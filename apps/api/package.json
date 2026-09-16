@@ -1,0 +1,33 @@
+{
+  "name": "@ixa/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "node --import tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.0",
+    "@hono/zod-openapi": "^0.19.10",
+    "@ixa/config": "workspace:*",
+    "@ixa/db": "workspace:*",
+    "@ixa/domain": "workspace:*",
+    "hono": "^4.10.0",
+    "pino": "^10.3.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.13",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
