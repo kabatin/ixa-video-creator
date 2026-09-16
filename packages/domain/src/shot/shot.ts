@@ -1,0 +1,105 @@
+import { z } from 'zod'
+import {
+  CharacterId, CharacterLookId, ProjectId, SequenceId, ShotId, TakeId, TransitionId,
+} from '../common/ids.js'
+import { Seconds } from '../common/time.js'
+import { ShotCamera } from './camera.js'
+import { ShotSourceType } from './source-type.js'
+
+export const ShotStatus = z.enum([
+  'draft',      // 記述のみ
+  'ready',      // 生成可能（必要な参照が揃っている）
+  'generating',
+  'review',     // Take はあるが未承認
+  'approved',   // selectedTake が承認済み
+  'blocked',    // 人間の判断待ち
+])
+export type ShotStatus = z.infer<typeof ShotStatus>
+
+/**
+ * 本システムの最重要ドメイン。
+ * Shot がマスタータイムライン VIDEO1 上の位置を所有する（ADR-0002）。
+ * 生成尺と編集尺は別物（ADR-0011）。durationSec は編集尺。
+ */
+export const Shot = z.object({
+  id: ShotId,
+  projectId: ProjectId,
+  sequenceId: SequenceId.nullable(),
+  order: z.number().int(),
+  code: z.string().min(1),
+
+  // タイミング
+  startSec: Seconds,
+  durationSec: Seconds.refine((d) => d > 0, '編集尺は 0 より大きいこと'),
+  sourceInSec: Seconds.default(0),
+
+  // 演出
+  description: z.string().default(''),
+  dialogue: z.string().nullable(),
+  camera: ShotCamera,
+  mood: z.string().nullable(),
+
+  sourceType: ShotSourceType,
+
+  selectedTakeId: TakeId.nullable(),
+  status: ShotStatus,
+  lockedAt: z.date().nullable(),
+
+  createdAt: z.date(),
+  updatedAt: z.date(),
+})
+export type Shot = z.infer<typeof Shot>
+
+export const ShotCharacter = z.object({
+  shotId: ShotId,
+  characterId: CharacterId,
+  /** 必須。実行時解決に頼らず、解決済みの値を保存する。 */
+  lookId: CharacterLookId,
+  prominence: z.enum(['primary', 'secondary', 'background']),
+  order: z.number().int().nonnegative(),
+})
+export type ShotCharacter = z.infer<typeof ShotCharacter>
+
+export const TransitionType = z.enum([
+  'cut', 'dissolve', 'dip_to_black', 'dip_to_white', 'wipe', 'whip_pan', 'glitch',
+])
+export type TransitionType = z.infer<typeof TransitionType>
+
+export const Transition = z.object({
+  id: TransitionId,
+  projectId: ProjectId,
+  fromShotId: ShotId,
+  toShotId: ShotId,
+  type: TransitionType,
+  durationSec: Seconds.default(0),
+})
+export type Transition = z.infer<typeof Transition>
+
+export const shotEndSec = (shot: Pick<Shot, 'startSec' | 'durationSec'>): Seconds =>
+  shot.startSec + shot.durationSec
+
+/** Shot の時間は互いに重ならない（重なりは Transition が表現する）。 */
+export const findOverlappingShots = (
+  shots: readonly Pick<Shot, 'id' | 'startSec' | 'durationSec'>[],
+): Array<[ShotId, ShotId]> => {
+  const sorted = [...shots].sort((a, b) => a.startSec - b.startSec)
+  const conflicts: Array<[ShotId, ShotId]> = []
+  for (let i = 0; i + 1 < sorted.length; i += 1) {
+    const current = sorted[i]
+    const next = sorted[i + 1]
+    if (current && next && shotEndSec(current) > next.startSec) {
+      conflicts.push([current.id, next.id])
+    }
+  }
+  return conflicts
+}
+
+/** order は 1000 刻みで採番する。挿入時の再採番を避けるため（ARCHITECTURE.md §19）。 */
+export const ORDER_STEP = 1000
+
+export const orderBetween = (before: number | null, after: number | null): number => {
+  if (before === null && after === null) return ORDER_STEP
+  if (before === null) return (after as number) - ORDER_STEP
+  if (after === null) return before + ORDER_STEP
+  return Math.floor((before + after) / 2)
+}
