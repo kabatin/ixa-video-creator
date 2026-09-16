@@ -157,6 +157,9 @@ importers:
       '@ixa/media':
         specifier: workspace:*
         version: link:../../packages/media
+      '@ixa/music':
+        specifier: workspace:*
+        version: link:../../packages/music
       '@ixa/provider-core':
         specifier: workspace:*
         version: link:../../packages/providers/core

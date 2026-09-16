@@ -20,6 +20,7 @@
     "@ixa/db": "workspace:*",
     "@ixa/domain": "workspace:*",
     "@ixa/media": "workspace:*",
+    "@ixa/music": "workspace:*",
     "@ixa/provider-core": "workspace:*",
     "@ixa/provider-video": "workspace:*",
     "@ixa/storage": "workspace:*",
