@@ -4,6 +4,8 @@ import { createApp, type AppDeps } from '../app.js'
 import { INTERNAL_ERROR_MESSAGE } from '../errors.js'
 import { createLogger } from '../logger.js'
 import type { ProjectResponse } from '../routes/projects.js'
+import { createMemoryStorage } from '@ixa/storage'
+import { createInMemoryMediaAssetRepository } from './in-memory-media-asset-repository.js'
 import {
   createFailingProjectRepository,
   createInMemoryProjectRepository,
@@ -12,7 +14,13 @@ import {
 
 const logger = createLogger('silent')
 
-const buildApp = (projects: AppDeps['projects']) => createApp({ projects, logger })
+const buildApp = (projects: AppDeps['projects']) =>
+  createApp({
+    projects,
+    mediaAssets: createInMemoryMediaAssetRepository(),
+    storage: createMemoryStorage(),
+    logger,
+  })
 
 const validBody = (overrides: Record<string, unknown> = {}) => ({
   workspaceId: newId(WorkspaceIdSchema),

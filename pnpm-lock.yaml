@@ -56,6 +56,9 @@ importers:
       '@ixa/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@ixa/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       hono:
         specifier: ^4.10.0
         version: 4.13.8
@@ -255,6 +258,28 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.3)
 
+  packages/providers/video:
+    dependencies:
+      '@ixa/domain':
+        specifier: workspace:*
+        version: link:../../domain
+      '@ixa/media':
+        specifier: workspace:*
+        version: link:../../media
+      '@ixa/provider-core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.3)
+
   packages/storage:
     dependencies:
       '@aws-sdk/client-s3':
@@ -263,6 +288,25 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.1133.0
         version: 3.1133.0
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.3)
+
+  packages/timeline:
+    dependencies:
+      '@ixa/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@ixa/music':
+        specifier: workspace:*
+        version: link:../music
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: ^5.7.3

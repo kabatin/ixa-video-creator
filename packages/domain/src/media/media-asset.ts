@@ -59,6 +59,12 @@ export const CreateMediaAssetInput = MediaAsset.omit({
   id: true, createdAt: true,
   probe: true, proxyKey: true, thumbnailKey: true, posterKeys: true,
 }).extend({
+  /**
+   * 2 段階アップロードでは署名時に ID が決まる。
+   * storageKey にその ULID が埋まるため、行の id と一致させないと
+   * パスと行がずれる。省略時のみリポジトリが採番する。
+   */
+  id: MediaAssetId.optional(),
   probe: MediaProbe.nullable().default(null),
   proxyKey: z.string().nullable().default(null),
   thumbnailKey: z.string().nullable().default(null),

@@ -1,6 +1,13 @@
 import { serve, type ServerType } from '@hono/node-server'
 import { getConfig } from '@ixa/config'
-import { closeDbClient, createDbClient, createProjectRepository, type DbClient } from '@ixa/db'
+import {
+  closeDbClient,
+  createDbClient,
+  createMediaAssetRepository,
+  createProjectRepository,
+  type DbClient,
+} from '@ixa/db'
+import { createS3Storage } from '@ixa/storage'
 import { createApp } from './app.js'
 import { createLogger, type Logger } from './logger.js'
 
@@ -85,7 +92,13 @@ export const main = (): void => {
   const logger = createLogger(config.logLevel)
 
   const db = createDbClient(config.database.url)
-  const app = createApp({ projects: createProjectRepository(db), logger })
+  const storage = createS3Storage(config.s3)
+  const app = createApp({
+    projects: createProjectRepository(db),
+    mediaAssets: createMediaAssetRepository(db),
+    storage,
+    logger,
+  })
 
   const server = serve({ fetch: app.fetch, port: config.api.port }, (info) => {
     logger.info({ port: info.port }, 'api を起動しました')

@@ -90,7 +90,7 @@ export const createMediaAssetRepository = (db: DbClient): MediaAssetRepository =
     const validated = CreateMediaAssetInputSchema.parse(input)
     const rows = await db
       .insert(mediaAssets)
-      .values({ ...validated, id: newId(MediaAssetIdSchema), createdAt: new Date() })
+      .values({ ...validated, id: validated.id ?? newId(MediaAssetIdSchema), createdAt: new Date() })
       .returning()
     const row = rows[0]
     if (!row) throw new Error('media_assets への INSERT が行を返しませんでした')

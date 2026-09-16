@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../app.js'
 import { createLogger } from '../logger.js'
+import { createMemoryStorage } from '@ixa/storage'
+import { createInMemoryMediaAssetRepository } from './in-memory-media-asset-repository.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 
 const buildApp = () =>
-  createApp({ projects: createInMemoryProjectRepository(), logger: createLogger('silent') })
+  createApp({
+    projects: createInMemoryProjectRepository(),
+    mediaAssets: createInMemoryMediaAssetRepository(),
+    storage: createMemoryStorage(),
+    logger: createLogger('silent'),
+  })
 
 describe('GET /health', () => {
   it('200 と { success: true, data: { status, uptimeSec } } を返す', async () => {
