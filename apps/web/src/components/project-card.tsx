@@ -1,6 +1,8 @@
 import type { Project } from '@ixa/domain'
+import Link from 'next/link'
 import { formatResolution } from '@/lib/resolution-presets'
 import { formatCreatedAt, statusClassName, statusLabel } from '@/lib/project-display'
+import { shotListHref } from '@/lib/shot-links'
 
 export type ProjectCardProps = {
   readonly project: Project
@@ -34,5 +36,11 @@ export const ProjectCard = ({ project }: ProjectCardProps) => (
         <dd>{formatCreatedAt(project)}</dd>
       </div>
     </dl>
+    <Link
+      href={shotListHref(project.id)}
+      className="mt-4 inline-block text-sm font-medium text-slate-900 underline hover:text-slate-600"
+    >
+      Shot 一覧へ
+    </Link>
   </li>
 )
