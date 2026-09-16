@@ -211,6 +211,8 @@ export const inMemoryShots = (seed: readonly Shot[]): InMemoryShots => {
     findById: (id) => Promise.resolve(store.find((s) => s.id === id) ?? null),
     findByProject: (projectId) => Promise.resolve(store.filter((s) => s.projectId === projectId)),
     create: () => Promise.reject(new Error('未使用')),
+    // 生成ワーカーは Shot を作らない。使われたら気付けるよう落とす（既存の create と同じ）。
+    createMany: () => Promise.reject(new Error('未使用')),
     update: (id, patch) => replace(id, patch as Partial<Shot>),
     softDelete: () => Promise.resolve(),
     selectTake: (shotId, takeId) => replace(shotId, { selectedTakeId: takeId }),

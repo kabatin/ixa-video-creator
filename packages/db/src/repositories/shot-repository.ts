@@ -26,6 +26,12 @@ export type ShotRepository = {
   /** order 昇順。ソフトデリート済みは含まない。 */
   findByProject(projectId: ProjectId): Promise<Shot[]>
   create(input: CreateShotInput): Promise<Shot>
+  /**
+   * 複数の Shot を **1 トランザクションで**追加する（ストーリーボードの一括作成）。
+   * 途中で失敗して半分だけ残ると、タイムラインに隙間のある状態が DB に居座る。
+   * 空配列を渡すのは呼び出し側の誤りなので例外にする。
+   */
+  createMany(inputs: readonly CreateShotInput[]): Promise<Shot[]>
   update(id: ShotId, patch: UpdateShotPatch): Promise<Shot>
   softDelete(id: ShotId): Promise<void>
   /** 採用 Take を差し替える。sourceInSec は維持する（ADR-0011）。 */
@@ -108,6 +114,34 @@ export const createShotRepository = (db: DbClient): ShotRepository => {
       const row = rows[0]
       if (!row) throw new Error('shots への INSERT が行を返しませんでした')
       return shotRowToDomain(row)
+    },
+
+    async createMany(inputs) {
+      if (inputs.length === 0) throw new Error('createMany に空の配列が渡されました')
+      const validated = inputs.map((input) => CreateShotInputSchema.parse(input))
+      const now = new Date()
+
+      // 全件まとめて 1 文で入れる。1 件ずつ回すと部分的に残る余地ができる。
+      const rows = await db
+        .insert(shots)
+        .values(
+          validated.map((input) => ({
+            ...input,
+            id: newId(ShotIdSchema),
+            selectedTakeId: null,
+            lockedAt: null,
+            createdAt: now,
+            updatedAt: now,
+          })),
+        )
+        .returning()
+
+      if (rows.length !== validated.length) {
+        throw new Error(
+          `shots への一括 INSERT が ${String(rows.length)} 行しか返しませんでした（要求 ${String(validated.length)} 行）`,
+        )
+      }
+      return rows.map(shotRowToDomain)
     },
 
     update: async (id, patch) => updateLive(id, UpdateShotPatchSchema.parse(patch)),

@@ -57,6 +57,24 @@ export const createInMemoryShotRepository = (
       return Promise.resolve(created)
     },
 
+    createMany: (inputs) => {
+      if (inputs.length === 0) return Promise.reject(new Error('createMany に空の配列が渡されました'))
+      const now = new Date()
+      const created = inputs.map((input) =>
+        ShotSchema.parse({
+          ...CreateShotInputSchema.parse(input),
+          id: newId(ShotIdSchema),
+          selectedTakeId: null,
+          lockedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        }),
+      )
+      // 実物は 1 トランザクションで入れる。偽物も途中の状態を作らない。
+      store = [...store, ...created]
+      return Promise.resolve(created)
+    },
+
     update: (id, patch) => replace(id, UpdateShotPatchSchema.parse(patch)),
 
     softDelete: (id) => {
