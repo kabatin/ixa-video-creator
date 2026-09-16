@@ -25,6 +25,7 @@ import { createLocationApi, type LocationApi } from '@/lib/location-api'
 import { createMusicApi, type MusicApi } from '@/lib/music-api'
 import { createSequenceApi, type SequenceApi } from '@/lib/sequence-api'
 import { createReviewApi, type ReviewApi } from '@/lib/review-api'
+import { createTimelineApi, type TimelineApi } from '@/lib/timeline-api'
 import { createRequester } from '@/lib/requester'
 import { createUploadApi, type UploadApi } from '@/lib/upload-api'
 
@@ -58,6 +59,7 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
   MusicApi &
   ReviewApi &
   SequenceApi &
+  TimelineApi &
   UploadApi
 
 const shotPath = (id: ShotId, suffix = ''): string => `/shots/${encodeURIComponent(id)}${suffix}`
@@ -118,6 +120,7 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
     ...createLocationApi(requester),
     ...createMusicApi(requester),
     ...createReviewApi(requester),
+    ...createTimelineApi(requester),
     ...createSequenceApi(requester),
     ...createUploadApi(requester),
   }

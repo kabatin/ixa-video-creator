@@ -23,6 +23,8 @@ import { sequenceRoutes } from './routes/sequences.js'
 import { musicRoutes, type AnalysisQueue } from './routes/music.js'
 import { storyboardRoutes } from './routes/storyboard.js'
 import { reviewRoutes, type ReviewQueue } from './routes/reviews.js'
+import { transitionRoutes } from './routes/transitions.js'
+import { clipRoutes } from './routes/clips.js'
 import type {
   BrandAssetRepository, CharacterLookRepository, CharacterRepository, LocationRepository,
   MusicAnalysisRepository, MusicTrackRepository, RenderJobRepository, ReviewRepository,
@@ -167,6 +169,12 @@ export const createApp = (deps: AppDeps) => {
   app.route(
     '/',
     reviewRoutes({ takes: deps.takes, reviews: deps.reviews, queue: deps.reviewQueue }),
+  )
+
+  app.route('/', transitionRoutes({ transitions: deps.transitions, shots: deps.shots, projects }))
+  app.route(
+    '/',
+    clipRoutes({ timelineClips: deps.timelineClips, projects, mediaAssets }),
   )
 
   app.route('/', timelineRoutes(timelineDeps))

@@ -34,6 +34,23 @@ describe('createApp のルート配線', () => {
     expect(res.status).toBe(200)
   })
 
+  it('Transition のルートが生えている', async () => {
+    const res = await buildApp().request(`/projects/${project.id}/transitions`)
+    expect(res.status).toBe(200)
+  })
+
+  it('クリップのルートが生えている', async () => {
+    const res = await buildApp().request(`/projects/${project.id}/clips`)
+    expect(res.status).toBe(200)
+  })
+
+  it('タイムラインの検証結果のルートが生えている', async () => {
+    // 画面が同じ規則を持たないよう、検証はここからしか取れない。
+    const res = await buildApp().request(`/projects/${project.id}/timeline/issues`)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ success: true })
+  })
+
   it('レビューのルートが生えている', async () => {
     // Take が無いので 404。配線されていなければ Hono の 404 と区別が付かないため、
     // 本文が API の封筒（success: false）であることまで見る。

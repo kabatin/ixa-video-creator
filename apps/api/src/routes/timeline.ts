@@ -11,13 +11,14 @@ import {
   type Project,
   type ProjectId,
   type Shot,
+  ShotId as ShotIdSchema,
   type ShotId,
   type TimelineClip,
 } from '@ixa/domain'
-import { buildTimelineDocument, type TimelineMusicTrack, type TimelineSource } from '@ixa/timeline'
+import { buildTimelineDocument, validateTimeline, type TimelineMusicTrack, type TimelineSource } from '@ixa/timeline'
 import type { ObjectStorage } from '@ixa/storage'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
-import { errorContent, fail, ok, successResponse } from '../response.js'
+import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
 
 /**
  * `TimelineDocument` の取得（docs/ARCHITECTURE.md §15 / §18）。
@@ -199,9 +200,63 @@ const getTimelineRoute = createRoute({
   },
 })
 
-export const timelineRoutes = (deps: TimelineRoutesDeps) =>
-  new OpenAPIHono({ defaultHook: validationHook }).openapi(getTimelineRoute, async (c) => {
-    const loaded = await loadTimelineDocument(deps, c.req.valid('param').projectId)
-    if (loaded === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
-    return c.json(ok(loaded.document), 200)
+/**
+ * `TimelineIssue`（@ixa/timeline）の DTO。
+ * `renders.ts` にも同じ形があるが、OpenAPI の component 名が衝突するため
+ * ここでは別名で登録する。**判定そのものは両方とも `validateTimeline` だけが持つ。**
+ */
+export const TimelineCheckIssue = z
+  .object({
+    severity: z.enum(['error', 'warning']),
+    code: z.string(),
+    message: z.string(),
+    shotId: ShotIdSchema.optional(),
   })
+  .openapi('TimelineCheckIssue')
+export type TimelineCheckIssue = z.infer<typeof TimelineCheckIssue>
+
+const getTimelineIssuesRoute = createRoute({
+  method: 'get',
+  path: '/projects/{projectId}/timeline/issues',
+  tags: ['timeline'],
+  summary: 'タイムラインの検証結果（隙間・重なり・未生成など）',
+  request: { params: ProjectParams },
+  responses: {
+    200: {
+      description: '検証結果',
+      content: { 'application/json': { schema: listResponse(TimelineCheckIssue) } },
+    },
+    404: errorContent('Project が存在しない'),
+    500: errorContent('サーバ内部エラー'),
+  },
+})
+
+export const timelineRoutes = (deps: TimelineRoutesDeps) =>
+  new OpenAPIHono({ defaultHook: validationHook })
+    .openapi(getTimelineRoute, async (c) => {
+      const loaded = await loadTimelineDocument(deps, c.req.valid('param').projectId)
+      if (loaded === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      return c.json(ok(loaded.document), 200)
+    })
+    /**
+     * 検証を画面へ出すための口。
+     *
+     * **画面に同じ規則を書かせない。** 書くと必ずズレて、レンダリングでは
+     * 止まるのに画面では合格に見える（またはその逆）状態が生まれる。
+     * レンダリング前の検査（renders.ts）と同じ `validateTimeline` を使う。
+     */
+    .openapi(getTimelineIssuesRoute, async (c) => {
+      const loaded = await loadTimelineDocument(deps, c.req.valid('param').projectId)
+      if (loaded === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      return c.json(okList(validateTimeline(loaded.source).map(toCheckIssue)), 200)
+    })
+
+const toCheckIssue = (issue: {
+  severity: 'error' | 'warning'
+  code: string
+  message: string
+  shotId?: ShotId
+}): TimelineCheckIssue =>
+  issue.shotId === undefined
+    ? { severity: issue.severity, code: issue.code, message: issue.message }
+    : { severity: issue.severity, code: issue.code, message: issue.message, shotId: issue.shotId }
