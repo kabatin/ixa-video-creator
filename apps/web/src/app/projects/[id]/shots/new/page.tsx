@@ -1,4 +1,4 @@
-import { ProjectId, orderBetween, shotEndSec, type Shot } from '@ixa/domain'
+import { ProjectId, orderBetween, shotEndSec, type Location, type Shot } from '@ixa/domain'
 import Link from 'next/link'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
@@ -6,6 +6,7 @@ import { ShotForm } from '@/components/shot-form'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { shotListHref } from '@/lib/shot-links'
+import { resolveWorkspaceId } from '@/lib/workspace'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +21,25 @@ type LoadResult =
 const loadShots = async (projectId: ProjectId): Promise<LoadResult> => {
   try {
     return { ok: true, shots: await createApiClient().listShots(projectId) }
+  } catch (error) {
+    return { ok: false, message: describeError(error) }
+  }
+}
+
+type LocationsResult =
+  | { readonly ok: true; readonly locations: readonly Location[] }
+  | { readonly ok: false; readonly message: string }
+
+/**
+ * ロケーションは Shot 作成の必須条件ではない。
+ * 読み込みに失敗しても作成自体は続けられるよう、失敗を画面上のメッセージへ畳む。
+ */
+const loadLocations = async (): Promise<LocationsResult> => {
+  const workspace = resolveWorkspaceId()
+  if (!workspace.ok) return { ok: false, message: workspace.reason }
+
+  try {
+    return { ok: true, locations: await createApiClient().listLocations(workspace.workspaceId) }
   } catch (error) {
     return { ok: false, message: describeError(error) }
   }
@@ -53,7 +73,7 @@ const NewShotPage = async ({ params }: NewShotPageProps) => {
     )
   }
 
-  const result = await loadShots(projectId.data)
+  const [result, locations] = await Promise.all([loadShots(projectId.data), loadLocations()])
 
   return (
     <main>
@@ -74,6 +94,8 @@ const NewShotPage = async ({ params }: NewShotPageProps) => {
           projectId={projectId.data}
           nextOrder={nextOrderOf(result.shots)}
           defaultStartSec={nextStartSecOf(result.shots)}
+          locations={locations.ok ? locations.locations : []}
+          locationsError={locations.ok ? undefined : locations.message}
         />
       ) : (
         <ErrorPanel

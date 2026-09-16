@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { LOCATION_ID } from '@/__tests__/fixtures'
 import { NONE_VALUE } from '@/lib/camera-options'
+import { NO_LOCATION_VALUE } from '@/lib/location-options'
 import { initialShotFormValues, validateShotForm, type ShotFormValues } from '@/lib/shot-form'
 
 const ORDER = 2000
@@ -122,5 +124,32 @@ describe('validateShotForm', () => {
     expect(values.startSec).toBe('12')
     expect(values.angleH).toBe(NONE_VALUE)
     expect(values.movement).toBe(NONE_VALUE)
+  })
+
+  it('ロケーション未選択は null になる（ADR-0015）', () => {
+    expect(initialShotFormValues().locationId).toBe(NO_LOCATION_VALUE)
+
+    const result = run({ locationId: NO_LOCATION_VALUE })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.input.locationId).toBeNull()
+  })
+
+  it('選んだロケーションを locationId に載せる', () => {
+    const result = run({ locationId: LOCATION_ID })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.input.locationId).toBe(LOCATION_ID)
+  })
+
+  it('ULID でないロケーションはロケーションのエラーになる', () => {
+    const result = run({ locationId: 'not-a-ulid' })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.errors.locationId).toBeDefined()
+    expect(result.errors.form).toBeUndefined()
   })
 })

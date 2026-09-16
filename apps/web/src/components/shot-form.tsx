@@ -1,6 +1,6 @@
 'use client'
 
-import type { ProjectId } from '@ixa/domain'
+import type { Location, ProjectId } from '@ixa/domain'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -8,6 +8,7 @@ import { CameraFields } from '@/components/camera-fields'
 import { FieldError } from '@/components/form/field-error'
 import { TextField } from '@/components/form/text-field'
 import { TextareaField } from '@/components/form/textarea-field'
+import { LocationField } from '@/components/location-field'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import {
@@ -23,9 +24,18 @@ export type ShotFormProps = {
   /** 末尾へ追加するための order。一覧の最後の Shot から算出して渡す。 */
   readonly nextOrder: number
   readonly defaultStartSec: number
+  /** 空配列は「未登録」。取得自体に失敗したときは `locationsError` で区別する。 */
+  readonly locations: readonly Location[]
+  readonly locationsError?: string
 }
 
-export const ShotForm = ({ projectId, nextOrder, defaultStartSec }: ShotFormProps) => {
+export const ShotForm = ({
+  projectId,
+  nextOrder,
+  defaultStartSec,
+  locations,
+  locationsError,
+}: ShotFormProps) => {
   const router = useRouter()
   const [values, setValues] = useState<ShotFormValues>(() => initialShotFormValues(defaultStartSec))
   const [errors, setErrors] = useState<ShotFormErrors>({})
@@ -120,6 +130,17 @@ export const ShotForm = ({ projectId, nextOrder, defaultStartSec }: ShotFormProp
         error={errors.mood}
         onChange={(value) => {
           setValue('mood', value)
+        }}
+      />
+
+      <LocationField
+        locations={locations}
+        value={values.locationId}
+        disabled={submitting}
+        error={errors.locationId}
+        loadError={locationsError}
+        onChange={(value) => {
+          setValue('locationId', value)
         }}
       />
 

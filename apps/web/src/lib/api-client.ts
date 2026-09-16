@@ -21,6 +21,7 @@ import {
   WireTakeList,
 } from '@/lib/api-schemas'
 import { createCharacterApi, type CharacterApi } from '@/lib/character-api'
+import { createLocationApi, type LocationApi } from '@/lib/location-api'
 import { createRequester } from '@/lib/requester'
 import { createUploadApi, type UploadApi } from '@/lib/upload-api'
 
@@ -48,7 +49,10 @@ export type ProjectApi = {
   mediaUrl: (mediaAssetId: MediaAssetId) => Promise<WireSignedUrl>
 }
 
-export type ApiClient = { readonly baseUrl: string } & ProjectApi & CharacterApi & UploadApi
+export type ApiClient = { readonly baseUrl: string } & ProjectApi &
+  CharacterApi &
+  LocationApi &
+  UploadApi
 
 const shotPath = (id: ShotId, suffix = ''): string => `/shots/${encodeURIComponent(id)}${suffix}`
 
@@ -105,6 +109,7 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
     baseUrl,
     ...projectApi,
     ...createCharacterApi(requester),
+    ...createLocationApi(requester),
     ...createUploadApi(requester),
   }
 }

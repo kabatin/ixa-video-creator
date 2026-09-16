@@ -30,6 +30,7 @@ export const shotJson = {
   dialogue: null,
   camera: cameraJson,
   mood: 'tense',
+  locationId: null,
   sourceType: { type: 'ai_video' },
   selectedTakeId: null,
   status: 'draft',
@@ -96,6 +97,7 @@ export const IDENTITY_IMAGE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FC1'
 export const LOOK_ID = '01ARZ3NDEKTSV4RRFFQ69G5FC2'
 export const LOOK_IMAGE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FC3'
 export const CANONICAL_FRAME_ID = '01ARZ3NDEKTSV4RRFFQ69G5FC4'
+export const LOCATION_ID = '01ARZ3NDEKTSV4RRFFQ69G5FD0'
 
 export const characterJson = {
   id: CHARACTER_ID,
@@ -162,4 +164,13 @@ export const mediaAssetJson = {
   origin: { type: 'upload', uploadedBy: 'web-ui' },
   tags: [],
   createdAt: '2026-09-16T01:02:03.000Z',
+}
+
+/** Asset Library の Location（DOMAIN.md §6）。Shot は 1 つだけ持つ（ADR-0015）。 */
+export const locationJson = {
+  id: LOCATION_ID,
+  workspaceId: WORKSPACE_ID,
+  name: '夜のスタジアム',
+  description: 'ナイター照明',
+  referenceAssetIds: [MEDIA_ID],
 }

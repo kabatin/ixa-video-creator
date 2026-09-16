@@ -49,6 +49,8 @@ export const UpdateShotBody = UpdateShotPatch.pick({
   startSec: true,
   durationSec: true,
   sourceInSec: true,
+  // 場所は後から決められる。null を送れば外す（ADR-0015）。
+  locationId: true,
 })
 export type UpdateShotBody = z.input<typeof UpdateShotBody>
 

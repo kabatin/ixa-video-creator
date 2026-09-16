@@ -1,6 +1,7 @@
 import { ShotCamera } from '@ixa/domain'
 import { CreateShotBody } from '@/lib/api-schemas'
 import { DEFAULT_SHOT_SIZE, NONE_VALUE } from '@/lib/camera-options'
+import { NO_LOCATION_VALUE } from '@/lib/location-options'
 
 /**
  * Shot 作成フォームの値と送信前検証。
@@ -13,6 +14,8 @@ export type ShotFormValues = {
   readonly durationSec: string
   readonly description: string
   readonly mood: string
+  /** 未選択は `NO_LOCATION_VALUE`。Shot は場所を 1 つだけ持つ（ADR-0015）。 */
+  readonly locationId: string
   readonly size: string
   readonly angleH: string
   readonly angle: string
@@ -35,6 +38,7 @@ export const initialShotFormValues = (startSec = 0): ShotFormValues => ({
   durationSec: '4',
   description: '',
   mood: '',
+  locationId: NO_LOCATION_VALUE,
   size: DEFAULT_SHOT_SIZE,
   angleH: NONE_VALUE,
   angle: NONE_VALUE,
@@ -68,6 +72,7 @@ const FIELD_BY_PATH: Readonly<Record<string, ShotFormField>> = {
   durationSec: 'durationSec',
   description: 'description',
   mood: 'mood',
+  locationId: 'locationId',
 }
 
 const fieldForPath = (path: readonly (string | number)[]): ShotFormField => {
@@ -145,6 +150,8 @@ export const validateShotForm = ({ values, order }: BuildShotInput): ShotFormVal
     dialogue: null,
     camera: camera.data,
     mood: values.mood.trim() === '' ? null : values.mood.trim(),
+    // ULID かどうかの検証は zod（LocationId）に委ねる。UI 側で形を二重に持たない。
+    locationId: values.locationId === NO_LOCATION_VALUE ? null : values.locationId,
     // Phase 1 の生成対象は AI 動画のみ（docs/ARCHITECTURE.md §11）。
     sourceType: { type: 'ai_video' },
     status: 'draft',
