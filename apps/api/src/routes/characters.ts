@@ -1,5 +1,8 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { CharacterLookRepository, CharacterRepository, MediaAssetRepository } from '@ixa/db'
+import type {
+  CharacterLookRepository, CharacterRepository, MediaAssetRepository,
+  ShotCharacterRepository, ShotRepository,
+} from '@ixa/db'
 import { CharacterLookInvariantError } from '@ixa/db'
 import {
   Character as CharacterSchema,
@@ -15,14 +18,19 @@ import {
   CreateCharacterLookImageInput as CreateCharacterLookImageInputSchema,
   CreateCharacterLookInput as CreateCharacterLookInputSchema,
   MediaAssetId as MediaAssetIdSchema,
+  ShotCharacter as ShotCharacterSchema,
+  ShotId as ShotIdSchema,
   UpdateCharacterLookPatch as UpdateCharacterLookPatchSchema,
   UpdateCharacterPatch as UpdateCharacterPatchSchema,
   WorkspaceId as WorkspaceIdSchema,
   type Character,
   type MediaAssetId,
+  type ShotId,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
-import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
+import {
+  errorContent, fail, listResponse, ok, okList, successResponse, type FieldErrors,
+} from '../response.js'
 
 /**
  * Character / Look とその参照画像の CRUD（DOMAIN.md §5 / ARCHITECTURE.md §8）。
@@ -366,5 +374,130 @@ export const characterRoutes = (deps: CharacterRoutesDeps) => {
         return c.json(fail(VALIDATION_ERROR_MESSAGE, { mediaAssetId: [MISSING_ASSET_MESSAGE] }), 422)
       }
       return c.json(ok(await deps.looks.setCanonicalFrame(id, mediaAssetId)), 200)
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Shot への登場人物の紐づけ（DOMAIN.md §9 ShotCharacter）
+// ---------------------------------------------------------------------------
+
+/**
+ * `characterRoutes` とは別の factory にしてある。
+ * 既存の Character CRUD は Shot を知らなくてよく、依存を増やすと
+ * Character だけを扱う呼び出し側に無関係なリポジトリを強いることになるため。
+ */
+
+export const ShotCharacterResponse = ShotCharacterSchema.openapi('ShotCharacter')
+
+/** shotId は経路が持つので本文には含めない。正が 2 つになるのを避ける。 */
+const ShotCharacterEntryBody = ShotCharacterSchema.omit({ shotId: true })
+const ReplaceShotCharactersBody = z
+  .object({ entries: z.array(ShotCharacterEntryBody) })
+  .openapi('ReplaceShotCharactersInput')
+
+const ShotCharacterParams = z.object({
+  shotId: ShotIdSchema.openapi({ param: { name: 'shotId', in: 'path' } }),
+})
+const ShotCharacterKeyParams = ShotCharacterParams.extend({
+  characterId: CharacterIdSchema.openapi({ param: { name: 'characterId', in: 'path' } }),
+})
+
+const listShotCharactersRoute = createRoute({
+  method: 'get', path: '/shots/{shotId}/characters', tags: ['characters'],
+  summary: 'Shot の登場人物一覧（order 昇順）',
+  request: { params: ShotCharacterParams },
+  responses: { 200: jsonContent('登場人物一覧', listResponse(ShotCharacterResponse)), ...commonErrors },
+})
+
+const replaceShotCharactersRoute = createRoute({
+  method: 'put', path: '/shots/{shotId}/characters', tags: ['characters'],
+  summary: 'Shot の登場人物を一括で置き換える',
+  request: { params: ShotCharacterParams, body: body(ReplaceShotCharactersBody) },
+  responses: {
+    200: jsonContent('置き換え後の登場人物一覧', listResponse(ShotCharacterResponse)),
+    ...commonErrors,
+  },
+})
+
+const removeShotCharacterRoute = createRoute({
+  method: 'delete', path: '/shots/{shotId}/characters/{characterId}', tags: ['characters'],
+  summary: 'Shot から登場人物を外す',
+  request: { params: ShotCharacterKeyParams },
+  responses: { 204: { description: '外した（本文なし）' }, ...commonErrors },
+})
+
+export type ShotCharacterRoutesDeps = {
+  shots: ShotRepository
+  shotCharacters: ShotCharacterRepository
+  characters: CharacterRepository
+  looks: CharacterLookRepository
+}
+
+const DUPLICATE_CHARACTER_MESSAGE = '同じ Character が複数回指定されています'
+const MISSING_CHARACTER_MESSAGE = '指定された Character が存在しません'
+const MISSING_LOOK_MESSAGE = '指定された Look が存在しません'
+const FOREIGN_LOOK_MESSAGE = '指定された Look はその Character のものではありません'
+
+export const shotCharacterRoutes = (deps: ShotCharacterRoutesDeps) => {
+  /**
+   * 紐づけの妥当性を確かめ、問題があればフィールドエラーを返す（無ければ null）。
+   *
+   * 人数分の findById を直列に await すると往復が人数に比例する。
+   * 1 回の Promise.all にまとめ、段数を一定に保つ。
+   */
+  const invalidEntries = async (
+    entries: readonly z.infer<typeof ShotCharacterEntryBody>[],
+  ): Promise<FieldErrors | null> => {
+    const ids = entries.map((entry) => entry.characterId)
+    if (new Set(ids).size !== ids.length) {
+      return { characterId: [DUPLICATE_CHARACTER_MESSAGE] }
+    }
+
+    const resolved = await Promise.all(
+      entries.map(async (entry) => {
+        const [character, look] = await Promise.all([
+          deps.characters.findById(entry.characterId),
+          deps.looks.findById(entry.lookId),
+        ])
+        return { entry, character, look }
+      }),
+    )
+
+    if (resolved.some((r) => r.character === null)) {
+      return { characterId: [MISSING_CHARACTER_MESSAGE] }
+    }
+    if (resolved.some((r) => r.look === null)) {
+      return { lookId: [MISSING_LOOK_MESSAGE] }
+    }
+    // 他 Character の Look を指すと、衣装だけ別人になった参照が Provider へ渡る。
+    if (resolved.some((r) => r.look !== null && r.look.characterId !== r.entry.characterId)) {
+      return { lookId: [FOREIGN_LOOK_MESSAGE] }
+    }
+    return null
+  }
+
+  const shotMissing = async (shotId: ShotId): Promise<boolean> =>
+    (await deps.shots.findById(shotId)) === null
+
+  return new OpenAPIHono({ defaultHook: validationHook })
+    .openapi(listShotCharactersRoute, async (c) => {
+      const { shotId } = c.req.valid('param')
+      if (await shotMissing(shotId)) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      return c.json(okList(await deps.shotCharacters.findByShot(shotId)), 200)
+    })
+    .openapi(replaceShotCharactersRoute, async (c) => {
+      const { shotId } = c.req.valid('param')
+      if (await shotMissing(shotId)) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+
+      const { entries } = c.req.valid('json')
+      const fields = await invalidEntries(entries)
+      if (fields !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, fields), 422)
+
+      return c.json(okList(await deps.shotCharacters.replaceAll(shotId, entries)), 200)
+    })
+    .openapi(removeShotCharacterRoute, async (c) => {
+      const { shotId, characterId } = c.req.valid('param')
+      await deps.shotCharacters.remove(shotId, characterId)
+      return c.body(null, 204)
     })
 }

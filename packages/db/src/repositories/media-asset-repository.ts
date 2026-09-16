@@ -43,6 +43,7 @@ export const mediaAssetRowToDomain = (row: MediaAssetRow): MediaAsset =>
     proxyKey: row.proxyKey,
     thumbnailKey: row.thumbnailKey,
     posterKeys: row.posterKeys,
+    lastFrameAssetId: row.lastFrameAssetId,
     origin: row.origin,
     tags: row.tags,
     createdAt: row.createdAt,

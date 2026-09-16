@@ -34,6 +34,7 @@ export const musicTrackRowToDomain = (row: MusicTrackRow): MusicTrack =>
     title: row.title,
     isMaster: row.isMaster,
     offsetSec: row.offsetSec,
+    volume: row.volume,
   })
 
 export const createMusicTrackRepository = (db: DbClient): MusicTrackRepository => ({

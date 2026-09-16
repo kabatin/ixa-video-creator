@@ -197,6 +197,7 @@ export const aMediaAsset = (overrides: Partial<MediaAsset> = {}): MediaAsset =>
     proxyKey: null,
     thumbnailKey: null,
     posterKeys: [],
+    lastFrameAssetId: null,
     origin: { type: 'upload', uploadedBy: 'test' },
     tags: [],
     createdAt: new Date('2026-01-02T00:00:00.000Z'),
