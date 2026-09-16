@@ -11,6 +11,7 @@ import { CHARACTER_LIST_HREF } from '@/lib/character-links'
 const ENTRIES: readonly { readonly href: string; readonly label: string }[] = Object.freeze([
   { href: '/', label: 'プロジェクト' },
   { href: CHARACTER_LIST_HREF, label: 'キャラクター' },
+  { href: '/library', label: '素材ライブラリ' },
 ])
 
 export const SiteHeader = () => (

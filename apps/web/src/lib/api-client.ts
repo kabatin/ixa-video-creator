@@ -28,6 +28,12 @@ import { createReviewApi, type ReviewApi } from '@/lib/review-api'
 import { createTimelineApi, type TimelineApi } from '@/lib/timeline-api'
 import { createRenderApi, type RenderApi } from '@/lib/render-api'
 import { createShotCastApi, type ShotCastApi } from '@/lib/shot-cast-api'
+import {
+  createLibraryApi,
+  createProjectSettingsApi,
+  type LibraryApi,
+  type ProjectSettingsApi,
+} from '@/lib/library-api'
 import { createRequester } from '@/lib/requester'
 import { createUploadApi, type UploadApi } from '@/lib/upload-api'
 
@@ -59,6 +65,8 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
   CharacterApi &
   LocationApi &
   MusicApi &
+  LibraryApi &
+  ProjectSettingsApi &
   RenderApi &
   ReviewApi &
   SequenceApi &
@@ -127,6 +135,8 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
     ...createTimelineApi(requester),
     ...createRenderApi(requester),
     ...createShotCastApi(requester),
+    ...createLibraryApi(requester),
+    ...createProjectSettingsApi(requester),
     ...createSequenceApi(requester),
     ...createUploadApi(requester),
   }
