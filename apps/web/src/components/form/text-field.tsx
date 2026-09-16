@@ -1,4 +1,5 @@
 import { FieldError } from '@/components/form/field-error'
+import { FIELD_CONTROL_CLASS, FIELD_LABEL_CLASS } from '@/components/form/field-styles'
 
 export type TextFieldProps = {
   readonly id: string
@@ -22,7 +23,7 @@ export const TextField = ({
   const errorId = `${id}-error`
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-slate-800">
+      <label htmlFor={id} className={FIELD_LABEL_CLASS}>
         {label}
       </label>
       <input
@@ -37,7 +38,7 @@ export const TextField = ({
         onChange={(event) => {
           onChange(event.target.value)
         }}
-        className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none disabled:bg-slate-100"
+        className={`mt-1 ${FIELD_CONTROL_CLASS}`}
       />
       <FieldError id={errorId} message={error} />
     </div>

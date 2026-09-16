@@ -2,6 +2,12 @@
 
 import { useState } from 'react'
 import { FieldError } from '@/components/form/field-error'
+import {
+  FIELD_CONTROL_CLASS,
+  FIELD_HINT_CLASS,
+  FIELD_LABEL_CLASS,
+} from '@/components/form/field-styles'
+import { Button } from '@/components/ui/button'
 import { addTag, removeTagAt } from '@/lib/tag-input'
 
 export type TagInputProps = {
@@ -14,6 +20,12 @@ export type TagInputProps = {
   readonly disabled?: boolean
   readonly error?: string
 }
+
+/** 削除ボタンは小さいので、枠と文字のコントラストを落とさない。slate-100 地に slate-600 で 6.92。 */
+const REMOVE_BUTTON_CLASS =
+  'rounded-full px-1.5 text-slate-600 hover:bg-slate-200 hover:text-slate-900 ' +
+  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  'focus-visible:outline-slate-900 disabled:cursor-not-allowed disabled:text-slate-500'
 
 /**
  * 配列のプロンプト断片を 1 つずつ足し引きする入力。
@@ -46,10 +58,10 @@ export const TagInput = ({
 
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-slate-800">
+      <label htmlFor={id} className={FIELD_LABEL_CLASS}>
         {label}
       </label>
-      {hint !== undefined && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
+      {hint !== undefined && <p className={`mt-1 ${FIELD_HINT_CLASS}`}>{hint}</p>}
 
       <ul className="mt-2 flex flex-wrap gap-2">
         {values.map((value, index) => (
@@ -66,13 +78,13 @@ export const TagInput = ({
                 setLocalError(null)
                 onChange(removeTagAt(values, index))
               }}
-              className="rounded-full px-1.5 text-slate-500 hover:bg-slate-200 hover:text-slate-900 disabled:cursor-not-allowed"
+              className={REMOVE_BUTTON_CLASS}
             >
               ×
             </button>
           </li>
         ))}
-        {values.length === 0 && <li className="text-sm text-slate-400">未登録</li>}
+        {values.length === 0 && <li className="text-sm text-slate-600">未登録</li>}
       </ul>
 
       <div className="mt-2 flex gap-2">
@@ -94,16 +106,13 @@ export const TagInput = ({
             event.preventDefault()
             commit()
           }}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none disabled:bg-slate-100"
+          className={FIELD_CONTROL_CLASS}
         />
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={commit}
-          className="shrink-0 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
-        >
-          追加
-        </button>
+        <div className="shrink-0">
+          <Button tone="secondary" disabled={disabled} onClick={commit}>
+            追加
+          </Button>
+        </div>
       </div>
 
       <FieldError id={errorId} message={error ?? localError ?? undefined} />

@@ -1,5 +1,6 @@
 import type { Location } from '@ixa/domain'
 import { SelectField } from '@/components/form/select-field'
+import { FIELD_HINT_CLASS, FIELD_LABEL_CLASS } from '@/components/form/field-styles'
 import {
   LOCATION_EMPTY_NOTICE,
   LOCATION_REFERENCE_NOTICE,
@@ -18,25 +19,43 @@ export type LocationFieldProps = {
 }
 
 const FIELD_ID = 'locationId'
+const LABEL_ID = 'locationId-label'
 const LABEL = 'ロケーション'
-
-const Label = () => <span className="block text-sm font-medium text-slate-800">{LABEL}</span>
 
 type NoticeProps = {
   readonly tone: 'muted' | 'warning'
   readonly message: string
 }
 
-const Notice = ({ tone, message }: NoticeProps) => (
-  <p
-    className={`mt-1 rounded-md border border-dashed px-3 py-2 text-sm ${
-      tone === 'warning'
-        ? 'border-amber-300 bg-amber-50 text-amber-900'
-        : 'border-slate-300 bg-slate-50 text-slate-600'
-    }`}
-  >
-    {message}
-  </p>
+const NOTICE_TONES: Readonly<Record<NoticeProps['tone'], string>> = Object.freeze({
+  // amber-900 on amber-50 = 8.75
+  warning: 'border-amber-300 bg-amber-50 text-amber-900',
+  // slate-600 on slate-50 = 7.24
+  muted: 'border-slate-300 bg-slate-50 text-slate-600',
+})
+
+/**
+ * 選択肢が出せないときの説明。
+ *
+ * **`<label>` を使わないこと。** ここには紐付ける入力欄が無い。対応する control の無い
+ * `<label>` は読み上げ時に宙に浮く。代わりに項目名を `role="group"` の名前として与え、
+ * 「ロケーションという項目の説明である」ことを読み上げに伝える。
+ *
+ * 読み込み失敗は `role="alert"` にする。利用者の操作の結果ではなく環境の異常なので、
+ * 視線が別の場所にあっても届く必要がある。未登録は異常ではないので alert にしない。
+ */
+const NoticeField = ({ tone, message }: NoticeProps) => (
+  <div role="group" aria-labelledby={LABEL_ID}>
+    <span id={LABEL_ID} className={FIELD_LABEL_CLASS}>
+      {LABEL}
+    </span>
+    <p
+      role={tone === 'warning' ? 'alert' : undefined}
+      className={`mt-1 rounded-md border border-dashed px-3 py-2 text-sm ${NOTICE_TONES[tone]}`}
+    >
+      {message}
+    </p>
+  </div>
 )
 
 export const LocationField = ({
@@ -49,20 +68,12 @@ export const LocationField = ({
 }: LocationFieldProps) => {
   if (loadError !== undefined) {
     return (
-      <div>
-        <Label />
-        <Notice tone="warning" message={`ロケーションを読み込めませんでした: ${loadError}`} />
-      </div>
+      <NoticeField tone="warning" message={`ロケーションを読み込めませんでした: ${loadError}`} />
     )
   }
 
   if (locations.length === 0) {
-    return (
-      <div>
-        <Label />
-        <Notice tone="muted" message={LOCATION_EMPTY_NOTICE} />
-      </div>
-    )
+    return <NoticeField tone="muted" message={LOCATION_EMPTY_NOTICE} />
   }
 
   return (
@@ -76,7 +87,7 @@ export const LocationField = ({
         error={error}
         onChange={onChange}
       />
-      <p className="mt-1 text-xs text-slate-500">{LOCATION_REFERENCE_NOTICE}</p>
+      <p className={`mt-1 ${FIELD_HINT_CLASS}`}>{LOCATION_REFERENCE_NOTICE}</p>
     </div>
   )
 }

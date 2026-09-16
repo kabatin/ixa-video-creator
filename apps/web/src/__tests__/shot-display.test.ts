@@ -1,7 +1,8 @@
-import { ShotStatus, ReviewStatus, HumanVerdict } from '@ixa/domain'
+import { ShotStatus, ReviewStatus, HumanVerdict, SourceTypeName } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import {
   formatSeconds,
+  formatTimecode,
   formatUsd,
   humanVerdictLabel,
   isGeneratingStatus,
@@ -9,6 +10,7 @@ import {
   reviewStatusLabel,
   shotStatusClassName,
   shotStatusLabel,
+  sourceTypeLabel,
 } from '@/lib/shot-display'
 
 describe('shotStatusClassName', () => {
@@ -59,5 +61,34 @@ describe('数値の書式', () => {
 
   it('コストは 3 桁で出す', () => {
     expect(formatUsd(0.35)).toBe('$0.350')
+  })
+})
+
+describe('sourceTypeLabel', () => {
+  it('すべての生成方式に日本語ラベルがある', () => {
+    for (const name of SourceTypeName.options) {
+      expect(sourceTypeLabel(name)).not.toBe('')
+    }
+  })
+
+  it('生の enum をそのまま返さない', () => {
+    for (const name of SourceTypeName.options) {
+      expect(sourceTypeLabel(name)).not.toBe(name)
+    }
+  })
+
+  it('生成方式ごとに違うラベルを返す', () => {
+    const labels = SourceTypeName.options.map(sourceTypeLabel)
+    expect(new Set(labels).size).toBe(SourceTypeName.options.length)
+  })
+})
+
+describe('formatTimecode', () => {
+  it('位置は時計形式、尺は秒で出す（format-time に揃える）', () => {
+    expect(formatTimecode({ startSec: 3.75, durationSec: 3.75 })).toBe('0:03.75 – 0:07.50（3.75s）')
+  })
+
+  it('1 分を越えても分に繰り上がる', () => {
+    expect(formatTimecode({ startSec: 62.5, durationSec: 2 })).toBe('1:02.50 – 1:04.50（2.00s）')
   })
 })
