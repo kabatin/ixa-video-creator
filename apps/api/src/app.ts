@@ -1,4 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
+import { cors } from 'hono/cors'
 import type {
   GenerationJobRepository, MediaAssetRepository, ProjectRepository, ShotRepository, TakeRepository,
 } from '@ixa/db'
@@ -40,6 +41,8 @@ export type AppDeps = {
   /** media キューへの投入。未配線なら登録のみ行い queued: false を返す。 */
   mediaIngest?: MediaIngestDeps
   storage: ObjectStorage
+  /** CORS で許可するオリジン。空なら CORS を有効にしない。 */
+  corsOrigins: readonly string[]
   logger: Logger
 }
 
@@ -50,6 +53,24 @@ export type AppDeps = {
 export const createApp = (deps: AppDeps) => {
   const { projects, mediaAssets, storage, logger } = deps
   const app = new OpenAPIHono({ defaultHook: validationHook })
+
+  /**
+   * ブラウザから API を直接叩く経路（署名付き URL の取得など）のために CORS を許可する。
+   *
+   * **許可先は設定で明示する。ワイルドカードを使わない。**
+   * 開発中は Web の開発サーバだけを許可すれば足りる。
+   */
+  if (deps.corsOrigins.length > 0) {
+    app.use(
+      '*',
+      cors({
+        origin: [...deps.corsOrigins],
+        allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowHeaders: ['Content-Type'],
+        maxAge: 600,
+      }),
+    )
+  }
 
   app.route('/', healthRoutes())
   app.route('/', projectRoutes({ projects }))

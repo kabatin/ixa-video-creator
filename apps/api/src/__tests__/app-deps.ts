@@ -69,5 +69,7 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   renderJobs: createInMemoryRenderJobRepository(),
   renderQueue: createRecordingRenderQueue(),
   storage: createMemoryStorage(),
+  // テストは同一オリジン想定なので CORS を無効にする
+  corsOrigins: [],
   logger: createLogger('silent'),
 })

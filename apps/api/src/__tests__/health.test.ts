@@ -52,3 +52,41 @@ describe('GET /openapi.json', () => {
     )
   })
 })
+
+describe('CORS', () => {
+  it('許可したオリジンからのプリフライトを通す', async () => {
+    const app = createApp({ ...baseAppDeps(), corsOrigins: ['http://127.0.0.1:3000'] })
+    const res = await app.request('/health', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'http://127.0.0.1:3000',
+        'Access-Control-Request-Method': 'GET',
+      },
+    })
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://127.0.0.1:3000')
+  })
+
+  it('許可していないオリジンには許可ヘッダを返さない', async () => {
+    const app = createApp({ ...baseAppDeps(), corsOrigins: ['http://127.0.0.1:3000'] })
+    const res = await app.request('/health', {
+      headers: { Origin: 'http://evil.example.com' },
+    })
+    expect(res.headers.get('access-control-allow-origin')).not.toBe('http://evil.example.com')
+  })
+
+  it('ワイルドカードを返さない（許可先を明示する設計）', async () => {
+    const app = createApp({ ...baseAppDeps(), corsOrigins: ['http://127.0.0.1:3000'] })
+    const res = await app.request('/health', {
+      headers: { Origin: 'http://127.0.0.1:3000' },
+    })
+    expect(res.headers.get('access-control-allow-origin')).not.toBe('*')
+  })
+
+  it('設定が空なら CORS を有効にしない', async () => {
+    const app = createApp({ ...baseAppDeps(), corsOrigins: [] })
+    const res = await app.request('/health', {
+      headers: { Origin: 'http://127.0.0.1:3000' },
+    })
+    expect(res.headers.get('access-control-allow-origin')).toBeNull()
+  })
+})

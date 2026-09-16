@@ -165,6 +165,7 @@ export const main = (): void => {
     generationContext: createPhase1EmptyContextSource(),
     generationQueue: queuePort,
     storage,
+    corsOrigins: config.corsOrigins,
     logger,
   })
 

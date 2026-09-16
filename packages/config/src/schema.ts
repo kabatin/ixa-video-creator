@@ -25,6 +25,15 @@ export const EnvSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(3001),
   WEB_PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  /**
+   * CORS で許可するオリジン。カンマ区切り。
+   * ブラウザから API を直接叩く経路（署名付き URL の取得など）に必要。
+   * **ワイルドカードを既定にしない。** 許可先を明示する。
+   */
+  CORS_ORIGINS: z
+    .string()
+    .default('http://127.0.0.1:3000,http://localhost:3000')
+    .transform((v) => v.split(',').map((o) => o.trim()).filter((o) => o.length > 0)),
   AUDIO_SERVICE_URL: urlString.default('http://127.0.0.1:8100'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
@@ -61,6 +70,7 @@ export interface AppConfig {
   api: {
     port: number
   }
+  corsOrigins: readonly string[]
   web: {
     port: number
   }
