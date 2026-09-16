@@ -13,8 +13,12 @@ const describeIssue = (issue: ZodIssue): string => {
       return issue.received === 'undefined'
         ? `${field}: 必須の環境変数が設定されていません`
         : `${field}: 型が不正です（${issue.expected} が必要です）`
-    case 'invalid_string':
-      return `${field}: 形式が不正です（${issue.validation} 形式が必要です）`
+    case 'invalid_string': {
+      // zod の validation は 'url' のような文字列のこともあれば { includes: '...' } のような
+      // オブジェクトのこともある。そのまま埋め込むと '[object Object]' になるため分岐する。
+      const kind = typeof issue.validation === 'string' ? issue.validation : 'フォーマット'
+      return `${field}: 形式が不正です（${kind} 形式が必要です）`
+    }
     case 'invalid_enum_value':
       return `${field}: 値が不正です（${issue.options.join(' | ')} のいずれかが必要です）`
     case 'too_small':

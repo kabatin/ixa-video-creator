@@ -1,3 +1,7 @@
+/* eslint-disable @typescript-eslint/require-await --
+ * ObjectStorage は非同期インターフェースだが、インメモリ実装は同期で完結する。
+ * async を外すと Port のシグネチャに合わなくなるため、このファイルだけルールを外す。
+ */
 import type { ObjectHead, ObjectStorage, PutOptions, StorageKey } from './port.js'
 import { ObjectNotFoundError } from './port.js'
 

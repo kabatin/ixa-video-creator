@@ -21,7 +21,7 @@ export type S3StorageConfig = {
 /** HeadObject / GetObject が「存在しない」ことを示すエラーかどうかを判定する */
 const isNotFoundError = (error: unknown): boolean => {
   if (typeof error !== 'object' || error === null) return false
-  const name = 'name' in error ? String((error as { name: unknown }).name) : ''
+  const name = 'name' in error ? String(error.name) : ''
   if (name === 'NotFound' || name === 'NoSuchKey') return true
   const statusCode =
     '$metadata' in error &&
