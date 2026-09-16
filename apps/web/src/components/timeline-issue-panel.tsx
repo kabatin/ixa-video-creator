@@ -1,7 +1,15 @@
+import type { ProjectId } from '@ixa/domain'
+import Link from 'next/link'
+import {
+  MAX_ROWS_PER_GROUP,
+  describeIssueShot,
+  groupTimelineIssues,
+  rowsForGroup,
+  type TimelineIssueGroup,
+} from '@/lib/issue-grouping'
 import {
   issueSeverityClassName,
   issueSeverityLabel,
-  sortTimelineIssues,
   summarizeTimelineIssues,
 } from '@/lib/timeline-display'
 import type { TimelineIssueView } from '@/lib/timeline-issues'
@@ -11,13 +19,110 @@ import type { TimelineIssueView } from '@/lib/timeline-issues'
  *
  * `issues` が `null` のときは「検査できていない」であって「問題なし」ではない。
  * 空配列と同じ見た目にすると、人は検査済みだと信じてしまう（lessons L-015）。
+ *
+ * 実データでは指摘が 121 件出る。以前は全件を平らに並べていたため、
+ * このパネルだけで 3470px を占め、編集 UI が 3766px の位置まで押し下げられていた。
+ * さらに一覧が `role="alert"` の中にあったので、**読み上げでは 121 件が一度に流れた。**
+ *
+ * いまは 2 つに分けている。
+ * - 件数の要約だけを `role="alert"` にする。ここは 1 文で読み終わる
+ * - 明細は alert の外に置き、種類ごとに畳む。開いた束だけが読み上げられる
  */
 
 export type TimelineIssuePanelProps = {
   readonly issues: readonly TimelineIssueView[] | null
+  /**
+   * 指摘から Shot 詳細へ飛ぶために要る。
+   * 渡されないうちはリンクにせず、Shot の見分けだけを文字で出す
+   * （呼び出し元がまだ渡していない間に、押せないリンクを作らないため）。
+   */
+  readonly projectId?: ProjectId
 }
 
-export const TimelineIssuePanel = ({ issues }: TimelineIssuePanelProps) => {
+const PANEL_LABEL = 'タイムラインの検証結果'
+
+const IssueRow = ({
+  issue,
+  projectId,
+}: {
+  readonly issue: TimelineIssueView
+  readonly projectId: ProjectId | undefined
+}) => {
+  // 見分けは常に出す。`projectId` が無いときに消えるのはリンクだけ。
+  const shot = describeIssueShot(issue, projectId)
+
+  return (
+    <li className="flex flex-wrap items-start gap-2 border-t border-slate-100 py-2 text-sm text-slate-800 first:border-t-0">
+      <span
+        className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${issueSeverityClassName(issue.severity)}`}
+      >
+        {issueSeverityLabel(issue.severity)}
+      </span>
+      <span className="min-w-0 flex-1 break-words">{issue.message}</span>
+      {shot !== null &&
+        (shot.href === null ? (
+          <span className="text-xs text-slate-500">{shot.label}</span>
+        ) : (
+          <Link
+            href={shot.href}
+            className="text-xs font-medium text-sky-700 underline hover:text-sky-900"
+          >
+            {`${shot.label} を開く`}
+          </Link>
+        ))}
+    </li>
+  )
+}
+
+/**
+ * 種類ごとの束。**既定は畳んだまま。**
+ * 開く操作は `<details>` に任せる。JavaScript が動く前でも開ける。
+ */
+const IssueGroupBlock = ({
+  group,
+  projectId,
+}: {
+  readonly group: TimelineIssueGroup
+  readonly projectId: ProjectId | undefined
+}) => {
+  const { rows, hiddenCount } = rowsForGroup(group)
+
+  return (
+    <details className="rounded-md border border-red-200 bg-white">
+      <summary className="flex cursor-pointer flex-wrap items-center gap-2 p-3 text-sm">
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${issueSeverityClassName(group.severity)}`}
+        >
+          {issueSeverityLabel(group.severity)}
+        </span>
+        <span className="font-medium text-slate-900">{group.label}</span>
+        <span className="text-slate-700">{`${String(group.count)} 件`}</span>
+        {group.shotCount > 0 && (
+          <span className="text-xs text-slate-500">{`Shot ${String(group.shotCount)} 件が関係`}</span>
+        )}
+        <code className="ml-auto text-xs text-slate-500">{group.code}</code>
+      </summary>
+
+      <ul className="px-3 pb-2">
+        {rows.map((issue, index) => (
+          <IssueRow
+            key={`${issue.code}-${issue.shotId ?? 'none'}-${String(index)}`}
+            issue={issue}
+            projectId={projectId}
+          />
+        ))}
+      </ul>
+
+      {hiddenCount > 0 && (
+        <p className="border-t border-slate-100 px-3 py-2 text-xs text-slate-600">
+          {`同じ種類があと ${String(hiddenCount)} 件あります（一度に出すのは ${String(MAX_ROWS_PER_GROUP)} 件まで）。上から片付けて、もう一度検査してください。`}
+        </p>
+      )}
+    </details>
+  )
+}
+
+export const TimelineIssuePanel = ({ issues, projectId }: TimelineIssuePanelProps) => {
   const summary = summarizeTimelineIssues(issues)
 
   if (summary.state === 'unchecked') {
@@ -25,7 +130,7 @@ export const TimelineIssuePanel = ({ issues }: TimelineIssuePanelProps) => {
       <section
         role="alert"
         className="rounded-lg border border-amber-300 bg-amber-50 p-4"
-        aria-label="タイムラインの検証結果"
+        aria-label={PANEL_LABEL}
       >
         <h2 className="text-sm font-semibold text-amber-900">{summary.message}</h2>
         <p className="mt-1 text-sm text-amber-800">
@@ -41,7 +146,7 @@ export const TimelineIssuePanel = ({ issues }: TimelineIssuePanelProps) => {
       <section
         role="status"
         className="rounded-lg border border-emerald-300 bg-emerald-50 p-4"
-        aria-label="タイムラインの検証結果"
+        aria-label={PANEL_LABEL}
       >
         <h2 className="text-sm font-semibold text-emerald-900">{summary.message}</h2>
         <p className="mt-1 text-sm text-emerald-800">
@@ -51,31 +156,30 @@ export const TimelineIssuePanel = ({ issues }: TimelineIssuePanelProps) => {
     )
   }
 
+  const groups = groupTimelineIssues(issues ?? [])
+
   return (
-    <section
-      role="alert"
-      className="rounded-lg border border-red-300 bg-red-50 p-4"
-      aria-label="タイムラインの検証結果"
-    >
-      <h2 className="text-sm font-semibold text-red-900">{`タイムラインに指摘があります（${summary.message}）`}</h2>
-      {summary.errorCount > 0 && (
-        <p className="mt-1 text-sm text-red-800">
-          「レンダリング不可」が残っている間は書き出しが 422 で拒否されます。
-        </p>
-      )}
+    <section className="rounded-lg border border-red-300 bg-red-50 p-4" aria-label={PANEL_LABEL}>
+      {/* 読み上げるのはここだけ。明細を alert に入れると全件が一度に流れる。 */}
+      <div role="alert">
+        <h2 className="text-sm font-semibold text-red-900">
+          {`タイムラインに指摘があります（${summary.message}・${String(groups.length)} 種類）`}
+        </h2>
+        {summary.errorCount > 0 && (
+          <p className="mt-1 text-sm text-red-800">
+            「レンダリング不可」が残っている間は書き出しが 422 で拒否されます。
+          </p>
+        )}
+      </div>
+
+      <p className="mt-1 text-sm text-red-800">
+        種類ごとに畳んであります。見出しを開くと、その種類の指摘と対象の Shot が出ます。
+      </p>
+
       <ul className="mt-3 space-y-2">
-        {sortTimelineIssues(issues ?? []).map((issue) => (
-          <li
-            key={`${issue.code}-${issue.shotId ?? 'none'}-${issue.message}`}
-            className="flex flex-wrap items-start gap-2 text-sm text-slate-800"
-          >
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${issueSeverityClassName(issue.severity)}`}
-            >
-              {issueSeverityLabel(issue.severity)}
-            </span>
-            <span className="min-w-0 flex-1 break-words">{issue.message}</span>
-            <code className="text-xs text-slate-500">{issue.code}</code>
+        {groups.map((group) => (
+          <li key={group.code}>
+            <IssueGroupBlock group={group} projectId={projectId} />
           </li>
         ))}
       </ul>

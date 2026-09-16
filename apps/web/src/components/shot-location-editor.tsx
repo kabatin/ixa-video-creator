@@ -3,7 +3,9 @@
 import type { Location, LocationId } from '@ixa/domain'
 import { useState } from 'react'
 import { LocationField } from '@/components/location-field'
+import { Button } from '@/components/ui/button'
 import { toLocationFieldValue, toLocationPatch } from '@/lib/shot-location'
+import { WORDING } from '@/lib/wording'
 
 /** 保存の結果。成功も失敗も同じ場所に出し、押したのに何も起きないように見えるのを防ぐ。 */
 export type LocationSaveFeedback = {
@@ -48,6 +50,9 @@ export const ShotLocationEditor = ({
    * 一覧が引けなくても、**既に付いている場所は必ず外せるようにする**。
    * 外せないと、一覧の取得が失敗している間ずっと参照画像が渡り続け、
    * 利用者には取り消す手段が画面上に存在しない状態になる。
+   *
+   * **これは削除ではない。** 外れるのは Shot との関連づけだけで、
+   * ロケーション自体は残る。だから `WORDING.unlink` を使い、`danger` も使わない。
    */
   const removable = !selectable && locationId !== null
   const unchanged = draft === toLocationFieldValue(locationId)
@@ -82,26 +87,24 @@ export const ShotLocationEditor = ({
       {(selectable || removable) && (
         <div className="mt-3 flex flex-wrap items-center gap-3">
           {selectable ? (
-            <button
-              type="button"
-              disabled={busy || unchanged}
-              onClick={save}
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-            >
-              {saving ? '保存中…' : 'ロケーションを保存'}
-            </button>
+            <Button tone="primary" disabled={busy || unchanged} onClick={save}>
+              {saving ? '保存中…' : `ロケーションを${WORDING.save}`}
+            </Button>
           ) : (
-            <button
-              type="button"
+            <Button
               disabled={busy}
               onClick={() => {
                 setInvalid(undefined)
                 onSave(null)
               }}
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
             >
-              {saving ? '保存中…' : 'ロケーションを外す'}
-            </button>
+              {saving ? '保存中…' : `ロケーションを${WORDING.unlink}`}
+            </Button>
+          )}
+          {removable && (
+            <p className="text-xs text-slate-600">
+              ロケーション自体は残ります。この Shot との関連づけだけを外します。
+            </p>
           )}
           {feedback !== null && (
             <p

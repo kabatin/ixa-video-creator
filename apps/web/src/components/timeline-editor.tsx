@@ -209,7 +209,7 @@ export const TimelineEditor = ({
         </ul>
       )}
 
-      <TimelineIssuePanel issues={issues} />
+      <TimelineIssuePanel issues={issues} projectId={projectId} />
 
       <TimelineSnapPanel
         enabled={snapEnabled}

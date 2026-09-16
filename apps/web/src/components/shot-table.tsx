@@ -5,7 +5,11 @@ export type ShotTableProps = {
   readonly shots: readonly Shot[]
 }
 
-const HEADERS: readonly string[] = ['コード', '尺', '説明', 'カメラ', '状態', '']
+/**
+ * 見出しと中身を合わせる。2 列目は開始時刻と尺の両方を出すので「尺」では嘘になる。
+ * 以前は「尺」の下に開始時刻が並んでいて、読み手は開始秒を尺だと読んだ。
+ */
+const HEADERS: readonly string[] = ['コード', '時間', '説明', 'カメラ', '状態', '']
 
 export const ShotTable = ({ shots }: ShotTableProps) => (
   <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">

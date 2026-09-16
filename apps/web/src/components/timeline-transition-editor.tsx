@@ -10,6 +10,7 @@ import {
 import { useState } from 'react'
 import { SelectField } from '@/components/form/select-field'
 import { TextField } from '@/components/form/text-field'
+import { Button } from '@/components/ui/button'
 import {
   adjacentShotPairs,
   formatClock,
@@ -18,14 +19,19 @@ import {
   transitionTypeLabel,
   type ShotPair,
 } from '@/lib/timeline-display'
+import { WORDING } from '@/lib/wording'
 
 /**
- * Shot と Shot の間に Transition を置く / 消す（P5-4）。
+ * Shot と Shot の間に Transition を置く / 削除する（P5-4）。
  *
  * **置ける場所は隣り合う Shot の間だけ。** 隣接していない組を選べる画面にすると、
  * 作れてしまってからサーバに弾かれる。組のほうを先に列挙して選ばせる。
  *
  * PATCH は無い契約なので、差し替えは「消して置き直す」になる。
+ *
+ * **削除に確認は挟まない。** 同じ行が種類と尺の 2 つだけで置き直せるうえ、
+ * 差し替えの手順そのものが「消してから置き直す」なので、毎回確認を出すと
+ * 想定どおりの操作を妨げる。取り消せる操作なので `danger` も使わない。
  */
 
 export type AddTransitionInput = {
@@ -118,30 +124,23 @@ const PairRow = ({ pair, transition, busy, onAdd, onRemove }: PairRowProps) => {
               onChange={setDurationRaw}
             />
           </div>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={submit}
-            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-          >
+          <Button tone="primary" disabled={busy} onClick={submit}>
             置く
-          </button>
+          </Button>
         </>
       ) : (
         <>
           <p className="text-sm text-slate-800">
             {`${transitionTypeLabel(transition.type)} / ${transition.durationSec.toFixed(2)}s`}
           </p>
-          <button
-            type="button"
+          <Button
             disabled={busy}
             onClick={() => {
               onRemove(transition.id)
             }}
-            className="rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-400"
           >
-            消す
-          </button>
+            {`${WORDING.delete}（Transition）`}
+          </Button>
         </>
       )}
     </li>
@@ -161,7 +160,7 @@ export const TimelineTransitionEditor = ({
     <section className="rounded-lg border border-slate-200 bg-white p-5">
       <h2 className="text-base font-semibold text-slate-900">Transition</h2>
       <p className="mt-1 text-sm text-slate-600">
-        隣り合う Shot の間にだけ置けます。差し替えるときは一度消してから置き直してください。
+        隣り合う Shot の間にだけ置けます。差し替えるときは一度削除してから置き直してください。
       </p>
 
       {pairs.length === 0 ? (

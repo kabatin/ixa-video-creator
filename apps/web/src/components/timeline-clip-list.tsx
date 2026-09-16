@@ -4,6 +4,8 @@ import type { TimelineClip, TimelineClipId } from '@ixa/domain'
 import { useState } from 'react'
 import { TextField } from '@/components/form/text-field'
 import { SnapNoticeList } from '@/components/timeline-snap-panel'
+import { Button } from '@/components/ui/button'
+import { ConfirmButton } from '@/components/ui/confirm-button'
 import {
   describeClipContent,
   formatTimeSpan,
@@ -13,9 +15,10 @@ import {
   sortClipsForDisplay,
 } from '@/lib/timeline-display'
 import type { SnapNotice, SnapSpanInput, SnapSpanOutcome } from '@/lib/timeline-snap'
+import { WORDING, deleteConfirmMessage } from '@/lib/wording'
 
 /**
- * 置いてあるクリップの位置・尺・重ね順を数値で変える / 消す（P5-4）。
+ * 置いてあるクリップの位置・尺・重ね順を数値で変える / 削除する（P5-4）。
  *
  * **クリップが 0 件であることと、読み込めていないことを画面で区別する。**
  * 呼び出し側は読み込めなかったときに `clips` へ null を渡す（lessons L-015）。
@@ -23,7 +26,16 @@ import type { SnapNotice, SnapSpanInput, SnapSpanOutcome } from '@/lib/timeline-
  * 確定時に開始と終了を吸着候補へ寄せる。**動かしている当のクリップ自身は候補から外す**
  * （自分の端は距離 0 の候補になり、そこへ吸着して動かせなくなるため）。
  * 除外は `onSnapSpan` に渡す `TimelineClipId` で呼び出し側が行う。
+ *
+ * **削除に確認を挟むかは「この画面から作り直せるか」で決める。**
+ * `timeline-clip-form.tsx` が作れるのは TEXT のクリップだけで、メディアと
+ * モーショングラフィックスは素材の選択が要るため作る導線が無い。消したら画面からは戻せない。
+ * 取り消せないものだけに確認と `danger` を付け、戻せるものは `secondary` にする。
+ * 全部を赤くすると、赤が「取り消せない」を指さなくなる。
  */
+
+/** この画面から作り直せるクリップか。作る導線は TEXT にしか無い。 */
+const recreatableHere = (content: TimelineClip['content']): boolean => content.type === 'text'
 
 export type ClipPatch = {
   readonly startSec: number
@@ -163,24 +175,35 @@ const ClipRow = ({
         />
       </div>
 
-      <button
-        type="button"
-        disabled={busy}
-        onClick={submit}
-        className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-      >
+      <Button tone="primary" disabled={busy} onClick={submit}>
         変える
-      </button>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => {
-          onRemove(clip.id)
-        }}
-        className="rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-400"
-      >
-        消す
-      </button>
+      </Button>
+      {recreatableHere(clip.content) ? (
+        <Button
+          disabled={busy}
+          onClick={() => {
+            onRemove(clip.id)
+          }}
+        >
+          {`${WORDING.delete}（クリップ）`}
+        </Button>
+      ) : (
+        <ConfirmButton
+          label={`${WORDING.delete}（クリップ）`}
+          message={deleteConfirmMessage(`${clip.track} のクリップ（${formatTimeSpan(clip)}）`)}
+          disabled={busy}
+          onConfirm={() => {
+            onRemove(clip.id)
+          }}
+        >
+          <p className="mt-2 text-xs text-rose-900">
+            {describeClipContent(clip.content)}
+          </p>
+          <p className="mt-1 text-xs text-rose-900">
+            この種類のクリップは、この画面から置き直せません。
+          </p>
+        </ConfirmButton>
+      )}
 
       <div className="w-full">
         <SnapNoticeList notices={notices} />

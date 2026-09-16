@@ -2,37 +2,104 @@
 
 import type { MusicTrack } from '@ixa/domain'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import { formatClock } from '@/lib/format-time'
+import { POLL_TIMEOUT_MS, startAsyncPolling, type PollHandle } from '@/lib/poller'
+import { WORDING } from '@/lib/wording'
 
 /**
  * 未解析の楽曲について、音楽解析をキューへ積む操作。
  *
- * 解析は worker が数十秒かけて行う。**ここでは完了を待たない。**
- * 受け付けたことだけを伝え、結果は利用者が画面を更新して確かめる。
+ * 解析は worker が数十秒かけて行う。以前は積んだあと放置で、
+ * 利用者が「結果を確認」を押すまで終わったかどうか分からなかった。
+ * いまは積んだ直後から結果を追いかけ、**終わったら自動で画面を差し替える。**
+ *
+ * 状態は 5 つを混ぜない。まだ始めていない / 送信中 / 待っている / 終わった /
+ * 上限まで待った / 失敗した。特に「上限まで待った」を「終わった」にしない（lessons L-015）。
+ *
+ * **画面を開き直したときは `idle` に戻る。** API に「解析が走っているか」を問う口が無く、
+ * `getAnalysis` は結果が出るまで null しか返さないため、
+ * 「まだ始まっていない」と「走っている最中」を画面から区別できない。
+ * 走っていると言い切るより、始まっていないものとして扱うほうが害が小さい。
  */
 
 export type AnalysisStarterProps = {
   readonly track: MusicTrack
 }
 
+type Phase =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'sending' }
+  | { readonly kind: 'waiting'; readonly startedAtMs: number; readonly elapsedMs: number }
+  | { readonly kind: 'done' }
+  /** 上限まで待っても結果が出なかった。終わっていない可能性が高い。 */
+  | { readonly kind: 'timeout' }
+  | { readonly kind: 'failed'; readonly message: string }
+
+const IDLE: Phase = { kind: 'idle' }
+
+const timeoutMinutes = (): string => String(Math.round(POLL_TIMEOUT_MS / 60_000))
+
 export const AnalysisStarter = ({ track }: AnalysisStarterProps) => {
   const router = useRouter()
-  const [state, setState] = useState<'idle' | 'sending' | 'queued'>('idle')
-  const [error, setError] = useState<string | null>(null)
+  const [phase, setPhase] = useState<Phase>(IDLE)
+  const pollRef = useRef<PollHandle | null>(null)
+
+  // 毎レンダーで作り直すと base URL の解決が繰り返される。1 度だけ組む。
+  const api = useMemo(() => createApiClient(), [])
+
+  // 画面を離れたらポーリングを止める。止め忘れはリクエストの垂れ流しになる。
+  useEffect(
+    () => () => {
+      pollRef.current?.stop()
+    },
+    [],
+  )
+
+  const watch = (startedAtMs: number): void => {
+    pollRef.current?.stop()
+    setPhase({ kind: 'waiting', startedAtMs, elapsedMs: 0 })
+    pollRef.current = startAsyncPolling({
+      probe: async () => {
+        const analysis = await api.getAnalysis(track.id)
+        return { running: analysis === null, value: analysis }
+      },
+      onProbe: () => {
+        setPhase((current) =>
+          current.kind === 'waiting'
+            ? { ...current, elapsedMs: Date.now() - current.startedAtMs }
+            : current,
+        )
+      },
+      onSettled: () => {
+        setPhase({ kind: 'done' })
+        // 解析結果が要るのはサーバ側で組み立てる画面なので、取り直させる。
+        router.refresh()
+      },
+      onTimeout: () => {
+        setPhase({ kind: 'timeout' })
+      },
+      onFailed: (caught) => {
+        setPhase({ kind: 'failed', message: describeError(caught) })
+      },
+    })
+  }
 
   const start = async (): Promise<void> => {
-    setState('sending')
-    setError(null)
+    setPhase({ kind: 'sending' })
     try {
-      await createApiClient().requestAnalysis(track.id)
-      setState('queued')
+      await api.requestAnalysis(track.id)
     } catch (caught) {
-      setError(describeError(caught))
-      setState('idle')
+      setPhase({ kind: 'failed', message: describeError(caught) })
+      return
     }
+    watch(Date.now())
   }
+
+  const busy = phase.kind === 'sending' || phase.kind === 'waiting'
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
@@ -42,38 +109,49 @@ export const AnalysisStarter = ({ track }: AnalysisStarterProps) => {
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          disabled={state === 'sending'}
+        <Button
+          tone="primary"
+          disabled={busy}
           onClick={() => {
             void start()
           }}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
-          {state === 'sending' ? '送信中…' : '解析を実行'}
-        </button>
+          {phase.kind === 'sending' ? '送信中…' : `解析を${WORDING.start}`}
+        </Button>
 
-        {state === 'queued' && (
-          <button
-            type="button"
+        {(phase.kind === 'timeout' || phase.kind === 'failed') && (
+          <Button
             onClick={() => {
               router.refresh()
             }}
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
-            結果を確認
-          </button>
+            {WORDING.refresh}
+          </Button>
         )}
+      </div>
 
-        {state === 'queued' && (
+      <div className="mt-3">
+        {phase.kind === 'waiting' && (
           <p role="status" className="text-sm text-slate-700">
-            解析を受け付けました。完了まで数十秒かかります。
+            {`解析を受け付けました。完了を待っています（経過 ${formatClock(phase.elapsedMs / 1_000)}）。終わったら自動で切り替わります。`}
           </p>
         )}
 
-        {error !== null && (
+        {phase.kind === 'done' && (
+          <p role="status" className="text-sm text-emerald-700">
+            解析が終わりました。画面を切り替えています。
+          </p>
+        )}
+
+        {phase.kind === 'timeout' && (
+          <p role="alert" className="text-sm text-amber-800">
+            {`${timeoutMinutes()} 分待ちましたが結果が出ませんでした。追いかけるのをやめます。解析が失敗している可能性があるので、worker のログを確認してください。`}
+          </p>
+        )}
+
+        {phase.kind === 'failed' && (
           <p role="alert" className="text-sm text-rose-700">
-            {error}
+            {phase.message}
           </p>
         )}
       </div>

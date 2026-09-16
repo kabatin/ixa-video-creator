@@ -1,4 +1,5 @@
 import {
+  CreateMusicTrackInput,
   MusicSection,
   MusicTrack,
   type MusicTrackId,
@@ -18,6 +19,13 @@ import type { Requester } from '@/lib/requester'
 
 export const WireMusicTrack = MusicTrack
 export const WireMusicTrackList = z.array(WireMusicTrack)
+
+/**
+ * 楽曲を登録するときの本文。
+ * `projectId` は経路が持つので本文には載せない（API 側と同じ形。正を 2 つにしない）。
+ */
+export const CreateMusicTrackBody = CreateMusicTrackInput.omit({ projectId: true })
+export type CreateMusicTrackBody = z.input<typeof CreateMusicTrackBody>
 
 /**
  * 解析結果の受け取り形。`waveformPeaksKey` は API が返さず、
@@ -65,6 +73,8 @@ export type AllocateShotsBody = {
 
 export type MusicApi = {
   listMusicTracks: (projectId: ProjectId) => Promise<MusicTrack[]>
+  /** 音源（MediaAsset）を楽曲として登録する。音声以外は API が 422 で弾く。 */
+  createMusicTrack: (projectId: ProjectId, body: CreateMusicTrackBody) => Promise<MusicTrack>
   /** 未解析なら null。解析前でも画面を出せるようにするため 404 を畳む。 */
   getAnalysis: (musicTrackId: MusicTrackId) => Promise<WireMusicAnalysis | null>
   requestAnalysis: (musicTrackId: MusicTrackId) => Promise<WireAnalysisAccepted>
@@ -77,6 +87,13 @@ const trackPath = (id: MusicTrackId, suffix = ''): string =>
 export const createMusicApi = (requester: Requester): MusicApi => ({
   listMusicTracks: async (projectId) =>
     requester.get(`/projects/${encodeURIComponent(projectId)}/music-tracks`, WireMusicTrackList),
+
+  createMusicTrack: async (projectId, body) =>
+    requester.post(
+      `/projects/${encodeURIComponent(projectId)}/music-tracks`,
+      CreateMusicTrackBody.parse(body),
+      WireMusicTrack,
+    ),
 
   getAnalysis: async (musicTrackId) =>
     requester.getOrNull(trackPath(musicTrackId, '/analysis'), WireMusicAnalysis),

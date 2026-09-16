@@ -1,15 +1,14 @@
 'use client'
 
 import type { HumanVerdict, ReviewFinding, Take, TakeId } from '@ixa/domain'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ReviewFindingList } from '@/components/review-finding-list'
+import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
-import {
-  type HumanDecision,
-  type ReviewApi,
-  type WireReviewRun,
-} from '@/lib/review-api'
+import { formatClock } from '@/lib/format-time'
+import { POLL_TIMEOUT_MS, startAsyncPolling, type PollHandle } from '@/lib/poller'
+import { type HumanDecision, type ReviewApi, type WireReviewRun } from '@/lib/review-api'
 import {
   humanDecisionLabel,
   isReviewRunPending,
@@ -21,12 +20,18 @@ import {
   summarizeRun,
 } from '@/lib/review-display'
 import { humanVerdictLabel } from '@/lib/shot-display'
+import { WORDING } from '@/lib/wording'
 
 /**
  * Take 1 件のレビュー結果表示と、人間の最終判断（P4-6）。
  *
  * レビューは worker が非同期で走る。**実行ボタンは完了を待たない。**
- * 受け付けたことだけを伝え、結果は「結果を確認」で引き直す。
+ * 以前はそこで止まっていたので、利用者が「結果を確認」を押すまで
+ * 終わったかどうかが分からなかった。いまは待機中・実行中の run を自動で追いかける。
+ *
+ * 追いかけている状態は 5 つを混ぜない。追っていない / 待っている / 終わった /
+ * 上限まで待った / 問い合わせに失敗した。
+ * 特に「上限まで待った」を「終わった」にしない（lessons L-015）。
  * 失敗は必ず画面に出し、「押したのに何も起きない」を作らない。
  */
 
@@ -52,6 +57,14 @@ type LoadState =
     }
   | { readonly kind: 'error'; readonly message: string }
 
+/** 完了を追いかけている状態。`off` は「追っていない」で、「終わった」ではない。 */
+type WatchState =
+  | { readonly kind: 'off' }
+  | { readonly kind: 'watching'; readonly startedAtMs: number; readonly elapsedMs: number }
+  | { readonly kind: 'settled' }
+  | { readonly kind: 'timeout' }
+  | { readonly kind: 'failed'; readonly message: string }
+
 type Feedback = { readonly tone: 'success' | 'error'; readonly message: string }
 
 const FEEDBACK_CLASS = {
@@ -61,10 +74,9 @@ const FEEDBACK_CLASS = {
 
 const DECISIONS: readonly HumanDecision[] = ['approved', 'rejected']
 
-const DECISION_CLASS: Readonly<Record<HumanDecision, string>> = {
-  approved: 'bg-emerald-600 text-white hover:bg-emerald-500 disabled:bg-slate-300',
-  rejected: 'bg-rose-600 text-white hover:bg-rose-500 disabled:bg-slate-300',
-}
+const WATCH_OFF: WatchState = { kind: 'off' }
+
+const timeoutMinutes = (): string => String(Math.round(POLL_TIMEOUT_MS / 60_000))
 
 /**
  * 既定の呼び出し口。**API クライアントの組み立ては 1 箇所に寄せる**
@@ -80,6 +92,14 @@ const loadLatest = async (api: ReviewApi, takeId: TakeId): Promise<LoadState> =>
   const detail = await api.getReviewRun(latest.id)
   return { kind: 'ready', run: detail.run, findings: detail.findings }
 }
+
+/**
+ * まだ動いているか。
+ * `empty` を「動いている」とみなすのは**積んだ直後だけ**。run の行が出るまでの間があるため。
+ * 画面を開いた時点の `empty` は「まだ 1 度も走っていない」なので、そもそも追いかけない。
+ */
+const stillRunning = (state: LoadState): boolean =>
+  state.kind === 'empty' || (state.kind === 'ready' && isReviewRunPending(state.run.status))
 
 const RunSummary = ({
   run,
@@ -99,6 +119,32 @@ const RunSummary = ({
   </div>
 )
 
+const WatchNotice = ({ watch }: { readonly watch: WatchState }) => {
+  switch (watch.kind) {
+    case 'off':
+    case 'settled':
+      return null
+    case 'watching':
+      return (
+        <p role="status" className="text-sm text-slate-700">
+          {`レビューの完了を待っています（経過 ${formatClock(watch.elapsedMs / 1_000)}）。終わったら自動で更新します。`}
+        </p>
+      )
+    case 'timeout':
+      return (
+        <p role="alert" className="text-sm text-amber-800">
+          {`${timeoutMinutes()} 分待ちましたが終わりませんでした。追いかけるのをやめます。「${WORDING.refresh}」で引き直すか、worker のログを確認してください。`}
+        </p>
+      )
+    case 'failed':
+      return (
+        <p role="alert" className="text-sm text-rose-700">
+          {`結果を追いかけられなくなりました: ${watch.message}`}
+        </p>
+      )
+  }
+}
+
 export const ReviewPanel = ({
   takeId,
   humanVerdict,
@@ -107,18 +153,56 @@ export const ReviewPanel = ({
   api,
 }: ReviewPanelProps) => {
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
+  const [watch, setWatch] = useState<WatchState>(WATCH_OFF)
   const [reloadKey, setReloadKey] = useState(0)
   const [requesting, setRequesting] = useState(false)
-  const [queued, setQueued] = useState(false)
   const [savingVerdict, setSavingVerdict] = useState<HumanDecision | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   // 保存に成功するまでは親から渡された値を表示する。保存後はこちらが優先する。
   const [savedVerdict, setSavedVerdict] = useState<HumanVerdict | null>(null)
+  const pollRef = useRef<PollHandle | null>(null)
 
   // 毎レンダーで作り直すと effect が回り続ける。注入された api が変わらない限り固定する。
   const client = useMemo<ReviewApi>(() => api ?? defaultApi(), [api])
   const currentVerdict = savedVerdict ?? humanVerdict
   const busy = disabled || requesting || savingVerdict !== null
+
+  const startWatching = useCallback(() => {
+    pollRef.current?.stop()
+    const startedAtMs = Date.now()
+    setWatch({ kind: 'watching', startedAtMs, elapsedMs: 0 })
+    pollRef.current = startAsyncPolling<LoadState>({
+      probe: async () => {
+        const next = await loadLatest(client, takeId)
+        return { running: stillRunning(next), value: next }
+      },
+      onProbe: (probe) => {
+        setState(probe.value)
+        setWatch((current) =>
+          current.kind === 'watching'
+            ? { ...current, elapsedMs: Date.now() - current.startedAtMs }
+            : current,
+        )
+      },
+      onSettled: () => {
+        setWatch({ kind: 'settled' })
+      },
+      onTimeout: () => {
+        setWatch({ kind: 'timeout' })
+      },
+      onFailed: (caught) => {
+        setWatch({ kind: 'failed', message: describeError(caught) })
+      },
+    })
+  }, [client, takeId])
+
+  // 画面を離れたらポーリングを止める。止め忘れはリクエストの垂れ流しになる。
+  useEffect(
+    () => () => {
+      pollRef.current?.stop()
+    },
+    [],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -127,7 +211,11 @@ export const ReviewPanel = ({
     const run = async (): Promise<void> => {
       try {
         const next = await loadLatest(client, takeId)
-        if (!cancelled) setState(next)
+        if (cancelled) return
+        setState(next)
+        // 開いた時点で走っている run があれば、そのまま追いかける。
+        // `empty`（1 度も走っていない）は追いかけない。押してもいない処理を待たせない。
+        if (next.kind === 'ready' && isReviewRunPending(next.run.status)) startWatching()
       } catch (caught) {
         if (!cancelled) setState({ kind: 'error', message: describeError(caught) })
       }
@@ -137,9 +225,11 @@ export const ReviewPanel = ({
     return () => {
       cancelled = true
     }
-  }, [client, takeId, reloadKey])
+  }, [client, takeId, reloadKey, startWatching])
 
   const reload = useCallback(() => {
+    pollRef.current?.stop()
+    setWatch(WATCH_OFF)
     setReloadKey((key) => key + 1)
   }, [])
 
@@ -148,7 +238,7 @@ export const ReviewPanel = ({
     setFeedback(null)
     try {
       await client.requestReview(takeId)
-      setQueued(true)
+      startWatching()
     } catch (caught) {
       setFeedback({ tone: 'error', message: describeError(caught) })
     } finally {
@@ -179,31 +269,21 @@ export const ReviewPanel = ({
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          disabled={busy}
+        <Button
+          tone="primary"
+          disabled={busy || watch.kind === 'watching'}
           onClick={() => {
             void requestReview()
           }}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
-          {requesting ? '送信中…' : 'レビューを実行'}
-        </button>
+          {requesting ? '送信中…' : `レビューを${WORDING.start}`}
+        </Button>
 
-        <button
-          type="button"
-          disabled={busy}
-          onClick={reload}
-          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
-        >
-          結果を確認
-        </button>
+        <Button disabled={busy} onClick={reload}>
+          {WORDING.refresh}
+        </Button>
 
-        {queued && (
-          <p role="status" className="text-sm text-slate-700">
-            レビューを受け付けました。完了まで数十秒かかります。
-          </p>
-        )}
+        <WatchNotice watch={watch} />
       </div>
 
       <div className="mt-5">
@@ -231,9 +311,9 @@ export const ReviewPanel = ({
         {state.kind === 'ready' && (
           <div className="flex flex-col gap-3">
             <RunSummary run={state.run} findings={state.findings} />
-            {isReviewRunPending(state.run.status) && (
+            {isReviewRunPending(state.run.status) && watch.kind !== 'watching' && (
               <p role="status" className="text-sm text-slate-600">
-                レビューは実行中です。「結果を確認」で引き直してください。
+                {`レビューは実行中です。「${WORDING.refresh}」で引き直してください。`}
               </p>
             )}
             <ReviewFindingList findings={state.findings} />
@@ -243,17 +323,16 @@ export const ReviewPanel = ({
 
       <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4">
         {DECISIONS.map((decision) => (
-          <button
+          <Button
             key={decision}
-            type="button"
+            tone={decision === 'approved' ? 'primary' : 'secondary'}
             disabled={busy || currentVerdict === decision}
             onClick={() => {
               void saveVerdict(decision)
             }}
-            className={`rounded-md px-4 py-2 text-sm font-medium disabled:cursor-not-allowed ${DECISION_CLASS[decision]}`}
           >
             {savingVerdict === decision ? '保存中…' : humanDecisionLabel(decision)}
-          </button>
+          </Button>
         ))}
 
         {feedback !== null && (
