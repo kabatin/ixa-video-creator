@@ -65,6 +65,11 @@ export const TimelineDocument = z.object({
     z.object({
       mediaUrl: z.string(),
       startSec: Seconds,
+      /**
+       * 音源の尺。ミュージックビデオでは**音楽がタイムライン全体の尺を決める**ため必須。
+       * これが無いと、Shot が曲より短いときにタイムラインが途中で切れる。
+       */
+      durationSec: Seconds,
       volume: z.number().min(0).max(2),
     }),
   ),
