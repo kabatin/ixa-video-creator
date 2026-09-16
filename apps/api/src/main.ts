@@ -12,6 +12,7 @@ import {
 } from '@ixa/db'
 import { createPhase1EmptyContextSource } from '@ixa/domain'
 import { createProviderRegistry } from '@ixa/provider-core'
+import { createStubVideoProvider } from '@ixa/provider-video'
 import { createS3Storage } from '@ixa/storage'
 import { Queue } from 'bullmq'
 import IORedis from 'ioredis'
@@ -126,7 +127,11 @@ export const main = (): void => {
     generationJobs: createGenerationJobRepository(db),
     // TODO: スタブ Provider（packages/providers/video）の配線は別タスク。
     // 登録が空のあいだ AUTO は「利用できるモデルがありません」で 422 になる。
-    registry: createProviderRegistry([]),
+    // Provider の登録はここでのみ行う。Phase 1 はスタブのみ（ADR-0014）。
+    // API 側は capability の参照と Model Router のためだけに使い、実行は worker が行う。
+    registry: createProviderRegistry([
+      createStubVideoProvider({ outputDir: process.env.STUB_OUTPUT_DIR ?? '/tmp/ixa-stub-output' }),
+    ]),
     // TODO: Character / Location リポジトリは Phase 2。それまでは空実装で通す。
     generationContext: createPhase1EmptyContextSource(),
     generationQueue: queuePort,

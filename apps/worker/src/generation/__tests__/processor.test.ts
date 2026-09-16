@@ -1,4 +1,8 @@
-import { createPhase1EmptyContextSource, type GenerationJob } from '@ixa/domain'
+import {
+  createPhase1EmptyContextSource,
+  type GenerationContextSource,
+  type GenerationJob,
+} from '@ixa/domain'
 import { createProviderRegistry } from '@ixa/provider-core'
 import type { ProviderJobStatus } from '@ixa/provider-core'
 import { createMemoryStorage } from '@ixa/storage'
@@ -10,8 +14,9 @@ import {
 } from '../processor.js'
 import { rebuildSpec } from '../spec.js'
 import {
-  aProject, aShot, createRecordingScheduler, createTestProvider, inMemoryJobs,
-  inMemoryMediaAssets, inMemoryProjects, inMemoryShots, inMemoryTakes, silentLogger, testModel,
+  aCharacterBundle, aProject, aShot, contextWith, createRecordingScheduler, createTestProvider,
+  inMemoryJobs, inMemoryMediaAssets, inMemoryProjects, inMemoryShots, inMemoryTakes, silentLogger,
+  testModel,
 } from './doubles.js'
 
 const MODEL = testModel()
@@ -29,16 +34,18 @@ const fakeDownload = vi.fn(
 
 const SUCCEEDED: ProviderJobStatus = {
   state: 'succeeded',
-  outputUrl: 'https://cdn.example.com/out.mp4',
+  output: { type: 'remote' as const, url: 'https://cdn.example.com/out.mp4' },
   seedUsed: 4242,
   costUsd: 0.4,
   raw: { id: 'provider-job-1' },
 }
 
-const buildFixture = async (statuses: readonly ProviderJobStatus[]) => {
+const buildFixture = async (
+  statuses: readonly ProviderJobStatus[],
+  context: GenerationContextSource = createPhase1EmptyContextSource(),
+) => {
   const project = aProject()
   const shot = aShot(project)
-  const context = createPhase1EmptyContextSource()
   const { specHash } = await rebuildSpec(context, shot, project, MODEL)
 
   const jobs = inMemoryJobs()
@@ -171,6 +178,20 @@ describe('processGenerationJob', () => {
       retryable: false,
     })
     expect(f.takes.snapshot()).toHaveLength(0)
+  })
+
+  it('参照を持つコンテキストでも仕様を組み直して Take に残す', async () => {
+    const f = await buildFixture([SUCCEEDED], contextWith([aCharacterBundle()]))
+
+    const { second } = await runToCompletion(f)
+
+    expect(second.state).toBe('succeeded')
+    const take = f.takes.snapshot()[0]
+    // canonical frame / 顔正面 / 衣装 の 3 枚（モデルの上限も 3 枚）
+    expect(take?.spec.references).toHaveLength(3)
+    expect(take?.spec.references.map((r) => r.role)).toEqual(['subject', 'subject', 'wardrobe'])
+    expect(take?.spec.promptParts.identityAnchors).toEqual(['teal twin tails'])
+    expect(take?.specHash).toBe(f.specHash)
   })
 
   it('Shot が変更されて仕様がずれたら投入せずに失敗させる', async () => {

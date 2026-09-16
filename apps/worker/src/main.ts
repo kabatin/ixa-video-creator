@@ -5,7 +5,9 @@ import type { Logger } from 'pino'
 import { createRedisConnection } from './connection.js'
 import { createLogger } from './logger.js'
 import { processNoopJob, type NoopJobData, type NoopJobResult } from './processors/noop.js'
-import { QUEUE_CONFIGS, resolveQueueConfigs, type QueueConfig } from './queues.js'
+import { QUEUE_CONFIGS, QUEUE_NAMES, resolveQueueConfigs, type QueueConfig } from './queues.js'
+import { createGenerationWiring, type GenerationWiring } from './generation-wiring.js'
+import { processGenerationJob } from './generation/index.js'
 
 /** graceful shutdown の既定タイムアウト（ミリ秒）。超過したら強制終了する。 */
 const SHUTDOWN_TIMEOUT_MS = 30_000
@@ -20,11 +22,21 @@ const createWorkers = (
   queueConfigs: readonly QueueConfig[],
   connection: Redis,
   logger: Logger,
+  generation: GenerationWiring,
 ): readonly NoopWorker[] =>
   queueConfigs.map((config) => {
+    // generation キューだけは実処理を担当する。他は Phase 1 時点では noop のまま。
+    const handler =
+      config.name === QUEUE_NAMES.generation
+        ? async (job: { data: unknown }): Promise<NoopJobResult> => {
+            const outcome = await processGenerationJob(generation.deps, job.data)
+            return { echoed: outcome.state, processedAt: new Date().toISOString() }
+          }
+        : async (job: { data: NoopJobData }): Promise<NoopJobResult> => processNoopJob(job.data)
+
     const worker: NoopWorker = new Worker<NoopJobData, NoopJobResult>(
       config.name,
-      async (job) => processNoopJob(job.data),
+      handler as (job: { data: NoopJobData }) => Promise<NoopJobResult>,
       { connection, concurrency: config.concurrency },
     )
 
@@ -50,9 +62,11 @@ const closeWorkersWithTimeout = async (
   workers: readonly NoopWorker[],
   connection: Redis,
   timeoutMs: number,
+  generation: GenerationWiring,
 ): Promise<'closed' | 'timeout'> => {
   const closeAll = (async (): Promise<void> => {
     await Promise.all(workers.map((worker) => worker.close()))
+    await generation.close()
     await connection.quit()
   })()
 
@@ -72,6 +86,7 @@ const registerShutdownHandlers = (
   workers: readonly NoopWorker[],
   connection: Redis,
   logger: Logger,
+  generation: GenerationWiring,
 ): void => {
   let shuttingDown = false
 
@@ -83,7 +98,7 @@ const registerShutdownHandlers = (
 
     logger.info({ signal }, 'シャットダウンを開始します。実行中のジョブの完了を待ちます')
 
-    closeWorkersWithTimeout(workers, connection, SHUTDOWN_TIMEOUT_MS)
+    closeWorkersWithTimeout(workers, connection, SHUTDOWN_TIMEOUT_MS, generation)
       .then((result) => {
         if (result === 'timeout') {
           logger.error(
@@ -119,9 +134,13 @@ export const main = (): void => {
 
   const connection = createRedisConnection(config.redis.url)
   const queueConfigs = resolveQueueConfigs(process.env)
-  const workers = createWorkers(queueConfigs, connection, logger)
 
-  registerShutdownHandlers(workers, connection, logger)
+  const stubOutputDir = process.env.STUB_OUTPUT_DIR ?? '/tmp/ixa-stub-output'
+  const generation = createGenerationWiring(config, connection, logger, stubOutputDir)
+
+  const workers = createWorkers(queueConfigs, connection, logger, generation)
+
+  registerShutdownHandlers(workers, connection, logger, generation)
 
   logger.info(
     { concurrency: Object.fromEntries(queueConfigs.map((c) => [c.name, c.concurrency])) },

@@ -10,12 +10,20 @@ import { createStubVideoProvider } from '../stub/provider.js'
 import { renderPlaceholder } from '../stub/render-placeholder.js'
 import {
   createTempDir,
-  filePathFromUrl,
   makeRequest,
   makeSpec,
   pollUntilSucceeded,
   removeTempDir,
 } from './fixtures.js'
+
+/** succeeded 状態から出力パスを取り出す。スタブは常に local を返す。 */
+const outputPathOf = (status: { output: { type: string; path?: string; url?: string } }): string => {
+  if (status.output.type !== 'local' || status.output.path === undefined) {
+    throw new Error('スタブは local 出力を返すはずです')
+  }
+  return status.output.path
+}
+
 
 const TEST_TIMEOUT_MS = 120_000
 
@@ -112,7 +120,7 @@ describe(`${STUB_FORCE_NO_DRAWTEXT_ENV} による強制縮退（実 ffmpeg）`, 
 
       expect(status.raw.renderMode).toBe('degraded_no_drawtext')
 
-      const probe = await probeMedia(filePathFromUrl(status.outputUrl))
+      const probe = await probeMedia(outputPathOf(status))
       expect(probe.durationSec).toBeCloseTo(4, 2)
       expect(probe.width).toBe(1280)
       expect(probe.height).toBe(720)

@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { computeSpecHash, quantizeDuration } from '@ixa/domain'
 import {
   CapabilityViolationError,
@@ -133,7 +132,7 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
       update(ref, {
         status: {
           state: 'succeeded',
-          outputUrl: pathToFileURL(job.outputPath).href,
+          output: { type: 'local', path: job.outputPath },
           seedUsed: spec.seed,
           costUsd: model.economics.costPerSecondUsd * generationDurationSec,
           raw: {

@@ -23,8 +23,7 @@ export type ProviderJobStatus =
   | { readonly state: 'pending' | 'running'; readonly progress: number | null }
   | {
       readonly state: 'succeeded'
-      /** 期限付き URL。**DB に保存せず即ダウンロードすること**（ARCHITECTURE.md §9） */
-      readonly outputUrl: string
+      readonly output: ProviderOutput
       readonly seedUsed: number | null
       readonly costUsd: number
       readonly raw: Record<string, unknown>
@@ -32,6 +31,26 @@ export type ProviderJobStatus =
   | {
       readonly state: 'failed'
       readonly error: { readonly code: string; readonly message: string; readonly retryable: boolean }
+    }
+
+/**
+ * 生成物の所在。**リモートとローカルを型で区別する。**
+ *
+ * リモート URL は Provider が返す外部由来の値であり、SSRF の検査対象になる。
+ * 一方ローカル Provider（スタブなど）の出力は自プロセスが書いたファイルで、
+ * 攻撃者の制御下にない。これを同じ `string` で扱うと、
+ * どちらかに合わせて検査を緩めるか、正しい経路が塞がれるかのどちらかになる。
+ */
+export type ProviderOutput =
+  | {
+      readonly type: 'remote'
+      /** 期限付き URL。**DB に保存せず即ダウンロードすること**（ARCHITECTURE.md §9） */
+      readonly url: string
+    }
+  | {
+      readonly type: 'local'
+      /** 自プロセスが書いたファイルの絶対パス。HTTP を経由しない。 */
+      readonly path: string
     }
 
 /** Domain から Provider へ渡す要求。参照は解決済みのアセット ID で渡す。 */

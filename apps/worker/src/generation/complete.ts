@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+import { readFile, stat as stat_ } from 'node:fs/promises'
 import type { MediaAssetRepository, TakeRepository } from '@ixa/db'
 import {
   MediaAssetId as MediaAssetIdSchema,
@@ -11,27 +13,38 @@ import {
   type ShotGenerationSpec,
   type Take,
 } from '@ixa/domain'
+import type { ProviderOutput } from '@ixa/provider-core'
 import { mediaKey, type ObjectStorage } from '@ixa/storage'
-import { downloadToStorage, type DownloadOptions, type DownloadedObject } from './download.js'
+import {
+  DEFAULT_MAX_DOWNLOAD_BYTES,
+  downloadToStorage,
+  type DownloadOptions,
+  type DownloadedObject,
+} from './download.js'
 
 /**
  * Provider の完了応答を Take として確定させる。
  * 期限付き URL は保存せず、その場でダウンロードしてストレージへ移す（ARCHITECTURE.md §11）。
  */
 
-/** contentType が分からない段階で key を決めるため、URL の拡張子から推定する。 */
+/**
+ * contentType が分かる前に storageKey を決める必要があるため、拡張子を出所から推定する。
+ * リモート URL でもローカルの絶対パスでも同じ結果になるようにしている。
+ */
 const EXTENSION_PATTERN = /^[A-Za-z0-9]{1,8}$/
 
-export const extensionFromUrl = (url: string, fallback = 'mp4'): string => {
-  try {
-    const path = new URL(url).pathname
-    const dot = path.lastIndexOf('.')
-    if (dot <= 0 || dot === path.length - 1) return fallback
-    const ext = path.slice(dot + 1).toLowerCase()
-    return EXTENSION_PATTERN.test(ext) ? ext : fallback
-  } catch {
-    return fallback
-  }
+export const extensionFromUrl = (source: string, fallback = 'mp4'): string => {
+  const path = (() => {
+    try {
+      return new URL(source).pathname
+    } catch {
+      return source
+    }
+  })()
+  const dot = path.lastIndexOf('.')
+  if (dot <= 0 || dot === path.length - 1) return fallback
+  const ext = path.slice(dot + 1).toLowerCase()
+  return EXTENSION_PATTERN.test(ext) ? ext : fallback
 }
 
 export const mediaKindFor = (contentType: string): MediaKind =>
@@ -44,7 +57,7 @@ export type RecordTakeInput = {
   readonly specHash: string
   readonly providerId: ProviderId
   readonly modelId: ModelId
-  readonly outputUrl: string
+  readonly output: ProviderOutput
   readonly seedUsed: number | null
   readonly costUsd: number
   readonly raw: Record<string, unknown>
@@ -60,24 +73,91 @@ export type RecordTakeDeps = {
   readonly timeoutMs?: number
 }
 
+/** ローカルファイルをそのままストレージへ取り込む。サイズ上限は共通で効かせる。 */
+const ingestLocalFile = async (
+  deps: RecordTakeDeps,
+  filePath: string,
+  key: string,
+): Promise<DownloadedObject> => {
+  const stat = await stat_(filePath)
+  const maxBytes = deps.maxBytes ?? DEFAULT_MAX_DOWNLOAD_BYTES
+  if (stat.size > maxBytes) {
+    throw new Error(`生成物が大きすぎます: ${stat.size} バイト（上限 ${maxBytes}）`)
+  }
+
+  const body = await readFile(filePath)
+  const contentType = filePath.endsWith('.mp4') ? 'video/mp4' : 'application/octet-stream'
+  await deps.storage.put(key, body, { contentType })
+
+  return {
+    storageKey: key,
+    bytes: body.byteLength,
+    contentType,
+    checksumSha256: createHash('sha256').update(body).digest('hex'),
+  }
+}
+
 /**
  * ダウンロード → MediaAsset → Take の順に確定させる。
  *
- * MediaAsset.origin は takeId を必要とし、Take は mediaAssetId を必要とするため、
- * 先に両方の ID を採番して循環を解く。
+ * ID の採番順は DOMAIN.md の通り。MediaAsset.origin は takeId を必要とし、
+ * Take は mediaAssetId を必要とするため、先に TakeId を採番して循環を断つ。
+ *
+ * 再入に耐える。同じ内容を 2 度取り込もうとしたときは checksum で気付き、
+ * 既にある MediaAsset を使う。MediaAsset だけ作って Take の前に落ちた
+ * 中断があっても、その孤児の takeId で Take を作り直して辻褄を合わせる。
  */
 export const recordTake = async (deps: RecordTakeDeps, input: RecordTakeInput): Promise<Take> => {
   const takeId = newId(TakeIdSchema)
   const mediaAssetId = newId(MediaAssetIdSchema)
-  const key = mediaKey(input.project.workspaceId, mediaAssetId, extensionFromUrl(input.outputUrl))
+  const key = mediaKey(
+    input.project.workspaceId,
+    mediaAssetId,
+    extensionFromUrl(input.output.type === 'remote' ? input.output.url : input.output.path),
+  )
 
-  const downloaded = await (deps.download ?? downloadToStorage)({
-    url: input.outputUrl,
-    storage: deps.storage,
-    key,
-    maxBytes: deps.maxBytes,
-    timeoutMs: deps.timeoutMs,
-  })
+  /**
+   * ローカル Provider の出力は自プロセスが書いたファイルなので HTTP を経由しない。
+   * SSRF 検査は「Provider が返した外部由来の URL」を守るためのもので、
+   * ここに file: を通すために検査を緩めるのは本末転倒である（型で分けている理由）。
+   */
+  const downloaded =
+    input.output.type === 'local'
+      ? await ingestLocalFile(deps, input.output.path, key)
+      : await (deps.download ?? downloadToStorage)({
+          url: input.output.url,
+          storage: deps.storage,
+          key,
+          maxBytes: deps.maxBytes,
+          timeoutMs: deps.timeoutMs,
+        })
+
+  // spec / providerParams / seed / cost / 所要時間をスナップショットする（ADR-0003）。
+  const takeFields = {
+    shotId: input.shot.id,
+    spec: input.spec,
+    specHash: input.specHash,
+    providerId: input.providerId,
+    modelId: input.modelId,
+    providerParams: { kind: 'http', request: input.raw } as const,
+    seedUsed: input.seedUsed,
+    costUsd: input.costUsd,
+    generationTimeSec: input.generationTimeSec,
+    parentTakeId: null,
+    regenerationReason: null,
+  }
+
+  // 同じ内容を既に取り込んでいないか。中断した取り込みの再開もここで拾う。
+  const duplicate = await deps.mediaAssets.findByChecksum(downloaded.checksumSha256)
+  if (duplicate !== null && duplicate.origin.type === 'generated') {
+    const previous = await deps.takes.findById(duplicate.origin.takeId)
+    if (previous !== null) return previous
+    return deps.takes.create({
+      ...takeFields,
+      id: duplicate.origin.takeId,
+      mediaAssetId: duplicate.id,
+    })
+  }
 
   await deps.mediaAssets.create({
     id: mediaAssetId,
@@ -92,22 +172,5 @@ export const recordTake = async (deps: RecordTakeDeps, input: RecordTakeInput): 
     tags: [],
   })
 
-  // spec / providerParams / seed / cost / 所要時間をスナップショットする（ADR-0003）。
-  return deps.takes.create(
-    {
-      shotId: input.shot.id,
-      mediaAssetId,
-      spec: input.spec,
-      specHash: input.specHash,
-      providerId: input.providerId,
-      modelId: input.modelId,
-      providerParams: { kind: 'http', request: input.raw },
-      seedUsed: input.seedUsed,
-      costUsd: input.costUsd,
-      generationTimeSec: input.generationTimeSec,
-      parentTakeId: null,
-      regenerationReason: null,
-    },
-    takeId,
-  )
+  return deps.takes.create({ ...takeFields, id: takeId, mediaAssetId })
 }

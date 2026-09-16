@@ -3,6 +3,14 @@ import type {
   GenerationJobRepository, MediaAssetRepository, ProjectRepository, ShotRepository, TakeRepository,
 } from '@ixa/db'
 import {
+  Character as CharacterSchema,
+  CharacterId as CharacterIdSchema,
+  CharacterIdentityImage as CharacterIdentityImageSchema,
+  CharacterIdentityImageId as CharacterIdentityImageIdSchema,
+  CharacterLook as CharacterLookSchema,
+  CharacterLookId as CharacterLookIdSchema,
+  CharacterLookImage as CharacterLookImageSchema,
+  CharacterLookImageId as CharacterLookImageIdSchema,
   CreateGenerationJobInput as CreateGenerationJobInputSchema,
   CreateMediaAssetInput as CreateMediaAssetInputSchema,
   CreateTakeInput as CreateTakeInputSchema,
@@ -23,6 +31,8 @@ import {
   UpdateGenerationJobPatch as UpdateGenerationJobPatchSchema,
   WorkspaceId as WorkspaceIdSchema,
   newId,
+  type CharacterBundle,
+  type GenerationContextSource,
   type GenerationJob,
   type MediaAsset,
   type Project,
@@ -284,5 +294,72 @@ export const inMemoryMediaAssets = (): InMemoryMediaAssets => {
     },
     update: () => Promise.reject(new Error('未使用')),
     softDelete: () => Promise.resolve(),
+  }
+}
+
+/**
+ * 参照を持つ GenerationContextSource のテストダブル。
+ * Phase 1 の本番配線は空実装だが、Phase 2 で参照が入っても壊れないことを検証するために使う。
+ */
+export const contextWith = (
+  characters: readonly CharacterBundle[] = [],
+): GenerationContextSource => ({
+  charactersForShot: () => Promise.resolve(characters),
+  locationsForShot: () => Promise.resolve([]),
+  manualReferencesForShot: () => Promise.resolve([]),
+  previousShotLastFrame: () => Promise.resolve(null),
+  startFrame: () => Promise.resolve(null),
+})
+
+/** 参照画像を 3 枚持つキャラクター束（canonical frame / 顔正面 / 衣装）。 */
+export const aCharacterBundle = (): CharacterBundle => {
+  const workspaceId = newId(WorkspaceIdSchema)
+  const character = CharacterSchema.parse({
+    id: newId(CharacterIdSchema),
+    workspaceId,
+    name: 'MIKU',
+    displayName: '初号ボーカル',
+    description: '',
+    identityAnchors: ['teal twin tails'],
+    styleTokens: ['anime'],
+    colorPalette: ['#39C5BB'],
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  })
+  const look = CharacterLookSchema.parse({
+    id: newId(CharacterLookIdSchema),
+    characterId: character.id,
+    key: 'STAGE_A',
+    name: 'ステージ衣装',
+    era: null,
+    description: '',
+    wardrobeTokens: ['holographic jacket'],
+    styleTokens: [],
+    colorPalette: [],
+    isDefault: true,
+    canonicalFrameAssetId: newId(MediaAssetIdSchema),
+  })
+  return {
+    character,
+    look,
+    identityImages: [
+      CharacterIdentityImageSchema.parse({
+        id: newId(CharacterIdentityImageIdSchema),
+        characterId: character.id,
+        mediaAssetId: newId(MediaAssetIdSchema),
+        role: 'face_front',
+        isPrimary: true,
+        order: 0,
+      }),
+    ],
+    lookImages: [
+      CharacterLookImageSchema.parse({
+        id: newId(CharacterLookImageIdSchema),
+        lookId: look.id,
+        mediaAssetId: newId(MediaAssetIdSchema),
+        role: 'wardrobe',
+        isPrimary: true,
+        order: 0,
+      }),
+    ],
   }
 }

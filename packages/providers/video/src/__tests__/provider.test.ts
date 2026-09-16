@@ -7,7 +7,6 @@ import { createStubVideoProvider } from '../stub/provider.js'
 import {
   channelDistance,
   createTempDir,
-  filePathFromUrl,
   makeRequest,
   makeSpec,
   pollUntilSettled,
@@ -17,6 +16,15 @@ import {
   SHOT_ID_A,
   SHOT_ID_B,
 } from './fixtures.js'
+
+/** succeeded 状態から出力パスを取り出す。スタブは常に local を返す。 */
+const outputPathOf = (status: { output: { type: string; path?: string; url?: string } }): string => {
+  if (status.output.type !== 'local' || status.output.path === undefined) {
+    throw new Error('スタブは local 出力を返すはずです')
+  }
+  return status.output.path
+}
+
 
 const TEST_TIMEOUT_MS = 180_000
 /** libx264 の量子化で背景色は数値が僅かにずれるため、許容差を持たせる。 */
@@ -50,11 +58,12 @@ describe('createStubVideoProvider（実 ffmpeg）', () => {
       expect(handle.modelId).toBe(stubVeoLikeModel.id)
 
       const status = await pollUntilSucceeded(provider, handle)
-      expect(status.outputUrl.startsWith('file:///')).toBe(true)
+      expect(status.output.type).toBe('local')
+      expect(outputPathOf(status).startsWith('/')).toBe(true)
       expect(status.costUsd).toBe(0)
       expect(status.seedUsed).toBeNull()
 
-      const probe = await probeMedia(filePathFromUrl(status.outputUrl))
+      const probe = await probeMedia(outputPathOf(status))
       expect(probe.durationSec).toBeCloseTo(4, 2)
       expect(probe.width).toBe(1280)
       expect(probe.height).toBe(720)
@@ -75,7 +84,7 @@ describe('createStubVideoProvider（実 ffmpeg）', () => {
       expect(status.raw.requestedDurationSec).toBe(3.75)
       expect(status.raw.generationDurationSec).toBe(4)
 
-      const probe = await probeMedia(filePathFromUrl(status.outputUrl))
+      const probe = await probeMedia(outputPathOf(status))
       expect(probe.durationSec).toBeCloseTo(4, 2)
     },
     TEST_TIMEOUT_MS,
@@ -91,7 +100,7 @@ describe('createStubVideoProvider（実 ffmpeg）', () => {
 
       expect(status.raw.generationDurationSec).toBe(7.5)
 
-      const probe = await probeMedia(filePathFromUrl(status.outputUrl))
+      const probe = await probeMedia(outputPathOf(status))
       expect(probe.durationSec).toBeCloseTo(7.5, 2)
     },
     TEST_TIMEOUT_MS,
@@ -109,7 +118,7 @@ describe('createStubVideoProvider（実 ffmpeg）', () => {
 
       expect(status.raw.generationDurationSec).toBe(4)
 
-      const probe = await probeMedia(filePathFromUrl(status.outputUrl))
+      const probe = await probeMedia(outputPathOf(status))
       expect(probe.durationSec).toBeCloseTo(4, 2)
     },
     TEST_TIMEOUT_MS,
@@ -136,9 +145,9 @@ describe('createStubVideoProvider（実 ffmpeg）', () => {
         await provider.submit(makeRequest(stubVeoLikeModel, { ...base, shotId: SHOT_ID_B })),
       )
 
-      const firstPixel = await samplePixel(filePathFromUrl(first.outputUrl), outputDir)
-      const secondPixel = await samplePixel(filePathFromUrl(second.outputUrl), outputDir)
-      const otherPixel = await samplePixel(filePathFromUrl(other.outputUrl), outputDir)
+      const firstPixel = await samplePixel(outputPathOf(first), outputDir)
+      const secondPixel = await samplePixel(outputPathOf(second), outputDir)
+      const otherPixel = await samplePixel(outputPathOf(other), outputDir)
 
       expect(channelDistance(firstPixel, secondPixel)).toBeLessThanOrEqual(COLOR_TOLERANCE)
       expect(channelDistance(firstPixel, hexToRgb(colorForShot(SHOT_ID_A)))).toBeLessThanOrEqual(
@@ -161,7 +170,7 @@ describe('createStubVideoProvider（実 ffmpeg）', () => {
       )
       expect(seeded.seedUsed).toBe(1234)
 
-      const probe = await probeMedia(filePathFromUrl(seeded.outputUrl))
+      const probe = await probeMedia(outputPathOf(seeded))
       expect(probe.durationSec).toBeCloseTo(4, 2)
     },
     TEST_TIMEOUT_MS,
@@ -183,7 +192,7 @@ describe('createStubVideoProvider（実 ffmpeg）', () => {
         provider,
         await provider.submit(makeRequest(stubVeoLikeModel, spec)),
       )
-      const probe = await probeMedia(filePathFromUrl(status.outputUrl))
+      const probe = await probeMedia(outputPathOf(status))
       expect(probe.durationSec).toBeCloseTo(4, 2)
     },
     TEST_TIMEOUT_MS,

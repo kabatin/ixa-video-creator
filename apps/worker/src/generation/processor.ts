@@ -156,7 +156,7 @@ const complete = async (
     specHash: job.specHash === specHash ? specHash : job.specHash,
     providerId: model.providerId,
     modelId: model.id,
-    outputUrl: status.outputUrl,
+    output: status.output,
     seedUsed: status.seedUsed,
     costUsd: status.costUsd,
     raw: status.raw,
