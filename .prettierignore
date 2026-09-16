@@ -1,0 +1,6 @@
+node_modules
+dist
+.next
+drizzle
+coverage
+pnpm-lock.yaml

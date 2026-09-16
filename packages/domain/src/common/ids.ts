@@ -5,8 +5,14 @@ import { z } from 'zod'
  * すべての ID は ULID（時系列ソート可能）。
  * branded type にすることで ShotId と TakeId の取り違えを型で防ぐ。
  */
-const brandedId = <B extends string>(_brand: B) =>
-  z.string().ulid().brand<B>()
+/**
+ * 引数 `brand` は型パラメータ B を推論させるためだけに存在する（値としては使わない）。
+ * これにより呼び出し側が `brandedId('ShotId')` と書くだけで型が決まる。
+ */
+const brandedId = <B extends string>(brand: B) => {
+  void brand
+  return z.string().ulid().brand<B>()
+}
 
 export const WorkspaceId = brandedId('WorkspaceId')
 export const ProjectId = brandedId('ProjectId')
@@ -60,4 +66,4 @@ export type RenderJobId = z.infer<typeof RenderJobId>
 
 /** 新しい ID を発行する。呼び出し側でスキーマを指定して型を確定させる。 */
 export const newId = <T extends z.ZodType<string>>(schema: T): z.infer<T> =>
-  schema.parse(ulid()) as z.infer<T>
+  schema.parse(ulid())
