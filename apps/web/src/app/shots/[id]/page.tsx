@@ -1,4 +1,4 @@
-import { ProjectId, ShotId, type Shot, type Take } from '@ixa/domain'
+import { ProjectId, ShotId, type Location, type Shot, type Take } from '@ixa/domain'
 import Link from 'next/link'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
@@ -6,6 +6,7 @@ import { ShotWorkbench } from '@/components/shot-workbench'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { PROJECT_ID_PARAM, shotListHref } from '@/lib/shot-links'
+import { resolveWorkspaceId } from '@/lib/workspace'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +51,25 @@ const loadShot = async (projectId: ProjectId, shotId: ShotId): Promise<LoadResul
   }
 }
 
+type LocationsResult =
+  | { readonly ok: true; readonly locations: readonly Location[] }
+  | { readonly ok: false; readonly message: string }
+
+/**
+ * ロケーションは Shot 詳細の付帯情報でしかない。
+ * 読み込みに失敗しても Take の比較は続けられるよう、失敗を画面上のメッセージへ畳む。
+ */
+const loadLocations = async (): Promise<LocationsResult> => {
+  const workspace = resolveWorkspaceId()
+  if (!workspace.ok) return { ok: false, message: workspace.reason }
+
+  try {
+    return { ok: true, locations: await createApiClient().listLocations(workspace.workspaceId) }
+  } catch (error) {
+    return { ok: false, message: describeError(error) }
+  }
+}
+
 const ShotDetailPage = async ({ params, searchParams }: ShotPageProps) => {
   const [{ id }, query] = await Promise.all([params, searchParams])
   const shotId = ShotId.safeParse(id)
@@ -68,7 +88,10 @@ const ShotDetailPage = async ({ params, searchParams }: ShotPageProps) => {
     )
   }
 
-  const result = await loadShot(projectId.data, shotId.data)
+  const [result, locations] = await Promise.all([
+    loadShot(projectId.data, shotId.data),
+    loadLocations(),
+  ])
 
   return (
     <main>
@@ -85,7 +108,12 @@ const ShotDetailPage = async ({ params, searchParams }: ShotPageProps) => {
         }
       />
       {result.ok ? (
-        <ShotWorkbench shot={result.shot} initialTakes={result.takes} />
+        <ShotWorkbench
+          shot={result.shot}
+          initialTakes={result.takes}
+          locations={locations.ok ? locations.locations : []}
+          locationsError={locations.ok ? undefined : locations.message}
+        />
       ) : (
         <ErrorPanel
           title={result.title}

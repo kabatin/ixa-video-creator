@@ -1,10 +1,11 @@
 'use client'
 
-import type { Shot, ShotStatus, Take, TakeId } from '@ixa/domain'
+import type { Location, LocationId, Shot, ShotStatus, Take, TakeId } from '@ixa/domain'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { ErrorPanel } from '@/components/error-panel'
 import { GeneratePanel } from '@/components/generate-panel'
+import { ShotLocationEditor, type LocationSaveFeedback } from '@/components/shot-location-editor'
 import { ShotSummary } from '@/components/shot-summary'
 import { TakeGrid } from '@/components/take-grid'
 import { createApiClient } from '@/lib/api-client'
@@ -12,20 +13,31 @@ import { describeError } from '@/lib/api-error'
 import { GenerateTakesBody, type WireGenerateResult } from '@/lib/api-schemas'
 import { startPolling, type PollStopReason } from '@/lib/poller'
 import { isGeneratingStatus } from '@/lib/shot-display'
+import { describeLocation } from '@/lib/shot-location'
 
 export type ShotWorkbenchProps = {
   readonly shot: Shot
   readonly initialTakes: readonly Take[]
+  /** 空配列は「未登録」。取得自体に失敗したときは `locationsError` で区別する。 */
+  readonly locations: readonly Location[]
+  readonly locationsError?: string
 }
 
 const TIMEOUT_NOTICE =
   '生成の監視を打ち切りました（上限 5 分）。まだ処理中の可能性があります。再読み込みしてください。'
 
+const LOCATION_SAVED = 'ロケーションを保存しました。'
+
 /**
  * Shot 詳細の中核。生成トリガ・Take のポーリング・採用をまとめて持つ。
  * ポーリングは `polling` が真の間だけ動き、アンマウント時に必ず停止する。
  */
-export const ShotWorkbench = ({ shot, initialTakes }: ShotWorkbenchProps) => {
+export const ShotWorkbench = ({
+  shot,
+  initialTakes,
+  locations,
+  locationsError,
+}: ShotWorkbenchProps) => {
   const router = useRouter()
   const [takes, setTakes] = useState<readonly Take[]>(initialTakes)
   const [status, setStatus] = useState<ShotStatus>(shot.status)
@@ -39,6 +51,10 @@ export const ShotWorkbench = ({ shot, initialTakes }: ShotWorkbenchProps) => {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // ロケーションは生成・採用とは別系統の操作なので、結果も専用の欄に出す。
+  const [locationId, setLocationId] = useState<LocationId | null>(shot.locationId)
+  const [locationSaving, setLocationSaving] = useState(false)
+  const [locationFeedback, setLocationFeedback] = useState<LocationSaveFeedback | null>(null)
 
   /**
    * Take と Shot の状態を同時に読み直す。
@@ -102,6 +118,29 @@ export const ShotWorkbench = ({ shot, initialTakes }: ShotWorkbenchProps) => {
     }
   }
 
+  /**
+   * ロケーションの付け替え。更新経路は `PATCH /shots/{id}` ひとつに揃える（ADR-0015）。
+   * 参照画像は生成時に解決されるため、保存後に Take を取り直す必要は無い。
+   */
+  const saveLocation = async (next: LocationId | null): Promise<void> => {
+    setLocationSaving(true)
+    setLocationFeedback(null)
+    try {
+      const updated = await createApiClient().updateShot(shot.id, { locationId: next })
+      setLocationId(updated.locationId)
+      setLocationFeedback({ tone: 'success', message: LOCATION_SAVED })
+      // Shot 一覧など他の画面の表示も古くなるため、サーバ側の再取得を促す。
+      router.refresh()
+    } catch (cause) {
+      setLocationFeedback({
+        tone: 'error',
+        message: `ロケーションを保存できませんでした: ${describeError(cause)}`,
+      })
+    } finally {
+      setLocationSaving(false)
+    }
+  }
+
   const select = async (takeId: TakeId): Promise<void> => {
     setBusy(true)
     setError(null)
@@ -118,7 +157,24 @@ export const ShotWorkbench = ({ shot, initialTakes }: ShotWorkbenchProps) => {
 
   return (
     <div className="space-y-6">
-      <ShotSummary shot={shot} status={status} selectedTakeId={selectedTakeId} />
+      <ShotSummary
+        shot={shot}
+        status={status}
+        selectedTakeId={selectedTakeId}
+        locationLabel={describeLocation(locationId, locations)}
+      />
+
+      <ShotLocationEditor
+        locations={locations}
+        loadError={locationsError}
+        locationId={locationId}
+        saving={locationSaving}
+        disabled={busy || polling}
+        feedback={locationFeedback}
+        onSave={(next) => {
+          void saveLocation(next)
+        }}
+      />
 
       <GeneratePanel
         busy={busy || polling}

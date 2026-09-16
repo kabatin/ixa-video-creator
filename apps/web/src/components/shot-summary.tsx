@@ -7,9 +7,14 @@ export type ShotSummaryProps = {
   /** 生成・採用で変わるため、最新の値を親から受け取る。 */
   readonly status: ShotStatus
   readonly selectedTakeId: TakeId | null
+  /**
+   * 表示用のロケーション名。ID から名前への解決は一覧を持つ親にしかできないため、
+   * ここでは解決済みの文字列だけを受け取り、この節は表示に徹する。
+   */
+  readonly locationLabel: string
 }
 
-export const ShotSummary = ({ shot, status, selectedTakeId }: ShotSummaryProps) => (
+export const ShotSummary = ({ shot, status, selectedTakeId, locationLabel }: ShotSummaryProps) => (
   <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 className="text-base font-semibold text-slate-900">{shot.code}</h2>
@@ -35,6 +40,10 @@ export const ShotSummary = ({ shot, status, selectedTakeId }: ShotSummaryProps) 
       <div>
         <dt className="text-xs uppercase tracking-wide text-slate-400">mood</dt>
         <dd>{shot.mood ?? '—'}</dd>
+      </div>
+      <div className="sm:col-span-3">
+        <dt className="text-xs uppercase tracking-wide text-slate-400">ロケーション</dt>
+        <dd className="break-words">{locationLabel}</dd>
       </div>
       <div className="sm:col-span-3">
         <dt className="text-xs uppercase tracking-wide text-slate-400">説明</dt>
