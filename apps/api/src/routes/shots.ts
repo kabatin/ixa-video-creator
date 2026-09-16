@@ -31,13 +31,17 @@ import {
   DEFAULT_COST_LIMITS,
   checkCostLimits,
   type CostLimits,
+  DurationNotSupportedError,
 } from '@ixa/domain'
+import { GenerationContextError } from '@ixa/generation'
 import {
   selectModel,
   validateAgainstCapabilities,
   type ProviderRegistry,
   type VideoModelDescriptor,
   estimateCostUsd,
+  NoEligibleModelError,
+  UnknownModelError,
 } from '@ixa/provider-core'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
@@ -447,8 +451,23 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
       try {
         compiled = await buildGeneration(deps, shot, project, model)
       } catch (error) {
-        // 仕様が組めない・尺が出せない・モデルが無い、はすべて入力の問題として 422 で返す。
-        if (error instanceof Error && !(error instanceof TypeError)) {
+        /**
+         * **知っている失敗だけを 422 に畳む。**
+         * 以前はここで `Error` を丸ごと捕まえていたため、DB の接続断まで
+         * 「モデルが不正」として 422 で返ってしまい、障害が入力ミスに見えていた。
+         * 未知の例外は握り潰さず投げ直し、500 として扱う。
+         */
+        if (error instanceof GenerationContextError) {
+          // Shot が実在しない Character / Look を指している。モデルの問題ではない。
+          return c.json(fail(VALIDATION_ERROR_MESSAGE, { characters: [error.message] }), 422)
+        }
+        // モデルが選べない・要求を満たせない・尺が出せない、は入力の問題。
+        if (
+          error instanceof SpecCompilationError ||
+          error instanceof DurationNotSupportedError ||
+          error instanceof NoEligibleModelError ||
+          error instanceof UnknownModelError
+        ) {
           return c.json(fail(VALIDATION_ERROR_MESSAGE, { model: [error.message] }), 422)
         }
         throw error

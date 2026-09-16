@@ -9,6 +9,7 @@ import {
   type Project,
   type Shot,
 } from '@ixa/domain'
+import { GenerationContextError } from '@ixa/generation'
 import { createProviderRegistry } from '@ixa/provider-core'
 import { describe, expect, it } from 'vitest'
 import { createApp, type AppDeps } from '../app.js'
@@ -199,6 +200,56 @@ describe('POST /shots/:id/generate', () => {
       model: 'test/cheap',
     })
     expect(res.status).toBe(404)
+  })
+})
+
+/**
+ * 参照解決の失敗と、それ以外の想定外の失敗を取り違えないこと。
+ * 以前はここで `Error` を丸ごと 422 に畳んでいたため、DB の接続断まで
+ * 「モデルが不正」として 422 で返り、障害が利用者の入力ミスに見えていた。
+ */
+describe('POST /shots/:id/generate の失敗の切り分け', () => {
+  /** charactersForShot だけが失敗する文脈。他は空を返す。 */
+  const appThatFailsContext = (error: Error) => {
+    const project = aProject()
+    const shot = aShot(project.id)
+    const generationJobs = createInMemoryGenerationJobRepository()
+    const deps: AppDeps = {
+      ...baseAppDeps(),
+      projects: createInMemoryProjectRepository([project]),
+      shots: createInMemoryShotRepository([shot]),
+      generationJobs,
+      registry: createProviderRegistry([createTestVideoProvider([CHEAP_MODEL])]),
+      generationContext: {
+        ...createTestContextSource({}),
+        charactersForShot: () => Promise.reject(error),
+      },
+    }
+    return { app: createApp(deps), shot, generationJobs }
+  }
+
+  it('壊れたキャラクター参照は 422 を characters フィールドで返す', async () => {
+    const f = appThatFailsContext(
+      new GenerationContextError('Shot が存在しない Character を参照しています'),
+    )
+
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/cheap' })
+
+    expect(res.status).toBe(422)
+    const body = (await res.json()) as ErrorBody
+    // モデルのせいにしない。直すべきは Shot とキャラクターの紐づけ。
+    expect(body.fields?.characters?.[0]).toContain('存在しない Character')
+    expect(body.fields?.model).toBeUndefined()
+    expect(f.generationJobs.snapshot()).toHaveLength(0)
+  })
+
+  it('想定外の失敗は 422 に畳まず 500 にする', async () => {
+    const f = appThatFailsContext(new Error('connection terminated unexpectedly'))
+
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/cheap' })
+
+    expect(res.status).toBe(500)
+    expect(f.generationJobs.snapshot()).toHaveLength(0)
   })
 })
 
