@@ -191,6 +191,49 @@ describe('セクションから Shot を割る', () => {
     expect(shots.map((shot) => shot.code)).toEqual(['CHORUS-01', 'CHORUS-02', 'CHORUS-03'])
   })
 
+  it('同じラベルのセクションを 2 回割っても code が衝突しない', async () => {
+    /**
+     * `(project_id, code)` は UNIQUE。ラベルは曲中で繰り返されるため、
+     * ラベルと枠内連番だけで採番すると 2 回目の一括作成ごと失敗する（実際に 500 を踏んだ）。
+     */
+    const first = await allocate({ musicTrackId: track.id, sectionIndex: 1, requestedCount: 3 })
+    expect(first.status).toBe(201)
+
+    const second = await allocate({ musicTrackId: track.id, sectionIndex: 1, requestedCount: 3 })
+    expect(second.status).toBe(201)
+
+    const codes = (await deps.shots.findByProject(project.id)).map((shot) => shot.code)
+    expect(new Set(codes).size).toBe(codes.length)
+    expect(codes).toHaveLength(6)
+  })
+
+  it('既存の Shot と同じ code を避けて採番する', async () => {
+    await deps.shots.create({
+      projectId: project.id,
+      sequenceId: null,
+      order: 0,
+      code: 'CHORUS-01',
+      startSec: 0,
+      durationSec: 4,
+      sourceInSec: 0,
+      description: '',
+      dialogue: null,
+      camera: {
+        size: 'medium', angleH: null, angle: null,
+        lensMm: null, movement: null, movementIntensity: null,
+      },
+      mood: null,
+      locationId: null,
+      sourceType: { type: 'ai_video' },
+      status: 'draft',
+    })
+
+    const res = await allocate({ musicTrackId: track.id, sectionIndex: 1, requestedCount: 2 })
+    const { shots } = (await json<SuccessBody<AllocateBody>>(res)).data
+
+    expect(shots.map((shot) => shot.code)).toEqual(['CHORUS-02', 'CHORUS-03'])
+  })
+
   it('作られた Shot は draft で、演出は空のまま残る', async () => {
     const res = await allocate({ musicTrackId: track.id, sectionIndex: 0, requestedCount: 2 })
     const { shots } = (await json<SuccessBody<AllocateBody>>(res)).data

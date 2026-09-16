@@ -91,9 +91,34 @@ const allocateRoute = createRoute({
   },
 })
 
-/** `CHORUS-01` のような、人が読んで並び順が分かるコード。 */
-const shotCode = (section: MusicSection, indexInSection: number): string =>
-  `${section.label.toUpperCase()}-${String(indexInSection + 1).padStart(CODE_SEQ_DIGITS, '0')}`
+/**
+ * `CHORUS-01` のような、人が読んで並び順が分かるコードを**既存と衝突しないように**振る。
+ *
+ * `(project_id, code)` は UNIQUE。ラベルは曲中で何度も繰り返される（verse が 5 つ等）ので、
+ * ラベルと枠内の連番だけで作ると**2 回目の割り当てが必ず衝突して一括作成ごと失敗する**。
+ * 実際に 500 を踏んだため、使用済みを避けて採番する。
+ */
+const assignShotCodes = (
+  section: MusicSection,
+  count: number,
+  usedCodes: ReadonlySet<string>,
+): readonly string[] => {
+  const prefix = section.label.toUpperCase()
+  const codes: string[] = []
+  let seq = 1
+
+  for (let i = 0; i < count; i += 1) {
+    let candidate = `${prefix}-${String(seq).padStart(CODE_SEQ_DIGITS, '0')}`
+    while (usedCodes.has(candidate) || codes.includes(candidate)) {
+      seq += 1
+      candidate = `${prefix}-${String(seq).padStart(CODE_SEQ_DIGITS, '0')}`
+    }
+    codes.push(candidate)
+    seq += 1
+  }
+
+  return codes
+}
 
 /**
  * 時間枠を Shot の作成入力にする。
@@ -103,15 +128,14 @@ const shotCode = (section: MusicSection, indexInSection: number): string =>
 const toCreateInput = (
   projectId: ProjectId,
   sequenceId: z.infer<typeof SequenceIdSchema> | null,
-  section: MusicSection,
+  code: string,
   slot: ShotSlot,
-  indexInSection: number,
   order: number,
 ): CreateShotInput => ({
   projectId,
   sequenceId,
   order,
-  code: shotCode(section, indexInSection),
+  code,
   startSec: slot.startSec,
   durationSec: slot.durationSec,
   sourceInSec: 0,
@@ -205,10 +229,18 @@ export const storyboardRoutes = (deps: StoryboardRoutesDeps) =>
     // 既存の Shot の後ろに積む。order は Project 内で連続させる。
     const existing = await deps.shots.findByProject(projectId)
     const nextOrder = existing.reduce((max, shot) => Math.max(max, shot.order + 1), 0)
+    const usedCodes = new Set(existing.map((shot) => shot.code))
+    const codes = assignShotCodes(section, allocated.slots.length, usedCodes)
 
     const created = await deps.shots.createMany(
       allocated.slots.map((slot, index) =>
-        toCreateInput(projectId, input.sequenceId, section, slot, index, nextOrder + index),
+        toCreateInput(
+          projectId,
+          input.sequenceId,
+          codes[index] as string,
+          slot,
+          nextOrder + index,
+        ),
       ),
     )
 
