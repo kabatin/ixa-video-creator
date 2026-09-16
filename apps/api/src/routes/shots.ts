@@ -12,20 +12,13 @@ import {
   Take as TakeSchema,
   TakeId as TakeIdSchema,
   UpdateShotPatch as UpdateShotPatchSchema,
-  compileSpec,
-  computeSpecHash,
-  quantizeDuration,
-  resolveReferences,
   type GenerationContextSource,
   GenerationJob as GenerationJobSchema,
   type GenerationJob,
   type GenerationJobId,
   type ModelId,
   type Project,
-  type ReferenceRole,
-  type RouterDecision,
   type Shot,
-  type ShotGenerationSpec,
   type Take,
   CostLimits as CostLimitsSchema,
   DEFAULT_COST_LIMITS,
@@ -33,7 +26,13 @@ import {
   type CostLimits,
   DurationNotSupportedError,
 } from '@ixa/domain'
-import { GenerationContextError } from '@ixa/generation'
+import {
+  GenerationContextError,
+  SpecCompilationError,
+  buildGeneration,
+  type BuildGenerationDeps,
+  type CompiledGeneration,
+} from '@ixa/generation'
 import {
   selectModel,
   validateAgainstCapabilities,
@@ -254,94 +253,21 @@ export type ShotRoutesDeps = {
   queue: GenerationQueue
 }
 
-/** 組み上がった生成仕様と、それを出したモデル。 */
-type CompiledGeneration = {
-  readonly spec: ShotGenerationSpec
-  readonly specHash: string
-  readonly model: VideoModelDescriptor
-  readonly routerDecision: RouterDecision | null
-}
-
-/** 仕様を組めない理由。呼び出し側が 422 へ変換する。 */
-export class SpecCompilationError extends Error {
-  override readonly name = 'SpecCompilationError'
-}
-
-const unionCapabilities = (models: readonly VideoModelDescriptor[]) => ({
-  maxReferences: Math.max(0, ...models.map((m) => m.capabilities.referenceImages.max)),
-  supportedRoles: [
-    ...new Set(models.flatMap((m): readonly ReferenceRole[] => m.capabilities.referenceImages.roles)),
-  ],
-})
-
 /**
- * Shot・Project・参照から生成仕様を組み立てる。
+ * `buildGeneration`（packages/generation）へ渡す Port を組み立てる。
  *
- * AUTO のときはモデルが決まるまで参照枚数も生成尺も確定できないため、
- * まず全モデルの能力の和で下書きを作って selectModel に渡し、
- * 選ばれたモデルの能力で組み直す。最終的な specHash は 2 周目のものだけを使う。
+ * 仕様の組み立てとモデル選択は **api と worker の両方が同じ実装を使う**必要がある
+ * （片方だけ差し替えると spec_drift で全滅する / tasks/lessons.md L-012）。
+ * そのためロジックは packages 側にあり、ここは provider-core の実装を
+ * 構造的な Port に差し込むだけの配線に徹する。
  */
-export const buildGeneration = async (
+const generationPorts = (
   deps: Pick<ShotRoutesDeps, 'context' | 'registry'>,
-  shot: Shot,
-  project: Project,
-  requestedModel: ModelId | 'AUTO',
-): Promise<CompiledGeneration> => {
-  const candidates =
-    requestedModel === 'AUTO'
-      ? deps.registry.allModels()
-      : [deps.registry.findModel(requestedModel)]
-  if (candidates.length === 0) throw new SpecCompilationError('利用できるモデルがありません')
-
-  const [characters, locations, manualReferences, previousShotLastFrameId, startFrameId] =
-    await Promise.all([
-      deps.context.charactersForShot(shot.id),
-      deps.context.locationsForShot(shot.id),
-      deps.context.manualReferencesForShot(shot.id),
-      deps.context.previousShotLastFrame(shot.id),
-      deps.context.startFrame(shot.id),
-    ])
-
-  const compileFor = (
-    maxReferences: number,
-    supportedRoles: readonly ReferenceRole[],
-    generationDurationSec: number,
-  ): ShotGenerationSpec => {
-    const references = resolveReferences({
-      characters, locations, manualReferences,
-      previousShotLastFrameId, startFrameId, maxReferences, supportedRoles,
-    })
-    return compileSpec({
-      project, shot, characters, references, generationDurationSec,
-      seed: null, negativePrompt: null,
-    })
-  }
-
-  let chosen = candidates[0] as VideoModelDescriptor
-  let routerDecision: RouterDecision | null = null
-
-  if (requestedModel === 'AUTO') {
-    const union = unionCapabilities(candidates)
-    // 下書きの尺は編集尺のまま渡す。selectModel はモデルごとに切り上げて見積もる。
-    const draft = compileFor(union.maxReferences, union.supportedRoles, shot.durationSec)
-    routerDecision = selectModel(draft, candidates)
-    chosen = deps.registry.findModel(routerDecision.modelId)
-  }
-
-  const caps = chosen.capabilities
-  const spec = compileFor(
-    caps.referenceImages.max,
-    caps.referenceImages.roles,
-    quantizeDuration(shot.durationSec, caps.durations),
-  )
-
-  const violations = validateAgainstCapabilities(spec, chosen)
-  if (violations.length > 0) {
-    throw new SpecCompilationError(`モデル ${chosen.id} では生成できません: ${violations.join(' / ')}`)
-  }
-
-  return { spec, specHash: await computeSpecHash(spec), model: chosen, routerDecision }
-}
+): BuildGenerationDeps<VideoModelDescriptor> => ({
+  context: deps.context,
+  catalog: deps.registry,
+  router: { selectModel, validateAgainstCapabilities },
+})
 
 /**
  * プロジェクトの設定からコスト上限を作る。
@@ -366,7 +292,7 @@ export const costLimitsFor = (project: Pick<Project, 'budgetUsd'>): CostLimits =
 const enqueueJobs = async (
   deps: Pick<ShotRoutesDeps, 'generationJobs' | 'queue'>,
   shot: Shot,
-  compiled: CompiledGeneration,
+  compiled: CompiledGeneration<VideoModelDescriptor>,
   requestedModel: ModelId | 'AUTO',
   count: number,
 ): Promise<GenerationJobId[]> => {
@@ -449,9 +375,9 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
 
       const { model, count } = c.req.valid('json')
 
-      let compiled: CompiledGeneration
+      let compiled: CompiledGeneration<VideoModelDescriptor>
       try {
-        compiled = await buildGeneration(deps, shot, project, model)
+        compiled = await buildGeneration(generationPorts(deps), shot, project, model)
       } catch (error) {
         /**
          * **知っている失敗だけを 422 に畳む。**
