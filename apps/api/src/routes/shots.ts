@@ -148,6 +148,8 @@ const CreateShotBody = CreateShotInputSchema.omit({ projectId: true }).openapi('
 const UpdateShotBody = UpdateShotPatchSchema.pick({
   description: true, camera: true, sourceType: true,
   startSec: true, durationSec: true, sourceInSec: true,
+  // 場所は後から決められる。null を送れば外す（ADR-0015）。
+  locationId: true,
 }).openapi('UpdateShotPatch')
 
 const jsonContent = <T extends z.ZodTypeAny>(description: string, schema: T) => ({
