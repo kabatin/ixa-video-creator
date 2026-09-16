@@ -74,6 +74,18 @@ export type TakeUpdate = z.infer<typeof TakeUpdate>
  */
 export const CreateTakeInput = Take.omit({
   id: true, index: true, createdAt: true, reviewStatus: true, humanVerdict: true,
+}).extend({
+  /**
+   * Take と MediaAsset は相互に参照するため、そのままでは作成順序が決まらない。
+   * Take.mediaAssetId は MediaAsset を要求し、
+   * MediaAsset.origin の { type: 'generated', takeId } は Take を要求する。
+   *
+   * **呼び出し側が先に ULID を採番して循環を断つ。**
+   * 手順: TakeId を採番 → その takeId を origin に入れて MediaAsset を作る
+   *      → 採番済みの id と mediaAssetId で Take を作る。
+   * 省略時のみリポジトリが採番する（循環が無い経路のため）。
+   */
+  id: TakeId.optional(),
 })
 export type CreateTakeInput = z.input<typeof CreateTakeInput>
 

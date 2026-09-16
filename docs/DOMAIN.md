@@ -83,6 +83,17 @@ type Workspace = {
 }
 ```
 
+### ID は呼び出し側が採番してよい
+
+以下の 2 つの場合、**呼び出し側が先に ULID を採番する**。リポジトリに任せない。
+
+1. **2 段階のフロー** — 例: アップロードは署名時に ID が決まり、`storageKey` にその ULID が埋まる。
+   後から別の ID を振るとパスと行がずれる。
+2. **相互参照** — 例: `Take.mediaAssetId` と `MediaAsset.origin.takeId` が互いを要求し、
+   そのままでは作成順序が決まらない。先に ID を採番して循環を断つ。
+
+`CreateXxxInput` の `id` は任意フィールドとし、省略時のみリポジトリが採番する。
+
 **リポジトリの入力型は Domain が定義する。** `CreateXxxInput` / `UpdateXxxPatch` を
 `packages/db` 側で定義しないこと。契約は Domain が持ち、db はそれを実装する（ADR-0007）。
 例: `CreateMediaAssetInput` は派生物（probe / proxy / thumbnail / posters）を省略できる。
