@@ -17,6 +17,10 @@ import {
 } from '@ixa/generation/testing'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import {
+  createInMemoryScriptRepository,
+  createInMemorySequenceRepository,
+} from './in-memory-script-repositories.js'
+import {
   createInMemoryMusicTrackRepository,
   createInMemoryRenderJobRepository,
   createInMemoryTimelineClipRepository,
@@ -80,6 +84,8 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   shotCharacters: createInMemoryShotCharacterRepository(),
   brandAssets: createInMemoryBrandAssetRepository(),
   locations: createInMemoryLocationRepository(),
+  scripts: createInMemoryScriptRepository(),
+  sequences: createInMemorySequenceRepository(),
   storage: createMemoryStorage(),
   // テストは同一オリジン想定なので CORS を無効にする
   corsOrigins: [],

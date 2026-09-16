@@ -18,10 +18,12 @@ import { timelineRoutes } from './routes/timeline.js'
 import { renderRoutes, type RenderQueue } from './routes/renders.js'
 import { characterRoutes, shotCharacterRoutes } from './routes/characters.js'
 import { assetRoutes } from './routes/assets.js'
+import { scriptRoutes } from './routes/scripts.js'
+import { sequenceRoutes } from './routes/sequences.js'
 import type {
   BrandAssetRepository, CharacterLookRepository, CharacterRepository, LocationRepository,
-  MusicTrackRepository, RenderJobRepository, ShotCharacterRepository,
-  TimelineClipRepository, TransitionRepository,
+  MusicTrackRepository, RenderJobRepository, ScriptRepository, SequenceRepository,
+  ShotCharacterRepository, TimelineClipRepository, TransitionRepository,
 } from '@ixa/db'
 
 /**
@@ -47,6 +49,8 @@ export type AppDeps = {
   shotCharacters: ShotCharacterRepository
   brandAssets: BrandAssetRepository
   locations: LocationRepository
+  scripts: ScriptRepository
+  sequences: SequenceRepository
   /** media キューへの投入。未配線なら登録のみ行い queued: false を返す。 */
   mediaIngest?: MediaIngestDeps
   storage: ObjectStorage
@@ -127,6 +131,9 @@ export const createApp = (deps: AppDeps) => {
     '/',
     assetRoutes({ brandAssets: deps.brandAssets, locations: deps.locations, mediaAssets }),
   )
+
+  app.route('/', scriptRoutes({ scripts: deps.scripts, projects }))
+  app.route('/', sequenceRoutes({ sequences: deps.sequences, projects }))
 
   app.route('/', timelineRoutes(timelineDeps))
   app.route('/', renderRoutes({ ...timelineDeps, renderJobs: deps.renderJobs, queue: deps.renderQueue }))

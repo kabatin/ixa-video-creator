@@ -19,6 +19,8 @@ import {
   createLocationRepository,
   createShotCharacterRepository,
   createShotReferenceRepository,
+  createScriptRepository,
+  createSequenceRepository,
 } from '@ixa/db'
 import { createProviderRegistry } from '@ixa/provider-core'
 import { createGenerationContextSource } from '@ixa/generation'
@@ -179,6 +181,8 @@ export const main = (): void => {
     shotCharacters,
     brandAssets,
     locations,
+    scripts: createScriptRepository(db),
+    sequences: createSequenceRepository(db),
     mediaIngest,
     // Provider の登録はここでのみ行う。Phase 1 はスタブのみ（ADR-0014）。
     // API 側は capability の参照と Model Router のためだけに使い、実行は worker が行う。
