@@ -45,7 +45,8 @@ import type {
   VideoProvider,
 } from '@ixa/provider-core'
 import pino from 'pino'
-import type { GenerationJobData, MediaJobQueue, PollScheduler } from '../processor.js'
+import type { GenerationJobData } from '../job-data.js'
+import type { MediaJobQueue, PollScheduler } from '../processor.js'
 
 /**
  * worker のテスト用ダブル一式。

@@ -4,6 +4,7 @@ import {
   type GenerationJob,
   type ShotId,
   type Take,
+  type TakeId,
 } from '@ixa/domain'
 import { createProviderRegistry } from '@ixa/provider-core'
 import type { ProviderJobStatus } from '@ixa/provider-core'
@@ -14,7 +15,6 @@ import {
   POLL_BACKOFF_BASE_MS, POLL_BACKOFF_MAX_MS, pollDelayMs, processGenerationJob,
   type GenerationProcessorDeps,
 } from '../processor.js'
-import { MAX_REGENERATION_REASON_LENGTH } from '../lineage.js'
 import { rebuildSpec } from '../spec.js'
 import {
   aCharacterBundle, aProject, aShot, contextWith, createRecordingMediaQueue,
@@ -293,6 +293,25 @@ describe('processGenerationJob', () => {
 describe('processGenerationJob（Take の系譜）', () => {
   const REASON = 'character_consistency: 顔の造作が参照と違う'
 
+  /**
+   * 系譜つきの GenerationJob をもう 1 行作る。
+   * **系譜の正は行であってジョブデータではない**ので、ここで積む。
+   */
+  const seedRegenerationJob = (
+    f: Fixture,
+    lineage: { parentTakeId?: TakeId; regenerationReason?: string },
+  ): Promise<GenerationJob> =>
+    f.jobs.create({
+      shotId: f.shot.id,
+      specHash: f.specHash,
+      requestedModel: 'AUTO',
+      resolvedModel: MODEL.id,
+      ...lineage,
+    })
+
+  const run = (f: Fixture, job: GenerationJob) =>
+    processGenerationJob(f.deps, { generationJobId: job.id })
+
   it('通常の生成で作った Take は親も理由も持たない', async () => {
     const f = await buildFixture([SUCCEEDED])
 
@@ -303,16 +322,16 @@ describe('processGenerationJob（Take の系譜）', () => {
     expect(take?.regenerationReason).toBeNull()
   })
 
-  it('再生成のジョブデータから作った Take が親と理由を持つ', async () => {
+  it('行に積まれた系譜から Take が親と理由を受け継ぐ', async () => {
     const f = await buildFixture([SUCCEEDED])
     const parent = await seedParentTake(f)
-    const data = {
-      generationJobId: f.job.id,
-      lineage: { parentTakeId: parent.id, regenerationReason: REASON },
-    }
+    const job = await seedRegenerationJob(f, {
+      parentTakeId: parent.id,
+      regenerationReason: REASON,
+    })
 
-    await processGenerationJob(f.deps, data)
-    const second = await processGenerationJob(f.deps, data)
+    await run(f, job)
+    const second = await run(f, job)
 
     expect(second.state).toBe('succeeded')
     const created = f.takes.snapshot().find((t) => t.id !== parent.id)
@@ -320,48 +339,54 @@ describe('processGenerationJob（Take の系譜）', () => {
     expect(created?.regenerationReason).toBe(REASON)
   })
 
-  it('ポーリングで入れ直すときも系譜を運ぶ', async () => {
-    const f = await buildFixture([{ state: 'running', progress: 0.3 }])
+  it('ジョブデータは ID だけを運び、入れ直しでも系譜が失われない', async () => {
+    const f = await buildFixture([SUCCEEDED])
     const parent = await seedParentTake(f)
-    const lineage = { parentTakeId: parent.id, regenerationReason: REASON }
-    const data = { generationJobId: f.job.id, lineage }
+    const job = await seedRegenerationJob(f, {
+      parentTakeId: parent.id,
+      regenerationReason: REASON,
+    })
 
-    await processGenerationJob(f.deps, data)
-    await processGenerationJob(f.deps, data)
+    await run(f, job)
+    // ポーリングで入れ直されたデータをそのまま使って続きを回す
+    const rescheduled = f.scheduler.scheduled()
+    await processGenerationJob(f.deps, rescheduled[0]?.data)
 
     /**
-     * 系譜を知っているのはジョブデータだけ（generation_jobs に列が無い）。
-     * 入れ直しで落とすと、完了する頃には再生成だったことが分からなくなる。
+     * 入れ直すデータに系譜は含まれない。それでも失われないのは、
+     * 系譜が generation_jobs の行にあるため。
      */
-    expect(f.scheduler.scheduled()).toHaveLength(2)
-    for (const scheduled of f.scheduler.scheduled()) {
-      expect(scheduled.data).toEqual(data)
-    }
+    expect(rescheduled[0]?.data).toEqual({ generationJobId: job.id })
+    const created = f.takes.snapshot().find((t) => t.id !== parent.id)
+    expect(created?.parentTakeId).toBe(parent.id)
+    expect(created?.regenerationReason).toBe(REASON)
   })
 
   it('親が実在しなければ投入する前に失敗させる（課金しない）', async () => {
     const f = await buildFixture([SUCCEEDED])
-
-    const outcome = await processGenerationJob(f.deps, {
-      generationJobId: f.job.id,
-      lineage: { parentTakeId: '01JBXV0000000000000000000A', regenerationReason: REASON },
+    const job = await seedRegenerationJob(f, {
+      parentTakeId: '01JBXV0000000000000000000A' as TakeId,
+      regenerationReason: REASON,
     })
+
+    const outcome = await run(f, job)
 
     expect(outcome).toEqual({ state: 'failed', code: 'parent_take_missing' })
     expect(f.provider.submitted()).toHaveLength(0)
     expect(f.takes.snapshot()).toHaveLength(0)
-    expect(f.jobs.snapshot()[0]?.error?.retryable).toBe(false)
+    expect(f.jobs.snapshot().find((j) => j.id === job.id)?.error?.retryable).toBe(false)
   })
 
   it('親が別の Shot の Take なら投入する前に失敗させる', async () => {
     const f = await buildFixture([SUCCEEDED])
     const otherShot = aShot(f.project)
     const parent = await seedParentTake(f, otherShot.id)
-
-    const outcome = await processGenerationJob(f.deps, {
-      generationJobId: f.job.id,
-      lineage: { parentTakeId: parent.id, regenerationReason: REASON },
+    const job = await seedRegenerationJob(f, {
+      parentTakeId: parent.id,
+      regenerationReason: REASON,
     })
+
+    const outcome = await run(f, job)
 
     expect(outcome).toEqual({ state: 'failed', code: 'parent_take_shot_mismatch' })
     expect(f.provider.submitted()).toHaveLength(0)
@@ -370,18 +395,18 @@ describe('processGenerationJob（Take の系譜）', () => {
   it('完了までに親が消えていたら理由だけ残して Take を確定する', async () => {
     const f = await buildFixture([SUCCEEDED])
     const parent = await seedParentTake(f)
-    const data = {
-      generationJobId: f.job.id,
-      lineage: { parentTakeId: parent.id, regenerationReason: REASON },
-    }
+    const job = await seedRegenerationJob(f, {
+      parentTakeId: parent.id,
+      regenerationReason: REASON,
+    })
 
-    await processGenerationJob(f.deps, data)
+    await run(f, job)
     // 投入と完了の間に親が消えた状態を作る
     const withoutParent = {
       ...f.deps,
       takes: { ...f.takes, findById: () => Promise.resolve(null) },
     }
-    const second = await processGenerationJob(withoutParent, data)
+    const second = await processGenerationJob(withoutParent, { generationJobId: job.id })
 
     /**
      * 生成は成功していて課金も済んでいる。親を辿れないことを理由に捨てない。
@@ -391,58 +416,109 @@ describe('processGenerationJob（Take の系譜）', () => {
     const created = f.takes.snapshot().find((t) => t.id !== parent.id)
     expect(created?.parentTakeId).toBeNull()
     expect(created?.regenerationReason).toBe(REASON)
-    expect(f.jobs.snapshot()[0]?.status).toBe('succeeded')
+    expect(f.jobs.snapshot().find((j) => j.id === job.id)?.status).toBe('succeeded')
   })
 
-  it('親だけ・理由だけの中途半端な系譜はジョブデータの時点で弾く', async () => {
+  it('親を消したあとの行（理由だけ）は失敗させず、理由を Take に残す', async () => {
     const f = await buildFixture([SUCCEEDED])
-    const parent = await seedParentTake(f)
+    const job = await seedRegenerationJob(f, { regenerationReason: REASON })
 
-    await expect(
-      processGenerationJob(f.deps, {
-        generationJobId: f.job.id,
-        lineage: { parentTakeId: parent.id },
-      }),
-    ).rejects.toThrow()
+    await run(f, job)
+    const second = await run(f, job)
 
-    await expect(
-      processGenerationJob(f.deps, {
-        generationJobId: f.job.id,
-        lineage: { parentTakeId: parent.id, regenerationReason: '' },
-      }),
-    ).rejects.toThrow()
-
-    await expect(
-      processGenerationJob(f.deps, {
-        generationJobId: f.job.id,
-        lineage: {
-          parentTakeId: parent.id,
-          regenerationReason: 'x'.repeat(MAX_REGENERATION_REASON_LENGTH + 1),
-        },
-      }),
-    ).rejects.toThrow()
-
-    expect(f.provider.submitted()).toHaveLength(0)
+    /**
+     * `parent_take_id` は ON DELETE SET NULL なので、親を消すとこの形で残る。
+     * 系譜の破損ではないため、投入を止める理由にはならない。
+     */
+    expect(second.state).toBe('succeeded')
+    const created = f.takes.snapshot()[0]
+    expect(created?.parentTakeId).toBeNull()
+    expect(created?.regenerationReason).toBe(REASON)
   })
+})
 
-  it('系譜を入れ子にし忘れて平たく積んだら黙って捨てずに落とす', async () => {
+describe('processGenerationJob（系譜の積み忘れを検出する）', () => {
+  const REASON = 'character_consistency: 顔の造作が参照と違う'
+
+  it('親だけを積んで理由を忘れた行は、そもそも作れない', async () => {
     const f = await buildFixture([SUCCEEDED])
     const parent = await seedParentTake(f)
 
     /**
-     * 既定の zod は未知のキーを落とす。落としたまま通すと、親も理由も無い Take が
-     * 「最初の生成」として確定してしまい、後から直せない（Take は Immutable）。
+     * 系譜は generation_jobs の行に対で積む。片方だけの行は作成の時点で落とす。
+     * ここを通してしまうと、何の作り直しか分からない Take が確定する。
      */
+    const createWithoutReason = async () =>
+      f.jobs.create({
+        shotId: f.shot.id,
+        specHash: f.specHash,
+        requestedModel: 'AUTO',
+        resolvedModel: MODEL.id,
+        parentTakeId: parent.id,
+      })
+
+    await expect(createWithoutReason()).rejects.toThrow(/regenerationReason/)
+  })
+
+  it('理由を欠いた行が届いたら、投入する前に落とす', async () => {
+    const f = await buildFixture([SUCCEEDED])
+    const parent = await seedParentTake(f)
+
+    /**
+     * 作成時の検証をすり抜けた行（直接 SQL で入れた・移行途中など）を想定する。
+     * 課金する前に止めて、何が足りないかを code に残す。
+     */
+    const broken: GenerationJob = {
+      ...f.job,
+      parentTakeId: parent.id,
+      regenerationReason: null,
+    }
+    const deps = {
+      ...f.deps,
+      generationJobs: { ...f.jobs, findById: () => Promise.resolve(broken) },
+    }
+
+    const outcome = await processGenerationJob(deps, { generationJobId: f.job.id })
+
+    expect(outcome).toEqual({ state: 'failed', code: 'regeneration_reason_missing' })
+    expect(f.provider.submitted()).toHaveLength(0)
+    expect(f.takes.snapshot()).toHaveLength(1) // 親だけ
+  })
+
+  it('系譜をジョブデータに入れ子で積んだら落とす（旧形式）', async () => {
+    const f = await buildFixture([SUCCEEDED])
+    const parent = await seedParentTake(f)
+
+    /**
+     * 移行前のジョブが Redis に残っているとこの形で届く。
+     * 黙って捨てると、系譜を持っているつもりのジョブが親も理由も無い Take を作って終わる。
+     * 落ちるのは投入前なので課金は発生しない。行に積み直せばよい。
+     */
+    await expect(
+      processGenerationJob(f.deps, {
+        generationJobId: f.job.id,
+        lineage: { parentTakeId: parent.id, regenerationReason: REASON },
+      }),
+    ).rejects.toThrow(/generation_jobs の行/)
+
+    expect(f.provider.submitted()).toHaveLength(0)
+    expect(f.takes.snapshot()).toHaveLength(1) // 親だけ
+  })
+
+  it('系譜をジョブデータに平たく積んでも落とす', async () => {
+    const f = await buildFixture([SUCCEEDED])
+    const parent = await seedParentTake(f)
+
+    /** 既定の zod は未知のキーを落とす。`.strict()` にしてあるので落ちる。 */
     await expect(
       processGenerationJob(f.deps, {
         generationJobId: f.job.id,
         parentTakeId: parent.id,
         regenerationReason: REASON,
       }),
-    ).rejects.toThrow()
+    ).rejects.toThrow(/generation_jobs の行/)
 
     expect(f.provider.submitted()).toHaveLength(0)
-    expect(f.takes.snapshot()).toHaveLength(1) // 親だけ
   })
 
   it('再生成の要求をそのまま積んだら、直し方が分かるエラーになる', async () => {
@@ -458,7 +534,7 @@ describe('processGenerationJob（Take の系譜）', () => {
           adjustment: {},
         },
       }),
-    ).rejects.toThrow(/GenerationJob を作/)
+    ).rejects.toThrow(/GenerationJob を系譜つきで作/)
   })
 })
 

@@ -7,6 +7,7 @@ import {
   GenerationJob as GenerationJobSchema,
   GenerationJobId as GenerationJobIdSchema,
   UpdateGenerationJobPatch as UpdateGenerationJobPatchSchema,
+  lineagePairViolation,
   newId,
 } from '@ixa/domain'
 import type { DbClient } from '../client.js'
@@ -19,6 +20,9 @@ export type GenerationJobRow = typeof generationJobs.$inferSelect
 /**
  * GenerationJob の読み書き。
  * DB の行が真実であり、キューは実行手段でしかない（ARCHITECTURE.md §20 / ADR-0008）。
+ *
+ * 系譜（parentTakeId / regenerationReason）も同じ扱いで、**この行が正**である。
+ * `create` でだけ書ける。`update` のパッチには含まれないので、後から付け足せない。
  */
 export type GenerationJobRepository = {
   findById(id: GenerationJobId): Promise<GenerationJob | null>
@@ -28,9 +32,23 @@ export type GenerationJobRepository = {
   update(id: GenerationJobId, patch: UpdateGenerationJobPatch): Promise<GenerationJob>
 }
 
-/** row → Domain。zod で検証して branded ID を付ける。 */
-export const generationJobRowToDomain = (row: GenerationJobRow): GenerationJob =>
-  GenerationJobSchema.parse({
+/**
+ * row → Domain。zod で検証して branded ID を付ける。
+ *
+ * 系譜の対（親があるなら理由もある）は zod のスキーマ側では見ていない。
+ * `GenerationJob` に `.refine()` を付けると派生スキーマが作れなくなるため、
+ * 規則そのものは domain の `lineagePairViolation` に 1 つだけ置いて、ここで呼ぶ。
+ *
+ * 対が破れた行は系譜を積む側の書き忘れでしか生まれない。
+ * 黙って通すと「何の作り直しか」の分からない Take が確定し、
+ * Take は Immutable（ADR-0003）なので後から直せない。読んだ時点で落とす。
+ */
+export const generationJobRowToDomain = (row: GenerationJobRow): GenerationJob => {
+  const violation = lineagePairViolation(row)
+  if (violation !== null) {
+    throw new Error(`generation_jobs(${row.id}) の系譜が壊れています: ${violation}`)
+  }
+  return GenerationJobSchema.parse({
     id: row.id,
     shotId: row.shotId,
     specHash: row.specHash,
@@ -41,10 +59,13 @@ export const generationJobRowToDomain = (row: GenerationJobRow): GenerationJob =
     attempt: row.attempt,
     providerJobRef: row.providerJobRef,
     error: row.error,
+    parentTakeId: row.parentTakeId,
+    regenerationReason: row.regenerationReason,
     queuedAt: row.queuedAt,
     startedAt: row.startedAt,
     finishedAt: row.finishedAt,
   })
+}
 
 export const createGenerationJobRepository = (db: DbClient): GenerationJobRepository => ({
   async findById(id) {

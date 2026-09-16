@@ -529,6 +529,10 @@ type GenerationJob = {
   requestedModel: ModelId | 'AUTO'
   resolvedModel: ModelId | null
   routerDecision: RouterDecision | null
+  // 再生成の系譜。ここが唯一の正で、キューのペイロードには載せない（ADR-0008）。
+  // 作った Take の parentTakeId / regenerationReason になる。通常の生成では両方 null。
+  parentTakeId: TakeId | null
+  regenerationReason: string | null
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
   attempt: number
   providerJobRef: string | null     // 外部ジョブID

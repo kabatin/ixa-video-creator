@@ -2,7 +2,6 @@ import type {
   GenerationJobRepository, MediaAssetRepository, ProjectRepository, ShotRepository, TakeRepository,
 } from '@ixa/db'
 import {
-  GenerationJobId as GenerationJobIdSchema,
   type GenerationContextSource,
   type GenerationJob,
   type MediaAssetId,
@@ -15,10 +14,9 @@ import type {
 } from '@ixa/provider-core'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
-import { z } from 'zod'
 import { recordTake, type RecordTakeDeps } from './complete.js'
+import { parseGenerationJobData, type GenerationJobData } from './job-data.js'
 import {
-  TakeLineage,
   checkLineage,
   lineageFailureOf,
   lineageFieldsOf,
@@ -33,53 +31,6 @@ import { rebuildSpec } from './spec.js'
  * - 外部ジョブのポーリングは repeatable job ではなく指数バックオフの再スケジュール
  * - 冪等。終了済みのジョブを再実行しても Take を二重に作らない
  */
-
-/**
- * generation キューのジョブデータ。
- *
- * **知らないキーを黙って捨てない（`.strict()`）。**
- * 既定の zod は未知のキーを落とすため、系譜を入れ子にし忘れて
- * `{ generationJobId, parentTakeId, regenerationReason }` と平たく積むと、
- * 何事も無く通って Take が親も理由も無いまま確定してしまう（実際に確かめた）。
- * 系譜を書けるのはこの経路だけで、Take は Immutable（ADR-0003）なので後から直せない。
- * 積み方の間違いはここで気付く必要がある。
- */
-export const GenerationJobData = z
-  .object({
-    generationJobId: GenerationJobIdSchema,
-    /**
-     * 再生成で積まれたジョブだけが持つ。通常の生成では省略する（DOMAIN.md §10）。
-     *
-     * **GenerationJob の行は系譜を持てない**（generation_jobs に列が無い）ため、
-     * 親を知っているのはこのジョブデータだけである。ポーリングで入れ直すときも
-     * このデータをそのまま運ぶので、投入から完了まで系譜が残る。
-     */
-    lineage: TakeLineage.optional(),
-  })
-  .strict()
-export type GenerationJobData = z.infer<typeof GenerationJobData>
-
-/**
- * 再生成の要求（`RegenerationRequest`）をそのまま generation キューへ積むと、
- * GenerationJob が作られていないのでここで詰まる。
- * 「generationJobId が必要」という汎用の zod エラーだけでは配線の直し方が分からないため、
- * その形を見つけたら何をすべきかまで書いたエラーにする。
- */
-const looksLikeRawRegenerationRequest = (data: unknown): boolean =>
-  typeof data === 'object' && data !== null && 'regeneration' in data
-
-export const parseGenerationJobData = (data: unknown): GenerationJobData => {
-  const parsed = GenerationJobData.safeParse(data)
-  if (parsed.success) return parsed.data
-  if (looksLikeRawRegenerationRequest(data)) {
-    throw new Error(
-      '再生成の要求がそのまま generation キューへ積まれています。' +
-        'GenerationJob を作ったうえで ' +
-        '{ generationJobId, lineage: { parentTakeId, regenerationReason } } の形で積んでください',
-    )
-  }
-  throw parsed.error
-}
 
 /** ポーリング間隔の初期値と上限。 */
 export const POLL_BACKOFF_BASE_MS = 5_000
@@ -144,8 +95,7 @@ const TERMINAL_STATUSES: readonly GenerationJob['status'][] = ['succeeded', 'fai
 
 /**
  * 1 回分の処理に必要な、DB から読み直した実体一式。
- * `data` も持ち回る。系譜はここにしか無いため、ポーリングで入れ直すときに
- * 落とすと再生成であることが分からなくなる。
+ * `data` も持ち回るが、運んでいるのは ID だけ。系譜は `job` の行から読む。
  */
 type JobContext = {
   readonly job: GenerationJob
@@ -157,13 +107,13 @@ type JobContext = {
 }
 
 /**
- * 運ばれてきた系譜を検査する。親を辿れなければ理由付きで返る。
+ * ジョブの行に載っている系譜を検査する。親を辿れなければ理由付きで返る。
  * 投入前に呼べば、壊れた系譜のまま課金することがない。
  */
 const inspectLineage = (
   deps: GenerationProcessorDeps,
   ctx: JobContext,
-): Promise<LineageCheck> => checkLineage(deps.takes, ctx.shot.id, ctx.data.lineage)
+): Promise<LineageCheck> => checkLineage(deps.takes, ctx.shot.id, ctx.job)
 
 /** Provider に参照画像を見せるための署名付き URL。DB には保存しない（規約 7）。 */
 const referenceResolver =
@@ -223,7 +173,7 @@ const submit = async (
     providerJobRef: handle.ref,
     startedAt: job.startedAt ?? now,
   })
-  // 系譜ごと運び直す。ここで data を組み直すと再生成であることが抜け落ちる。
+  // 運ぶのは ID だけ。系譜は行に載っているので、入れ直しで失われることがない。
   await deps.scheduler.reschedule(ctx.data, pollDelayMs(1))
 
   deps.logger.info({ jobId: job.id, ref: handle.ref }, 'Provider へ生成ジョブを投入しました')

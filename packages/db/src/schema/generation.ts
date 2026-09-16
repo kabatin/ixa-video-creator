@@ -33,6 +33,22 @@ export const generationJobs = pgTable(
     /** 外部ジョブ ID */
     providerJobRef: text('provider_job_ref'),
     error: jsonb('error').$type<NonNullable<GenerationJob['error']>>(),
+
+    /**
+     * 系譜。再生成で積まれたジョブだけが値を持つ（DOMAIN.md §10）。
+     *
+     * **ここが系譜の唯一の正である。** 以前はキューのジョブペイロードにしか無く、
+     * 行を作ってからペイロードに積むまでの間に落とすと、親も理由も持たない Take が
+     * 静かに確定していた。Take は Immutable（ADR-0003）なので後から埋められない。
+     *
+     * `ON DELETE SET NULL` と列の型は `takes` の同名列に合わせてある。
+     * 親を消すと「理由はあるが親が無い」形になり、Take 側と同じ読み方ができる。
+     */
+    parentTakeId: ulidRef('parent_take_id').references((): AnyPgColumn => takes.id, {
+      onDelete: 'set null',
+    }),
+    regenerationReason: text('regeneration_reason'),
+
     queuedAt: timestampTz('queued_at').notNull().defaultNow(),
     startedAt: timestampTz('started_at'),
     finishedAt: timestampTz('finished_at'),

@@ -1,3 +1,4 @@
+import { MAX_REGENERATION_REASON_LENGTH } from '@ixa/domain'
 import type { RegenerationPolicy, ReviewFinding, ReviewerType, Severity } from '@ixa/domain'
 
 /**
@@ -61,8 +62,12 @@ export type RegenerationDecision =
   /** 機械で回してはいけない指摘。人間に渡す。 */
   | { readonly kind: 'human'; readonly reason: string }
 
-/** regenerationReason は DB の text 列だが、無制限に長い文字列を積まない。 */
-export const MAX_REASON_LENGTH = 400
+/**
+ * `regenerationReason` の上限。**実体は `@ixa/domain` にある。**
+ * ここに同じ値を書くと、DB 側の検証だけ変えた日に「保存はできるが投入で落ちる」
+ * または「投入は通るが保存で落ちる」状態になる（L-016）。
+ */
+export const MAX_REASON_LENGTH = MAX_REGENERATION_REASON_LENGTH
 
 const SEVERITY_RANK: Readonly<Record<Severity, number>> = Object.freeze({
   fail: 2,

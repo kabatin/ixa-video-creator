@@ -103,6 +103,51 @@ export const RouterDecision = z.object({
 })
 export type RouterDecision = z.infer<typeof RouterDecision>
 
+/** regenerationReason は DB では text 列だが、無制限に長い文字列を積まない。 */
+export const MAX_REGENERATION_REASON_LENGTH = 400
+
+/** 系譜の 2 列だけを見る形。GenerationJob / その行 / 作成入力のいずれからも渡せる。 */
+export type LineagePair = {
+  readonly parentTakeId: string | null
+  readonly regenerationReason: string | null
+}
+
+export const LINEAGE_PAIR_VIOLATION =
+  'parentTakeId を持つなら regenerationReason も必要です（系譜の積み忘れ）'
+
+/**
+ * 系譜の対が成立しているかを見る。破れていれば理由、成立していれば null。
+ *
+ * **規則はここ 1 箇所にだけ書く。** 作成入力の検証も、DB の行を読み直すときの検査も
+ * これを呼ぶ。別々に書き写すと、片方だけ直す日が来て必ずズレる。
+ *
+ * 規則: 親を持つなら理由も必ず持つ。
+ * 逆（理由だけで親が無い）は**許す**。`parent_take_id` は `ON DELETE SET NULL` なので、
+ * 親を消した再生成は「理由はあるが親が無い」形で残る。takes と同じ規則にしておくと、
+ * 読む側の解釈が 1 つで済む。
+ *
+ * 親だけあって理由が無い値は、系譜を積む側の書き忘れでしか生まれない。
+ * 黙って通すと「何の作り直しか」が永久に分からなくなる。
+ */
+export const lineagePairViolation = (v: LineagePair): string | null =>
+  v.parentTakeId === null || v.regenerationReason !== null ? null : LINEAGE_PAIR_VIOLATION
+
+const hasReasonWhenParented = (v: LineagePair): boolean => lineagePairViolation(v) === null
+
+/** 毎回新しい値を返す。zod へ渡す issue を使い回さない。 */
+const lineagePairIssue = (): { message: string; path: string[] } => ({
+  message: LINEAGE_PAIR_VIOLATION,
+  path: ['regenerationReason'],
+})
+
+/**
+ * GenerationJob。
+ *
+ * 系譜の対の検査（`lineagePairViolation`）は **ここには付けない**。
+ * `.refine()` を付けると `omit` / `pick` / `shape` が使えなくなり、
+ * API のレスポンス型など派生スキーマが作れなくなるため。
+ * 検査は作成入力（`CreateGenerationJobInput`）と、DB の行を読み直す側で行う。
+ */
 export const GenerationJob = z.object({
   id: GenerationJobId,
   shotId: ShotId,
@@ -118,6 +163,19 @@ export const GenerationJob = z.object({
     message: z.string(),
     retryable: z.boolean(),
   }).nullable(),
+
+  /**
+   * 系譜（DOMAIN.md §10）。再生成で積まれたジョブだけが持つ。
+   *
+   * **ここが系譜の正である。** キューのジョブデータには積まない。
+   * ジョブデータに積む形だと「GenerationJob 行は作ったがペイロードに入れ忘れた」
+   * 隙間が生まれ、親も理由も持たない Take が静かに確定していた。
+   * Take は Immutable（ADR-0003）なので後から埋められない。
+   * 行を作る呼び出しと系譜を書く呼び出しを同じ 1 回にまとめて、その隙間を無くす。
+   */
+  parentTakeId: TakeId.nullable(),
+  regenerationReason: z.string().nullable(),
+
   queuedAt: z.date(),
   startedAt: z.date().nullable(),
   finishedAt: z.date().nullable(),
@@ -127,17 +185,34 @@ export type GenerationJob = z.infer<typeof GenerationJob>
 /** GenerationJob 作成時の入力。キューへ入れる時点では未解決の項目が多い。 */
 export const CreateGenerationJobInput = GenerationJob.omit({
   id: true, queuedAt: true, startedAt: true, finishedAt: true,
-}).extend({
-  status: GenerationJobStatus.default('queued'),
-  attempt: z.number().int().positive().default(1),
-  resolvedModel: ModelId.nullable().default(null),
-  routerDecision: RouterDecision.nullable().default(null),
-  providerJobRef: z.string().nullable().default(null),
-  error: GenerationJob.shape.error.default(null),
 })
+  .extend({
+    status: GenerationJobStatus.default('queued'),
+    attempt: z.number().int().positive().default(1),
+    resolvedModel: ModelId.nullable().default(null),
+    routerDecision: RouterDecision.nullable().default(null),
+    providerJobRef: z.string().nullable().default(null),
+    error: GenerationJob.shape.error.default(null),
+    /**
+     * 系譜を書けるのはここだけ。作成後の更新では変えられない
+     * （`UpdateGenerationJobPatch` に含めていない）。
+     * 再生成の配線は必ずこの 2 つを渡すこと。
+     */
+    parentTakeId: TakeId.nullable().default(null),
+    regenerationReason: z
+      .string()
+      .min(1)
+      .max(MAX_REGENERATION_REASON_LENGTH)
+      .nullable()
+      .default(null),
+  })
+  .refine(hasReasonWhenParented, lineagePairIssue())
 export type CreateGenerationJobInput = z.input<typeof CreateGenerationJobInput>
 
-/** ジョブ進行中に更新される列。 */
+/**
+ * ジョブ進行中に更新される列。
+ * **系譜（parentTakeId / regenerationReason）は入れない。** 作成時に決まり、後から変わらない。
+ */
 export const UpdateGenerationJobPatch = GenerationJob.pick({
   status: true, resolvedModel: true, routerDecision: true, attempt: true,
   providerJobRef: true, error: true, startedAt: true, finishedAt: true,

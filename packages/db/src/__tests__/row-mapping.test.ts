@@ -15,9 +15,16 @@ import { describe, expect, it } from 'vitest'
 const REPOSITORY_DIR = join(import.meta.dirname, '..', 'repositories')
 const SCHEMA_DIR = join(import.meta.dirname, '..', 'schema')
 
-/** 変換関数が写している列名。 */
+/**
+ * 変換関数が写している列名。
+ *
+ * 本体が式のもの（`=> Schema.parse({...})`）と、検査を挟んでから返すもの
+ * （`=> { ...; return Schema.parse({...}) }`）の両方を拾う。
+ * 片方しか拾えないと、本体の書き方を変えただけで**検査が黙ってスキップされる**。
+ */
 const mappedColumns = (source: string): Set<string> | null => {
-  const match = /RowToDomain = \(row: \w+\): \w+ =>\s*\w+\.parse\(\{(.*?)\n\s*\}\)/s.exec(source)
+  const match =
+    /RowToDomain = \(row: \w+\): \w+ =>[\s\S]*?\w+\.parse\(\{(.*?)\n\s*\}\)/s.exec(source)
   if (!match?.[1]) return null
   return new Set([...match[1].matchAll(/(\w+):\s*row\./g)].map((m) => m[1] as string))
 }
@@ -36,11 +43,31 @@ const tableColumns = (schemaSource: string, tableName: string): Set<string> | nu
 /** ドメインに存在しない、DB 内部だけの列。写さないのが正しい。 */
 const INTERNAL_COLUMNS = new Set(['deletedAt'])
 
+/**
+ * 変換関数を必ず見つけられること自体を検査する対象。
+ *
+ * 見つからないリポジトリは黙って読み飛ばす作りなので、
+ * 「検査した結果 OK」と「そもそも検査していない」が区別できない（L-015）。
+ * 少なくともこの一覧は、いつでも実際に検査されていなければならない。
+ */
+const MUST_BE_INSPECTED = [
+  'generation-job-repository.ts',
+  'take-repository.ts',
+  'media-asset-repository.ts',
+  'shot-repository.ts',
+  'project-repository.ts',
+] as const
+
 describe('row → domain 変換が列を落としていない', () => {
   const files = readdirSync(REPOSITORY_DIR).filter((f) => f.endsWith('-repository.ts'))
 
   it('検査対象のリポジトリが存在する', () => {
     expect(files.length).toBeGreaterThan(5)
+  })
+
+  it.each(MUST_BE_INSPECTED)('%s の変換関数を見つけられる', (file) => {
+    const source = readFileSync(join(REPOSITORY_DIR, file), 'utf8')
+    expect(mappedColumns(source), `${file} の変換関数を認識できていません`).not.toBeNull()
   })
 
   for (const file of files) {

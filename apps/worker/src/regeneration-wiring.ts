@@ -74,25 +74,22 @@ export const createRegenerationEnqueue = (deps: RegenerationEnqueueDeps): Regene
         'AUTO',
       )
 
+      /**
+       * **系譜は行に積む。ジョブデータには載せない。**
+       * 両方から読めると必ずズレるので、DB の行を唯一の正にする（ADR-0008）。
+       * ポーリングの入れ直しでも ID しか運ばないため、運搬中に系譜が失われる経路が無い。
+       */
       const job = await generationJobs.create({
         shotId: shot.id,
         specHash: compiled.specHash,
         requestedModel: 'AUTO',
         resolvedModel: compiled.model.id,
         routerDecision: compiled.routerDecision,
+        parentTakeId: request.parentTakeId,
+        regenerationReason: request.reason,
       })
 
-      /**
-       * 系譜はこのペイロードにしか無い（`generation_jobs` に列が無い）。
-       * 積み忘れると親も理由も持たない Take が確定するため、ここで必ず入れる。
-       */
-      await deps.queue.add('generate', {
-        generationJobId: job.id,
-        lineage: {
-          parentTakeId: request.parentTakeId,
-          regenerationReason: request.reason,
-        },
-      })
+      await deps.queue.add('generate', { generationJobId: job.id })
 
       deps.logger.info(
         {
