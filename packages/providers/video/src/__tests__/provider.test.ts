@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { probeMedia } from '@ixa/media'
 import { CapabilityViolationError } from '@ixa/provider-core'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { colorForShot } from '../stub/color.js'
 import { stubSeedanceLikeModel, stubVeoLikeModel } from '../stub/descriptor.js'
 import { createStubVideoProvider } from '../stub/provider.js'
@@ -245,8 +245,17 @@ describe('createStubVideoProvider（実 ffmpeg）', () => {
 })
 
 describe('seed 未指定時の挙動（実 ffmpeg）', () => {
+  let outputDir = ''
+
+  beforeEach(async () => {
+    outputDir = await createTempDir()
+  })
+
+  afterEach(async () => {
+    await removeTempDir(outputDir)
+  })
+
   it('同じ仕様で 2 回生成しても内容が異なる（Take を比較できるようにするため）', async () => {
-    const outputDir = await createTempDir()
     const provider = createStubVideoProvider({ outputDir })
     const request = makeRequest(stubVeoLikeModel, makeSpec({ seed: null }))
 
@@ -260,7 +269,6 @@ describe('seed 未指定時の挙動（実 ffmpeg）', () => {
   })
 
   it('seed を明示すれば尊重される（再現性のため）', async () => {
-    const outputDir = await createTempDir()
     const provider = createStubVideoProvider({ outputDir })
     const request = makeRequest(stubVeoLikeModel, makeSpec({ seed: 12345 }))
 

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createMemoryStorage, posterKey, proxyKey, thumbnailKey } from '@ixa/storage'
 import type { ObjectStorage } from '@ixa/storage'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_POSTER_COUNT, processMediaJob, type MediaOutcome } from '../processor.js'
 import { inMemoryMediaAssets, readBytes, seedAsset, silentLogger } from './doubles.js'
 import type { InMemoryMediaAssets } from './doubles.js'
@@ -41,6 +41,10 @@ describe('processMediaJob', () => {
     repo = inMemoryMediaAssets()
     storage = createMemoryStorage()
     workDir = await mkdtemp(join(tmpdir(), 'ixa-media-work-'))
+  })
+
+  afterEach(async () => {
+    await rm(workDir, { recursive: true, force: true })
   })
 
   const deps = () => ({ mediaAssets: repo, storage, workDir, logger: silentLogger })

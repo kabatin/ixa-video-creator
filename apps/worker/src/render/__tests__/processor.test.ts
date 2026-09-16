@@ -1,9 +1,9 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { RenderJobId as RenderJobIdSchema, newId, type Project, type RenderJob } from '@ixa/domain'
 import { createMemoryStorage, renderKey } from '@ixa/storage'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { processRenderJob, type RenderProcessorDeps } from '../processor.js'
 import {
   aProject,
@@ -22,12 +22,17 @@ import {
  */
 
 const OUTPUT_BYTES = Buffer.from('rendered-mp4-bytes')
+let outputDir: string
 let outputPath: string
 
 beforeAll(async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ixa-render-test-'))
-  outputPath = join(dir, 'render-master_1080p.mp4')
+  outputDir = await mkdtemp(join(tmpdir(), 'ixa-render-test-'))
+  outputPath = join(outputDir, 'render-master_1080p.mp4')
   await writeFile(outputPath, OUTPUT_BYTES)
+})
+
+afterAll(async () => {
+  await rm(outputDir, { recursive: true, force: true })
 })
 
 type FixtureOptions = {
