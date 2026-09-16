@@ -3,6 +3,7 @@
 import type { TimelineClip, TimelineClipId } from '@ixa/domain'
 import { useState } from 'react'
 import { TextField } from '@/components/form/text-field'
+import { SnapNoticeList } from '@/components/timeline-snap-panel'
 import {
   describeClipContent,
   formatTimeSpan,
@@ -11,12 +12,17 @@ import {
   parseSeconds,
   sortClipsForDisplay,
 } from '@/lib/timeline-display'
+import type { SnapNotice, SnapSpanInput, SnapSpanOutcome } from '@/lib/timeline-snap'
 
 /**
  * 置いてあるクリップの位置・尺・重ね順を数値で変える / 消す（P5-4）。
  *
  * **クリップが 0 件であることと、読み込めていないことを画面で区別する。**
  * 呼び出し側は読み込めなかったときに `clips` へ null を渡す（lessons L-015）。
+ *
+ * 確定時に開始と終了を吸着候補へ寄せる。**動かしている当のクリップ自身は候補から外す**
+ * （自分の端は距離 0 の候補になり、そこへ吸着して動かせなくなるため）。
+ * 除外は `onSnapSpan` に渡す `TimelineClipId` で呼び出し側が行う。
  */
 
 export type ClipPatch = {
@@ -33,6 +39,11 @@ export type TimelineClipListProps = {
   readonly onSelect: (id: TimelineClipId) => void
   readonly onUpdate: (id: TimelineClipId, patch: ClipPatch) => void
   readonly onRemove: (id: TimelineClipId) => void
+  /**
+   * 吸着の実行。**第 1 引数のクリップを候補から除外して**呼ぶこと。
+   * 規則の正は `packages/timeline` 側にあり、この画面には置かない。
+   */
+  readonly onSnapSpan: (id: TimelineClipId, span: SnapSpanInput) => SnapSpanOutcome
 }
 
 type Errors = Partial<Record<'startSec' | 'durationSec' | 'layer', string>>
@@ -44,13 +55,23 @@ type ClipRowProps = {
   readonly onSelect: (id: TimelineClipId) => void
   readonly onUpdate: (id: TimelineClipId, patch: ClipPatch) => void
   readonly onRemove: (id: TimelineClipId) => void
+  readonly onSnapSpan: (id: TimelineClipId, span: SnapSpanInput) => SnapSpanOutcome
 }
 
-const ClipRow = ({ clip, busy, selected, onSelect, onUpdate, onRemove }: ClipRowProps) => {
+const ClipRow = ({
+  clip,
+  busy,
+  selected,
+  onSelect,
+  onUpdate,
+  onRemove,
+  onSnapSpan,
+}: ClipRowProps) => {
   const [startRaw, setStartRaw] = useState(clip.startSec.toFixed(2))
   const [durationRaw, setDurationRaw] = useState(clip.durationSec.toFixed(2))
   const [layerRaw, setLayerRaw] = useState(String(clip.layer))
   const [errors, setErrors] = useState<Errors>({})
+  const [notices, setNotices] = useState<readonly SnapNotice[] | null>(null)
 
   const submit = (): void => {
     const start = parseSeconds(startRaw)
@@ -63,11 +84,23 @@ const ClipRow = ({ clip, busy, selected, onSelect, onUpdate, onRemove }: ClipRow
       ...(layer.ok ? {} : { layer: layer.message }),
     }
     setErrors(next)
-    if (!start.ok || !duration.ok || !layer.ok) return
+    if (!start.ok || !duration.ok || !layer.ok) {
+      setNotices(null)
+      return
+    }
 
-    onUpdate(clip.id, {
+    const snapped = onSnapSpan(clip.id, {
       startSec: start.value,
       durationSec: duration.value,
+    })
+    setNotices(snapped.notices)
+    // 送る値を欄へ書き戻す。欄と送信値がずれたままだと何が起きたか読めない。
+    setStartRaw(snapped.startSec.toFixed(3))
+    setDurationRaw(snapped.durationSec.toFixed(3))
+
+    onUpdate(clip.id, {
+      startSec: snapped.startSec,
+      durationSec: snapped.durationSec,
       layer: layer.value,
     })
   }
@@ -100,7 +133,10 @@ const ClipRow = ({ clip, busy, selected, onSelect, onUpdate, onRemove }: ClipRow
           value={startRaw}
           disabled={busy}
           error={errors.startSec}
-          onChange={setStartRaw}
+          onChange={(value) => {
+            setStartRaw(value)
+            setNotices(null)
+          }}
         />
       </div>
       <div className="w-28">
@@ -110,7 +146,10 @@ const ClipRow = ({ clip, busy, selected, onSelect, onUpdate, onRemove }: ClipRow
           value={durationRaw}
           disabled={busy}
           error={errors.durationSec}
-          onChange={setDurationRaw}
+          onChange={(value) => {
+            setDurationRaw(value)
+            setNotices(null)
+          }}
         />
       </div>
       <div className="w-24">
@@ -142,6 +181,10 @@ const ClipRow = ({ clip, busy, selected, onSelect, onUpdate, onRemove }: ClipRow
       >
         消す
       </button>
+
+      <div className="w-full">
+        <SnapNoticeList notices={notices} />
+      </div>
     </li>
   )
 }
@@ -153,6 +196,7 @@ export const TimelineClipList = ({
   onSelect,
   onUpdate,
   onRemove,
+  onSnapSpan,
 }: TimelineClipListProps) => (
   <section className="rounded-lg border border-slate-200 bg-white p-5">
     <h2 className="text-base font-semibold text-slate-900">置いてあるクリップ</h2>
@@ -176,6 +220,7 @@ export const TimelineClipList = ({
             onSelect={onSelect}
             onUpdate={onUpdate}
             onRemove={onRemove}
+            onSnapSpan={onSnapSpan}
           />
         ))}
       </ul>

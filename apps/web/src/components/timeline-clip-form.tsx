@@ -2,7 +2,9 @@
 
 import { useState } from 'react'
 import { TextField } from '@/components/form/text-field'
+import { SnapNoticeList } from '@/components/timeline-snap-panel'
 import { parseDurationSec, parseLayer, parseSeconds } from '@/lib/timeline-display'
+import type { SnapNotice, SnapSpanInput, SnapSpanOutcome } from '@/lib/timeline-snap'
 
 /**
  * TEXT トラックにテロップのクリップを足す（P5-4）。
@@ -12,6 +14,9 @@ import { parseDurationSec, parseLayer, parseSeconds } from '@/lib/timeline-displ
  *
  * VFX / VIDEO2 / SFX のクリップはこの画面からは作らない（素材の選択が要るため）。
  * それらのトラックは既にあるクリップを映すだけになる。
+ *
+ * 確定時に開始と終了を吸着候補へ寄せる。**寄せた結果は必ず欄の下に出す。**
+ * 数字だけを見て「動いたのか動いていないのか」を利用者に推測させない（lessons L-015）。
  */
 
 export type NewTextClipInput = {
@@ -24,6 +29,11 @@ export type NewTextClipInput = {
 export type TimelineClipFormProps = {
   readonly busy: boolean
   readonly onAdd: (input: NewTextClipInput) => void
+  /**
+   * 吸着の実行。候補・許容距離・ON/OFF は呼び出し側が持つ。
+   * **この画面に吸着の規則を書かない**（正は `packages/timeline`）。
+   */
+  readonly onSnapSpan: (span: SnapSpanInput) => SnapSpanOutcome
 }
 
 type Values = {
@@ -67,19 +77,33 @@ const validate = (
   }
 }
 
-export const TimelineClipForm = ({ busy, onAdd }: TimelineClipFormProps) => {
+export const TimelineClipForm = ({ busy, onAdd, onSnapSpan }: TimelineClipFormProps) => {
   const [values, setValues] = useState<Values>(INITIAL)
   const [errors, setErrors] = useState<Errors>({})
+  const [notices, setNotices] = useState<readonly SnapNotice[] | null>(null)
 
   const update = (field: keyof Values) => (value: string) => {
     setValues((current) => ({ ...current, [field]: value }))
+    setNotices(null)
   }
 
   const submit = (): void => {
     const result = validate(values)
     setErrors(result.errors)
-    if (result.input === null) return
-    onAdd(result.input)
+    if (result.input === null) {
+      setNotices(null)
+      return
+    }
+
+    const snapped = onSnapSpan(result.input)
+    setNotices(snapped.notices)
+    // 実際に送る値を欄へ書き戻す。入力欄と送信値がずれていると何が起きたか分からない。
+    setValues((current) => ({
+      ...current,
+      startSec: snapped.startSec.toFixed(3),
+      durationSec: snapped.durationSec.toFixed(3),
+    }))
+    onAdd({ ...result.input, startSec: snapped.startSec, durationSec: snapped.durationSec })
   }
 
   return (
@@ -134,6 +158,8 @@ export const TimelineClipForm = ({ busy, onAdd }: TimelineClipFormProps) => {
       >
         TEXT クリップを足す
       </button>
+
+      <SnapNoticeList notices={notices} />
     </section>
   )
 }

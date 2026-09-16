@@ -8,6 +8,7 @@ import { describeError } from '@/lib/api-error'
 import { createRequester } from '@/lib/requester'
 import { createTimelineApi, type WireTimelineIssue } from '@/lib/timeline-api'
 import { shotListHref } from '@/lib/shot-links'
+import type { BeatSource } from '@/lib/timeline-snap'
 
 /**
  * タイムライン編集画面（P5-4）。
@@ -15,6 +16,10 @@ import { shotListHref } from '@/lib/shot-links'
  * 読み込みは部分ごとに成否を持つ。**1 つ落ちてもページ全体を白画面にしない**が、
  * 落ちた部分を空配列に畳むこともしない。「0 件」と「読めていない」は別の事実で、
  * 混ぜると検証が「指摘なし」に化ける（lessons L-015）。
+ *
+ * ビート吸着の候補は楽曲解析から来る。解析が無い Project でも画面は出すが、
+ * **「ビート候補が無い」ことを黙って「吸着しない」に畳まない。**
+ * 楽曲が無いのか・解析がまだなのか・読めていないのかを区別して渡す。
  */
 
 export const dynamic = 'force-dynamic'
@@ -43,19 +48,50 @@ type Loaded = {
   readonly renderedShotIds: Part<readonly ShotId[]>
   readonly durationSec: number | null
   readonly issues: Part<readonly WireTimelineIssue[]>
+  readonly beatSource: BeatSource
+}
+
+/**
+ * 吸着に使う楽曲を選ぶ。マスター音源があればそれ、無ければ先頭。
+ * ミュージックビデオでは**尺を決めるのはマスター音源**なので、そこを既定にする
+ * （ストーリーボード画面と同じ選び方）。
+ */
+const loadBeatSource = async (projectId: ProjectId): Promise<BeatSource> => {
+  try {
+    const api = createApiClient()
+    const tracks = await api.listMusicTracks(projectId)
+    const track = tracks.find((candidate) => candidate.isMaster) ?? tracks[0]
+    if (track === undefined) return { state: 'no_track' }
+
+    const analysis = await api.getAnalysis(track.id)
+    if (analysis === null) return { state: 'no_analysis', trackTitle: track.title }
+    if (analysis.beats.length === 0) return { state: 'no_beats', trackTitle: track.title }
+
+    return {
+      state: 'available',
+      trackTitle: track.title,
+      beats: analysis.beats,
+      sections: analysis.sections,
+      drops: analysis.drops,
+    }
+  } catch (error) {
+    return { state: 'unreadable', reason: describeError(error) }
+  }
 }
 
 const load = async (projectId: ProjectId): Promise<Loaded> => {
   const api = createApiClient()
   const timelineApi = createTimelineApi(createRequester(resolveApiBaseUrl()))
 
-  const [shots, transitions, clips, document, issues] = await Promise.all([
+  const [shots, transitions, clips, document, issues, beatSource] = await Promise.all([
     attempt('Shot', () => api.listShots(projectId)),
     attempt('Transition', () => timelineApi.listTransitions(projectId)),
     attempt('クリップ', () => timelineApi.listClips(projectId)),
     attempt('TimelineDocument', () => timelineApi.getTimelineDocument(projectId)),
     // 検証はサーバの validateTimeline が唯一の正。画面に同じ規則を置かない。
     attempt('検証結果', () => timelineApi.getTimelineIssues(projectId)),
+    // 吸着候補のビート。失敗しても画面は出すが、失敗した事実は値として残す。
+    loadBeatSource(projectId),
   ])
 
   return {
@@ -69,6 +105,7 @@ const load = async (projectId: ProjectId): Promise<Loaded> => {
     },
     durationSec: document.value?.durationSec ?? null,
     issues,
+    beatSource,
   }
 }
 
@@ -153,6 +190,7 @@ const TimelinePage = async ({ params }: TimelinePageProps) => {
         renderedShotIds={loaded.renderedShotIds.value}
         documentDurationSec={loaded.durationSec}
         initialIssues={loaded.issues.value}
+        beatSource={loaded.beatSource}
         loadErrors={loadErrors}
       />
     </main>

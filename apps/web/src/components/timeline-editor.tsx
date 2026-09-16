@@ -13,6 +13,7 @@ import { useMemo, useState } from 'react'
 import { TimelineClipForm, type NewTextClipInput } from '@/components/timeline-clip-form'
 import { TimelineClipList, type ClipPatch } from '@/components/timeline-clip-list'
 import { TimelineIssuePanel } from '@/components/timeline-issue-panel'
+import { TimelineSnapPanel } from '@/components/timeline-snap-panel'
 import { TimelineTracks } from '@/components/timeline-tracks'
 import {
   TimelineTransitionEditor,
@@ -28,6 +29,14 @@ import {
   formatDuration,
   programEndSec,
 } from '@/lib/timeline-display'
+import {
+  buildSnapCandidates,
+  snapSpan,
+  snapToleranceSec,
+  type BeatSource,
+  type SnapSpanInput,
+  type SnapSpanOutcome,
+} from '@/lib/timeline-snap'
 
 
 /**
@@ -36,8 +45,9 @@ import {
  * 読み込みは部分的に失敗しうる。**失敗した部分を空として描かない。**
  * 空配列（本当に 0 件）と null（読み込めていない）を最後まで区別して渡す（lessons L-015）。
  *
- * ビート吸着は `packages/timeline` 側に実装中のため、ここからは呼ばない。
- * Architect が後から繋ぐ。
+ * ビート吸着は `@ixa/timeline` の `collectSnapCandidates` / `snapTime` をそのまま呼ぶ。
+ * **画面に吸着の規則を書き写さない**（正は 1 箇所、lessons L-016）。
+ * 許容距離はズーム率から出すので、拡大すると細かく置ける。
  */
 
 export type TimelineEditorProps = {
@@ -50,6 +60,11 @@ export type TimelineEditorProps = {
   /** サーバの検証結果。null は「検査できていない」（指摘なしの空配列とは別物）。 */
   readonly initialIssues: readonly WireTimelineIssue[] | null
   readonly documentDurationSec: number | null
+  /**
+   * ビート候補の出どころ。**「解析が無い」と「読めていない」を畳まずに渡す。**
+   * どちらもビートには吸着しないが、利用者が取るべき行動が違う（lessons L-015）。
+   */
+  readonly beatSource: BeatSource
   /** 読み込みに失敗した部分の理由。1 件でもあれば画面に必ず出す。 */
   readonly loadErrors: readonly string[]
 }
@@ -62,6 +77,7 @@ export const TimelineEditor = ({
   renderedShotIds,
   initialIssues,
   documentDurationSec,
+  beatSource,
   loadErrors,
 }: TimelineEditorProps) => {
   const api = useMemo(() => createTimelineApi(createRequester(resolveApiBaseUrl())), [])
@@ -69,6 +85,7 @@ export const TimelineEditor = ({
   const [transitions, setTransitions] = useState(initialTransitions)
   const [clips, setClips] = useState(initialClips)
   const [pxPerSec, setPxPerSec] = useState(DEFAULT_PX_PER_SEC)
+  const [snapEnabled, setSnapEnabled] = useState(true)
   const [selectedClipId, setSelectedClipId] = useState<TimelineClipId | null>(null)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -84,6 +101,40 @@ export const TimelineEditor = ({
   const issues = initialIssues
 
   const durationSec = documentDurationSec ?? programEndSec(shots ?? [])
+
+  /**
+   * 吸着の材料。読み込めていない部分は空として渡すしかないが、
+   * **その事実は `beatSource` と読み込みエラーの表示で別に出している。**
+   * 候補が減っていることを黙って「吸着しない」に畳まない。
+   */
+  const snapSource = useMemo(
+    () => ({
+      shots: shots ?? [],
+      clips: clips ?? [],
+      beatSource,
+      timelineEndSec: durationSec,
+    }),
+    [shots, clips, beatSource, durationSec],
+  )
+
+  /** 許容距離はズーム率から。px で一定にするのは `snapToleranceSecForZoom` の判断。 */
+  const toleranceSec = snapToleranceSec(pxPerSec)
+
+  /** 内訳の表示用。どのクリップも除外していない状態の候補数。 */
+  const overviewCandidates = useMemo(
+    () => buildSnapCandidates(snapSource, { clipId: null }),
+    [snapSource],
+  )
+
+  /**
+   * **動かしている当のクリップを必ず除外する。**
+   * 自分の端は距離 0 の候補になり、そこへ吸着して二度と動かせなくなる。
+   */
+  const snapSpanForClip = (
+    clipId: TimelineClipId | null,
+    span: SnapSpanInput,
+  ): SnapSpanOutcome =>
+    snapSpan(span, buildSnapCandidates(snapSource, { clipId }), toleranceSec, snapEnabled)
 
   /** 失敗を握り潰すと「押したのに何も起きない」画面になる。必ず理由を出す。 */
   const run = async (label: string, action: () => Promise<void>): Promise<void> => {
@@ -160,6 +211,14 @@ export const TimelineEditor = ({
 
       <TimelineIssuePanel issues={issues} />
 
+      <TimelineSnapPanel
+        enabled={snapEnabled}
+        onToggle={setSnapEnabled}
+        beatSource={beatSource}
+        toleranceSec={toleranceSec}
+        candidates={overviewCandidates}
+      />
+
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm text-slate-700">{`全体の尺 ${formatDuration(durationSec)}`}</span>
         <span className="text-sm text-slate-500">ズーム（1 秒あたりの px）</span>
@@ -230,7 +289,11 @@ export const TimelineEditor = ({
         </p>
       )}
 
-      <TimelineClipForm busy={busy} onAdd={addClip} />
+      <TimelineClipForm
+        busy={busy}
+        onAdd={addClip}
+        onSnapSpan={(span) => snapSpanForClip(null, span)}
+      />
 
       <TimelineClipList
         clips={clips}
@@ -239,6 +302,7 @@ export const TimelineEditor = ({
         onSelect={setSelectedClipId}
         onUpdate={updateClip}
         onRemove={removeClip}
+        onSnapSpan={snapSpanForClip}
       />
     </div>
   )
