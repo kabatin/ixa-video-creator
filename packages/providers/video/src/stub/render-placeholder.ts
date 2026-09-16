@@ -195,7 +195,7 @@ export const renderPlaceholder = async (
 ): Promise<PlaceholderRenderResult> => {
   const { drawtextAvailable, ...runOptions } = options
   const validated = PlaceholderInput.parse(input)
-  const canDrawText = drawtextAvailable ?? (await detectDrawtextSupport(runOptions))
+  const canDrawText = drawtextAvailable ?? (await detectDrawtextSupport())
   const args = buildPlaceholderArgs(validated, canDrawText)
 
   try {
