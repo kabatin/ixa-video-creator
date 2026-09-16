@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { ProjectId } from '../common/ids.js'
-import { aggregateVerdict, canRegenerate, isDeterministicReviewer } from '../review/review.js'
+import {
+  DEFAULT_PROJECT_BUDGET_USD,
+  aggregateVerdict,
+  canRegenerate,
+  isDeterministicReviewer,
+  resolveRegenerationPolicy,
+} from '../review/review.js'
 
 const policy = {
   projectId: ProjectId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAV'),
@@ -57,5 +63,44 @@ describe('isDeterministicReviewer', () => {
     expect(isDeterministicReviewer('technical')).toBe(true)
     expect(isDeterministicReviewer('music')).toBe(true)
     expect(isDeterministicReviewer('identity')).toBe(false)
+  })
+})
+
+describe('resolveRegenerationPolicy', () => {
+  const projectId = ProjectId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+
+  it('Project の予算をプロジェクト上限に使う', () => {
+    const resolved = resolveRegenerationPolicy({ id: projectId, budgetUsd: 50 })
+
+    expect(resolved.maxCostPerProjectUsd).toBe(50)
+    expect(resolved.projectId).toBe(projectId)
+  })
+
+  it('予算が未設定でも「上限なし」を作らない', () => {
+    const resolved = resolveRegenerationPolicy({ id: projectId, budgetUsd: null })
+
+    expect(resolved.maxCostPerProjectUsd).toBe(DEFAULT_PROJECT_BUDGET_USD)
+  })
+
+  it('予算 0 も既定値へ倒す（0 だと最初の 1 回も回せない）', () => {
+    const resolved = resolveRegenerationPolicy({ id: projectId, budgetUsd: 0 })
+
+    expect(resolved.maxCostPerProjectUsd).toBe(DEFAULT_PROJECT_BUDGET_USD)
+  })
+
+  it('回数と人間判断の既定はスキーマの既定値を使う', () => {
+    const resolved = resolveRegenerationPolicy({ id: projectId, budgetUsd: 10 })
+
+    expect(resolved.maxAttemptsPerShot).toBe(3)
+    expect(resolved.requireHumanApprovalAfter).toBe(2)
+    expect(resolved.maxCostPerShotUsd).toBe(2)
+    expect(resolved.autoRegenerateOn).toEqual(['identity', 'technical'])
+  })
+
+  it('導いたポリシーは、そのまま canRegenerate に渡せる', () => {
+    const resolved = resolveRegenerationPolicy({ id: projectId, budgetUsd: 10 })
+    const gate = canRegenerate(resolved, { attempts: 0, shotCostUsd: 0, projectCostUsd: 0 })
+
+    expect(gate.allowed).toBe(true)
   })
 })

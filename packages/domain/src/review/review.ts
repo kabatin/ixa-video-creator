@@ -100,6 +100,30 @@ export const RegenerationPolicy = z.object({
 })
 export type RegenerationPolicy = z.infer<typeof RegenerationPolicy>
 
+/**
+ * Project から再生成ポリシーを導く。
+ *
+ * **ポリシー専用のテーブルは作らない。** 調整したい人がまだ居ないのに
+ * CRUD 画面とマイグレーションが増えるだけで、既定値が 2 箇所（スキーマと DB 行）に散る。
+ * 予算だけは Project が持っているので、それを上限に使う。
+ *
+ * `budgetUsd` が未設定の Project では上限が無いことになってしまうため、
+ * ここで既定の上限を当てる。**「上限なし」を作らない**のがこの関数の役目。
+ */
+export const DEFAULT_PROJECT_BUDGET_USD = 200
+
+export const resolveRegenerationPolicy = (project: {
+  id: ProjectId
+  budgetUsd: number | null
+}): RegenerationPolicy =>
+  RegenerationPolicy.parse({
+    projectId: project.id,
+    maxCostPerProjectUsd:
+      project.budgetUsd === null || project.budgetUsd <= 0
+        ? DEFAULT_PROJECT_BUDGET_USD
+        : project.budgetUsd,
+  })
+
 export type RegenerationState = {
   attempts: number
   shotCostUsd: number
