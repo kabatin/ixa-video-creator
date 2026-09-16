@@ -43,6 +43,9 @@ export type CreateShotBody = z.input<typeof CreateShotBody>
 
 /** `PATCH /shots/{id}` が受け付ける列だけに絞る。 */
 export const UpdateShotBody = UpdateShotPatch.pick({
+  // ストーリーボードの一括作成は機械的なコードと空の mood を付ける。後から直せる必要がある。
+  code: true,
+  mood: true,
   description: true,
   camera: true,
   sourceType: true,

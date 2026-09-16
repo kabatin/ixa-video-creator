@@ -144,12 +144,39 @@ const ProjectParams = z.object({
 })
 
 const CreateShotBody = CreateShotInputSchema.omit({ projectId: true }).openapi('CreateShotInput')
+/**
+ * 後から直せる列。
+ *
+ * `code` と `mood` も直せる。ストーリーボードの一括作成は `VERSE-01` のような
+ * 機械的なコードと空の `mood` を付けるので、**後から直せないと直す手段が無い**。
+ * `selectedTakeId` と `status` は専用の口があるので含めない（不変条件を伴う更新を
+ * 汎用の patch で素通りさせないため）。
+ */
 const UpdateShotBody = UpdateShotPatchSchema.pick({
-  description: true, camera: true, sourceType: true,
+  code: true, description: true, mood: true, camera: true, sourceType: true,
   startSec: true, durationSec: true, sourceInSec: true,
   // 場所は後から決められる。null を送れば外す（ADR-0015）。
   locationId: true,
 }).openapi('UpdateShotPatch')
+
+/**
+ * PostgreSQL の一意制約違反かどうか。
+ * **エラーの型で判定せず code で見る。** drizzle は driver の例外を包んで投げるため、
+ * instanceof では捕まえられない（実際に包まれていることを確認済み）。
+ */
+const isUniqueViolation = (error: unknown): boolean => {
+  const seen = new Set<unknown>()
+  let current: unknown = error
+  while (current !== null && current !== undefined && !seen.has(current)) {
+    seen.add(current)
+    if (typeof current === 'object' && 'code' in current && current.code === '23505') return true
+    current = typeof current === 'object' && 'cause' in current ? current.cause : null
+  }
+  return false
+}
+
+/** `(project_id, code)` は UNIQUE。衝突は利用者の入力ミスなので 422 で返す。 */
+export const DUPLICATE_SHOT_CODE_MESSAGE = 'このコードは同じ Project の別の Shot が使っています'
 
 const jsonContent = <T extends z.ZodTypeAny>(description: string, schema: T) => ({
   description,
@@ -333,8 +360,23 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
       return c.json(ok(toShotResponse(created)), 201)
     })
     .openapi(updateShotRoute, async (c) => {
-      const updated = await deps.shots.update(c.req.valid('param').id, c.req.valid('json'))
-      return c.json(ok(toShotResponse(updated)), 200)
+      const patch = c.req.valid('json')
+
+      /**
+       * コードの重複は `(project_id, code)` の UNIQUE が弾く。
+       * **DB の例外をそのまま 500 にしない。** 利用者の入力ミスなので、
+       * 何が悪いか分かる 422 にする。他の Shot を読み比べるより、
+       * 制約に任せて衝突だけを畳むほうが競合に強い。
+       */
+      try {
+        const updated = await deps.shots.update(c.req.valid('param').id, patch)
+        return c.json(ok(toShotResponse(updated)), 200)
+      } catch (error) {
+        if (patch.code !== undefined && isUniqueViolation(error)) {
+          return c.json(fail(VALIDATION_ERROR_MESSAGE, { code: [DUPLICATE_SHOT_CODE_MESSAGE] }), 422)
+        }
+        throw error
+      }
     })
     .openapi(deleteShotRoute, async (c) => {
       await deps.shots.softDelete(c.req.valid('param').id)

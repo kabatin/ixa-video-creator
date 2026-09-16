@@ -18,6 +18,8 @@ export type Requester = {
   /** `body` が undefined のときは本文を送らない（本文を取らない POST がある）。 */
   readonly post: <T>(path: string, body: unknown, schema: WireSchema<T>) => Promise<T>
   readonly patch: <T>(path: string, body: unknown, schema: WireSchema<T>) => Promise<T>
+  /** 全体を置き換える。部分更新の PATCH と混同しないこと。 */
+  readonly put: <T>(path: string, body: unknown, schema: WireSchema<T>) => Promise<T>
   /** 204 は本文が無いため封筒を剥がさない。失敗だけを例外にする。 */
   readonly remove: (path: string) => Promise<void>
 }
@@ -58,6 +60,8 @@ export const createRequester = (baseUrl: string): Requester => {
     post: (path, body, schema) => call('POST', path, body, schema),
 
     patch: (path, body, schema) => call('PATCH', path, body, schema),
+
+    put: (path, body, schema) => call('PUT', path, body, schema),
 
     remove: async (path) => {
       const url = joinUrl(baseUrl, path)
