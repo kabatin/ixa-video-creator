@@ -1,0 +1,24 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+*.log
+.turbo/
+.pnpm-store/
+
+# 生成・レンダリング成果物（ストレージに置くもの）
+/tmp/
+/storage/
+/renders/
+__pycache__/
+*.py[cod]
+.venv/
