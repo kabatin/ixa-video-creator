@@ -16,7 +16,9 @@ import tseslint from 'typescript-eslint'
  */
 const boundariesElements = [
   { type: 'domain', pattern: 'packages/domain/**' },
-  { type: 'packages', pattern: 'packages/!(domain)/**' },
+  // Provider は外部 SDK を閉じ込める層。一般のロジックから import させない。
+  { type: 'providers', pattern: 'packages/providers/*/**' },
+  { type: 'packages', pattern: 'packages/!(domain|providers)/**' },
   { type: 'apps', pattern: 'apps/*/**' },
 ]
 
@@ -74,15 +76,24 @@ export default tseslint.config(
               from: { element: { type: 'domain' } },
               allow: { to: { element: { type: 'domain' } } },
             },
-            // packages（domain 以外）は domain のみ import 可
+            // packages は domain と他の packages を import 可。
+            // providers は import できない（外部 SDK を一般ロジックへ漏らさないため）。
             {
               from: { element: { type: 'packages' } },
-              allow: { to: { element: { type: 'domain' } } },
+              allow: { to: { element: { types: { anyOf: ['domain', 'packages'] } } } },
             },
-            // apps は packages と domain を import 可
+            // providers は domain と packages を import 可（ffmpeg ラッパや共通 interface が必要）。
+            // provider 同士の import も許可する（core を各アダプタが使うため）。
+            {
+              from: { element: { type: 'providers' } },
+              allow: { to: { element: { types: { anyOf: ['domain', 'packages', 'providers'] } } } },
+            },
+            // apps はすべて import 可
             {
               from: { element: { type: 'apps' } },
-              allow: { to: { element: { types: { anyOf: ['packages', 'domain'] } } } },
+              allow: {
+                to: { element: { types: { anyOf: ['providers', 'packages', 'domain'] } } },
+              },
             },
           ],
         },

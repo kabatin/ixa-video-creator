@@ -309,6 +309,20 @@ packages/*    ロジック。
 **依存の向きは常に `apps → packages → domain`。逆流は禁止。**
 この規則は `eslint-plugin-boundaries` で機械的に強制する。
 
+| from | import できる先 |
+|---|---|
+| `domain` | **domain のみ**（他のどのパッケージも import できない） |
+| `packages/*` | domain と他の `packages/*`。**`providers` は import 禁止** |
+| `packages/providers/*` | domain / packages / 他の providers |
+| `apps/*` | すべて |
+
+`providers` を独立させているのは、**外部 SDK を一般ロジックへ漏らさないため**。
+タイムライン計算やメディア処理が特定 Provider に依存し始めると、Provider の差し替えができなくなる。
+
+**注意**: このプラグインは既定のリゾルバだと本リポジトリの `import './foo.js'`（実体は `.ts`）を
+解決できず、**境界チェックを黙って素通りする**。`eslint-import-resolver-typescript` が必須。
+設定を変えたら、わざと違反を作って実際にエラーになることを確認すること。
+
 ---
 
 ## 5. Domain Model
