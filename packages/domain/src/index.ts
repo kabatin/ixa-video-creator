@@ -3,6 +3,7 @@ export * from './common/ids.js'
 export * from './common/time.js'
 
 // エンティティ
+export * from './project/workspace.js'
 export * from './project/project.js'
 export * from './media/media-asset.js'
 export * from './character/character.js'

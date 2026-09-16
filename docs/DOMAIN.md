@@ -74,6 +74,22 @@ type Cost = { amountUsd: number; unit: string; estimated: boolean }
 ## 3. Workspace / Project
 
 ```ts
+/** すべてのエンティティのルート。MVP では 1 つだけ存在する想定。 */
+type Workspace = {
+  id: WorkspaceId
+  name: string
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+**リポジトリの入力型は Domain が定義する。** `CreateXxxInput` / `UpdateXxxPatch` を
+`packages/db` 側で定義しないこと。契約は Domain が持ち、db はそれを実装する（ADR-0007）。
+例: `CreateMediaAssetInput` は派生物（probe / proxy / thumbnail / posters）を省略できる。
+これらは media キューが後から埋めるため。
+
+
+```ts
 type Project = {
   id: ProjectId
   workspaceId: WorkspaceId

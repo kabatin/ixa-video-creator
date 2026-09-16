@@ -1,0 +1,105 @@
+import { doublePrecision, index, integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import type { AnyPgColumn } from 'drizzle-orm/pg-core'
+import type {
+  GenerationJob, GenerationJobStatus, HumanVerdict, ProviderParams, ReviewStatus,
+  RouterDecision, ShotGenerationSpec,
+} from '@ixa/domain'
+import {
+  GenerationJobStatus as GenerationJobStatusSchema,
+  HumanVerdict as HumanVerdictSchema,
+  ReviewStatus as ReviewStatusSchema,
+} from '@ixa/domain'
+import { createdAt, timestampTz, ulidPk, ulidRef } from './columns.js'
+import { mediaAssets } from './media.js'
+import { shots } from './shot.js'
+
+/** DOMAIN.md §10 GenerationJob。外部 Provider へのジョブ 1 回分。 */
+export const generationJobs = pgTable(
+  'generation_jobs',
+  {
+    id: ulidPk(),
+    shotId: ulidRef('shot_id')
+      .notNull()
+      .references(() => shots.id, { onDelete: 'cascade' }),
+    specHash: text('spec_hash').notNull(),
+    /** ModelId | 'AUTO' */
+    requestedModel: text('requested_model').$type<GenerationJob['requestedModel']>().notNull(),
+    resolvedModel: text('resolved_model').$type<GenerationJob['resolvedModel']>(),
+    routerDecision: jsonb('router_decision').$type<RouterDecision>(),
+    status: text('status', { enum: GenerationJobStatusSchema.options })
+      .$type<GenerationJobStatus>()
+      .notNull(),
+    attempt: integer('attempt').notNull().default(1),
+    /** 外部ジョブ ID */
+    providerJobRef: text('provider_job_ref'),
+    error: jsonb('error').$type<NonNullable<GenerationJob['error']>>(),
+    queuedAt: timestampTz('queued_at').notNull().defaultNow(),
+    startedAt: timestampTz('started_at'),
+    finishedAt: timestampTz('finished_at'),
+  },
+  (t) => [
+    index('generation_jobs_shot_id_idx').on(t.shotId),
+    index('generation_jobs_status_idx').on(t.status),
+  ],
+)
+
+/**
+ * DOMAIN.md §10 Take — Immutable（ADR-0003）。
+ *
+ * ★ 追記のみ（APPEND-ONLY）。
+ *   このテーブルへの UPDATE は `review_status` と `human_verdict` の 2 列に限定する。
+ *   spec / provider_params / media_asset_id / cost_usd などは作成後に変更しない。
+ *   「作り直し」は parent_take_id を持つ新しい行を INSERT する。
+ *   DELETE もしない（deleted_at 列を持たないのは意図的）。
+ *   リポジトリ実装は @ixa/domain の TAKE_MUTABLE_FIELDS / TakeUpdate を守ること。
+ *   DB トリガでの強制は ADR-0003 で検討事項。
+ */
+export const takes = pgTable(
+  'takes',
+  {
+    id: ulidPk(),
+    shotId: ulidRef('shot_id')
+      .notNull()
+      .references(() => shots.id, { onDelete: 'cascade' }),
+    /** Shot 内の連番（1 始まり、表示用） */
+    index: integer('index').notNull(),
+
+    mediaAssetId: ulidRef('media_asset_id')
+      .notNull()
+      .references(() => mediaAssets.id, { onDelete: 'restrict' }),
+
+    // 再現性のためのスナップショット（Immutable）
+    spec: jsonb('spec').$type<ShotGenerationSpec>().notNull(),
+    specHash: text('spec_hash').notNull(),
+    providerId: text('provider_id').notNull(),
+    modelId: text('model_id').notNull(),
+    /** 実際に Provider へ送った固有パラメータ */
+    providerParams: jsonb('provider_params').$type<ProviderParams>().notNull(),
+    seedUsed: integer('seed_used'),
+
+    // 計測
+    costUsd: doublePrecision('cost_usd').notNull(),
+    generationTimeSec: doublePrecision('generation_time_sec').notNull(),
+
+    // 系譜（自己参照）
+    parentTakeId: ulidRef('parent_take_id').references((): AnyPgColumn => takes.id, {
+      onDelete: 'set null',
+    }),
+    regenerationReason: text('regeneration_reason'),
+
+    // 作成後に変更してよいのはこの 2 列だけ
+    reviewStatus: text('review_status', { enum: ReviewStatusSchema.options })
+      .$type<ReviewStatus>()
+      .notNull()
+      .default('pending'),
+    humanVerdict: text('human_verdict', { enum: HumanVerdictSchema.options })
+      .$type<HumanVerdict>()
+      .notNull()
+      .default('unreviewed'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('takes_shot_id_index_uidx').on(t.shotId, t.index),
+    index('takes_spec_hash_idx').on(t.specHash),
+  ],
+)

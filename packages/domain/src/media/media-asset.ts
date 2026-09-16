@@ -49,3 +49,28 @@ export const MediaAsset = z.object({
   createdAt: z.date(),
 })
 export type MediaAsset = z.infer<typeof MediaAsset>
+
+/**
+ * 登録時の入力。
+ * 派生物（probe / proxy / thumbnail / posters）は media キューが後から埋めるため、
+ * 登録時点では省略できる（既定は null / 空配列）。
+ */
+export const CreateMediaAssetInput = MediaAsset.omit({
+  id: true, createdAt: true,
+  probe: true, proxyKey: true, thumbnailKey: true, posterKeys: true,
+}).extend({
+  probe: MediaProbe.nullable().default(null),
+  proxyKey: z.string().nullable().default(null),
+  thumbnailKey: z.string().nullable().default(null),
+  posterKeys: z.array(z.string()).default([]),
+})
+export type CreateMediaAssetInput = z.input<typeof CreateMediaAssetInput>
+
+/**
+ * 取り込みパイプライン（ffprobe / プロキシ / サムネ / ポスターフレーム）が
+ * 後から埋める列だけを更新可能にする。storageKey や checksum は不変。
+ */
+export const UpdateMediaAssetPatch = MediaAsset.pick({
+  probe: true, proxyKey: true, thumbnailKey: true, posterKeys: true, tags: true,
+}).partial()
+export type UpdateMediaAssetPatch = z.input<typeof UpdateMediaAssetPatch>

@@ -35,3 +35,12 @@ export const CreateProjectInput = Project.pick({
   styleGuide: z.string().default(''),
 })
 export type CreateProjectInput = z.input<typeof CreateProjectInput>
+
+/**
+ * 更新可能な列。リポジトリの契約はドメインが定義する（ADR-0007）。
+ * id / workspaceId / createdAt は変更できない。
+ */
+export const UpdateProjectPatch = Project.omit({
+  id: true, workspaceId: true, createdAt: true, updatedAt: true,
+}).partial()
+export type UpdateProjectPatch = z.input<typeof UpdateProjectPatch>
