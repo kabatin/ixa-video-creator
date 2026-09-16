@@ -22,6 +22,13 @@
       "when": 1789544946221,
       "tag": "0002_goofy_namor",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789547716333,
+      "tag": "0003_milky_darkhawk",
+      "breakpoints": true
     }
   ]
 }

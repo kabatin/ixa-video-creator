@@ -19,6 +19,7 @@ const baseRow = (): MediaAssetRow => ({
   proxyKey: null,
   thumbnailKey: 'ws/proj/take.jpg',
   posterKeys: ['a.jpg', 'b.jpg'],
+  lastFrameAssetId: null,
   origin: { type: 'generated', takeId: newId(TakeId) },
   tags: ['footage'],
   createdAt: new Date('2026-09-16T00:00:00Z'),

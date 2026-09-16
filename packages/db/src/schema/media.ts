@@ -31,6 +31,8 @@ export const mediaAssets = pgTable(
     proxyKey: text('proxy_key'),
     thumbnailKey: text('thumbnail_key'),
     posterKeys: text('poster_keys').array().notNull().default([]),
+  /** 最終フレームの派生 MediaAsset。連続性の参照に使う（自己参照）。 */
+  lastFrameAssetId: ulidRef('last_frame_asset_id'),
 
     origin: jsonb('origin').$type<MediaOrigin>().notNull(),
     tags: text('tags').array().notNull().default([]),

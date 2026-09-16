@@ -61,3 +61,10 @@ export const renderKey = (projectId: string, renderJobId: string, ext: string): 
   assertValidSegment(ext, 'ext')
   return `renders/${projectId}/${renderJobId}/output.${ext}`
 }
+
+/** 最終フレーム。連続性の参照に使う（ARCHITECTURE.md §8）。 */
+export const lastFrameKey = (workspaceId: string, mediaAssetId: string): StorageKey => {
+  assertValidSegment(workspaceId, 'workspaceId')
+  assertValidSegment(mediaAssetId, 'mediaAssetId')
+  return `media/${workspaceId}/${mediaAssetId}/last-frame.jpg`
+}

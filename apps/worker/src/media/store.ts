@@ -1,6 +1,9 @@
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import type { MediaAsset } from '@ixa/domain'
-import { posterKey, proxyKey, thumbnailKey, type ObjectStorage, type StorageKey } from '@ixa/storage'
+import { posterKey, proxyKey, thumbnailKey, type ObjectStorage, type StorageKey,
+  lastFrameKey,
+} from '@ixa/storage'
 import type { LocalDerivatives } from './derivatives.js'
 
 /**
@@ -17,6 +20,10 @@ export type DerivativeKeys = {
   readonly thumbnailKey: string | null
   /** UpdateMediaAssetPatch へそのまま渡すため可変配列で持つ。 */
   readonly posterKeys: string[]
+  /** 最終フレーム。派生 MediaAsset を作るのは呼び出し側（processor）の責務。 */
+  readonly lastFrameKey: string | null
+  readonly lastFrameBytes: number
+  readonly lastFrameChecksum: string | null
 }
 
 const putFile = async (
@@ -67,9 +74,26 @@ export const storeDerivatives = async (
     )
   }
 
+  const lastFrame =
+    derivatives.lastFramePath === null
+      ? { key: null, bytes: 0, checksum: null }
+      : await (async () => {
+          const body = await readFile(derivatives.lastFramePath as string)
+          const key = lastFrameKey(workspaceId, id)
+          await storage.put(key, body, { contentType: JPEG_CONTENT_TYPE })
+          return {
+            key,
+            bytes: body.byteLength,
+            checksum: createHash('sha256').update(body).digest('hex'),
+          }
+        })()
+
   return {
     proxyKey: storedProxyKey,
     thumbnailKey: storedThumbnailKey,
     posterKeys: storedPosterKeys,
+    lastFrameKey: lastFrame.key,
+    lastFrameBytes: lastFrame.bytes,
+    lastFrameChecksum: lastFrame.checksum,
   }
 }

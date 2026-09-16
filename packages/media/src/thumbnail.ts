@@ -97,3 +97,35 @@ export const extractPosterFrames = async (
 
   return outputPaths
 }
+
+/**
+ * 最終フレームを 1 枚切り出す。**連続性の参照に使う**（ARCHITECTURE.md §8）。
+ *
+ * 末尾ぴったりではなく少し手前を取る。動画生成モデルは末尾が不安定になりやすく、
+ * ブレたフレームを次の Shot の参照にすると連続性がかえって崩れるため。
+ */
+export const LAST_FRAME_BACKOFF_SEC = 0.1
+
+export const extractLastFrame = async (
+  inputPath: string,
+  outputPath: string,
+  durationSec: number,
+  runOptions?: RunOptions,
+): Promise<void> => {
+  const position = Math.max(0, durationSec - LAST_FRAME_BACKOFF_SEC)
+  await runFfmpeg(
+    [
+      '-y',
+      '-ss',
+      formatSeconds(position),
+      '-i',
+      inputPath,
+      '-frames:v',
+      '1',
+      '-q:v',
+      JPEG_QUALITY,
+      outputPath,
+    ],
+    runOptions,
+  )
+}

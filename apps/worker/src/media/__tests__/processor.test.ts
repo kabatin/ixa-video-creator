@@ -250,4 +250,43 @@ describe('processMediaJob', () => {
     expect(outcome.state).toBe('processed')
     await expect(readdir(nested)).resolves.toEqual([])
   }, FFMPEG_TIMEOUT_MS)
+
+  it('video の最終フレームが独立した MediaAsset として作られる（連続性の参照に使う）', async () => {
+    const asset = await seedAsset(repo, storage, {
+      kind: 'video',
+      ext: 'mp4',
+      mimeType: 'video/mp4',
+      body: videoBytes,
+    })
+
+    processed(await processMediaJob(deps(), { mediaAssetId: asset.id }))
+
+    const source = repo.snapshot().find((a) => a.id === asset.id)
+    expect(source?.lastFrameAssetId).not.toBeNull()
+
+    const lastFrame = repo.snapshot().find((a) => a.id === source?.lastFrameAssetId)
+    expect(lastFrame?.kind).toBe('image')
+    expect(lastFrame?.origin).toEqual({
+      type: 'derived',
+      sourceAssetId: asset.id,
+      operation: 'last_frame',
+    })
+    expect(lastFrame?.storageKey).toContain('last-frame.jpg')
+    expect(lastFrame?.bytes).toBeGreaterThan(0)
+    // 実体がストレージに置かれていること
+    expect(await storage.exists(lastFrame?.storageKey as string)).toBe(true)
+  })
+
+  it('image には最終フレームを作らない', async () => {
+    const asset = await seedAsset(repo, storage, {
+      kind: 'image',
+      ext: 'png',
+      mimeType: 'image/png',
+      body: imageBytes,
+    })
+    processed(await processMediaJob(deps(), { mediaAssetId: asset.id }))
+    expect(repo.snapshot().find((a) => a.id === asset.id)?.lastFrameAssetId).toBeNull()
+    // 派生アセットが増えていないこと
+    expect(repo.snapshot()).toHaveLength(1)
+  })
 })

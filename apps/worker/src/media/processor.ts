@@ -103,11 +103,35 @@ const ingest = async (
 
   const keys = await storeDerivatives(deps.storage, asset, derivatives)
 
+  /**
+   * 最終フレームは**独立した MediaAsset** にする。
+   * 次の Shot の生成へ参照画像として渡すため、MediaAssetId で指せる必要がある
+   * （`ShotGenerationSpec.references` は MediaAssetId を持つ）。
+   * ポスターフレームはレビュー用でキーのままでよいが、これだけは別扱いになる。
+   */
+  const lastFrameAssetId =
+    keys.lastFrameKey === null || keys.lastFrameChecksum === null
+      ? null
+      : (
+          await deps.mediaAssets.create({
+            workspaceId: asset.workspaceId,
+            projectId: asset.projectId,
+            kind: 'image',
+            storageKey: keys.lastFrameKey,
+            mimeType: 'image/jpeg',
+            bytes: keys.lastFrameBytes,
+            checksumSha256: keys.lastFrameChecksum,
+            origin: { type: 'derived', sourceAssetId: asset.id, operation: 'last_frame' },
+            tags: ['last_frame'],
+          })
+        ).id
+
   await deps.mediaAssets.update(asset.id, {
     probe,
     proxyKey: keys.proxyKey,
     thumbnailKey: keys.thumbnailKey,
     posterKeys: keys.posterKeys,
+    lastFrameAssetId,
   })
 
   deps.logger.info(

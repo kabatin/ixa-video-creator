@@ -43,6 +43,15 @@ export const MediaAsset = z.object({
   proxyKey: z.string().nullable(),
   thumbnailKey: z.string().nullable(),
   posterKeys: z.array(z.string()).default([]),
+  /**
+   * 最終フレームを切り出した派生 MediaAsset。動画のみ。
+   *
+   * **なぜキーではなく MediaAssetId なのか**: 前 Shot の最終フレームは、
+   * 次の Shot の生成へ参照画像として渡される（連続性の担保、ARCHITECTURE.md §8）。
+   * 参照は `ShotGenerationSpec.references` を通るため MediaAssetId でなければならない。
+   * posterKeys はレビュー用にストレージキーのまま持つ（参照には使わない）。
+   */
+  lastFrameAssetId: MediaAssetId.nullable().default(null),
 
   origin: MediaOrigin,
   tags: z.array(z.string()).default([]),
@@ -57,7 +66,7 @@ export type MediaAsset = z.infer<typeof MediaAsset>
  */
 export const CreateMediaAssetInput = MediaAsset.omit({
   id: true, createdAt: true,
-  probe: true, proxyKey: true, thumbnailKey: true, posterKeys: true,
+  probe: true, proxyKey: true, thumbnailKey: true, posterKeys: true, lastFrameAssetId: true,
 }).extend({
   /**
    * 2 段階アップロードでは署名時に ID が決まる。
@@ -69,6 +78,15 @@ export const CreateMediaAssetInput = MediaAsset.omit({
   proxyKey: z.string().nullable().default(null),
   thumbnailKey: z.string().nullable().default(null),
   posterKeys: z.array(z.string()).default([]),
+  /**
+   * 最終フレームを切り出した派生 MediaAsset。動画のみ。
+   *
+   * **なぜキーではなく MediaAssetId なのか**: 前 Shot の最終フレームは、
+   * 次の Shot の生成へ参照画像として渡される（連続性の担保、ARCHITECTURE.md §8）。
+   * 参照は `ShotGenerationSpec.references` を通るため MediaAssetId でなければならない。
+   * posterKeys はレビュー用にストレージキーのまま持つ（参照には使わない）。
+   */
+  lastFrameAssetId: MediaAssetId.nullable().default(null),
 })
 export type CreateMediaAssetInput = z.input<typeof CreateMediaAssetInput>
 
@@ -77,6 +95,7 @@ export type CreateMediaAssetInput = z.input<typeof CreateMediaAssetInput>
  * 後から埋める列だけを更新可能にする。storageKey や checksum は不変。
  */
 export const UpdateMediaAssetPatch = MediaAsset.pick({
-  probe: true, proxyKey: true, thumbnailKey: true, posterKeys: true, tags: true,
+  probe: true, proxyKey: true, thumbnailKey: true, posterKeys: true,
+  lastFrameAssetId: true, tags: true,
 }).partial()
 export type UpdateMediaAssetPatch = z.input<typeof UpdateMediaAssetPatch>

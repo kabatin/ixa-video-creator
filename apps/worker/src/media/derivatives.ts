@@ -1,7 +1,9 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { MediaKind, MediaProbe } from '@ixa/domain'
-import { createProxy, createThumbnail, extractPosterFrames, type RunOptions } from '@ixa/media'
+import { createProxy, createThumbnail, extractPosterFrames, type RunOptions,
+  extractLastFrame,
+} from '@ixa/media'
 
 /**
  * 取り込みパイプラインの生成物を、まず一時ディレクトリの中だけで作る
@@ -13,7 +15,8 @@ import { createProxy, createThumbnail, extractPosterFrames, type RunOptions } fr
 
 export const PROXY_FILE_NAME = 'proxy.mp4'
 export const THUMBNAIL_FILE_NAME = 'thumb.jpg'
-export const POSTER_DIR_NAME = 'posters'
+export const LAST_FRAME_FILE_NAME = 'last-frame.jpg'
+const POSTER_DIR_NAME = 'posters'
 
 /** サムネイルを切り出す位置。冒頭は黒フレームやフェードインになりがちなので尺の 10% を採る。 */
 const THUMBNAIL_POSITION_RATIO = 0.1
@@ -23,6 +26,8 @@ export type LocalDerivatives = {
   readonly proxyPath: string | null
   readonly thumbnailPath: string | null
   readonly posterPaths: readonly string[]
+  /** 最終フレーム。次の Shot の生成へ参照として渡す（ARCHITECTURE.md §8）。 */
+  readonly lastFramePath: string | null
 }
 
 /** audio / font / lut / other は probe だけを入れる。画像系の生成物は作らない。 */
@@ -30,6 +35,7 @@ const NO_DERIVATIVES: LocalDerivatives = {
   proxyPath: null,
   thumbnailPath: null,
   posterPaths: [],
+  lastFramePath: null,
 }
 
 export type BuildDerivativesInput = {
@@ -79,7 +85,7 @@ export const buildDerivatives = async (
   )
 
   if (kind === 'image') {
-    return { proxyPath: null, thumbnailPath, posterPaths: [] }
+    return { proxyPath: null, thumbnailPath, posterPaths: [], lastFramePath: null }
   }
 
   const proxyPath = join(outDir, PROXY_FILE_NAME)
@@ -95,5 +101,19 @@ export const buildDerivatives = async (
       )
     : []
 
-  return { proxyPath, thumbnailPath, posterPaths }
+  /**
+   * 最終フレームは連続性の参照に使うため、ポスターフレームとは別に 1 枚切り出す。
+   * ポスターは等間隔で末尾を踏まないので、最後の絵はここでしか取れない。
+   */
+  const durationSec = probe.durationSec
+  const lastFramePath =
+    durationSec !== null && durationSec > 0
+      ? await (async (): Promise<string> => {
+          const path = join(outDir, LAST_FRAME_FILE_NAME)
+          await extractLastFrame(sourcePath, path, durationSec, runOptions)
+          return path
+        })()
+      : null
+
+  return { proxyPath, thumbnailPath, posterPaths, lastFramePath }
 }

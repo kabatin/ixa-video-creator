@@ -1,0 +1,1 @@
+ALTER TABLE "media_assets" ADD COLUMN "last_frame_asset_id" text;
