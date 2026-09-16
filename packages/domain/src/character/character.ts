@@ -77,3 +77,37 @@ export const CharacterLookImage = z.object({
   order: z.number().int().nonnegative(),
 })
 export type CharacterLookImage = z.infer<typeof CharacterLookImage>
+
+// ---------------------------------------------------------------------------
+// リポジトリの入力型（ADR-0007: 契約は Domain が定義する）
+// ---------------------------------------------------------------------------
+
+export const CreateCharacterInput = Character.omit({ id: true, createdAt: true })
+export type CreateCharacterInput = z.input<typeof CreateCharacterInput>
+
+/** workspaceId は変更できない。キャラクターを別ワークスペースへ移す操作は想定しない。 */
+export const UpdateCharacterPatch = Character.pick({
+  name: true, displayName: true, description: true,
+  identityAnchors: true, styleTokens: true, colorPalette: true,
+}).partial()
+export type UpdateCharacterPatch = z.input<typeof UpdateCharacterPatch>
+
+export const CreateCharacterIdentityImageInput = CharacterIdentityImage.omit({ id: true })
+export type CreateCharacterIdentityImageInput = z.input<typeof CreateCharacterIdentityImageInput>
+
+export const CreateCharacterLookInput = CharacterLook.omit({ id: true })
+export type CreateCharacterLookInput = z.input<typeof CreateCharacterLookInput>
+
+/**
+ * characterId と key は変更できない。
+ * key は Shot から Look を指す識別子なので、変えると参照が切れる。
+ */
+export const UpdateCharacterLookPatch = CharacterLook.pick({
+  name: true, era: true, description: true,
+  wardrobeTokens: true, styleTokens: true, colorPalette: true,
+  isDefault: true, canonicalFrameAssetId: true,
+}).partial()
+export type UpdateCharacterLookPatch = z.input<typeof UpdateCharacterLookPatch>
+
+export const CreateCharacterLookImageInput = CharacterLookImage.omit({ id: true })
+export type CreateCharacterLookImageInput = z.input<typeof CreateCharacterLookImageInput>

@@ -40,3 +40,26 @@ export const MotionTemplate = z.object({
   previewAssetId: MediaAssetId.nullable(),
 })
 export type MotionTemplate = z.infer<typeof MotionTemplate>
+
+// ---------------------------------------------------------------------------
+// リポジトリの入力型（ADR-0007）
+// ---------------------------------------------------------------------------
+
+export const CreateBrandAssetInput = BrandAsset.omit({ id: true })
+export type CreateBrandAssetInput = z.input<typeof CreateBrandAssetInput>
+
+export const UpdateBrandAssetPatch = BrandAsset.pick({
+  category: true, name: true, mediaAssetId: true, value: true, usageRule: true,
+}).partial()
+export type UpdateBrandAssetPatch = z.input<typeof UpdateBrandAssetPatch>
+
+export const CreateLocationInput = Location.omit({ id: true })
+export type CreateLocationInput = z.input<typeof CreateLocationInput>
+
+export const UpdateLocationPatch = Location.pick({
+  name: true, description: true, referenceAssetIds: true,
+}).partial()
+export type UpdateLocationPatch = z.input<typeof UpdateLocationPatch>
+
+export const CreateMotionTemplateInput = MotionTemplate.omit({ id: true })
+export type CreateMotionTemplateInput = z.input<typeof CreateMotionTemplateInput>

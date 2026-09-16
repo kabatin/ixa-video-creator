@@ -23,6 +23,9 @@ export const ShotReference = z.object({
 })
 export type ShotReference = z.infer<typeof ShotReference>
 
+export const CreateShotReferenceInput = ShotReference.omit({ id: true })
+export type CreateShotReferenceInput = z.input<typeof CreateShotReferenceInput>
+
 /**
  * 参照の切り詰め優先度。数値が小さいほど優先される。
  * モデルの参照枚数上限（Veo/Runway は 3 枚）に合わせて削るときに使う。
