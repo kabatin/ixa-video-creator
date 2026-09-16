@@ -31,6 +31,28 @@ export const RenderJob = z.object({
 })
 export type RenderJob = z.infer<typeof RenderJob>
 
+/**
+ * レンダリング要求時の入力。
+ * timelineSnapshot は作成時に確定させる。何をレンダリングしたかを後から辿れるようにするため。
+ */
+export const CreateRenderJobInput = RenderJob.omit({
+  id: true, createdAt: true, finishedAt: true, outputAssetId: true, error: true,
+}).extend({
+  status: RenderJob.shape.status.default('queued'),
+  progress: z.number().min(0).max(1).default(0),
+})
+export type CreateRenderJobInput = z.input<typeof CreateRenderJobInput>
+
+/**
+ * ジョブ進行中に更新される列。
+ * **timelineSnapshot / scope / preset は含めない。** 投入時の内容を後から変えられると、
+ * 「何をレンダリングしたか」が信用できなくなるため。
+ */
+export const UpdateRenderJobPatch = RenderJob.pick({
+  status: true, progress: true, outputAssetId: true, error: true, finishedAt: true,
+}).partial()
+export type UpdateRenderJobPatch = z.input<typeof UpdateRenderJobPatch>
+
 export type RenderResult = {
   readonly storageKey: string
   readonly durationSec: Seconds

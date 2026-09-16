@@ -41,6 +41,15 @@ export const TimelineClip = z.object({
 })
 export type TimelineClip = z.infer<typeof TimelineClip>
 
+export const CreateTimelineClipInput = TimelineClip.omit({ id: true, createdAt: true })
+export type CreateTimelineClipInput = z.input<typeof CreateTimelineClipInput>
+
+/** projectId は変更できない。クリップを別プロジェクトへ移す操作は想定しない。 */
+export const UpdateTimelineClipPatch = TimelineClip.pick({
+  track: true, startSec: true, durationSec: true, layer: true, content: true, opacity: true,
+}).partial()
+export type UpdateTimelineClipPatch = z.input<typeof UpdateTimelineClipPatch>
+
 /**
  * レンダリング時のクリップ内容。
  *

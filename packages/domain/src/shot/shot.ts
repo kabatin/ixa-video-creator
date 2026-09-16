@@ -100,6 +100,9 @@ export const UpdateShotPatch = Shot.pick({
 }).partial()
 export type UpdateShotPatch = z.input<typeof UpdateShotPatch>
 
+export const CreateTransitionInput = Transition.omit({ id: true })
+export type CreateTransitionInput = z.input<typeof CreateTransitionInput>
+
 export const shotEndSec = (shot: Pick<Shot, 'startSec' | 'durationSec'>): Seconds =>
   shot.startSec + shot.durationSec
 

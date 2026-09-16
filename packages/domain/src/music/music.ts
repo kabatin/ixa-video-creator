@@ -12,6 +12,9 @@ export const MusicTrack = z.object({
 })
 export type MusicTrack = z.infer<typeof MusicTrack>
 
+export const CreateMusicTrackInput = MusicTrack.omit({ id: true })
+export type CreateMusicTrackInput = z.input<typeof CreateMusicTrackInput>
+
 export const SectionLabel = z.enum([
   'intro', 'verse', 'pre_chorus', 'chorus', 'bridge', 'break', 'drop', 'outro',
 ])
