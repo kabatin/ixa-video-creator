@@ -33,12 +33,6 @@ import { errorContent, fail, ok, successResponse } from '../response.js'
  */
 export const TIMELINE_SIGNED_URL_EXPIRES_SEC = 3600
 
-/**
- * 音楽トラックの音量。`MusicTrack` は音量列を持たないため既定値で埋める。
- * 音量調整は Phase 1 の範囲外（spec.md §22 の Non Goal ではないが、列が無い）。
- */
-export const DEFAULT_MUSIC_VOLUME = 1
-
 /** `RenderableClipContent.kind` が受け付ける種別。font / lut / other は載せられない。 */
 const RENDERABLE_KINDS = ['image', 'video', 'audio'] as const
 type RenderableKind = (typeof RENDERABLE_KINDS)[number]
@@ -151,7 +145,7 @@ export const loadTimelineSource = async (
         startSec: track.offsetSec,
         // 音源の尺は MediaAsset の probe が持つ。未解析なら 0（尺に効かせない）。
         durationSec: resolved.durationSec,
-        volume: DEFAULT_MUSIC_VOLUME,
+        volume: track.volume,
       },
     ]
   })

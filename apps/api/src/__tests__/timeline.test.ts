@@ -211,3 +211,72 @@ describe('GET /projects/:projectId/timeline', () => {
     expect(response.status).toBe(404)
   })
 })
+
+describe('音楽の音量', () => {
+  it('MusicTrack の音量がタイムラインへ引き継がれる', async () => {
+    const project = aProject()
+    const withTake = aShotWithTake(project)
+    const asset = aMediaAsset({
+      workspaceId: project.workspaceId,
+      kind: 'audio',
+      probe: { durationSec: 30, width: null, height: null, fps: null, hasAudio: true, codec: 'aac' },
+    })
+
+    const musicTracks = createInMemoryMusicTrackRepository()
+    await musicTracks.create({
+      projectId: project.id,
+      mediaAssetId: asset.id,
+      title: 'BGM',
+      isMaster: true,
+      offsetSec: 0,
+      volume: 0.35,
+    })
+
+    const deps: TimelineRoutesDeps = {
+      ...timelineDeps({
+        project,
+        shots: [withTake.shot],
+        takes: [withTake.take],
+        mediaAssets: [withTake.asset, asset],
+        clips: [],
+      }),
+      musicTracks,
+    }
+
+    const { body } = await getTimeline(deps, project)
+    expect(body.data.audio[0]?.volume).toBe(0.35)
+  })
+
+  it('音量を省略したら原音（1）になる', async () => {
+    const project = aProject()
+    const withTake = aShotWithTake(project)
+    const asset = aMediaAsset({
+      workspaceId: project.workspaceId,
+      kind: 'audio',
+      probe: { durationSec: 30, width: null, height: null, fps: null, hasAudio: true, codec: 'aac' },
+    })
+
+    const musicTracks = createInMemoryMusicTrackRepository()
+    await musicTracks.create({
+      projectId: project.id,
+      mediaAssetId: asset.id,
+      title: 'BGM',
+      isMaster: true,
+      offsetSec: 0,
+    })
+
+    const deps: TimelineRoutesDeps = {
+      ...timelineDeps({
+        project,
+        shots: [withTake.shot],
+        takes: [withTake.take],
+        mediaAssets: [withTake.asset, asset],
+        clips: [],
+      }),
+      musicTracks,
+    }
+
+    const { body } = await getTimeline(deps, project)
+    expect(body.data.audio[0]?.volume).toBe(1)
+  })
+})

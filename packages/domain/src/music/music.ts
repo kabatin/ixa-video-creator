@@ -9,6 +9,11 @@ export const MusicTrack = z.object({
   title: z.string(),
   isMaster: z.boolean().default(false),
   offsetSec: Seconds.default(0),
+  /**
+   * 音量の倍率。1 が原音。TimelineClip と同じ 0..2 の表現に揃える。
+   * ミュージックビデオでは音楽と SFX のバランス調整が必須になるため列で持つ。
+   */
+  volume: z.number().min(0).max(2).default(1),
 })
 export type MusicTrack = z.infer<typeof MusicTrack>
 

@@ -1,0 +1,1 @@
+ALTER TABLE "music_tracks" ADD COLUMN "volume" double precision DEFAULT 1 NOT NULL;

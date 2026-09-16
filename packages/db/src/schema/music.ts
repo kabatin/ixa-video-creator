@@ -20,6 +20,8 @@ export const musicTracks = pgTable(
     isMaster: boolean('is_master').notNull().default(false),
     /** タイムライン上の開始位置（秒） */
     offsetSec: seconds('offset_sec').notNull().default(0),
+    /** 音量の倍率。1 が原音。 */
+    volume: doublePrecision('volume').notNull().default(1),
     deletedAt: deletedAt(),
   },
   (t) => [index('music_tracks_project_id_idx').on(t.projectId)],

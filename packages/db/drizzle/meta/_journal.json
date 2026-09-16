@@ -15,6 +15,13 @@
       "when": 1789530266451,
       "tag": "0001_neat_groot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789544946221,
+      "tag": "0002_goofy_namor",
+      "breakpoints": true
     }
   ]
 }
