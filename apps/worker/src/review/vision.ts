@@ -130,12 +130,35 @@ const toFinding = (
   }
 }
 
+export const NO_FRAMES_MESSAGE =
+  '抽出済みフレームが無いため判定していない（media ジョブでポスターフレームを作ること）'
+
+/**
+ * 判定できなかったことを指摘として残す。
+ *
+ * **「走らなかった」を「合格」に見せない。** 空で返すと `aggregateVerdict` が
+ * pass を出し、7 レビュア中 4 つが一度も動いていないのに「レビュー済み・合格」に見える。
+ * 実機で実際にそうなった。どの検査が飛んだかが分かるよう、レビュアごとに 1 件ずつ残す。
+ */
+const skippedFindings = (
+  reviewers: readonly VisionReviewer[],
+): readonly CreateReviewFindingInput[] =>
+  [...new Set(reviewers.flatMap((reviewer) => reviewer.supports))].map((reviewer) => ({
+    reviewer,
+    severity: 'warn' as const,
+    score: null,
+    message: NO_FRAMES_MESSAGE,
+    evidence: null,
+    // 直すのはプロンプトではなく取り込み経路。再生成ループに差分を渡さない。
+    suggestedPromptDelta: null,
+  }))
+
 /**
  * 注入された vision レビュアを順に走らせ、指摘と実コストを返す。
  *
- * 判定できるフレームが 1 枚も無ければ、**呼ばずに空で返す**。
- * 画像なしの依頼は `VisionReviewRequest` の検証に落ちるうえ、
- * 画像を見ずに出た判定を指摘として残すべきでもない。
+ * 判定できるフレームが 1 枚も無ければ**呼ばない**。画像なしの依頼は
+ * `VisionReviewRequest` の検証に落ちるうえ、画像を見ずに出た判定を残すべきでもない。
+ * ただし黙って空を返すのではなく、判定していないことを warn として残す。
  */
 export const runVisionStage = async (input: VisionStageInput): Promise<VisionStageResult> => {
   const subjects = await toImages(input.storage, input.asset)
@@ -144,7 +167,7 @@ export const runVisionStage = async (input: VisionStageInput): Promise<VisionSta
       { mediaAssetId: input.asset.id, shotId: input.shot.id },
       '判定できるフレームが無いため vision レビューを実行しません',
     )
-    return { findings: [], costUsd: 0 }
+    return { findings: skippedFindings(input.reviewers), costUsd: 0 }
   }
 
   const criteria = buildCriteria(input.shot)

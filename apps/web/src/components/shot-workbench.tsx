@@ -8,6 +8,7 @@ import { GeneratePanel } from '@/components/generate-panel'
 import { ShotLocationEditor, type LocationSaveFeedback } from '@/components/shot-location-editor'
 import { ShotSummary } from '@/components/shot-summary'
 import { TakeGrid } from '@/components/take-grid'
+import { ReviewPanel } from '@/components/review-panel'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { GenerateTakesBody, type WireGenerateResult } from '@/lib/api-schemas'
@@ -40,8 +41,11 @@ export const ShotWorkbench = ({
 }: ShotWorkbenchProps) => {
   const router = useRouter()
   const [takes, setTakes] = useState<readonly Take[]>(initialTakes)
+
   const [status, setStatus] = useState<ShotStatus>(shot.status)
   const [selectedTakeId, setSelectedTakeId] = useState<TakeId | null>(shot.selectedTakeId)
+  /** レビューは採用中の Take に対して行う。未選択なら出さない。 */
+  const selectedTake = takes.find((take) => take.id === selectedTakeId)
   const [polling, setPolling] = useState(isGeneratingStatus(shot.status))
   // 生成完了の判定材料。API にジョブ状態の参照が無いため Take 本数で見る。
   const [expectedTakes, setExpectedTakes] = useState(
@@ -219,6 +223,20 @@ export const ShotWorkbench = ({
           }}
         />
       </section>
+
+      {selectedTake !== undefined && (
+        <ReviewPanel
+          takeId={selectedTake.id}
+          humanVerdict={selectedTake.humanVerdict}
+          disabled={busy}
+          onVerdictSaved={(updated) => {
+            // 判定は Take の行を書き換えるので、一覧の該当 Take だけ差し替える。
+            setTakes((current) =>
+              current.map((take) => (take.id === updated.id ? updated : take)),
+            )
+          }}
+        />
+      )}
     </div>
   )
 }

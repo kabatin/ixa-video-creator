@@ -1,6 +1,13 @@
 import { createMemoryStorage } from '@ixa/storage'
 import { describe, expect, it } from 'vitest'
-import { MAX_SUBJECT_FRAMES, VisionStageError, buildCriteria, runVisionStage } from '../vision.js'
+import { aggregateVerdict } from '@ixa/domain'
+import {
+  MAX_SUBJECT_FRAMES,
+  NO_FRAMES_MESSAGE,
+  VisionStageError,
+  buildCriteria,
+  runVisionStage,
+} from '../vision.js'
 import {
   aProject,
   aShot,
@@ -69,7 +76,10 @@ describe('runVisionStage', () => {
     const result = await runVisionStage({ ...base, asset, reviewers: [reviewer] })
 
     expect(reviewer.calls()).toHaveLength(0)
-    expect(result).toEqual({ findings: [], costUsd: 0 })
+    expect(result.costUsd).toBe(0)
+    // 空で返すと verdict が pass になり「7 レビュア中 4 つが未実行なのに合格」に見える。
+    // 判定していないことを残す（詳細は下の describe）。
+    expect(result.findings).not.toHaveLength(0)
   })
 
   it('失敗したときは、そこまでのコストを持った例外を投げる', async () => {
@@ -89,5 +99,69 @@ describe('runVisionStage', () => {
     expect(failure).toBeInstanceOf(VisionStageError)
     expect((failure as VisionStageError).costUsd).toBeCloseTo(0.03)
     expect((failure as VisionStageError).cause).toBeInstanceOf(Error)
+  })
+})
+
+describe('判定できるフレームが無いとき', () => {
+  /** ポスターフレームもサムネイルも無い MediaAsset。実機で実際にこの状態が出た。 */
+  const frameless = () => aVideoAsset(project, { posterKeys: [], thumbnailKey: null })
+
+  it('黙って空を返さず、判定していないことを warn として残す', async () => {
+    const reviewer = fakeVisionReviewer({ supports: ['identity', 'continuity'] })
+    const result = await runVisionStage({
+      shot,
+      asset: frameless(),
+      reviewers: [reviewer],
+      storage: createMemoryStorage(),
+      logger: silentLogger,
+    })
+
+    expect(reviewer.calls()).toHaveLength(0)
+    expect(result.costUsd).toBe(0)
+    expect(result.findings).toHaveLength(2)
+    expect(result.findings.every((finding) => finding.severity === 'warn')).toBe(true)
+    expect(result.findings[0]?.message).toBe(NO_FRAMES_MESSAGE)
+  })
+
+  it('verdict が pass にならない（走らなかったものを合格に見せない）', async () => {
+    const result = await runVisionStage({
+      shot,
+      asset: frameless(),
+      reviewers: [fakeVisionReviewer()],
+      storage: createMemoryStorage(),
+      logger: silentLogger,
+    })
+
+    expect(aggregateVerdict(result.findings)).toBe('warn')
+  })
+
+  it('飛ばした検査の種別が分かる（どれを判定していないかを隠さない）', async () => {
+    const result = await runVisionStage({
+      shot,
+      asset: frameless(),
+      reviewers: [
+        fakeVisionReviewer({ supports: ['identity', 'composition'] }),
+        fakeVisionReviewer({ supports: ['composition', 'prompt_adherence'] }),
+      ],
+      storage: createMemoryStorage(),
+      logger: silentLogger,
+    })
+
+    const reviewers = result.findings.map((finding) => finding.reviewer)
+    // 重複したレビュア種別は 1 件にまとめる
+    expect(reviewers).toHaveLength(3)
+    expect(new Set(reviewers)).toEqual(new Set(['identity', 'composition', 'prompt_adherence']))
+  })
+
+  it('再生成ループへプロンプト差分を渡さない（直すのは取り込み経路）', async () => {
+    const result = await runVisionStage({
+      shot,
+      asset: frameless(),
+      reviewers: [fakeVisionReviewer()],
+      storage: createMemoryStorage(),
+      logger: silentLogger,
+    })
+
+    expect(result.findings.every((finding) => finding.suggestedPromptDelta === null)).toBe(true)
   })
 })
