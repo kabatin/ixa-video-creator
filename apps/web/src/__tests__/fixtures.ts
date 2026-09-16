@@ -87,3 +87,79 @@ export const generateResultJson = {
   resolvedModel: 'kling-v2',
   duplicateOfTakeId: null,
 }
+
+// --- Character / Look（docs/ARCHITECTURE.md §8） ---
+
+export const WORKSPACE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+export const CHARACTER_ID = '01ARZ3NDEKTSV4RRFFQ69G5FC0'
+export const IDENTITY_IMAGE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FC1'
+export const LOOK_ID = '01ARZ3NDEKTSV4RRFFQ69G5FC2'
+export const LOOK_IMAGE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FC3'
+export const CANONICAL_FRAME_ID = '01ARZ3NDEKTSV4RRFFQ69G5FC4'
+
+export const characterJson = {
+  id: CHARACTER_ID,
+  workspaceId: WORKSPACE_ID,
+  name: 'takepi',
+  displayName: 'タケピ',
+  description: '主人公',
+  identityAnchors: ['20代日本人男性', '細身'],
+  styleTokens: ['硬質な光'],
+  colorPalette: ['#1A1A1A'],
+  createdAt: '2026-09-16T01:02:03.000Z',
+}
+
+export const identityImageJson = {
+  id: IDENTITY_IMAGE_ID,
+  characterId: CHARACTER_ID,
+  mediaAssetId: MEDIA_ID,
+  role: 'four_view',
+  isPrimary: true,
+  order: 0,
+}
+
+export const lookJson = {
+  id: LOOK_ID,
+  characterId: CHARACTER_ID,
+  key: 'IXA_CUP_PAST',
+  name: 'iXA CUP 2019',
+  era: '2019',
+  description: '',
+  wardrobeTokens: ['黒髪短髪'],
+  styleTokens: [],
+  colorPalette: [],
+  isDefault: true,
+  canonicalFrameAssetId: null,
+}
+
+export const lookImageJson = {
+  id: LOOK_IMAGE_ID,
+  lookId: LOOK_ID,
+  mediaAssetId: MEDIA_ID,
+  role: 'wardrobe',
+  isPrimary: true,
+  order: 0,
+}
+
+/** sha256('hello') — アップロードの完了通知に載る checksum の検証に使う。 */
+export const HELLO_SHA256 =
+  '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'
+
+export const mediaAssetJson = {
+  id: MEDIA_ID,
+  workspaceId: WORKSPACE_ID,
+  projectId: null,
+  kind: 'image',
+  storageKey: `media/${WORKSPACE_ID}/${MEDIA_ID}/source.png`,
+  mimeType: 'image/png',
+  bytes: 5,
+  checksumSha256: HELLO_SHA256,
+  probe: null,
+  proxyKey: null,
+  thumbnailKey: null,
+  posterKeys: [],
+  lastFrameAssetId: null,
+  origin: { type: 'upload', uploadedBy: 'web-ui' },
+  tags: [],
+  createdAt: '2026-09-16T01:02:03.000Z',
+}

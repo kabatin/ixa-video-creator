@@ -20,11 +20,9 @@ import {
   WireSignedUrl,
   WireTakeList,
 } from '@/lib/api-schemas'
-import type { z } from 'zod'
-import { ensureOk, joinUrl, jsonHeaders, send, unwrap } from '@/lib/http'
-
-/** 封筒の中身を検証するスキーマ。入力は `unknown` として扱う。 */
-type WireSchema<T> = z.ZodType<T, z.ZodTypeDef, unknown>
+import { createCharacterApi, type CharacterApi } from '@/lib/character-api'
+import { createRequester } from '@/lib/requester'
+import { createUploadApi, type UploadApi } from '@/lib/upload-api'
 
 /** docs/ARCHITECTURE.md §18 のレスポンス形。 */
 export type ApiResponse<T> = { success: boolean; data?: T; error?: string }
@@ -34,8 +32,7 @@ export const DEFAULT_API_BASE_URL = 'http://127.0.0.1:3001'
 export const resolveApiBaseUrl = (): string =>
   process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_BASE_URL
 
-export type ApiClient = {
-  readonly baseUrl: string
+export type ProjectApi = {
   listProjects: (workspaceId: string) => Promise<Project[]>
   getProject: (id: string) => Promise<Project | null>
   createProject: (input: CreateProjectInput) => Promise<Project>
@@ -51,90 +48,63 @@ export type ApiClient = {
   mediaUrl: (mediaAssetId: MediaAssetId) => Promise<WireSignedUrl>
 }
 
+export type ApiClient = { readonly baseUrl: string } & ProjectApi & CharacterApi & UploadApi
+
 const shotPath = (id: ShotId, suffix = ''): string => `/shots/${encodeURIComponent(id)}${suffix}`
 
 export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClient => {
-  const get = async <T>(path: string, schema: WireSchema<T>): Promise<T> => {
-    const url = joinUrl(baseUrl, path)
-    const context = `GET ${url}`
-    const raw = await send(url, { method: 'GET', headers: jsonHeaders })
-    ensureOk(raw, context)
-    return unwrap(schema, raw, context)
-  }
+  const requester = createRequester(baseUrl)
 
-  const post = async <T>(path: string, body: unknown, schema: WireSchema<T>): Promise<T> => {
-    const url = joinUrl(baseUrl, path)
-    const context = `POST ${url}`
-    const raw = await send(url, {
-      method: 'POST',
-      headers: jsonHeaders,
-      body: JSON.stringify(body),
-    })
-    ensureOk(raw, context)
-    return unwrap(schema, raw, context)
-  }
-
-  return {
-    baseUrl,
-
+  const projectApi: ProjectApi = {
     listProjects: async (workspaceId: string): Promise<Project[]> => {
       const query = new URLSearchParams({ workspaceId })
-      return get(`/projects?${query.toString()}`, WireProjectList)
+      return requester.get(`/projects?${query.toString()}`, WireProjectList)
     },
 
-    getProject: async (id: string): Promise<Project | null> => {
-      const url = joinUrl(baseUrl, `/projects/${encodeURIComponent(id)}`)
-      const context = `GET ${url}`
-      const raw = await send(url, { method: 'GET', headers: jsonHeaders })
-      if (raw.status === 404) return null
-      ensureOk(raw, context)
-      return unwrap(WireProject, raw, context)
-    },
+    getProject: async (id: string): Promise<Project | null> =>
+      requester.getOrNull(`/projects/${encodeURIComponent(id)}`, WireProject),
 
     createProject: async (input: CreateProjectInput): Promise<Project> =>
-      post('/projects', CreateProjectInput.parse(input), WireProject),
+      requester.post('/projects', CreateProjectInput.parse(input), WireProject),
 
     listShots: async (projectId: ProjectId): Promise<Shot[]> =>
-      get(`/projects/${encodeURIComponent(projectId)}/shots`, WireShotList),
+      requester.get(`/projects/${encodeURIComponent(projectId)}/shots`, WireShotList),
 
-    getShot: async (id: ShotId): Promise<Shot> => get(`/shots/${encodeURIComponent(id)}`, WireShot),
+    getShot: async (id: ShotId): Promise<Shot> => requester.get(shotPath(id), WireShot),
 
     createShot: async (projectId: ProjectId, input: CreateShotBody): Promise<Shot> =>
-      post(
+      requester.post(
         `/projects/${encodeURIComponent(projectId)}/shots`,
         CreateShotBody.parse(input),
         WireShot,
       ),
 
-    updateShot: async (id: ShotId, patch: UpdateShotBody): Promise<Shot> => {
-      const url = joinUrl(baseUrl, shotPath(id))
-      const context = `PATCH ${url}`
-      const raw = await send(url, {
-        method: 'PATCH',
-        headers: jsonHeaders,
-        body: JSON.stringify(UpdateShotBody.parse(patch)),
-      })
-      ensureOk(raw, context)
-      return unwrap(WireShot, raw, context)
-    },
+    updateShot: async (id: ShotId, patch: UpdateShotBody): Promise<Shot> =>
+      requester.patch(shotPath(id), UpdateShotBody.parse(patch), WireShot),
 
-    deleteShot: async (id: ShotId): Promise<void> => {
-      const url = joinUrl(baseUrl, shotPath(id))
-      const raw = await send(url, { method: 'DELETE', headers: jsonHeaders })
-      // 204 は本文が無いため封筒を剥がさない。失敗だけを例外にする。
-      ensureOk(raw, `DELETE ${url}`)
-    },
+    deleteShot: async (id: ShotId): Promise<void> => requester.remove(shotPath(id)),
 
     generateTakes: async (shotId: ShotId, input: GenerateTakesBody): Promise<WireGenerateResult> =>
-      post(shotPath(shotId, '/generate'), GenerateTakesBody.parse(input), WireGenerateResult),
+      requester.post(
+        shotPath(shotId, '/generate'),
+        GenerateTakesBody.parse(input),
+        WireGenerateResult,
+      ),
 
     listTakes: async (shotId: ShotId): Promise<Take[]> =>
-      get(shotPath(shotId, '/takes'), WireTakeList),
+      requester.get(shotPath(shotId, '/takes'), WireTakeList),
 
     selectTake: async (shotId: ShotId, takeId: TakeId): Promise<Shot> =>
-      post(shotPath(shotId, '/select-take'), { takeId }, WireShot),
+      requester.post(shotPath(shotId, '/select-take'), { takeId }, WireShot),
 
     mediaUrl: async (mediaAssetId: MediaAssetId): Promise<WireSignedUrl> =>
-      get(`/media/${encodeURIComponent(mediaAssetId)}/url`, WireSignedUrl),
+      requester.get(`/media/${encodeURIComponent(mediaAssetId)}/url`, WireSignedUrl),
+  }
+
+  return {
+    baseUrl,
+    ...projectApi,
+    ...createCharacterApi(requester),
+    ...createUploadApi(requester),
   }
 }
