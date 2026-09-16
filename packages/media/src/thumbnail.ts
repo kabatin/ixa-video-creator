@@ -38,6 +38,7 @@ export const createThumbnail = async (
   inputPath: string,
   outputPath: string,
   atSec?: number,
+  runOptions?: RunOptions,
 ): Promise<void> => {
   const position =
     atSec === undefined
@@ -58,7 +59,7 @@ export const createThumbnail = async (
     '-q:v',
     JPEG_QUALITY,
     outputPath,
-  ])
+  ], runOptions)
 }
 
 /**

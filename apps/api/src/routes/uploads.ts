@@ -6,10 +6,12 @@ import {
   ProjectId as ProjectIdSchema,
   WorkspaceId as WorkspaceIdSchema,
   newId,
+  type MediaAssetId,
   type MediaKind,
 } from '@ixa/domain'
 import { mediaKey, type ObjectStorage } from '@ixa/storage'
 import { VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
+import type { Logger } from '../logger.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 import { MediaAssetResponse, toMediaAssetResponse } from './media.js'
 
@@ -18,6 +20,28 @@ import { MediaAssetResponse, toMediaAssetResponse } from './media.js'
  * 本体は API を通さず、署名付き PUT URL でクライアントから直接ストレージへ送る。
  * 署名付き URL は DB に保存しない（CLAUDE.md 規約 7）。
  */
+
+/** BullMQ のキュー名（docs/ARCHITECTURE.md §20）。apps 同士を import しないため定数で持つ。 */
+export const MEDIA_QUEUE_NAME = 'media'
+
+/**
+ * 取り込みジョブ（ffprobe / プロキシ / サムネ / ポスター）をキューへ投入する Port。
+ * Redis への依存を main.ts に閉じ込める。
+ */
+export type MediaQueue = {
+  /** ジョブデータは ID のみ。実データは DB から読む（ADR-0008）。 */
+  enqueue(mediaAssetId: MediaAssetId): Promise<void>
+}
+
+/**
+ * media キューへの投入口。
+ * キューとロガーを 1 つのオブジェクトにまとめてあるのは、キューだけ配線して
+ * 投入失敗を握り潰す配線を型の上で作れなくするため（CLAUDE.md 規約 5）。
+ */
+export type MediaIngestDeps = {
+  readonly queue: MediaQueue
+  readonly logger: Logger
+}
 
 /** 1 ファイルあたりのアップロード上限（バイト）。既定 5GB。 */
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024
@@ -98,6 +122,17 @@ const CompleteUploadBody = z
   })
   .openapi('CompleteUploadInput')
 
+/**
+ * complete の応答。MediaAsset に取り込みジョブの投入可否を添える。
+ * 投入に失敗しても素材の登録自体は成功しているので 201 を返すが、
+ * 呼び出し側が再投入を判断できるよう queued を必ず返す。
+ */
+const CompleteUploadData = MediaAssetResponse.extend({
+  queued: z
+    .boolean()
+    .openapi({ description: 'media キューへ取り込みジョブを投入できたか' }),
+}).openapi('CompleteUploadResult')
+
 const jsonContent = <T extends z.ZodTypeAny>(description: string, schema: T) => ({
   description,
   content: { 'application/json': { schema } },
@@ -127,8 +162,8 @@ const completeUploadRoute = createRoute({
     body: { required: true, content: { 'application/json': { schema: CompleteUploadBody } } },
   },
   responses: {
-    200: jsonContent('同じ checksum の既存 MediaAsset', successResponse(MediaAssetResponse)),
-    201: jsonContent('登録された MediaAsset', successResponse(MediaAssetResponse)),
+    200: jsonContent('同じ checksum の既存 MediaAsset', successResponse(CompleteUploadData)),
+    201: jsonContent('登録された MediaAsset', successResponse(CompleteUploadData)),
     404: errorContent('storageKey のオブジェクトが存在しない'),
     422: errorContent('入力の検証に失敗した'),
     500: errorContent('サーバ内部エラー'),
@@ -138,9 +173,38 @@ const completeUploadRoute = createRoute({
 export type UploadRoutesDeps = {
   mediaAssets: MediaAssetRepository
   storage: ObjectStorage
+  /**
+   * media キューへの投入口。未配線のときは登録だけ行い queued=false を返す。
+   * 配線は main.ts 側で行う（ライブラリ側で Redis に触らない）。
+   */
+  mediaIngest?: MediaIngestDeps
 }
 
-export const uploadRoutes = ({ mediaAssets, storage }: UploadRoutesDeps) =>
+/**
+ * 取り込みジョブをキューへ投入する。
+ * 投入に失敗しても素材の登録自体は成功しているため throw しないが、
+ * 握り潰さずにログへ残し、queued=false として呼び出し側にも伝える（CLAUDE.md 規約 5）。
+ */
+const enqueueIngest = async (
+  ingest: MediaIngestDeps | undefined,
+  mediaAssetId: MediaAssetId,
+): Promise<boolean> => {
+  if (ingest === undefined) {
+    return false
+  }
+  try {
+    await ingest.queue.enqueue(mediaAssetId)
+    return true
+  } catch (error) {
+    ingest.logger.error(
+      { mediaAssetId, queue: MEDIA_QUEUE_NAME, err: error },
+      'media キューへの取り込みジョブ投入に失敗しました',
+    )
+    return false
+  }
+}
+
+export const uploadRoutes = ({ mediaAssets, storage, mediaIngest }: UploadRoutesDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })
     .openapi(signUploadRoute, async (c) => {
       const { workspaceId, kind, fileName, contentType, bytes } = c.req.valid('json')
@@ -219,7 +283,8 @@ export const uploadRoutes = ({ mediaAssets, storage }: UploadRoutesDeps) =>
       // 重複排除。同じ内容のファイルを二重に登録しない。
       const duplicate = await mediaAssets.findByChecksum(body.checksumSha256)
       if (duplicate !== null) {
-        return c.json(ok(toMediaAssetResponse(duplicate)), 200)
+        // 既存の素材は取り込み済み（または取り込み中）なので、キューへ入れ直さない。
+        return c.json(ok({ ...toMediaAssetResponse(duplicate), queued: false }), 200)
       }
 
       const created = await mediaAssets.create({
@@ -237,8 +302,9 @@ export const uploadRoutes = ({ mediaAssets, storage }: UploadRoutesDeps) =>
         tags: [],
       })
 
-      // TODO: media キューへ取り込みジョブ（ffprobe / プロキシ / サムネ / ポスター）を
-      // 投入する。キュー配線は別タスクのため、ここでは MediaAsset の登録までを行う。
+      // media キューへ取り込みジョブ（ffprobe / プロキシ / サムネ / ポスター）を投入する。
+      // 投入に失敗しても登録は成功しているので 201 を返す（docs/ARCHITECTURE.md §7）。
+      const queued = await enqueueIngest(mediaIngest, created.id)
 
-      return c.json(ok(toMediaAssetResponse(created)), 201)
+      return c.json(ok({ ...toMediaAssetResponse(created), queued }), 201)
     })
