@@ -75,6 +75,31 @@ export const Transition = z.object({
 })
 export type Transition = z.infer<typeof Transition>
 
+/**
+ * Shot 作成時の入力。リポジトリの契約はドメインが定義する（ADR-0007）。
+ * selectedTakeId は生成前なので常に null、lockedAt も未ロックで始まる。
+ */
+export const CreateShotInput = Shot.omit({
+  id: true, createdAt: true, updatedAt: true, selectedTakeId: true, lockedAt: true,
+}).extend({
+  sourceInSec: Seconds.default(0),
+  status: ShotStatus.default('draft'),
+})
+export type CreateShotInput = z.input<typeof CreateShotInput>
+
+/**
+ * 更新可能な列。
+ * selectedTakeId と status は専用メソッド（selectTake / updateStatus）で更新するため含めない。
+ * 不変条件を伴う更新を、汎用の patch で素通りさせないため。
+ */
+export const UpdateShotPatch = Shot.pick({
+  sequenceId: true, order: true, code: true,
+  startSec: true, durationSec: true, sourceInSec: true,
+  description: true, dialogue: true, camera: true, mood: true,
+  sourceType: true, lockedAt: true,
+}).partial()
+export type UpdateShotPatch = z.input<typeof UpdateShotPatch>
+
 export const shotEndSec = (shot: Pick<Shot, 'startSec' | 'durationSec'>): Seconds =>
   shot.startSec + shot.durationSec
 

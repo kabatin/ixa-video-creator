@@ -67,6 +67,16 @@ export const TAKE_MUTABLE_FIELDS = Object.freeze(['reviewStatus', 'humanVerdict'
 export const TakeUpdate = Take.pick({ reviewStatus: true, humanVerdict: true }).partial()
 export type TakeUpdate = z.infer<typeof TakeUpdate>
 
+/**
+ * Take 作成時の入力。
+ * index は Shot 内の連番なのでリポジトリが採番する（呼び出し側に競合を意識させない）。
+ * 作成時点では未レビュー・未承認で始まる。
+ */
+export const CreateTakeInput = Take.omit({
+  id: true, index: true, createdAt: true, reviewStatus: true, humanVerdict: true,
+})
+export type CreateTakeInput = z.input<typeof CreateTakeInput>
+
 export const GenerationJobStatus = z.enum([
   'queued', 'running', 'succeeded', 'failed', 'cancelled',
 ])
@@ -101,3 +111,23 @@ export const GenerationJob = z.object({
   finishedAt: z.date().nullable(),
 })
 export type GenerationJob = z.infer<typeof GenerationJob>
+
+/** GenerationJob 作成時の入力。キューへ入れる時点では未解決の項目が多い。 */
+export const CreateGenerationJobInput = GenerationJob.omit({
+  id: true, queuedAt: true, startedAt: true, finishedAt: true,
+}).extend({
+  status: GenerationJobStatus.default('queued'),
+  attempt: z.number().int().positive().default(1),
+  resolvedModel: ModelId.nullable().default(null),
+  routerDecision: RouterDecision.nullable().default(null),
+  providerJobRef: z.string().nullable().default(null),
+  error: GenerationJob.shape.error.default(null),
+})
+export type CreateGenerationJobInput = z.input<typeof CreateGenerationJobInput>
+
+/** ジョブ進行中に更新される列。 */
+export const UpdateGenerationJobPatch = GenerationJob.pick({
+  status: true, resolvedModel: true, routerDecision: true, attempt: true,
+  providerJobRef: true, error: true, startedAt: true, finishedAt: true,
+}).partial()
+export type UpdateGenerationJobPatch = z.input<typeof UpdateGenerationJobPatch>
