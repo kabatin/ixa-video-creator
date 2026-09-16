@@ -146,3 +146,24 @@ describe('createShot / updateShot / deleteShot', () => {
     await expect(createApiClient(BASE_URL).deleteShot(shotId)).rejects.toBeInstanceOf(ApiError)
   })
 })
+
+describe('getShot', () => {
+  it('Shot を 1 件取得してパースする', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: shotJson }))
+
+    const shot = await createApiClient(BASE_URL).getShot(shotId)
+
+    expect(shot.code).toBe('S01-010')
+    expect(shot.createdAt).toBeInstanceOf(Date)
+
+    const [url] = fetchMock.mock.calls[0] ?? []
+    expect(url).toBe(`${BASE_URL}/shots/${SHOT_ID}`)
+  })
+
+  it('HTTP エラーを握り潰さない', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: false, error: 'リソースが見つかりません' }, 404),
+    )
+    await expect(createApiClient(BASE_URL).getShot(shotId)).rejects.toThrow()
+  })
+})

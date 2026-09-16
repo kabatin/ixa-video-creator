@@ -40,6 +40,8 @@ export type ApiClient = {
   getProject: (id: string) => Promise<Project | null>
   createProject: (input: CreateProjectInput) => Promise<Project>
   listShots: (projectId: ProjectId) => Promise<Shot[]>
+  /** Shot を 1 件取得する。生成中の状態を追うのに使う。 */
+  getShot: (id: ShotId) => Promise<Shot>
   createShot: (projectId: ProjectId, input: CreateShotBody) => Promise<Shot>
   updateShot: (id: ShotId, patch: UpdateShotBody) => Promise<Shot>
   deleteShot: (id: ShotId) => Promise<void>
@@ -94,6 +96,8 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
 
     listShots: async (projectId: ProjectId): Promise<Shot[]> =>
       get(`/projects/${encodeURIComponent(projectId)}/shots`, WireShotList),
+
+    getShot: async (id: ShotId): Promise<Shot> => get(`/shots/${encodeURIComponent(id)}`, WireShot),
 
     createShot: async (projectId: ProjectId, input: CreateShotBody): Promise<Shot> =>
       post(

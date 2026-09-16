@@ -40,9 +40,19 @@ export const ShotWorkbench = ({ shot, initialTakes }: ShotWorkbenchProps) => {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
+  /**
+   * Take と Shot の状態を同時に読み直す。
+   *
+   * Take だけを見ていると、生成が終わって status が review に戻っても
+   * 画面の状態バッジが「生成中」のまま残る（実機で確認した）。
+   * 採用中の Take も worker 側で変わりうるので併せて反映する。
+   */
   const refreshTakes = useCallback(async (): Promise<readonly Take[]> => {
-    const next = await createApiClient().listTakes(shot.id)
+    const client = createApiClient()
+    const [next, latest] = await Promise.all([client.listTakes(shot.id), client.getShot(shot.id)])
     setTakes(next)
+    setStatus(latest.status)
+    setSelectedTakeId(latest.selectedTakeId)
     return next
   }, [shot.id])
 
