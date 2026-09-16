@@ -17,6 +17,13 @@ import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import { z } from 'zod'
 import { recordTake, type RecordTakeDeps } from './complete.js'
+import {
+  TakeLineage,
+  checkLineage,
+  lineageFailureOf,
+  lineageFieldsOf,
+  type LineageCheck,
+} from './lineage.js'
 import { rebuildSpec } from './spec.js'
 
 /**
@@ -27,8 +34,52 @@ import { rebuildSpec } from './spec.js'
  * - 冪等。終了済みのジョブを再実行しても Take を二重に作らない
  */
 
-export const GenerationJobData = z.object({ generationJobId: GenerationJobIdSchema })
+/**
+ * generation キューのジョブデータ。
+ *
+ * **知らないキーを黙って捨てない（`.strict()`）。**
+ * 既定の zod は未知のキーを落とすため、系譜を入れ子にし忘れて
+ * `{ generationJobId, parentTakeId, regenerationReason }` と平たく積むと、
+ * 何事も無く通って Take が親も理由も無いまま確定してしまう（実際に確かめた）。
+ * 系譜を書けるのはこの経路だけで、Take は Immutable（ADR-0003）なので後から直せない。
+ * 積み方の間違いはここで気付く必要がある。
+ */
+export const GenerationJobData = z
+  .object({
+    generationJobId: GenerationJobIdSchema,
+    /**
+     * 再生成で積まれたジョブだけが持つ。通常の生成では省略する（DOMAIN.md §10）。
+     *
+     * **GenerationJob の行は系譜を持てない**（generation_jobs に列が無い）ため、
+     * 親を知っているのはこのジョブデータだけである。ポーリングで入れ直すときも
+     * このデータをそのまま運ぶので、投入から完了まで系譜が残る。
+     */
+    lineage: TakeLineage.optional(),
+  })
+  .strict()
 export type GenerationJobData = z.infer<typeof GenerationJobData>
+
+/**
+ * 再生成の要求（`RegenerationRequest`）をそのまま generation キューへ積むと、
+ * GenerationJob が作られていないのでここで詰まる。
+ * 「generationJobId が必要」という汎用の zod エラーだけでは配線の直し方が分からないため、
+ * その形を見つけたら何をすべきかまで書いたエラーにする。
+ */
+const looksLikeRawRegenerationRequest = (data: unknown): boolean =>
+  typeof data === 'object' && data !== null && 'regeneration' in data
+
+export const parseGenerationJobData = (data: unknown): GenerationJobData => {
+  const parsed = GenerationJobData.safeParse(data)
+  if (parsed.success) return parsed.data
+  if (looksLikeRawRegenerationRequest(data)) {
+    throw new Error(
+      '再生成の要求がそのまま generation キューへ積まれています。' +
+        'GenerationJob を作ったうえで ' +
+        '{ generationJobId, lineage: { parentTakeId, regenerationReason } } の形で積んでください',
+    )
+  }
+  throw parsed.error
+}
 
 /** ポーリング間隔の初期値と上限。 */
 export const POLL_BACKOFF_BASE_MS = 5_000
@@ -91,6 +142,29 @@ class JobFailure extends Error {
 
 const TERMINAL_STATUSES: readonly GenerationJob['status'][] = ['succeeded', 'failed', 'cancelled']
 
+/**
+ * 1 回分の処理に必要な、DB から読み直した実体一式。
+ * `data` も持ち回る。系譜はここにしか無いため、ポーリングで入れ直すときに
+ * 落とすと再生成であることが分からなくなる。
+ */
+type JobContext = {
+  readonly job: GenerationJob
+  readonly shot: Shot
+  readonly project: Project
+  readonly model: VideoModelDescriptor
+  readonly data: GenerationJobData
+  readonly now: Date
+}
+
+/**
+ * 運ばれてきた系譜を検査する。親を辿れなければ理由付きで返る。
+ * 投入前に呼べば、壊れた系譜のまま課金することがない。
+ */
+const inspectLineage = (
+  deps: GenerationProcessorDeps,
+  ctx: JobContext,
+): Promise<LineageCheck> => checkLineage(deps.takes, ctx.shot.id, ctx.data.lineage)
+
 /** Provider に参照画像を見せるための署名付き URL。DB には保存しない（規約 7）。 */
 const referenceResolver =
   (mediaAssets: MediaAssetRepository, storage: ObjectStorage) => async (id: MediaAssetId) => {
@@ -113,12 +187,20 @@ const loadModel = (registry: ProviderRegistry, job: GenerationJob): VideoModelDe
 /** Provider へ投入し、最初のポーリングを予約する。 */
 const submit = async (
   deps: GenerationProcessorDeps,
-  job: GenerationJob,
-  shot: Shot,
-  project: Project,
-  model: VideoModelDescriptor,
-  now: Date,
+  ctx: JobContext,
 ): Promise<GenerationOutcome> => {
+  const { job, shot, project, model, now } = ctx
+
+  /**
+   * **系譜の検査は投入の前に置く。**
+   * ここで落ちるのは 1 回も課金していない状態なので安い。
+   * 完了後に気付いても、生成済みの Take を捨てるか系譜を諦めるかしか選べなくなる。
+   */
+  const lineageFailure = lineageFailureOf(await inspectLineage(deps, ctx))
+  if (lineageFailure !== null) {
+    throw new JobFailure(lineageFailure.code, lineageFailure.message, false)
+  }
+
   const { spec, specHash } = await rebuildSpec(deps.context, shot, project, model)
   if (specHash !== job.specHash) {
     // Shot が編集されて仕様が変わっている。古い仕様で課金しないよう止める。
@@ -141,7 +223,8 @@ const submit = async (
     providerJobRef: handle.ref,
     startedAt: job.startedAt ?? now,
   })
-  await deps.scheduler.reschedule({ generationJobId: job.id }, pollDelayMs(1))
+  // 系譜ごと運び直す。ここで data を組み直すと再生成であることが抜け落ちる。
+  await deps.scheduler.reschedule(ctx.data, pollDelayMs(1))
 
   deps.logger.info({ jobId: job.id, ref: handle.ref }, 'Provider へ生成ジョブを投入しました')
   return { state: 'submitted', providerJobRef: handle.ref }
@@ -150,15 +233,27 @@ const submit = async (
 /** 完了応答から MediaAsset と Take を作り、ジョブを succeeded にする。 */
 const complete = async (
   deps: GenerationProcessorDeps,
-  job: GenerationJob,
-  shot: Shot,
-  project: Project,
-  model: VideoModelDescriptor,
+  ctx: JobContext,
   status: Extract<ProviderJobStatus, { state: 'succeeded' }>,
-  now: Date,
 ): Promise<GenerationOutcome> => {
+  const { job, shot, project, model, now } = ctx
   const { spec, specHash } = await rebuildSpec(deps.context, shot, project, model)
   const startedAt = job.startedAt ?? job.queuedAt
+
+  /**
+   * 投入時に通った系譜でも、完了までの間に親が消えていることはある。
+   * **その場合でも Take は確定させる。** ここに来た時点で生成は成功し課金も済んでいて、
+   * 系譜が辿れないことは作り直しても直らない。
+   * 代わりに理由だけを残し（`lineageFieldsOf`）、何が欠けたかを error で出す。
+   */
+  const lineage = await inspectLineage(deps, ctx)
+  const lineageFailure = lineageFailureOf(lineage)
+  if (lineageFailure !== null) {
+    deps.logger.error(
+      { jobId: job.id, shotId: shot.id, code: lineageFailure.code },
+      `${lineageFailure.message}。理由だけを残して Take を確定します`,
+    )
+  }
 
   const take = await recordTake(deps, {
     shot,
@@ -173,6 +268,7 @@ const complete = async (
     costUsd: status.costUsd,
     raw: status.raw,
     generationTimeSec: Math.max(0, (now.getTime() - startedAt.getTime()) / 1000),
+    lineage: lineageFieldsOf(lineage),
   })
 
   /**
@@ -204,13 +300,10 @@ const complete = async (
 /** 進行中の外部ジョブを 1 回だけ問い合わせる。 */
 const poll = async (
   deps: GenerationProcessorDeps,
-  job: GenerationJob,
-  shot: Shot,
-  project: Project,
-  model: VideoModelDescriptor,
+  ctx: JobContext,
   providerJobRef: string,
-  now: Date,
 ): Promise<GenerationOutcome> => {
+  const { job, model } = ctx
   const provider = deps.registry.providerFor(model.id)
   const handle: ProviderJobHandle = {
     providerId: model.providerId,
@@ -221,7 +314,7 @@ const poll = async (
 
   const status = await provider.poll(handle)
 
-  if (status.state === 'succeeded') return complete(deps, job, shot, project, model, status, now)
+  if (status.state === 'succeeded') return complete(deps, ctx, status)
 
   if (status.state === 'failed') {
     throw new JobFailure(status.error.code, status.error.message, status.error.retryable)
@@ -235,7 +328,7 @@ const poll = async (
   await deps.generationJobs.update(job.id, { attempt })
   const delayMs = pollDelayMs(attempt)
   // repeatable job は使わない。都度、指数バックオフで入れ直す（ARCHITECTURE.md §20）。
-  await deps.scheduler.reschedule({ generationJobId: job.id }, delayMs)
+  await deps.scheduler.reschedule(ctx.data, delayMs)
   return { state: 'polling', delayMs }
 }
 
@@ -247,12 +340,12 @@ export const processGenerationJob = async (
   deps: GenerationProcessorDeps,
   data: unknown,
 ): Promise<GenerationOutcome> => {
-  const { generationJobId } = GenerationJobData.parse(data)
+  const parsed = parseGenerationJobData(data)
   const now = (deps.now ?? (() => new Date()))()
 
-  const job = await deps.generationJobs.findById(generationJobId)
+  const job = await deps.generationJobs.findById(parsed.generationJobId)
   if (job === null) {
-    throw new Error(`GenerationJob が見つかりません: ${generationJobId}`)
+    throw new Error(`GenerationJob が見つかりません: ${parsed.generationJobId}`)
   }
 
   // 冪等性の要。同じジョブが 2 回走っても Take を二重に作らない。
@@ -270,11 +363,13 @@ export const processGenerationJob = async (
       throw new JobFailure('project_missing', `Project がありません: ${shot.projectId}`, false)
     }
 
-    const model = loadModel(deps.registry, job)
+    const ctx: JobContext = {
+      job, shot, project, model: loadModel(deps.registry, job), data: parsed, now,
+    }
 
     return job.providerJobRef === null
-      ? await submit(deps, job, shot, project, model, now)
-      : await poll(deps, job, shot, project, model, job.providerJobRef, now)
+      ? await submit(deps, ctx)
+      : await poll(deps, ctx, job.providerJobRef)
   } catch (error) {
     const failure =
       error instanceof JobFailure

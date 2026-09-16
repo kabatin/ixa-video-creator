@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { createMemoryStorage } from '@ixa/storage'
 import { describe, expect, it, vi } from 'vitest'
 import { extensionFromUrl, mediaKindFor, recordTake, type RecordTakeDeps } from '../complete.js'
+import { NO_LINEAGE } from '../lineage.js'
 import type { DownloadedObject } from '../download.js'
 import { rebuildSpec } from '../spec.js'
 import { aProject, aShot, inMemoryMediaAssets, inMemoryTakes, testModel } from './doubles.js'
@@ -53,6 +54,7 @@ const buildFixture = async () => {
     costUsd: 0.4,
     raw: { id: 'provider-job-1' },
     generationTimeSec: 42,
+    lineage: NO_LINEAGE,
   }
 
   return { deps, input, takes, mediaAssets, download, project, shot }
@@ -109,6 +111,62 @@ describe('recordTake', () => {
     expect(f.takes.snapshot()).toHaveLength(1)
     // MediaAsset は増えない（重複行を作らない）
     expect(f.mediaAssets.snapshot()).toHaveLength(1)
+  })
+})
+
+describe('recordTake（系譜）', () => {
+  it('通常の生成では parentTakeId も regenerationReason も null のまま', async () => {
+    const f = await buildFixture()
+
+    const take = await recordTake(f.deps, f.input)
+
+    expect(take.parentTakeId).toBeNull()
+    expect(take.regenerationReason).toBeNull()
+  })
+
+  it('再生成では親と理由を Take に入れる', async () => {
+    const f = await buildFixture()
+    const parentTakeId = newId(TakeIdSchema)
+
+    const take = await recordTake(f.deps, {
+      ...f.input,
+      lineage: { parentTakeId, regenerationReason: 'character_consistency: 顔が崩れている' },
+    })
+
+    expect(take.parentTakeId).toBe(parentTakeId)
+    expect(take.regenerationReason).toBe('character_consistency: 顔が崩れている')
+  })
+
+  it('親を辿れない再生成でも理由だけは残す', async () => {
+    const f = await buildFixture()
+
+    const take = await recordTake(f.deps, {
+      ...f.input,
+      lineage: { parentTakeId: null, regenerationReason: 'motion: 動きが破綻している' },
+    })
+
+    expect(take.parentTakeId).toBeNull()
+    expect(take.regenerationReason).toBe('motion: 動きが破綻している')
+  })
+
+  it('取り込み済みの Take を再利用するときは既存の系譜を書き換えない（ADR-0003）', async () => {
+    const f = await buildFixture()
+    const parentTakeId = newId(TakeIdSchema)
+
+    const first = await recordTake(f.deps, {
+      ...f.input,
+      lineage: { parentTakeId, regenerationReason: '最初に記録した理由' },
+    })
+    // 同じ checksum で、別の系譜を主張して呼び直す
+    const second = await recordTake(f.deps, {
+      ...f.input,
+      lineage: { parentTakeId: newId(TakeIdSchema), regenerationReason: '後から来た別の理由' },
+    })
+
+    expect(second.id).toBe(first.id)
+    expect(second.parentTakeId).toBe(parentTakeId)
+    expect(second.regenerationReason).toBe('最初に記録した理由')
+    expect(f.takes.snapshot()).toHaveLength(1)
   })
 })
 

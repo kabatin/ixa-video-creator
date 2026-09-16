@@ -2,6 +2,8 @@ import {
   createPhase1EmptyContextSource,
   type GenerationContextSource,
   type GenerationJob,
+  type ShotId,
+  type Take,
 } from '@ixa/domain'
 import { createProviderRegistry } from '@ixa/provider-core'
 import type { ProviderJobStatus } from '@ixa/provider-core'
@@ -12,6 +14,7 @@ import {
   POLL_BACKOFF_BASE_MS, POLL_BACKOFF_MAX_MS, pollDelayMs, processGenerationJob,
   type GenerationProcessorDeps,
 } from '../processor.js'
+import { MAX_REGENERATION_REASON_LENGTH } from '../lineage.js'
 import { rebuildSpec } from '../spec.js'
 import {
   aCharacterBundle, aProject, aShot, contextWith, createRecordingMediaQueue,
@@ -61,6 +64,7 @@ const buildFixture = async (
   const mediaAssets = inMemoryMediaAssets()
   const scheduler = createRecordingScheduler()
   const mediaQueue = createRecordingMediaQueue()
+  const provider = createTestProvider([MODEL], statuses)
 
   const deps: GenerationProcessorDeps = {
     generationJobs: jobs,
@@ -69,7 +73,7 @@ const buildFixture = async (
     takes,
     mediaAssets,
     storage: createMemoryStorage(),
-    registry: createProviderRegistry([createTestProvider([MODEL], statuses)]),
+    registry: createProviderRegistry([provider]),
     context,
     scheduler,
     mediaQueue,
@@ -79,7 +83,46 @@ const buildFixture = async (
 
   return {
     deps, job, shot, project, jobs, shots, takes, mediaAssets, scheduler, mediaQueue, specHash,
+    provider,
   }
+}
+
+type Fixture = Awaited<ReturnType<typeof buildFixture>>
+
+/**
+ * 再生成元になる Take を 1 件だけ用意する。
+ * checksum は生成物（'a' の 64 桁）とわざと変える。同じにすると
+ * `recordTake` の重複排除が働いて別の経路に入ってしまう。
+ */
+const seedParentTake = async (f: Fixture, shotId: ShotId = f.shot.id): Promise<Take> => {
+  const { spec, specHash } = await rebuildSpec(
+    createPhase1EmptyContextSource(), f.shot, f.project, MODEL,
+  )
+  const asset = await f.mediaAssets.create({
+    workspaceId: f.project.workspaceId,
+    projectId: f.project.id,
+    kind: 'video',
+    storageKey: 'media/WS/PARENT/original.mp4',
+    mimeType: 'video/mp4',
+    bytes: 2048,
+    checksumSha256: 'c'.repeat(64),
+    origin: { type: 'upload', uploadedBy: 'test' },
+    tags: [],
+  })
+  return f.takes.create({
+    shotId,
+    mediaAssetId: asset.id,
+    spec,
+    specHash,
+    providerId: MODEL.providerId,
+    modelId: MODEL.id,
+    providerParams: { kind: 'http', request: {} },
+    seedUsed: null,
+    costUsd: 0.4,
+    generationTimeSec: 12,
+    parentTakeId: null,
+    regenerationReason: null,
+  })
 }
 
 /** 投入 → 完了まで 2 回走らせる。 */
@@ -244,6 +287,178 @@ describe('processGenerationJob', () => {
   it('ジョブデータの形が違えば例外を投げる', async () => {
     const f = await buildFixture([SUCCEEDED])
     await expect(processGenerationJob(f.deps, { shotId: 'nope' })).rejects.toThrow()
+  })
+})
+
+describe('processGenerationJob（Take の系譜）', () => {
+  const REASON = 'character_consistency: 顔の造作が参照と違う'
+
+  it('通常の生成で作った Take は親も理由も持たない', async () => {
+    const f = await buildFixture([SUCCEEDED])
+
+    await runToCompletion(f)
+
+    const take = f.takes.snapshot()[0]
+    expect(take?.parentTakeId).toBeNull()
+    expect(take?.regenerationReason).toBeNull()
+  })
+
+  it('再生成のジョブデータから作った Take が親と理由を持つ', async () => {
+    const f = await buildFixture([SUCCEEDED])
+    const parent = await seedParentTake(f)
+    const data = {
+      generationJobId: f.job.id,
+      lineage: { parentTakeId: parent.id, regenerationReason: REASON },
+    }
+
+    await processGenerationJob(f.deps, data)
+    const second = await processGenerationJob(f.deps, data)
+
+    expect(second.state).toBe('succeeded')
+    const created = f.takes.snapshot().find((t) => t.id !== parent.id)
+    expect(created?.parentTakeId).toBe(parent.id)
+    expect(created?.regenerationReason).toBe(REASON)
+  })
+
+  it('ポーリングで入れ直すときも系譜を運ぶ', async () => {
+    const f = await buildFixture([{ state: 'running', progress: 0.3 }])
+    const parent = await seedParentTake(f)
+    const lineage = { parentTakeId: parent.id, regenerationReason: REASON }
+    const data = { generationJobId: f.job.id, lineage }
+
+    await processGenerationJob(f.deps, data)
+    await processGenerationJob(f.deps, data)
+
+    /**
+     * 系譜を知っているのはジョブデータだけ（generation_jobs に列が無い）。
+     * 入れ直しで落とすと、完了する頃には再生成だったことが分からなくなる。
+     */
+    expect(f.scheduler.scheduled()).toHaveLength(2)
+    for (const scheduled of f.scheduler.scheduled()) {
+      expect(scheduled.data).toEqual(data)
+    }
+  })
+
+  it('親が実在しなければ投入する前に失敗させる（課金しない）', async () => {
+    const f = await buildFixture([SUCCEEDED])
+
+    const outcome = await processGenerationJob(f.deps, {
+      generationJobId: f.job.id,
+      lineage: { parentTakeId: '01JBXV0000000000000000000A', regenerationReason: REASON },
+    })
+
+    expect(outcome).toEqual({ state: 'failed', code: 'parent_take_missing' })
+    expect(f.provider.submitted()).toHaveLength(0)
+    expect(f.takes.snapshot()).toHaveLength(0)
+    expect(f.jobs.snapshot()[0]?.error?.retryable).toBe(false)
+  })
+
+  it('親が別の Shot の Take なら投入する前に失敗させる', async () => {
+    const f = await buildFixture([SUCCEEDED])
+    const otherShot = aShot(f.project)
+    const parent = await seedParentTake(f, otherShot.id)
+
+    const outcome = await processGenerationJob(f.deps, {
+      generationJobId: f.job.id,
+      lineage: { parentTakeId: parent.id, regenerationReason: REASON },
+    })
+
+    expect(outcome).toEqual({ state: 'failed', code: 'parent_take_shot_mismatch' })
+    expect(f.provider.submitted()).toHaveLength(0)
+  })
+
+  it('完了までに親が消えていたら理由だけ残して Take を確定する', async () => {
+    const f = await buildFixture([SUCCEEDED])
+    const parent = await seedParentTake(f)
+    const data = {
+      generationJobId: f.job.id,
+      lineage: { parentTakeId: parent.id, regenerationReason: REASON },
+    }
+
+    await processGenerationJob(f.deps, data)
+    // 投入と完了の間に親が消えた状態を作る
+    const withoutParent = {
+      ...f.deps,
+      takes: { ...f.takes, findById: () => Promise.resolve(null) },
+    }
+    const second = await processGenerationJob(withoutParent, data)
+
+    /**
+     * 生成は成功していて課金も済んでいる。親を辿れないことを理由に捨てない。
+     * 理由を残すことで「最初の生成」と「親を失った再生成」が区別できる（L-015）。
+     */
+    expect(second.state).toBe('succeeded')
+    const created = f.takes.snapshot().find((t) => t.id !== parent.id)
+    expect(created?.parentTakeId).toBeNull()
+    expect(created?.regenerationReason).toBe(REASON)
+    expect(f.jobs.snapshot()[0]?.status).toBe('succeeded')
+  })
+
+  it('親だけ・理由だけの中途半端な系譜はジョブデータの時点で弾く', async () => {
+    const f = await buildFixture([SUCCEEDED])
+    const parent = await seedParentTake(f)
+
+    await expect(
+      processGenerationJob(f.deps, {
+        generationJobId: f.job.id,
+        lineage: { parentTakeId: parent.id },
+      }),
+    ).rejects.toThrow()
+
+    await expect(
+      processGenerationJob(f.deps, {
+        generationJobId: f.job.id,
+        lineage: { parentTakeId: parent.id, regenerationReason: '' },
+      }),
+    ).rejects.toThrow()
+
+    await expect(
+      processGenerationJob(f.deps, {
+        generationJobId: f.job.id,
+        lineage: {
+          parentTakeId: parent.id,
+          regenerationReason: 'x'.repeat(MAX_REGENERATION_REASON_LENGTH + 1),
+        },
+      }),
+    ).rejects.toThrow()
+
+    expect(f.provider.submitted()).toHaveLength(0)
+  })
+
+  it('系譜を入れ子にし忘れて平たく積んだら黙って捨てずに落とす', async () => {
+    const f = await buildFixture([SUCCEEDED])
+    const parent = await seedParentTake(f)
+
+    /**
+     * 既定の zod は未知のキーを落とす。落としたまま通すと、親も理由も無い Take が
+     * 「最初の生成」として確定してしまい、後から直せない（Take は Immutable）。
+     */
+    await expect(
+      processGenerationJob(f.deps, {
+        generationJobId: f.job.id,
+        parentTakeId: parent.id,
+        regenerationReason: REASON,
+      }),
+    ).rejects.toThrow()
+
+    expect(f.provider.submitted()).toHaveLength(0)
+    expect(f.takes.snapshot()).toHaveLength(1) // 親だけ
+  })
+
+  it('再生成の要求をそのまま積んだら、直し方が分かるエラーになる', async () => {
+    const f = await buildFixture([SUCCEEDED])
+
+    await expect(
+      processGenerationJob(f.deps, {
+        regeneration: {
+          shotId: f.shot.id,
+          projectId: f.project.id,
+          parentTakeId: '01JBXV0000000000000000000A',
+          reason: REASON,
+          adjustment: {},
+        },
+      }),
+    ).rejects.toThrow(/GenerationJob を作/)
   })
 })
 

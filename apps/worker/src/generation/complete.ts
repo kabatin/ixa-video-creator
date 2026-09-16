@@ -21,6 +21,7 @@ import {
   type DownloadOptions,
   type DownloadedObject,
 } from './download.js'
+import type { TakeLineageFields } from './lineage.js'
 
 /**
  * Provider の完了応答を Take として確定させる。
@@ -62,6 +63,12 @@ export type RecordTakeInput = {
   readonly costUsd: number
   readonly raw: Record<string, unknown>
   readonly generationTimeSec: number
+  /**
+   * 何の作り直しなのか（DOMAIN.md §10）。通常の生成は `NO_LINEAGE` を明示して渡す。
+   * 省略可能にすると「再生成でない」と「系譜を渡し忘れた」が区別できなくなるため必須にしている。
+   * Take は Immutable（ADR-0003）なので、ここで入れ損ねた系譜は後から足せない。
+   */
+  readonly lineage: TakeLineageFields
 }
 
 export type RecordTakeDeps = {
@@ -143,8 +150,8 @@ export const recordTake = async (deps: RecordTakeDeps, input: RecordTakeInput): 
     seedUsed: input.seedUsed,
     costUsd: input.costUsd,
     generationTimeSec: input.generationTimeSec,
-    parentTakeId: null,
-    regenerationReason: null,
+    // 再生成なら親と理由が入る。通常の生成では両方 null。
+    ...input.lineage,
   }
 
   // 同じ内容を既に取り込んでいないか。中断した取り込みの再開もここで拾う。
