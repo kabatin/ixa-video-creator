@@ -6,6 +6,8 @@ import {
   createDbClient,
   createGenerationJobRepository,
   createMediaAssetRepository,
+  createMusicAnalysisRepository,
+  createMusicTrackRepository,
   createProjectRepository,
   createRenderJobRepository,
   createShotRepository,
@@ -21,6 +23,8 @@ import { Queue } from 'bullmq'
 import type { Redis } from 'ioredis'
 import type { Logger } from 'pino'
 import { createRemotionRenderer } from '@ixa/render'
+import { createMusicAnalyzer } from '@ixa/music'
+import type { AnalysisProcessorDeps } from './analysis/index.js'
 import type { GenerationProcessorDeps, PollScheduler } from './generation/index.js'
 import type { MediaProcessorDeps } from './media/index.js'
 import type { RenderProcessorDeps } from './render/index.js'
@@ -37,6 +41,7 @@ export type GenerationWiring = {
   readonly deps: GenerationProcessorDeps
   readonly media: MediaProcessorDeps
   readonly render: RenderProcessorDeps
+  readonly analysis: AnalysisProcessorDeps
   readonly queue: Queue
   close(): Promise<void>
 }
@@ -127,10 +132,26 @@ export const createGenerationWiring = (
     logger,
   }
 
+  /**
+   * 音楽解析（ADR-0009）。解析本体は apps/audio（Python / librosa）が行い、
+   * worker は音源を AUDIO_ROOT 配下へ置いて相対パスを渡すだけ。
+   * **AUDIO_ROOT は apps/audio 側と同じディレクトリを指すこと。**
+   */
+  const analysis: AnalysisProcessorDeps = {
+    musicTracks: createMusicTrackRepository(db),
+    musicAnalyses: createMusicAnalysisRepository(db),
+    mediaAssets: createMediaAssetRepository(db),
+    storage,
+    analyzer: createMusicAnalyzer(config.audio.url),
+    audioRoot: process.env.AUDIO_ROOT ?? '/tmp/ixa-audio',
+    logger,
+  }
+
   return {
     deps,
     media,
     render,
+    analysis,
     queue,
     close: async () => {
       await queue.close()

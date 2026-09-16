@@ -10,6 +10,7 @@ import { createGenerationWiring, type GenerationWiring } from './generation-wiri
 import { processGenerationJob } from './generation/index.js'
 import { processMediaJob } from './media/index.js'
 import { processRenderJob } from './render/index.js'
+import { processAnalysisJob } from './analysis/index.js'
 
 /** graceful shutdown の既定タイムアウト（ミリ秒）。超過したら強制終了する。 */
 const SHUTDOWN_TIMEOUT_MS = 30_000
@@ -29,7 +30,7 @@ const createWorkers = (
   queueConfigs.map((config) => {
     /**
      * キューごとに担当プロセッサを割り当てる。
-     * review と analysis は Phase 4 / Phase 2 の担当なので noop のまま。
+     * review は Phase 4 の担当なので noop のまま。
      * 未実装のキューを無言で成功させないよう、対応表を 1 箇所に集約する。
      */
     const handler = async (job: { data: unknown }): Promise<NoopJobResult> => {
@@ -41,6 +42,8 @@ const createWorkers = (
             return (await processMediaJob(generation.media, job.data)).state
           case QUEUE_NAMES.render:
             return (await processRenderJob(generation.render, job.data)).state
+          case QUEUE_NAMES.analysis:
+            return (await processAnalysisJob(generation.analysis, job.data)).state
           default:
             return (await processNoopJob(job.data as NoopJobData)).echoed
         }
