@@ -2,7 +2,7 @@ import type { Project } from '@ixa/domain'
 import Link from 'next/link'
 import { formatResolution } from '@/lib/resolution-presets'
 import { formatCreatedAt, statusClassName, statusLabel } from '@/lib/project-display'
-import { shotListHref } from '@/lib/shot-links'
+import { PROJECT_SECTIONS, projectSectionHref } from '@/lib/project-links'
 
 export type ProjectCardProps = {
   readonly project: Project
@@ -36,11 +36,17 @@ export const ProjectCard = ({ project }: ProjectCardProps) => (
         <dd>{formatCreatedAt(project)}</dd>
       </div>
     </dl>
-    <Link
-      href={shotListHref(project.id)}
-      className="mt-4 inline-block text-sm font-medium text-slate-900 underline hover:text-slate-600"
-    >
-      Shot 一覧へ
-    </Link>
+    {/* 画面を足したら project-links.ts に追記する。ここは自動で増える。 */}
+    <div className="mt-4 flex flex-wrap gap-3">
+      {PROJECT_SECTIONS.map((section) => (
+        <Link
+          key={section.key}
+          href={projectSectionHref(project.id, section.key)}
+          className="text-sm font-medium text-slate-900 underline hover:text-slate-600"
+        >
+          {section.label}
+        </Link>
+      ))}
+    </div>
   </li>
 )

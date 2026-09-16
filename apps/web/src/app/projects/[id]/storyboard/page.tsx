@@ -1,5 +1,5 @@
 import { ProjectId, type MusicTrack, type Sequence } from '@ixa/domain'
-import Link from 'next/link'
+import { ProjectNav } from '@/components/project-nav'
 import { AnalysisStarter } from '@/components/analysis-starter'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
@@ -7,7 +7,6 @@ import { StoryboardPanel } from '@/components/storyboard-panel'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import type { WireMusicAnalysis } from '@/lib/music-api'
-import { shotListHref } from '@/lib/shot-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,19 +74,7 @@ const StoryboardPage = async ({ params }: StoryboardPageProps) => {
       <PageHeader
         title="ストーリーボード"
         description="音楽のセクションを選んで、ビートに載った Shot を一括で作ります。"
-        action={
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-sm text-slate-600 underline hover:text-slate-900">
-              プロジェクト一覧
-            </Link>
-            <Link
-              href={shotListHref(projectId.data)}
-              className="text-sm text-slate-600 underline hover:text-slate-900"
-            >
-              Shot 一覧
-            </Link>
-          </div>
-        }
+        action={<ProjectNav projectId={projectId.data} current="storyboard" />}
       />
 
       {!result.ok ? (

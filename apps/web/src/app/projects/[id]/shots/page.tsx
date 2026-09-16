@@ -1,5 +1,6 @@
 import { ProjectId, type Shot } from '@ixa/domain'
 import Link from 'next/link'
+import { ProjectNav } from '@/components/project-nav'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
@@ -52,10 +53,8 @@ const ShotsPage = async ({ params }: ShotsPageProps) => {
         title="Shot 一覧"
         description="Shot がタイムライン上の位置と生成仕様を所有します。"
         action={
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-sm text-slate-600 underline hover:text-slate-900">
-              プロジェクト一覧
-            </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <ProjectNav projectId={projectId.data} current="shots" />
             <Link
               href={newShotHref(projectId.data)}
               className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"

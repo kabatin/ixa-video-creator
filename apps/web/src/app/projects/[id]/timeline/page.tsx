@@ -1,5 +1,5 @@
 import { ProjectId, type Shot, type ShotId, type TimelineClip, type Transition } from '@ixa/domain'
-import Link from 'next/link'
+import { ProjectNav } from '@/components/project-nav'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
 import { TimelineEditor } from '@/components/timeline-editor'
@@ -7,7 +7,6 @@ import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { createRequester } from '@/lib/requester'
 import { createTimelineApi, type WireTimelineIssue } from '@/lib/timeline-api'
-import { shotListHref } from '@/lib/shot-links'
 import type { BeatSource } from '@/lib/timeline-snap'
 
 /**
@@ -167,19 +166,7 @@ const TimelinePage = async ({ params }: TimelinePageProps) => {
       <PageHeader
         title="タイムライン"
         description={`${project.value.name} の Shot・Transition・クリップを時間軸で見て直します。`}
-        action={
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-sm text-slate-600 underline hover:text-slate-900">
-              プロジェクト一覧
-            </Link>
-            <Link
-              href={shotListHref(projectId.data)}
-              className="text-sm text-slate-600 underline hover:text-slate-900"
-            >
-              Shot 一覧
-            </Link>
-          </div>
-        }
+        action={<ProjectNav projectId={projectId.data} current="timeline" />}
       />
 
       <TimelineEditor
