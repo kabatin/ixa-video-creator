@@ -29,6 +29,14 @@ export const createInMemoryTakeRepository = (
     store.filter((t) => t.shotId === shotId).reduce((max, t) => Math.max(max, t.index), 0) + 1
 
   return {
+    // 偽物なので projectId は見ず、全 Take を合算する。
+    // テストは 1 プロジェクトしか作らないため、これで十分。
+    sumCostByProject: () =>
+      Promise.resolve(store.reduce((total, take) => total + take.costUsd, 0)),
+    sumCostByShot: (shotId: ShotId) =>
+      Promise.resolve(
+        store.filter((t) => t.shotId === shotId).reduce((total, take) => total + take.costUsd, 0),
+      ),
     snapshot: () => store,
 
     findById: (id) => Promise.resolve(find(id) ?? null),

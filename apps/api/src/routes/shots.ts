@@ -27,12 +27,17 @@ import {
   type Shot,
   type ShotGenerationSpec,
   type Take,
+  CostLimits as CostLimitsSchema,
+  DEFAULT_COST_LIMITS,
+  checkCostLimits,
+  type CostLimits,
 } from '@ixa/domain'
 import {
   selectModel,
   validateAgainstCapabilities,
   type ProviderRegistry,
   type VideoModelDescriptor,
+  estimateCostUsd,
 } from '@ixa/provider-core'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
@@ -332,6 +337,25 @@ export const buildGeneration = async (
   return { spec, specHash: await computeSpecHash(spec), model: chosen, routerDecision }
 }
 
+/**
+ * プロジェクトの設定からコスト上限を作る。
+ * Project.budgetUsd が未設定なら無制限だが、Shot と要求の上限は常に効く。
+ */
+export const costLimitsFor = (project: Pick<Project, 'budgetUsd'>): CostLimits =>
+  CostLimitsSchema.parse({
+    ...DEFAULT_COST_LIMITS,
+    projectBudgetUsd: project.budgetUsd,
+    // 予算が既定の Shot 上限より小さい場合、不変条件（Shot ≤ 予算）を満たすよう下げる
+    maxCostPerShotUsd:
+      project.budgetUsd === null
+        ? DEFAULT_COST_LIMITS.maxCostPerShotUsd
+        : Math.min(DEFAULT_COST_LIMITS.maxCostPerShotUsd, project.budgetUsd),
+    maxCostPerRequestUsd:
+      project.budgetUsd === null
+        ? DEFAULT_COST_LIMITS.maxCostPerRequestUsd
+        : Math.min(DEFAULT_COST_LIMITS.maxCostPerRequestUsd, project.budgetUsd),
+  })
+
 /** GenerationJob 行を作りつつキューへ入れる。DB が真実、キューは実行手段（ADR-0008）。 */
 const enqueueJobs = async (
   deps: Pick<ShotRoutesDeps, 'generationJobs' | 'queue'>,
@@ -428,6 +452,24 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
           return c.json(fail(VALIDATION_ERROR_MESSAGE, { model: [error.message] }), 422)
         }
         throw error
+      }
+
+      /**
+       * コスト上限を確認する。**キューへ投入する前に止める**（ADR / ARCHITECTURE.md §11）。
+       * 投入してから worker が失敗するより、投入しないほうが利用者に分かりやすい。
+       *
+       * スタブはコスト 0 なので Phase 1 では発動しない。
+       * 実 Provider に切り替えた瞬間に効く必要があるため、先に配線しておく。
+       */
+      const estimated = estimateCostUsd(compiled.spec, compiled.model) * count
+      const [projectSpentUsd, shotSpentUsd] = await Promise.all([
+        deps.takes.sumCostByProject(project.id),
+        deps.takes.sumCostByShot(shot.id),
+      ])
+      const limits = costLimitsFor(project)
+      const decision = checkCostLimits(limits, { projectSpentUsd, shotSpentUsd }, estimated)
+      if (!decision.allowed) {
+        return c.json(fail(decision.reason, { cost: [decision.limit] }), 422)
       }
 
       // 同一仕様の Take が既にあれば警告する。生成は止めない（ARCHITECTURE.md §11）。

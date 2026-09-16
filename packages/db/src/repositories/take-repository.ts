@@ -1,5 +1,5 @@
-import { asc, desc, eq } from 'drizzle-orm'
-import type { CreateTakeInput, ShotId, Take, TakeId, TakeUpdate } from '@ixa/domain'
+import { asc, desc, eq, sql } from 'drizzle-orm'
+import type { CreateTakeInput, ProjectId, ShotId, Take, TakeId, TakeUpdate } from '@ixa/domain'
 import {
   CreateTakeInput as CreateTakeInputSchema,
   Take as TakeSchema,
@@ -10,6 +10,7 @@ import {
 import type { DbClient } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { takes } from '../schema/generation.js'
+import { shots } from '../schema/shot.js'
 
 /** drizzle の row 型。パッケージ外へは出さない。 */
 export type TakeRow = typeof takes.$inferSelect
@@ -30,6 +31,12 @@ export type TakeRepository = {
   create(input: CreateTakeInput): Promise<Take>
   /** reviewStatus / humanVerdict のみ更新できる（ADR-0003）。 */
   updateReview(takeId: TakeId, patch: TakeUpdate): Promise<Take>
+  /**
+   * 実際に支払ったコストの合計。見積りではなく Take に記録された実測値。
+   * 全 Take を読み込まずに済むよう SQL で集計する（MV 全体では数百行になるため）。
+   */
+  sumCostByProject(projectId: ProjectId): Promise<number>
+  sumCostByShot(shotId: ShotId): Promise<number>
 }
 
 /** row → Domain。zod で検証して branded ID を付ける。 */
@@ -109,6 +116,24 @@ export const createTakeRepository = (db: DbClient): TakeRepository => {
       const row = rows[0]
       if (!row) throw new DbNotFoundError('Take', takeId)
       return takeRowToDomain(row)
+    },
+
+    async sumCostByProject(projectId) {
+      // takes は shot_id しか持たないので shots を経由する。
+      const rows = await db
+        .select({ total: sql<string>`coalesce(sum(${takes.costUsd}), 0)` })
+        .from(takes)
+        .innerJoin(shots, eq(shots.id, takes.shotId))
+        .where(eq(shots.projectId, projectId))
+      return Number(rows[0]?.total ?? 0)
+    },
+
+    async sumCostByShot(shotId) {
+      const rows = await db
+        .select({ total: sql<string>`coalesce(sum(${takes.costUsd}), 0)` })
+        .from(takes)
+        .where(eq(takes.shotId, shotId))
+      return Number(rows[0]?.total ?? 0)
     },
   }
 }

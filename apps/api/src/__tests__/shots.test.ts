@@ -558,3 +558,82 @@ describe('GET /generation-jobs/:id', () => {
     expect(res.status).toBe(404)
   })
 })
+
+describe('コスト上限（実 Provider に切り替えたときの歯止め）', () => {
+  /** 1 秒 $1 の高額モデル。4 秒生成で $4 になる。 */
+  const PRICEY = testModel({ id: 'test/pricey', costPerSecondUsd: 1 })
+
+  const priceyFixture = (options: FixtureOptions = {}) => {
+    const project: Project = options.project ?? aProject()
+    const shot = aShot(project.id)
+    const shots = createInMemoryShotRepository([shot])
+    const takes = createInMemoryTakeRepository(options.takes ?? [])
+    const deps: AppDeps = {
+      ...baseAppDeps(),
+      projects: createInMemoryProjectRepository([project]),
+      shots,
+      takes,
+      generationJobs: createInMemoryGenerationJobRepository(),
+      registry: createProviderRegistry([createTestVideoProvider([PRICEY])]),
+      generationQueue: createRecordingQueue(),
+    }
+    return { app: createApp(deps), project, shot, takes }
+  }
+
+  it('1 回の要求の上限を超えたら 422 で止め、キューに入れない', async () => {
+    const f = priceyFixture()
+    // 4 秒 × $1 × 4 本 = $16。既定の要求上限 $6 を超える
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, {
+      model: 'test/pricey',
+      count: 4,
+    })
+    expect(res.status).toBe(422)
+    const json = (await res.json()) as { error: string; fields?: Record<string, string[]> }
+    expect(json.error).toContain('上限')
+    expect(json.fields?.cost).toEqual(['request'])
+  })
+
+  it('Shot の累積が上限に達したら 422（既に払った分を含めて判定する）', async () => {
+    const f = priceyFixture()
+    // 既に $5.5 使っている Shot に、さらに $4 を要求する
+    await f.takes.create({
+      ...aTake(f.shot, 'e'.repeat(64)),
+      costUsd: 5.5,
+    })
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, {
+      model: 'test/pricey',
+      count: 1,
+    })
+    expect(res.status).toBe(422)
+    const json = (await res.json()) as { fields?: Record<string, string[]> }
+    expect(json.fields?.cost).toEqual(['shot'])
+  })
+
+  it('プロジェクト予算を超えたら 422', async () => {
+    const f = priceyFixture({ project: aProject({ budgetUsd: 3 }) })
+    // 予算 $3 に対して 4 秒 × $1 = $4
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, {
+      model: 'test/pricey',
+      count: 1,
+    })
+    expect(res.status).toBe(422)
+  })
+
+  it('上限内なら通常どおり 202 で投入される', async () => {
+    const f = priceyFixture()
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, {
+      model: 'test/pricey',
+      count: 1,
+    })
+    expect(res.status).toBe(202)
+  })
+
+  it('コスト 0 の Provider（スタブ）では発動しない', async () => {
+    const f = buildFixture()
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, {
+      model: 'test/cheap',
+      count: 4,
+    })
+    expect(res.status).toBe(202)
+  })
+})
