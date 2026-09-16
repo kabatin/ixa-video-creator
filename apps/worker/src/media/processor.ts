@@ -14,7 +14,7 @@ import { withTempDir } from './temp-dir.js'
  * media キューのジョブ処理（docs/ARCHITECTURE.md §7 の取り込みパイプライン）。
  *
  * - ジョブデータは ID のみ。実データは DB から読む（DB が真実。ADR-0008）
- * - 冪等。probe が入っている MediaAsset を再処理しない
+ * - 冪等。取り込み済みの MediaAsset を再処理しない（判定は `isIngested`）
  * - 一時ディレクトリはジョブごとに分け、成功・失敗のどちらでも必ず片付ける
  */
 
@@ -57,6 +57,27 @@ export type MediaOutcome =
 const errorCodeOf = (error: unknown): string => {
   if (error instanceof Error && 'code' in error && typeof error.code === 'string') return error.code
   return error instanceof Error ? error.name : 'unknown_error'
+}
+
+/**
+ * 取り込み済みかどうかを判定する。
+ *
+ * **`probe` の有無では判定できない。** probe はこのパイプライン以外も書き込む。
+ * render は出力 MediaAsset を作る時点で尺だけの probe を自分で入れるため
+ * （`apps/worker/src/render/processor.ts`）、probe を根拠にすると
+ * media ジョブが必ず skip され、レンダリング結果のポスターフレームが
+ * **永久に 1 枚も作られない**。実データで実際にそうなっていた。
+ * skip は成功として返るので、この欠落は下流からは見えない。
+ *
+ * 根拠には kind ごとに「取り込みが成功したなら必ず残るもの」だけを使う。
+ * `posterKeys` は尺が取れない動画では正常に空となるため根拠にしない。
+ */
+const isIngested = (asset: MediaAsset): boolean => {
+  // video は proxy とサムネイルを必ず作る（derivatives.ts の表を参照）。
+  if (asset.kind === 'video') return asset.proxyKey !== null && asset.thumbnailKey !== null
+  if (asset.kind === 'image') return asset.thumbnailKey !== null
+  // audio / font / lut / other は派生物を作らないので probe だけが成果物になる。
+  return asset.probe !== null
 }
 
 /** 原本の拡張子は storageKey から取る（`media/{ws}/{id}/original.mp4`）。 */
@@ -159,9 +180,12 @@ export const processMediaJob = async (
   }
 
   // 冪等性の要。取り込み済みの素材を再処理して ffmpeg を無駄に回さない。
-  if (asset.probe !== null) {
-    deps.logger.debug({ mediaAssetId }, '取り込み済みの MediaAsset なので何もしません')
-    return { state: 'skipped', reason: 'probe_present' }
+  if (isIngested(asset)) {
+    deps.logger.debug(
+      { mediaAssetId, kind: asset.kind },
+      '取り込み済みの MediaAsset なので何もしません',
+    )
+    return { state: 'skipped', reason: 'already_ingested' }
   }
 
   const posterCount = PosterCount.parse(deps.posterCount ?? DEFAULT_POSTER_COUNT)

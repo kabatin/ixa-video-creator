@@ -11,6 +11,8 @@ import {
   type MediaAsset,
   type MediaAssetId,
   type MediaKind,
+  type MediaOrigin,
+  type MediaProbe,
 } from '@ixa/domain'
 import { mediaKey, type ObjectStorage } from '@ixa/storage'
 import pino from 'pino'
@@ -79,6 +81,14 @@ export type SeedAssetInput = {
   readonly body: Uint8Array
   /** ストレージへ実体を置かないことで「原本が取れない」失敗を再現する。 */
   readonly skipUpload?: boolean
+  /**
+   * 取り込みパイプラインを通さずに probe が入っている状態を作る。
+   * render は出力 MediaAsset を作る時点で尺だけの probe を書き込むため、
+   * その状態を再現して冪等判定を検証するのに使う。
+   */
+  readonly probe?: MediaProbe
+  /** 既定は upload。render 由来の素材を再現したいときに指定する。 */
+  readonly origin?: MediaOrigin
 }
 
 /**
@@ -107,7 +117,8 @@ export const seedAsset = async (
     mimeType: input.mimeType,
     bytes: input.body.byteLength,
     checksumSha256: createHash('sha256').update(input.body).digest('hex'),
-    origin: { type: 'upload', uploadedBy: 'test' },
+    probe: input.probe ?? null,
+    origin: input.origin ?? { type: 'upload', uploadedBy: 'test' },
     tags: [],
   })
 }

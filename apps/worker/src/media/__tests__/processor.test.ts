@@ -144,7 +144,7 @@ describe('processMediaJob', () => {
     await expect(storage.exists(proxyKey(asset.workspaceId, asset.id))).resolves.toBe(false)
   }, FFMPEG_TIMEOUT_MS)
 
-  it('probe が入っている MediaAsset は skipped になる（冪等）', async () => {
+  it('取り込み済みの MediaAsset は skipped になる（冪等）', async () => {
     const asset = await seedAsset(repo, storage, {
       kind: 'video',
       ext: 'mp4',
@@ -156,7 +156,7 @@ describe('processMediaJob', () => {
 
     const outcome = await processMediaJob(deps(), { mediaAssetId: asset.id })
 
-    expect(outcome).toEqual({ state: 'skipped', reason: 'probe_present' })
+    expect(outcome).toEqual({ state: 'skipped', reason: 'already_ingested' })
     // 2 回目は ffmpeg も update も走らない
     expect(repo.updateCount()).toBe(afterFirst)
   }, FFMPEG_TIMEOUT_MS)
