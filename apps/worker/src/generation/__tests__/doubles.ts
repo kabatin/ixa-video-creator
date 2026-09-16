@@ -18,6 +18,7 @@ import {
   GenerationJobId as GenerationJobIdSchema,
   MediaAsset as MediaAssetSchema,
   MediaAssetId as MediaAssetIdSchema,
+  type MediaAssetId,
   ModelId as ModelIdSchema,
   Project as ProjectSchema,
   ProjectId as ProjectIdSchema,
@@ -44,7 +45,7 @@ import type {
   VideoProvider,
 } from '@ixa/provider-core'
 import pino from 'pino'
-import type { GenerationJobData, PollScheduler } from '../processor.js'
+import type { GenerationJobData, MediaJobQueue, PollScheduler } from '../processor.js'
 
 /**
  * worker のテスト用ダブル一式。
@@ -163,6 +164,22 @@ export const createRecordingScheduler = (): RecordingScheduler => {
     scheduled: () => scheduled,
     reschedule: (data, delayMs) => {
       scheduled.push({ data, delayMs })
+      return Promise.resolve()
+    },
+  }
+}
+
+/** 投入された MediaAsset ID を記録するだけの media キュー。Redis には接続しない。 */
+export type RecordingMediaQueue = MediaJobQueue & {
+  readonly enqueued: () => readonly MediaAssetId[]
+}
+
+export const createRecordingMediaQueue = (): RecordingMediaQueue => {
+  const enqueued: MediaAssetId[] = []
+  return {
+    enqueued: () => enqueued,
+    enqueue: (mediaAssetId) => {
+      enqueued.push(mediaAssetId)
       return Promise.resolve()
     },
   }

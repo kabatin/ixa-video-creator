@@ -14,9 +14,9 @@ import {
 } from '../processor.js'
 import { rebuildSpec } from '../spec.js'
 import {
-  aCharacterBundle, aProject, aShot, contextWith, createRecordingScheduler, createTestProvider,
-  inMemoryJobs, inMemoryMediaAssets, inMemoryProjects, inMemoryShots, inMemoryTakes, silentLogger,
-  testModel,
+  aCharacterBundle, aProject, aShot, contextWith, createRecordingMediaQueue,
+  createRecordingScheduler, createTestProvider, inMemoryJobs, inMemoryMediaAssets,
+  inMemoryProjects, inMemoryShots, inMemoryTakes, silentLogger, testModel,
 } from './doubles.js'
 
 const MODEL = testModel()
@@ -60,6 +60,7 @@ const buildFixture = async (
   const takes = inMemoryTakes()
   const mediaAssets = inMemoryMediaAssets()
   const scheduler = createRecordingScheduler()
+  const mediaQueue = createRecordingMediaQueue()
 
   const deps: GenerationProcessorDeps = {
     generationJobs: jobs,
@@ -71,11 +72,14 @@ const buildFixture = async (
     registry: createProviderRegistry([createTestProvider([MODEL], statuses)]),
     context,
     scheduler,
+    mediaQueue,
     logger: silentLogger,
     download: fakeDownload,
   }
 
-  return { deps, job, shot, project, jobs, shots, takes, mediaAssets, scheduler, specHash }
+  return {
+    deps, job, shot, project, jobs, shots, takes, mediaAssets, scheduler, mediaQueue, specHash,
+  }
 }
 
 /** 投入 → 完了まで 2 回走らせる。 */
@@ -125,6 +129,32 @@ describe('processGenerationJob', () => {
 
     expect(f.shots.snapshot()[0]?.status).toBe('review')
     expect(f.jobs.snapshot()[0]?.status).toBe('succeeded')
+
+    /**
+     * 生成物も media キューへ回す。ここを通さないと probe もサムネイルも
+     * 最終フレームも作られず、次の Shot の連続性参照が黙って欠ける。
+     */
+    expect(f.mediaQueue.enqueued()).toEqual([take?.mediaAssetId])
+  })
+
+  it('media キューへ入れられなくても Take は確定させる', async () => {
+    const f = await buildFixture([SUCCEEDED])
+    const failing = {
+      ...f.deps,
+      mediaQueue: { enqueue: () => Promise.reject(new Error('redis に接続できません')) },
+    }
+
+    await processGenerationJob(failing, { generationJobId: f.job.id })
+    const second = await processGenerationJob(failing, { generationJobId: f.job.id })
+
+    /**
+     * 生成は成功していて課金も済んでいる。キューの不調でそれを捨てない。
+     * 失われるのは後から作り直せる派生物（probe / サムネイル / 最終フレーム）だけ。
+     */
+    expect(second.state).toBe('succeeded')
+    expect(f.takes.snapshot()).toHaveLength(1)
+    expect(f.jobs.snapshot()[0]?.status).toBe('succeeded')
+    expect(f.shots.snapshot()[0]?.status).toBe('review')
   })
 
   it('同じジョブが 2 回走っても Take を二重に作らない（冪等）', async () => {

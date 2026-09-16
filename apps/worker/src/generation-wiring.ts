@@ -59,6 +59,11 @@ export const createGenerationWiring = (
   })
 
   const queue = new Queue(QUEUE_NAMES.generation, { connection })
+  /**
+   * 生成物を media キューへ回すための口。probe とサムネイル、そして
+   * 次の Shot が使う最終フレームはこの経路でしか作られない。
+   */
+  const mediaQueue = new Queue(QUEUE_NAMES.media, { connection })
 
   /** ポーリングの再スケジュールは BullMQ の delay で行う。repeatable job は使わない。 */
   const scheduler: PollScheduler = {
@@ -95,6 +100,11 @@ export const createGenerationWiring = (
       mediaAssets: createMediaAssetRepository(db),
     }),
     scheduler,
+    mediaQueue: {
+      enqueue: async (mediaAssetId) => {
+        await mediaQueue.add('process', { mediaAssetId })
+      },
+    },
     logger,
   }
 
@@ -124,6 +134,7 @@ export const createGenerationWiring = (
     queue,
     close: async () => {
       await queue.close()
+      await mediaQueue.close()
       await db.$client.end()
     },
   }

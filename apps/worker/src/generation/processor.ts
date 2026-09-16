@@ -48,6 +48,17 @@ export type PollScheduler = {
   reschedule(data: GenerationJobData, delayMs: number): Promise<void>
 }
 
+/**
+ * 生成した MediaAsset を media キューへ回す口。
+ *
+ * **生成物にも probe と最終フレームが要る。** 最終フレームは次の Shot の
+ * 連続性参照（`previousShotLastFrame`）そのものなので、ここを通さないと
+ * 参照解決が黙って 1 つ欠けたまま動き続ける。
+ */
+export type MediaJobQueue = {
+  enqueue(mediaAssetId: MediaAssetId): Promise<void>
+}
+
 export type GenerationProcessorDeps = RecordTakeDeps & {
   readonly generationJobs: GenerationJobRepository
   readonly shots: ShotRepository
@@ -58,6 +69,7 @@ export type GenerationProcessorDeps = RecordTakeDeps & {
   readonly registry: ProviderRegistry
   readonly context: GenerationContextSource
   readonly scheduler: PollScheduler
+  readonly mediaQueue: MediaJobQueue
   readonly logger: Logger
   readonly now?: () => Date
 }
@@ -162,6 +174,25 @@ const complete = async (
     raw: status.raw,
     generationTimeSec: Math.max(0, (now.getTime() - startedAt.getTime()) / 1000),
   })
+
+  /**
+   * **投入の失敗でジョブを落とさない。**
+   * ここに来た時点で生成は成功し、課金も済み、Take も確定している。
+   * Redis の一時的な不調でそれを failed にすると、払った金額を捨てたうえ
+   * Shot が generating のまま取り残される。失われるのは probe・サムネイル・
+   * 最終フレームだけで、media ジョブは冪等なので後から流し直せる。
+   *
+   * ただし黙って落とさない。最終フレームが無いと次の Shot の連続性参照が
+   * 欠けるため、流し直す対象が分かるよう mediaAssetId ごと error で残す。
+   */
+  try {
+    await deps.mediaQueue.enqueue(take.mediaAssetId)
+  } catch (error) {
+    deps.logger.error(
+      { jobId: job.id, takeId: take.id, mediaAssetId: take.mediaAssetId, err: error },
+      'media キューへ投入できませんでした。probe と最終フレームが作られていません',
+    )
+  }
 
   await deps.shots.updateStatus(shot.id, 'review')
   await deps.generationJobs.update(job.id, { status: 'succeeded', finishedAt: now })
