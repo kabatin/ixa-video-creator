@@ -1,52 +1,27 @@
-import { OpenAPIHono } from '@hono/zod-openapi'
 import {
-  CharacterId as CharacterIdSchema,
+  CharacterId as CharacterIdSchema, LocationId as LocationIdSchema,
   MediaAssetId as MediaAssetIdSchema,
-  ProjectId as ProjectIdSchema,
-  TakeId as TakeIdSchema,
-  WorkspaceId as WorkspaceIdSchema,
-  newId,
-  resolveReferences,
-  type Character,
-  type CharacterLook,
-  type GenerationContextSource,
-  type IdentityImageRole,
-  type ReferenceRole,
-  type Shot,
+  ProjectId as ProjectIdSchema, TakeId as TakeIdSchema, WorkspaceId as WorkspaceIdSchema,
+  newId, resolveReferences,
+  type Character, type CharacterLook, type GenerationContextSource,
+  type IdentityImageRole, type Location, type ReferenceRole, type Shot,
 } from '@ixa/domain'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { registerErrorHandlers, validationHook } from '../errors.js'
 import {
-  createGenerationContextSource,
-  GenerationContextError,
-  type GenerationContextDeps,
-} from '@ixa/generation'
-import { createLogger } from '../logger.js'
-import { shotCharacterRoutes, type ShotCharacterRoutesDeps } from '../routes/characters.js'
-import { aShot, aTake } from './fixtures.js'
+  createGenerationContextSource, GenerationContextError, type GenerationContextDeps,
+} from '../context.js'
 import {
-  createInMemoryCharacterLookRepository,
-  createInMemoryCharacterRepository,
-  type InMemoryCharacterLookRepository,
-  type InMemoryCharacterRepository,
-} from './in-memory-character-repositories.js'
-import { createInMemoryLocationRepository } from './in-memory-library-repositories.js'
-import {
-  createInMemoryMediaAssetRepository,
-  type InMemoryMediaAssetRepository,
-} from './in-memory-media-asset-repository.js'
-import { createInMemoryShotRepository } from './in-memory-shot-repository.js'
-import {
-  countingCharacterRepository,
-  countingLookRepository,
-  countingShotCharacterRepository,
+  aShot, aTake,
+  countingCharacterRepository, countingLookRepository, countingShotCharacterRepository,
   createCallRecorder,
-  createInMemoryShotCharacterRepository,
-  createInMemoryShotReferenceRepository,
-  type InMemoryShotCharacterRepository,
+  createInMemoryCharacterLookRepository, createInMemoryCharacterRepository,
+  createInMemoryLocationRepository, createInMemoryMediaAssetRepository,
+  createInMemoryShotCharacterRepository, createInMemoryShotReferenceRepository,
+  createInMemoryShotRepository, createInMemoryTakeRepository,
+  type InMemoryCharacterLookRepository, type InMemoryCharacterRepository,
+  type InMemoryMediaAssetRepository, type InMemoryShotCharacterRepository,
   type InMemoryShotReferenceRepository,
-} from '@ixa/generation/testing'
-import { createInMemoryTakeRepository } from './in-memory-take-repository.js'
+} from '../testing.js'
 
 /**
  * GenerationContextSource の実実装（ARCHITECTURE.md §8）。実 DB には接続しない。
@@ -292,8 +267,44 @@ describe('manualReferencesForShot', () => {
 })
 
 describe('locationsForShot', () => {
-  it('Shot とロケーションの紐づけ表が無いため空を返す', async () => {
+  /** Shot に場所を割り当て、その Shot だけを持つ文脈を作る。 */
+  const contextWithLocation = async (): Promise<{
+    readonly context: GenerationContextSource
+    readonly location: Location
+    readonly located: Shot
+  }> => {
+    const locations = createInMemoryLocationRepository()
+    const location = await locations.create({
+      workspaceId,
+      name: 'iXA CUP 会場',
+      description: '決勝の舞台',
+      referenceAssetIds: [newId(MediaAssetIdSchema)],
+    })
+    const located = aShot(projectId, { locationId: location.id })
+    return {
+      context: buildContext({ locations, shots: createInMemoryShotRepository([located]) }),
+      location,
+      located,
+    }
+  }
+
+  it('場所が未設定なら空を返す', async () => {
     await expect(buildContext().locationsForShot(shot.id)).resolves.toEqual([])
+  })
+
+  it('割り当てられた Location を 1 件だけ返す（ADR-0015）', async () => {
+    const { context, location, located } = await contextWithLocation()
+
+    // ひと続きのカットは 1 つの場所で起きる。配列は Port の形に合わせているだけ。
+    await expect(context.locationsForShot(located.id)).resolves.toEqual([location])
+  })
+
+  it('存在しない Location を指した Shot は黙って落とさず例外にする', async () => {
+    const located = aShot(projectId, { locationId: newId(LocationIdSchema) })
+    const context = buildContext({ shots: createInMemoryShotRepository([located]) })
+
+    // 参照を 1 つ落とすと背景が静かに変わり、動画を見るまで気づけない。
+    await expect(context.locationsForShot(located.id)).rejects.toThrow(GenerationContextError)
   })
 })
 
@@ -418,124 +429,5 @@ describe('resolveReferences との統合（ARCHITECTURE.md §8）', () => {
     expect(resolved).toHaveLength(1)
     expect(resolved[0]?.origin).toBe('canonical:takepi/STAGE_A')
     expect(resolved[0]?.mediaAssetId).toBe(look.canonicalFrameAssetId)
-  })
-})
-
-describe('PUT /shots/{shotId}/characters', () => {
-  const buildApp = (deps: ShotCharacterRoutesDeps) => {
-    const app = new OpenAPIHono({ defaultHook: validationHook })
-    app.route('/', shotCharacterRoutes(deps))
-    registerErrorHandlers(app, createLogger('silent'))
-    return app
-  }
-
-  type ErrorBody = { success: false; error: string; fields?: Record<string, string[]> }
-  type ListBody<T> = { success: true; data: T[]; meta: { total: number } }
-  type ShotCharacterBody = { characterId: string; lookId: string; prominence: string; order: number }
-
-  let app: ReturnType<typeof buildApp>
-
-  beforeEach(() => {
-    app = buildApp({
-      shots: createInMemoryShotRepository([shot]),
-      shotCharacters,
-      characters,
-      looks,
-    })
-  })
-
-  const send = (method: string, path: string, payload?: unknown) =>
-    app.request(path, {
-      method,
-      headers: { 'content-type': 'application/json' },
-      body: payload === undefined ? undefined : JSON.stringify(payload),
-    })
-
-  const json = async <T>(res: Response): Promise<T> => (await res.json()) as T
-
-  it('一括置き換えに成功し、一覧で読み戻せる', async () => {
-    const lead = await registerCharacter('takepi')
-    const support = await registerCharacter('kana')
-
-    const put = await send('PUT', `/shots/${shot.id}/characters`, {
-      entries: [
-        { characterId: lead.character.id, lookId: lead.look.id, prominence: 'primary', order: 0 },
-        {
-          characterId: support.character.id, lookId: support.look.id,
-          prominence: 'background', order: 1,
-        },
-      ],
-    })
-    expect(put.status).toBe(200)
-
-    const list = await json<ListBody<ShotCharacterBody>>(
-      await send('GET', `/shots/${shot.id}/characters`),
-    )
-    expect(list.meta.total).toBe(2)
-    expect(list.data[0]?.characterId).toBe(lead.character.id)
-  })
-
-  it('他 Character の Look を指定したら 422', async () => {
-    const owner = await registerCharacter('takepi')
-    const other = await registerCharacter('kana')
-
-    const res = await send('PUT', `/shots/${shot.id}/characters`, {
-      entries: [
-        { characterId: owner.character.id, lookId: other.look.id, prominence: 'primary', order: 0 },
-      ],
-    })
-
-    expect(res.status).toBe(422)
-    expect((await json<ErrorBody>(res)).fields?.lookId).toBeDefined()
-    expect(shotCharacters.snapshot()).toHaveLength(0)
-  })
-
-  it('同じ characterId が重複していたら 422', async () => {
-    const { character, look } = await registerCharacter('takepi')
-
-    const res = await send('PUT', `/shots/${shot.id}/characters`, {
-      entries: [
-        { characterId: character.id, lookId: look.id, prominence: 'primary', order: 0 },
-        { characterId: character.id, lookId: look.id, prominence: 'secondary', order: 1 },
-      ],
-    })
-
-    expect(res.status).toBe(422)
-    expect((await json<ErrorBody>(res)).fields?.characterId).toBeDefined()
-  })
-
-  it('存在しない Character を指定したら 422', async () => {
-    const { look } = await registerCharacter('takepi')
-
-    const res = await send('PUT', `/shots/${shot.id}/characters`, {
-      entries: [
-        {
-          characterId: newId(CharacterIdSchema), lookId: look.id,
-          prominence: 'primary', order: 0,
-        },
-      ],
-    })
-
-    expect(res.status).toBe(422)
-    expect((await json<ErrorBody>(res)).fields?.characterId).toBeDefined()
-  })
-
-  it('存在しない Shot は 404', async () => {
-    const res = await send('PUT', `/shots/${aShot(projectId).id}/characters`, { entries: [] })
-    expect(res.status).toBe(404)
-  })
-
-  it('DELETE で 1 人だけ外せる', async () => {
-    const lead = await registerCharacter('takepi')
-    const support = await registerCharacter('kana')
-    await link(lead.character, lead.look, 'primary', 0)
-    await link(support.character, support.look, 'secondary', 1)
-
-    const res = await send('DELETE', `/shots/${shot.id}/characters/${lead.character.id}`)
-
-    expect(res.status).toBe(204)
-    expect(shotCharacters.snapshot().map((entry) => entry.characterId)).toEqual([
-      support.character.id,
-    ])
   })
 })

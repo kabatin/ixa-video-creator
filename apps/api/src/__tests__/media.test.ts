@@ -18,7 +18,7 @@ import {
 import {
   createInMemoryMediaAssetRepository,
   type InMemoryMediaAssetRepository,
-} from './in-memory-media-asset-repository.js'
+} from '@ixa/generation/testing'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { baseAppDeps } from './app-deps.js'
 

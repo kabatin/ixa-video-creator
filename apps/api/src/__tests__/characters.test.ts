@@ -21,10 +21,10 @@ import {
 import {
   createInMemoryCharacterLookRepository,
   createInMemoryCharacterRepository,
+  createInMemoryMediaAssetRepository,
   type InMemoryCharacterLookRepository,
   type InMemoryCharacterRepository,
-} from './in-memory-character-repositories.js'
-import { createInMemoryMediaAssetRepository } from './in-memory-media-asset-repository.js'
+} from '@ixa/generation/testing'
 
 type SuccessBody<T> = { success: true; data: T }
 type ListBody<T> = { success: true; data: T[]; meta: { total: number } }

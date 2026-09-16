@@ -2,11 +2,14 @@ import type { MediaAsset, Project, Shot, Take, TimelineClip } from '@ixa/domain'
 import { createMemoryStorage } from '@ixa/storage'
 import type { RenderQueue, RenderRoutesDeps } from '../routes/renders.js'
 import type { TimelineRoutesDeps } from '../routes/timeline.js'
-import { aShot, aTake } from './fixtures.js'
-import { createInMemoryMediaAssetRepository } from './in-memory-media-asset-repository.js'
+import {
+  aShot,
+  aTake,
+  createInMemoryMediaAssetRepository,
+  createInMemoryShotRepository,
+  createInMemoryTakeRepository,
+} from '@ixa/generation/testing'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
-import { createInMemoryShotRepository } from './in-memory-shot-repository.js'
-import { createInMemoryTakeRepository } from './in-memory-take-repository.js'
 import {
   aMediaAsset,
   createInMemoryMusicTrackRepository,

@@ -77,6 +77,7 @@ export const aShot = (project: Project, overrides: Partial<Shot> = {}): Shot =>
     id: newId(ShotIdSchema),
     projectId: project.id,
     sequenceId: null,
+    locationId: null,
     order: 1000,
     code: 'shot_001',
     startSec: 0,

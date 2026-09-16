@@ -6,7 +6,7 @@ import { createLogger } from '../logger.js'
 import type { ProjectResponse } from '../routes/projects.js'
 import { createMemoryStorage } from '@ixa/storage'
 import { baseAppDeps } from './app-deps.js'
-import { createInMemoryMediaAssetRepository } from './in-memory-media-asset-repository.js'
+import { createInMemoryMediaAssetRepository } from '@ixa/generation/testing'
 import {
   createFailingProjectRepository,
   createInMemoryProjectRepository,

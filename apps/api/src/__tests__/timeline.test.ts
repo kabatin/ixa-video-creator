@@ -8,7 +8,8 @@ import {
 } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import { timelineRoutes, type TimelineRoutesDeps } from '../routes/timeline.js'
-import { aProject, aShot } from './fixtures.js'
+import { aProject } from './fixtures.js'
+import { aShot } from '@ixa/generation/testing'
 import { aShotWithTake, timelineDeps } from './timeline-deps.js'
 import {
   aMediaAsset,

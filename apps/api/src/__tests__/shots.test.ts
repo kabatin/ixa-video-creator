@@ -15,11 +15,10 @@ import { describe, expect, it } from 'vitest'
 import { createApp, type AppDeps } from '../app.js'
 import { MAX_TAKES_PER_REQUEST, type ShotResponse } from '../routes/shots.js'
 import { baseAppDeps, createRecordingQueue, type RecordingQueue } from './app-deps.js'
-import { aCharacterBundle, aProject, aShot, aTake, createTestContextSource } from './fixtures.js'
+import { aCharacterBundle, aProject, createTestContextSource } from './fixtures.js'
+import { aShot, aTake, createInMemoryShotRepository, createInMemoryTakeRepository } from '@ixa/generation/testing'
 import { createInMemoryGenerationJobRepository } from './in-memory-generation-job-repository.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
-import { createInMemoryShotRepository } from './in-memory-shot-repository.js'
-import { createInMemoryTakeRepository } from './in-memory-take-repository.js'
 import { createTestVideoProvider, testModel } from './test-video-provider.js'
 
 type Ok<T> = { success: true; data: T }

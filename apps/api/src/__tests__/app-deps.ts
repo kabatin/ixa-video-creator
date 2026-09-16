@@ -5,10 +5,17 @@ import type { AppDeps } from '../app.js'
 import { createLogger } from '../logger.js'
 import type { GenerationQueue } from '../routes/shots.js'
 import { createInMemoryGenerationJobRepository } from './in-memory-generation-job-repository.js'
-import { createInMemoryMediaAssetRepository } from './in-memory-media-asset-repository.js'
+import {
+  createInMemoryBrandAssetRepository,
+  createInMemoryCharacterLookRepository,
+  createInMemoryCharacterRepository,
+  createInMemoryLocationRepository,
+  createInMemoryMediaAssetRepository,
+  createInMemoryShotCharacterRepository,
+  createInMemoryShotRepository,
+  createInMemoryTakeRepository,
+} from '@ixa/generation/testing'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
-import { createInMemoryShotRepository } from './in-memory-shot-repository.js'
-import { createInMemoryTakeRepository } from './in-memory-take-repository.js'
 import {
   createInMemoryMusicTrackRepository,
   createInMemoryRenderJobRepository,
@@ -16,15 +23,6 @@ import {
   createInMemoryTransitionRepository,
 } from './in-memory-timeline-repositories.js'
 import type { RenderQueue } from '../routes/renders.js'
-import {
-  createInMemoryCharacterLookRepository,
-  createInMemoryCharacterRepository,
-} from './in-memory-character-repositories.js'
-import {
-  createInMemoryBrandAssetRepository,
-  createInMemoryLocationRepository,
-} from './in-memory-library-repositories.js'
-import { createInMemoryShotCharacterRepository } from '@ixa/generation/testing'
 import type { RenderJobId } from '@ixa/domain'
 
 /** 投入されたジョブ ID を記録するだけのキュー。Redis には接続しない。 */

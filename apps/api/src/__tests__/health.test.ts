@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createApp } from '../app.js'
 import { createLogger } from '../logger.js'
 import { createMemoryStorage } from '@ixa/storage'
-import { createInMemoryMediaAssetRepository } from './in-memory-media-asset-repository.js'
+import { createInMemoryMediaAssetRepository } from '@ixa/generation/testing'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { baseAppDeps } from './app-deps.js'
 

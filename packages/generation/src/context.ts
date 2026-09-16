@@ -31,10 +31,6 @@ export type GenerationContextDeps = {
   readonly shotCharacters: ShotCharacterRepository
   readonly characters: CharacterRepository
   readonly looks: CharacterLookRepository
-  /**
-   * Shot とロケーションの紐づけ表がまだ無いため、Phase 2 では参照しない。
-   * `locationsForShot` のコメントを参照。配線を先に通しておくために受け取る。
-   */
   readonly locations: LocationRepository
   readonly shotReferences: ShotReferenceRepository
   readonly shots: ShotRepository
@@ -120,17 +116,24 @@ export const createGenerationContextSource = (
     },
 
     /**
-     * **Phase 2 では常に空を返す。**
+     * ひと続きのカットは 1 つの場所で起きるため、返るのは 0 件か 1 件（ADR-0015）。
+     * Port が配列を返すのは `resolveReferences` の入力に合わせているだけで、
+     * 複数件を表現できることを意味しない。
      *
-     * Shot とロケーションを結ぶ表が存在しない（packages/db/src/schema/shot.ts に
-     * shot_locations は無い）。`shot_references` の derived_location から辿ることも
-     * できない。derived_* は ReferenceResolver が生成のたびに組み立てる派生値であり、
-     * 保存されている保証がないため、そこを正にすると参照が消えたり二重に入ったりする。
-     *
-     * 紐づけ表の追加は Architect の判断（AGENTS.md §1）。ここで勝手に作らない。
+     * 実在しないロケーションを指していたら黙って落とさず例外にする。
+     * 参照を 1 つ落とすと背景が静かに変わり、出来上がった動画を見るまで気づけない。
      */
-    locationsForShot(): Promise<readonly Location[]> {
-      return Promise.resolve([])
+    async locationsForShot(shotId: ShotId): Promise<readonly Location[]> {
+      const shot = await deps.shots.findById(shotId)
+      if (shot === null || shot.locationId === null) return []
+
+      const location = await deps.locations.findById(shot.locationId)
+      if (location === null) {
+        throw new GenerationContextError(
+          `Shot ${shotId} が存在しない Location ${shot.locationId} を参照しています`,
+        )
+      }
+      return [location]
     },
 
     async manualReferencesForShot(shotId: ShotId): Promise<readonly ShotReference[]> {

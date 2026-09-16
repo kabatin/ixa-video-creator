@@ -16,10 +16,10 @@ import { assetRoutes, type AssetRoutesDeps } from '../routes/assets.js'
 import {
   createInMemoryBrandAssetRepository,
   createInMemoryLocationRepository,
+  createInMemoryMediaAssetRepository,
   type InMemoryBrandAssetRepository,
   type InMemoryLocationRepository,
-} from './in-memory-library-repositories.js'
-import { createInMemoryMediaAssetRepository } from './in-memory-media-asset-repository.js'
+} from '@ixa/generation/testing'
 
 type SuccessBody<T> = { success: true; data: T }
 type ListBody<T> = { success: true; data: T[]; meta: { total: number } }
