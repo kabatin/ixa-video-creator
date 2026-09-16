@@ -1,4 +1,5 @@
 import {
+  LocationId as LocationIdSchema,
   ReferenceRole as ReferenceRoleSchema,
   TakeId as TakeIdSchema,
   compileSpec,
@@ -363,6 +364,25 @@ describe('Shot CRUD', () => {
     expect(json.data.durationSec).toBe(7.5)
     expect(json.data.sourceInSec).toBe(0.15)
     expect(json.data.description).toBe(f.shot.description)
+  })
+
+  it('PATCH でロケーションを付け外しできる（ADR-0015）', async () => {
+    const f = buildFixture()
+    const locationId = newId(LocationIdSchema)
+
+    const patch = (body: unknown) =>
+      f.app.request(`/shots/${f.shot.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+    const assigned = (await (await patch({ locationId })).json()) as Ok<ShotResponse>
+    expect(assigned.data.locationId).toBe(locationId)
+
+    // null を送れば外せる。未指定との区別がつかないと場所を消せなくなる。
+    const cleared = (await (await patch({ locationId: null })).json()) as Ok<ShotResponse>
+    expect(cleared.data.locationId).toBeNull()
   })
 })
 
