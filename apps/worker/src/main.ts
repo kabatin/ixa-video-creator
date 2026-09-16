@@ -36,7 +36,7 @@ const createWorkers = (
 
     const worker: NoopWorker = new Worker<NoopJobData, NoopJobResult>(
       config.name,
-      handler as (job: { data: NoopJobData }) => Promise<NoopJobResult>,
+      handler,
       { connection, concurrency: config.concurrency },
     )
 
