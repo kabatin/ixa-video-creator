@@ -163,12 +163,18 @@ importers:
       '@ixa/provider-core':
         specifier: workspace:*
         version: link:../../packages/providers/core
+      '@ixa/provider-llm':
+        specifier: workspace:*
+        version: link:../../packages/providers/llm
       '@ixa/provider-video':
         specifier: workspace:*
         version: link:../../packages/providers/video
       '@ixa/render':
         specifier: workspace:*
         version: link:../../packages/render
+      '@ixa/review':
+        specifier: workspace:*
+        version: link:../../packages/review
       '@ixa/storage':
         specifier: workspace:*
         version: link:../../packages/storage

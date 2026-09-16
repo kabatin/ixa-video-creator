@@ -64,6 +64,14 @@ export type RegenerationJobQueue = {
   enqueue(takeId: TakeId): Promise<void>
 }
 
+/**
+ * ブランド色の要求を Project ごとに引く口。
+ *
+ * **起動時に 1 度だけ解決してはいけない。** 色は Project（の Workspace）ごとに違うため、
+ * 固定値にすると別の Project のブランドで判定してしまう。
+ */
+export type BrandColorLookup = (projectId: ProjectId) => Promise<readonly BrandColorTarget[]>
+
 export type ReviewProcessorDeps = {
   readonly takes: Pick<TakeRepository, 'findById' | 'updateReview'>
   readonly shots: Pick<ShotRepository, 'findById'>
@@ -88,7 +96,7 @@ export type ReviewProcessorDeps = {
    * ブランド色の要求。既定は空で、そのとき brand レビュアは skip する。
    * 色の定義（hex）は運用で変わるため、ここへ注入する。
    */
-  readonly brandColors?: readonly BrandColorTarget[]
+  readonly brandColors?: BrandColorLookup
   /** 測定器。既定は ffmpeg 実装。テストは実バイナリを起動せずに差し替える。 */
   readonly measurer?: TakeMeasurer
 }
@@ -226,7 +234,7 @@ export const processReviewJob = async (
       project,
       asset,
       musicAnalysis: await deps.musicAnalyses.findByProject(project.id),
-      brandColors: deps.brandColors ?? [],
+      brandColors: deps.brandColors === undefined ? [] : await deps.brandColors(project.id),
     })
 
     const deterministicFindings = deps.deterministicReviewers.flatMap((review) =>

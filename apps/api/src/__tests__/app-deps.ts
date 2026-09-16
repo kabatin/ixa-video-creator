@@ -21,6 +21,9 @@ import {
   createInMemorySequenceRepository,
 } from './in-memory-script-repositories.js'
 import { createInMemoryMusicAnalysisRepository } from './in-memory-music-analysis-repository.js'
+import { createInMemoryReviewRepository } from './in-memory-review-repository.js'
+import type { ReviewQueue } from '../routes/reviews.js'
+import type { TakeId } from '@ixa/domain'
 import type { AnalysisQueue } from '../routes/music.js'
 import type { MusicTrackId } from '@ixa/domain'
 import {
@@ -84,6 +87,22 @@ export const createRecordingAnalysisQueue = (): RecordingAnalysisQueue => {
   }
 }
 
+/** 投入された Take ID を記録するだけのキュー。 */
+export type RecordingReviewQueue = ReviewQueue & {
+  readonly enqueued: () => readonly TakeId[]
+}
+
+export const createRecordingReviewQueue = (): RecordingReviewQueue => {
+  const enqueued: TakeId[] = []
+  return {
+    enqueued: () => enqueued,
+    enqueue: (takeId) => {
+      enqueued.push(takeId)
+      return Promise.resolve()
+    },
+  }
+}
+
 export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps => ({
   projects: createInMemoryProjectRepository(),
   mediaAssets: createInMemoryMediaAssetRepository(),
@@ -107,6 +126,8 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   sequences: createInMemorySequenceRepository(),
   musicAnalyses: createInMemoryMusicAnalysisRepository(),
   analysisQueue: createRecordingAnalysisQueue(),
+  reviews: createInMemoryReviewRepository(),
+  reviewQueue: createRecordingReviewQueue(),
   storage: createMemoryStorage(),
   // テストは同一オリジン想定なので CORS を無効にする
   corsOrigins: [],

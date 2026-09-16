@@ -22,10 +22,12 @@ import { scriptRoutes } from './routes/scripts.js'
 import { sequenceRoutes } from './routes/sequences.js'
 import { musicRoutes, type AnalysisQueue } from './routes/music.js'
 import { storyboardRoutes } from './routes/storyboard.js'
+import { reviewRoutes, type ReviewQueue } from './routes/reviews.js'
 import type {
   BrandAssetRepository, CharacterLookRepository, CharacterRepository, LocationRepository,
-  MusicAnalysisRepository, MusicTrackRepository, RenderJobRepository, ScriptRepository,
-  SequenceRepository, ShotCharacterRepository, TimelineClipRepository, TransitionRepository,
+  MusicAnalysisRepository, MusicTrackRepository, RenderJobRepository, ReviewRepository,
+  ScriptRepository, SequenceRepository, ShotCharacterRepository, TimelineClipRepository,
+  TransitionRepository,
 } from '@ixa/db'
 
 /**
@@ -55,6 +57,8 @@ export type AppDeps = {
   sequences: SequenceRepository
   musicAnalyses: MusicAnalysisRepository
   analysisQueue: AnalysisQueue
+  reviews: ReviewRepository
+  reviewQueue: ReviewQueue
   /** media キューへの投入。未配線なら登録のみ行い queued: false を返す。 */
   mediaIngest?: MediaIngestDeps
   storage: ObjectStorage
@@ -158,6 +162,11 @@ export const createApp = (deps: AppDeps) => {
       sequences: deps.sequences,
       projects,
     }),
+  )
+
+  app.route(
+    '/',
+    reviewRoutes({ takes: deps.takes, reviews: deps.reviews, queue: deps.reviewQueue }),
   )
 
   app.route('/', timelineRoutes(timelineDeps))

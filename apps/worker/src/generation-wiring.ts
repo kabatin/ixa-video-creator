@@ -28,6 +28,7 @@ import type { AnalysisProcessorDeps } from './analysis/index.js'
 import type { GenerationProcessorDeps, PollScheduler } from './generation/index.js'
 import type { MediaProcessorDeps } from './media/index.js'
 import type { RenderProcessorDeps } from './render/index.js'
+import { createReviewWiring, type ReviewWiring } from './review-wiring.js'
 import { QUEUE_NAMES } from './queues.js'
 
 /**
@@ -42,6 +43,8 @@ export type GenerationWiring = {
   readonly media: MediaProcessorDeps
   readonly render: RenderProcessorDeps
   readonly analysis: AnalysisProcessorDeps
+  readonly review: ReviewWiring['review']
+  readonly regeneration: ReviewWiring['regeneration']
   readonly queue: Queue
   close(): Promise<void>
 }
@@ -147,15 +150,36 @@ export const createGenerationWiring = (
     logger,
   }
 
+  /**
+   * レビューと再生成。review が fail を出したら regeneration キューへ回し、
+   * 再生成が通ったら generation キューへ戻る。**判定はしない。積むだけ。**
+   */
+  const regenerationQueue = new Queue(QUEUE_NAMES.regeneration, { connection })
+  const reviewWiring = createReviewWiring(db, storage, logger, {
+    regeneration: {
+      enqueue: async (takeId) => {
+        await regenerationQueue.add('regenerate', { takeId })
+      },
+    },
+    generation: {
+      enqueue: async (request) => {
+        await queue.add('generate', { regeneration: request })
+      },
+    },
+  })
+
   return {
     deps,
     media,
     render,
     analysis,
+    review: reviewWiring.review,
+    regeneration: reviewWiring.regeneration,
     queue,
     close: async () => {
       await queue.close()
       await mediaQueue.close()
+      await regenerationQueue.close()
       await db.$client.end()
     },
   }

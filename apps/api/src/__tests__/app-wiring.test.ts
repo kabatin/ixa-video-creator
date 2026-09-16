@@ -33,4 +33,13 @@ describe('createApp のルート配線', () => {
     const res = await buildApp().request(`/projects/${project.id}/music-tracks`)
     expect(res.status).toBe(200)
   })
+
+  it('レビューのルートが生えている', async () => {
+    // Take が無いので 404。配線されていなければ Hono の 404 と区別が付かないため、
+    // 本文が API の封筒（success: false）であることまで見る。
+    const res = await buildApp().request('/takes/01ARZ3NDEKTSV4RRFFQ69G5FAV/reviews')
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ success: false })
+  })
 })

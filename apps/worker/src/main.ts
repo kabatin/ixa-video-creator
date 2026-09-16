@@ -11,6 +11,8 @@ import { processGenerationJob } from './generation/index.js'
 import { processMediaJob } from './media/index.js'
 import { processRenderJob } from './render/index.js'
 import { processAnalysisJob } from './analysis/index.js'
+import { processReviewJob } from './review/index.js'
+import { processRegenerationJob } from './regeneration/index.js'
 
 /** graceful shutdown の既定タイムアウト（ミリ秒）。超過したら強制終了する。 */
 const SHUTDOWN_TIMEOUT_MS = 30_000
@@ -30,7 +32,7 @@ const createWorkers = (
   queueConfigs.map((config) => {
     /**
      * キューごとに担当プロセッサを割り当てる。
-     * review は Phase 4 の担当なので noop のまま。
+     * 未実装のキューは noop のまま。
      * 未実装のキューを無言で成功させないよう、対応表を 1 箇所に集約する。
      */
     const handler = async (job: { data: unknown }): Promise<NoopJobResult> => {
@@ -44,6 +46,10 @@ const createWorkers = (
             return (await processRenderJob(generation.render, job.data)).state
           case QUEUE_NAMES.analysis:
             return (await processAnalysisJob(generation.analysis, job.data)).state
+          case QUEUE_NAMES.review:
+            return (await processReviewJob(generation.review, job.data)).state
+          case QUEUE_NAMES.regeneration:
+            return (await processRegenerationJob(generation.regeneration, job.data)).state
           default:
             return (await processNoopJob(job.data as NoopJobData)).echoed
         }
