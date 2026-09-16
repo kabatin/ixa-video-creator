@@ -518,3 +518,43 @@ describe('参照がある場合の生成（Phase 2 への備え）', () => {
     expect(jobs.snapshot()).toHaveLength(0)
   })
 })
+
+describe('GET /shots/:id', () => {
+  it('Shot を 1 件返す', async () => {
+    const f = buildFixture()
+    const res = await f.app.request(`/shots/${f.shot.id}`)
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as Ok<{ id: string; code: string }>
+    expect(json.data.id).toBe(f.shot.id)
+    expect(json.data.code).toBe(f.shot.code)
+  })
+
+  it('存在しない id は 404', async () => {
+    const f = buildFixture()
+    const res = await f.app.request('/shots/01ARZ3NDEKTSV4RRFFQ69G5FZZ')
+    expect(res.status).toBe(404)
+  })
+})
+
+describe('GET /generation-jobs/:id', () => {
+  it('生成ジョブの状態を返す（UI が完了を判定できるようにするため）', async () => {
+    const f = buildFixture()
+    const gen = (await (
+      await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/cheap' })
+    ).json()) as Ok<GenerateData>
+    const jobId = gen.data.jobIds[0] as string
+
+    const res = await f.app.request(`/generation-jobs/${jobId}`)
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as Ok<{ id: string; status: string; shotId: string }>
+    expect(json.data.id).toBe(jobId)
+    expect(json.data.shotId).toBe(f.shot.id)
+    expect(json.data.status).toBe('queued')
+  })
+
+  it('存在しない id は 404', async () => {
+    const f = buildFixture()
+    const res = await f.app.request('/generation-jobs/01ARZ3NDEKTSV4RRFFQ69G5FZZ')
+    expect(res.status).toBe(404)
+  })
+})

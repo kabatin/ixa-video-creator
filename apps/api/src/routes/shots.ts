@@ -17,6 +17,8 @@ import {
   quantizeDuration,
   resolveReferences,
   type GenerationContextSource,
+  GenerationJob as GenerationJobSchema,
+  type GenerationJob,
   type GenerationJobId,
   type ModelId,
   type Project,
@@ -100,6 +102,32 @@ const GenerateData = z
 
 const SelectTakeBody = z.object({ takeId: TakeIdSchema }).openapi('SelectTakeInput')
 
+/**
+ * 生成ジョブの状態。UI が「生成が終わったか」を判定するために必要。
+ * Take の本数で推測すると、失敗したジョブを待ち続けることになる。
+ */
+export const GenerationJobResponse = GenerationJobSchema.omit({
+  queuedAt: true, startedAt: true, finishedAt: true,
+})
+  .extend({
+    queuedAt: z.string().datetime(),
+    startedAt: z.string().datetime().nullable(),
+    finishedAt: z.string().datetime().nullable(),
+  })
+  .openapi('GenerationJob')
+export type GenerationJobResponse = z.infer<typeof GenerationJobResponse>
+
+export const toGenerationJobResponse = (job: GenerationJob): GenerationJobResponse => ({
+  ...job,
+  queuedAt: job.queuedAt.toISOString(),
+  startedAt: job.startedAt === null ? null : job.startedAt.toISOString(),
+  finishedAt: job.finishedAt === null ? null : job.finishedAt.toISOString(),
+})
+
+const GenerationJobParams = z.object({
+  id: GenerationJobIdSchema.openapi({ param: { name: 'id', in: 'path' } }),
+})
+
 const ShotParams = z.object({
   id: ShotIdSchema.openapi({ param: { name: 'id', in: 'path' } }),
 })
@@ -129,6 +157,23 @@ const listShotsRoute = createRoute({
   summary: 'プロジェクト内の Shot 一覧（order 昇順）',
   request: { params: ProjectParams },
   responses: { 200: jsonContent('Shot 一覧', listResponse(ShotResponse)), ...commonErrors },
+})
+
+const getShotRoute = createRoute({
+  method: 'get', path: '/shots/{id}', tags: ['shots'],
+  summary: 'Shot を 1 件取得する',
+  request: { params: ShotParams },
+  responses: { 200: jsonContent('Shot', successResponse(ShotResponse)), ...commonErrors },
+})
+
+const getGenerationJobRoute = createRoute({
+  method: 'get', path: '/generation-jobs/{id}', tags: ['shots'],
+  summary: '生成ジョブの状態を取得する',
+  request: { params: GenerationJobParams },
+  responses: {
+    200: jsonContent('生成ジョブ', successResponse(GenerationJobResponse)),
+    ...commonErrors,
+  },
 })
 
 const createShotRoute = createRoute({
@@ -315,6 +360,16 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
     .openapi(listShotsRoute, async (c) => {
       const found = await deps.shots.findByProject(c.req.valid('param').projectId)
       return c.json(okList(found.map(toShotResponse)), 200)
+    })
+    .openapi(getShotRoute, async (c) => {
+      const shot = await deps.shots.findById(c.req.valid('param').id)
+      if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      return c.json(ok(toShotResponse(shot)), 200)
+    })
+    .openapi(getGenerationJobRoute, async (c) => {
+      const job = await deps.generationJobs.findById(c.req.valid('param').id)
+      if (job === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      return c.json(ok(toGenerationJobResponse(job)), 200)
     })
     .openapi(createShotRoute, async (c) => {
       const { projectId } = c.req.valid('param')
