@@ -29,6 +29,7 @@ import type { GenerationProcessorDeps, PollScheduler } from './generation/index.
 import type { MediaProcessorDeps } from './media/index.js'
 import type { RenderProcessorDeps } from './render/index.js'
 import { createReviewWiring, type ReviewWiring } from './review-wiring.js'
+import { createRegenerationEnqueue } from './regeneration-wiring.js'
 import { QUEUE_NAMES } from './queues.js'
 
 /**
@@ -161,11 +162,17 @@ export const createGenerationWiring = (
         await regenerationQueue.add('regenerate', { takeId })
       },
     },
-    generation: {
-      enqueue: async (request) => {
-        await queue.add('generate', { regeneration: request })
-      },
-    },
+    /**
+     * 再生成が許可されたときに実際の生成を積む口。
+     * 仕様のコンパイルと GenerationJob 行の作成が要るので、`regeneration-wiring.ts` に分けた。
+     */
+    generation: createRegenerationEnqueue({
+      db,
+      context: deps.context,
+      registry,
+      queue,
+      logger,
+    }),
   })
 
   return {
