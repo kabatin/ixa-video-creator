@@ -8,6 +8,7 @@ const shot = (overrides: Partial<Shot> = {}): Shot => ({
   id: ShotId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAV'),
   projectId: ProjectId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAW'),
   sequenceId: null,
+  locationId: null,
   order: 1000,
   code: 'shot_014',
   startSec: 51.2,

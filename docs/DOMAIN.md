@@ -358,6 +358,9 @@ type Shot = {
   camera: ShotCamera
   mood: string | null
 
+  // 場所。ひと続きのカットなので 1 つだけ持つ（ADR-0015）
+  locationId: LocationId | null
+
   // 生成方式
   sourceType: ShotSourceType
 

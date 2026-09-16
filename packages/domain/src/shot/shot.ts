@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
-  CharacterId, CharacterLookId, ProjectId, SequenceId, ShotId, TakeId, TransitionId,
+  CharacterId, CharacterLookId, LocationId, ProjectId, SequenceId, ShotId, TakeId,
+  TransitionId,
 } from '../common/ids.js'
 import { Seconds } from '../common/time.js'
 import { ShotCamera } from './camera.js'
@@ -38,6 +39,9 @@ export const Shot = z.object({
   dialogue: z.string().nullable(),
   camera: ShotCamera,
   mood: z.string().nullable(),
+
+  /** ひと続きのカットなので場所は 1 つだけ持つ。中間表は作らない（ADR-0015）。 */
+  locationId: LocationId.nullable(),
 
   sourceType: ShotSourceType,
 
@@ -84,6 +88,8 @@ export const CreateShotInput = Shot.omit({
 }).extend({
   sourceInSec: Seconds.default(0),
   status: ShotStatus.default('draft'),
+  // 場所は後から決められる。作成時の必須項目にしない（ADR-0015）。
+  locationId: LocationId.nullable().default(null),
 })
 export type CreateShotInput = z.input<typeof CreateShotInput>
 
@@ -96,7 +102,7 @@ export const UpdateShotPatch = Shot.pick({
   sequenceId: true, order: true, code: true,
   startSec: true, durationSec: true, sourceInSec: true,
   description: true, dialogue: true, camera: true, mood: true,
-  sourceType: true, lockedAt: true,
+  locationId: true, sourceType: true, lockedAt: true,
 }).partial()
 export type UpdateShotPatch = z.input<typeof UpdateShotPatch>
 

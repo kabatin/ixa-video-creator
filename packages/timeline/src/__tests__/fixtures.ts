@@ -37,6 +37,7 @@ export const makeShot = (
   id: shotId(n),
   projectId: PROJECT_ID,
   sequenceId: null,
+  locationId: null,
   order: n * 1000,
   code: `S${n}`,
   startSec,

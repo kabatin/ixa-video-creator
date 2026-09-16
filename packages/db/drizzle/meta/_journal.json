@@ -29,6 +29,13 @@
       "when": 1789547716333,
       "tag": "0003_milky_darkhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789550611654,
+      "tag": "0004_add_shot_location",
+      "breakpoints": true
     }
   ]
 }

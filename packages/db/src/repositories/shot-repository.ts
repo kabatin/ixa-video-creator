@@ -48,6 +48,7 @@ export const shotRowToDomain = (row: ShotRow): Shot =>
     dialogue: row.dialogue,
     camera: row.camera,
     mood: row.mood,
+    locationId: row.locationId,
     sourceType: row.sourceType,
     selectedTakeId: row.selectedTakeId,
     status: row.status,

@@ -14,6 +14,7 @@ import {
 } from '@ixa/domain'
 import { createdAt, deletedAt, seconds, timestampTz, ulidPk, ulidRef, updatedAt } from './columns.js'
 import { characterLooks, characters } from './character.js'
+import { locations } from './library.js'
 import { takes } from './generation.js'
 import { mediaAssets } from './media.js'
 import { sequences } from './script.js'
@@ -48,6 +49,12 @@ export const shots = pgTable(
     dialogue: text('dialogue'),
     camera: jsonb('camera').$type<ShotCamera>().notNull(),
     mood: text('mood'),
+
+    /**
+     * 場所。ひと続きのカットなので 1 つだけ（ADR-0015）。
+     * 参照中のロケーションを消せると Shot が実在しない場所を指すため restrict。
+     */
+    locationId: ulidRef('location_id').references(() => locations.id, { onDelete: 'restrict' }),
 
     /** 生成方式。判別共用体なので JSONB。 */
     sourceType: jsonb('source_type').$type<ShotSourceType>().notNull(),
