@@ -206,6 +206,12 @@ export const inMemoryTakes = (): InMemoryTakes => {
   let store: readonly Take[] = []
   return {
     snapshot: () => store,
+    // 偽物なので projectId は見ず全 Take を合算する。テストは 1 プロジェクトしか作らない。
+    sumCostByProject: () => Promise.resolve(store.reduce((sum, t) => sum + t.costUsd, 0)),
+    sumCostByShot: (shotId) =>
+      Promise.resolve(
+        store.filter((t) => t.shotId === shotId).reduce((sum, t) => sum + t.costUsd, 0),
+      ),
     findById: (id) => Promise.resolve(store.find((t) => t.id === id) ?? null),
     findByShot: (shotId) =>
       Promise.resolve(store.filter((t) => t.shotId === shotId).sort((a, b) => a.index - b.index)),
