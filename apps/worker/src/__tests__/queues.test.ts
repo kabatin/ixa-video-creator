@@ -8,8 +8,8 @@ import {
 } from '../queues.js'
 
 describe('QUEUE_CONFIGS', () => {
-  it('5つのキューがすべて定義されている', () => {
-    expect(QUEUE_CONFIGS).toHaveLength(5)
+  it('6つのキューがすべて定義されている', () => {
+    expect(QUEUE_CONFIGS).toHaveLength(6)
     expect(QUEUE_CONFIGS.map((config) => config.name).sort()).toEqual(
       Object.values(QUEUE_NAMES).sort(),
     )
@@ -26,6 +26,7 @@ describe('QUEUE_CONFIGS', () => {
       review: 4,
       render: 1,
       analysis: 2,
+      regeneration: 4,
     })
   })
 })
@@ -83,6 +84,7 @@ describe('resolveQueueConfigs', () => {
       review: 4,
       render: 1,
       analysis: 2,
+      regeneration: 4,
     })
   })
 

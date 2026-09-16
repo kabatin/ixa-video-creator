@@ -1066,6 +1066,7 @@ BullMQ + Redis（ADR-0008）。
 | `review` | 4 | 決定的チェック / LLM レビュー | |
 | `render` | 1〜2 | Remotion レンダリング | CPU を占有する |
 | `analysis` | 2 | 音楽解析（Python へ委譲） | |
+| `regeneration` | 4 | 再生成の可否判定と投入 | review と分ける。レビューは LLM コストを払うため、再生成の失敗でやり直させない |
 
 ### 規約
 

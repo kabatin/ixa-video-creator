@@ -9,6 +9,7 @@ export const QUEUE_NAMES = {
   review: 'review',
   render: 'render',
   analysis: 'analysis',
+  regeneration: 'regeneration',
 } as const
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES]
@@ -30,6 +31,12 @@ export const QUEUE_CONFIGS: readonly QueueConfig[] = [
   { name: QUEUE_NAMES.review, concurrency: 4 },
   { name: QUEUE_NAMES.render, concurrency: 1 },
   { name: QUEUE_NAMES.analysis, concurrency: 2 },
+  /**
+   * 再生成の判定だけを行う軽い処理。生成そのものは generation キューが行う。
+   * **review と分けている。** レビューは LLM を叩いて金を払うため、
+   * 再生成の投入に失敗しただけでレビューをやり直させたくない。
+   */
+  { name: QUEUE_NAMES.regeneration, concurrency: 4 },
 ]
 
 const concurrencyEnvVarName = (queueName: QueueName): string =>
