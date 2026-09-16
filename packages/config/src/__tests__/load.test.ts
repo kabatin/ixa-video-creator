@@ -110,3 +110,20 @@ describe('getConfig', () => {
     expect(config.api.port).toBe(5555)
   })
 })
+
+describe('空文字の任意変数', () => {
+  it('FAL_API_KEY が空文字なら未設定として扱う', () => {
+    const config = loadConfig({ ...requiredEnv, FAL_API_KEY: '' })
+    expect(config.providers.falApiKey).toBeNull()
+  })
+
+  it('FAL_API_KEY が空白のみでも未設定として扱う', () => {
+    const config = loadConfig({ ...requiredEnv, FAL_API_KEY: '   ' })
+    expect(config.providers.falApiKey).toBeNull()
+  })
+
+  it('FAL_API_KEY に値があればそのまま読む', () => {
+    const config = loadConfig({ ...requiredEnv, FAL_API_KEY: 'fal-key-123' })
+    expect(config.providers.falApiKey).toBe('fal-key-123')
+  })
+})

@@ -9,8 +9,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "dev": "tsx watch src/main.ts",
-    "start": "node --import tsx src/main.ts",
+    "dev": "tsx watch --env-file=../../.env src/main.ts",
+    "start": "node --import tsx --env-file=../../.env src/main.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint src"

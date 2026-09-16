@@ -32,11 +32,11 @@ services:
       timeout: 5s
       retries: 10
 
-  # NOTE: MinIO はリリースタグが日付ベースのため latest を使っている。
-  # 初回起動後に `docker image inspect ixa-minio` でダイジェストを確認し、
-  # 再現性が必要になった時点で具体的なタグへ固定すること。
+  # NOTE: MinIO は Docker Hub の minio/minio が公開停止になっており quay.io から取得する
+  # （docker.io では "pull access denied" になる。2026-09-16 に実機で確認）。
+  # タグが日付ベースのため latest を使っている。再現性が必要になったら固定すること。
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     container_name: ixa-minio
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
@@ -56,7 +56,7 @@ services:
 
   # 一回限りのバケット作成ジョブ。正常終了するため restart は "no"。
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     container_name: ixa-minio-init
     restart: "no"
     depends_on:

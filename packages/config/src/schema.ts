@@ -29,7 +29,14 @@ export const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
   // 任意（既定値なし・nullable）
-  FAL_API_KEY: z.string().min(1).optional(),
+  /**
+   * .env に `FAL_API_KEY=` と空で書かれた場合は「未設定」として扱う。
+   * 空文字を値として受け取ると、キー未取得のまま API を叩いて分かりにくい失敗をするため。
+   */
+  FAL_API_KEY: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v))
+    .optional(),
 })
 
 export type Env = z.infer<typeof EnvSchema>
