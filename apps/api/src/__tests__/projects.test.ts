@@ -5,6 +5,7 @@ import { INTERNAL_ERROR_MESSAGE } from '../errors.js'
 import { createLogger } from '../logger.js'
 import type { ProjectResponse } from '../routes/projects.js'
 import { createMemoryStorage } from '@ixa/storage'
+import { baseAppDeps } from './app-deps.js'
 import { createInMemoryMediaAssetRepository } from './in-memory-media-asset-repository.js'
 import {
   createFailingProjectRepository,
@@ -16,6 +17,7 @@ const logger = createLogger('silent')
 
 const buildApp = (projects: AppDeps['projects']) =>
   createApp({
+    ...baseAppDeps(),
     projects,
     mediaAssets: createInMemoryMediaAssetRepository(),
     storage: createMemoryStorage(),

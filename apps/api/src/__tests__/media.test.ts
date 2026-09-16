@@ -20,6 +20,7 @@ import {
   type InMemoryMediaAssetRepository,
 } from './in-memory-media-asset-repository.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
+import { baseAppDeps } from './app-deps.js'
 
 const logger = createLogger('silent')
 
@@ -30,6 +31,7 @@ type ErrorBody = { success: false; error: string; fields?: Record<string, string
 
 const buildApp = (mediaAssets: InMemoryMediaAssetRepository, storage: ObjectStorage) =>
   createApp({
+    ...baseAppDeps(),
     projects: createInMemoryProjectRepository(),
     mediaAssets,
     storage,

@@ -1,2 +1,5 @@
 export * from './project-repository.js'
 export * from './media-asset-repository.js'
+export * from './shot-repository.js'
+export * from './take-repository.js'
+export * from './generation-job-repository.js'

@@ -4,9 +4,11 @@ import { createLogger } from '../logger.js'
 import { createMemoryStorage } from '@ixa/storage'
 import { createInMemoryMediaAssetRepository } from './in-memory-media-asset-repository.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
+import { baseAppDeps } from './app-deps.js'
 
 const buildApp = () =>
   createApp({
+    ...baseAppDeps(),
     projects: createInMemoryProjectRepository(),
     mediaAssets: createInMemoryMediaAssetRepository(),
     storage: createMemoryStorage(),

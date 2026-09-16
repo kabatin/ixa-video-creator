@@ -1,0 +1,394 @@
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
+import type {
+  GenerationJobRepository, ProjectRepository, ShotRepository, TakeRepository,
+} from '@ixa/db'
+import {
+  CreateShotInput as CreateShotInputSchema,
+  GenerationJobId as GenerationJobIdSchema,
+  ModelId as ModelIdSchema,
+  ProjectId as ProjectIdSchema,
+  Shot as ShotSchema,
+  ShotId as ShotIdSchema,
+  Take as TakeSchema,
+  TakeId as TakeIdSchema,
+  UpdateShotPatch as UpdateShotPatchSchema,
+  compileSpec,
+  computeSpecHash,
+  quantizeDuration,
+  resolveReferences,
+  type GenerationContextSource,
+  type GenerationJobId,
+  type ModelId,
+  type Project,
+  type ReferenceRole,
+  type RouterDecision,
+  type Shot,
+  type ShotGenerationSpec,
+  type Take,
+} from '@ixa/domain'
+import {
+  selectModel,
+  validateAgainstCapabilities,
+  type ProviderRegistry,
+  type VideoModelDescriptor,
+} from '@ixa/provider-core'
+import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
+import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
+
+/**
+ * Shot の CRUD と生成ジョブの投入（docs/ARCHITECTURE.md §11 / §18）。
+ * ADR-0006 に従い zod スキーマとハンドラを 1 ファイルに同居させる。
+ */
+
+/** BullMQ のキュー名（docs/ARCHITECTURE.md §20）。apps 同士を import しないため定数で持つ。 */
+export const GENERATION_QUEUE_NAME = 'generation'
+
+/** 1 回の要求で作れる Take の上限。超えたら 422。 */
+export const MAX_TAKES_PER_REQUEST = 4
+
+/** 生成ジョブをキューへ投入する Port。Redis への依存を main.ts に閉じ込める。 */
+export type GenerationQueue = {
+  /** ジョブデータは ID のみ。実データは DB から読む（ADR-0008）。 */
+  enqueue(generationJobId: GenerationJobId): Promise<void>
+}
+
+export const ShotResponse = ShotSchema.omit({ createdAt: true, updatedAt: true, lockedAt: true })
+  .extend({
+    lockedAt: z.string().datetime().nullable(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  })
+  .openapi('Shot')
+export type ShotResponse = z.infer<typeof ShotResponse>
+
+export const toShotResponse = (shot: Shot): ShotResponse => ({
+  ...shot,
+  lockedAt: shot.lockedAt === null ? null : shot.lockedAt.toISOString(),
+  createdAt: shot.createdAt.toISOString(),
+  updatedAt: shot.updatedAt.toISOString(),
+})
+
+export const TakeResponse = TakeSchema.omit({ createdAt: true })
+  .extend({ createdAt: z.string().datetime() })
+  .openapi('Take')
+export type TakeResponse = z.infer<typeof TakeResponse>
+
+export const toTakeResponse = (take: Take): TakeResponse => ({
+  ...take,
+  createdAt: take.createdAt.toISOString(),
+})
+
+const GenerateBody = z
+  .object({
+    model: z.union([ModelIdSchema, z.literal('AUTO')]),
+    count: z.number().int().min(1).max(MAX_TAKES_PER_REQUEST).default(1),
+  })
+  .openapi('GenerateShotInput')
+
+const GenerateData = z
+  .object({
+    jobIds: z.array(GenerationJobIdSchema),
+    specHash: z.string().length(64),
+    resolvedModel: ModelIdSchema,
+    /**
+     * 同じ specHash の Take が既にある場合の警告。生成自体は止めない
+     * （ARCHITECTURE.md §11 のコストガード）。
+     */
+    duplicateOfTakeId: TakeIdSchema.nullable(),
+  })
+  .openapi('GenerateShotResult')
+
+const SelectTakeBody = z.object({ takeId: TakeIdSchema }).openapi('SelectTakeInput')
+
+const ShotParams = z.object({
+  id: ShotIdSchema.openapi({ param: { name: 'id', in: 'path' } }),
+})
+const ProjectParams = z.object({
+  projectId: ProjectIdSchema.openapi({ param: { name: 'projectId', in: 'path' } }),
+})
+
+const CreateShotBody = CreateShotInputSchema.omit({ projectId: true }).openapi('CreateShotInput')
+const UpdateShotBody = UpdateShotPatchSchema.pick({
+  description: true, camera: true, sourceType: true,
+  startSec: true, durationSec: true, sourceInSec: true,
+}).openapi('UpdateShotPatch')
+
+const jsonContent = <T extends z.ZodTypeAny>(description: string, schema: T) => ({
+  description,
+  content: { 'application/json': { schema } },
+})
+
+const commonErrors = {
+  404: errorContent('対象が存在しない'),
+  422: errorContent('入力の検証に失敗した'),
+  500: errorContent('サーバ内部エラー'),
+}
+
+const listShotsRoute = createRoute({
+  method: 'get', path: '/projects/{projectId}/shots', tags: ['shots'],
+  summary: 'プロジェクト内の Shot 一覧（order 昇順）',
+  request: { params: ProjectParams },
+  responses: { 200: jsonContent('Shot 一覧', listResponse(ShotResponse)), ...commonErrors },
+})
+
+const createShotRoute = createRoute({
+  method: 'post', path: '/projects/{projectId}/shots', tags: ['shots'],
+  summary: 'Shot を作成する',
+  request: {
+    params: ProjectParams,
+    body: { required: true, content: { 'application/json': { schema: CreateShotBody } } },
+  },
+  responses: { 201: jsonContent('作成された Shot', successResponse(ShotResponse)), ...commonErrors },
+})
+
+const updateShotRoute = createRoute({
+  method: 'patch', path: '/shots/{id}', tags: ['shots'],
+  summary: 'Shot を部分更新する',
+  request: {
+    params: ShotParams,
+    body: { required: true, content: { 'application/json': { schema: UpdateShotBody } } },
+  },
+  responses: { 200: jsonContent('更新後の Shot', successResponse(ShotResponse)), ...commonErrors },
+})
+
+const deleteShotRoute = createRoute({
+  method: 'delete', path: '/shots/{id}', tags: ['shots'],
+  summary: 'Shot をソフトデリートする',
+  request: { params: ShotParams },
+  responses: { 204: { description: '削除した（本文なし）' }, ...commonErrors },
+})
+
+const generateRoute = createRoute({
+  method: 'post', path: '/shots/{id}/generate', tags: ['shots'],
+  summary: '生成仕様を組み立てて generation キューへ投入する',
+  request: {
+    params: ShotParams,
+    body: { required: true, content: { 'application/json': { schema: GenerateBody } } },
+  },
+  responses: {
+    202: jsonContent('投入されたジョブ', successResponse(GenerateData)),
+    ...commonErrors,
+  },
+})
+
+const listTakesRoute = createRoute({
+  method: 'get', path: '/shots/{id}/takes', tags: ['shots'],
+  summary: 'Shot の Take 一覧（index 昇順）',
+  request: { params: ShotParams },
+  responses: { 200: jsonContent('Take 一覧', listResponse(TakeResponse)), ...commonErrors },
+})
+
+const selectTakeRoute = createRoute({
+  method: 'post', path: '/shots/{id}/select-take', tags: ['shots'],
+  summary: '採用 Take を決める',
+  request: {
+    params: ShotParams,
+    body: { required: true, content: { 'application/json': { schema: SelectTakeBody } } },
+  },
+  responses: { 200: jsonContent('更新後の Shot', successResponse(ShotResponse)), ...commonErrors },
+})
+
+export type ShotRoutesDeps = {
+  shots: ShotRepository
+  projects: ProjectRepository
+  takes: TakeRepository
+  generationJobs: GenerationJobRepository
+  registry: ProviderRegistry
+  context: GenerationContextSource
+  queue: GenerationQueue
+}
+
+/** 組み上がった生成仕様と、それを出したモデル。 */
+type CompiledGeneration = {
+  readonly spec: ShotGenerationSpec
+  readonly specHash: string
+  readonly model: VideoModelDescriptor
+  readonly routerDecision: RouterDecision | null
+}
+
+/** 仕様を組めない理由。呼び出し側が 422 へ変換する。 */
+export class SpecCompilationError extends Error {
+  override readonly name = 'SpecCompilationError'
+}
+
+const unionCapabilities = (models: readonly VideoModelDescriptor[]) => ({
+  maxReferences: Math.max(0, ...models.map((m) => m.capabilities.referenceImages.max)),
+  supportedRoles: [
+    ...new Set(models.flatMap((m): readonly ReferenceRole[] => m.capabilities.referenceImages.roles)),
+  ],
+})
+
+/**
+ * Shot・Project・参照から生成仕様を組み立てる。
+ *
+ * AUTO のときはモデルが決まるまで参照枚数も生成尺も確定できないため、
+ * まず全モデルの能力の和で下書きを作って selectModel に渡し、
+ * 選ばれたモデルの能力で組み直す。最終的な specHash は 2 周目のものだけを使う。
+ */
+export const buildGeneration = async (
+  deps: Pick<ShotRoutesDeps, 'context' | 'registry'>,
+  shot: Shot,
+  project: Project,
+  requestedModel: ModelId | 'AUTO',
+): Promise<CompiledGeneration> => {
+  const candidates =
+    requestedModel === 'AUTO'
+      ? deps.registry.allModels()
+      : [deps.registry.findModel(requestedModel)]
+  if (candidates.length === 0) throw new SpecCompilationError('利用できるモデルがありません')
+
+  const [characters, locations, manualReferences, previousShotLastFrameId, startFrameId] =
+    await Promise.all([
+      deps.context.charactersForShot(shot.id),
+      deps.context.locationsForShot(shot.id),
+      deps.context.manualReferencesForShot(shot.id),
+      deps.context.previousShotLastFrame(shot.id),
+      deps.context.startFrame(shot.id),
+    ])
+
+  const compileFor = (
+    maxReferences: number,
+    supportedRoles: readonly ReferenceRole[],
+    generationDurationSec: number,
+  ): ShotGenerationSpec => {
+    const references = resolveReferences({
+      characters, locations, manualReferences,
+      previousShotLastFrameId, startFrameId, maxReferences, supportedRoles,
+    })
+    return compileSpec({
+      project, shot, characters, references, generationDurationSec,
+      seed: null, negativePrompt: null,
+    })
+  }
+
+  let chosen = candidates[0] as VideoModelDescriptor
+  let routerDecision: RouterDecision | null = null
+
+  if (requestedModel === 'AUTO') {
+    const union = unionCapabilities(candidates)
+    // 下書きの尺は編集尺のまま渡す。selectModel はモデルごとに切り上げて見積もる。
+    const draft = compileFor(union.maxReferences, union.supportedRoles, shot.durationSec)
+    routerDecision = selectModel(draft, candidates)
+    chosen = deps.registry.findModel(routerDecision.modelId)
+  }
+
+  const caps = chosen.capabilities
+  const spec = compileFor(
+    caps.referenceImages.max,
+    caps.referenceImages.roles,
+    quantizeDuration(shot.durationSec, caps.durations),
+  )
+
+  const violations = validateAgainstCapabilities(spec, chosen)
+  if (violations.length > 0) {
+    throw new SpecCompilationError(`モデル ${chosen.id} では生成できません: ${violations.join(' / ')}`)
+  }
+
+  return { spec, specHash: await computeSpecHash(spec), model: chosen, routerDecision }
+}
+
+/** GenerationJob 行を作りつつキューへ入れる。DB が真実、キューは実行手段（ADR-0008）。 */
+const enqueueJobs = async (
+  deps: Pick<ShotRoutesDeps, 'generationJobs' | 'queue'>,
+  shot: Shot,
+  compiled: CompiledGeneration,
+  requestedModel: ModelId | 'AUTO',
+  count: number,
+): Promise<GenerationJobId[]> => {
+  const created: GenerationJobId[] = []
+  for (let i = 0; i < count; i += 1) {
+    const job = await deps.generationJobs.create({
+      shotId: shot.id,
+      specHash: compiled.specHash,
+      requestedModel,
+      resolvedModel: compiled.model.id,
+      routerDecision: compiled.routerDecision,
+    })
+    await deps.queue.enqueue(job.id)
+    created.push(job.id)
+  }
+  return created
+}
+
+export const shotRoutes = (deps: ShotRoutesDeps) =>
+  new OpenAPIHono({ defaultHook: validationHook })
+    .openapi(listShotsRoute, async (c) => {
+      const found = await deps.shots.findByProject(c.req.valid('param').projectId)
+      return c.json(okList(found.map(toShotResponse)), 200)
+    })
+    .openapi(createShotRoute, async (c) => {
+      const { projectId } = c.req.valid('param')
+      const created = await deps.shots.create({ ...c.req.valid('json'), projectId })
+      return c.json(ok(toShotResponse(created)), 201)
+    })
+    .openapi(updateShotRoute, async (c) => {
+      const updated = await deps.shots.update(c.req.valid('param').id, c.req.valid('json'))
+      return c.json(ok(toShotResponse(updated)), 200)
+    })
+    .openapi(deleteShotRoute, async (c) => {
+      await deps.shots.softDelete(c.req.valid('param').id)
+      return c.body(null, 204)
+    })
+    .openapi(listTakesRoute, async (c) => {
+      const shot = await deps.shots.findById(c.req.valid('param').id)
+      if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      const found = await deps.takes.findByShot(shot.id)
+      return c.json(okList(found.map(toTakeResponse)), 200)
+    })
+    .openapi(selectTakeRoute, async (c) => {
+      const shot = await deps.shots.findById(c.req.valid('param').id)
+      if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+
+      const take = await deps.takes.findById(c.req.valid('json').takeId)
+      // 他 Shot の Take を採用させない。Take は Shot に属する（DOMAIN.md §10）。
+      if (take === null || take.shotId !== shot.id) {
+        return c.json(
+          fail(VALIDATION_ERROR_MESSAGE, { takeId: ['この Shot に属する Take ではありません'] }),
+          422,
+        )
+      }
+
+      await deps.shots.selectTake(shot.id, take.id)
+      const updated = await deps.shots.updateStatus(
+        shot.id,
+        take.humanVerdict === 'approved' ? 'approved' : 'review',
+      )
+      return c.json(ok(toShotResponse(updated)), 200)
+    })
+    .openapi(generateRoute, async (c) => {
+      const shot = await deps.shots.findById(c.req.valid('param').id)
+      if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+
+      const project = await deps.projects.findById(shot.projectId)
+      if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+
+      const { model, count } = c.req.valid('json')
+
+      let compiled: CompiledGeneration
+      try {
+        compiled = await buildGeneration(deps, shot, project, model)
+      } catch (error) {
+        // 仕様が組めない・尺が出せない・モデルが無い、はすべて入力の問題として 422 で返す。
+        if (error instanceof Error && !(error instanceof TypeError)) {
+          return c.json(fail(VALIDATION_ERROR_MESSAGE, { model: [error.message] }), 422)
+        }
+        throw error
+      }
+
+      // 同一仕様の Take が既にあれば警告する。生成は止めない（ARCHITECTURE.md §11）。
+      const existing = await deps.takes.findByShot(shot.id)
+      const duplicate = existing.find((t) => t.specHash === compiled.specHash) ?? null
+
+      const jobIds = await enqueueJobs(deps, shot, compiled, model, count)
+      await deps.shots.updateStatus(shot.id, 'generating')
+
+      return c.json(
+        ok({
+          jobIds,
+          specHash: compiled.specHash,
+          resolvedModel: compiled.model.id,
+          duplicateOfTakeId: duplicate === null ? null : duplicate.id,
+        }),
+        202,
+      )
+    })

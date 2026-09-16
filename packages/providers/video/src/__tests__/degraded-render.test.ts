@@ -120,9 +120,4 @@ describe(`${STUB_FORCE_NO_DRAWTEXT_ENV} による強制縮退（実 ffmpeg）`, 
     },
     TEST_TIMEOUT_MS,
   )
-
-  it('0 を指定したときは強制しない', () => {
-    process.env[STUB_FORCE_NO_DRAWTEXT_ENV] = '0'
-    expect(process.env[STUB_FORCE_NO_DRAWTEXT_ENV]).toBe('0')
-  })
 })

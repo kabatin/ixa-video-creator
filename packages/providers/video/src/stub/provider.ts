@@ -46,6 +46,12 @@ const CANCELLED: ProviderJobStatus = {
 
 const delay = (ms: number, signal: AbortSignal): Promise<void> =>
   new Promise<void>((resolve, reject) => {
+    // 既に中断済みなら abort イベントはもう飛ばない。ここで弾かないと待ち続けてしまう。
+    if (signal.aborted) {
+      reject(new Error('待機前に中断されました', { cause: signal.reason }))
+      return
+    }
+
     const onAbort = (): void => {
       clearTimeout(timer)
       reject(new Error('待機中に中断されました', { cause: signal.reason }))
@@ -103,6 +109,8 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
       // ここで throw すると unhandled rejection になる。
       const specHash = await computeSpecHash(spec)
       if (simulatedLatencyMs > 0) await delay(simulatedLatencyMs, job.controller.signal)
+      // 待っている間に cancel されていたら running で上書きしない。
+      if (jobs.get(ref)?.cancelled === true) return
       update(ref, { status: { state: 'running', progress: null } })
 
       const rendered = await renderPlaceholder(
