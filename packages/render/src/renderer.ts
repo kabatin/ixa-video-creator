@@ -66,9 +66,17 @@ const measureOutput = async (
  */
 export const createRemotionRenderer = (options: RemotionRendererOptions): TimelineRenderer => ({
   id: 'remotion',
+  /**
+   * **事実を書く。** ここは `RenderResult` に警告の置き場が無いぶんの唯一の申告口なので、
+   * できないことを true にすると誰も気づけない（ADR-0010）。
+   *
+   * text / motion_graphics のクリップは、いまはテンプレート名を書いた
+   * プレースホルダが出るだけでテンプレート機構が無い。だから false。
+   * opacity と layer は実際に効くので perClipEffects だけ true。
+   */
   capabilities: {
-    motionGraphics: true,
-    textAnimation: true,
+    motionGraphics: false,
+    textAnimation: false,
     perClipEffects: true,
   },
 

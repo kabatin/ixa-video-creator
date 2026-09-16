@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TIMELINE_ISSUE_CODES, validateTimeline, type TimelineIssue } from '../validate.js'
+import type { Transition } from '@ixa/domain'
 import { makeClip, makeShot, makeSource, makeTransition, shotId, snapshot } from './fixtures.js'
 
 const codes = (issues: readonly TimelineIssue[]): string[] => issues.map((issue) => issue.code)
@@ -185,5 +186,43 @@ describe('validateTimeline / 列挙', () => {
 
     expect(snapshot([shots, clips])).toBe(before)
     expect(shots.map((shot) => shot.code)).toEqual(['S3', 'S1', 'S2'])
+  })
+})
+
+describe('絵に出ない Transition（Architect 追加）', () => {
+  /**
+   * wipe / whip_pan / glitch はレンダリング時に cut へ落ちる。
+   * 置いた本人は選んだ効果が出ると思っているので、黙って落とさない。
+   */
+  const sourceWith = (type: Transition['type']) => {
+    const shots = [makeShot(1, 0, 2), makeShot(2, 2, 2)]
+    return makeSource({
+      shots,
+      transitions: [{ ...makeTransition(1, shotId(1), shotId(2), 0.5), type }],
+    })
+  }
+
+  const degraded = (type: Transition['type']): TimelineIssue[] =>
+    find(validateTimeline(sourceWith(type)), TIMELINE_ISSUE_CODES.transitionDegraded)
+
+  it.each(['wipe', 'whip_pan', 'glitch'] as const)('%s は warning を出す', (type) => {
+    const issues = degraded(type)
+
+    expect(issues).toHaveLength(1)
+    expect(issues[0]?.severity).toBe('warning')
+    expect(issues[0]?.message).toContain('カット')
+  })
+
+  it.each(['cut', 'dissolve', 'dip_to_black', 'dip_to_white'] as const)(
+    '%s は warning を出さない',
+    (type) => {
+      expect(degraded(type)).toEqual([])
+    },
+  )
+
+  it('error にはしない。出力は作れるので、止めるより伝えるほうが役に立つ', () => {
+    const errors = validateTimeline(sourceWith('wipe')).filter((i) => i.severity === 'error')
+
+    expect(errors).toEqual([])
   })
 })

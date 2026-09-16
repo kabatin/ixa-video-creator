@@ -69,6 +69,32 @@ export const TransitionType = z.enum([
 ])
 export type TransitionType = z.infer<typeof TransitionType>
 
+/**
+ * その種別を**実際に絵として出せるか**。
+ *
+ * ここに置くのは、画面・検証・レンダラの 3 箇所が同じ答えを見る必要があるため。
+ * 分けて持つと必ずズレて、**画面で選べるのに絵に出ない**種別が生まれる
+ * （実際に wipe がそうなっていた。選択肢に並ぶのに出力はただのカットだった）。
+ *
+ * `degraded_to_cut` はモーショングラフィックス機構の上に載せるべきもので、
+ * 中途半端な近似を入れると後で捨てることになるため、あえて実装していない。
+ */
+export const TRANSITION_SUPPORT: Readonly<
+  Record<z.infer<typeof TransitionType>, 'implemented' | 'degraded_to_cut'>
+> = Object.freeze({
+  cut: 'implemented',
+  dissolve: 'implemented',
+  dip_to_black: 'implemented',
+  dip_to_white: 'implemented',
+  wipe: 'degraded_to_cut',
+  whip_pan: 'degraded_to_cut',
+  glitch: 'degraded_to_cut',
+})
+
+/** 絵に出ない種別か。画面はこれを見て注意を出す。 */
+export const isDegradedTransition = (type: z.infer<typeof TransitionType>): boolean =>
+  TRANSITION_SUPPORT[type] === 'degraded_to_cut'
+
 export const Transition = z.object({
   id: TransitionId,
   projectId: ProjectId,

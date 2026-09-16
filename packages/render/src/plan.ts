@@ -8,6 +8,7 @@ import type {
   Transition,
   TransitionType,
 } from '@ixa/domain'
+import { isDegradedTransition } from '@ixa/domain'
 import { letterboxFit, type FitRect } from './presets.js'
 import { frameRange, sourceOffsetFrames, totalFrames, type FrameRange } from './timing.js'
 
@@ -25,16 +26,11 @@ import { frameRange, sourceOffsetFrames, totalFrames, type FrameRange } from './
  *       中途半端な近似を入れると後で捨てることになるため、あえて実装しない。
  *       縮退したことは `TimelinePlan.degradedTransitions` で呼び出し側に見える。
  */
-export const TRANSITION_SUPPORT: Readonly<Record<TransitionType, 'implemented' | 'degraded_to_cut'>> =
-  {
-    cut: 'implemented',
-    dissolve: 'implemented',
-    dip_to_black: 'implemented',
-    dip_to_white: 'implemented',
-    wipe: 'degraded_to_cut',
-    whip_pan: 'degraded_to_cut',
-    glitch: 'degraded_to_cut',
-  }
+/**
+ * 表の実体は `@ixa/domain` にある。画面・検証・レンダラが同じ答えを見るため。
+ * ここでは再輸出するだけで、**値をここに書かない**。
+ */
+export { TRANSITION_SUPPORT } from '@ixa/domain'
 
 const DIP_COLOR: Partial<Record<TransitionType, string>> = {
   dip_to_black: '#000000',
@@ -124,7 +120,7 @@ const buildShots = (doc: TimelineDocument): readonly ShotPlan[] =>
     const outgoing = findOutgoing(doc.transitions, shot.shotId)
     const isDissolve =
       outgoing !== undefined &&
-      TRANSITION_SUPPORT[outgoing.type] === 'implemented' &&
+      !isDegradedTransition(outgoing.type) &&
       outgoing.type === 'dissolve' &&
       outgoing.durationSec > 0
 
@@ -185,7 +181,7 @@ const buildAudio = (doc: TimelineDocument): readonly AudioPlan[] =>
 
 const buildDegraded = (doc: TimelineDocument): readonly DegradedTransition[] =>
   doc.transitions
-    .filter((t) => TRANSITION_SUPPORT[t.type] === 'degraded_to_cut')
+    .filter((t) => isDegradedTransition(t.type))
     .map((t) => ({ transitionId: t.id, type: t.type }))
 
 /**

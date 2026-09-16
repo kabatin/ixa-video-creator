@@ -1,4 +1,4 @@
-import { shotEndSec, type Shot, type ShotId, type Transition } from '@ixa/domain'
+import { isDegradedTransition, shotEndSec, type Shot, type ShotId, type Transition } from '@ixa/domain'
 import type { TimelineSource } from './build.js'
 import { TIME_EPSILON, shotsEndSec, sortShotsByStart } from './ordering.js'
 
@@ -18,6 +18,7 @@ export const TIMELINE_ISSUE_CODES = {
   shotGap: 'shot_gap',
   shotMissingTake: 'shot_missing_take',
   clipOutOfRange: 'clip_out_of_range',
+  transitionDegraded: 'transition_degraded',
 } as const
 
 const sec = (value: number): string => `${value.toFixed(3)}s`
@@ -127,6 +128,22 @@ const checkTransitions = (
           `（from=${transition.fromShotId} to=${transition.toShotId}）`,
       })
       continue
+    }
+
+    /**
+     * 絵に出ない種別（wipe / whip_pan / glitch）はレンダリング時に cut へ落ちる。
+     * **黙って落とさない。** 置いた本人は選んだ効果が出ると思っている。
+     * error にはしない。出力自体は作れるので、止めるより伝えるほうが役に立つ。
+     */
+    if (isDegradedTransition(transition.type)) {
+      issues.push({
+        severity: 'warning',
+        code: TIMELINE_ISSUE_CODES.transitionDegraded,
+        message:
+          `Transition ${transition.type} はまだ絵に出せないため、レンダリングでは` +
+          `ただのカットになる`,
+        shotId: transition.fromShotId,
+      })
     }
 
     if (toIndex !== fromIndex + 1) {
