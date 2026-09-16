@@ -932,8 +932,10 @@ ixa-video-creator/
 
 ```
 POST   /projects                       プロジェクト作成
+GET    /projects?workspaceId=<ULID>    一覧（workspaceId は必須）
 GET    /projects/:id
 PATCH  /projects/:id
+DELETE /projects/:id                   ソフトデリート
 
 POST   /uploads/sign                   署名付き PUT URL 発行
 POST   /uploads/complete               アップロード完了通知 → media キュー投入

@@ -25,7 +25,12 @@ const domainPurityMessage =
 
 export default tseslint.config(
   {
-    ignores: ['**/node_modules/**', '**/dist/**', '**/.next/**', '**/drizzle/**', '**/coverage/**'],
+    ignores: ['**/node_modules/**', '**/dist/**', '**/.next/**', '**/drizzle/**', '**/coverage/**',
+      '**/next-env.d.ts', // Next.js が毎回生成する。triple-slash-reference に抵触するため除外,
+      // ビルド設定ファイルは tsconfig に含まれず型情報つきルールを適用できないため除外する
+      'eslint.config.js',
+      '**/*.config.{js,mjs,ts}',
+    ],
   },
 
   js.configs.recommended,
