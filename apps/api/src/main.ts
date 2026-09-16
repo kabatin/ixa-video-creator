@@ -13,9 +13,15 @@ import {
   createRenderJobRepository,
   createTimelineClipRepository,
   createTransitionRepository,
+  createBrandAssetRepository,
+  createCharacterLookRepository,
+  createCharacterRepository,
+  createLocationRepository,
+  createShotCharacterRepository,
+  createShotReferenceRepository,
 } from '@ixa/db'
-import { createPhase1EmptyContextSource } from '@ixa/domain'
 import { createProviderRegistry } from '@ixa/provider-core'
+import { createGenerationContextSource } from '@ixa/generation'
 import { RENDER_QUEUE_NAME, type RenderQueue } from './routes/renders.js'
 import type { MediaIngestDeps } from './routes/uploads.js'
 import { createStubVideoProvider } from '@ixa/provider-video'
@@ -144,25 +150,49 @@ export const main = (): void => {
     logger,
   }
 
+  /**
+   * リポジトリは 1 箇所で作る。生成コンテキストと API の両方が同じ実体を使う。
+   */
+  const characters = createCharacterRepository(db)
+  const looks = createCharacterLookRepository(db)
+  const shotCharacters = createShotCharacterRepository(db)
+  const shotReferences = createShotReferenceRepository(db)
+  const brandAssets = createBrandAssetRepository(db)
+  const locations = createLocationRepository(db)
+  const shots = createShotRepository(db)
+  const takes = createTakeRepository(db)
+  const mediaAssets = createMediaAssetRepository(db)
+
   const app = createApp({
     projects: createProjectRepository(db),
-    mediaAssets: createMediaAssetRepository(db),
-    shots: createShotRepository(db),
-    takes: createTakeRepository(db),
+    mediaAssets,
+    shots,
+    takes,
     generationJobs: createGenerationJobRepository(db),
     transitions: createTransitionRepository(db),
     timelineClips: createTimelineClipRepository(db),
     musicTracks: createMusicTrackRepository(db),
     renderJobs: createRenderJobRepository(db),
     renderQueue: renderQueuePort,
+    characters,
+    looks,
+    shotCharacters,
+    brandAssets,
+    locations,
     mediaIngest,
     // Provider の登録はここでのみ行う。Phase 1 はスタブのみ（ADR-0014）。
     // API 側は capability の参照と Model Router のためだけに使い、実行は worker が行う。
     registry: createProviderRegistry([
       createStubVideoProvider({ outputDir: process.env.STUB_OUTPUT_DIR ?? '/tmp/ixa-stub-output' }),
     ]),
-    // TODO: Character / Location リポジトリは Phase 2。それまでは空実装で通す。
-    generationContext: createPhase1EmptyContextSource(),
+    /**
+     * Phase 2 で空実装から差し替えた。
+     * Shot に紐づいた登場人物・Look・識別画像・衣装画像を実際に解決する。
+     */
+    generationContext: createGenerationContextSource({
+      shotCharacters, characters, looks, locations, shotReferences,
+      shots, takes, mediaAssets,
+    }),
     generationQueue: queuePort,
     storage,
     corsOrigins: config.corsOrigins,

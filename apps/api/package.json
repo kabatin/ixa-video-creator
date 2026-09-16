@@ -29,7 +29,8 @@
     "pino": "^10.3.1",
     "zod": "^3.24.1",
     "@ixa/provider-video": "workspace:*",
-    "@ixa/timeline": "workspace:*"
+    "@ixa/timeline": "workspace:*",
+    "@ixa/generation": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.23.13",

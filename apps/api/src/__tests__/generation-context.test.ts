@@ -20,7 +20,7 @@ import {
   createGenerationContextSource,
   GenerationContextError,
   type GenerationContextDeps,
-} from '../generation-context.js'
+} from '@ixa/generation'
 import { createLogger } from '../logger.js'
 import { shotCharacterRoutes, type ShotCharacterRoutesDeps } from '../routes/characters.js'
 import { aShot, aTake } from './fixtures.js'
@@ -45,7 +45,7 @@ import {
   createInMemoryShotReferenceRepository,
   type InMemoryShotCharacterRepository,
   type InMemoryShotReferenceRepository,
-} from './in-memory-shot-link-repositories.js'
+} from '@ixa/generation/testing'
 import { createInMemoryTakeRepository } from './in-memory-take-repository.js'
 
 /**

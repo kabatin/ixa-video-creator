@@ -1,3 +1,7 @@
+/**
+ * テスト専用の偽物リポジトリ。`@ixa/generation/testing` から api / worker の
+ * 両方が使う。本番コードから import しないこと（`index.ts` では公開しない）。
+ */
 import {
   DbNotFoundError,
   type CharacterLookRepository,

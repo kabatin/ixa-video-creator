@@ -16,6 +16,15 @@ import {
   createInMemoryTransitionRepository,
 } from './in-memory-timeline-repositories.js'
 import type { RenderQueue } from '../routes/renders.js'
+import {
+  createInMemoryCharacterLookRepository,
+  createInMemoryCharacterRepository,
+} from './in-memory-character-repositories.js'
+import {
+  createInMemoryBrandAssetRepository,
+  createInMemoryLocationRepository,
+} from './in-memory-library-repositories.js'
+import { createInMemoryShotCharacterRepository } from '@ixa/generation/testing'
 import type { RenderJobId } from '@ixa/domain'
 
 /** 投入されたジョブ ID を記録するだけのキュー。Redis には接続しない。 */
@@ -68,6 +77,11 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   musicTracks: createInMemoryMusicTrackRepository(),
   renderJobs: createInMemoryRenderJobRepository(),
   renderQueue: createRecordingRenderQueue(),
+  characters: createInMemoryCharacterRepository(),
+  looks: createInMemoryCharacterLookRepository(),
+  shotCharacters: createInMemoryShotCharacterRepository(),
+  brandAssets: createInMemoryBrandAssetRepository(),
+  locations: createInMemoryLocationRepository(),
   storage: createMemoryStorage(),
   // テストは同一オリジン想定なので CORS を無効にする
   corsOrigins: [],

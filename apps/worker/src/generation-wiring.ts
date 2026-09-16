@@ -1,5 +1,5 @@
-import { createPhase1EmptyContextSource } from '@ixa/domain'
 import { createProviderRegistry } from '@ixa/provider-core'
+import { createGenerationContextSource } from '@ixa/generation'
 import { createStubVideoProvider } from '@ixa/provider-video'
 import { createS3Storage } from '@ixa/storage'
 import {
@@ -10,6 +10,11 @@ import {
   createRenderJobRepository,
   createShotRepository,
   createTakeRepository,
+  createCharacterLookRepository,
+  createCharacterRepository,
+  createLocationRepository,
+  createShotCharacterRepository,
+  createShotReferenceRepository,
 } from '@ixa/db'
 import type { AppConfig } from '@ixa/config'
 import { Queue } from 'bullmq'
@@ -74,8 +79,21 @@ export const createGenerationWiring = (
     takes: createTakeRepository(db),
     storage,
     registry,
-    // Phase 2 でキャラクター・ロケーションのリポジトリに差し替える
-    context: createPhase1EmptyContextSource(),
+    /**
+     * **API 側と同じ実装を使うこと。**
+     * 片方だけ空実装のままだと、API が解決した仕様と worker が組み直した仕様の
+     * ハッシュが食い違い、spec_drift で全ての生成が失敗する（実際に起きた）。
+     */
+    context: createGenerationContextSource({
+      shotCharacters: createShotCharacterRepository(db),
+      characters: createCharacterRepository(db),
+      looks: createCharacterLookRepository(db),
+      locations: createLocationRepository(db),
+      shotReferences: createShotReferenceRepository(db),
+      shots: createShotRepository(db),
+      takes: createTakeRepository(db),
+      mediaAssets: createMediaAssetRepository(db),
+    }),
     scheduler,
     logger,
   }
