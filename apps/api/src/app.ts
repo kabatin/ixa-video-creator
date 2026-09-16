@@ -21,6 +21,7 @@ import { assetRoutes } from './routes/assets.js'
 import { scriptRoutes } from './routes/scripts.js'
 import { sequenceRoutes } from './routes/sequences.js'
 import { musicRoutes, type AnalysisQueue } from './routes/music.js'
+import { storyboardRoutes } from './routes/storyboard.js'
 import type {
   BrandAssetRepository, CharacterLookRepository, CharacterRepository, LocationRepository,
   MusicAnalysisRepository, MusicTrackRepository, RenderJobRepository, ScriptRepository,
@@ -148,6 +149,16 @@ export const createApp = (deps: AppDeps) => {
   )
   app.route('/', scriptRoutes({ scripts: deps.scripts, projects }))
   app.route('/', sequenceRoutes({ sequences: deps.sequences, projects }))
+  app.route(
+    '/',
+    storyboardRoutes({
+      shots: deps.shots,
+      musicTracks: deps.musicTracks,
+      musicAnalyses: deps.musicAnalyses,
+      sequences: deps.sequences,
+      projects,
+    }),
+  )
 
   app.route('/', timelineRoutes(timelineDeps))
   app.route('/', renderRoutes({ ...timelineDeps, renderJobs: deps.renderJobs, queue: deps.renderQueue }))
