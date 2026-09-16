@@ -68,6 +68,13 @@ const unknownJobError = (ref: string): ProviderError =>
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
 
+/** ジョブ参照（UUID）から決定的に seed を作る。同じジョブなら常に同じ値。 */
+const hashToSeed = (ref: string): number => {
+  let hash = 0
+  for (const char of ref) hash = (hash * 31 + char.charCodeAt(0)) % 2_147_483_647
+  return hash
+}
+
 const resolveModel = (model: VideoModelDescriptor): VideoModelDescriptor => {
   const known = stubVideoModels.find((candidate) => candidate.id === model.id)
   if (known === undefined) {
@@ -107,6 +114,17 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
       // ハッシュ計算も try の中で行う。render は await されないため、
       // ここで throw すると unhandled rejection になる。
       const specHash = await computeSpecHash(spec)
+
+      /**
+       * seed が未指定なら、このジョブ固有の値をノイズの種にする。
+       *
+       * 実 Provider は seed 無しのとき実行ごとに違う絵を返す。
+       * スタブが毎回まったく同じバイト列を返すと、
+       * 1 Shot に複数 Take を作っても内容が同一になり、
+       * **Take を比較して選ぶ工程を試せない**（ストレージ側の重複排除にも当たる）。
+       * seedUsed には実際に使った値を返すので、再現もできる。
+       */
+      const effectiveSeed = spec.seed ?? hashToSeed(ref)
       if (simulatedLatencyMs > 0) await delay(simulatedLatencyMs, job.controller.signal)
       // 待っている間に cancel されていたら running で上書きしない。
       if (jobs.get(ref)?.cancelled === true) return
@@ -122,7 +140,7 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
           backgroundColor: colorForShot(spec.shotId),
           lines: placeholderLines({ spec, model, generationDurationSec, specHash }),
           signature: specHash,
-          seed: spec.seed,
+          seed: effectiveSeed,
         },
         { signal: job.controller.signal },
       )
@@ -133,7 +151,7 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
         status: {
           state: 'succeeded',
           output: { type: 'local', path: job.outputPath },
-          seedUsed: spec.seed,
+          seedUsed: effectiveSeed,
           costUsd: model.economics.costPerSecondUsd * generationDurationSec,
           raw: {
             provider: 'stub',

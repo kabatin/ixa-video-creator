@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { probeMedia } from '@ixa/media'
 import { CapabilityViolationError } from '@ixa/provider-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -61,7 +62,8 @@ describe('createStubVideoProvider（実 ffmpeg）', () => {
       expect(status.output.type).toBe('local')
       expect(outputPathOf(status).startsWith('/')).toBe(true)
       expect(status.costUsd).toBe(0)
-      expect(status.seedUsed).toBeNull()
+      // seed 未指定でもジョブ固有の値が使われる。実 Provider と同じく毎回違う絵になるため。
+      expect(status.seedUsed).not.toBeNull()
 
       const probe = await probeMedia(outputPathOf(status))
       expect(probe.durationSec).toBeCloseTo(4, 2)
@@ -239,5 +241,30 @@ describe('createStubVideoProvider（実 ffmpeg）', () => {
     }
 
     await expect(provider.poll(handle)).rejects.toThrow('未知のジョブ')
+  })
+})
+
+describe('seed 未指定時の挙動（実 ffmpeg）', () => {
+  it('同じ仕様で 2 回生成しても内容が異なる（Take を比較できるようにするため）', async () => {
+    const outputDir = await createTempDir()
+    const provider = createStubVideoProvider({ outputDir })
+    const request = makeRequest(stubVeoLikeModel, makeSpec({ seed: null }))
+
+    const first = await pollUntilSucceeded(provider, await provider.submit(request))
+    const second = await pollUntilSucceeded(provider, await provider.submit(request))
+
+    expect(first.seedUsed).not.toBe(second.seedUsed)
+    const a = await readFile(outputPathOf(first))
+    const b = await readFile(outputPathOf(second))
+    expect(a.equals(b)).toBe(false)
+  })
+
+  it('seed を明示すれば尊重される（再現性のため）', async () => {
+    const outputDir = await createTempDir()
+    const provider = createStubVideoProvider({ outputDir })
+    const request = makeRequest(stubVeoLikeModel, makeSpec({ seed: 12345 }))
+
+    const status = await pollUntilSucceeded(provider, await provider.submit(request))
+    expect(status.seedUsed).toBe(12345)
   })
 })
