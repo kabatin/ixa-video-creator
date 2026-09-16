@@ -53,6 +53,13 @@ export const MusicAnalysis = z.object({
 })
 export type MusicAnalysis = z.infer<typeof MusicAnalysis>
 
+/**
+ * 解析結果を 1 件保存するときの入力。id と createdAt はリポジトリが採番する。
+ * **追記のみ。** 既存の解析を書き換える入力型は用意しない（再解析は新しい行を作る）。
+ */
+export const CreateMusicAnalysisInput = MusicAnalysis.omit({ id: true, createdAt: true })
+export type CreateMusicAnalysisInput = z.input<typeof CreateMusicAnalysisInput>
+
 export const MANUAL_ANALYZER_VERSION = 'manual'
 
 /** ビートグリッドの分解能。1 = 拍、0.5 = 8分、0.25 = 16分。 */
