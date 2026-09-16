@@ -19,17 +19,19 @@
     "@ixa/config": "workspace:*",
     "@ixa/db": "workspace:*",
     "@ixa/domain": "workspace:*",
+    "@ixa/generation": "workspace:*",
     "@ixa/media": "workspace:*",
     "@ixa/music": "workspace:*",
     "@ixa/provider-core": "workspace:*",
+    "@ixa/provider-llm": "workspace:*",
     "@ixa/provider-video": "workspace:*",
+    "@ixa/render": "workspace:*",
+    "@ixa/review": "workspace:*",
     "@ixa/storage": "workspace:*",
     "bullmq": "^6.3.6",
     "ioredis": "^5.11.1",
     "pino": "^10.3.1",
-    "zod": "^3.24.1",
-    "@ixa/render": "workspace:*",
-    "@ixa/generation": "workspace:*"
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "tsx": "^4.23.13",
