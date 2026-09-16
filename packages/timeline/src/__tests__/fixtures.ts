@@ -7,8 +7,7 @@ import {
   type Shot,
   type TimelineClip,
   type TimelineTrack,
-  type Transition,
-} from '@ixa/domain'
+  type Transition, MediaAssetId} from '@ixa/domain'
 import type { TimelineSource } from '../build.js'
 
 /** ULID は 26 文字。末尾 2 桁だけを変えて読みやすい ID を作る。 */
@@ -103,8 +102,27 @@ export const makeSource = (overrides: Partial<TimelineSource> = {}): TimelineSou
   clips: [],
   musicTracks: [],
   resolveShotMedia: (shot) => `https://media.test/${shot.code}.mp4`,
+  resolveClipMedia: (id) => ({ url: `https://media.test/${id}.mp4`, kind: 'video' as const }),
   ...overrides,
 })
 
 /** 入力配列と各要素が変更されていないことを確認するためのスナップショット。 */
 export const snapshot = <T>(values: readonly T[]): string => JSON.stringify(values)
+
+/** media 内容を持つクリップ。メディア解決の検証に使う。 */
+export const makeMediaClip = (
+  n: number,
+  track: TimelineTrack,
+  startSec: Seconds,
+  durationSec: Seconds,
+  layer = 0,
+): TimelineClip => ({
+  ...makeClip(n, track, startSec, durationSec, layer),
+  content: {
+    type: 'media',
+    mediaAssetId: MediaAssetId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAV'),
+    inSec: 0,
+    outSec: durationSec,
+    volume: 1,
+  },
+})

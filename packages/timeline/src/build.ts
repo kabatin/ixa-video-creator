@@ -1,5 +1,7 @@
 import type {
+  MediaAssetId,
   Project,
+  RenderableClip,
   Seconds,
   Shot,
   TimelineClip,
@@ -8,7 +10,7 @@ import type {
 } from '@ixa/domain'
 import { clipsEndSec, shotsEndSec, sortClips, sortShotsByStart } from './ordering.js'
 
-/** 音楽トラックの投影。尺は `TimelineDocument.audio` と同じく持たない。 */
+/** 音楽トラックの投影。 */
 export type TimelineMusicTrack = {
   readonly mediaUrl: string
   readonly startSec: Seconds
@@ -29,6 +31,57 @@ export type TimelineSource = {
   readonly musicTracks: readonly TimelineMusicTrack[]
   /** Shot の採用 Take のメディア URL を引く。未生成の Shot は undefined を返してよい。 */
   readonly resolveShotMedia: (shot: Shot) => string | undefined
+  /**
+   * クリップのメディアを URL と種別に解決する。解決できなければ undefined を返してよい。
+   * レンダラは ID を URL に解決できないため、ここで解決しておく（video1 と同じ扱い）。
+   */
+  readonly resolveClipMedia: (
+    mediaAssetId: MediaAssetId,
+  ) => { readonly url: string; readonly kind: 'image' | 'video' | 'audio' } | undefined
+}
+
+/**
+ * DB 上のクリップを、レンダリング可能な形へ変換する。
+ * 解決できなかったメディアは無言で消さず `unresolved` として残す。
+ * 消すと「なぜ出ないのか」が分からなくなるため。
+ */
+const toRenderableClip = (
+  clip: TimelineClip,
+  resolve: TimelineSource['resolveClipMedia'],
+): RenderableClip => {
+  const base = {
+    id: clip.id,
+    track: clip.track,
+    startSec: clip.startSec,
+    durationSec: clip.durationSec,
+    layer: clip.layer,
+    opacity: clip.opacity,
+  }
+
+  if (clip.content.type !== 'media') return { ...base, content: clip.content }
+
+  const resolved = resolve(clip.content.mediaAssetId)
+  if (resolved === undefined) {
+    return {
+      ...base,
+      content: {
+        type: 'unresolved',
+        reason: `メディアを解決できません: ${clip.content.mediaAssetId}`,
+      },
+    }
+  }
+
+  return {
+    ...base,
+    content: {
+      type: 'media',
+      mediaUrl: resolved.url,
+      kind: resolved.kind,
+      inSec: clip.content.inSec,
+      outSec: clip.content.outSec,
+      volume: clip.content.volume,
+    },
+  }
 }
 
 /**
@@ -83,7 +136,7 @@ export const buildTimelineDocument = (source: TimelineSource): TimelineDocument 
   durationSec: timelineDurationSec(source),
   video1: buildVideo1(source),
   transitions: [...source.transitions],
-  clips: sortClips(source.clips),
+  clips: sortClips(source.clips).map((clip) => toRenderableClip(clip, source.resolveClipMedia)),
   audio: source.musicTracks.map((track) => ({
     mediaUrl: track.mediaUrl,
     startSec: track.startSec,

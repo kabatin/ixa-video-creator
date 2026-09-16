@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildTimelineDocument } from '../build.js'
-import { makeClip, makeShot, makeSource, shotId, snapshot } from './fixtures.js'
+import { makeClip, makeMediaClip, makeShot, makeSource, shotId, snapshot } from './fixtures.js'
 
 describe('buildTimelineDocument', () => {
   it('VIDEO1 は startSec 昇順に並ぶ', () => {
@@ -124,5 +124,39 @@ describe('buildTimelineDocument', () => {
     expect(snapshot([shots, clips, musicTracks])).toBe(before)
     expect(shots.map((shot) => shot.code)).toEqual(['S3', 'S1', 'S2'])
     expect(document.clips).not.toBe(clips)
+  })
+})
+
+describe('クリップのメディア解決', () => {
+  it('解決できたクリップは URL と種別を持つ', () => {
+    const clips = [makeMediaClip(1, 'VIDEO2', 0, 2)]
+    const doc = buildTimelineDocument(makeSource({ shots: [makeShot(1, 0, 4)], clips }))
+    const content = doc.clips[0]?.content
+    expect(content?.type).toBe('media')
+    if (content?.type === 'media') {
+      expect(content.mediaUrl).toContain('https://media.test/')
+      expect(content.kind).toBe('video')
+    }
+  })
+
+  it('解決できないクリップは消さず unresolved として残す', () => {
+    const clips = [makeMediaClip(1, 'VIDEO2', 0, 2)]
+    const doc = buildTimelineDocument(
+      makeSource({ shots: [makeShot(1, 0, 4)], clips, resolveClipMedia: () => undefined }),
+    )
+    expect(doc.clips).toHaveLength(1)
+    const content = doc.clips[0]?.content
+    expect(content?.type).toBe('unresolved')
+    if (content?.type === 'unresolved') {
+      expect(content.reason).toContain('解決できません')
+    }
+  })
+
+  it('text クリップはメディア解決を経由しない', () => {
+    const clips = [makeClip(2, 'TEXT', 0, 2)]
+    const doc = buildTimelineDocument(
+      makeSource({ shots: [makeShot(1, 0, 4)], clips, resolveClipMedia: () => undefined }),
+    )
+    expect(doc.clips[0]?.content.type).toBe('text')
   })
 })

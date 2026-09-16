@@ -42,6 +42,52 @@ export const TimelineClip = z.object({
 export type TimelineClip = z.infer<typeof TimelineClip>
 
 /**
+ * レンダリング時のクリップ内容。
+ *
+ * DB 上の `TimelineClip` は `mediaAssetId` を持つが、レンダラは ID を URL に解決できない
+ * （Port は `render(doc, preset, onProgress)` で、リポジトリもストレージも受け取らない）。
+ * **`video1` が `mediaUrl` を持つのと同じく、クリップも構築時に解決済みの URL を持つ。**
+ */
+export const RenderableClipContent = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('media'),
+    mediaUrl: z.string(),
+    /** OffthreadVideo と Img の分岐に使う。拡張子で推測しない。 */
+    kind: z.enum(['image', 'video', 'audio']),
+    inSec: Seconds,
+    outSec: Seconds,
+    volume: z.number().min(0).max(2),
+  }),
+  z.object({
+    type: z.literal('text'),
+    templateKey: z.string().min(1),
+    params: z.record(z.unknown()),
+  }),
+  z.object({
+    type: z.literal('motion_graphics'),
+    templateKey: z.string().min(1),
+    params: z.record(z.unknown()),
+  }),
+  /** 参照先のメディアを解決できなかったクリップ。無言で消さず、絵で分かるようにする。 */
+  z.object({
+    type: z.literal('unresolved'),
+    reason: z.string(),
+  }),
+])
+export type RenderableClipContent = z.infer<typeof RenderableClipContent>
+
+export const RenderableClip = z.object({
+  id: TimelineClipId,
+  track: TimelineTrack,
+  startSec: Seconds,
+  durationSec: Seconds,
+  layer: z.number().int().nonnegative(),
+  content: RenderableClipContent,
+  opacity: z.number().min(0).max(1),
+})
+export type RenderableClip = z.infer<typeof RenderableClip>
+
+/**
  * プレビューとレンダリングの共通入力。
  * これが同一であることで「プレビューでは合っていたのに書き出すとズレる」を構造的に防ぐ。
  */
@@ -60,7 +106,7 @@ export const TimelineDocument = z.object({
     }),
   ),
   transitions: z.array(Transition),
-  clips: z.array(TimelineClip),
+  clips: z.array(RenderableClip),
   audio: z.array(
     z.object({
       mediaUrl: z.string(),
