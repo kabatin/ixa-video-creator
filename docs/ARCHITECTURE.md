@@ -300,11 +300,18 @@ packages/*    ロジック。
   domain/     純粋。IO 禁止。他 package に依存しない。型と規則の唯一の正。
   db/         domain の Port を実装する。SQL はここだけ。
   providers/  外部 SDK をここで閉じる。domain 型のみを外に出す。
+  generation/ 生成仕様の入力を DB から集める（domain の Port の実装）。
   timeline/   時間計算・ビートスナップ・TimelineDocument 構築（純粋）。
   render/     Remotion コンポジション + レンダリング実行。
   review/     レビュアー実装（決定的 + LLM）。
   music/ media/ storage/ llm/ ui/ config/
 ```
+
+`generation` が独立したパッケージなのは、**api と worker の両方が同じ入力から
+同じ仕様を組み立てる必要があるため**（ADR-0003 の再現性）。apps 同士は import
+できないので、片方の app に置くと必ずもう片方が空実装のまま取り残される。
+実際に `apps/api` へ置いたときに worker だけが古い実装のまま残り、specHash が
+食い違って全生成が spec_drift で失敗した（tasks/lessons.md L-012）。
 
 **依存の向きは常に `apps → packages → domain`。逆流は禁止。**
 この規則は `eslint-plugin-boundaries` で機械的に強制する。
@@ -910,6 +917,7 @@ ixa-video-creator/
 │   ├── domain/           純粋な型・zod スキーマ・ロジック（IO 禁止）
 │   │   ├── shot/  character/  take/  review/  reference/  routing/  ids/
 │   ├── db/               Drizzle スキーマ + マイグレーション + リポジトリ実装
+│   ├── generation/       GenerationContextSource の実装（api と worker が共有）
 │   ├── providers/
 │   │   ├── core/         interface / registry / descriptor 型
 │   │   ├── video/        seedance / veo / kling / runway
