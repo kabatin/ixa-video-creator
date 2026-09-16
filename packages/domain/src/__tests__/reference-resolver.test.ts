@@ -106,6 +106,35 @@ describe('resolveReferences', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
+  it('前 Shot の最終フレームを連続性の参照として積む', () => {
+    const refs = resolveReferences(base({ previousShotLastFrameId: asset(7) }))
+
+    const continuity = refs.find((r) => r.mediaAssetId === asset(7))
+    expect(continuity?.role).toBe('previous_shot_last_frame')
+  })
+
+  it('開始画像を明示したら連続性フレームは積まない（ADR-0016）', () => {
+    const refs = resolveReferences(
+      base({ startFrameId: asset(6), previousShotLastFrameId: asset(7) }),
+    )
+
+    // どちらも Provider の開始画像 1 枠に落ちる。明示した指定が勝つ。
+    expect(refs.find((r) => r.mediaAssetId === asset(6))?.role).toBe('start_frame')
+    expect(refs.some((r) => r.mediaAssetId === asset(7))).toBe(false)
+  })
+
+  it('枠が余っていても開始画像は 2 枚にならない（ADR-0016）', () => {
+    const refs = resolveReferences(
+      base({ maxReferences: 9, startFrameId: asset(6), previousShotLastFrameId: asset(7) }),
+    )
+
+    // 優先度による切り詰めに任せると、上限が緩いモデルでは両方残ってしまう。
+    const frames = refs.filter(
+      (r) => r.role === 'start_frame' || r.role === 'previous_shot_last_frame',
+    )
+    expect(frames).toHaveLength(1)
+  })
+
   it('同じ入力で必ず同じ結果になる（再現性）', () => {
     const runs = Array.from({ length: 5 }, () => resolveReferences(base({ maxReferences: 3 })))
     const serialized = runs.map((r) => JSON.stringify(r.map((x) => x.mediaAssetId)))

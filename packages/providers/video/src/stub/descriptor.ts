@@ -38,7 +38,11 @@ export const stubVeoLikeModel: VideoModelDescriptor = {
     resolutions: SHARED_OUTPUT.resolutions.map((r) => ({ ...r })),
     fps: [...SHARED_OUTPUT.fps],
     durations: { mode: 'enum', values: [4, 6, 8] },
-    referenceImages: { max: 3, roles: ['subject', 'wardrobe', 'start_frame'] },
+    /** 連続性フレームは開始画像として受ける（ADR-0016）。 */
+    referenceImages: {
+      max: 3,
+      roles: ['subject', 'wardrobe', 'start_frame', 'previous_shot_last_frame'],
+    },
     seed: true,
     negativePrompt: false,
     cameraControl: 'prompt',
@@ -66,7 +70,10 @@ export const stubSeedanceLikeModel: VideoModelDescriptor = {
     durations: { mode: 'range', min: 4, max: 15 },
     referenceImages: {
       max: 9,
-      roles: ['subject', 'wardrobe', 'start_frame', 'end_frame', 'location', 'style'],
+      roles: [
+        'subject', 'wardrobe', 'start_frame', 'previous_shot_last_frame',
+        'end_frame', 'location', 'style',
+      ],
     },
     seed: true,
     negativePrompt: false,

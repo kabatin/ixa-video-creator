@@ -116,7 +116,15 @@ export const resolveReferences = (input: ResolveInput): ResolvedReference[] => {
     })
   }
 
-  if (input.previousShotLastFrameId !== null) {
+  /**
+   * **明示したキーフレームがあるときは連続性フレームを積まない**（ADR-0016）。
+   * どちらも Provider の「開始画像」1 枠に落ちるため、両方渡すと同じ枠を奪い合う。
+   * 捨てるのは推測のほう。`start_frame` は利用者が始点を明示した指定である。
+   *
+   * 優先度による切り詰めに任せないのは、枠が余っているモデル（上限 9 枚など）では
+   * 落ちずに開始画像が 2 枚ある仕様ができあがるため。
+   */
+  if (input.previousShotLastFrameId !== null && input.startFrameId === null) {
     candidates.push({
       mediaAssetId: input.previousShotLastFrameId,
       role: 'previous_shot_last_frame',
