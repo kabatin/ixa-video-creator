@@ -30,6 +30,8 @@ export const MusicAnalysis = z.object({
   musicTrackId: MusicTrackId,
   /** 'librosa-v1' | 'manual' など。手動補正値は常に優先される（ADR-0009）。 */
   analyzerVersion: z.string().min(1),
+  /** 解析対象の尺。セクションが尺全体を隙間なく覆うことの検証と、タイムライン配置に使う。 */
+  durationSec: Seconds,
   bpm: z.number().positive(),
   bpmConfidence: z.number().min(0).max(1),
   beats: z.array(Seconds),

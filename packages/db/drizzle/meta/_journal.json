@@ -8,6 +8,13 @@
       "when": 1789526137335,
       "tag": "0000_hard_colossus",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789530266451,
+      "tag": "0001_neat_groot",
+      "breakpoints": true
     }
   ]
 }

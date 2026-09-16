@@ -39,6 +39,8 @@ export const musicAnalyses = pgTable(
       .references(() => musicTracks.id, { onDelete: 'cascade' }),
     /** 再解析の判定に使う（'librosa-v1' | 'manual'）。手動補正は常に優先（ADR-0009）。 */
     analyzerVersion: text('analyzer_version').notNull(),
+    /** 解析対象の尺。セクションが尺全体を覆うことの検証に使う。 */
+    durationSec: seconds('duration_sec').notNull(),
     bpm: doublePrecision('bpm').notNull(),
     bpmConfidence: doublePrecision('bpm_confidence').notNull(),
     beats: jsonb('beats').$type<Seconds[]>().notNull(),

@@ -1,0 +1,1 @@
+ALTER TABLE "music_analyses" ADD COLUMN "duration_sec" double precision NOT NULL;

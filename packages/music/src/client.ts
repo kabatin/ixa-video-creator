@@ -77,19 +77,17 @@ const post = async (url: string, payload: Readonly<Record<string, string>>): Pro
   }
 }
 
-const isOkStatus = (body: unknown): boolean =>
-  typeof body === 'object' &&
-  body !== null &&
-  'status' in body &&
-  (body as { status: unknown }).status === 'ok'
+const isOkStatus = (body: unknown): boolean => {
+  if (typeof body !== 'object' || body === null || !('status' in body)) return false
+  return body.status === 'ok'
+}
 
 /** エラー応答から人が読める理由を取り出す。本文が読めなくても例外にしない。 */
 const readDetail = async (response: Response): Promise<string> => {
   try {
     const body: unknown = await response.json()
     if (typeof body === 'object' && body !== null && 'detail' in body) {
-      const detail = (body as { detail: unknown }).detail
-      if (typeof detail === 'string') return detail
+      if (typeof body.detail === 'string') return body.detail
     }
     return JSON.stringify(body)
   } catch {
