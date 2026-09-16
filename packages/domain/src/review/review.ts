@@ -59,6 +59,29 @@ export const ReviewFinding = z.object({
 })
 export type ReviewFinding = z.infer<typeof ReviewFinding>
 
+/**
+ * ReviewRun を 1 件作るときの入力。id と createdAt はリポジトリが採番する。
+ * status は queued 固定にせず呼び出し側が決める（同期実行なら running から始まる）。
+ */
+export const CreateReviewRunInput = ReviewRun.omit({ id: true, createdAt: true })
+export type CreateReviewRunInput = z.input<typeof CreateReviewRunInput>
+
+/**
+ * ReviewFinding を作るときの入力。id はリポジトリが採番する。
+ * **指摘は追記のみ。** 既存の指摘を書き換える入力型は用意しない
+ * （判定をやり直すなら新しい ReviewRun を作る）。
+ */
+export const CreateReviewFindingInput = ReviewFinding.omit({ id: true, reviewRunId: true })
+export type CreateReviewFindingInput = z.input<typeof CreateReviewFindingInput>
+
+/** ReviewRun の実行後に確定する列。status / verdict / costUsd のみ動く。 */
+export const ReviewRunOutcome = z.object({
+  status: ReviewRun.shape.status,
+  verdict: Verdict.nullable(),
+  costUsd: z.number().nonnegative(),
+})
+export type ReviewRunOutcome = z.infer<typeof ReviewRunOutcome>
+
 export const aggregateVerdict = (
   findings: readonly Pick<ReviewFinding, 'severity'>[],
 ): Verdict => {
