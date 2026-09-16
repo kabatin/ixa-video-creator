@@ -1,3 +1,5 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # Provider アダプタは種別ごとにディレクトリを分けるため 1 階層深い
+  - "packages/providers/*"
