@@ -12,6 +12,7 @@ import {
   inMemoryMediaAssets,
   inMemoryProjects,
   inMemoryRenderJobs,
+  recordingMediaQueue,
   silentLogger,
   type TestRendererOptions,
 } from './doubles.js'
@@ -40,6 +41,8 @@ type FixtureOptions = {
   readonly status?: RenderJob['status']
   readonly snapshot?: ReturnType<typeof aTimelineDocument>
   readonly renderer?: Partial<TestRendererOptions>
+  /** media キューへの投入を失敗させる。 */
+  readonly mediaQueueFailWith?: Error
 }
 
 const buildFixture = async (options: FixtureOptions = {}) => {
@@ -48,6 +51,7 @@ const buildFixture = async (options: FixtureOptions = {}) => {
   const renderJobs = inMemoryRenderJobs()
   const mediaAssets = inMemoryMediaAssets()
   const renderer = createTestRenderer({ outputPath, ...options.renderer })
+  const mediaQueue = recordingMediaQueue(options.mediaQueueFailWith)
 
   const job = await renderJobs.create({
     projectId: project.id,
@@ -63,10 +67,11 @@ const buildFixture = async (options: FixtureOptions = {}) => {
     projects,
     storage: createMemoryStorage(),
     renderer,
+    mediaQueue,
     logger: silentLogger,
   }
 
-  return { deps, job, project, projects, renderJobs, mediaAssets, renderer }
+  return { deps, job, project, projects, renderJobs, mediaAssets, renderer, mediaQueue }
 }
 
 describe('processRenderJob', () => {
@@ -264,5 +269,113 @@ describe('失敗の記録', () => {
       .filter((patch) => patch.progress !== undefined && patch.status === undefined)
 
     expect(progressUpdates.length).toBeGreaterThan(0)
+  })
+})
+
+/**
+ * 再発防止（実データで起きた事故）。
+ *
+ * render が尺と hasAudio だけの部分的な probe を書いていたため、media 側が
+ * `probe !== null` を取り込み済みの根拠にしていた時期にレンダリング結果の
+ * media ジョブが必ず skip され、ポスターフレームが 1 枚も作られなかった。
+ * skip は成功として返るので、欠落は下流から見えなかった。
+ *
+ * 根本は「測っていない値を測った形で残したこと」なので、ここで縛る。
+ */
+describe('出力の probe は測った側が書く', () => {
+  it('render は probe を書かない（測っていないため）', async () => {
+    const { deps, job, mediaAssets } = await buildFixture()
+
+    await processRenderJob(deps, { renderJobId: job.id })
+
+    expect(mediaAssets.snapshot()[0]?.probe).toBeNull()
+  })
+
+  it('レンダラが尺を返しても probe には入れない', async () => {
+    const { deps, job, mediaAssets } = await buildFixture({
+      renderer: { durationSec: 116.5 },
+    })
+
+    await processRenderJob(deps, { renderJobId: job.id })
+
+    // 116.5 は「タイムラインが要求した尺」であって出力ファイルの実測値ではない。
+    expect(mediaAssets.snapshot()[0]?.probe).toBeNull()
+  })
+
+  it('音声トラックの有無から hasAudio を推測しない', async () => {
+    const { deps, job, mediaAssets } = await buildFixture({
+      snapshot: aTimelineDocument({
+        audio: [{ mediaUrl: 'memory://bgm.mp3', startSec: 0, durationSec: 4, volume: 1 }],
+      }),
+    })
+
+    await processRenderJob(deps, { renderJobId: job.id })
+
+    expect(mediaAssets.snapshot()[0]?.probe).toBeNull()
+  })
+
+  it('派生物の列も空のまま残す（media ジョブが埋める）', async () => {
+    const { deps, job, mediaAssets } = await buildFixture()
+
+    await processRenderJob(deps, { renderJobId: job.id })
+
+    const asset = mediaAssets.snapshot()[0]
+    expect(asset?.proxyKey).toBeNull()
+    expect(asset?.thumbnailKey).toBeNull()
+    expect(asset?.posterKeys).toEqual([])
+  })
+})
+
+describe('出力を media キューへ回す', () => {
+  it('成功したら出力 MediaAsset を media キューへ投入する', async () => {
+    const { deps, job, mediaQueue, renderJobs } = await buildFixture()
+
+    await processRenderJob(deps, { renderJobId: job.id })
+
+    // ここを通さないと probe もポスターフレームも永久に作られない。
+    expect(mediaQueue.enqueued()).toEqual([renderJobs.snapshot()[0]?.outputAssetId])
+  })
+
+  it('投入するのは出力 MediaAsset そのもの', async () => {
+    const { deps, job, mediaAssets, mediaQueue } = await buildFixture()
+
+    const outcome = await processRenderJob(deps, { renderJobId: job.id })
+
+    expect(outcome).toEqual({ state: 'succeeded', outputAssetId: mediaAssets.snapshot()[0]?.id })
+    expect(mediaQueue.enqueued()).toEqual([mediaAssets.snapshot()[0]?.id])
+  })
+
+  it('投入に失敗してもレンダリングジョブは succeeded のまま', async () => {
+    const { deps, job, renderJobs, mediaAssets } = await buildFixture({
+      mediaQueueFailWith: new Error('redis に接続できません'),
+    })
+
+    const outcome = await processRenderJob(deps, { renderJobId: job.id })
+
+    // 数十分かけた出力を Redis の不調で捨てない。media ジョブは冪等で流し直せる。
+    expect(outcome.state).toBe('succeeded')
+    const finished = renderJobs.snapshot()[0]
+    expect(finished?.status).toBe('succeeded')
+    expect(finished?.error).toBeNull()
+    expect(finished?.outputAssetId).toBe(mediaAssets.snapshot()[0]?.id)
+  })
+
+  it('レンダリングが失敗したら media キューへは何も投入しない', async () => {
+    const { deps, job, mediaQueue } = await buildFixture({
+      renderer: { failWith: new Error('Chrome が起動できませんでした') },
+    })
+
+    await processRenderJob(deps, { renderJobId: job.id })
+
+    expect(mediaQueue.enqueued()).toEqual([])
+  })
+
+  it('終了済みのジョブを再処理しても二重に投入しない', async () => {
+    const { deps, job, mediaQueue } = await buildFixture()
+
+    await processRenderJob(deps, { renderJobId: job.id })
+    await processRenderJob(deps, { renderJobId: job.id })
+
+    expect(mediaQueue.enqueued()).toHaveLength(1)
   })
 })

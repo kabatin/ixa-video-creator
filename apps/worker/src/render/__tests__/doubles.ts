@@ -14,6 +14,7 @@ import {
   WorkspaceId as WorkspaceIdSchema,
   newId,
   type MediaAsset,
+  type MediaAssetId,
   type Project,
   type RenderJob,
   type RenderPreset,
@@ -23,6 +24,7 @@ import {
   type UpdateRenderJobPatch,
 } from '@ixa/domain'
 import pino from 'pino'
+import type { RenderMediaJobQueue } from '../processor.js'
 
 /**
  * render worker のテスト用ダブル一式。
@@ -214,6 +216,27 @@ export const createTestRenderer = (options: TestRendererOptions): TestRenderer =
         durationSec: options.durationSec ?? doc.durationSec,
         bytes: options.bytes ?? 1024,
       })
+    },
+  }
+}
+
+export type RecordingMediaQueue = RenderMediaJobQueue & {
+  /** 投入された MediaAssetId の記録。順序も保つ。 */
+  readonly enqueued: () => readonly MediaAssetId[]
+}
+
+/**
+ * media キューのテストダブル。Redis へは繋がない。
+ * `failWith` を渡すと投入が必ず失敗する（投入失敗の扱いの検証用）。
+ */
+export const recordingMediaQueue = (failWith?: Error): RecordingMediaQueue => {
+  const enqueued: MediaAssetId[] = []
+  return {
+    enqueued: () => enqueued,
+    enqueue: (mediaAssetId) => {
+      if (failWith !== undefined) return Promise.reject(failWith)
+      enqueued.push(mediaAssetId)
+      return Promise.resolve()
     },
   }
 }

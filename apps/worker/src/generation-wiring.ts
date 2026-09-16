@@ -133,6 +133,15 @@ export const createGenerationWiring = (
     renderer: createRemotionRenderer({
       outputDir: process.env.RENDER_OUTPUT_DIR ?? '/tmp/ixa-render-output',
     }),
+    /**
+     * 出力の probe・サムネイル・ポスターフレームはこの経路でしか作られない。
+     * 以前は投入していなかったため、レンダリング結果には何も付いていなかった。
+     */
+    mediaQueue: {
+      enqueue: async (mediaAssetId) => {
+        await mediaQueue.add('process', { mediaAssetId })
+      },
+    },
     logger,
   }
 

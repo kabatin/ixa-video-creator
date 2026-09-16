@@ -23,6 +23,7 @@ import { createProgressReporter } from './progress.js'
  * - **`RenderJob.timelineSnapshot` をそのまま使い、タイムラインを組み直さない。**
  *   レンダリング中に Shot が編集されても、投入した時点の内容が出る
  * - 冪等。終了済みのジョブを再実行しても MediaAsset を二重に作らない
+ * - **出力の probe は書かない。** 実測は media ジョブの ffprobe に任せる（`storeOutput` 参照）
  */
 
 export const RenderJobData = z.object({ renderJobId: RenderJobIdSchema })
@@ -36,12 +37,27 @@ const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
   webm: 'video/webm',
 }
 
+/**
+ * レンダリング結果の MediaAsset を media キューへ回す口。
+ *
+ * **レンダリング結果にも probe と派生物が要る。** render は出力を測らないので
+ * （`storeOutput` のコメント参照）、ここを通さないと尺も解像度も永久に null のまま、
+ * ポスターフレームもサムネイルもプロキシも 1 つも作られない。
+ *
+ * 形は `generation` 側の `MediaJobQueue` と同じだが、render が generation に
+ * 依存しないよう別に定義する。配線側は同じオブジェクトを両方へ渡してよい。
+ */
+export type RenderMediaJobQueue = {
+  enqueue(mediaAssetId: MediaAssetId): Promise<void>
+}
+
 export type RenderProcessorDeps = {
   readonly renderJobs: RenderJobRepository
   readonly mediaAssets: MediaAssetRepository
   readonly projects: ProjectRepository
   readonly storage: ObjectStorage
   readonly renderer: TimelineRenderer
+  readonly mediaQueue: RenderMediaJobQueue
   readonly logger: Logger
 }
 
@@ -97,6 +113,13 @@ const createProgressWriter = (deps: RenderProcessorDeps, job: RenderJob) => {
  *
  * `RenderResult.storageKey` は `packages/render` が書いた**ローカルのファイルパス**で、
  * ストレージ上のキーではない（renderer.ts のコメント参照）。ここで置き換える。
+ *
+ * **probe は付けない。** render はこのファイルを一度も測っていない。
+ * 以前は尺と hasAudio だけ入れた probe を書いていたが、どちらも実測ではなく
+ * 「タイムラインがそう要求した」という入力側の値でしかなかった
+ * （エンコードが尺を丸めても、音声トラックが無音で落ちても気づけない）。
+ * 残りの width / height / fps / codec は null 固定だった。
+ * 実測は media ジョブの ffprobe が行い、`MediaAsset.probe` を後から埋める。
  */
 const storeOutput = async (
   deps: RenderProcessorDeps,
@@ -121,20 +144,36 @@ const storeOutput = async (
     mimeType: contentType,
     bytes: body.byteLength,
     checksumSha256: createHash('sha256').update(body).digest('hex'),
-    // 解像度やコーデックは ffprobe が測る。ここで preset から推測して書かない。
-    probe: {
-      durationSec: result.durationSec,
-      width: null,
-      height: null,
-      fps: null,
-      hasAudio: job.timelineSnapshot.audio.length > 0,
-      codec: null,
-    },
     origin: { type: 'rendered', renderJobId: job.id },
     tags: [],
   })
 
   return asset.id
+}
+
+/**
+ * 出力を media キューへ回す。**失敗してもレンダリングジョブは落とさない。**
+ *
+ * ここに来た時点でレンダリングは終わり、ファイルはストレージに入り、
+ * MediaAsset も確定している。Redis の一時的な不調でそれを failed にすると、
+ * 数十分かけた出力を捨てて丸ごとやり直すことになる。
+ * media ジョブは冪等なので後から流し直せる。
+ *
+ * ただし黙って落とさない。流し直す対象が分かるよう mediaAssetId ごと error で残す。
+ */
+const enqueueIngest = async (
+  deps: RenderProcessorDeps,
+  job: RenderJob,
+  mediaAssetId: MediaAssetId,
+): Promise<void> => {
+  try {
+    await deps.mediaQueue.enqueue(mediaAssetId)
+  } catch (error) {
+    deps.logger.error(
+      { jobId: job.id, mediaAssetId, err: error },
+      'media キューへ投入できませんでした。出力の probe とポスターフレームが作られていません',
+    )
+  }
 }
 
 /** レンダリング本体。スナップショットをそのままレンダラへ渡す。 */
@@ -158,6 +197,9 @@ const render = async (
   }
 
   const outputAssetId = await storeOutput(deps, job, project, result)
+
+  // probe / サムネイル / ポスターフレームはこの経路でしか作られない。
+  await enqueueIngest(deps, job, outputAssetId)
 
   await deps.renderJobs.update(job.id, {
     status: 'succeeded',
