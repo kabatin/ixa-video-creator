@@ -28,4 +28,9 @@ describe('createApp のルート配線', () => {
     const res = await buildApp().request(`/projects/${project.id}/sequences`)
     expect(res.status).toBe(200)
   })
+
+  it('楽曲のルートが生えている', async () => {
+    const res = await buildApp().request(`/projects/${project.id}/music-tracks`)
+    expect(res.status).toBe(200)
+  })
 })

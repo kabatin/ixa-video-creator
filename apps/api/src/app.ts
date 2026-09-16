@@ -20,10 +20,11 @@ import { characterRoutes, shotCharacterRoutes } from './routes/characters.js'
 import { assetRoutes } from './routes/assets.js'
 import { scriptRoutes } from './routes/scripts.js'
 import { sequenceRoutes } from './routes/sequences.js'
+import { musicRoutes, type AnalysisQueue } from './routes/music.js'
 import type {
   BrandAssetRepository, CharacterLookRepository, CharacterRepository, LocationRepository,
-  MusicTrackRepository, RenderJobRepository, ScriptRepository, SequenceRepository,
-  ShotCharacterRepository, TimelineClipRepository, TransitionRepository,
+  MusicAnalysisRepository, MusicTrackRepository, RenderJobRepository, ScriptRepository,
+  SequenceRepository, ShotCharacterRepository, TimelineClipRepository, TransitionRepository,
 } from '@ixa/db'
 
 /**
@@ -51,6 +52,8 @@ export type AppDeps = {
   locations: LocationRepository
   scripts: ScriptRepository
   sequences: SequenceRepository
+  musicAnalyses: MusicAnalysisRepository
+  analysisQueue: AnalysisQueue
   /** media キューへの投入。未配線なら登録のみ行い queued: false を返す。 */
   mediaIngest?: MediaIngestDeps
   storage: ObjectStorage
@@ -132,6 +135,17 @@ export const createApp = (deps: AppDeps) => {
     assetRoutes({ brandAssets: deps.brandAssets, locations: deps.locations, mediaAssets }),
   )
 
+  app.route(
+    '/',
+    musicRoutes({
+      musicTracks: deps.musicTracks,
+      musicAnalyses: deps.musicAnalyses,
+      projects,
+      mediaAssets,
+      storage,
+      queue: deps.analysisQueue,
+    }),
+  )
   app.route('/', scriptRoutes({ scripts: deps.scripts, projects }))
   app.route('/', sequenceRoutes({ sequences: deps.sequences, projects }))
 

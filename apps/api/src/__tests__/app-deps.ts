@@ -20,6 +20,9 @@ import {
   createInMemoryScriptRepository,
   createInMemorySequenceRepository,
 } from './in-memory-script-repositories.js'
+import { createInMemoryMusicAnalysisRepository } from './in-memory-music-analysis-repository.js'
+import type { AnalysisQueue } from '../routes/music.js'
+import type { MusicTrackId } from '@ixa/domain'
 import {
   createInMemoryMusicTrackRepository,
   createInMemoryRenderJobRepository,
@@ -65,6 +68,22 @@ export const createRecordingRenderQueue = (): RecordingRenderQueue => {
   }
 }
 
+/** 投入された MusicTrack ID を記録するだけのキュー。 */
+export type RecordingAnalysisQueue = AnalysisQueue & {
+  readonly enqueued: () => readonly MusicTrackId[]
+}
+
+export const createRecordingAnalysisQueue = (): RecordingAnalysisQueue => {
+  const enqueued: MusicTrackId[] = []
+  return {
+    enqueued: () => enqueued,
+    enqueue: (musicTrackId) => {
+      enqueued.push(musicTrackId)
+      return Promise.resolve()
+    },
+  }
+}
+
 export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps => ({
   projects: createInMemoryProjectRepository(),
   mediaAssets: createInMemoryMediaAssetRepository(),
@@ -86,6 +105,8 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   locations: createInMemoryLocationRepository(),
   scripts: createInMemoryScriptRepository(),
   sequences: createInMemorySequenceRepository(),
+  musicAnalyses: createInMemoryMusicAnalysisRepository(),
+  analysisQueue: createRecordingAnalysisQueue(),
   storage: createMemoryStorage(),
   // テストは同一オリジン想定なので CORS を無効にする
   corsOrigins: [],

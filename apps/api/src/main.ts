@@ -21,10 +21,12 @@ import {
   createShotReferenceRepository,
   createScriptRepository,
   createSequenceRepository,
+  createMusicAnalysisRepository,
 } from '@ixa/db'
 import { createProviderRegistry } from '@ixa/provider-core'
 import { createGenerationContextSource } from '@ixa/generation'
 import { RENDER_QUEUE_NAME, type RenderQueue } from './routes/renders.js'
+import { ANALYSIS_QUEUE_NAME, type AnalysisQueue } from './routes/music.js'
 import type { MediaIngestDeps } from './routes/uploads.js'
 import { createStubVideoProvider } from '@ixa/provider-video'
 import { createS3Storage } from '@ixa/storage'
@@ -140,6 +142,13 @@ export const main = (): void => {
     },
   }
 
+  const analysisQueue = new Queue(ANALYSIS_QUEUE_NAME, { connection })
+  const analysisQueuePort: AnalysisQueue = {
+    enqueue: async (musicTrackId) => {
+      await analysisQueue.add('analyze', { musicTrackId })
+    },
+  }
+
   // キュー名は apps/worker/src/queues.ts の QUEUE_NAMES と一致させること。
   // apps 同士を import できないため、文字列で合わせるしかない。
   const mediaQueue = new Queue('media', { connection })
@@ -183,6 +192,8 @@ export const main = (): void => {
     locations,
     scripts: createScriptRepository(db),
     sequences: createSequenceRepository(db),
+    musicAnalyses: createMusicAnalysisRepository(db),
+    analysisQueue: analysisQueuePort,
     mediaIngest,
     // Provider の登録はここでのみ行う。Phase 1 はスタブのみ（ADR-0014）。
     // API 側は capability の参照と Model Router のためだけに使い、実行は worker が行う。
