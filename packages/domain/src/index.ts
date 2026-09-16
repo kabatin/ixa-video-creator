@@ -23,6 +23,7 @@ export * from './generation/spec.js'
 export * from './generation/reference-resolver.js'
 export * from './generation/spec-compiler.js'
 export * from './generation/context-port.js'
+export * from './generation/cost-guard.js'
 export * from './generation/take.js'
 
 // レビュー / タイムライン / レンダリング
