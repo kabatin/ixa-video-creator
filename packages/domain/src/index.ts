@@ -26,6 +26,9 @@ export * from './generation/context-port.js'
 export * from './generation/cost-guard.js'
 export * from './generation/take.js'
 
+// ストーリーボード（音楽セクション → Shot 割り）
+export * from './storyboard/shot-allocation.js'
+
 // レビュー / タイムライン / レンダリング
 export * from './review/review.js'
 export * from './timeline/timeline.js'
