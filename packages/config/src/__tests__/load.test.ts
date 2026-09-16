@@ -1,0 +1,112 @@
+import { beforeEach, describe, expect, it } from 'vitest'
+import { getConfig, loadConfig, resetConfigCache } from '../load.js'
+
+const requiredEnv: NodeJS.ProcessEnv = {
+  DATABASE_URL: 'postgres://user:pass@localhost:5432/ixa',
+  REDIS_URL: 'redis://localhost:6379',
+  S3_ENDPOINT: 'http://localhost:9000',
+  S3_REGION: 'us-east-1',
+  S3_BUCKET: 'ixa-media',
+  S3_ACCESS_KEY_ID: 'access-key-id',
+  S3_SECRET_ACCESS_KEY: 'super-secret-access-key',
+}
+
+describe('loadConfig', () => {
+  it('必須変数が揃っていれば正しくパースされ、ネスト構造で返る', () => {
+    const config = loadConfig({ ...requiredEnv })
+
+    expect(config.database.url).toBe(requiredEnv.DATABASE_URL)
+    expect(config.redis.url).toBe(requiredEnv.REDIS_URL)
+    expect(config.s3).toEqual({
+      endpoint: 'http://localhost:9000',
+      region: 'us-east-1',
+      bucket: 'ixa-media',
+      accessKeyId: 'access-key-id',
+      secretAccessKey: 'super-secret-access-key',
+      forcePathStyle: true,
+    })
+    expect(config.api.port).toBe(3001)
+    expect(config.web.port).toBe(3000)
+    expect(config.logLevel).toBe('info')
+    expect(config.nodeEnv).toBe('development')
+    expect(config.audio.url).toBe('http://127.0.0.1:8100')
+    expect(config.providers.falApiKey).toBeNull()
+  })
+
+  it('必須変数が欠けていると throw し、メッセージに欠けた変数名が含まれる', () => {
+    expect(() => loadConfig({})).toThrow(/DATABASE_URL/)
+
+    try {
+      loadConfig({})
+      throw new Error('loadConfig should have thrown')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      expect(message).toContain('DATABASE_URL')
+      expect(message).toContain('REDIS_URL')
+      expect(message).toContain('S3_ENDPOINT')
+      expect(message).toContain('S3_REGION')
+      expect(message).toContain('S3_BUCKET')
+      expect(message).toContain('S3_ACCESS_KEY_ID')
+      expect(message).toContain('S3_SECRET_ACCESS_KEY')
+    }
+  })
+
+  it('既定値が効く: S3_FORCE_PATH_STYLE 未指定で true、LOG_LEVEL 未指定で info', () => {
+    const config = loadConfig({ ...requiredEnv })
+
+    expect(config.s3.forcePathStyle).toBe(true)
+    expect(config.logLevel).toBe('info')
+  })
+
+  it('"false" 文字列が boolean の false になる', () => {
+    const config = loadConfig({ ...requiredEnv, S3_FORCE_PATH_STYLE: 'false' })
+
+    expect(config.s3.forcePathStyle).toBe(false)
+  })
+
+  it('API_PORT の "3001" が数値 3001 になる', () => {
+    const config = loadConfig({ ...requiredEnv, API_PORT: '3001' })
+
+    expect(config.api.port).toBe(3001)
+    expect(typeof config.api.port).toBe('number')
+  })
+
+  it('不正な URL を渡すと throw する', () => {
+    expect(() => loadConfig({ ...requiredEnv, DATABASE_URL: 'not-a-url' })).toThrow()
+    expect(() => loadConfig({ ...requiredEnv, S3_ENDPOINT: 'not-a-url' })).toThrow()
+  })
+
+  it('エラーメッセージに秘密値が含まれない', () => {
+    try {
+      loadConfig({ ...requiredEnv, DATABASE_URL: 'not-a-url' })
+      throw new Error('loadConfig should have thrown')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      expect(message).not.toContain('not-a-url')
+      expect(message).not.toContain(requiredEnv.S3_SECRET_ACCESS_KEY)
+    }
+  })
+})
+
+describe('getConfig', () => {
+  beforeEach(() => {
+    resetConfigCache()
+  })
+
+  it('getConfig がキャッシュされる（2回目の呼び出しでは env を再検証しない）', () => {
+    const first = getConfig({ ...requiredEnv })
+    const second = getConfig({ ...requiredEnv, API_PORT: '9999' })
+
+    expect(second).toBe(first)
+    expect(second.api.port).toBe(3001)
+  })
+
+  it('resetConfigCache でキャッシュが解除される', () => {
+    getConfig({ ...requiredEnv, API_PORT: '3001' })
+    resetConfigCache()
+
+    const config = getConfig({ ...requiredEnv, API_PORT: '5555' })
+
+    expect(config.api.port).toBe(5555)
+  })
+})
