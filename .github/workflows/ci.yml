@@ -16,6 +16,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 実 ffmpeg を使うテストが多数ある（media / render / providers/video / worker）。
+      # ubuntu-latest には ffmpeg が入っておらず、入れないと spawn ENOENT で落ちる。
+      # drawtext の有無で描画が縮退する経路があるため、対応状況をログに残す。
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffmpeg -version | head -1
+          ffmpeg -hide_banner -filters | grep -c drawtext || echo "drawtext なし（縮退経路で動く）"
+
       - name: Enable corepack
         run: corepack enable
 
