@@ -8,6 +8,8 @@ import { processNoopJob, type NoopJobData, type NoopJobResult } from './processo
 import { QUEUE_CONFIGS, QUEUE_NAMES, resolveQueueConfigs, type QueueConfig } from './queues.js'
 import { createGenerationWiring, type GenerationWiring } from './generation-wiring.js'
 import { processGenerationJob } from './generation/index.js'
+import { processMediaJob } from './media/index.js'
+import { processRenderJob } from './render/index.js'
 
 /** graceful shutdown の既定タイムアウト（ミリ秒）。超過したら強制終了する。 */
 const SHUTDOWN_TIMEOUT_MS = 30_000
@@ -25,14 +27,26 @@ const createWorkers = (
   generation: GenerationWiring,
 ): readonly NoopWorker[] =>
   queueConfigs.map((config) => {
-    // generation キューだけは実処理を担当する。他は Phase 1 時点では noop のまま。
-    const handler =
-      config.name === QUEUE_NAMES.generation
-        ? async (job: { data: unknown }): Promise<NoopJobResult> => {
-            const outcome = await processGenerationJob(generation.deps, job.data)
-            return { echoed: outcome.state, processedAt: new Date().toISOString() }
-          }
-        : async (job: { data: NoopJobData }): Promise<NoopJobResult> => processNoopJob(job.data)
+    /**
+     * キューごとに担当プロセッサを割り当てる。
+     * review と analysis は Phase 4 / Phase 2 の担当なので noop のまま。
+     * 未実装のキューを無言で成功させないよう、対応表を 1 箇所に集約する。
+     */
+    const handler = async (job: { data: unknown }): Promise<NoopJobResult> => {
+      const state = await (async (): Promise<string> => {
+        switch (config.name) {
+          case QUEUE_NAMES.generation:
+            return (await processGenerationJob(generation.deps, job.data)).state
+          case QUEUE_NAMES.media:
+            return (await processMediaJob(generation.media, job.data)).state
+          case QUEUE_NAMES.render:
+            return (await processRenderJob(generation.render, job.data)).state
+          default:
+            return (await processNoopJob(job.data as NoopJobData)).echoed
+        }
+      })()
+      return { echoed: state, processedAt: new Date().toISOString() }
+    }
 
     const worker: NoopWorker = new Worker<NoopJobData, NoopJobResult>(
       config.name,

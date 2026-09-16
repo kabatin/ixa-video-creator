@@ -157,6 +157,9 @@ importers:
       '@ixa/provider-video':
         specifier: workspace:*
         version: link:../../packages/providers/video
+      '@ixa/render':
+        specifier: workspace:*
+        version: link:../../packages/render
       '@ixa/storage':
         specifier: workspace:*
         version: link:../../packages/storage

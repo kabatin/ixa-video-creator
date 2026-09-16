@@ -9,6 +9,14 @@ import { createInMemoryMediaAssetRepository } from './in-memory-media-asset-repo
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { createInMemoryShotRepository } from './in-memory-shot-repository.js'
 import { createInMemoryTakeRepository } from './in-memory-take-repository.js'
+import {
+  createInMemoryMusicTrackRepository,
+  createInMemoryRenderJobRepository,
+  createInMemoryTimelineClipRepository,
+  createInMemoryTransitionRepository,
+} from './in-memory-timeline-repositories.js'
+import type { RenderQueue } from '../routes/renders.js'
+import type { RenderJobId } from '@ixa/domain'
 
 /** 投入されたジョブ ID を記録するだけのキュー。Redis には接続しない。 */
 export type RecordingQueue = GenerationQueue & {
@@ -30,6 +38,22 @@ export const createRecordingQueue = (): RecordingQueue => {
  * createApp に渡す既定の依存一式。すべてインメモリで、実 DB / 実ストレージ /
  * 実 Provider には接続しない。テストは必要なものだけ差し替える。
  */
+/** 投入された RenderJob ID を記録するだけのキュー。 */
+export type RecordingRenderQueue = RenderQueue & {
+  readonly enqueued: () => readonly RenderJobId[]
+}
+
+export const createRecordingRenderQueue = (): RecordingRenderQueue => {
+  const enqueued: RenderJobId[] = []
+  return {
+    enqueued: () => enqueued,
+    enqueue: (renderJobId) => {
+      enqueued.push(renderJobId)
+      return Promise.resolve()
+    },
+  }
+}
+
 export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps => ({
   projects: createInMemoryProjectRepository(),
   mediaAssets: createInMemoryMediaAssetRepository(),
@@ -39,6 +63,11 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   registry: createProviderRegistry(providers),
   generationContext: createPhase1EmptyContextSource(),
   generationQueue: createRecordingQueue(),
+  transitions: createInMemoryTransitionRepository(),
+  timelineClips: createInMemoryTimelineClipRepository(),
+  musicTracks: createInMemoryMusicTrackRepository(),
+  renderJobs: createInMemoryRenderJobRepository(),
+  renderQueue: createRecordingRenderQueue(),
   storage: createMemoryStorage(),
   logger: createLogger('silent'),
 })

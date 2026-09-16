@@ -9,9 +9,15 @@ import {
   createShotRepository,
   createTakeRepository,
   type DbClient,
+  createMusicTrackRepository,
+  createRenderJobRepository,
+  createTimelineClipRepository,
+  createTransitionRepository,
 } from '@ixa/db'
 import { createPhase1EmptyContextSource } from '@ixa/domain'
 import { createProviderRegistry } from '@ixa/provider-core'
+import { RENDER_QUEUE_NAME, type RenderQueue } from './routes/renders.js'
+import type { MediaIngestDeps } from './routes/uploads.js'
 import { createStubVideoProvider } from '@ixa/provider-video'
 import { createS3Storage } from '@ixa/storage'
 import { Queue } from 'bullmq'
@@ -119,14 +125,37 @@ export const main = (): void => {
     },
   }
 
+  const renderQueue = new Queue(RENDER_QUEUE_NAME, { connection })
+  const renderQueuePort: RenderQueue = {
+    enqueue: async (renderJobId) => {
+      await renderQueue.add('render', { renderJobId })
+    },
+  }
+
+  // キュー名は apps/worker/src/queues.ts の QUEUE_NAMES と一致させること。
+  // apps 同士を import できないため、文字列で合わせるしかない。
+  const mediaQueue = new Queue('media', { connection })
+  const mediaIngest: MediaIngestDeps = {
+    queue: {
+      enqueue: async (mediaAssetId) => {
+        await mediaQueue.add('process', { mediaAssetId })
+      },
+    },
+    logger,
+  }
+
   const app = createApp({
     projects: createProjectRepository(db),
     mediaAssets: createMediaAssetRepository(db),
     shots: createShotRepository(db),
     takes: createTakeRepository(db),
     generationJobs: createGenerationJobRepository(db),
-    // TODO: スタブ Provider（packages/providers/video）の配線は別タスク。
-    // 登録が空のあいだ AUTO は「利用できるモデルがありません」で 422 になる。
+    transitions: createTransitionRepository(db),
+    timelineClips: createTimelineClipRepository(db),
+    musicTracks: createMusicTrackRepository(db),
+    renderJobs: createRenderJobRepository(db),
+    renderQueue: renderQueuePort,
+    mediaIngest,
     // Provider の登録はここでのみ行う。Phase 1 はスタブのみ（ADR-0014）。
     // API 側は capability の参照と Model Router のためだけに使い、実行は worker が行う。
     registry: createProviderRegistry([

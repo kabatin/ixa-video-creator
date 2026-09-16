@@ -7,6 +7,7 @@ import {
   createGenerationJobRepository,
   createMediaAssetRepository,
   createProjectRepository,
+  createRenderJobRepository,
   createShotRepository,
   createTakeRepository,
 } from '@ixa/db'
@@ -14,7 +15,10 @@ import type { AppConfig } from '@ixa/config'
 import { Queue } from 'bullmq'
 import type { Redis } from 'ioredis'
 import type { Logger } from 'pino'
+import { createRemotionRenderer } from '@ixa/render'
 import type { GenerationProcessorDeps, PollScheduler } from './generation/index.js'
+import type { MediaProcessorDeps } from './media/index.js'
+import type { RenderProcessorDeps } from './render/index.js'
 import { QUEUE_NAMES } from './queues.js'
 
 /**
@@ -26,6 +30,8 @@ import { QUEUE_NAMES } from './queues.js'
  */
 export type GenerationWiring = {
   readonly deps: GenerationProcessorDeps
+  readonly media: MediaProcessorDeps
+  readonly render: RenderProcessorDeps
   readonly queue: Queue
   close(): Promise<void>
 }
@@ -74,8 +80,29 @@ export const createGenerationWiring = (
     logger,
   }
 
+  const media: MediaProcessorDeps = {
+    mediaAssets: createMediaAssetRepository(db),
+    storage,
+    workDir: process.env.MEDIA_WORK_DIR ?? '/tmp/ixa-media-work',
+    logger,
+  }
+
+  const render: RenderProcessorDeps = {
+    renderJobs: createRenderJobRepository(db),
+    mediaAssets: createMediaAssetRepository(db),
+    projects: createProjectRepository(db),
+    storage,
+    // Remotion を既定にする（ADR-0010）。個人利用のため無償。
+    renderer: createRemotionRenderer({
+      outputDir: process.env.RENDER_OUTPUT_DIR ?? '/tmp/ixa-render-output',
+    }),
+    logger,
+  }
+
   return {
     deps,
+    media,
+    render,
     queue,
     close: async () => {
       await queue.close()

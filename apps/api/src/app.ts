@@ -12,7 +12,12 @@ import { healthRoutes } from './routes/health.js'
 import { mediaRoutes } from './routes/media.js'
 import { projectRoutes } from './routes/projects.js'
 import { shotRoutes, type GenerationQueue } from './routes/shots.js'
-import { uploadRoutes } from './routes/uploads.js'
+import { uploadRoutes, type MediaIngestDeps } from './routes/uploads.js'
+import { timelineRoutes } from './routes/timeline.js'
+import { renderRoutes, type RenderQueue } from './routes/renders.js'
+import type {
+  MusicTrackRepository, RenderJobRepository, TimelineClipRepository, TransitionRepository,
+} from '@ixa/db'
 
 /**
  * アプリが必要とする依存。DB 接続やロガーの生成はここでは行わず、
@@ -27,6 +32,13 @@ export type AppDeps = {
   registry: ProviderRegistry
   generationContext: GenerationContextSource
   generationQueue: GenerationQueue
+  transitions: TransitionRepository
+  timelineClips: TimelineClipRepository
+  musicTracks: MusicTrackRepository
+  renderJobs: RenderJobRepository
+  renderQueue: RenderQueue
+  /** media キューへの投入。未配線なら登録のみ行い queued: false を返す。 */
+  mediaIngest?: MediaIngestDeps
   storage: ObjectStorage
   logger: Logger
 }
@@ -41,7 +53,7 @@ export const createApp = (deps: AppDeps) => {
 
   app.route('/', healthRoutes())
   app.route('/', projectRoutes({ projects }))
-  app.route('/', uploadRoutes({ mediaAssets, storage }))
+  app.route('/', uploadRoutes({ mediaAssets, storage, mediaIngest: deps.mediaIngest }))
   app.route('/', mediaRoutes({ mediaAssets, storage }))
   app.route(
     '/',
@@ -55,6 +67,21 @@ export const createApp = (deps: AppDeps) => {
       queue: deps.generationQueue,
     }),
   )
+
+  /** Timeline と Render は同じ依存を使う。組み立てを 1 箇所にまとめる。 */
+  const timelineDeps = {
+    projects,
+    shots: deps.shots,
+    takes: deps.takes,
+    transitions: deps.transitions,
+    timelineClips: deps.timelineClips,
+    musicTracks: deps.musicTracks,
+    mediaAssets,
+    storage,
+  }
+
+  app.route('/', timelineRoutes(timelineDeps))
+  app.route('/', renderRoutes({ ...timelineDeps, renderJobs: deps.renderJobs, queue: deps.renderQueue }))
 
   registerOpenApiDocument(app)
   registerErrorHandlers(app, logger)
