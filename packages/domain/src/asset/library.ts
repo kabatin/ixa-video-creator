@@ -45,7 +45,14 @@ export type MotionTemplate = z.infer<typeof MotionTemplate>
 // リポジトリの入力型（ADR-0007）
 // ---------------------------------------------------------------------------
 
-export const CreateBrandAssetInput = BrandAsset.omit({ id: true })
+/**
+ * category によってどちらが必須かが変わるため、両方を既定 null にしておく。
+ * 組み合わせの検証は API 層が行う（color は value、それ以外は mediaAssetId）。
+ */
+export const CreateBrandAssetInput = BrandAsset.omit({ id: true }).extend({
+  mediaAssetId: BrandAsset.shape.mediaAssetId.default(null),
+  value: BrandAsset.shape.value.default(null),
+})
 export type CreateBrandAssetInput = z.input<typeof CreateBrandAssetInput>
 
 export const UpdateBrandAssetPatch = BrandAsset.pick({

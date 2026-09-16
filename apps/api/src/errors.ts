@@ -1,4 +1,4 @@
-import { DbNotFoundError } from '@ixa/db'
+import { CharacterLookInvariantError, DbNotFoundError } from '@ixa/db'
 import type { Hook, OpenAPIHono } from '@hono/zod-openapi'
 import type { Context, Env } from 'hono'
 import { HTTPException } from 'hono/http-exception'
@@ -37,6 +37,15 @@ export const handleError = (logger: Logger) => (error: Error, c: Context) => {
   }
   if (error instanceof DbNotFoundError) {
     return c.json(fail(`${error.entity} が見つかりません`), 404)
+  }
+  /**
+   * ドメインの不変条件違反は利用者の操作ミスなので 422 で返す。
+   *
+   * ルート側でも捕まえてフィールド名を添えているが、ここは**取りこぼしの受け皿**。
+   * 捕まえ忘れた経路で 500 になると、利用者には原因が分からなくなる。
+   */
+  if (error instanceof CharacterLookInvariantError) {
+    return c.json(fail(error.message), 422)
   }
   if (error instanceof HTTPException) {
     const status: ContentfulStatusCode = error.status

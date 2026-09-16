@@ -95,7 +95,14 @@ export type UpdateCharacterPatch = z.input<typeof UpdateCharacterPatch>
 export const CreateCharacterIdentityImageInput = CharacterIdentityImage.omit({ id: true })
 export type CreateCharacterIdentityImageInput = z.input<typeof CreateCharacterIdentityImageInput>
 
-export const CreateCharacterLookInput = CharacterLook.omit({ id: true })
+/**
+ * 登録時に必ず明示させる必要が無い列には既定値を持たせる。
+ * API 側で `.extend()` して既定を足す回避が不要になる。
+ */
+export const CreateCharacterLookInput = CharacterLook.omit({ id: true }).extend({
+  era: CharacterLook.shape.era.default(null),
+  canonicalFrameAssetId: CharacterLook.shape.canonicalFrameAssetId.default(null),
+})
 export type CreateCharacterLookInput = z.input<typeof CreateCharacterLookInput>
 
 /**
