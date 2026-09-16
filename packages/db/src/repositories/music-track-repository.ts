@@ -1,5 +1,5 @@
 import { and, asc, eq, isNull } from 'drizzle-orm'
-import type { CreateMusicTrackInput, MusicTrack, ProjectId } from '@ixa/domain'
+import type { CreateMusicTrackInput, MusicTrack, MusicTrackId, ProjectId } from '@ixa/domain'
 import {
   CreateMusicTrackInput as CreateMusicTrackInputSchema,
   MusicTrack as MusicTrackSchema,
@@ -20,6 +20,8 @@ export type MusicTrackRow = typeof musicTracks.$inferSelect
  * （ARCHITECTURE.md §15）。
  */
 export type MusicTrackRepository = {
+  /** ソフトデリート済みは null。worker の音楽解析がジョブデータの ID から引く。 */
+  findById(id: MusicTrackId): Promise<MusicTrack | null>
   /** 投入順（ULID の昇順 = 時系列）。ソフトデリート済みは含まない。 */
   findByProject(projectId: ProjectId): Promise<MusicTrack[]>
   create(input: CreateMusicTrackInput): Promise<MusicTrack>
@@ -38,6 +40,16 @@ export const musicTrackRowToDomain = (row: MusicTrackRow): MusicTrack =>
   })
 
 export const createMusicTrackRepository = (db: DbClient): MusicTrackRepository => ({
+  async findById(id) {
+    const rows = await db
+      .select()
+      .from(musicTracks)
+      .where(and(eq(musicTracks.id, id), isNull(musicTracks.deletedAt)))
+      .limit(1)
+    const row = rows[0]
+    return row ? musicTrackRowToDomain(row) : null
+  },
+
   async findByProject(projectId) {
     const rows = await db
       .select()

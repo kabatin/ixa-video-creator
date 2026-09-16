@@ -168,6 +168,8 @@ export const createInMemoryMusicTrackRepository = (
   return {
     snapshot: () => store,
 
+    findById: (id) => Promise.resolve(store.find((track) => track.id === id) ?? null),
+
     findByProject: (projectId) =>
       Promise.resolve(store.filter((track) => track.projectId === projectId)),
 
