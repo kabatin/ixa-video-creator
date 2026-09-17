@@ -32,4 +32,5 @@ export * from './storyboard/shot-allocation.js'
 // レビュー / タイムライン / レンダリング
 export * from './review/review.js'
 export * from './timeline/timeline.js'
+export * from './timeline/text-template.js'
 export * from './render/render.js'
