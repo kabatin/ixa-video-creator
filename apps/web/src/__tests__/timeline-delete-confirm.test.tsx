@@ -1,9 +1,8 @@
-import { Shot, TimelineClip, Transition } from '@ixa/domain'
+import { TimelineClip } from '@ixa/domain'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { TimelineClipList } from '@/components/timeline-clip-list'
-import { TimelineTransitionEditor } from '@/components/timeline-transition-editor'
 import type { SnapSpanInput, SnapSpanOutcome } from '@/lib/timeline-snap'
 
 /**
@@ -130,70 +129,6 @@ describe('クリップの削除', () => {
     await user.click(screen.getByRole('button', { name: 'やめる' }))
 
     expect(onRemove).not.toHaveBeenCalled()
-    expect(screen.queryByRole('alertdialog')).toBeNull()
-  })
-})
-
-const AT = new Date('2026-01-01T00:00:00Z')
-
-const shot = (id: string, code: string, startSec: number): Shot =>
-  Shot.parse({
-    id: ulid(id),
-    projectId: PROJECT_ID,
-    sequenceId: null,
-    order: startSec,
-    code,
-    startSec,
-    durationSec: 2,
-    sourceInSec: 0,
-    description: '',
-    dialogue: null,
-    camera: {
-      size: 'medium',
-      angleH: null,
-      angle: null,
-      lensMm: null,
-      movement: null,
-      movementIntensity: null,
-    },
-    mood: null,
-    locationId: null,
-    sourceType: { type: 'ai_video' },
-    selectedTakeId: null,
-    status: 'draft',
-    lockedAt: null,
-    createdAt: AT,
-    updatedAt: AT,
-  })
-
-describe('Transition の削除', () => {
-  it('同じ行で置き直せるので、確認を挟まずに消す', async () => {
-    const from = shot('SHTAA', 'S001', 0)
-    const to = shot('SHTBB', 'S002', 2)
-    const transition = Transition.parse({
-      id: ulid('TRANA'),
-      projectId: PROJECT_ID,
-      fromShotId: from.id,
-      toShotId: to.id,
-      type: 'dissolve',
-      durationSec: 0.5,
-    })
-    const onRemove = vi.fn()
-    render(
-      <TimelineTransitionEditor
-        shots={[from, to]}
-        transitions={[transition]}
-        busy={false}
-        onAdd={vi.fn()}
-        onRemove={onRemove}
-      />,
-    )
-
-    await userEvent.setup().click(screen.getByRole('button', { name: '削除（Transition）' }))
-
-    // 差し替えの正規手順が「削除してから置き直す」なので、ここで確認を出すと操作を妨げる。
-    expect(onRemove).toHaveBeenCalledTimes(1)
-    expect(onRemove).toHaveBeenCalledWith(transition.id)
     expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 })

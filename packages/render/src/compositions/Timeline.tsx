@@ -10,6 +10,7 @@ import {
 } from '../plan.js'
 import type { FitRect } from '../presets.js'
 import { sourceOffsetFrames } from '../timing.js'
+import { TextClip, resolveTextClip } from './text-clip.js'
 
 export type TimelineCompositionProps = {
   readonly doc: TimelineDocument
@@ -108,8 +109,9 @@ export const ClipMedia: React.FC<{ content: MediaContent; fps: number; video: Fi
 
 /**
  * クリップ 1 つ分の描画。
- * プレースホルダ（`unresolved` / `text` / `motion_graphics`）は Remotion のコンテキスト無しでも
- * 描けるので、テストから直接レンダリングして「無言で消えていない」ことを確認できる。
+ * テロップとプレースホルダ（`unresolved` / `motion_graphics`）は Remotion のコンテキスト無しでも
+ * 描けるので、テストから直接レンダリングして
+ * 「文字が絵に出ている」「無言で消えていない」ことを確認できる。
  */
 export const ClipBody: React.FC<{ clip: ClipPlan; fps: number; video: FitRect }> = ({
   clip,
@@ -138,8 +140,40 @@ export const ClipBody: React.FC<{ clip: ClipPlan; fps: number; video: FitRect }>
     )
   }
 
-  // text / motion_graphics のテンプレート機構は Phase 5。
-  // Phase 1 では templateKey が分かるプレースホルダを出すだけにする（これも無言で消さない）。
+  // テロップ。描けるかどうかの判定は `text-clip.tsx` が domain の表を見て決める。
+  // **ここで templateKey を直接分岐しない。**分岐を書くと表と二重化し、
+  // 「選べるのに絵に出ない」テンプレートが生まれる。
+  if (content.type === 'text') {
+    const resolved = resolveTextClip(content)
+
+    if (resolved.status === 'renderable') {
+      return (
+        <AbsoluteFill style={layerStyle}>
+          <TextClip template={resolved.template} params={resolved.params} video={video} />
+        </AbsoluteFill>
+      )
+    }
+
+    // 中身が読めないテロップは**壊れている**。unresolved と同じ赤で目立たせる。
+    // 空文字に畳んで無言で消すと、文字が無いのか壊れているのかが絵から分からなくなる。
+    if (resolved.status === 'invalid') {
+      return (
+        <AbsoluteFill
+          style={{ ...UNRESOLVED_STYLE, ...layerStyle }}
+        >{`[text] ${content.templateKey} — ${resolved.reason}`}</AbsoluteFill>
+      )
+    }
+
+    // まだ絵にできないテンプレート。枠だけ出す。
+    return (
+      <AbsoluteFill
+        style={{ ...PLACEHOLDER_STYLE, ...layerStyle }}
+      >{`[text] ${content.templateKey} — ${resolved.reason}`}</AbsoluteFill>
+    )
+  }
+
+  // motion_graphics のテンプレート機構は今回の範囲外。
+  // templateKey が分かるプレースホルダを出すだけにする（これも無言で消さない）。
   return (
     <AbsoluteFill
       style={{ ...PLACEHOLDER_STYLE, ...layerStyle }}

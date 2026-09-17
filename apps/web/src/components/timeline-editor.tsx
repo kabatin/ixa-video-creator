@@ -8,19 +8,21 @@ import type {
   ShotId,
   TimelineClip,
   TimelineClipId,
+  TimelineTrack,
   Transition,
   TransitionId,
 } from '@ixa/domain'
 import { useMemo, useState } from 'react'
-import { TimelineClipForm, type NewTextClipInput } from '@/components/timeline-clip-form'
 import { TimelineClipList, type ClipPatch } from '@/components/timeline-clip-list'
+import {
+  TimelineInlineForm,
+  inlineFormErrors,
+  type InlineFormAnchor,
+  type InlineFormDraft,
+} from '@/components/timeline-inline-form'
 import { TimelineIssuePanel } from '@/components/timeline-issue-panel'
 import { TimelineSnapPanel } from '@/components/timeline-snap-panel'
-import { TimelineTracks } from '@/components/timeline-tracks'
-import {
-  TimelineTransitionEditor,
-  type AddTransitionInput,
-} from '@/components/timeline-transition-editor'
+import { TEXT_INSERT_LAYER, TimelineTracks } from '@/components/timeline-tracks'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { createRequester } from '@/lib/requester'
@@ -32,6 +34,27 @@ import {
   programEndSec,
 } from '@/lib/timeline-display'
 import {
+  candidatesForClipDrag,
+  type ClipDragContext,
+  type ClipDragOutcome,
+} from '@/lib/timeline-drag'
+import {
+  INSERTABLE_TRANSITION_TYPES,
+  probeTextInsertion,
+  transitionInsertionPoints,
+  validateTextClipInsert,
+  validateTransitionInsert,
+  type InsertIssue,
+  type TransitionInsertionPoint,
+} from '@/lib/timeline-insert'
+import {
+  openFormCaption,
+  textEditDraft,
+  textInsertDraft,
+  transitionDraft,
+  type OpenInlineForm,
+} from '@/lib/timeline-open-form'
+import {
   buildSnapCandidates,
   snapSpan,
   snapToleranceSec,
@@ -39,7 +62,6 @@ import {
   type SnapSpanInput,
   type SnapSpanOutcome,
 } from '@/lib/timeline-snap'
-
 
 /**
  * タイムライン編集画面の操作盤（P5-4）。
@@ -95,6 +117,18 @@ export const TimelineEditor = ({
   const [actionError, setActionError] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
 
+  /** 帯の上で開いている入力。開く場所が変わったら下書きも作り直す。 */
+  const [open, setOpen] = useState<OpenInlineForm | null>(null)
+  const [draft, setDraft] = useState<InlineFormDraft | null>(null)
+  const [formIssues, setFormIssues] = useState<readonly InsertIssue[]>([])
+  /** 掴んでいる最中の見た目。確定するまで本体は書き換えない。 */
+  const [preview, setPreview] = useState<{
+    readonly id: TimelineClipId
+    readonly span: { readonly startSec: number; readonly durationSec: number }
+  } | null>(null)
+  /** 掴んで止まった理由・吸着した先。**黙って丸めない。** */
+  const [dragNotes, setDragNotes] = useState<readonly string[]>([])
+
   /**
    * 検証はサーバの `validateTimeline` が唯一の正。**画面に同じ規則を置かない。**
    * 置くと必ずズレて、レンダリングでは止まるのに画面では合格に見える状態が生まれる。
@@ -134,10 +168,7 @@ export const TimelineEditor = ({
    * **動かしている当のクリップを必ず除外する。**
    * 自分の端は距離 0 の候補になり、そこへ吸着して二度と動かせなくなる。
    */
-  const snapSpanForClip = (
-    clipId: TimelineClipId | null,
-    span: SnapSpanInput,
-  ): SnapSpanOutcome =>
+  const snapSpanForClip = (clipId: TimelineClipId | null, span: SnapSpanInput): SnapSpanOutcome =>
     snapSpan(span, buildSnapCandidates(snapSource, { clipId }), toleranceSec, snapEnabled)
 
   /** 失敗を握り潰すと「押したのに何も起きない」画面になる。必ず理由を出す。 */
@@ -157,13 +188,6 @@ export const TimelineEditor = ({
     }
   }
 
-  const addTransition = (input: AddTransitionInput): void => {
-    void run('Transition を追加', async () => {
-      const created = await api.createTransition(projectId, input)
-      setTransitions((current) => (current === null ? [created] : [...current, created]))
-    })
-  }
-
   const removeTransition = (id: TransitionId): void => {
     void run('Transition を削除', async () => {
       await api.deleteTransition(id)
@@ -173,16 +197,173 @@ export const TimelineEditor = ({
     })
   }
 
-  const addClip = (input: NewTextClipInput): void => {
-    void run('TEXT クリップを追加', async () => {
-      const created = await api.createClip(projectId, {
-        track: 'TEXT',
-        startSec: input.startSec,
-        durationSec: input.durationSec,
-        layer: input.layer,
-        content: { type: 'text', templateKey: input.templateKey, params: {} },
+  // --- 帯の上の入力 ---
+
+  const points = useMemo(
+    () => transitionInsertionPoints(shots ?? [], transitions ?? []),
+    [shots, transitions],
+  )
+
+  const closeForm = (): void => {
+    setOpen(null)
+    setDraft(null)
+    setFormIssues([])
+  }
+
+  const openTransition = (point: TransitionInsertionPoint, anchor: InlineFormAnchor): void => {
+    setOpen({ kind: 'transition', point, anchor })
+    setDraft(transitionDraft(point))
+    setFormIssues([])
+  }
+
+  const openTextInsert = (track: TimelineTrack, atSec: number, anchor: InlineFormAnchor): void => {
+    const probe = probeTextInsertion({
+      clips: clips ?? [],
+      track,
+      layer: TEXT_INSERT_LAYER,
+      atSec,
+      programEndSec: durationSec,
+    })
+    if (!probe.ok) {
+      // **置けない理由を必ず出す。** 押しても何も出ないと、押せる場所が分からない。
+      closeForm()
+      setActionError(probe.message)
+      return
+    }
+    setActionError(null)
+    setOpen({ kind: 'text_insert', track, layer: TEXT_INSERT_LAYER, anchor })
+    setDraft(textInsertDraft(probe))
+    setFormIssues([])
+  }
+
+  const openClip = (clip: TimelineClip, anchor: InlineFormAnchor): void => {
+    setOpen({ kind: 'text_edit', clip, anchor })
+    // 読めなかった値は `null` のまま渡す。断りは入力部品が出す。
+    setDraft(textEditDraft(clip))
+    setFormIssues([])
+  }
+
+  /**
+   * トランジションは差し替えの口が無いので、**消してから作り直す**。
+   * 2 つの Shot の間に 1 本、という不変条件を保ちやすいため（`timeline-api.ts`）。
+   */
+  const submitTransition = (point: TransitionInsertionPoint, next: InlineFormDraft): void => {
+    if (next.kind !== 'transition') return
+    const result = validateTransitionInsert(point, {
+      type: next.type,
+      durationSec: next.durationSec,
+    })
+    if (!result.ok) {
+      setFormIssues(result.issues)
+      return
+    }
+    const existing = point.existing
+    void run(existing === null ? 'Transition を追加' : 'Transition を差し替え', async () => {
+      if (existing !== null) {
+        await api.deleteTransition(existing.id)
+        setTransitions((current) =>
+          current === null ? current : current.filter((t) => t.id !== existing.id),
+        )
+      }
+      const created = await api.createTransition(projectId, result.value)
+      setTransitions((current) => (current === null ? [created] : [...current, created]))
+      closeForm()
+    })
+  }
+
+  const submitTextClip = (next: InlineFormDraft, existing: TimelineClip | null): void => {
+    if (next.kind !== 'text') return
+    const track: TimelineTrack = existing?.track ?? 'TEXT'
+    const layer = existing?.layer ?? TEXT_INSERT_LAYER
+    const result = validateTextClipInsert({
+      // 自分自身は重なりの相手にしない。直しているのだから当然ぶつかる。
+      clips: (clips ?? []).filter((clip) => clip.id !== existing?.id),
+      track,
+      layer,
+      programEndSec: durationSec,
+      draft: {
+        // 読めなかった値は `null` で来る。**検証へ渡す直前にだけ畳む。**
+        // 早く畳むと「読めない」と「空」の区別が消える。
+        templateKey: next.templateKey ?? '',
+        text: next.text ?? '',
+        startSec: next.startSec,
+        durationSec: next.durationSec,
+      },
+    })
+    if (!result.ok) {
+      setFormIssues(result.issues)
+      return
+    }
+
+    const value = result.value
+    if (existing === null) {
+      void run('テロップを追加', async () => {
+        const created = await api.createClip(projectId, {
+          track: value.track,
+          startSec: value.startSec,
+          durationSec: value.durationSec,
+          layer: value.layer,
+          content: {
+            type: 'text',
+            templateKey: value.templateKey,
+            params: { ...value.params },
+          },
+        })
+        setClips((current) => (current === null ? [created] : [...current, created]))
+        closeForm()
       })
-      setClips((current) => (current === null ? [created] : [...current, created]))
+      return
+    }
+
+    void run('テロップを更新', async () => {
+      const updated = await api.updateClip(existing.id, {
+        startSec: value.startSec,
+        durationSec: value.durationSec,
+        content: {
+          type: 'text',
+          templateKey: value.templateKey,
+          params: { ...value.params },
+        },
+      })
+      setClips((current) =>
+        current === null ? current : current.map((c) => (c.id === existing.id ? updated : c)),
+      )
+      closeForm()
+    })
+  }
+
+  // --- 掴んで動かす ---
+
+  const beginDrag = (clip: TimelineClip): ClipDragContext => {
+    setDragNotes([])
+    return {
+      // **当人を候補から外す。** 外し忘れると自分の端に吸着して動かせない。
+      candidates: candidatesForClipDrag(snapSource, clip.id),
+      toleranceSec,
+      snapEnabled,
+      timelineEndSec: durationSec,
+    }
+  }
+
+  const dragMove = (clip: TimelineClip, outcome: ClipDragOutcome): void => {
+    setPreview({ id: clip.id, span: outcome.span })
+  }
+
+  const dragEnd = (clip: TimelineClip, outcome: ClipDragOutcome): void => {
+    setPreview(null)
+    setDragNotes([
+      ...outcome.limits.map((limit) => limit.message),
+      ...outcome.snapNotices.filter((n) => n.state === 'snapped').map((n) => n.message),
+    ])
+    if (!outcome.moved) return
+    void run('クリップの位置と尺を更新', async () => {
+      const updated = await api.updateClip(clip.id, {
+        startSec: outcome.span.startSec,
+        durationSec: outcome.span.durationSec,
+      })
+      setClips((current) =>
+        current === null ? current : current.map((c) => (c.id === clip.id ? updated : c)),
+      )
     })
   }
 
@@ -269,47 +450,86 @@ export const TimelineEditor = ({
         <TimelineTracks
           shots={shots}
           clips={clips ?? []}
-          transitions={transitions ?? []}
+          transitionPoints={points}
           renderedShotIds={new Set(renderedShotIds ?? [])}
           durationSec={durationSec}
           pxPerSec={pxPerSec}
           selectedClipId={selectedClipId}
-          onSelectClip={setSelectedClipId}
-        />
-      )}
-
-      {shots !== null && transitions !== null ? (
-        <TimelineTransitionEditor
-          shots={shots}
-          transitions={transitions}
           busy={busy}
-          onAdd={addTransition}
-          onRemove={removeTransition}
+          openTransitionAtSec={open?.kind === 'transition' ? open.point.atSec : null}
+          previewClipId={preview?.id ?? null}
+          previewSpan={preview?.span ?? null}
+          onSelectClip={setSelectedClipId}
+          onOpenTransition={openTransition}
+          onOpenClip={openClip}
+          onInsertText={openTextInsert}
+          onClipDragBegin={beginDrag}
+          onClipDragMove={dragMove}
+          onClipDragEnd={dragEnd}
+          overlay={
+            open === null || draft === null ? null : (
+              <TimelineInlineForm
+                // 開く場所が変われば作り直す。残っていると前の打ちかけが出る。
+                key={`${open.kind}-${String(open.anchor.leftPx)}-${String(open.anchor.topPx)}`}
+                draft={draft}
+                anchor={open.anchor}
+                caption={openFormCaption(open)}
+                transitionTypes={INSERTABLE_TRANSITION_TYPES}
+                errors={inlineFormErrors(formIssues)}
+                busy={busy}
+                onSubmit={(next) => {
+                  if (open.kind === 'transition') submitTransition(open.point, next)
+                  else submitTextClip(next, open.kind === 'text_edit' ? open.clip : null)
+                }}
+                onDismiss={closeForm}
+                onRemove={
+                  open.kind === 'transition' && open.point.existing !== null
+                    ? () => {
+                        removeTransition(open.point.existing!.id)
+                        closeForm()
+                      }
+                    : open.kind === 'text_edit'
+                      ? () => {
+                          removeClip(open.clip.id)
+                          closeForm()
+                        }
+                      : undefined
+                }
+              />
+            )
+          }
         />
-      ) : (
-        <p
-          role="alert"
-          className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800"
-        >
-          Shot または Transition を読み込めていないため、Transition を編集できません。
-        </p>
       )}
 
-      <TimelineClipForm
-        busy={busy}
-        onAdd={addClip}
-        onSnapSpan={(span) => snapSpanForClip(null, span)}
-      />
+      {dragNotes.length > 0 && (
+        <ul role="status" className="space-y-1 rounded-md bg-slate-100 p-3 text-sm text-slate-700">
+          {dragNotes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      )}
 
-      <TimelineClipList
-        clips={clips}
-        busy={busy}
-        selectedClipId={selectedClipId}
-        onSelect={setSelectedClipId}
-        onUpdate={updateClip}
-        onRemove={removeClip}
-        onSnapSpan={snapSpanForClip}
-      />
+      {/**
+       * 数値で直す口は残す。**帯の上の操作は掴める幅に限りがある。**
+       * 0.01 秒を合わせ込むには数値のほうが速く、キーボードだけでも操作できる。
+       * 主でなくなったので、開かないと出ないところへ下げてある。
+       */}
+      <details className="rounded-lg border border-slate-200 bg-white p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-slate-900">
+          クリップを数値で直す
+        </summary>
+        <div className="mt-4">
+          <TimelineClipList
+            clips={clips}
+            busy={busy}
+            selectedClipId={selectedClipId}
+            onSelect={setSelectedClipId}
+            onUpdate={updateClip}
+            onRemove={removeClip}
+            onSnapSpan={snapSpanForClip}
+          />
+        </div>
+      </details>
     </div>
   )
 }

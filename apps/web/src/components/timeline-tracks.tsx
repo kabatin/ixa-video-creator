@@ -1,19 +1,12 @@
 'use client'
 
-import type {
-  Shot,
-  ShotId,
-  TimelineClip,
-  TimelineClipId,
-  TimelineTrack,
-  Transition,
-} from '@ixa/domain'
-import type { ReactNode } from 'react'
+import type { Shot, ShotId, TimelineClip, TimelineClipId, TimelineTrack } from '@ixa/domain'
+import { useRef, type ReactNode } from 'react'
+import { TimelineClipLane } from '@/components/timeline-clip-lane'
+import { TimelineTransitionRow } from '@/components/timeline-transition-row'
 import {
   EDITABLE_TRACKS,
   VIDEO1_ROW,
-  adjacentShotPairs,
-  describeClipContent,
   formatClock,
   formatTimeSpan,
   lanesForTrack,
@@ -21,31 +14,53 @@ import {
   secondsToPx,
   timeSpanToRect,
   timelineRowLabel,
-  transitionForPair,
-  transitionTypeLabel,
 } from '@/lib/timeline-display'
+import type { ClipDragContext, ClipDragOutcome } from '@/lib/timeline-drag'
+import type { InlineFormAnchor } from '@/components/timeline-inline-form'
+import type { TransitionInsertionPoint } from '@/lib/timeline-insert'
 
 /**
- * Shot と TimelineClip を時間軸に並べて見せる帯（P5-4）。
+ * Shot と TimelineClip を時間軸に並べ、**その場で置いて動かせる**帯。
  *
- * **操作性より「壊れた状態が見えること」を優先する。** ドラッグは持たない。
- * 位置と尺は数値で編集し、ここは結果を映すだけにする。
+ * 以前は「操作性より壊れた状態が見えることを優先する。ドラッグは持たない」
+ * という作りだった。制作者の判断（2026-09-17）でその前提を変えている。
+ * 壊れた状態が見えることは引き続き優先する（載らなかった Shot は色を変える）。
+ *
+ * **判定はここに書かない。** どこを掴んだか・どこへ挿せるかは
+ * `timeline-drag.ts` と `timeline-insert.ts` が持つ。ここは並べて繋ぐだけ。
  */
 
 const LABEL_WIDTH_CLASS = 'w-44'
 const LANE_HEIGHT_PX = 44
+const TRANSITION_ROW_HEIGHT_PX = 32
 const MIN_CONTENT_WIDTH_PX = 320
+
+/** テロップを置く層。いまは 1 層だけ扱う。 */
+export const TEXT_INSERT_LAYER = 0
 
 export type TimelineTracksProps = {
   readonly shots: readonly Shot[]
   readonly clips: readonly TimelineClip[]
-  readonly transitions: readonly Transition[]
+  readonly transitionPoints: readonly TransitionInsertionPoint[]
   /** VIDEO1 に実際に載った Shot。載らなかったものは色を変えて必ず見えるようにする。 */
   readonly renderedShotIds: ReadonlySet<ShotId>
   readonly durationSec: number
   readonly pxPerSec: number
   readonly selectedClipId: TimelineClipId | null
+  readonly busy: boolean
+  /** いま開いている境目の時刻。開いている印を付けるため。 */
+  readonly openTransitionAtSec: number | null
+  readonly previewClipId: TimelineClipId | null
+  readonly previewSpan: { readonly startSec: number; readonly durationSec: number } | null
   readonly onSelectClip: (id: TimelineClipId) => void
+  readonly onOpenTransition: (point: TransitionInsertionPoint, anchor: InlineFormAnchor) => void
+  readonly onOpenClip: (clip: TimelineClip, anchor: InlineFormAnchor) => void
+  readonly onInsertText: (track: TimelineTrack, atSec: number, anchor: InlineFormAnchor) => void
+  readonly onClipDragBegin: (clip: TimelineClip) => ClipDragContext
+  readonly onClipDragMove: (clip: TimelineClip, outcome: ClipDragOutcome) => void
+  readonly onClipDragEnd: (clip: TimelineClip, outcome: ClipDragOutcome) => void
+  /** 帯の上に重ねるもの（その場で出る入力）。位置は呼び出し側が持つ。 */
+  readonly overlay?: ReactNode
 }
 
 type RowProps = {
@@ -79,56 +94,77 @@ const EmptyLane = ({ message }: { readonly message: string }) => (
 export const TimelineTracks = ({
   shots,
   clips,
-  transitions,
+  transitionPoints,
   renderedShotIds,
   durationSec,
   pxPerSec,
   selectedClipId,
+  busy,
+  openTransitionAtSec,
+  previewClipId,
+  previewSpan,
   onSelectClip,
+  onOpenTransition,
+  onOpenClip,
+  onInsertText,
+  onClipDragBegin,
+  onClipDragMove,
+  onClipDragEnd,
+  overlay,
 }: TimelineTracksProps) => {
+  const contentRef = useRef<HTMLDivElement>(null)
   const contentWidthPx = Math.max(secondsToPx(durationSec, pxPerSec), MIN_CONTENT_WIDTH_PX)
   const ticks = rulerTicks(durationSec, pxPerSec)
-  const pairs = adjacentShotPairs(shots)
+
+  /**
+   * 子は自分がどの行にいるかを知らないので、画面上の縦位置だけを渡してくる。
+   * **入力を重ねるのはこの器の中なので、器から見た座標へ直すのはここの仕事。**
+   */
+  const anchorFrom = (leftPx: number, clientY: number): InlineFormAnchor => ({
+    leftPx,
+    topPx: clientY - (contentRef.current?.getBoundingClientRect().top ?? 0),
+  })
 
   const renderTrack = (track: TimelineTrack): ReactNode => {
     const lanes = lanesForTrack(clips, track)
-    if (lanes.length === 0) return <EmptyLane message="クリップなし" />
+    /**
+     * TEXT は空でも置ける場所として出す。**空の帯を「クリップなし」で塞がない。**
+     * 置ける場所が見えていないと、そこを押せることに気づけない。
+     * 素材の選択が要る他のトラックは、この画面からは置けないので従来どおり。
+     */
+    if (lanes.length === 0 && track !== 'TEXT') return <EmptyLane message="クリップなし" />
 
-    return lanes.map((lane) => (
-      <div key={lane.layer} className="relative" style={{ height: LANE_HEIGHT_PX }}>
-        <span className="absolute left-1 top-1 text-[10px] text-slate-400">
-          {`layer ${String(lane.layer)}`}
-        </span>
-        {lane.clips.map((clip) => {
-          const rect = timeSpanToRect(clip, pxPerSec)
-          const selected = clip.id === selectedClipId
-          return (
-            <button
-              key={clip.id}
-              type="button"
-              onClick={() => {
-                onSelectClip(clip.id)
-              }}
-              aria-pressed={selected}
-              title={`${formatTimeSpan(clip)} ${describeClipContent(clip.content)}`}
-              className={`absolute top-4 overflow-hidden rounded px-1 text-left text-[11px] ring-1 ${
-                selected
-                  ? 'bg-sky-200 text-sky-900 ring-sky-500'
-                  : 'bg-sky-100 text-sky-900 ring-sky-300 hover:bg-sky-200'
-              }`}
-              style={{ left: rect.leftPx, width: rect.widthPx, height: LANE_HEIGHT_PX - 20 }}
-            >
-              {describeClipContent(clip.content)}
-            </button>
-          )
-        })}
-      </div>
+    const laneList =
+      lanes.length === 0 ? [{ layer: TEXT_INSERT_LAYER, clips: [] as TimelineClip[] }] : lanes
+
+    return laneList.map((lane) => (
+      <TimelineClipLane
+        key={lane.layer}
+        layer={lane.layer}
+        clips={lane.clips}
+        pxPerSec={pxPerSec}
+        selectedClipId={selectedClipId}
+        busy={busy}
+        previewId={previewClipId}
+        previewSpan={previewSpan}
+        onSelect={onSelectClip}
+        onOpen={(clip, leftPx, clientY) => {
+          onOpenClip(clip, anchorFrom(leftPx, clientY))
+        }}
+        onDragBegin={onClipDragBegin}
+        onDragMove={onClipDragMove}
+        onDragEnd={onClipDragEnd}
+        onInsertAt={(atSec, leftPx, clientY) => {
+          // 置けるのは TEXT だけ。他は素材の選択が要るのでこの画面では受けない。
+          if (track === 'TEXT') onInsertText(track, atSec, anchorFrom(leftPx, clientY))
+        }}
+      />
     ))
   }
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-      <div style={{ minWidth: contentWidthPx }}>
+      <div ref={contentRef} className="relative" style={{ minWidth: contentWidthPx }}>
         <Row label={`尺 ${formatClock(durationSec)}`} contentWidthPx={contentWidthPx}>
           <div className="relative h-8">
             {ticks.map((tick) => (
@@ -171,21 +207,16 @@ export const TimelineTracks = ({
         </Row>
 
         <Row label="Transition" contentWidthPx={contentWidthPx}>
-          <div className="relative" style={{ height: 28 }}>
-            {pairs.map((pair) => {
-              const transition = transitionForPair(transitions, pair)
-              if (transition === null) return null
-              return (
-                <span
-                  key={transition.id}
-                  className="absolute top-1 -translate-x-1/2 whitespace-nowrap rounded bg-violet-100 px-1 text-[10px] text-violet-900 ring-1 ring-violet-300"
-                  style={{ left: secondsToPx(pair.to.startSec, pxPerSec) }}
-                >
-                  {`${transitionTypeLabel(transition.type)} ${transition.durationSec.toFixed(2)}s`}
-                </span>
-              )
-            })}
-          </div>
+          <TimelineTransitionRow
+            points={transitionPoints}
+            pxPerSec={pxPerSec}
+            heightPx={TRANSITION_ROW_HEIGHT_PX}
+            busy={busy}
+            openAtSec={openTransitionAtSec}
+            onOpen={(point, leftPx, clientY) => {
+              onOpenTransition(point, anchorFrom(leftPx, clientY))
+            }}
+          />
         </Row>
 
         {EDITABLE_TRACKS.map((track) => (
@@ -193,6 +224,8 @@ export const TimelineTracks = ({
             {renderTrack(track)}
           </Row>
         ))}
+
+        {overlay}
       </div>
     </div>
   )
