@@ -16,7 +16,6 @@ const baseRow = (overrides: Partial<MusicTrackRow> = {}): MusicTrackRow => ({
   isMaster: true,
   offsetSec: 0,
   volume: 1,
-  createdAt: new Date('2026-01-01T00:00:00Z'),
   deletedAt: null,
   ...overrides,
 })

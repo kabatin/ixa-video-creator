@@ -18,8 +18,14 @@ import { createLogger } from '../logger.js'
 import {
   storyboardRoutes,
   ANALYSIS_REQUIRED_MESSAGE,
+  BOUNDARIES_NEGATIVE_MESSAGE,
+  BOUNDARIES_NOT_ASCENDING_MESSAGE,
+  BOUNDARIES_TOO_FEW_MESSAGE,
+  BOUNDARIES_TOO_MANY_MESSAGE,
+  CODE_PREFIX_INVALID_MESSAGE,
   FOREIGN_SEQUENCE_MESSAGE,
   FOREIGN_TRACK_MESSAGE,
+  MAX_CUT_BOUNDARIES,
   SECTION_OUT_OF_RANGE_MESSAGE,
   type StoryboardRoutesDeps,
 } from '../routes/storyboard.js'
@@ -46,6 +52,15 @@ type AllocateBody = {
   requestedCount: number
   createdCount: number
   section: { index: number; label: string }
+  warnings: string[]
+}
+/**
+ * 時間指定の応答。`requestedCount` と `section` は**意図的に持たない**。
+ * 減らさず 422 で弾くため要求数と作成数が常に一致し、由来する音楽セクションも無いため。
+ */
+type CutsBody = {
+  shots: ShotBody[]
+  createdCount: number
   warnings: string[]
 }
 
@@ -99,6 +114,33 @@ const allocate = (payload: Record<string, unknown>, projectId: string = project.
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
   })
+
+const createCuts = (payload: Record<string, unknown>, projectId: string = project.id) =>
+  app.request(`/projects/${projectId}/storyboard/cuts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+/** 既存 Shot を 1 つ置くためだけの最小入力。演出は空のまま。 */
+const aShotInput = (overrides: { code: string; order: number }) => ({
+  projectId: project.id,
+  sequenceId: null,
+  startSec: 0,
+  durationSec: 4,
+  sourceInSec: 0,
+  description: '',
+  dialogue: null,
+  camera: {
+    size: 'medium' as const, angleH: null, angle: null,
+    lensMm: null, movement: null, movementIntensity: null,
+  },
+  mood: null,
+  locationId: null,
+  sourceType: { type: 'ai_video' as const },
+  status: 'draft' as const,
+  ...overrides,
+})
 
 const json = async <T>(res: Response): Promise<T> => (await res.json()) as T
 
@@ -406,5 +448,223 @@ describe('Sequence への所属', () => {
     expect(res.status).toBe(201)
     const { shots } = (await json<SuccessBody<AllocateBody>>(res)).data
     expect(shots.every((shot) => shot.sequenceId === sequence.id)).toBe(true)
+  })
+})
+
+describe('時間を直接指定して Shot を作る', () => {
+  it('区切り 5 個から 4 カットができる', async () => {
+    const res = await createCuts({ boundariesSec: [0, 2.5, 5, 7.5, 10] })
+
+    expect(res.status).toBe(201)
+    const body = await json<SuccessBody<CutsBody>>(res)
+    expect(body.data.createdCount).toBe(4)
+    expect(body.data.shots).toHaveLength(4)
+    expect(body.data.warnings).toEqual([])
+  })
+
+  it('指定した時刻がそのまま Shot の始まりと尺になる（拍へ寄せない）', async () => {
+    /**
+     * 波形の上で人が決めた位置を勝手に動かさない。
+     * `allocateShots` の経路と違い、ここではスナップしないことが仕様。
+     */
+    const res = await createCuts({ boundariesSec: [1.37, 4.02, 9.5] })
+    const { shots } = (await json<SuccessBody<CutsBody>>(res)).data
+
+    const ordered = [...shots].sort((a, b) => a.startSec - b.startSec)
+    expect(ordered[0]?.startSec).toBeCloseTo(1.37, 9)
+    expect(ordered[0]?.durationSec).toBeCloseTo(2.65, 9)
+    expect(ordered[1]?.startSec).toBeCloseTo(4.02, 9)
+    expect(ordered[1]?.durationSec).toBeCloseTo(5.48, 9)
+  })
+
+  it('作られた Shot に隙間も重なりも無い', async () => {
+    const boundaries = [0, 1.25, 3.75, 4.1, 8.9, 12]
+    const res = await createCuts({ boundariesSec: boundaries })
+    const { shots } = (await json<SuccessBody<CutsBody>>(res)).data
+
+    const ordered = [...shots].sort((a, b) => a.startSec - b.startSec)
+    expect(ordered).toHaveLength(boundaries.length - 1)
+    for (let i = 0; i + 1 < ordered.length; i += 1) {
+      const current = ordered[i] as ShotBody
+      const next = ordered[i + 1] as ShotBody
+      expect(current.startSec + current.durationSec).toBeCloseTo(next.startSec, 9)
+    }
+
+    const last = ordered[ordered.length - 1] as ShotBody
+    expect(last.startSec + last.durationSec).toBeCloseTo(12, 9)
+  })
+
+  it('検証器も、隙間も重なりも報告しない', async () => {
+    /**
+     * テスト独自の判定だけでなく、**レンダリング前に実際に走る検証器**で確かめる。
+     * セクション経由の一括作成と同じやり方に倣う。
+     */
+    await createCuts({ boundariesSec: [0, 3.3, 7.7, 11.1] })
+
+    const shots = await deps.shots.findByProject(project.id)
+    const issues = validateTimeline({
+      project: { fps: project.fps, resolution: project.resolution },
+      shots,
+      transitions: [],
+      clips: [],
+      musicTracks: [],
+      resolveShotMedia: () => 'file:///stub.mp4',
+      resolveClipMedia: () => undefined,
+    })
+
+    const timingCodes: readonly string[] = [
+      TIMELINE_ISSUE_CODES.shotGap,
+      TIMELINE_ISSUE_CODES.shotOverlap,
+    ]
+    expect(issues.filter((issue) => timingCodes.includes(issue.code))).toEqual([])
+  })
+
+  it('code は既定で CUT-01 から振られ、order は既存の後ろに続く', async () => {
+    await deps.shots.create(aShotInput({ code: 'S01-010', order: 0 }))
+
+    const res = await createCuts({ boundariesSec: [0, 1, 2, 3] })
+    const { shots } = (await json<SuccessBody<CutsBody>>(res)).data
+
+    expect(shots.map((shot) => shot.code)).toEqual(['CUT-01', 'CUT-02', 'CUT-03'])
+    expect(shots.map((shot) => shot.order)).toEqual([1, 2, 3])
+  })
+
+  it('codePrefix を指定するとその接頭辞になり、小文字は大文字に揃う', async () => {
+    const res = await createCuts({ boundariesSec: [0, 1, 2], codePrefix: 'hook' })
+    const { shots } = (await json<SuccessBody<CutsBody>>(res)).data
+
+    expect(shots.map((shot) => shot.code)).toEqual(['HOOK-01', 'HOOK-02'])
+  })
+
+  it('2 回続けて作っても code が衝突しない（(project_id, code) は UNIQUE）', async () => {
+    expect((await createCuts({ boundariesSec: [0, 1, 2] })).status).toBe(201)
+    expect((await createCuts({ boundariesSec: [2, 3, 4] })).status).toBe(201)
+
+    const codes = (await deps.shots.findByProject(project.id)).map((shot) => shot.code)
+    expect(codes).toHaveLength(4)
+    expect(new Set(codes).size).toBe(codes.length)
+  })
+
+  it('セクション経由で作った code とも衝突しない', async () => {
+    await allocate({ musicTrackId: track.id, sectionIndex: 1, requestedCount: 2 })
+    const res = await createCuts({ boundariesSec: [0, 1, 2], codePrefix: 'CHORUS' })
+
+    expect(res.status).toBe(201)
+    const codes = (await deps.shots.findByProject(project.id)).map((shot) => shot.code)
+    expect(new Set(codes).size).toBe(codes.length)
+    expect(codes).toContain('CHORUS-03')
+  })
+
+  it('作られた Shot は draft で、演出は空のまま残る', async () => {
+    const res = await createCuts({ boundariesSec: [0, 1, 2] })
+    const { shots } = (await json<SuccessBody<CutsBody>>(res)).data
+
+    expect(shots.every((shot) => shot.status === 'draft')).toBe(true)
+    expect(shots.every((shot) => shot.sequenceId === null)).toBe(true)
+  })
+
+  it('同じ Project の Sequence を指定すると、その配下に作られる', async () => {
+    const sequence = await deps.sequences.create({
+      projectId: project.id,
+      order: 0,
+      name: 'サビ',
+      musicSectionLabel: 'chorus',
+    })
+
+    const res = await createCuts({ boundariesSec: [0, 1, 2], sequenceId: sequence.id })
+
+    expect(res.status).toBe(201)
+    const { shots } = (await json<SuccessBody<CutsBody>>(res)).data
+    expect(shots.every((shot) => shot.sequenceId === sequence.id)).toBe(true)
+  })
+
+  it('上限ちょうどの区切りは通り、Shot は 1 つ少なくできる', async () => {
+    const boundaries = Array.from({ length: MAX_CUT_BOUNDARIES }, (_, i) => i * 0.5)
+    const res = await createCuts({ boundariesSec: boundaries })
+
+    expect(res.status).toBe(201)
+    expect((await json<SuccessBody<CutsBody>>(res)).data.createdCount).toBe(MAX_CUT_BOUNDARIES - 1)
+  })
+})
+
+describe('時間指定の入力の検証', () => {
+  it('存在しない Project は 404', async () => {
+    const res = await createCuts({ boundariesSec: [0, 1, 2] }, aProject().id)
+    expect(res.status).toBe(404)
+  })
+
+  it('区切りが 1 個しか無ければ 422', async () => {
+    const res = await createCuts({ boundariesSec: [3] })
+
+    expect(res.status).toBe(422)
+    expect((await json<ErrorBody>(res)).fields?.boundariesSec).toEqual([BOUNDARIES_TOO_FEW_MESSAGE])
+  })
+
+  it('区切りが空なら 422', async () => {
+    const res = await createCuts({ boundariesSec: [] })
+    expect(res.status).toBe(422)
+  })
+
+  it('降順に並んでいたら 422', async () => {
+    const res = await createCuts({ boundariesSec: [0, 5, 3] })
+
+    expect(res.status).toBe(422)
+    expect((await json<ErrorBody>(res)).fields?.boundariesSec).toEqual([
+      BOUNDARIES_NOT_ASCENDING_MESSAGE,
+    ])
+  })
+
+  it('同じ時刻が隣り合っていたら 422（尺 0 の Shot を作らない）', async () => {
+    const res = await createCuts({ boundariesSec: [0, 2, 2, 4] })
+
+    expect(res.status).toBe(422)
+    expect((await json<ErrorBody>(res)).fields?.boundariesSec).toEqual([
+      BOUNDARIES_NOT_ASCENDING_MESSAGE,
+    ])
+  })
+
+  it('負の時刻は 422', async () => {
+    const res = await createCuts({ boundariesSec: [-1, 2, 4] })
+
+    expect(res.status).toBe(422)
+    expect((await json<ErrorBody>(res)).fields?.['boundariesSec.0']).toEqual([
+      BOUNDARIES_NEGATIVE_MESSAGE,
+    ])
+  })
+
+  it('数値でない区切りは 422', async () => {
+    const res = await createCuts({ boundariesSec: [0, '2', 4] })
+    expect(res.status).toBe(422)
+  })
+
+  it('上限を超える区切りは、減らさず 422 で弾く', async () => {
+    const boundaries = Array.from({ length: MAX_CUT_BOUNDARIES + 1 }, (_, i) => i * 0.5)
+    const res = await createCuts({ boundariesSec: boundaries })
+
+    expect(res.status).toBe(422)
+    expect((await json<ErrorBody>(res)).fields?.boundariesSec).toEqual([BOUNDARIES_TOO_MANY_MESSAGE])
+    expect(await deps.shots.findByProject(project.id)).toHaveLength(0)
+  })
+
+  it('codePrefix が記号混じりなら 422', async () => {
+    const res = await createCuts({ boundariesSec: [0, 1, 2], codePrefix: 'a b!' })
+
+    expect(res.status).toBe(422)
+    expect((await json<ErrorBody>(res)).fields?.codePrefix).toEqual([CODE_PREFIX_INVALID_MESSAGE])
+  })
+
+  it('他 Project の Sequence は 422', async () => {
+    const res = await createCuts({
+      boundariesSec: [0, 1, 2],
+      sequenceId: newId(SequenceIdSchema),
+    })
+
+    expect(res.status).toBe(422)
+    expect((await json<ErrorBody>(res)).fields?.sequenceId).toEqual([FOREIGN_SEQUENCE_MESSAGE])
+  })
+
+  it('失敗したときは Shot を 1 つも作らない', async () => {
+    await createCuts({ boundariesSec: [0, 2, 2, 4] })
+    expect(await deps.shots.findByProject(project.id)).toHaveLength(0)
   })
 })

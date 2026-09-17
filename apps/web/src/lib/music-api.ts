@@ -63,6 +63,29 @@ export const WireAllocateResult = z.object({
 })
 export type WireAllocateResult = z.infer<typeof WireAllocateResult>
 
+/**
+ * 波形の上で決めた区切りから作った結果。
+ *
+ * **一括作成と違い `requestedCount` と `section` を持たない。** 時間を直接指定する経路には
+ * 「要求したが作れなかった数」が無く、支えられない入力は減らさず 422 で弾かれる。
+ * 意味の無い数を同じ名前で返すと、減ることがあると読み違える。
+ */
+export const WireCreateCutsResult = z.object({
+  shots: z.array(WireShot),
+  createdCount: z.number(),
+  /** 現状この経路では常に空。「警告が無い」であって「見ていない」ではない。 */
+  warnings: z.array(z.string()),
+})
+export type WireCreateCutsResult = z.infer<typeof WireCreateCutsResult>
+
+export type CreateCutsBody = {
+  /** 区切りの時刻（秒・float）。昇順・重複なし。N 個で N-1 カットできる。 */
+  readonly boundariesSec: readonly number[]
+  readonly sequenceId: SequenceId | null
+  /** `CUT-01` の `CUT` の部分。省略すると API 側の既定になる。 */
+  readonly codePrefix?: string
+}
+
 export type AllocateShotsBody = {
   readonly musicTrackId: MusicTrackId
   readonly sectionIndex: number
@@ -79,6 +102,8 @@ export type MusicApi = {
   getAnalysis: (musicTrackId: MusicTrackId) => Promise<WireMusicAnalysis | null>
   requestAnalysis: (musicTrackId: MusicTrackId) => Promise<WireAnalysisAccepted>
   allocateShots: (projectId: ProjectId, body: AllocateShotsBody) => Promise<WireAllocateResult>
+  /** 区切りの列から Shot を作る。セクション解析を介さない経路。 */
+  createCuts: (projectId: ProjectId, body: CreateCutsBody) => Promise<WireCreateCutsResult>
 }
 
 const trackPath = (id: MusicTrackId, suffix = ''): string =>
@@ -106,5 +131,12 @@ export const createMusicApi = (requester: Requester): MusicApi => ({
       `/projects/${encodeURIComponent(projectId)}/storyboard/shots`,
       body,
       WireAllocateResult,
+    ),
+
+  createCuts: async (projectId, body) =>
+    requester.post(
+      `/projects/${encodeURIComponent(projectId)}/storyboard/cuts`,
+      body,
+      WireCreateCutsResult,
     ),
 })

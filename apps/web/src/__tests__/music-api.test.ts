@@ -1,4 +1,4 @@
-import { MusicTrackId, ProjectId } from '@ixa/domain'
+import { MediaAssetId, MusicTrackId, ProjectId } from '@ixa/domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   MEDIA_ID,
@@ -178,6 +178,102 @@ describe('Shot の一括作成', () => {
     })
 
     expect(result.warnings).toEqual([])
+  })
+})
+
+describe('区切りから Shot を作る', () => {
+  it('区切りの列を送り、作られた Shot を返す', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        data: { shots: [shotJson], createdCount: 1, warnings: [] },
+      }),
+    )
+
+    const result = await createApiClient(BASE_URL).createCuts(projectId, {
+      boundariesSec: [0, 3.5, 7.25],
+      sequenceId: null,
+      codePrefix: 'CUT',
+    })
+
+    expect(result.createdCount).toBe(1)
+
+    const [url, init] = fetchMock.mock.calls[0] ?? []
+    expect(url).toBe(`${BASE_URL}/projects/${PROJECT_ID}/storyboard/cuts`)
+    expect(init?.method).toBe('POST')
+    expect(requestBodyOf(init)).toEqual({
+      boundariesSec: [0, 3.5, 7.25],
+      sequenceId: null,
+      codePrefix: 'CUT',
+    })
+  })
+
+  it('接頭辞を省いたら本文にも載せない。既定は API 側が持つ', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        data: { shots: [shotJson], createdCount: 1, warnings: [] },
+      }),
+    )
+
+    await createApiClient(BASE_URL).createCuts(projectId, {
+      boundariesSec: [0, 1],
+      sequenceId: null,
+    })
+
+    expect(requestBodyOf(fetchMock.mock.calls[0]?.[1])).toEqual({
+      boundariesSec: [0, 1],
+      sequenceId: null,
+    })
+  })
+
+  it('入力の配列を書き換えない', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        data: { shots: [shotJson], createdCount: 1, warnings: [] },
+      }),
+    )
+    const boundariesSec = [0, 2, 4]
+
+    await createApiClient(BASE_URL).createCuts(projectId, { boundariesSec, sequenceId: null })
+
+    expect(boundariesSec).toEqual([0, 2, 4])
+  })
+
+  it('失敗を握り潰さない（区切りが少なすぎる等の 422）', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: false, error: '区切りは 2 個以上必要です' }, 422),
+    )
+
+    await expect(
+      createApiClient(BASE_URL).createCuts(projectId, { boundariesSec: [0], sequenceId: null }),
+    ).rejects.toThrow()
+  })
+})
+
+describe('実体の署名付き URL', () => {
+  const signed = { success: true, data: { url: 'http://minio.invalid/x?sig=y', expiresInSec: 300 } }
+
+  it('期限を省いたら query を付けない。既定は API 側が持つ', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(signed))
+
+    await createApiClient(BASE_URL).mediaUrl(MediaAssetId.parse(MEDIA_ID))
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE_URL}/media/${MEDIA_ID}/url`)
+  })
+
+  /**
+   * 音を聴きながら切る画面は既定の 300 秒より長く開かれる。
+   * 期限が切れたあとのシークは黙って失敗するため、長い期限を頼めることを固定する。
+   */
+  it('期限を渡したら query に載せる', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ ...signed, data: { ...signed.data, expiresInSec: 3600 } }))
+
+    const result = await createApiClient(BASE_URL).mediaUrl(MediaAssetId.parse(MEDIA_ID), 3600)
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE_URL}/media/${MEDIA_ID}/url?expiresInSec=3600`)
+    expect(result.expiresInSec).toBe(3600)
   })
 })
 

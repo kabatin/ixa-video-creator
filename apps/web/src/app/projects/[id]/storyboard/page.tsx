@@ -3,6 +3,7 @@ import { ProjectNav } from '@/components/project-nav'
 import { AnalysisStarter } from '@/components/analysis-starter'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
+import { CutEditor } from '@/components/cut-editor'
 import { StoryboardPanel } from '@/components/storyboard-panel'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
@@ -73,7 +74,7 @@ const StoryboardPage = async ({ params }: StoryboardPageProps) => {
     <main>
       <PageHeader
         title="ストーリーボード"
-        description="音楽のセクションを選んで、ビートに載った Shot を一括で作ります。"
+        description="音を鳴らしながら波形の上で区切りを置き、Shot にします。"
         action={<ProjectNav projectId={projectId.data} current="storyboard" />}
       />
 
@@ -92,12 +93,37 @@ const StoryboardPage = async ({ params }: StoryboardPageProps) => {
       ) : result.loaded.analysis === null ? (
         <AnalysisStarter track={result.loaded.track} />
       ) : (
-        <StoryboardPanel
-          projectId={projectId.data}
-          track={result.loaded.track}
-          analysis={result.loaded.analysis}
-          sequences={result.loaded.sequences}
-        />
+        <div className="space-y-6">
+          <CutEditor
+            projectId={projectId.data}
+            track={result.loaded.track}
+            analysis={result.loaded.analysis}
+            sequences={result.loaded.sequences}
+          />
+
+          {/**
+           * セクションから一括で割る形も残す。**精度は低い**（実データは 15 個すべて
+           * `verse` 判定）が、下拵えとして粗く割ってから波形の上で直す使い方はできる。
+           * 主でなくなったので、開かないと出ないところへ下げてある。
+           */}
+          <details className="rounded-lg border border-slate-200 bg-white p-5">
+            <summary className="cursor-pointer text-base font-semibold text-slate-900">
+              セクションから一括で割る（自動・精度は低い）
+            </summary>
+            <p className="mt-2 text-sm text-slate-600">
+              解析が付けたセクションの境目で機械的に割ります。ラベルの判定は当てになりません。
+              粗く割ってから、上の波形で区切りを直す使い方を想定しています。
+            </p>
+            <div className="mt-4">
+              <StoryboardPanel
+                projectId={projectId.data}
+                track={result.loaded.track}
+                analysis={result.loaded.analysis}
+                sequences={result.loaded.sequences}
+              />
+            </div>
+          </details>
+        </div>
       )}
     </main>
   )
