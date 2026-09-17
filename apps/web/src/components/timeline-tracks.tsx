@@ -53,9 +53,22 @@ export type TimelineTracksProps = {
   readonly previewClipId: TimelineClipId | null
   readonly previewSpan: { readonly startSec: number; readonly durationSec: number } | null
   readonly onSelectClip: (id: TimelineClipId) => void
-  readonly onOpenTransition: (point: TransitionInsertionPoint, anchor: InlineFormAnchor) => void
-  readonly onOpenClip: (clip: TimelineClip, anchor: InlineFormAnchor) => void
-  readonly onInsertText: (track: TimelineTrack, atSec: number, anchor: InlineFormAnchor) => void
+  readonly onOpenTransition: (
+    point: TransitionInsertionPoint,
+    anchor: InlineFormAnchor,
+    opener: HTMLElement | null,
+  ) => void
+  readonly onOpenClip: (
+    clip: TimelineClip,
+    anchor: InlineFormAnchor,
+    opener: HTMLElement | null,
+  ) => void
+  readonly onInsertText: (
+    track: TimelineTrack,
+    atSec: number,
+    anchor: InlineFormAnchor,
+    opener: HTMLElement | null,
+  ) => void
   readonly onClipDragBegin: (clip: TimelineClip) => ClipDragContext
   readonly onClipDragMove: (clip: TimelineClip, outcome: ClipDragOutcome) => void
   readonly onClipDragEnd: (clip: TimelineClip, outcome: ClipDragOutcome) => void
@@ -149,14 +162,15 @@ export const TimelineTracks = ({
         previewSpan={previewSpan}
         onSelect={onSelectClip}
         onOpen={(clip, leftPx, clientY) => {
-          onOpenClip(clip, anchorFrom(leftPx, clientY))
+          // 帯の上のクリップはボタンではないので、戻す先は無い（マウスで開く）。
+          onOpenClip(clip, anchorFrom(leftPx, clientY), null)
         }}
         onDragBegin={onClipDragBegin}
         onDragMove={onClipDragMove}
         onDragEnd={onClipDragEnd}
         onInsertAt={(atSec, leftPx, clientY) => {
           // 置けるのは TEXT だけ。他は素材の選択が要るのでこの画面では受けない。
-          if (track === 'TEXT') onInsertText(track, atSec, anchorFrom(leftPx, clientY))
+          if (track === 'TEXT') onInsertText(track, atSec, anchorFrom(leftPx, clientY), null)
         }}
       />
     ))
@@ -213,8 +227,8 @@ export const TimelineTracks = ({
             heightPx={TRANSITION_ROW_HEIGHT_PX}
             busy={busy}
             openAtSec={openTransitionAtSec}
-            onOpen={(point, leftPx, clientY) => {
-              onOpenTransition(point, anchorFrom(leftPx, clientY))
+            onOpen={(point, leftPx, clientY, opener) => {
+              onOpenTransition(point, anchorFrom(leftPx, clientY), opener)
             }}
           />
         </Row>

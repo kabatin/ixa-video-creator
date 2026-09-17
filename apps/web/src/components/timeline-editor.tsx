@@ -12,7 +12,7 @@ import type {
   Transition,
   TransitionId,
 } from '@ixa/domain'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { TimelineClipList, type ClipPatch } from '@/components/timeline-clip-list'
 import {
   TimelineInlineForm,
@@ -128,6 +128,12 @@ export const TimelineEditor = ({
   } | null>(null)
   /** 掴んで止まった理由・吸着した先。**黙って丸めない。** */
   const [dragNotes, setDragNotes] = useState<readonly string[]>([])
+  /**
+   * 入力を開いた元のボタン。**閉じたら焦点をここへ戻す。**
+   * 戻さないと、キーボードだけで操作している人が現在地を失って帯の先頭へ飛ばされる。
+   * 戻すのは入力部品の仕事なので、こちらは受け口を渡すだけ。
+   */
+  const openerRef = useRef<HTMLElement | null>(null)
 
   /**
    * 検証はサーバの `validateTimeline` が唯一の正。**画面に同じ規則を置かない。**
@@ -210,13 +216,24 @@ export const TimelineEditor = ({
     setFormIssues([])
   }
 
-  const openTransition = (point: TransitionInsertionPoint, anchor: InlineFormAnchor): void => {
+  const openTransition = (
+    point: TransitionInsertionPoint,
+    anchor: InlineFormAnchor,
+    opener: HTMLElement | null,
+  ): void => {
+    openerRef.current = opener
     setOpen({ kind: 'transition', point, anchor })
     setDraft(transitionDraft(point))
     setFormIssues([])
   }
 
-  const openTextInsert = (track: TimelineTrack, atSec: number, anchor: InlineFormAnchor): void => {
+  const openTextInsert = (
+    track: TimelineTrack,
+    atSec: number,
+    anchor: InlineFormAnchor,
+    opener: HTMLElement | null,
+  ): void => {
+    openerRef.current = opener
     const probe = probeTextInsertion({
       clips: clips ?? [],
       track,
@@ -236,7 +253,12 @@ export const TimelineEditor = ({
     setFormIssues([])
   }
 
-  const openClip = (clip: TimelineClip, anchor: InlineFormAnchor): void => {
+  const openClip = (
+    clip: TimelineClip,
+    anchor: InlineFormAnchor,
+    opener: HTMLElement | null,
+  ): void => {
+    openerRef.current = opener
     setOpen({ kind: 'text_edit', clip, anchor })
     // 読めなかった値は `null` のまま渡す。断りは入力部品が出す。
     setDraft(textEditDraft(clip))
@@ -476,6 +498,7 @@ export const TimelineEditor = ({
                 caption={openFormCaption(open)}
                 transitionTypes={INSERTABLE_TRANSITION_TYPES}
                 errors={inlineFormErrors(formIssues)}
+                returnFocusRef={openerRef}
                 busy={busy}
                 onSubmit={(next) => {
                   if (open.kind === 'transition') submitTransition(open.point, next)

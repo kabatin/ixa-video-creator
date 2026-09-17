@@ -30,7 +30,13 @@ export type TimelineTransitionRowProps = {
    * **入力を出す縦の場所を親が計算するために要る**（帯は縦に積まれていて、
    * どの行かはこの部品からは分からない）。
    */
-  readonly onOpen: (point: TransitionInsertionPoint, leftPx: number, clientY: number) => void
+  /** `opener` は押されたボタン。**閉じたあと焦点を戻す先**として要る。 */
+  readonly onOpen: (
+    point: TransitionInsertionPoint,
+    leftPx: number,
+    clientY: number,
+    opener: HTMLElement,
+  ) => void
 }
 
 export const TimelineTransitionRow = ({
@@ -68,7 +74,7 @@ export const TimelineTransitionRow = ({
             title={point.message}
             onClick={(event) => {
               const rect = event.currentTarget.getBoundingClientRect()
-              onOpen(point, leftPx, rect.bottom)
+              onOpen(point, leftPx, rect.bottom, event.currentTarget)
             }}
             className={
               existing === null
