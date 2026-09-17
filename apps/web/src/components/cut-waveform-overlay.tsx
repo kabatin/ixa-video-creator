@@ -34,6 +34,11 @@ export type CutWaveformOverlayProps = {
   readonly disabled: boolean
   readonly onSeek: (sec: number) => void
   readonly onSelectMark: (index: number) => void
+  /**
+   * 区切りを掴んだ。**掴んでいる間は窓を動かさないこと。**
+   * 再生位置に追従して窓が流れると、狙った場所が指の下から逃げていく。
+   */
+  readonly onDragStart: () => void
   /** 引きずっている最中も呼ばれる。確定は `onDragEnd`。 */
   readonly onMoveMark: (index: number, sec: number) => void
   readonly onDragEnd: () => void
@@ -60,6 +65,7 @@ export const CutWaveformOverlay = ({
   disabled,
   onSeek,
   onSelectMark,
+  onDragStart,
   onMoveMark,
   onDragEnd,
   onZoom,
@@ -99,6 +105,7 @@ export const CutWaveformOverlay = ({
     }
     dragRef.current = { index: intent.index, pointerId: event.pointerId }
     onSelectMark(intent.index)
+    onDragStart()
   }
 
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {

@@ -3,6 +3,9 @@ import type { CutMark } from '@/lib/cut-marks'
 import {
   POINTER_HIT_RADIUS_PX,
   ZOOM_STEP,
+  canFollowPlayhead,
+  centerView,
+  isTimeInView,
   clientXForTime,
   markIndexAtClientX,
   panView,
@@ -55,7 +58,12 @@ describe('位置を秒にする', () => {
   })
 
   it('幅が 0 のときは窓の先頭に畳む。0 除算で NaN を返さない', () => {
-    const result = timeAtClientX(100, { left: 0, width: 0 }, { startSec: 7, endSec: 9 }, DURATION_SEC)
+    const result = timeAtClientX(
+      100,
+      { left: 0, width: 0 },
+      { startSec: 7, endSec: 9 },
+      DURATION_SEC,
+    )
 
     expect(result).toBe(7)
     expect(Number.isNaN(result)).toBe(false)
@@ -200,5 +208,101 @@ describe('横へ動かす', () => {
 
     expect(panView(view, -1000, DURATION_SEC).startSec).toBe(0)
     expect(panView(view, 1000, DURATION_SEC).endSec).toBeCloseTo(DURATION_SEC, 6)
+  })
+})
+
+describe('再生位置を中央に保つ', () => {
+  const zoomed: ViewRange = { startSec: 40, endSec: 60 }
+
+  it('窓の中央が再生位置に合う', () => {
+    const centered = centerView(zoomed, 70, DURATION_SEC)
+
+    expect((centered.startSec + centered.endSec) / 2).toBeCloseTo(70, 6)
+  })
+
+  it('幅は変わらない', () => {
+    expect(viewDurationSec(centerView(zoomed, 70, DURATION_SEC))).toBeCloseTo(
+      viewDurationSec(zoomed),
+      6,
+    )
+  })
+
+  /**
+   * 端では寄せきらない。曲の外の空白を見せるより、
+   * 再生位置が中央から外れるほうが「どこを聴いているか」は分かりやすい。
+   */
+  it('曲の先頭では曲からはみ出さない', () => {
+    const centered = centerView(zoomed, 2, DURATION_SEC)
+
+    expect(centered.startSec).toBe(0)
+    expect(viewDurationSec(centered)).toBeCloseTo(viewDurationSec(zoomed), 6)
+  })
+
+  it('曲の末尾では曲からはみ出さない', () => {
+    const centered = centerView(zoomed, DURATION_SEC - 1, DURATION_SEC)
+
+    expect(centered.endSec).toBeCloseTo(DURATION_SEC, 6)
+    expect(viewDurationSec(centered)).toBeCloseTo(viewDurationSec(zoomed), 6)
+  })
+
+  /**
+   * 毎フレーム呼ばれるので、動かないときに新しい物を作ると
+   * 描き直しだけが延々と走る。
+   */
+  /** 既に中央に居るなら、受け取った窓をそのまま返す（描き直しを起こさない）。 */
+  it('動かす必要が無ければ受け取った窓をそのまま返す', () => {
+    expect(centerView(zoomed, 50, DURATION_SEC)).toBe(zoomed)
+  })
+
+  it('曲全体を映しているときは動かず、同じ物を返す', () => {
+    expect(centerView(FULL, 80, DURATION_SEC)).toBe(FULL)
+  })
+
+  it('端で止まっている間は同じ物を返し続ける', () => {
+    const atStart = centerView(zoomed, 2, DURATION_SEC)
+
+    expect(centerView(atStart, 1, DURATION_SEC)).toBe(atStart)
+  })
+
+  it('再生位置が数値でなければ窓を変えない', () => {
+    expect(centerView(zoomed, Number.NaN, DURATION_SEC)).toEqual(zoomed)
+  })
+})
+
+describe('追従が目に見えるか', () => {
+  it('曲全体を映しているなら動きようがない', () => {
+    expect(canFollowPlayhead(FULL, DURATION_SEC)).toBe(false)
+  })
+
+  it('寄っていれば動く', () => {
+    expect(canFollowPlayhead({ startSec: 40, endSec: 60 }, DURATION_SEC)).toBe(true)
+  })
+
+  it('曲より広い窓も動きようがない', () => {
+    expect(canFollowPlayhead({ startSec: -50, endSec: 200 }, DURATION_SEC)).toBe(false)
+  })
+})
+
+describe('その時刻が見えているか', () => {
+  const zoomed: ViewRange = { startSec: 40, endSec: 60 }
+
+  it('窓の中なら見えている', () => {
+    expect(isTimeInView(50, zoomed, DURATION_SEC)).toBe(true)
+  })
+
+  it('窓の端はまだ見えている', () => {
+    expect(isTimeInView(40, zoomed, DURATION_SEC)).toBe(true)
+    expect(isTimeInView(60, zoomed, DURATION_SEC)).toBe(true)
+  })
+
+  it('窓の外なら見えていない', () => {
+    expect(isTimeInView(39.9, zoomed, DURATION_SEC)).toBe(false)
+    expect(isTimeInView(60.1, zoomed, DURATION_SEC)).toBe(false)
+  })
+
+  /** 止めている間にここへ飛ぶと、連れ戻さなければ再生位置がどこにも見えない。 */
+  it('曲全体を映しているならどこでも見えている', () => {
+    expect(isTimeInView(0, FULL, DURATION_SEC)).toBe(true)
+    expect(isTimeInView(DURATION_SEC, FULL, DURATION_SEC)).toBe(true)
   })
 })

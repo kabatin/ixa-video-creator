@@ -12,7 +12,14 @@ import { WaveformCanvas } from '@/components/waveform-canvas'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { resolveCutEditorCommand, describeCutEditorKeys } from '@/lib/cut-editor-keys'
-import { ZOOM_STEP, panView, zoomView } from '@/lib/cut-editor-pointer'
+import {
+  ZOOM_STEP,
+  canFollowPlayhead,
+  centerView,
+  isTimeInView,
+  panView,
+  zoomView,
+} from '@/lib/cut-editor-pointer'
 import {
   addMark,
   buildCutMarkCandidates,
@@ -77,6 +84,18 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
   const [snapEnabled, setSnapEnabled] = useState(true)
 
   const [view, setView] = useState<ViewRange>(() => fullView(analysis.durationSec))
+  /**
+   * 再生位置を窓の中央に置いて、曲のほうを流す。
+   *
+   * 寄って見ているとき、再生に合わせて自分で窓を送るのは現実的ではない。
+   * 鳴っている間は毎フレーム中央へ寄せる。**止めている間は、再生位置が
+   * 窓から出たときだけ連れ戻す。** 止めている間も寄せ続けると、自分で送った窓が
+   * すぐ引き戻されて動かせない。かといって何もしないと、シークした先が窓の外のまま
+   * 再生位置がどこにも見えなくなる。
+   */
+  const [followPlayhead, setFollowPlayhead] = useState(true)
+  /** 区切りを掴んでいる間。掴んだ場所が指の下から逃げないよう、追従を止める。 */
+  const [dragging, setDragging] = useState(false)
   const [peaks, setPeaks] = useState<WaveformPeaksResult | null>(null)
   const [widthPx, setWidthPx] = useState(0)
 
@@ -200,6 +219,29 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
     setSelectedIndex(index)
     setRejection(null)
     playback.seekTo(mark.atSec)
+  }
+
+  // --- 再生位置への追従 ---
+
+  /**
+   * **`view` を依存に入れないこと。** 入れると、窓を動かす→再実行→また動かす、で回り続ける。
+   * 引き金は再生位置の変化だけでよく、いまの窓は `setView` の引数として受け取る。
+   */
+  useEffect(() => {
+    if (!followPlayhead || dragging) return
+    setView((current) =>
+      // 止めている間は、見えているうちは触らない。窓を自分で送った直後に
+      // 引き戻されないようにするため。外へ出たときだけ連れ戻す。
+      !playback.isPlaying && isTimeInView(playback.currentSec, current, durationSec)
+        ? current
+        : centerView(current, playback.currentSec, durationSec),
+    )
+  }, [followPlayhead, playback.isPlaying, playback.currentSec, dragging, durationSec])
+
+  /** 自分で窓を送ったら追従は切る。切らないと、送った先から即座に引き戻される。 */
+  const panBy = (ratio: number): void => {
+    setFollowPlayhead(false)
+    setView((current) => panView(current, (current.endSec - current.startSec) * ratio, durationSec))
   }
 
   // --- キーボード ---
@@ -335,10 +377,14 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
                 disabled={saving}
                 onSeek={playback.seekTo}
                 onSelectMark={setSelectedIndex}
+                onDragStart={() => {
+                  setDragging(true)
+                }}
                 onMoveMark={(index, sec) => {
                   moveMarkTo(index, sec, false)
                 }}
                 onDragEnd={() => {
+                  setDragging(false)
                   const mark = marks[selectedIndex]
                   if (mark !== undefined) moveMarkTo(selectedIndex, mark.atSec, true)
                 }}
@@ -372,9 +418,7 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
           <Button
             size="sm"
             onClick={() => {
-              setView((current) =>
-                panView(current, -(current.endSec - current.startSec) * PAN_RATIO, durationSec),
-              )
+              panBy(-PAN_RATIO)
             }}
           >
             ← 左へ
@@ -382,9 +426,7 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
           <Button
             size="sm"
             onClick={() => {
-              setView((current) =>
-                panView(current, (current.endSec - current.startSec) * PAN_RATIO, durationSec),
-              )
+              panBy(PAN_RATIO)
             }}
           >
             右へ →
@@ -399,6 +441,33 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
           </Button>
           <span className="text-sm text-slate-600">
             {`表示 ${formatClock(view.startSec)} 〜 ${formatClock(view.endSec)}`}
+          </span>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <label className="flex items-center gap-2 text-sm text-slate-800">
+            <input
+              type="checkbox"
+              checked={followPlayhead}
+              onChange={(event) => {
+                setFollowPlayhead(event.target.checked)
+              }}
+              className="h-4 w-4 rounded border-slate-400"
+            />
+            再生位置を中央に保つ
+          </label>
+
+          {/**
+           * **効いていないのか、効いた上で動く必要が無いのかを区別して出す**（L-015）。
+           * 曲全体を映している窓では中央へ寄せても押し戻されるので、何も起きない。
+           * 黙っていると設定が壊れているように見える。
+           */}
+          <span className="text-sm text-slate-600">
+            {!followPlayhead
+              ? '窓は動かしません。「← 左へ」「右へ →」で自分で送ってください。'
+              : !canFollowPlayhead(view, durationSec)
+                ? '曲全体を表示しているので動きません。「寄る」で拡大すると中央に保ちます。'
+                : '鳴っている間は窓が流れます。止めている間は、再生位置が画面から出たときだけ追いかけます。'}
           </span>
         </div>
       </section>

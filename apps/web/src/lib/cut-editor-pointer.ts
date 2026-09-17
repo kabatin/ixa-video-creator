@@ -142,3 +142,54 @@ export const panView = (view: ViewRange, deltaSec: number, durationSec: number):
     durationSec,
   )
 }
+
+/**
+ * 窓の中央を `atSec` に合わせる。幅は変えない。
+ *
+ * 再生位置を真ん中に置いて曲のほうを流すための計算。**曲の端では寄せきらない。**
+ * 先頭や末尾では窓が曲からはみ出すので `clampView` が止め、
+ * そのぶん再生位置は中央から外れる。これは正しい振る舞いで、
+ * 端を越えた空白を見せないほうが、どこを聴いているか分かりやすい。
+ *
+ * **動かす必要が無いときは受け取った窓をそのまま返す。**
+ * 追従は毎フレーム呼ばれるため、同じ値の新しい物を作り続けると
+ * 描き直しだけが延々と走る。曲全体を映しているときや端で止まっているときは
+ * 窓が動かないので、そこで止める意味が大きい。
+ */
+export const centerView = (view: ViewRange, atSec: number, durationSec: number): ViewRange => {
+  const safeView = clampView(view, durationSec)
+  const span = safeView.endSec - safeView.startSec
+  if (!Number.isFinite(atSec) || span <= 0) return safeView
+
+  const half = span / 2
+  const next = clampView({ startSec: atSec - half, endSec: atSec + half }, durationSec)
+
+  // `clampView` は毎回新しい物を返すので、**受け取った窓そのもの**と比べる。
+  // `safeView` と比べると、値が同じでも常に別の物を返してしまい、同一性で止められない。
+  return next.startSec === view.startSec && next.endSec === view.endSec ? view : next
+}
+
+/**
+ * 追従が目に見えるか。
+ *
+ * 曲全体が収まっている窓では、中央へ寄せても `clampView` が押し戻すので**何も起きない**。
+ * 設定が効いていないのか、効いた上で動く必要が無いのかは利用者には区別できないので、
+ * 画面で説明するためにここで判定する（lessons L-015）。
+ */
+export const canFollowPlayhead = (view: ViewRange, durationSec: number): boolean => {
+  const safeView = clampView(view, durationSec)
+  return safeView.endSec - safeView.startSec < durationSec
+}
+
+/**
+ * その時刻がいま見えているか。
+ *
+ * **止めている間の追従の判断に使う。** 鳴っている間は毎フレーム中央へ寄せればよいが、
+ * 止めている間まで同じことをすると、窓を自分で送った直後に引き戻されて動かせない。
+ * かといって何もしないと、シークした先が窓の外のまま**再生位置がどこにも見えなくなる**。
+ * 見えているうちは触らず、外へ出たときだけ連れ戻すのが両立する形になる。
+ */
+export const isTimeInView = (sec: number, view: ViewRange, durationSec: number): boolean => {
+  const safeView = clampView(view, durationSec)
+  return sec >= safeView.startSec && sec <= safeView.endSec
+}
