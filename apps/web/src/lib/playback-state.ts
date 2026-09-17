@@ -40,7 +40,8 @@ export const resolveSeekTarget = (
   currentSec: number,
   deltaSec: number,
   durationSec: number,
-): number => clampSec(toFiniteSec(currentSec) + (Number.isFinite(deltaSec) ? deltaSec : 0), durationSec)
+): number =>
+  clampSec(toFiniteSec(currentSec) + (Number.isFinite(deltaSec) ? deltaSec : 0), durationSec)
 
 // ---------------------------------------------------------------------------
 // キー操作
@@ -206,4 +207,38 @@ export const mediaErrorMessage = (code: number | null | undefined): string => {
     default:
       return '音源の再生に失敗しました。'
   }
+}
+
+// ---------------------------------------------------------------------------
+// 音量
+// ---------------------------------------------------------------------------
+
+/** `HTMLMediaElement.volume` が受け付ける範囲。外すと例外になる。 */
+export const MIN_VOLUME = 0
+export const MAX_VOLUME = 1
+export const DEFAULT_VOLUME = 1
+
+/**
+ * 音量を要素が受け付ける形に丸める。
+ *
+ * **範囲外を渡すと `HTMLMediaElement` は例外を投げる。** 保存した値が壊れていたり、
+ * 別のところで 0〜100 の百分率を入れ違えたりしたときに、再生ごと落とさないための関門。
+ * 数値でないものは既定へ倒す。0 は正しい値なので、`||` で潰さないこと。
+ */
+export const clampVolume = (value: number): number => {
+  if (!Number.isFinite(value)) return DEFAULT_VOLUME
+  return Math.min(Math.max(value, MIN_VOLUME), MAX_VOLUME)
+}
+
+/**
+ * 音量の言い方。
+ *
+ * **消音と音量 0 を同じ文にしない。** どちらも音は出ないが、
+ * 戻し方が違う。消音は解除すれば元の大きさに戻り、音量 0 は上げ直す必要がある。
+ */
+export const describeVolume = (volume: number, muted: boolean): string => {
+  const percent = Math.round(clampVolume(volume) * 100)
+  if (muted) return `消音中（解除すると ${String(percent)}%）`
+  if (percent === 0) return '音量 0%（消音ではありません。上げると鳴ります）'
+  return `音量 ${String(percent)}%`
 }

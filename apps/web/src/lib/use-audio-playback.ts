@@ -3,16 +3,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { describeError } from '@/lib/api-error'
 import {
-  URL_EXPIRED_NOTICE,
-  URL_REFRESHING_NOTICE,
   clampSec,
+  clampVolume,
   isRecoverableMediaError,
   mediaErrorMessage,
   refreshDelayMs,
   resolveSeekTarget,
   shouldCommitPosition,
+  URL_EXPIRED_NOTICE,
+  URL_REFRESHING_NOTICE,
   type SignedSource,
 } from '@/lib/playback-state'
+import {
+  DEFAULT_VOLUME_PREFERENCE,
+  readVolumePreference,
+  writeVolumePreference,
+  type VolumePreference,
+} from '@/lib/volume-preference'
 
 /**
  * 音源を鳴らし、いまどこを鳴らしているかを伝えるフック。
@@ -28,8 +35,7 @@ import {
  */
 
 /** 取り直す手立てが無いまま期限が切れたときの文面。 */
-export const URL_EXPIRED_MESSAGE =
-  '再生用の URL の期限が切れました。画面を再読み込みしてください。'
+export const URL_EXPIRED_MESSAGE = '再生用の URL の期限が切れました。画面を再読み込みしてください。'
 
 export type UseAudioPlaybackOptions = {
   /**
@@ -70,6 +76,12 @@ export type AudioPlayback = {
   readonly seekTo: (sec: number) => void
   /** 現在位置から相対で動かす。負なら戻る。 */
   readonly nudge: (deltaSec: number) => void
+  /** 0〜1。**消音とは別物。** 消音を解除したときに戻る大きさ。 */
+  readonly volume: number
+  readonly muted: boolean
+  /** 範囲外は丸める。要素は範囲外で例外を投げるため。 */
+  readonly setVolume: (value: number) => void
+  readonly toggleMute: () => void
 }
 
 /** 1 つの URL につき自動復帰は 1 回まで。403 を無限に叩き直さない。 */
@@ -104,6 +116,15 @@ export const useAudioPlayback = ({
   const [isLoading, setIsLoading] = useState(source !== null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  /**
+   * 音量。**最初の描画では覚え書きを読まない。**
+   *
+   * この画面はサーバでも描かれる。サーバに `localStorage` は無いので既定になり、
+   * 最初の描画で覚え書きを読むと**サーバの結果と食い違って**React が
+   * 木を作り直す（実際に「消音」と「消音を解除」で不一致になった）。
+   * 読むのは描画のあと、下の効果で行う。
+   */
+  const [preference, setPreference] = useState<VolumePreference>(DEFAULT_VOLUME_PREFERENCE)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const rafRef = useRef<number | null>(null)
@@ -112,6 +133,11 @@ export const useAudioPlayback = ({
   const wasPlayingRef = useRef(false)
   const propUrlRef = useRef<string | null>(source?.url ?? null)
   const refreshRef = useRef<(() => Promise<SignedSource>) | undefined>(onRefreshSource)
+  /**
+   * 要素を作り直したときに音量を入れ直すための控え。
+   * **state を直接読むと作成の効果に依存が増え、音量を変えるたびに要素が作り直される。**
+   */
+  const preferenceRef = useRef<VolumePreference>(preference)
 
   useEffect(() => {
     refreshRef.current = onRefreshSource
@@ -145,36 +171,37 @@ export const useAudioPlayback = ({
    * **取り直していることを必ず画面に出す。** 黙って直すと、音が一瞬途切れた理由が
    * どこにも残らない。直せなかったときはさらに `error` へ上げる。
    */
-  const refresh = useCallback(
-    async (reason: 'expiring' | 'failed'): Promise<void> => {
-      const load = refreshRef.current
-      const audio = audioRef.current
-      if (!load) {
-        if (reason === 'failed') setError(URL_EXPIRED_MESSAGE)
-        return
-      }
-      setNotice(reason === 'failed' ? URL_EXPIRED_NOTICE : URL_REFRESHING_NOTICE)
-      resumeRef.current = {
-        sec: audio?.currentTime ?? 0,
-        // 失敗して止まった直後は `paused` が true になっているため、控えた値を使う。
-        wasPlaying: reason === 'failed' ? wasPlayingRef.current : !(audio?.paused ?? true),
-      }
-      try {
-        const next = await load()
-        setError(null)
-        setActive(next)
-      } catch (caught) {
-        setNotice(null)
-        setError(`音源の一時 URL を取り直せませんでした: ${describeError(caught)}`)
-      }
-    },
-    [],
-  )
+  const refresh = useCallback(async (reason: 'expiring' | 'failed'): Promise<void> => {
+    const load = refreshRef.current
+    const audio = audioRef.current
+    if (!load) {
+      if (reason === 'failed') setError(URL_EXPIRED_MESSAGE)
+      return
+    }
+    setNotice(reason === 'failed' ? URL_EXPIRED_NOTICE : URL_REFRESHING_NOTICE)
+    resumeRef.current = {
+      sec: audio?.currentTime ?? 0,
+      // 失敗して止まった直後は `paused` が true になっているため、控えた値を使う。
+      wasPlaying: reason === 'failed' ? wasPlayingRef.current : !(audio?.paused ?? true),
+    }
+    try {
+      const next = await load()
+      setError(null)
+      setActive(next)
+    } catch (caught) {
+      setNotice(null)
+      setError(`音源の一時 URL を取り直せませんでした: ${describeError(caught)}`)
+    }
+  }, [])
 
   // --- 要素の生成と行事の購読。画面を離れたら必ず止める。 ---
   useEffect(() => {
     const audio = new Audio()
     audio.preload = 'metadata'
+    // **作り直しても音量が戻らないようにする。** この効果は音量に依存しないので、
+    // state ではなく控えから入れる。
+    audio.volume = clampVolume(preferenceRef.current.volume)
+    audio.muted = preferenceRef.current.muted
     audioRef.current = audio
 
     const onLoadedMetadata = (): void => {
@@ -346,6 +373,49 @@ export const useAudioPlayback = ({
     [seekTo],
   )
 
+  /**
+   * 音量を要素へ流し、覚え書きに残す。
+   *
+   * **`audio.src` を差し替えても `volume` は消えない**（要素の属性であって音源の性質ではない）。
+   * 消えるのは要素ごと作り直したときだけで、それは生成の効果が控えから入れ直す。
+   */
+  /** 描画が済んでから覚え書きを読む。ここまでは両側とも既定で揃っている。 */
+  useEffect(() => {
+    const stored = readVolumePreference()
+    preferenceRef.current = stored
+    setPreference(stored)
+  }, [])
+
+  useEffect(() => {
+    preferenceRef.current = preference
+    const audio = audioRef.current
+    if (!audio) return
+    audio.volume = clampVolume(preference.volume)
+    audio.muted = preference.muted
+  }, [preference])
+
+  /**
+   * **保存は操作したときだけ行う。** 状態の変化に合わせて書くと、
+   * 覚え書きを読み込む前の既定値で上書きしてしまう。
+   */
+  const commit = useCallback((next: VolumePreference): void => {
+    preferenceRef.current = next
+    setPreference(next)
+    writeVolumePreference(next)
+  }, [])
+
+  const setVolume = useCallback(
+    (value: number): void => {
+      // 丸めてから持つ。範囲外のまま持つと、要素へ入れる側で毎回考えることになる。
+      commit({ ...preferenceRef.current, volume: clampVolume(value) })
+    },
+    [commit],
+  )
+
+  const toggleMute = useCallback((): void => {
+    commit({ ...preferenceRef.current, muted: !preferenceRef.current.muted })
+  }, [commit])
+
   return {
     isPlaying,
     currentSec,
@@ -358,5 +428,9 @@ export const useAudioPlayback = ({
     toggle,
     seekTo,
     nudge,
+    volume: preference.volume,
+    muted: preference.muted,
+    setVolume,
+    toggleMute,
   }
 }

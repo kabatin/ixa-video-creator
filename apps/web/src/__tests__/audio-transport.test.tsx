@@ -26,6 +26,10 @@ const createPlayback = (
     toggle: vi.fn(),
     seekTo: vi.fn(),
     nudge: vi.fn(),
+    volume: 1,
+    muted: false,
+    setVolume: vi.fn(),
+    toggleMute: vi.fn(),
     ...overrides,
   },
 })
@@ -64,6 +68,45 @@ describe('AudioTransport', () => {
     fireEvent.keyDown(window, { key: ' ' })
 
     expect(playback.toggle).not.toHaveBeenCalled()
+  })
+
+  it('音量を動かすと呼び出しに変換される', () => {
+    const { playback } = createPlayback()
+    render(<AudioTransport playback={playback} />)
+
+    fireEvent.change(screen.getByLabelText('音量'), { target: { value: '0.4' } })
+
+    expect(playback.setVolume).toHaveBeenCalledWith(0.4)
+  })
+
+  it('消音を切り替えられる', () => {
+    const { playback } = createPlayback()
+    render(<AudioTransport playback={playback} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '消音' }))
+
+    expect(playback.toggleMute).toHaveBeenCalled()
+  })
+
+  /**
+   * 消音したまま音量だけ動かしても音は出ない。**動かした人は鳴らしたい**ので、
+   * 同時に消音を解く。解かないと「上げたのに鳴らない」画面になる。
+   */
+  it('消音中に音量を動かすと消音も解く', () => {
+    const { playback } = createPlayback({ muted: true })
+    render(<AudioTransport playback={playback} />)
+
+    fireEvent.change(screen.getByLabelText('音量'), { target: { value: '0.6' } })
+
+    expect(playback.toggleMute).toHaveBeenCalled()
+    expect(playback.setVolume).toHaveBeenCalledWith(0.6)
+  })
+
+  it('消音中はボタンの文言が変わる', () => {
+    const { playback } = createPlayback({ muted: true })
+    render(<AudioTransport playback={playback} />)
+
+    expect(screen.getByRole('button', { name: '消音を解除' })).toBeInTheDocument()
   })
 
   it('ボタンで再生と一時停止を切り替える', () => {

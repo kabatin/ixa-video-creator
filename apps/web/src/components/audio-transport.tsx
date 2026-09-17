@@ -3,7 +3,15 @@
 import { useEffect, type ChangeEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { formatClock } from '@/lib/format-time'
-import { FINE_SEC, KEY_HINTS, isTextEntryTarget, keyToPlaybackCommand } from '@/lib/playback-state'
+import {
+  describeVolume,
+  FINE_SEC,
+  isTextEntryTarget,
+  KEY_HINTS,
+  keyToPlaybackCommand,
+  MAX_VOLUME,
+  MIN_VOLUME,
+} from '@/lib/playback-state'
 import type { AudioPlayback } from '@/lib/use-audio-playback'
 
 /**
@@ -45,7 +53,20 @@ export const AudioTransport = ({
   label,
   keyboardShortcuts = true,
 }: AudioTransportProps) => {
-  const { isPlaying, currentSec, durationSec, isLoading, error, toggle, seekTo, nudge } = playback
+  const {
+    isPlaying,
+    currentSec,
+    durationSec,
+    isLoading,
+    error,
+    toggle,
+    seekTo,
+    nudge,
+    volume,
+    muted,
+    setVolume,
+    toggleMute,
+  } = playback
   const seekable = durationSec > 0 && error === null
 
   /**
@@ -115,6 +136,46 @@ export const AudioTransport = ({
           className={playback.notice !== null ? 'text-xs text-amber-700' : 'text-xs text-slate-500'}
         >
           {stateMessage(playback)}
+        </p>
+      </div>
+
+      {/*
+        音量。**消音とは別の値として持つ。** 消音を解除したときに元の大きさへ戻るので、
+        消音のたびに大きさを覚え直さなくてよい。刻みは 1%。
+        矢印キーはこの入力欄の中ではブラウザ既定の動きになり、画面の割り当ては効かない。
+      */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="sm" onClick={toggleMute} aria-pressed={muted}>
+          {muted ? '消音を解除' : '消音'}
+        </Button>
+
+        <label className="flex flex-1 items-center gap-2 text-sm text-slate-700">
+          <span className="shrink-0">音量</span>
+          <input
+            type="range"
+            aria-label="音量"
+            min={MIN_VOLUME}
+            max={MAX_VOLUME}
+            step={0.01}
+            value={volume}
+            onChange={(event) => {
+              // 消音したまま音量を動かしたら、鳴らしたいということ。消音を解く。
+              if (muted) toggleMute()
+              setVolume(Number.parseFloat(event.target.value))
+            }}
+            aria-valuetext={describeVolume(volume, muted)}
+            className="w-full max-w-xs accent-slate-900"
+          />
+        </label>
+
+        {/**
+         * 目で読むためだけの表示。**読み上げ領域にしないこと。**
+         * 同じ内容はスライダーの `aria-valuetext` が持っており、
+         * 二重に持たせると読み上げが同じ文を 2 回言う。
+         * 再生状態の読み上げ領域とも取り違えられる。
+         */}
+        <p aria-hidden="true" className="text-xs text-slate-600">
+          {describeVolume(volume, muted)}
         </p>
       </div>
 
