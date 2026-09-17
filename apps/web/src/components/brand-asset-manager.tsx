@@ -1,5 +1,7 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
+
 import { BrandCategory, type BrandAsset, type WorkspaceId } from '@ixa/domain'
 import { useState } from 'react'
 import { describeViewState } from '@/components/empty-state'
@@ -232,6 +234,7 @@ const BrandAssetForm = ({
   onSubmit,
   deletion,
 }: BrandAssetFormProps) => {
+  const router = useRouter()
   const [values, setValues] = useState<BrandAssetValues>(initial)
   const [errors, setErrors] = useState<BrandErrors>({})
   const [busy, setBusy] = useState(false)
@@ -245,6 +248,9 @@ const BrandAssetForm = ({
     try {
       await task()
       setNotice(`${label}しました`)
+      // 他の画面の先読み内容を捨てる（music-panel.tsx の説明を参照）。
+      // ブランド色はレビューの色判定が読むので、登録したら他の画面にも効かせる。
+      router.refresh()
     } catch (error) {
       setErrors(errorsFromServer(error, label))
     } finally {

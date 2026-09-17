@@ -1,5 +1,7 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
+
 import type { Location, LocationId, MediaAssetId, WorkspaceId } from '@ixa/domain'
 import { useState } from 'react'
 import { describeViewState } from '@/components/empty-state'
@@ -111,6 +113,7 @@ type LocationCardProps = {
 }
 
 const LocationCard = ({ location, workspaceId, onChanged, onRemoved }: LocationCardProps) => {
+  const router = useRouter()
   const [name, setName] = useState(location.name)
   const [description, setDescription] = useState(location.description)
   const [busy, setBusy] = useState(false)
@@ -124,6 +127,8 @@ const LocationCard = ({ location, workspaceId, onChanged, onRemoved }: LocationC
     try {
       await task()
       setNotice(`${label}しました`)
+      // 他の画面の先読み内容を捨てる（music-panel.tsx の説明を参照）。
+      router.refresh()
     } catch (cause) {
       setError(`${label}できませんでした: ${describeFailure(cause)}`)
     } finally {

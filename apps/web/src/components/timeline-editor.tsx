@@ -1,5 +1,7 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
+
 import type {
   ProjectId,
   Shot,
@@ -82,6 +84,8 @@ export const TimelineEditor = ({
 }: TimelineEditorProps) => {
   const api = useMemo(() => createTimelineApi(createRequester(resolveApiBaseUrl())), [])
 
+  const router = useRouter()
+
   const [transitions, setTransitions] = useState(initialTransitions)
   const [clips, setClips] = useState(initialClips)
   const [pxPerSec, setPxPerSec] = useState(DEFAULT_PX_PER_SEC)
@@ -143,6 +147,8 @@ export const TimelineEditor = ({
     try {
       await action()
       setStatus(`${label}しました`)
+      // 他の画面の先読み内容を捨てる（music-panel.tsx の説明を参照）。
+      router.refresh()
     } catch (error) {
       setActionError(`${label}できませんでした: ${describeError(error)}`)
       setStatus(null)

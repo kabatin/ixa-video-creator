@@ -2,6 +2,7 @@
 
 import type { MusicTrack, MusicTrackId, ProjectId, WorkspaceId } from '@ixa/domain'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AudioUploader, type UploadedAudio } from '@/components/audio-uploader'
 import { TextField } from '@/components/form/text-field'
@@ -62,6 +63,7 @@ const Stat = ({ label, value }: { label: string; value: string }) => (
 )
 
 export const MusicPanel = ({ projectId, workspaceId, initialTracks }: MusicPanelProps) => {
+  const router = useRouter()
   const [tracks, setTracks] = useState<readonly MusicTrack[]>(initialTracks)
   const [uploaded, setUploaded] = useState<UploadedAudio | null>(null)
   const [title, setTitle] = useState('')
@@ -158,6 +160,17 @@ export const MusicPanel = ({ projectId, workspaceId, initialTracks }: MusicPanel
       setUploaded(null)
       setTitle('')
       setSelectedId(track.id)
+
+      /**
+       * **他の画面が持っている古い内容を捨てる。**
+       *
+       * Next.js は `<Link>` が画面に入った時点で遷移先を先読みする。
+       * この画面を開いた瞬間にストーリーボードも先読みされるので、
+       * そこには「楽曲が登録されていません」が入っている。
+       * 登録後にそのリンクを押すと、先読みした古い内容がそのまま出る。
+       * 実際に「登録したのに未登録と言われ、再読み込みしたら直る」が起きた。
+       */
+      router.refresh()
     } catch (caught) {
       setRegisterError(`楽曲として登録できませんでした: ${describeError(caught)}`)
     } finally {

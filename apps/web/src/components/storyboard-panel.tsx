@@ -1,5 +1,7 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
+
 import type { MusicTrack, ProjectId, Sequence, Shot } from '@ixa/domain'
 import { useState } from 'react'
 import { SelectField } from '@/components/form/select-field'
@@ -45,6 +47,7 @@ export const StoryboardPanel = ({
   analysis,
   sequences,
 }: StoryboardPanelProps) => {
+  const router = useRouter()
   const [values, setValues] = useState<StoryboardFormValues>(() =>
     initialStoryboardFormValues(track.id),
   )
@@ -84,6 +87,12 @@ export const StoryboardPanel = ({
         warnings: result.warnings,
         shots: result.shots,
       })
+      /**
+       * **他の画面の先読み内容を捨てる。**
+       * Next.js は `<Link>` が画面に入った時点で遷移先を先読みする。作る前に
+       * 先読みされた内容が残っていると、作ったのに「ありません」と出る。
+       */
+      router.refresh()
     } catch (error) {
       // 失敗を握り潰すと「押したのに何も起きない」画面になる。必ず理由を出す。
       setErrors({ form: describeError(error) })
