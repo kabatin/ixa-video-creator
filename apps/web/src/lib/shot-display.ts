@@ -45,6 +45,21 @@ export const shotStatusLabel = (status: ShotStatus): string => SHOT_STATUS_LABEL
 
 export const shotStatusClassName = (status: ShotStatus): string => SHOT_STATUS_CLASSES[status]
 
+/**
+ * 状態の点（ストーリーボードのカード・一覧の行）。バッジと同じ色の役割を**塗りで**使う。
+ * 点は小さいので色だけでは読めない。使う側は必ずラベルを title / 読み上げに渡すこと。
+ */
+const SHOT_STATUS_DOTS: Readonly<Record<ShotStatus, string>> = {
+  draft: 'bg-muted',
+  ready: 'bg-info',
+  generating: 'bg-info animate-pulse',
+  review: 'bg-warn',
+  approved: 'bg-ok',
+  blocked: 'bg-danger',
+}
+
+export const shotStatusDotClassName = (status: ShotStatus): string => SHOT_STATUS_DOTS[status]
+
 const REVIEW_STATUS_LABELS: Readonly<Record<ReviewStatus, string>> = {
   pending: '自動レビュー未実施',
   passed: '自動レビュー合格',

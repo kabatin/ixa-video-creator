@@ -1,11 +1,12 @@
 import { MusicTrack, MusicTrackId, ProjectId, Shot, ShotId } from '@ixa/domain'
 import { render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { StoryboardWorkspace } from '@/components/storyboard-workspace'
+import { StoryboardPanel } from '@/components/workbench/panels/storyboard-panel'
 import { TimelineEditor } from '@/components/timeline-editor'
 import type { WireTimelineBeatAlignment } from '@/lib/beat-alignment-view'
 import type { WireMusicAnalysis } from '@/lib/music-api'
 import { MEDIA_ID, MUSIC_TRACK_ID, PROJECT_ID, shotJson } from './fixtures'
+import { renderInWorkbench } from './workbench-fixture'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn() }),
@@ -101,28 +102,20 @@ const aTrack = MusicTrack.parse({
   volume: 1,
 })
 
-describe('ストーリーボード画面への配線', () => {
+describe('ストーリーボードのパネルへの配線（PHASE 7.1）', () => {
   beforeEach(() => {
-    vi.stubGlobal('matchMedia', () => ({
-      matches: true,
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-    }))
     vi.stubGlobal(
       'ResizeObserver',
       class {
         observe(): void {
           // 位置は測らない。
         }
-        unobserve(): void {
-          // 何もしない（dockview が後始末で呼ぶ）。
-        }
         disconnect(): void {
           // 何もしない。
         }
       },
     )
-    // サムネイルは取りに行かせない。取れなくてもポスター帯は出る。
+    // 下書きの件数は取りに行かせない。取れなくてもカードは出る。
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
   })
 
@@ -130,16 +123,8 @@ describe('ストーリーボード画面への配線', () => {
     vi.unstubAllGlobals()
   })
 
-  it('手元の解析から出した整列が、ポスター帯の要約まで届く', async () => {
-    render(
-      <StoryboardWorkspace
-        projectId={ProjectId.parse(PROJECT_ID)}
-        track={aTrack}
-        analysis={anAnalysis}
-        sequences={[]}
-        initialShots={shots}
-      />,
-    )
+  it('手元の解析から出した整列が、ストーリーボードの要約まで届く', async () => {
+    renderInWorkbench(<StoryboardPanel />, { shots, track: aTrack, analysis: anAnalysis })
 
     await waitFor(() => {
       expect(screen.getByText(/2 件中 1 件が拍から外れています/)).toBeTruthy()

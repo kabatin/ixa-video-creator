@@ -92,8 +92,14 @@ textarea {
   color-scheme: inherit;
 }
 
-/* Dockview の構造はライブラリに任せ、色だけを本アプリの意味トークンへ接続する。 */
-.storyboard-dock {
+/*
+ * Dockview の構造はライブラリに任せ、色だけを本アプリの意味トークンへ接続する。
+ * タブ列の高さは密度の尺度（UI-WORKBENCH §5.2）に合わせて rem で持つ。
+ */
+/* テーマの class（`dockview-theme-abyss`）が自分の要素で同じ変数を宣言し直すので、そこへ直接当てる。 */
+.workbench-dock [class*='dockview-theme-'] {
+  --dv-tabs-and-actions-container-height: 1.75rem;
+  --dv-tabs-and-actions-container-font-size: 0.75rem;
   --dv-background-color: rgb(var(--bg));
   --dv-paneview-header-border-color: rgb(var(--line));
   --dv-tabs-and-actions-container-background-color: rgb(var(--surface));
@@ -106,4 +112,29 @@ textarea {
   --dv-separator-border: rgb(var(--line));
   --dv-activegroup-visiblepanel-tab-color: rgb(var(--text));
   --dv-inactivegroup-visiblepanel-tab-color: rgb(var(--muted));
+  --dv-activegroup-hiddenpanel-tab-color: rgb(var(--muted));
+  --dv-inactivegroup-hiddenpanel-tab-color: rgb(var(--muted));
+  --dv-group-view-background-color: rgb(var(--bg));
+  --dv-separator-handle-background-color: rgb(var(--line));
+}
+
+/*
+ * パネル内の余白（UI-WORKBENCH §3.4 / §5.2）。環境設定の「画面の密度」で p-2 / p-3。
+ * 部品は環境設定を直接読まず、`<html data-density>` だけを見る。
+ */
+.workbench-panel-body {
+  padding: 0.5rem;
+}
+
+:root[data-density='relaxed'] .workbench-panel-body {
+  padding: 0.75rem;
+}
+
+/*
+ * ダイアログの背景（UI-WORKBENCH §3.3）。ぼかしはトークン化しない（この 1 箇所だけ）。
+ * 色は地のトークンを透かして使い、ライト / ダークの両方で同じ規則にする。
+ */
+.workbench-dialog::backdrop {
+  backdrop-filter: blur(8px);
+  background: rgb(var(--bg) / 0.6);
 }

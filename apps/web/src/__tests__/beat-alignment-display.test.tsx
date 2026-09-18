@@ -1,7 +1,7 @@
 import { Shot, ShotId, type ShotId as ShotIdType } from '@ixa/domain'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { StoryboardPosterStrip } from '@/components/storyboard-poster-strip'
+import { StoryboardGrid } from '@/components/workbench/storyboard-grid'
 import { TimelineTracks } from '@/components/timeline-tracks'
 import { buildShotAlignments } from '@/lib/beat-alignment-view'
 import { shotJson } from './fixtures'
@@ -135,42 +135,36 @@ describe('TimelineTracks の拍の色', () => {
   })
 })
 
-describe('StoryboardPosterStrip の拍の色', () => {
-  const renderStrip = (withAlignment: boolean) =>
+describe('StoryboardGrid の拍の色（PHASE 7.1）', () => {
+  const renderGrid = (withAlignment: boolean) =>
     render(
-      <StoryboardPosterStrip
+      <StoryboardGrid
         shots={shots}
         posters={new Map()}
         selectedShotId={null}
         onSelect={vi.fn()}
-        {...(withAlignment ? { beatAlignment } : {})}
+        {...(withAlignment ? { alignments: beatAlignment.views } : {})}
       />,
     )
 
   it('拍から外れた Shot の左の辺を強い色にする', () => {
-    renderStrip(true)
+    renderGrid(true)
     const buttons = screen.getAllByRole('button')
     expect(buttons[1]?.className).toContain('border-l-danger')
     expect(buttons[0]?.className).toContain('border-l-ok')
   })
 
-  it('何件が外れているかを文でも出す', () => {
-    renderStrip(true)
-    expect(screen.getByText(/2 件中 1 件が拍から外れています/)).toBeTruthy()
-  })
-
-  it('ズレを渡さなければ従来どおり（色も 1 行も出ない）', () => {
-    renderStrip(false)
+  it('ズレを渡さなければ色を付けない', () => {
+    renderGrid(false)
     const buttons = screen.getAllByRole('button')
     expect(buttons[1]?.className).not.toContain('border-l-danger')
     expect(buttons[1]?.className).toContain('hover:border-line-strong')
-    expect(screen.queryByText(/拍から外れています/)).toBeNull()
   })
 
   it('拍の色が付いたカードは、ホバーで縁を塗り替えない', () => {
     // `hover:border-line-strong` は 4 辺をまとめて塗るので、
     // 指を乗せた瞬間だけ左の辺の色が消える。色が付く側ではホバーを縁に掛けない。
-    renderStrip(true)
+    renderGrid(true)
     const buttons = screen.getAllByRole('button')
     expect(buttons[1]?.className).toContain('border-l-danger')
     expect(buttons[1]?.className).not.toContain('hover:border-line-strong')

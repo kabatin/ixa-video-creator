@@ -1,0 +1,300 @@
+import type { ProjectId } from '@ixa/domain'
+import type { AddPanelOptions, SerializedDockview } from 'dockview-react'
+import { z } from 'zod'
+
+/**
+ * ワークベンチの配置（UI-WORKBENCH §3 / §6 / §8）。**React を含まない。**
+ * ADR-0020 の `storyboard-layout.ts` を Project 全体へ一般化したもの。
+ *
+ * - 既定配置は `addDefaultPanels` の 1 箇所。**`addPanel` の順序を固定**し、テストで検査する
+ *   （入れ子が意図どおりに並ばない危険を §12 で挙げた）
+ * - プリセットは前に出すタブを変えるだけ。パネルの位置・大きさは動かさない（§6）
+ * - 保存は Project ごと・版ごとに `localStorage`。制作データではない（ADR-0020）
+ */
+
+/** 区画。パネルが「どこに住むか」。閉じたパネルを戻すときの行き先になる。 */
+export type DockArea = 'main' | 'bottom' | 'side' | 'left'
+
+export const PANEL_IDS = [
+  'storyboard',
+  'preview',
+  'compare',
+  'draft',
+  'cutter',
+  'timeline',
+  'automatic',
+  'shots',
+  'inspector',
+  'assets',
+] as const
+export type PanelId = (typeof PANEL_IDS)[number]
+
+type PanelSpec = {
+  readonly title: string
+  readonly area: DockArea
+}
+
+export const PANEL_SPECS: Readonly<Record<PanelId, PanelSpec>> = Object.freeze({
+  storyboard: { title: 'ストーリーボード', area: 'main' },
+  preview: { title: 'プレビュー', area: 'main' },
+  compare: { title: 'Take 比較', area: 'main' },
+  draft: { title: '絵コンテ下書き', area: 'main' },
+  cutter: { title: '聴きながら切る', area: 'bottom' },
+  timeline: { title: 'タイムライン', area: 'bottom' },
+  automatic: { title: '自動で割る', area: 'bottom' },
+  shots: { title: 'Shot 一覧', area: 'side' },
+  inspector: { title: 'インスペクター', area: 'side' },
+  assets: { title: '素材', area: 'left' },
+})
+
+/** 区画の幅（px）。1440×900 で中央 ≈ 880px になる値（§5.3）。 */
+export const LEFT_WIDTH_PX = 240
+export const SIDE_WIDTH_PX = 320
+
+/**
+ * 区画に初めて置くときの位置。中央上を起点に、下・右・左へ広げる。
+ * 中央下は中央上のどれかの下に付ける。中央上が 1 枚も無ければ全体の下へ。
+ */
+const areaAnchor = (
+  area: DockArea,
+  mainPanel: string | null,
+): AddPanelOptions['position'] | undefined => {
+  switch (area) {
+    case 'main':
+      return undefined
+    case 'bottom':
+      return mainPanel === null
+        ? { direction: 'below' }
+        : { referencePanel: mainPanel, direction: 'below' }
+    case 'side':
+      return { direction: 'right' }
+    case 'left':
+      return { direction: 'left' }
+  }
+}
+
+const AREA_WIDTHS: Readonly<Partial<Record<DockArea, number>>> = Object.freeze({
+  side: SIDE_WIDTH_PX,
+  left: LEFT_WIDTH_PX,
+})
+
+/** 区画ごとに先頭が表、残りが裏のタブ。**この順で `addPanel` する。** */
+const DEFAULT_ORDER: readonly PanelId[] = [
+  'storyboard',
+  'preview',
+  'compare',
+  'draft',
+  'cutter',
+  'timeline',
+  'automatic',
+  'shots',
+  'inspector',
+  'assets',
+]
+
+/** テストから差し替えられるよう、使う口だけに絞る。 */
+export type DockLike = {
+  readonly addPanel: (options: AddPanelOptions) => unknown
+  readonly getPanel: (id: string) => { readonly api: { readonly setActive: () => void } } | undefined
+}
+
+const firstOfArea = (area: DockArea): PanelId =>
+  DEFAULT_ORDER.find((id) => PANEL_SPECS[id].area === area) ?? 'storyboard'
+
+/** 1 枚の置き方。同じ区画に既にパネルがあればそのタブに並べ、無ければ区画を作る。 */
+const panelOptions = (
+  id: PanelId,
+  where: { readonly sibling: string | null; readonly mainPanel: string | null },
+  inactive: boolean,
+): AddPanelOptions => {
+  const spec = PANEL_SPECS[id]
+  const width = AREA_WIDTHS[spec.area]
+  const position =
+    where.sibling === null
+      ? areaAnchor(spec.area, where.mainPanel)
+      : ({ referencePanel: where.sibling, direction: 'within' } as const)
+  return {
+    id,
+    component: id,
+    title: spec.title,
+    ...(inactive ? { inactive: true } : {}),
+    ...(position === undefined ? {} : { position }),
+    ...(where.sibling === null && width !== undefined ? { initialWidth: width } : {}),
+  }
+}
+
+/** 既定配置（§3）。左 240 / 中央上下 / 右 320。区画の先頭のタブが表に出る。 */
+export const addDefaultPanels = (api: Pick<DockLike, 'addPanel'>): void => {
+  DEFAULT_ORDER.forEach((id) => {
+    const head = firstOfArea(PANEL_SPECS[id].area)
+    api.addPanel(
+      panelOptions(id, { sibling: head === id ? null : head, mainPanel: 'storyboard' }, head !== id),
+    )
+  })
+}
+
+/** 区画の幅を合わせる口。`addPanel` の `initialWidth` は区画を作る順によって効かないことがある。 */
+export type SizableDock = {
+  readonly getPanel: (id: string) =>
+    | { readonly group: { readonly api: { readonly setSize: (size: { width?: number }) => void } } }
+    | undefined
+}
+
+/**
+ * 既定配置の幅を 左 240 / 右 320 に揃える（§3）。**置いたあとで**区画ごとに指定する。
+ * 実機（1440×900）で右が 720px に広がり、中央が 1 列しか入らなかった（2026-09-19）。
+ */
+export const sizeDefaultAreas = (api: SizableDock): void => {
+  api.getPanel(firstOfArea('left'))?.group.api.setSize({ width: LEFT_WIDTH_PX })
+  api.getPanel(firstOfArea('side'))?.group.api.setSize({ width: SIDE_WIDTH_PX })
+}
+
+/**
+ * パネルを前に出す。**閉じられていたら住んでいた区画へ戻してから出す。**
+ * メニューの「表示」から押して何も起きないのが一番困る。
+ */
+export const focusPanel = (api: DockLike, id: PanelId): void => {
+  const existing = api.getPanel(id)
+  if (existing !== undefined) {
+    existing.api.setActive()
+    return
+  }
+  const present = (area: DockArea): string | null =>
+    DEFAULT_ORDER.find(
+      (other) => PANEL_SPECS[other].area === area && api.getPanel(other) !== undefined,
+    ) ?? null
+  api.addPanel(
+    panelOptions(
+      id,
+      { sibling: present(PANEL_SPECS[id].area), mainPanel: present('main') },
+      false,
+    ),
+  )
+}
+
+// --- 素材のタブ（7.3） ---
+
+/** 素材ペインから中央上に開くもの。 */
+export type AssetRef =
+  | { readonly kind: 'character'; readonly id: string; readonly label: string }
+  | { readonly kind: 'locations' }
+  | { readonly kind: 'brand-assets' }
+
+export const ASSET_COMPONENT = 'asset'
+
+export const assetPanelId = (asset: AssetRef): string =>
+  asset.kind === 'character' ? `asset:character:${asset.id}` : `asset:${asset.kind}`
+
+const assetTitle = (asset: AssetRef): string =>
+  asset.kind === 'character'
+    ? asset.label
+    : asset.kind === 'locations'
+      ? 'ロケーション'
+      : 'ブランド資産'
+
+/**
+ * 素材を中央上のタブとして開く。**同じ素材は 2 枚開かない**（開いていれば前に出す）。
+ * 中央上が 1 枚も無ければ区画ごと作る。
+ */
+export const openAssetPanel = (api: DockLike, asset: AssetRef): void => {
+  const id = assetPanelId(asset)
+  const existing = api.getPanel(id)
+  if (existing !== undefined) {
+    existing.api.setActive()
+    return
+  }
+  const sibling = DEFAULT_ORDER.find(
+    (other) => PANEL_SPECS[other].area === 'main' && api.getPanel(other) !== undefined,
+  )
+  api.addPanel({
+    id,
+    component: ASSET_COMPONENT,
+    title: assetTitle(asset),
+    params: { asset },
+    ...(sibling === undefined ? {} : { position: { referencePanel: sibling, direction: 'within' } }),
+  })
+}
+
+// --- 作業モード（§6） ---
+
+export const PRESETS = ['compose', 'finish'] as const
+export type Preset = (typeof PRESETS)[number]
+
+export const PRESET_LABELS: Readonly<Record<Preset, string>> = Object.freeze({
+  compose: '構成',
+  finish: '仕上げ',
+})
+
+/** モードごとに前に出す 3 枚（中央上・中央下・右）。 */
+export const PRESET_PANELS: Readonly<Record<Preset, readonly PanelId[]>> = Object.freeze({
+  compose: ['storyboard', 'cutter', 'shots'],
+  finish: ['compare', 'timeline', 'inspector'],
+})
+
+/** 前に出すタブを変えるだけ。配置の JSON には手を入れない。 */
+export const applyPreset = (api: DockLike, preset: Preset): void => {
+  PRESET_PANELS[preset].forEach((id) => {
+    focusPanel(api, id)
+  })
+}
+
+// --- 保存 ---
+
+const LAYOUT_VERSION = 1
+
+/** 旧 `ixa:storyboard-layout:v4` は読まない（パネルの組が違う）。 */
+export const workbenchLayoutKey = (projectId: ProjectId): string =>
+  `ixa:workbench-layout:v${String(LAYOUT_VERSION)}:${projectId}`
+
+const SerializedLayout = z.custom<SerializedDockview>(
+  (value) => typeof value === 'object' && value !== null && 'grid' in value && 'panels' in value,
+  'Dockview の保存形式ではありません',
+)
+
+export type StoredLayoutResult =
+  | { readonly state: 'missing' }
+  | { readonly state: 'invalid'; readonly reason: string }
+  | { readonly state: 'ready'; readonly layout: SerializedDockview }
+
+export const readStoredWorkbenchLayout = (
+  storage: Pick<Storage, 'getItem'>,
+  projectId: ProjectId,
+): StoredLayoutResult => {
+  try {
+    const raw = storage.getItem(workbenchLayoutKey(projectId))
+    if (raw === null) return { state: 'missing' }
+    const parsed = SerializedLayout.safeParse(JSON.parse(raw) as unknown)
+    return parsed.success
+      ? { state: 'ready', layout: parsed.data }
+      : { state: 'invalid', reason: parsed.error.issues[0]?.message ?? '形式が不正です' }
+  } catch (error) {
+    return {
+      state: 'invalid',
+      reason: error instanceof Error ? error.message : 'JSON を読めません',
+    }
+  }
+}
+
+/** 書けなくても何も起きない。配置が残らないだけで、作業は続けられる。 */
+export const writeWorkbenchLayout = (
+  storage: Pick<Storage, 'setItem'>,
+  projectId: ProjectId,
+  layout: SerializedDockview,
+): void => {
+  try {
+    storage.setItem(workbenchLayoutKey(projectId), JSON.stringify(layout))
+  } catch {
+    // 保存を止めているブラウザ設定がある。続ける。
+  }
+}
+
+export const clearWorkbenchLayout = (
+  storage: Pick<Storage, 'removeItem'>,
+  projectId: ProjectId,
+): void => {
+  try {
+    storage.removeItem(workbenchLayoutKey(projectId))
+  } catch {
+    // 同上。
+  }
+}

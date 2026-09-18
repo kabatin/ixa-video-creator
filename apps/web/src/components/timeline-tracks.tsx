@@ -1,7 +1,7 @@
 'use client'
 
 import type { Shot, ShotId, TimelineClip, TimelineClipId, TimelineTrack } from '@ixa/domain'
-import { useRef, type ReactNode } from 'react'
+import { useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { ShotPoster } from '@/components/shot-poster'
 import { TimelineClipLane } from '@/components/timeline-clip-lane'
 import { TimelineTransitionRow } from '@/components/timeline-transition-row'
@@ -109,6 +109,10 @@ export type TimelineTracksProps = {
     readonly trackTitle: string | null
     readonly views: readonly ShotBeatAlignmentView[]
   }
+  /** 選んでいる Shot（PHASE 7.2 ワークベンチ）。帯の上で強調する。 */
+  readonly selectedShotId?: ShotId | null
+  /** 帯の Shot を押した。渡さなければ押せない（従来どおり）。 */
+  readonly onSelectShot?: (shotId: ShotId) => void
 }
 
 type RowProps = {
@@ -163,6 +167,8 @@ export const TimelineTracks = ({
   onSeek,
   overlay,
   beatAlignment,
+  selectedShotId = null,
+  onSelectShot,
 }: TimelineTracksProps) => {
   const contentRef = useRef<HTMLDivElement>(null)
   const alignments = beatAlignment === undefined ? null : alignmentByShotId(beatAlignment.views)
@@ -262,7 +268,7 @@ export const TimelineTracks = ({
             {ticks.map((tick) => (
               <span
                 key={tick.sec}
-                className="absolute top-0 border-l border-line-strong pl-1 text-[10px] text-muted"
+                className="absolute top-0 border-l border-line-strong pl-1 text-xs text-muted"
                 style={{ left: tick.leftPx, height: '100%' }}
               >
                 {tick.label}
@@ -281,17 +287,38 @@ export const TimelineTracks = ({
                 const rendered = renderedShotIds.has(shot.id)
                 const poster = posters === undefined ? null : posterViewFor(posters, shot.id)
                 const alignment = alignments?.get(shot.id) ?? null
+                const selected = shot.id === selectedShotId
                 return (
                   <div
                     key={shot.id}
+                    {...(onSelectShot === undefined
+                      ? {}
+                      : {
+                          role: 'button',
+                          tabIndex: 0,
+                          'aria-pressed': selected,
+                          onClick: () => {
+                            onSelectShot(shot.id)
+                          },
+                          onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+                            if (event.key !== 'Enter' && event.key !== ' ') return
+                            event.preventDefault()
+                            // 帯の上の Space を再生に流さない（L-018）。
+                            event.stopPropagation()
+                            onSelectShot(shot.id)
+                          },
+                        })}
                     title={
                       alignment === null
                         ? `${shot.code} ${formatTimeSpan(shot)}`
                         : `${shot.code} ${formatTimeSpan(shot)} / ${describeDrift(alignment)}`
                     }
-                    className={`absolute top-2 overflow-hidden rounded px-1 text-[11px] ${
+                    className={`absolute top-2 overflow-hidden rounded px-1 text-xs ${
                       rendered ? 'bg-line text-text' : 'border border-dashed bg-warn/10 text-warn'
-                    } ${chipRingClass({ rendered, alignment: alignment?.alignment ?? null })}`}
+                    } ${chipRingClass({ rendered, alignment: alignment?.alignment ?? null })} ${
+                      // 拍の色は ring。選択は outline にして両方を同時に見せる。
+                      selected ? 'outline outline-2 outline-offset-1 outline-accent' : ''
+                    } ${onSelectShot === undefined ? '' : 'cursor-pointer'}`}
                     style={{ left: rect.leftPx, width: rect.widthPx, height: LANE_HEIGHT_PX - 16 }}
                   >
                     {poster !== null && (

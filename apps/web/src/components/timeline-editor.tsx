@@ -30,6 +30,7 @@ import type { WireTimelineBeatAlignment } from '@/lib/beat-alignment-view'
 import { EditHistoryPanel } from '@/components/edit-history-panel'
 import { RoughCutPanel } from '@/components/rough-cut-panel'
 import { nextSeekCommand, type SeekCommand } from '@/lib/program-monitor'
+import type { ShotPosterMap } from '@/lib/shot-posters'
 import { createRequester } from '@/lib/requester'
 import {
   createTimelineApi,
@@ -109,6 +110,34 @@ export type TimelineEditorProps = {
   readonly beatAlignment: WireTimelineBeatAlignment | null
   /** 読み込みに失敗した部分の理由。1 件でもあれば画面に必ず出す。 */
   readonly loadErrors: readonly string[]
+  /**
+   * 外から渡す再生位置（PHASE 7.1 ワークベンチ）。**渡すと内部の再生状態と Space の受け付けを使わない。**
+   * 再生位置はワークベンチの 1 箇所が持ち、プレビューと同じ値を見る（UI-WORKBENCH §7.2）。
+   */
+  readonly playback?: TimelinePlayback
+  /** モニターを出すか。ワークベンチではプレビューのパネルに任せるので出さない。既定は出す。 */
+  readonly showMonitor?: boolean
+  /** 「拍に吸着」の初期値。環境設定の既定を渡す（UI-WORKBENCH §3.4）。 */
+  readonly initialSnapEnabled?: boolean
+  /**
+   * 検査・粗編集・履歴・吸着を帯の下へ畳むか（PHASE 7.1 ワークベンチ）。
+   * ワークベンチの中央下は高さが限られ、上に積むと帯が見えるところまで届かない。
+   */
+  readonly collapseAuxiliary?: boolean
+  /** 帯に敷くサムネイル・選択中の Shot・選ぶ口（PHASE 7.2 ワークベンチ）。`TimelineTracks` へそのまま渡す。 */
+  readonly posters?: ShotPosterMap
+  readonly selectedShotId?: ShotId | null
+  readonly onSelectShot?: (shotId: ShotId) => void
+}
+
+export type TimelinePlayback = {
+  readonly currentSec: number
+  readonly playing: boolean
+  readonly seek: SeekCommand | null
+  /** 目盛りを押した。明示的に飛ぶ。 */
+  readonly onSeek: (sec: number) => void
+  readonly onFrame: (sec: number) => void
+  readonly onPlayingChange: (playing: boolean) => void
 }
 
 export const TimelineEditor = ({
@@ -123,6 +152,13 @@ export const TimelineEditor = ({
   beatSource,
   beatAlignment,
   loadErrors,
+  playback,
+  showMonitor = true,
+  initialSnapEnabled = true,
+  collapseAuxiliary = false,
+  posters,
+  selectedShotId,
+  onSelectShot,
 }: TimelineEditorProps) => {
   const api = useMemo(() => createTimelineApi(createRequester(resolveApiBaseUrl())), [])
 
@@ -131,7 +167,7 @@ export const TimelineEditor = ({
   const [transitions, setTransitions] = useState(initialTransitions)
   const [clips, setClips] = useState(initialClips)
   const [pxPerSec, setPxPerSec] = useState(DEFAULT_PX_PER_SEC)
-  const [snapEnabled, setSnapEnabled] = useState(true)
+  const [snapEnabled, setSnapEnabled] = useState(initialSnapEnabled)
   const [selectedClipId, setSelectedClipId] = useState<TimelineClipId | null>(null)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -156,14 +192,32 @@ export const TimelineEditor = ({
   const openerRef = useRef<HTMLElement | null>(null)
 
   /** 再生ヘッド（PHASE 6.0）。モニターと帯が同じ値を見る。 */
-  const [currentSec, setCurrentSec] = useState(0)
-  const [playing, setPlaying] = useState(false)
+  const [ownCurrentSec, setOwnCurrentSec] = useState(0)
+  const [ownPlaying, setOwnPlaying] = useState(false)
   /** 目盛りを押した、という明示的な指示。モニターはこれが変わったときだけ飛ぶ（`program-monitor.ts`）。 */
-  const [seek, setSeek] = useState<SeekCommand | null>(null)
+  const [ownSeek, setOwnSeek] = useState<SeekCommand | null>(null)
   const document = initialDocument
+
+  /** 外から渡されていればそちらが正。内部の状態は使わない。 */
+  const currentSec = playback?.currentSec ?? ownCurrentSec
+  const playing = playback?.playing ?? ownPlaying
+  const seek = playback === undefined ? ownSeek : playback.seek
+  const setCurrentSec = playback?.onFrame ?? setOwnCurrentSec
+  const setPlaying = playback?.onPlayingChange ?? setOwnPlaying
+  const seekTo = (sec: number): void => {
+    if (playback !== undefined) {
+      playback.onSeek(sec)
+      return
+    }
+    setOwnCurrentSec(sec)
+    setOwnSeek((previous) => nextSeekCommand(previous, sec))
+  }
+  const controlled = playback !== undefined
 
   /** Space で再生/停止。入力欄の中の打鍵は横取りしない（`timeline-playhead`）。 */
   useEffect(() => {
+    // ワークベンチでは Space をワークベンチの 1 箇所が受ける。二重に反応させない。
+    if (controlled) return undefined
     const onKeyDown = (event: KeyboardEvent): void => {
       const target = event.target instanceof HTMLElement ? { tagName: event.target.tagName } : null
       const command = resolveTimelineKey({
@@ -175,13 +229,13 @@ export const TimelineEditor = ({
       })
       if (command === null) return
       event.preventDefault()
-      setPlaying((current) => !current)
+      setOwnPlaying((current) => !current)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [])
+  }, [controlled])
 
   /**
    * 検証はサーバの `validateTimeline` が唯一の正。**画面に同じ規則を置かない。**
@@ -454,18 +508,9 @@ export const TimelineEditor = ({
     })
   }
 
-  return (
-    <div className="space-y-6">
-      {loadErrors.length > 0 && (
-        <ul role="alert" className="space-y-1 rounded-lg border border-danger/40 bg-danger/10 p-4">
-          {loadErrors.map((message) => (
-            <li key={message} className="text-sm text-danger">
-              {message}
-            </li>
-          ))}
-        </ul>
-      )}
-
+  /** 検査・粗編集・履歴・吸着。帯の操作の周りの道具。 */
+  const auxiliary = (
+    <>
       <TimelineIssuePanel issues={issues} projectId={projectId} />
 
       {/**
@@ -500,6 +545,22 @@ export const TimelineEditor = ({
         toleranceSec={toleranceSec}
         candidates={overviewCandidates}
       />
+    </>
+  )
+
+  return (
+    <div className="space-y-6">
+      {loadErrors.length > 0 && (
+        <ul role="alert" className="space-y-1 rounded-lg border border-danger/40 bg-danger/10 p-4">
+          {loadErrors.map((message) => (
+            <li key={message} className="text-sm text-danger">
+              {message}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!collapseAuxiliary && auxiliary}
 
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm text-text">{`全体の尺 ${formatDuration(durationSec)}`}</span>
@@ -539,6 +600,7 @@ export const TimelineEditor = ({
        * 再生する。プレビューでは合っていたのに書き出すとズレる、を構造的に防ぐ。
        * 再生位置は帯の再生ヘッドと同じ state を見る。
        */}
+      {showMonitor && (
       <div className="mx-auto w-full max-w-4xl">
         <ProgramMonitor
           document={document}
@@ -552,6 +614,7 @@ export const TimelineEditor = ({
           }}
         />
       </div>
+      )}
 
       {document !== null && (
         <p role="status" className="text-sm text-muted">
@@ -587,6 +650,9 @@ export const TimelineEditor = ({
           onClipDragMove={dragMove}
           onClipDragEnd={dragEnd}
           playheadSec={document === null ? null : currentSec}
+          {...(posters === undefined ? {} : { posters })}
+          selectedShotId={selectedShotId ?? null}
+          {...(onSelectShot === undefined ? {} : { onSelectShot })}
           beatAlignment={
             beatAlignment === null
               ? undefined
@@ -597,10 +663,7 @@ export const TimelineEditor = ({
                   views: beatAlignment.shots,
                 }
           }
-          onSeek={(sec) => {
-            setCurrentSec(sec)
-            setSeek((previous) => nextSeekCommand(previous, sec))
-          }}
+          onSeek={seekTo}
           overlay={
             open === null || draft === null ? null : (
               <TimelineInlineForm
@@ -666,6 +729,15 @@ export const TimelineEditor = ({
           />
         </div>
       </details>
+
+      {collapseAuxiliary && (
+        <details className="rounded-lg border border-line bg-surface p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-text">
+            検査・粗編集・変更の履歴・ビート吸着
+          </summary>
+          <div className="mt-3 space-y-4">{auxiliary}</div>
+        </details>
+      )}
     </div>
   )
 }

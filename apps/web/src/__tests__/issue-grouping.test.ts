@@ -177,9 +177,9 @@ describe('rowsForGroup', () => {
 })
 
 describe('issueShotHref', () => {
-  it('shotId と projectId が揃っていれば Shot 詳細へのリンクになる', () => {
+  it('shotId と projectId が揃っていれば、その Shot を選んだワークベンチへのリンクになる', () => {
     expect(issueShotHref({ shotId: SHOT_A }, PROJECT)).toBe(
-      `/shots/${SHOT_A}?projectId=${PROJECT}`,
+      `/projects/${PROJECT}?shot=${SHOT_A}&main=compare&side=inspector`,
     )
   })
 
@@ -209,7 +209,7 @@ describe('describeIssueShot', () => {
     const unwired = describeIssueShot(target, undefined)
 
     expect(unwired?.label).toBe(wired?.label)
-    expect(wired?.href).toBe(`/shots/${SHOT_A}?projectId=${PROJECT}`)
+    expect(wired?.href).toBe(`/projects/${PROJECT}?shot=${SHOT_A}&main=compare&side=inspector`)
     expect(unwired?.href).toBeNull()
   })
 

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import 'dockview-react/dist/styles/dockview.css'
 import './globals.css'
-import { SiteHeader } from '@/components/site-header'
+import { PreferencesRoot } from '@/components/preferences-root'
 import { DEFAULT_THEME, THEME_ATTRIBUTE } from '@/lib/theme'
 
 export const metadata: Metadata = {
@@ -11,20 +11,18 @@ export const metadata: Metadata = {
 }
 
 /**
- * 画面の殻（PHASE 5.9）。
+ * 画面の殻（PHASE 5.9 / 7.1）。
  *
- * **幅を絞らない。** 以前は 1000px で中央寄せにしていて、1440px の画面で 3 割が空白だった。
- * タイムラインや一覧は横に長く、表示領域は全部使う。読み物として幅を絞りたい画面
- * （設定など）は、その画面が自分で `max-w` を持つ。
+ * **ここは `<html>` と `<body>` だけを持つ。** 共通ヘッダと外周の余白は `(site)` の殻、
+ * ワークベンチの全画面は `(workbench)` の殻が持つ（ADR-0021 D3）。
  *
- * `data-theme` はサーバで既定（ダーク）を出す。保存された選択は描画のあとに
- * `ThemeToggle` が反映する（lessons L-019）。
+ * `data-theme` はサーバで既定（ダーク）を出す。保存された環境設定は描画のあとに
+ * `PreferencesRoot` が反映する（lessons L-019）。
  */
 const RootLayout = ({ children }: { children: ReactNode }) => (
   <html lang="ja" {...{ [THEME_ATTRIBUTE]: DEFAULT_THEME }}>
     <body className="min-h-screen">
-      <SiteHeader />
-      <div className="px-6 py-6">{children}</div>
+      <PreferencesRoot>{children}</PreferencesRoot>
     </body>
   </html>
 )

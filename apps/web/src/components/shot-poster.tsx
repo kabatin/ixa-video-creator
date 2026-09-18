@@ -38,7 +38,7 @@ const FRAME_CLASS: Readonly<Record<ShotPosterSize, string>> = {
 
 /** 空枠の文。チップは高さが 28px しか無いので、文字は読み上げにだけ残す。 */
 const NOTE_CLASS: Readonly<Record<ShotPosterSize, string>> = {
-  row: 'px-1 text-center text-[10px] leading-tight',
+  row: 'px-1 text-center text-xs leading-tight',
   card: 'px-2 text-center text-xs leading-tight',
   chip: 'sr-only',
 }

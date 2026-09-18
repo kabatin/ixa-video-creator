@@ -1,6 +1,6 @@
 'use client'
 
-import type { Location, ProjectId } from '@ixa/domain'
+import type { Location, ProjectId, Shot } from '@ixa/domain'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -27,6 +27,11 @@ export type ShotFormProps = {
   /** 空配列は「未登録」。取得自体に失敗したときは `locationsError` で区別する。 */
   readonly locations: readonly Location[]
   readonly locationsError?: string
+  /**
+   * 作ったあとの行き先（PHASE 7.1 ワークベンチ）。渡せばそれを呼び、一覧へは移らない。
+   * 渡さなければ従来どおり Shot 一覧へ戻る。
+   */
+  readonly onCreated?: (shot: Shot) => void
 }
 
 export const ShotForm = ({
@@ -35,6 +40,7 @@ export const ShotForm = ({
   defaultStartSec,
   locations,
   locationsError,
+  onCreated,
 }: ShotFormProps) => {
   const router = useRouter()
   const [values, setValues] = useState<ShotFormValues>(() => initialShotFormValues(defaultStartSec))
@@ -55,8 +61,9 @@ export const ShotForm = ({
     setErrors({})
     setSubmitting(true)
     try {
-      await createApiClient().createShot(projectId, validation.input)
-      router.push(shotListHref(projectId))
+      const created = await createApiClient().createShot(projectId, validation.input)
+      if (onCreated === undefined) router.push(shotListHref(projectId))
+      else onCreated(created)
       router.refresh()
     } catch (error) {
       setErrors({ form: `Shot を作成できませんでした: ${describeError(error)}` })

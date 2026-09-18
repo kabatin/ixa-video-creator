@@ -4,11 +4,13 @@ import { ProjectId } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import { PROJECT_ID } from '@/__tests__/fixtures'
 import { PROJECT_SECTIONS, projectSectionHref } from '@/lib/project-links'
+import { legacySectionHref } from '@/lib/workbench-url'
 
 const projectId = ProjectId.parse(PROJECT_ID)
 
 /**
  * **実装済みの画面に必ず行き先があるか**を、ディレクトリと突き合わせて確かめる。
+ * PHASE 7.1 から各ディレクトリは旧 URL のリダイレクトだが、行き先の表は同じ組のまま保つ。
  *
  * 以前ストーリーボードとタイムラインが実装済みなのにどこからもリンクされておらず、
  * URL を直接打つしか到達手段が無かった。行き先を手で並べたテストだと、
@@ -58,11 +60,13 @@ describe('Project 配下の画面へのリンク', () => {
     expect(new Set(keys).size).toBe(keys.length)
   })
 
-  it.each(PROJECT_SECTIONS)('$key のリンクが Project 配下を指す', ({ key }) => {
-    expect(projectSectionHref(projectId, key)).toBe(`/projects/${PROJECT_ID}/${key}`)
+  /** 旧 URL を経由しない（PHASE 7.1）。行き先はワークベンチの該当タブ・ダイアログ。 */
+  it.each(PROJECT_SECTIONS)('$key のリンクがワークベンチを直接指す', ({ key }) => {
+    expect(projectSectionHref(projectId, key)).toBe(legacySectionHref(projectId, key))
+    expect(projectSectionHref(projectId, key).startsWith(`/projects/${PROJECT_ID}?`)).toBe(true)
   })
 
   it('ID をエスケープする', () => {
-    expect(projectSectionHref('a/b' as ProjectId, 'shots')).toBe('/projects/a%2Fb/shots')
+    expect(projectSectionHref('a/b' as ProjectId, 'shots')).toBe('/projects/a%2Fb?side=shots')
   })
 })

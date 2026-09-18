@@ -86,7 +86,7 @@ export const TimelineTransitionRow = ({
                   `focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ` +
                   (open ? 'opacity-100 ring-2 ring-accent' : '')
                 : `absolute top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded px-1.5 py-0.5 ` +
-                  `text-[10px] ring-1 hover:bg-accent-soft/30 disabled:cursor-not-allowed ` +
+                  `text-xs ring-1 hover:bg-accent-soft/30 disabled:cursor-not-allowed ` +
                   `focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ` +
                   (open
                     ? 'bg-accent-soft/30 text-text ring-accent'

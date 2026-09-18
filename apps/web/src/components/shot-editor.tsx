@@ -97,6 +97,10 @@ export type ShotEditorProps = {
   readonly shot: Shot
   /** 生成中など、他の操作で画面が動いている間は触らせない。 */
   readonly disabled?: boolean
+  /**
+   * 削除後の行き先。ワークベンチではその場で引き直す（`refresh`）。既定は一覧へ戻る。
+   */
+  readonly deleteAfter?: ShotDeleteButtonProps['after']
 }
 
 const SAVED_NOTICE = 'Shot を保存しました。'
@@ -105,7 +109,7 @@ const SAVED_NOTICE = 'Shot を保存しました。'
  * Shot 詳細の編集フォーム。コード・開始秒・尺・説明・mood・カメラを後から直す。
  * 更新経路は `PATCH /shots/{id}` ひとつに揃える（ADR-0015）。
  */
-export const ShotEditor = ({ shot, disabled = false }: ShotEditorProps) => {
+export const ShotEditor = ({ shot, disabled = false, deleteAfter = 'list' }: ShotEditorProps) => {
   const router = useRouter()
   // 保存済みの値。応答で差し替えることで、差分判定が常に「サーバにある値」との比較になる。
   const [saved, setSaved] = useState<EditableShot>(() => shot)
@@ -158,7 +162,7 @@ export const ShotEditor = ({ shot, disabled = false }: ShotEditorProps) => {
     <section className="rounded-lg border border-line bg-surface p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h2 className="text-base font-semibold text-text">Shot を編集</h2>
-        <ShotDeleteButton shot={shot} disabled={busy} size="sm" after="list" />
+        <ShotDeleteButton shot={shot} disabled={busy} size="sm" after={deleteAfter} />
       </div>
 
       <form

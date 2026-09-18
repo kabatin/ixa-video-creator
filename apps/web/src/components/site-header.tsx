@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { PreferencesButton } from '@/components/preferences-button'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { CHARACTER_LIST_HREF } from '@/lib/character-links'
 
@@ -32,8 +33,9 @@ export const SiteHeader = () => (
           {entry.label}
         </Link>
       ))}
-      <div className="ml-auto">
+      <div className="ml-auto flex items-center gap-2">
         <ThemeToggle />
+        <PreferencesButton />
       </div>
     </nav>
   </header>

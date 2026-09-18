@@ -41,6 +41,7 @@ import type { WireMusicAnalysis } from '@/lib/music-api'
 import { AUDIO_URL_EXPIRES_IN_SEC, type SignedSource } from '@/lib/playback-state'
 import { snapNoticeClassName, type BeatSource, type SnapNotice } from '@/lib/timeline-snap'
 import { useAudioPlayback } from '@/lib/use-audio-playback'
+import { useCutEditorSync, type TransportSyncPort } from '@/lib/use-cut-editor-sync'
 import { fetchWaveformPeaks, type WaveformPeaksResult } from '@/lib/waveform-api'
 import { fullView, pixelsPerSecond, sectionBoundaries, type ViewRange } from '@/lib/waveform-draw'
 
@@ -68,21 +69,42 @@ export type CutEditorProps = {
   readonly track: MusicTrack
   readonly analysis: WireMusicAnalysis
   readonly sequences: readonly Sequence[]
+  /** 「拍に吸着」の初期値。環境設定の既定を渡す（UI-WORKBENCH §3.4）。 */
+  readonly initialSnapEnabled?: boolean
+  /**
+   * 画面全体の打鍵を受けるか（PHASE 7.2 ワークベンチ）。
+   * ワークベンチでは「聴きながら切る」が見えている間だけ受ける。見えていないのに
+   * Space や ← → を取ると、別のパネルを見ている人の操作を横取りする（lessons L-018）。
+   */
+  readonly keyboardShortcuts?: boolean
+  /** ワークベンチの再生位置と繋ぐ口（PHASE 7.2）。渡さなければ単独で動く。 */
+  readonly sync?: CutEditorSync
 }
+
+/** 再生位置の共有（UI-WORKBENCH §7.2）。形と規則は `use-cut-editor-sync.ts`。 */
+export type CutEditorSync = TransportSyncPort
 
 type SaveOutcome = {
   readonly createdCount: number
   readonly warnings: readonly string[]
 }
 
-export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorProps) => {
+export const CutEditor = ({
+  projectId,
+  track,
+  analysis,
+  sequences,
+  initialSnapEnabled = true,
+  keyboardShortcuts = true,
+  sync,
+}: CutEditorProps) => {
   const router = useRouter()
 
   const [marks, setMarks] = useState<readonly CutMark[]>([])
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const [rejection, setRejection] = useState<MarkRejection | null>(null)
   const [snapNotice, setSnapNotice] = useState<SnapNotice | null>(null)
-  const [snapEnabled, setSnapEnabled] = useState(true)
+  const [snapEnabled, setSnapEnabled] = useState(initialSnapEnabled)
 
   const [view, setView] = useState<ViewRange>(() => fullView(analysis.durationSec))
   /**
@@ -147,6 +169,7 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
   }, [analysis.waveformPeaksUrl])
 
   const playback = useAudioPlayback({ source, onRefreshSource: loadSource })
+  useCutEditorSync(playback, sync)
 
   /** 尺はメタデータが読めるまで 0 なので、解析側の値を控えに使う。 */
   const durationSec = playback.durationSec > 0 ? playback.durationSec : analysis.durationSec
@@ -248,6 +271,7 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
   // --- キーボード ---
 
   useEffect(() => {
+    if (!keyboardShortcuts) return undefined
     const onKeyDown = (event: KeyboardEvent): void => {
       const target =
         event.target instanceof HTMLElement

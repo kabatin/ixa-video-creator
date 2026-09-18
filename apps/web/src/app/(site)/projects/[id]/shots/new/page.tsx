@@ -1,10 +1,11 @@
-import { ProjectId, orderBetween, shotEndSec, type Location, type Shot } from '@ixa/domain'
+import { ProjectId, type Location, type Shot } from '@ixa/domain'
 import Link from 'next/link'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
 import { ShotForm } from '@/components/shot-form'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import { nextShotOrder, nextShotStartSec } from '@/lib/shot-form'
 import { shotListHref } from '@/lib/shot-links'
 import { resolveWorkspaceId } from '@/lib/workspace'
 
@@ -45,17 +46,6 @@ const loadLocations = async (): Promise<LocationsResult> => {
   }
 }
 
-/** 末尾へ追加する。order は 1000 刻みで採番する（ARCHITECTURE.md §19）。 */
-const nextOrderOf = (shots: readonly Shot[]): number =>
-  orderBetween(
-    shots.reduce<number | null>((max, s) => (max === null || s.order > max ? s.order : max), null),
-    null,
-  )
-
-/** 既定の開始秒は最後の Shot の終端。重ならない位置から書き始められるようにする。 */
-const nextStartSecOf = (shots: readonly Shot[]): number =>
-  shots.reduce<number>((end, s) => Math.max(end, shotEndSec(s)), 0)
-
 const NewShotPage = async ({ params }: NewShotPageProps) => {
   const { id } = await params
   const projectId = ProjectId.safeParse(id)
@@ -92,8 +82,8 @@ const NewShotPage = async ({ params }: NewShotPageProps) => {
       {result.ok ? (
         <ShotForm
           projectId={projectId.data}
-          nextOrder={nextOrderOf(result.shots)}
-          defaultStartSec={nextStartSecOf(result.shots)}
+          nextOrder={nextShotOrder(result.shots)}
+          defaultStartSec={nextShotStartSec(result.shots)}
           locations={locations.ok ? locations.locations : []}
           locationsError={locations.ok ? undefined : locations.message}
         />

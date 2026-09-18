@@ -162,7 +162,7 @@ export const TimelineClipLane = ({
       onPointerUp={finish}
       onPointerCancel={finish}
     >
-      <span className="pointer-events-none absolute left-1 top-1 text-[10px] text-muted">
+      <span className="pointer-events-none absolute left-1 top-1 text-xs text-muted">
         {`layer ${String(layer)}`}
       </span>
 
@@ -180,7 +180,7 @@ export const TimelineClipLane = ({
             // **キーボードからは帯の下の一覧で操作する**（数値のほうが正確に置ける）。
             aria-hidden="true"
             title={`${formatTimeSpan(span)} ${describeClipContent(clip.content)}`}
-            className={`absolute top-4 touch-none select-none overflow-hidden rounded text-left text-[11px] ring-1 ${
+            className={`absolute top-4 touch-none select-none overflow-hidden rounded text-left text-xs ring-1 ${
               selected
                 ? 'bg-info/25 text-text ring-info/60'
                 : 'bg-info/10 text-text ring-info/60 hover:bg-info/25'

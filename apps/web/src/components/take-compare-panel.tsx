@@ -3,6 +3,7 @@
 import type { ShotId, Take, TakeId } from '@ixa/domain'
 import { useEffect, useState } from 'react'
 import { TakeCompare } from '@/components/take-compare'
+import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import type { WireShotCompare } from '@/lib/take-compare'
@@ -25,11 +26,24 @@ export type TakeComparePanelProps = {
   readonly takes: readonly Take[]
   /** 採用中の Take。A の既定値になる。 */
   readonly selectedTakeId: TakeId | null
+  /**
+   * 並べた Take をその場で採用する口（PHASE 7.1 ワークベンチ）。
+   * 渡さなければ採用ボタンを出さない（比較だけの画面）。
+   */
+  readonly onAdopt?: (takeId: TakeId) => void
+  /** 採用の送信中。ボタンを押せなくする。 */
+  readonly adopting?: boolean
 }
 
 const takeLabel = (take: Take): string => `Take ${String(take.index)}`
 
-export const TakeComparePanel = ({ shotId, takes, selectedTakeId }: TakeComparePanelProps) => {
+export const TakeComparePanel = ({
+  shotId,
+  takes,
+  selectedTakeId,
+  onAdopt,
+  adopting = false,
+}: TakeComparePanelProps) => {
   /**
    * A の既定は採用中の Take。まだ無ければ先頭。
    *
@@ -117,6 +131,30 @@ export const TakeComparePanel = ({ shotId, takes, selectedTakeId }: TakeCompareP
       </div>
 
       <TakeCompare compare={compare} error={error} />
+
+      {onAdopt !== undefined && (
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { side: 'A', id: resolvedA },
+            { side: 'B', id: resolvedB },
+          ].map(({ side, id }) =>
+            id === null ? null : (
+              <Button
+                key={side}
+                size="sm"
+                tone={side === 'B' ? 'primary' : 'secondary'}
+                // 採用中の Take をもう一度採用しても何も変わらない。押せるように見せない。
+                disabled={adopting || id === selectedTakeId}
+                onClick={() => {
+                  onAdopt(id)
+                }}
+              >
+                {id === selectedTakeId ? `${side} は採用中` : `${side} を採用`}
+              </Button>
+            ),
+          )}
+        </div>
+      )}
     </section>
   )
 }

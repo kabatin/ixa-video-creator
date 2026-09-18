@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_VOLUME } from '@/lib/playback-state'
+import { PREFERENCES_STORAGE_KEY } from '@/lib/preferences'
 import { useAudioPlayback } from '@/lib/use-audio-playback'
 
 /**
@@ -13,12 +14,18 @@ import { useAudioPlayback } from '@/lib/use-audio-playback'
 
 const store = new Map<string, string>()
 
+/** 環境設定の保存形式（PHASE 7.1）。音量は「再生」分類にある。 */
+const SAVED = JSON.stringify({ playback: { volume: 0.3, muted: true, snapToBeat: true } })
+
 beforeEach(() => {
   store.clear()
   vi.stubGlobal('localStorage', {
     getItem: (key: string) => store.get(key) ?? null,
     setItem: (key: string, value: string) => {
       store.set(key, value)
+    },
+    removeItem: (key: string) => {
+      store.delete(key)
     },
   })
 })
@@ -36,8 +43,7 @@ const Probe = ({ seen }: { readonly seen: number[] }) => {
 
 describe('覚えた音量の読み込み', () => {
   it('最初の描画では覚え書きを読まない', () => {
-    store.set('ixa.playback.volume', '0.3')
-    store.set('ixa.playback.muted', 'true')
+    store.set(PREFERENCES_STORAGE_KEY, SAVED)
     const seen: number[] = []
 
     render(<Probe seen={seen} />)
@@ -47,8 +53,7 @@ describe('覚えた音量の読み込み', () => {
   })
 
   it('描画のあとで覚え書きが効く', () => {
-    store.set('ixa.playback.volume', '0.3')
-    store.set('ixa.playback.muted', 'true')
+    store.set(PREFERENCES_STORAGE_KEY, SAVED)
     const seen: number[] = []
 
     render(<Probe seen={seen} />)
@@ -71,12 +76,10 @@ describe('覚えた音量の読み込み', () => {
    * 状態の変化に合わせて書くと、起動しただけで覚えた値が消える。
    */
   it('開いただけでは覚え書きを書き換えない', () => {
-    store.set('ixa.playback.volume', '0.3')
-    store.set('ixa.playback.muted', 'true')
+    store.set(PREFERENCES_STORAGE_KEY, SAVED)
 
     render(<Probe seen={[]} />)
 
-    expect(store.get('ixa.playback.volume')).toBe('0.3')
-    expect(store.get('ixa.playback.muted')).toBe('true')
+    expect(store.get(PREFERENCES_STORAGE_KEY)).toBe(SAVED)
   })
 })

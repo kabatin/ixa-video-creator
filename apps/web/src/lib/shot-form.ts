@@ -1,4 +1,4 @@
-import { ShotCamera } from '@ixa/domain'
+import { ShotCamera, orderBetween, shotEndSec, type Shot } from '@ixa/domain'
 import { CreateShotBody } from '@/lib/api-schemas'
 import { DEFAULT_SHOT_SIZE, NONE_VALUE } from '@/lib/camera-options'
 import { NO_LOCATION_VALUE } from '@/lib/location-options'
@@ -161,3 +161,14 @@ export const validateShotForm = ({ values, order }: BuildShotInput): ShotFormVal
 
   return { ok: true, input: parsed.data }
 }
+
+/** 末尾へ追加する。order は 1000 刻みで採番する（ARCHITECTURE.md §19）。 */
+export const nextShotOrder = (shots: readonly Pick<Shot, 'order'>[]): number =>
+  orderBetween(
+    shots.reduce<number | null>((max, s) => (max === null || s.order > max ? s.order : max), null),
+    null,
+  )
+
+/** 既定の開始秒は最後の Shot の終端。重ならない位置から書き始められるようにする。 */
+export const nextShotStartSec = (shots: readonly Pick<Shot, 'startSec' | 'durationSec'>[]): number =>
+  shots.reduce<number>((end, s) => Math.max(end, shotEndSec(s)), 0)
