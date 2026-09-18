@@ -1,15 +1,33 @@
 import type { Project } from '@ixa/domain'
 import Link from 'next/link'
+import { ShotPoster } from '@/components/shot-poster'
 import { formatResolution } from '@/lib/resolution-presets'
 import { formatCreatedAt, statusClassName, statusLabel } from '@/lib/project-display'
 import { PROJECT_SECTIONS, projectSectionHref } from '@/lib/project-links'
 
 export type ProjectCardProps = {
   readonly project: Project
+  /**
+   * 表紙にする絵（`pickProjectCover` が選ぶ）。**`undefined` は「呼び出し側がまだ繋いでいない」**。
+   * `null` は「繋がっているが絵が無い」で、そのときは `coverReason` に理由が入る。
+   * 2 つを混ぜると、繋ぎ忘れが「Take がありません」に化ける（L-021）。
+   */
+  readonly coverUrl?: string | null
+  readonly coverReason?: string | null
 }
 
-export const ProjectCard = ({ project }: ProjectCardProps) => (
+export const ProjectCard = ({ project, coverUrl, coverReason }: ProjectCardProps) => (
   <li className="rounded-lg border border-line bg-surface p-5 shadow-sm">
+    {(coverUrl !== undefined || coverReason !== undefined) && (
+      <div className="mb-4">
+        <ShotPoster
+          url={coverUrl ?? null}
+          reason={coverReason ?? null}
+          alt={`${project.name} の表紙`}
+          size="card"
+        />
+      </div>
+    )}
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 className="text-base font-semibold text-text">{project.name}</h2>
       <span

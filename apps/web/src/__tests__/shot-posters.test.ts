@@ -1,0 +1,110 @@
+import { ShotId, TakeId } from '@ixa/domain'
+import { describe, expect, it } from 'vitest'
+import { SHOT_ID, TAKE_ID } from '@/__tests__/fixtures'
+import {
+  NOT_FETCHED_REASON,
+  NO_SHOTS_REASON,
+  describeMissingPoster,
+  pickProjectCover,
+  posterByShotId,
+  posterViewFor,
+} from '@/lib/shot-posters'
+import type { WireShotPoster } from '@/lib/shot-posters-api'
+
+const OTHER_SHOT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FC0'
+const THIRD_SHOT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FC1'
+
+const shotId = ShotId.parse(SHOT_ID)
+const otherShotId = ShotId.parse(OTHER_SHOT_ID)
+
+const withPoster = (id: string, url: string): WireShotPoster => ({
+  shotId: ShotId.parse(id),
+  takeId: TakeId.parse(TAKE_ID),
+  thumbnailUrl: url,
+  reason: null,
+})
+
+const withoutPoster = (id: string, reason: string): WireShotPoster => ({
+  shotId: ShotId.parse(id),
+  takeId: null,
+  thumbnailUrl: null,
+  reason,
+})
+
+describe('posterByShotId', () => {
+  it('Shot ごとに引ける形へ直す', () => {
+    const map = posterByShotId([
+      withPoster(SHOT_ID, 'https://example.invalid/a.jpg'),
+      withoutPoster(OTHER_SHOT_ID, 'no_take'),
+    ])
+
+    expect(map.get(shotId)).toEqual({ url: 'https://example.invalid/a.jpg', reason: null })
+    expect(map.get(otherShotId)).toEqual({ url: null, reason: 'no_take' })
+  })
+})
+
+describe('posterViewFor', () => {
+  it('Map に無い Shot は「無い」ではなく「まだ引いていない」にする', () => {
+    const map = posterByShotId([withPoster(SHOT_ID, 'https://example.invalid/a.jpg')])
+
+    // 取得前の行に「Take がありません」と出すと、生成をやり直させてしまう（L-021）。
+    expect(posterViewFor(map, otherShotId)).toEqual({ url: null, reason: NOT_FETCHED_REASON })
+  })
+})
+
+describe('describeMissingPoster', () => {
+  it('画面が自分で作った理由だけを言い換える', () => {
+    expect(describeMissingPoster(NOT_FETCHED_REASON)).toBe('サムネイルを読み込み中')
+    expect(describeMissingPoster(NO_SHOTS_REASON)).toBe('Shot がありません')
+  })
+
+  it('API が返す文はそのまま出す（言い換えを二重に持たない）', () => {
+    // 同じ文を web 側にも書き写すと、API が直しても画面だけ古い文を出し続ける。
+    expect(describeMissingPoster('Take が選ばれていません')).toBe('Take が選ばれていません')
+    expect(describeMissingPoster('メディアが見つかりません')).toBe('メディアが見つかりません')
+  })
+
+  it('理由が無いときは「分からない」と言う（空欄で隠さない）', () => {
+    expect(describeMissingPoster(null)).toBe('理由が分かりません')
+    expect(describeMissingPoster('  ')).toBe('理由が分かりません')
+  })
+})
+
+describe('pickProjectCover', () => {
+  it('サムネイルがある先頭の Shot を選ぶ', () => {
+    const cover = pickProjectCover([
+      withoutPoster(SHOT_ID, 'no_take'),
+      withPoster(OTHER_SHOT_ID, 'https://example.invalid/b.jpg'),
+      withPoster(THIRD_SHOT_ID, 'https://example.invalid/c.jpg'),
+    ])
+
+    expect(cover).toEqual({ url: 'https://example.invalid/b.jpg', reason: null })
+  })
+
+  it('1 枚も無いときは先頭の理由を返す', () => {
+    const cover = pickProjectCover([
+      withoutPoster(SHOT_ID, 'no_thumbnail'),
+      withoutPoster(OTHER_SHOT_ID, 'no_take'),
+    ])
+
+    expect(cover).toEqual({ url: null, reason: 'no_thumbnail' })
+  })
+
+  it('Shot が 1 件も無いときは Shot が無いことを理由にする', () => {
+    expect(pickProjectCover([])).toEqual({ url: null, reason: NO_SHOTS_REASON })
+  })
+
+  it('選んだ表紙は必ず理由が null（絵と理由を同時に持たない）', () => {
+    const cover = pickProjectCover([withPoster(SHOT_ID, 'https://example.invalid/a.jpg')])
+
+    expect(cover.url).not.toBeNull()
+    expect(cover.reason).toBeNull()
+  })
+
+  it('選べなかった表紙は必ず理由を持つ', () => {
+    const cover = pickProjectCover([withoutPoster(SHOT_ID, 'no_take')])
+
+    expect(cover.url).toBeNull()
+    expect(cover.reason).not.toBeNull()
+  })
+})

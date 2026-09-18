@@ -4,15 +4,26 @@ import type { Shot } from '@ixa/domain'
 import { useEffect, useRef } from 'react'
 import { ShotRow } from '@/components/shot-row'
 import type { HeaderCheckboxState } from '@/lib/shot-bulk'
+import { posterViewFor, type ShotPosterMap } from '@/lib/shot-posters'
 
 /**
  * 見出しと中身を合わせる。2 列目は開始時刻と尺の両方を出すので「尺」では嘘になる。
  * 以前は「尺」の下に開始時刻が並んでいて、読み手は開始秒を尺だと読んだ。
  */
-const HEADERS: readonly string[] = ['コード', '時間', '説明 / mood', 'カメラ', '状態', '']
+const HEADERS: readonly string[] = [
+  'サムネイル',
+  'コード',
+  '時間',
+  '説明 / mood',
+  'カメラ',
+  '状態',
+  '',
+]
 
 export type ShotTableProps = {
   readonly shots: readonly Shot[]
+  /** Shot ごとのサムネイル。引けていない Shot は `posterViewFor` が理由付きの空に畳む。 */
+  readonly posters: ShotPosterMap
   readonly isSelected: (shot: Shot) => boolean
   readonly headerState: HeaderCheckboxState
   readonly busy: boolean
@@ -25,6 +36,7 @@ export type ShotTableProps = {
 
 export const ShotTable = ({
   shots,
+  posters,
   isSelected,
   headerState,
   busy,
@@ -75,6 +87,7 @@ export const ShotTable = ({
             <ShotRow
               key={shot.id}
               shot={shot}
+              poster={posterViewFor(posters, shot.id)}
               selected={isSelected(shot)}
               busy={busy}
               onToggle={onToggle}

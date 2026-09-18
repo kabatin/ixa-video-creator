@@ -18,6 +18,7 @@ import { mediaRoutes } from './routes/media.js'
 import { projectRoutes } from './routes/projects.js'
 import { shotRoutes, type GenerationQueue } from './routes/shots.js'
 import { shotBulkRoutes } from './routes/shots-bulk.js'
+import { shotPosterRoutes } from './routes/shot-posters.js'
 import { uploadRoutes, type MediaIngestDeps } from './routes/uploads.js'
 import { timelineRoutes } from './routes/timeline.js'
 import { renderRoutes, type RenderQueue } from './routes/renders.js'
@@ -124,6 +125,10 @@ export const createApp = (deps: AppDeps) => {
   }
   app.route('/', shotRoutes(shotDeps))
   app.route('/', shotBulkRoutes(shotDeps))
+  app.route(
+    '/',
+    shotPosterRoutes({ shots: deps.shots, takes: deps.takes, mediaAssets, projects, storage }),
+  )
   app.route('/', eventRoutes({ projects, events: deps.events, logger }))
 
   /** Timeline と Render は同じ依存を使う。組み立てを 1 箇所にまとめる。 */

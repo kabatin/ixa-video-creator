@@ -4,10 +4,12 @@ import type { Shot } from '@ixa/domain'
 import Link from 'next/link'
 import { InlineTextCell } from '@/components/inline-text-cell'
 import { ShotDeleteButton } from '@/components/shot-editor'
+import { ShotPoster } from '@/components/shot-poster'
 import { ShotStatusBadge } from '@/components/shot-status-badge'
 import { formatClock, formatDuration } from '@/lib/format-time'
 import { formatCamera } from '@/lib/shot-display'
 import { shotDetailHref } from '@/lib/shot-links'
+import type { PosterView } from '@/lib/shot-posters'
 
 /**
  * Shot 一覧の 1 行。**行の中で説明と mood を直せる。**
@@ -19,6 +21,8 @@ import { shotDetailHref } from '@/lib/shot-links'
 
 export type ShotRowProps = {
   readonly shot: Shot
+  /** 採用 Take のサムネイル。**絵が無いときも理由を連れて来る**（L-015）。 */
+  readonly poster: PosterView
   readonly selected: boolean
   readonly busy: boolean
   readonly onToggle: (shot: Shot) => void
@@ -28,6 +32,7 @@ export type ShotRowProps = {
 
 export const ShotRow = ({
   shot,
+  poster,
   selected,
   busy,
   onToggle,
@@ -45,6 +50,14 @@ export const ShotRow = ({
           onToggle(shot)
         }}
         className="h-4 w-4 rounded border-line-strong"
+      />
+    </td>
+    <td className="px-2 py-3">
+      <ShotPoster
+        url={poster.url}
+        reason={poster.reason}
+        alt={`${shot.code} のサムネイル`}
+        size="row"
       />
     </td>
     <th scope="row" className="px-4 py-3 text-left text-sm font-semibold text-text">

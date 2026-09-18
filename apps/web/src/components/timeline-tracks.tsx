@@ -2,6 +2,7 @@
 
 import type { Shot, ShotId, TimelineClip, TimelineClipId, TimelineTrack } from '@ixa/domain'
 import { useRef, type ReactNode } from 'react'
+import { ShotPoster } from '@/components/shot-poster'
 import { TimelineClipLane } from '@/components/timeline-clip-lane'
 import { TimelineTransitionRow } from '@/components/timeline-transition-row'
 import {
@@ -18,6 +19,8 @@ import {
 import type { ClipDragContext, ClipDragOutcome } from '@/lib/timeline-drag'
 import type { InlineFormAnchor } from '@/components/timeline-inline-form'
 import type { TransitionInsertionPoint } from '@/lib/timeline-insert'
+import type { ShotPosterMap } from '@/lib/shot-posters'
+import { posterViewFor } from '@/lib/shot-posters'
 import { playheadLeftPx, seekSecAtClientX } from '@/lib/timeline-playhead'
 
 /**
@@ -73,6 +76,11 @@ export type TimelineTracksProps = {
   readonly onClipDragBegin: (clip: TimelineClip) => ClipDragContext
   readonly onClipDragMove: (clip: TimelineClip, outcome: ClipDragOutcome) => void
   readonly onClipDragEnd: (clip: TimelineClip, outcome: ClipDragOutcome) => void
+  /**
+   * VIDEO1 の帯に敷くサムネイル。**渡さなければ帯は従来どおり**（絵を敷かない）。
+   * 渡した Shot の分だけ絵が下地になり、文字は暗い被せの上に乗る。
+   */
+  readonly posters?: ShotPosterMap
   /** 再生ヘッドの位置（秒）。null なら描かない。 */
   readonly playheadSec?: number | null
   /** 目盛りの帯を押した。その秒へ飛ぶ。 */
@@ -128,6 +136,7 @@ export const TimelineTracks = ({
   onClipDragBegin,
   onClipDragMove,
   onClipDragEnd,
+  posters,
   playheadSec = null,
   onSeek,
   overlay,
@@ -216,6 +225,7 @@ export const TimelineTracks = ({
               {shots.map((shot) => {
                 const rect = timeSpanToRect(shot, pxPerSec)
                 const rendered = renderedShotIds.has(shot.id)
+                const poster = posters === undefined ? null : posterViewFor(posters, shot.id)
                 return (
                   <div
                     key={shot.id}
@@ -227,7 +237,21 @@ export const TimelineTracks = ({
                     }`}
                     style={{ left: rect.leftPx, width: rect.widthPx, height: LANE_HEIGHT_PX - 16 }}
                   >
-                    {rendered ? shot.code : `${shot.code}（Take 無し）`}
+                    {poster !== null && (
+                      <>
+                        <ShotPoster
+                          url={poster.url}
+                          reason={poster.reason}
+                          alt={`${shot.code} のサムネイル`}
+                          size="chip"
+                        />
+                        {/* 絵の上に字は読めない。地の色を薄く被せてから字を乗せる。 */}
+                        <span aria-hidden className="absolute inset-0 bg-bg/50" />
+                      </>
+                    )}
+                    <span className="relative">
+                      {rendered ? shot.code : `${shot.code}（Take 無し）`}
+                    </span>
                   </div>
                 )
               })}

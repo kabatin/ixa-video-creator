@@ -12,7 +12,10 @@ import { createApp } from '../app.js'
 import { createLogger } from '../logger.js'
 import {
   DEFAULT_SIGNED_URL_EXPIRES_SEC,
+  DERIVED_NOT_READY_MESSAGE,
   MAX_SIGNED_URL_EXPIRES_SEC,
+  POSTERS_NOT_READY_MESSAGE,
+  POSTER_INDEX_OUT_OF_RANGE_MESSAGE,
   type MediaAssetResponse,
 } from '../routes/media.js'
 import {
@@ -177,6 +180,126 @@ describe('GET /media/:id/url', () => {
 
   it('存在しない id は 404', async () => {
     const res = await buildApp(repo, storage).request(`/media/${newId(MediaAssetIdSchema)}/url`)
+
+    expect(res.status).toBe(404)
+  })
+})
+
+describe('GET /media/:id/url?variant=', () => {
+  let repo: InMemoryMediaAssetRepository
+  let storage: ObjectStorage
+
+  beforeEach(() => {
+    repo = createInMemoryMediaAssetRepository()
+    storage = createMemoryStorage()
+  })
+
+  /** 派生物（サムネイル / ポスターフレーム）を後から埋める。取り込みキューと同じ経路。 */
+  const withDerived = async (
+    asset: MediaAsset,
+    derived: { thumbnailKey?: string | null; posterKeys?: readonly string[] },
+  ) => repo.update(asset.id, { ...derived, posterKeys: [...(derived.posterKeys ?? [])] })
+
+  it('variant を省略すると従来どおり本体に署名する', async () => {
+    const asset = await seedAsset(repo, storage)
+    await withDerived(asset, { thumbnailKey: 'thumbs/one.jpg' })
+
+    const json = (await (
+      await buildApp(repo, storage).request(`/media/${asset.id}/url`)
+    ).json()) as UrlBody
+
+    expect(json.data.url).toContain(asset.storageKey)
+    expect(json.data.url).not.toContain('thumbs/one.jpg')
+  })
+
+  it('variant=thumbnail は thumbnailKey に署名する', async () => {
+    const asset = await seedAsset(repo, storage)
+    await withDerived(asset, { thumbnailKey: 'thumbs/one.jpg' })
+
+    const res = await buildApp(repo, storage).request(`/media/${asset.id}/url?variant=thumbnail`)
+
+    expect(res.status).toBe(200)
+
+    const json = (await res.json()) as UrlBody
+    expect(json.data.url).toContain('thumbs/one.jpg')
+    expect(json.data.expiresInSec).toBe(DEFAULT_SIGNED_URL_EXPIRES_SEC)
+  })
+
+  it('thumbnailKey がまだ無いときは 404 ではなく 409 と理由を返す', async () => {
+    const asset = await seedAsset(repo, storage)
+
+    const res = await buildApp(repo, storage).request(`/media/${asset.id}/url?variant=thumbnail`)
+
+    expect(res.status).toBe(409)
+
+    const json = (await res.json()) as ErrorBody
+    expect(json.error).toBe(DERIVED_NOT_READY_MESSAGE)
+  })
+
+  it('variant=poster は index 既定 0 の posterKeys に署名する', async () => {
+    const asset = await seedAsset(repo, storage)
+    await withDerived(asset, { posterKeys: ['posters/0.jpg', 'posters/1.jpg'] })
+
+    const first = (await (
+      await buildApp(repo, storage).request(`/media/${asset.id}/url?variant=poster`)
+    ).json()) as UrlBody
+    expect(first.data.url).toContain('posters/0.jpg')
+
+    const second = (await (
+      await buildApp(repo, storage).request(`/media/${asset.id}/url?variant=poster&index=1`)
+    ).json()) as UrlBody
+    expect(second.data.url).toContain('posters/1.jpg')
+  })
+
+  it('index が範囲外なら 422', async () => {
+    const asset = await seedAsset(repo, storage)
+    await withDerived(asset, { posterKeys: ['posters/0.jpg'] })
+
+    const res = await buildApp(repo, storage).request(
+      `/media/${asset.id}/url?variant=poster&index=1`,
+    )
+
+    expect(res.status).toBe(422)
+
+    const json = (await res.json()) as ErrorBody
+    expect(json.error).toBe(POSTER_INDEX_OUT_OF_RANGE_MESSAGE)
+  })
+
+  it('posterKeys が空なら 409（範囲外とは別の状態）', async () => {
+    const asset = await seedAsset(repo, storage)
+
+    const res = await buildApp(repo, storage).request(`/media/${asset.id}/url?variant=poster`)
+
+    expect(res.status).toBe(409)
+
+    const json = (await res.json()) as ErrorBody
+    expect(json.error).toBe(POSTERS_NOT_READY_MESSAGE)
+    expect(POSTERS_NOT_READY_MESSAGE).not.toBe(POSTER_INDEX_OUT_OF_RANGE_MESSAGE)
+  })
+
+  it('負の index は 422', async () => {
+    const asset = await seedAsset(repo, storage)
+    await withDerived(asset, { posterKeys: ['posters/0.jpg'] })
+
+    const res = await buildApp(repo, storage).request(
+      `/media/${asset.id}/url?variant=poster&index=-1`,
+    )
+
+    expect(res.status).toBe(422)
+  })
+
+  it('知らない variant は 422', async () => {
+    const asset = await seedAsset(repo, storage)
+
+    const res = await buildApp(repo, storage).request(`/media/${asset.id}/url?variant=proxy`)
+
+    expect(res.status).toBe(422)
+  })
+
+  it('存在しない id は variant を付けても 404', async () => {
+    const res = await buildApp(repo, storage).request(
+      `/media/${newId(MediaAssetIdSchema)}/url?variant=thumbnail`,
+    )
 
     expect(res.status).toBe(404)
   })

@@ -1,0 +1,238 @@
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
+import type {
+  MediaAssetRepository,
+  ProjectRepository,
+  ShotRepository,
+  TakeRepository,
+} from '@ixa/db'
+import {
+  ProjectId as ProjectIdSchema,
+  ShotId as ShotIdSchema,
+  TakeId as TakeIdSchema,
+  type MediaAsset,
+  type MediaAssetId,
+  type Shot,
+  type ShotId,
+  type Take,
+  type TakeId,
+} from '@ixa/domain'
+import type { ObjectStorage } from '@ixa/storage'
+import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
+import { errorContent, fail, listResponse, okList } from '../response.js'
+import { DEFAULT_SIGNED_URL_EXPIRES_SEC, DERIVED_NOT_READY_MESSAGE } from './media.js'
+
+/**
+ * Shot 一覧に出すサムネイルを **1 応答でまとめて発行する**。
+ * 27 行の一覧に 27 回 URL を取りに行かせないために在る。
+ * ADR-0006 に従い zod スキーマとハンドラを 1 ファイルに同居させる。
+ *
+ * 署名付き URL は DB に保存せず都度発行する（CLAUDE.md 規約 7）。
+ * 期限は `media.ts` の既定を **import して使う**。書き写すと必ずズレる（L-016）。
+ */
+
+/**
+ * 絵が出せなかった理由。**`thumbnailUrl: null` と必ず対にする**（L-015）。
+ * まとめて「出せません」にすると、待てば出るのか壊れているのかが消える。
+ */
+export const SHOT_POSTER_REASON = {
+  /** そもそも採用 Take が選ばれていない。生成・選択がまだ。 */
+  noTake: 'Take が選ばれていません',
+  /** 採用 Take の行が引けない。選択と実体がずれている（異常）。 */
+  takeMissing: '採用 Take が見つかりません',
+  /** MediaAsset の行が引けない。削除済みか、取り込みが失敗している（異常）。 */
+  mediaMissing: 'メディアが見つかりません',
+  /** MediaAsset は在るが派生物がまだ。待てば出る。 */
+  thumbnailNotReady: DERIVED_NOT_READY_MESSAGE,
+} as const
+
+/**
+ * URL と理由は**どちらか一方だけが null**。
+ * 両方 null は「理由の無い空枠」で、見る人には検査済みの空白と区別が付かない（L-015）。
+ * 型（`ShotPoster`）でも同じ対を強制しているが、スキーマにも書いて OpenAPI に出す。
+ */
+export const URL_AND_REASON_PAIR_MESSAGE =
+  'thumbnailUrl と reason は、どちらか一方だけが null でなければならない'
+
+export const ShotPosterResponse = z
+  .object({
+    shotId: ShotIdSchema,
+    takeId: TakeIdSchema.nullable().openapi({ description: '採用 Take。未選択なら null' }),
+    thumbnailUrl: z
+      .string()
+      .min(1)
+      .nullable()
+      .openapi({ description: '都度発行する署名付き GET URL。出せないときは null' }),
+    reason: z
+      .string()
+      .min(1)
+      .nullable()
+      .openapi({ description: 'thumbnailUrl が null のときの理由。URL があるときは null' }),
+  })
+  .refine((entry) => (entry.thumbnailUrl === null) !== (entry.reason === null), {
+    message: URL_AND_REASON_PAIR_MESSAGE,
+  })
+  .openapi('ShotPoster')
+export type ShotPosterResponse = z.infer<typeof ShotPosterResponse>
+
+/**
+ * 1 行分の結果。**URL と理由を型で対にする。**
+ * 片方だけ返す形は書けない（`reason` を落とすとコンパイルが通らない）。
+ */
+export type ShotPoster =
+  | { shotId: ShotId; takeId: TakeId | null; thumbnailUrl: string; reason: null }
+  | { shotId: ShotId; takeId: TakeId | null; thumbnailUrl: null; reason: string }
+
+export type ShotPosterRoutesDeps = {
+  projects: ProjectRepository
+  shots: ShotRepository
+  takes: TakeRepository
+  mediaAssets: MediaAssetRepository
+  storage: ObjectStorage
+}
+
+/**
+ * id の重複を除いて引き、Map にする。
+ *
+ * リポジトリに一括取得の口（`findByIds`）が無いため 1 件ずつ引くが、
+ * **同じ id を 2 度引かず、行数分を直列にもしない**。
+ */
+const loadById = async <Id, Entity>(
+  ids: readonly Id[],
+  find: (id: Id) => Promise<Entity | null>,
+): Promise<ReadonlyMap<Id, Entity>> => {
+  const unique = [...new Set(ids)]
+  // `async (id) => [id, await find(id)]` にすると Entity が Awaited<Entity> へ潰れるため then で受ける。
+  const entries = await Promise.all(
+    unique.map((id) => find(id).then((entity) => [id, entity] as const)),
+  )
+  return new Map(
+    entries.filter((entry): entry is readonly [Id, Entity] => entry[1] !== null),
+  )
+}
+
+/** 1 Shot について、どの状態で止まったかを決める。署名だけは呼び出し側が行う。 */
+const resolveShotPoster = (
+  shot: Shot,
+  takesById: ReadonlyMap<TakeId, Take>,
+  assetsById: ReadonlyMap<MediaAssetId, MediaAsset>,
+  urlByKey: ReadonlyMap<string, string>,
+): ShotPoster => {
+  const base = { shotId: shot.id }
+
+  if (shot.selectedTakeId === null) {
+    return { ...base, takeId: null, thumbnailUrl: null, reason: SHOT_POSTER_REASON.noTake }
+  }
+
+  const take = takesById.get(shot.selectedTakeId)
+  if (take === undefined) {
+    // 選択されているのに引けない。待っても出ないので「まだ」とは書かない。
+    return {
+      ...base,
+      takeId: shot.selectedTakeId,
+      thumbnailUrl: null,
+      reason: SHOT_POSTER_REASON.takeMissing,
+    }
+  }
+
+  const asset = assetsById.get(take.mediaAssetId)
+  if (asset === undefined) {
+    return {
+      ...base,
+      takeId: take.id,
+      thumbnailUrl: null,
+      reason: SHOT_POSTER_REASON.mediaMissing,
+    }
+  }
+
+  if (asset.thumbnailKey === null) {
+    return {
+      ...base,
+      takeId: take.id,
+      thumbnailUrl: null,
+      reason: SHOT_POSTER_REASON.thumbnailNotReady,
+    }
+  }
+
+  const url = urlByKey.get(asset.thumbnailKey)
+  if (url === undefined) {
+    // 署名の対象を集め損ねた場合の受け皿。黙って空にしない。
+    return {
+      ...base,
+      takeId: take.id,
+      thumbnailUrl: null,
+      reason: SHOT_POSTER_REASON.thumbnailNotReady,
+    }
+  }
+
+  return { ...base, takeId: take.id, thumbnailUrl: url, reason: null }
+}
+
+/**
+ * Project の全 Shot について、採用 Take のサムネイル URL をまとめて作る。
+ *
+ * Shot → Take → MediaAsset を **段ごとにまとめて**引く（行ごとの直列にしない）。
+ */
+export const buildShotPosters = async (
+  deps: Omit<ShotPosterRoutesDeps, 'projects'>,
+  shots: readonly Shot[],
+): Promise<ShotPoster[]> => {
+  const takeIds = shots.flatMap((shot) =>
+    shot.selectedTakeId === null ? [] : [shot.selectedTakeId],
+  )
+  const takesById = await loadById(takeIds, (id) => deps.takes.findById(id))
+
+  const assetIds = [...takesById.values()].map((take) => take.mediaAssetId)
+  const assetsById = await loadById(assetIds, (id) => deps.mediaAssets.findById(id))
+
+  const thumbnailKeys = [
+    ...new Set(
+      [...assetsById.values()].flatMap((asset) =>
+        asset.thumbnailKey === null ? [] : [asset.thumbnailKey],
+      ),
+    ),
+  ]
+  const signed = await Promise.all(
+    thumbnailKeys.map(
+      async (key) =>
+        [key, await deps.storage.signedGetUrl(key, DEFAULT_SIGNED_URL_EXPIRES_SEC)] as const,
+    ),
+  )
+  const urlByKey = new Map(signed)
+
+  return shots.map((shot) => resolveShotPoster(shot, takesById, assetsById, urlByKey))
+}
+
+const ProjectParams = z.object({
+  projectId: ProjectIdSchema.openapi({ param: { name: 'projectId', in: 'path' } }),
+})
+
+const listShotPostersRoute = createRoute({
+  method: 'get',
+  path: '/projects/{projectId}/shot-posters',
+  tags: ['shots'],
+  summary: 'Shot 全件の採用 Take のサムネイル URL をまとめて発行する',
+  request: { params: ProjectParams },
+  responses: {
+    200: {
+      description: 'Shot ごとのサムネイル（出せない行は理由が入る）',
+      content: { 'application/json': { schema: listResponse(ShotPosterResponse) } },
+    },
+    404: errorContent('Project が存在しない'),
+    422: errorContent('入力の検証に失敗した'),
+    500: errorContent('サーバ内部エラー'),
+  },
+})
+
+export const shotPosterRoutes = (deps: ShotPosterRoutesDeps) =>
+  new OpenAPIHono({ defaultHook: validationHook }).openapi(
+    listShotPostersRoute,
+    async (c) => {
+      const { projectId } = c.req.valid('param')
+      const project = await deps.projects.findById(projectId)
+      if (project === null) {
+        return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      }
+      const shots = await deps.shots.findByProject(projectId)
+      return c.json(okList(await buildShotPosters(deps, shots)), 200)
+    },
+  )

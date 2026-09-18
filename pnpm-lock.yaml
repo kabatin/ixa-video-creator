@@ -105,9 +105,15 @@ importers:
       '@ixa/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@ixa/render':
+        specifier: workspace:*
+        version: link:../../packages/render
       '@ixa/timeline':
         specifier: workspace:*
         version: link:../../packages/timeline
+      '@remotion/player':
+        specifier: 4.0.525
+        version: 4.0.525(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       next:
         specifier: ^15.1.6
         version: 15.5.25(@types/node@22.20.3)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -117,6 +123,9 @@ importers:
       react-dom:
         specifier: ^19.0.0
         version: 19.3.0(react@19.3.0)
+      remotion:
+        specifier: 4.0.525
+        version: 4.0.525(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       zod:
         specifier: ^3.24.1
         version: 3.25.76
