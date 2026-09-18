@@ -46,6 +46,8 @@ export const WireShotCompare = z.object({
   a: WireComparedTake,
   b: WireComparedTake.nullable(),
   beats: z.array(Seconds),
+  /** 小節頭。**拍の部分集合とは限らない**（手で直した解析では拍の列に無い小節頭がありうる）。 */
+  downbeats: z.array(Seconds),
   beatState: WireCompareBeatState,
   reason: WireCompareReason.nullable(),
 })
@@ -104,18 +106,42 @@ export type BeatTick = {
   readonly percent: number
   /** 区間の先頭の拍。数え始めが分かるよう少し強く出す。 */
   readonly isFirst: boolean
+  /**
+   * 小節頭。**拍の強弱の中で最も強い。**
+   * ミュージックビデオのカットは小節頭に置くのが基本なので、
+   * 普通の拍と同じ太さで出すと、狙うべき線が埋もれる。
+   */
+  readonly isDownbeat: boolean
 }
 
 /**
- * 区間の拍を目盛りの目印へ。**区間に入る拍だけ**を、押された順ではなく時間順に返す。
- * 小節頭（`downbeats` / `sections` / `drops`）はこの API では受け取っていないので出さない。
+ * 小節頭かどうかの判定に使う許容差（秒）。
+ *
+ * **完全一致では判定できない。** `downbeats` は `beats` の部分集合とは限らず、
+ * 解析器が別々に出した浮動小数なので、同じ拍でも下位の桁が食い違う。
+ * 1 ミリ秒は 30fps の 1 フレーム（33ms）よりはるかに細かいので、
+ * 隣の拍を巻き込むことはない。
  */
-export const beatTicks = (beats: readonly number[], span: CompareSpan): readonly BeatTick[] => {
+const DOWNBEAT_MATCH_SEC = 0.001
+
+const isDownbeatAt = (sec: number, downbeats: readonly number[]): boolean =>
+  downbeats.some((downbeat) => Math.abs(downbeat - sec) <= DOWNBEAT_MATCH_SEC)
+
+/**
+ * 区間の拍を目盛りの目印へ。**区間に入る拍だけ**を、押された順ではなく時間順に返す。
+ * 小節頭は太さで区別する（`isDownbeat`）。
+ */
+export const beatTicks = (
+  beats: readonly number[],
+  span: CompareSpan,
+  downbeats: readonly number[] = [],
+): readonly BeatTick[] => {
   const inside = [...beatsInShot(beats, span.startSec, span.durationSec)].sort((a, b) => a - b)
   return inside.map((sec, index) => ({
     sec,
     percent: spanPercent(sec, span),
     isFirst: index === 0,
+    isDownbeat: isDownbeatAt(sec, downbeats),
   }))
 }
 

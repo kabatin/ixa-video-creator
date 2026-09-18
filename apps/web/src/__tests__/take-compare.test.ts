@@ -99,6 +99,42 @@ describe('beatTicks', () => {
   it('区間に拍が無ければ空', () => {
     expect(beatTicks([10, 100], span)).toEqual([])
   })
+
+  /**
+   * 小節頭は**拍の強弱の中で最も強い**。ミュージックビデオのカットは
+   * 小節頭に置くのが基本なので、普通の拍と同じ太さだと狙う線が埋もれる。
+   */
+  it('小節頭に印を付ける', () => {
+    const ticks = beatTicks([40, 41, 42, 43], span, [40, 42])
+
+    expect(ticks.map((tick) => tick.isDownbeat)).toEqual([true, false, true, false])
+  })
+
+  it('小節頭を渡さなければ、どれも小節頭にしない', () => {
+    expect(beatTicks([40, 41], span).map((tick) => tick.isDownbeat)).toEqual([false, false])
+  })
+
+  /**
+   * `downbeats` は `beats` の部分集合とは限らない。**目印を増やしはしない。**
+   * 拍として数えていない位置に線を立てると、拍の数と線の数が食い違う。
+   */
+  it('拍に無い小節頭では線を増やさない', () => {
+    const ticks = beatTicks([40, 41], span, [40, 41.5])
+
+    expect(ticks.map((tick) => tick.sec)).toEqual([40, 41])
+  })
+
+  /**
+   * 解析器が拍と小節頭を別々に出すので、同じ拍でも下位の桁が食い違う。
+   * 完全一致で判定すると、実データでは小節頭が 1 件も出ない。
+   */
+  it('わずかな誤差があっても同じ拍として扱う', () => {
+    expect(beatTicks([40], span, [40.0005]).map((tick) => tick.isDownbeat)).toEqual([true])
+  })
+
+  it('離れていれば別の拍として扱う', () => {
+    expect(beatTicks([40], span, [40.05]).map((tick) => tick.isDownbeat)).toEqual([false])
+  })
 })
 
 describe('describeCompareState', () => {

@@ -27,6 +27,11 @@ import { formatClock } from '@/lib/timeline-display'
 export type BeatRulerProps = {
   /** 曲全体の拍（絶対秒）。区間で切るのはこの部品の中で行う。 */
   readonly beats: readonly number[]
+  /**
+   * 小節頭（絶対秒）。**渡さなければ従来どおり**、すべて同じ太さで出る。
+   * ミュージックビデオのカットは小節頭に置くのが基本なので、そこだけ太くする。
+   */
+  readonly downbeats?: readonly number[]
   /** 拍の出どころの状態。**「解析が無い」と「拍が 0 件」を混ぜない**（L-015）。 */
   readonly beatState: WireCompareBeatState
   readonly span: CompareSpan
@@ -36,8 +41,15 @@ export type BeatRulerProps = {
   readonly onSeek: (sec: number) => void
 }
 
-export const BeatRuler = ({ beats, beatState, span, currentSec, onSeek }: BeatRulerProps) => {
-  const ticks = beatTicks(beats, span)
+export const BeatRuler = ({
+  beats,
+  downbeats = [],
+  beatState,
+  span,
+  currentSec,
+  onSeek,
+}: BeatRulerProps) => {
+  const ticks = beatTicks(beats, span, downbeats)
   const notice = describeBeatState(beatState, ticks.length)
   const headSec = clampToSpan(currentSec, span)
   const headPercent = spanPercent(headSec, span)
@@ -65,7 +77,17 @@ export const BeatRuler = ({ beats, beatState, span, currentSec, onSeek }: BeatRu
           <span
             key={tick.sec}
             aria-hidden
-            className={`absolute inset-y-1 ${tick.isFirst ? 'w-0.5 bg-line-strong' : 'w-px bg-line-strong'}`}
+            /**
+             * 小節頭 > 区間の先頭 > 普通の拍、の順に強く出す。
+             * **小節頭は上下いっぱいまで伸ばす**ので、太さだけでなく長さでも分かる。
+             */
+            className={`absolute ${
+              tick.isDownbeat
+                ? 'inset-y-0 w-1 bg-text'
+                : tick.isFirst
+                  ? 'inset-y-1 w-0.5 bg-line-strong'
+                  : 'inset-y-1 w-px bg-line-strong'
+            }`}
             style={{ left: `${String(tick.percent)}%` }}
           />
         ))}

@@ -197,6 +197,7 @@ const CompareBoard = ({ compare, labelA, labelB }: CompareBoardProps) => {
 
       <BeatRuler
         beats={compare.beats}
+        downbeats={compare.downbeats}
         beatState={compare.beatState}
         span={span}
         currentSec={currentSec}

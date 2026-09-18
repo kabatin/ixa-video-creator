@@ -1,11 +1,9 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type { MusicAnalysisRepository } from '@ixa/db'
 import {
-  pickMasterTrack,
   Seconds as SecondsSchema,
   ShotId as ShotIdSchema,
   TakeId as TakeIdSchema,
-  type ProjectId,
   type Shot,
   type Take,
 } from '@ixa/domain'
@@ -15,6 +13,7 @@ import { errorContent, fail, ok, successResponse } from '../response.js'
 import {
   TIMELINE_SIGNED_URL_EXPIRES_SEC,
   TimelineDocumentResponse,
+  loadProjectBeats,
   loadTimelineSource,
   type TimelineRoutesDeps,
 } from './timeline.js'
@@ -90,6 +89,11 @@ export const ShotCompareResponse = z
     b: ComparedTake.nullable(),
     /** 曲全体の拍（絶対秒）。区間で切るのは画面側の仕事。 */
     beats: z.array(SecondsSchema),
+    /**
+     * 小節頭（絶対秒）。**拍の部分集合とは限らない**（手で直した解析では
+     * 拍の列に無い小節頭がありうる）。目盛りは太さで区別するために使う。
+     */
+    downbeats: z.array(SecondsSchema),
     beatState: ShotCompareBeatState,
     reason: ShotCompareReason.nullable(),
   })
@@ -126,35 +130,17 @@ const compareRoute = createRoute({
   },
 })
 
-/** 拍の読み取り結果。件数 0 の理由を必ず添える。 */
-type BeatLoad = {
-  readonly beats: readonly number[]
-  readonly state: ShotCompareBeatState
-}
-
 /**
- * 吸着と同じ選び方でマスター音源を選び、その解析から拍を取る。
+ * 拍は `timeline.ts` の `loadProjectBeats` を呼ぶ。**ここで数え方を書き写さない。**
  *
- * **`offsetSec` は足さない。** ビート吸着（`timeline/page.tsx`）も
- * ストーリーボードも解析の値をそのまま絶対秒として使っており、
- * ここだけ足すと目盛りと吸着がズレる。ズレ方を 1 箇所で直せるよう、
- * 数え方は既存に揃える（L-016）。
+ * 以前はこのファイルに同じ手順を持っていたが、そちらは小節頭（downbeats）を
+ * 落としていたため、A/B 比較の目盛りだけ小節頭を出せなかった。
+ * 楽曲の選び方（`pickMasterTrack`）・状態の分け方・`offsetSec` を足さない判断まで
+ * 含めて 1 箇所に寄せる（L-016）。
+ *
+ * `offsetSec` を足さないのは、ビート吸着（`timeline/page.tsx`）もストーリーボードも
+ * 解析の値をそのまま絶対秒として使っているため。ここだけ足すと目盛りと吸着がズレる。
  */
-const loadBeats = async (
-  deps: Pick<ShotCompareRoutesDeps, 'musicTracks' | 'musicAnalyses'>,
-  projectId: ProjectId,
-): Promise<BeatLoad> => {
-  const tracks = await deps.musicTracks.findByProject(projectId)
-  // 楽曲の選び方は `@ixa/domain` の `pickMasterTrack` だけが持つ。ここで書き写さない（L-016）。
-  const track = pickMasterTrack(tracks)
-  if (track === null) return { beats: [], state: 'no_track' }
-
-  const analysis = await deps.musicAnalyses.findByTrack(track.id)
-  if (analysis === null) return { beats: [], state: 'no_analysis' }
-  if (analysis.beats.length === 0) return { beats: [], state: 'no_beats' }
-
-  return { beats: [...analysis.beats], state: 'available' }
-}
 
 /**
  * Take のメディアを署名付き URL に解決する。無ければ undefined。
@@ -216,7 +202,7 @@ export const shotCompareRoutes = (deps: ShotCompareRoutesDeps) =>
 
     const [base, beatLoad, urlA] = await Promise.all([
       loadTimelineSource(deps, project),
-      loadBeats(deps, shot.projectId),
+      loadProjectBeats(deps, shot.projectId),
       resolveTakeMedia(deps, takeA),
     ])
 
@@ -242,6 +228,7 @@ export const shotCompareRoutes = (deps: ShotCompareRoutesDeps) =>
             ? null
             : { takeId: usableB.id, document: documentB },
         beats: [...beatLoad.beats],
+        downbeats: [...beatLoad.downbeats],
         beatState: beatLoad.state,
         reason: compareReason({
           requestedB: query.b,
