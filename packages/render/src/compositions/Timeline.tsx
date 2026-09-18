@@ -231,8 +231,8 @@ export const TimelineComposition: React.FC<TimelineCompositionProps> = ({ doc, c
         </Sequence>
       ))}
 
-      {plan.audio.map((track) => (
-        <AudioTrack key={`${track.mediaUrl}:${track.range.from}`} track={track} />
+      {plan.audio.map((track, index) => (
+        <AudioTrack key={`${String(index)}:${track.mediaUrl}:${track.range.from}`} track={track} />
       ))}
     </AbsoluteFill>
   )
