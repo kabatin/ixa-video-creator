@@ -126,3 +126,23 @@ describe('computeSpecHash', () => {
     expect(a).not.toBe(b)
   })
 })
+
+/**
+ * **仕様のハッシュは既存の Take の重複検知に使われている。**
+ *
+ * 仕様に新しい欄を足すと `canonicalJson` の文字列が変わり、
+ * 既に生成済みの Take とハッシュが一致しなくなる。すると
+ * 「同じ内容なのに別物」と判定され、重複検知が黙って効かなくなる。
+ * 効かなくなったことは画面からは見えず、費用としてだけ現れる。
+ *
+ * この値は 2026-09-18（PHASE 6.1 の着手前）に採取したもの。
+ * **欄を足してここが落ちたら、その欄は `undefined` のときキーごと消えていない。**
+ * `canonicalJson` は `JSON.stringify` なので、キーが無ければ文字列にも現れない。
+ */
+describe('仕様のハッシュ（既存の Take との互換）', () => {
+  const BASELINE = 'e8b6c5465b3defaf21459e406df0a89273f5c4f7bec2234ed1bedb7cbf106532'
+
+  it('同じ入力から同じハッシュが出る（記録した値と一致する）', async () => {
+    expect(await computeSpecHash(compileSpec(input()))).toBe(BASELINE)
+  })
+})
