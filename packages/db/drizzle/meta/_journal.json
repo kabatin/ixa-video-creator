@@ -57,6 +57,13 @@
       "when": 1789714987209,
       "tag": "0007_past_pestilence",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789720041017,
+      "tag": "0008_zippy_firebrand",
+      "breakpoints": true
     }
   ]
 }

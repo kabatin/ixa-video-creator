@@ -37,6 +37,8 @@ export const GenerationJobId = brandedId('GenerationJobId')
 export const TakeId = brandedId('TakeId')
 export const ReviewRunId = brandedId('ReviewRunId')
 export const ReviewFindingId = brandedId('ReviewFindingId')
+export const StoryboardDraftRunId = brandedId('StoryboardDraftRunId')
+export const StoryboardDraftItemId = brandedId('StoryboardDraftItemId')
 export const RenderJobId = brandedId('RenderJobId')
 
 export type WorkspaceId = z.infer<typeof WorkspaceId>
@@ -62,6 +64,8 @@ export type GenerationJobId = z.infer<typeof GenerationJobId>
 export type TakeId = z.infer<typeof TakeId>
 export type ReviewRunId = z.infer<typeof ReviewRunId>
 export type ReviewFindingId = z.infer<typeof ReviewFindingId>
+export type StoryboardDraftRunId = z.infer<typeof StoryboardDraftRunId>
+export type StoryboardDraftItemId = z.infer<typeof StoryboardDraftItemId>
 export type RenderJobId = z.infer<typeof RenderJobId>
 
 /** 新しい ID を発行する。呼び出し側でスキーマを指定して型を確定させる。 */
