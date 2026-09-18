@@ -29,6 +29,7 @@ import { createTimelineApi, type TimelineApi } from '@/lib/timeline-api'
 import { createRenderApi, type RenderApi } from '@/lib/render-api'
 import { createShotBulkApi, type ShotBulkApi } from '@/lib/shot-bulk-api'
 import { createShotCastApi, type ShotCastApi } from '@/lib/shot-cast-api'
+import { createShotPostersApi, type ShotPostersApi } from '@/lib/shot-posters-api'
 import {
   createLibraryApi,
   createProjectSettingsApi,
@@ -81,6 +82,7 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
   SequenceApi &
   ShotBulkApi &
   ShotCastApi &
+  ShotPostersApi &
   TimelineApi &
   UploadApi
 
@@ -151,6 +153,7 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
     ...createRenderApi(requester),
     ...createShotBulkApi(requester),
     ...createShotCastApi(requester),
+    ...createShotPostersApi(requester),
     ...createLibraryApi(requester),
     ...createProjectSettingsApi(requester),
     ...createSequenceApi(requester),

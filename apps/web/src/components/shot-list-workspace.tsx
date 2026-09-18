@@ -2,7 +2,7 @@
 
 import { ShotSize, type ProjectId, type Shot } from '@ixa/domain'
 import { useRouter } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   BulkActionBar,
   type BulkGenerateInput,
@@ -31,6 +31,7 @@ import {
   type ShotSelection,
 } from '@/lib/shot-bulk'
 import { parseBulkGenerateRejection, type BulkGenerateRejection } from '@/lib/shot-bulk-api'
+import { posterByShotId, type ShotPosterMap } from '@/lib/shot-posters'
 import { applyProjectEvent } from '@/lib/project-events'
 import { useProjectEvents } from '@/lib/use-project-events'
 
@@ -58,6 +59,9 @@ const MODEL_CHOICES: readonly BulkModelOption[] = MODEL_OPTIONS.flatMap((option)
 const replaceShot = (shots: readonly Shot[], next: Shot): readonly Shot[] =>
   shots.map((shot) => (shot.id === next.id ? next : shot))
 
+/** 引く前の状態。空の Map は「1 件も無い」ではなく「まだ引いていない」を意味する（L-021）。 */
+const NO_POSTERS: ShotPosterMap = new Map()
+
 export const ShotListWorkspace = ({
   projectId,
   initialShots,
@@ -73,6 +77,13 @@ export const ShotListWorkspace = ({
   const [rowError, setRowError] = useState<string | null>(null)
   /** 開いてから出来事で知った、新しい Take の数。黙って増やさず、数として見せる。 */
   const [newTakeCount, setNewTakeCount] = useState(0)
+  const [posters, setPosters] = useState<ShotPosterMap>(NO_POSTERS)
+  const [posterError, setPosterError] = useState<string | null>(null)
+  /**
+   * サムネイルを引き直す合図。**Take ができたら絵が変わる**ので、
+   * SSE の succeeded を受けたらこれを進める。数そのものに意味は無い。
+   */
+  const [posterEpoch, setPosterEpoch] = useState(0)
 
   /**
    * 生成の状態は SSE で受けてその場で書き換える（PHASE 5.8b）。
@@ -90,9 +101,34 @@ export const ShotListWorkspace = ({
         event.takeId !== null
       ) {
         setNewTakeCount((count) => count + 1)
+        // 採用 Take が変わればサムネイルも変わる。まとめて 1 往復で引き直す。
+        setPosterEpoch((epoch) => epoch + 1)
       }
     },
   })
+
+  /**
+   * サムネイルは**描画のあとに 1 回だけ**まとめて引く（27 行で 27 往復しない）。
+   * 署名付き URL はこの state の中だけに置く。保存しない（規約 7）。
+   */
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .listShotPosters(projectId)
+      .then((list) => {
+        if (cancelled) return
+        setPosters(posterByShotId(list))
+        setPosterError(null)
+      })
+      .catch((error: unknown) => {
+        // 取れなかったことを黙らせない。空の Map のままだと「絵が無い」に化ける（L-015）。
+        if (!cancelled) setPosterError(`サムネイルを取得できませんでした: ${describeError(error)}`)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [api, projectId, posterEpoch])
 
   const visibleIds = useMemo(() => shots.map((shot) => shot.id), [shots])
   const headerState = headerCheckboxState(selection, visibleIds)
@@ -247,8 +283,15 @@ export const ShotListWorkspace = ({
         </p>
       )}
 
+      {posterError !== null && (
+        <p role="alert" className="rounded-md bg-warn/10 p-3 text-sm text-warn">
+          {posterError}
+        </p>
+      )}
+
       <ShotTable
         shots={shots}
+        posters={posters}
         isSelected={(shot) => selection.has(shot.id)}
         headerState={headerState}
         busy={busy}

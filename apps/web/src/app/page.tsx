@@ -1,4 +1,4 @@
-import type { Project, WorkspaceId } from '@ixa/domain'
+import type { Project, ProjectId, WorkspaceId } from '@ixa/domain'
 import Link from 'next/link'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorPanel } from '@/components/error-panel'
@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/page-header'
 import { ProjectList } from '@/components/project-list'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import { pickProjectCover, type PosterView } from '@/lib/shot-posters'
 import { resolveWorkspaceId } from '@/lib/workspace'
 
 export const dynamic = 'force-dynamic'
@@ -21,6 +22,29 @@ const loadProjects = async (workspaceId: WorkspaceId): Promise<LoadResult> => {
   } catch (error) {
     return { ok: false, message: describeError(error) }
   }
+}
+
+/**
+ * カードの表紙。採用 Take のサムネイルがある先頭の Shot を選ぶ。
+ * **取れなかったことは理由として残す。** 空の Map にすると「絵が無い」と区別がつかない。
+ */
+const loadCovers = async (
+  projects: readonly Project[],
+): Promise<ReadonlyMap<ProjectId, PosterView>> => {
+  const api = createApiClient()
+  const entries = await Promise.all(
+    projects.map(async (project): Promise<readonly [ProjectId, PosterView]> => {
+      try {
+        return [project.id, pickProjectCover(await api.listShotPosters(project.id))]
+      } catch (error) {
+        return [
+          project.id,
+          { url: null, reason: `サムネイルを取れませんでした: ${describeError(error)}` },
+        ]
+      }
+    }),
+  )
+  return new Map(entries)
 }
 
 const NewProjectLink = () => (
@@ -49,6 +73,7 @@ const ProjectsPage = async () => {
   }
 
   const result = await loadProjects(workspace.workspaceId)
+  const covers = result.ok ? await loadCovers(result.projects) : new Map<ProjectId, PosterView>()
 
   return (
     <main>
@@ -70,7 +95,7 @@ const ProjectsPage = async () => {
           actionLabel="最初のプロジェクトを作成"
         />
       ) : (
-        <ProjectList projects={result.projects} />
+        <ProjectList projects={result.projects} covers={covers} />
       )}
     </main>
   )
