@@ -37,12 +37,45 @@ export type ProgramMonitorPlayerProps = {
   /** 利用者の明示的なシーク。`serial` が変わったときだけ飛ぶ。 */
   readonly seek: SeekCommand | null
   readonly playing: boolean
+  /** 再生する区間の先頭（秒）。省略すると先頭から。 */
+  readonly inSec?: number
+  /** 再生する区間の終わり（秒）。**この秒自体は再生しない。** 省略すると終端まで。 */
+  readonly outSec?: number
+  /** 区間の終わりまで来たら先頭へ戻る。既定は戻らない。 */
+  readonly loop?: boolean
   readonly onFrame: (sec: number) => void
   readonly onPlayingChange: (playing: boolean) => void
   /** 再生そのものが壊れた。絵は出せない。 */
   readonly onFatalError: (message: string) => void
   /** Shot 1 本の素材を読めなかった。残りの絵は出せる。 */
   readonly onMediaError: (message: string) => void
+}
+
+/**
+ * 再生する区間の秒を Player のフレーム番号へ。
+ *
+ * **`outFrame` は「最後に再生するフレーム」で、その番号自体を再生する**
+ * （`@remotion/player` の `use-playback` が `actualLastFrame` として使う）。
+ * 区間の終わりの秒をそのまま渡すと、繰り返すたびに**次の Shot の頭が 1 フレーム映る**。
+ * 秒は区間の境目を指すので、フレームに直したら 1 引く。
+ *
+ * 尺の外のフレームは Player が扱えないので、両端を尺の中へ丸める。
+ * 丸めた結果 終わりが先頭より前に来たら、先頭の 1 フレームだけを区間にする。
+ */
+const spanFrames = (
+  inSec: number | undefined,
+  outSec: number | undefined,
+  fps: number,
+  durationInFrames: number,
+): { readonly inFrame: number | null; readonly outFrame: number | null } => {
+  const lastFrame = Math.max(0, durationInFrames - 1)
+  const clamp = (frame: number): number => Math.min(Math.max(frame, 0), lastFrame)
+
+  const inFrame = inSec === undefined ? null : clamp(secToFrame(inSec, fps))
+  if (outSec === undefined) return { inFrame, outFrame: null }
+
+  const outFrame = Math.max(clamp(secToFrame(outSec, fps) - 1), inFrame ?? 0)
+  return { inFrame, outFrame }
 }
 
 /** `<video>` / `<img>` / `<audio>` の読み込み失敗だけを拾う。 */
@@ -56,6 +89,9 @@ export const ProgramMonitorPlayer = ({
   initialSec,
   seek,
   playing,
+  inSec,
+  outSec,
+  loop = false,
   onFrame,
   onPlayingChange,
   onFatalError,
@@ -88,6 +124,7 @@ export const ProgramMonitorPlayer = ({
 
   const { fps } = document
   const durationInFrames = monitorDurationInFrames(document)
+  const { inFrame, outFrame } = spanFrames(inSec, outSec, fps, durationInFrames)
 
   const inputProps = useMemo<TimelineCompositionProps>(
     () => ({ doc: document, canvas: null }),
@@ -185,6 +222,9 @@ export const ProgramMonitorPlayer = ({
       compositionWidth={document.resolution.width}
       compositionHeight={document.resolution.height}
       initialFrame={initialFrameRef.current}
+      inFrame={inFrame}
+      outFrame={outFrame}
+      loop={loop}
       style={{ width: '100%', height: '100%' }}
       // 個人利用のため会社規模によるライセンス契約は不要（制作者に確認、2026-09-18）。
       // 商用として販売する段になったら remotion.dev/license を見直すこと。

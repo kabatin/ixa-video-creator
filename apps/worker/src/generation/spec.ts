@@ -17,6 +17,9 @@ import type { VideoModelDescriptor } from '@ixa/provider-core'
  * 参照 Port から決定的に組み直す（DB が真実。ADR-0008）。
  * モデルは API が決めて `GenerationJob.resolvedModel` に入っているので、
  * ここでルーターは動かさない。
+ *
+ * **直し（corrections）だけは Shot から導けない。** 人が生成のたびに選ぶものなので
+ * `GenerationJob.corrections` の行を唯一の正として受け取る。
  */
 export type RebuiltSpec = {
   readonly spec: ShotGenerationSpec
@@ -28,6 +31,7 @@ export const rebuildSpec = async (
   shot: Shot,
   project: Project,
   model: VideoModelDescriptor,
+  corrections: readonly string[] = [],
 ): Promise<RebuiltSpec> => {
   const [characters, locations, manualReferences, previousShotLastFrameId, startFrameId] =
     await Promise.all([
@@ -58,6 +62,11 @@ export const rebuildSpec = async (
     generationDurationSec: quantizeDuration(shot.durationSec, caps.durations),
     seed: null,
     negativePrompt: null,
+    /**
+     * **直しは GenerationJob の行から渡す。** api が仕様へ織り込んだものと
+     * 同じ値をここでも渡さないと `specHash` が一致せず `spec_drift` で落ちる（L-012）。
+     */
+    corrections,
   })
 
   return { spec, specHash: await computeSpecHash(spec) }

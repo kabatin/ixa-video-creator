@@ -13,28 +13,43 @@ import { createMemoryStorage } from '@ixa/storage'
 import { describe, expect, it, vi } from 'vitest'
 import type { DownloadedObject } from '../download.js'
 import {
-  POLL_BACKOFF_BASE_MS, POLL_BACKOFF_MAX_MS, pollDelayMs, processGenerationJob,
+  POLL_BACKOFF_BASE_MS,
+  POLL_BACKOFF_MAX_MS,
+  pollDelayMs,
+  processGenerationJob,
   type GenerationProcessorDeps,
 } from '../processor.js'
 import { rebuildSpec } from '../spec.js'
 import {
-  aCharacterBundle, aProject, aShot, contextWith, createCapturingLogger, createFailingEvents,
-  createRecordingEvents, createRecordingMediaQueue,
-  createRecordingScheduler, createTestProvider, inMemoryJobs, inMemoryMediaAssets,
-  inMemoryProjects, inMemoryShots, inMemoryTakes, silentLogger, testModel,
+  aCharacterBundle,
+  aProject,
+  aShot,
+  contextWith,
+  createCapturingLogger,
+  createFailingEvents,
+  createRecordingEvents,
+  createRecordingMediaQueue,
+  createRecordingScheduler,
+  createTestProvider,
+  inMemoryJobs,
+  inMemoryMediaAssets,
+  inMemoryProjects,
+  inMemoryShots,
+  inMemoryTakes,
+  silentLogger,
+  testModel,
 } from './doubles.js'
 
 const MODEL = testModel()
 
 /** 実ダウンロードはしない。キーだけ受け取って結果を返す。 */
-const fakeDownload = vi.fn(
-  (options: { key: string }): Promise<DownloadedObject> =>
-    Promise.resolve({
-      storageKey: options.key,
-      bytes: 4096,
-      contentType: 'video/mp4',
-      checksumSha256: 'a'.repeat(64),
-    }),
+const fakeDownload = vi.fn((options: { key: string }): Promise<DownloadedObject> =>
+  Promise.resolve({
+    storageKey: options.key,
+    bytes: 4096,
+    contentType: 'video/mp4',
+    checksumSha256: 'a'.repeat(64),
+  }),
 )
 
 const SUCCEEDED: ProviderJobStatus = {
@@ -48,10 +63,11 @@ const SUCCEEDED: ProviderJobStatus = {
 const buildFixture = async (
   statuses: readonly ProviderJobStatus[],
   context: GenerationContextSource = createPhase1EmptyContextSource(),
+  corrections: readonly string[] = [],
 ) => {
   const project = aProject()
   const shot = aShot(project)
-  const { specHash } = await rebuildSpec(context, shot, project, MODEL)
+  const { specHash } = await rebuildSpec(context, shot, project, MODEL, corrections)
 
   const jobs = inMemoryJobs()
   const job: GenerationJob = await jobs.create({
@@ -59,6 +75,7 @@ const buildFixture = async (
     specHash,
     requestedModel: 'AUTO',
     resolvedModel: MODEL.id,
+    corrections: [...corrections],
   })
 
   const shots = inMemoryShots([shot])
@@ -86,8 +103,19 @@ const buildFixture = async (
   }
 
   return {
-    deps, job, shot, project, jobs, shots, takes, mediaAssets, scheduler, mediaQueue, specHash,
-    provider, events,
+    deps,
+    job,
+    shot,
+    project,
+    jobs,
+    shots,
+    takes,
+    mediaAssets,
+    scheduler,
+    mediaQueue,
+    specHash,
+    provider,
+    events,
   }
 }
 
@@ -100,7 +128,10 @@ type Fixture = Awaited<ReturnType<typeof buildFixture>>
  */
 const seedParentTake = async (f: Fixture, shotId: ShotId = f.shot.id): Promise<Take> => {
   const { spec, specHash } = await rebuildSpec(
-    createPhase1EmptyContextSource(), f.shot, f.project, MODEL,
+    createPhase1EmptyContextSource(),
+    f.shot,
+    f.project,
+    MODEL,
   )
   const asset = await f.mediaAssets.create({
     workspaceId: f.project.workspaceId,
@@ -587,7 +618,9 @@ describe('processGenerationJob（状態の変化を出来事として流す）',
 
     // running → shot.status(review) → generation_job.status(succeeded) の順
     expect(events.map((e) => e.type)).toEqual([
-      'generation_job.status', 'shot.status', 'generation_job.status',
+      'generation_job.status',
+      'shot.status',
+      'generation_job.status',
     ])
     expect(events[1]).toMatchObject({
       type: 'shot.status',
@@ -657,7 +690,9 @@ describe('processGenerationJob（状態の変化を出来事として流す）',
     expect(outcome).toEqual({ state: 'failed', code: 'shot_missing' })
     // projectId が分からないので流せない。だが黙って省かない（lessons L-015）
     expect(f.events.published()).toHaveLength(0)
-    expect(captured.lines().some((l) => l.msg.includes('失敗の出来事を流せませんでした'))).toBe(true)
+    expect(captured.lines().some((l) => l.msg.includes('失敗の出来事を流せませんでした'))).toBe(
+      true,
+    )
   })
 
   it('publish が失敗しても Take は確定し、warn が残る', async () => {
@@ -690,5 +725,62 @@ describe('processGenerationJob（状態の変化を出来事として流す）',
     await processGenerationJob({ ...f.deps, now: () => at }, { generationJobId: f.job.id })
 
     expect(parsedEvents(f).map((e) => e.at)).toEqual([at.toISOString()])
+  })
+})
+
+/**
+ * 指摘の直しを添えたジョブ（PHASE 6.1）。
+ *
+ * **api が仕様へ織り込んだ直しを、worker も行から読んで同じように織り込む必要がある。**
+ * 片側にしか無いと `specHash` が食い違い、`spec_drift` で必ず落ちる（L-012）。
+ * ここが落ちると「直して作り直す」が画面上は成功して、生成だけが静かに死ぬ。
+ */
+describe('processGenerationJob — 指摘の直し（corrections）', () => {
+  it('行の直しを仕様へ織り込むので spec_drift にならない', async () => {
+    const f = await buildFixture([SUCCEEDED], createPhase1EmptyContextSource(), ['顔をもっと近く'])
+
+    const outcome = await processGenerationJob(f.deps, { generationJobId: f.job.id })
+
+    expect(outcome).toEqual({ state: 'submitted', providerJobRef: 'provider-job-1' })
+    expect(f.provider.submitted()).toHaveLength(1)
+  })
+
+  it('直しが Provider へ渡る仕様に載り、プロンプトの末尾に付く', async () => {
+    const f = await buildFixture([SUCCEEDED], createPhase1EmptyContextSource(), ['顔をもっと近く'])
+
+    await processGenerationJob(f.deps, { generationJobId: f.job.id })
+
+    const request = f.provider.submitted()[0]
+    expect(request?.spec.corrections).toEqual(['顔をもっと近く'])
+    // promptParts に入れるだけでは Provider に届かない。最終プロンプトに出ること。
+    expect(request?.spec.prompt).toContain('顔をもっと近く')
+  })
+
+  it('直しの無いジョブの仕様にはキーが現れない', async () => {
+    const f = await buildFixture([SUCCEEDED])
+
+    await processGenerationJob(f.deps, { generationJobId: f.job.id })
+
+    const request = f.provider.submitted()[0]
+    expect(request === undefined ? true : 'corrections' in request.spec).toBe(false)
+  })
+
+  it('行の直しと仕様の直しが食い違えば spec_drift で止める（課金の前）', async () => {
+    // 仕様は「顔をもっと近く」で組まれているのに、行には別の直しが入っている形。
+    // api と worker がズレるとこうなる。**Provider へ投げる前に止まること**を見る。
+    const f = await buildFixture([SUCCEEDED], createPhase1EmptyContextSource(), ['顔をもっと近く'])
+
+    const drifted = await f.jobs.create({
+      shotId: f.shot.id,
+      specHash: f.specHash,
+      requestedModel: 'AUTO',
+      resolvedModel: MODEL.id,
+      corrections: ['光を強く'],
+    })
+
+    const outcome = await processGenerationJob(f.deps, { generationJobId: drifted.id })
+
+    expect(outcome).toEqual({ state: 'failed', code: 'spec_drift' })
+    expect(f.provider.submitted()).toHaveLength(0)
   })
 })

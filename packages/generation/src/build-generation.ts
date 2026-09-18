@@ -85,6 +85,17 @@ export type CompiledGeneration<M extends GenerationModel> = {
   readonly routerDecision: RouterDecision | null
 }
 
+/**
+ * 1 回の生成に添える任意の指定。
+ *
+ * **直しは下書きと本番の両方のコンパイルへ渡る。** 片方だけに渡すと router が
+ * 見ている仕様と最終的な仕様が食い違い、選ばれたモデルの根拠がずれる。
+ */
+export type BuildGenerationOptions = {
+  /** レビューの指摘から人が選んだ直し（PHASE 6.1）。空なら仕様にキーを置かない。 */
+  readonly corrections?: readonly string[]
+}
+
 /** 仕様を組めない理由。呼び出し側が 422 へ変換する。 */
 export class SpecCompilationError extends Error {
   override readonly name = 'SpecCompilationError'
@@ -93,7 +104,9 @@ export class SpecCompilationError extends Error {
 const unionCapabilities = <M extends GenerationModel>(models: readonly M[]) => ({
   maxReferences: Math.max(0, ...models.map((m) => m.capabilities.referenceImages.max)),
   supportedRoles: [
-    ...new Set(models.flatMap((m): readonly ReferenceRole[] => m.capabilities.referenceImages.roles)),
+    ...new Set(
+      models.flatMap((m): readonly ReferenceRole[] => m.capabilities.referenceImages.roles),
+    ),
   ],
 })
 
@@ -109,7 +122,9 @@ export const buildGeneration = async <M extends GenerationModel>(
   shot: Shot,
   project: GenerationProject,
   requestedModel: ModelId | 'AUTO',
+  options: BuildGenerationOptions = {},
 ): Promise<CompiledGeneration<M>> => {
+  const { corrections = [] } = options
   const candidates =
     requestedModel === 'AUTO' ? deps.catalog.allModels() : [deps.catalog.findModel(requestedModel)]
   const first = candidates[0]
@@ -131,12 +146,23 @@ export const buildGeneration = async <M extends GenerationModel>(
     generationDurationSec: number,
   ): ShotGenerationSpec => {
     const references = resolveReferences({
-      characters, locations, manualReferences,
-      previousShotLastFrameId, startFrameId, maxReferences, supportedRoles,
+      characters,
+      locations,
+      manualReferences,
+      previousShotLastFrameId,
+      startFrameId,
+      maxReferences,
+      supportedRoles,
     })
     return compileSpec({
-      project, shot, characters, references, generationDurationSec,
-      seed: null, negativePrompt: null,
+      project,
+      shot,
+      characters,
+      references,
+      generationDurationSec,
+      seed: null,
+      negativePrompt: null,
+      corrections,
     })
   }
 
@@ -159,7 +185,9 @@ export const buildGeneration = async <M extends GenerationModel>(
 
   const violations = deps.router.validateAgainstCapabilities(spec, chosen)
   if (violations.length > 0) {
-    throw new SpecCompilationError(`モデル ${chosen.id} では生成できません: ${violations.join(' / ')}`)
+    throw new SpecCompilationError(
+      `モデル ${chosen.id} では生成できません: ${violations.join(' / ')}`,
+    )
   }
 
   return { spec, specHash: await computeSpecHash(spec), model: chosen, routerDecision }

@@ -1,6 +1,9 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type {
-  GenerationJobRepository, ProjectRepository, ShotRepository, TakeRepository,
+  GenerationJobRepository,
+  ProjectRepository,
+  ShotRepository,
+  TakeRepository,
 } from '@ixa/db'
 import {
   CreateShotInput as CreateShotInputSchema,
@@ -27,6 +30,7 @@ import {
   checkCostLimits,
   type CostLimits,
   DurationNotSupportedError,
+  Corrections as CorrectionsSchema,
 } from '@ixa/domain'
 import {
   GenerationContextError,
@@ -47,7 +51,13 @@ import {
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import type { Logger } from '../logger.js'
 import {
-  errorContent, fail, listResponse, ok, okList, successResponse, type FieldErrors,
+  errorContent,
+  fail,
+  listResponse,
+  ok,
+  okList,
+  successResponse,
+  type FieldErrors,
 } from '../response.js'
 
 /**
@@ -97,6 +107,13 @@ const GenerateBody = z
   .object({
     model: z.union([ModelIdSchema, z.literal('AUTO')]),
     count: z.number().int().min(1).max(MAX_TAKES_PER_REQUEST).default(1),
+    /**
+     * レビューの指摘から人が選んだ直し（PHASE 6.1）。
+     *
+     * 上限（件数・1 件の長さ）は domain の `Corrections` が持つ。**ここで書き写さない。**
+     * 二重に書くと必ずズレて、画面では通るのに API で落ちる入力が生まれる。
+     */
+    corrections: CorrectionsSchema.default([]),
   })
   .openapi('GenerateShotInput')
 
@@ -120,7 +137,9 @@ const SelectTakeBody = z.object({ takeId: TakeIdSchema }).openapi('SelectTakeInp
  * Take の本数で推測すると、失敗したジョブを待ち続けることになる。
  */
 export const GenerationJobResponse = GenerationJobSchema.omit({
-  queuedAt: true, startedAt: true, finishedAt: true,
+  queuedAt: true,
+  startedAt: true,
+  finishedAt: true,
 })
   .extend({
     queuedAt: z.string().datetime(),
@@ -158,8 +177,14 @@ const CreateShotBody = CreateShotInputSchema.omit({ projectId: true }).openapi('
  * 汎用の patch で素通りさせないため）。
  */
 const UpdateShotBody = UpdateShotPatchSchema.pick({
-  code: true, description: true, mood: true, camera: true, sourceType: true,
-  startSec: true, durationSec: true, sourceInSec: true,
+  code: true,
+  description: true,
+  mood: true,
+  camera: true,
+  sourceType: true,
+  startSec: true,
+  durationSec: true,
+  sourceInSec: true,
   // 場所は後から決められる。null を送れば外す（ADR-0015）。
   locationId: true,
 }).openapi('UpdateShotPatch')
@@ -195,21 +220,27 @@ const commonErrors = {
 }
 
 const listShotsRoute = createRoute({
-  method: 'get', path: '/projects/{projectId}/shots', tags: ['shots'],
+  method: 'get',
+  path: '/projects/{projectId}/shots',
+  tags: ['shots'],
   summary: 'プロジェクト内の Shot 一覧（order 昇順）',
   request: { params: ProjectParams },
   responses: { 200: jsonContent('Shot 一覧', listResponse(ShotResponse)), ...commonErrors },
 })
 
 const getShotRoute = createRoute({
-  method: 'get', path: '/shots/{id}', tags: ['shots'],
+  method: 'get',
+  path: '/shots/{id}',
+  tags: ['shots'],
   summary: 'Shot を 1 件取得する',
   request: { params: ShotParams },
   responses: { 200: jsonContent('Shot', successResponse(ShotResponse)), ...commonErrors },
 })
 
 const getGenerationJobRoute = createRoute({
-  method: 'get', path: '/generation-jobs/{id}', tags: ['shots'],
+  method: 'get',
+  path: '/generation-jobs/{id}',
+  tags: ['shots'],
   summary: '生成ジョブの状態を取得する',
   request: { params: GenerationJobParams },
   responses: {
@@ -219,17 +250,24 @@ const getGenerationJobRoute = createRoute({
 })
 
 const createShotRoute = createRoute({
-  method: 'post', path: '/projects/{projectId}/shots', tags: ['shots'],
+  method: 'post',
+  path: '/projects/{projectId}/shots',
+  tags: ['shots'],
   summary: 'Shot を作成する',
   request: {
     params: ProjectParams,
     body: { required: true, content: { 'application/json': { schema: CreateShotBody } } },
   },
-  responses: { 201: jsonContent('作成された Shot', successResponse(ShotResponse)), ...commonErrors },
+  responses: {
+    201: jsonContent('作成された Shot', successResponse(ShotResponse)),
+    ...commonErrors,
+  },
 })
 
 const updateShotRoute = createRoute({
-  method: 'patch', path: '/shots/{id}', tags: ['shots'],
+  method: 'patch',
+  path: '/shots/{id}',
+  tags: ['shots'],
   summary: 'Shot を部分更新する',
   request: {
     params: ShotParams,
@@ -239,14 +277,18 @@ const updateShotRoute = createRoute({
 })
 
 const deleteShotRoute = createRoute({
-  method: 'delete', path: '/shots/{id}', tags: ['shots'],
+  method: 'delete',
+  path: '/shots/{id}',
+  tags: ['shots'],
   summary: 'Shot をソフトデリートする',
   request: { params: ShotParams },
   responses: { 204: { description: '削除した（本文なし）' }, ...commonErrors },
 })
 
 const generateRoute = createRoute({
-  method: 'post', path: '/shots/{id}/generate', tags: ['shots'],
+  method: 'post',
+  path: '/shots/{id}/generate',
+  tags: ['shots'],
   summary: '生成仕様を組み立てて generation キューへ投入する',
   request: {
     params: ShotParams,
@@ -259,14 +301,18 @@ const generateRoute = createRoute({
 })
 
 const listTakesRoute = createRoute({
-  method: 'get', path: '/shots/{id}/takes', tags: ['shots'],
+  method: 'get',
+  path: '/shots/{id}/takes',
+  tags: ['shots'],
   summary: 'Shot の Take 一覧（index 昇順）',
   request: { params: ShotParams },
   responses: { 200: jsonContent('Take 一覧', listResponse(TakeResponse)), ...commonErrors },
 })
 
 const selectTakeRoute = createRoute({
-  method: 'post', path: '/shots/{id}/select-take', tags: ['shots'],
+  method: 'post',
+  path: '/shots/{id}/select-take',
+  tags: ['shots'],
   summary: '採用 Take を決める',
   request: {
     params: ShotParams,
@@ -330,6 +376,7 @@ export const enqueueJobs = async (
   compiled: CompiledGeneration<VideoModelDescriptor>,
   requestedModel: ModelId | 'AUTO',
   count: number,
+  corrections: readonly string[] = [],
 ): Promise<GenerationJobId[]> => {
   const created: GenerationJobId[] = []
   for (let i = 0; i < count; i += 1) {
@@ -339,6 +386,11 @@ export const enqueueJobs = async (
       requestedModel,
       resolvedModel: compiled.model.id,
       routerDecision: compiled.routerDecision,
+      /**
+       * **直しは行に積む。** worker は行から読み直して仕様を組み直すので、
+       * ここで積み忘れると `specHash` が食い違って `spec_drift` で落ちる（L-012）。
+       */
+      corrections: [...corrections],
     })
     await deps.queue.enqueue(job.id)
     created.push(job.id)
@@ -451,7 +503,10 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
         return c.json(ok(toShotResponse(updated)), 200)
       } catch (error) {
         if (patch.code !== undefined && isUniqueViolation(error)) {
-          return c.json(fail(VALIDATION_ERROR_MESSAGE, { code: [DUPLICATE_SHOT_CODE_MESSAGE] }), 422)
+          return c.json(
+            fail(VALIDATION_ERROR_MESSAGE, { code: [DUPLICATE_SHOT_CODE_MESSAGE] }),
+            422,
+          )
         }
         throw error
       }
@@ -489,11 +544,13 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
       const project = await deps.projects.findById(shot.projectId)
       if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
 
-      const { model, count } = c.req.valid('json')
+      const { model, count, corrections } = c.req.valid('json')
 
       let compiled: CompiledGeneration<VideoModelDescriptor>
       try {
-        compiled = await buildGeneration(generationPorts(deps), shot, project, model)
+        compiled = await buildGeneration(generationPorts(deps), shot, project, model, {
+          corrections,
+        })
       } catch (error) {
         /**
          * **知っている失敗だけを 422 に畳む。**
@@ -528,7 +585,7 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
       const existing = await deps.takes.findByShot(shot.id)
       const duplicate = existing.find((t) => t.specHash === compiled.specHash) ?? null
 
-      const jobIds = await enqueueJobs(deps, shot, compiled, model, count)
+      const jobIds = await enqueueJobs(deps, shot, compiled, model, count, corrections)
       const generating = await deps.shots.updateStatus(shot.id, 'generating')
       await publishShotStatus(deps, generating)
 

@@ -58,7 +58,18 @@ export type ProgramMonitorProps = {
   /** 利用者が目盛りなどで明示的に指定した位置。`serial` が変わったときだけ Player が飛ぶ。 */
   readonly seek: SeekCommand | null
   readonly playing: boolean
-  /** 再生中に進んだ位置を返す。 */
+  /** 再生する区間の先頭（秒）。省略すると先頭から。 */
+  readonly inSec?: number
+  /** 再生する区間の終わり（秒）。**この秒自体は再生しない。** 省略すると終端まで。 */
+  readonly outSec?: number
+  /** 区間の終わりまで来たら先頭へ戻る。既定は戻らない。 */
+  readonly loop?: boolean
+  /**
+   * 再生中に進んだ位置を返す。
+   *
+   * **2 つ並べるときは片方だけが返すこと。** 両方が返すと位置が双方向に流れ、
+   * 6.0 で潰した往復が戻る（lessons L-023）。
+   */
   readonly onFrame: (sec: number) => void
   readonly onPlayingChange: (playing: boolean) => void
   readonly onError?: (message: string) => void
@@ -69,6 +80,9 @@ export const ProgramMonitor = ({
   currentSec,
   seek,
   playing,
+  inSec,
+  outSec,
+  loop,
   onFrame,
   onPlayingChange,
   onError,
@@ -121,6 +135,9 @@ export const ProgramMonitor = ({
             initialSec={currentSec}
             seek={seek}
             playing={playing}
+            inSec={inSec}
+            outSec={outSec}
+            loop={loop}
             onFrame={onFrame}
             onPlayingChange={onPlayingChange}
             onFatalError={handleFatalError}

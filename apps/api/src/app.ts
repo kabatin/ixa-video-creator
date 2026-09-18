@@ -1,7 +1,11 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { cors } from 'hono/cors'
 import type {
-  GenerationJobRepository, MediaAssetRepository, ProjectRepository, ShotRepository, TakeRepository,
+  GenerationJobRepository,
+  MediaAssetRepository,
+  ProjectRepository,
+  ShotRepository,
+  TakeRepository,
 } from '@ixa/db'
 import type {
   GenerationContextSource,
@@ -20,6 +24,7 @@ import { shotRoutes, type GenerationQueue } from './routes/shots.js'
 import { shotBulkRoutes } from './routes/shots-bulk.js'
 import { shotPosterRoutes } from './routes/shot-posters.js'
 import { uploadRoutes, type MediaIngestDeps } from './routes/uploads.js'
+import { shotCompareRoutes } from './routes/shot-compare.js'
 import { timelineRoutes } from './routes/timeline.js'
 import { renderRoutes, type RenderQueue } from './routes/renders.js'
 import { characterRoutes, shotCharacterRoutes } from './routes/characters.js'
@@ -33,9 +38,18 @@ import { transitionRoutes } from './routes/transitions.js'
 import { clipRoutes } from './routes/clips.js'
 import { eventRoutes } from './routes/events.js'
 import type {
-  BrandAssetRepository, CharacterLookRepository, CharacterRepository, LocationRepository,
-  MusicAnalysisRepository, MusicTrackRepository, RenderJobRepository, ReviewRepository,
-  ScriptRepository, SequenceRepository, ShotCharacterRepository, TimelineClipRepository,
+  BrandAssetRepository,
+  CharacterLookRepository,
+  CharacterRepository,
+  LocationRepository,
+  MusicAnalysisRepository,
+  MusicTrackRepository,
+  RenderJobRepository,
+  ReviewRepository,
+  ScriptRepository,
+  SequenceRepository,
+  ShotCharacterRepository,
+  TimelineClipRepository,
   TransitionRepository,
 } from '@ixa/db'
 
@@ -143,10 +157,7 @@ export const createApp = (deps: AppDeps) => {
     storage,
   }
 
-  app.route(
-    '/',
-    characterRoutes({ characters: deps.characters, looks: deps.looks, mediaAssets }),
-  )
+  app.route('/', characterRoutes({ characters: deps.characters, looks: deps.looks, mediaAssets }))
   app.route(
     '/',
     shotCharacterRoutes({
@@ -191,13 +202,15 @@ export const createApp = (deps: AppDeps) => {
   )
 
   app.route('/', transitionRoutes({ transitions: deps.transitions, shots: deps.shots, projects }))
-  app.route(
-    '/',
-    clipRoutes({ timelineClips: deps.timelineClips, projects, mediaAssets }),
-  )
+  app.route('/', clipRoutes({ timelineClips: deps.timelineClips, projects, mediaAssets }))
 
   app.route('/', timelineRoutes(timelineDeps))
-  app.route('/', renderRoutes({ ...timelineDeps, renderJobs: deps.renderJobs, queue: deps.renderQueue }))
+  // A/B 比較は書き出しと同じ素材の集め方を使うので、Timeline と同じ依存に解析を 1 つ足すだけ。
+  app.route('/', shotCompareRoutes({ ...timelineDeps, musicAnalyses: deps.musicAnalyses }))
+  app.route(
+    '/',
+    renderRoutes({ ...timelineDeps, renderJobs: deps.renderJobs, queue: deps.renderQueue }),
+  )
 
   registerOpenApiDocument(app)
   registerErrorHandlers(app, logger)

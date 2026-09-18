@@ -1,8 +1,16 @@
 'use client'
 
-import type { HumanVerdict, ReviewFinding, Take, TakeId } from '@ixa/domain'
+import type {
+  HumanVerdict,
+  ReviewFinding,
+  ReviewFindingId,
+  ShotId,
+  Take,
+  TakeId,
+} from '@ixa/domain'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ReviewFindingList } from '@/components/review-finding-list'
+import { RegenerateForm, type RegenerateApi } from '@/components/regenerate-form'
+import { ReviewFindingList, isCorrectable, selectedDeltas } from '@/components/review-finding-list'
 import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
@@ -37,6 +45,12 @@ import { WORDING } from '@/lib/wording'
 
 export type ReviewPanelProps = {
   readonly takeId: TakeId
+  /**
+   * 作り直しの宛先（PHASE 6.1）。**省略できない。**
+   * Take から Shot を引けなくはないが、引き忘れると指摘が生成へ戻らないまま
+   * 画面だけ出来上がる。必須にして、渡し忘れを型で止める。
+   */
+  readonly shotId: ShotId
   /** 保存済みの人手判定。保存に成功したらこの画面の表示が優先される。 */
   readonly humanVerdict: HumanVerdict
   /** 生成中など、他の操作で画面が動いている間は触らせない。 */
@@ -44,6 +58,8 @@ export type ReviewPanelProps = {
   readonly onVerdictSaved?: (take: Take) => void
   /** テストや Storybook から差し替えるための注入口。既定は既存の API クライアント。 */
   readonly api?: ReviewApi
+  /** 作り直しを頼む口。レビューの口とは関心が違うので別に受け取る。 */
+  readonly generateApi?: RegenerateApi
 }
 
 type LoadState =
@@ -147,10 +163,12 @@ const WatchNotice = ({ watch }: { readonly watch: WatchState }) => {
 
 export const ReviewPanel = ({
   takeId,
+  shotId,
   humanVerdict,
   disabled = false,
   onVerdictSaved,
   api,
+  generateApi,
 }: ReviewPanelProps) => {
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
   const [watch, setWatch] = useState<WatchState>(WATCH_OFF)
@@ -160,6 +178,9 @@ export const ReviewPanel = ({
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   // 保存に成功するまでは親から渡された値を表示する。保存後はこちらが優先する。
   const [savedVerdict, setSavedVerdict] = useState<HumanVerdict | null>(null)
+  // 直しに使う指摘の選択と、入力欄を開いているか。Take を切り替えたら両方畳む。
+  const [selectedIds, setSelectedIds] = useState<readonly ReviewFindingId[]>([])
+  const [regenerating, setRegenerating] = useState(false)
   const pollRef = useRef<PollHandle | null>(null)
 
   // 毎レンダーで作り直すと effect が回り続ける。注入された api が変わらない限り固定する。
@@ -207,6 +228,9 @@ export const ReviewPanel = ({
   useEffect(() => {
     let cancelled = false
     setState({ kind: 'loading' })
+    // 別の Take の指摘を選んだまま持ち越さない。足す直しが取り違えられる。
+    setSelectedIds([])
+    setRegenerating(false)
 
     const run = async (): Promise<void> => {
       try {
@@ -232,6 +256,17 @@ export const ReviewPanel = ({
     setWatch(WATCH_OFF)
     setReloadKey((key) => key + 1)
   }, [])
+
+  const toggleFinding = useCallback((id: ReviewFindingId) => {
+    // 破壊的変更をしない。選択は常に新しい配列で置き換える。
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((each) => each !== id) : [...current, id],
+    )
+  }, [])
+
+  const findings = state.kind === 'ready' ? state.findings : []
+  const correctable = findings.filter(isCorrectable)
+  const deltas = selectedDeltas(findings, selectedIds)
 
   const requestReview = async (): Promise<void> => {
     setRequesting(true)
@@ -316,7 +351,56 @@ export const ReviewPanel = ({
                 {`レビューは実行中です。「${WORDING.refresh}」で引き直してください。`}
               </p>
             )}
-            <ReviewFindingList findings={state.findings} />
+            <ReviewFindingList
+              findings={state.findings}
+              /*
+                入力欄を開いている間は選択を触らせない。開いた時点の差分を初期値にして
+                以後は入力欄が正なので、チェックを動かしても文が追随せず「押しても
+                何も起きない」操作になる。
+              */
+              selection={{ selectedIds, onToggle: toggleFinding, disabled: busy || regenerating }}
+            />
+
+            {/*
+              指摘から生成へ戻す線（PHASE 6.1）。
+              **差分を持つ指摘が 1 件も無いときはボタンを出さない。**
+              押しても足すものが無いボタンは、押せるのに何も起きない操作になる。
+            */}
+            {correctable.length > 0 && !regenerating && (
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  size="sm"
+                  disabled={busy || deltas.length === 0}
+                  onClick={() => {
+                    setRegenerating(true)
+                  }}
+                >
+                  選んだ指摘を直して再生成
+                </Button>
+                <span className="text-xs text-muted">
+                  {deltas.length === 0
+                    ? '足したい指摘にチェックを入れてください。'
+                    : `${String(deltas.length)} 件を選んでいます。次の画面で文を直せます。`}
+                </span>
+              </div>
+            )}
+
+            {regenerating && (
+              <RegenerateForm
+                shotId={shotId}
+                initialDeltas={deltas}
+                disabled={busy}
+                api={generateApi}
+                onCancel={() => {
+                  setRegenerating(false)
+                }}
+                onQueued={() => {
+                  setRegenerating(false)
+                  setSelectedIds([])
+                  setFeedback({ tone: 'success', message: '直しを添えて生成を積みました。' })
+                }}
+              />
+            )}
           </div>
         )}
       </div>

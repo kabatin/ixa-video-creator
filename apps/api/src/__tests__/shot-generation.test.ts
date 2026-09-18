@@ -6,7 +6,12 @@ import { createApp, type AppDeps } from '../app.js'
 import { MAX_TAKES_PER_REQUEST } from '../routes/shots.js'
 import { baseAppDeps, createRecordingQueue } from './app-deps.js'
 import { aProject, createTestContextSource } from './fixtures.js'
-import { aShot, aTake, createInMemoryShotRepository, createInMemoryTakeRepository } from '@ixa/generation/testing'
+import {
+  aShot,
+  aTake,
+  createInMemoryShotRepository,
+  createInMemoryTakeRepository,
+} from '@ixa/generation/testing'
 import { createInMemoryGenerationJobRepository } from './in-memory-generation-job-repository.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { createTestVideoProvider, testModel } from './test-video-provider.js'
@@ -303,5 +308,107 @@ describe('コスト上限（実 Provider に切り替えたときの歯止め）
       count: 4,
     })
     expect(res.status).toBe(202)
+  })
+})
+
+/**
+ * レビューの指摘から人が選んだ直しを添えた生成（PHASE 6.1）。
+ *
+ * **仕様と行の両方に届く必要がある。** 仕様にしか無いと worker が組み直したとき
+ * 一致せず `spec_drift` で落ち、行にしか無いと Provider へ指示が届かない（L-012）。
+ */
+describe('POST /shots/:id/generate — 指摘の直し（corrections）', () => {
+  it('直しを GenerationJob の行に積む', async () => {
+    const f = buildFixture()
+
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, {
+      model: 'test/cheap',
+      corrections: ['顔をもっと近く', '光を強く'],
+    })
+
+    expect(res.status).toBe(202)
+    const jobs = f.generationJobs.snapshot()
+    expect(jobs).toHaveLength(1)
+    // ここが抜けると worker が同じ仕様を組み直せず spec_drift で落ちる。
+    expect(jobs[0]?.corrections).toEqual(['顔をもっと近く', '光を強く'])
+  })
+
+  it('直しを添えると specHash が変わる（重複として捨てられない）', async () => {
+    // **同じ Shot で比べる。** 別の fixture は shotId が違うので、
+    // 直しの有無と無関係にハッシュが変わってしまい何も確かめられない。
+    const f = buildFixture()
+
+    const plain = (await (
+      await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/cheap' })
+    ).json()) as Ok<GenerateData>
+    const corrected = (await (
+      await postJson(f.app, `/shots/${f.shot.id}/generate`, {
+        model: 'test/cheap',
+        corrections: ['顔をもっと近く'],
+      })
+    ).json()) as Ok<GenerateData>
+
+    expect(corrected.data.specHash).not.toBe(plain.data.specHash)
+  })
+
+  it('直しを添えなければ specHash も行も今までどおり', async () => {
+    const f = buildFixture()
+
+    const plain = (await (
+      await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/cheap' })
+    ).json()) as Ok<GenerateData>
+    const empty = (await (
+      await postJson(f.app, `/shots/${f.shot.id}/generate`, {
+        model: 'test/cheap',
+        corrections: [],
+      })
+    ).json()) as Ok<GenerateData>
+
+    expect(empty.data.specHash).toBe(plain.data.specHash)
+    expect(f.generationJobs.snapshot().map((job) => job.corrections)).toEqual([[], []])
+  })
+
+  it('件数の上限を超えたら 422 でジョブを作らない', async () => {
+    const f = buildFixture()
+
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, {
+      model: 'test/cheap',
+      corrections: ['a', 'b', 'c', 'd', 'e', 'f'],
+    })
+
+    expect(res.status).toBe(422)
+    expect(Object.keys(((await res.json()) as ErrorBody).fields ?? {})).toContain('corrections')
+    expect(f.generationJobs.snapshot()).toHaveLength(0)
+    expect(f.queue.enqueued()).toHaveLength(0)
+  })
+
+  it('1 件が長すぎたら 422 でジョブを作らない', async () => {
+    const f = buildFixture()
+
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, {
+      model: 'test/cheap',
+      corrections: ['あ'.repeat(501)],
+    })
+
+    expect(res.status).toBe(422)
+    // 長さの違反は要素ごとに返る（`corrections.0`）。どの行が長いか分かる必要がある。
+    expect(
+      Object.keys(((await res.json()) as ErrorBody).fields ?? {}).some((key) =>
+        key.startsWith('corrections'),
+      ),
+    ).toBe(true)
+    expect(f.generationJobs.snapshot()).toHaveLength(0)
+  })
+
+  it('空白だけの直しを受け付けない', async () => {
+    const f = buildFixture()
+
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, {
+      model: 'test/cheap',
+      corrections: ['   '],
+    })
+
+    expect(res.status).toBe(422)
+    expect(f.generationJobs.snapshot()).toHaveLength(0)
   })
 })

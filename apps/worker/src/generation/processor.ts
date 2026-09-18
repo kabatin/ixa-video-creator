@@ -1,5 +1,9 @@
 import type {
-  GenerationJobRepository, MediaAssetRepository, ProjectRepository, ShotRepository, TakeRepository,
+  GenerationJobRepository,
+  MediaAssetRepository,
+  ProjectRepository,
+  ShotRepository,
+  TakeRepository,
 } from '@ixa/db'
 import {
   type GenerationContextSource,
@@ -11,19 +15,17 @@ import {
   type TakeId,
 } from '@ixa/domain'
 import type {
-  ProviderJobHandle, ProviderJobStatus, ProviderRegistry, VideoModelDescriptor,
+  ProviderJobHandle,
+  ProviderJobStatus,
+  ProviderRegistry,
+  VideoModelDescriptor,
 } from '@ixa/provider-core'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import { recordTake, type RecordTakeDeps } from './complete.js'
 import { failureMessageOf, publishJobStatus, publishShotStatus } from './events.js'
 import { parseGenerationJobData, type GenerationJobData } from './job-data.js'
-import {
-  checkLineage,
-  lineageFailureOf,
-  lineageFieldsOf,
-  type LineageCheck,
-} from './lineage.js'
+import { checkLineage, lineageFailureOf, lineageFieldsOf, type LineageCheck } from './lineage.js'
 import { rebuildSpec } from './spec.js'
 
 /**
@@ -93,7 +95,11 @@ export type GenerationOutcome =
 /** 作業を続けられない状態。GenerationJob.error に落として failed にする。 */
 class JobFailure extends Error {
   override readonly name = 'JobFailure'
-  constructor(readonly code: string, message: string, readonly retryable: boolean) {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly retryable: boolean,
+  ) {
     super(message)
   }
 }
@@ -117,16 +123,15 @@ type JobContext = {
  * ジョブの行に載っている系譜を検査する。親を辿れなければ理由付きで返る。
  * 投入前に呼べば、壊れた系譜のまま課金することがない。
  */
-const inspectLineage = (
-  deps: GenerationProcessorDeps,
-  ctx: JobContext,
-): Promise<LineageCheck> => checkLineage(deps.takes, ctx.shot.id, ctx.job)
+const inspectLineage = (deps: GenerationProcessorDeps, ctx: JobContext): Promise<LineageCheck> =>
+  checkLineage(deps.takes, ctx.shot.id, ctx.job)
 
 /** Provider に参照画像を見せるための署名付き URL。DB には保存しない（規約 7）。 */
 const referenceResolver =
   (mediaAssets: MediaAssetRepository, storage: ObjectStorage) => async (id: MediaAssetId) => {
     const asset = await mediaAssets.findById(id)
-    if (asset === null) throw new JobFailure('reference_missing', `参照アセットがありません: ${id}`, false)
+    if (asset === null)
+      throw new JobFailure('reference_missing', `参照アセットがありません: ${id}`, false)
     return storage.signedGetUrl(asset.storageKey, REFERENCE_URL_EXPIRES_SEC)
   }
 
@@ -158,7 +163,7 @@ const submit = async (
     throw new JobFailure(lineageFailure.code, lineageFailure.message, false)
   }
 
-  const { spec, specHash } = await rebuildSpec(deps.context, shot, project, model)
+  const { spec, specHash } = await rebuildSpec(deps.context, shot, project, model, job.corrections)
   if (specHash !== job.specHash) {
     // Shot が編集されて仕様が変わっている。古い仕様で課金しないよう止める。
     throw new JobFailure(
@@ -181,7 +186,12 @@ const submit = async (
     startedAt: job.startedAt ?? now,
   })
   await publishJobStatus(deps, {
-    shot, jobId: job.id, status: 'running', takeId: null, error: null, at: now,
+    shot,
+    jobId: job.id,
+    status: 'running',
+    takeId: null,
+    error: null,
+    at: now,
   })
   // 運ぶのは ID だけ。系譜は行に載っているので、入れ直しで失われることがない。
   await deps.scheduler.reschedule(ctx.data, pollDelayMs(1))
@@ -260,7 +270,12 @@ const complete = async (
    */
   await publishShotStatus(deps, { shot, jobId: job.id, status: 'review', at: now })
   await publishJobStatus(deps, {
-    shot, jobId: job.id, status: 'succeeded', takeId: take.id, error: null, at: now,
+    shot,
+    jobId: job.id,
+    status: 'succeeded',
+    takeId: take.id,
+    error: null,
+    at: now,
   })
 
   deps.logger.info({ jobId: job.id, takeId: take.id }, 'Take を確定しました')
@@ -292,7 +307,11 @@ const poll = async (
 
   const attempt = job.attempt + 1
   if (attempt > MAX_POLL_ATTEMPTS) {
-    throw new JobFailure('poll_timeout', `ポーリングが ${String(MAX_POLL_ATTEMPTS)} 回を超えました`, false)
+    throw new JobFailure(
+      'poll_timeout',
+      `ポーリングが ${String(MAX_POLL_ATTEMPTS)} 回を超えました`,
+      false,
+    )
   }
 
   await deps.generationJobs.update(job.id, { attempt })
@@ -333,7 +352,8 @@ export const processGenerationJob = async (
 
   try {
     const shot = await deps.shots.findById(job.shotId)
-    if (shot === null) throw new JobFailure('shot_missing', `Shot がありません: ${job.shotId}`, false)
+    if (shot === null)
+      throw new JobFailure('shot_missing', `Shot がありません: ${job.shotId}`, false)
     loadedShot = shot
 
     const project = await deps.projects.findById(shot.projectId)
@@ -342,7 +362,12 @@ export const processGenerationJob = async (
     }
 
     const ctx: JobContext = {
-      job, shot, project, model: loadModel(deps.registry, job), data: parsed, now,
+      job,
+      shot,
+      project,
+      model: loadModel(deps.registry, job),
+      data: parsed,
+      now,
     }
 
     return job.providerJobRef === null
@@ -375,7 +400,12 @@ export const processGenerationJob = async (
     } else {
       // **黙って失敗にしない。** 行に残したのと同じ理由を画面まで運ぶ。
       await publishJobStatus(deps, {
-        shot: loadedShot, jobId: job.id, status: 'failed', takeId: null, error: message, at: now,
+        shot: loadedShot,
+        jobId: job.id,
+        status: 'failed',
+        takeId: null,
+        error: message,
+        at: now,
       })
     }
 

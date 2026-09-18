@@ -45,8 +45,14 @@ const aProject = (overrides: Partial<GenerationProject> = {}): GenerationProject
 })
 
 const ALL_ROLES: readonly ReferenceRole[] = [
-  'subject', 'wardrobe', 'location', 'style', 'brand',
-  'start_frame', 'end_frame', 'previous_shot_last_frame',
+  'subject',
+  'wardrobe',
+  'location',
+  'style',
+  'brand',
+  'start_frame',
+  'end_frame',
+  'previous_shot_last_frame',
 ]
 
 type TestModel = GenerationModel & { readonly label: string }
@@ -85,11 +91,7 @@ const contextWith = (parts: Partial<GenerationContextSource>): GenerationContext
   ...parts,
 })
 
-const aManualReference = (
-  shot: Shot,
-  role: ReferenceRole,
-  order: number,
-): ShotReference => ({
+const aManualReference = (shot: Shot, role: ReferenceRole, order: number): ShotReference => ({
   id: newId(ShotReferenceIdSchema),
   shotId: shot.id,
   mediaAssetId: newId(MediaAssetIdSchema),
@@ -323,8 +325,14 @@ describe('buildGeneration — 参照と specHash', () => {
     const called: string[] = []
     const previousFrameId = newId(MediaAssetIdSchema)
     const context: GenerationContextSource = {
-      charactersForShot: () => { called.push('characters'); return Promise.resolve([]) },
-      locationsForShot: () => { called.push('locations'); return Promise.resolve([]) },
+      charactersForShot: () => {
+        called.push('characters')
+        return Promise.resolve([])
+      },
+      locationsForShot: () => {
+        called.push('locations')
+        return Promise.resolve([])
+      },
       manualReferencesForShot: () => {
         called.push('manual')
         return Promise.resolve([aManualReference(shot, 'subject', 0)])
@@ -333,15 +341,22 @@ describe('buildGeneration — 参照と specHash', () => {
         called.push('previousFrame')
         return Promise.resolve(previousFrameId)
       },
-      startFrame: () => { called.push('startFrame'); return Promise.resolve(null) },
+      startFrame: () => {
+        called.push('startFrame')
+        return Promise.resolve(null)
+      },
     }
     const { deps } = depsOf([modelA], context)
 
     const compiled = await buildGeneration(deps, shot, aProject(), modelA.id)
 
-    expect(called.sort()).toEqual(
-      ['characters', 'locations', 'manual', 'previousFrame', 'startFrame'],
-    )
+    expect(called.sort()).toEqual([
+      'characters',
+      'locations',
+      'manual',
+      'previousFrame',
+      'startFrame',
+    ])
     expect(compiled.spec.references.map((r) => r.role)).toEqual([
       'subject',
       'previous_shot_last_frame',
@@ -378,5 +393,62 @@ describe('buildGeneration — 参照と specHash', () => {
     expect(withA.spec.durationSec).toBe(4)
     expect(withB.spec.durationSec).toBe(5)
     expect(withA.specHash).not.toBe(withB.specHash)
+  })
+})
+
+/**
+ * レビューの指摘から人が選んだ直し（PHASE 6.1）。
+ *
+ * ここで守るのは 2 つ。**直しを添えないときは何も変わらない**ことと、
+ * **下書きと本番の両方のコンパイルへ同じ直しが届く**こと。
+ * 後者が抜けると router が見た仕様と最終的な仕様が食い違い、
+ * 選ばれたモデルの根拠が実際に生成される内容とずれる。
+ */
+describe('buildGeneration — 指摘の直し（corrections）', () => {
+  it('添えなければ仕様にキーが現れず、ハッシュも変わらない', async () => {
+    const shot = aShot(projectId)
+
+    const plain = await buildGeneration(depsOf([modelA]).deps, shot, aProject(), modelA.id)
+    const empty = await buildGeneration(depsOf([modelA]).deps, shot, aProject(), modelA.id, {})
+    const explicitlyEmpty = await buildGeneration(
+      depsOf([modelA]).deps,
+      shot,
+      aProject(),
+      modelA.id,
+      { corrections: [] },
+    )
+
+    expect('corrections' in plain.spec).toBe(false)
+    expect(empty.specHash).toBe(plain.specHash)
+    expect(explicitlyEmpty.specHash).toBe(plain.specHash)
+  })
+
+  it('添えると仕様に載り、プロンプトの末尾に付き、別のハッシュになる', async () => {
+    const shot = aShot(projectId)
+
+    const plain = await buildGeneration(depsOf([modelA]).deps, shot, aProject(), modelA.id)
+    const corrected = await buildGeneration(depsOf([modelA]).deps, shot, aProject(), modelA.id, {
+      corrections: ['顔をもっと近く'],
+    })
+
+    expect(corrected.spec.corrections).toEqual(['顔をもっと近く'])
+    expect(corrected.spec.prompt).toContain('顔をもっと近く')
+    expect(corrected.spec.prompt.startsWith(plain.spec.prompt)).toBe(true)
+    // 別のハッシュでないと、直した生成が「同じ仕様の Take が既にある」と判定される。
+    expect(corrected.specHash).not.toBe(plain.specHash)
+  })
+
+  it('AUTO のとき router へ渡す下書きにも直しが載る', async () => {
+    const shot = aShot(projectId)
+    const { deps, router } = depsOf([modelA, modelB])
+
+    const compiled = await buildGeneration(deps, shot, aProject(), 'AUTO', {
+      corrections: ['光を強く'],
+    })
+
+    // 下書きと本番で違う仕様をモデルに見せない。
+    expect(router.drafts).toHaveLength(1)
+    expect(router.drafts[0]?.corrections).toEqual(['光を強く'])
+    expect(compiled.spec.corrections).toEqual(['光を強く'])
   })
 })

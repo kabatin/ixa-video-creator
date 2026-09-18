@@ -1,4 +1,5 @@
 import {
+  Corrections,
   CreateShotInput,
   GenerationJobId,
   ModelId,
@@ -63,6 +64,15 @@ export const MAX_TAKES_PER_REQUEST = 4
 export const GenerateTakesBody = z.object({
   model: z.union([ModelId, z.literal('AUTO')]),
   count: z.number().int().min(1).max(MAX_TAKES_PER_REQUEST).default(1),
+  /**
+   * レビューの指摘から人が選んだ直し（PHASE 6.1）。
+   * 上限は domain の `Corrections` が持つ。**この画面で書き写さない**（サーバと必ずズレる）。
+   *
+   * **`optional` にして、直しが無いときはキーごと送らない。** 空配列を常に送ると
+   * 直しを使わない既存の呼び出しのリクエストまで形が変わる。サーバ側は
+   * `Corrections.default([])` で受けるので、送らないことが「直し無し」を意味する。
+   */
+  corrections: Corrections.optional(),
 })
 export type GenerateTakesBody = z.input<typeof GenerateTakesBody>
 

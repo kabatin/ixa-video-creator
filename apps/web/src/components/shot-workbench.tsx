@@ -6,7 +6,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { ErrorPanel } from '@/components/error-panel'
 import { GeneratePanel } from '@/components/generate-panel'
 import { ShotLocationEditor, type LocationSaveFeedback } from '@/components/shot-location-editor'
+import { ShotDetailLayout } from '@/components/shot-detail-layout'
 import { ShotSummary } from '@/components/shot-summary'
+import { TakeComparePanel } from '@/components/take-compare-panel'
 import { TakeGrid } from '@/components/take-grid'
 import { ReviewPanel } from '@/components/review-panel'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
@@ -34,6 +36,9 @@ const LOCATION_SAVED = 'ロケーションを保存しました。'
 /**
  * Shot 詳細の中核。生成トリガ・Take のポーリング・採用をまとめて持つ。
  * ポーリングは `polling` が真の間だけ動き、アンマウント時に必ず停止する。
+ *
+ * **並べ方は持たない。** 2 列の組み方は `ShotDetailLayout` にあり、
+ * ここは状態と、どの要素をどちらの列へ渡すかだけを決める（PHASE 6.1）。
  */
 export const ShotWorkbench = ({
   shot,
@@ -176,37 +181,20 @@ export const ShotWorkbench = ({
     }
   }
 
-  return (
-    <div className="space-y-6">
-      <ShotSummary
-        shot={shot}
-        status={status}
-        selectedTakeId={selectedTakeId}
-        locationLabel={describeLocation(locationId, locations)}
-      />
-
-      <ShotLocationEditor
-        locations={locations}
-        loadError={locationsError}
-        locationId={locationId}
-        saving={locationSaving}
-        disabled={busy || polling}
-        feedback={locationFeedback}
-        onSave={(next) => {
-          void saveLocation(next)
-        }}
-      />
-
-      <GeneratePanel
-        busy={busy || polling}
-        generating={polling}
-        lastResult={lastResult}
-        onGenerate={(model, count) => {
-          void generate(model, count)
-        }}
-      />
-
+  /**
+   * 判定するもの（左）。
+   * 失敗と通知もここに置く。右の欄は `lg` 未満で下に回るため、
+   * そこに出すと採用の失敗が押した場所より下に沈む。
+   */
+  const main = (
+    <>
       {error !== null && <ErrorPanel title="操作に失敗しました" message={error} />}
+
+      {/**
+       * A/B を曲の拍の上で比べる（PHASE 6.1）。**一覧より先に置く。**
+       * 「この Take でいいか」を決めるのが目的の画面なので、判断の材料を最初に出す。
+       */}
+      <TakeComparePanel shotId={shot.id} takes={takes} selectedTakeId={selectedTakeId} />
 
       {notice !== null && (
         <p role="status" className="rounded-md bg-warn/10 p-4 text-sm text-warn">
@@ -245,9 +233,43 @@ export const ShotWorkbench = ({
           }}
         />
       </section>
+    </>
+  )
+
+  /** 操作する欄（右）。貼り付いたまま残るので、左を見ながら触れる。 */
+  const rail = (
+    <>
+      <ShotSummary
+        shot={shot}
+        status={status}
+        selectedTakeId={selectedTakeId}
+        locationLabel={describeLocation(locationId, locations)}
+      />
+
+      <ShotLocationEditor
+        locations={locations}
+        loadError={locationsError}
+        locationId={locationId}
+        saving={locationSaving}
+        disabled={busy || polling}
+        feedback={locationFeedback}
+        onSave={(next) => {
+          void saveLocation(next)
+        }}
+      />
+
+      <GeneratePanel
+        busy={busy || polling}
+        generating={polling}
+        lastResult={lastResult}
+        onGenerate={(model, count) => {
+          void generate(model, count)
+        }}
+      />
 
       {selectedTake !== undefined && (
         <ReviewPanel
+          shotId={shot.id}
           takeId={selectedTake.id}
           humanVerdict={selectedTake.humanVerdict}
           disabled={busy}
@@ -257,6 +279,8 @@ export const ShotWorkbench = ({
           }}
         />
       )}
-    </div>
+    </>
   )
+
+  return <ShotDetailLayout main={main} rail={rail} />
 }
