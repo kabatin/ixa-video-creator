@@ -1,0 +1,1 @@
+ALTER TABLE "generation_jobs" ADD COLUMN "corrections" jsonb DEFAULT '[]'::jsonb NOT NULL;

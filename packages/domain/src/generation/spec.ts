@@ -46,8 +46,37 @@ export const ShotGenerationSpec = z.object({
   ),
 
   camera: ShotCamera,
+
+  /**
+   * レビューの指摘から人が選んだ直し（PHASE 6.1）。
+   *
+   * **`optional` であることが重要。** `computeSpecHash` は `canonicalJson`（= `JSON.stringify`）
+   * を掛けるため、値が `undefined` のキーは文字列から消える。差分が無いときにキーごと
+   * 省けば、既に生成済みの Take のハッシュが 1 バイトも変わらない。
+   * 逆に `corrections: []` を無条件に置くと全 Shot のハッシュが変わり、
+   * 重複検知が黙って効かなくなる（画面には出ず、費用としてだけ現れる）。
+   */
+  corrections: z.array(z.string().min(1)).optional(),
 })
 export type ShotGenerationSpec = z.infer<typeof ShotGenerationSpec>
+
+/**
+ * 1 回の生成に添えられる直しの上限。
+ *
+ * **api・画面・DB の入力検証がこの 1 つを参照する。** 同じ数字を書き写すと必ずズレて、
+ * 片方だけ通る入力が生まれる。
+ */
+export const MAX_CORRECTIONS = 5
+export const MAX_CORRECTION_LENGTH = 500
+
+/**
+ * 直しの入力の検証。空白のみの要素は受け付けない（trim 済み・非空）。
+ * API 境界と画面の両方がこれを使う。
+ */
+export const Corrections = z
+  .array(z.string().trim().min(1).max(MAX_CORRECTION_LENGTH))
+  .max(MAX_CORRECTIONS)
+export type Corrections = z.infer<typeof Corrections>
 
 /**
  * オブジェクトキーを再帰的にソートした JSON 文字列。

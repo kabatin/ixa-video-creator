@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { GenerationJobId, MediaAssetId, ShotId, TakeId } from '../common/ids.js'
-import { ShotGenerationSpec } from './spec.js'
+import { Corrections, ShotGenerationSpec } from './spec.js'
 
 export const ProviderId = z.string().min(1).brand<'ProviderId'>()
 export type ProviderId = z.infer<typeof ProviderId>
@@ -176,6 +176,19 @@ export const GenerationJob = z.object({
   parentTakeId: TakeId.nullable(),
   regenerationReason: z.string().nullable(),
 
+  /**
+   * レビューの指摘から人が選んだ直し（PHASE 6.1）。
+   *
+   * **ここが直しの正である。** キューのジョブデータには積まない（`job-data.ts` は
+   * `.strict()` で ID だけを運ぶ）。系譜と同じ理由で、行を作る呼び出しに含めて隙間を無くす。
+   * worker は処理時に仕様を組み直すため、直しが行に無いと同じ仕様を再現できず
+   * `spec_drift` で落ちる。
+   *
+   * **`null` ではなく空配列が「直し無し」。** 直しを添えなかったジョブにとって
+   * 「無い」は分からない状態ではなく事実なので、2 通りの表し方を作らない（lessons L-021）。
+   */
+  corrections: z.array(z.string().min(1)),
+
   queuedAt: z.date(),
   startedAt: z.date().nullable(),
   finishedAt: z.date().nullable(),
@@ -205,6 +218,8 @@ export const CreateGenerationJobInput = GenerationJob.omit({
       .max(MAX_REGENERATION_REASON_LENGTH)
       .nullable()
       .default(null),
+    /** 直しは添えないのが既定。上限は `spec.ts` の `Corrections` が持つ（写さない）。 */
+    corrections: Corrections.default([]),
   })
   .refine(hasReasonWhenParented, lineagePairIssue())
 export type CreateGenerationJobInput = z.input<typeof CreateGenerationJobInput>

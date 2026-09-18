@@ -49,6 +49,19 @@ export const generationJobs = pgTable(
     }),
     regenerationReason: text('regeneration_reason'),
 
+    /**
+     * レビューの指摘から人が選んだ直し（PHASE 6.1）。
+     *
+     * **ここが直しの唯一の正である。** キューのジョブデータは `.strict()` で ID しか
+     * 運ばないため（`apps/worker/src/generation/job-data.ts`）、系譜と同じく行に置く。
+     * worker は処理時に仕様を組み直す。直しが行に無いと同じ `specHash` を再現できず
+     * `spec_drift` で落ちる。
+     *
+     * **`NOT NULL DEFAULT '[]'`。** 直しを添えなかったジョブにとって「無い」は
+     * 分からない状態ではなく事実なので、`NULL` と空配列の 2 通りを作らない（lessons L-021）。
+     */
+    corrections: jsonb('corrections').$type<readonly string[]>().notNull().default([]),
+
     queuedAt: timestampTz('queued_at').notNull().defaultNow(),
     startedAt: timestampTz('started_at'),
     finishedAt: timestampTz('finished_at'),

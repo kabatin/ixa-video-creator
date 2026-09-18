@@ -14,7 +14,16 @@ export type CompileInput = {
   readonly generationDurationSec: number
   readonly seed: number | null
   readonly negativePrompt: string | null
+  /**
+   * レビューの指摘から人が選んだ直し（PHASE 6.1）。
+   * 空・未指定なら仕様にキーを置かない。置くとハッシュが変わり、重複検知が壊れる。
+   */
+  readonly corrections?: readonly string[]
 }
+
+/** 空白のみを落とし、trim して並べ直す。順序は呼び出し側の指定を保つ。 */
+const normalizeCorrections = (values: readonly string[] | undefined): string[] =>
+  (values ?? []).map((v) => v.trim()).filter((v) => v.length > 0)
 
 /**
  * Shot から Provider 非依存の生成仕様を**決定的に**組み立てる。
@@ -51,11 +60,17 @@ export const compileSpec = (input: CompileInput): ShotGenerationSpec => {
     moodFragment,
   }
 
+  const corrections = normalizeCorrections(input.corrections)
+
   return {
     specVersion: 1,
     shotId: shot.id,
     sourceType: shot.sourceType.type,
-    prompt: assemblePrompt(promptParts),
+    /**
+     * 直しは**最終プロンプトの末尾へ連結する**。`promptParts` に入れるだけでは
+     * Provider に届かない。既存の断片の順序は動かさない（`assemblePrompt` の注記）。
+     */
+    prompt: [assemblePrompt(promptParts), ...corrections].join('. '),
     negativePrompt: input.negativePrompt,
     promptParts,
     durationSec: input.generationDurationSec,
@@ -69,6 +84,11 @@ export const compileSpec = (input: CompileInput): ShotGenerationSpec => {
       weight: r.weight,
     })),
     camera: shot.camera,
+    /**
+     * **差分があるときだけキーを置く。** 無条件に `corrections: []` を置くと
+     * `JSON.stringify` の結果が変わり、既存の Take と specHash が一致しなくなる。
+     */
+    ...(corrections.length > 0 ? { corrections } : {}),
   }
 }
 

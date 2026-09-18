@@ -25,6 +25,7 @@ const baseRow = (): GenerationJobRow => ({
   error: null,
   parentTakeId: null,
   regenerationReason: null,
+  corrections: [],
   queuedAt: new Date('2026-09-17T00:00:00Z'),
   startedAt: null,
   finishedAt: null,
@@ -77,5 +78,25 @@ describe('generationJobRowToDomain', () => {
         regenerationReason: null,
       }),
     ).toThrow(/regenerationReason/)
+  })
+})
+
+/**
+ * 直し（PHASE 6.1）も行から読む。キューのジョブデータは `.strict()` で ID しか
+ * 運ばないため、ここが唯一の経路になる。落ちると worker が同じ仕様を組み直せず
+ * `spec_drift` になる。
+ */
+describe('直しを行から読む', () => {
+  it('行の corrections がそのまま Domain に出る', () => {
+    const job = generationJobRowToDomain({
+      ...baseRow(),
+      corrections: ['参照画像の顔に合わせ、輪郭と髪型を一致させる'],
+    })
+    expect(job.corrections).toEqual(['参照画像の顔に合わせ、輪郭と髪型を一致させる'])
+  })
+
+  /** 空配列が「直し無し」。`null` という別の表し方を作らない（lessons L-021）。 */
+  it('直しを添えなかったジョブは空配列', () => {
+    expect(generationJobRowToDomain(baseRow()).corrections).toEqual([])
   })
 })
