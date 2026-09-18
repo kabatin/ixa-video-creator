@@ -2,10 +2,92 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/*
+ * デザイントークン（PHASE 5.9）。
+ *
+ * 色は**役割**で持つ。`slate-600` のような素の色名を部品に書かない。
+ * 部品は `bg-surface` / `text-muted` / `border-line` のような役割の名前だけを使い、
+ * 実際の色はここで一度に決める。ダークとライトの切り替えはこの表を差し替えるだけ。
+ *
+ * 値は `R G B` の 3 つ組で置く。Tailwind の `bg-surface/50` のような透過を効かせるため
+ * （`tailwind.config.ts` が `rgb(var(--x) / <alpha-value>)` で読む）。
+ *
+ * **既定はダーク。** 映像ツールは素材の色を正しく見るために暗い背景を使う（制作者の判断 2026-09-18）。
+ *
+ * コントラストの下限は 4.5:1（12〜14px の文字）。`muted` は必ず `surface` の上で
+ * この比を満たす値にすること。以前 `slate-300` の上に白文字（1.48）で読めなかった。
+ */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* 面 */
+  --bg: 11 15 20; /* #0B0F14 画面の地 */
+  --surface: 18 23 30; /* #12171E カード・表 */
+  --surface-2: 26 33 42; /* #1A212A 見出し行・ホバー */
+  --line: 38 48 64; /* #263040 罫線・枠 */
+  --line-strong: 62 76 98; /* #3E4C62 入力欄の枠 */
+
+  /* 文字 */
+  --text: 230 234 240; /* #E6EAF0 本文 */
+  --muted: 154 164 178; /* #9AA4B2 補足。surface 上で 7.6:1 */
+  --faint: 108 120 138; /* #6C788A 12px 未満では使わない */
+
+  /* 主張 */
+  --accent: 255 210 0; /* #FFD200 iXA の黄。主ボタン・選択 */
+  --accent-fg: 17 17 17; /* 黄の上の文字 */
+  --accent-soft: 255 210 0; /* 透過で使う（/15 など） */
+
+  /* 意味 */
+  --ok: 52 211 153; /* #34D399 */
+  --warn: 251 191 36; /* #FBBF24 */
+  --danger: 248 113 113; /* #F87171 */
+  --info: 96 165 250; /* #60A5FA */
+
+  /* 焦点 */
+  --focus: 255 210 0;
+}
+
+:root[data-theme='light'] {
   color-scheme: light;
+
+  --bg: 248 250 252; /* #F8FAFC */
+  --surface: 255 255 255;
+  --surface-2: 241 245 249; /* #F1F5F9 */
+  --line: 226 232 240; /* #E2E8F0 */
+  --line-strong: 148 163 184; /* #94A3B8 */
+
+  --text: 15 23 42; /* #0F172A */
+  --muted: 71 85 105; /* #475569 白地で 7.6:1 */
+  --faint: 100 116 139; /* #64748B */
+
+  --accent: 17 24 39; /* 明るい地では黄が薄いので、主ボタンは濃い墨 */
+  --accent-fg: 255 255 255;
+  --accent-soft: 255 210 0;
+
+  --ok: 5 150 105; /* #059669 */
+  --warn: 180 83 9; /* #B45309 */
+  --danger: 185 28 28; /* #B91C1C */
+  --info: 29 78 216; /* #1D4ED8 */
+
+  --focus: 17 24 39;
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  /* `@apply` は Tailwind の設定を読み直すまで新しい色名を知らない。地の色は素の CSS で持つ。 */
+  background-color: rgb(var(--bg));
+  color: rgb(var(--text));
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 選択範囲と入力の下地も地の色に合わせる。 */
+::selection {
+  background: rgb(var(--accent) / 0.35);
+}
+
+input,
+select,
+textarea {
+  color-scheme: inherit;
 }
