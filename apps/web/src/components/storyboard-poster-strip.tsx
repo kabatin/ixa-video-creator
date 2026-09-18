@@ -19,7 +19,7 @@ export const StoryboardPosterStrip = ({
   selectedShotId,
   onSelect,
 }: StoryboardPosterStripProps) => (
-  <div className="h-full overflow-auto bg-bg p-3">
+  <div className="h-full overflow-x-auto overflow-y-hidden bg-bg p-3">
     <div className="flex min-w-max items-stretch gap-0" role="list" aria-label="Shot のポスター帯">
       {shots.map((shot, index) => {
         const poster = posterViewFor(posters, shot.id)
@@ -60,7 +60,10 @@ export const StoryboardPosterStrip = ({
                   {formatClock(shot.startSec)} / {formatDuration(shot.durationSec)}
                 </span>
               </span>
-              <span className="mt-1 line-clamp-2 block min-h-10 text-xs text-muted">
+              <span
+                className="mt-1 line-clamp-2 block h-10 overflow-hidden text-ellipsis text-xs text-muted"
+                title={shot.description.trim() === '' ? undefined : shot.description}
+              >
                 {shot.description.trim() === '' ? '説明はまだありません' : shot.description}
               </span>
             </button>

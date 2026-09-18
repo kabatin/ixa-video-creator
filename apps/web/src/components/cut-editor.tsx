@@ -352,6 +352,15 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
           </p>
         )}
 
+        <div className="mt-4">
+          <AudioTransport
+            playback={playback}
+            label={track.title}
+            keyboardShortcuts={false}
+            layout="inline"
+          />
+        </div>
+
         <div ref={(node) => setWidthPx(node?.clientWidth ?? 0)} className="mt-4">
           {peaks === null ? (
             <p role="status" className="text-sm text-muted">
@@ -471,8 +480,6 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
           </span>
         </div>
       </section>
-
-      <AudioTransport playback={playback} label={track.title} keyboardShortcuts={false} />
 
       <section className="rounded-lg border border-line bg-surface p-5">
         <div className="flex flex-wrap items-center gap-3">

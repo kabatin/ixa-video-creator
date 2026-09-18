@@ -125,28 +125,32 @@ const COMPONENTS = Object.freeze({
   automatic: AutomaticPanel,
 })
 
+/** タブ見出しを含め、カード全体が収まる高さ。ポスタードック内は横にだけ送る。 */
+const POSTER_DOCK_HEIGHT_PX = 280
+
 const addDefaultPanels = (api: DockviewApi): void => {
-  api.addPanel({ id: 'posters', component: 'posters', title: 'ポスター' })
-  api.addPanel({
-    id: 'inspector',
-    component: 'inspector',
-    title: 'Shot 設定',
-    initialWidth: 360,
-    position: { referencePanel: 'posters', direction: 'right' },
-  })
-  api.addPanel({
-    id: 'cutter',
-    component: 'cutter',
-    title: '聴きながら切る',
-    initialHeight: 500,
-    position: { referencePanel: 'posters', direction: 'below' },
-  })
+  api.addPanel({ id: 'cutter', component: 'cutter', title: '聴きながら切る' })
   api.addPanel({
     id: 'automatic',
     component: 'automatic',
     title: '自動で割る',
     inactive: true,
     position: { referencePanel: 'cutter', direction: 'within' },
+  })
+  api.addPanel({
+    id: 'posters',
+    component: 'posters',
+    title: 'ポスター',
+    initialWidth: 520,
+    minimumHeight: POSTER_DOCK_HEIGHT_PX,
+    maximumHeight: POSTER_DOCK_HEIGHT_PX,
+    position: { referencePanel: 'cutter', direction: 'right' },
+  })
+  api.addPanel({
+    id: 'inspector',
+    component: 'inspector',
+    title: 'Shot 設定',
+    position: { referencePanel: 'posters', direction: 'below' },
   })
 }
 

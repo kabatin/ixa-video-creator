@@ -2,7 +2,8 @@ import type { ProjectId } from '@ixa/domain'
 import { z } from 'zod'
 import type { SerializedDockview } from 'dockview-react'
 
-const LAYOUT_VERSION = 1
+// 初期配置を左右構成へ変えたため、旧配置を新しい既定より優先しない。
+const LAYOUT_VERSION = 2
 
 /** 配置は制作データではない。Project ごと・版ごとにブラウザへ閉じる（ADR-0020）。 */
 export const storyboardLayoutKey = (projectId: ProjectId): string =>

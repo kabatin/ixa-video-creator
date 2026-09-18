@@ -109,6 +109,18 @@ describe('AudioTransport', () => {
     expect(screen.getByRole('button', { name: '消音を解除' })).toBeInTheDocument()
   })
 
+  it('波形編集用レイアウトでは再生位置と音量を同じ操作列へまとめる', () => {
+    const { playback } = createPlayback()
+    render(<AudioTransport playback={playback} layout="inline" />)
+
+    const controls = screen.getByRole('group', { name: '再生位置と音量' })
+    expect(controls).toContainElement(screen.getByRole('button', { name: '再生' }))
+    expect(controls).toContainElement(screen.getByRole('slider', { name: '再生位置' }))
+    expect(controls).toContainElement(screen.getByRole('button', { name: '消音' }))
+    expect(controls).toContainElement(screen.getByRole('slider', { name: '音量' }))
+    expect(controls).toHaveTextContent('100%')
+  })
+
   it('ボタンで再生と一時停止を切り替える', () => {
     const { playback } = createPlayback()
     render(<AudioTransport playback={playback} />)

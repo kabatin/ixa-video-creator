@@ -28,6 +28,8 @@ export type AudioTransportProps = {
   readonly playback: AudioPlayback
   /** 何を鳴らしているか。無名の操作盤にしない。 */
   readonly label?: string
+  /** 波形編集では再生位置と音量を一列にまとめる。 */
+  readonly layout?: 'stacked' | 'inline'
   /**
    * 画面全体でキー操作を受けるか。
    * **1 つの画面に 2 つ置くときは片方を false にする。** 両方が同じ打鍵に反応する。
@@ -51,6 +53,7 @@ const stateMessage = (playback: AudioPlayback): string => {
 export const AudioTransport = ({
   playback,
   label,
+  layout = 'stacked',
   keyboardShortcuts = true,
 }: AudioTransportProps) => {
   const {
@@ -101,6 +104,14 @@ export const AudioTransport = ({
     seekTo(Number(event.target.value))
   }
 
+  const onVolumeChange = (event: ChangeEvent<HTMLInputElement>): void => {
+    // 消音したまま音量を動かしたら、鳴らしたいということ。消音を解く。
+    if (muted) toggleMute()
+    setVolume(Number.parseFloat(event.target.value))
+  }
+
+  const volumePercent = `${String(Math.round(volume * 100))}%`
+
   return (
     <section
       aria-label={label ? `${label} の再生操作` : '再生操作'}
@@ -115,42 +126,49 @@ export const AudioTransport = ({
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          tone="primary"
-          onClick={toggle}
-          disabled={error !== null}
-          aria-label={isPlaying ? '一時停止' : '再生'}
+      {layout === 'inline' ? (
+        <div
+          role="group"
+          aria-label="再生位置と音量"
+          className="flex flex-wrap items-center gap-x-2 gap-y-2 xl:flex-nowrap"
         >
-          {isPlaying ? '一時停止' : '再生'}
-        </Button>
-
-        <p className="font-mono text-sm tabular-nums text-text">
-          <span>{formatClock(currentSec)}</span>
-          <span className="text-faint"> / </span>
-          <span>{formatClock(durationSec)}</span>
-        </p>
-
-        <p
-          role="status"
-          className={playback.notice !== null ? 'text-xs text-warn' : 'text-xs text-muted'}
-        >
-          {stateMessage(playback)}
-        </p>
-      </div>
-
-      {/*
-        音量。**消音とは別の値として持つ。** 消音を解除したときに元の大きさへ戻るので、
-        消音のたびに大きさを覚え直さなくてよい。刻みは 1%。
-        矢印キーはこの入力欄の中ではブラウザ既定の動きになり、画面の割り当ては効かない。
-      */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button size="sm" onClick={toggleMute} aria-pressed={muted}>
-          {muted ? '消音を解除' : '消音'}
-        </Button>
-
-        <label className="flex flex-1 items-center gap-2 text-sm text-text">
-          <span className="shrink-0">音量</span>
+          <Button
+            tone="primary"
+            onClick={toggle}
+            disabled={error !== null}
+            aria-label={isPlaying ? '一時停止' : '再生'}
+          >
+            <span className="whitespace-nowrap">{isPlaying ? '一時停止' : '再生'}</span>
+          </Button>
+          <p className="shrink-0 font-mono text-sm tabular-nums text-text">
+            <span>{formatClock(currentSec)}</span>
+            <span className="text-faint"> / </span>
+            <span>{formatClock(durationSec)}</span>
+          </p>
+          <p
+            role="status"
+            className={`shrink-0 ${playback.notice !== null ? 'text-xs text-warn' : 'text-xs text-muted'}`}
+          >
+            {stateMessage(playback)}
+          </p>
+          <span aria-hidden="true" className="hidden h-6 border-l border-line xl:block" />
+          <input
+            type="range"
+            aria-label="再生位置"
+            min={0}
+            max={durationSec > 0 ? durationSec : 0}
+            step={FINE_SEC}
+            value={Math.min(currentSec, durationSec)}
+            disabled={!seekable}
+            onChange={onSeekChange}
+            aria-valuetext={`${formatClock(currentSec)} / ${formatClock(durationSec)}`}
+            className="min-w-32 flex-[2_1_20rem] accent-accent disabled:cursor-not-allowed disabled:opacity-40"
+          />
+          <span aria-hidden="true" className="hidden h-6 border-l border-line xl:block" />
+          <span className="shrink-0 text-sm text-text">音量</span>
+          <Button size="sm" onClick={toggleMute} aria-pressed={muted}>
+            <span className="whitespace-nowrap">{muted ? '消音を解除' : '消音'}</span>
+          </Button>
           <input
             type="range"
             aria-label="音量"
@@ -158,44 +176,79 @@ export const AudioTransport = ({
             max={MAX_VOLUME}
             step={0.01}
             value={volume}
-            onChange={(event) => {
-              // 消音したまま音量を動かしたら、鳴らしたいということ。消音を解く。
-              if (muted) toggleMute()
-              setVolume(Number.parseFloat(event.target.value))
-            }}
+            onChange={onVolumeChange}
             aria-valuetext={describeVolume(volume, muted)}
-            className="w-full max-w-xs accent-accent"
+            className="w-24 accent-accent"
           />
-        </label>
+          <span aria-hidden="true" className="w-9 text-right text-xs tabular-nums text-muted">
+            {volumePercent}
+          </span>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              tone="primary"
+              onClick={toggle}
+              disabled={error !== null}
+              aria-label={isPlaying ? '一時停止' : '再生'}
+            >
+              {isPlaying ? '一時停止' : '再生'}
+            </Button>
 
-        {/**
-         * 目で読むためだけの表示。**読み上げ領域にしないこと。**
-         * 同じ内容はスライダーの `aria-valuetext` が持っており、
-         * 二重に持たせると読み上げが同じ文を 2 回言う。
-         * 再生状態の読み上げ領域とも取り違えられる。
-         */}
-        <p aria-hidden="true" className="text-xs text-muted">
-          {describeVolume(volume, muted)}
-        </p>
-      </div>
+            <p className="font-mono text-sm tabular-nums text-text">
+              <span>{formatClock(currentSec)}</span>
+              <span className="text-faint"> / </span>
+              <span>{formatClock(durationSec)}</span>
+            </p>
 
-      {/*
-        シークバーは秒そのものを値にする。割合にすると読み上げが「43%」になり、
-        曲のどこかが分からない。矢印キーはこの入力欄の中では自前の割り当てを使わず、
-        ブラウザ既定の刻み（0.1 秒）で動く。
-      */}
-      <input
-        type="range"
-        aria-label="再生位置"
-        min={0}
-        max={durationSec > 0 ? durationSec : 0}
-        step={FINE_SEC}
-        value={Math.min(currentSec, durationSec)}
-        disabled={!seekable}
-        onChange={onSeekChange}
-        aria-valuetext={`${formatClock(currentSec)} / ${formatClock(durationSec)}`}
-        className="w-full accent-accent disabled:cursor-not-allowed disabled:opacity-40"
-      />
+            <p
+              role="status"
+              className={playback.notice !== null ? 'text-xs text-warn' : 'text-xs text-muted'}
+            >
+              {stateMessage(playback)}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button size="sm" onClick={toggleMute} aria-pressed={muted}>
+              {muted ? '消音を解除' : '消音'}
+            </Button>
+
+            <label className="flex flex-1 items-center gap-2 text-sm text-text">
+              <span className="shrink-0">音量</span>
+              <input
+                type="range"
+                aria-label="音量"
+                min={MIN_VOLUME}
+                max={MAX_VOLUME}
+                step={0.01}
+                value={volume}
+                onChange={onVolumeChange}
+                aria-valuetext={describeVolume(volume, muted)}
+                className="w-full max-w-xs accent-accent"
+              />
+            </label>
+
+            <p aria-hidden="true" className="text-xs text-muted">
+              {describeVolume(volume, muted)}
+            </p>
+          </div>
+
+          <input
+            type="range"
+            aria-label="再生位置"
+            min={0}
+            max={durationSec > 0 ? durationSec : 0}
+            step={FINE_SEC}
+            value={Math.min(currentSec, durationSec)}
+            disabled={!seekable}
+            onChange={onSeekChange}
+            aria-valuetext={`${formatClock(currentSec)} / ${formatClock(durationSec)}`}
+            className="w-full accent-accent disabled:cursor-not-allowed disabled:opacity-40"
+          />
+        </>
+      )}
 
       {/*
         割り当ては必ず画面に出す。隠れた操作は無いのと同じ。
