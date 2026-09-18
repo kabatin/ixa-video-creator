@@ -10,6 +10,7 @@ import {
   buildCostMeter,
   type CostMeter,
   type Project,
+  type ProjectId,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
@@ -173,6 +174,16 @@ export const ShotCostResponse = z
   })
   .openapi('ShotCost')
 
+export const OtherRunCostResponse = z
+  .object({
+    /** `storyboard_draft` / `review` など。表示の言葉は画面が持つ。 */
+    kind: z.string().min(1),
+    runCount: z.number().int().positive(),
+    totalUsd: z.number().nonnegative(),
+  })
+  .openapi('OtherRunCost')
+export type OtherRunCostResponse = z.infer<typeof OtherRunCostResponse>
+
 export const CostMeterResponse = z
   .object({
     /** null は「予算未設定」。0（予算ゼロ）とは別の状態。 */
@@ -183,6 +194,10 @@ export const CostMeterResponse = z
     byShot: z.array(ShotCostResponse),
     /** 内訳と合計の差の説明。黙って捨てない。 */
     unlistedShots: UnlistedShotCostResponse,
+    /** Take 以外で払った額（絵コンテ下書き・レビュー）。0 件の種類は並べない。 */
+    otherRuns: z.array(OtherRunCostResponse),
+    /** **予算と突き合わせるのはこの額。** 実測の Take と otherRuns の合計。 */
+    totalUsd: z.number().nonnegative(),
   })
   .openapi('CostMeter')
 export type CostMeterResponse = z.infer<typeof CostMeterResponse>
@@ -190,6 +205,8 @@ export type CostMeterResponse = z.infer<typeof CostMeterResponse>
 /** Domain の CostMeter を DTO へ写す（Map → 配列）。 */
 export const toCostMeterResponse = (meter: CostMeter): CostMeterResponse => ({
   budgetUsd: meter.budgetUsd,
+  otherRuns: meter.otherRuns.map((run) => ({ ...run })),
+  totalUsd: meter.totalUsd,
   measured: { ...meter.measured, byProvider: meter.measured.byProvider.map((p) => ({ ...p })) },
   stub: { ...meter.stub },
   byShot: [...meter.byShot].map(([shotId, cost]) => ({ shotId, ...cost })),
@@ -216,6 +233,21 @@ export type ProjectRoutesDeps = {
   shots: ShotRepository
   takes: TakeRepository
   /**
+   * 下書きの実行費を数えるために引く。**生成だけが金を使うわけではない。**
+   *
+   * **実際に読む欄だけを構造的な型で受ける**（`build-generation.ts` と同じ方針）。
+   * リポジトリ全体を要求すると、テストの偽物が関係の無い口まで埋めることになる。
+   */
+  storyboardDrafts: {
+    findRunsByProject(projectId: ProjectId): Promise<readonly { readonly costUsd: number }[]>
+  }
+  /** レビューの実行費を数えるために引く。 */
+  reviews: {
+    sumCostByProject(
+      projectId: ProjectId,
+    ): Promise<{ readonly runCount: number; readonly totalUsd: number }>
+  }
+  /**
    * スタブ Provider の ID。**app 層が渡す。**
    *
    * `ProviderRegistry` に素性の印が無いため、`@ixa/provider-video` の `STUB_PROVIDER_ID` を
@@ -225,7 +257,14 @@ export type ProjectRoutesDeps = {
   stubProviderIds: readonly string[]
 }
 
-export const projectRoutes = ({ projects, shots, takes, stubProviderIds }: ProjectRoutesDeps) =>
+export const projectRoutes = ({
+  projects,
+  shots,
+  takes,
+  storyboardDrafts,
+  reviews,
+  stubProviderIds,
+}: ProjectRoutesDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })
     .openapi(createProjectRoute, async (c) => {
       const created = await projects.create(c.req.valid('json'))
@@ -264,9 +303,13 @@ export const projectRoutes = ({ projects, shots, takes, stubProviderIds }: Proje
       //
       // 一方 Shot ごとの内訳は行として出せないので、生きている Shot だけに絞り、
       // 溢れた分は `unlistedShots` に残す（捨てない）。
-      const [projectTakes, liveShots] = await Promise.all([
+      const [projectTakes, liveShots, draftRuns, reviewCost] = await Promise.all([
         takes.findByProject(projectId),
         shots.findByProject(projectId),
+        // **生成だけが金を使うわけではない。** 下書きとレビューの実行費も数える。
+        // 数えないと予算が実際より軽く見える（実際に下書き 1 回で $0.38 払った）。
+        storyboardDrafts.findRunsByProject(projectId),
+        reviews.sumCostByProject(projectId),
       ])
 
       const meter = buildCostMeter({
@@ -278,6 +321,14 @@ export const projectRoutes = ({ projects, shots, takes, stubProviderIds }: Proje
         })),
         stubProviderIds,
         listedShotIds: liveShots.map((shot) => shot.id),
+        otherRuns: [
+          {
+            kind: 'storyboard_draft',
+            runCount: draftRuns.length,
+            totalUsd: draftRuns.reduce((total, run) => total + run.costUsd, 0),
+          },
+          { kind: 'review', runCount: reviewCost.runCount, totalUsd: reviewCost.totalUsd },
+        ],
       })
 
       return c.json(ok(toCostMeterResponse(meter)), 200)

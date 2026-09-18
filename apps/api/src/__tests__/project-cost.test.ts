@@ -36,13 +36,23 @@ const buildRoutes = (options: {
   project: Project | null
   shots?: readonly Shot[]
   takes?: readonly Take[]
+  /** 下書きの実行費。**生成だけが金を使うわけではない。** */
+  draftRuns?: readonly { costUsd: number }[]
+  /** レビューの実行費。 */
+  reviewCost?: { runCount: number; totalUsd: number }
 }) => {
   const project = options.project
+  const draftRuns = options.draftRuns ?? []
   return {
     app: projectRoutes({
       projects: createInMemoryProjectRepository(project === null ? [] : [project]),
       shots: createInMemoryShotRepository(options.shots ?? []),
       takes: createInMemoryTakeRepository(options.takes ?? []),
+      storyboardDrafts: { findRunsByProject: () => Promise.resolve(draftRuns) },
+      reviews: {
+        sumCostByProject: () =>
+          Promise.resolve(options.reviewCost ?? { runCount: 0, totalUsd: 0 }),
+      },
       stubProviderIds: [...STUB_PROVIDER_IDS],
     }),
   }
@@ -244,5 +254,43 @@ describe('GET /projects/{id}/cost', () => {
     const body = (await res.json()) as Ok<CostMeterResponse>
     expect(body.data.stub.takeCount).toBe(1)
     expect(body.data.measured.takeCount).toBe(0)
+  })
+})
+
+/**
+ * **生成だけが金を使うわけではない。**
+ * 実際に絵コンテ下書きを 1 回回して $0.38 を払ったのに、
+ * メーターは $0.00 のままだった（2026-09-18）。予算が実際より軽く見える。
+ */
+describe('Take 以外で払った額', () => {
+  it('下書きとレビューの実行費を合計に入れる', async () => {
+    const project = aProject({ budgetUsd: 300 })
+    const { app } = buildRoutes({
+      project,
+      draftRuns: [{ costUsd: 0.38 }, { costUsd: 0.12 }],
+      reviewCost: { runCount: 3, totalUsd: 1.5 },
+    })
+
+    const { body } = await getCost(app, project.id)
+
+    expect(body.data.totalUsd).toBeCloseTo(0.38 + 0.12 + 1.5, 6)
+    const kinds = Object.fromEntries(
+      body.data.otherRuns.map((run) => [run.kind, run] as const),
+    )
+    expect(kinds.storyboard_draft?.kind).toBe('storyboard_draft')
+    expect(kinds.storyboard_draft?.runCount).toBe(2)
+    expect(kinds.storyboard_draft?.totalUsd).toBeCloseTo(0.5, 6)
+    expect(kinds.review?.runCount).toBe(3)
+  })
+
+  /** 「レビュー 0 件 $0.00」を並べても読み手には情報が無い。 */
+  it('1 度も回していない種類は並べない', async () => {
+    const project = aProject({ budgetUsd: 300 })
+    const { app } = buildRoutes({ project })
+
+    const { body } = await getCost(app, project.id)
+
+    expect(body.data.otherRuns).toEqual([])
+    expect(body.data.totalUsd).toBe(0)
   })
 })

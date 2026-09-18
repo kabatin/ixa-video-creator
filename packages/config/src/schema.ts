@@ -35,6 +35,14 @@ export const EnvSchema = z.object({
     .default('http://127.0.0.1:3000,http://localhost:3000')
     .transform((v) => v.split(',').map((o) => o.trim()).filter((o) => o.length > 0)),
   AUDIO_SERVICE_URL: urlString.default('http://127.0.0.1:8100'),
+  /**
+   * 絵コンテ下書きに使う口（PHASE 6.3）。
+   *
+   * **既定はスタブ。** `claude_cli` にすると実際に Claude CLI を起動し、
+   * 制作者の契約の利用枠を消費する。生成 API のような従量課金ではないが
+   * 無制限でもないので、明示的に切り替えたときだけ走らせる。
+   */
+  STORYBOARD_DRAFTER: z.enum(['stub', 'claude_cli']).default('stub'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
   // 任意（既定値なし・nullable）
@@ -52,6 +60,8 @@ export type Env = z.infer<typeof EnvSchema>
 
 export interface AppConfig {
   nodeEnv: Env['NODE_ENV']
+  /** 絵コンテ下書きに使う口。既定はスタブ。 */
+  storyboardDrafter: Env['STORYBOARD_DRAFTER']
   logLevel: Env['LOG_LEVEL']
   database: {
     url: string

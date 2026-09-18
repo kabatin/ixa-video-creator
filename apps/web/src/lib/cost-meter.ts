@@ -24,13 +24,21 @@ export type CostMeterView = {
   /** 実 Provider で実際に払った額。 */
   readonly measuredLabel: string
   /** 予算に対する割合（0〜1 で頭打ち）。バーを描けないときは null。 */
+  /** Take 以外で払った額の内訳。1 件も無ければ null。 */
+  readonly otherRunsNote: string | null
   readonly ratio: number | null
   readonly ratioLabel: string | null
   readonly tone: CostTone
   /** **額の出どころ。額と必ず一緒に出す。** */
   readonly provenance: string
   /** 実測が 1 件も無い状態。額に意味が無いことを画面が強調するために使う。 */
+  /** 実測の Take が 1 件も無い。Provider の名前を添える判断に使う。 */
   readonly measuredIsEmpty: boolean
+  /**
+   * **額そのものに意味が無い**（実測の Take も Take 以外の実行費も 0）。
+   * 下書きやレビューで実際に払っていれば、Take が 0 件でも額には意味がある。
+   */
+  readonly spendIsEmpty: boolean
   /**
    * **実測として数えた Provider の名前。** 額の隣に必ず出す。
    *
@@ -103,14 +111,36 @@ const describeUnlisted = (meter: WireCostMeter): string | null => {
   return `削除された Shot の分 ${money(measuredUsd)}（${takeCount.toString()} 件）を含みます`
 }
 
+/** 種類ごとの言葉。**符号は API が持ち、言葉はここが持つ。** */
+const RUN_KIND_LABELS: Readonly<Record<string, string>> = {
+  storyboard_draft: '絵コンテ下書き',
+  review: 'レビュー',
+}
+
+/**
+ * Take 以外で払った額の説明。**知らない種類でも名前を出す**（黙って消さない）。
+ * 1 件も無ければ null。
+ */
+const describeOtherRuns = (meter: WireCostMeter): string | null =>
+  meter.otherRuns.length === 0
+    ? null
+    : `うち Take 以外: ${meter.otherRuns
+        .map(
+          (run) =>
+            `${RUN_KIND_LABELS[run.kind] ?? run.kind} ${money(run.totalUsd)}（${String(run.runCount)} 回）`,
+        )
+        .join(' / ')}`
+
 /**
  * wire の費用メーターを画面の言葉へ写す。
  *
- * **予算の判定に使うのは実測だけ。** スタブの額（常に 0）を混ぜると、
- * 実 Provider へ切り替えたときに数字の意味が変わってしまう。
+ * **予算の判定に使うのは `totalUsd`。** 実測の Take だけを見ていたため、
+ * 絵コンテ下書きで実際に $0.38 を払ってもメーターは $0.00 のままだった
+ * （2026-09-18）。生成だけが金を使うわけではない。
+ * スタブの額（常に 0）は混ぜない。実 Provider へ切り替えたとき意味が変わるため。
  */
 export const buildCostMeterView = (meter: WireCostMeter): CostMeterView => {
-  const spentUsd = meter.measured.totalUsd
+  const spentUsd = meter.totalUsd
   const ratio = computeRatio(meter.budgetUsd, spentUsd)
 
   return {
@@ -122,7 +152,10 @@ export const buildCostMeterView = (meter: WireCostMeter): CostMeterView => {
     tone: computeTone(meter.budgetUsd, spentUsd),
     provenance: describeProvenance(meter),
     measuredIsEmpty: meter.measured.takeCount === 0,
+    // **合計で見る。** Take が 0 件でも下書きで払っていれば額には意味がある。
+    spendIsEmpty: meter.totalUsd === 0,
     measuredProviders: describeMeasuredProviders(meter),
     unlistedNote: describeUnlisted(meter),
+    otherRunsNote: describeOtherRuns(meter),
   }
 }

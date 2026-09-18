@@ -39,6 +39,10 @@ import { createRedisProjectEvents } from '@ixa/events'
 import { createApp } from './app.js'
 import { createLogger, type Logger } from './logger.js'
 import { GENERATION_QUEUE_NAME, type GenerationQueue } from './routes/shots.js'
+import {
+  createClaudeCliStoryboardDrafter,
+  createStubStoryboardDrafter,
+} from '@ixa/provider-llm'
 
 /** graceful shutdown の上限時間（ミリ秒）。超過したら強制終了する。 */
 const SHUTDOWN_TIMEOUT_MS = 30_000
@@ -212,6 +216,16 @@ export const main = (): void => {
     locations,
     scripts: createScriptRepository(db),
     storyboardDrafts: createStoryboardDraftRepository(db),
+    /**
+     * **絵コンテ下書きの口を選ぶのはここだけ。** 既定はスタブで、
+     * `STORYBOARD_DRAFTER=claude_cli` のときだけ実 CLI を起動する。
+     * 生成 API のような従量課金ではないが、制作者の契約の利用枠を消費するため
+     * 明示的に切り替えたときだけ走らせる（memory: cost-bearing-work-goes-last）。
+     */
+    storyboardDrafter:
+      config.storyboardDrafter === 'claude_cli'
+        ? createClaudeCliStoryboardDrafter()
+        : createStubStoryboardDrafter(),
     sequences: createSequenceRepository(db),
     musicAnalyses: createMusicAnalysisRepository(db),
     analysisQueue: analysisQueuePort,

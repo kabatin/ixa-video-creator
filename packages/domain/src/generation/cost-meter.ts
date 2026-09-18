@@ -80,6 +80,26 @@ export type CostMeter = {
   readonly byShot: ReadonlyMap<ShotId, ShotCost>
   /** `byShot` から溢れた分。合計には入っている。 */
   readonly unlistedShots: UnlistedShotCost
+  /**
+   * Take 以外で払った額（絵コンテ下書き・レビューなど）。
+   *
+   * **これを数えないと予算が実際より軽く見える。** 実際に絵コンテ下書きを
+   * 1 回回して $0.38 を払ったのに、メーターは $0.00 のままだった（2026-09-18）。
+   * 生成だけが金を使うわけではない。
+   */
+  readonly otherRuns: readonly OtherRunCost[]
+  /**
+   * **予算と突き合わせるのはこの額。** 実測の Take と `otherRuns` の合計。
+   * スタブの分は入らない（額が 0 なので入れても変わらないが、意味が違う）。
+   */
+  readonly totalUsd: number
+}
+
+/** Take 以外の実行の集計。`kind` は `storyboard_draft` のような符号で、言葉は画面が持つ。 */
+export type OtherRunCost = {
+  readonly kind: string
+  readonly runCount: number
+  readonly totalUsd: number
 }
 
 /** 1 件も無いバケツ。合計を 0 で始めるための値。 */
@@ -115,6 +135,11 @@ export type CostMeterInput = {
    * 論理削除された Shot を落とすために呼ぶ側が渡す。落とした分は捨てず `unlistedShots` に残る。
    */
   readonly listedShotIds: readonly ShotId[] | null
+  /**
+   * Take 以外で払った額。**呼ぶ側が種類ごとに畳んで渡す。**
+   * 集計の元（下書きの run / レビューの run）は domain の外にあるため。
+   */
+  readonly otherRuns?: readonly OtherRunCost[]
 }
 
 /** Provider ごとの集計を、名前の昇順の配列へ畳む。 */
@@ -172,11 +197,18 @@ export const buildCostMeter = (input: CostMeterInput): CostMeter => {
     )
   }
 
+  // **0 件の種類は落とす。** 「レビュー 0 件 $0.00」を並べても読み手には情報が無い。
+  const otherRuns = (input.otherRuns ?? []).filter((run) => run.runCount > 0)
+  const otherUsd = otherRuns.reduce((total, run) => total + run.totalUsd, 0)
+
   return {
     budgetUsd: input.budgetUsd,
     measured: { ...measured, byProvider: toProviderCosts(measuredByProvider) },
     stub,
     byShot,
     unlistedShots: unlisted,
+    otherRuns,
+    // 予算と突き合わせるのはここ。スタブの分は入れない（額 0 だが意味が違う）。
+    totalUsd: measured.totalUsd + otherUsd,
   }
 }

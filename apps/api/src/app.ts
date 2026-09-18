@@ -38,7 +38,7 @@ import { reviewRoutes, type ReviewQueue } from './routes/reviews.js'
 import { transitionRoutes } from './routes/transitions.js'
 import { clipRoutes } from './routes/clips.js'
 import { eventRoutes } from './routes/events.js'
-import { createStubStoryboardDrafter } from '@ixa/provider-llm'
+import type { StoryboardDrafter } from '@ixa/provider-llm'
 import { STUB_PROVIDER_IDS } from '@ixa/provider-video'
 import type {
   BrandAssetRepository,
@@ -82,6 +82,12 @@ export type AppDeps = {
   locations: LocationRepository
   scripts: ScriptRepository
   storyboardDrafts: StoryboardDraftRepository
+  /**
+   * 絵コンテ下書きの口。**どの実装を挿すかは main.ts だけが決める**
+   * （レビュアと同じ方針。`apps/worker/src/review-wiring.ts`）。
+   * テストはスタブを渡すので、実 CLI が CI で走ることはない。
+   */
+  storyboardDrafter: StoryboardDrafter
   sequences: SequenceRepository
   musicAnalyses: MusicAnalysisRepository
   analysisQueue: AnalysisQueue
@@ -137,6 +143,8 @@ export const createApp = (deps: AppDeps) => {
       // （削除済み Shot の Take も払った額なので、合計は takes.findByProject が数える）。
       shots: deps.shots,
       takes: deps.takes,
+      storyboardDrafts: deps.storyboardDrafts,
+      reviews: deps.reviews,
       stubProviderIds: [...STUB_PROVIDER_IDS],
     }),
   )
@@ -202,14 +210,7 @@ export const createApp = (deps: AppDeps) => {
   )
   app.route('/', scriptRoutes({ scripts: deps.scripts, projects }))
 
-  /**
-   * 絵コンテの下書き（PHASE 6.3）。
-   *
-   * **口はスタブを挿す。** 実 Provider はまだ通さない方針（制作者 2026-09-18）で、
-   * レビュアも `apps/worker/src/review-wiring.ts` が同じくスタブを挿している。
-   * Claude CLI を使う実装（`createClaudeCliStoryboardDrafter`）は用意してあるので、
-   * 通す段になったらここの 1 行を差し替える。
-   */
+  // 絵コンテの下書き（PHASE 6.3）。どの口を挿すかは main.ts が決める。
   app.route(
     '/',
     storyboardDraftRoutes({
@@ -219,7 +220,7 @@ export const createApp = (deps: AppDeps) => {
       musicTracks: deps.musicTracks,
       musicAnalyses: deps.musicAnalyses,
       drafts: deps.storyboardDrafts,
-      drafter: createStubStoryboardDrafter(),
+      drafter: deps.storyboardDrafter,
     }),
   )
   app.route('/', sequenceRoutes({ sequences: deps.sequences, projects }))

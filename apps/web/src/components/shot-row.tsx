@@ -4,6 +4,7 @@ import type { Shot } from '@ixa/domain'
 import Link from 'next/link'
 import { InlineTextCell } from '@/components/inline-text-cell'
 import { ShotDeleteButton } from '@/components/shot-editor'
+import { RowMenu } from '@/components/row-menu'
 import { ShotPoster } from '@/components/shot-poster'
 import { ShotStatusBadge } from '@/components/shot-status-badge'
 import { formatClock, formatDuration } from '@/lib/format-time'
@@ -92,15 +93,22 @@ export const ShotRow = ({
       <ShotStatusBadge status={shot.status} />
     </td>
     <td className="px-4 py-3 text-sm">
-      <div className="flex flex-col items-start gap-2">
+      <div className="flex items-center justify-end gap-2">
         <Link
           href={shotDetailHref(shot)}
           className="whitespace-nowrap font-medium text-text underline hover:text-muted"
         >
           Take を見る
         </Link>
-        {/* 重なった Shot は人が選別して消す。その選別を一覧の上で完結させる。 */}
-        <ShotDeleteButton shot={shot} size="sm" after="refresh" />
+        {/**
+         * **消す操作はメニューの中へ。** 以前は「Take を見る」のすぐ下に
+         * 赤い削除ボタンが並んでおり、制作者から「近すぎて怖い」と報告があった
+         * （2026-09-18）。確認を挟んでいても、押し間違えた次の一手で消える位置は危ない。
+         * 重なった Shot を一覧の上で選別して消せること自体は残す。
+         */}
+        <RowMenu label={`${shot.code} のその他の操作`}>
+          <ShotDeleteButton shot={shot} size="sm" after="refresh" />
+        </RowMenu>
       </div>
     </td>
   </tr>

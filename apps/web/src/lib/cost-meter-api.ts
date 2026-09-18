@@ -53,6 +53,13 @@ export const WireShotCost = z.object({
 export type WireShotCost = z.infer<typeof WireShotCost>
 
 /** `budgetUsd` の null は「未設定」。0 に畳まない（lessons L-021）。 */
+export const WireOtherRunCost = z.object({
+  kind: z.string().min(1),
+  runCount: z.number().int().positive(),
+  totalUsd: z.number().nonnegative(),
+})
+export type WireOtherRunCost = z.infer<typeof WireOtherRunCost>
+
 export const WireCostMeter = z.object({
   budgetUsd: z.number().nonnegative().nullable(),
   measured: WireMeasuredBucket,
@@ -61,6 +68,10 @@ export const WireCostMeter = z.object({
   byShot: z.array(WireShotCost),
   /** 内訳と合計の差の説明。 */
   unlistedShots: WireUnlistedShotCost,
+  /** Take 以外で払った額（絵コンテ下書き・レビュー）。0 件の種類は並ばない。 */
+  otherRuns: z.array(WireOtherRunCost),
+  /** **予算と突き合わせるのはこの額。** 実測の Take と otherRuns の合計。 */
+  totalUsd: z.number().nonnegative(),
 })
 export type WireCostMeter = z.infer<typeof WireCostMeter>
 

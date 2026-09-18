@@ -46,6 +46,13 @@ export const createInMemoryReviewRepository = (
     runs.filter((run) => run.takeId === takeId).reverse()
 
   return {
+    // 偽物なので projectId は見ず、全 run を合算する（テストは 1 プロジェクトしか作らない）。
+    sumCostByProject: () =>
+      Promise.resolve({
+        runCount: runs.length,
+        totalUsd: runs.reduce((total, run) => total + run.costUsd, 0),
+      }),
+
     snapshotRuns: () => runs,
     snapshotFindings: () => findings,
 

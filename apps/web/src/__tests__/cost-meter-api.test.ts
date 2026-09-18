@@ -21,6 +21,8 @@ const meterJson = {
   stub: { takeCount: 50, totalUsd: 0 },
   byShot: [{ shotId: SHOT_ID, measuredUsd: 0, stubTakeCount: 2 }],
   unlistedShots: { takeCount: 0, measuredUsd: 0, stubTakeCount: 0 },
+  otherRuns: [],
+  totalUsd: 0,
 }
 
 const jsonResponse = (body: unknown, status = 200): Response =>

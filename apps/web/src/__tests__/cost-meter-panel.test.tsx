@@ -24,7 +24,17 @@ const meter = (o: Partial<WireCostMeter> = {}): WireCostMeter => ({
   stub: { takeCount: 50, totalUsd: 0 },
   byShot: [],
   unlistedShots: { takeCount: 0, measuredUsd: 0, stubTakeCount: 0 },
+  otherRuns: [],
   ...o,
+  /**
+   * **既定は「実測 + Take 以外」の合計。** 個別に上書きもできる。
+   * ここを 0 固定にすると、`measured` を足したテストが予算バーを動かさなくなり、
+   * 何を確かめているのか分からなくなる。
+   */
+  totalUsd:
+    o.totalUsd ??
+    (o.measured ?? measuredOf(0, 0)).totalUsd +
+      (o.otherRuns ?? []).reduce((total, run) => total + run.totalUsd, 0),
 })
 
 const apiReturning = (value: WireCostMeter): CostMeterApi => ({
@@ -67,7 +77,33 @@ describe('CostMeterPanel', () => {
     )
 
     expect(screen.queryByRole('alert')).toBeNull()
-    expect(screen.getByText('実測 4 件・スタブ 50 件')).toBeInTheDocument()
+    expect(screen.getByText(/実測 4 件・スタブ 50 件/)).toBeInTheDocument()
+  })
+
+  /**
+   * **「額に意味が無い」と言えるのは 1 円も払っていないときだけ。**
+   * Take が 0 件でも、絵コンテ下書きで実際に払っていれば額には意味がある。
+   * ここを実測の Take だけで判断していたため、$0.38 使ったあとも
+   * 「この額に意味はありません」と嘘を出していた（2026-09-18）。
+   */
+  it('Take が 0 件でも、下書きで払っていれば「意味がない」と言わない', () => {
+    render(
+      <CostMeterPanel
+        projectId={projectId}
+        initialMeter={meter({
+          otherRuns: [{ kind: 'storyboard_draft', runCount: 1, totalUsd: 0.38 }],
+        })}
+      />,
+    )
+
+    expect(screen.queryByText(/この額に意味はありません/)).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('1 円も払っていなければ「意味がない」と出す', () => {
+    render(<CostMeterPanel projectId={projectId} initialMeter={meter()} />)
+
+    expect(screen.getByRole('alert').textContent).toContain('この額に意味はありません')
   })
 
   /** null を「$0」と書かない（lessons L-021）。 */
@@ -111,10 +147,16 @@ describe('CostMeterPanel', () => {
 })
 
 describe('CostMeterPanel の Provider 名', () => {
-  /** 額は $0 のまま。名前を出さないと、載せ忘れたスタブに誰も気付けない。 */
-  it('実測が 1 件も無ければ「該当 Provider なし」と額の隣に出す', () => {
+  /**
+   * 実測 0 件のときは Provider 名を添えない。「実測 0 件」で言い尽くしており、
+   * 「（該当 Provider なし）」は重複するだけ。
+   * **載せ忘れた Provider は実測に数えられて件数が 1 以上になる**ので、
+   * 気付ける場面（下のテスト）は失われない。
+   */
+  it('実測が 1 件も無ければ Provider 名を添えない', () => {
     render(<CostMeterPanel projectId={projectId} initialMeter={meter()} />)
-    expect(screen.getByText(/該当 Provider なし/)).toBeInTheDocument()
+    expect(screen.queryByText(/該当 Provider なし/)).toBeNull()
+    expect(screen.getByText(/実測 0 件/)).toBeInTheDocument()
   })
 
   it('実測に数えた Provider の名前と件数を出す', () => {

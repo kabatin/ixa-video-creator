@@ -1,9 +1,10 @@
-import { asc, desc, eq } from 'drizzle-orm'
+import { asc, desc, eq, sql } from 'drizzle-orm'
 import type {
   CreateReviewFindingInput,
   CreateReviewRunInput,
   ReviewFinding,
   ReviewRun,
+  ProjectId,
   ReviewRunId,
   ReviewRunOutcome,
   TakeId,
@@ -20,7 +21,9 @@ import {
 } from '@ixa/domain'
 import type { DbClient } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
+import { takes } from '../schema/generation.js'
 import { reviewFindings, reviewRuns } from '../schema/review.js'
+import { shots } from '../schema/shot.js'
 
 /** drizzle の row 型。パッケージ外へは出さない。 */
 export type ReviewRunRow = typeof reviewRuns.$inferSelect
@@ -40,6 +43,12 @@ export type ReviewRepository = {
   findRunsByTake(takeId: TakeId): Promise<ReviewRun[]>
   /** 最新の 1 件。無ければ null。 */
   findLatestRunByTake(takeId: TakeId): Promise<ReviewRun | null>
+  /**
+   * Project 内のレビュー実行の総額と件数。**費用メーター（P63-2）が使う。**
+   * 生成だけが金を使うわけではない。数えないと予算が実際より軽く見える。
+   * 論理削除済み Shot の Take のレビューも含める（払った額は戻らない）。
+   */
+  sumCostByProject(projectId: ProjectId): Promise<{ runCount: number; totalUsd: number }>
   createRun(input: CreateReviewRunInput): Promise<ReviewRun>
   /** 実行の結果を確定させる。ここ以外で ReviewRun を UPDATE しない。 */
   completeRun(id: ReviewRunId, outcome: ReviewRunOutcome): Promise<ReviewRun>
@@ -105,6 +114,24 @@ export const createReviewRepository = (db: DbClient): ReviewRepository => ({
       .limit(1)
     const row = rows[0]
     return row ? reviewRunRowToDomain(row) : null
+  },
+
+  sumCostByProject: async (projectId) => {
+    // review_runs は take_id しか持たないので takes → shots を経由する。
+    // **論理削除の絞り込みはしない**（takes の sumCostByProject と同じ数え方）。
+    const rows = await db
+      .select({
+        runCount: sql<string>`count(*)`,
+        totalUsd: sql<string>`coalesce(sum(${reviewRuns.costUsd}), 0)`,
+      })
+      .from(reviewRuns)
+      .innerJoin(takes, eq(takes.id, reviewRuns.takeId))
+      .innerJoin(shots, eq(shots.id, takes.shotId))
+      .where(eq(shots.projectId, projectId))
+    return {
+      runCount: Number(rows[0]?.runCount ?? 0),
+      totalUsd: Number(rows[0]?.totalUsd ?? 0),
+    }
   },
 
   async createRun(input) {

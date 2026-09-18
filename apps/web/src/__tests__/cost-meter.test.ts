@@ -21,7 +21,17 @@ const meter = (o: Partial<WireCostMeter> = {}): WireCostMeter => ({
   stub: { takeCount: 0, totalUsd: 0 },
   byShot: [],
   unlistedShots: { takeCount: 0, measuredUsd: 0, stubTakeCount: 0 },
+  otherRuns: [],
   ...o,
+  /**
+   * **既定は「実測 + Take 以外」の合計。** 個別に上書きもできる。
+   * ここを 0 固定にすると、`measured` を足したテストが予算バーを動かさなくなり、
+   * 何を確かめているのか分からなくなる。
+   */
+  totalUsd:
+    o.totalUsd ??
+    (o.measured ?? measuredOf(0, 0)).totalUsd +
+      (o.otherRuns ?? []).reduce((total, run) => total + run.totalUsd, 0),
 })
 
 describe('buildCostMeterView', () => {
@@ -161,5 +171,51 @@ describe('内訳に出せなかった分', () => {
 
   it('溢れが無ければ余計な但し書きを出さない', () => {
     expect(buildCostMeterView(meter()).unlistedNote).toBeNull()
+  })
+})
+
+/**
+ * **生成だけが金を使うわけではない。**
+ * 実際に絵コンテ下書きを 1 回回して $0.38 を払ったのに、
+ * 予算バーが実測の Take だけを見ていたため $0.00 のままだった（2026-09-18）。
+ */
+describe('Take 以外で払った額', () => {
+  it('予算の使用率に含める', () => {
+    const view = buildCostMeterView(
+      meter({
+        budgetUsd: 100,
+        otherRuns: [{ kind: 'storyboard_draft', runCount: 1, totalUsd: 25 }],
+      }),
+    )
+
+    expect(view.ratioLabel).toBe('25%')
+  })
+
+  it('種類ごとに名前と件数を出す', () => {
+    const view = buildCostMeterView(
+      meter({
+        otherRuns: [
+          { kind: 'storyboard_draft', runCount: 2, totalUsd: 0.5 },
+          { kind: 'review', runCount: 3, totalUsd: 1.5 },
+        ],
+      }),
+    )
+
+    expect(view.otherRunsNote).toContain('絵コンテ下書き')
+    expect(view.otherRunsNote).toContain('2 回')
+    expect(view.otherRunsNote).toContain('レビュー')
+  })
+
+  /** 知らない種類でも黙って消さない。符号のまま出す方が、消えるよりよい。 */
+  it('知らない種類は符号のまま出す', () => {
+    const view = buildCostMeterView(
+      meter({ otherRuns: [{ kind: 'unknown_kind', runCount: 1, totalUsd: 2 }] }),
+    )
+
+    expect(view.otherRunsNote).toContain('unknown_kind')
+  })
+
+  it('1 度も回していなければ何も言わない', () => {
+    expect(buildCostMeterView(meter()).otherRunsNote).toBeNull()
   })
 })

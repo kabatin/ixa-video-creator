@@ -112,9 +112,6 @@ export const CostMeterPanel = ({
       */}
       <p className={`mt-2 text-2xl font-semibold tabular-nums ${AMOUNT_CLASSES[view.tone]}`}>
         {view.measuredLabel}
-        <span className="ml-2 align-middle text-xs font-normal text-muted tabular-nums">
-          （{view.measuredProviders}）
-        </span>
       </p>
 
       {view.ratio !== null && view.ratioLabel !== null ? (
@@ -139,12 +136,26 @@ export const CostMeterPanel = ({
         額が 0 なのと、費用が発生していないのは違う（lessons L-015）。
       */}
       <p
-        className={`mt-2 text-xs ${view.measuredIsEmpty ? 'text-warn' : 'text-muted'}`}
-        role={view.measuredIsEmpty ? 'alert' : undefined}
+        className={`mt-2 text-xs ${view.spendIsEmpty ? 'text-warn' : 'text-muted'}`}
+        role={view.spendIsEmpty ? 'alert' : undefined}
       >
+        {/*
+          **「額に意味が無い」と言えるのは、1 円も払っていないときだけ。**
+          Take が 0 件でも、絵コンテ下書きで実際に払っていれば額には意味がある。
+          ここを実測の Take だけで判断していたため、$0.38 使ったあとも
+          「この額に意味はありません」と嘘を出していた（2026-09-18）。
+          Provider の名前は Take の行に添える。載せ忘れは額では気付けない。
+        */}
+        {/*
+          **Provider の名前は実測が 1 件以上のときだけ添える。**
+          0 件なら「実測 0 件」で言い尽くしており、「（該当 Provider なし）」は重複。
+          載せ忘れた Provider は実測に数えられて件数が 1 以上になるので、
+          気付ける場面は失われない。
+        */}
         {view.measuredIsEmpty
-          ? `${view.provenance}。実 Provider をまだ回していないため、この額に意味はありません`
-          : view.provenance}
+          ? `Take: ${view.provenance}`
+          : `Take: ${view.provenance}（${view.measuredProviders}）`}
+        {view.spendIsEmpty ? '。実 Provider をまだ回していないため、この額に意味はありません' : ''}
       </p>
 
       {/*
@@ -153,6 +164,14 @@ export const CostMeterPanel = ({
       */}
       {view.unlistedNote === null ? null : (
         <p className="mt-1 text-xs text-muted">{view.unlistedNote}</p>
+      )}
+
+      {/*
+        **生成だけが金を使うわけではない。** 絵コンテ下書きやレビューの実行費も
+        合計に入っている。内訳を出さないと、Take の額と合わずに原因を探すことになる。
+      */}
+      {view.otherRunsNote === null ? null : (
+        <p className="mt-1 text-xs text-muted">{view.otherRunsNote}</p>
       )}
     </section>
   )
