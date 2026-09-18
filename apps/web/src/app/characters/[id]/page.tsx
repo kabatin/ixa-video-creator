@@ -59,7 +59,7 @@ const CharacterDetailPage = async ({ params }: CharacterPageProps) => {
 
   if (!characterId.success) {
     return (
-      <main>
+      <main className="mx-auto w-full max-w-5xl">
         <PageHeader title="キャラクター" />
         <ErrorPanel
           title="キャラクター ID が不正です"
@@ -73,14 +73,14 @@ const CharacterDetailPage = async ({ params }: CharacterPageProps) => {
   const result = await loadCharacter(characterId.data)
 
   return (
-    <main>
+    <main className="mx-auto w-full max-w-5xl">
       <PageHeader
         title={result.ok ? result.character.displayName : 'キャラクター'}
         description="識別画像と Look を揃えるほど、生成した人物が Shot 間でぶれなくなります。"
         action={
           <Link
             href={CHARACTER_LIST_HREF}
-            className="text-sm text-slate-600 underline hover:text-slate-900"
+            className="text-sm text-muted underline hover:text-text"
           >
             一覧へ戻る
           </Link>

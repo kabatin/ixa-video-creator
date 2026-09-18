@@ -2,11 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { formatClock, formatDuration } from '@/lib/format-time'
+import { THEME_ATTRIBUTE } from '@/lib/theme'
 import type { WaveformPeaksResult } from '@/lib/waveform-api'
 import { peaksOf } from '@/lib/waveform-api'
 import {
+  DEFAULT_WAVEFORM_PALETTE,
   MARKER_DRAW_ORDER,
   MARKER_STYLES,
+  WAVEFORM_COLOR_TOKENS,
+  WAVE_FILL_ALPHA,
   beatGridAnchor,
   clampView,
   describeWaveform,
@@ -20,6 +24,7 @@ import {
   type MarkerPick,
   type MarkerStyle,
   type ViewRange,
+  type WaveformPalette,
 } from '@/lib/waveform-draw'
 
 /**
@@ -35,8 +40,6 @@ import {
  */
 
 const DEFAULT_HEIGHT_PX = 128
-const BACKGROUND_COLOR = '#f8fafc'
-const WAVE_COLOR = '#cbd5e1'
 /** 波形が上下いっぱいに触れないようにする。目印の上端の印と重なって読めなくなるため。 */
 const WAVE_VERTICAL_FILL = 0.88
 
@@ -104,6 +107,69 @@ const useDevicePixelRatio = (): number => {
   return ratio
 }
 
+// --- 色の解決 ---
+
+/**
+ * トークン 1 つを canvas が読める色にする。
+ * `globals.css` は値を `R G B` の 3 つ組で持つので、そのまま `rgb()` に入れられる。
+ * 読めなければ `null` を返し、呼び出し側が控えへ落ちる。
+ */
+const readTokenColor = (
+  styles: CSSStyleDeclaration,
+  token: string,
+  alpha?: number,
+): string | null => {
+  const rgb = styles.getPropertyValue(`--${token}`).trim()
+  if (rgb === '') return null
+  return alpha === undefined ? `rgb(${rgb})` : `rgb(${rgb} / ${String(alpha)})`
+}
+
+const resolvePalette = (root: HTMLElement): WaveformPalette => {
+  const styles = getComputedStyle(root)
+  const fallback = DEFAULT_WAVEFORM_PALETTE
+  const marker = (kind: MarkerKind): string =>
+    readTokenColor(styles, WAVEFORM_COLOR_TOKENS.marker[kind]) ?? fallback.marker[kind]
+
+  return {
+    background: readTokenColor(styles, WAVEFORM_COLOR_TOKENS.background) ?? fallback.background,
+    wave: readTokenColor(styles, WAVEFORM_COLOR_TOKENS.wave, WAVE_FILL_ALPHA) ?? fallback.wave,
+    marker: {
+      section: marker('section'),
+      beat: marker('beat'),
+      downbeat: marker('downbeat'),
+      drop: marker('drop'),
+    },
+  }
+}
+
+/**
+ * いま効いている色。**最初の描画では `document` を読まない**（サーバに無い。lessons L-019）。
+ * 読むのは `useEffect` の中だけで、それまでは既定のダークで描く。
+ *
+ * テーマは `<html data-theme>` を書き換えて切り替わる。canvas は CSS が届かないので、
+ * 属性を見張って**自分で描き直す**。見張らないと、切り替えても波形だけ前の色のまま残る。
+ */
+const useWaveformPalette = (): WaveformPalette => {
+  const [palette, setPalette] = useState<WaveformPalette>(DEFAULT_WAVEFORM_PALETTE)
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const root = document.documentElement
+    const sync = (): void => {
+      setPalette(resolvePalette(root))
+    }
+    sync()
+    if (typeof MutationObserver === 'undefined') return
+    const observer = new MutationObserver(sync)
+    observer.observe(root, { attributes: true, attributeFilter: [THEME_ATTRIBUTE] })
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+
+  return palette
+}
+
 // --- canvas への描画 ---
 
 /**
@@ -147,6 +213,7 @@ type DrawParams = {
   readonly widthDev: number
   readonly heightDev: number
   readonly dpr: number
+  readonly palette: WaveformPalette
 }
 
 const drawMarkers = (ctx: CanvasRenderingContext2D, params: DrawParams): void => {
@@ -160,7 +227,7 @@ const drawMarkers = (ctx: CanvasRenderingContext2D, params: DrawParams): void =>
       style.dashPx === null
         ? null
         : ([style.dashPx[0] * params.dpr, style.dashPx[1] * params.dpr] as const)
-    ctx.fillStyle = style.color
+    ctx.fillStyle = params.palette.marker[kind]
     for (const time of pick.times) {
       const x = timeToX(time, params.view, params.widthDev)
       fillVerticalLine(ctx, x, top, bottom, style.lineWidthPx * params.dpr, dash)
@@ -174,11 +241,11 @@ const draw = (canvas: HTMLCanvasElement, params: DrawParams): boolean => {
   if (ctx === null) return false
 
   ctx.clearRect(0, 0, params.widthDev, params.heightDev)
-  ctx.fillStyle = BACKGROUND_COLOR
+  ctx.fillStyle = params.palette.background
   ctx.fillRect(0, 0, params.widthDev, params.heightDev)
 
   const middle = params.heightDev / 2
-  ctx.fillStyle = WAVE_COLOR
+  ctx.fillStyle = params.palette.wave
   params.columns.forEach((amplitude, column) => {
     const barHeight = Math.max(1, amplitude * params.heightDev * WAVE_VERTICAL_FILL)
     ctx.fillRect(column, middle - barHeight / 2, 1, barHeight)
@@ -194,7 +261,13 @@ const draw = (canvas: HTMLCanvasElement, params: DrawParams): boolean => {
 const MIN_SAMPLE_LENGTH_PX = 7
 
 /** 線の形そのものを見せる。色が見えなくても、点線・太さ・高さ・位置で区別できる。 */
-const MarkerSample = ({ style }: { readonly style: MarkerStyle }) => {
+const MarkerSample = ({
+  style,
+  color,
+}: {
+  readonly style: MarkerStyle
+  readonly color: string
+}) => {
   const height = 16
   const [top, rawBottom] = markerSegment(style, height)
   const bottom = Math.max(rawBottom, top + MIN_SAMPLE_LENGTH_PX)
@@ -205,26 +278,32 @@ const MarkerSample = ({ style }: { readonly style: MarkerStyle }) => {
         y1={top}
         x2={7}
         y2={bottom}
-        stroke={style.color}
+        stroke={color}
         strokeWidth={style.lineWidthPx}
         strokeDasharray={style.dashPx === null ? undefined : style.dashPx.join(' ')}
       />
       {style.capMarker === 'triangle' && (
-        <polygon points="4,0 10,0 7,5" fill={style.color} />
+        <polygon points="4,0 10,0 7,5" fill={color} />
       )}
     </svg>
   )
 }
 
-const MarkerLegend = ({ picks }: { readonly picks: readonly MarkerPick[] }) => (
-  <ul className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+const MarkerLegend = ({
+  picks,
+  palette,
+}: {
+  readonly picks: readonly MarkerPick[]
+  readonly palette: WaveformPalette
+}) => (
+  <ul className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
     {picks.map((pick) => (
       <li key={pick.kind} className="flex items-center gap-1.5">
-        <MarkerSample style={MARKER_STYLES[pick.kind]} />
+        <MarkerSample style={MARKER_STYLES[pick.kind]} color={palette.marker[pick.kind]} />
         <span>
           {MARKER_STYLES[pick.kind].label} {pick.times.length}
           {pick.hiddenCount > 0 && (
-            <span className="text-slate-500">
+            <span className="text-muted">
               （{pick.stride} 個に 1 本・{pick.hiddenCount} 個は非表示）
             </span>
           )}
@@ -251,6 +330,7 @@ export const WaveformCanvas = ({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const widthPx = useElementWidth(wrapperRef)
   const dpr = useDevicePixelRatio()
+  const palette = useWaveformPalette()
   const [drawError, setDrawError] = useState<string | null>(null)
 
   const safeView = useMemo(
@@ -279,16 +359,16 @@ export const WaveformCanvas = ({
     canvas.width = widthDev
     canvas.height = heightDev
     const columns = peakColumns(points, safeView, durationSec, widthDev)
-    const ok = draw(canvas, { columns, picks, view: safeView, widthDev, heightDev, dpr })
+    const ok = draw(canvas, { columns, picks, view: safeView, widthDev, heightDev, dpr, palette })
     setDrawError(ok ? null : 'この端末では波形を描画できませんでした（canvas を初期化できません）。')
-  }, [points, safeView, durationSec, picks, widthDev, heightDev, dpr])
+  }, [points, safeView, durationSec, picks, widthDev, heightDev, dpr, palette])
 
   if (peaks.status === 'failed') {
     return (
-      <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4">
-        <p className="text-sm font-semibold text-red-900">波形を表示できません</p>
-        <p className="mt-1 break-words text-sm text-red-800">{peaks.message}</p>
-        <p className="mt-2 text-sm text-red-700">
+      <div role="alert" className="rounded-lg border border-danger/40 bg-danger/10 p-4">
+        <p className="text-sm font-semibold text-danger">波形を表示できません</p>
+        <p className="mt-1 break-words text-sm text-danger">{peaks.message}</p>
+        <p className="mt-2 text-sm text-danger">
           署名付き URL には期限があります。解析結果を読み直すと新しい URL が発行されます。
         </p>
       </div>
@@ -306,7 +386,7 @@ export const WaveformCanvas = ({
     <div>
       <div
         ref={wrapperRef}
-        className="relative w-full overflow-hidden rounded-lg border border-slate-200"
+        className="relative w-full overflow-hidden rounded-lg border border-line"
         style={{ height: `${heightPx}px` }}
       >
         <canvas
@@ -319,13 +399,13 @@ export const WaveformCanvas = ({
       </div>
 
       {drawError !== null && (
-        <p role="alert" className="mt-2 text-sm text-red-800">
+        <p role="alert" className="mt-2 text-sm text-danger">
           {drawError}
         </p>
       )}
 
       {peaks.status === 'empty' && (
-        <p className="mt-2 text-sm text-amber-800">
+        <p className="mt-2 text-sm text-warn">
           波形の点が 0 個でした。解析は終わっていますが、音の形は表示できません。目印だけを描いています。
         </p>
       )}
@@ -335,11 +415,11 @@ export const WaveformCanvas = ({
         ここを `sr-only` で二重に置かない（同じ文が 2 回読まれる）。
         代わりに、目で見ても分からない「いまどこを映しているか」を出す。
       */}
-      <p className="mt-2 text-xs text-slate-600">
+      <p className="mt-2 text-xs text-muted">
         {formatClock(safeView.startSec)} – {formatClock(safeView.endSec)}（
         {formatDuration(viewDurationSec(safeView))} / 全体 {formatDuration(durationSec)}）
       </p>
-      <MarkerLegend picks={picks} />
+      <MarkerLegend picks={picks} palette={palette} />
     </div>
   )
 }

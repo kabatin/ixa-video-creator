@@ -209,14 +209,14 @@ export const ShotWorkbench = ({
       {error !== null && <ErrorPanel title="操作に失敗しました" message={error} />}
 
       {notice !== null && (
-        <p role="status" className="rounded-md bg-amber-50 p-4 text-sm text-amber-900">
+        <p role="status" className="rounded-md bg-warn/10 p-4 text-sm text-warn">
           {notice}
         </p>
       )}
 
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-slate-900">Take 比較</h2>
+          <h2 className="text-base font-semibold text-text">Take 比較</h2>
           <LiveStatusBadge
             state={live.state}
             lastEventAt={live.lastEventAt}
@@ -231,7 +231,7 @@ export const ShotWorkbench = ({
                 setError(`Take を取得できませんでした: ${describeError(cause)}`)
               })
             }}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+            className="rounded-md border border-line-strong px-3 py-1.5 text-sm text-text hover:bg-surface-2 disabled:cursor-not-allowed disabled:text-muted"
           >
             再読み込み
           </button>

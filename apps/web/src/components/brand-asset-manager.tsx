@@ -154,14 +154,14 @@ const BrandAssetFields = ({ idPrefix, values, errors, workspaceId, busy, onChang
         onChange={(event) => {
           onChange({ value: event.target.value })
         }}
-        className="mb-1 h-10 w-12 cursor-pointer rounded-md border border-slate-300 bg-white p-1 disabled:cursor-not-allowed"
+        className="mb-1 h-10 w-12 cursor-pointer rounded-md border border-line-strong bg-surface p-1 disabled:cursor-not-allowed"
       />
     </div>
 
     <div className="space-y-2">
-      <span className="block text-sm font-medium text-slate-800">画像</span>
+      <span className="block text-sm font-medium text-text">画像</span>
       {values.mediaAssetId === null ? (
-        <p className="text-sm text-slate-600">画像は未設定です。</p>
+        <p className="text-sm text-muted">画像は未設定です。</p>
       ) : (
         <div className="flex items-end gap-3">
           <div className="w-32">
@@ -189,7 +189,7 @@ const BrandAssetFields = ({ idPrefix, values, errors, workspaceId, busy, onChang
         }}
       />
       <FieldError id={`${idPrefix}-media-error`} message={errors.mediaAssetId} />
-      <p className="text-xs text-slate-600">
+      <p className="text-xs text-muted">
         値と画像のどちらが要るかは種類によって変わります。足りなければ保存時に理由が出ます。
       </p>
     </div>
@@ -296,13 +296,13 @@ const BrandAssetForm = ({
               void act(WORDING.delete, deletion.run)
             }}
           >
-            <p className="mt-2 text-sm text-rose-900">
+            <p className="mt-2 text-sm text-danger">
               レビューがこの資産を参照しなくなります。画像そのものは残ります。
             </p>
           </ConfirmButton>
         )}
         {notice !== null && (
-          <span role="status" className="text-sm text-emerald-700">
+          <span role="status" className="text-sm text-ok">
             {notice}
           </span>
         )}
@@ -321,8 +321,8 @@ const Notice = ({ kind, detail }: NoticeProps) => {
   const state = describeViewState(kind, SUBJECT)
   const tone =
     kind === 'unreadable'
-      ? 'border-red-200 bg-red-50 text-red-800'
-      : 'border-dashed border-slate-300 bg-white text-slate-600'
+      ? 'border-danger/40 bg-danger/10 text-danger'
+      : 'border-dashed border-line-strong bg-surface text-muted'
   return (
     <p role={state.role} className={`rounded-md border p-4 text-sm ${tone}`}>
       {state.title}
@@ -341,8 +341,8 @@ export const BrandAssetManager = ({
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">{SUBJECT}</h2>
-        <p className="mt-1 text-sm text-slate-600">
+        <h2 className="text-lg font-semibold text-text">{SUBJECT}</h2>
+        <p className="mt-1 text-sm text-muted">
           レビューがここを読みます。色を 1 件も登録していないと、ブランドの検査は判定できません。
         </p>
       </div>
@@ -353,7 +353,7 @@ export const BrandAssetManager = ({
       {assets.length > 0 && (
         <ul className="space-y-4">
           {assets.map((asset) => (
-            <li key={asset.id} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+            <li key={asset.id} className="rounded-lg border border-line bg-surface p-6 shadow-sm">
               <BrandAssetForm
                 idPrefix={`brand-${asset.id}`}
                 initial={brandAssetValuesOf(asset)}
@@ -380,8 +380,8 @@ export const BrandAssetManager = ({
         </ul>
       )}
 
-      <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6">
-        <h3 className="mb-4 text-sm font-semibold text-slate-900">{SUBJECT}を追加</h3>
+      <div className="rounded-lg border border-dashed border-line-strong bg-surface p-6">
+        <h3 className="mb-4 text-sm font-semibold text-text">{SUBJECT}を追加</h3>
         <BrandAssetForm
           idPrefix="new-brand"
           initial={EMPTY_BRAND_ASSET_VALUES}

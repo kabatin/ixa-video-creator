@@ -85,7 +85,7 @@ export const ShotDeleteButton = ({
         }}
       />
       {error !== null && (
-        <p role="alert" className="mt-2 text-sm text-rose-700">
+        <p role="alert" className="mt-2 text-sm text-danger">
           {error}
         </p>
       )}
@@ -155,9 +155,9 @@ export const ShotEditor = ({ shot, disabled = false }: ShotEditorProps) => {
   }
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="rounded-lg border border-line bg-surface p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-900">Shot を編集</h2>
+        <h2 className="text-base font-semibold text-text">Shot を編集</h2>
         <ShotDeleteButton shot={shot} disabled={busy} size="sm" after="list" />
       </div>
 
@@ -246,7 +246,7 @@ export const ShotEditor = ({ shot, disabled = false }: ShotEditorProps) => {
             変更を{WORDING.cancel}
           </Button>
           {notice !== null && (
-            <p role="status" className="text-sm text-emerald-700">
+            <p role="status" className="text-sm text-ok">
               {notice}
             </p>
           )}

@@ -86,11 +86,11 @@ export const IdentityImagePanel = ({
 
   return (
     <section className="space-y-4">
-      <h2 className="text-base font-semibold text-slate-900">識別画像</h2>
+      <h2 className="text-base font-semibold text-text">識別画像</h2>
 
       <FourViewNotice present={hasFourView(images)} />
 
-      <div className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2">
+      <div className="grid gap-4 rounded-lg border border-line bg-surface p-4 shadow-sm sm:grid-cols-2">
         <div>
           <SelectField
             id="identity-image-role"
@@ -103,7 +103,7 @@ export const IdentityImagePanel = ({
               if (parsed.success) setRole(parsed.data)
             }}
           />
-          <p className="mt-1 text-xs text-slate-500">{identityRoleHint(role)}</p>
+          <p className="mt-1 text-xs text-muted">{identityRoleHint(role)}</p>
         </div>
 
         <ImageUploader

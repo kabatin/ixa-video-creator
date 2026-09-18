@@ -29,7 +29,7 @@ export const IdentityImageGrid = ({
 }: IdentityImageGridProps) => {
   if (images.length === 0) {
     return (
-      <p className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-600">
+      <p className="rounded-lg border border-dashed border-line-strong bg-surface p-6 text-center text-sm text-muted">
         識別画像がありません。まず四面図を登録してください。
       </p>
     )
@@ -46,8 +46,8 @@ export const IdentityImageGrid = ({
         return (
           <li
             key={image.id}
-            className={`flex flex-col items-start gap-2 rounded-lg border bg-white p-3 shadow-sm ${
-              image.isPrimary ? 'border-emerald-500 ring-1 ring-emerald-500' : 'border-slate-200'
+            className={`flex flex-col items-start gap-2 rounded-lg border bg-surface p-3 shadow-sm ${
+              image.isPrimary ? 'border-ok/40 ring-1 ring-ok/40' : 'border-line'
             }`}
           >
             <MediaImage mediaAssetId={image.mediaAssetId} alt={roleLabel} />
@@ -55,12 +55,12 @@ export const IdentityImageGrid = ({
             <div className="flex flex-wrap items-center gap-2">
               <span
                 title={identityRoleHint(image.role)}
-                className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+                className="rounded bg-surface-2 px-2 py-0.5 text-xs font-medium text-text"
               >
                 {roleLabel}
               </span>
               {image.isPrimary && (
-                <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-xs font-semibold text-white">
+                <span className="rounded-full bg-ok px-2 py-0.5 text-xs font-semibold text-bg">
                   この role の主画像
                 </span>
               )}

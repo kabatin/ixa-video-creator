@@ -28,10 +28,10 @@ type NoticeProps = {
 }
 
 const NOTICE_TONES: Readonly<Record<NoticeProps['tone'], string>> = Object.freeze({
-  // amber-900 on amber-50 = 8.75
-  warning: 'border-amber-300 bg-amber-50 text-amber-900',
-  // slate-600 on slate-50 = 7.24
-  muted: 'border-slate-300 bg-slate-50 text-slate-600',
+  // warn を warn/10 の上に置く。コントラストはトークン側（globals.css）で担保する
+  warning: 'border-warn/40 bg-warn/10 text-warn',
+  // muted を surface-2 の上に置く。コントラストはトークン側（globals.css）で担保する
+  muted: 'border-line-strong bg-surface-2 text-muted',
 })
 
 /**

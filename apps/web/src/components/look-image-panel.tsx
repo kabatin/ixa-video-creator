@@ -81,9 +81,9 @@ export const LookImagePanel = ({
 
   return (
     <section className="space-y-4">
-      <h3 className="text-sm font-semibold text-slate-900">Look 画像</h3>
+      <h3 className="text-sm font-semibold text-text">Look 画像</h3>
 
-      <div className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2">
+      <div className="grid gap-4 rounded-lg border border-line bg-surface p-4 shadow-sm sm:grid-cols-2">
         <SelectField
           id="look-image-role"
           label="役割（role）"

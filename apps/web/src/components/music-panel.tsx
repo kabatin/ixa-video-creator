@@ -39,8 +39,8 @@ import { WORDING } from '@/lib/wording'
 
 const POLL_STEP_SEC = POLL_INTERVAL_MS / 1000
 
-const INFO_CLASS = 'whitespace-pre-wrap break-words text-sm text-slate-700'
-const ALERT_CLASS = 'whitespace-pre-wrap break-words text-sm text-rose-700'
+const INFO_CLASS = 'whitespace-pre-wrap break-words text-sm text-text'
+const ALERT_CLASS = 'whitespace-pre-wrap break-words text-sm text-danger'
 
 export type MusicPanelProps = {
   readonly projectId: ProjectId
@@ -49,16 +49,16 @@ export type MusicPanelProps = {
 }
 
 const Card = ({ title, children }: { title: string; children: ReactNode }) => (
-  <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-    <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+  <section className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+    <h2 className="text-base font-semibold text-text">{title}</h2>
     <div className="mt-4">{children}</div>
   </section>
 )
 
 const Stat = ({ label, value }: { label: string; value: string }) => (
   <div>
-    <dt className="text-xs uppercase tracking-wide text-slate-400">{label}</dt>
-    <dd className="text-sm text-slate-800">{value}</dd>
+    <dt className="text-xs uppercase tracking-wide text-muted">{label}</dt>
+    <dd className="text-sm text-text">{value}</dd>
   </div>
 )
 
@@ -210,7 +210,7 @@ export const MusicPanel = ({ projectId, workspaceId, initialTracks }: MusicPanel
           />
 
           {uploaded !== null && (
-            <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-4">
+            <div className="space-y-3 rounded-md border border-line bg-surface-2 p-4">
               <p role="status" className={INFO_CLASS}>
                 {uploaded.fileName}（{formatBytes(uploaded.bytes)}）を取り込みました。
                 曲名を確認して登録してください。
@@ -313,7 +313,7 @@ export const MusicPanel = ({ projectId, workspaceId, initialTracks }: MusicPanel
               {phase.kind === 'ready' && (
                 <Link
                   href={projectSectionHref(projectId, 'storyboard')}
-                  className="text-sm font-medium text-slate-900 underline hover:text-slate-600"
+                  className="text-sm font-medium text-text underline hover:text-muted"
                 >
                   ストーリーボードへ進む
                 </Link>
@@ -382,10 +382,10 @@ const AnalysisResult = ({ analysis }: { readonly analysis: WireMusicAnalysis }) 
 
       {summary.sectionCount > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-slate-900">セクション</h3>
+          <h3 className="text-sm font-semibold text-text">セクション</h3>
           <ul className="mt-2 space-y-1">
             {analysis.sections.map((section, index) => (
-              <li key={`${String(index)}-${section.label}`} className="text-sm text-slate-700">
+              <li key={`${String(index)}-${section.label}`} className="text-sm text-text">
                 <span className="font-medium">{section.label}</span>{' '}
                 {describeAnalysisSection(section)}
               </li>
@@ -396,8 +396,8 @@ const AnalysisResult = ({ analysis }: { readonly analysis: WireMusicAnalysis }) 
 
       {summary.dropCount > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-slate-900">ドロップ</h3>
-          <p className="mt-2 text-sm text-slate-700">
+          <h3 className="text-sm font-semibold text-text">ドロップ</h3>
+          <p className="mt-2 text-sm text-text">
             {analysis.drops.map((drop) => formatClock(drop)).join(' / ')}
           </p>
         </div>

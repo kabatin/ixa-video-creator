@@ -52,24 +52,24 @@ const loadProject = async (rawId: string): Promise<LoadResult> => {
  */
 const SettingsNav = ({ projectId }: { readonly projectId: ProjectId }) => (
   <nav aria-label="プロジェクトの画面" className="flex flex-wrap items-center gap-3">
-    <Link href={PROJECT_LIST_HREF} className="rounded-sm text-sm text-slate-700 underline hover:text-slate-900">
+    <Link href={PROJECT_LIST_HREF} className="rounded-sm text-sm text-muted underline hover:text-text">
       プロジェクト一覧
     </Link>
-    <span aria-hidden className="text-slate-400">
+    <span aria-hidden className="text-faint">
       /
     </span>
     {PROJECT_SECTIONS.map((section) => (
       <Link
         key={section.key}
         href={projectSectionHref(projectId, section.key)}
-        className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+        className="rounded-md border border-line-strong px-3 py-1.5 text-sm text-text hover:bg-surface-2"
       >
         {section.label}
       </Link>
     ))}
     <span
       aria-current="page"
-      className="rounded-md bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-900 ring-1 ring-inset ring-slate-300"
+      className="rounded-md bg-surface-2 px-3 py-1.5 text-sm font-semibold text-text ring-1 ring-inset ring-line-strong"
     >
       設定
     </span>
@@ -82,7 +82,7 @@ const ProjectSettingsPage = async ({ params }: SettingsPageProps) => {
 
   if (result.kind === 'missing') {
     return (
-      <main>
+      <main className="mx-auto w-full max-w-3xl">
         <PageHeader title="プロジェクトの設定" />
         <ErrorPanel
           title="プロジェクトが見つかりません"
@@ -96,7 +96,7 @@ const ProjectSettingsPage = async ({ params }: SettingsPageProps) => {
 
   if (result.kind === 'unreadable') {
     return (
-      <main>
+      <main className="mx-auto w-full max-w-3xl">
         <PageHeader title="プロジェクトの設定" />
         <ErrorPanel
           title="プロジェクトを読み込めませんでした"
@@ -109,7 +109,7 @@ const ProjectSettingsPage = async ({ params }: SettingsPageProps) => {
   }
 
   return (
-    <main>
+    <main className="mx-auto w-full max-w-3xl">
       <PageHeader
         title={`設定 — ${result.project.name}`}
         description="出力仕様と制作の制約を変更します。生成済みの Take には遡って効きません。"

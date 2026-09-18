@@ -86,8 +86,11 @@ export type MarkerKind = 'section' | 'beat' | 'downbeat' | 'drop'
 /** 縦線の基準。`center` は中央から上下へ、`top` は上端から下へ伸ばす。 */
 export type MarkerAnchor = 'center' | 'top'
 
+/**
+ * 線の形だけ。**色はここに持たない**（`WaveformPalette` が持つ）。
+ * canvas には CSS のクラスが効かないので、色は描く時点でテーマから解決して渡す。
+ */
 export type MarkerStyle = {
-  readonly color: string
   /** CSS px。描画時に devicePixelRatio を掛ける。 */
   readonly lineWidthPx: number
   /** 点線の `[描く, 空ける]`（CSS px）。`null` は実線。 */
@@ -113,7 +116,6 @@ export type MarkerStyle = {
  */
 export const MARKER_STYLES: Readonly<Record<MarkerKind, MarkerStyle>> = Object.freeze({
   section: Object.freeze({
-    color: '#94a3b8',
     lineWidthPx: 1,
     dashPx: null,
     anchor: 'top',
@@ -123,7 +125,6 @@ export const MARKER_STYLES: Readonly<Record<MarkerKind, MarkerStyle>> = Object.f
     label: 'セクションの境目',
   }),
   beat: Object.freeze({
-    color: '#64748b',
     lineWidthPx: 1,
     dashPx: Object.freeze([1.5, 2] as const),
     anchor: 'center',
@@ -133,7 +134,6 @@ export const MARKER_STYLES: Readonly<Record<MarkerKind, MarkerStyle>> = Object.f
     label: '拍',
   }),
   downbeat: Object.freeze({
-    color: '#1e293b',
     lineWidthPx: 1.5,
     dashPx: null,
     anchor: 'center',
@@ -143,7 +143,6 @@ export const MARKER_STYLES: Readonly<Record<MarkerKind, MarkerStyle>> = Object.f
     label: '小節',
   }),
   drop: Object.freeze({
-    color: '#b45309',
     lineWidthPx: 2.5,
     dashPx: null,
     anchor: 'center',
@@ -162,6 +161,60 @@ export const MARKER_DRAW_ORDER: readonly MarkerKind[] = Object.freeze([
   'downbeat',
   'drop',
 ])
+
+// --- 色 ---
+
+/**
+ * 描くときの色。**canvas に Tailwind のクラスは効かない**ので、
+ * 役割の名前から実際の色へ解決した結果を、描く側（`waveform-canvas.tsx`）が渡す。
+ *
+ * この層は `document` に触らない。純粋なまま保つための引数である。
+ */
+export type WaveformPalette = {
+  readonly background: string
+  readonly wave: string
+  readonly marker: Readonly<Record<MarkerKind, string>>
+}
+
+/**
+ * どの役割の色を使うか。**割り当ての正はここ 1 箇所。**
+ * 値そのものは `app/globals.css` のトークンが持ち、ダーク／ライトで差し替わる。
+ * 解決（`getComputedStyle`）は描く側の仕事で、この層は名前しか知らない。
+ */
+export const WAVEFORM_COLOR_TOKENS = Object.freeze({
+  background: 'surface-2',
+  wave: 'muted',
+  marker: Object.freeze({
+    section: 'info',
+    beat: 'faint',
+    downbeat: 'text',
+    drop: 'accent',
+  } satisfies Record<MarkerKind, string>),
+})
+
+/**
+ * 波形の柱の不透明度。目印の線より後ろへ下げるために透かす。
+ * 塗り潰すと拍と小節が波形に埋もれ、切りどころが読めなくなる。
+ */
+export const WAVE_FILL_ALPHA = 0.6
+
+/**
+ * トークンを読めないときの控え（ダークの値）。
+ *
+ * サーバ側の描画と、`getComputedStyle` が使えない環境で使う。
+ * **値の正は `app/globals.css`。** ここが効くのは読めなかったときだけで、
+ * ズレても「最初の 1 フレームだけ少し違う」で済む（`--muted` などが変われば追随しない）。
+ */
+export const DEFAULT_WAVEFORM_PALETTE: WaveformPalette = Object.freeze({
+  background: 'rgb(26 33 42)',
+  wave: `rgb(154 164 178 / ${String(WAVE_FILL_ALPHA)})`,
+  marker: Object.freeze({
+    section: 'rgb(96 165 250)',
+    beat: 'rgb(108 120 138)',
+    downbeat: 'rgb(230 234 240)',
+    drop: 'rgb(255 210 0)',
+  }),
+})
 
 /** 縦線が占める範囲（上端 y, 下端 y）。単位は呼び出し側の高さに合わせる。 */
 export const markerSegment = (style: MarkerStyle, heightPx: number): readonly [number, number] => {

@@ -162,7 +162,7 @@ export const TimelineClipLane = ({
       onPointerUp={finish}
       onPointerCancel={finish}
     >
-      <span className="pointer-events-none absolute left-1 top-1 text-[10px] text-slate-400">
+      <span className="pointer-events-none absolute left-1 top-1 text-[10px] text-muted">
         {`layer ${String(layer)}`}
       </span>
 
@@ -182,22 +182,22 @@ export const TimelineClipLane = ({
             title={`${formatTimeSpan(span)} ${describeClipContent(clip.content)}`}
             className={`absolute top-4 touch-none select-none overflow-hidden rounded text-left text-[11px] ring-1 ${
               selected
-                ? 'bg-sky-200 text-sky-900 ring-sky-500'
-                : 'bg-sky-100 text-sky-900 ring-sky-300 hover:bg-sky-200'
-            } ${clip.id === previewId ? 'opacity-80 ring-2 ring-sky-600' : ''}`}
+                ? 'bg-info/25 text-text ring-info/60'
+                : 'bg-info/10 text-text ring-info/60 hover:bg-info/25'
+            } ${clip.id === previewId ? 'opacity-80 ring-2 ring-info/60' : ''}`}
             style={{ left: rect.leftPx, width: rect.widthPx, height: CLIP_HEIGHT_PX }}
           >
             {/* 端の掴みしろ。幅は本体を食いつぶさないよう `timeline-drag` が決める。 */}
             <span
               aria-hidden="true"
               title={clipDragHandleLabel('start')}
-              className="absolute inset-y-0 left-0 cursor-ew-resize bg-sky-500/30"
+              className="absolute inset-y-0 left-0 cursor-ew-resize bg-info/30"
               style={{ width: grabPx }}
             />
             <span
               aria-hidden="true"
               title={clipDragHandleLabel('end')}
-              className="absolute inset-y-0 right-0 cursor-ew-resize bg-sky-500/30"
+              className="absolute inset-y-0 right-0 cursor-ew-resize bg-info/30"
               style={{ width: grabPx }}
             />
             <span className="pointer-events-none block cursor-grab truncate px-1 leading-6">

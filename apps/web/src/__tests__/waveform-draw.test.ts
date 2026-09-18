@@ -1,10 +1,15 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { fetchWaveformPeaks } from '@/lib/waveform-api'
 import {
   BEAT_MATCH_EPSILON_SEC,
+  DEFAULT_WAVEFORM_PALETTE,
   MARKER_DRAW_ORDER,
   MARKER_STYLES,
   MIN_VIEW_SPAN_SEC,
+  WAVEFORM_COLOR_TOKENS,
+  WAVE_FILL_ALPHA,
   beatGridAnchor,
   clampView,
   describeWaveform,
@@ -122,6 +127,61 @@ describe('MARKER_STYLES', () => {
   it('ドロップは間引かない', () => {
     expect(MARKER_STYLES.drop.minSpacingPx).toBe(0)
     expect(markerStride([1, 2, 3, 4], 0.001, MARKER_STYLES.drop.minSpacingPx)).toBe(1)
+  })
+})
+
+describe('色の割り当て', () => {
+  /**
+   * canvas に CSS のクラスは効かないので、色はコードが持つしかない。
+   * **持つのは役割の名前だけ**で、値は `globals.css` のトークンにある。
+   * 名前を打ち間違えると「既定の控えのまま動く」ので、実在することをここで確かめる。
+   */
+  const GLOBALS_CSS = readFileSync(
+    fileURLToPath(new URL('../app/globals.css', import.meta.url)),
+    'utf8',
+  )
+
+  const usedTokens = [
+    WAVEFORM_COLOR_TOKENS.background,
+    WAVEFORM_COLOR_TOKENS.wave,
+    ...MARKER_DRAW_ORDER.map((kind) => WAVEFORM_COLOR_TOKENS.marker[kind]),
+  ]
+
+  it('4 種類すべてに色の割り当てがある', () => {
+    expect(Object.keys(WAVEFORM_COLOR_TOKENS.marker).sort()).toEqual([...MARKER_DRAW_ORDER].sort())
+  })
+
+  it('使う名前が globals.css に定義されている', () => {
+    for (const token of usedTokens) {
+      expect(GLOBALS_CSS, `--${token} が globals.css にありません`).toContain(`--${token}:`)
+    }
+  })
+
+  it('目印の 4 色が互いに違う（同じ役割を 2 つに割り当てない）', () => {
+    const tokens = MARKER_DRAW_ORDER.map((kind) => WAVEFORM_COLOR_TOKENS.marker[kind])
+    expect(new Set(tokens).size).toBe(MARKER_DRAW_ORDER.length)
+    const colors = MARKER_DRAW_ORDER.map((kind) => DEFAULT_WAVEFORM_PALETTE.marker[kind])
+    expect(new Set(colors).size).toBe(MARKER_DRAW_ORDER.length)
+  })
+
+  it('波形の塗りは透かす。目印は透かさない', () => {
+    expect(WAVE_FILL_ALPHA).toBeGreaterThan(0)
+    expect(WAVE_FILL_ALPHA).toBeLessThan(1)
+    expect(DEFAULT_WAVEFORM_PALETTE.wave).toContain(` / ${String(WAVE_FILL_ALPHA)}`)
+    for (const kind of MARKER_DRAW_ORDER) {
+      expect(DEFAULT_WAVEFORM_PALETTE.marker[kind]).not.toContain('/')
+    }
+  })
+
+  it('控えは canvas が読める形（16 進値を部品に残さない）', () => {
+    const values = [
+      DEFAULT_WAVEFORM_PALETTE.background,
+      DEFAULT_WAVEFORM_PALETTE.wave,
+      ...MARKER_DRAW_ORDER.map((kind) => DEFAULT_WAVEFORM_PALETTE.marker[kind]),
+    ]
+    for (const value of values) {
+      expect(value).toMatch(/^rgb\(\d+ \d+ \d+( \/ [\d.]+)?\)$/)
+    }
   })
 })
 

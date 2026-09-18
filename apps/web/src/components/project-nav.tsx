@@ -14,28 +14,28 @@ export type ProjectNavProps = {
 
 const FOCUS_CLASS =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ' +
-  'focus-visible:outline-slate-900'
+  'focus-visible:outline-focus'
 
 /**
  * 現在地。**主ボタンと同じ見た目にしないこと。**
- * 以前は `bg-slate-900 text-white` で、隣の「新規 Shot」ボタンと区別が付かず、
+ * 以前は主ボタンと同じ塗りつぶし（濃い地に白文字）で、隣の「新規 Shot」ボタンと区別が付かず、
  * 押せそうに見えて押せなかった。塗りつぶしはやめ、へこんだタブとして見せる。
  */
 const CURRENT_CLASS =
-  'rounded-md bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-900 ' +
-  'ring-1 ring-inset ring-slate-300'
+  'rounded-md bg-surface-2 px-3 py-1.5 text-sm font-semibold text-text ' +
+  'ring-1 ring-inset ring-line-strong'
 
-const LINK_CLASS = `rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 ${FOCUS_CLASS}`
+const LINK_CLASS = `rounded-md border border-line-strong px-3 py-1.5 text-sm text-text hover:bg-surface-2 ${FOCUS_CLASS}`
 
 export const ProjectNav = ({ projectId, current }: ProjectNavProps) => (
   <nav aria-label="プロジェクトの画面" className="flex flex-wrap items-center gap-3">
     <Link
       href="/"
-      className={`rounded-sm text-sm text-slate-700 underline hover:text-slate-900 ${FOCUS_CLASS}`}
+      className={`rounded-sm text-sm text-text underline hover:text-accent ${FOCUS_CLASS}`}
     >
       プロジェクト一覧
     </Link>
-    <span aria-hidden className="text-slate-400">
+    <span aria-hidden className="text-faint">
       /
     </span>
     {PROJECT_SECTIONS.map((section) =>

@@ -203,11 +203,11 @@ export const AudioUploader = ({
         onChange={(event) => {
           select(event.target.files?.[0] ?? null)
         }}
-        className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border file:border-slate-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:text-slate-700"
+        className="block w-full text-sm text-text file:mr-3 file:rounded-md file:border file:border-line-strong file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-text"
       />
 
       {file !== null && (
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-muted">
           {file.name}（{formatBytes(file.size)}）
         </p>
       )}
@@ -225,16 +225,16 @@ export const AudioUploader = ({
 
       {phase !== 'idle' && (
         <div role="status" className="space-y-1">
-          <p className="text-sm text-slate-700">
+          <p className="text-sm text-text">
             {uploadPhaseLabel(phase)}
             {phase === 'upload' && file !== null
               ? ` — ${formatBytes(sentBytes)} / ${formatBytes(file.size)}`
               : ''}
             （{formatPercent(ratio)}）
           </p>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-line">
             <div
-              className="h-full rounded-full bg-slate-900 transition-[width]"
+              className="h-full rounded-full bg-accent transition-[width]"
               style={{ width: formatPercent(ratio) }}
             />
           </div>
@@ -242,7 +242,7 @@ export const AudioUploader = ({
       )}
 
       {error !== null && (
-        <p role="alert" className="whitespace-pre-wrap break-words text-sm text-rose-700">
+        <p role="alert" className="whitespace-pre-wrap break-words text-sm text-danger">
           {error}
         </p>
       )}

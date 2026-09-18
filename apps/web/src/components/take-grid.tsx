@@ -14,7 +14,7 @@ export type TakeGridProps = {
 export const TakeGrid = ({ takes, selectedTakeId, busy, onSelect }: TakeGridProps) => {
   if (takes.length === 0) {
     return (
-      <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">
+      <p className="rounded-lg border border-dashed border-line-strong bg-surface p-8 text-center text-sm text-muted">
         Take がまだありません。生成を実行してください。
       </p>
     )

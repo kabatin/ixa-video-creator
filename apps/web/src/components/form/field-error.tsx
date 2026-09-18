@@ -6,7 +6,7 @@ export type FieldErrorProps = {
 /** エラーは必ず入力欄の直下に出す。aria-describedby で入力欄と結び付ける。 */
 export const FieldError = ({ id, message }: FieldErrorProps) =>
   message === undefined ? null : (
-    <p id={id} role="alert" className="mt-1 text-sm text-red-700">
+    <p id={id} role="alert" className="mt-1 text-sm text-danger">
       {message}
     </p>
   )

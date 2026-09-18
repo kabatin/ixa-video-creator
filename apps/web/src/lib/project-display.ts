@@ -9,11 +9,11 @@ const STATUS_LABELS: Readonly<Record<ProjectStatus, string>> = {
 }
 
 const STATUS_CLASSES: Readonly<Record<ProjectStatus, string>> = {
-  planning: 'bg-slate-100 text-slate-700',
-  production: 'bg-blue-100 text-blue-800',
-  review: 'bg-amber-100 text-amber-800',
-  finalizing: 'bg-violet-100 text-violet-800',
-  done: 'bg-emerald-100 text-emerald-800',
+  planning: 'bg-surface-2 text-text',
+  production: 'bg-info/10 text-info',
+  review: 'bg-warn/10 text-warn',
+  finalizing: 'bg-accent-soft/15 text-text',
+  done: 'bg-ok/10 text-ok',
 }
 
 export const statusLabel = (status: ProjectStatus): string => STATUS_LABELS[status]

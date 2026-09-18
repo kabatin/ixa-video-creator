@@ -230,19 +230,19 @@ export const ShotListWorkspace = ({
       <div className="flex flex-wrap items-center gap-3">
         <LiveStatusBadge state={live.state} lastEventAt={live.lastEventAt} attempt={live.attempt} />
         {newTakeCount > 0 && (
-          <p role="status" className="text-sm text-slate-700">
+          <p role="status" className="text-sm text-text">
             {`開いてから ${String(newTakeCount)} 本の Take ができました。`}
           </p>
         )}
         {live.invalidCount > 0 && (
-          <p role="alert" className="text-sm text-amber-800">
+          <p role="alert" className="text-sm text-warn">
             {`読めない更新が ${String(live.invalidCount)} 件ありました。表示が古い可能性があります。`}
           </p>
         )}
       </div>
 
       {rowError !== null && (
-        <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <p role="alert" className="rounded-md bg-danger/10 p-3 text-sm text-danger">
           {rowError}
         </p>
       )}

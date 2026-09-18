@@ -58,17 +58,17 @@ export const MediaImage = ({ mediaAssetId, alt, className }: MediaImageProps) =>
   const frame = className ?? 'aspect-square w-full rounded object-cover'
 
   if (state.kind === 'loading') {
-    return <div className={`${frame} animate-pulse bg-slate-200`} />
+    return <div className={`${frame} animate-pulse bg-line`} />
   }
 
   if (state.kind === 'error') {
     return (
-      <p role="alert" className="rounded bg-red-50 p-2 text-xs text-red-800">
+      <p role="alert" className="rounded bg-danger/10 p-2 text-xs text-danger">
         画像を取得できませんでした: {state.message}
       </p>
     )
   }
 
   // 署名付き URL は毎回変わるため、next/image の最適化対象にせず素の img で表示する。
-  return <img src={state.url} alt={alt} className={`${frame} bg-slate-100`} />
+  return <img src={state.url} alt={alt} className={`${frame} bg-surface-2`} />
 }

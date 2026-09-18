@@ -157,13 +157,13 @@ export const ProjectSettingsForm = ({ project }: ProjectSettingsFormProps) => {
     <div className="space-y-8">
       <form
         noValidate
-        className="space-y-5 rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+        className="space-y-5 rounded-lg border border-line bg-surface p-6 shadow-sm"
         onSubmit={(event) => {
           event.preventDefault()
           void submit()
         }}
       >
-        <h2 className="text-base font-semibold text-slate-900">基本</h2>
+        <h2 className="text-base font-semibold text-text">基本</h2>
 
         <TextField
           id="project-name"
@@ -212,7 +212,7 @@ export const ProjectSettingsForm = ({ project }: ProjectSettingsFormProps) => {
           />
         </div>
 
-        <h2 className="pt-2 text-base font-semibold text-slate-900">制作の制約</h2>
+        <h2 className="pt-2 text-base font-semibold text-text">制作の制約</h2>
 
         <div className="grid gap-5 sm:grid-cols-3">
           <TextField
@@ -250,7 +250,7 @@ export const ProjectSettingsForm = ({ project }: ProjectSettingsFormProps) => {
           />
         </div>
 
-        <p className="text-xs text-slate-600">
+        <p className="text-xs text-muted">
           尺と予算は空欄にすると「未設定」になります。0 と未設定は別の意味で扱われます。
         </p>
 
@@ -274,16 +274,16 @@ export const ProjectSettingsForm = ({ project }: ProjectSettingsFormProps) => {
             {busy ? '保存中…' : WORDING.save}
           </Button>
           {notice !== null && (
-            <span role="status" className="text-sm text-emerald-700">
+            <span role="status" className="text-sm text-ok">
               {notice}
             </span>
           )}
         </div>
       </form>
 
-      <section className="rounded-lg border border-rose-200 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-rose-900">プロジェクトの削除</h2>
-        <p className="mt-2 text-sm text-slate-700">
+      <section className="rounded-lg border border-danger/40 bg-surface p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-danger">プロジェクトの削除</h2>
+        <p className="mt-2 text-sm text-text">
           このプロジェクトに紐づくものが、すべて画面から辿れなくなります。
         </p>
         <div className="mt-4">
@@ -296,13 +296,13 @@ export const ProjectSettingsForm = ({ project }: ProjectSettingsFormProps) => {
               void remove()
             }}
           >
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-rose-900">
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-danger">
               <li>すべての Shot と、その生成結果（Take）</li>
               <li>ストーリーボード・タイムライン・トランジション</li>
               <li>登録した楽曲と解析結果</li>
               <li>レンダリング結果</li>
             </ul>
-            <p className="mt-2 text-sm text-rose-900">
+            <p className="mt-2 text-sm text-danger">
               キャラクター・ロケーション・ブランド資産はワークスペースのものなので残ります。
             </p>
           </ConfirmButton>

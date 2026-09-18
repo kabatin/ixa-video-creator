@@ -309,11 +309,15 @@ export const snapSpan = (
 
 // --- 表示の見た目 ---
 
+/**
+ * `text-xs`（12px）の上で使うため、`faint` は使わない。
+ * `none`（寄せ先が無かった）より `rejected`（寄せるのを見送った）の方が強い報せ。
+ */
 const NOTICE_CLASSES: Readonly<Record<SnapNotice['state'], string>> = {
-  off: 'text-slate-500',
-  none: 'text-amber-700',
-  snapped: 'text-emerald-700',
-  rejected: 'text-amber-800',
+  off: 'text-muted',
+  none: 'text-warn',
+  snapped: 'text-ok',
+  rejected: 'text-danger',
 }
 
 export const snapNoticeClassName = (state: SnapNotice['state']): string => NOTICE_CLASSES[state]

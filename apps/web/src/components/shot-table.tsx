@@ -41,10 +41,10 @@ export const ShotTable = ({
   }, [headerState])
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-sm">
       <table className="min-w-full border-collapse text-left">
         <caption className="sr-only">Shot 一覧</caption>
-        <thead className="bg-slate-50">
+        <thead className="bg-surface-2">
           <tr>
             <th scope="col" className="px-3 py-3">
               <input
@@ -56,14 +56,14 @@ export const ShotTable = ({
                   headerState === 'all' ? 'すべての選択を解除' : '表示中の Shot をすべて選択'
                 }
                 onChange={onToggleAll}
-                className="h-4 w-4 rounded border-slate-400"
+                className="h-4 w-4 rounded border-line-strong"
               />
             </th>
             {HEADERS.map((header, index) => (
               <th
                 key={header === '' ? `actions-${String(index)}` : header}
                 scope="col"
-                className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted"
               >
                 {header}
               </th>

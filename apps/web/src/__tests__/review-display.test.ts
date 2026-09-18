@@ -43,11 +43,11 @@ describe('severity の表示', () => {
     expect(new Set(classes).size).toBe(Severity.options.length)
   })
 
-  it('色は意味と一致する。fail を緑にしない', () => {
-    expect(findingSeverityClassName('fail')).toContain('red')
-    expect(findingSeverityClassName('fail')).not.toContain('emerald')
-    expect(findingSeverityClassName('fail')).not.toContain('green')
-    expect(findingSeverityClassName('warn')).toContain('amber')
+  it('色は意味と一致する。fail を ok の色にしない', () => {
+    expect(findingSeverityClassName('fail')).toContain('text-danger')
+    expect(findingSeverityClassName('fail')).not.toContain('text-ok')
+    expect(findingSeverityClassName('fail')).not.toContain('bg-ok')
+    expect(findingSeverityClassName('warn')).toContain('text-warn')
   })
 })
 
@@ -62,13 +62,13 @@ describe('verdict の表示', () => {
   it('判定前（null）を合格と混同させない', () => {
     expect(reviewVerdictLabel(null)).toBe('判定待ち')
     expect(reviewVerdictLabel(null)).not.toBe(reviewVerdictLabel('pass'))
-    expect(reviewVerdictClassName(null)).not.toContain('emerald')
+    expect(reviewVerdictClassName(null)).not.toContain('-ok')
   })
 
-  it('合格だけが緑、不合格は赤', () => {
-    expect(reviewVerdictClassName('pass')).toContain('emerald')
-    expect(reviewVerdictClassName('fail')).toContain('red')
-    expect(reviewVerdictClassName('fail')).not.toContain('emerald')
+  it('合格だけが ok の色、不合格は danger の色', () => {
+    expect(reviewVerdictClassName('pass')).toContain('text-ok')
+    expect(reviewVerdictClassName('fail')).toContain('text-danger')
+    expect(reviewVerdictClassName('fail')).not.toContain('text-ok')
   })
 })
 

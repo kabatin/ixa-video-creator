@@ -126,10 +126,10 @@ export const BulkActionBar = ({
     <section
       aria-label="一括操作"
       onKeyDown={handleKeyDown}
-      className="sticky bottom-0 z-30 border-t border-slate-300 bg-white p-3 shadow-lg"
+      className="sticky bottom-0 z-30 border-t border-line-strong bg-surface p-3 shadow-lg"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <p className="text-sm font-semibold text-slate-900">{selectedCount} 件を選択中</p>
+        <p className="text-sm font-semibold text-text">{selectedCount} 件を選択中</p>
         {PANEL_ORDER.map((key) => (
           <Button
             key={key}
@@ -158,7 +158,7 @@ export const BulkActionBar = ({
           id={panelId(open)}
           role="group"
           aria-label={PANEL_LABELS[open]}
-          className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3"
+          className="mt-3 rounded-md border border-line bg-surface-2 p-3"
         >
           {open === 'generate' && (
             <BulkGenerateForm
@@ -194,7 +194,7 @@ export const BulkActionBar = ({
       )}
 
       {busy ? (
-        <p role="status" className="mt-3 text-sm text-blue-800">
+        <p role="status" className="mt-3 text-sm text-text">
           {WORDING.start}中です。終わるまでお待ちください。
         </p>
       ) : (
@@ -213,7 +213,7 @@ const BulkOutcomeView = ({ outcome }: { readonly outcome: BulkOutcome | null }) 
 
   if (outcome.failures.length === 0) {
     return (
-      <p role="status" className="mt-3 text-sm text-emerald-800">
+      <p role="status" className="mt-3 text-sm text-ok">
         {outcome.summary}
       </p>
     )
@@ -222,7 +222,7 @@ const BulkOutcomeView = ({ outcome }: { readonly outcome: BulkOutcome | null }) 
   return (
     <div
       role="alert"
-      className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+      className="mt-3 rounded-md border border-warn/40 bg-warn/10 p-3 text-sm text-warn"
     >
       <p>{outcome.summary}</p>
       <ul className="mt-1 list-disc pl-5">

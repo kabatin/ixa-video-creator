@@ -67,11 +67,11 @@ const useSignedUrl = (mediaAssetId: MediaAssetId): UrlState => {
 
 const TakePreview = ({ state }: { readonly state: UrlState }) => {
   if (state.kind === 'loading') {
-    return <div className="aspect-video w-full animate-pulse rounded bg-slate-200" />
+    return <div className="aspect-video w-full animate-pulse rounded bg-line" />
   }
   if (state.kind === 'error') {
     return (
-      <p role="alert" className="rounded bg-red-50 p-3 text-xs text-red-800">
+      <p role="alert" className="rounded bg-danger/10 p-3 text-xs text-danger">
         プレビューを取得できませんでした: {state.message}
       </p>
     )
@@ -92,14 +92,14 @@ export const TakeCard = ({ take, selected, busy, onSelect }: TakeCardProps) => {
   return (
     <li
       aria-current={selected ? 'true' : undefined}
-      className={`flex w-80 shrink-0 flex-col gap-3 rounded-lg border bg-white p-4 shadow-sm ${
-        selected ? 'border-emerald-500 ring-2 ring-emerald-500' : 'border-slate-200'
+      className={`flex w-80 shrink-0 flex-col gap-3 rounded-lg border bg-surface p-4 shadow-sm ${
+        selected ? 'border-ok/40 ring-2 ring-ok/40' : 'border-line'
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-slate-900">Take {take.index}</h3>
+        <h3 className="text-sm font-semibold text-text">Take {take.index}</h3>
         {selected && (
-          <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-semibold text-white">
+          <span className="rounded-full bg-ok px-2.5 py-0.5 text-xs font-semibold text-bg">
             採用中
           </span>
         )}
@@ -107,16 +107,16 @@ export const TakeCard = ({ take, selected, busy, onSelect }: TakeCardProps) => {
 
       <TakePreview state={urlState} />
 
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-600">
-        <dt className="text-slate-400">モデル</dt>
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted">
+        <dt className="text-muted">モデル</dt>
         <dd className="truncate" title={take.modelId}>
           {take.modelId}
         </dd>
-        <dt className="text-slate-400">seed</dt>
+        <dt className="text-muted">seed</dt>
         <dd>{take.seedUsed === null ? '—' : take.seedUsed}</dd>
-        <dt className="text-slate-400">コスト</dt>
+        <dt className="text-muted">コスト</dt>
         <dd>{formatUsd(take.costUsd)}</dd>
-        <dt className="text-slate-400">生成時間</dt>
+        <dt className="text-muted">生成時間</dt>
         <dd>{formatSeconds(take.generationTimeSec)}</dd>
       </dl>
 
@@ -126,7 +126,7 @@ export const TakeCard = ({ take, selected, busy, onSelect }: TakeCardProps) => {
         >
           {reviewStatusLabel(take.reviewStatus)}
         </span>
-        <span className="text-xs text-slate-500">{humanVerdictLabel(take.humanVerdict)}</span>
+        <span className="text-xs text-muted">{humanVerdictLabel(take.humanVerdict)}</span>
       </div>
 
       <button
@@ -135,7 +135,7 @@ export const TakeCard = ({ take, selected, busy, onSelect }: TakeCardProps) => {
         onClick={() => {
           onSelect(take.id)
         }}
-        className="mt-auto rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+        className="mt-auto rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-line disabled:text-muted"
       >
         {selected ? '採用中' : '採用する'}
       </button>

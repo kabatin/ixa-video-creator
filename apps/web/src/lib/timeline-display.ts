@@ -197,8 +197,8 @@ const SEVERITY_LABELS: Readonly<Record<TimelineIssueSeverity, string>> = {
 }
 
 const SEVERITY_CLASSES: Readonly<Record<TimelineIssueSeverity, string>> = {
-  error: 'bg-red-100 text-red-800 ring-red-300',
-  warning: 'bg-amber-100 text-amber-900 ring-amber-300',
+  error: 'bg-danger/10 text-danger ring-danger/40',
+  warning: 'bg-warn/10 text-warn ring-warn/40',
 }
 
 export const issueSeverityLabel = (severity: TimelineIssueSeverity): string =>

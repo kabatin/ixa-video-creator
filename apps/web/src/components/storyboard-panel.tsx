@@ -103,9 +103,9 @@ export const StoryboardPanel = ({
   }
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-base font-semibold text-slate-900">セクションから Shot を割る</h2>
-      <p className="mt-1 text-sm text-slate-600">
+    <section className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+      <h2 className="text-base font-semibold text-text">セクションから Shot を割る</h2>
+      <p className="mt-1 text-sm text-muted">
         {`BPM ${analysis.bpm.toFixed(1)} / ビート ${String(analysis.beats.length)} 個 / 解析器 ${analysis.analyzerVersion}`}
       </p>
 
@@ -154,32 +154,32 @@ export const StoryboardPanel = ({
           onClick={() => {
             void submit()
           }}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-line disabled:text-muted"
         >
           {submitting ? '作成中…' : 'Shot を作成'}
         </button>
         {errors.form !== undefined && (
-          <p role="alert" className="text-sm text-rose-700">
+          <p role="alert" className="text-sm text-danger">
             {errors.form}
           </p>
         )}
       </div>
 
       {outcome !== null && (
-        <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
-          <p role="status" className="text-sm text-slate-800">
+        <div className="mt-5 rounded-md border border-line bg-surface-2 p-4">
+          <p role="status" className="text-sm text-text">
             {`${outcome.sectionLabel} を ${String(outcome.createdCount)} カットに割りました`}
           </p>
 
           {outcome.warnings.length > 0 && (
-            <ul role="alert" className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-800">
+            <ul role="alert" className="mt-2 list-disc space-y-1 pl-5 text-sm text-warn">
               {outcome.warnings.map((warning) => (
                 <li key={warning}>{warning}</li>
               ))}
             </ul>
           )}
 
-          <ul className="mt-3 space-y-1 text-sm text-slate-700">
+          <ul className="mt-3 space-y-1 text-sm text-text">
             {outcome.shots.map((shot) => (
               <li key={shot.id}>
                 {`${shot.code} ${shot.startSec.toFixed(2)}s から ${shot.durationSec.toFixed(2)}s`}

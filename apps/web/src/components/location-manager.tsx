@@ -60,8 +60,8 @@ const Notice = ({ kind, detail }: NoticeProps) => {
   const state = describeViewState(kind, SUBJECT)
   const tone =
     kind === 'unreadable'
-      ? 'border-red-200 bg-red-50 text-red-800'
-      : 'border-dashed border-slate-300 bg-white text-slate-600'
+      ? 'border-danger/40 bg-danger/10 text-danger'
+      : 'border-dashed border-line-strong bg-surface text-muted'
   return (
     <p role={state.role} className={`rounded-md border p-4 text-sm ${tone}`}>
       {state.title}
@@ -78,7 +78,7 @@ type ReferenceGridProps = {
 
 const ReferenceGrid = ({ assetIds, busy, onRemove }: ReferenceGridProps) =>
   assetIds.length === 0 ? (
-    <p className="text-sm text-slate-600">
+    <p className="text-sm text-muted">
       参照画像がありません。登録すると、この場所を選んだ Shot の生成に自動で渡ります。
     </p>
   ) : (
@@ -152,7 +152,7 @@ const LocationCard = ({ location, workspaceId, onChanged, onRemoved }: LocationC
   const unchanged = name === location.name && description === location.description
 
   return (
-    <li className="space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+    <li className="space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm">
       <TextField
         id={`location-name-${location.id}`}
         label="名前"
@@ -186,14 +186,14 @@ const LocationCard = ({ location, workspaceId, onChanged, onRemoved }: LocationC
             })
           }}
         >
-          <p className="mt-2 text-sm text-rose-900">
+          <p className="mt-2 text-sm text-danger">
             この場所を選んでいる Shot からは外れます。参照画像そのものは残ります。
           </p>
         </ConfirmButton>
       </div>
 
-      <div className="space-y-3 border-t border-slate-200 pt-4">
-        <h3 className="text-sm font-semibold text-slate-900">参照画像</h3>
+      <div className="space-y-3 border-t border-line pt-4">
+        <h3 className="text-sm font-semibold text-text">参照画像</h3>
         <ReferenceGrid
           assetIds={location.referenceAssetIds}
           busy={busy}
@@ -216,12 +216,12 @@ const LocationCard = ({ location, workspaceId, onChanged, onRemoved }: LocationC
       </div>
 
       {error !== null && (
-        <p role="alert" className="text-sm text-rose-700">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       )}
       {error === null && notice !== null && (
-        <p role="status" className="text-sm text-emerald-700">
+        <p role="status" className="text-sm text-ok">
           {notice}
         </p>
       )}
@@ -263,13 +263,13 @@ const CreateForm = ({ workspaceId, onCreated }: CreateFormProps) => {
   return (
     <form
       noValidate
-      className="space-y-4 rounded-lg border border-dashed border-slate-300 bg-white p-6"
+      className="space-y-4 rounded-lg border border-dashed border-line-strong bg-surface p-6"
       onSubmit={(event) => {
         event.preventDefault()
         void submit()
       }}
     >
-      <h3 className="text-sm font-semibold text-slate-900">ロケーションを追加</h3>
+      <h3 className="text-sm font-semibold text-text">ロケーションを追加</h3>
       <TextField
         id="new-location-name"
         label="名前"
@@ -286,9 +286,9 @@ const CreateForm = ({ workspaceId, onCreated }: CreateFormProps) => {
         disabled={busy}
         onChange={setDescription}
       />
-      <p className="text-xs text-slate-600">参照画像は作成したあとで追加します。</p>
+      <p className="text-xs text-muted">参照画像は作成したあとで追加します。</p>
       {error !== null && (
-        <p role="alert" className="text-sm text-rose-700">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       )}
@@ -309,8 +309,8 @@ export const LocationManager = ({
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">{SUBJECT}</h2>
-        <p className="mt-1 text-sm text-slate-600">{LOCATION_REFERENCE_NOTICE}</p>
+        <h2 className="text-lg font-semibold text-text">{SUBJECT}</h2>
+        <p className="mt-1 text-sm text-muted">{LOCATION_REFERENCE_NOTICE}</p>
       </div>
 
       {loadError !== undefined && <Notice kind="unreadable" detail={loadError} />}

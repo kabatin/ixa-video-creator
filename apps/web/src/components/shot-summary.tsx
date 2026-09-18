@@ -18,44 +18,44 @@ export type ShotSummaryProps = {
 
 export const ShotSummary = ({ shot, status, selectedTakeId, locationLabel }: ShotSummaryProps) => (
   <div className="space-y-6">
-    <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="rounded-lg border border-line bg-surface p-6 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-900">{shot.code}</h2>
+        <h2 className="text-base font-semibold text-text">{shot.code}</h2>
         <ShotStatusBadge status={status} />
       </div>
-      <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm text-slate-700 sm:grid-cols-3">
+      <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm text-text sm:grid-cols-3">
         <div>
-          <dt className="text-xs uppercase tracking-wide text-slate-400">開始</dt>
+          <dt className="text-xs uppercase tracking-wide text-muted">開始</dt>
           <dd className="tabular-nums">{formatClock(shot.startSec)}</dd>
         </div>
         <div>
-          <dt className="text-xs uppercase tracking-wide text-slate-400">尺</dt>
+          <dt className="text-xs uppercase tracking-wide text-muted">尺</dt>
           <dd className="tabular-nums">{formatDuration(shot.durationSec)}</dd>
         </div>
         <div>
-          <dt className="text-xs uppercase tracking-wide text-slate-400">生成方式</dt>
+          <dt className="text-xs uppercase tracking-wide text-muted">生成方式</dt>
           <dd>{shot.sourceType.type}</dd>
         </div>
         <div className="sm:col-span-2">
-          <dt className="text-xs uppercase tracking-wide text-slate-400">カメラ</dt>
+          <dt className="text-xs uppercase tracking-wide text-muted">カメラ</dt>
           <dd>{formatCamera(shot.camera)}</dd>
         </div>
         <div>
-          <dt className="text-xs uppercase tracking-wide text-slate-400">mood</dt>
+          <dt className="text-xs uppercase tracking-wide text-muted">mood</dt>
           <dd>{shot.mood ?? '—'}</dd>
         </div>
         <div className="sm:col-span-3">
-          <dt className="text-xs uppercase tracking-wide text-slate-400">ロケーション</dt>
+          <dt className="text-xs uppercase tracking-wide text-muted">ロケーション</dt>
           <dd className="break-words">{locationLabel}</dd>
         </div>
         <div className="sm:col-span-3">
-          <dt className="text-xs uppercase tracking-wide text-slate-400">説明</dt>
+          <dt className="text-xs uppercase tracking-wide text-muted">説明</dt>
           <dd className="whitespace-pre-wrap break-words">
             {shot.description === '' ? '—' : shot.description}
           </dd>
         </div>
         <div className="sm:col-span-3">
-          <dt className="text-xs uppercase tracking-wide text-slate-400">採用中の Take</dt>
+          <dt className="text-xs uppercase tracking-wide text-muted">採用中の Take</dt>
           <dd>{selectedTakeId ?? '未採用'}</dd>
         </div>
       </dl>

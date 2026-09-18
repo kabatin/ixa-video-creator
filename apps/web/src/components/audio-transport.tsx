@@ -109,7 +109,7 @@ export const AudioTransport = ({
       {error !== null && (
         <p
           role="alert"
-          className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900"
+          className="rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-danger"
         >
           {error}
         </p>
@@ -125,15 +125,15 @@ export const AudioTransport = ({
           {isPlaying ? '一時停止' : '再生'}
         </Button>
 
-        <p className="font-mono text-sm tabular-nums text-slate-700">
+        <p className="font-mono text-sm tabular-nums text-text">
           <span>{formatClock(currentSec)}</span>
-          <span className="text-slate-400"> / </span>
+          <span className="text-faint"> / </span>
           <span>{formatClock(durationSec)}</span>
         </p>
 
         <p
           role="status"
-          className={playback.notice !== null ? 'text-xs text-amber-700' : 'text-xs text-slate-500'}
+          className={playback.notice !== null ? 'text-xs text-warn' : 'text-xs text-muted'}
         >
           {stateMessage(playback)}
         </p>
@@ -149,7 +149,7 @@ export const AudioTransport = ({
           {muted ? '消音を解除' : '消音'}
         </Button>
 
-        <label className="flex flex-1 items-center gap-2 text-sm text-slate-700">
+        <label className="flex flex-1 items-center gap-2 text-sm text-text">
           <span className="shrink-0">音量</span>
           <input
             type="range"
@@ -164,7 +164,7 @@ export const AudioTransport = ({
               setVolume(Number.parseFloat(event.target.value))
             }}
             aria-valuetext={describeVolume(volume, muted)}
-            className="w-full max-w-xs accent-slate-900"
+            className="w-full max-w-xs accent-accent"
           />
         </label>
 
@@ -174,7 +174,7 @@ export const AudioTransport = ({
          * 二重に持たせると読み上げが同じ文を 2 回言う。
          * 再生状態の読み上げ領域とも取り違えられる。
          */}
-        <p aria-hidden="true" className="text-xs text-slate-600">
+        <p aria-hidden="true" className="text-xs text-muted">
           {describeVolume(volume, muted)}
         </p>
       </div>
@@ -194,7 +194,7 @@ export const AudioTransport = ({
         disabled={!seekable}
         onChange={onSeekChange}
         aria-valuetext={`${formatClock(currentSec)} / ${formatClock(durationSec)}`}
-        className="w-full accent-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+        className="w-full accent-accent disabled:cursor-not-allowed disabled:opacity-40"
       />
 
       {/*
@@ -209,11 +209,11 @@ export const AudioTransport = ({
         古い説明を出していた。
       */}
       {keyboardShortcuts && (
-        <dl className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+        <dl className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
           {KEY_HINTS.map((hint) => (
             <div key={hint.keys} className="flex items-center gap-1.5">
               <dt>
-                <kbd className="rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 font-mono text-slate-700">
+                <kbd className="rounded border border-line-strong bg-surface-2 px-1.5 py-0.5 font-mono text-text">
                   {hint.keys}
                 </kbd>
               </dt>
@@ -224,7 +224,7 @@ export const AudioTransport = ({
       )}
 
       {isLoading && durationSec === 0 && (
-        <p className="text-xs text-slate-500">音源を読み込んでいます…</p>
+        <p className="text-xs text-muted">音源を読み込んでいます…</p>
       )}
     </section>
   )

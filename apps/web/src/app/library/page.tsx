@@ -51,7 +51,7 @@ const load = async (workspaceId: WorkspaceId): Promise<Loaded> => {
 }
 
 const CharacterLink = () => (
-  <Link href={CHARACTER_LIST_HREF} className="text-sm text-slate-700 underline hover:text-slate-900">
+  <Link href={CHARACTER_LIST_HREF} className="text-sm text-muted underline hover:text-text">
     キャラクターを編集する
   </Link>
 )
@@ -95,9 +95,9 @@ const LibraryPage = async () => {
           loadError={loaded.brandAssets.error}
         />
 
-        <section className="rounded-lg border border-slate-200 bg-slate-50 p-6">
-          <h2 className="text-lg font-semibold text-slate-900">キャラクター</h2>
-          <p className="mt-1 text-sm text-slate-700">
+        <section className="rounded-lg border border-line bg-surface-2 p-6">
+          <h2 className="text-lg font-semibold text-text">キャラクター</h2>
+          <p className="mt-1 text-sm text-text">
             同一性（Character）と外見（Look）は専用の画面で編集します。
           </p>
           <p className="mt-3">

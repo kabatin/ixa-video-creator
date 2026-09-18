@@ -27,8 +27,8 @@ export type ShotLocationEditorProps = {
 }
 
 const FEEDBACK_CLASS = {
-  success: 'text-emerald-700',
-  error: 'text-rose-700',
+  success: 'text-ok',
+  error: 'text-danger',
 } as const
 
 export const ShotLocationEditor = ({
@@ -70,8 +70,8 @@ export const ShotLocationEditor = ({
   }
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="mb-3 text-base font-semibold text-slate-900">ロケーション</h2>
+    <section className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+      <h2 className="mb-3 text-base font-semibold text-text">ロケーション</h2>
 
       <LocationField
         locations={locations}
@@ -102,7 +102,7 @@ export const ShotLocationEditor = ({
             </Button>
           )}
           {removable && (
-            <p className="text-xs text-slate-600">
+            <p className="text-xs text-muted">
               ロケーション自体は残ります。この Shot との関連づけだけを外します。
             </p>
           )}

@@ -54,7 +54,7 @@ export const ShotCastRow = ({
   const name = describeCharacter(row.characterId, characters)
 
   return (
-    <li className="rounded-lg border border-slate-200 bg-white p-4">
+    <li className="rounded-lg border border-line bg-surface p-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <SelectField
           id={`cast-character-${row.key}`}
@@ -103,7 +103,7 @@ export const ShotCastRow = ({
       </div>
 
       {row.characterId !== '' && available.length === 0 && errors.lookId === undefined && (
-        <p role="status" className="mt-2 text-sm text-amber-900">
+        <p role="status" className="mt-2 text-sm text-warn">
           {LOOK_MISSING_MESSAGE}
         </p>
       )}

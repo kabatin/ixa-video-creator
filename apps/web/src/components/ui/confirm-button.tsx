@@ -54,8 +54,8 @@ export const ConfirmButton = ({
   }
 
   return (
-    <div role="alertdialog" aria-label={label} className="rounded-md border border-rose-300 bg-rose-50 p-3">
-      <p className="text-sm text-rose-900">{message}</p>
+    <div role="alertdialog" aria-label={label} className="rounded-md border border-danger/40 bg-danger/10 p-3">
+      <p className="text-sm text-danger">{message}</p>
       {children}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button

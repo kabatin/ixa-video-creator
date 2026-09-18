@@ -38,23 +38,23 @@ export const CanonicalFramePanel = ({ look, busy, onSet }: CanonicalFramePanelPr
   return (
     <section
       className={`rounded-lg border p-4 ${
-        present ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'
+        present ? 'border-ok/40 bg-ok/10' : 'border-warn/40 bg-warn/10'
       }`}
     >
       <div className="flex flex-wrap items-center gap-3">
-        <h3 className="text-sm font-semibold text-slate-900">canonical frame</h3>
+        <h3 className="text-sm font-semibold text-text">canonical frame</h3>
         <span
           className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-            present ? 'bg-emerald-600 text-white' : 'bg-amber-200 text-amber-900'
+            present ? 'bg-ok text-bg' : 'bg-warn/25 text-warn'
           }`}
         >
           {present ? '設定済み' : '未設定'}
         </span>
       </div>
 
-      <p className="mt-2 text-sm text-slate-700">{CANONICAL_FRAME_NOTICE}</p>
+      <p className="mt-2 text-sm text-text">{CANONICAL_FRAME_NOTICE}</p>
       {!present && (
-        <p className="mt-2 text-sm font-medium text-amber-900">{CANONICAL_FRAME_ABSENT_HINT}</p>
+        <p className="mt-2 text-sm font-medium text-warn">{CANONICAL_FRAME_ABSENT_HINT}</p>
       )}
 
       {look.canonicalFrameAssetId !== null && (
@@ -84,7 +84,7 @@ export const CanonicalFramePanel = ({ look, busy, onSet }: CanonicalFramePanelPr
           type="button"
           disabled={busy || draft.trim() === ''}
           onClick={submit}
-          className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-line-strong"
         >
           昇格させる
         </button>

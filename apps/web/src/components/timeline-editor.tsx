@@ -409,9 +409,9 @@ export const TimelineEditor = ({
   return (
     <div className="space-y-6">
       {loadErrors.length > 0 && (
-        <ul role="alert" className="space-y-1 rounded-lg border border-red-300 bg-red-50 p-4">
+        <ul role="alert" className="space-y-1 rounded-lg border border-danger/40 bg-danger/10 p-4">
           {loadErrors.map((message) => (
-            <li key={message} className="text-sm text-red-800">
+            <li key={message} className="text-sm text-danger">
               {message}
             </li>
           ))}
@@ -429,8 +429,8 @@ export const TimelineEditor = ({
       />
 
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm text-slate-700">{`全体の尺 ${formatDuration(durationSec)}`}</span>
-        <span className="text-sm text-slate-500">ズーム（1 秒あたりの px）</span>
+        <span className="text-sm text-text">{`全体の尺 ${formatDuration(durationSec)}`}</span>
+        <span className="text-sm text-muted">ズーム（1 秒あたりの px）</span>
         {ZOOM_LEVELS.map((level) => (
           <button
             key={level}
@@ -441,8 +441,8 @@ export const TimelineEditor = ({
             }}
             className={`rounded-md px-3 py-1 text-sm ring-1 ${
               level === pxPerSec
-                ? 'bg-slate-900 text-white ring-slate-900'
-                : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-100'
+                ? 'bg-accent text-accent-fg ring-accent'
+                : 'bg-surface text-text ring-line-strong hover:bg-surface-2'
             }`}
           >
             {level}
@@ -451,12 +451,12 @@ export const TimelineEditor = ({
       </div>
 
       {actionError !== null && (
-        <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <p role="alert" className="rounded-md bg-danger/10 p-3 text-sm text-danger">
           {actionError}
         </p>
       )}
       {status !== null && actionError === null && (
-        <p role="status" className="rounded-md bg-slate-100 p-3 text-sm text-slate-700">
+        <p role="status" className="rounded-md bg-surface-2 p-3 text-sm text-text">
           {status}
         </p>
       )}
@@ -464,7 +464,7 @@ export const TimelineEditor = ({
       {shots === null ? (
         <p
           role="alert"
-          className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800"
+          className="rounded-lg border border-danger/40 bg-danger/10 p-4 text-sm text-danger"
         >
           Shot を読み込めていません。タイムラインを描けません。
         </p>
@@ -525,7 +525,7 @@ export const TimelineEditor = ({
       )}
 
       {dragNotes.length > 0 && (
-        <ul role="status" className="space-y-1 rounded-md bg-slate-100 p-3 text-sm text-slate-700">
+        <ul role="status" className="space-y-1 rounded-md bg-surface-2 p-3 text-sm text-text">
           {dragNotes.map((note) => (
             <li key={note}>{note}</li>
           ))}
@@ -537,8 +537,8 @@ export const TimelineEditor = ({
        * 0.01 秒を合わせ込むには数値のほうが速く、キーボードだけでも操作できる。
        * 主でなくなったので、開かないと出ないところへ下げてある。
        */}
-      <details className="rounded-lg border border-slate-200 bg-white p-4">
-        <summary className="cursor-pointer text-sm font-semibold text-slate-900">
+      <details className="rounded-lg border border-line bg-surface p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-text">
           クリップを数値で直す
         </summary>
         <div className="mt-4">

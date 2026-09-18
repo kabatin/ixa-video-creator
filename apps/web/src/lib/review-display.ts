@@ -16,9 +16,9 @@ const SEVERITY_LABELS: Readonly<Record<Severity, string>> = {
 }
 
 const SEVERITY_CLASSES: Readonly<Record<Severity, string>> = {
-  info: 'bg-slate-100 text-slate-700 ring-slate-200',
-  warn: 'bg-amber-100 text-amber-900 ring-amber-300',
-  fail: 'bg-red-100 text-red-800 ring-red-300',
+  info: 'bg-surface-2 text-text ring-line',
+  warn: 'bg-warn/10 text-warn ring-warn/40',
+  fail: 'bg-danger/10 text-danger ring-danger/40',
 }
 
 export const findingSeverityLabel = (severity: Severity): string => SEVERITY_LABELS[severity]
@@ -32,9 +32,9 @@ const VERDICT_LABELS: Readonly<Record<Verdict, string>> = {
 }
 
 const VERDICT_CLASSES: Readonly<Record<Verdict, string>> = {
-  pass: 'bg-emerald-100 text-emerald-800 ring-emerald-300',
-  warn: 'bg-amber-100 text-amber-900 ring-amber-300',
-  fail: 'bg-red-100 text-red-800 ring-red-300',
+  pass: 'bg-ok/10 text-ok ring-ok/40',
+  warn: 'bg-warn/10 text-warn ring-warn/40',
+  fail: 'bg-danger/10 text-danger ring-danger/40',
 }
 
 /** verdict が null なのは「まだ判定が出ていない」。合格と混同させない。 */
@@ -42,7 +42,7 @@ export const reviewVerdictLabel = (verdict: Verdict | null): string =>
   verdict === null ? '判定待ち' : VERDICT_LABELS[verdict]
 
 export const reviewVerdictClassName = (verdict: Verdict | null): string =>
-  verdict === null ? 'bg-slate-100 text-slate-600 ring-slate-200' : VERDICT_CLASSES[verdict]
+  verdict === null ? 'bg-surface-2 text-muted ring-line' : VERDICT_CLASSES[verdict]
 
 const RUN_STATUS_LABELS: Readonly<Record<ReviewRun['status'], string>> = {
   queued: '待機中',

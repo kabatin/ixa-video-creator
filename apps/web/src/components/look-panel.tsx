@@ -88,13 +88,13 @@ export const LookPanel = ({ characterId, workspaceId, initialLooks }: LookPanelP
 
   return (
     <section className="space-y-4">
-      <h2 className="text-base font-semibold text-slate-900">Look</h2>
-      <p className="text-sm text-slate-600">
+      <h2 className="text-base font-semibold text-text">Look</h2>
+      <p className="text-sm text-muted">
         Look は時系列で変わる外見です。Shot は Look を指して衣装と髪型を切り替えます。
       </p>
 
       {looks.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-600">
+        <p className="rounded-lg border border-dashed border-line-strong bg-surface p-6 text-center text-sm text-muted">
           Look がありません。最初に作った Look が既定になります。
         </p>
       ) : (

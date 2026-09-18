@@ -17,8 +17,8 @@ export const GeneratePanel = ({ busy, generating, lastResult, onGenerate }: Gene
   const [count, setCount] = useState<string>('1')
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-base font-semibold text-slate-900">生成</h2>
+    <section className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+      <h2 className="text-base font-semibold text-text">生成</h2>
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
         <SelectField
           id="model"
@@ -43,7 +43,7 @@ export const GeneratePanel = ({ busy, generating, lastResult, onGenerate }: Gene
             onClick={() => {
               onGenerate(model, Number(count))
             }}
-            className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+            className="w-full rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-line-strong"
           >
             {generating ? '生成中…' : 'Take を生成'}
           </button>
@@ -51,21 +51,21 @@ export const GeneratePanel = ({ busy, generating, lastResult, onGenerate }: Gene
       </div>
 
       {generating && (
-        <p role="status" className="mt-4 text-sm text-blue-800">
+        <p role="status" className="mt-4 text-sm text-text">
           生成中です。完了した Take から順に表示されます。
         </p>
       )}
 
       {lastResult !== null && (
-        <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-slate-600">
-          <dt className="text-slate-400">選ばれたモデル</dt>
+        <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-muted">
+          <dt className="text-muted">選ばれたモデル</dt>
           <dd>{lastResult.resolvedModel}</dd>
-          <dt className="text-slate-400">投入ジョブ</dt>
+          <dt className="text-muted">投入ジョブ</dt>
           <dd>{lastResult.jobIds.length} 件</dd>
           {lastResult.duplicateOfTakeId !== null && (
             <>
-              <dt className="text-amber-700">重複</dt>
-              <dd className="text-amber-700">
+              <dt className="text-warn">重複</dt>
+              <dd className="text-warn">
                 同じ仕様の Take が既にあります（{lastResult.duplicateOfTakeId}）。
               </dd>
             </>

@@ -27,15 +27,15 @@ export type ErrorPanelProps = {
  * `EmptyState` を使う。混ぜると、利用者は異常を正常だと思う。
  */
 export const ErrorPanel = ({ title, message, hint, actions, children }: ErrorPanelProps) => (
-  <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-6">
-    <h2 className="text-base font-semibold text-red-900">{title}</h2>
-    <p className="mt-2 whitespace-pre-wrap break-words text-sm text-red-800">{message}</p>
-    {hint !== undefined && <p className="mt-3 text-sm text-red-700">{hint}</p>}
+  <div role="alert" className="rounded-lg border border-danger/40 bg-danger/10 p-6">
+    <h2 className="text-base font-semibold text-danger">{title}</h2>
+    <p className="mt-2 whitespace-pre-wrap break-words text-sm text-danger">{message}</p>
+    {hint !== undefined && <p className="mt-3 text-sm text-danger">{hint}</p>}
     {actions !== undefined && actions.length > 0 && (
       <ul className="mt-4 flex flex-wrap items-center gap-4">
         {actions.map((action) => (
           <li key={action.href}>
-            <Link href={action.href} className="text-sm text-red-800 underline hover:text-red-950">
+            <Link href={action.href} className="text-sm text-danger underline hover:opacity-80">
               {action.label}
             </Link>
           </li>

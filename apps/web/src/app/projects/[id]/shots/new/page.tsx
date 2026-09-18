@@ -62,7 +62,7 @@ const NewShotPage = async ({ params }: NewShotPageProps) => {
 
   if (!projectId.success) {
     return (
-      <main>
+      <main className="mx-auto w-full max-w-3xl">
         <PageHeader title="新規 Shot" />
         <ErrorPanel
           title="プロジェクト ID が不正です"
@@ -76,14 +76,14 @@ const NewShotPage = async ({ params }: NewShotPageProps) => {
   const [result, locations] = await Promise.all([loadShots(projectId.data), loadLocations()])
 
   return (
-    <main>
+    <main className="mx-auto w-full max-w-3xl">
       <PageHeader
         title="新規 Shot"
         description="カメラ指定は生成プロンプトへそのまま反映されます。"
         action={
           <Link
             href={shotListHref(projectId.data)}
-            className="text-sm text-slate-600 underline hover:text-slate-900"
+            className="text-sm text-muted underline hover:text-text"
           >
             一覧へ戻る
           </Link>

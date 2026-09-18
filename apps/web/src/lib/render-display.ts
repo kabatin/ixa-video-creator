@@ -77,12 +77,12 @@ const STATUS_LABELS: Readonly<Record<RenderJobStatus, string>> = {
 }
 
 const STATUS_CLASSES: Readonly<Record<RenderJobStatus, string>> = {
-  queued: 'bg-slate-100 text-slate-700 ring-slate-200',
-  rendering: 'bg-sky-100 text-sky-900 ring-sky-300',
-  encoding: 'bg-sky-100 text-sky-900 ring-sky-300',
-  succeeded: 'bg-emerald-100 text-emerald-800 ring-emerald-300',
-  failed: 'bg-red-100 text-red-800 ring-red-300',
-  cancelled: 'bg-amber-100 text-amber-900 ring-amber-300',
+  queued: 'bg-surface-2 text-text ring-line',
+  rendering: 'bg-info/10 text-info ring-info/40',
+  encoding: 'bg-info/10 text-info ring-info/40',
+  succeeded: 'bg-ok/10 text-ok ring-ok/40',
+  failed: 'bg-danger/10 text-danger ring-danger/40',
+  cancelled: 'bg-warn/10 text-warn ring-warn/40',
 }
 
 export const renderStatusLabel = (status: RenderJobStatus): string => STATUS_LABELS[status]

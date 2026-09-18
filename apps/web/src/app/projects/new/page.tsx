@@ -7,7 +7,7 @@ import { resolveWorkspaceId } from '@/lib/workspace'
 export const dynamic = 'force-dynamic'
 
 const BackLink = () => (
-  <Link href="/" className="text-sm text-slate-600 underline hover:text-slate-900">
+  <Link href="/" className="text-sm text-muted underline hover:text-text">
     一覧へ戻る
   </Link>
 )
@@ -16,7 +16,7 @@ const NewProjectPage = () => {
   const workspace = resolveWorkspaceId()
 
   return (
-    <main>
+    <main className="mx-auto w-full max-w-3xl">
       <PageHeader
         title="新規プロジェクト"
         description="出力仕様はレンダリングと Provider 選択の制約になります。"

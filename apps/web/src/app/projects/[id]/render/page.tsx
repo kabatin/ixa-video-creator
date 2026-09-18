@@ -131,10 +131,10 @@ const RenderPage = async ({ params }: RenderPageProps) => {
         description={`${project.value.name} のタイムライン全体を 1 本の動画にします。`}
         action={
           <nav aria-label="プロジェクトの画面" className="flex flex-wrap items-center gap-3">
-            <Link href="/" className="text-sm text-slate-600 underline hover:text-slate-900">
+            <Link href="/" className="text-sm text-muted underline hover:text-text">
               プロジェクト一覧
             </Link>
-            <Link href={timelineHref} className="text-sm text-slate-600 underline hover:text-slate-900">
+            <Link href={timelineHref} className="text-sm text-muted underline hover:text-text">
               タイムライン
             </Link>
           </nav>
@@ -155,16 +155,16 @@ const RenderPage = async ({ params }: RenderPageProps) => {
         />
 
         <section className="flex flex-col gap-3">
-          <h2 className="text-base font-semibold text-slate-900">投入前の検査</h2>
+          <h2 className="text-base font-semibold text-text">投入前の検査</h2>
           {/* 判定はサーバの検査結果をそのまま出す。タイムライン画面と同じ部品を使う。 */}
           <TimelineIssuePanel issues={loaded.issues.value} projectId={projectId.data} />
           {loaded.issues.error !== null && (
-            <p role="alert" className="text-sm text-red-800">
+            <p role="alert" className="text-sm text-danger">
               {loaded.issues.error}
             </p>
           )}
           <p className="text-sm">
-            <Link href={timelineHref} className="text-slate-700 underline hover:text-slate-950">
+            <Link href={timelineHref} className="text-muted underline hover:text-text">
               タイムラインで直す
             </Link>
           </p>

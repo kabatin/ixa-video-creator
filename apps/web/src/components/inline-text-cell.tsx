@@ -243,10 +243,10 @@ export const InlineTextCell = ({
         }}
         className={
           'w-full rounded-md px-2 py-1 text-left text-sm ' +
-          'hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 ' +
-          'focus-visible:outline-offset-2 focus-visible:outline-slate-900 ' +
-          'disabled:cursor-not-allowed disabled:text-slate-500 disabled:hover:bg-transparent ' +
-          (empty ? 'text-slate-600 underline decoration-dotted' : 'whitespace-pre-wrap text-slate-900')
+          'hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 ' +
+          'focus-visible:outline-offset-2 focus-visible:outline-focus ' +
+          'disabled:cursor-not-allowed disabled:text-muted disabled:hover:bg-transparent ' +
+          (empty ? 'text-muted underline decoration-dotted' : 'whitespace-pre-wrap text-text')
         }
       >
         {empty ? placeholder : value}
@@ -298,7 +298,7 @@ export const InlineTextCell = ({
         </p>
       ) : null}
       {error === null ? null : (
-        <p role="alert" className="mt-1 text-xs text-rose-700">
+        <p role="alert" className="mt-1 text-xs text-danger">
           {error}
         </p>
       )}

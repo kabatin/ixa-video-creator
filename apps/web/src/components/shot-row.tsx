@@ -34,7 +34,7 @@ export const ShotRow = ({
   onSaveDescription,
   onSaveMood,
 }: ShotRowProps) => (
-  <tr className={`border-t border-slate-200 align-top ${selected ? 'bg-sky-50' : ''}`}>
+  <tr className={`border-t border-line align-top ${selected ? 'bg-info/10' : ''}`}>
     <td className="px-3 py-3">
       <input
         type="checkbox"
@@ -44,17 +44,17 @@ export const ShotRow = ({
         onChange={() => {
           onToggle(shot)
         }}
-        className="h-4 w-4 rounded border-slate-400"
+        className="h-4 w-4 rounded border-line-strong"
       />
     </td>
-    <th scope="row" className="px-4 py-3 text-left text-sm font-semibold text-slate-900">
+    <th scope="row" className="px-4 py-3 text-left text-sm font-semibold text-text">
       {shot.code}
     </th>
-    <td className="whitespace-nowrap px-4 py-3 text-sm tabular-nums text-slate-700">
+    <td className="whitespace-nowrap px-4 py-3 text-sm tabular-nums text-text">
       <div>{formatClock(shot.startSec)}</div>
-      <div className="text-xs text-slate-500">尺 {formatDuration(shot.durationSec)}</div>
+      <div className="text-xs text-muted">尺 {formatDuration(shot.durationSec)}</div>
     </td>
-    <td className="min-w-72 px-4 py-3 text-sm text-slate-700">
+    <td className="min-w-72 px-4 py-3 text-sm text-text">
       <InlineTextCell
         value={shot.description}
         multiline
@@ -63,7 +63,7 @@ export const ShotRow = ({
         disabled={busy}
         onSave={(next) => onSaveDescription(shot, next)}
       />
-      <div className="mt-1 text-xs text-slate-500">
+      <div className="mt-1 text-xs text-muted">
         <InlineTextCell
           // `null` は未設定。部品は文字列だけを受けるので、ここで空文字に畳む（L-021 の逆の取り違えに注意）。
           value={shot.mood ?? ''}
@@ -74,7 +74,7 @@ export const ShotRow = ({
         />
       </div>
     </td>
-    <td className="px-4 py-3 text-sm text-slate-700">{formatCamera(shot.camera)}</td>
+    <td className="px-4 py-3 text-sm text-text">{formatCamera(shot.camera)}</td>
     <td className="px-4 py-3">
       <ShotStatusBadge status={shot.status} />
     </td>
@@ -82,7 +82,7 @@ export const ShotRow = ({
       <div className="flex flex-col items-start gap-2">
         <Link
           href={shotDetailHref(shot)}
-          className="whitespace-nowrap font-medium text-slate-900 underline hover:text-slate-600"
+          className="whitespace-nowrap font-medium text-text underline hover:text-muted"
         >
           Take を見る
         </Link>

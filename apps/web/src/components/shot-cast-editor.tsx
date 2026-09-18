@@ -52,7 +52,7 @@ type Loaded = {
 
 type Feedback = { readonly tone: 'success' | 'error'; readonly message: string }
 
-const FEEDBACK_CLASS = { success: 'text-emerald-700', error: 'text-rose-700' } as const
+const FEEDBACK_CLASS = { success: 'text-ok', error: 'text-danger' } as const
 
 const INVALID_INPUT_MESSAGE = '入力に誤りがあります。各行の指摘を直してから保存してください。'
 
@@ -103,7 +103,7 @@ export const ShotCastEditor = ({ shotId, workspaceId, disabled = false }: ShotCa
     const state = describeViewState('unreadable', '登場人物')
     return (
       <section className="space-y-3">
-        <h2 className="text-base font-semibold text-slate-900">登場人物</h2>
+        <h2 className="text-base font-semibold text-text">登場人物</h2>
         <ErrorPanel title={CAST_LOAD_FAILED_TITLE} message={loadError} hint={state.hint}>
           <Button onClick={load}>{WORDING.reload}</Button>
         </ErrorPanel>
@@ -115,8 +115,8 @@ export const ShotCastEditor = ({ shotId, workspaceId, disabled = false }: ShotCa
     const state = describeViewState('loading', '登場人物')
     return (
       <section className="space-y-3">
-        <h2 className="text-base font-semibold text-slate-900">登場人物</h2>
-        <p role="status" className="text-sm text-slate-600">
+        <h2 className="text-base font-semibold text-text">登場人物</h2>
+        <p role="status" className="text-sm text-muted">
           {state.title}
         </p>
       </section>
@@ -194,7 +194,7 @@ export const ShotCastEditor = ({ shotId, workspaceId, disabled = false }: ShotCa
   if (characters.length === 0) {
     return (
       <section className="space-y-3">
-        <h2 className="text-base font-semibold text-slate-900">登場人物</h2>
+        <h2 className="text-base font-semibold text-text">登場人物</h2>
         <EmptyState
           message={NO_CHARACTERS_NOTICE}
           actionHref={NEW_CHARACTER_HREF}
@@ -207,15 +207,15 @@ export const ShotCastEditor = ({ shotId, workspaceId, disabled = false }: ShotCa
 
   return (
     <section className="space-y-3">
-      <h2 className="text-base font-semibold text-slate-900">登場人物</h2>
-      <p className="text-sm text-slate-600">
+      <h2 className="text-base font-semibold text-text">登場人物</h2>
+      <p className="text-sm text-muted">
         ここで選んだ人の四面図と Look が、生成の参照画像として使われます。Look は必ず選んでください。
       </p>
 
       {rows.length === 0 ? (
         <p
           role="status"
-          className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-600"
+          className="rounded-lg border border-dashed border-line-strong bg-surface p-6 text-center text-sm text-muted"
         >
           {CAST_EMPTY_NOTICE}
         </p>

@@ -76,17 +76,17 @@ const acceptedMessage = (warningCount: number): string =>
 const Rejected = ({ rejection }: { readonly rejection: RenderRejection }) => {
   const entries = Object.entries(rejection.fields)
   return (
-    <section role="alert" className="rounded-lg border border-red-300 bg-red-50 p-4">
-      <h3 className="text-sm font-semibold text-red-900">{`書き出しを受け付けられませんでした: ${rejection.message}`}</h3>
+    <section role="alert" className="rounded-lg border border-danger/40 bg-danger/10 p-4">
+      <h3 className="text-sm font-semibold text-danger">{`書き出しを受け付けられませんでした: ${rejection.message}`}</h3>
       {entries.length === 0 && (
-        <p className="mt-1 text-sm text-red-800">理由が返っていません。API のログを確認してください。</p>
+        <p className="mt-1 text-sm text-danger">理由が返っていません。API のログを確認してください。</p>
       )}
       {entries.map(([field, reasons]) => {
         const summary = summarizeReasons(reasons)
         return (
           <div key={field} className="mt-2">
-            <p className="text-sm font-medium text-red-900">{`${field}: ${String(summary.total)} 件`}</p>
-            <ul className="mt-1 flex flex-col gap-0.5 pl-4 text-xs text-red-800">
+            <p className="text-sm font-medium text-danger">{`${field}: ${String(summary.total)} 件`}</p>
+            <ul className="mt-1 flex flex-col gap-0.5 pl-4 text-xs text-danger">
               {summary.shown.map((reason) => (
                 <li key={reason} className="list-disc break-words">
                   {reason}
@@ -235,9 +235,9 @@ export const RenderPanel = ({
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-slate-900">書き出す</h2>
-        <p className="mt-1 text-sm text-slate-600">
+      <section className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-text">書き出す</h2>
+        <p className="mt-1 text-sm text-muted">
           {'タイムライン全体を 1 本の動画にします。'}
           {timelineDurationSec === null
             ? '長さを読み込めませんでした。'
@@ -246,7 +246,7 @@ export const RenderPanel = ({
         </p>
 
         <div className="mt-4 flex flex-col gap-2">
-          <label htmlFor="render-preset" className="text-sm font-medium text-slate-800">
+          <label htmlFor="render-preset" className="text-sm font-medium text-text">
             プリセット
           </label>
           <select
@@ -256,7 +256,7 @@ export const RenderPanel = ({
             onChange={(event) => {
               setPreset(event.target.value as RenderPreset)
             }}
-            className="w-full max-w-sm rounded-md border border-slate-300 px-3 py-2 text-sm"
+            className="w-full max-w-sm rounded-md border border-line-strong px-3 py-2 text-sm"
           >
             {RENDER_PRESET_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -264,7 +264,7 @@ export const RenderPanel = ({
               </option>
             ))}
           </select>
-          <p className="text-xs text-slate-600">{presetHint}</p>
+          <p className="text-xs text-muted">{presetHint}</p>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -287,19 +287,19 @@ export const RenderPanel = ({
           </Button>
 
           {blocked && (
-            <p role="status" className="text-sm text-red-800">
+            <p role="status" className="text-sm text-danger">
               {`レンダリング不可の指摘が ${String(blockingIssueCount ?? 0)} 件あるため、まだ書き出せません。`}
             </p>
           )}
           {blockingIssueCount === null && (
-            <p role="status" className="text-sm text-amber-800">
+            <p role="status" className="text-sm text-warn">
               投入前の検査ができていません。サーバ側の検査で拒否される可能性があります。
             </p>
           )}
           {feedback !== null && (
             <p
               role={feedback.tone === 'error' ? 'alert' : 'status'}
-              className={`text-sm ${feedback.tone === 'error' ? 'text-rose-700' : 'text-emerald-700'}`}
+              className={`text-sm ${feedback.tone === 'error' ? 'text-danger' : 'text-ok'}`}
             >
               {feedback.message}
             </p>
@@ -309,14 +309,14 @@ export const RenderPanel = ({
         {shownView !== null && (
           <p
             role={shownView.phase === 'failed' ? 'alert' : 'status'}
-            className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800"
+            className="mt-4 rounded-md border border-line bg-surface-2 p-3 text-sm text-text"
           >
             {`最後の書き出し（${shownView.statusLabel}）: ${shownView.detail}`}
           </p>
         )}
 
         {pollNote !== null && (
-          <p role="status" className="mt-2 text-sm text-amber-800">
+          <p role="status" className="mt-2 text-sm text-warn">
             {pollNote === 'timeout'
               ? `${String(RENDER_POLL_TIMEOUT_MS / 60_000)} 分待っても終わらないため自動更新を止めました。終わったかどうかは分かっていません。`
               : '状態を引き直せなくなったため自動更新を止めました。'}
@@ -328,7 +328,7 @@ export const RenderPanel = ({
       {rejection !== null && <Rejected rejection={rejection} />}
 
       <section>
-        <h2 className="text-base font-semibold text-slate-900">これまでの書き出し</h2>
+        <h2 className="text-base font-semibold text-text">これまでの書き出し</h2>
         <div className="mt-3">
           <RenderJobList
             jobs={jobs}

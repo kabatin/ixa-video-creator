@@ -160,13 +160,13 @@ export const CutWaveformOverlay = ({
             key={`${String(index)}-${String(mark.atSec)}`}
             aria-hidden="true"
             className={`absolute top-0 bottom-0 w-0.5 -translate-x-1/2 ${
-              index === selectedIndex ? 'bg-sky-500' : 'bg-slate-900'
+              index === selectedIndex ? 'bg-accent' : 'bg-text'
             }`}
             style={{ left: positionOf(mark.atSec) }}
           >
             <span
               className={`absolute -top-px left-1/2 h-2 w-2 -translate-x-1/2 rounded-sm ${
-                index === selectedIndex ? 'bg-sky-500' : 'bg-slate-900'
+                index === selectedIndex ? 'bg-accent' : 'bg-text'
               }`}
             />
           </div>
@@ -177,7 +177,7 @@ export const CutWaveformOverlay = ({
       {isVisible(currentSec, safeView) && (
         <div
           aria-hidden="true"
-          className="absolute top-0 bottom-0 w-px -translate-x-1/2 bg-rose-500"
+          className="absolute top-0 bottom-0 w-px -translate-x-1/2 bg-danger"
           style={{ left: positionOf(currentSec) }}
         />
       )}

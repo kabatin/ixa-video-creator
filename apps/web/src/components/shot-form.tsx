@@ -67,7 +67,7 @@ export const ShotForm = ({
   return (
     <form
       noValidate
-      className="space-y-5 rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+      className="space-y-5 rounded-lg border border-line bg-surface p-6 shadow-sm"
       onSubmit={(event) => {
         event.preventDefault()
         void submit()
@@ -152,13 +152,13 @@ export const ShotForm = ({
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-line disabled:text-muted"
         >
           {submitting ? '作成中…' : 'Shot を作成'}
         </button>
         <Link
           href={shotListHref(projectId)}
-          className="text-sm text-slate-600 underline hover:text-slate-900"
+          className="text-sm text-muted underline hover:text-text"
         >
           キャンセル
         </Link>

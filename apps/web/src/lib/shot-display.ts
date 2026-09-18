@@ -13,7 +13,8 @@ import { formatDuration, formatSpan } from '@/lib/format-time'
  * Shot / Take の表示用ラベルと色。
  * キーをドメインの union にすることで、enum が増えたときに型で気付ける。
  *
- * 色は白地・淡色地ともにコントラスト比 4.5 以上を満たすものだけを使う。
+ * 色は役割の名前だけで持つ（PHASE 5.9）。実際の値は `globals.css` のトークンにあり、
+ * ダークとライトのコントラストはそこで保証する。ここで素の色名を書かない。
  * 状態は色だけで伝えない。呼び出し側は必ずラベルも一緒に出すこと。
  */
 
@@ -26,14 +27,18 @@ const SHOT_STATUS_LABELS: Readonly<Record<ShotStatus, string>> = {
   blocked: '要判断',
 }
 
-/** 実測コントラスト比: slate 9.45 / sky 6.59 / blue 7.15 / amber 8.15 / emerald 6.78 / red 6.80。 */
+/**
+ * 下地は役割の色の薄い透過、文字と枠は同じ役割で揃える。
+ * `ready` と `generating` は同じ `info` を使うため、**濃さで分ける**
+ * （進行中の方が強い）。色だけで区別させないので、ラベルは必ず併記する。
+ */
 const SHOT_STATUS_CLASSES: Readonly<Record<ShotStatus, string>> = {
-  draft: 'bg-slate-100 text-slate-700 ring-slate-200',
-  ready: 'bg-sky-100 text-sky-800 ring-sky-200',
-  generating: 'bg-blue-100 text-blue-800 ring-blue-300',
-  review: 'bg-amber-100 text-amber-900 ring-amber-300',
-  approved: 'bg-emerald-100 text-emerald-800 ring-emerald-300',
-  blocked: 'bg-red-100 text-red-800 ring-red-300',
+  draft: 'bg-surface-2 text-text ring-line',
+  ready: 'bg-info/10 text-info ring-info/40',
+  generating: 'bg-info/25 text-info ring-info/60',
+  review: 'bg-warn/10 text-warn ring-warn/40',
+  approved: 'bg-ok/10 text-ok ring-ok/40',
+  blocked: 'bg-danger/10 text-danger ring-danger/40',
 }
 
 export const shotStatusLabel = (status: ShotStatus): string => SHOT_STATUS_LABELS[status]
@@ -48,13 +53,13 @@ const REVIEW_STATUS_LABELS: Readonly<Record<ReviewStatus, string>> = {
   skipped: '自動レビュー省略',
 }
 
-/** `skipped` は slate-500 だった。slate-100 地で 4.34 と基準未満のため slate-600（6.92）にする。 */
+/** `skipped` は「実施しなかった」。判定が出た 3 つより一段弱い文字にして区別する。 */
 const REVIEW_STATUS_CLASSES: Readonly<Record<ReviewStatus, string>> = {
-  pending: 'bg-slate-100 text-slate-700',
-  passed: 'bg-emerald-100 text-emerald-800',
-  warned: 'bg-amber-100 text-amber-900',
-  failed: 'bg-red-100 text-red-800',
-  skipped: 'bg-slate-100 text-slate-600',
+  pending: 'bg-surface-2 text-text',
+  passed: 'bg-ok/10 text-ok',
+  warned: 'bg-warn/10 text-warn',
+  failed: 'bg-danger/10 text-danger',
+  skipped: 'bg-surface-2 text-muted',
 }
 
 export const reviewStatusLabel = (status: ReviewStatus): string => REVIEW_STATUS_LABELS[status]

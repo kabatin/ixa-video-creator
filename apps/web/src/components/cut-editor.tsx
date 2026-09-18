@@ -338,23 +338,23 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
 
   return (
     <div className="space-y-4">
-      <section className="rounded-lg border border-slate-200 bg-white p-5">
+      <section className="rounded-lg border border-line bg-surface p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-base font-semibold text-slate-900">聴きながら切る</h2>
-          <p className="text-sm text-slate-600">
+          <h2 className="text-base font-semibold text-text">聴きながら切る</h2>
+          <p className="text-sm text-muted">
             {`BPM ${analysis.bpm.toFixed(1)} / 拍 ${String(analysis.beats.length)} 個 / 小節 ${String(analysis.downbeats.length)} 個`}
           </p>
         </div>
 
         {sourceError !== null && (
-          <p role="alert" className="mt-3 text-sm text-red-800">
+          <p role="alert" className="mt-3 text-sm text-danger">
             {`音源を読み込めませんでした: ${sourceError}`}
           </p>
         )}
 
         <div ref={(node) => setWidthPx(node?.clientWidth ?? 0)} className="mt-4">
           {peaks === null ? (
-            <p role="status" className="text-sm text-slate-600">
+            <p role="status" className="text-sm text-muted">
               波形を読み込んでいます…
             </p>
           ) : (
@@ -439,20 +439,20 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
           >
             全体
           </Button>
-          <span className="text-sm text-slate-600">
+          <span className="text-sm text-muted">
             {`表示 ${formatClock(view.startSec)} 〜 ${formatClock(view.endSec)}`}
           </span>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-          <label className="flex items-center gap-2 text-sm text-slate-800">
+          <label className="flex items-center gap-2 text-sm text-text">
             <input
               type="checkbox"
               checked={followPlayhead}
               onChange={(event) => {
                 setFollowPlayhead(event.target.checked)
               }}
-              className="h-4 w-4 rounded border-slate-400"
+              className="h-4 w-4 rounded border-line-strong"
             />
             再生位置を中央に保つ
           </label>
@@ -462,7 +462,7 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
            * 曲全体を映している窓では中央へ寄せても押し戻されるので、何も起きない。
            * 黙っていると設定が壊れているように見える。
            */}
-          <span className="text-sm text-slate-600">
+          <span className="text-sm text-muted">
             {!followPlayhead
               ? '窓は動かしません。「← 左へ」「右へ →」で自分で送ってください。'
               : !canFollowPlayhead(view, durationSec)
@@ -474,7 +474,7 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
 
       <AudioTransport playback={playback} label={track.title} keyboardShortcuts={false} />
 
-      <section className="rounded-lg border border-slate-200 bg-white p-5">
+      <section className="rounded-lg border border-line bg-surface p-5">
         <div className="flex flex-wrap items-center gap-3">
           <Button
             tone="primary"
@@ -486,7 +486,7 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
             {`ここに区切りを置く（${formatClock(playback.currentSec)}）`}
           </Button>
 
-          <label className="flex items-center gap-2 text-sm text-slate-800">
+          <label className="flex items-center gap-2 text-sm text-text">
             <input
               type="checkbox"
               checked={snapEnabled}
@@ -495,7 +495,7 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
                 setSnapEnabled(event.target.checked)
                 setSnapNotice(null)
               }}
-              className="h-4 w-4 rounded border-slate-400"
+              className="h-4 w-4 rounded border-line-strong"
             />
             拍に吸着させる
           </label>
@@ -516,18 +516,16 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
          * 実際に一度そうなり、再生側だけが「1 秒 戻る / 進む」と嘘を出していた。
          * ここでは `describeCutEditorKeys` が**実際の行き先から作った一覧**だけを出す。
          */}
-        <h3 className="mt-4 text-sm font-semibold text-slate-900">キーの割り当て</h3>
+        <h3 className="mt-4 text-sm font-semibold text-text">キーの割り当て</h3>
         <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
           {keyHelp.map((entry) => (
             <div key={entry.keys} className="flex justify-between gap-3">
-              <dt className="font-mono text-slate-800">{entry.keys}</dt>
-              <dd className="text-right text-slate-600">{entry.action}</dd>
+              <dt className="font-mono text-text">{entry.keys}</dt>
+              <dd className="text-right text-muted">{entry.action}</dd>
             </div>
           ))}
         </dl>
-        <p className="mt-2 text-xs text-slate-600">
-          文字を打っている間はこれらのキーは効きません。
-        </p>
+        <p className="mt-2 text-xs text-muted">文字を打っている間はこれらのキーは効きません。</p>
       </section>
 
       <CutMarkList
@@ -542,8 +540,8 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
         rejection={rejection}
       />
 
-      <section className="rounded-lg border border-slate-200 bg-white p-5">
-        <h2 className="text-base font-semibold text-slate-900">Shot にする</h2>
+      <section className="rounded-lg border border-line bg-surface p-5">
+        <h2 className="text-base font-semibold text-text">Shot にする</h2>
 
         <div className="mt-3 max-w-sm">
           <SelectField
@@ -575,7 +573,7 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
           </Button>
 
           {cuts.state !== 'cuts' && (
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-muted">
               {cuts.state === 'single_mark'
                 ? '区切りが 1 個だけです。カットは隣り合う 2 個の区切りで決まります。'
                 : '区切りがまだありません。'}
@@ -584,18 +582,18 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
         </div>
 
         {saveError !== null && (
-          <p role="alert" className="mt-3 text-sm text-red-800">
+          <p role="alert" className="mt-3 text-sm text-danger">
             {saveError}
           </p>
         )}
 
         {outcome !== null && (
           <div className="mt-3">
-            <p role="status" className="text-sm text-slate-800">
+            <p role="status" className="text-sm text-text">
               {`${String(outcome.createdCount)} 個の Shot を作りました。`}
             </p>
             {outcome.warnings.length > 0 && (
-              <ul role="alert" className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-800">
+              <ul role="alert" className="mt-2 list-disc space-y-1 pl-5 text-sm text-warn">
                 {outcome.warnings.map((warning) => (
                   <li key={warning}>{warning}</li>
                 ))}

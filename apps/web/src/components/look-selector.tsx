@@ -23,26 +23,24 @@ export const LookSelector = ({ looks, selectedLookId, onSelect }: LookSelectorPr
             }}
             className={`flex flex-col items-start gap-1 rounded-lg border px-3 py-2 text-left ${
               selected
-                ? 'border-slate-900 bg-slate-900 text-white'
-                : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-100'
+                ? 'border-accent bg-accent text-accent-fg'
+                : 'border-line-strong bg-surface text-text hover:bg-surface-2'
             }`}
           >
             <span className="text-sm font-semibold">{look.name}</span>
-            <span className={`text-xs ${selected ? 'text-slate-300' : 'text-slate-500'}`}>
+            <span className={`text-xs ${selected ? 'text-accent-fg/80' : 'text-muted'}`}>
               {look.key}
               {look.era === null ? '' : ` / ${look.era}`}
             </span>
             <span className="flex flex-wrap gap-1">
               {look.isDefault && (
-                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-900">
+                <span className="rounded-full bg-bg px-2 py-0.5 text-xs font-medium text-text">
                   既定
                 </span>
               )}
               <span
                 className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                  look.canonicalFrameAssetId === null
-                    ? 'bg-amber-100 text-amber-900'
-                    : 'bg-emerald-100 text-emerald-800'
+                  look.canonicalFrameAssetId === null ? 'bg-bg text-warn' : 'bg-bg text-ok'
                 }`}
               >
                 {look.canonicalFrameAssetId === null ? 'canonical frame なし' : 'canonical frame'}

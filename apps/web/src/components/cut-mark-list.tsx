@@ -82,8 +82,8 @@ const MarkRow = ({
 
   return (
     <li
-      className={`flex flex-wrap items-end gap-3 border-t border-slate-200 py-3 ${
-        selected ? 'bg-sky-50' : ''
+      className={`flex flex-wrap items-end gap-3 border-t border-line py-3 ${
+        selected ? 'bg-info/10' : ''
       }`}
     >
       <button
@@ -94,9 +94,9 @@ const MarkRow = ({
         aria-pressed={selected}
         className="min-w-56 flex-1 text-left"
       >
-        <p className="text-sm font-medium text-slate-800">{cutLabel}</p>
-        <p className="text-xs text-slate-600">{`区切り ${String(index + 1)} — ${formatClock(mark.atSec)}`}</p>
-        <p className="text-xs text-slate-500">{`吸着先: ${snapLabel(mark)}`}</p>
+        <p className="text-sm font-medium text-text">{cutLabel}</p>
+        <p className="text-xs text-muted">{`区切り ${String(index + 1)} — ${formatClock(mark.atSec)}`}</p>
+        <p className="text-xs text-muted">{`吸着先: ${snapLabel(mark)}`}</p>
       </button>
 
       <div className="w-32">
@@ -132,19 +132,19 @@ const EmptyNotice = ({ marks }: { readonly marks: readonly CutMark[] | null }) =
   switch (outcome.state) {
     case 'unreadable':
       return (
-        <p role="alert" className="mt-3 text-sm text-red-800">
+        <p role="alert" className="mt-3 text-sm text-danger">
           区切りを読み込めていません。「1 個も無い」ではなく「分からない」状態です。
         </p>
       )
     case 'no_marks':
       return (
-        <p role="status" className="mt-3 text-sm text-slate-600">
+        <p role="status" className="mt-3 text-sm text-muted">
           {`区切りがまだ 1 個もありません。カットは区切り 2 個からできます（1 カットは ${formatDuration(MIN_CUT_DURATION_SEC)} 以上）。`}
         </p>
       )
     case 'single_mark':
       return (
-        <p role="status" className="mt-3 text-sm text-slate-600">
+        <p role="status" className="mt-3 text-sm text-muted">
           {`区切りは ${formatClock(outcome.atSec)} の 1 個だけです。カットは区切り 2 個からできるので、まだ 1 カットもできていません。`}
         </p>
       )
@@ -172,11 +172,11 @@ export const CutMarkList = ({
   }
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5">
-      <h2 className="text-base font-semibold text-slate-900">できるカット</h2>
+    <section className="rounded-lg border border-line bg-surface p-5">
+      <h2 className="text-base font-semibold text-text">できるカット</h2>
 
       {rejection === null ? null : (
-        <p role="alert" className="mt-3 text-sm text-red-800">
+        <p role="alert" className="mt-3 text-sm text-danger">
           {rejection.message}
         </p>
       )}
@@ -185,7 +185,7 @@ export const CutMarkList = ({
 
       {sorted === null || cuts.length === 0 ? null : (
         <>
-          <p role="status" className="mt-3 text-sm text-slate-700">
+          <p role="status" className="mt-3 text-sm text-text">
             {`区切り ${String(sorted.length)} 個 → カット ${String(cuts.length)} 個。隣り合う区切りがそのまま境界なので、隙間も重なりもできません。`}
           </p>
           <ul className="mt-2">
@@ -214,16 +214,16 @@ export const CutMarkList = ({
  * 割り当ての正は `@/lib/cut-marks` の `resolveCutMarkCommand` で、ここは並べるだけ。
  */
 export const CutMarkKeyHelp = () => (
-  <section className="rounded-lg border border-slate-200 bg-white p-5">
-    <h2 className="text-base font-semibold text-slate-900">キーの割り当て</h2>
+  <section className="rounded-lg border border-line bg-surface p-5">
+    <h2 className="text-base font-semibold text-text">キーの割り当て</h2>
     <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
       {CUT_MARK_KEY_HELP.map((entry) => (
         <div key={entry.keys} className="contents">
-          <dt className="font-mono text-xs text-slate-800">{entry.keys}</dt>
-          <dd className="text-xs text-slate-600">{entry.description}</dd>
+          <dt className="font-mono text-xs text-text">{entry.keys}</dt>
+          <dd className="text-xs text-muted">{entry.description}</dd>
         </div>
       ))}
     </dl>
-    <p className="mt-2 text-xs text-slate-500">文字を打っている間はこれらのキーは効きません。</p>
+    <p className="mt-2 text-xs text-muted">文字を打っている間はこれらのキーは効きません。</p>
   </section>
 )

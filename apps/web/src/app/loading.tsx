@@ -19,12 +19,12 @@ const Loading = () => {
       <div
         role="status"
         aria-live="polite"
-        className="rounded-lg border border-slate-200 bg-white p-12 text-center"
+        className="rounded-lg border border-line bg-surface p-12 text-center"
       >
-        <p className="text-sm text-slate-600">{state.hint}</p>
+        <p className="text-sm text-muted">{state.hint}</p>
         <div
           aria-hidden
-          className="mx-auto mt-6 h-2 w-40 animate-pulse rounded-full bg-slate-200"
+          className="mx-auto mt-6 h-2 w-40 animate-pulse rounded-full bg-line"
         />
       </div>
     </main>

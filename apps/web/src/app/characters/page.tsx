@@ -43,12 +43,12 @@ const loadLibrary = async (workspaceId: WorkspaceId): Promise<LoadResult> => {
 
 const NewCharacterLink = () => (
   <div className="flex items-center gap-3">
-    <Link href="/" className="text-sm text-slate-600 underline hover:text-slate-900">
+    <Link href="/" className="text-sm text-muted underline hover:text-text">
       プロジェクト一覧
     </Link>
     <Link
       href={NEW_CHARACTER_HREF}
-      className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+      className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90"
     >
       新規キャラクター
     </Link>
@@ -81,7 +81,7 @@ const CharactersPage = async () => {
         action={<NewCharacterLink />}
       />
 
-      <p className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+      <p className="mb-6 rounded-lg border border-line bg-surface-2 p-4 text-sm text-text">
         {FOUR_VIEW_NOTICE}
       </p>
 

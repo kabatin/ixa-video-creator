@@ -12,14 +12,14 @@ export const FourViewBadge = ({ present }: FourViewBadgeProps) =>
   present ? (
     <span
       title={identityRoleHint(FOUR_VIEW_ROLE)}
-      className="inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800"
+      className="inline-flex rounded-full bg-ok/10 px-2.5 py-0.5 text-xs font-medium text-ok"
     >
       四面図あり
     </span>
   ) : (
     <span
       title={FOUR_VIEW_ABSENT_HINT}
-      className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900"
+      className="inline-flex rounded-full bg-warn/10 px-2.5 py-0.5 text-xs font-medium text-warn"
     >
       四面図なし
     </span>

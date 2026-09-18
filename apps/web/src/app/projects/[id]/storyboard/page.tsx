@@ -106,11 +106,11 @@ const StoryboardPage = async ({ params }: StoryboardPageProps) => {
            * `verse` 判定）が、下拵えとして粗く割ってから波形の上で直す使い方はできる。
            * 主でなくなったので、開かないと出ないところへ下げてある。
            */}
-          <details className="rounded-lg border border-slate-200 bg-white p-5">
-            <summary className="cursor-pointer text-base font-semibold text-slate-900">
+          <details className="rounded-lg border border-line bg-surface p-5">
+            <summary className="cursor-pointer text-base font-semibold text-text">
               セクションから一括で割る（自動・精度は低い）
             </summary>
-            <p className="mt-2 text-sm text-slate-600">
+            <p className="mt-2 text-sm text-muted">
               解析が付けたセクションの境目で機械的に割ります。ラベルの判定は当てになりません。
               粗く割ってから、上の波形で区切りを直す使い方を想定しています。
             </p>

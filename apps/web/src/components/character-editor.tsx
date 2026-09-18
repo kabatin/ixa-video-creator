@@ -65,13 +65,13 @@ export const CharacterEditor = ({ character }: CharacterEditorProps) => {
   return (
     <form
       noValidate
-      className="space-y-5 rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+      className="space-y-5 rounded-lg border border-line bg-surface p-6 shadow-sm"
       onSubmit={(event) => {
         event.preventDefault()
         void submit()
       }}
     >
-      <h2 className="text-base font-semibold text-slate-900">同一性</h2>
+      <h2 className="text-base font-semibold text-text">同一性</h2>
 
       <div className="grid gap-5 sm:grid-cols-2">
         <TextField
@@ -152,12 +152,12 @@ export const CharacterEditor = ({ character }: CharacterEditorProps) => {
         <button
           type="submit"
           disabled={saving}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-line-strong"
         >
           {saving ? '保存中…' : '保存'}
         </button>
         {savedAt !== null && (
-          <span role="status" className="text-sm text-emerald-700">
+          <span role="status" className="text-sm text-ok">
             {savedAt} に保存しました
           </span>
         )}

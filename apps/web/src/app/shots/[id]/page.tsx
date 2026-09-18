@@ -101,7 +101,7 @@ const ShotDetailPage = async ({ params, searchParams }: ShotPageProps) => {
         action={
           <Link
             href={shotListHref(projectId.data)}
-            className="text-sm text-slate-600 underline hover:text-slate-900"
+            className="text-sm text-muted underline hover:text-text"
           >
             Shot 一覧へ戻る
           </Link>

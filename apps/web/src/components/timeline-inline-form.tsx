@@ -97,7 +97,7 @@ const TEXT_LENGTH_HINT = `${String(MAX_TEXT_CLIP_LENGTH)} 文字まで`
 
 /** 読めなかったことの断り。欄の直下に出す。 */
 const Unreadable = ({ children }: { readonly children: string }) => (
-  <p role="alert" className="mt-1 text-xs text-red-700">
+  <p role="alert" className="mt-1 text-xs text-danger">
     {children}
   </p>
 )
@@ -241,9 +241,9 @@ export const TimelineInlineForm = ({
         (focusInside.current = panelRef.current?.contains(event.relatedTarget) ?? false)
       }
       style={{ left: `${String(placement.leftPx)}px`, top: `${String(placement.topPx)}px` }}
-      className="absolute z-20 w-64 rounded-lg border border-slate-300 bg-white p-3 shadow-lg"
+      className="absolute z-20 w-64 rounded-lg border border-line-strong bg-surface p-3 shadow-lg"
     >
-      <p className="text-sm font-semibold text-slate-900">{PANEL_TITLES[values.kind]}</p>
+      <p className="text-sm font-semibold text-text">{PANEL_TITLES[values.kind]}</p>
       {caption === undefined ? null : <p className={`mt-0.5 ${FIELD_HINT_CLASS}`}>{caption}</p>}
       <div className="mt-3 space-y-3">
         {values.kind === 'transition' ? (
@@ -313,12 +313,12 @@ export const TimelineInlineForm = ({
         />
       </div>
       {notice === null ? null : (
-        <p role="status" className="mt-3 rounded-md bg-amber-50 p-2 text-xs text-amber-900">
+        <p role="status" className="mt-3 rounded-md bg-warn/10 p-2 text-xs text-warn">
           {notice}
         </p>
       )}
       {errors?.form === undefined ? null : (
-        <p role="alert" className="mt-3 text-sm text-red-700">
+        <p role="alert" className="mt-3 text-sm text-danger">
           {errors.form}
         </p>
       )}

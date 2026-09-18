@@ -10,20 +10,20 @@
  * 入力欄の枠・余白・フォーカスを 1 箇所に集める。
  *
  * **`focus:outline-none` を書かないこと。** 以前は入力プリミティブ 4 つすべてに
- * 付いていて、フォーカス時に変わるのは枠線が slate-300 から slate-500 になるだけだった。
+ * 付いていて、フォーカス時に変わるのは枠線がわずかに濃くなるだけだった。
  * キーボードだけの利用者が、いまどこにいるか分からなかった。
  *
  * 見え方は `components/ui/button` の主ボタンと揃える。同じ「いまここ」の合図に
  * 違う見た目を使わない。
  */
 export const FIELD_CONTROL_CLASS =
-  'w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm ' +
-  'focus-visible:border-slate-500 focus-visible:outline focus-visible:outline-2 ' +
-  'focus-visible:outline-offset-2 focus-visible:outline-slate-900 ' +
-  'disabled:bg-slate-100 disabled:text-slate-600'
+  'w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm shadow-sm ' +
+  'focus-visible:border-line-strong focus-visible:outline focus-visible:outline-2 ' +
+  'focus-visible:outline-offset-2 focus-visible:outline-focus ' +
+  'disabled:bg-surface-2 disabled:text-muted'
 
 /** 項目名。12px まで落とさない。小さい文字ほどコントラストが効かなくなる。 */
-export const FIELD_LABEL_CLASS = 'block text-sm font-medium text-slate-800'
+export const FIELD_LABEL_CLASS = 'block text-sm font-medium text-text'
 
-/** 補足説明。12px なので slate-500（白地で 4.76）ではなく slate-600（7.58）を使う。 */
-export const FIELD_HINT_CLASS = 'text-xs text-slate-600'
+/** 補足説明。12px なので `faint` は使わない。`muted` は地の上で 7.6:1 ある。 */
+export const FIELD_HINT_CLASS = 'text-xs text-muted'

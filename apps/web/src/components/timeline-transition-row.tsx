@@ -50,7 +50,7 @@ export const TimelineTransitionRow = ({
   if (points.length === 0) {
     return (
       <div
-        className="m-1 flex items-center justify-center rounded border border-dashed border-slate-300 text-xs text-slate-500"
+        className="m-1 flex items-center justify-center rounded border border-dashed border-line-strong text-xs text-muted"
         style={{ height: heightPx - 8 }}
       >
         Shot が 2 個以上ないと境目がありません
@@ -80,17 +80,17 @@ export const TimelineTransitionRow = ({
               existing === null
                 ? // まだ何も無い境目。**見た目だけ隠す。** 焦点が当たれば現れる。
                   `absolute top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center ` +
-                  `rounded-full border border-dashed border-slate-400 bg-white text-slate-600 ` +
+                  `rounded-full border border-dashed border-line-strong bg-surface text-muted ` +
                   `opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 ` +
                   `group-hover/row:opacity-60 disabled:cursor-not-allowed ` +
-                  `focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 ` +
-                  (open ? 'opacity-100 ring-2 ring-slate-900' : '')
+                  `focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ` +
+                  (open ? 'opacity-100 ring-2 ring-accent' : '')
                 : `absolute top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded px-1.5 py-0.5 ` +
-                  `text-[10px] ring-1 hover:bg-violet-200 disabled:cursor-not-allowed ` +
-                  `focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 ` +
+                  `text-[10px] ring-1 hover:bg-accent-soft/30 disabled:cursor-not-allowed ` +
+                  `focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ` +
                   (open
-                    ? 'bg-violet-200 text-violet-900 ring-violet-600'
-                    : 'bg-violet-100 text-violet-900 ring-violet-300')
+                    ? 'bg-accent-soft/30 text-text ring-accent'
+                    : 'bg-accent-soft/15 text-text ring-accent/40')
             }
             style={
               existing === null

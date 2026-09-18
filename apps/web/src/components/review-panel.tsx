@@ -68,8 +68,8 @@ type WatchState =
 type Feedback = { readonly tone: 'success' | 'error'; readonly message: string }
 
 const FEEDBACK_CLASS = {
-  success: 'text-emerald-700',
-  error: 'text-rose-700',
+  success: 'text-ok',
+  error: 'text-danger',
 } as const
 
 const DECISIONS: readonly HumanDecision[] = ['approved', 'rejected']
@@ -114,8 +114,8 @@ const RunSummary = ({
     >
       {reviewVerdictLabel(run.verdict)}
     </span>
-    <span className="text-xs text-slate-600">{reviewRunStatusLabel(run.status)}</span>
-    <span className="text-sm text-slate-700">{summarizeRun(run, summarizeFindings(findings))}</span>
+    <span className="text-xs text-muted">{reviewRunStatusLabel(run.status)}</span>
+    <span className="text-sm text-text">{summarizeRun(run, summarizeFindings(findings))}</span>
   </div>
 )
 
@@ -126,19 +126,19 @@ const WatchNotice = ({ watch }: { readonly watch: WatchState }) => {
       return null
     case 'watching':
       return (
-        <p role="status" className="text-sm text-slate-700">
+        <p role="status" className="text-sm text-text">
           {`レビューの完了を待っています（経過 ${formatClock(watch.elapsedMs / 1_000)}）。終わったら自動で更新します。`}
         </p>
       )
     case 'timeout':
       return (
-        <p role="alert" className="text-sm text-amber-800">
+        <p role="alert" className="text-sm text-warn">
           {`${timeoutMinutes()} 分待ちましたが終わりませんでした。追いかけるのをやめます。「${WORDING.refresh}」で引き直すか、worker のログを確認してください。`}
         </p>
       )
     case 'failed':
       return (
-        <p role="alert" className="text-sm text-rose-700">
+        <p role="alert" className="text-sm text-danger">
           {`結果を追いかけられなくなりました: ${watch.message}`}
         </p>
       )
@@ -262,10 +262,10 @@ export const ReviewPanel = ({
   }
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="rounded-lg border border-line bg-surface p-6 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-900">自動レビューと判断</h2>
-        <span className="text-xs text-slate-600">{humanVerdictLabel(currentVerdict)}</span>
+        <h2 className="text-base font-semibold text-text">自動レビューと判断</h2>
+        <span className="text-xs text-muted">{humanVerdictLabel(currentVerdict)}</span>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -288,13 +288,13 @@ export const ReviewPanel = ({
 
       <div className="mt-5">
         {state.kind === 'loading' && (
-          <p role="status" className="text-sm text-slate-600">
+          <p role="status" className="text-sm text-muted">
             レビュー結果を読み込んでいます…
           </p>
         )}
 
         {state.kind === 'empty' && (
-          <p className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+          <p className="rounded-md border border-line bg-surface-2 p-4 text-sm text-muted">
             この Take はまだレビューされていません。
           </p>
         )}
@@ -302,7 +302,7 @@ export const ReviewPanel = ({
         {state.kind === 'error' && (
           <p
             role="alert"
-            className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+            className="rounded-md border border-danger/40 bg-danger/10 p-4 text-sm text-danger"
           >
             レビュー結果を取得できませんでした: {state.message}
           </p>
@@ -312,7 +312,7 @@ export const ReviewPanel = ({
           <div className="flex flex-col gap-3">
             <RunSummary run={state.run} findings={state.findings} />
             {isReviewRunPending(state.run.status) && watch.kind !== 'watching' && (
-              <p role="status" className="text-sm text-slate-600">
+              <p role="status" className="text-sm text-muted">
                 {`レビューは実行中です。「${WORDING.refresh}」で引き直してください。`}
               </p>
             )}
@@ -321,7 +321,7 @@ export const ReviewPanel = ({
         )}
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4">
+      <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
         {DECISIONS.map((decision) => (
           <Button
             key={decision}

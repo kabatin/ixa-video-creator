@@ -102,9 +102,9 @@ export const AnalysisStarter = ({ track }: AnalysisStarterProps) => {
   const busy = phase.kind === 'sending' || phase.kind === 'waiting'
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-base font-semibold text-slate-900">この楽曲はまだ解析されていません</h2>
-      <p className="mt-1 text-sm text-slate-600">
+    <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+      <h2 className="text-base font-semibold text-text">この楽曲はまだ解析されていません</h2>
+      <p className="mt-1 text-sm text-muted">
         Shot を割るにはビートとセクションが必要です。解析を実行してください。
       </p>
 
@@ -132,25 +132,25 @@ export const AnalysisStarter = ({ track }: AnalysisStarterProps) => {
 
       <div className="mt-3">
         {phase.kind === 'waiting' && (
-          <p role="status" className="text-sm text-slate-700">
+          <p role="status" className="text-sm text-text">
             {`解析を受け付けました。完了を待っています（経過 ${formatClock(phase.elapsedMs / 1_000)}）。終わったら自動で切り替わります。`}
           </p>
         )}
 
         {phase.kind === 'done' && (
-          <p role="status" className="text-sm text-emerald-700">
+          <p role="status" className="text-sm text-ok">
             解析が終わりました。画面を切り替えています。
           </p>
         )}
 
         {phase.kind === 'timeout' && (
-          <p role="alert" className="text-sm text-amber-800">
+          <p role="alert" className="text-sm text-warn">
             {`${timeoutMinutes()} 分待ちましたが結果が出ませんでした。追いかけるのをやめます。解析が失敗している可能性があるので、worker のログを確認してください。`}
           </p>
         )}
 
         {phase.kind === 'failed' && (
-          <p role="alert" className="text-sm text-rose-700">
+          <p role="alert" className="text-sm text-danger">
             {phase.message}
           </p>
         )}

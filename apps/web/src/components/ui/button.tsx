@@ -33,18 +33,19 @@ const SIZES: Readonly<Record<ButtonSize, string>> = Object.freeze({
 
 /**
  * 無効時の色は文字とのコントラストで選ぶ。
- * `bg-slate-300` に白文字はコントラスト比 1.48 で読めなかった。
+ * 以前の薄い灰（slate-300 相当）の地に白文字はコントラスト比 1.48 で読めなかった。
+ * 役割の名前にしたいまも同じで、無効は `line` の上に `muted`（薄くしすぎない）。
  */
 const TONES: Readonly<Record<ButtonTone, string>> = Object.freeze({
   primary:
-    'bg-slate-900 text-white hover:bg-slate-700 focus-visible:outline-slate-900 ' +
-    'disabled:bg-slate-200 disabled:text-slate-500',
+    'bg-accent text-accent-fg hover:bg-accent/90 focus-visible:outline-focus ' +
+    'disabled:bg-line disabled:text-muted',
   secondary:
-    'border border-slate-300 text-slate-700 hover:bg-slate-50 focus-visible:outline-slate-500 ' +
-    'disabled:border-slate-200 disabled:text-slate-400',
+    'border border-line-strong text-text hover:bg-surface-2 focus-visible:outline-focus ' +
+    'disabled:border-line disabled:text-muted',
   danger:
-    'bg-rose-700 text-white hover:bg-rose-800 focus-visible:outline-rose-700 ' +
-    'disabled:bg-rose-200 disabled:text-rose-700',
+    'bg-danger text-bg hover:bg-danger/90 focus-visible:outline-focus ' +
+    'disabled:bg-line disabled:text-muted',
 })
 
 export type ButtonProps = {

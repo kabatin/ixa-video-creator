@@ -37,13 +37,13 @@ export const LookForm = ({ busy, onSubmit }: LookFormProps) => {
   return (
     <form
       noValidate
-      className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+      className="space-y-4 rounded-lg border border-line bg-surface p-4 shadow-sm"
       onSubmit={(event) => {
         event.preventDefault()
         submit()
       }}
     >
-      <h3 className="text-sm font-semibold text-slate-900">Look を追加</h3>
+      <h3 className="text-sm font-semibold text-text">Look を追加</h3>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField
@@ -107,7 +107,7 @@ export const LookForm = ({ busy, onSubmit }: LookFormProps) => {
         }}
       />
 
-      <label className="flex items-center gap-2 text-sm text-slate-800">
+      <label className="flex items-center gap-2 text-sm text-text">
         <input
           type="checkbox"
           checked={values.isDefault}
@@ -116,7 +116,7 @@ export const LookForm = ({ busy, onSubmit }: LookFormProps) => {
             const isDefault = event.target.checked
             setValues((current) => ({ ...current, isDefault }))
           }}
-          className="h-4 w-4 rounded border-slate-300"
+          className="h-4 w-4 rounded border-line-strong"
         />
         既定の Look にする（Shot が Look を指定しないときに使われる）
       </label>
@@ -126,7 +126,7 @@ export const LookForm = ({ busy, onSubmit }: LookFormProps) => {
       <button
         type="submit"
         disabled={busy}
-        className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+        className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-line-strong"
       >
         {busy ? '追加中…' : 'Look を追加'}
       </button>

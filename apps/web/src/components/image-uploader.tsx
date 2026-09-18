@@ -53,7 +53,7 @@ export const ImageUploader = ({
 
   return (
     <div className="space-y-2">
-      <label htmlFor={id} className="block text-sm font-medium text-slate-800">
+      <label htmlFor={id} className="block text-sm font-medium text-text">
         画像ファイル
       </label>
       <input
@@ -67,7 +67,7 @@ export const ImageUploader = ({
           setError(null)
           setFile(event.target.files?.[0] ?? null)
         }}
-        className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border file:border-slate-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:text-slate-700"
+        className="block w-full text-sm text-text file:mr-3 file:rounded-md file:border file:border-line-strong file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-text"
       />
 
       <button
@@ -77,13 +77,13 @@ export const ImageUploader = ({
           if (file === null) return
           void upload(file)
         }}
-        className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+        className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-line-strong"
       >
         {busy ? 'アップロード中…' : submitLabel}
       </button>
 
       {error !== null && (
-        <p role="alert" className="whitespace-pre-wrap break-words text-sm text-red-700">
+        <p role="alert" className="whitespace-pre-wrap break-words text-sm text-danger">
           {error}
         </p>
       )}

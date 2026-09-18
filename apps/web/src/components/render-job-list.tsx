@@ -35,8 +35,8 @@ export type RenderJobListProps = {
 }
 
 const ProgressBar = ({ percent }: { readonly percent: number }) => (
-  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
-    <div className="h-full rounded-full bg-sky-600" style={{ width: `${String(percent)}%` }} />
+  <div className="h-2 w-full overflow-hidden rounded-full bg-line">
+    <div className="h-full rounded-full bg-info" style={{ width: `${String(percent)}%` }} />
   </div>
 )
 
@@ -57,7 +57,7 @@ const JobRow = ({
 }) => {
   const view = describeRenderJob(job)
   const outputUrl = outputs[job.id]
-  const border = highlighted ? 'border-sky-400 bg-sky-50' : 'border-slate-200 bg-white'
+  const border = highlighted ? 'border-info/60 bg-info/10' : 'border-line bg-surface'
 
   return (
     <li className={`rounded-lg border p-4 ${border}`}>
@@ -67,10 +67,10 @@ const JobRow = ({
         >
           {view.statusLabel}
         </span>
-        <span className="text-sm font-medium text-slate-900">{renderPresetLabel(job.preset)}</span>
-        <span className="text-xs text-slate-500">{formatJobTime(job.createdAt)}</span>
+        <span className="text-sm font-medium text-text">{renderPresetLabel(job.preset)}</span>
+        <span className="text-xs text-muted">{formatJobTime(job.createdAt)}</span>
         {nowMs !== null && (
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-muted">
             {job.finishedAt === null ? '経過 ' : 'かかった時間 '}
             {formatClock(renderElapsedSec(job, nowMs))}
           </span>
@@ -79,7 +79,7 @@ const JobRow = ({
 
       <p
         role={view.phase === 'failed' ? 'alert' : 'status'}
-        className={`mt-2 text-sm ${view.phase === 'failed' ? 'text-red-800' : 'text-slate-700'}`}
+        className={`mt-2 text-sm ${view.phase === 'failed' ? 'text-danger' : 'text-text'}`}
       >
         {view.detail}
       </p>
@@ -106,7 +106,7 @@ const JobRow = ({
               href={outputUrl}
               target="_blank"
               rel="noreferrer"
-              className="text-sm text-sky-800 underline hover:text-sky-950"
+              className="text-sm text-text underline hover:text-accent"
             >
               別のタブで再生・ダウンロード
             </a>
@@ -119,7 +119,7 @@ const JobRow = ({
           controls
           preload="metadata"
           src={outputUrl}
-          className="mt-3 w-full max-w-xl rounded-md border border-slate-200 bg-black"
+          className="mt-3 w-full max-w-xl rounded-md border border-line bg-black"
         >
           <track kind="captions" />
         </video>
@@ -139,9 +139,9 @@ export const RenderJobList = ({
 }: RenderJobListProps) => {
   if (jobs === null) {
     return (
-      <section role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4">
-        <h3 className="text-sm font-semibold text-red-900">書き出しの履歴を読み込めませんでした</h3>
-        <p className="mt-1 text-sm text-red-800">
+      <section role="alert" className="rounded-lg border border-danger/40 bg-danger/10 p-4">
+        <h3 className="text-sm font-semibold text-danger">書き出しの履歴を読み込めませんでした</h3>
+        <p className="mt-1 text-sm text-danger">
           {error ?? '理由が記録されていません。'}
           これは「まだ 1 件も書き出していない」ではありません。
         </p>
@@ -151,7 +151,7 @@ export const RenderJobList = ({
 
   if (jobs.length === 0) {
     return (
-      <p role="status" className="rounded-lg border border-dashed border-slate-300 p-6 text-sm text-slate-600">
+      <p role="status" className="rounded-lg border border-dashed border-line-strong p-6 text-sm text-muted">
         このプロジェクトはまだ 1 度も書き出していません。
       </p>
     )

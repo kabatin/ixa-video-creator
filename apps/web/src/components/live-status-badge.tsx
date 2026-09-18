@@ -20,15 +20,15 @@ import {
  */
 
 const TONE_CLASSES: Readonly<Record<LiveTone, string>> = {
-  waiting: 'bg-slate-100 text-slate-700 ring-slate-200',
-  live: 'bg-emerald-100 text-emerald-800 ring-emerald-300',
-  stale: 'bg-amber-100 text-amber-900 ring-amber-300',
+  waiting: 'bg-surface-2 text-text ring-line',
+  live: 'bg-ok/10 text-ok ring-ok/40',
+  stale: 'bg-warn/10 text-warn ring-warn/40',
 }
 
 const DOT_CLASSES: Readonly<Record<LiveTone, string>> = {
-  waiting: 'bg-slate-400',
-  live: 'bg-emerald-500',
-  stale: 'bg-amber-500',
+  waiting: 'bg-line-strong',
+  live: 'bg-ok',
+  stale: 'bg-warn',
 }
 
 /** 経過時間を書き換える間隔。秒を出しているので 1 秒。 */

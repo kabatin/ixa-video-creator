@@ -30,7 +30,7 @@ export const LookImageGrid = ({
 }: LookImageGridProps) => {
   if (images.length === 0) {
     return (
-      <p className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-600">
+      <p className="rounded-lg border border-dashed border-line-strong bg-surface p-6 text-center text-sm text-muted">
         この Look の画像がありません。衣装の参照を登録してください。
       </p>
     )
@@ -49,18 +49,18 @@ export const LookImageGrid = ({
         return (
           <li
             key={image.id}
-            className={`flex flex-col items-start gap-2 rounded-lg border bg-white p-3 shadow-sm ${
-              isCanonical ? 'border-emerald-500 ring-1 ring-emerald-500' : 'border-slate-200'
+            className={`flex flex-col items-start gap-2 rounded-lg border bg-surface p-3 shadow-sm ${
+              isCanonical ? 'border-ok/40 ring-1 ring-ok/40' : 'border-line'
             }`}
           >
             <MediaImage mediaAssetId={image.mediaAssetId} alt={roleLabel} />
 
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+              <span className="rounded bg-surface-2 px-2 py-0.5 text-xs font-medium text-text">
                 {roleLabel}
               </span>
               {isCanonical && (
-                <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-xs font-semibold text-white">
+                <span className="rounded-full bg-ok px-2 py-0.5 text-xs font-semibold text-bg">
                   canonical frame
                 </span>
               )}

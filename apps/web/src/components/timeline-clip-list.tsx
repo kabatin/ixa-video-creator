@@ -119,8 +119,8 @@ const ClipRow = ({
 
   return (
     <li
-      className={`flex flex-wrap items-end gap-3 border-t border-slate-200 py-3 ${
-        selected ? 'bg-sky-50' : ''
+      className={`flex flex-wrap items-end gap-3 border-t border-line py-3 ${
+        selected ? 'bg-info/10' : ''
       }`}
     >
       <button
@@ -131,11 +131,11 @@ const ClipRow = ({
         aria-pressed={selected}
         className="min-w-56 flex-1 text-left"
       >
-        <p className="text-sm font-medium text-slate-800">
+        <p className="text-sm font-medium text-text">
           {`${clip.track} / layer ${String(clip.layer)}`}
         </p>
-        <p className="text-xs text-slate-600">{describeClipContent(clip.content)}</p>
-        <p className="text-xs text-slate-500">{formatTimeSpan(clip)}</p>
+        <p className="text-xs text-muted">{describeClipContent(clip.content)}</p>
+        <p className="text-xs text-muted">{formatTimeSpan(clip)}</p>
       </button>
 
       <div className="w-28">
@@ -196,10 +196,10 @@ const ClipRow = ({
             onRemove(clip.id)
           }}
         >
-          <p className="mt-2 text-xs text-rose-900">
+          <p className="mt-2 text-xs text-danger">
             {describeClipContent(clip.content)}
           </p>
-          <p className="mt-1 text-xs text-rose-900">
+          <p className="mt-1 text-xs text-danger">
             この種類のクリップは、この画面から置き直せません。
           </p>
         </ConfirmButton>
@@ -221,15 +221,15 @@ export const TimelineClipList = ({
   onRemove,
   onSnapSpan,
 }: TimelineClipListProps) => (
-  <section className="rounded-lg border border-slate-200 bg-white p-5">
-    <h2 className="text-base font-semibold text-slate-900">置いてあるクリップ</h2>
+  <section className="rounded-lg border border-line bg-surface p-5">
+    <h2 className="text-base font-semibold text-text">置いてあるクリップ</h2>
 
     {clips === null ? (
-      <p role="alert" className="mt-3 text-sm text-red-800">
+      <p role="alert" className="mt-3 text-sm text-danger">
         クリップを読み込めていません。「1 件も無い」ではなく「分からない」状態です。
       </p>
     ) : clips.length === 0 ? (
-      <p role="status" className="mt-3 text-sm text-slate-600">
+      <p role="status" className="mt-3 text-sm text-muted">
         読み込みは成功しました。クリップはまだ 1 件もありません。
       </p>
     ) : (

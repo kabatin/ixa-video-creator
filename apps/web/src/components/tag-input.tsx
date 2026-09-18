@@ -23,9 +23,9 @@ export type TagInputProps = {
 
 /** 削除ボタンは小さいので、枠と文字のコントラストを落とさない。slate-100 地に slate-600 で 6.92。 */
 const REMOVE_BUTTON_CLASS =
-  'rounded-full px-1.5 text-slate-600 hover:bg-slate-200 hover:text-slate-900 ' +
+  'rounded-full px-1.5 text-muted hover:bg-line hover:text-text ' +
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ' +
-  'focus-visible:outline-slate-900 disabled:cursor-not-allowed disabled:text-slate-500'
+  'focus-visible:outline-focus disabled:cursor-not-allowed disabled:text-muted'
 
 /**
  * 配列のプロンプト断片を 1 つずつ足し引きする入力。
@@ -67,7 +67,7 @@ export const TagInput = ({
         {values.map((value, index) => (
           <li
             key={value}
-            className="flex items-center gap-1 rounded-full bg-slate-100 py-1 pl-3 pr-1 text-sm text-slate-800"
+            className="flex items-center gap-1 rounded-full bg-surface-2 py-1 pl-3 pr-1 text-sm text-text"
           >
             <span>{value}</span>
             <button
@@ -84,7 +84,7 @@ export const TagInput = ({
             </button>
           </li>
         ))}
-        {values.length === 0 && <li className="text-sm text-slate-600">未登録</li>}
+        {values.length === 0 && <li className="text-sm text-muted">未登録</li>}
       </ul>
 
       <div className="mt-2 flex gap-2">

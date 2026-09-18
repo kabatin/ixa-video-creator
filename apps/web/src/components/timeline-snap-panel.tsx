@@ -18,9 +18,9 @@ import type { SnapCandidate } from '@ixa/timeline'
  */
 
 const TONE_CLASSES: Readonly<Record<BeatSourceTone, string>> = {
-  ok: 'border-emerald-300 bg-emerald-50 text-emerald-900',
-  warn: 'border-amber-300 bg-amber-50 text-amber-900',
-  error: 'border-red-300 bg-red-50 text-red-900',
+  ok: 'border-ok/40 bg-ok/10 text-ok',
+  warn: 'border-warn/40 bg-warn/10 text-warn',
+  error: 'border-danger/40 bg-danger/10 text-danger',
 }
 
 export type TimelineSnapPanelProps = {
@@ -44,9 +44,9 @@ export const TimelineSnapPanel = ({
   const counts = countSnapCandidates(candidates)
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5" aria-label="ビート吸着">
+    <section className="rounded-lg border border-line bg-surface p-5" aria-label="ビート吸着">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-900">ビート吸着</h2>
+        <h2 className="text-base font-semibold text-text">ビート吸着</h2>
         <button
           type="button"
           aria-pressed={enabled}
@@ -55,15 +55,15 @@ export const TimelineSnapPanel = ({
           }}
           className={`rounded-md px-4 py-1.5 text-sm font-medium ring-1 ${
             enabled
-              ? 'bg-slate-900 text-white ring-slate-900'
-              : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-100'
+              ? 'bg-accent text-accent-fg ring-accent'
+              : 'bg-surface text-text ring-line-strong hover:bg-surface-2'
           }`}
         >
           {enabled ? '吸着 ON' : '吸着 OFF'}
         </button>
       </div>
 
-      <p role="status" className="mt-2 text-sm text-slate-600">
+      <p role="status" className="mt-2 text-sm text-muted">
         {enabled
           ? `入力した秒を、最寄りの候補へ寄せます。許容距離は今のズームで ${toleranceSec.toFixed(3)}s（画面上で 8px 相当）です。`
           : '吸着を切っています。入力した秒をそのまま使います。狙った位置へ正確に置きたいときはこちらです。'}
@@ -78,7 +78,7 @@ export const TimelineSnapPanel = ({
       </div>
 
       {counts.length === 0 ? (
-        <p role="status" className="mt-3 text-sm text-amber-800">
+        <p role="status" className="mt-3 text-sm text-warn">
           吸着候補が 1 件もありません。吸着を ON にしても値は動きません。
         </p>
       ) : (
@@ -86,7 +86,7 @@ export const TimelineSnapPanel = ({
           {counts.map((entry) => (
             <li
               key={entry.kind}
-              className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700 ring-1 ring-slate-200"
+              className="rounded-full bg-surface-2 px-3 py-1 text-xs text-text ring-1 ring-line"
             >
               {`${entry.label} ${String(entry.count)} 件`}
             </li>
@@ -111,7 +111,7 @@ export const SnapNoticeList = ({ notices }: SnapNoticeListProps) => {
   if (notices === null || notices.length === 0) return null
 
   return (
-    <ul role="status" className="mt-3 space-y-1 rounded-md bg-slate-50 p-3">
+    <ul role="status" className="mt-3 space-y-1 rounded-md bg-surface-2 p-3">
       {notices.map((notice) => (
         <li key={notice.label} className={`text-xs ${snapNoticeClassName(notice.state)}`}>
           <span className="font-medium">{`${notice.label}: `}</span>

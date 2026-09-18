@@ -41,7 +41,7 @@ export const SelectField = ({
         onChange={(event) => {
           onChange(event.target.value)
         }}
-        className={`mt-1 bg-white ${FIELD_CONTROL_CLASS}`}
+        className={`mt-1 bg-surface ${FIELD_CONTROL_CLASS}`}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>

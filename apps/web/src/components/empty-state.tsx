@@ -85,19 +85,19 @@ export const EmptyState = ({
 }: EmptyStateProps) => (
   <div
     role="status"
-    className="rounded-lg border border-dashed border-slate-300 bg-white p-12 text-center"
+    className="rounded-lg border border-dashed border-line-strong bg-surface p-12 text-center"
   >
-    <p className="text-sm text-slate-600">{message}</p>
-    {hint !== undefined && <p className="mt-2 text-sm text-slate-500">{hint}</p>}
+    <p className="text-sm text-muted">{message}</p>
+    {hint !== undefined && <p className="mt-2 text-sm text-muted">{hint}</p>}
     <Link
       href={actionHref}
-      className="mt-4 inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+      className="mt-4 inline-block rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90"
     >
       {actionLabel}
     </Link>
     {secondaryHref !== undefined && secondaryLabel !== undefined && (
       <p className="mt-3 text-sm">
-        <Link href={secondaryHref} className="text-slate-600 underline hover:text-slate-900">
+        <Link href={secondaryHref} className="text-muted underline hover:text-text">
           {secondaryLabel}
         </Link>
       </p>

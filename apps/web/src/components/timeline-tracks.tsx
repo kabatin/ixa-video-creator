@@ -83,9 +83,9 @@ type RowProps = {
 }
 
 const Row = ({ label, contentWidthPx, children }: RowProps) => (
-  <div className="flex border-t border-slate-200">
+  <div className="flex border-t border-line">
     <div
-      className={`sticky left-0 z-10 ${LABEL_WIDTH_CLASS} shrink-0 border-r border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700`}
+      className={`sticky left-0 z-10 ${LABEL_WIDTH_CLASS} shrink-0 border-r border-line bg-surface-2 px-3 py-2 text-xs font-medium text-text`}
     >
       {label}
     </div>
@@ -97,7 +97,7 @@ const Row = ({ label, contentWidthPx, children }: RowProps) => (
 
 const EmptyLane = ({ message }: { readonly message: string }) => (
   <div
-    className="m-1 flex items-center justify-center rounded border border-dashed border-slate-300 text-xs text-slate-500"
+    className="m-1 flex items-center justify-center rounded border border-dashed border-line-strong text-xs text-muted"
     style={{ height: LANE_HEIGHT_PX - 8 }}
   >
     {message}
@@ -177,14 +177,14 @@ export const TimelineTracks = ({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+    <div className="overflow-x-auto rounded-lg border border-line bg-surface">
       <div ref={contentRef} className="relative" style={{ minWidth: contentWidthPx }}>
         <Row label={`尺 ${formatClock(durationSec)}`} contentWidthPx={contentWidthPx}>
           <div className="relative h-8">
             {ticks.map((tick) => (
               <span
                 key={tick.sec}
-                className="absolute top-0 border-l border-slate-300 pl-1 text-[10px] text-slate-500"
+                className="absolute top-0 border-l border-line-strong pl-1 text-[10px] text-muted"
                 style={{ left: tick.leftPx, height: '100%' }}
               >
                 {tick.label}
@@ -207,8 +207,8 @@ export const TimelineTracks = ({
                     title={`${shot.code} ${formatTimeSpan(shot)}`}
                     className={`absolute top-2 overflow-hidden rounded px-1 text-[11px] ring-1 ${
                       rendered
-                        ? 'bg-slate-200 text-slate-800 ring-slate-400'
-                        : 'border border-dashed bg-amber-50 text-amber-900 ring-amber-400'
+                        ? 'bg-line text-text ring-line-strong'
+                        : 'border border-dashed bg-warn/10 text-warn ring-warn/40'
                     }`}
                     style={{ left: rect.leftPx, width: rect.widthPx, height: LANE_HEIGHT_PX - 16 }}
                   >

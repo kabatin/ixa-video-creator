@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 const BackLink = () => (
   <Link
     href={CHARACTER_LIST_HREF}
-    className="text-sm text-slate-600 underline hover:text-slate-900"
+    className="text-sm text-muted underline hover:text-text"
   >
     一覧へ戻る
   </Link>
@@ -20,7 +20,7 @@ const NewCharacterPage = () => {
   const workspace = resolveWorkspaceId()
 
   return (
-    <main>
+    <main className="mx-auto w-full max-w-3xl">
       <PageHeader
         title="新規キャラクター"
         description="ここには Look で変わらない同一性だけを登録します。衣装や髪色は作成後に Look として足します。"

@@ -20,8 +20,8 @@ export type CameraFieldsProps = {
 }
 
 export const CameraFields = ({ values, errors, disabled, onChange }: CameraFieldsProps) => (
-  <fieldset className="rounded-md border border-slate-200 p-4">
-    <legend className="px-1 text-sm font-semibold text-slate-800">カメラ</legend>
+  <fieldset className="rounded-md border border-line p-4">
+    <legend className="px-1 text-sm font-semibold text-text">カメラ</legend>
     <div className="grid gap-4 sm:grid-cols-2">
       <SelectField
         id="size"
