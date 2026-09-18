@@ -27,6 +27,7 @@ import { createSequenceApi, type SequenceApi } from '@/lib/sequence-api'
 import { createReviewApi, type ReviewApi } from '@/lib/review-api'
 import { createTimelineApi, type TimelineApi } from '@/lib/timeline-api'
 import { createRenderApi, type RenderApi } from '@/lib/render-api'
+import { createShotBulkApi, type ShotBulkApi } from '@/lib/shot-bulk-api'
 import { createShotCastApi, type ShotCastApi } from '@/lib/shot-cast-api'
 import {
   createLibraryApi,
@@ -78,6 +79,7 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
   RenderApi &
   ReviewApi &
   SequenceApi &
+  ShotBulkApi &
   ShotCastApi &
   TimelineApi &
   UploadApi
@@ -147,6 +149,7 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
     ...createReviewApi(requester),
     ...createTimelineApi(requester),
     ...createRenderApi(requester),
+    ...createShotBulkApi(requester),
     ...createShotCastApi(requester),
     ...createLibraryApi(requester),
     ...createProjectSettingsApi(requester),

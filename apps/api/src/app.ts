@@ -13,6 +13,7 @@ import { healthRoutes } from './routes/health.js'
 import { mediaRoutes } from './routes/media.js'
 import { projectRoutes } from './routes/projects.js'
 import { shotRoutes, type GenerationQueue } from './routes/shots.js'
+import { shotBulkRoutes } from './routes/shots-bulk.js'
 import { uploadRoutes, type MediaIngestDeps } from './routes/uploads.js'
 import { timelineRoutes } from './routes/timeline.js'
 import { renderRoutes, type RenderQueue } from './routes/renders.js'
@@ -99,18 +100,18 @@ export const createApp = (deps: AppDeps) => {
   app.route('/', projectRoutes({ projects }))
   app.route('/', uploadRoutes({ mediaAssets, storage, mediaIngest: deps.mediaIngest }))
   app.route('/', mediaRoutes({ mediaAssets, storage }))
-  app.route(
-    '/',
-    shotRoutes({
-      shots: deps.shots,
-      projects,
-      takes: deps.takes,
-      generationJobs: deps.generationJobs,
-      registry: deps.registry,
-      context: deps.generationContext,
-      queue: deps.generationQueue,
-    }),
-  )
+  /** 1 件の経路と一括の経路は同じ依存を使う。組み立てを 1 箇所にまとめる。 */
+  const shotDeps = {
+    shots: deps.shots,
+    projects,
+    takes: deps.takes,
+    generationJobs: deps.generationJobs,
+    registry: deps.registry,
+    context: deps.generationContext,
+    queue: deps.generationQueue,
+  }
+  app.route('/', shotRoutes(shotDeps))
+  app.route('/', shotBulkRoutes(shotDeps))
 
   /** Timeline と Render は同じ依存を使う。組み立てを 1 箇所にまとめる。 */
   const timelineDeps = {

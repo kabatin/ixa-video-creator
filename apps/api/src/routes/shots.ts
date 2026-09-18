@@ -19,6 +19,7 @@ import {
   type ModelId,
   type Project,
   type Shot,
+  type ShotId,
   type Take,
   CostLimits as CostLimitsSchema,
   DEFAULT_COST_LIMITS,
@@ -43,7 +44,9 @@ import {
   UnknownModelError,
 } from '@ixa/provider-core'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
-import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
+import {
+  errorContent, fail, listResponse, ok, okList, successResponse, type FieldErrors,
+} from '../response.js'
 
 /**
  * Shot の CRUD と生成ジョブの投入（docs/ARCHITECTURE.md §11 / §18）。
@@ -288,7 +291,7 @@ export type ShotRoutesDeps = {
  * そのためロジックは packages 側にあり、ここは provider-core の実装を
  * 構造的な Port に差し込むだけの配線に徹する。
  */
-const generationPorts = (
+export const generationPorts = (
   deps: Pick<ShotRoutesDeps, 'context' | 'registry'>,
 ): BuildGenerationDeps<VideoModelDescriptor> => ({
   context: deps.context,
@@ -316,7 +319,7 @@ export const costLimitsFor = (project: Pick<Project, 'budgetUsd'>): CostLimits =
   })
 
 /** GenerationJob 行を作りつつキューへ入れる。DB が真実、キューは実行手段（ADR-0008）。 */
-const enqueueJobs = async (
+export const enqueueJobs = async (
   deps: Pick<ShotRoutesDeps, 'generationJobs' | 'queue'>,
   shot: Shot,
   compiled: CompiledGeneration<VideoModelDescriptor>,
@@ -336,6 +339,43 @@ const enqueueJobs = async (
     created.push(job.id)
   }
   return created
+}
+
+/**
+ * 採用 Take を確定し、Shot の状態を進める。
+ *
+ * **1 件ずつの採用と一括採用で同じ判断を使う**（tasks/lessons.md L-016）。
+ * 人が承認済みの Take なら見直す先が無いので `approved`、それ以外は `review`。
+ */
+export const applySelectedTake = async (
+  deps: Pick<ShotRoutesDeps, 'shots'>,
+  shotId: ShotId,
+  take: Pick<Take, 'id' | 'humanVerdict'>,
+): Promise<Shot> => {
+  await deps.shots.selectTake(shotId, take.id)
+  return deps.shots.updateStatus(shotId, take.humanVerdict === 'approved' ? 'approved' : 'review')
+}
+
+/**
+ * `buildGeneration` の**知っている失敗だけ**をフィールド単位の 422 へ畳む。
+ * 未知の失敗は `null` を返す。呼び出し側は投げ直して 500 にすること
+ * （DB の接続断を「モデルが不正」として返さないため）。
+ *
+ * 1 件ずつの生成と一括生成が同じ切り分けを使う（tasks/lessons.md L-016）。
+ */
+export const generationFailureFields = (error: unknown): FieldErrors | null => {
+  // Shot が実在しない Character / Look を指している。モデルの問題ではない。
+  if (error instanceof GenerationContextError) return { characters: [error.message] }
+  // モデルが選べない・要求を満たせない・尺が出せない、は入力の問題。
+  if (
+    error instanceof SpecCompilationError ||
+    error instanceof DurationNotSupportedError ||
+    error instanceof NoEligibleModelError ||
+    error instanceof UnknownModelError
+  ) {
+    return { model: [error.message] }
+  }
+  return null
 }
 
 export const shotRoutes = (deps: ShotRoutesDeps) =>
@@ -401,11 +441,7 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
         )
       }
 
-      await deps.shots.selectTake(shot.id, take.id)
-      const updated = await deps.shots.updateStatus(
-        shot.id,
-        take.humanVerdict === 'approved' ? 'approved' : 'review',
-      )
+      const updated = await applySelectedTake(deps, shot.id, take)
       return c.json(ok(toShotResponse(updated)), 200)
     })
     .openapi(generateRoute, async (c) => {
@@ -427,20 +463,9 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
          * 「モデルが不正」として 422 で返ってしまい、障害が入力ミスに見えていた。
          * 未知の例外は握り潰さず投げ直し、500 として扱う。
          */
-        if (error instanceof GenerationContextError) {
-          // Shot が実在しない Character / Look を指している。モデルの問題ではない。
-          return c.json(fail(VALIDATION_ERROR_MESSAGE, { characters: [error.message] }), 422)
-        }
-        // モデルが選べない・要求を満たせない・尺が出せない、は入力の問題。
-        if (
-          error instanceof SpecCompilationError ||
-          error instanceof DurationNotSupportedError ||
-          error instanceof NoEligibleModelError ||
-          error instanceof UnknownModelError
-        ) {
-          return c.json(fail(VALIDATION_ERROR_MESSAGE, { model: [error.message] }), 422)
-        }
-        throw error
+        const fields = generationFailureFields(error)
+        if (fields === null) throw error
+        return c.json(fail(VALIDATION_ERROR_MESSAGE, fields), 422)
       }
 
       /**

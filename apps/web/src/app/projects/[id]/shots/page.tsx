@@ -5,11 +5,14 @@ import { ProjectNav } from '@/components/project-nav'
 import { EmptyState, describeViewState } from '@/components/empty-state'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
-import { ShotTable } from '@/components/shot-table'
+import { ShotListWorkspace } from '@/components/shot-list-workspace'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import { toLocationOptions } from '@/lib/location-options'
 import { projectSectionHref } from '@/lib/project-links'
 import { newShotHref } from '@/lib/shot-links'
+import { resolveWorkspaceId } from '@/lib/workspace'
+import type { BulkSelectOption } from '@/components/bulk-action-bar'
 
 /**
  * Shot 一覧（P55-6）。
@@ -56,9 +59,11 @@ const Shell = ({ children }: { readonly children: ReactNode }) => (
 const ShotsBody = ({
   projectId,
   shots,
+  locationOptions,
 }: {
   readonly projectId: ProjectId
   readonly shots: Part<readonly Shot[]>
+  readonly locationOptions: readonly BulkSelectOption[]
 }) => {
   if (shots.error !== null) {
     const state = describeViewState('unreadable', 'Shot')
@@ -86,7 +91,13 @@ const ShotsBody = ({
     )
   }
 
-  return <ShotTable shots={shots.value} />
+  return (
+    <ShotListWorkspace
+      projectId={projectId}
+      initialShots={shots.value}
+      locationOptions={locationOptions}
+    />
+  )
 }
 
 const ShotsPage = async ({ params }: ShotsPageProps) => {
@@ -141,6 +152,24 @@ const ShotsPage = async ({ params }: ShotsPageProps) => {
 
   const shots = await attempt('Shot', () => createApiClient().listShots(projectId.data))
 
+  /**
+   * ロケーションは一括変更の選択肢。**読めなくても一覧は出す。**
+   * 読めなかったことは選択肢の側で「取れませんでした」と出し、空と混ぜない（L-015）。
+   */
+  const workspace = resolveWorkspaceId()
+  const locations = workspace.ok
+    ? await attempt('ロケーション', () => createApiClient().listLocations(workspace.workspaceId))
+    : { value: null, error: workspace.reason }
+  const locationOptions: readonly BulkSelectOption[] =
+    locations.value === null
+      ? [
+          {
+            value: '__unavailable__',
+            label: `ロケーションを取れませんでした: ${locations.error ?? ''}`,
+          },
+        ]
+      : toLocationOptions(locations.value)
+
   return (
     <main>
       <PageHeader
@@ -158,7 +187,7 @@ const ShotsPage = async ({ params }: ShotsPageProps) => {
           </div>
         }
       />
-      <ShotsBody projectId={projectId.data} shots={shots} />
+      <ShotsBody projectId={projectId.data} shots={shots} locationOptions={locationOptions} />
     </main>
   )
 }
