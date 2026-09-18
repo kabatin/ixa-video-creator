@@ -1,4 +1,10 @@
-import { ProjectId, type MusicTrack, type Sequence, type Shot } from '@ixa/domain'
+import {
+  pickMasterTrack,
+  ProjectId,
+  type MusicTrack,
+  type Sequence,
+  type Shot,
+} from '@ixa/domain'
 import { ProjectNav } from '@/components/project-nav'
 import { AnalysisStarter } from '@/components/analysis-starter'
 import { ErrorPanel } from '@/components/error-panel'
@@ -25,12 +31,11 @@ type LoadResult =
   { readonly ok: true; readonly loaded: Loaded } | { readonly ok: false; readonly message: string }
 
 /**
- * 割り当てに使う楽曲を選ぶ。
- * マスター音源があればそれ、無ければ先頭。ミュージックビデオでは
- * **尺を決めるのはマスター音源**なので、そこを既定にする。
+ * 割り当てに使う楽曲を選ぶ。**規則は `@ixa/domain` の `pickMasterTrack` だけが持つ。**
+ * 以前はこの画面・吸着・A/B 比較がそれぞれ同じ規則を書き写しており、
+ * 画面ごとに違う曲の拍で色が付く余地があった（lessons L-016）。
  */
-const pickTrack = (tracks: readonly MusicTrack[]): MusicTrack | null =>
-  tracks.find((track) => track.isMaster) ?? tracks[0] ?? null
+const pickTrack = (tracks: readonly MusicTrack[]): MusicTrack | null => pickMasterTrack(tracks)
 
 /** API 障害でページを落とさない。失敗は必ず表示可能な値へ畳む。 */
 const load = async (projectId: ProjectId): Promise<LoadResult> => {

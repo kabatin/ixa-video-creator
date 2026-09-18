@@ -331,6 +331,47 @@ describe('GET /shots/:shotId/compare — 拍が無い理由を混ぜない', () 
     expect(body.data.beatState).toBe('available')
   })
 
+  /**
+   * **楽曲の選び方は `@ixa/domain` の `pickMasterTrack` 1 箇所だけが持つ。**
+   * ここが先頭を採る実装に戻ると、同じ Project でも画面ごとに違う曲の拍で
+   * 色が付く（タイムラインは master、比較は先頭）。規則を寄せた意味が消えるので、
+   * **この口が本当にその規則を通っていること**を固定する（lessons L-016）。
+   */
+  it('楽曲が複数あってもマスター音源の解析を使う', async () => {
+    const s = scene()
+    const project = s.project
+    const decoy = MusicTrackSchema.parse({
+      id: newId(MusicTrackIdSchema),
+      projectId: project.id,
+      mediaAssetId: s.songAsset.id,
+      title: 'ダミー（マスターではない）',
+      isMaster: false,
+      offsetSec: 0,
+      volume: 1,
+    })
+    const master = MusicTrackSchema.parse({
+      id: newId(MusicTrackIdSchema),
+      projectId: project.id,
+      mediaAssetId: s.songAsset.id,
+      title: 'マスター',
+      isMaster: true,
+      offsetSec: 0,
+      volume: 1,
+    })
+    // **マスターを後ろに置く。** 先頭を採る実装なら decoy の拍が返る。
+    const deps: ShotCompareRoutesDeps = {
+      ...s.deps,
+      musicTracks: createInMemoryMusicTrackRepository([decoy, master]),
+      musicAnalyses: createInMemoryMusicAnalysisRepository([
+        anAnalysis(decoy.id, [9, 9.5]),
+        anAnalysis(master.id, [1, 2, 3]),
+      ]),
+    }
+    const { body } = await compare({ ...s, deps }, `a=${s.takeA.id}`)
+
+    expect(body.data.beats).toEqual([1, 2, 3])
+  })
+
   it('楽曲が無いときは no_track', async () => {
     const s = scene({ withTrack: false })
     const { body } = await compare(s, `a=${s.takeA.id}`)

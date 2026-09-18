@@ -1,6 +1,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type { MusicAnalysisRepository } from '@ixa/db'
 import {
+  pickMasterTrack,
   Seconds as SecondsSchema,
   ShotId as ShotIdSchema,
   TakeId as TakeIdSchema,
@@ -144,8 +145,9 @@ const loadBeats = async (
   projectId: ProjectId,
 ): Promise<BeatLoad> => {
   const tracks = await deps.musicTracks.findByProject(projectId)
-  const track = tracks.find((candidate) => candidate.isMaster) ?? tracks[0]
-  if (track === undefined) return { beats: [], state: 'no_track' }
+  // 楽曲の選び方は `@ixa/domain` の `pickMasterTrack` だけが持つ。ここで書き写さない（L-016）。
+  const track = pickMasterTrack(tracks)
+  if (track === null) return { beats: [], state: 'no_track' }
 
   const analysis = await deps.musicAnalyses.findByTrack(track.id)
   if (analysis === null) return { beats: [], state: 'no_analysis' }
