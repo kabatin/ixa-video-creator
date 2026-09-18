@@ -22,9 +22,11 @@ import {
 } from '@/components/timeline-inline-form'
 import { TimelineIssuePanel } from '@/components/timeline-issue-panel'
 import { TimelineSnapPanel } from '@/components/timeline-snap-panel'
+import { ProgramMonitor } from '@/components/program-monitor'
 import { TEXT_INSERT_LAYER, TimelineTracks } from '@/components/timeline-tracks'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import { nextSeekCommand, type SeekCommand } from '@/lib/program-monitor'
 import { createRequester } from '@/lib/requester'
 import {
   createTimelineApi,
@@ -147,6 +149,8 @@ export const TimelineEditor = ({
   /** 再生ヘッド（PHASE 6.0）。モニターと帯が同じ値を見る。 */
   const [currentSec, setCurrentSec] = useState(0)
   const [playing, setPlaying] = useState(false)
+  /** 目盛りを押した、という明示的な指示。モニターはこれが変わったときだけ飛ぶ（`program-monitor.ts`）。 */
+  const [seek, setSeek] = useState<SeekCommand | null>(null)
   const document = initialDocument
 
   /** Space で再生/停止。入力欄の中の打鍵は横取りしない（`timeline-playhead`）。 */
@@ -496,6 +500,25 @@ export const TimelineEditor = ({
         </p>
       )}
 
+      {/**
+       * プログラムモニター（PHASE 6.0）。**書き出しと同じ TimelineDocument を同じコンポジションで**
+       * 再生する。プレビューでは合っていたのに書き出すとズレる、を構造的に防ぐ。
+       * 再生位置は帯の再生ヘッドと同じ state を見る。
+       */}
+      <div className="mx-auto w-full max-w-4xl">
+        <ProgramMonitor
+          document={document}
+          currentSec={currentSec}
+          seek={seek}
+          playing={playing}
+          onFrame={setCurrentSec}
+          onPlayingChange={setPlaying}
+          onError={(message) => {
+            setActionError(`モニター: ${message}`)
+          }}
+        />
+      </div>
+
       {document !== null && (
         <p role="status" className="text-sm text-muted">
           {`${playing ? '再生中' : '停止中'} ${formatClock(currentSec)}（Space で再生 / 一時停止、目盛りを押すとその位置へ）`}
@@ -532,6 +555,7 @@ export const TimelineEditor = ({
           playheadSec={document === null ? null : currentSec}
           onSeek={(sec) => {
             setCurrentSec(sec)
+            setSeek((previous) => nextSeekCommand(previous, sec))
           }}
           overlay={
             open === null || draft === null ? null : (
