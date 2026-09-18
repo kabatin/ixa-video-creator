@@ -14,6 +14,8 @@ import {
   type ProjectId,
   type Shot,
   type ShotId,
+  type ShotStatus,
+  type TakeId,
   type EditBatchEntry,
   type Take,
   type UpdateShotPatch,
@@ -229,6 +231,21 @@ type PlanEntry =
   | { readonly shotId: ShotId; readonly planned: Planned }
   | { readonly shotId: ShotId; readonly reason: string }
 
+/**
+ * 一括採用の 1 件。**採用する Take まで決まってから**、書く前の状態を控える。
+ *
+ * `applySelectedTake` は採用 Take と状態の両方を動かすので、**両方**を控える。
+ * 片方だけでは、取り消しても状態が新しいまま残る。
+ */
+type BulkSelectStep =
+  | { readonly shotId: ShotId; readonly reason: string }
+  | {
+      readonly shotId: ShotId
+      readonly take: Take
+      readonly beforeSelectedTakeId: TakeId | null
+      readonly beforeStatus: ShotStatus
+    }
+
 /** 一括変更の 1 件。**書く前に決まり切っている**ので、記録も結果もここから作れる。 */
 type BulkUpdateStep =
   | { readonly shotId: ShotId; readonly reason: string }
@@ -384,21 +401,66 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
       const body = c.req.valid('json')
       const pick = rule[body.rule]
 
-      const results = []
+      /** **書く前に全件を決める。** 書きながら控えると、記録の無い採用が残る。 */
+      const steps: BulkSelectStep[] = []
       for (const shotId of body.shotIds) {
         const resolved = await resolveShot(deps, projectId, shotId)
         if (!('shot' in resolved)) {
-          results.push({ shotId, ok: false as const, reason: resolved.reason })
+          steps.push({ shotId, reason: resolved.reason })
           continue
         }
         const chosen = pick(await deps.takes.findByShot(resolved.shot.id))
         if (typeof chosen === 'string') {
-          results.push({ shotId, ok: false as const, reason: chosen })
+          steps.push({ shotId, reason: chosen })
+          continue
+        }
+        steps.push({
+          shotId,
+          take: chosen,
+          beforeSelectedTakeId: resolved.shot.selectedTakeId,
+          beforeStatus: resolved.shot.status,
+        })
+      }
+
+      /**
+       * **採用する Shot は「変える前」を必ず控える。**
+       *
+       * 採用後の状態を先読みして「変わらない」と判定することはしない。
+       * 先読みは `applySelectedTake` が持つ規則の書き写しになり、
+       * 片方だけ直した日にズレる（lessons L-016）。控えすぎても、
+       * 取り消しで同じ値が戻るだけで害は無い。
+       */
+      await recordEditBatch(deps.editBatches, {
+        projectId,
+        kind: 'bulk_update',
+        summarize: (count) => `採用 Take を ${count.toString()} 件まとめて決めました`,
+        entries: steps.flatMap((step) =>
+          'reason' in step
+            ? []
+            : [
+                editBatchEntry(
+                  step.shotId,
+                  {},
+                  { selectedTakeId: step.beforeSelectedTakeId, status: step.beforeStatus },
+                ),
+              ],
+        ),
+      })
+
+      const results = []
+      for (const step of steps) {
+        if ('reason' in step) {
+          results.push({ shotId: step.shotId, ok: false as const, reason: step.reason })
           continue
         }
         // 状態遷移は 1 件ずつの採用と同じ関数に任せる。
-        const updated = await applySelectedTake(deps, resolved.shot.id, chosen)
-        results.push({ shotId, ok: true as const, takeId: chosen.id, status: updated.status })
+        const updated = await applySelectedTake(deps, step.shotId, step.take)
+        results.push({
+          shotId: step.shotId,
+          ok: true as const,
+          takeId: step.take.id,
+          status: updated.status,
+        })
       }
 
       return c.json(ok({ results }), 200)

@@ -7,6 +7,7 @@ import {
   canUndo,
   isUndone,
   undoTouchesSelectedTake,
+  undoTouchesStatus,
   type EditBatch,
   type EditBatchEntry,
   type ProjectId,
@@ -131,8 +132,11 @@ const undoRoute = createRoute({
 
 export type EditBatchRoutesDeps = {
   projects: Pick<ProjectRepository, 'findById'>
-  /** 戻すのは `update` と `selectTake` の 2 つだけ。Take の作成には触らない。 */
-  shots: Pick<ShotRepository, 'findById' | 'selectTake' | 'update'>
+  /**
+   * 戻すのは `update` / `selectTake` / `updateStatus` の 3 つだけ。Take の作成には触らない。
+   * 一括採用は採用 Take と状態の両方を動かすので、状態を戻す口も要る。
+   */
+  shots: Pick<ShotRepository, 'findById' | 'selectTake' | 'update' | 'updateStatus'>
   editBatches: Pick<EditBatchRepository, 'findByProject' | 'findById' | 'markUndone'>
 }
 
@@ -170,6 +174,15 @@ const restoreEntry = async (
      */
     if (undoTouchesSelectedTake(entry)) {
       await deps.shots.selectTake(entry.shotId, entry.selectedTakeId ?? null)
+    }
+    /**
+     * **状態も、欄があるときだけ戻す。** 一括採用は採用 Take と状態の両方を動かすので、
+     * 状態を戻さないと「採用だけ戻って状態は新しいまま」になる。
+     * 採用のあとに当てる（`selectTake` は状態を触らないが、順番を決めておく）。
+     */
+    const { status } = entry
+    if (undoTouchesStatus(entry) && status !== undefined) {
+      await deps.shots.updateStatus(entry.shotId, status)
     }
     return null
   } catch (cause) {

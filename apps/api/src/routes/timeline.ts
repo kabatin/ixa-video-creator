@@ -667,7 +667,9 @@ const toEditBatchEntries = (steps: readonly ChangeStep[]): readonly EditBatchEnt
   return [...byShot.values()].map((prepared) =>
     prepared.beforeSelectedTake === undefined
       ? editBatchEntry(prepared.shotId, prepared.before)
-      : editBatchEntry(prepared.shotId, prepared.before, prepared.beforeSelectedTake.takeId),
+      : editBatchEntry(prepared.shotId, prepared.before, {
+          selectedTakeId: prepared.beforeSelectedTake.takeId,
+        }),
   )
 }
 

@@ -743,3 +743,115 @@ describe('一括変更は「変える前」を記録する', () => {
     expect(batch?.entries.map((entry) => entry.shotId)).toEqual([shot.id])
   })
 })
+
+/**
+ * 一括採用の記録（P64-1）。
+ *
+ * **採用 Take と状態の両方を控える。** `applySelectedTake` は 2 つを動かすので、
+ * 片方だけ控えると、取り消しても状態が新しいまま残る。
+ */
+describe('一括採用は「変える前」を記録する', () => {
+  const sceneWithTake = (overrides: Partial<Shot> = {}) => {
+    const project = aProject()
+    const shot = aShot(project.id, { status: 'ready', selectedTakeId: null, ...overrides })
+    const take = aTake(shot, 'a'.repeat(64))
+    return { project, shot, take }
+  }
+
+  it('採用前の selectedTakeId と status の両方を残す', async () => {
+    const { project, shot, take } = sceneWithTake()
+    const { app, editBatches } = buildBulkFixture({ project, shots: [shot], takes: [take] })
+
+    const res = await postJson(app, `/projects/${project.id}/shots/bulk/select-take`, {
+      shotIds: [shot.id],
+      rule: 'only',
+    })
+
+    expect(res.status).toBe(200)
+    const [batch] = editBatches.snapshot()
+    expect(batch?.kind).toBe('bulk_update')
+    expect(batch?.entries).toEqual([
+      // **`null` は「採用していなかった」。** 欄が無いのは「触っていない」。
+      { shotId: shot.id, patch: {}, selectedTakeId: null, status: 'ready' },
+    ])
+  })
+
+  it('採用済みの Shot でも、そのときの採用 Take を残す', async () => {
+    const project = aProject()
+    const bare = aShot(project.id, { status: 'review' })
+    const first = aTake(bare, 'a'.repeat(64), { index: 1 })
+    const second = aTake(bare, 'b'.repeat(64), {
+      index: 2,
+      createdAt: new Date('2026-03-01T00:00:00Z'),
+    })
+    const shot = { ...bare, selectedTakeId: first.id }
+    const { app, editBatches } = buildBulkFixture({
+      project,
+      shots: [shot],
+      takes: [first, second],
+    })
+
+    await postJson(app, `/projects/${project.id}/shots/bulk/select-take`, {
+      shotIds: [shot.id],
+      rule: 'latest',
+    })
+
+    const [batch] = editBatches.snapshot()
+    expect(batch?.entries[0]?.selectedTakeId).toBe(first.id)
+    expect(batch?.entries[0]?.status).toBe('review')
+  })
+
+  it('採用できなかった Shot は記録に入れない', async () => {
+    const project = aProject()
+    const withTake = aShot(project.id, { code: 'S1', order: 1000, status: 'ready' })
+    const take = aTake(withTake, 'a'.repeat(64))
+    const withoutTake = aShot(project.id, { code: 'S2', order: 2000, status: 'ready' })
+    const { app, editBatches } = buildBulkFixture({
+      project,
+      shots: [withTake, withoutTake],
+      takes: [take],
+    })
+
+    await postJson(app, `/projects/${project.id}/shots/bulk/select-take`, {
+      shotIds: [withoutTake.id, withTake.id],
+      rule: 'only',
+    })
+
+    const [batch] = editBatches.snapshot()
+    expect(batch?.entries.map((entry) => entry.shotId)).toEqual([withTake.id])
+  })
+
+  it('1 件も採用できなければ記録そのものを作らない', async () => {
+    const project = aProject()
+    const withoutTake = aShot(project.id, { status: 'ready' })
+    const { app, editBatches } = buildBulkFixture({ project, shots: [withoutTake] })
+
+    const res = await postJson(app, `/projects/${project.id}/shots/bulk/select-take`, {
+      shotIds: [withoutTake.id],
+      rule: 'only',
+    })
+
+    expect(res.status).toBe(200)
+    expect(editBatches.snapshot()).toEqual([])
+  })
+
+  /** **記録は書き込みの「直前」に作る。** 作れなかったなら 1 件も採用しない。 */
+  it('記録を作れなければ 1 件も採用しない', async () => {
+    const { project, shot, take } = sceneWithTake()
+    const { app, shots } = buildBulkFixture({
+      project,
+      shots: [shot],
+      takes: [take],
+      editBatches: { create: () => Promise.reject(new Error('記録を作れませんでした')) },
+    })
+
+    const res = await postJson(app, `/projects/${project.id}/shots/bulk/select-take`, {
+      shotIds: [shot.id],
+      rule: 'only',
+    })
+
+    expect(res.status).toBe(500)
+    expect(shots.snapshot()[0]?.selectedTakeId).toBeNull()
+    expect(shots.snapshot()[0]?.status).toBe('ready')
+  })
+})

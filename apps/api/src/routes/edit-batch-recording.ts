@@ -6,6 +6,7 @@ import type {
   ProjectId,
   Shot,
   ShotId,
+  ShotStatus,
   TakeId,
   UpdateShotPatch,
 } from '@ixa/domain'
@@ -79,18 +80,34 @@ export const shotBeforePatch = (shot: Shot, patch: UpdateShotPatch): ShotBeforeP
 }
 
 /**
+ * `patch` に載らない「変える前」。**渡さなかった欄は作らない。**
+ *
+ * `selectedTakeId` と `status` は不変条件を伴うため `UpdateShotPatch` では動かせず、
+ * リポジトリの別の口（`selectTake` / `updateStatus`）が持つ。記録の側も別の欄で持つ。
+ */
+export type TouchedShotFields = {
+  /** `null` は「採用していなかった」。**渡さなければ「触っていない」。** */
+  readonly selectedTakeId?: TakeId | null
+  readonly status?: ShotStatus
+}
+
+/**
  * 記録 1 件ぶんを組み立てる。
  *
- * ★ **`selectedTakeId` を渡さなければ、欄そのものを作らない。**
- *   「触っていない」は欄が無いことで表し、`null` は「採用していなかった」を指す。
- *   両方を `null` にすると区別が消える（lessons L-021）。
+ * ★ **渡さなかった欄は、欄そのものを作らない。**
+ *   「触っていない」は欄が無いことで表し、`selectedTakeId: null` は
+ *   「採用していなかった」を指す。両方を `null` にすると区別が消える（lessons L-021）。
  */
 export const editBatchEntry = (
   shotId: ShotId,
   patch: ShotBeforePatch,
-  selectedTakeId?: TakeId | null,
-): EditBatchEntry =>
-  selectedTakeId === undefined ? { shotId, patch } : { shotId, patch, selectedTakeId }
+  touched: TouchedShotFields = {},
+): EditBatchEntry => ({
+  shotId,
+  patch,
+  ...(touched.selectedTakeId === undefined ? {} : { selectedTakeId: touched.selectedTakeId }),
+  ...(touched.status === undefined ? {} : { status: touched.status }),
+})
 
 export type EditBatchDraft = {
   readonly projectId: ProjectId

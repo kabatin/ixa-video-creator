@@ -41,11 +41,13 @@ type Scene = {
   readonly shots: ReturnType<typeof createInMemoryShotRepository>
   readonly editBatches: ReturnType<typeof createInMemoryEditBatchRepository>
   /**
-   * `selectTake` を呼んだ回数。**最終状態ではなく呼び出しそのものを見る**（lessons L-022）。
-   * 同じ Take を当て直しても最終状態は変わらないので、状態だけでは
+   * `selectTake` / `updateStatus` を呼んだ回数。
+   * **最終状態ではなく呼び出しそのものを見る**（lessons L-022）。
+   * 同じ値を当て直しても最終状態は変わらないので、状態だけでは
    * 「触らなかった」を確かめられない。
    */
   readonly selectTakeCalls: () => number
+  readonly updateStatusCalls: () => number
 }
 
 const scene = (options: {
@@ -57,6 +59,7 @@ const scene = (options: {
   const shots = createInMemoryShotRepository(options.shots ?? [])
   const editBatches = createInMemoryEditBatchRepository()
   let selectTakeCalls = 0
+  let updateStatusCalls = 0
   const app = new OpenAPIHono({ defaultHook: validationHook })
   registerErrorHandlers(app, createLogger('silent'))
   app.route(
@@ -70,11 +73,22 @@ const scene = (options: {
           selectTakeCalls += 1
           return shots.selectTake(shotId, takeId)
         },
+        updateStatus: (shotId, status) => {
+          updateStatusCalls += 1
+          return shots.updateStatus(shotId, status)
+        },
       },
       editBatches,
     }),
   )
-  return { app, project, shots, editBatches, selectTakeCalls: () => selectTakeCalls }
+  return {
+    app,
+    project,
+    shots,
+    editBatches,
+    selectTakeCalls: () => selectTakeCalls,
+    updateStatusCalls: () => updateStatusCalls,
+  }
 }
 
 const seed = async (s: Scene, input: Omit<CreateEditBatchInput, 'projectId'> & {
@@ -196,6 +210,46 @@ describe('POST /projects/{projectId}/edit-batches/{id}/undo', () => {
     expect(after?.selectedTakeId).toBe(takeId)
     // **採用の口を呼んでいないこと**まで見る。当て直しでは状態が変わらない（L-022）。
     expect(s.selectTakeCalls()).toBe(0)
+  })
+
+  it('状態の欄がある記録は、採用と状態の両方を戻す', async () => {
+    const takeId = newId(TakeIdSchema)
+    const project = aProject()
+    // 一括採用のあとの姿。採用済みで status は review。
+    const live = aShot(project.id, { selectedTakeId: takeId, status: 'review' })
+    const s = scene({ project, shots: [live] })
+    const batch = await seed(s, {
+      kind: 'bulk_update',
+      summary: '採用 Take を 1 件まとめて決めました',
+      // 採用前は「未採用・ready」だった。
+      entries: [{ shotId: live.id, patch: {}, selectedTakeId: null, status: 'ready' }],
+    })
+
+    const result = await undoOk(s, batch.id)
+
+    expect(result.restored).toEqual([live.id])
+    const after = await s.shots.findById(live.id)
+    expect(after?.selectedTakeId).toBeNull()
+    // **採用だけ戻して状態が新しいまま、にしない。**
+    expect(after?.status).toBe('ready')
+    expect(s.updateStatusCalls()).toBe(1)
+  })
+
+  it('状態の欄が無い記録は、状態を触らない', async () => {
+    const project = aProject()
+    const live = aShot(project.id, { startSec: 3, status: 'approved' })
+    const s = scene({ project, shots: [live] })
+    const batch = await seed(s, {
+      kind: 'rough_cut',
+      summary: '粗編集を 1 件の Shot へ適用しました',
+      entries: [{ shotId: live.id, patch: { startSec: 1 } }],
+    })
+
+    await undoOk(s, batch.id)
+
+    expect((await s.shots.findById(live.id))?.status).toBe('approved')
+    // **状態の口を呼んでいないこと**まで見る。同じ値の当て直しは状態に現れない。
+    expect(s.updateStatusCalls()).toBe(0)
   })
 
   it('二度目の取り消しは 409 と理由を返す', async () => {

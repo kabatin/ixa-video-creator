@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { EditBatchId, ProjectId, ShotId, TakeId } from '../common/ids.js'
-import { UpdateShotPatch } from './shot.js'
+import { ShotStatus, UpdateShotPatch } from './shot.js'
 
 /**
  * 一括で変えた記録と、その取り消し（横断 ROADMAP: Undo と履歴）。
@@ -49,6 +49,15 @@ export const EditBatchEntry = z.object({
    * （lessons L-021）。
    */
   selectedTakeId: TakeId.nullable().optional(),
+  /**
+   * 状態を変えたときだけ持つ。**欄が無いのは「触っていない」。**
+   *
+   * 一括採用（`bulk/select-take`）は採用 Take と状態の両方を動かす。
+   * 状態を戻さないと、採用だけ戻って状態が新しいまま残り、
+   * **取り消したのに中途半端**になる。片方だけ戻すくらいなら、
+   * 戻せる範囲を型で正直に表して両方戻す。
+   */
+  status: ShotStatus.optional(),
 })
 export type EditBatchEntry = z.infer<typeof EditBatchEntry>
 
@@ -96,6 +105,11 @@ export const canUndo = (batch: EditBatch): boolean => !isUndone(batch) && batch.
 export const undoTouchesSelectedTake = (entry: EditBatchEntry): boolean =>
   'selectedTakeId' in entry && entry.selectedTakeId !== undefined
 
+/** 状態を戻す必要があるか。欄が無ければ触っていないので戻さない。 */
+export const undoTouchesStatus = (entry: EditBatchEntry): boolean => entry.status !== undefined
+
 /** 欄を 1 つも変えていない記録は残さない。数だけ増えて履歴が読めなくなる。 */
 export const hasChanges = (entry: EditBatchEntry): boolean =>
-  Object.keys(entry.patch).length > 0 || undoTouchesSelectedTake(entry)
+  Object.keys(entry.patch).length > 0 ||
+  undoTouchesSelectedTake(entry) ||
+  undoTouchesStatus(entry)
