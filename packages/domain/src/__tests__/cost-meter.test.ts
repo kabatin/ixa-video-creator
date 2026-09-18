@@ -191,7 +191,7 @@ describe('buildCostMeter の行に出せない Shot', () => {
 
     expect(meter.measured.totalUsd).toBeCloseTo(5.5, 10)
     expect([...meter.byShot.keys()]).toEqual([shotA])
-    expect(meter.unlistedShots).toEqual({ takeCount: 1, measuredUsd: 4, stubUsd: 0 })
+    expect(meter.unlistedShots).toEqual({ takeCount: 1, measuredUsd: 4, stubTakeCount: 0 })
   })
 
   /** ズレを黙って捨てない。内訳を足した人が合計と合わずに困る（L-015）。 */
@@ -238,7 +238,7 @@ describe('buildCostMeter の行に出せない Shot', () => {
     })
 
     expect(meter.byShot.size).toBe(1)
-    expect(meter.unlistedShots).toEqual({ takeCount: 0, measuredUsd: 0, stubUsd: 0 })
+    expect(meter.unlistedShots).toEqual({ takeCount: 0, measuredUsd: 0, stubTakeCount: 0 })
   })
 })
 
@@ -275,5 +275,40 @@ describe('Shot ごとの内訳の単位', () => {
     expect(meter.byShot.get(shotA)).toEqual({ measuredUsd: 0, stubTakeCount: 1 })
     // 全体の合計は額のまま。件数に化けない。
     expect(meter.stub).toEqual({ takeCount: 1, totalUsd: 9 })
+  })
+})
+
+describe('溢れた分の単位', () => {
+  /**
+   * **`takeCount` だけでは内訳が引けない。** 実測とスタブが混ざったとき、
+   * 5 件のうち何件がスタブかは額 0 からは分からない。件数なら引ける。
+   */
+  it('溢れた分の実測とスタブを、額と件数で別々に持つ', () => {
+    const meter = buildCostMeter({
+      budgetUsd: 300,
+      takes: [
+        take({ shotId: shotB, providerId: 'fal', costUsd: 3 }),
+        take({ shotId: shotB, providerId: 'stub', costUsd: 0 }),
+        take({ shotId: shotB, providerId: 'stub', costUsd: 0 }),
+      ],
+      stubProviderIds: ['stub'],
+      listedShotIds: [shotA],
+    })
+
+    expect(meter.unlistedShots).toEqual({ takeCount: 3, measuredUsd: 3, stubTakeCount: 2 })
+    // 全件からスタブを引けば実測の件数が出る。
+    expect(meter.unlistedShots.takeCount - meter.unlistedShots.stubTakeCount).toBe(1)
+  })
+
+  it('スタブが 0 でない額を返しても、溢れた分は件数で数える', () => {
+    const meter = buildCostMeter({
+      budgetUsd: 300,
+      takes: [take({ shotId: shotB, providerId: 'stub', costUsd: 7 })],
+      stubProviderIds: ['stub'],
+      listedShotIds: [shotA],
+    })
+
+    expect(meter.unlistedShots.stubTakeCount).toBe(1)
+    expect(meter.stub.totalUsd).toBe(7)
   })
 })

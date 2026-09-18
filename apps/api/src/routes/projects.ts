@@ -159,7 +159,8 @@ export const UnlistedShotCostResponse = z
   .object({
     takeCount: z.number().int().nonnegative(),
     measuredUsd: z.number().nonnegative(),
-    stubUsd: z.number().nonnegative(),
+    /** **件数**。額ではない（`ShotCost.stubTakeCount` と単位を揃える）。 */
+    stubTakeCount: z.number().int().nonnegative(),
   })
   .openapi('UnlistedShotCost')
 

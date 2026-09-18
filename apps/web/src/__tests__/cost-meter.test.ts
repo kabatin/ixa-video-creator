@@ -20,7 +20,7 @@ const meter = (o: Partial<WireCostMeter> = {}): WireCostMeter => ({
   measured: measuredOf(0, 0),
   stub: { takeCount: 0, totalUsd: 0 },
   byShot: [],
-  unlistedShots: { takeCount: 0, measuredUsd: 0, stubUsd: 0 },
+  unlistedShots: { takeCount: 0, measuredUsd: 0, stubTakeCount: 0 },
   ...o,
 })
 
@@ -152,7 +152,7 @@ describe('内訳に出せなかった分', () => {
     const view = buildCostMeterView(
       meter({
         measured: measuredOf(3, 10),
-        unlistedShots: { takeCount: 2, measuredUsd: 4, stubUsd: 0 },
+        unlistedShots: { takeCount: 2, measuredUsd: 4, stubTakeCount: 0 },
       }),
     )
 

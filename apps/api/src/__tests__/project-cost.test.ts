@@ -161,7 +161,7 @@ describe('GET /projects/{id}/cost', () => {
     expect(body.data.measured.takeCount).toBe(1)
     expect(body.data.measured.totalUsd).toBe(4)
     expect(body.data.byShot).toEqual([])
-    expect(body.data.unlistedShots).toEqual({ takeCount: 1, measuredUsd: 4, stubUsd: 0 })
+    expect(body.data.unlistedShots).toEqual({ takeCount: 1, measuredUsd: 4, stubTakeCount: 0 })
   })
 
   /** 内訳と合計の差は、黙って消さずに説明を付けて返す（L-015）。 */

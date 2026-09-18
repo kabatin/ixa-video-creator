@@ -23,7 +23,7 @@ const meter = (o: Partial<WireCostMeter> = {}): WireCostMeter => ({
   measured: measuredOf(0, 0),
   stub: { takeCount: 50, totalUsd: 0 },
   byShot: [],
-  unlistedShots: { takeCount: 0, measuredUsd: 0, stubUsd: 0 },
+  unlistedShots: { takeCount: 0, measuredUsd: 0, stubTakeCount: 0 },
   ...o,
 })
 
@@ -136,7 +136,7 @@ describe('CostMeterPanel の Provider 名', () => {
         projectId={projectId}
         initialMeter={meter({
           measured: measuredOf(3, 10, [{ providerId: 'fal', takeCount: 3, totalUsd: 10 }]),
-          unlistedShots: { takeCount: 2, measuredUsd: 4, stubUsd: 0 },
+          unlistedShots: { takeCount: 2, measuredUsd: 4, stubTakeCount: 0 },
         })}
       />,
     )

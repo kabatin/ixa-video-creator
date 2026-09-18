@@ -56,9 +56,17 @@ export type ShotCost = {
  * **そのズレを黙って捨てると、内訳を足し算した人が合計と合わずに混乱する**（lessons L-015）。
  */
 export type UnlistedShotCost = {
+  /** 溢れた Take の全件。実測とスタブの合計。 */
   readonly takeCount: number
   readonly measuredUsd: number
-  readonly stubUsd: number
+  /**
+   * **件数で持つ**（`ShotCost.stubTakeCount` と同じ理由）。
+   *
+   * スタブの額は常に 0 なので、額では欄が何も語らない。
+   * 件数なら `takeCount` との差から実測が何件かも引ける。
+   * 同じ概念が場所によって額だったり件数だったりするのが、いちばん間違いを招く。
+   */
+  readonly stubTakeCount: number
 }
 
 export type CostMeter = {
@@ -130,7 +138,7 @@ export const buildCostMeter = (input: CostMeterInput): CostMeter => {
 
   let measured = EMPTY_BUCKET
   let stub = EMPTY_BUCKET
-  let unlisted: UnlistedShotCost = { takeCount: 0, measuredUsd: 0, stubUsd: 0 }
+  let unlisted: UnlistedShotCost = { takeCount: 0, measuredUsd: 0, stubTakeCount: 0 }
 
   for (const take of input.takes) {
     const isStub = stubIds.has(take.providerId)
@@ -150,7 +158,7 @@ export const buildCostMeter = (input: CostMeterInput): CostMeter => {
       unlisted = {
         takeCount: unlisted.takeCount + 1,
         measuredUsd: unlisted.measuredUsd + (isStub ? 0 : take.costUsd),
-        stubUsd: unlisted.stubUsd + (isStub ? take.costUsd : 0),
+        stubTakeCount: unlisted.stubTakeCount + (isStub ? 1 : 0),
       }
       continue
     }

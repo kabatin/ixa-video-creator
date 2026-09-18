@@ -20,7 +20,7 @@ const meterJson = {
   measured: { takeCount: 0, totalUsd: 0, byProvider: [] },
   stub: { takeCount: 50, totalUsd: 0 },
   byShot: [{ shotId: SHOT_ID, measuredUsd: 0, stubTakeCount: 2 }],
-  unlistedShots: { takeCount: 0, measuredUsd: 0, stubUsd: 0 },
+  unlistedShots: { takeCount: 0, measuredUsd: 0, stubTakeCount: 0 },
 }
 
 const jsonResponse = (body: unknown, status = 200): Response =>
@@ -123,6 +123,16 @@ describe('WireCostMeter の検証', () => {
       WireCostMeter.parse({
         ...meterJson,
         byShot: [{ shotId: SHOT_ID, measuredUsd: 0, stubTakeCount: 1.5 }],
+      }),
+    ).toThrow()
+  })
+
+  /** 溢れた分のスタブ欄も**件数**。額が紛れ込んだら通さない。 */
+  it('溢れた分のスタブ件数が小数の応答を通さない', () => {
+    expect(() =>
+      WireCostMeter.parse({
+        ...meterJson,
+        unlistedShots: { takeCount: 2, measuredUsd: 0, stubTakeCount: 1.5 },
       }),
     ).toThrow()
   })

@@ -19,7 +19,19 @@ import {
   type ShotId,
   type TimelineClip,
 } from '@ixa/domain'
-import { buildTimelineDocument, validateTimeline, type TimelineMusicTrack, type TimelineSource } from '@ixa/timeline'
+import {
+  RoughCutChange as RoughCutChangeSchema,
+  RoughCutUnresolved as RoughCutUnresolvedSchema,
+  TIME_EPSILON,
+  buildTimelineDocument,
+  planRoughCut,
+  validateTimeline,
+  type RoughCutChange,
+  type RoughCutInput,
+  type RoughCutTake,
+  type TimelineMusicTrack,
+  type TimelineSource,
+} from '@ixa/timeline'
 import type { ObjectStorage } from '@ixa/storage'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
@@ -415,3 +427,203 @@ export const beatAlignmentRoutes = (deps: BeatAlignmentRoutesDeps) =>
       )
     },
   )
+
+/**
+ * 粗編集の自動組み立て（PHASE 6.3 / P63-3）。
+ *
+ * **組み立てるのではなく、組み立て方を提案する。** Undo がまだ無いので、
+ * 押すまで何も変わらない形にする。口は 2 つに分ける。
+ *
+ * - `plan` — 計算するだけ。**何も書かない**
+ * - `apply` — plan の内容を**本文で受け取って**適用する
+ *
+ * **apply でサーバが計算し直さない。** 再計算すると、人が見た案と実際に適用される
+ * 内容がズレる（その間に Take が増えているかもしれない）。
+ * 代わりに、案が前提にしていた値（元の位置・元の尺）がまだそのままかを 1 件ずつ確かめ、
+ * 変わっていたものは**理由つきで skipped に返す**。黙って当てない・黙って落とさない。
+ */
+
+/** 拍・Take・素材を集めて `planRoughCut` に渡す形にする。**判定はここに書かない。** */
+const loadRoughCutInput = async (
+  deps: BeatAlignmentRoutesDeps,
+  project: Project,
+): Promise<RoughCutInput> => {
+  const [source, music, takes] = await Promise.all([
+    loadTimelineSource(deps, project),
+    loadProjectBeats(deps, project.id),
+    deps.takes.findByProject(project.id),
+  ])
+
+  const takesByShot = new Map<ShotId, RoughCutTake[]>()
+  for (const take of takes) {
+    const bucket = takesByShot.get(take.shotId)
+    if (bucket === undefined) takesByShot.set(take.shotId, [take])
+    else bucket.push(take)
+  }
+
+  return { source, beats: music.beats, takesByShot }
+}
+
+/** wire の形。判定と理由は `@ixa/timeline` が持つ。ここは運ぶだけ。 */
+export const RoughCutPlanResponse = z
+  .object({
+    changes: z.array(RoughCutChangeSchema),
+    /** 機械が決められなかったもの。**必ず理由を連れて来る。** */
+    unresolved: z.array(RoughCutUnresolvedSchema),
+  })
+  .openapi('RoughCutPlan')
+export type RoughCutPlanResponse = z.infer<typeof RoughCutPlanResponse>
+
+/** 適用の本文。**案をそのまま送り返してもらう。** `unresolved` は適用に要らない。 */
+export const RoughCutApplyBody = z
+  .object({ changes: z.array(RoughCutChangeSchema) })
+  .openapi('RoughCutApplyBody')
+export type RoughCutApplyBody = z.infer<typeof RoughCutApplyBody>
+
+export const RoughCutSkipped = z
+  .object({ change: RoughCutChangeSchema, reason: z.string() })
+  .openapi('RoughCutSkipped')
+export type RoughCutSkipped = z.infer<typeof RoughCutSkipped>
+
+/** **当てた分と当てなかった分を両方返す。** 件数だけだと何が残ったか分からない。 */
+export const RoughCutApplyResponse = z
+  .object({
+    applied: z.array(RoughCutChangeSchema),
+    skipped: z.array(RoughCutSkipped),
+  })
+  .openapi('RoughCutApplyResult')
+export type RoughCutApplyResponse = z.infer<typeof RoughCutApplyResponse>
+
+const planRoughCutRoute = createRoute({
+  method: 'post',
+  path: '/projects/{projectId}/timeline/rough-cut/plan',
+  tags: ['timeline'],
+  summary: '粗編集の案を計算する（何も書かない）',
+  request: { params: ProjectParams },
+  responses: {
+    200: {
+      description: '案と、決められなかったもの',
+      content: { 'application/json': { schema: successResponse(RoughCutPlanResponse) } },
+    },
+    404: errorContent('Project が存在しない'),
+    500: errorContent('サーバ内部エラー'),
+  },
+})
+
+const applyRoughCutRoute = createRoute({
+  method: 'post',
+  path: '/projects/{projectId}/timeline/rough-cut/apply',
+  tags: ['timeline'],
+  summary: '受け取った案をそのまま適用する（サーバは計算し直さない）',
+  request: {
+    params: ProjectParams,
+    body: { content: { 'application/json': { schema: RoughCutApplyBody } }, required: true },
+  },
+  responses: {
+    200: {
+      description: '当てた分と、当てられなかった分',
+      content: { 'application/json': { schema: successResponse(RoughCutApplyResponse) } },
+    },
+    404: errorContent('Project が存在しない'),
+    422: errorContent('入力の検証に失敗した'),
+    500: errorContent('サーバ内部エラー'),
+  },
+})
+
+const sec = (value: number): string => `${value.toFixed(3)}s`
+
+/**
+ * 時間が同じか。**許容誤差は `@ixa/timeline` の `TIME_EPSILON` を使う。**
+ * ここに別の数字を書くと、検証が通す差を適用が拒む（またはその逆）ようになる。
+ */
+const isSameTimeSec = (a: number, b: number): boolean => Math.abs(a - b) <= TIME_EPSILON
+
+/** 案が前提にしていた値がまだそのままか。**違っていれば当てない。** */
+const staleReason = (change: RoughCutChange, shot: Shot): string | null => {
+  if (change.kind === 'move' && !isSameTimeSec(shot.startSec, change.fromSec)) {
+    return (
+      `案を作ったあとに Shot が動いています` +
+      `（案は ${sec(change.fromSec)} 起点・現在は ${sec(shot.startSec)}）`
+    )
+  }
+  if (change.kind === 'trim' && !isSameTimeSec(shot.durationSec, change.fromDurationSec)) {
+    return (
+      `案を作ったあとに Shot の尺が変わっています` +
+      `（案は ${sec(change.fromDurationSec)} 起点・現在は ${sec(shot.durationSec)}）`
+    )
+  }
+  return null
+}
+
+/** 変更 1 件を当てる。当てなかったときは理由を返す。**例外は握り潰さず理由にする。** */
+const applyChange = async (
+  deps: Pick<TimelineRoutesDeps, 'shots' | 'takes'>,
+  projectId: ProjectId,
+  change: RoughCutChange,
+): Promise<string | null> => {
+  const shot = await deps.shots.findById(change.shotId)
+  if (shot === null) return 'Shot が見つかりません（削除された可能性があります）'
+  if (shot.projectId !== projectId) return 'この Project の Shot ではありません'
+
+  const stale = staleReason(change, shot)
+  if (stale !== null) return stale
+
+  if (change.kind !== 'select' && shot.lockedAt !== null) {
+    return `Shot ${shot.code} はロックされているため、位置と尺を変えません`
+  }
+
+  try {
+    if (change.kind === 'move') {
+      await deps.shots.update(change.shotId, { startSec: change.toSec })
+      return null
+    }
+    if (change.kind === 'trim') {
+      await deps.shots.update(change.shotId, { durationSec: change.toDurationSec })
+      return null
+    }
+
+    const take = await deps.takes.findById(change.takeId)
+    if (take === null) return 'Take が見つかりません'
+    if (take.shotId !== change.shotId) return 'Take が別の Shot のものです'
+    if (shot.selectedTakeId === change.takeId) return '既にこの Take を採用しています'
+    await deps.shots.selectTake(change.shotId, change.takeId)
+    return null
+  } catch (cause) {
+    // 握り潰さない（規約 5）。1 件の失敗で残りを止めもしない。
+    return `適用に失敗しました: ${cause instanceof Error ? cause.message : String(cause)}`
+  }
+}
+
+/**
+ * `beatAlignmentRoutes` と同じく、この 2 口だけが楽曲解析を要るので別の factory にする。
+ * `TimelineRoutesDeps` に解析を足すと、書き出し（renders.ts）に要らない依存が増える。
+ */
+export const roughCutRoutes = (deps: BeatAlignmentRoutesDeps) =>
+  new OpenAPIHono({ defaultHook: validationHook })
+    .openapi(planRoughCutRoute, async (c) => {
+      const project = await deps.projects.findById(c.req.valid('param').projectId)
+      if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+
+      const plan = planRoughCut(await loadRoughCutInput(deps, project))
+      return c.json(ok({ changes: [...plan.changes], unresolved: [...plan.unresolved] }), 200)
+    })
+    /**
+     * **本文の案をそのまま当てる。** ここで `planRoughCut` を呼び直さない。
+     * 呼び直すと、人が見て承認した案とは別のものが当たる。
+     */
+    .openapi(applyRoughCutRoute, async (c) => {
+      const { projectId } = c.req.valid('param')
+      const project = await deps.projects.findById(projectId)
+      if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+
+      const applied: RoughCutChange[] = []
+      const skipped: RoughCutSkipped[] = []
+
+      for (const change of c.req.valid('json').changes) {
+        const reason = await applyChange(deps, projectId, change)
+        if (reason === null) applied.push(change)
+        else skipped.push({ change, reason })
+      }
+
+      return c.json(ok({ applied, skipped }), 200)
+    })

@@ -39,7 +39,8 @@ export type WireMeasuredBucket = z.infer<typeof WireMeasuredBucket>
 export const WireUnlistedShotCost = z.object({
   takeCount: z.number().int().nonnegative(),
   measuredUsd: z.number().nonnegative(),
-  stubUsd: z.number().nonnegative(),
+  /** **件数**。額ではない（`WireShotCost.stubTakeCount` と単位を揃える）。 */
+  stubTakeCount: z.number().int().nonnegative(),
 })
 export type WireUnlistedShotCost = z.infer<typeof WireUnlistedShotCost>
 
