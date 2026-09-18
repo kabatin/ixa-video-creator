@@ -1,5 +1,5 @@
 import { Shot, ShotId, type ShotId as ShotIdType } from '@ixa/domain'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { StoryboardGrid } from '@/components/workbench/storyboard-grid'
 import { TimelineTracks } from '@/components/timeline-tracks'
@@ -168,5 +168,55 @@ describe('StoryboardGrid の拍の色（PHASE 7.1）', () => {
     const buttons = screen.getAllByRole('button')
     expect(buttons[1]?.className).toContain('border-l-danger')
     expect(buttons[1]?.className).not.toContain('hover:border-line-strong')
+  })
+})
+
+describe('TimelineTracks の Shot の選択（PHASE 7.2）', () => {
+  const renderSelectable = (onSelectShot?: (id: ShotIdType) => void) =>
+    render(
+      <TimelineTracks
+        shots={shots}
+        clips={[]}
+        transitionPoints={[]}
+        renderedShotIds={new Set(shots.map((shot) => shot.id))}
+        durationSec={4}
+        pxPerSec={40}
+        selectedClipId={null}
+        busy={false}
+        openTransitionAtSec={null}
+        previewClipId={null}
+        previewSpan={null}
+        onSelectClip={vi.fn()}
+        onOpenTransition={vi.fn()}
+        onOpenClip={vi.fn()}
+        onInsertText={vi.fn()}
+        onClipDragBegin={vi.fn()}
+        onClipDragMove={vi.fn()}
+        onClipDragEnd={vi.fn()}
+        selectedShotId={offBeatShot.id}
+        {...(onSelectShot === undefined ? {} : { onSelectShot })}
+      />,
+    )
+
+  it('押すとその Shot を選び、選択中は強調する', () => {
+    const onSelectShot = vi.fn()
+    renderSelectable(onSelectShot)
+    const chip = chipFor('S01-001')
+    chip.click()
+    expect(onSelectShot).toHaveBeenCalledWith(onDownbeatShot.id)
+    expect(chipFor('S01-002')).toHaveAttribute('aria-pressed', 'true')
+    expect(chipFor('S01-002').className).toContain('outline-accent')
+  })
+
+  it('キーボード（Space）でも選べる', () => {
+    const onSelectShot = vi.fn()
+    renderSelectable(onSelectShot)
+    fireEvent.keyDown(chipFor('S01-001'), { key: ' ' })
+    expect(onSelectShot).toHaveBeenCalledWith(onDownbeatShot.id)
+  })
+
+  it('選ぶ口を渡さなければ押せない（従来どおり）', () => {
+    renderSelectable()
+    expect(chipFor('S01-001')).not.toHaveAttribute('role', 'button')
   })
 })
