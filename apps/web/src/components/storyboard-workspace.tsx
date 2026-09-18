@@ -203,14 +203,18 @@ const addDefaultPanels = (api: DockviewApi): void => {
     title: 'Shot 設定',
     position: { referencePanel: 'posters', direction: 'below' },
   })
-  // **既定では裏のタブに置く。** 下書きは毎回使うものではないので、
-  // 開いた直後から幅を食わせない。使うときにタブを選べば出る。
+  /**
+   * **左の広い側にタブとして置く。** 27 件の案を「いまの説明 / 案 / なぜこの絵か」で
+   * 読み比べる場所なので、右下の細い区画では読めない。
+   * 既定では裏のタブ（開いた直後に波形を隠さないため）。
+   * **見つけられないと意味が無い**ので、上の知らせから開ける（制作者 2026-09-18）。
+   */
   api.addPanel({
     id: 'draft',
     component: 'draft',
     title: '絵コンテ下書き',
     inactive: true,
-    position: { referencePanel: 'inspector', direction: 'within' },
+    position: { referencePanel: 'cutter', direction: 'within' },
   })
 }
 
@@ -319,6 +323,34 @@ export const StoryboardWorkspace = (props: StoryboardWorkspaceProps) => {
     })
   }
 
+  /**
+   * まだ採用していない案の件数。**0 件なら何も出さない。**
+   * 画面を開いたときに 1 回だけ引く（下書きの中身は panel 側が引く）。
+   */
+  const [pendingDraftCount, setPendingDraftCount] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    createApiClient()
+      .getLatestDraft(props.projectId)
+      .then((latest) => {
+        if (cancelled) return
+        setPendingDraftCount(latest.items.filter((item) => item.adoptedAt === null).length)
+      })
+      .catch(() => {
+        // 知らせが出ないだけ。画面の本体は下書きと無関係なので、ここでは落とさない。
+        if (!cancelled) setPendingDraftCount(0)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [props.projectId])
+
+  /** 上の知らせから下書きのタブを前に出す。見つけられないと意味が無い。 */
+  const openDraftPanel = (): void => {
+    dockApi.current?.getPanel('draft')?.api.setActive()
+  }
+
   const resetLayout = (): void => {
     clearStoryboardLayout(window.localStorage, props.projectId)
     const api = dockApi.current
@@ -339,6 +371,23 @@ export const StoryboardWorkspace = (props: StoryboardWorkspaceProps) => {
           パネル配置をリセット
         </Button>
       </div>
+
+      {/**
+       * **裏のタブは見つけられない。** 27 件の案が待っているのに画面のどこにも
+       * それを知らせるものが無く、制作者が探せなかった（2026-09-18）。
+       * 待っている件数をここに出し、押せばタブが開くようにする。
+       */}
+      {pendingDraftCount > 0 && (
+        <p
+          role="status"
+          className="mb-3 flex flex-wrap items-center gap-3 rounded border border-info/40 bg-info/10 px-3 py-2 text-sm text-info"
+        >
+          {`絵コンテの案が ${String(pendingDraftCount)} 件あります（まだ採用していないもの）。`}
+          <Button size="sm" onClick={openDraftPanel}>
+            絵コンテ下書きを開く
+          </Button>
+        </p>
+      )}
       {layoutNotice !== null && (
         <p
           role="status"

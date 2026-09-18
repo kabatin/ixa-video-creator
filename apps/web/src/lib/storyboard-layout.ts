@@ -5,7 +5,9 @@ import type { SerializedDockview } from 'dockview-react'
 // 初期配置を左右構成へ変えたため、旧配置を新しい既定より優先しない。
 // 3: 「絵コンテ下書き」のタブを足した（PHASE 6.3）。
 //    版を上げないと、保存済みの配置が新しい既定を隠して新タブが出ない（lessons L-025）。
-const LAYOUT_VERSION = 3
+// 4: 「絵コンテ下書き」を右下の細い区画から左の広い側へ移した（PHASE 6.3）。
+//    版を上げないと、保存済みの配置が古い位置のまま残る（lessons L-025）。
+const LAYOUT_VERSION = 4
 
 /** 配置は制作データではない。Project ごと・版ごとにブラウザへ閉じる（ADR-0020）。 */
 export const storyboardLayoutKey = (projectId: ProjectId): string =>
