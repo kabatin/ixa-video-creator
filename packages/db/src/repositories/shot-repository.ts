@@ -35,7 +35,14 @@ export type ShotRepository = {
   update(id: ShotId, patch: UpdateShotPatch): Promise<Shot>
   softDelete(id: ShotId): Promise<void>
   /** 採用 Take を差し替える。sourceInSec は維持する（ADR-0011）。 */
-  selectTake(shotId: ShotId, takeId: TakeId): Promise<Shot>
+  /**
+   * 採用 Take を設定する。**`null` で採用を外す。**
+   *
+   * 外せる必要があるのは、一括編集の取り消し（Undo）が
+   * 「採用していなかった状態」へ戻すため。`Shot.selectedTakeId` は元から
+   * nullable なので、外せないのは口の側の制限でしかなかった。
+   */
+  selectTake(shotId: ShotId, takeId: TakeId | null): Promise<Shot>
   updateStatus(shotId: ShotId, status: ShotStatus): Promise<Shot>
 }
 

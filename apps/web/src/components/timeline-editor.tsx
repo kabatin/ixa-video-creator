@@ -27,6 +27,7 @@ import { TEXT_INSERT_LAYER, TimelineTracks } from '@/components/timeline-tracks'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import type { WireTimelineBeatAlignment } from '@/lib/beat-alignment-view'
+import { EditHistoryPanel } from '@/components/edit-history-panel'
 import { RoughCutPanel } from '@/components/rough-cut-panel'
 import { nextSeekCommand, type SeekCommand } from '@/lib/program-monitor'
 import { createRequester } from '@/lib/requester'
@@ -476,6 +477,18 @@ export const TimelineEditor = ({
         projectId={projectId}
         shotCodes={new Map((shots ?? []).map((shot) => [shot.id, shot.code]))}
         onApplied={() => {
+          router.refresh()
+        }}
+      />
+
+      {/**
+       * 一括で変えたものを戻す（横断 ROADMAP）。**押した場所の隣に置く。**
+       * 49 件を当てた直後に「戻したい」と思うので、別の画面へ探しに行かせない。
+       */}
+      <EditHistoryPanel
+        projectId={projectId}
+        shotCodes={new Map((shots ?? []).map((shot) => [shot.id, shot.code]))}
+        onUndone={() => {
           router.refresh()
         }}
       />

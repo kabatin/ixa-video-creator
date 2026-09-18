@@ -20,6 +20,7 @@ import {
   createShotCharacterRepository,
   createShotReferenceRepository,
   createScriptRepository,
+  createEditBatchRepository,
   createStoryboardDraftRepository,
   createSequenceRepository,
   createMusicAnalysisRepository,
@@ -216,6 +217,7 @@ export const main = (): void => {
     locations,
     scripts: createScriptRepository(db),
     storyboardDrafts: createStoryboardDraftRepository(db),
+    editBatches: createEditBatchRepository(db),
     /**
      * **絵コンテ下書きの口を選ぶのはここだけ。** 既定はスタブで、
      * `STORYBOARD_DRAFTER=claude_cli` のときだけ実 CLI を起動する。

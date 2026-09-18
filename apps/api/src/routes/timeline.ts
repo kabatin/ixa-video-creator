@@ -16,7 +16,9 @@ import {
   type ProjectId,
   type Shot,
   ShotId as ShotIdSchema,
+  type EditBatchEntry,
   type ShotId,
+  type TakeId,
   type TimelineClip,
 } from '@ixa/domain'
 import {
@@ -36,6 +38,11 @@ import {
 import type { ObjectStorage } from '@ixa/storage'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
+import {
+  editBatchEntry,
+  recordEditBatch,
+  type EditBatchRecorder,
+} from './edit-batch-recording.js'
 
 /**
  * `TimelineDocument` の取得（docs/ARCHITECTURE.md §15 / §18）。
@@ -556,12 +563,38 @@ const staleReason = (change: RoughCutChange, shot: Shot): string | null => {
   return null
 }
 
-/** 変更 1 件を当てる。当てなかったときは理由を返す。**例外は握り潰さず理由にする。** */
-const applyChange = async (
+/**
+ * 当てると決まった 1 件。**変える前の値と、書き込みそのもの**を持つ。
+ *
+ * 判定と書き込みを分けてあるのは、**書く直前に記録を作る**ため（P64-1）。
+ * 判定しながら書くと、記録の無い変更が先に入ってしまう。
+ */
+type PreparedChange = {
+  readonly shotId: ShotId
+  /** 変える欄の、変える前の値。 */
+  readonly before: EditBatchEntry['patch']
+  /**
+   * 採用 Take を変えるときだけ持つ。**入れ子にして「触っていない」と区別する。**
+   * 中の `takeId` が `null` なら「採用していなかった」（lessons L-021）。
+   */
+  readonly beforeSelectedTake?: { readonly takeId: TakeId | null }
+  readonly write: () => Promise<void>
+}
+
+/** 入力の並びを保ったまま、当てる分と当てない分を持つ。 */
+type ChangeStep =
+  | { readonly change: RoughCutChange; readonly reason: string }
+  | { readonly change: RoughCutChange; readonly prepared: PreparedChange }
+
+/**
+ * 変更 1 件を当てられるか調べる。**ここでは 1 つも書かない。**
+ * 当てないときは理由を返す。
+ */
+const prepareChange = async (
   deps: Pick<TimelineRoutesDeps, 'shots' | 'takes'>,
   projectId: ProjectId,
   change: RoughCutChange,
-): Promise<string | null> => {
+): Promise<string | PreparedChange> => {
   const shot = await deps.shots.findById(change.shotId)
   if (shot === null) return 'Shot が見つかりません（削除された可能性があります）'
   if (shot.projectId !== projectId) return 'この Project の Shot ではありません'
@@ -576,33 +609,81 @@ const applyChange = async (
    */
   if (shot.lockedAt !== null) return roughCutLockedReason(shot.code)
 
-  try {
-    if (change.kind === 'move') {
-      await deps.shots.update(change.shotId, { startSec: change.toSec })
-      return null
+  if (change.kind === 'move') {
+    return {
+      shotId: change.shotId,
+      before: { startSec: shot.startSec },
+      write: async () => {
+        await deps.shots.update(change.shotId, { startSec: change.toSec })
+      },
     }
-    if (change.kind === 'trim') {
-      await deps.shots.update(change.shotId, { durationSec: change.toDurationSec })
-      return null
-    }
-
-    const take = await deps.takes.findById(change.takeId)
-    if (take === null) return 'Take が見つかりません'
-    if (take.shotId !== change.shotId) return 'Take が別の Shot のものです'
-    if (shot.selectedTakeId === change.takeId) return '既にこの Take を採用しています'
-    await deps.shots.selectTake(change.shotId, change.takeId)
-    return null
-  } catch (cause) {
-    // 握り潰さない（規約 5）。1 件の失敗で残りを止めもしない。
-    return `適用に失敗しました: ${cause instanceof Error ? cause.message : String(cause)}`
   }
+  if (change.kind === 'trim') {
+    return {
+      shotId: change.shotId,
+      before: { durationSec: shot.durationSec },
+      write: async () => {
+        await deps.shots.update(change.shotId, { durationSec: change.toDurationSec })
+      },
+    }
+  }
+
+  const take = await deps.takes.findById(change.takeId)
+  if (take === null) return 'Take が見つかりません'
+  if (take.shotId !== change.shotId) return 'Take が別の Shot のものです'
+  if (shot.selectedTakeId === change.takeId) return '既にこの Take を採用しています'
+  return {
+    shotId: change.shotId,
+    before: {},
+    beforeSelectedTake: { takeId: shot.selectedTakeId },
+    write: async () => {
+      await deps.shots.selectTake(change.shotId, change.takeId)
+    },
+  }
+}
+
+/**
+ * 当てる分を Shot ごとに 1 件へ畳む。
+ *
+ * 同じ Shot に位置と尺の案が並ぶので、そのまま並べると記録が 2 行になる。
+ * **どちらも「変える前」は同じ読み取り時点の値**（書く前に全件を調べている）なので、
+ * 重ねても古い値が混ざることはない。
+ */
+const toEditBatchEntries = (steps: readonly ChangeStep[]): readonly EditBatchEntry[] => {
+  const byShot = new Map<ShotId, PreparedChange>()
+  for (const step of steps) {
+    if (!('prepared' in step)) continue
+    const current = byShot.get(step.prepared.shotId)
+    if (current === undefined) {
+      byShot.set(step.prepared.shotId, step.prepared)
+      continue
+    }
+    byShot.set(step.prepared.shotId, {
+      ...current,
+      before: { ...step.prepared.before, ...current.before },
+      beforeSelectedTake: current.beforeSelectedTake ?? step.prepared.beforeSelectedTake,
+    })
+  }
+  return [...byShot.values()].map((prepared) =>
+    prepared.beforeSelectedTake === undefined
+      ? editBatchEntry(prepared.shotId, prepared.before)
+      : editBatchEntry(prepared.shotId, prepared.before, prepared.beforeSelectedTake.takeId),
+  )
 }
 
 /**
  * `beatAlignmentRoutes` と同じく、この 2 口だけが楽曲解析を要るので別の factory にする。
  * `TimelineRoutesDeps` に解析を足すと、書き出し（renders.ts）に要らない依存が増える。
  */
-export const roughCutRoutes = (deps: BeatAlignmentRoutesDeps) =>
+export type RoughCutRoutesDeps = BeatAlignmentRoutesDeps & {
+  /**
+   * 適用の**直前**に「変える前」を残す口（P64-1）。
+   * 案を作る口には要らないが、適用の口には必ず要る。
+   */
+  readonly editBatches: EditBatchRecorder
+}
+
+export const roughCutRoutes = (deps: RoughCutRoutesDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })
     .openapi(planRoughCutRoute, async (c) => {
       const project = await deps.projects.findById(c.req.valid('param').projectId)
@@ -620,13 +701,43 @@ export const roughCutRoutes = (deps: BeatAlignmentRoutesDeps) =>
       const project = await deps.projects.findById(projectId)
       if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
 
+      /** **先に全件を調べる。** 1 件も書かないまま、当てる分と当てない分を決める。 */
+      const steps: ChangeStep[] = []
+      for (const change of c.req.valid('json').changes) {
+        const prepared = await prepareChange(deps, projectId, change)
+        steps.push(
+          typeof prepared === 'string' ? { change, reason: prepared } : { change, prepared },
+        )
+      }
+
+      /**
+       * **書く直前に記録を作る**（P64-1）。最大 49 件が一度に変わるので、
+       * 記録が無いと押した瞬間に戻せなくなる。
+       */
+      await recordEditBatch(deps.editBatches, {
+        projectId,
+        kind: 'rough_cut',
+        summarize: (count) => `粗編集を ${count.toString()} 件の Shot へ適用しました`,
+        entries: toEditBatchEntries(steps),
+      })
+
       const applied: RoughCutChange[] = []
       const skipped: RoughCutSkipped[] = []
-
-      for (const change of c.req.valid('json').changes) {
-        const reason = await applyChange(deps, projectId, change)
-        if (reason === null) applied.push(change)
-        else skipped.push({ change, reason })
+      for (const step of steps) {
+        if ('reason' in step) {
+          skipped.push({ change: step.change, reason: step.reason })
+          continue
+        }
+        try {
+          await step.prepared.write()
+          applied.push(step.change)
+        } catch (cause) {
+          // 握り潰さない（規約 5）。1 件の失敗で残りを止めもしない。
+          skipped.push({
+            change: step.change,
+            reason: `適用に失敗しました: ${cause instanceof Error ? cause.message : String(cause)}`,
+          })
+        }
       }
 
       return c.json(ok({ applied, skipped }), 200)

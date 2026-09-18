@@ -32,6 +32,7 @@ import { assetRoutes } from './routes/assets.js'
 import { scriptRoutes } from './routes/scripts.js'
 import { sequenceRoutes } from './routes/sequences.js'
 import { musicRoutes, type AnalysisQueue } from './routes/music.js'
+import { editBatchRoutes } from './routes/edit-batches.js'
 import { storyboardDraftRoutes } from './routes/storyboard-drafts.js'
 import { storyboardRoutes } from './routes/storyboard.js'
 import { reviewRoutes, type ReviewQueue } from './routes/reviews.js'
@@ -49,6 +50,7 @@ import type {
   MusicTrackRepository,
   RenderJobRepository,
   ReviewRepository,
+  EditBatchRepository,
   ScriptRepository,
   StoryboardDraftRepository,
   SequenceRepository,
@@ -82,6 +84,8 @@ export type AppDeps = {
   locations: LocationRepository
   scripts: ScriptRepository
   storyboardDrafts: StoryboardDraftRepository
+  /** 一括編集の記録と取り消し（Undo と履歴）。 */
+  editBatches: EditBatchRepository
   /**
    * 絵コンテ下書きの口。**どの実装を挿すかは main.ts だけが決める**
    * （レビュアと同じ方針。`apps/worker/src/review-wiring.ts`）。
@@ -163,7 +167,8 @@ export const createApp = (deps: AppDeps) => {
     logger,
   }
   app.route('/', shotRoutes(shotDeps))
-  app.route('/', shotBulkRoutes(shotDeps))
+  // 一括変更だけが記録を作る。1 件ずつの変更は戻す対象にしない（横断 ROADMAP）。
+  app.route('/', shotBulkRoutes({ ...shotDeps, editBatches: deps.editBatches }))
   app.route(
     '/',
     shotPosterRoutes({ shots: deps.shots, takes: deps.takes, mediaAssets, projects, storage }),
@@ -220,6 +225,7 @@ export const createApp = (deps: AppDeps) => {
       musicTracks: deps.musicTracks,
       musicAnalyses: deps.musicAnalyses,
       drafts: deps.storyboardDrafts,
+      editBatches: deps.editBatches,
       drafter: deps.storyboardDrafter,
     }),
   )
@@ -252,7 +258,20 @@ export const createApp = (deps: AppDeps) => {
     beatAlignmentRoutes({ ...timelineDeps, musicAnalyses: deps.musicAnalyses }),
   )
   // 粗編集。plan は何も書かず、apply は **人が見た案をそのまま**受け取って適用する。
-  app.route('/', roughCutRoutes({ ...timelineDeps, musicAnalyses: deps.musicAnalyses }))
+  app.route(
+    '/',
+    roughCutRoutes({
+      ...timelineDeps,
+      musicAnalyses: deps.musicAnalyses,
+      editBatches: deps.editBatches,
+    }),
+  )
+
+  // 一括で変えた記録と、その取り消し（横断 ROADMAP: Undo と履歴）。
+  app.route(
+    '/',
+    editBatchRoutes({ projects, shots: deps.shots, editBatches: deps.editBatches }),
+  )
   app.route(
     '/',
     renderRoutes({ ...timelineDeps, renderJobs: deps.renderJobs, queue: deps.renderQueue }),

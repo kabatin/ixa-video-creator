@@ -26,6 +26,12 @@ import type {
 } from '@ixa/provider-llm'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
+import {
+  editBatchEntry,
+  recordEditBatch,
+  shotBeforePatch,
+  type EditBatchRecorder,
+} from './edit-batch-recording.js'
 import { ShotResponse, toShotResponse } from './shots.js'
 
 /**
@@ -221,6 +227,11 @@ export type StoryboardDraftRoutesDeps = {
     | 'adoptItems'
   >
   drafter: StoryboardDrafter
+  /**
+   * 採用の**直前**に「変える前」を残す口（P64-1）。
+   * 27 件が一度に書き換わる操作なので、記録が無いと戻せない。
+   */
+  editBatches: EditBatchRecorder
 }
 
 /** 現在の脚本本文。まだ書かれていなければ null（空文字に畳まない）。 */
@@ -427,6 +438,27 @@ export const storyboardDraftRoutes = (deps: StoryboardDraftRoutesDeps) =>
        * 跨ぐリポジトリが 2 つあり、トランザクションの口を設計する方が大きい。
        * 案の中身は追記のみで変わらないので、押し直しても書かれる内容は同じになる。
        */
+      /**
+       * **書く直前に、変える欄の現在値を残す**（P64-1）。
+       * 同じ文字を採用し直しただけの Shot は記録に入れない（`shotBeforePatch` が空を返す）。
+       * 入れると履歴が「何も戻らない行」で埋まり、本当に戻したい操作が埋もれる。
+       */
+      const liveShotById = new Map(liveShots.map((shot) => [shot.id, shot] as const))
+      await recordEditBatch(deps.editBatches, {
+        projectId,
+        kind: 'draft_adopt',
+        summarize: (count) => `絵コンテの案を ${count.toString()} 件採用しました`,
+        entries: pending.flatMap((item) => {
+          const shot = liveShotById.get(item.shotId)
+          if (shot === undefined) return []
+          const before = shotBeforePatch(shot, {
+            description: item.description,
+            mood: item.mood,
+          })
+          return [editBatchEntry(item.shotId, before)]
+        }),
+      })
+
       for (const item of pending) {
         await deps.shots.update(item.shotId, { description: item.description, mood: item.mood })
       }

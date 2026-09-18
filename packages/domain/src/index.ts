@@ -17,6 +17,7 @@ export * from './shot/camera.js'
 export * from './shot/source-type.js'
 export * from './shot/reference.js'
 export * from './shot/shot.js'
+export * from './shot/edit-batch.js'
 
 // 生成
 export * from './generation/duration.js'

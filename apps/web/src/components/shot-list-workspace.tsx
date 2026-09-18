@@ -14,6 +14,7 @@ import {
 } from '@/components/bulk-action-bar'
 import { LiveStatusBadge } from '@/components/live-status-badge'
 import { CostMeterPanel } from '@/components/cost-meter'
+import { EditHistoryPanel } from '@/components/edit-history-panel'
 import { ShotTable } from '@/components/shot-table'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
@@ -284,6 +285,15 @@ export const ShotListWorkspace = ({
        * 額だけを出さない作りは部品側が持つ（実測 0 件なら出どころを併記する）。
        */}
       <CostMeterPanel projectId={projectId} />
+
+      {/* 一括変更を戻す（横断 ROADMAP）。一括を投げるのがこの画面なので、隣に置く。 */}
+      <EditHistoryPanel
+        projectId={projectId}
+        shotCodes={new Map(shots.map((shot) => [shot.id, shot.code]))}
+        onUndone={() => {
+          router.refresh()
+        }}
+      />
 
       {rowError !== null && (
         <p role="alert" className="rounded-md bg-danger/10 p-3 text-sm text-danger">

@@ -27,6 +27,7 @@ import {
   createInMemoryProjectEvents,
 } from './in-memory-project-events.js'
 import { createInMemoryGenerationJobRepository } from './in-memory-generation-job-repository.js'
+import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { CHEAP_MODEL, GOOD_MODEL, type Ok } from './shot-test-support.js'
 import { createTestVideoProvider } from './test-video-provider.js'
@@ -65,7 +66,7 @@ const buildFixture = (options: FixtureOptions = {}) => {
   const app = new OpenAPIHono({ defaultHook: validationHook })
   registerErrorHandlers(app, createLogger('silent'))
   app.route('/', shotRoutes(deps))
-  app.route('/', shotBulkRoutes(deps))
+  app.route('/', shotBulkRoutes({ ...deps, editBatches: createInMemoryEditBatchRepository() }))
 
   return { app, project, events, shots }
 }

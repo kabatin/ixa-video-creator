@@ -64,6 +64,13 @@
       "when": 1789720041017,
       "tag": "0008_zippy_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789737158519,
+      "tag": "0009_lame_silver_fox",
+      "breakpoints": true
     }
   ]
 }

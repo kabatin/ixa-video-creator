@@ -25,6 +25,8 @@ import {
   type StoryboardDraftRunResponse,
 } from '../routes/storyboard-drafts.js'
 import { aProject } from './fixtures.js'
+import type { EditBatchRecorder } from '../routes/edit-batch-recording.js'
+import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
 import { createInMemoryMusicAnalysisRepository } from './in-memory-music-analysis-repository.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { createInMemoryScriptRepository } from './in-memory-script-repositories.js'
@@ -119,6 +121,8 @@ const buildRoutes = async (options: {
   script?: string | null
   withAnalysis?: boolean
   drafter?: StoryboardDrafter
+  /** 記録の口を差し替える（作れないときの振る舞いを見るため）。 */
+  editBatches?: EditBatchRecorder
 }) => {
   const project = options.project === undefined ? aProject() : options.project
   const shots = options.shots ?? []
@@ -154,12 +158,14 @@ const buildRoutes = async (options: {
   }
 
   const drafter = options.drafter ?? drafterFor(shots)
+  const editBatches = createInMemoryEditBatchRepository()
 
   return {
     project,
     shotRepo,
     drafts,
     drafter,
+    editBatches,
     app: storyboardDraftRoutes({
       projects,
       shots: shotRepo,
@@ -168,6 +174,7 @@ const buildRoutes = async (options: {
       musicAnalyses,
       drafts,
       drafter,
+      editBatches: options.editBatches ?? editBatches,
     }),
   }
 }
@@ -660,5 +667,102 @@ describe('GET /projects/{id}/storyboard/drafts', () => {
 
     expect(byShot.get((shots[0] as Shot).id)?.adoptedAt).not.toBeNull()
     expect(byShot.get((shots[1] as Shot).id)?.adoptedAt).toBeNull()
+  })
+})
+
+/**
+ * 採用の記録（P64-1）。**書く直前に「変える前」を残す。**
+ * 27 件が一度に書き換わるので、記録が無いと戻せない。
+ */
+describe('絵コンテの採用は「変える前」を記録する', () => {
+  const withDraft = async (shotOverrides: readonly Partial<Shot>[]) => {
+    const project = aProject()
+    const shots = shotOverrides.map((overrides) => aShot(project.id, overrides))
+    const built = await buildRoutes({ project, shots })
+    const { body } = await postDraft(built.app, project.id)
+    return { ...built, project, shots, run: body.data.run }
+  }
+
+  it('変わる欄だけを、採用した Shot のぶんだけ残す', async () => {
+    const { app, project, shots, run, editBatches } = await withDraft([
+      { code: 'A', description: 'Aの元の説明', mood: '元の雰囲気' },
+      { code: 'B', description: 'Bの元の説明', mood: '元の雰囲気' },
+    ])
+    const [first] = shots as [Shot]
+
+    await postAdopt(app, project.id, run.id, [first.id])
+
+    const [batch] = editBatches.snapshot()
+    expect(batch?.kind).toBe('draft_adopt')
+    expect(batch?.entries).toEqual([
+      { shotId: first.id, patch: { description: 'Aの元の説明', mood: '元の雰囲気' } },
+    ])
+    // 採用 Take は触らないので、欄そのものを作らない（lessons L-021）。
+    expect(batch?.entries[0] && 'selectedTakeId' in batch.entries[0]).toBe(false)
+  })
+
+  it('同じ値を採用し直しただけの Shot は記録に入れない', async () => {
+    // 下書きは description を `案: {code}` / mood を `静かな緊張` にする。
+    const { app, project, shots, run, editBatches } = await withDraft([
+      { code: 'A', description: '案: A', mood: '静かな緊張' },
+      { code: 'B', description: 'Bの元の説明', mood: '静かな緊張' },
+    ])
+
+    await postAdopt(app, project.id, run.id, shots.map((shot) => shot.id))
+
+    const [batch] = editBatches.snapshot()
+    // A は 1 欄も変わらないので落ちる。B は description だけ変わる。
+    expect(batch?.entries).toEqual([
+      { shotId: shots[1]?.id, patch: { description: 'Bの元の説明' } },
+    ])
+  })
+
+  /** **記録は書き込みの「直前」に作る。** 作れなかったなら 1 件も書かない。 */
+  it('記録を作れなければ Shot を 1 件も書かない', async () => {
+    const project = aProject()
+    const shots = [aShot(project.id, { code: 'A', description: 'Aの元の説明' })]
+    const built = await buildRoutes({
+      project,
+      shots,
+      editBatches: { create: () => Promise.reject(new Error('記録を作れませんでした')) },
+    })
+    const { body } = await postDraft(built.app, project.id)
+
+    // このアプリは onError を登録していないので、本文ではなく状態だけを見る。
+    const res = await built.app.request(
+      `/projects/${project.id}/storyboard/drafts/${body.data.run.id}/adopt`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ shotIds: [shots[0]?.id ?? ''] }),
+      },
+    )
+
+    expect(res.status).toBe(500)
+    const after = await built.shotRepo.findByProject(project.id)
+    expect(after[0]?.description).toBe('Aの元の説明')
+  })
+
+  it('1 件も変わらなければ記録そのものを作らない', async () => {
+    const { app, project, shots, run, editBatches } = await withDraft([
+      { code: 'A', description: '案: A', mood: '静かな緊張' },
+    ])
+
+    const { status } = await postAdopt(app, project.id, run.id, [shots[0]?.id ?? ''])
+
+    expect(status).toBe(200)
+    expect(editBatches.snapshot()).toEqual([])
+  })
+
+  it('既に採用済みの案を押し直しても、記録は増えない', async () => {
+    const { app, project, shots, run, editBatches } = await withDraft([
+      { code: 'A', description: 'Aの元の説明', mood: '元の雰囲気' },
+    ])
+    const ids = [shots[0]?.id ?? '']
+
+    await postAdopt(app, project.id, run.id, ids)
+    await postAdopt(app, project.id, run.id, ids)
+
+    expect(editBatches.snapshot()).toHaveLength(1)
   })
 })

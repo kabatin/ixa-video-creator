@@ -1,6 +1,7 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import {
   LocationId as LocationIdSchema,
+  ShotId as ShotIdSchema,
   createPhase1EmptyContextSource,
   newId,
   type Project,
@@ -23,11 +24,13 @@ import {
   SHOT_NOT_FOUND_REASON,
   shotBulkRoutes,
 } from '../routes/shots-bulk.js'
+import type { EditBatchRecorder } from '../routes/edit-batch-recording.js'
 import type { ShotRoutesDeps } from '../routes/shots.js'
 import { createRecordingQueue } from './app-deps.js'
 import { createInMemoryProjectEvents } from './in-memory-project-events.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryGenerationJobRepository } from './in-memory-generation-job-repository.js'
+import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { CHEAP_MODEL, GOOD_MODEL, type ErrorBody, type Ok } from './shot-test-support.js'
 import { createTestVideoProvider, testModel } from './test-video-provider.js'
@@ -84,6 +87,8 @@ type BulkFixtureOptions = {
   readonly takes?: readonly Take[]
   readonly models?: readonly VideoModelDescriptor[]
   readonly otherProjects?: readonly Project[]
+  /** 記録の口を差し替える（作れないときの振る舞いを見るため）。 */
+  readonly editBatches?: EditBatchRecorder
 }
 
 /**
@@ -112,11 +117,12 @@ const buildBulkFixture = (options: BulkFixtureOptions = {}) => {
     logger: createLogger('silent'),
   }
 
+  const editBatches = createInMemoryEditBatchRepository()
   const app = new OpenAPIHono({ defaultHook: validationHook })
   registerErrorHandlers(app, createLogger('silent'))
-  app.route('/', shotBulkRoutes(deps))
+  app.route('/', shotBulkRoutes({ ...deps, editBatches: options.editBatches ?? editBatches }))
 
-  return { app, project, shots, takes, generationJobs, queue, events }
+  return { app, project, shots, takes, generationJobs, queue, events, editBatches }
 }
 
 const threeShots = (project: Project): readonly Shot[] => [
@@ -632,5 +638,108 @@ describe('PATCH /projects/:projectId/shots/bulk', () => {
     expect(json.data.results[0]).toMatchObject({ ok: false, reason: SHOT_NOT_FOUND_REASON })
     expect(json.data.results[1]).toMatchObject({ ok: true })
     expect(f.shots.snapshot()[0]?.mood).toBe('calm')
+  })
+})
+
+/**
+ * 一括変更の記録（P64-1）。**書く直前に「変える前」を残す。**
+ * 最大 200 件が一度に変わるので、記録が無いと戻せない。
+ */
+describe('一括変更は「変える前」を記録する', () => {
+  it('変わる欄だけを、Shot ごとに残す', async () => {
+    const project = aProject()
+    const shot = aShot(project.id, { mood: '元の雰囲気', description: '元の説明' })
+    const { app, editBatches } = buildBulkFixture({ project, shots: [shot] })
+
+    const res = await patchJson(app, `/projects/${project.id}/shots/bulk`, {
+      shotIds: [shot.id],
+      patch: { mood: '新しい雰囲気' },
+    })
+
+    expect(res.status).toBe(200)
+    const [batch] = editBatches.snapshot()
+    expect(batch?.kind).toBe('bulk_update')
+    expect(batch?.entries).toEqual([{ shotId: shot.id, patch: { mood: '元の雰囲気' } }])
+    expect(batch?.entries[0] && 'selectedTakeId' in batch.entries[0]).toBe(false)
+  })
+
+  it('camera は重ねた結果と比べ、変わる項目だけを残す', async () => {
+    const project = aProject()
+    // 既定の camera は size: medium / lensMm: 35。size だけを変える。
+    const shot = aShot(project.id)
+    const { app, editBatches } = buildBulkFixture({ project, shots: [shot] })
+
+    await patchJson(app, `/projects/${project.id}/shots/bulk`, {
+      shotIds: [shot.id],
+      patch: { camera: { size: 'closeup' } },
+    })
+
+    const [batch] = editBatches.snapshot()
+    // **全欄ではなく camera 1 欄。** ただし中身は重ねる前の camera そのもの。
+    expect(Object.keys(batch?.entries[0]?.patch ?? {})).toEqual(['camera'])
+    expect(batch?.entries[0]?.patch.camera).toEqual(shot.camera)
+  })
+
+  it('同じ値を送った Shot は記録に入れない', async () => {
+    const project = aProject()
+    const same = aShot(project.id, { code: 'S1', order: 1000, mood: '同じ雰囲気' })
+    const other = aShot(project.id, { code: 'S2', order: 2000, mood: '違う雰囲気' })
+    const { app, editBatches } = buildBulkFixture({ project, shots: [same, other] })
+
+    await patchJson(app, `/projects/${project.id}/shots/bulk`, {
+      shotIds: [same.id, other.id],
+      patch: { mood: '同じ雰囲気' },
+    })
+
+    const [batch] = editBatches.snapshot()
+    expect(batch?.entries).toEqual([{ shotId: other.id, patch: { mood: '違う雰囲気' } }])
+    expect(batch?.summary).toContain('1 件')
+  })
+
+  it('1 件も変わらなければ記録そのものを作らない', async () => {
+    const project = aProject()
+    const shot = aShot(project.id, { mood: '同じ雰囲気' })
+    const { app, editBatches } = buildBulkFixture({ project, shots: [shot] })
+
+    const res = await patchJson(app, `/projects/${project.id}/shots/bulk`, {
+      shotIds: [shot.id],
+      patch: { mood: '同じ雰囲気' },
+    })
+
+    expect(res.status).toBe(200)
+    expect(editBatches.snapshot()).toEqual([])
+  })
+
+  it('記録を作れなければ Shot を 1 件も書かない', async () => {
+    const project = aProject()
+    const shot = aShot(project.id, { mood: '元の雰囲気' })
+    const { app, shots } = buildBulkFixture({
+      project,
+      shots: [shot],
+      editBatches: { create: () => Promise.reject(new Error('記録を作れませんでした')) },
+    })
+
+    const res = await patchJson(app, `/projects/${project.id}/shots/bulk`, {
+      shotIds: [shot.id],
+      patch: { mood: '新しい雰囲気' },
+    })
+
+    expect(res.status).toBe(500)
+    expect(shots.snapshot()[0]?.mood).toBe('元の雰囲気')
+  })
+
+  it('当てられなかった Shot は記録に入れない', async () => {
+    const project = aProject()
+    const missing = newId(ShotIdSchema)
+    const shot = aShot(project.id, { mood: '元の雰囲気' })
+    const { app, editBatches } = buildBulkFixture({ project, shots: [shot] })
+
+    await patchJson(app, `/projects/${project.id}/shots/bulk`, {
+      shotIds: [missing, shot.id],
+      patch: { mood: '新しい雰囲気' },
+    })
+
+    const [batch] = editBatches.snapshot()
+    expect(batch?.entries.map((entry) => entry.shotId)).toEqual([shot.id])
   })
 })

@@ -39,6 +39,7 @@ export const ReviewRunId = brandedId('ReviewRunId')
 export const ReviewFindingId = brandedId('ReviewFindingId')
 export const StoryboardDraftRunId = brandedId('StoryboardDraftRunId')
 export const StoryboardDraftItemId = brandedId('StoryboardDraftItemId')
+export const EditBatchId = brandedId('EditBatchId')
 export const RenderJobId = brandedId('RenderJobId')
 
 export type WorkspaceId = z.infer<typeof WorkspaceId>
@@ -66,6 +67,7 @@ export type ReviewRunId = z.infer<typeof ReviewRunId>
 export type ReviewFindingId = z.infer<typeof ReviewFindingId>
 export type StoryboardDraftRunId = z.infer<typeof StoryboardDraftRunId>
 export type StoryboardDraftItemId = z.infer<typeof StoryboardDraftItemId>
+export type EditBatchId = z.infer<typeof EditBatchId>
 export type RenderJobId = z.infer<typeof RenderJobId>
 
 /**

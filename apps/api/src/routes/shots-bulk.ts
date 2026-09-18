@@ -14,10 +14,18 @@ import {
   type ProjectId,
   type Shot,
   type ShotId,
+  type EditBatchEntry,
   type Take,
+  type UpdateShotPatch,
 } from '@ixa/domain'
 import { buildGeneration, type CompiledGeneration } from '@ixa/generation'
 import { estimateCostUsd, type VideoModelDescriptor } from '@ixa/provider-core'
+import {
+  editBatchEntry,
+  recordEditBatch,
+  shotBeforePatch,
+  type EditBatchRecorder,
+} from './edit-batch-recording.js'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 import {
@@ -221,6 +229,17 @@ type PlanEntry =
   | { readonly shotId: ShotId; readonly planned: Planned }
   | { readonly shotId: ShotId; readonly reason: string }
 
+/** 一括変更の 1 件。**書く前に決まり切っている**ので、記録も結果もここから作れる。 */
+type BulkUpdateStep =
+  | { readonly shotId: ShotId; readonly reason: string }
+  | {
+      readonly shotId: ShotId
+      /** 実際に当てる値（`camera` は既存へ重ねたあと）。 */
+      readonly next: UpdateShotPatch
+      /** その値に対する「変える前」。変わる欄だけを持つ。 */
+      readonly before: EditBatchEntry['patch']
+    }
+
 const rule = {
   /** ちょうど 1 件のときだけ。0 件と 2 件以上は人に返す。 */
   only: (takes: readonly Take[]): Take | string => {
@@ -239,7 +258,17 @@ const rule = {
   },
 } as const
 
-export const shotBulkRoutes = (deps: ShotRoutesDeps) =>
+/**
+ * 一括の口が要る依存。
+ *
+ * `ShotRoutesDeps`（1 件ずつの口と共有）に、**取り消しのための記録**を足す。
+ * 記録を作れない状態で一括変更を通すと、押した瞬間に最大 200 件が戻せなくなる。
+ */
+export type ShotBulkRoutesDeps = ShotRoutesDeps & {
+  readonly editBatches: EditBatchRecorder
+}
+
+export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })
     .openapi(bulkGenerateRoute, async (c) => {
       const { projectId } = c.req.valid('param')
@@ -383,20 +412,41 @@ export const shotBulkRoutes = (deps: ShotRoutesDeps) =>
 
       const { shotIds, patch } = c.req.valid('json')
 
-      const results = []
+      /**
+       * **書く前に、全件ぶんの「変える前」を集める。** 書きながら集めると、
+       * 途中で落ちたときに記録の無い変更が残る。
+       */
+      const steps: BulkUpdateStep[] = []
       for (const shotId of shotIds) {
         const resolved = await resolveShot(deps, projectId, shotId)
         if (!('shot' in resolved)) {
-          results.push({ shotId, ok: false as const, reason: resolved.reason })
+          steps.push({ shotId, reason: resolved.reason })
           continue
         }
         // camera は Shot ごとに既存の値へ重ねる。全体の置換にしない。
         const { camera, ...rest } = patch
-        const updated = await deps.shots.update(
-          resolved.shot.id,
-          camera === undefined ? rest : { ...rest, camera: { ...resolved.shot.camera, ...camera } },
-        )
-        results.push({ shotId, ok: true as const, shot: toShotResponse(updated) })
+        const next =
+          camera === undefined ? rest : { ...rest, camera: { ...resolved.shot.camera, ...camera } }
+        steps.push({ shotId, next, before: shotBeforePatch(resolved.shot, next) })
+      }
+
+      await recordEditBatch(deps.editBatches, {
+        projectId,
+        kind: 'bulk_update',
+        summarize: (count) => `Shot を ${count.toString()} 件まとめて変更しました`,
+        entries: steps.flatMap((step) =>
+          'reason' in step ? [] : [editBatchEntry(step.shotId, step.before)],
+        ),
+      })
+
+      const results = []
+      for (const step of steps) {
+        if ('reason' in step) {
+          results.push({ shotId: step.shotId, ok: false as const, reason: step.reason })
+          continue
+        }
+        const updated = await deps.shots.update(step.shotId, step.next)
+        results.push({ shotId: step.shotId, ok: true as const, shot: toShotResponse(updated) })
       }
 
       return c.json(ok({ results }), 200)

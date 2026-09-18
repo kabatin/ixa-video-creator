@@ -22,11 +22,12 @@ import {
 import { describe, expect, it } from 'vitest'
 import {
   roughCutRoutes,
-  type BeatAlignmentRoutesDeps,
+  type RoughCutRoutesDeps,
   type RoughCutApplyResponse,
   type RoughCutPlanResponse,
 } from '../routes/timeline.js'
 import { aProject } from './fixtures.js'
+import { createInMemoryEditBatchRepository, type InMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
 import { createInMemoryMusicAnalysisRepository } from './in-memory-music-analysis-repository.js'
 import {
   aMediaAsset,
@@ -105,9 +106,11 @@ type SceneOptions = {
 }
 
 type Scene = {
-  readonly deps: BeatAlignmentRoutesDeps
+  readonly deps: RoughCutRoutesDeps
   readonly project: Project
   readonly shots: InMemoryShotRepository
+  /** 適用のたびに積まれる「変える前」の記録（P64-1）。 */
+  readonly editBatches: InMemoryEditBatchRepository
 }
 
 const scene = (options: SceneOptions = {}): Scene => {
@@ -117,6 +120,7 @@ const scene = (options: SceneOptions = {}): Scene => {
   const withMusic = options.withMusic !== false
 
   const shots = createInMemoryShotRepository(options.shots ?? [])
+  const editBatches = createInMemoryEditBatchRepository()
   const base = timelineDeps({
     project,
     takes: options.takes ?? [],
@@ -126,9 +130,11 @@ const scene = (options: SceneOptions = {}): Scene => {
   return {
     project,
     shots,
+    editBatches,
     deps: {
       ...base,
       shots,
+      editBatches,
       musicTracks: createInMemoryMusicTrackRepository(withMusic ? [track] : []),
       musicAnalyses: createInMemoryMusicAnalysisRepository(withMusic ? [anAnalysis(track.id)] : []),
     },
@@ -398,5 +404,102 @@ describe('POST /timeline/rough-cut/apply', () => {
       },
     )
     expect(res.status).toBe(422)
+  })
+})
+
+/**
+ * 適用の記録（P64-1）。**書く直前に「変える前」を残す。**
+ * 残っていないと、49 件が一度に変わる操作を戻せない。
+ */
+describe('粗編集の適用は「変える前」を記録する', () => {
+  it('位置を動かした Shot の、動かす前の startSec を残す', async () => {
+    const { s, b } = twoShots()
+    const change: RoughCutChange = {
+      kind: 'move', shotId: b.shot.id, fromSec: 4.3, toSec: 4.5, reason: '人が承認した案',
+    }
+
+    await apply(s, [change])
+
+    const [batch] = s.editBatches.snapshot()
+    expect(batch?.kind).toBe('rough_cut')
+    expect(batch?.entries).toEqual([{ shotId: b.shot.id, patch: { startSec: 4.3 } }])
+    // **採用 Take は触っていないので、欄そのものを作らない**（lessons L-021）。
+    expect(batch?.entries[0] && 'selectedTakeId' in batch.entries[0]).toBe(false)
+    expect(batch?.undoneAt).toBeNull()
+  })
+
+  it('採用 Take を変えたときは、変える前の採用を欄として残す', async () => {
+    const project = aProject()
+    const a = shotWithTake(project, { code: 'S1', order: 1, startSec: 0, durationSec: 4 })
+    /** 同じ Shot の 2 本目。採用をこちらへ差し替える案にする。 */
+    const second = aTake(a.shot, 'e'.repeat(64), { mediaAssetId: a.asset.id, index: 2 })
+    const s = scene({
+      project, shots: [a.shot], takes: [a.take, second], mediaAssets: [a.asset],
+    })
+    const change: RoughCutChange = {
+      kind: 'select', shotId: a.shot.id, takeId: second.id, reason: '人が承認した案',
+    }
+
+    await apply(s, [change])
+
+    const [batch] = s.editBatches.snapshot()
+    expect(batch?.entries).toHaveLength(1)
+    expect(batch?.entries[0]?.selectedTakeId).toBe(a.take.id)
+    expect(batch?.entries[0]?.patch).toEqual({})
+  })
+
+  it('同じ Shot の位置と尺は 1 件に畳む', async () => {
+    const { s, b } = twoShots()
+    const changes: RoughCutChange[] = [
+      { kind: 'move', shotId: b.shot.id, fromSec: 4.3, toSec: 4.5, reason: '案' },
+      { kind: 'trim', shotId: b.shot.id, fromDurationSec: 4, toDurationSec: 3.5, reason: '案' },
+    ]
+
+    await apply(s, changes)
+
+    const [batch] = s.editBatches.snapshot()
+    expect(batch?.entries).toEqual([
+      { shotId: b.shot.id, patch: { startSec: 4.3, durationSec: 4 } },
+    ])
+  })
+
+  /**
+   * **記録は書き込みの「直前」に作る。** 作れなかったなら 1 件も書かない。
+   * 逆順だと、記録の無い変更が先に入ってしまう。
+   */
+  it('記録を作れなければ Shot を 1 件も書かない', async () => {
+    const { s, b } = twoShots()
+    const before = JSON.stringify(s.shots.snapshot())
+    const failing = {
+      create: () => Promise.reject(new Error('記録を作れませんでした')),
+    }
+
+    const res = await roughCutRoutes({ ...s.deps, editBatches: failing }).request(
+      `/projects/${s.project.id}/timeline/rough-cut/apply`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          changes: [
+            { kind: 'move', shotId: b.shot.id, fromSec: 4.3, toSec: 4.5, reason: '案' },
+          ],
+        }),
+      },
+    )
+
+    expect(res.status).toBe(500)
+    expect(JSON.stringify(s.shots.snapshot())).toBe(before)
+  })
+
+  it('1 件も当たらなかった適用では記録を作らない', async () => {
+    const { s, b } = twoShots()
+    // 案が前提にしていた位置と現在が違う（stale）ので、1 件も当たらない。
+    const change: RoughCutChange = {
+      kind: 'move', shotId: b.shot.id, fromSec: 99, toSec: 4.5, reason: '古い案',
+    }
+
+    const result = await apply(s, [change])
+    expect(result.applied).toEqual([])
+    expect(s.editBatches.snapshot()).toEqual([])
   })
 })
