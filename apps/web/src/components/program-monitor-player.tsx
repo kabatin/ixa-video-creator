@@ -186,6 +186,9 @@ export const ProgramMonitorPlayer = ({
       compositionHeight={document.resolution.height}
       initialFrame={initialFrameRef.current}
       style={{ width: '100%', height: '100%' }}
+      // 個人利用のため会社規模によるライセンス契約は不要（制作者に確認、2026-09-18）。
+      // 商用として販売する段になったら remotion.dev/license を見直すこと。
+      acknowledgeRemotionLicense
       clickToPlay={false}
       // 再生・停止の割り当ては画面側で 1 か所にまとめる（cut-editor-keys と同じ方針）。
       // Player が独自に Space を奪うと、割り当てが 2 箇所に分かれる。
