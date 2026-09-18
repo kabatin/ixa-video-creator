@@ -27,6 +27,7 @@ import { TEXT_INSERT_LAYER, TimelineTracks } from '@/components/timeline-tracks'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import type { WireTimelineBeatAlignment } from '@/lib/beat-alignment-view'
+import { RoughCutPanel } from '@/components/rough-cut-panel'
 import { nextSeekCommand, type SeekCommand } from '@/lib/program-monitor'
 import { createRequester } from '@/lib/requester'
 import {
@@ -465,6 +466,19 @@ export const TimelineEditor = ({
       )}
 
       <TimelineIssuePanel issues={issues} projectId={projectId} />
+
+      {/**
+       * 粗編集の提案（PHASE 6.3）。**指摘の真下に置く。**
+       * 「重なり 72 件」を見た人が次に取る行動がこれなので、探させない。
+       * 押すまで何も変わらない作りは部品側が持つ。
+       */}
+      <RoughCutPanel
+        projectId={projectId}
+        shotCodes={new Map((shots ?? []).map((shot) => [shot.id, shot.code]))}
+        onApplied={() => {
+          router.refresh()
+        }}
+      />
 
       <TimelineSnapPanel
         enabled={snapEnabled}

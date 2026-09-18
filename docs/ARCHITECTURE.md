@@ -1029,7 +1029,8 @@ locations
 motion_templates
 music_tracks
 music_analyses               (JSONB: beats / downbeats / sections / energy_curve)
-scripts / script_versions
+scripts
+script_versions
 sequences
 shots                        (project_id, order) に複合インデックス
 shot_characters
@@ -1040,6 +1041,8 @@ generation_jobs
 takes                        (JSONB: spec / provider_params。追記のみ)
 review_runs
 review_findings
+storyboard_draft_runs        (絵コンテ下書きの実行 1 回分)
+storyboard_draft_items       (Shot ごとの案。中身は追記のみ。動くのは adopted_at だけ)
 render_jobs                  (JSONB: timeline_snapshot)
 ```
 

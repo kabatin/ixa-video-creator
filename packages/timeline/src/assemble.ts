@@ -41,6 +41,20 @@ const sec = (value: number): string => `${value.toFixed(3)}s`
 
 const isSameTime = (a: number, b: number): boolean => Math.abs(a - b) <= TIME_EPSILON
 
+/**
+ * ロック済み Shot を外したときの理由。**「決められなかった」と言い分けるための文言。**
+ *
+ * ロックは「ここはもう触らないでいい」と人が決めた印なので、機械が外したのは
+ * 判断に困ったからではなく**意図して除外した**からである。同じ言葉で書くと、
+ * 人はロックを外せば直ると気付けない。
+ *
+ * **位置・尺だけでなく Take の採用も外す。** 採用 Take を機械が差し替えると、
+ * 位置は変わらないのに**その Shot に映るものが変わる**。触らないと決めた Shot で
+ * それが起きるのがいちばん驚かせる壊れ方になる。
+ */
+export const roughCutLockedReason = (code: string): string =>
+  `Shot ${code} はロックされているため変更しません（人が触らないと決めた Shot）`
+
 /** 採否の判断に要る列だけ。`@ixa/generation` には依存しない。 */
 export type RoughCutTake = Pick<
   Take,
@@ -147,6 +161,11 @@ const planSelect = (
   takes: readonly RoughCutTake[],
   issue: TimelineIssue,
 ): { change: RoughCutChange } | { unresolved: RoughCutUnresolved } => {
+  // **黙って飛ばさない。** 飛ばした痕跡を残さないと、なぜ直らないのかが画面から消える。
+  if (shot.lockedAt !== null) {
+    return { unresolved: { shotId: shot.id, reason: `${issue.message}。${roughCutLockedReason(shot.code)}` } }
+  }
+
   if (takes.length === 0) {
     return {
       unresolved: {
@@ -194,8 +213,19 @@ const planSelect = (
  * 隙間と重なりを閉じる
  * ------------------------------------------------------------------ */
 
-/** 直す対象の境目。`earlier` の終わりと `later` の始まりが食い違っている。 */
-type Boundary = { readonly earlier: Shot; readonly later: Shot; readonly issue: TimelineIssue }
+/**
+ * 直す対象の境目。`earlier` の終わりと `later` の始まりが食い違っている。
+ *
+ * `nextStartSec` は `later` の次に来る Shot の開始。**並びを保つための上限**で、
+ * ここを越えて `later` を動かすと Shot の順が入れ替わる。入れ替わると次の回で
+ * 別の境目として現れ、直したものが直され直して**堂々巡りになる**（実データで発生した）。
+ */
+type Boundary = {
+  readonly earlier: Shot
+  readonly later: Shot
+  readonly nextStartSec: number | null
+  readonly issue: TimelineIssue
+}
 
 const boundaryKey = (boundary: Boundary): string => `${boundary.earlier.id}>${boundary.later.id}`
 
@@ -220,13 +250,21 @@ const toBoundaries = (issues: readonly TimelineIssue[], shots: readonly Shot[]):
     const earlier = sorted[index]
     const later = sorted[index + 1]
     if (earlier === undefined || later === undefined) return []
-    return [{ earlier, later, issue }]
+    return [{ earlier, later, nextStartSec: sorted[index + 2]?.startSec ?? null, issue }]
   })
 }
 
-/** 境目を閉じる時刻の案。`snapped` が false なら拍を使えなかった。 */
+/**
+ * 何に合わせて閉じたか。**「拍を使えなかった」で一括りにしない。**
+ *
+ * 理由が「拍を使わなかった」だけだと、拍が無いのか・後ろがロックされているのか・
+ * 拍へ寄せると尺が消えるのかが混ざる。**どれも次に取る行動が違う**（lessons L-015）。
+ */
+type BoundaryAnchor = 'beat' | 'no_beats' | 'later_locked' | 'beat_would_zero'
+
+/** 境目を閉じる時刻の案。 */
 type BoundaryFix =
-  | { readonly ok: true; readonly atSec: number; readonly snapped: boolean }
+  | { readonly ok: true; readonly atSec: number; readonly anchor: BoundaryAnchor }
   | { readonly ok: false; readonly reason: string }
 
 /**
@@ -244,34 +282,49 @@ const resolveBoundary = (boundary: Boundary, beats: readonly Seconds[]): Boundar
 
   // ロックされた Shot は動かさない。拍へ寄せるには後ろの Shot を動かす必要がある。
   const canMoveLater = later.lockedAt === null
-  const candidates: readonly { atSec: number; snapped: boolean }[] =
-    snapped === null || !canMoveLater
-      ? [{ atSec: later.startSec, snapped: false }]
-      : [
-          { atSec: snapped, snapped: true },
-          { atSec: later.startSec, snapped: false },
-        ]
+
+  /**
+   * **拍を使えない理由を、候補ごとに持たせる。**
+   * 後から `snapped === false` を見て理由を組み立てると、
+   * 「後ろがロックされている」が「拍へ寄せると尺が消える」に化ける。
+   */
+  const candidates: readonly { atSec: number; anchor: BoundaryAnchor }[] =
+    snapped === null
+      ? [{ atSec: later.startSec, anchor: 'no_beats' }]
+      : !canMoveLater
+        ? [{ atSec: later.startSec, anchor: 'later_locked' }]
+        : [
+            { atSec: snapped, anchor: 'beat' },
+            { atSec: later.startSec, anchor: 'beat_would_zero' },
+          ]
 
   for (const candidate of candidates) {
     if (candidate.atSec - earlier.startSec <= TIME_EPSILON) continue
     if (candidate.atSec < 0) continue
+    // **並びを越えない。** 越えると Shot の順が入れ替わり、堂々巡りになる。
+    if (
+      boundary.nextStartSec !== null &&
+      candidate.atSec > boundary.nextStartSec + TIME_EPSILON
+    ) {
+      continue
+    }
     // 前の Shot の尺を変えずに閉じられないなら、前の Shot がロックされていては無理。
     if (earlier.lockedAt !== null && !isSameTime(candidate.atSec, shotEndSec(earlier))) continue
-    return { ok: true, atSec: candidate.atSec, snapped: candidate.snapped }
+    return { ok: true, atSec: candidate.atSec, anchor: candidate.anchor }
   }
 
   if (earlier.lockedAt !== null) {
     return {
       ok: false,
-      reason: `Shot ${earlier.code} がロックされているため、尺を変えて境目を閉じられない`,
+      reason: `${roughCutLockedReason(earlier.code)}。尺を変えないと境目を閉じられません`,
     }
   }
   if (!canMoveLater) {
     return {
       ok: false,
       reason:
-        `Shot ${later.code} がロックされていて動かせず、` +
-        `その開始 ${sec(later.startSec)} は Shot ${earlier.code} の開始 ${sec(earlier.startSec)} より後ろにない`,
+        `${roughCutLockedReason(later.code)}。その開始 ${sec(later.startSec)} は ` +
+        `Shot ${earlier.code} の開始 ${sec(earlier.startSec)} より後ろにありません`,
     }
   }
   return {
@@ -282,19 +335,24 @@ const resolveBoundary = (boundary: Boundary, beats: readonly Seconds[]): Boundar
   }
 }
 
-/** 拍を使えたか使えなかったかを、そのまま言葉にする（L-015）。 */
+/** 何に合わせたかを、**そのまま**言葉にする（L-015）。理由を一括りにしない。 */
 const describeAnchor = (
-  fix: { atSec: number; snapped: boolean },
+  fix: { atSec: number; anchor: BoundaryAnchor },
   boundary: Boundary,
-  beats: readonly Seconds[],
 ): string => {
-  if (fix.snapped) return `拍 ${sec(fix.atSec)} に合わせる`
-  if (beats.length === 0) {
-    return `拍が分かっていないため、Shot ${boundary.later.code} の開始 ${sec(fix.atSec)} に合わせる`
+  const at = sec(fix.atSec)
+  const later = boundary.later.code
+
+  if (fix.anchor === 'beat') return `拍 ${at} に合わせる`
+  if (fix.anchor === 'no_beats') {
+    return `拍が分かっていないため、Shot ${later} の開始 ${at} に合わせる`
+  }
+  if (fix.anchor === 'later_locked') {
+    return `Shot ${later} がロックされていて動かせないため、その開始 ${at} に合わせる`
   }
   return (
     `拍へ寄せると Shot ${boundary.earlier.code} の尺が 0 以下になるため、拍を使わず ` +
-    `Shot ${boundary.later.code} の開始 ${sec(fix.atSec)} に合わせる`
+    `Shot ${later} の開始 ${at} に合わせる`
   )
 }
 
@@ -325,11 +383,11 @@ const closeBoundaries = (
 ): {
   readonly shots: readonly Shot[]
   readonly reasons: ReasonLog
-  readonly unresolved: readonly RoughCutUnresolved[]
+  /** 直せなかった境目 → その理由。**残った指摘に理由を配るために使う。** */
+  readonly abandoned: ReadonlyMap<string, string>
 } => {
   const reasons: ReasonLog = new Map()
-  const unresolved: RoughCutUnresolved[] = []
-  const abandoned = new Set<string>()
+  const abandoned = new Map<string, string>()
 
   let shots: readonly Shot[] = input.source.shots
   const maxRounds = shots.length + MAX_ROUNDS_MARGIN
@@ -341,31 +399,23 @@ const closeBoundaries = (
       .sort((a, b) => a.earlier.startSec - b.earlier.startSec)
 
     const boundary = pending[0]
-    if (boundary === undefined) return { shots, reasons, unresolved }
+    if (boundary === undefined) return { shots, reasons, abandoned }
 
     if (round === maxRounds) {
       // ここへ来るのは左から閉じる前提が崩れたとき。**黙って打ち切らない。**
-      // 残っている境目を全部残す。1 件にまとめると何が未解決か分からなくなる（L-015）。
       for (const rest of pending) {
-        unresolved.push({
-          shotId: rest.earlier.id,
-          reason: `${rest.issue.message}。繰り返しの上限に達しても解消しなかった`,
-        })
+        abandoned.set(boundaryKey(rest), '繰り返しの上限に達しても解消しなかった')
       }
-      return { shots, reasons, unresolved }
+      return { shots, reasons, abandoned }
     }
 
     const fix = resolveBoundary(boundary, input.beats)
     if (!fix.ok) {
-      abandoned.add(boundaryKey(boundary))
-      unresolved.push({
-        shotId: boundary.earlier.id,
-        reason: `${boundary.issue.message}。${fix.reason}`,
-      })
+      abandoned.set(boundaryKey(boundary), fix.reason)
       continue
     }
 
-    const anchor = describeAnchor(fix, boundary, input.beats)
+    const anchor = describeAnchor(fix, boundary)
     const { earlier, later } = boundary
     const nextDuration = fix.atSec - earlier.startSec
 
@@ -393,7 +443,7 @@ const closeBoundaries = (
     })
   }
 
-  return { shots, reasons, unresolved }
+  return { shots, reasons, abandoned }
 }
 
 /**
@@ -426,7 +476,6 @@ export const planRoughCut = (input: RoughCutInput): RoughCutPlan => {
   }
 
   const closed = closeBoundaries(input)
-  unresolved.push(...closed.unresolved)
 
   const proposedById = new Map<ShotId, Shot>(closed.shots.map((shot) => [shot.id, shot]))
   for (const shot of original) {
@@ -455,14 +504,33 @@ export const planRoughCut = (input: RoughCutInput): RoughCutPlan => {
   }
 
   /**
-   * **この案が新しく作る指摘を黙って飲み込まない**（L-015）。
-   * 尺を縮めれば Transition が長すぎになりうるし、クリップがはみ出しうる。
-   * 判定は増やさず、同じ `validateTimeline` の結果を元の結果と突き合わせるだけ。
+   * **この案を当てても残るもの・新しく出るものを、1 件残らず出す**（lessons L-015）。
+   *
+   * 判定は増やさない。同じ `validateTimeline` を最後の姿に掛け直すだけ。
+   * ここを「直せなかった境目の数」で代表させると、**1 つの境目に何十件も重なりが
+   * ぶら下がっている実データで、残った指摘の大半が画面から消える**（実測 60 件中 10 件しか出なかった）。
    */
-  for (const issue of validateTimeline({ ...input.source, shots: closed.shots })) {
-    if (originalKeys.has(issueKey(issue))) continue
+  const finalIssues = validateTimeline({ ...input.source, shots: closed.shots })
+  const finalBoundaryByShot = new Map<ShotId, string>(
+    toBoundaries(finalIssues, closed.shots).map((boundary) => [
+      boundary.earlier.id,
+      boundaryKey(boundary),
+    ]),
+  )
+
+  for (const issue of finalIssues) {
     if (issue.shotId === undefined) continue
-    if (TIMING_CODES.includes(issue.code)) continue
+
+    if (TIMING_CODES.includes(issue.code)) {
+      const key = finalBoundaryByShot.get(issue.shotId)
+      const why =
+        (key === undefined ? undefined : closed.abandoned.get(key)) ??
+        '機械にはこの境目を閉じられなかった'
+      unresolved.push({ shotId: issue.shotId, reason: `${issue.message}。${why}` })
+      continue
+    }
+
+    if (originalKeys.has(issueKey(issue))) continue
     unresolved.push({
       shotId: issue.shotId,
       reason: `この案を適用すると新しい指摘が出る: ${issue.message}`,

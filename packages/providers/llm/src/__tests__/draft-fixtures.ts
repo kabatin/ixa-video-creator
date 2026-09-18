@@ -54,3 +54,9 @@ export const completedWith = (stdout: string, stderr = ''): CliRunResult => ({
   stdout,
   stderr,
 })
+
+/** `reason` の抜けた案。**分割代入で捨てるとリンタに未使用と怒られる**ので明示的に作る。 */
+export const itemWithoutReason = (shotId: ShotId): Record<string, unknown> => {
+  const { description, mood } = aDraftedItem(shotId)
+  return { shotId, description, mood }
+}

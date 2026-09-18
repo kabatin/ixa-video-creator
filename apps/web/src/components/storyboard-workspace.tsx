@@ -11,6 +11,7 @@ import {
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { FunctionComponent } from 'react'
 import { CutEditor } from '@/components/cut-editor'
+import { StoryboardDraftPanel } from '@/components/storyboard-draft-panel'
 import { StoryboardInspector } from '@/components/storyboard-inspector'
 import { StoryboardPanel } from '@/components/storyboard-panel'
 import { StoryboardPosterStrip } from '@/components/storyboard-poster-strip'
@@ -43,6 +44,14 @@ type WorkspaceContextValue = StoryboardWorkspaceProps & {
     shot: Shot,
     patch: Pick<Shot, 'description' | 'continuityMode'>,
   ) => Promise<void>
+  /**
+   * 下書きの採用で変わった Shot を手元へ反映する。
+   * 受け取るのは説明と mood だけなので、**残りの列は手元の値を残す**
+   * （採用は description / mood しか書き換えないため）。
+   */
+  readonly applyAdoptedShots: (
+    adopted: readonly Pick<Shot, 'id' | 'description' | 'mood'>[],
+  ) => void
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)
@@ -101,6 +110,31 @@ const InspectorContent = () => {
 }
 const InspectorPanel: FunctionComponent<IDockviewPanelProps> = () => <InspectorContent />
 
+/**
+ * 絵コンテの下書き（PHASE 6.3）。
+ *
+ * **下書きは Shot を書き換えない。** 採用を押した Shot だけが変わるので、
+ * 採用後は手元の一覧も差し替えて、隣の「Shot 設定」と食い違わないようにする。
+ */
+const DraftContent = () => {
+  const workspace = useWorkspace()
+  return (
+    <div className="h-full overflow-auto bg-bg p-3">
+      <StoryboardDraftPanel
+        projectId={workspace.projectId}
+        shots={workspace.shots.map((shot) => ({
+          id: shot.id,
+          code: shot.code,
+          description: shot.description,
+          mood: shot.mood,
+        }))}
+        onAdopted={workspace.applyAdoptedShots}
+      />
+    </div>
+  )
+}
+const DraftPanel: FunctionComponent<IDockviewPanelProps> = () => <DraftContent />
+
 const CutterContent = () => {
   const workspace = useWorkspace()
   return (
@@ -137,6 +171,7 @@ const AutomaticPanel: FunctionComponent<IDockviewPanelProps> = () => <AutomaticC
 const COMPONENTS = Object.freeze({
   posters: PostersPanel,
   inspector: InspectorPanel,
+  draft: DraftPanel,
   cutter: CutterPanel,
   automatic: AutomaticPanel,
 })
@@ -167,6 +202,15 @@ const addDefaultPanels = (api: DockviewApi): void => {
     component: 'inspector',
     title: 'Shot 設定',
     position: { referencePanel: 'posters', direction: 'below' },
+  })
+  // **既定では裏のタブに置く。** 下書きは毎回使うものではないので、
+  // 開いた直後から幅を食わせない。使うときにタブを選べば出る。
+  api.addPanel({
+    id: 'draft',
+    component: 'draft',
+    title: '絵コンテ下書き',
+    inactive: true,
+    position: { referencePanel: 'inspector', direction: 'within' },
   })
 }
 
@@ -233,6 +277,17 @@ export const StoryboardWorkspace = (props: StoryboardWorkspaceProps) => {
       posterError,
       selectShot: setSelectedShotId,
       saveShot,
+      applyAdoptedShots: (adopted) => {
+        const patches = new Map(adopted.map((shot) => [shot.id, shot] as const))
+        setShots((current) =>
+          current.map((shot) => {
+            const patch = patches.get(shot.id)
+            return patch === undefined
+              ? shot
+              : { ...shot, description: patch.description, mood: patch.mood }
+          }),
+        )
+      },
     }),
     [posterError, posters, props, selectedShotId, shots],
   )

@@ -1,3 +1,4 @@
+import { MAX_DRAFT_DESCRIPTION_LENGTH, MAX_DRAFT_REASON_LENGTH } from '@ixa/domain'
 import { z } from 'zod'
 import {
   ClaudeCliEnvelope,
@@ -75,9 +76,9 @@ export const buildDraftPrompt = (request: StoryboardDraftRequest): string =>
     '  "items": [',
     '    {',
     '      "shotId": 上の一覧にある shotId をそのまま,',
-    '      "description": その Shot で何を映すか（400 文字以内）,',
+    `      "description": その Shot で何を映すか（${String(MAX_DRAFT_DESCRIPTION_LENGTH)} 文字以内）,`,
     '      "mood": 雰囲気を表す短い語。適切な語が無ければ null,',
-    '      "reason": なぜこの絵なのか（400 文字以内）',
+    `      "reason": なぜこの絵なのか（${String(MAX_DRAFT_REASON_LENGTH)} 文字以内）`,
     '    }',
     '  ]',
     '}',
@@ -135,8 +136,15 @@ export const createClaudeCliStoryboardDrafter = (
     code: StoryboardDraftError['code'],
     summary: string,
     command: string,
+    costUsd = 0,
   ): StoryboardDraftOutcome => ({
     ok: false,
+    /**
+     * **CLI が走った後の失敗でも、実際に払った額を連れて来る。**
+     * 応答の形が崩れていても課金は起きている。0 と書くと、
+     * 費用メーター（P63-2）が「何も使っていない」と読める嘘になる。
+     */
+    costUsd,
     error: { code, message: `${summary}（adapter=${config.name} / command=${command}）` },
   })
 
@@ -207,11 +215,14 @@ export const createClaudeCliStoryboardDrafter = (
         redacted,
       )
     }
+    const costUsd = envelope.data.total_cost_usd ?? 0
+
     if (envelope.data.is_error === true) {
       return failure(
         'cli_exit_failed',
         `CLI が is_error を返しました: ${excerpt(envelope.data.result)}`,
         redacted,
+        costUsd,
       )
     }
 
@@ -222,6 +233,7 @@ export const createClaudeCliStoryboardDrafter = (
         'response_not_json',
         `CLI の応答（result）が JSON として読めません: ${excerpt(resultText)}`,
         redacted,
+        costUsd,
       )
     }
 
@@ -231,6 +243,7 @@ export const createClaudeCliStoryboardDrafter = (
         'response_schema_violation',
         `CLI の応答（result）がスキーマに適合しません: ${formatIssues(result.error)}`,
         redacted,
+        costUsd,
       )
     }
 
@@ -242,9 +255,9 @@ export const createClaudeCliStoryboardDrafter = (
       parsed.shots.map((shot) => shot.id),
       result.data.items.map((item) => item.shotId),
     )
-    if (mismatch !== null) return failure(mismatch.code, mismatch.message, redacted)
+    if (mismatch !== null) return failure(mismatch.code, mismatch.message, redacted, costUsd)
 
-    return { ok: true, items: result.data.items, costUsd: envelope.data.total_cost_usd ?? 0 }
+    return { ok: true, items: result.data.items, costUsd }
   }
 
   return { name: config.name, draft }

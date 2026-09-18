@@ -6,7 +6,7 @@ import {
   StoryboardDraftResponse,
   checkDraftedShotIds,
 } from '../storyboard-port.js'
-import { aDraftRequest, aDraftShot, aDraftedItem } from './draft-fixtures.js'
+import { aDraftRequest, aDraftShot, aDraftedItem, itemWithoutReason } from './draft-fixtures.js'
 
 /**
  * 依頼した Shot と返ってきた案の突き合わせ（P63-4）。
@@ -93,8 +93,7 @@ describe('StoryboardDraftResponse', () => {
   const shotId = newId(ShotIdSchema)
 
   it('reason の無い案は通さない（採否を判断できない）', () => {
-    const { reason: _reason, ...withoutReason } = aDraftedItem(shotId)
-    const parsed = StoryboardDraftResponse.safeParse({ items: [withoutReason] })
+    const parsed = StoryboardDraftResponse.safeParse({ items: [itemWithoutReason(shotId)] })
 
     expect(parsed.success).toBe(false)
   })

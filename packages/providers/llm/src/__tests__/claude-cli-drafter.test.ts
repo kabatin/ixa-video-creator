@@ -1,4 +1,9 @@
-import { ShotId as ShotIdSchema, newId } from '@ixa/domain'
+import {
+  MAX_DRAFT_DESCRIPTION_LENGTH,
+  MAX_DRAFT_REASON_LENGTH,
+  ShotId as ShotIdSchema,
+  newId,
+} from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import type { CliRunner } from '../claude-cli-reviewer.js'
 import {
@@ -6,7 +11,14 @@ import {
   buildDraftPrompt,
   createClaudeCliStoryboardDrafter,
 } from '../claude-cli-drafter.js'
-import { aDraftRequest, aDraftShot, aDraftedItem, completedWith, envelope } from './draft-fixtures.js'
+import {
+  aDraftRequest,
+  aDraftShot,
+  aDraftedItem,
+  completedWith,
+  envelope,
+  itemWithoutReason,
+} from './draft-fixtures.js'
 
 /**
  * **実 CLI を CI で叩かない**（ADR-0004 / ADR-0012）。
@@ -81,6 +93,24 @@ describe('Claude CLI 下書きが組み立てるプロンプト', () => {
     expect(prompt).toContain('reason を省略しないでください')
   })
 
+  /**
+   * **上限はドメインの定数から出す。** プロンプトに数字を書き写すと、
+   * 上限を変えたときにここだけ古い数字が残り、LLM が弾かれる長さの案を作り続ける。
+   */
+  it('長さの上限をドメインの定数から出す（数字を書き写さない）', () => {
+    /**
+     * **項目ごとに行として突き合わせる。** 2 つの上限は今どちらも同じ値なので、
+     * 数字だけを探すと片方の行だけで両方の期待が満たされ、
+     * もう片方がズレていても素通りする（実際に素通りした）。
+     */
+    expect(prompt).toContain(
+      `"description": その Shot で何を映すか（${String(MAX_DRAFT_DESCRIPTION_LENGTH)} 文字以内）`,
+    )
+    expect(prompt).toContain(
+      `"reason": なぜこの絵なのか（${String(MAX_DRAFT_REASON_LENGTH)} 文字以内）`,
+    )
+  })
+
   it('脚本が無ければ「まだ書かれていません」と書く（空文字を渡さない）', () => {
     expect(buildDraftPrompt(aDraftRequest({ script: null }))).toContain('まだ書かれていません')
   })
@@ -149,14 +179,37 @@ describe('Claude CLI 下書きの異常系', () => {
     expect(error?.message).toContain('レート制限')
   })
 
+  /**
+   * **CLI が走った後の失敗でも、払った額を連れて来る。**
+   * 0 と書くと費用メーター（P63-2）が「何も使っていない」と読める嘘になる。
+   */
+  it('応答が壊れていても実測コストを返す', async () => {
+    const outcome = await drafterWith(okRunner('not json')).draft(request)
+
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok) return
+    expect(outcome.costUsd).toBe(0.0456)
+  })
+
+  it('CLI を起動できなかったときだけコストは 0', async () => {
+    const outcome = await drafterWith(() =>
+      Promise.resolve({ kind: 'not_found', reason: 'ENOENT' }),
+    ).draft(request)
+
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok) return
+    expect(outcome.costUsd).toBe(0)
+  })
+
   it('本文が JSON でなければ response_not_json', async () => {
     const error = await failsWith(okRunner('案を書きました。よろしくお願いします。'))
     expect(error?.code).toBe('response_not_json')
   })
 
   it('reason の無い案は response_schema_violation（自由文をそのまま信じない）', async () => {
-    const { reason: _reason, ...withoutReason } = aDraftedItem(shot.id)
-    const error = await failsWith(okRunner(JSON.stringify({ items: [withoutReason] })))
+    const error = await failsWith(
+      okRunner(JSON.stringify({ items: [itemWithoutReason(shot.id)] })),
+    )
 
     expect(error?.code).toBe('response_schema_violation')
     expect(error?.message).toContain('reason')

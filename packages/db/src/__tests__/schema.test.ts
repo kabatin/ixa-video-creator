@@ -1,35 +1,42 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { getTableColumns, getTableName } from 'drizzle-orm'
 import * as schema from '../schema/index.js'
 
-/** docs/ARCHITECTURE.md §19 のテーブル一覧。ここに無いテーブルを作ってはいけない。 */
-const EXPECTED_TABLES = [
-  'workspaces',
-  'projects',
-  'media_assets',
-  'characters',
-  'character_identity_images',
-  'character_looks',
-  'character_look_images',
-  'brand_assets',
-  'locations',
-  'motion_templates',
-  'music_tracks',
-  'music_analyses',
-  'scripts',
-  'script_versions',
-  'sequences',
-  'shots',
-  'shot_characters',
-  'shot_references',
-  'transitions',
-  'timeline_clips',
-  'generation_jobs',
-  'takes',
-  'review_runs',
-  'review_findings',
-  'render_jobs',
-] as const
+/**
+ * テーブル一覧の**正は `docs/ARCHITECTURE.md` §19 の 1 箇所だけ**。
+ *
+ * 以前はここに同じ一覧を書き写していた。2 つあると必ずズレ、
+ * 「ドキュメントを直したのにテストが落ちる」「テストを直したのに
+ * ドキュメントが古い」のどちらかが起きる（lessons L-016）。
+ * 実際に `storyboard_draft_*` を足したとき、ドキュメントだけ直して落ちた。
+ *
+ * **読めなかったら空を返さず落とす。** 空で通すと、テーブルを何個足しても
+ * 検査が「合格」に化ける（memory: skipped-checks-must-leave-a-trace）。
+ */
+const ARCHITECTURE_MD = fileURLToPath(
+  new URL('../../../../docs/ARCHITECTURE.md', import.meta.url),
+)
+
+const readExpectedTables = (): readonly string[] => {
+  const doc = readFileSync(ARCHITECTURE_MD, 'utf8')
+  const section = doc.slice(doc.indexOf('## 19. Database'))
+  const fence = /```[a-z]*\n([\s\S]*?)```/.exec(section)
+  if (fence === null) {
+    throw new Error('ARCHITECTURE.md §19 のテーブル一覧（コードブロック）が見つかりません')
+  }
+  const names = fence[1]
+    .split('\n')
+    .map((line) => /^([a-z_]+)/.exec(line.trim())?.[1])
+    .filter((name): name is string => name !== undefined)
+  if (names.length === 0) {
+    throw new Error('ARCHITECTURE.md §19 のテーブル一覧が空です')
+  }
+  return names
+}
+
+const EXPECTED_TABLES = readExpectedTables()
 
 const definedTableNames = (): string[] =>
   Object.values(schema)

@@ -139,7 +139,7 @@ export const createStubStoryboardDrafter = (
       parsed.shots.map((shot) => shot.id),
       items.map((item) => item.shotId),
     )
-    if (mismatch !== null) return { ok: false, error: mismatch }
+    if (mismatch !== null) return { ok: false, costUsd: 0, error: mismatch }
 
     return { ok: true, items, costUsd: 0 }
   }

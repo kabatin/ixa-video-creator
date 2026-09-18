@@ -30,6 +30,8 @@ import { createRenderApi, type RenderApi } from '@/lib/render-api'
 import { createShotBulkApi, type ShotBulkApi } from '@/lib/shot-bulk-api'
 import { createShotCastApi, type ShotCastApi } from '@/lib/shot-cast-api'
 import { createCostMeterApi, type CostMeterApi } from '@/lib/cost-meter-api'
+import { createRoughCutApi, type RoughCutApi } from '@/lib/rough-cut-api'
+import { createStoryboardDraftApi, type StoryboardDraftApi } from '@/lib/storyboard-draft-api'
 import { createShotCompareApi, type ShotCompareApi } from '@/lib/shot-compare-api'
 import { createShotPostersApi, type ShotPostersApi } from '@/lib/shot-posters-api'
 import {
@@ -87,6 +89,8 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
   ShotPostersApi &
   ShotCompareApi &
   CostMeterApi &
+  RoughCutApi &
+  StoryboardDraftApi &
   TimelineApi &
   UploadApi
 
@@ -160,6 +164,8 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
     ...createShotPostersApi(requester),
     ...createShotCompareApi(requester),
     ...createCostMeterApi(requester),
+    ...createRoughCutApi(requester),
+    ...createStoryboardDraftApi(requester),
     ...createLibraryApi(requester),
     ...createProjectSettingsApi(requester),
     ...createSequenceApi(requester),

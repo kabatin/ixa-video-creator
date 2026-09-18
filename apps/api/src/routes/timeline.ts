@@ -25,6 +25,7 @@ import {
   TIME_EPSILON,
   buildTimelineDocument,
   planRoughCut,
+  roughCutLockedReason,
   validateTimeline,
   type RoughCutChange,
   type RoughCutInput,
@@ -568,9 +569,12 @@ const applyChange = async (
   const stale = staleReason(change, shot)
   if (stale !== null) return stale
 
-  if (change.kind !== 'select' && shot.lockedAt !== null) {
-    return `Shot ${shot.code} はロックされているため、位置と尺を変えません`
-  }
+  /**
+   * **ロック済み Shot は 3 種類とも当てない。** 位置・尺だけでなく Take の採用も外す。
+   * 採用 Take を機械が差し替えると、位置は変わらないのに映るものが変わる。
+   * 文言は `@ixa/timeline` が持つものを使う。案の側と違う言い方にしない。
+   */
+  if (shot.lockedAt !== null) return roughCutLockedReason(shot.code)
 
   try {
     if (change.kind === 'move') {

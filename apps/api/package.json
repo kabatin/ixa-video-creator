@@ -24,6 +24,7 @@
     "@ixa/events": "workspace:*",
     "@ixa/generation": "workspace:*",
     "@ixa/provider-core": "workspace:*",
+    "@ixa/provider-llm": "workspace:*",
     "@ixa/provider-video": "workspace:*",
     "@ixa/storage": "workspace:*",
     "@ixa/timeline": "workspace:*",

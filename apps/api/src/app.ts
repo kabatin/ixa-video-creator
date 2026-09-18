@@ -25,18 +25,20 @@ import { shotBulkRoutes } from './routes/shots-bulk.js'
 import { shotPosterRoutes } from './routes/shot-posters.js'
 import { uploadRoutes, type MediaIngestDeps } from './routes/uploads.js'
 import { shotCompareRoutes } from './routes/shot-compare.js'
-import { beatAlignmentRoutes, timelineRoutes } from './routes/timeline.js'
+import { beatAlignmentRoutes, roughCutRoutes, timelineRoutes } from './routes/timeline.js'
 import { renderRoutes, type RenderQueue } from './routes/renders.js'
 import { characterRoutes, shotCharacterRoutes } from './routes/characters.js'
 import { assetRoutes } from './routes/assets.js'
 import { scriptRoutes } from './routes/scripts.js'
 import { sequenceRoutes } from './routes/sequences.js'
 import { musicRoutes, type AnalysisQueue } from './routes/music.js'
+import { storyboardDraftRoutes } from './routes/storyboard-drafts.js'
 import { storyboardRoutes } from './routes/storyboard.js'
 import { reviewRoutes, type ReviewQueue } from './routes/reviews.js'
 import { transitionRoutes } from './routes/transitions.js'
 import { clipRoutes } from './routes/clips.js'
 import { eventRoutes } from './routes/events.js'
+import { createStubStoryboardDrafter } from '@ixa/provider-llm'
 import { STUB_PROVIDER_IDS } from '@ixa/provider-video'
 import type {
   BrandAssetRepository,
@@ -48,6 +50,7 @@ import type {
   RenderJobRepository,
   ReviewRepository,
   ScriptRepository,
+  StoryboardDraftRepository,
   SequenceRepository,
   ShotCharacterRepository,
   TimelineClipRepository,
@@ -78,6 +81,7 @@ export type AppDeps = {
   brandAssets: BrandAssetRepository
   locations: LocationRepository
   scripts: ScriptRepository
+  storyboardDrafts: StoryboardDraftRepository
   sequences: SequenceRepository
   musicAnalyses: MusicAnalysisRepository
   analysisQueue: AnalysisQueue
@@ -197,6 +201,27 @@ export const createApp = (deps: AppDeps) => {
     }),
   )
   app.route('/', scriptRoutes({ scripts: deps.scripts, projects }))
+
+  /**
+   * 絵コンテの下書き（PHASE 6.3）。
+   *
+   * **口はスタブを挿す。** 実 Provider はまだ通さない方針（制作者 2026-09-18）で、
+   * レビュアも `apps/worker/src/review-wiring.ts` が同じくスタブを挿している。
+   * Claude CLI を使う実装（`createClaudeCliStoryboardDrafter`）は用意してあるので、
+   * 通す段になったらここの 1 行を差し替える。
+   */
+  app.route(
+    '/',
+    storyboardDraftRoutes({
+      projects,
+      shots: deps.shots,
+      scripts: deps.scripts,
+      musicTracks: deps.musicTracks,
+      musicAnalyses: deps.musicAnalyses,
+      drafts: deps.storyboardDrafts,
+      drafter: createStubStoryboardDrafter(),
+    }),
+  )
   app.route('/', sequenceRoutes({ sequences: deps.sequences, projects }))
   app.route(
     '/',
@@ -225,6 +250,8 @@ export const createApp = (deps: AppDeps) => {
     '/',
     beatAlignmentRoutes({ ...timelineDeps, musicAnalyses: deps.musicAnalyses }),
   )
+  // 粗編集。plan は何も書かず、apply は **人が見た案をそのまま**受け取って適用する。
+  app.route('/', roughCutRoutes({ ...timelineDeps, musicAnalyses: deps.musicAnalyses }))
   app.route(
     '/',
     renderRoutes({ ...timelineDeps, renderJobs: deps.renderJobs, queue: deps.renderQueue }),

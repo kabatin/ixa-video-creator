@@ -1,6 +1,7 @@
-import { TakeId, type HumanVerdict, type ReviewStatus, type ShotId, type Take } from '@ixa/domain'
+import { TakeId, type ShotId } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import { planRoughCut, type RoughCutChange, type RoughCutTake } from '../assemble.js'
+import { TIMELINE_ISSUE_CODES, validateTimeline } from '../validate.js'
 import { BEATS, makeShot, makeSource, makeTransition, shotId, snapshot } from './fixtures.js'
 
 /**
@@ -24,8 +25,8 @@ const makeTake = (
   id: takeId(n),
   shotId: shot,
   index: n,
-  reviewStatus: 'pending' as ReviewStatus,
-  humanVerdict: 'unreviewed' as HumanVerdict,
+  reviewStatus: 'pending',
+  humanVerdict: 'unreviewed',
   createdAt: new Date(`2026-09-1${n.toString()}T00:00:00.000Z`),
   ...overrides,
 })
@@ -216,6 +217,27 @@ describe('planRoughCut / 採用 Take', () => {
     expect(selects(plan.changes)[0]?.reason).toContain('レビュー')
   })
 
+  /**
+   * **ロックは「決められなかった」ではなく「意図して外した」。**
+   * 採用 Take を機械が差し替えると、位置は変わらないのに映るものが変わる。
+   * 触らないと決めた Shot でそれが起きるのがいちばん驚かせる壊れ方になる。
+   */
+  it('ロック済み Shot は Take の採用も提案しない', () => {
+    const shots = [makeShot(1, 0, 4, { lockedAt: new Date('2026-09-17T00:00:00.000Z') })]
+    const plan = planRoughCut({
+      source: missingTakeSource(shots),
+      beats: BEATS,
+      takesByShot: takesOf([shotId(1), [makeTake(1, shotId(1), { humanVerdict: 'approved' })]]),
+    })
+
+    expect(selects(plan.changes)).toEqual([])
+    expect(plan.unresolved).toHaveLength(1)
+    expect(plan.unresolved[0]?.reason).toContain('変更しません')
+    // 「機械が決められなかった」と言い分けられること。混ぜるとロックを外せば
+    // 直ると気付けない。
+    expect(plan.unresolved[0]?.reason).not.toContain('決められ')
+  })
+
   it('人が不採用にした Take と自動レビューが落とした Take は拾い直さない', () => {
     const shots = [makeShot(1, 0, 4)]
     const takes = [
@@ -234,7 +256,7 @@ describe('planRoughCut / 採用 Take', () => {
 
   it('採用中の Take を提案し直さない（メディアが解決できないだけのとき）', () => {
     // 採用済みだが解決できない、という状態を作る。
-    const shot = makeShot(1, 0, 4, { selectedTakeId: takeId(1) as Take['id'] })
+    const shot = makeShot(1, 0, 4, { selectedTakeId: takeId(1) })
     const plan = planRoughCut({
       source: makeSource({ shots: [shot], resolveShotMedia: () => undefined }),
       beats: BEATS,
@@ -277,6 +299,33 @@ describe('planRoughCut / 決められないもの', () => {
 
     expect(moves(plan.changes)).toEqual([])
     expect(trims(plan.changes)[0]).toMatchObject({ toDurationSec: 4.3 })
+    // **理由は本当の原因を言うこと。** 拍を使わなかったのはロックのせいで、
+    // 「拍へ寄せると尺が 0 以下になる」からではない。
+    expect(trims(plan.changes)[0]?.reason).toContain('ロック')
+    expect(trims(plan.changes)[0]?.reason).not.toContain('0 以下')
+  })
+
+  /**
+   * 実データ（検証用 Project）では、同じ時刻に 4 本の Shot が重なっており、
+   * 1 つの境目に何十件もの重なりがぶら下がる。境目の数で代表させると
+   * **60 件のうち 10 件しか画面に出なかった**（試走で実測）。
+   */
+  it('残った重なりは 1 件も欠かさず未解決に出る（境目の数で代表させない）', () => {
+    const shots = [
+      makeShot(1, 10, 4, { order: 1000 }),
+      makeShot(2, 10, 4, { order: 2000 }),
+      makeShot(3, 10, 4, { order: 3000 }),
+    ]
+    const source = makeSource({ shots })
+    const overlaps = validateTimeline(source).filter(
+      (issue) => issue.code === TIMELINE_ISSUE_CODES.shotOverlap,
+    )
+    const plan = planRoughCut({ source, beats: BEATS, takesByShot: NO_TAKES })
+
+    expect(overlaps).toHaveLength(3)
+    expect(plan.changes).toEqual([])
+    expect(plan.unresolved).toHaveLength(overlaps.length)
+    for (const entry of plan.unresolved) expect(entry.reason).toContain('重なっている')
   })
 
   it('この案が新しく作る指摘を黙って飲み込まない', () => {

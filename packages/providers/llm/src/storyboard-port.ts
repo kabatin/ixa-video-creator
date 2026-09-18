@@ -105,7 +105,17 @@ export type StoryboardDraftOutcome =
       /** 実際に支払った額。測れないなら 0（推測値を入れない）。 */
       readonly costUsd: number
     }
-  | { readonly ok: false; readonly error: StoryboardDraftError }
+  | {
+      readonly ok: false
+      /**
+       * **失敗しても、実際に払った額は連れて来る。**
+       * 応答の形が崩れていても CLI は走っており課金は起きている。
+       * ここを常に 0 にすると、費用メーター（P63-2）が「何も使っていない」と読める嘘になる。
+       * CLI を起動できなかった場合だけが本当の 0。
+       */
+      readonly costUsd: number
+      readonly error: StoryboardDraftError
+    }
 
 /**
  * 絵コンテ下書きのアダプタ。実装は `@ixa/provider-llm` 内に閉じる。

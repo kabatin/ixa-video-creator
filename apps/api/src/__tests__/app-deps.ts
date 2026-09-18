@@ -35,6 +35,7 @@ import {
 import type { RenderQueue } from '../routes/renders.js'
 import type { RenderJobId } from '@ixa/domain'
 import { createInMemoryProjectEvents } from './in-memory-project-events.js'
+import { createInMemoryStoryboardDraftRepository } from './in-memory-storyboard-draft-repository.js'
 
 /** 投入されたジョブ ID を記録するだけのキュー。Redis には接続しない。 */
 export type RecordingQueue = GenerationQueue & {
@@ -124,6 +125,7 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   brandAssets: createInMemoryBrandAssetRepository(),
   locations: createInMemoryLocationRepository(),
   scripts: createInMemoryScriptRepository(),
+  storyboardDrafts: createInMemoryStoryboardDraftRepository(),
   sequences: createInMemorySequenceRepository(),
   musicAnalyses: createInMemoryMusicAnalysisRepository(),
   analysisQueue: createRecordingAnalysisQueue(),

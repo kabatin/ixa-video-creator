@@ -1,4 +1,4 @@
-import { desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import type {
   CreateStoryboardDraftItemInput,
   CreateStoryboardDraftRunInput,
@@ -154,10 +154,13 @@ export const createStoryboardDraftRepository = (db: DbClient): StoryboardDraftRe
 
   adoptItems: async (ids, at) => {
     if (ids.length === 0) return []
+    // **既に採用済みの行は触らない。** 最初に人が決めた時刻を残すため、
+    // `adopted_at is null` を条件に入れる。ここを緩めると、押し直すたびに
+    // 「いつ決めたか」が今の時刻へ上書きされ、判断の履歴が消える。
     const rows = await db
       .update(storyboardDraftItems)
       .set({ adoptedAt: at })
-      .where(inArray(storyboardDraftItems.id, [...ids]))
+      .where(and(inArray(storyboardDraftItems.id, [...ids]), isNull(storyboardDraftItems.adoptedAt)))
       .returning()
     return rows.map(itemRowToDomain)
   },
