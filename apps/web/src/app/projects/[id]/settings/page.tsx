@@ -1,11 +1,10 @@
 import { ProjectId, type Project } from '@ixa/domain'
-import Link from 'next/link'
 import { ErrorPanel } from '@/components/error-panel'
+import { ProjectNav } from '@/components/project-nav'
 import { PageHeader } from '@/components/page-header'
 import { ProjectSettingsForm } from '@/components/project-settings-form'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
-import { PROJECT_SECTIONS, projectSectionHref } from '@/lib/project-links'
 
 /**
  * Project の設定（P55-9）。
@@ -42,39 +41,6 @@ const loadProject = async (rawId: string): Promise<LoadResult> => {
     return { kind: 'unreadable', message: describeError(error) }
   }
 }
-
-/**
- * Project 配下の画面への入口。
- *
- * **`ProjectNav` を使っていないのは、`ProjectSection` にまだ `settings` が無いため。**
- * `project-links.ts` は Architect の所有ファイルなので、勝手に足さずここでリンクを組む。
- * `settings` が `PROJECT_SECTIONS` に入ったら `<ProjectNav current="settings" />` に置き換える。
- */
-const SettingsNav = ({ projectId }: { readonly projectId: ProjectId }) => (
-  <nav aria-label="プロジェクトの画面" className="flex flex-wrap items-center gap-3">
-    <Link href={PROJECT_LIST_HREF} className="rounded-sm text-sm text-muted underline hover:text-text">
-      プロジェクト一覧
-    </Link>
-    <span aria-hidden className="text-faint">
-      /
-    </span>
-    {PROJECT_SECTIONS.map((section) => (
-      <Link
-        key={section.key}
-        href={projectSectionHref(projectId, section.key)}
-        className="rounded-md border border-line-strong px-3 py-1.5 text-sm text-text hover:bg-surface-2"
-      >
-        {section.label}
-      </Link>
-    ))}
-    <span
-      aria-current="page"
-      className="rounded-md bg-surface-2 px-3 py-1.5 text-sm font-semibold text-text ring-1 ring-inset ring-line-strong"
-    >
-      設定
-    </span>
-  </nav>
-)
 
 const ProjectSettingsPage = async ({ params }: SettingsPageProps) => {
   const { id } = await params
@@ -113,7 +79,7 @@ const ProjectSettingsPage = async ({ params }: SettingsPageProps) => {
       <PageHeader
         title={`設定 — ${result.project.name}`}
         description="出力仕様と制作の制約を変更します。生成済みの Take には遡って効きません。"
-        action={<SettingsNav projectId={result.project.id} />}
+        action={<ProjectNav current="settings" projectId={result.project.id} />}
       />
       <ProjectSettingsForm project={result.project} />
     </main>

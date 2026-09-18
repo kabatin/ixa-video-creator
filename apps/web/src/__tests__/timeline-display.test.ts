@@ -1,4 +1,5 @@
 import {
+  newId,
   MediaAssetId,
   ProjectId,
   ShotId,
@@ -38,6 +39,9 @@ import {
   timelineRowLabel,
   transitionForPair,
   transitionTypeLabel,
+  hiddenTracks,
+  isInsertableTrack,
+  visibleTracks,
 } from '@/lib/timeline-display'
 import {
   type TimelineIssueView,
@@ -312,5 +316,49 @@ describe('入力の解釈', () => {
     expect(parseLayer('1.5')).toMatchObject({ ok: false })
     expect(parseLayer('-1')).toMatchObject({ ok: false })
     expect(parseLayer('2')).toEqual({ ok: true, value: 2 })
+  })
+})
+
+/**
+ * **押しても何も置けない帯は出さない。** VFX / VIDEO2 / SFX は挿入の口が無く、
+ * 空の帯として縦を食っていた。ただし**黙って隠すと、過去に入れたクリップが消える**。
+ */
+describe('出す帯を決める', () => {
+  const clipOn = (track: TimelineTrack): TimelineClip => ({
+    id: newId(TimelineClipId),
+    projectId: newId(ProjectId),
+    track,
+    startSec: 0,
+    durationSec: 1,
+    layer: 0,
+    content: { type: 'text', templateKey: 'plain', params: { text: 'a' } },
+    opacity: 1,
+    createdAt: new Date(),
+  })
+
+  it('置ける帯は中身が無くても出す', () => {
+    expect(visibleTracks([])).toContain('TEXT')
+  })
+
+  it('置けない帯は中身が無ければ出さない', () => {
+    expect(visibleTracks([])).not.toContain('VFX')
+    expect(visibleTracks([])).not.toContain('SFX')
+  })
+
+  /** ここを落とすと、過去に入れたクリップが画面から消える。 */
+  it('置けない帯でも中身があれば必ず出す', () => {
+    expect(visibleTracks([clipOn('VFX')])).toContain('VFX')
+  })
+
+  it('隠した帯の名前を返す。1 つも隠していなければ空', () => {
+    expect(hiddenTracks([])).toEqual(['VFX', 'VIDEO2', 'SFX'])
+    expect(hiddenTracks([clipOn('VFX')])).toEqual(['VIDEO2', 'SFX'])
+  })
+
+  /** 帯を出すかどうかと、押せるかどうかが別の場所にあると必ずズレる（L-016）。 */
+  it('出す帯の判定と、押せるかの判定が食い違わない', () => {
+    for (const track of visibleTracks([])) {
+      expect(isInsertableTrack(track)).toBe(true)
+    }
   })
 })

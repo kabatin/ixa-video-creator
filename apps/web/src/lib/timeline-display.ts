@@ -29,6 +29,41 @@ export type TimelineRow = typeof VIDEO1_ROW | TimelineTrack
 /** 画面に縦に並べる行。VIDEO1 が一番上。 */
 export const TIMELINE_ROWS: readonly TimelineRow[] = [VIDEO1_ROW, ...EDITABLE_TRACKS]
 
+/**
+ * **いま画面から置けるトラック。**
+ *
+ * `TimelineTrack` には 4 つあるが、挿入の口があるのは TEXT だけで、
+ * 残りは押しても何も起きない空の帯として縦を食っていた。
+ * **判定をここ 1 箇所に置く。** 帯を出すかどうかと、押せるかどうかが
+ * 別々の場所にあると必ずズレ、「出ているのに押せない」が戻ってくる（L-016）。
+ *
+ * VFX / VIDEO2 / SFX に置く口ができたら、ここへ足せば帯も出る。
+ */
+export const INSERTABLE_TRACKS: readonly TimelineTrack[] = ['TEXT']
+
+export const isInsertableTrack = (track: TimelineTrack): boolean =>
+  INSERTABLE_TRACKS.includes(track)
+
+/**
+ * 実際に出す帯。**中身のある帯は、置けなくても必ず出す。**
+ *
+ * 黙って隠すと、過去に入れたクリップが画面から消える。
+ * 「置けない」と「中身が無い」は別のことなので、両方を見て決める（L-015）。
+ */
+export const visibleTracks = (clips: readonly TimelineClip[]): readonly TimelineTrack[] => {
+  const used = new Set(clips.map((clip) => clip.track))
+  return EDITABLE_TRACKS.filter((track) => isInsertableTrack(track) || used.has(track))
+}
+
+/**
+ * 隠した帯の名前。**1 つも隠していなければ空。**
+ * 隠した事実を出さないと、帯が消えたのが不具合に見える。
+ */
+export const hiddenTracks = (clips: readonly TimelineClip[]): readonly TimelineTrack[] => {
+  const shown = new Set(visibleTracks(clips))
+  return EDITABLE_TRACKS.filter((track) => !shown.has(track))
+}
+
 const ROW_LABELS: Readonly<Record<TimelineRow, string>> = {
   VIDEO1: 'VIDEO1（Shot）',
   VFX: 'VFX（エフェクト）',

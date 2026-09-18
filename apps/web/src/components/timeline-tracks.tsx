@@ -6,7 +6,9 @@ import { ShotPoster } from '@/components/shot-poster'
 import { TimelineClipLane } from '@/components/timeline-clip-lane'
 import { TimelineTransitionRow } from '@/components/timeline-transition-row'
 import {
-  EDITABLE_TRACKS,
+  hiddenTracks,
+  isInsertableTrack,
+  visibleTracks,
   VIDEO1_ROW,
   formatClock,
   formatTimeSpan,
@@ -176,6 +178,9 @@ export const TimelineTracks = ({
     topPx: clientY - (contentRef.current?.getBoundingClientRect().top ?? 0),
   })
 
+  const shownTracks = visibleTracks(clips)
+  const hidden = hiddenTracks(clips)
+
   const renderTrack = (track: TimelineTrack): ReactNode => {
     const lanes = lanesForTrack(clips, track)
     /**
@@ -208,7 +213,7 @@ export const TimelineTracks = ({
         onDragEnd={onClipDragEnd}
         onInsertAt={(atSec, leftPx, clientY) => {
           // 置けるのは TEXT だけ。他は素材の選択が要るのでこの画面では受けない。
-          if (track === 'TEXT') onInsertText(track, atSec, anchorFrom(leftPx, clientY), null)
+          if (isInsertableTrack(track)) onInsertText(track, atSec, anchorFrom(leftPx, clientY), null)
         }}
       />
     ))
@@ -232,6 +237,15 @@ export const TimelineTracks = ({
           className={`sticky left-0 border-b border-line px-3 py-2 text-xs ${beatAlignmentToneClass(summary.tone)}`}
         >
           {summary.text}
+        </p>
+      )}
+      {hidden.length > 0 && (
+        /**
+         * **隠した事実を出す。** 帯が消えたのを不具合と読ませない。
+         * 置く口ができたら `INSERTABLE_TRACKS` に足すだけで帯も戻る。
+         */
+        <p className="sticky left-0 border-b border-line px-3 py-2 text-xs text-muted">
+          {`まだ置けない帯は隠しています: ${hidden.join(' / ')}`}
         </p>
       )}
       <div ref={contentRef} className="relative" style={{ minWidth: contentWidthPx }}>
@@ -315,7 +329,12 @@ export const TimelineTracks = ({
           />
         </Row>
 
-        {EDITABLE_TRACKS.map((track) => (
+        {/**
+         * **置けない帯は出さない。** 押しても何も起きない空の帯が縦を食っていた。
+         * ただし**中身のある帯は、置けなくても必ず出す**（黙って隠すと過去に
+         * 入れたクリップが画面から消える・L-015）。判定は `timeline-display` の 1 箇所。
+         */}
+        {shownTracks.map((track) => (
           <Row key={track} label={timelineRowLabel(track)} contentWidthPx={contentWidthPx}>
             {renderTrack(track)}
           </Row>
