@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { WaveformCanvas } from '@/components/waveform-canvas'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import { HelpDisclosure } from '@/components/ui/help-disclosure'
 import { resolveCutEditorCommand, describeCutEditorKeys } from '@/lib/cut-editor-keys'
 import {
   ZOOM_STEP,
@@ -523,16 +524,22 @@ export const CutEditor = ({ projectId, track, analysis, sequences }: CutEditorPr
          * 実際に一度そうなり、再生側だけが「1 秒 戻る / 進む」と嘘を出していた。
          * ここでは `describeCutEditorKeys` が**実際の行き先から作った一覧**だけを出す。
          */}
-        <h3 className="mt-4 text-sm font-semibold text-text">キーの割り当て</h3>
-        <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-          {keyHelp.map((entry) => (
-            <div key={entry.keys} className="flex justify-between gap-3">
-              <dt className="font-mono text-text">{entry.keys}</dt>
-              <dd className="text-right text-muted">{entry.action}</dd>
-            </div>
-          ))}
-        </dl>
-        <p className="mt-2 text-xs text-muted">文字を打っている間はこれらのキーは効きません。</p>
+        {/* **既定では畳む。** 初めは要るが、慣れると縦を食うだけになる。 */}
+        <div className="mt-4">
+          <HelpDisclosure label="キーの割り当て">
+            <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+              {keyHelp.map((entry) => (
+                <div key={entry.keys} className="flex justify-between gap-3">
+                  <dt className="font-mono text-text">{entry.keys}</dt>
+                  <dd className="text-right text-muted">{entry.action}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="mt-2 text-xs text-muted">
+              文字を打っている間はこれらのキーは効きません。
+            </p>
+          </HelpDisclosure>
+        </div>
       </section>
 
       <CutMarkList

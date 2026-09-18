@@ -16,6 +16,7 @@ import { TIME_DECIMALS, formatClock, formatDuration, formatSpan } from '@/lib/fo
 import { parseSeconds } from '@/lib/timeline-display'
 import { snapTargetLabel } from '@/lib/timeline-snap'
 import { WORDING } from '@/lib/wording'
+import { HelpDisclosure } from '@/components/ui/help-disclosure'
 
 /**
  * 区切りからできるカットの一覧（P56-4）。**表示だけを持つ。**
@@ -214,9 +215,9 @@ export const CutMarkList = ({
  * 割り当ての正は `@/lib/cut-marks` の `resolveCutMarkCommand` で、ここは並べるだけ。
  */
 export const CutMarkKeyHelp = () => (
-  <section className="rounded-lg border border-line bg-surface p-5">
-    <h2 className="text-base font-semibold text-text">キーの割り当て</h2>
-    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+  /* **既定では畳む。** 初めは要るが、慣れると縦を食うだけになる。 */
+  <HelpDisclosure label="キーの割り当て">
+    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
       {CUT_MARK_KEY_HELP.map((entry) => (
         <div key={entry.keys} className="contents">
           <dt className="font-mono text-xs text-text">{entry.keys}</dt>
@@ -225,5 +226,5 @@ export const CutMarkKeyHelp = () => (
       ))}
     </dl>
     <p className="mt-2 text-xs text-muted">文字を打っている間はこれらのキーは効きません。</p>
-  </section>
+  </HelpDisclosure>
 )
