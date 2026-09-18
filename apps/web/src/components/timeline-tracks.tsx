@@ -18,6 +18,7 @@ import {
 import type { ClipDragContext, ClipDragOutcome } from '@/lib/timeline-drag'
 import type { InlineFormAnchor } from '@/components/timeline-inline-form'
 import type { TransitionInsertionPoint } from '@/lib/timeline-insert'
+import { playheadLeftPx, seekSecAtClientX } from '@/lib/timeline-playhead'
 
 /**
  * Shot と TimelineClip を時間軸に並べ、**その場で置いて動かせる**帯。
@@ -72,6 +73,10 @@ export type TimelineTracksProps = {
   readonly onClipDragBegin: (clip: TimelineClip) => ClipDragContext
   readonly onClipDragMove: (clip: TimelineClip, outcome: ClipDragOutcome) => void
   readonly onClipDragEnd: (clip: TimelineClip, outcome: ClipDragOutcome) => void
+  /** 再生ヘッドの位置（秒）。null なら描かない。 */
+  readonly playheadSec?: number | null
+  /** 目盛りの帯を押した。その秒へ飛ぶ。 */
+  readonly onSeek?: (sec: number) => void
   /** 帯の上に重ねるもの（その場で出る入力）。位置は呼び出し側が持つ。 */
   readonly overlay?: ReactNode
 }
@@ -123,6 +128,8 @@ export const TimelineTracks = ({
   onClipDragBegin,
   onClipDragMove,
   onClipDragEnd,
+  playheadSec = null,
+  onSeek,
   overlay,
 }: TimelineTracksProps) => {
   const contentRef = useRef<HTMLDivElement>(null)
@@ -180,7 +187,15 @@ export const TimelineTracks = ({
     <div className="overflow-x-auto rounded-lg border border-line bg-surface">
       <div ref={contentRef} className="relative" style={{ minWidth: contentWidthPx }}>
         <Row label={`尺 ${formatClock(durationSec)}`} contentWidthPx={contentWidthPx}>
-          <div className="relative h-8">
+          {/* 目盛りを押したらその秒へ。判定は `timeline-playhead` が持つ。 */}
+          <div
+            className={`relative h-8 ${onSeek === undefined ? '' : 'cursor-pointer'}`}
+            onPointerDown={(event) => {
+              if (onSeek === undefined) return
+              const left = event.currentTarget.getBoundingClientRect().left
+              onSeek(seekSecAtClientX(event.clientX, { left }, pxPerSec, durationSec))
+            }}
+          >
             {ticks.map((tick) => (
               <span
                 key={tick.sec}
@@ -239,6 +254,19 @@ export const TimelineTracks = ({
           </Row>
         ))}
 
+        {playheadSec !== null && (
+          /**
+           * 再生ヘッド。行をまたいで 1 本引く。ラベル列（w-44 = 11rem）の右が時間軸の 0 秒。
+           * `pointer-events-none` で、下の帯の操作を邪魔しない。
+           */
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-danger"
+            style={{
+              left: `calc(11rem + ${String(playheadLeftPx(playheadSec, durationSec, pxPerSec))}px)`,
+            }}
+          />
+        )}
         {overlay}
       </div>
     </div>

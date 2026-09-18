@@ -12,7 +12,7 @@ import type {
   Transition,
   TransitionId,
 } from '@ixa/domain'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { TimelineClipList, type ClipPatch } from '@/components/timeline-clip-list'
 import {
   TimelineInlineForm,
@@ -26,10 +26,16 @@ import { TEXT_INSERT_LAYER, TimelineTracks } from '@/components/timeline-tracks'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { createRequester } from '@/lib/requester'
-import { createTimelineApi, type WireTimelineIssue } from '@/lib/timeline-api'
+import {
+  createTimelineApi,
+  type WireTimelineDocument,
+  type WireTimelineIssue,
+} from '@/lib/timeline-api'
+import { resolveTimelineKey } from '@/lib/timeline-playhead'
 import {
   DEFAULT_PX_PER_SEC,
   ZOOM_LEVELS,
+  formatClock,
   formatDuration,
   programEndSec,
 } from '@/lib/timeline-display'
@@ -84,6 +90,8 @@ export type TimelineEditorProps = {
   /** サーバの検証結果。null は「検査できていない」（指摘なしの空配列とは別物）。 */
   readonly initialIssues: readonly WireTimelineIssue[] | null
   readonly documentDurationSec: number | null
+  /** モニターの入力。null は読めていない（空のタイムラインとは別）。 */
+  readonly initialDocument: WireTimelineDocument | null
   /**
    * ビート候補の出どころ。**「解析が無い」と「読めていない」を畳まずに渡す。**
    * どちらもビートには吸着しないが、利用者が取るべき行動が違う（lessons L-015）。
@@ -101,6 +109,7 @@ export const TimelineEditor = ({
   renderedShotIds,
   initialIssues,
   documentDurationSec,
+  initialDocument,
   beatSource,
   loadErrors,
 }: TimelineEditorProps) => {
@@ -134,6 +143,32 @@ export const TimelineEditor = ({
    * 戻すのは入力部品の仕事なので、こちらは受け口を渡すだけ。
    */
   const openerRef = useRef<HTMLElement | null>(null)
+
+  /** 再生ヘッド（PHASE 6.0）。モニターと帯が同じ値を見る。 */
+  const [currentSec, setCurrentSec] = useState(0)
+  const [playing, setPlaying] = useState(false)
+  const document = initialDocument
+
+  /** Space で再生/停止。入力欄の中の打鍵は横取りしない（`timeline-playhead`）。 */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const target = event.target instanceof HTMLElement ? { tagName: event.target.tagName } : null
+      const command = resolveTimelineKey({
+        key: event.key,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        altKey: event.altKey,
+        target,
+      })
+      if (command === null) return
+      event.preventDefault()
+      setPlaying((current) => !current)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [])
 
   /**
    * 検証はサーバの `validateTimeline` が唯一の正。**画面に同じ規則を置かない。**
@@ -461,6 +496,12 @@ export const TimelineEditor = ({
         </p>
       )}
 
+      {document !== null && (
+        <p role="status" className="text-sm text-muted">
+          {`${playing ? '再生中' : '停止中'} ${formatClock(currentSec)}（Space で再生 / 一時停止、目盛りを押すとその位置へ）`}
+        </p>
+      )}
+
       {shots === null ? (
         <p
           role="alert"
@@ -488,6 +529,10 @@ export const TimelineEditor = ({
           onClipDragBegin={beginDrag}
           onClipDragMove={dragMove}
           onClipDragEnd={dragEnd}
+          playheadSec={document === null ? null : currentSec}
+          onSeek={(sec) => {
+            setCurrentSec(sec)
+          }}
           overlay={
             open === null || draft === null ? null : (
               <TimelineInlineForm

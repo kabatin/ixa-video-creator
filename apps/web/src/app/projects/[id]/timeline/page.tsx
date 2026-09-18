@@ -6,7 +6,11 @@ import { TimelineEditor } from '@/components/timeline-editor'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { createRequester } from '@/lib/requester'
-import { createTimelineApi, type WireTimelineIssue } from '@/lib/timeline-api'
+import {
+  createTimelineApi,
+  type WireTimelineDocument,
+  type WireTimelineIssue,
+} from '@/lib/timeline-api'
 import type { BeatSource } from '@/lib/timeline-snap'
 
 /**
@@ -46,6 +50,8 @@ type Loaded = {
   readonly clips: Part<readonly TimelineClip[]>
   readonly renderedShotIds: Part<readonly ShotId[]>
   readonly durationSec: number | null
+  /** モニターの入力。プレビューと書き出しは同じ物を見る。 */
+  readonly document: Part<WireTimelineDocument>
   readonly issues: Part<readonly WireTimelineIssue[]>
   readonly beatSource: BeatSource
 }
@@ -103,6 +109,7 @@ const load = async (projectId: ProjectId): Promise<Loaded> => {
       error: document.error,
     },
     durationSec: document.value?.durationSec ?? null,
+    document,
     issues,
     beatSource,
   }
@@ -176,6 +183,7 @@ const TimelinePage = async ({ params }: TimelinePageProps) => {
         initialClips={loaded.clips.value}
         renderedShotIds={loaded.renderedShotIds.value}
         documentDurationSec={loaded.durationSec}
+        initialDocument={loaded.document.value}
         initialIssues={loaded.issues.value}
         beatSource={loaded.beatSource}
         loadErrors={loadErrors}
