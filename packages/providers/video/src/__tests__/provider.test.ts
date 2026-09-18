@@ -255,24 +255,34 @@ describe('seed 未指定時の挙動（実 ffmpeg）', () => {
     await removeTempDir(outputDir)
   })
 
-  it('同じ仕様で 2 回生成しても内容が異なる（Take を比較できるようにするため）', async () => {
-    const provider = createStubVideoProvider({ outputDir })
-    const request = makeRequest(stubVeoLikeModel, makeSpec({ seed: null }))
+  it(
+    '同じ仕様で 2 回生成しても内容が異なる（Take を比較できるようにするため）',
+    async () => {
+      const provider = createStubVideoProvider({ outputDir })
+      const request = makeRequest(stubVeoLikeModel, makeSpec({ seed: null }))
 
-    const first = await pollUntilSucceeded(provider, await provider.submit(request))
-    const second = await pollUntilSucceeded(provider, await provider.submit(request))
+      const first = await pollUntilSucceeded(provider, await provider.submit(request))
+      const second = await pollUntilSucceeded(provider, await provider.submit(request))
 
-    expect(first.seedUsed).not.toBe(second.seedUsed)
-    const a = await readFile(outputPathOf(first))
-    const b = await readFile(outputPathOf(second))
-    expect(a.equals(b)).toBe(false)
-  })
+      expect(first.seedUsed).not.toBe(second.seedUsed)
+      const a = await readFile(outputPathOf(first))
+      const b = await readFile(outputPathOf(second))
+      expect(a.equals(b)).toBe(false)
+    },
+    // **実 ffmpeg を 2 回回すので既定の 5 秒では足りない。**
+    // 手元では通るが CI の runner は遅く、ここだけ上限が付いていなかった。
+    TEST_TIMEOUT_MS,
+  )
 
-  it('seed を明示すれば尊重される（再現性のため）', async () => {
-    const provider = createStubVideoProvider({ outputDir })
-    const request = makeRequest(stubVeoLikeModel, makeSpec({ seed: 12345 }))
+  it(
+    'seed を明示すれば尊重される（再現性のため）',
+    async () => {
+      const provider = createStubVideoProvider({ outputDir })
+      const request = makeRequest(stubVeoLikeModel, makeSpec({ seed: 12345 }))
 
-    const status = await pollUntilSucceeded(provider, await provider.submit(request))
-    expect(status.seedUsed).toBe(12345)
-  })
+      const status = await pollUntilSucceeded(provider, await provider.submit(request))
+      expect(status.seedUsed).toBe(12345)
+    },
+    TEST_TIMEOUT_MS,
+  )
 })

@@ -1,4 +1,4 @@
-import { ulid } from 'ulid'
+import { monotonicFactory } from 'ulid'
 import { z } from 'zod'
 
 /**
@@ -68,6 +68,22 @@ export type StoryboardDraftRunId = z.infer<typeof StoryboardDraftRunId>
 export type StoryboardDraftItemId = z.infer<typeof StoryboardDraftItemId>
 export type RenderJobId = z.infer<typeof RenderJobId>
 
+/**
+ * ID の発行器。**同じミリ秒でも必ず増える**（`monotonicFactory`）。
+ *
+ * 素の `ulid()` は同じミリ秒だと乱数部がそのつど独立なので、
+ * **続けて作った 2 件の大小が入れ替わる。** ARCHITECTURE.md §19 は
+ * 「主キーは ULID（時系列ソート性が欲しい）」と書いており、
+ * `orderBy(desc(id))` で「最新の 1 件」を引く口がいくつもある
+ * （ReviewRun / GenerationJob / StoryboardDraftRun）。
+ * 入れ替わると、作り直した直後に**古い方が「最新」として返る。**
+ * 実際に絵コンテ下書きのテストが同じミリ秒で落ちて分かった。
+ *
+ * 単調性はこのプロセスの中でのみ保証される。プロセスをまたぐ場合は
+ * ミリ秒のタイムスタンプが順序を決める。
+ */
+const nextUlid = monotonicFactory()
+
 /** 新しい ID を発行する。呼び出し側でスキーマを指定して型を確定させる。 */
 export const newId = <T extends z.ZodType<string>>(schema: T): z.infer<T> =>
-  schema.parse(ulid())
+  schema.parse(nextUlid())

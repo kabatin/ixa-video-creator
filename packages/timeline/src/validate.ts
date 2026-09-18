@@ -1,4 +1,12 @@
-import { isDegradedTransition, shotEndSec, type Shot, type ShotId, type Transition } from '@ixa/domain'
+import {
+  isDegradedTransition,
+  parseTextClipParams,
+  shotEndSec,
+  TextTemplateKey,
+  type Shot,
+  type ShotId,
+  type Transition,
+} from '@ixa/domain'
 import type { TimelineSource } from './build.js'
 import { TIME_EPSILON, shotsEndSec, sortShotsByStart } from './ordering.js'
 
@@ -19,6 +27,7 @@ export const TIMELINE_ISSUE_CODES = {
   shotMissingTake: 'shot_missing_take',
   clipOutOfRange: 'clip_out_of_range',
   transitionDegraded: 'transition_degraded',
+  textClipUnreadable: 'text_clip_unreadable',
 } as const
 
 const sec = (value: number): string => `${value.toFixed(3)}s`
@@ -198,6 +207,45 @@ const checkClips = (source: TimelineSource): TimelineIssue[] => {
 }
 
 /**
+ * 中身を読めないテロップ（warning）。
+ *
+ * **書き出すと赤いプレースホルダになる。** レンダラは読めない指定を黙って
+ * 消さずに赤で描くが（PHASE 5.7）、それは**書き出してみるまで分からない**。
+ * 書き出す前の検査に出して、押す前に気付けるようにする。
+ *
+ * **「知らない種類」と「中身が読めない」を分ける**（lessons L-015）。
+ * 前者は古い形式で作られたクリップ、後者は文言が入っていないクリップで、
+ * 直し方が違う。同じ文にすると、どちらを直せばよいのか分からない。
+ */
+const checkTextClips = (source: TimelineSource): TimelineIssue[] =>
+  source.clips.flatMap((clip) => {
+    if (clip.content.type !== 'text') return []
+    const { templateKey, params } = clip.content
+
+    if (!TextTemplateKey.safeParse(templateKey).success) {
+      return [
+        {
+          severity: 'warning' as const,
+          code: TIMELINE_ISSUE_CODES.textClipUnreadable,
+          message:
+            `${sec(clip.startSec)} のテロップが知らない種類「${templateKey}」を指しており、` +
+            '書き出すと赤い枠になる（古い形式で作られた可能性がある）',
+        },
+      ]
+    }
+
+    if (parseTextClipParams(params) !== null) return []
+    return [
+      {
+        severity: 'warning' as const,
+        code: TIMELINE_ISSUE_CODES.textClipUnreadable,
+        message:
+          `${sec(clip.startSec)} のテロップに出す文言が入っておらず、書き出すと赤い枠になる`,
+      },
+    ]
+  })
+
+/**
  * タイムラインの不変条件を検査する。**レンダリング前に必ず通す想定。**
  *
  * 1 つ見つけて止めず、すべて列挙する。入力は一切変更しない。
@@ -211,5 +259,6 @@ export const validateTimeline = (source: TimelineSource): TimelineIssue[] => {
     ...checkGaps(sorted),
     ...checkMissingTakes(sorted, source.resolveShotMedia),
     ...checkClips(source),
+    ...checkTextClips(source),
   ]
 }

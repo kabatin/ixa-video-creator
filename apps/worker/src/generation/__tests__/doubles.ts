@@ -281,6 +281,9 @@ export const inMemoryTakes = (): InMemoryTakes => {
     findById: (id) => Promise.resolve(store.find((t) => t.id === id) ?? null),
     findByShot: (shotId) =>
       Promise.resolve(store.filter((t) => t.shotId === shotId).sort((a, b) => a.index - b.index)),
+    // 偽物なので projectId は見ず、全 Take を返す。
+    // 本物は論理削除済み Shot の Take も含めるので、ここでも取りこぼしを作らない。
+    findByProject: () => Promise.resolve([...store].sort((a, b) => (a.id < b.id ? -1 : 1))),
     create: (input) => {
       const validated = CreateTakeInputSchema.parse(input)
       const index =

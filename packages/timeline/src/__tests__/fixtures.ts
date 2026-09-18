@@ -77,7 +77,7 @@ export const makeClip = (
   startSec,
   durationSec,
   layer,
-  content: { type: 'text', templateKey: 'lower_third', params: {} },
+  content: { type: 'text', templateKey: 'lower_third', params: { text: 'テロップ' } },
   opacity: 1,
   createdAt: EPOCH,
 })

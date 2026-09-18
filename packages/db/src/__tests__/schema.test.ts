@@ -22,11 +22,11 @@ const ARCHITECTURE_MD = fileURLToPath(
 const readExpectedTables = (): readonly string[] => {
   const doc = readFileSync(ARCHITECTURE_MD, 'utf8')
   const section = doc.slice(doc.indexOf('## 19. Database'))
-  const fence = /```[a-z]*\n([\s\S]*?)```/.exec(section)
-  if (fence === null) {
+  const body = /```[a-z]*\n([\s\S]*?)```/.exec(section)?.[1]
+  if (body === undefined) {
     throw new Error('ARCHITECTURE.md §19 のテーブル一覧（コードブロック）が見つかりません')
   }
-  const names = fence[1]
+  const names = body
     .split('\n')
     .map((line) => /^([a-z_]+)/.exec(line.trim())?.[1])
     .filter((name): name is string => name !== undefined)

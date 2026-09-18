@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TIMELINE_ISSUE_CODES, validateTimeline, type TimelineIssue } from '../validate.js'
-import type { Transition } from '@ixa/domain'
+import type { TimelineClip, Transition } from '@ixa/domain'
 import { makeClip, makeShot, makeSource, makeTransition, shotId, snapshot } from './fixtures.js'
 
 const codes = (issues: readonly TimelineIssue[]): string[] => issues.map((issue) => issue.code)
@@ -134,6 +134,70 @@ describe('validateTimeline / warning', () => {
     const shots = [makeShot(1, 0, 0.1 + 0.2), makeShot(2, 0.3, 1)]
     const clips = [makeClip(21, 'TEXT', 0, 1.3)]
     expect(codes(validateTimeline(makeSource({ shots, clips })))).toEqual([])
+  })
+})
+
+/**
+ * 読めないテロップは**書き出すまで分からない**（レンダラは赤で描くだけ）。
+ * 押す前の検査に出す。「知らない種類」と「文言が無い」は直し方が違うので分ける。
+ */
+describe('読めないテロップ', () => {
+  const textClip = (n: number, content: TimelineClip['content']): TimelineClip => ({
+    ...makeClip(n, 'TEXT', 0, 2),
+    content,
+  })
+
+  it('文言が入っていなければ warning', () => {
+    const clips = [textClip(21, { type: 'text', templateKey: 'lower_third', params: {} })]
+    const issues = find(
+      validateTimeline(makeSource({ shots: [makeShot(1, 0, 10)], clips })),
+      TIMELINE_ISSUE_CODES.textClipUnreadable,
+    )
+
+    expect(issues).toHaveLength(1)
+    expect(issues[0]?.severity).toBe('warning')
+    expect(issues[0]?.message).toContain('文言が入っておらず')
+  })
+
+  it('知らない種類は「文言が無い」と別の文で出す', () => {
+    const clips = [
+      textClip(21, { type: 'text', templateKey: 'lower-third', params: { text: 'あり' } }),
+    ]
+    const issues = find(
+      validateTimeline(makeSource({ shots: [makeShot(1, 0, 10)], clips })),
+      TIMELINE_ISSUE_CODES.textClipUnreadable,
+    )
+
+    expect(issues).toHaveLength(1)
+    expect(issues[0]?.message).toContain('知らない種類')
+    expect(issues[0]?.message).not.toContain('文言が入っておらず')
+  })
+
+  it('読めるテロップは何も言わない', () => {
+    const clips = [makeClip(21, 'TEXT', 0, 2)]
+    const issues = find(
+      validateTimeline(makeSource({ shots: [makeShot(1, 0, 10)], clips })),
+      TIMELINE_ISSUE_CODES.textClipUnreadable,
+    )
+
+    expect(issues).toEqual([])
+  })
+
+  /** テロップ以外の帯は見ない。素材クリップに文言は要らない。 */
+  it('テキスト以外のクリップは対象外', () => {
+    const clips = [
+      textClip(21, {
+        type: 'motion_graphics',
+        templateKey: 'unknown_thing',
+        params: {},
+      }),
+    ]
+    const issues = find(
+      validateTimeline(makeSource({ shots: [makeShot(1, 0, 10)], clips })),
+      TIMELINE_ISSUE_CODES.textClipUnreadable,
+    )
+
+    expect(issues).toEqual([])
   })
 })
 
