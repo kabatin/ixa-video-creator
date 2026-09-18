@@ -35,6 +35,14 @@ export type TakeRepository = {
    * 実際に支払ったコストの合計。見積りではなく Take に記録された実測値。
    * 全 Take を読み込まずに済むよう SQL で集計する（MV 全体では数百行になるため）。
    */
+  /**
+   * Project 内の全 Take。**論理削除済み Shot の Take も含む。**
+   *
+   * 費用の集計に使う。払った額は Shot を消しても戻らないので、
+   * 「いま生きている Shot の Take」だけを数えると、予算の見え方が実際より軽くなる
+   * （`sumCostByProject` も同じ理由で shots を絞り込んでいない）。
+   */
+  findByProject(projectId: ProjectId): Promise<Take[]>
   sumCostByProject(projectId: ProjectId): Promise<number>
   sumCostByShot(shotId: ShotId): Promise<number>
 }
@@ -116,6 +124,18 @@ export const createTakeRepository = (db: DbClient): TakeRepository => {
       const row = rows[0]
       if (!row) throw new DbNotFoundError('Take', takeId)
       return takeRowToDomain(row)
+    },
+
+    async findByProject(projectId) {
+      // takes は shot_id しか持たないので shots を経由する。
+      // **論理削除の絞り込みはしない**（sumCostByProject と同じ数え方に揃える）。
+      const rows = await db
+        .select()
+        .from(takes)
+        .innerJoin(shots, eq(shots.id, takes.shotId))
+        .where(eq(shots.projectId, projectId))
+        .orderBy(asc(takes.id))
+      return rows.map((row) => takeRowToDomain(row.takes))
     },
 
     async sumCostByProject(projectId) {

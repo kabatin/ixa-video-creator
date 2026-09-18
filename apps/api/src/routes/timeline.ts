@@ -1,11 +1,15 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type {
-  MediaAssetRepository, MusicTrackRepository, ProjectRepository, ShotRepository, TakeRepository,
-  TimelineClipRepository, TransitionRepository,
+  MediaAssetRepository, MusicAnalysisRepository, MusicTrackRepository, ProjectRepository,
+  ShotRepository, TakeRepository, TimelineClipRepository, TransitionRepository,
 } from '@ixa/db'
 import {
+  BeatAlignment as BeatAlignmentSchema,
   ProjectId as ProjectIdSchema,
+  Seconds as SecondsSchema,
   TimelineDocument as TimelineDocumentSchema,
+  alignBoundary,
+  pickMasterTrack,
   type MediaAsset,
   type MediaAssetId,
   type Project,
@@ -260,3 +264,154 @@ const toCheckIssue = (issue: {
   issue.shotId === undefined
     ? { severity: issue.severity, code: issue.code, message: issue.message }
     : { severity: issue.severity, code: issue.code, message: issue.message, shotId: issue.shotId }
+
+/**
+ * Shot の境目が拍に乗っているかを返す口（PHASE 6.3 / P63-1）。
+ *
+ * **`/timeline/issues` には載せない。** 拍が分かっていない状態は「指摘」ではなく、
+ * issues に混ぜると severity を偽ることになる。直し方も違う
+ * （外れているのは Shot を動かす / 拍が無いのは解析を流す）。
+ *
+ * 判定そのものは `@ixa/domain` の `alignBoundary` だけが持つ。
+ * **しきい値をこのファイルに書かない**（lessons L-016）。
+ */
+
+/**
+ * 拍の出どころの状態。**「楽曲が無い」「解析が無い」「拍が 0 件」を混ぜない**（L-015）。
+ * どれも結果は「色が付かない」だが、利用者が取るべき次の行動が違う。
+ *
+ * `shot-compare.ts` の `ShotCompareBeatState` と同じ区別で、選び方も同じ
+ * （マスター音源 → 無ければ先頭 → 最新の解析）。**あちらの private な `loadBeats` は
+ * この `loadProjectBeats` に寄せられる**（downbeats を落とさない上位互換）。
+ */
+export const TimelineBeatSourceState = z
+  .enum(['available', 'no_beats', 'no_analysis', 'no_track'])
+  .openapi('TimelineBeatSourceState')
+export type TimelineBeatSourceState = z.infer<typeof TimelineBeatSourceState>
+
+/**
+ * **`TimelineRoutesDeps` そのものに解析を足さない。** 同じ型を `renderRoutes` も使っており、
+ * 書き出しに要らない依存が増える。`shotCompareRoutes` と同じく 1 つ足した形で受ける。
+ */
+export type BeatAlignmentRoutesDeps = TimelineRoutesDeps & {
+  musicAnalyses: MusicAnalysisRepository
+}
+
+/** 拍の読み取り結果。件数 0 の理由を必ず添える。 */
+export type ProjectBeats = {
+  readonly state: TimelineBeatSourceState
+  /** 拍の出どころにした楽曲の題。楽曲そのものが無ければ null。 */
+  readonly trackTitle: string | null
+  readonly beats: readonly number[]
+  readonly downbeats: readonly number[]
+}
+
+/**
+ * 吸着・A/B 比較と同じ選び方でマスター音源を選び、その解析から拍と小節頭を取る。
+ *
+ * **`offsetSec` は足さない。** 吸着（`timeline/page.tsx`）もストーリーボードも
+ * 解析の値をそのまま絶対秒として扱っており、ここだけ足すと目盛りとズレる。
+ */
+export const loadProjectBeats = async (
+  deps: Pick<BeatAlignmentRoutesDeps, 'musicTracks' | 'musicAnalyses'>,
+  projectId: ProjectId,
+): Promise<ProjectBeats> => {
+  // 選び方は domain の `pickMasterTrack` だけが持つ。ここに書き写さない（L-016）。
+  const track = pickMasterTrack(await deps.musicTracks.findByProject(projectId))
+  if (track === null) {
+    return { state: 'no_track', trackTitle: null, beats: [], downbeats: [] }
+  }
+
+  const analysis = await deps.musicAnalyses.findByTrack(track.id)
+  if (analysis === null) {
+    return { state: 'no_analysis', trackTitle: track.title, beats: [], downbeats: [] }
+  }
+  if (analysis.beats.length === 0) {
+    return { state: 'no_beats', trackTitle: track.title, beats: [], downbeats: [] }
+  }
+
+  return {
+    state: 'available',
+    trackTitle: track.title,
+    beats: [...analysis.beats],
+    downbeats: [...analysis.downbeats],
+  }
+}
+
+/**
+ * Shot 1 件の整列。見るのは**開始位置だけ**。
+ * 終わりは次の Shot の開始と同じ境目なので、両方数えると同じズレを二重に数える。
+ */
+export const ShotBeatAlignment = z
+  .object({
+    shotId: ShotIdSchema,
+    atSec: SecondsSchema,
+    /** 一番近い拍。拍が 1 件も無ければ null。 */
+    nearestBeatSec: SecondsSchema.nullable(),
+    /** 拍からのズレ（秒）。正なら拍より後ろ。拍が無ければ null（0 ではない）。 */
+    driftSec: z.number().nullable(),
+    alignment: BeatAlignmentSchema,
+  })
+  .openapi('ShotBeatAlignment')
+export type ShotBeatAlignment = z.infer<typeof ShotBeatAlignment>
+
+/**
+ * 整列の一覧。**`source` を必ず添える。**
+ * 解析が無い Project で件数だけを返すと、画面が「0 件が外れています」と
+ * 嘘を出す（L-015）。
+ */
+export const TimelineBeatAlignmentResponse = z
+  .object({
+    source: TimelineBeatSourceState,
+    trackTitle: z.string().nullable(),
+    shots: z.array(ShotBeatAlignment),
+  })
+  .openapi('TimelineBeatAlignment')
+export type TimelineBeatAlignmentResponse = z.infer<typeof TimelineBeatAlignmentResponse>
+
+const getBeatAlignmentRoute = createRoute({
+  method: 'get',
+  path: '/projects/{projectId}/timeline/beat-alignment',
+  tags: ['timeline'],
+  summary: 'Shot の境目が拍からどれだけズレているか',
+  request: { params: ProjectParams },
+  responses: {
+    200: {
+      description: '整列の一覧',
+      content: {
+        'application/json': { schema: successResponse(TimelineBeatAlignmentResponse) },
+      },
+    },
+    404: errorContent('Project が存在しない'),
+    500: errorContent('サーバ内部エラー'),
+  },
+})
+
+/**
+ * `timelineRoutes` と分けてあるのは、この口だけが楽曲解析を要るため。
+ * 依存を 1 つ足すだけで済むよう、`shotCompareRoutes` と同じ形にしている。
+ */
+export const beatAlignmentRoutes = (deps: BeatAlignmentRoutesDeps) =>
+  new OpenAPIHono({ defaultHook: validationHook }).openapi(
+    getBeatAlignmentRoute,
+    async (c) => {
+      const { projectId } = c.req.valid('param')
+      const project = await deps.projects.findById(projectId)
+      if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+
+      const music = await loadProjectBeats(deps, projectId)
+      const shots = await deps.shots.findByProject(projectId)
+
+      return c.json(
+        ok({
+          source: music.state,
+          trackTitle: music.trackTitle,
+          shots: shots.map((shot) => ({
+            shotId: shot.id,
+            ...alignBoundary(shot.startSec, music.beats, music.downbeats),
+          })),
+        }),
+        200,
+      )
+    },
+  )

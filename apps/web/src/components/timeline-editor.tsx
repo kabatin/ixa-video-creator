@@ -26,6 +26,7 @@ import { ProgramMonitor } from '@/components/program-monitor'
 import { TEXT_INSERT_LAYER, TimelineTracks } from '@/components/timeline-tracks'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import type { WireTimelineBeatAlignment } from '@/lib/beat-alignment-view'
 import { nextSeekCommand, type SeekCommand } from '@/lib/program-monitor'
 import { createRequester } from '@/lib/requester'
 import {
@@ -99,6 +100,11 @@ export type TimelineEditorProps = {
    * どちらもビートには吸着しないが、利用者が取るべき行動が違う（lessons L-015）。
    */
   readonly beatSource: BeatSource
+  /**
+   * 拍とのズレ。**null は「読めていない」**（「ズレが無い」ではない）。
+   * 判定・しきい値・「解析が無い」の扱いはすべてサーバ側の 1 箇所が持つ。
+   */
+  readonly beatAlignment: WireTimelineBeatAlignment | null
   /** 読み込みに失敗した部分の理由。1 件でもあれば画面に必ず出す。 */
   readonly loadErrors: readonly string[]
 }
@@ -113,6 +119,7 @@ export const TimelineEditor = ({
   documentDurationSec,
   initialDocument,
   beatSource,
+  beatAlignment,
   loadErrors,
 }: TimelineEditorProps) => {
   const api = useMemo(() => createTimelineApi(createRequester(resolveApiBaseUrl())), [])
@@ -553,6 +560,16 @@ export const TimelineEditor = ({
           onClipDragMove={dragMove}
           onClipDragEnd={dragEnd}
           playheadSec={document === null ? null : currentSec}
+          beatAlignment={
+            beatAlignment === null
+              ? undefined
+              : // wire の 1 件は `ShotBeatAlignmentView` と同じ形。名前だけ揃える。
+                {
+                  source: beatAlignment.source,
+                  trackTitle: beatAlignment.trackTitle,
+                  views: beatAlignment.shots,
+                }
+          }
           onSeek={(sec) => {
             setCurrentSec(sec)
             setSeek((previous) => nextSeekCommand(previous, sec))

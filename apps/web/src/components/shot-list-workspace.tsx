@@ -13,6 +13,7 @@ import {
   type BulkUpdatePatch,
 } from '@/components/bulk-action-bar'
 import { LiveStatusBadge } from '@/components/live-status-badge'
+import { CostMeterPanel } from '@/components/cost-meter'
 import { ShotTable } from '@/components/shot-table'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
@@ -276,6 +277,13 @@ export const ShotListWorkspace = ({
           </p>
         )}
       </div>
+
+      {/**
+       * 費用メーター（PHASE 6.3）。**お金を使う場所の隣に置く。**
+       * 一括生成はこの画面から投げるので、押す前に残りが見えている必要がある。
+       * 額だけを出さない作りは部品側が持つ（実測 0 件なら出どころを併記する）。
+       */}
+      <CostMeterPanel projectId={projectId} />
 
       {rowError !== null && (
         <p role="alert" className="rounded-md bg-danger/10 p-3 text-sm text-danger">

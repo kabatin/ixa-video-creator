@@ -25,7 +25,7 @@ import { shotBulkRoutes } from './routes/shots-bulk.js'
 import { shotPosterRoutes } from './routes/shot-posters.js'
 import { uploadRoutes, type MediaIngestDeps } from './routes/uploads.js'
 import { shotCompareRoutes } from './routes/shot-compare.js'
-import { timelineRoutes } from './routes/timeline.js'
+import { beatAlignmentRoutes, timelineRoutes } from './routes/timeline.js'
 import { renderRoutes, type RenderQueue } from './routes/renders.js'
 import { characterRoutes, shotCharacterRoutes } from './routes/characters.js'
 import { assetRoutes } from './routes/assets.js'
@@ -37,6 +37,7 @@ import { reviewRoutes, type ReviewQueue } from './routes/reviews.js'
 import { transitionRoutes } from './routes/transitions.js'
 import { clipRoutes } from './routes/clips.js'
 import { eventRoutes } from './routes/events.js'
+import { STUB_PROVIDER_IDS } from '@ixa/provider-video'
 import type {
   BrandAssetRepository,
   CharacterLookRepository,
@@ -122,7 +123,19 @@ export const createApp = (deps: AppDeps) => {
   }
 
   app.route('/', healthRoutes())
-  app.route('/', projectRoutes({ projects }))
+  app.route(
+    '/',
+    // 費用の出どころ判定は **過去の事実**。今 registry にいる Provider と突き合わせない
+    // （外した瞬間に過去の Take が「実測」に化ける）。素性の一覧を app 層が注入する。
+    projectRoutes({
+      projects,
+      // 行として出せる Shot を知るために引く。**額の合計には使わない**
+      // （削除済み Shot の Take も払った額なので、合計は takes.findByProject が数える）。
+      shots: deps.shots,
+      takes: deps.takes,
+      stubProviderIds: [...STUB_PROVIDER_IDS],
+    }),
+  )
   app.route('/', uploadRoutes({ mediaAssets, storage, mediaIngest: deps.mediaIngest }))
   app.route('/', mediaRoutes({ mediaAssets, storage }))
   /** 1 件の経路と一括の経路は同じ依存を使う。組み立てを 1 箇所にまとめる。 */
@@ -207,6 +220,11 @@ export const createApp = (deps: AppDeps) => {
   app.route('/', timelineRoutes(timelineDeps))
   // A/B 比較は書き出しと同じ素材の集め方を使うので、Timeline と同じ依存に解析を 1 つ足すだけ。
   app.route('/', shotCompareRoutes({ ...timelineDeps, musicAnalyses: deps.musicAnalyses }))
+  // 拍とのズレ。この口だけ解析が要るので factory を分けてある（既存の配線を壊さない）。
+  app.route(
+    '/',
+    beatAlignmentRoutes({ ...timelineDeps, musicAnalyses: deps.musicAnalyses }),
+  )
   app.route(
     '/',
     renderRoutes({ ...timelineDeps, renderJobs: deps.renderJobs, queue: deps.renderQueue }),

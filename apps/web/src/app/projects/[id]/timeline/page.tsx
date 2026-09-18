@@ -1,10 +1,18 @@
-import { ProjectId, type Shot, type ShotId, type TimelineClip, type Transition } from '@ixa/domain'
+import {
+  ProjectId,
+  pickMasterTrack,
+  type Shot,
+  type ShotId,
+  type TimelineClip,
+  type Transition,
+} from '@ixa/domain'
 import { ProjectNav } from '@/components/project-nav'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
 import { TimelineEditor } from '@/components/timeline-editor'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import { createBeatAlignmentApi, type WireTimelineBeatAlignment } from '@/lib/beat-alignment-view'
 import { createRequester } from '@/lib/requester'
 import {
   createTimelineApi,
@@ -54,19 +62,22 @@ type Loaded = {
   readonly document: Part<WireTimelineDocument>
   readonly issues: Part<readonly WireTimelineIssue[]>
   readonly beatSource: BeatSource
+  /** 拍とのズレ。判定はサーバの 1 箇所が持つ（画面で数え直さない）。 */
+  readonly beatAlignment: Part<WireTimelineBeatAlignment>
 }
 
 /**
- * 吸着に使う楽曲を選ぶ。マスター音源があればそれ、無ければ先頭。
- * ミュージックビデオでは**尺を決めるのはマスター音源**なので、そこを既定にする
- * （ストーリーボード画面と同じ選び方）。
+ * 吸着に使う楽曲の解析を読む。**どの楽曲を選ぶかは domain の `pickMasterTrack`。**
+ * ミュージックビデオでは尺を決めるのがマスター音源なので、そこを既定にする
+ * （ストーリーボード画面・拍とのズレの口と同じ選び方）。
  */
 const loadBeatSource = async (projectId: ProjectId): Promise<BeatSource> => {
   try {
     const api = createApiClient()
-    const tracks = await api.listMusicTracks(projectId)
-    const track = tracks.find((candidate) => candidate.isMaster) ?? tracks[0]
-    if (track === undefined) return { state: 'no_track' }
+    // 選び方は domain の `pickMasterTrack` だけが持つ。サーバ側（拍とのズレの口）も
+    // 同じ関数を呼ぶので、**2 つの経路が違う曲の拍を使うことがない**（L-016）。
+    const track = pickMasterTrack(await api.listMusicTracks(projectId))
+    if (track === null) return { state: 'no_track' }
 
     const analysis = await api.getAnalysis(track.id)
     if (analysis === null) return { state: 'no_analysis', trackTitle: track.title }
@@ -88,16 +99,21 @@ const load = async (projectId: ProjectId): Promise<Loaded> => {
   const api = createApiClient()
   const timelineApi = createTimelineApi(createRequester(resolveApiBaseUrl()))
 
-  const [shots, transitions, clips, document, issues, beatSource] = await Promise.all([
-    attempt('Shot', () => api.listShots(projectId)),
-    attempt('Transition', () => timelineApi.listTransitions(projectId)),
-    attempt('クリップ', () => timelineApi.listClips(projectId)),
-    attempt('TimelineDocument', () => timelineApi.getTimelineDocument(projectId)),
-    // 検証はサーバの validateTimeline が唯一の正。画面に同じ規則を置かない。
-    attempt('検証結果', () => timelineApi.getTimelineIssues(projectId)),
-    // 吸着候補のビート。失敗しても画面は出すが、失敗した事実は値として残す。
-    loadBeatSource(projectId),
-  ])
+  const beatAlignmentApi = createBeatAlignmentApi(createRequester(resolveApiBaseUrl()))
+
+  const [shots, transitions, clips, document, issues, beatSource, beatAlignment] =
+    await Promise.all([
+      attempt('Shot', () => api.listShots(projectId)),
+      attempt('Transition', () => timelineApi.listTransitions(projectId)),
+      attempt('クリップ', () => timelineApi.listClips(projectId)),
+      attempt('TimelineDocument', () => timelineApi.getTimelineDocument(projectId)),
+      // 検証はサーバの validateTimeline が唯一の正。画面に同じ規則を置かない。
+      attempt('検証結果', () => timelineApi.getTimelineIssues(projectId)),
+      // 吸着候補のビート。失敗しても画面は出すが、失敗した事実は値として残す。
+      loadBeatSource(projectId),
+      // 拍とのズレ。しきい値も「解析が無い」の扱いもサーバ側の 1 箇所が持つ。
+      attempt('拍とのズレ', () => beatAlignmentApi.getTimelineBeatAlignment(projectId)),
+    ])
 
   return {
     shots,
@@ -112,6 +128,7 @@ const load = async (projectId: ProjectId): Promise<Loaded> => {
     document,
     issues,
     beatSource,
+    beatAlignment,
   }
 }
 
@@ -166,6 +183,9 @@ const TimelinePage = async ({ params }: TimelinePageProps) => {
     loaded.transitions.error,
     loaded.clips.error,
     loaded.renderedShotIds.error,
+    // **読めなかったことを黙って色なしに畳まない。** 色が付かない理由が
+    // 「拍に乗っている」に見えてしまう（lessons L-015）。
+    loaded.beatAlignment.error,
   ].filter((message): message is string => message !== null)
 
   return (
@@ -186,6 +206,7 @@ const TimelinePage = async ({ params }: TimelinePageProps) => {
         initialDocument={loaded.document.value}
         initialIssues={loaded.issues.value}
         beatSource={loaded.beatSource}
+        beatAlignment={loaded.beatAlignment.value}
         loadErrors={loadErrors}
       />
     </main>

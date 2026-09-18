@@ -14,6 +14,7 @@ import { CutEditor } from '@/components/cut-editor'
 import { StoryboardInspector } from '@/components/storyboard-inspector'
 import { StoryboardPanel } from '@/components/storyboard-panel'
 import { StoryboardPosterStrip } from '@/components/storyboard-poster-strip'
+import { buildShotAlignments } from '@/lib/beat-alignment-view'
 import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import type { WireMusicAnalysis } from '@/lib/music-api'
@@ -66,6 +67,21 @@ const PostersContent = () => {
         posters={workspace.posters}
         selectedShotId={workspace.selectedShotId}
         onSelect={workspace.selectShot}
+        /**
+         * この画面は解析を既に持っているので、往復させずその場で判定する。
+         * **判定そのものは `@ixa/domain` の `alignBoundary` 1 箇所**なので、
+         * タイムライン画面（サーバ経由）と結果は必ず一致する。
+         * `analysis` が非 null な画面なので `no_analysis` / `no_track` は起こらない。
+         */
+        beatAlignment={{
+          source: workspace.analysis.beats.length === 0 ? 'no_beats' : 'available',
+          trackTitle: workspace.track.title,
+          views: buildShotAlignments(
+            workspace.shots,
+            workspace.analysis.beats,
+            workspace.analysis.downbeats,
+          ),
+        }}
       />
     </div>
   )

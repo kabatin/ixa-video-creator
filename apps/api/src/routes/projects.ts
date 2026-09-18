@@ -1,11 +1,14 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { ProjectRepository } from '@ixa/db'
+import type { ProjectRepository, ShotRepository, TakeRepository } from '@ixa/db'
 import {
   CreateProjectInput as CreateProjectInputSchema,
   Project as ProjectSchema,
   ProjectId as ProjectIdSchema,
+  ShotId as ShotIdSchema,
   UpdateProjectPatch as UpdateProjectPatchSchema,
   WorkspaceId as WorkspaceIdSchema,
+  buildCostMeter,
+  type CostMeter,
   type Project,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
@@ -124,9 +127,104 @@ const deleteProjectRoute = createRoute({
   },
 })
 
-export type ProjectRoutesDeps = { projects: ProjectRepository }
+/**
+ * 費用メーターの wire 形（PHASE 6.3）。
+ *
+ * Domain の `CostMeter` は `byShot` を `ReadonlyMap` で持つが、JSON に Map は無い。
+ * ここで配列へ写す。**額だけでなく件数も必ず返す。**
+ * スタブで回した Take は額が 0 なので、件数が無いと「何も起きていない」と区別が付かない。
+ */
+export const CostBucketResponse = z
+  .object({
+    takeCount: z.number().int().nonnegative(),
+    totalUsd: z.number().nonnegative(),
+  })
+  .openapi('CostBucket')
 
-export const projectRoutes = ({ projects }: ProjectRoutesDeps) =>
+/** 実測として数えた Provider 1 つ分。**名前を返す**ので、載せ忘れに画面から気付ける。 */
+export const ProviderCostResponse = z
+  .object({
+    providerId: z.string().min(1),
+    takeCount: z.number().int().nonnegative(),
+    totalUsd: z.number().nonnegative(),
+  })
+  .openapi('ProviderCost')
+
+export const MeasuredBucketResponse = CostBucketResponse.extend({
+  byProvider: z.array(ProviderCostResponse),
+}).openapi('MeasuredBucket')
+
+/** `byShot` に行として出せなかった分（論理削除された Shot）。合計には入っている。 */
+export const UnlistedShotCostResponse = z
+  .object({
+    takeCount: z.number().int().nonnegative(),
+    measuredUsd: z.number().nonnegative(),
+    stubUsd: z.number().nonnegative(),
+  })
+  .openapi('UnlistedShotCost')
+
+/** **額と件数は名前で区別する。** スタブの額は常に 0 なので、件数で持つ方が情報がある。 */
+export const ShotCostResponse = z
+  .object({
+    shotId: ShotIdSchema,
+    measuredUsd: z.number().nonnegative(),
+    stubTakeCount: z.number().int().nonnegative(),
+  })
+  .openapi('ShotCost')
+
+export const CostMeterResponse = z
+  .object({
+    /** null は「予算未設定」。0（予算ゼロ）とは別の状態。 */
+    budgetUsd: z.number().nonnegative().nullable(),
+    measured: MeasuredBucketResponse,
+    stub: CostBucketResponse,
+    /** **生きている Shot だけ**の内訳。合計と一致しないことがある。 */
+    byShot: z.array(ShotCostResponse),
+    /** 内訳と合計の差の説明。黙って捨てない。 */
+    unlistedShots: UnlistedShotCostResponse,
+  })
+  .openapi('CostMeter')
+export type CostMeterResponse = z.infer<typeof CostMeterResponse>
+
+/** Domain の CostMeter を DTO へ写す（Map → 配列）。 */
+export const toCostMeterResponse = (meter: CostMeter): CostMeterResponse => ({
+  budgetUsd: meter.budgetUsd,
+  measured: { ...meter.measured, byProvider: meter.measured.byProvider.map((p) => ({ ...p })) },
+  stub: { ...meter.stub },
+  byShot: [...meter.byShot].map(([shotId, cost]) => ({ shotId, ...cost })),
+  unlistedShots: { ...meter.unlistedShots },
+})
+
+const getProjectCostRoute = createRoute({
+  method: 'get',
+  path: '/projects/{id}/cost',
+  tags: ['projects'],
+  summary: '使った額を出どころ（実測 / スタブ）で割って返す',
+  request: { params: ProjectParams },
+  responses: {
+    200: jsonContent('費用メーター', successResponse(CostMeterResponse)),
+    404: errorContent('プロジェクトが存在しない'),
+    422: errorContent('入力の検証に失敗した'),
+    500: errorContent('サーバ内部エラー'),
+  },
+})
+
+export type ProjectRoutesDeps = {
+  projects: ProjectRepository
+  /** 行として出せる Shot を知るために引く。**額の合計には使わない。** */
+  shots: ShotRepository
+  takes: TakeRepository
+  /**
+   * スタブ Provider の ID。**app 層が渡す。**
+   *
+   * `ProviderRegistry` に素性の印が無いため、`@ixa/provider-video` の `STUB_PROVIDER_ID` を
+   * main / app が注入する。**今 registry にいる Provider と突き合わせてはいけない。**
+   * 突き合わせると、registry からスタブを外した瞬間に過去の Take が「実測」に化ける。
+   */
+  stubProviderIds: readonly string[]
+}
+
+export const projectRoutes = ({ projects, shots, takes, stubProviderIds }: ProjectRoutesDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })
     .openapi(createProjectRoute, async (c) => {
       const created = await projects.create(c.req.valid('json'))
@@ -151,4 +249,35 @@ export const projectRoutes = ({ projects }: ProjectRoutesDeps) =>
     .openapi(deleteProjectRoute, async (c) => {
       await projects.softDelete(c.req.valid('param').id)
       return c.body(null, 204)
+    })
+    .openapi(getProjectCostRoute, async (c) => {
+      const projectId = c.req.valid('param').id
+      const project = await projects.findById(projectId)
+      if (project === null) {
+        return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      }
+
+      // **合計は論理削除済み Shot の Take も含めて数える**（`findByProject` の約束）。
+      // 払った額は Shot を消しても戻らない。生きている Shot だけで数えると予算が軽く見え、
+      // 画面は「余裕あり」なのに `checkCostLimits` が弾く、という食い違いになる。
+      //
+      // 一方 Shot ごとの内訳は行として出せないので、生きている Shot だけに絞り、
+      // 溢れた分は `unlistedShots` に残す（捨てない）。
+      const [projectTakes, liveShots] = await Promise.all([
+        takes.findByProject(projectId),
+        shots.findByProject(projectId),
+      ])
+
+      const meter = buildCostMeter({
+        budgetUsd: project.budgetUsd,
+        takes: projectTakes.map((take) => ({
+          shotId: take.shotId,
+          costUsd: take.costUsd,
+          providerId: take.providerId,
+        })),
+        stubProviderIds,
+        listedShotIds: liveShots.map((shot) => shot.id),
+      })
+
+      return c.json(ok(toCostMeterResponse(meter)), 200)
     })

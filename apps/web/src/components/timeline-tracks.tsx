@@ -22,6 +22,15 @@ import type { TransitionInsertionPoint } from '@/lib/timeline-insert'
 import type { ShotPosterMap } from '@/lib/shot-posters'
 import { posterViewFor } from '@/lib/shot-posters'
 import { playheadLeftPx, seekSecAtClientX } from '@/lib/timeline-playhead'
+import {
+  alignmentByShotId,
+  beatAlignmentToneClass,
+  chipRingClass,
+  describeDrift,
+  summarizeBeatAlignment,
+  type BeatAlignmentSource,
+  type ShotBeatAlignmentView,
+} from '@/lib/beat-alignment-view'
 
 /**
  * Shot と TimelineClip を時間軸に並べ、**その場で置いて動かせる**帯。
@@ -87,6 +96,17 @@ export type TimelineTracksProps = {
   readonly onSeek?: (sec: number) => void
   /** 帯の上に重ねるもの（その場で出る入力）。位置は呼び出し側が持つ。 */
   readonly overlay?: ReactNode
+  /**
+   * 拍とのズレ。**渡さなければ縁は従来どおり**（拍の色を出さない）。
+   *
+   * 判定も数え方もここには無い。`@ixa/domain` の `alignBoundary` が出した結果を
+   * `beat-alignment-view` が色と文に直したものを、そのまま並べるだけ。
+   */
+  readonly beatAlignment?: {
+    readonly source: BeatAlignmentSource
+    readonly trackTitle: string | null
+    readonly views: readonly ShotBeatAlignmentView[]
+  }
 }
 
 type RowProps = {
@@ -140,8 +160,10 @@ export const TimelineTracks = ({
   playheadSec = null,
   onSeek,
   overlay,
+  beatAlignment,
 }: TimelineTracksProps) => {
   const contentRef = useRef<HTMLDivElement>(null)
+  const alignments = beatAlignment === undefined ? null : alignmentByShotId(beatAlignment.views)
   const contentWidthPx = Math.max(secondsToPx(durationSec, pxPerSec), MIN_CONTENT_WIDTH_PX)
   const ticks = rulerTicks(durationSec, pxPerSec)
 
@@ -192,8 +214,26 @@ export const TimelineTracks = ({
     ))
   }
 
+  const summary =
+    beatAlignment === undefined
+      ? null
+      : summarizeBeatAlignment({
+          source: beatAlignment.source,
+          trackTitle: beatAlignment.trackTitle,
+          views: beatAlignment.views,
+        })
+
   return (
     <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+      {summary !== null && (
+        /* **色だけでは全体像が掴めない。** 何件が外れているかを必ず文でも出す。 */
+        /* 帯は横に流れる。**要約は流して消さない**ので左に貼り付ける。 */
+        <p
+          className={`sticky left-0 border-b border-line px-3 py-2 text-xs ${beatAlignmentToneClass(summary.tone)}`}
+        >
+          {summary.text}
+        </p>
+      )}
       <div ref={contentRef} className="relative" style={{ minWidth: contentWidthPx }}>
         <Row label={`尺 ${formatClock(durationSec)}`} contentWidthPx={contentWidthPx}>
           {/* 目盛りを押したらその秒へ。判定は `timeline-playhead` が持つ。 */}
@@ -226,15 +266,18 @@ export const TimelineTracks = ({
                 const rect = timeSpanToRect(shot, pxPerSec)
                 const rendered = renderedShotIds.has(shot.id)
                 const poster = posters === undefined ? null : posterViewFor(posters, shot.id)
+                const alignment = alignments?.get(shot.id) ?? null
                 return (
                   <div
                     key={shot.id}
-                    title={`${shot.code} ${formatTimeSpan(shot)}`}
-                    className={`absolute top-2 overflow-hidden rounded px-1 text-[11px] ring-1 ${
-                      rendered
-                        ? 'bg-line text-text ring-line-strong'
-                        : 'border border-dashed bg-warn/10 text-warn ring-warn/40'
-                    }`}
+                    title={
+                      alignment === null
+                        ? `${shot.code} ${formatTimeSpan(shot)}`
+                        : `${shot.code} ${formatTimeSpan(shot)} / ${describeDrift(alignment)}`
+                    }
+                    className={`absolute top-2 overflow-hidden rounded px-1 text-[11px] ${
+                      rendered ? 'bg-line text-text' : 'border border-dashed bg-warn/10 text-warn'
+                    } ${chipRingClass({ rendered, alignment: alignment?.alignment ?? null })}`}
                     style={{ left: rect.leftPx, width: rect.widthPx, height: LANE_HEIGHT_PX - 16 }}
                   >
                     {poster !== null && (
