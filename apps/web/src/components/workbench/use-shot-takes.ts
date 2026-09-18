@@ -21,7 +21,14 @@ export type ShotTakes = {
  * 届くので、ここはそれを見て追う（旧 Shot 詳細のポーリングの代わり）。
  */
 export const useShotTakes = (shot: Shot | null, epoch: number): ShotTakes => {
-  const [takes, setTakes] = useState<readonly Take[] | null>(null)
+  /**
+   * **誰の Take かを一緒に持つ。** Shot を替えた直後は前の Shot の Take がまだ手元にあり、
+   * それを新しい Shot の比較に渡すとサーバが 404 を返した（実機 2026-09-19）。
+   */
+  const [loaded, setLoaded] = useState<{
+    readonly shotId: Shot['id']
+    readonly takes: readonly Take[]
+  } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reloads, setReloads] = useState(0)
   const shotId = shot?.id ?? null
@@ -30,7 +37,7 @@ export const useShotTakes = (shot: Shot | null, epoch: number): ShotTakes => {
 
   useEffect(() => {
     if (shotId === null) {
-      setTakes(null)
+      setLoaded(null)
       return undefined
     }
     let cancelled = false
@@ -38,11 +45,11 @@ export const useShotTakes = (shot: Shot | null, epoch: number): ShotTakes => {
     createApiClient()
       .listTakes(shotId)
       .then((next) => {
-        if (!cancelled) setTakes(next)
+        if (!cancelled) setLoaded({ shotId, takes: next })
       })
       .catch((cause: unknown) => {
         if (cancelled) return
-        setTakes(null)
+        setLoaded(null)
         setError(`Take を取得できませんでした: ${describeError(cause)}`)
       })
     return () => {
@@ -55,10 +62,14 @@ export const useShotTakes = (shot: Shot | null, epoch: number): ShotTakes => {
   }, [])
 
   const replaceTake = useCallback((take: Take) => {
-    setTakes((current) =>
-      current === null ? current : current.map((entry) => (entry.id === take.id ? take : entry)),
+    setLoaded((current) =>
+      current === null
+        ? current
+        : { ...current, takes: current.takes.map((entry) => (entry.id === take.id ? take : entry)) },
     )
   }, [])
 
+  // 前の Shot の Take は「まだ読めていない」として扱う。
+  const takes = loaded !== null && loaded.shotId === shotId ? loaded.takes : null
   return { takes, error, reload, replaceTake }
 }

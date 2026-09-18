@@ -39,6 +39,8 @@ export const ComparePanel = () => {
     try {
       const updated = await createApiClient().selectTake(shot.id, takeId)
       workbench.replaceShots([updated])
+      // 採用 Take が変わればサムネイルとタイムライン文書も変わる。サーバから読み直す。
+      workbench.refresh()
     } catch (cause) {
       setAdoptError(`Take を採用できませんでした: ${describeError(cause)}`)
     } finally {
