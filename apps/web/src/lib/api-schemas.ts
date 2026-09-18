@@ -47,6 +47,7 @@ export const UpdateShotBody = UpdateShotPatch.pick({
   // ストーリーボードの一括作成は機械的なコードと空の mood を付ける。後から直せる必要がある。
   code: true,
   mood: true,
+  continuityMode: true,
   description: true,
   camera: true,
   sourceType: true,

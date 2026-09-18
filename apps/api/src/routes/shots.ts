@@ -180,6 +180,7 @@ const UpdateShotBody = UpdateShotPatchSchema.pick({
   code: true,
   description: true,
   mood: true,
+  continuityMode: true,
   camera: true,
   sourceType: true,
   startSec: true,

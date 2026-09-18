@@ -517,6 +517,17 @@ type ShotGenerationSpec = {
 }
 ```
 
+### Shot の連続性
+
+`Shot.continuityMode` は、直前の Shot と画を繋ぐ意図を保存する。
+
+```ts
+type ShotContinuityMode = 'independent' | 'previous_shot'
+```
+
+既定は `independent`。`previous_shot` のときだけ、前 Shot の採用 Take の最終フレームを
+生成時の開始画像候補にする（ADR-0019 / ADR-0020）。
+
 `specHash = sha256(canonicalJson(spec))` を Take に保存する。同一 hash の再生成は警告する。
 
 ### GenerationJob / Take

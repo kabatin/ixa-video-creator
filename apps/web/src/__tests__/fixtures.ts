@@ -33,6 +33,7 @@ export const shotJson = {
   dialogue: null,
   camera: cameraJson,
   mood: 'tense',
+  continuityMode: 'independent',
   locationId: null,
   sourceType: { type: 'ai_video' },
   selectedTakeId: null,

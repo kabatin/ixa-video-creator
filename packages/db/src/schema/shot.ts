@@ -4,7 +4,7 @@ import {
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import type {
   ReferenceRole, ReferenceSourceKind, ShotCamera, ShotCharacter, ShotSourceType,
-  ShotStatus, TransitionType,
+  ShotContinuityMode, ShotStatus, TransitionType,
 } from '@ixa/domain'
 import {
   ReferenceRole as ReferenceRoleSchema,
@@ -49,6 +49,10 @@ export const shots = pgTable(
     dialogue: text('dialogue'),
     camera: jsonb('camera').$type<ShotCamera>().notNull(),
     mood: text('mood'),
+    continuityMode: text('continuity_mode', { enum: ['independent', 'previous_shot'] })
+      .$type<ShotContinuityMode>()
+      .notNull()
+      .default('independent'),
 
     /**
      * 場所。ひと続きのカットなので 1 つだけ（ADR-0015）。

@@ -543,6 +543,7 @@ const makeShot = (suffix: string, startSec: number, durationSec: number): Shot =
   dialogue: null,
   camera,
   mood: null,
+  continuityMode: 'independent',
   locationId: null,
   sourceType: { type: 'ai_video' },
   selectedTakeId: null,

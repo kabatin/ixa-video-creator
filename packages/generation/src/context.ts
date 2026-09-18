@@ -154,7 +154,7 @@ export const createGenerationContextSource = (
      */
     async previousShotLastFrame(shotId: ShotId): Promise<MediaAssetId | null> {
       const shot = await deps.shots.findById(shotId)
-      if (shot === null) return null
+      if (shot === null || shot.continuityMode !== 'previous_shot') return null
 
       const previous = await previousShot(shot)
       // 採用 Take が決まっていない Shot の最終フレームは意味を持たない。

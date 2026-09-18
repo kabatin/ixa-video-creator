@@ -92,6 +92,7 @@ describe('createShot / updateShot / deleteShot', () => {
       camera: shotJson.camera,
       mood: 'tense',
       sourceType: { type: 'ai_video' },
+      continuityMode: 'independent',
     })
 
     expect(created.id).toBe(SHOT_ID)
@@ -114,6 +115,7 @@ describe('createShot / updateShot / deleteShot', () => {
         camera: shotJson.camera,
         mood: null,
         sourceType: { type: 'ai_video' },
+        continuityMode: 'independent',
       }),
     ).rejects.toThrow()
     expect(fetchMock).not.toHaveBeenCalled()

@@ -1,0 +1,1 @@
+ALTER TABLE "shots" ADD COLUMN "continuity_mode" text DEFAULT 'independent' NOT NULL;

@@ -54,6 +54,7 @@ export const makeShot = (
     movementIntensity: null,
   },
   mood: null,
+  continuityMode: 'independent',
   sourceType: { type: 'ai_video' },
   selectedTakeId: null,
   status: 'approved',

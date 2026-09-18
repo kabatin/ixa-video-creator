@@ -88,6 +88,7 @@ export const aShot = (project: Project, overrides: Partial<Shot> = {}): Shot =>
       movementIntensity: 'subtle',
     },
     mood: 'energetic',
+    continuityMode: 'independent',
     sourceType: { type: 'ai_video' },
     selectedTakeId: null,
     status: 'review',

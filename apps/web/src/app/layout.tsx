@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import 'dockview-react/dist/styles/dockview.css'
 import './globals.css'
 import { SiteHeader } from '@/components/site-header'
 import { DEFAULT_THEME, THEME_ATTRIBUTE } from '@/lib/theme'

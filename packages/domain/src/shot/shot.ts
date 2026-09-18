@@ -17,6 +17,10 @@ export const ShotStatus = z.enum([
 ])
 export type ShotStatus = z.infer<typeof ShotStatus>
 
+/** ADR-0019 / ADR-0020: 前の Shot の絵を使うのは、制作者が明示した場合だけ。 */
+export const ShotContinuityMode = z.enum(['independent', 'previous_shot'])
+export type ShotContinuityMode = z.infer<typeof ShotContinuityMode>
+
 /**
  * 本システムの最重要ドメイン。
  * Shot がマスタータイムライン VIDEO1 上の位置を所有する（ADR-0002）。
@@ -39,6 +43,9 @@ export const Shot = z.object({
   dialogue: z.string().nullable(),
   camera: ShotCamera,
   mood: z.string().nullable(),
+
+  /** 前 Shot との画の接続。独立したカットが既定（ADR-0020）。 */
+  continuityMode: ShotContinuityMode,
 
   /** ひと続きのカットなので場所は 1 つだけ持つ。中間表は作らない（ADR-0015）。 */
   locationId: LocationId.nullable(),
@@ -113,6 +120,7 @@ export const CreateShotInput = Shot.omit({
   id: true, createdAt: true, updatedAt: true, selectedTakeId: true, lockedAt: true,
 }).extend({
   sourceInSec: Seconds.default(0),
+  continuityMode: ShotContinuityMode.default('independent'),
   status: ShotStatus.default('draft'),
   // 場所は後から決められる。作成時の必須項目にしない（ADR-0015）。
   locationId: LocationId.nullable().default(null),
@@ -128,6 +136,7 @@ export const UpdateShotPatch = Shot.pick({
   sequenceId: true, order: true, code: true,
   startSec: true, durationSec: true, sourceInSec: true,
   description: true, dialogue: true, camera: true, mood: true,
+  continuityMode: true,
   locationId: true, sourceType: true, lockedAt: true,
 }).partial()
 export type UpdateShotPatch = z.input<typeof UpdateShotPatch>

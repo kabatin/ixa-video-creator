@@ -97,6 +97,7 @@ export const makeShot = (overrides: Partial<Shot> = {}): Shot => ({
   dialogue: null,
   camera: CAMERA,
   mood: null,
+  continuityMode: 'independent',
   locationId: null,
   sourceType: { type: 'ai_video' },
   selectedTakeId: null,

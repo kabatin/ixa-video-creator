@@ -355,7 +355,11 @@ describe('previousShotLastFrame', () => {
     const first = aShot(projectId, { order: 1000, code: 'shot_001' })
     const take = aTake(first, 'c'.repeat(64), { mediaAssetId: video.id })
     // order は 1000 刻みで連番ではない。間が空いていても直前として拾えること。
-    const second = aShot(projectId, { order: 3000, code: 'shot_002' })
+    const second = aShot(projectId, {
+      order: 3000,
+      code: 'shot_002',
+      continuityMode: 'previous_shot',
+    })
 
     const context = buildContext({
       shots: createInMemoryShotRepository([{ ...first, selectedTakeId: take.id }, second]),
@@ -371,6 +375,22 @@ describe('previousShotLastFrame', () => {
     const first = aShot(projectId, { order: 1000, code: 'shot_001' })
     const second = aShot(projectId, { order: 2000, code: 'shot_002' })
     const context = buildContext({ shots: createInMemoryShotRepository([first, second]) })
+
+    await expect(context.previousShotLastFrame(second.id)).resolves.toBeNull()
+  })
+
+  it('独立した Shot は前に採用 Take があっても最終フレームを使わない（ADR-0019）', async () => {
+    const first = aShot(projectId, { order: 1000, code: 'shot_001' })
+    const take = aTake(first, 'd'.repeat(64))
+    const second = aShot(projectId, {
+      order: 2000,
+      code: 'shot_002',
+      continuityMode: 'independent',
+    })
+    const context = buildContext({
+      shots: createInMemoryShotRepository([{ ...first, selectedTakeId: take.id }, second]),
+      takes: createInMemoryTakeRepository([take]),
+    })
 
     await expect(context.previousShotLastFrame(second.id)).resolves.toBeNull()
   })

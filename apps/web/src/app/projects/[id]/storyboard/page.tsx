@@ -1,10 +1,9 @@
-import { ProjectId, type MusicTrack, type Sequence } from '@ixa/domain'
+import { ProjectId, type MusicTrack, type Sequence, type Shot } from '@ixa/domain'
 import { ProjectNav } from '@/components/project-nav'
 import { AnalysisStarter } from '@/components/analysis-starter'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
-import { CutEditor } from '@/components/cut-editor'
-import { StoryboardPanel } from '@/components/storyboard-panel'
+import { StoryboardWorkspace } from '@/components/storyboard-workspace'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import type { WireMusicAnalysis } from '@/lib/music-api'
@@ -19,11 +18,11 @@ type Loaded = {
   readonly track: MusicTrack | null
   readonly analysis: WireMusicAnalysis | null
   readonly sequences: readonly Sequence[]
+  readonly shots: readonly Shot[]
 }
 
 type LoadResult =
-  | { readonly ok: true; readonly loaded: Loaded }
-  | { readonly ok: false; readonly message: string }
+  { readonly ok: true; readonly loaded: Loaded } | { readonly ok: false; readonly message: string }
 
 /**
  * 割り当てに使う楽曲を選ぶ。
@@ -37,15 +36,21 @@ const pickTrack = (tracks: readonly MusicTrack[]): MusicTrack | null =>
 const load = async (projectId: ProjectId): Promise<LoadResult> => {
   try {
     const api = createApiClient()
-    const [tracks, sequences] = await Promise.all([
+    const [tracks, sequences, shots] = await Promise.all([
       api.listMusicTracks(projectId),
       api.listSequences(projectId),
+      api.listShots(projectId),
     ])
 
     const track = pickTrack(tracks)
-    if (track === null) return { ok: true, loaded: { track: null, analysis: null, sequences } }
+    if (track === null) {
+      return { ok: true, loaded: { track: null, analysis: null, sequences, shots } }
+    }
 
-    return { ok: true, loaded: { track, analysis: await api.getAnalysis(track.id), sequences } }
+    return {
+      ok: true,
+      loaded: { track, analysis: await api.getAnalysis(track.id), sequences, shots },
+    }
   } catch (error) {
     return { ok: false, message: describeError(error) }
   }
@@ -93,37 +98,13 @@ const StoryboardPage = async ({ params }: StoryboardPageProps) => {
       ) : result.loaded.analysis === null ? (
         <AnalysisStarter track={result.loaded.track} />
       ) : (
-        <div className="space-y-6">
-          <CutEditor
-            projectId={projectId.data}
-            track={result.loaded.track}
-            analysis={result.loaded.analysis}
-            sequences={result.loaded.sequences}
-          />
-
-          {/**
-           * セクションから一括で割る形も残す。**精度は低い**（実データは 15 個すべて
-           * `verse` 判定）が、下拵えとして粗く割ってから波形の上で直す使い方はできる。
-           * 主でなくなったので、開かないと出ないところへ下げてある。
-           */}
-          <details className="rounded-lg border border-line bg-surface p-5">
-            <summary className="cursor-pointer text-base font-semibold text-text">
-              セクションから一括で割る（自動・精度は低い）
-            </summary>
-            <p className="mt-2 text-sm text-muted">
-              解析が付けたセクションの境目で機械的に割ります。ラベルの判定は当てになりません。
-              粗く割ってから、上の波形で区切りを直す使い方を想定しています。
-            </p>
-            <div className="mt-4">
-              <StoryboardPanel
-                projectId={projectId.data}
-                track={result.loaded.track}
-                analysis={result.loaded.analysis}
-                sequences={result.loaded.sequences}
-              />
-            </div>
-          </details>
-        </div>
+        <StoryboardWorkspace
+          projectId={projectId.data}
+          track={result.loaded.track}
+          analysis={result.loaded.analysis}
+          sequences={result.loaded.sequences}
+          initialShots={result.loaded.shots}
+        />
       )}
     </main>
   )

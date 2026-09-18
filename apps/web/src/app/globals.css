@@ -91,3 +91,19 @@ select,
 textarea {
   color-scheme: inherit;
 }
+
+/* Dockview の構造はライブラリに任せ、色だけを本アプリの意味トークンへ接続する。 */
+.storyboard-dock {
+  --dv-background-color: rgb(var(--bg));
+  --dv-paneview-header-border-color: rgb(var(--line));
+  --dv-tabs-and-actions-container-background-color: rgb(var(--surface));
+  --dv-activegroup-visiblepanel-tab-background-color: rgb(var(--surface-2));
+  --dv-activegroup-hiddenpanel-tab-background-color: rgb(var(--surface));
+  --dv-inactivegroup-visiblepanel-tab-background-color: rgb(var(--surface-2));
+  --dv-inactivegroup-hiddenpanel-tab-background-color: rgb(var(--surface));
+  --dv-tab-divider-color: rgb(var(--line));
+  --dv-active-sash-color: rgb(var(--accent));
+  --dv-separator-border: rgb(var(--line));
+  --dv-activegroup-visiblepanel-tab-color: rgb(var(--text));
+  --dv-inactivegroup-visiblepanel-tab-color: rgb(var(--muted));
+}

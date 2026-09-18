@@ -27,6 +27,7 @@ const shot = (overrides: Partial<Shot> = {}): Shot => ({
     lensMm: 50, movement: 'push_in', movementIntensity: 'subtle',
   },
   mood: '緊迫',
+  continuityMode: 'independent',
   sourceType: { type: 'ai_video' },
   selectedTakeId: null,
   status: 'ready',
