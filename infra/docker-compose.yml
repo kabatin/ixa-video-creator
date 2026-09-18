@@ -44,7 +44,9 @@ services:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-ixa_minio}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-ixa_minio_dev_password}
     ports:
-      - "127.0.0.1:9000:9000"
+      # LAN 端末へ署名付きURLを返す場合だけ S3_BIND_HOST=0.0.0.0 にする。
+      # 管理コンソールは常にローカル限定のままにする。
+      - "${S3_BIND_HOST:-127.0.0.1}:9000:9000"
       - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
