@@ -28,6 +28,7 @@ import {
   enqueueJobs,
   generationFailureFields,
   generationPorts,
+  publishShotStatus,
   toShotResponse,
   type ShotRoutesDeps,
 } from './shots.js'
@@ -326,7 +327,9 @@ export const shotBulkRoutes = (deps: ShotRoutesDeps) =>
       const jobIdsByShot = new Map<ShotId, GenerationJobId[]>()
       for (const { shot, compiled } of planned) {
         jobIdsByShot.set(shot.id, await enqueueJobs(deps, shot, compiled, model, count))
-        await deps.shots.updateStatus(shot.id, 'generating')
+        const generating = await deps.shots.updateStatus(shot.id, 'generating')
+        // 投入した Shot ごとに流す。1 通にまとめると、どの Shot が動いたか画面に出せない。
+        await publishShotStatus(deps, generating)
       }
 
       const results = plan.map((entry) =>

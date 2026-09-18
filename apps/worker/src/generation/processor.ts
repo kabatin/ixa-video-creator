@@ -6,6 +6,7 @@ import {
   type GenerationJob,
   type MediaAssetId,
   type Project,
+  type ProjectEventPublisher,
   type Shot,
   type TakeId,
 } from '@ixa/domain'
@@ -15,6 +16,7 @@ import type {
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import { recordTake, type RecordTakeDeps } from './complete.js'
+import { failureMessageOf, publishJobStatus, publishShotStatus } from './events.js'
 import { parseGenerationJobData, type GenerationJobData } from './job-data.js'
 import {
   checkLineage,
@@ -72,6 +74,11 @@ export type GenerationProcessorDeps = RecordTakeDeps & {
   readonly context: GenerationContextSource
   readonly scheduler: PollScheduler
   readonly mediaQueue: MediaJobQueue
+  /**
+   * 状態が変わった瞬間に出来事を流す口（Phase 5.8b）。
+   * **publish の失敗で本処理を止めない。** 詳細は `events.ts`。
+   */
+  readonly events: ProjectEventPublisher
   readonly logger: Logger
   readonly now?: () => Date
 }
@@ -173,6 +180,9 @@ const submit = async (
     providerJobRef: handle.ref,
     startedAt: job.startedAt ?? now,
   })
+  await publishJobStatus(deps, {
+    shot, jobId: job.id, status: 'running', takeId: null, error: null, at: now,
+  })
   // 運ぶのは ID だけ。系譜は行に載っているので、入れ直しで失われることがない。
   await deps.scheduler.reschedule(ctx.data, pollDelayMs(1))
 
@@ -243,6 +253,16 @@ const complete = async (
   await deps.shots.updateStatus(shot.id, 'review')
   await deps.generationJobs.update(job.id, { status: 'succeeded', finishedAt: now })
 
+  /**
+   * **Take の確定は publish の結果に関わらず成立する。**
+   * ここより上で Take もジョブの行も確定済みで、通知はその上乗せでしかない。
+   * 落ちたら warn に残すだけにする（`ProjectEventPublisher` の契約）。
+   */
+  await publishShotStatus(deps, { shot, jobId: job.id, status: 'review', at: now })
+  await publishJobStatus(deps, {
+    shot, jobId: job.id, status: 'succeeded', takeId: take.id, error: null, at: now,
+  })
+
   deps.logger.info({ jobId: job.id, takeId: take.id }, 'Take を確定しました')
   return { state: 'succeeded', takeId: take.id }
 }
@@ -304,9 +324,17 @@ export const processGenerationJob = async (
     return { state: 'skipped', reason: `status=${job.status}` }
   }
 
+  /**
+   * 失敗したときも出来事を流したいが、出来事には projectId が要る。
+   * projectId は Shot にしか無く、Shot を読む前に落ちることもあるため、
+   * 読めたところで控えておく。読めていなければ流さず、流せなかったことを残す。
+   */
+  let loadedShot: Shot | null = null
+
   try {
     const shot = await deps.shots.findById(job.shotId)
     if (shot === null) throw new JobFailure('shot_missing', `Shot がありません: ${job.shotId}`, false)
+    loadedShot = shot
 
     const project = await deps.projects.findById(shot.projectId)
     if (project === null) {
@@ -330,12 +358,27 @@ export const processGenerationJob = async (
             false,
           )
 
+    const message = failureMessageOf(failure)
     await deps.generationJobs.update(job.id, {
       status: 'failed',
       finishedAt: now,
-      error: { code: failure.code, message: failure.message, retryable: failure.retryable },
+      error: { code: failure.code, message, retryable: failure.retryable },
     })
     deps.logger.error({ jobId: job.id, code: failure.code, err: error }, '生成ジョブが失敗しました')
+
+    if (loadedShot === null) {
+      // 流さなかったことを残す。黙って省くと、届かない理由がどこにも無くなる（lessons L-015）。
+      deps.logger.warn(
+        { jobId: job.id, shotId: job.shotId },
+        'Shot を読めなかったため、失敗の出来事を流せませんでした',
+      )
+    } else {
+      // **黙って失敗にしない。** 行に残したのと同じ理由を画面まで運ぶ。
+      await publishJobStatus(deps, {
+        shot: loadedShot, jobId: job.id, status: 'failed', takeId: null, error: message, at: now,
+      })
+    }
+
     return { state: 'failed', code: failure.code }
   }
 }

@@ -25,6 +25,7 @@ import {
 } from '../routes/shots-bulk.js'
 import type { ShotRoutesDeps } from '../routes/shots.js'
 import { createRecordingQueue } from './app-deps.js'
+import { createInMemoryProjectEvents } from './in-memory-project-events.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryGenerationJobRepository } from './in-memory-generation-job-repository.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
@@ -95,6 +96,7 @@ const buildBulkFixture = (options: BulkFixtureOptions = {}) => {
   const takes = createInMemoryTakeRepository(options.takes ?? [])
   const generationJobs = createInMemoryGenerationJobRepository()
   const queue = createRecordingQueue()
+  const events = createInMemoryProjectEvents()
 
   const deps: ShotRoutesDeps = {
     shots,
@@ -106,13 +108,15 @@ const buildBulkFixture = (options: BulkFixtureOptions = {}) => {
     ]),
     context: createPhase1EmptyContextSource(),
     queue,
+    events,
+    logger: createLogger('silent'),
   }
 
   const app = new OpenAPIHono({ defaultHook: validationHook })
   registerErrorHandlers(app, createLogger('silent'))
   app.route('/', shotBulkRoutes(deps))
 
-  return { app, project, shots, takes, generationJobs, queue }
+  return { app, project, shots, takes, generationJobs, queue, events }
 }
 
 const threeShots = (project: Project): readonly Shot[] => [
@@ -147,6 +151,8 @@ describe('POST /projects/:projectId/shots/bulk/generate', () => {
       'generating',
       'generating',
     ])
+    // 投入した Shot ごとに 1 通ずつ流れる（PHASE 5.8b）。詳細は shot-events.test.ts
+    expect(f.events.published()).toHaveLength(3)
   })
 
   it('count の分だけ 1 Shot ずつジョブを作る', async () => {

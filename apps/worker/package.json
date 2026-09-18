@@ -19,6 +19,7 @@
     "@ixa/config": "workspace:*",
     "@ixa/db": "workspace:*",
     "@ixa/domain": "workspace:*",
+    "@ixa/events": "workspace:*",
     "@ixa/generation": "workspace:*",
     "@ixa/media": "workspace:*",
     "@ixa/music": "workspace:*",

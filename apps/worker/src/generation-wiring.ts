@@ -18,6 +18,7 @@ import {
   createShotCharacterRepository,
   createShotReferenceRepository,
 } from '@ixa/db'
+import type { ProjectEventPublisher } from '@ixa/domain'
 import type { AppConfig } from '@ixa/config'
 import { Queue } from 'bullmq'
 import type { Redis } from 'ioredis'
@@ -25,7 +26,11 @@ import type { Logger } from 'pino'
 import { createRemotionRenderer } from '@ixa/render'
 import { createMusicAnalyzer } from '@ixa/music'
 import type { AnalysisProcessorDeps } from './analysis/index.js'
-import type { GenerationProcessorDeps, PollScheduler } from './generation/index.js'
+import {
+  createUnwiredEventPublisher,
+  type GenerationProcessorDeps,
+  type PollScheduler,
+} from './generation/index.js'
 import type { MediaProcessorDeps } from './media/index.js'
 import type { RenderProcessorDeps } from './render/index.js'
 import { createReviewWiring, type ReviewWiring } from './review-wiring.js'
@@ -50,11 +55,16 @@ export type GenerationWiring = {
   close(): Promise<void>
 }
 
+/**
+ * 出来事の配信先（Phase 5.8b）。**実体は `packages/events` が持ち、main.ts が注入する。**
+ * 未注入のあいだは何も届かないので、握り潰さず warn を出す口を使う（`generation/events.ts`）。
+ */
 export const createGenerationWiring = (
   config: AppConfig,
   connection: Redis,
   logger: Logger,
   stubOutputDir: string,
+  events?: ProjectEventPublisher,
 ): GenerationWiring => {
   const db = createDbClient(config.database.url)
 
@@ -114,6 +124,7 @@ export const createGenerationWiring = (
         await mediaQueue.add('process', { mediaAssetId })
       },
     },
+    events: events ?? createUnwiredEventPublisher(logger),
     logger,
   }
 

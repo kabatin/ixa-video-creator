@@ -6,6 +6,7 @@ import { createRedisConnection } from './connection.js'
 import { createLogger } from './logger.js'
 import { processNoopJob, type NoopJobData, type NoopJobResult } from './processors/noop.js'
 import { QUEUE_CONFIGS, QUEUE_NAMES, resolveQueueConfigs, type QueueConfig } from './queues.js'
+import { createRedisProjectEvents } from '@ixa/events'
 import { createGenerationWiring, type GenerationWiring } from './generation-wiring.js'
 import { processGenerationJob } from './generation/index.js'
 import { processMediaJob } from './media/index.js'
@@ -57,11 +58,10 @@ const createWorkers = (
       return { echoed: state, processedAt: new Date().toISOString() }
     }
 
-    const worker: NoopWorker = new Worker<NoopJobData, NoopJobResult>(
-      config.name,
-      handler,
-      { connection, concurrency: config.concurrency },
-    )
+    const worker: NoopWorker = new Worker<NoopJobData, NoopJobResult>(config.name, handler, {
+      connection,
+      concurrency: config.concurrency,
+    })
 
     worker.on('completed', (job) => {
       logger.debug({ queue: config.name, jobId: job.id }, 'ジョブが完了しました')
@@ -86,10 +86,12 @@ const closeWorkersWithTimeout = async (
   connection: Redis,
   timeoutMs: number,
   generation: GenerationWiring,
+  onClose: () => Promise<void>,
 ): Promise<'closed' | 'timeout'> => {
   const closeAll = (async (): Promise<void> => {
     await Promise.all(workers.map((worker) => worker.close()))
     await generation.close()
+    await onClose()
     await connection.quit()
   })()
 
@@ -110,6 +112,7 @@ const registerShutdownHandlers = (
   connection: Redis,
   logger: Logger,
   generation: GenerationWiring,
+  onClose: () => Promise<void>,
 ): void => {
   let shuttingDown = false
 
@@ -121,7 +124,7 @@ const registerShutdownHandlers = (
 
     logger.info({ signal }, 'シャットダウンを開始します。実行中のジョブの完了を待ちます')
 
-    closeWorkersWithTimeout(workers, connection, SHUTDOWN_TIMEOUT_MS, generation)
+    closeWorkersWithTimeout(workers, connection, SHUTDOWN_TIMEOUT_MS, generation, onClose)
       .then((result) => {
         if (result === 'timeout') {
           logger.error(
@@ -159,11 +162,19 @@ export const main = (): void => {
   const queueConfigs = resolveQueueConfigs(process.env)
 
   const stubOutputDir = process.env.STUB_OUTPUT_DIR ?? '/tmp/ixa-stub-output'
-  const generation = createGenerationWiring(config, connection, logger, stubOutputDir)
+  /** 生成の状態が変わった瞬間に流す口（PHASE 5.8b）。API 側が SSE で受ける。 */
+  const projectEvents = createRedisProjectEvents({ connection })
+  const generation = createGenerationWiring(
+    config,
+    connection,
+    logger,
+    stubOutputDir,
+    projectEvents.publisher,
+  )
 
   const workers = createWorkers(queueConfigs, connection, logger, generation)
 
-  registerShutdownHandlers(workers, connection, logger, generation)
+  registerShutdownHandlers(workers, connection, logger, generation, () => projectEvents.close())
 
   logger.info(
     { concurrency: Object.fromEntries(queueConfigs.map((c) => [c.name, c.concurrency])) },

@@ -3,7 +3,11 @@ import { cors } from 'hono/cors'
 import type {
   GenerationJobRepository, MediaAssetRepository, ProjectRepository, ShotRepository, TakeRepository,
 } from '@ixa/db'
-import type { GenerationContextSource } from '@ixa/domain'
+import type {
+  GenerationContextSource,
+  ProjectEventPublisher,
+  ProjectEventSubscriber,
+} from '@ixa/domain'
 import type { ProviderRegistry } from '@ixa/provider-core'
 import type { ObjectStorage } from '@ixa/storage'
 import { registerErrorHandlers, validationHook } from './errors.js'
@@ -26,6 +30,7 @@ import { storyboardRoutes } from './routes/storyboard.js'
 import { reviewRoutes, type ReviewQueue } from './routes/reviews.js'
 import { transitionRoutes } from './routes/transitions.js'
 import { clipRoutes } from './routes/clips.js'
+import { eventRoutes } from './routes/events.js'
 import type {
   BrandAssetRepository, CharacterLookRepository, CharacterRepository, LocationRepository,
   MusicAnalysisRepository, MusicTrackRepository, RenderJobRepository, ReviewRepository,
@@ -62,6 +67,11 @@ export type AppDeps = {
   analysisQueue: AnalysisQueue
   reviews: ReviewRepository
   reviewQueue: ReviewQueue
+  /**
+   * Project の出来事を流す・受ける口（PHASE 5.8b）。publish と subscribe の両方を
+   * 同じ実体が持つ。Shot の経路は流し、SSE の経路は受ける。実体は main.ts が注入する。
+   */
+  events: ProjectEventPublisher & ProjectEventSubscriber
   /** media キューへの投入。未配線なら登録のみ行い queued: false を返す。 */
   mediaIngest?: MediaIngestDeps
   storage: ObjectStorage
@@ -109,9 +119,12 @@ export const createApp = (deps: AppDeps) => {
     registry: deps.registry,
     context: deps.generationContext,
     queue: deps.generationQueue,
+    events: deps.events,
+    logger,
   }
   app.route('/', shotRoutes(shotDeps))
   app.route('/', shotBulkRoutes(shotDeps))
+  app.route('/', eventRoutes({ projects, events: deps.events, logger }))
 
   /** Timeline と Render は同じ依存を使う。組み立てを 1 箇所にまとめる。 */
   const timelineDeps = {

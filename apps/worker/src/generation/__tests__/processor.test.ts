@@ -1,5 +1,6 @@
 import {
   createPhase1EmptyContextSource,
+  ProjectEvent,
   type GenerationContextSource,
   type GenerationJob,
   type ShotId,
@@ -17,7 +18,8 @@ import {
 } from '../processor.js'
 import { rebuildSpec } from '../spec.js'
 import {
-  aCharacterBundle, aProject, aShot, contextWith, createRecordingMediaQueue,
+  aCharacterBundle, aProject, aShot, contextWith, createCapturingLogger, createFailingEvents,
+  createRecordingEvents, createRecordingMediaQueue,
   createRecordingScheduler, createTestProvider, inMemoryJobs, inMemoryMediaAssets,
   inMemoryProjects, inMemoryShots, inMemoryTakes, silentLogger, testModel,
 } from './doubles.js'
@@ -64,6 +66,7 @@ const buildFixture = async (
   const mediaAssets = inMemoryMediaAssets()
   const scheduler = createRecordingScheduler()
   const mediaQueue = createRecordingMediaQueue()
+  const events = createRecordingEvents()
   const provider = createTestProvider([MODEL], statuses)
 
   const deps: GenerationProcessorDeps = {
@@ -77,13 +80,14 @@ const buildFixture = async (
     context,
     scheduler,
     mediaQueue,
+    events,
     logger: silentLogger,
     download: fakeDownload,
   }
 
   return {
     deps, job, shot, project, jobs, shots, takes, mediaAssets, scheduler, mediaQueue, specHash,
-    provider,
+    provider, events,
   }
 }
 
@@ -544,5 +548,147 @@ describe('pollDelayMs', () => {
     expect(pollDelayMs(2)).toBe(POLL_BACKOFF_BASE_MS * 2)
     expect(pollDelayMs(3)).toBe(POLL_BACKOFF_BASE_MS * 4)
     expect(pollDelayMs(50)).toBe(POLL_BACKOFF_MAX_MS)
+  })
+})
+
+describe('processGenerationJob（状態の変化を出来事として流す）', () => {
+  /** 流れた出来事はすべて契約（domain）を通ること。形がズレたらここで落ちる。 */
+  const parsedEvents = (f: Fixture) => f.events.published().map((e) => ProjectEvent.parse(e))
+
+  const jobEvents = (f: Fixture) =>
+    parsedEvents(f).filter((e) => e.type === 'generation_job.status')
+
+  it('ジョブを投入したら running の出来事を流す', async () => {
+    const f = await buildFixture([{ state: 'pending', progress: null }])
+
+    await processGenerationJob(f.deps, { generationJobId: f.job.id })
+
+    const events = parsedEvents(f)
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      type: 'generation_job.status',
+      projectId: f.project.id,
+      shotId: f.shot.id,
+      jobId: f.job.id,
+      status: 'running',
+      // 開始時点では Take も理由も無い
+      takeId: null,
+      error: null,
+    })
+  })
+
+  it('Take を確定したら Shot と ジョブ の 2 つを流す', async () => {
+    const f = await buildFixture([SUCCEEDED])
+
+    await runToCompletion(f)
+
+    const take = f.takes.snapshot()[0]
+    const events = parsedEvents(f)
+
+    // running → shot.status(review) → generation_job.status(succeeded) の順
+    expect(events.map((e) => e.type)).toEqual([
+      'generation_job.status', 'shot.status', 'generation_job.status',
+    ])
+    expect(events[1]).toMatchObject({
+      type: 'shot.status',
+      projectId: f.project.id,
+      shotId: f.shot.id,
+      status: 'review',
+    })
+    expect(events[2]).toMatchObject({
+      type: 'generation_job.status',
+      projectId: f.project.id,
+      shotId: f.shot.id,
+      jobId: f.job.id,
+      status: 'succeeded',
+      takeId: take?.id,
+      error: null,
+    })
+  })
+
+  it('失敗したら理由の付いた出来事を流す（黙って失敗にしない）', async () => {
+    const f = await buildFixture([
+      {
+        state: 'failed',
+        error: { code: 'content_policy', message: '生成が拒否されました', retryable: false },
+      },
+    ])
+
+    await runToCompletion(f)
+
+    const failed = jobEvents(f).filter((e) => e.status === 'failed')
+    expect(failed).toHaveLength(1)
+    expect(failed[0]).toMatchObject({
+      projectId: f.project.id,
+      shotId: f.shot.id,
+      jobId: f.job.id,
+      status: 'failed',
+      takeId: null,
+      error: '生成が拒否されました',
+    })
+  })
+
+  it('失敗の出来事の error は必ず中身を持つ', async () => {
+    const f = await buildFixture([SUCCEEDED])
+    // message が空のエラーでも「失敗」だけを流さない（Shot は読めている）
+    const deps = {
+      ...f.deps,
+      projects: { ...f.deps.projects, findById: () => Promise.reject(new Error('')) },
+    }
+
+    await processGenerationJob(deps, { generationJobId: f.job.id })
+
+    const failed = jobEvents(f).filter((e) => e.status === 'failed')
+    expect(failed).toHaveLength(1)
+    expect(failed[0]?.error?.trim()).not.toBe('')
+  })
+
+  it('Shot を読めなければ流さず、流せなかったことを残す', async () => {
+    const f = await buildFixture([SUCCEEDED])
+    const captured = createCapturingLogger()
+    const deps = {
+      ...f.deps,
+      shots: { ...f.shots, findById: () => Promise.resolve(null) },
+      logger: captured.logger,
+    }
+
+    const outcome = await processGenerationJob(deps, { generationJobId: f.job.id })
+
+    expect(outcome).toEqual({ state: 'failed', code: 'shot_missing' })
+    // projectId が分からないので流せない。だが黙って省かない（lessons L-015）
+    expect(f.events.published()).toHaveLength(0)
+    expect(captured.lines().some((l) => l.msg.includes('失敗の出来事を流せませんでした'))).toBe(true)
+  })
+
+  it('publish が失敗しても Take は確定し、warn が残る', async () => {
+    const f = await buildFixture([SUCCEEDED])
+    const captured = createCapturingLogger()
+    const deps = { ...f.deps, events: createFailingEvents(), logger: captured.logger }
+
+    await processGenerationJob(deps, { generationJobId: f.job.id })
+    const second = await processGenerationJob(deps, { generationJobId: f.job.id })
+
+    /**
+     * 通知は状態変更への上乗せ。届かなかったことを理由に Take を巻き戻さない
+     * （`ProjectEventPublisher` の契約）。
+     */
+    expect(second.state).toBe('succeeded')
+    expect(f.takes.snapshot()).toHaveLength(1)
+    expect(f.jobs.snapshot()[0]?.status).toBe('succeeded')
+    expect(f.shots.snapshot()[0]?.status).toBe('review')
+
+    const warns = captured.lines().filter((l) => l.msg.includes('出来事を流せませんでした'))
+    // running / shot.status / generation_job.status の 3 回ぶん
+    expect(warns).toHaveLength(3)
+    expect(warns.every((l) => l.jobId === f.job.id)).toBe(true)
+  })
+
+  it('at は流す側の時計を使う', async () => {
+    const f = await buildFixture([{ state: 'pending', progress: null }])
+    const at = new Date('2026-09-18T12:34:56.000Z')
+
+    await processGenerationJob({ ...f.deps, now: () => at }, { generationJobId: f.job.id })
+
+    expect(parsedEvents(f).map((e) => e.at)).toEqual([at.toISOString()])
   })
 })

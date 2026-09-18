@@ -22,6 +22,7 @@ import {
   type ShotId,
   type Take,
   CostLimits as CostLimitsSchema,
+  type ProjectEventPublisher,
   DEFAULT_COST_LIMITS,
   checkCostLimits,
   type CostLimits,
@@ -44,6 +45,7 @@ import {
   UnknownModelError,
 } from '@ixa/provider-core'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
+import type { Logger } from '../logger.js'
 import {
   errorContent, fail, listResponse, ok, okList, successResponse, type FieldErrors,
 } from '../response.js'
@@ -281,6 +283,9 @@ export type ShotRoutesDeps = {
   registry: ProviderRegistry
   context: GenerationContextSource
   queue: GenerationQueue
+  /** 状態を変えた瞬間に出来事を流す先（PHASE 5.8b）。配信の実体は main.ts が注入する。 */
+  events: ProjectEventPublisher
+  logger: Logger
 }
 
 /**
@@ -342,18 +347,51 @@ export const enqueueJobs = async (
 }
 
 /**
+ * Shot の状態が変わったことを流す（tasks/todo.md PHASE 5.8b）。
+ *
+ * **失敗しても呼び出し元の処理を止めない。** 通知は状態変更への上乗せで、
+ * 通知が落ちたからといって採用や投入を巻き戻すことはない（domain の
+ * `ProjectEventPublisher` の約束）。**ただし黙って捨てない。** 必ずログに残す。
+ */
+export const publishShotStatus = async (
+  deps: Pick<ShotRoutesDeps, 'events' | 'logger'>,
+  shot: Pick<Shot, 'id' | 'projectId' | 'status'>,
+): Promise<void> => {
+  try {
+    await deps.events.publish({
+      type: 'shot.status',
+      projectId: shot.projectId,
+      shotId: shot.id,
+      status: shot.status,
+      at: new Date().toISOString(),
+    })
+  } catch (error) {
+    deps.logger.warn(
+      { err: error, shotId: shot.id, status: shot.status },
+      'Shot の状態変化を配信できませんでした',
+    )
+  }
+}
+
+/**
  * 採用 Take を確定し、Shot の状態を進める。
  *
  * **1 件ずつの採用と一括採用で同じ判断を使う**（tasks/lessons.md L-016）。
  * 人が承認済みの Take なら見直す先が無いので `approved`、それ以外は `review`。
  */
 export const applySelectedTake = async (
-  deps: Pick<ShotRoutesDeps, 'shots'>,
+  deps: Pick<ShotRoutesDeps, 'shots' | 'events' | 'logger'>,
   shotId: ShotId,
   take: Pick<Take, 'id' | 'humanVerdict'>,
 ): Promise<Shot> => {
   await deps.shots.selectTake(shotId, take.id)
-  return deps.shots.updateStatus(shotId, take.humanVerdict === 'approved' ? 'approved' : 'review')
+  const updated = await deps.shots.updateStatus(
+    shotId,
+    take.humanVerdict === 'approved' ? 'approved' : 'review',
+  )
+  // 1 件ずつの採用も一括採用もここを通るので、出来事もここで 1 回だけ流す。
+  await publishShotStatus(deps, updated)
+  return updated
 }
 
 /**
@@ -491,7 +529,8 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
       const duplicate = existing.find((t) => t.specHash === compiled.specHash) ?? null
 
       const jobIds = await enqueueJobs(deps, shot, compiled, model, count)
-      await deps.shots.updateStatus(shot.id, 'generating')
+      const generating = await deps.shots.updateStatus(shot.id, 'generating')
+      await publishShotStatus(deps, generating)
 
       return c.json(
         ok({

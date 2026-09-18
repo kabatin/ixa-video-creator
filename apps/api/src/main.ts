@@ -34,6 +34,7 @@ import { createStubVideoProvider } from '@ixa/provider-video'
 import { createS3Storage } from '@ixa/storage'
 import { Queue } from 'bullmq'
 import IORedis from 'ioredis'
+import { createRedisProjectEvents } from '@ixa/events'
 import { createApp } from './app.js'
 import { createLogger, type Logger } from './logger.js'
 import { GENERATION_QUEUE_NAME, type GenerationQueue } from './routes/shots.js'
@@ -59,9 +60,12 @@ const closeAllWithTimeout = async (
   db: DbClient,
   queue: Queue,
   timeoutMs: number,
+  /** サーバの次、キューの前に閉じるもの（出来事の配信など）。 */
+  onClose: () => Promise<void> = async () => {},
 ): Promise<'closed' | 'timeout'> => {
   const closeAll = (async (): Promise<'closed'> => {
     await closeServer(server)
+    await onClose()
     await queue.close()
     await closeDbClient(db)
     return 'closed'
@@ -83,6 +87,7 @@ const registerShutdownHandlers = (
   db: DbClient,
   queue: Queue,
   logger: Logger,
+  onClose: () => Promise<void> = async () => {},
 ): void => {
   let shuttingDown = false
 
@@ -94,7 +99,7 @@ const registerShutdownHandlers = (
 
     logger.info({ signal }, 'シャットダウンを開始します')
 
-    closeAllWithTimeout(server, db, queue, SHUTDOWN_TIMEOUT_MS)
+    closeAllWithTimeout(server, db, queue, SHUTDOWN_TIMEOUT_MS, onClose)
       .then((result) => {
         if (result === 'timeout') {
           logger.error(
@@ -130,6 +135,11 @@ export const main = (): void => {
 
   // ジョブデータは ID のみ。実データは worker が DB から読む（ADR-0008）。
   const connection = new IORedis(config.redis.url, { maxRetriesPerRequest: null })
+  /**
+   * Project の出来事（生成の状態など）を流す・受ける口（PHASE 5.8b）。
+   * 購読は専用の接続が要るので、キュー用の接続を複製して使う。
+   */
+  const projectEvents = createRedisProjectEvents({ connection })
   const generationQueue = new Queue(GENERATION_QUEUE_NAME, { connection })
   const queuePort: GenerationQueue = {
     enqueue: async (generationJobId) => {
@@ -216,12 +226,22 @@ export const main = (): void => {
      * Shot に紐づいた登場人物・Look・識別画像・衣装画像を実際に解決する。
      */
     generationContext: createGenerationContextSource({
-      shotCharacters, characters, looks, locations, shotReferences,
-      shots, takes, mediaAssets,
+      shotCharacters,
+      characters,
+      looks,
+      locations,
+      shotReferences,
+      shots,
+      takes,
+      mediaAssets,
     }),
     generationQueue: queuePort,
     storage,
     corsOrigins: config.corsOrigins,
+    events: {
+      publish: projectEvents.publisher.publish,
+      subscribe: projectEvents.subscriber.subscribe,
+    },
     logger,
   })
 
@@ -229,7 +249,7 @@ export const main = (): void => {
     logger.info({ port: info.port }, 'api を起動しました')
   })
 
-  registerShutdownHandlers(server, db, generationQueue, logger)
+  registerShutdownHandlers(server, db, generationQueue, logger, () => projectEvents.close())
 }
 
 try {

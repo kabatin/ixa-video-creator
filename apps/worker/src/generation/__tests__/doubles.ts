@@ -37,6 +37,8 @@ import {
   type GenerationJob,
   type MediaAsset,
   type Project,
+  type ProjectEvent,
+  type ProjectEventPublisher,
   type Shot,
   type Take,
 } from '@ixa/domain'
@@ -44,7 +46,7 @@ import type {
   ProviderJobStatus, VideoGenerationRequest, VideoModelCapabilities, VideoModelDescriptor,
   VideoProvider,
 } from '@ixa/provider-core'
-import pino from 'pino'
+import pino, { type Logger } from 'pino'
 import type { GenerationJobData } from '../job-data.js'
 import type { MediaJobQueue, PollScheduler } from '../processor.js'
 
@@ -185,6 +187,48 @@ export const createRecordingMediaQueue = (): RecordingMediaQueue => {
       return Promise.resolve()
     },
   }
+}
+
+/** 流れた出来事を記録するだけの口。Redis には接続しない。 */
+export type RecordingEvents = ProjectEventPublisher & {
+  readonly published: () => readonly ProjectEvent[]
+}
+
+export const createRecordingEvents = (): RecordingEvents => {
+  const published: ProjectEvent[] = []
+  return {
+    published: () => published,
+    publish: (event) => {
+      published.push(event)
+      return Promise.resolve()
+    },
+  }
+}
+
+/**
+ * publish が必ず失敗する口。**通知が落ちても本処理が成立すること**を確かめるために使う
+ * （`ProjectEventPublisher` の契約）。
+ */
+export const createFailingEvents = (
+  message = 'Redis に接続できません',
+): ProjectEventPublisher => ({
+  publish: () => Promise.reject(new Error(message)),
+})
+
+/** 出力を貯める logger。warn が本当に残るかを見るために使う。 */
+export type CapturingLogger = {
+  readonly logger: Logger
+  readonly lines: () => readonly { level: number; msg: string; jobId?: string }[]
+}
+
+export const createCapturingLogger = (): CapturingLogger => {
+  const lines: { level: number; msg: string; jobId?: string }[] = []
+  const logger = pino({ level: 'warn' }, {
+    write: (chunk: string) => {
+      lines.push(JSON.parse(chunk) as { level: number; msg: string; jobId?: string })
+    },
+  })
+  return { logger, lines: () => lines }
 }
 
 export const inMemoryProjects = (seed: readonly Project[]): ProjectRepository => ({

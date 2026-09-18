@@ -9,10 +9,12 @@ import { ShotLocationEditor, type LocationSaveFeedback } from '@/components/shot
 import { ShotSummary } from '@/components/shot-summary'
 import { TakeGrid } from '@/components/take-grid'
 import { ReviewPanel } from '@/components/review-panel'
-import { createApiClient } from '@/lib/api-client'
+import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { GenerateTakesBody, type WireGenerateResult } from '@/lib/api-schemas'
 import { startPolling, type PollStopReason } from '@/lib/poller'
+import { useProjectEvents } from '@/lib/use-project-events'
+import { LiveStatusBadge } from '@/components/live-status-badge'
 import { isGeneratingStatus } from '@/lib/shot-display'
 import { describeLocation } from '@/lib/shot-location'
 
@@ -75,6 +77,21 @@ export const ShotWorkbench = ({
     setSelectedTakeId(latest.selectedTakeId)
     return next
   }, [shot.id])
+
+  /**
+   * この Shot の出来事が来たら即座に引き直す（PHASE 5.8b）。
+   * ポーリングは繋がっていない間の保険として残す。
+   */
+  const live = useProjectEvents({
+    projectId: shot.projectId,
+    baseUrl: resolveApiBaseUrl(),
+    onEvent: (event) => {
+      if (event.shotId !== shot.id) return
+      void refreshTakes().catch((cause: unknown) => {
+        setError(`Take を取得できませんでした: ${describeError(cause)}`)
+      })
+    },
+  })
 
   useEffect(() => {
     if (!polling) return undefined
@@ -200,6 +217,11 @@ export const ShotWorkbench = ({
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-slate-900">Take 比較</h2>
+          <LiveStatusBadge
+            state={live.state}
+            lastEventAt={live.lastEventAt}
+            attempt={live.attempt}
+          />
           <button
             type="button"
             disabled={busy}
@@ -231,9 +253,7 @@ export const ShotWorkbench = ({
           disabled={busy}
           onVerdictSaved={(updated) => {
             // 判定は Take の行を書き換えるので、一覧の該当 Take だけ差し替える。
-            setTakes((current) =>
-              current.map((take) => (take.id === updated.id ? updated : take)),
-            )
+            setTakes((current) => current.map((take) => (take.id === updated.id ? updated : take)))
           }}
         />
       )}

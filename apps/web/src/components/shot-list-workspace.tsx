@@ -12,8 +12,9 @@ import {
   type BulkTakeRule,
   type BulkUpdatePatch,
 } from '@/components/bulk-action-bar'
+import { LiveStatusBadge } from '@/components/live-status-badge'
 import { ShotTable } from '@/components/shot-table'
-import { createApiClient } from '@/lib/api-client'
+import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { SHOT_SIZE_OPTIONS } from '@/lib/camera-options'
 import { MODEL_OPTIONS } from '@/lib/generation-options'
@@ -30,6 +31,8 @@ import {
   type ShotSelection,
 } from '@/lib/shot-bulk'
 import { parseBulkGenerateRejection, type BulkGenerateRejection } from '@/lib/shot-bulk-api'
+import { applyProjectEvent } from '@/lib/project-events'
+import { useProjectEvents } from '@/lib/use-project-events'
 
 /**
  * Shot 一覧の操作場（P58）。選ぶ・行の中で直す・まとめて動かす、を 1 画面で行う。
@@ -68,6 +71,28 @@ export const ShotListWorkspace = ({
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<BulkOutcome | null>(null)
   const [rowError, setRowError] = useState<string | null>(null)
+  /** 開いてから出来事で知った、新しい Take の数。黙って増やさず、数として見せる。 */
+  const [newTakeCount, setNewTakeCount] = useState(0)
+
+  /**
+   * 生成の状態は SSE で受けてその場で書き換える（PHASE 5.8b）。
+   * 一括で 27 件を投入したあと、27 件の状態を再読み込みで追わせない。
+   * 繋がっていない間は「表示が古い可能性がある」と出す（L-015）。
+   */
+  const live = useProjectEvents({
+    projectId,
+    baseUrl: resolveApiBaseUrl(),
+    onEvent: (event) => {
+      setShots((current) => applyProjectEvent(current, event).shots)
+      if (
+        event.type === 'generation_job.status' &&
+        event.status === 'succeeded' &&
+        event.takeId !== null
+      ) {
+        setNewTakeCount((count) => count + 1)
+      }
+    },
+  })
 
   const visibleIds = useMemo(() => shots.map((shot) => shot.id), [shots])
   const headerState = headerCheckboxState(selection, visibleIds)
@@ -202,6 +227,20 @@ export const ShotListWorkspace = ({
 
   return (
     <div className="space-y-4 pb-32">
+      <div className="flex flex-wrap items-center gap-3">
+        <LiveStatusBadge state={live.state} lastEventAt={live.lastEventAt} attempt={live.attempt} />
+        {newTakeCount > 0 && (
+          <p role="status" className="text-sm text-slate-700">
+            {`開いてから ${String(newTakeCount)} 本の Take ができました。`}
+          </p>
+        )}
+        {live.invalidCount > 0 && (
+          <p role="alert" className="text-sm text-amber-800">
+            {`読めない更新が ${String(live.invalidCount)} 件ありました。表示が古い可能性があります。`}
+          </p>
+        )}
+      </div>
+
       {rowError !== null && (
         <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-800">
           {rowError}
