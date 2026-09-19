@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { AnalysisStarter } from '@/components/analysis-starter'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty } from '@/components/workbench/panels/panel-frame'
-import { Button } from '@/components/ui/button'
+import { AddTrackButton } from '@/components/workbench/ui/add-track-button'
 import type { WireMusicAnalysis } from '@/lib/music-api'
 
 /**
@@ -17,7 +17,10 @@ import type { WireMusicAnalysis } from '@/lib/music-api'
 export const MusicGate = ({
   children,
 }: {
-  readonly children: (music: { readonly track: MusicTrack; readonly analysis: WireMusicAnalysis }) => ReactNode
+  readonly children: (music: {
+    readonly track: MusicTrack
+    readonly analysis: WireMusicAnalysis
+  }) => ReactNode
 }) => {
   const workbench = useWorkbench()
 
@@ -35,15 +38,7 @@ export const MusicGate = ({
         title="楽曲が登録されていません"
         hint="音源をアップロードして楽曲として登録すると、波形の上で区切りを置けます。"
       >
-        <Button
-          tone="primary"
-          size="sm"
-          onClick={() => {
-            workbench.openDialog('music')
-          }}
-        >
-          楽曲を登録
-        </Button>
+        <AddTrackButton />
       </PanelEmpty>
     )
   }

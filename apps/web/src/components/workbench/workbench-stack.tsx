@@ -9,10 +9,15 @@ import { PreviewPanel } from '@/components/workbench/panels/preview-panel'
 import { ShotListPanel } from '@/components/workbench/panels/shot-list-panel'
 import { StoryboardPanel } from '@/components/workbench/panels/storyboard-panel'
 import { TimelinePanel } from '@/components/workbench/panels/timeline-panel'
+import { ViewerPanel } from '@/components/workbench/panels/viewer-panel'
 import { PANEL_SPECS, type PanelId } from '@/lib/workbench-layout'
 
 /** 狭い画面で縦に並べる順。判断に要る順（絵 → 選ぶ → 直す → 比べる → 切る）。 */
-const STACK: readonly { readonly id: PanelId; readonly body: ReactNode; readonly tall?: boolean }[] = [
+const STACK: readonly {
+  readonly id: PanelId
+  readonly body: ReactNode
+  readonly tall?: boolean
+}[] = [
   { id: 'storyboard', body: <StoryboardPanel /> },
   { id: 'shots', body: <ShotListPanel /> },
   { id: 'inspector', body: <InspectorPanel />, tall: true },
@@ -21,6 +26,7 @@ const STACK: readonly { readonly id: PanelId; readonly body: ReactNode; readonly
   { id: 'cutter', body: <CutterPanel visible />, tall: true },
   { id: 'timeline', body: <TimelinePanel />, tall: true },
   { id: 'assets', body: <AssetsPanel /> },
+  { id: 'viewer', body: <ViewerPanel /> },
 ]
 
 export const stackSectionId = (id: PanelId): string => `workbench-section-${id}`

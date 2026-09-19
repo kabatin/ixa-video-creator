@@ -5,6 +5,7 @@ import { StoryboardGrid } from '@/components/workbench/storyboard-grid'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty, PanelFrame, PanelNotice } from '@/components/workbench/panels/panel-frame'
 import { Button } from '@/components/ui/button'
+import { AddTrackButton } from '@/components/workbench/ui/add-track-button'
 import { createApiClient } from '@/lib/api-client'
 import {
   beatAlignmentToneClass,
@@ -95,7 +96,9 @@ export const StoryboardPanel = () => {
           </Button>
         </PanelNotice>
       )}
-      {workbench.posterError !== null && <PanelNotice tone="warn">{workbench.posterError}</PanelNotice>}
+      {workbench.posterError !== null && (
+        <PanelNotice tone="warn">{workbench.posterError}</PanelNotice>
+      )}
       <StoryboardGrid
         shots={shots}
         posters={workbench.posters}
@@ -116,15 +119,7 @@ const StoryboardEmpty = () => {
         title="楽曲が登録されていません"
         hint="曲を登録して解析すると、波形の上で区切りを置いて Shot にできます。"
       >
-        <Button
-          tone="primary"
-          size="sm"
-          onClick={() => {
-            workbench.openDialog('music')
-          }}
-        >
-          楽曲を登録
-        </Button>
+        <AddTrackButton />
       </PanelEmpty>
     )
   }

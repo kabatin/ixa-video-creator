@@ -1,4 +1,5 @@
 import {
+  UpdateMusicTrackPatch,
   CreateMusicTrackInput,
   MusicSection,
   MusicTrack,
@@ -104,6 +105,12 @@ export type MusicApi = {
   allocateShots: (projectId: ProjectId, body: AllocateShotsBody) => Promise<WireAllocateResult>
   /** 区切りの列から Shot を作る。セクション解析を介さない経路。 */
   createCuts: (projectId: ProjectId, body: CreateCutsBody) => Promise<WireCreateCutsResult>
+  /** 題名・オフセット・音量を直す（PHASE 8 / ADR-0022）。マスターは `setMasterTrack`。 */
+  updateMusicTrack: (id: MusicTrackId, patch: UpdateMusicTrackPatch) => Promise<MusicTrack>
+  /** この曲をマスターにする。**降格した曲も含めて Project の全曲**を返す。 */
+  setMasterTrack: (id: MusicTrackId) => Promise<MusicTrack[]>
+  /** ソフトデリート。マスターを消したら残りの最古がマスターになる（サーバが決める）。 */
+  deleteMusicTrack: (id: MusicTrackId) => Promise<void>
 }
 
 const trackPath = (id: MusicTrackId, suffix = ''): string =>
@@ -139,4 +146,12 @@ export const createMusicApi = (requester: Requester): MusicApi => ({
       body,
       WireCreateCutsResult,
     ),
+
+  updateMusicTrack: async (id, patch) =>
+    requester.patch(trackPath(id), UpdateMusicTrackPatch.parse(patch), WireMusicTrack),
+
+  setMasterTrack: async (id) =>
+    requester.post(trackPath(id, '/set-master'), undefined, WireMusicTrackList),
+
+  deleteMusicTrack: async (id) => requester.remove(trackPath(id)),
 })

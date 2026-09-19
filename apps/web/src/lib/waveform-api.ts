@@ -99,7 +99,9 @@ export const fetchWaveformPeaks = async (
 
   const parsed = WaveformPeaksPayload.safeParse(json)
   if (!parsed.success) {
-    return failed(`${context}の形が想定と違います — ${parsed.error.issues[0]?.message ?? '検証に失敗'}`)
+    return failed(
+      `${context}の形が想定と違います — ${parsed.error.issues[0]?.message ?? '検証に失敗'}`,
+    )
   }
 
   const data = parsed.data

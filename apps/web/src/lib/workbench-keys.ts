@@ -28,17 +28,17 @@ export type WorkbenchKeyEvent = {
 }
 
 export type WorkbenchKeyCommand =
-  | 'undo'
-  | 'redo'
-  | 'history'
-  | 'preferences'
-  | 'toggle-play'
-  | 'previous-shot'
-  | 'next-shot'
+  'undo' | 'redo' | 'history' | 'preferences' | 'toggle-play' | 'previous-shot' | 'next-shot'
 
 /** 押すと自分が動く要素。Space や矢印はそちらのもの。 */
 const OWN_KEYS_TAGS: ReadonlySet<string> = new Set(['BUTTON', 'A', 'SUMMARY'])
-const OWN_KEYS_ROLES: ReadonlySet<string> = new Set(['menuitem', 'tab', 'option', 'slider', 'checkbox'])
+const OWN_KEYS_ROLES: ReadonlySet<string> = new Set([
+  'menuitem',
+  'tab',
+  'option',
+  'slider',
+  'checkbox',
+])
 
 const ownsPlainKeys = (target: WorkbenchKeyEvent['target']): boolean =>
   target !== null &&

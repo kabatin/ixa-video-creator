@@ -129,7 +129,10 @@ export const validateProjectSettings = (
     return { ok: false, errors: { name: 'プロジェクト名を入力してください。' } }
   }
   if (name.length > NAME_MAX) {
-    return { ok: false, errors: { name: `プロジェクト名は ${String(NAME_MAX)} 文字以内で入力してください。` } }
+    return {
+      ok: false,
+      errors: { name: `プロジェクト名は ${String(NAME_MAX)} 文字以内で入力してください。` },
+    }
   }
 
   const aspectRatio = AspectRatio.safeParse(values.aspectRatio)

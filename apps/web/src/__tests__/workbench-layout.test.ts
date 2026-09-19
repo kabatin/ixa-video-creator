@@ -7,8 +7,6 @@ import {
   SIDE_WIDTH_PX,
   addDefaultPanels,
   applyPreset,
-  assetPanelId,
-  openAssetPanel,
   sizeDefaultAreas,
   clearWorkbenchLayout,
   focusPanel,
@@ -56,7 +54,7 @@ describe('既定配置', () => {
 
   it('全パネルが 1 回ずつある', () => {
     expect(added.map((options) => options.id).sort()).toEqual([...PANEL_IDS].sort())
-    // §10: 設計書の 8 パネル（+ 絵コンテ下書き・自動で割る）
+    // §10: 設計書の 8 パネル（+ 素材ビューア・絵コンテ下書き。自動で割るは PHASE 8 で外した）
     expect(added.map((options) => options.id)).toEqual(
       expect.arrayContaining([
         'storyboard',
@@ -163,8 +161,8 @@ describe('保存', () => {
     }
   }
 
-  it('鍵は ixa:workbench-layout:v1:<projectId>', () => {
-    expect(workbenchLayoutKey(projectId)).toBe(`ixa:workbench-layout:v1:${PROJECT_ID}`)
+  it('鍵は ixa:workbench-layout:v2:<projectId>（PHASE 8.2 で版を上げた）', () => {
+    expect(workbenchLayoutKey(projectId)).toBe(`ixa:workbench-layout:v2:${PROJECT_ID}`)
   })
 
   it('無ければ missing', () => {
@@ -192,34 +190,6 @@ describe('保存', () => {
     const storage = memory()
     storage.setItem(`ixa:storyboard-layout:v4:${PROJECT_ID}`, '{"grid":{},"panels":{}}')
     expect(readStoredWorkbenchLayout(storage, projectId)).toEqual({ state: 'missing' })
-  })
-})
-
-describe('素材のタブ（7.3）', () => {
-  it('中央上のタブとして開く', () => {
-    const { api, added } = fakeDock(['storyboard', 'cutter'])
-    openAssetPanel(api, { kind: 'locations' })
-    expect(added).toEqual([
-      expect.objectContaining({
-        id: 'asset:locations',
-        component: 'asset',
-        params: { asset: { kind: 'locations' } },
-        position: { referencePanel: 'storyboard', direction: 'within' },
-      }),
-    ])
-  })
-
-  it('同じ素材は 2 枚開かず、前に出す', () => {
-    const { api, added, activated } = fakeDock(['storyboard', 'asset:character:c1'])
-    openAssetPanel(api, { kind: 'character', id: 'c1', label: 'ヒーロー' })
-    expect(added).toEqual([])
-    expect(activated).toEqual(['asset:character:c1'])
-  })
-
-  it('キャラクターごとに別のタブ', () => {
-    expect(assetPanelId({ kind: 'character', id: 'a', label: 'A' })).not.toBe(
-      assetPanelId({ kind: 'character', id: 'b', label: 'B' }),
-    )
   })
 })
 

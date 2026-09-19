@@ -28,7 +28,10 @@ export const ComparePanel = () => {
   if (shot === null) {
     return (
       <PanelFrame>
-        <PanelEmpty title="Shot を選んでください" hint="ストーリーボードか右の一覧で選ぶと、ここに Take が並びます。" />
+        <PanelEmpty
+          title="Shot を選んでください"
+          hint="ストーリーボードか右の一覧で選ぶと、ここに Take が並びます。"
+        />
       </PanelFrame>
     )
   }

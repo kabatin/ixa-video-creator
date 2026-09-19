@@ -54,8 +54,7 @@ export const isSupportedAudioFile = (file: AudioCandidate): boolean =>
   isAudioContentType(file.type) || AUDIO_EXTENSIONS.includes(fileExtension(file.name))
 
 export type AudioValidation =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly reason: string }
+  { readonly ok: true } | { readonly ok: false; readonly reason: string }
 
 const SUPPORTED_LIST = AUDIO_EXTENSIONS.join(' / ')
 
@@ -86,8 +85,7 @@ export const deriveTrackTitle = (fileName: string): string => {
 }
 
 export type TitleValidation =
-  | { readonly ok: true; readonly title: string }
-  | { readonly ok: false; readonly reason: string }
+  { readonly ok: true; readonly title: string } | { readonly ok: false; readonly reason: string }
 
 export const validateTrackTitle = (raw: string): TitleValidation => {
   const title = raw.trim()
@@ -138,11 +136,7 @@ export type UploadProgress = {
  * 全体の進捗を 0..1 で返す。
  * 送信中だけバイト数で細かく動き、それ以外は段階の境目で跳ねる。
  */
-export const uploadProgressRatio = ({
-  phase,
-  sentBytes,
-  totalBytes,
-}: UploadProgress): number => {
+export const uploadProgressRatio = ({ phase, sentBytes, totalBytes }: UploadProgress): number => {
   if (phase !== 'upload') return PHASE_FLOOR[phase]
   if (!Number.isFinite(totalBytes) || totalBytes <= 0) return PHASE_FLOOR.upload
   const sent = clampRatio(sentBytes / totalBytes)
@@ -179,8 +173,7 @@ export type AnalysisFreshnessInput = {
 }
 
 export type AnalysisFreshness =
-  | { readonly kind: 'waiting' }
-  | { readonly kind: 'fresh'; readonly analysis: WireMusicAnalysis }
+  { readonly kind: 'waiting' } | { readonly kind: 'fresh'; readonly analysis: WireMusicAnalysis }
 
 export const decideAnalysisFreshness = ({
   previousCreatedAt,

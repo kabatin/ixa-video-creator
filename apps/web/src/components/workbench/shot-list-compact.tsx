@@ -58,7 +58,9 @@ export const ShotListCompact = ({
               type="checkbox"
               checked={headerState === 'all'}
               disabled={busy || shots.length === 0}
-              aria-label={headerState === 'all' ? 'すべての選択を解除' : '表示中の Shot をすべて選択'}
+              aria-label={
+                headerState === 'all' ? 'すべての選択を解除' : '表示中の Shot をすべて選択'
+              }
               onChange={onToggleAll}
               className="h-3.5 w-3.5"
             />

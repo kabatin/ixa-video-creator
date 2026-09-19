@@ -65,8 +65,7 @@ export const createReviewApi = (requester: Requester): ReviewApi => ({
   requestReview: async (takeId) =>
     requester.post(takePath(takeId, '/review'), undefined, WireReviewAccepted),
 
-  listReviewRuns: async (takeId) =>
-    requester.get(takePath(takeId, '/reviews'), WireReviewRunList),
+  listReviewRuns: async (takeId) => requester.get(takePath(takeId, '/reviews'), WireReviewRunList),
 
   getReviewRun: async (id) =>
     requester.get(`/review-runs/${encodeURIComponent(id)}`, WireReviewDetail),

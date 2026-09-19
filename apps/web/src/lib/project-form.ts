@@ -89,13 +89,10 @@ export const validateProjectForm = (
   })
 
   if (!parsed.success) {
-    const errors = parsed.error.issues.reduce<FieldErrors>(
-      (acc, issue) => {
-        const field = fieldForPath(issue.path)
-        return field in acc ? acc : { ...acc, [field]: issue.message }
-      },
-      {},
-    )
+    const errors = parsed.error.issues.reduce<FieldErrors>((acc, issue) => {
+      const field = fieldForPath(issue.path)
+      return field in acc ? acc : { ...acc, [field]: issue.message }
+    }, {})
     return { ok: false, errors }
   }
 

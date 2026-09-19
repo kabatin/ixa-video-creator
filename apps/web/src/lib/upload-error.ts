@@ -28,10 +28,7 @@ export class UploadError extends Error {
 }
 
 /** 段階ごとに実行し、失敗を必ず `UploadError` へ包み直す。 */
-export const runUploadStage = async <T>(
-  stage: UploadStage,
-  task: () => Promise<T>,
-): Promise<T> => {
+export const runUploadStage = async <T>(stage: UploadStage, task: () => Promise<T>): Promise<T> => {
   try {
     return await task()
   } catch (cause) {

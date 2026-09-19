@@ -63,16 +63,10 @@ export type CharacterApi = {
   deleteLook: (id: CharacterLookId) => Promise<void>
 
   listLookImages: (lookId: CharacterLookId) => Promise<CharacterLookImage[]>
-  addLookImage: (
-    lookId: CharacterLookId,
-    input: CreateLookImageBody,
-  ) => Promise<CharacterLookImage>
+  addLookImage: (lookId: CharacterLookId, input: CreateLookImageBody) => Promise<CharacterLookImage>
   removeLookImage: (id: CharacterLookImageId) => Promise<void>
   /** 承認 Take のフレームを canonical reference に昇格させ、Look のドリフトを止める。 */
-  setCanonicalFrame: (
-    lookId: CharacterLookId,
-    mediaAssetId: MediaAssetId,
-  ) => Promise<CharacterLook>
+  setCanonicalFrame: (lookId: CharacterLookId, mediaAssetId: MediaAssetId) => Promise<CharacterLook>
 }
 
 export const createCharacterApi = (requester: Requester): CharacterApi => ({
@@ -101,8 +95,7 @@ export const createCharacterApi = (requester: Requester): CharacterApi => ({
       WireIdentityImage,
     ),
 
-  removeIdentityImage: async (id) =>
-    requester.remove(`/identity-images/${encodeURIComponent(id)}`),
+  removeIdentityImage: async (id) => requester.remove(`/identity-images/${encodeURIComponent(id)}`),
 
   setPrimaryIdentityImage: async (id) =>
     requester.post(

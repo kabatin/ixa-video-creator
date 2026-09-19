@@ -81,10 +81,8 @@ export const UNSAVED_ROW_CONFIRM_MESSAGE = 'まだ保存していない行を取
  * 一覧を読み込めなかったときや、選択中のキャラクターが削除済みのときは名前を引けない。
  * そこで空文字に潰すと「誰も付いていない」と誤解されるため、ID をそのまま出す。
  */
-export const describeCharacter = (
-  characterId: string,
-  characters: readonly Character[],
-): string => characters.find((c) => c.id === characterId)?.displayName ?? characterId
+export const describeCharacter = (characterId: string, characters: readonly Character[]): string =>
+  characters.find((c) => c.id === characterId)?.displayName ?? characterId
 
 export const describeLook = (lookId: string, looks: readonly CharacterLook[]): string =>
   looks.find((look) => look.id === lookId)?.name ?? lookId

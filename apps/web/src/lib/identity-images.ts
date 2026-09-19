@@ -67,9 +67,7 @@ export type IdentityImageSummary = {
   readonly hasAny: boolean
 }
 
-export const summarizeIdentityImages = (
-  images: readonly RoleBearing[],
-): IdentityImageSummary => ({
+export const summarizeIdentityImages = (images: readonly RoleBearing[]): IdentityImageSummary => ({
   total: images.length,
   hasFourView: hasFourView(images),
   hasAny: images.length > 0,

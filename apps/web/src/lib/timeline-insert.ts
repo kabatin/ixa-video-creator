@@ -401,7 +401,7 @@ export const probeTextInsertion = (args: {
       blocking === null
         ? `${formatClock(atSec)} には置けません。空いているところを指してください`
         : `${formatClock(atSec)} には既に ${describeClipContent(blocking.content)} が` +
-          `置かれています（${formatTimeSpan(blocking)}）`,
+            `置かれています（${formatTimeSpan(blocking)}）`,
       blocking?.id ?? null,
     )
   }
@@ -501,7 +501,9 @@ export const validateTextClipInsert = (args: {
 
   const issues = [
     ...issuesOf([
-      template.success ? null : { field: 'templateKey', message: 'テロップの見せ方を選んでください' },
+      template.success
+        ? null
+        : { field: 'templateKey', message: 'テロップの見せ方を選んでください' },
     ]),
     ...textIssues(draft.text),
     ...issuesOf([

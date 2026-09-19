@@ -26,7 +26,14 @@ export const useQueryNavigation = (query: WorkbenchQuery): void => {
     ;[query.main, query.bottom, query.side].forEach((panel) => {
       if (panel !== null) current.focusPanel(panel)
     })
-    if (query.dialog !== null) current.openDialog(query.dialog)
+    // 楽曲ダイアログは無くした（UI-WORKBENCH-2 §4.4）。マスターの楽曲をインスペクターとビューアで開く。
+    if (query.dialog === 'music') {
+      current.closeDialog()
+      if (current.track !== null) {
+        current.inspect({ kind: 'track', id: current.track.id })
+        current.openViewer()
+      }
+    } else if (query.dialog !== null) current.openDialog(query.dialog)
     else current.closeDialog()
   }, [query])
 }

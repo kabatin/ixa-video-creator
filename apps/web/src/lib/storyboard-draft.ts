@@ -1,8 +1,5 @@
 import type { ShotId } from '@ixa/domain'
-import type {
-  WireStoryboardDraftItem,
-  WireStoryboardDraftRun,
-} from '@/lib/storyboard-draft-api'
+import type { WireStoryboardDraftItem, WireStoryboardDraftRun } from '@/lib/storyboard-draft-api'
 
 /**
  * 絵コンテ下書きの表示ロジック（P63-4）。**判定と言葉はここだけが持つ。**
@@ -219,8 +216,6 @@ export const buildDraftSummary = (input: {
         : `${String(unmatchedCount)} 件の案は、この画面が知らない Shot に対するものです`,
     canAdopt: adoptable.length > 0,
     adoptLabel:
-      adoptable.length === 0
-        ? '採用する'
-        : `選んだ ${String(adoptable.length)} 件を採用する`,
+      adoptable.length === 0 ? '採用する' : `選んだ ${String(adoptable.length)} 件を採用する`,
   }
 }

@@ -30,8 +30,7 @@ const clampNumber = (value: number, min: number, max: number): number =>
 const clampInt = (value: number, min: number, max: number): number =>
   Math.min(Math.max(Math.trunc(value), min), max)
 
-const clamp01 = (value: number): number =>
-  Number.isFinite(value) ? clampNumber(value, 0, 1) : 0
+const clamp01 = (value: number): number => (Number.isFinite(value) ? clampNumber(value, 0, 1) : 0)
 
 export const viewDurationSec = (view: ViewRange): number => view.endSec - view.startSec
 
@@ -278,10 +277,7 @@ export const BEAT_MATCH_EPSILON_SEC = 1e-6
  * 2 種類の線が互い違いに並んで**拍子が読めない絵**になる。
  * 最初の小節線と一致する拍を起点にすることで、間引いても両者が重なる。
  */
-export const beatGridAnchor = (
-  beats: readonly number[],
-  downbeats: readonly number[],
-): number => {
+export const beatGridAnchor = (beats: readonly number[], downbeats: readonly number[]): number => {
   const first = downbeats[0]
   if (first === undefined) return 0
   const index = beats.findIndex((beat) => Math.abs(beat - first) < BEAT_MATCH_EPSILON_SEC)
@@ -353,7 +349,8 @@ export const sectionBoundaries = (sections: readonly SectionSpan[]): readonly nu
   const all = sections.flatMap((section) => [section.start, section.end])
   const sorted = [...all].filter((sec) => Number.isFinite(sec) && sec > 0).sort((a, b) => a - b)
   return sorted.filter(
-    (sec, index) => index === 0 || Math.abs(sec - (sorted[index - 1] as number)) >= BEAT_MATCH_EPSILON_SEC,
+    (sec, index) =>
+      index === 0 || Math.abs(sec - (sorted[index - 1] as number)) >= BEAT_MATCH_EPSILON_SEC,
   )
 }
 

@@ -65,7 +65,10 @@ export const useShotTakes = (shot: Shot | null, epoch: number): ShotTakes => {
     setLoaded((current) =>
       current === null
         ? current
-        : { ...current, takes: current.takes.map((entry) => (entry.id === take.id ? take : entry)) },
+        : {
+            ...current,
+            takes: current.takes.map((entry) => (entry.id === take.id ? take : entry)),
+          },
     )
   }, [])
 

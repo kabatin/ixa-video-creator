@@ -8,7 +8,9 @@ import { EXTRA_SHORTCUTS, buildMenus, listShortcuts } from '@/lib/menu-model'
  */
 export const ShortcutList = () => {
   const rows = [
-    ...listShortcuts(buildMenus({ hasCurrentShot: true, checkedCount: 1, canUndo: true })),
+    ...listShortcuts(
+      buildMenus({ hasCurrentShot: true, checkedCount: 1, canUndo: true, currentHasTake: true }),
+    ),
     ...EXTRA_SHORTCUTS,
   ]
   return (

@@ -29,7 +29,9 @@ export const useWorkbenchTransport = (): {
   const [transport, setTransport] = useState<WorkbenchTransport>(INITIAL)
 
   const setCurrentSec = useCallback((sec: number): void => {
-    setTransport((current) => (current.currentSec === sec ? current : { ...current, currentSec: sec }))
+    setTransport((current) =>
+      current.currentSec === sec ? current : { ...current, currentSec: sec },
+    )
   }, [])
 
   const seekTo = useCallback((sec: number): void => {

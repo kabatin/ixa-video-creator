@@ -9,18 +9,14 @@ import {
 } from '@/components/bulk-action-bar'
 import { ShotListCompact } from '@/components/workbench/shot-list-compact'
 import { useBulkActions } from '@/components/workbench/use-bulk-actions'
+import { useAssets } from '@/components/workbench/asset-store'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty, PanelFrame, PanelNotice } from '@/components/workbench/panels/panel-frame'
 import { Button } from '@/components/ui/button'
 import { SHOT_SIZE_OPTIONS } from '@/lib/camera-options'
 import { MODEL_OPTIONS } from '@/lib/generation-options'
 import { toLocationOptions } from '@/lib/location-options'
-import {
-  clearSelection,
-  headerCheckboxState,
-  selectAllVisible,
-  toggleShot,
-} from '@/lib/shot-bulk'
+import { clearSelection, headerCheckboxState, selectAllVisible, toggleShot } from '@/lib/shot-bulk'
 import { shotStatusLabel } from '@/lib/shot-display'
 
 /** 選べるモデル。いまは AUTO だけだが、選択肢の正は `generation-options` に置いたまま。 */
@@ -28,7 +24,14 @@ const MODEL_CHOICES: readonly BulkModelOption[] = MODEL_OPTIONS.flatMap((option)
   option.value === 'AUTO' ? [{ value: 'AUTO' as const, label: option.label }] : [],
 )
 
-const STATUSES: readonly ShotStatus[] = ['draft', 'ready', 'generating', 'review', 'approved', 'blocked']
+const STATUSES: readonly ShotStatus[] = [
+  'draft',
+  'ready',
+  'generating',
+  'review',
+  'approved',
+  'blocked',
+]
 const ALL = 'all'
 
 /**
@@ -48,11 +51,20 @@ export const ShotListPanel = () => {
   const visibleIds = visible.map((shot) => shot.id)
   const chosen = (shots ?? []).filter((shot) => workbench.checked.has(shot.id))
 
-  /** ロケーションが読めなかったことを選択肢の側で出し、空と混ぜない（L-015）。 */
+  /**
+   * ロケーションは素材の共有状態から（ツリーで足したものがすぐ出る。PHASE 8.2）。
+   * 読めなかったことは選択肢の側で出し、空と混ぜない（L-015）。
+   */
+  const { locations } = useAssets()
   const locationOptions: readonly BulkSelectOption[] =
-    workbench.locations === null
-      ? [{ value: '__unavailable__', label: 'ロケーションを取れませんでした' }]
-      : toLocationOptions(workbench.locations)
+    locations.state === 'ready'
+      ? toLocationOptions(locations.value)
+      : [
+          {
+            value: '__unavailable__',
+            label: locations.state === 'loading' ? '読み込み中…' : 'ロケーションを取れませんでした',
+          },
+        ]
 
   const toolbar = (
     <>

@@ -70,12 +70,7 @@ export const createShotCastApi = (requester: Requester): ShotCastApi => ({
   listShotCast: async (shotId) => requester.get(castPath(shotId), WireShotCharacterList),
 
   replaceShotCast: async (shotId, entries) =>
-    put(
-      requester,
-      castPath(shotId),
-      ReplaceShotCastBody.parse({ entries }),
-      WireShotCharacterList,
-    ),
+    put(requester, castPath(shotId), ReplaceShotCastBody.parse({ entries }), WireShotCharacterList),
 
   unlinkShotCharacter: async (shotId, characterId) =>
     requester.remove(memberPath(shotId, characterId)),

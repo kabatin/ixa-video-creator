@@ -87,9 +87,7 @@ export const DEFAULT_PREFERENCES: Preferences = Object.freeze({
 
 /** 何を渡されても `Preferences` を返す。**例外を投げない。** */
 export const parsePreferences = (raw: unknown): Preferences => {
-  const parsed = PreferencesSchema.safeParse(
-    typeof raw === 'object' && raw !== null ? raw : {},
-  )
+  const parsed = PreferencesSchema.safeParse(typeof raw === 'object' && raw !== null ? raw : {})
   return parsed.success ? parsed.data : DEFAULT_PREFERENCES
 }
 
@@ -145,7 +143,9 @@ const removeLegacy = (storage: PreferenceStorage): void => {
  * 新しいキーがあるなら旧キーは読まずに消すだけ（古い値で上書きしない）。
  * 保存に触れない環境（プライベートウィンドウ等）では既定を返す。
  */
-export const readPreferences = (storage: PreferenceStorage | null = defaultStorage()): Preferences => {
+export const readPreferences = (
+  storage: PreferenceStorage | null = defaultStorage(),
+): Preferences => {
   if (storage === null) return DEFAULT_PREFERENCES
   try {
     const raw = storage.getItem(PREFERENCES_STORAGE_KEY)

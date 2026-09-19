@@ -12,14 +12,7 @@ import type { PanelId } from '@/lib/workbench-layout'
 
 /** ダイアログで開くもの。`workbench-url.ts` の URL から開けるものより広い。 */
 export type WorkbenchDialog =
-  | 'music'
-  | 'render'
-  | 'settings'
-  | 'preferences'
-  | 'history'
-  | 'new-shot'
-  | 'import'
-  | 'shortcuts'
+  'render' | 'settings' | 'preferences' | 'history' | 'new-shot' | 'shortcuts'
 
 export type MenuAction =
   | { readonly kind: 'href'; readonly href: string }
@@ -36,6 +29,9 @@ export type MenuCommand =
   | 'bulk-edit'
   | 'generate-shot'
   | 'bulk-generate'
+  | 'import-files'
+  | 'inspect-master-track'
+  | 'unselect-take'
 
 export type MenuItem = {
   readonly id: string
@@ -62,6 +58,8 @@ export type MenuState = {
   readonly checkedCount: number
   /** 取り消せる一括操作があるか（判定はサーバの `canUndo`）。 */
   readonly canUndo: boolean
+  /** 選んでいる Shot に採用 Take があるか（「採用を外す」の有効判定）。 */
+  readonly currentHasTake: boolean
 }
 
 const href = (value: string): MenuAction => ({ kind: 'href', href: value })
@@ -137,13 +135,13 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
         item('view-storyboard', 'ストーリーボード', panel('storyboard')),
         item('view-preview', 'プレビュー', panel('preview')),
         item('view-compare', 'Take 比較', panel('compare')),
+        item('view-viewer', '素材ビューア', panel('viewer')),
         item('view-draft', '絵コンテ下書き', panel('draft')),
         item('view-cutter', '聴きながら切る', panel('cutter')),
         item('view-timeline', 'タイムライン', panel('timeline')),
-        item('view-automatic', '自動で割る', panel('automatic')),
         item('view-shots', 'Shot 一覧', panel('shots')),
         item('view-inspector', 'インスペクター', panel('inspector')),
-        item('view-assets', '素材', panel('assets')),
+        item('view-assets', '素材ツリー', panel('assets')),
         item('copy-link', 'リンクをコピー', command('copy-link')),
         item('reset-layout', 'パネル配置をリセット', command('reset-layout')),
       ],
@@ -152,8 +150,8 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
       id: 'assets',
       label: '素材',
       items: [
-        item('import', '素材をインポート…', dialog('import')),
-        item('music', '楽曲…', dialog('music')),
+        item('import', 'ファイルを取り込む…', command('import-files')),
+        item('music', '楽曲', command('inspect-master-track')),
       ],
     },
     {
@@ -162,6 +160,13 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
       items: [
         item('new-shot', '新規 Shot', dialog('new-shot')),
         item('bulk-edit', '選択を一括変更…', command('bulk-edit'), { disabledReason: noChecked }),
+        item('unselect-take', '採用を外す', command('unselect-take'), {
+          disabledReason: state.hasCurrentShot
+            ? state.currentHasTake
+              ? null
+              : '採用している Take がありません'
+            : NO_CURRENT_SHOT,
+        }),
         item('delete-shot', '選択を削除', command('delete-shot'), { disabledReason: noCurrent }),
       ],
     },

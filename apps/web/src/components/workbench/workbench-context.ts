@@ -1,14 +1,6 @@
 'use client'
 
-import type {
-  Location,
-  MusicTrack,
-  Project,
-  ProjectId,
-  Sequence,
-  Shot,
-  ShotId,
-} from '@ixa/domain'
+import type { Location, MusicTrack, Project, ProjectId, Sequence, Shot, ShotId } from '@ixa/domain'
 import { createContext, useContext } from 'react'
 import type { UpdateShotBody } from '@/lib/api-schemas'
 import type { WireMusicAnalysis } from '@/lib/music-api'
@@ -17,7 +9,8 @@ import type { LiveState } from '@/lib/project-events'
 import type { SeekCommand } from '@/lib/program-monitor'
 import type { ShotSelection } from '@/lib/shot-bulk'
 import type { ShotPosterMap } from '@/lib/shot-posters'
-import type { AssetRef, PanelId } from '@/lib/workbench-layout'
+import type { PanelId } from '@/lib/workbench-layout'
+import type { Inspected } from '@/lib/workbench-selection'
 
 /**
  * ワークベンチの共有状態（UI-WORKBENCH §7.2 / ADR-0021 D5）。
@@ -76,7 +69,14 @@ export type WorkbenchContextValue = {
    */
   readonly serverEpoch: number
   readonly selectedShotId: ShotId | null
+  /** Shot を選ぶ。インスペクターもその Shot を見る。 */
   readonly selectShot: (shotId: ShotId) => void
+  /**
+   * インスペクターが見ている物（PHASE 8.2）。Shot を選べば Shot、素材を選べば素材。
+   * **Shot の選択（selectedShotId）は素材を選んでも外さない**（ストーリーボードの強調は残る）。
+   */
+  readonly inspected: Inspected | null
+  readonly inspect: (selection: Inspected | null) => void
   /** 一覧でチェックした Shot（一括操作の対象）。メニューの有効判定にも使う。 */
   readonly checked: ShotSelection
   readonly setChecked: (next: ShotSelection) => void
@@ -101,8 +101,8 @@ export type WorkbenchContextValue = {
   /** インスペクターのどのタブを前に出すか。メニュー「生成」から生成タブを開くのに使う。 */
   readonly inspectorTab: InspectorTab
   readonly openInspector: (tab: InspectorTab) => void
-  /** 中央上に素材を開く（7.3）。 */
-  readonly openAsset: (asset: AssetRef) => void
+  /** 中央上の素材ビューアを前に出す（PHASE 8.2）。 */
+  readonly openViewer: () => void
 }
 
 export type ShotPatch = UpdateShotBody
@@ -118,8 +118,6 @@ export type TransportControls = {
   readonly pause: () => void
   readonly toggle: (owner: TransportOwner) => void
 }
-
-export type { AssetRef }
 
 export const WorkbenchContext = createContext<WorkbenchContextValue | null>(null)
 

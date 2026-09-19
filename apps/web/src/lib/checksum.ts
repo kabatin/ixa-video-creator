@@ -64,7 +64,14 @@ const sha256Fallback = (data: ArrayBuffer): Uint8Array => {
     }
 
     let [a, b, c, d, e, f, g, hh] = h as unknown as number[] as [
-      number, number, number, number, number, number, number, number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
     ]
 
     for (let i = 0; i < 64; i += 1) {

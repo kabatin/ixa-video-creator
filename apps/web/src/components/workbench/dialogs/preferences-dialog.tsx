@@ -37,7 +37,12 @@ export const PreferencesDialogBody = () => {
 
   return (
     <div className="flex h-full min-h-80 gap-4">
-      <div role="tablist" aria-orientation="vertical" aria-label="環境設定の分類" className="w-40 shrink-0">
+      <div
+        role="tablist"
+        aria-orientation="vertical"
+        aria-label="環境設定の分類"
+        className="w-40 shrink-0"
+      >
         {CATEGORIES.map((value) => (
           <button
             key={value}
@@ -50,7 +55,9 @@ export const PreferencesDialogBody = () => {
               setCategory(value)
             }}
             className={`block h-7 w-full rounded px-2 text-left text-sm ${
-              category === value ? 'bg-surface-2 font-semibold text-text' : 'text-muted hover:text-text'
+              category === value
+                ? 'bg-surface-2 font-semibold text-text'
+                : 'text-muted hover:text-text'
             }`}
           >
             {CATEGORY_LABELS[value]}
@@ -98,7 +105,9 @@ const Choice = ({
     aria-pressed={selected}
     onClick={onSelect}
     className={`h-7 rounded-md px-3 text-sm ring-1 ${
-      selected ? 'bg-accent text-accent-fg ring-accent' : 'bg-surface text-text ring-line-strong hover:bg-surface-2'
+      selected
+        ? 'bg-accent text-accent-fg ring-accent'
+        : 'bg-surface text-text ring-line-strong hover:bg-surface-2'
     }`}
   >
     {children}

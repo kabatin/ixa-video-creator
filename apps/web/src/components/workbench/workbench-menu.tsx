@@ -2,7 +2,9 @@
 
 import type { DockviewApi } from 'dockview-react'
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { MenuBar } from '@/components/workbench/menu-bar'
+import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
 import { useSelectedShot, useWorkbench } from '@/components/workbench/workbench-context'
 import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
@@ -17,12 +19,7 @@ import {
   applyPreset,
   type PanelId,
 } from '@/lib/workbench-layout'
-import {
-  BOTTOM_TABS,
-  MAIN_TABS,
-  SIDE_TABS,
-  workbenchHref,
-} from '@/lib/workbench-url'
+import { BOTTOM_TABS, MAIN_TABS, SIDE_TABS, workbenchHref } from '@/lib/workbench-url'
 
 export type WorkbenchMenuProps = {
   readonly canUndo: boolean
@@ -32,6 +29,8 @@ export type WorkbenchMenuProps = {
   readonly dock: React.RefObject<DockviewApi | null>
   /** ドックが変わるたびに進む。見えているタブを読み直す合図（値そのものは使わない）。 */
   readonly dockEpoch: number
+  /** 「ファイルを取り込む…」。ファイル選択を開く。 */
+  readonly onImportFiles: () => void
 }
 
 /** 区画の中でいま見えているタブ。無ければ null。 */
@@ -42,15 +41,24 @@ const visibleOf = <T extends PanelId>(dock: DockviewApi | null, ids: readonly T[
  * メニューバーの配線（UI-WORKBENCH §4）。中身と有効判定は `menu-model.ts`、ここは実行するだけ。
  * 右端: 作業モード（構成 / 仕上げ）・歯車（プロジェクト設定）・主ボタン「書き出し」。
  */
-export const WorkbenchMenu = ({ canUndo, onUndo, onResetLayout, onNotice, dock }: WorkbenchMenuProps) => {
+export const WorkbenchMenu = ({
+  canUndo,
+  onUndo,
+  onResetLayout,
+  onNotice,
+  dock,
+  onImportFiles,
+}: WorkbenchMenuProps) => {
   const router = useRouter()
   const workbench = useWorkbench()
   const current = useSelectedShot()
 
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const menus = buildMenus({
     hasCurrentShot: current !== null,
     checkedCount: workbench.checked.size,
     canUndo,
+    currentHasTake: (current?.selectedTakeId ?? null) !== null,
   })
 
   /** いまの見た目から作ったリンク。**URL を操作のたびに書き換えないので、共有はここから。** */
@@ -73,10 +81,10 @@ export const WorkbenchMenu = ({ canUndo, onUndo, onResetLayout, onNotice, dock }
       })
   }
 
+  /** 取り消せない削除は確認を挟む。確認はワークベンチのダイアログの殻で出す（`window.confirm` を使わない）。 */
   const deleteCurrent = (): void => {
     if (current === null) return
-    const target = `Shot ${current.code} ${formatSpan(current.startSec, current.durationSec)}`
-    if (!window.confirm(deleteConfirmMessage(target))) return
+    setConfirmDelete(false)
     createApiClient()
       .deleteShot(current.id)
       .then(() => {
@@ -88,12 +96,41 @@ export const WorkbenchMenu = ({ canUndo, onUndo, onResetLayout, onNotice, dock }
       })
   }
 
+  const unselectTake = (): void => {
+    if (current === null) return
+    createApiClient()
+      .unselectTake(current.id)
+      .then((updated) => {
+        workbench.replaceShots([updated])
+        workbench.refresh()
+        onNotice(`${current.code} の採用を外しました（Take は残っています）。`)
+      })
+      .catch((cause: unknown) => {
+        onNotice(`採用を外せませんでした: ${describeError(cause)}`)
+      })
+  }
+
   const COMMANDS: Readonly<Record<MenuCommand, () => void>> = {
     undo: onUndo,
     redo: () => undefined,
     'reset-layout': onResetLayout,
     'copy-link': copyLink,
-    'delete-shot': deleteCurrent,
+    'delete-shot': () => {
+      setConfirmDelete(true)
+    },
+    'unselect-take': unselectTake,
+    'import-files': onImportFiles,
+    'inspect-master-track': () => {
+      if (workbench.track === null) {
+        onNotice(
+          '楽曲がまだありません。音声ファイルを画面に落とすか、素材ツリーの「＋」から登録します。',
+        )
+        workbench.focusPanel('assets')
+        return
+      }
+      workbench.inspect({ kind: 'track', id: workbench.track.id })
+      workbench.openViewer()
+    },
     // 一括の操作バーは Shot 一覧の下にある。チェックした行と同じ場所で決めさせる。
     'bulk-edit': () => {
       workbench.focusPanel('shots')
@@ -128,53 +165,86 @@ export const WorkbenchMenu = ({ canUndo, onUndo, onResetLayout, onNotice, dock }
   )
 
   return (
-    <MenuBar
-      menus={menus}
-      onSelect={select}
-      trailing={
-        <>
-          <div role="group" aria-label="作業モード" className="flex rounded-md ring-1 ring-line-strong">
-            {PRESETS.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                aria-pressed={activePreset === preset}
-                onClick={() => {
-                  if (dock.current !== null) applyPreset(dock.current, preset)
-                  else PRESET_PANELS[preset].forEach((id) => {
-                    workbench.focusPanel(id)
-                  })
-                }}
-                className={`h-6 px-2 text-xs first:rounded-l-md last:rounded-r-md ${
-                  activePreset === preset ? 'bg-surface-2 font-semibold text-text' : 'text-muted hover:text-text'
-                }`}
-              >
-                {PRESET_LABELS[preset]}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            aria-label="プロジェクト設定"
-            title="プロジェクト設定"
-            onClick={() => {
-              workbench.openDialog('settings')
-            }}
-            className="inline-flex h-6 min-w-6 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text"
-          >
-            ⚙
-          </button>
-          <Button
-            tone="primary"
-            size="sm"
-            onClick={() => {
-              workbench.openDialog('render')
-            }}
-          >
-            書き出し
+    <>
+      <WorkbenchDialog
+        open={confirmDelete && current !== null}
+        title="Shot を削除"
+        size="medium"
+        onClose={() => {
+          setConfirmDelete(false)
+        }}
+      >
+        <p className="text-sm text-text">
+          {current === null
+            ? ''
+            : deleteConfirmMessage(
+                `Shot ${current.code} ${formatSpan(current.startSec, current.durationSec)}`,
+              )}
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button size="sm" onClick={() => setConfirmDelete(false)}>
+            やめる
           </Button>
-        </>
-      }
-    />
+          <Button size="sm" tone="danger" onClick={deleteCurrent}>
+            削除する
+          </Button>
+        </div>
+      </WorkbenchDialog>
+      <MenuBar
+        menus={menus}
+        onSelect={select}
+        trailing={
+          <>
+            <div
+              role="group"
+              aria-label="作業モード"
+              className="flex rounded-md ring-1 ring-line-strong"
+            >
+              {PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  aria-pressed={activePreset === preset}
+                  onClick={() => {
+                    if (dock.current !== null) applyPreset(dock.current, preset)
+                    else
+                      PRESET_PANELS[preset].forEach((id) => {
+                        workbench.focusPanel(id)
+                      })
+                  }}
+                  className={`h-6 px-2 text-xs first:rounded-l-md last:rounded-r-md ${
+                    activePreset === preset
+                      ? 'bg-surface-2 font-semibold text-text'
+                      : 'text-muted hover:text-text'
+                  }`}
+                >
+                  {PRESET_LABELS[preset]}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              aria-label="プロジェクト設定"
+              title="プロジェクト設定"
+              onClick={() => {
+                workbench.openDialog('settings')
+              }}
+              className="inline-flex h-6 min-w-6 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text"
+            >
+              ⚙
+            </button>
+            <Button
+              tone="primary"
+              size="sm"
+              onClick={() => {
+                workbench.openDialog('render')
+              }}
+            >
+              書き出し
+            </Button>
+          </>
+        }
+      />
+    </>
   )
 }

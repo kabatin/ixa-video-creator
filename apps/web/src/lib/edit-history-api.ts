@@ -49,10 +49,7 @@ export type WireUndoResult = z.infer<typeof WireUndoResult>
 
 export type EditHistoryApi = {
   readonly listEditBatches: (projectId: ProjectId) => Promise<WireEditBatch[]>
-  readonly undoEditBatch: (
-    projectId: ProjectId,
-    id: EditBatchIdType,
-  ) => Promise<WireUndoResult>
+  readonly undoEditBatch: (projectId: ProjectId, id: EditBatchIdType) => Promise<WireUndoResult>
 }
 
 const basePath = (projectId: ProjectId): string =>
@@ -62,5 +59,9 @@ export const createEditHistoryApi = (requester: Requester): EditHistoryApi => ({
   listEditBatches: async (projectId) => requester.get(basePath(projectId), WireEditBatchList),
 
   undoEditBatch: async (projectId, id) =>
-    requester.post(`${basePath(projectId)}/${encodeURIComponent(id)}/undo`, undefined, WireUndoResult),
+    requester.post(
+      `${basePath(projectId)}/${encodeURIComponent(id)}/undo`,
+      undefined,
+      WireUndoResult,
+    ),
 })

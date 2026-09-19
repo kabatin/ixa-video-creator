@@ -65,6 +65,8 @@ export type ProjectApi = {
   generateTakes: (shotId: ShotId, input: GenerateTakesBody) => Promise<WireGenerateResult>
   listTakes: (shotId: ShotId) => Promise<Take[]>
   selectTake: (shotId: ShotId, takeId: TakeId) => Promise<Shot>
+  /** 採用を外す（PHASE 8 / ADR-0022）。Take は消えない。更新後の Shot を返す。 */
+  unselectTake: (shotId: ShotId) => Promise<Shot>
   /**
    * 実体を取りに行くための署名付き URL を**都度発行**する（規約 7。DB には保存しない）。
    *
@@ -142,6 +144,12 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
 
     selectTake: async (shotId: ShotId, takeId: TakeId): Promise<Shot> =>
       requester.post(shotPath(shotId, '/select-take'), { takeId }, WireShot),
+
+    // 応答は Shot だが、DELETE の封筒を剥がす口が無いので取り直す（往復 1 回増えるだけ）。
+    unselectTake: async (shotId: ShotId): Promise<Shot> => {
+      await requester.remove(shotPath(shotId, '/selected-take'))
+      return requester.get(shotPath(shotId), WireShot)
+    },
 
     mediaUrl: async (mediaAssetId: MediaAssetId, expiresInSec?: number): Promise<WireSignedUrl> => {
       const path = `/media/${encodeURIComponent(mediaAssetId)}/url`

@@ -61,7 +61,9 @@ export const PreviewPanel = () => {
       }
     >
       {loadError !== null && <PanelNotice tone="danger">{loadError}</PanelNotice>}
-      {monitorError !== null && <PanelNotice tone="warn">{`モニター: ${monitorError}`}</PanelNotice>}
+      {monitorError !== null && (
+        <PanelNotice tone="warn">{`モニター: ${monitorError}`}</PanelNotice>
+      )}
       <div className="mx-auto w-full max-w-5xl">
         <ProgramMonitor
           document={loaded}

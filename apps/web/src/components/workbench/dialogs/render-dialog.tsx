@@ -52,7 +52,11 @@ const loadRenderMaterials = async (projectId: ProjectId): Promise<RenderMaterial
  */
 export const RenderDialogBody = () => {
   const workbench = useWorkbench()
-  const loaded = useLoaded('書き出しの材料', () => loadRenderMaterials(workbench.projectId), workbench.projectId)
+  const loaded = useLoaded(
+    '書き出しの材料',
+    () => loadRenderMaterials(workbench.projectId),
+    workbench.projectId,
+  )
 
   if (loaded.state === 'loading') return <p className="text-sm text-muted">読み込んでいます…</p>
   if (loaded.state === 'error') {
@@ -71,7 +75,9 @@ export const RenderDialogBody = () => {
         initialJobs={jobs.value}
         jobsError={jobs.error}
         blockingIssueCount={
-          issues.value === null ? null : issues.value.filter((issue) => issue.severity === 'error').length
+          issues.value === null
+            ? null
+            : issues.value.filter((issue) => issue.severity === 'error').length
         }
         timelineDurationSec={durationSec}
       />

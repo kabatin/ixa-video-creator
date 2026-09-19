@@ -35,10 +35,8 @@ export const defaultResolutionKeyFor = (aspectRatio: AspectRatio): string => {
   return first.key
 }
 
-export const findResolution = (
-  aspectRatio: AspectRatio,
-  key: string,
-): Resolution | undefined => PRESETS[aspectRatio].find((p) => p.key === key)?.resolution
+export const findResolution = (aspectRatio: AspectRatio, key: string): Resolution | undefined =>
+  PRESETS[aspectRatio].find((p) => p.key === key)?.resolution
 
 export const formatResolution = (resolution: Resolution): string =>
   `${String(resolution.width)}×${String(resolution.height)}`

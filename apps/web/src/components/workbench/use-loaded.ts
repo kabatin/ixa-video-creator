@@ -28,7 +28,10 @@ export const useLoaded = <T>(label: string, run: () => Promise<T>, key: string):
       })
       .catch((cause: unknown) => {
         if (!cancelled) {
-          setState({ state: 'error', message: `${label}を読み込めませんでした: ${describeError(cause)}` })
+          setState({
+            state: 'error',
+            message: `${label}を読み込めませんでした: ${describeError(cause)}`,
+          })
         }
       })
     return () => {

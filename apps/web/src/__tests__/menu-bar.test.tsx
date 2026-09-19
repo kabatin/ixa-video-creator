@@ -5,7 +5,7 @@ import { buildMenus, type MenuItem } from '@/lib/menu-model'
 
 /** メニューバー（UI-WORKBENCH §4 / §10）。← → ↑ ↓ Esc の操作と aria-expanded。 */
 
-const menus = buildMenus({ hasCurrentShot: false, checkedCount: 0, canUndo: false })
+const menus = buildMenus({ hasCurrentShot: false, checkedCount: 0, canUndo: false, currentHasTake: false })
 
 const top = (label: string): HTMLElement => screen.getByRole('menuitem', { name: label })
 

@@ -11,11 +11,7 @@ import type {
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
-import {
-  planBulkOperation,
-  summarizeBulkResult,
-  type BulkPlan,
-} from '@/lib/shot-bulk'
+import { planBulkOperation, summarizeBulkResult, type BulkPlan } from '@/lib/shot-bulk'
 import { parseBulkGenerateRejection, type BulkGenerateRejection } from '@/lib/shot-bulk-api'
 
 /**
@@ -158,9 +154,7 @@ export const useBulkActions = (): BulkActions => {
         },
       })
       const summary = summarizeBulkResult('update', result.results, shots)
-      workbench.replaceShots(
-        result.results.flatMap((entry) => (entry.ok ? [entry.shot] : [])),
-      )
+      workbench.replaceShots(result.results.flatMap((entry) => (entry.ok ? [entry.shot] : [])))
       return { summary: summary.headline, failures: summary.failures.map(noteLine) }
     })
   }

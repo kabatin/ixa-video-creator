@@ -19,10 +19,10 @@ export const PANEL_IDS = [
   'storyboard',
   'preview',
   'compare',
+  'viewer',
   'draft',
   'cutter',
   'timeline',
-  'automatic',
   'shots',
   'inspector',
   'assets',
@@ -38,13 +38,13 @@ export const PANEL_SPECS: Readonly<Record<PanelId, PanelSpec>> = Object.freeze({
   storyboard: { title: 'ストーリーボード', area: 'main' },
   preview: { title: 'プレビュー', area: 'main' },
   compare: { title: 'Take 比較', area: 'main' },
+  viewer: { title: '素材', area: 'main' },
   draft: { title: '絵コンテ下書き', area: 'main' },
   cutter: { title: '聴きながら切る', area: 'bottom' },
   timeline: { title: 'タイムライン', area: 'bottom' },
-  automatic: { title: '自動で割る', area: 'bottom' },
   shots: { title: 'Shot 一覧', area: 'side' },
   inspector: { title: 'インスペクター', area: 'side' },
-  assets: { title: '素材', area: 'left' },
+  assets: { title: '素材ツリー', area: 'left' },
 })
 
 /** 区画の幅（px）。1440×900 で中央 ≈ 880px になる値（§5.3）。 */
@@ -83,10 +83,10 @@ const DEFAULT_ORDER: readonly PanelId[] = [
   'storyboard',
   'preview',
   'compare',
+  'viewer',
   'draft',
   'cutter',
   'timeline',
-  'automatic',
   'shots',
   'inspector',
   'assets',
@@ -95,7 +95,9 @@ const DEFAULT_ORDER: readonly PanelId[] = [
 /** テストから差し替えられるよう、使う口だけに絞る。 */
 export type DockLike = {
   readonly addPanel: (options: AddPanelOptions) => unknown
-  readonly getPanel: (id: string) => { readonly api: { readonly setActive: () => void } } | undefined
+  readonly getPanel: (
+    id: string,
+  ) => { readonly api: { readonly setActive: () => void } } | undefined
 }
 
 const firstOfArea = (area: DockArea): PanelId =>
@@ -128,14 +130,20 @@ export const addDefaultPanels = (api: Pick<DockLike, 'addPanel'>): void => {
   DEFAULT_ORDER.forEach((id) => {
     const head = firstOfArea(PANEL_SPECS[id].area)
     api.addPanel(
-      panelOptions(id, { sibling: head === id ? null : head, mainPanel: 'storyboard' }, head !== id),
+      panelOptions(
+        id,
+        { sibling: head === id ? null : head, mainPanel: 'storyboard' },
+        head !== id,
+      ),
     )
   })
 }
 
 /** 区画の幅を合わせる口。`addPanel` の `initialWidth` は区画を作る順によって効かないことがある。 */
 export type SizableDock = {
-  readonly getPanel: (id: string) =>
+  readonly getPanel: (
+    id: string,
+  ) =>
     | { readonly group: { readonly api: { readonly setSize: (size: { width?: number }) => void } } }
     | undefined
 }
@@ -164,55 +172,8 @@ export const focusPanel = (api: DockLike, id: PanelId): void => {
       (other) => PANEL_SPECS[other].area === area && api.getPanel(other) !== undefined,
     ) ?? null
   api.addPanel(
-    panelOptions(
-      id,
-      { sibling: present(PANEL_SPECS[id].area), mainPanel: present('main') },
-      false,
-    ),
+    panelOptions(id, { sibling: present(PANEL_SPECS[id].area), mainPanel: present('main') }, false),
   )
-}
-
-// --- 素材のタブ（7.3） ---
-
-/** 素材ペインから中央上に開くもの。 */
-export type AssetRef =
-  | { readonly kind: 'character'; readonly id: string; readonly label: string }
-  | { readonly kind: 'locations' }
-  | { readonly kind: 'brand-assets' }
-
-export const ASSET_COMPONENT = 'asset'
-
-export const assetPanelId = (asset: AssetRef): string =>
-  asset.kind === 'character' ? `asset:character:${asset.id}` : `asset:${asset.kind}`
-
-const assetTitle = (asset: AssetRef): string =>
-  asset.kind === 'character'
-    ? asset.label
-    : asset.kind === 'locations'
-      ? 'ロケーション'
-      : 'ブランド資産'
-
-/**
- * 素材を中央上のタブとして開く。**同じ素材は 2 枚開かない**（開いていれば前に出す）。
- * 中央上が 1 枚も無ければ区画ごと作る。
- */
-export const openAssetPanel = (api: DockLike, asset: AssetRef): void => {
-  const id = assetPanelId(asset)
-  const existing = api.getPanel(id)
-  if (existing !== undefined) {
-    existing.api.setActive()
-    return
-  }
-  const sibling = DEFAULT_ORDER.find(
-    (other) => PANEL_SPECS[other].area === 'main' && api.getPanel(other) !== undefined,
-  )
-  api.addPanel({
-    id,
-    component: ASSET_COMPONENT,
-    title: assetTitle(asset),
-    params: { asset },
-    ...(sibling === undefined ? {} : { position: { referencePanel: sibling, direction: 'within' } }),
-  })
 }
 
 // --- 作業モード（§6） ---
@@ -240,9 +201,11 @@ export const applyPreset = (api: DockLike, preset: Preset): void => {
 
 // --- 保存 ---
 
-const LAYOUT_VERSION = 1
+// 2: 素材ごとのタブをやめて「素材」ビューア 1 枚に、「自動で割る」タブを外した（PHASE 8.2）。
+//    版を上げないと、保存済みの配置が消えた部品を指して復元に失敗する（lessons L-025）。
+const LAYOUT_VERSION = 2
 
-/** 旧 `ixa:storyboard-layout:v4` は読まない（パネルの組が違う）。 */
+/** 旧 `ixa:storyboard-layout:v4` と v1 は読まない（パネルの組が違う）。 */
 export const workbenchLayoutKey = (projectId: ProjectId): string =>
   `ixa:workbench-layout:v${String(LAYOUT_VERSION)}:${projectId}`
 

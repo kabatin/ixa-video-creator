@@ -44,11 +44,7 @@ export type UploadApi = {
  * ストレージへ本体を直接送る。
  * 署名付き URL はエラーメッセージにも載せない（ログに残ると再利用されるため）。
  */
-const putToStorage = async (
-  uploadUrl: string,
-  file: File,
-  contentType: string,
-): Promise<void> => {
+const putToStorage = async (uploadUrl: string, file: File, contentType: string): Promise<void> => {
   const response = await fetch(uploadUrl, {
     method: 'PUT',
     headers: { 'content-type': contentType },
@@ -57,19 +53,14 @@ const putToStorage = async (
   })
   if (response.ok) return
   const body = (await response.text()).slice(0, STORAGE_ERROR_BODY_LIMIT)
-  throw new UploadError(
-    'upload',
-    `ストレージが ${String(response.status)} を返しました — ${body}`,
-  )
+  throw new UploadError('upload', `ストレージが ${String(response.status)} を返しました — ${body}`)
 }
 
 export const createUploadApi = (requester: Requester): UploadApi => {
   const signUpload = async (body: SignUploadBody): Promise<WireSignUploadResult> =>
     requester.post('/uploads/sign', SignUploadBody.parse(body), WireSignUploadResult)
 
-  const completeUpload = async (
-    body: CompleteUploadBody,
-  ): Promise<WireCompleteUploadResult> =>
+  const completeUpload = async (body: CompleteUploadBody): Promise<WireCompleteUploadResult> =>
     requester.post('/uploads/complete', CompleteUploadBody.parse(body), WireCompleteUploadResult)
 
   return {

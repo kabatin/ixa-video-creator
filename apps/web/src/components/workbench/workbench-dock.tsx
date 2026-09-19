@@ -10,9 +10,7 @@ import {
 } from 'dockview-react'
 import { useEffect, useState } from 'react'
 import type { FunctionComponent } from 'react'
-import { AssetContentPanel } from '@/components/workbench/panels/asset-content-panel'
 import { AssetsPanel } from '@/components/workbench/panels/assets-panel'
-import { AutomaticPanel } from '@/components/workbench/panels/automatic-panel'
 import { ComparePanel } from '@/components/workbench/panels/compare-panel'
 import { CutterPanel } from '@/components/workbench/panels/cutter-panel'
 import { DraftPanel } from '@/components/workbench/panels/draft-panel'
@@ -21,9 +19,8 @@ import { PreviewPanel } from '@/components/workbench/panels/preview-panel'
 import { ShotListPanel } from '@/components/workbench/panels/shot-list-panel'
 import { StoryboardPanel } from '@/components/workbench/panels/storyboard-panel'
 import { TimelinePanel } from '@/components/workbench/panels/timeline-panel'
-import type { AssetRef } from '@/components/workbench/workbench-context'
+import { ViewerPanel } from '@/components/workbench/panels/viewer-panel'
 import {
-  ASSET_COMPONENT,
   addDefaultPanels,
   focusPanel,
   readStoredWorkbenchLayout,
@@ -52,25 +49,21 @@ const CutterDock: FunctionComponent<IDockviewPanelProps> = ({ api }) => {
   return <CutterPanel visible={visible} />
 }
 
-const AssetDock: FunctionComponent<IDockviewPanelProps<{ asset: AssetRef }>> = ({ params }) => (
-  <AssetContentPanel asset={params.asset} />
-)
-
 /** Dockview に渡す部品。id は `workbench-layout.ts` の `PANEL_IDS` と同じ。 */
-const COMPONENTS: Readonly<Record<PanelId | typeof ASSET_COMPONENT, FunctionComponent<IDockviewPanelProps>>> =
-  Object.freeze({
+const COMPONENTS: Readonly<Record<PanelId, FunctionComponent<IDockviewPanelProps>>> = Object.freeze(
+  {
     storyboard: () => <StoryboardPanel />,
     preview: () => <PreviewPanel />,
     compare: () => <ComparePanel />,
+    viewer: () => <ViewerPanel />,
     draft: () => <DraftPanel />,
     cutter: CutterDock,
     timeline: () => <TimelinePanel />,
-    automatic: () => <AutomaticPanel />,
     shots: () => <ShotListPanel />,
     inspector: () => <InspectorPanel />,
     assets: () => <AssetsPanel />,
-    [ASSET_COMPONENT]: AssetDock as FunctionComponent<IDockviewPanelProps>,
-  })
+  },
+)
 
 export type WorkbenchDockProps = {
   readonly projectId: ProjectId

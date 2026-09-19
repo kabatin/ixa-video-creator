@@ -25,7 +25,8 @@ export const WireShotPoster = z
     reason: z.string().nullable(),
   })
   .refine((entry) => (entry.thumbnailUrl === null) !== (entry.reason === null), {
-    message: 'thumbnailUrl と reason はどちらか一方だけが null であること（理由の無い空枠を作らない）',
+    message:
+      'thumbnailUrl と reason はどちらか一方だけが null であること（理由の無い空枠を作らない）',
   })
 export type WireShotPoster = z.infer<typeof WireShotPoster>
 

@@ -18,11 +18,12 @@ import {
   addDefaultPanels,
   clearWorkbenchLayout,
   focusPanel as focusDockPanel,
-  openAssetPanel,
   sizeDefaultAreas,
-  type AssetRef,
   type PanelId,
 } from '@/lib/workbench-layout'
+import type { Inspected } from '@/lib/workbench-selection'
+import { AssetStoreProvider } from '@/components/workbench/asset-store'
+import { FileIntake } from '@/components/workbench/file-intake'
 import type { WorkbenchQuery } from '@/lib/workbench-url'
 
 export type ProjectWorkbenchProps = {
@@ -82,27 +83,34 @@ export const ProjectWorkbench = (props: ProjectWorkbenchProps) => {
     [wide],
   )
 
-  const openAsset = useCallback((asset: AssetRef): void => {
-    if (dock.current !== null) openAssetPanel(dock.current, asset)
-  }, [])
+  /**
+   * 楽曲ダイアログは無くした（UI-WORKBENCH-2 §4.4）。旧 `?dialog=music` はマスターの楽曲を
+   * インスペクターで開く意味に読み替える（引き継ぎ文書・ブックマークを壊さない）。
+   */
+  const legacyMusic = props.query.dialog === 'music'
+  const initialInspected: Inspected | null =
+    legacyMusic && props.track !== null ? { kind: 'track', id: props.track.id } : null
+  const initialDialog = props.query.dialog === 'music' ? null : props.query.dialog
 
   return (
-    <WorkbenchProvider
-      project={props.project}
-      initialShots={props.initialShots}
-      track={props.track}
-      analysis={props.analysis}
-      musicLoaded={props.musicLoaded}
-      sequences={props.sequences}
-      locations={props.locations}
-      loadErrors={props.loadErrors}
-      initialShotId={props.query.shot}
-      initialDialog={props.query.dialog}
-      focusPanel={focusPanel}
-      openAsset={openAsset}
-    >
-      <WorkbenchShell dock={dock} wide={wide} query={props.query} />
-    </WorkbenchProvider>
+    <AssetStoreProvider workspaceId={props.project.workspaceId} projectId={props.project.id}>
+      <WorkbenchProvider
+        project={props.project}
+        initialShots={props.initialShots}
+        track={props.track}
+        analysis={props.analysis}
+        musicLoaded={props.musicLoaded}
+        sequences={props.sequences}
+        locations={props.locations}
+        loadErrors={props.loadErrors}
+        initialShotId={props.query.shot}
+        initialDialog={initialDialog}
+        initialInspected={initialInspected}
+        focusPanel={focusPanel}
+      >
+        <WorkbenchShell dock={dock} wide={wide} query={props.query} />
+      </WorkbenchProvider>
+    </AssetStoreProvider>
   )
 }
 
@@ -120,6 +128,8 @@ const WorkbenchShell = ({
   /** ドックの配置・前のタブが変わるたびに進む。メニューの作業モードの表示を追わせる。 */
   const [dockEpoch, setDockEpoch] = useState(0)
   const history = useEditHistory(workbench.projectId, workbench.serverEpoch)
+  /** 「ファイルを取り込む…」でファイル選択を開く口。`FileIntake` が登録する。 */
+  const fileOpener = useRef<(() => void) | null>(null)
 
   const resetLayout = (): void => {
     clearWorkbenchLayout(window.localStorage, workbench.projectId)
@@ -143,8 +153,7 @@ const WorkbenchShell = ({
 
   useWorkbenchKeys({
     undo,
-    cutterActive: () =>
-      wide ? dock.current?.getPanel('cutter')?.api.isVisible === true : false,
+    cutterActive: () => (wide ? dock.current?.getPanel('cutter')?.api.isVisible === true : false),
   })
 
   return (
@@ -156,6 +165,9 @@ const WorkbenchShell = ({
         onNotice={setNotice}
         dock={dock}
         dockEpoch={dockEpoch}
+        onImportFiles={() => {
+          fileOpener.current?.()
+        }}
       />
       {notice !== null && (
         <p
@@ -201,6 +213,12 @@ const WorkbenchShell = ({
         loadErrors={workbench.loadErrors}
       />
       <WorkbenchDialogs onHistoryChanged={history.reload} />
+      <FileIntake
+        onNotice={setNotice}
+        registerOpener={(open) => {
+          fileOpener.current = open
+        }}
+      />
     </div>
   )
 }

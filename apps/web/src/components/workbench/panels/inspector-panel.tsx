@@ -1,25 +1,64 @@
 'use client'
 
-import { ShotInspector } from '@/components/workbench/shot-inspector'
+import {
+  BrandAssetInspector,
+  CharacterInspector,
+  LocationInspector,
+  LookInspector,
+  TrackInspector,
+} from '@/components/workbench/inspector/asset-inspectors'
+import { ShotInspector } from '@/components/workbench/inspector/shot-inspector'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty, PanelFrame } from '@/components/workbench/panels/panel-frame'
 
-/** インスペクター（右）。選択中の Shot を出す。 */
+/**
+ * インスペクター（右。UI-WORKBENCH-2 §5）。**選んだ物の種類で中身が変わる**
+ * （Shot・キャラクター・Look・ロケーション・ブランド資産・楽曲）。
+ */
 export const InspectorPanel = () => {
-  const { shots, selectedShotId } = useWorkbench()
-  const index = shots?.findIndex((shot) => shot.id === selectedShotId) ?? -1
-  const shot = index < 0 ? null : (shots?.[index] ?? null)
+  const { inspected, shots } = useWorkbench()
 
-  if (shot === null) {
+  if (inspected === null) {
     return (
       <PanelFrame>
-        <PanelEmpty title="Shot を選んでください" hint="ストーリーボードか Shot 一覧で選ぶと、ここで直せます。" />
+        <PanelEmpty
+          title="何も選んでいません"
+          hint="ストーリーボード・Shot 一覧・素材ツリーで選ぶと、ここで直せます。"
+        />
       </PanelFrame>
     )
   }
+
+  if (inspected.kind === 'shot') {
+    const index = shots?.findIndex((shot) => shot.id === inspected.id) ?? -1
+    const shot = index < 0 ? null : (shots?.[index] ?? null)
+    return (
+      <PanelFrame flush>
+        {shot === null ? (
+          <PanelEmpty
+            title="この Shot は見つかりません"
+            hint="消されたか、まだ読み込めていません。"
+          />
+        ) : (
+          <ShotInspector key={shot.id} shot={shot} isFirst={index === 0} />
+        )}
+      </PanelFrame>
+    )
+  }
+
   return (
     <PanelFrame flush>
-      <ShotInspector shot={shot} isFirst={index === 0} />
+      {inspected.kind === 'character' && (
+        <CharacterInspector key={inspected.id} id={inspected.id} />
+      )}
+      {inspected.kind === 'look' && (
+        <LookInspector key={inspected.id} id={inspected.id} characterId={inspected.characterId} />
+      )}
+      {inspected.kind === 'location' && <LocationInspector key={inspected.id} id={inspected.id} />}
+      {inspected.kind === 'brand-asset' && (
+        <BrandAssetInspector key={inspected.id} id={inspected.id} />
+      )}
+      {inspected.kind === 'track' && <TrackInspector key={inspected.id} id={inspected.id} />}
     </PanelFrame>
   )
 }

@@ -1,4 +1,10 @@
-import { ProjectEvent, type ProjectId, type ShotId, type ShotStatus, type TakeId } from '@ixa/domain'
+import {
+  ProjectEvent,
+  type ProjectId,
+  type ShotId,
+  type ShotStatus,
+  type TakeId,
+} from '@ixa/domain'
 import { joinUrl } from '@/lib/http'
 
 /**

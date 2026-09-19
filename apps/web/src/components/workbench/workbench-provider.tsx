@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   WorkbenchContext,
-  type AssetRef,
   type InspectorTab,
   type ShotPatch,
   type WorkbenchContextValue,
@@ -21,6 +20,7 @@ import { EMPTY_SELECTION, pruneSelection, type ShotSelection } from '@/lib/shot-
 import { posterByShotId, type ShotPosterMap } from '@/lib/shot-posters'
 import { useProjectEvents } from '@/lib/use-project-events'
 import type { PanelId } from '@/lib/workbench-layout'
+import type { Inspected } from '@/lib/workbench-selection'
 
 export type WorkbenchProviderProps = {
   readonly project: Project
@@ -35,9 +35,10 @@ export type WorkbenchProviderProps = {
   /** URL の `?shot`。一覧に無ければ先頭 Shot を選ぶ。 */
   readonly initialShotId: ShotId | null
   readonly initialDialog: WorkbenchDialog | null
+  /** 最初にインスペクターで見るもの（旧 `?dialog=music` → マスターの楽曲など）。 */
+  readonly initialInspected: Inspected | null
   /** Dockview の操作。ドックの持ち主（`project-workbench`）が渡す。 */
   readonly focusPanel: (panel: PanelId) => void
-  readonly openAsset: (asset: AssetRef) => void
   readonly children: ReactNode
 }
 
@@ -72,6 +73,11 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
   const [selectedShotId, setSelectedShotId] = useState<ShotId | null>(() =>
     initialSelection(props.initialShots, props.initialShotId),
   )
+  const [inspected, setInspected] = useState<Inspected | null>(() => {
+    if (props.initialInspected !== null) return props.initialInspected
+    const shotId = initialSelection(props.initialShots, props.initialShotId)
+    return shotId === null ? null : { kind: 'shot', id: shotId }
+  })
   const [checked, setCheckedState] = useState<ShotSelection>(EMPTY_SELECTION)
   const [posters, setPosters] = useState<ShotPosterMap>(NO_POSTERS)
   const [posterError, setPosterError] = useState<string | null>(null)
@@ -192,7 +198,15 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       posterEpoch,
       serverEpoch,
       selectedShotId,
-      selectShot: setSelectedShotId,
+      selectShot: (shotId) => {
+        setSelectedShotId(shotId)
+        setInspected({ kind: 'shot', id: shotId })
+      },
+      inspected,
+      inspect: (selection) => {
+        if (selection?.kind === 'shot') setSelectedShotId(selection.id)
+        setInspected(selection)
+      },
       checked,
       setChecked: setCheckedState,
       transport,
@@ -217,7 +231,9 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
         setInspectorTab(tab)
         props.focusPanel('inspector')
       },
-      openAsset: props.openAsset,
+      openViewer: () => {
+        props.focusPanel('viewer')
+      },
     }),
     [
       props,
@@ -239,6 +255,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       refresh,
       dialog,
       inspectorTab,
+      inspected,
     ],
   )
 

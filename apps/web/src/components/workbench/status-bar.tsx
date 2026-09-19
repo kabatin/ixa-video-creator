@@ -51,7 +51,9 @@ export const StatusBar = ({ project, shotCount, live, loadErrors }: StatusBarPro
         </span>
       )}
       <span className="ml-auto flex items-center gap-1">
-        {cost.state === 'ready' && <span title={cost.view.provenance}>{`費用 ${cost.view.measuredLabel}`}</span>}
+        {cost.state === 'ready' && (
+          <span title={cost.view.provenance}>{`費用 ${cost.view.measuredLabel}`}</span>
+        )}
         {cost.state === 'loading' && <span>費用 —</span>}
         {cost.state === 'error' && (
           <span role="alert" title={cost.message} className="text-warn">

@@ -81,7 +81,9 @@ export const workbenchValue = (
   focusPanel: vi.fn(),
   inspectorTab: 'settings',
   openInspector: vi.fn(),
-  openAsset: vi.fn(),
+  inspected: null,
+  inspect: vi.fn(),
+  openViewer: vi.fn(),
   ...patch,
 })
 

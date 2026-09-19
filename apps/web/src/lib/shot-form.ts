@@ -170,5 +170,6 @@ export const nextShotOrder = (shots: readonly Pick<Shot, 'order'>[]): number =>
   )
 
 /** 既定の開始秒は最後の Shot の終端。重ならない位置から書き始められるようにする。 */
-export const nextShotStartSec = (shots: readonly Pick<Shot, 'startSec' | 'durationSec'>[]): number =>
-  shots.reduce<number>((end, s) => Math.max(end, shotEndSec(s)), 0)
+export const nextShotStartSec = (
+  shots: readonly Pick<Shot, 'startSec' | 'durationSec'>[],
+): number => shots.reduce<number>((end, s) => Math.max(end, shotEndSec(s)), 0)

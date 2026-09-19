@@ -127,10 +127,10 @@ export const summarizeFindings = (
 }
 
 /** 「何秒地点の指摘か」。証拠が無ければ null を返し、呼び出し側で出し分ける。 */
-export const formatEvidenceMoment = (
-  evidence: ReviewFinding['evidence'],
-): string | null =>
-  evidence === null || evidence.frameSec === null ? null : `${formatSeconds(evidence.frameSec)} 地点`
+export const formatEvidenceMoment = (evidence: ReviewFinding['evidence']): string | null =>
+  evidence === null || evidence.frameSec === null
+    ? null
+    : `${formatSeconds(evidence.frameSec)} 地点`
 
 /** レビュー結果の一行要約。指摘が無いことも明示する。 */
 export const summarizeRun = (

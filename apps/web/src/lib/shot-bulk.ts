@@ -273,7 +273,9 @@ export const summarizeBulkResult = (
 ): BulkSummary => {
   const succeeded = results.flatMap((result) => (result.ok ? [result.shotId] : []))
   const failures = results.flatMap((result) =>
-    result.ok ? [] : [{ shotId: result.shotId, code: codeOf(shots, result.shotId), message: result.reason }],
+    result.ok
+      ? []
+      : [{ shotId: result.shotId, code: codeOf(shots, result.shotId), message: result.reason }],
   )
   const headline = headlineOf(operation, results.length, succeeded.length, estimatedTotalUsd)
   const failureLines =

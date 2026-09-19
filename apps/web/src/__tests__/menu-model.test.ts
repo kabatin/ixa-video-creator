@@ -10,8 +10,8 @@ import { PANEL_IDS } from '@/lib/workbench-layout'
 
 /** メニューの有効判定（UI-WORKBENCH §4 / §10）。 */
 
-const READY: MenuState = { hasCurrentShot: true, checkedCount: 3, canUndo: true }
-const EMPTY: MenuState = { hasCurrentShot: false, checkedCount: 0, canUndo: false }
+const READY: MenuState = { hasCurrentShot: true, checkedCount: 3, canUndo: true, currentHasTake: true }
+const EMPTY: MenuState = { hasCurrentShot: false, checkedCount: 0, canUndo: false, currentHasTake: false }
 
 const find = (state: MenuState, id: string): MenuItem => {
   const found = buildMenus(state)
@@ -43,6 +43,12 @@ describe('有効判定', () => {
     expect(find(EMPTY, 'bulk-generate').enabled).toBe(false)
     expect(find(READY, 'bulk-edit').enabled).toBe(true)
     expect(find(READY, 'bulk-generate').enabled).toBe(true)
+  })
+
+  it('採用を外すは、選んだ Shot に採用 Take があるときだけ（PHASE 8）', () => {
+    expect(find(READY, 'unselect-take').enabled).toBe(true)
+    expect(find({ ...READY, currentHasTake: false }, 'unselect-take').enabled).toBe(false)
+    expect(find(EMPTY, 'unselect-take').enabled).toBe(false)
   })
 
   it('有効な項目には押せない理由を付けない', () => {
@@ -78,11 +84,14 @@ describe('行き先', () => {
     expect([...panels].sort()).toEqual([...PANEL_IDS].sort())
   })
 
-  it('ダイアログ 3 種（楽曲 / 書き出し / 設定）と環境設定に行ける', () => {
-    const dialogs = menus
-      .flatMap((menu) => menu.items)
-      .flatMap((entry) => (entry.action.kind === 'dialog' ? [entry.action.dialog] : []))
-    expect(dialogs).toEqual(expect.arrayContaining(['music', 'render', 'settings', 'preferences']))
+  it('書き出し / 設定 / 環境設定はダイアログ、楽曲は素材として開く（PHASE 8.2）', () => {
+    const items = menus.flatMap((menu) => menu.items)
+    const dialogs = items.flatMap((entry) => (entry.action.kind === 'dialog' ? [entry.action.dialog] : []))
+    expect(dialogs).toEqual(expect.arrayContaining(['render', 'settings', 'preferences']))
+    expect(items.find((entry) => entry.id === 'music')?.action).toEqual({
+      kind: 'command',
+      command: 'inspect-master-track',
+    })
   })
 
   it('項目の id は重ならない', () => {

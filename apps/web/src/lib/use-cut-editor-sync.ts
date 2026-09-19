@@ -20,7 +20,10 @@ export type TransportSyncPort = {
  * - 他が鳴り始めたら止まる（同時に鳴るのは 1 つだけ）
  * - 明示的に飛んだ指示（`seek.serial` が変わる）だけを追う。位置の報告と往復させない（L-023）
  */
-export const useCutEditorSync = (playback: AudioPlayback, sync: TransportSyncPort | undefined): void => {
+export const useCutEditorSync = (
+  playback: AudioPlayback,
+  sync: TransportSyncPort | undefined,
+): void => {
   const port = useRef(sync)
   port.current = sync
   const control = useRef(playback)
