@@ -66,6 +66,8 @@ export type WaveformCanvasProps = {
   readonly drops: readonly number[]
   readonly sectionBoundarySec: readonly number[]
   readonly heightPx?: number
+  /** 下の行（表示範囲・読み方）を出さない。タイムラインの帯の中に置くとき（PHASE 8.4）。 */
+  readonly compact?: boolean
   /** 再生位置などの重ね描き。 */
   readonly children?: ReactNode
 }
@@ -92,6 +94,9 @@ const useElementWidth = (ref: React.RefObject<HTMLElement | null>): number => {
 
   return width
 }
+
+/** キャンバスの幅の画素数の上限。ブラウザの上限（約 32767）より余裕を持たせる。 */
+const MAX_CANVAS_WIDTH_PX = 16_384
 
 /**
  * 端末の解像度。**これを見ないと波形が滲む。**
@@ -438,6 +443,7 @@ export const WaveformCanvas = ({
   drops,
   sectionBoundarySec,
   heightPx = WAVEFORM_HEIGHT_PX,
+  compact = false,
   children,
 }: WaveformCanvasProps) => {
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -464,7 +470,9 @@ export const WaveformCanvas = ({
   }, [widthPx, safeView, beats, downbeats, drops, sectionBoundarySec])
 
   const points = peaksOf(peaks)
-  const widthDev = Math.max(0, Math.round(widthPx * dpr))
+  // ブラウザのキャンバスは一辺およそ 32k px が上限。タイムラインを「細かく」にすると
+  // 1 曲で超えるので、画素だけ間引いて CSS 幅はそのまま伸ばす（位置はずれない）。
+  const widthDev = Math.max(0, Math.min(MAX_CANVAS_WIDTH_PX, Math.round(widthPx * dpr)))
   const heightDev = Math.max(0, Math.round(heightPx * dpr))
 
   /**
@@ -535,7 +543,7 @@ export const WaveformCanvas = ({
     <div>
       <div
         ref={wrapperRef}
-        className="relative w-full overflow-hidden rounded-lg border border-line"
+        className={`relative w-full overflow-hidden ${compact ? '' : 'rounded-lg border border-line'}`}
         style={{ height: `${heightPx}px` }}
       >
         <canvas ref={canvasRef} role="img" aria-label={label} className="block h-full w-full" />
@@ -559,21 +567,23 @@ export const WaveformCanvas = ({
         いまどこを映しているかと、目印の読み方。凡例は波形の下を 2 行占めていたので、
         `?` の中へ畳む（UI-WORKBENCH-2 §3.2）。読み上げは canvas の `aria-label` が持つ。
       */}
-      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
-        <span className="tabular-nums">
-          {formatClock(safeView.startSec)} – {formatClock(safeView.endSec)}（
-          {formatDuration(viewDurationSec(safeView))} / 全体 {formatDuration(durationSec)}）
-        </span>
-        {peaks.status === 'ok' && peaks.bands === null && (
-          <span className="text-warn">
-            古い解析のため帯域の色がありません。再解析すると出ます。
+      {!compact && (
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+          <span className="tabular-nums">
+            {formatClock(safeView.startSec)} – {formatClock(safeView.endSec)}（
+            {formatDuration(viewDurationSec(safeView))} / 全体 {formatDuration(durationSec)}）
           </span>
-        )}
-        <HelpDisclosure label="波形の読み方">
-          <BandLegend palette={palette} />
-          <MarkerLegend picks={picks} palette={palette} />
-        </HelpDisclosure>
-      </div>
+          {peaks.status === 'ok' && peaks.bands === null && (
+            <span className="text-warn">
+              古い解析のため帯域の色がありません。再解析すると出ます。
+            </span>
+          )}
+          <HelpDisclosure label="波形の読み方">
+            <BandLegend palette={palette} />
+            <MarkerLegend picks={picks} palette={palette} />
+          </HelpDisclosure>
+        </div>
+      )}
     </div>
   )
 }

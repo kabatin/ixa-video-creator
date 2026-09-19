@@ -113,6 +113,11 @@ export type TimelineTracksProps = {
   readonly selectedShotId?: ShotId | null
   /** 帯の Shot を押した。渡さなければ押せない（従来どおり）。 */
   readonly onSelectShot?: (shotId: ShotId) => void
+  /**
+   * 楽曲の波形の帯（PHASE 8.4 / UI-WORKBENCH-2 §6 F2）。聴きながら切ると同じ 3 帯域の波形を、
+   * **このタイムラインの尺度（px/秒）で**並べる。渡さなければ出さない。
+   */
+  readonly audioLane?: { readonly durationSec: number; readonly node: ReactNode }
 }
 
 type RowProps = {
@@ -169,6 +174,7 @@ export const TimelineTracks = ({
   beatAlignment,
   selectedShotId = null,
   onSelectShot,
+  audioLane,
 }: TimelineTracksProps) => {
   const contentRef = useRef<HTMLDivElement>(null)
   const alignments = beatAlignment === undefined ? null : alignmentByShotId(beatAlignment.views)
@@ -219,7 +225,8 @@ export const TimelineTracks = ({
         onDragEnd={onClipDragEnd}
         onInsertAt={(atSec, leftPx, clientY) => {
           // 置けるのは TEXT だけ。他は素材の選択が要るのでこの画面では受けない。
-          if (isInsertableTrack(track)) onInsertText(track, atSec, anchorFrom(leftPx, clientY), null)
+          if (isInsertableTrack(track))
+            onInsertText(track, atSec, anchorFrom(leftPx, clientY), null)
         }}
       />
     ))
@@ -276,6 +283,12 @@ export const TimelineTracks = ({
             ))}
           </div>
         </Row>
+
+        {audioLane !== undefined && (
+          <Row label="MUSIC（波形）" contentWidthPx={contentWidthPx}>
+            <div style={{ width: audioLane.durationSec * pxPerSec }}>{audioLane.node}</div>
+          </Row>
+        )}
 
         <Row label={timelineRowLabel(VIDEO1_ROW)} contentWidthPx={contentWidthPx}>
           {shots.length === 0 ? (

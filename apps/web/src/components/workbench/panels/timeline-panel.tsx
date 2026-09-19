@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { TimelineEditor } from '@/components/timeline-editor'
+import { WaveformCanvas } from '@/components/waveform-canvas'
+import { fetchWaveformPeaks, type WaveformPeaksResult } from '@/lib/waveform-api'
+import { sectionBoundaries } from '@/lib/waveform-draw'
 import { usePreferences } from '@/components/preferences-root'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelFrame } from '@/components/workbench/panels/panel-frame'
@@ -23,6 +26,7 @@ export const TimelinePanel = () => {
   const { preferences } = usePreferences()
   const { transport, transportControls } = workbench
   const [materials, setMaterials] = useState<TimelineMaterials | null>(null)
+  const peaks = useTrackPeaks(workbench.analysis?.waveformPeaksUrl ?? null)
 
   // 開いたとき・サーバから読み直したとき・Take ができたときに取り直す。
   useEffect(() => {
@@ -44,6 +48,25 @@ export const TimelinePanel = () => {
   }
 
   const mine = transport.owner === 'monitor'
+  const analysis = workbench.analysis
+  const audioLane =
+    analysis === null || peaks === null
+      ? null
+      : {
+          durationSec: analysis.durationSec,
+          node: (
+            <WaveformCanvas
+              peaks={peaks}
+              durationSec={analysis.durationSec}
+              beats={analysis.beats}
+              downbeats={analysis.downbeats}
+              drops={analysis.drops}
+              sectionBoundarySec={sectionBoundaries(analysis.sections)}
+              heightPx={44}
+              compact
+            />
+          ),
+        }
 
   return (
     <PanelFrame>
@@ -64,6 +87,7 @@ export const TimelinePanel = () => {
         posters={workbench.posters}
         selectedShotId={workbench.selectedShotId}
         onSelectShot={workbench.selectShot}
+        {...(audioLane === null ? {} : { audioLane })}
         initialSnapEnabled={preferences.playback.snapToBeat}
         playback={{
           currentSec: transport.currentSec,
@@ -79,4 +103,23 @@ export const TimelinePanel = () => {
       />
     </PanelFrame>
   )
+}
+
+/**
+ * 楽曲の波形の点。解析の署名付き URL は期限があるので、**開いたときに 1 回だけ**取る
+ * （URL を持ち回さない。規約 7）。取れなければ帯を出さない（読めない理由はカッター側が出す）。
+ */
+const useTrackPeaks = (url: string | null): WaveformPeaksResult | null => {
+  const [peaks, setPeaks] = useState<WaveformPeaksResult | null>(null)
+  useEffect(() => {
+    if (url === null) return undefined
+    let cancelled = false
+    void fetchWaveformPeaks(url).then((result) => {
+      if (!cancelled) setPeaks(result.status === 'failed' ? null : result)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [url])
+  return peaks
 }

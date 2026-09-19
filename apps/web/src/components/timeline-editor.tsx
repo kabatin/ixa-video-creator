@@ -12,7 +12,7 @@ import type {
   Transition,
   TransitionId,
 } from '@ixa/domain'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { TimelineClipList, type ClipPatch } from '@/components/timeline-clip-list'
 import {
   TimelineInlineForm,
@@ -129,6 +129,8 @@ export type TimelineEditorProps = {
   readonly posters?: ShotPosterMap
   readonly selectedShotId?: ShotId | null
   readonly onSelectShot?: (shotId: ShotId) => void
+  /** 楽曲の波形の帯。`TimelineTracks` へそのまま渡す。 */
+  readonly audioLane?: { readonly durationSec: number; readonly node: ReactNode }
 }
 
 export type TimelinePlayback = {
@@ -160,6 +162,7 @@ export const TimelineEditor = ({
   posters,
   selectedShotId,
   onSelectShot,
+  audioLane,
 }: TimelineEditorProps) => {
   const api = useMemo(() => createTimelineApi(createRequester(resolveApiBaseUrl())), [])
 
@@ -602,19 +605,19 @@ export const TimelineEditor = ({
        * 再生位置は帯の再生ヘッドと同じ state を見る。
        */}
       {showMonitor && (
-      <div className="mx-auto w-full max-w-4xl">
-        <ProgramMonitor
-          document={document}
-          currentSec={currentSec}
-          seek={seek}
-          playing={playing}
-          onFrame={setCurrentSec}
-          onPlayingChange={setPlaying}
-          onError={(message) => {
-            setActionError(`モニター: ${message}`)
-          }}
-        />
-      </div>
+        <div className="mx-auto w-full max-w-4xl">
+          <ProgramMonitor
+            document={document}
+            currentSec={currentSec}
+            seek={seek}
+            playing={playing}
+            onFrame={setCurrentSec}
+            onPlayingChange={setPlaying}
+            onError={(message) => {
+              setActionError(`モニター: ${message}`)
+            }}
+          />
+        </div>
       )}
 
       {document !== null && (
@@ -654,6 +657,7 @@ export const TimelineEditor = ({
           {...(posters === undefined ? {} : { posters })}
           selectedShotId={selectedShotId ?? null}
           {...(onSelectShot === undefined ? {} : { onSelectShot })}
+          {...(audioLane === undefined ? {} : { audioLane })}
           beatAlignment={
             beatAlignment === null
               ? undefined
