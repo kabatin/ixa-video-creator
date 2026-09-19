@@ -362,3 +362,13 @@ describe('出す帯を決める', () => {
     }
   })
 })
+
+describe('ズームの呼び名（PHASE 8.4）', () => {
+  it('すべての段に呼び名がある（px を画面に出さない）', async () => {
+    const { ZOOM_LEVELS, zoomLabel } = await import('@/lib/timeline-display')
+    ZOOM_LEVELS.forEach((level) => {
+      expect(zoomLabel(level)).not.toContain('px')
+    })
+    expect(zoomLabel(10)).toBe('全体')
+  })
+})

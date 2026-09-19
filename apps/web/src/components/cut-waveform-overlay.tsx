@@ -43,6 +43,8 @@ export type CutWaveformOverlayProps = {
   readonly onMoveMark: (index: number, sec: number) => void
   readonly onDragEnd: () => void
   readonly onZoom: (anchorSec: number, factor: number) => void
+  /** Shift + ホイール・横スクロールで横に送る（窓の幅に対する割合）。渡さなければ送らない。 */
+  readonly onPan?: (ratio: number) => void
 }
 
 type DragState = { readonly index: number; readonly pointerId: number }
@@ -53,6 +55,9 @@ const boundsOf = (element: HTMLElement): PointerBounds => {
 }
 
 /** 窓の外にある印は描かない。曲全体で 200 本まで置けるので、毎回全部は置かない。 */
+/** 横送り 1 回の量（窓の幅に対する割合）。 */
+const PAN_STEP = 0.1
+
 const isVisible = (sec: number, view: ViewRange): boolean =>
   sec >= view.startSec && sec <= view.endSec
 
@@ -69,6 +74,7 @@ export const CutWaveformOverlay = ({
   onMoveMark,
   onDragEnd,
   onZoom,
+  onPan,
 }: CutWaveformOverlayProps) => {
   const layerRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragState | null>(null)
@@ -134,7 +140,14 @@ export const CutWaveformOverlay = ({
    * ページを縦に送るつもりの回転で波形が拡大すると、読む場所を見失う。
    */
   const onWheel = (event: WheelEvent<HTMLDivElement>): void => {
-    if (disabled || (!event.ctrlKey && !event.metaKey && !event.altKey)) return
+    if (disabled) return
+    // Shift + 回転・トラックパッドの横スクロールは横送り。縦に送るつもりの素の回転は受けない。
+    const sideways = event.shiftKey ? event.deltaY : event.deltaX
+    if (onPan !== undefined && !event.ctrlKey && !event.metaKey && Math.abs(sideways) > 0) {
+      onPan(sideways > 0 ? PAN_STEP : -PAN_STEP)
+      return
+    }
+    if (!event.ctrlKey && !event.metaKey && !event.altKey) return
     const anchorSec = timeAtClientX(
       event.clientX,
       boundsOf(event.currentTarget),

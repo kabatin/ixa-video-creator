@@ -41,6 +41,7 @@ import { resolveTimelineKey } from '@/lib/timeline-playhead'
 import {
   DEFAULT_PX_PER_SEC,
   ZOOM_LEVELS,
+  zoomLabel,
   formatClock,
   formatDuration,
   programEndSec,
@@ -564,7 +565,7 @@ export const TimelineEditor = ({
 
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm text-text">{`全体の尺 ${formatDuration(durationSec)}`}</span>
-        <span className="text-sm text-muted">ズーム（1 秒あたりの px）</span>
+        <span className="text-sm text-muted">ズーム</span>
         {ZOOM_LEVELS.map((level) => (
           <button
             key={level}
@@ -579,7 +580,7 @@ export const TimelineEditor = ({
                 : 'bg-surface text-text ring-line-strong hover:bg-surface-2'
             }`}
           >
-            {level}
+            {zoomLabel(level)}
           </button>
         ))}
       </div>

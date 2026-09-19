@@ -6,6 +6,7 @@ import {
   WorkbenchContext,
   type WorkbenchContextValue,
 } from '@/components/workbench/workbench-context'
+import { AssetStoreContext, type AssetStoreValue } from '@/components/workbench/asset-store'
 import { EMPTY_SELECTION } from '@/lib/shot-bulk'
 import { PROJECT_ID, WORKSPACE_ID, shotJson } from './fixtures'
 
@@ -82,12 +83,54 @@ export const workbenchValue = (
   inspectorTab: 'settings',
   openInspector: vi.fn(),
   inspected: null,
+  notice: null,
+  notify: vi.fn(),
   inspect: vi.fn(),
   openViewer: vi.fn(),
   ...patch,
 })
 
-export const renderInWorkbench = (ui: ReactElement, patch: Partial<WorkbenchContextValue> = {}) => {
+/** 素材の共有状態の偽物。既定は全部「読めた・0 件」、操作は何もしない。 */
+export const assetStoreValue = (patch: Partial<AssetStoreValue> = {}): AssetStoreValue => ({
+  characters: { state: 'ready', value: [] },
+  looks: new Map(),
+  locations: { state: 'ready', value: [] },
+  brandAssets: { state: 'ready', value: [] },
+  tracks: { state: 'ready', value: [] },
+  actions: {
+    createCharacter: vi.fn(),
+    updateCharacter: vi.fn(),
+    deleteCharacter: vi.fn(),
+    createLook: vi.fn(),
+    updateLook: vi.fn(),
+    deleteLook: vi.fn(),
+    createLocation: vi.fn(),
+    updateLocation: vi.fn(),
+    deleteLocation: vi.fn(),
+    createBrandAsset: vi.fn(),
+    updateBrandAsset: vi.fn(),
+    deleteBrandAsset: vi.fn(),
+    addTrackFromFile: vi.fn(),
+    updateTrack: vi.fn(),
+    setMasterTrack: vi.fn(),
+    deleteTrack: vi.fn(),
+    analyzeTrack: vi.fn(),
+  },
+  ...patch,
+})
+
+export const renderInWorkbench = (
+  ui: ReactElement,
+  patch: Partial<WorkbenchContextValue> = {},
+  assets: Partial<AssetStoreValue> = {},
+) => {
   const value = workbenchValue(patch)
-  return { value, ...render(<WorkbenchContext.Provider value={value}>{ui}</WorkbenchContext.Provider>) }
+  return {
+    value,
+    ...render(
+      <AssetStoreContext.Provider value={assetStoreValue(assets)}>
+        <WorkbenchContext.Provider value={value}>{ui}</WorkbenchContext.Provider>
+      </AssetStoreContext.Provider>,
+    ),
+  }
 }

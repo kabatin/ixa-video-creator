@@ -28,6 +28,7 @@ export const DraftPanel = () => {
           mood: shot.mood,
         }))}
         onAdopted={workbench.applyAdoptedShots}
+        onSelectShot={workbench.selectShot}
       />
     </PanelFrame>
   )

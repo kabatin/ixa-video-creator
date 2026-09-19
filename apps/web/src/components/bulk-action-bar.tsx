@@ -126,10 +126,18 @@ export const BulkActionBar = ({
     <section
       aria-label="一括操作"
       onKeyDown={handleKeyDown}
-      className="sticky bottom-0 z-30 border-t border-line-strong bg-surface p-3 shadow-lg"
+      // 一覧の上に置く（UI-WORKBENCH-2 §7）。320px で崩れないよう、件数の行とボタンの行に分ける。
+      className="sticky top-0 z-30 border-b border-line-strong bg-surface p-2 shadow-md"
     >
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-2">
         <p className="text-sm font-semibold text-text">{selectedCount} 件を選択中</p>
+        <div className="ml-auto">
+          <Button size="sm" tone="secondary" disabled={busy} onClick={onClearSelection}>
+            選択を{WORDING.unlink}
+          </Button>
+        </div>
+      </div>
+      <div className="mt-1.5 grid grid-cols-3 gap-1">
         {PANEL_ORDER.map((key) => (
           <Button
             key={key}
@@ -146,11 +154,6 @@ export const BulkActionBar = ({
             {PANEL_LABELS[key]}
           </Button>
         ))}
-        <div className="ml-auto">
-          <Button size="sm" tone="secondary" disabled={busy} onClick={onClearSelection}>
-            選択を{WORDING.unlink}
-          </Button>
-        </div>
       </div>
 
       {open !== null && (

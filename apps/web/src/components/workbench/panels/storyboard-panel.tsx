@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { StoryboardGrid } from '@/components/workbench/storyboard-grid'
+import { readyOr, useAssets } from '@/components/workbench/asset-store'
+import { useAssetDrop } from '@/components/workbench/use-asset-drop'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty, PanelFrame, PanelNotice } from '@/components/workbench/panels/panel-frame'
 import { Button } from '@/components/ui/button'
@@ -23,6 +25,8 @@ export const StoryboardPanel = () => {
   const workbench = useWorkbench()
   const { shots, analysis, track } = workbench
   const pendingDrafts = usePendingDraftCount()
+  const { locations } = useAssets()
+  const drop = useAssetDrop(workbench.notify)
 
   const alignment = useMemo(() => {
     if (shots === null || analysis === null || track === null) return null
@@ -105,7 +109,22 @@ export const StoryboardPanel = () => {
         selectedShotId={workbench.selectedShotId}
         onSelect={workbench.selectShot}
         alignments={alignment?.views}
+        onOpen={(shotId) => {
+          workbench.selectShot(shotId)
+          workbench.focusPanel('compare')
+        }}
+        locationName={(shot) =>
+          shot.locationId === null
+            ? null
+            : (readyOr(locations).find((l) => l.id === shot.locationId)?.name ?? null)
+        }
+        dropHandlers={drop.handlers}
+        dropState={drop.stateOf}
       />
+      <p className="mt-2 text-xs text-muted">
+        カードを 2 回押すと Take
+        比較。素材ツリーのキャラクターやロケーションをカードへ落とすと割り当てます。
+      </p>
     </PanelFrame>
   )
 }

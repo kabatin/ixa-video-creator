@@ -2,10 +2,13 @@
 
 import type { Shot, ShotId } from '@ixa/domain'
 import { useEffect, useRef } from 'react'
+import type { DragEvent, MouseEvent } from 'react'
 import { ShotPoster } from '@/components/shot-poster'
+import type { AssetDropState } from '@/components/workbench/use-asset-drop'
 import { formatDuration } from '@/lib/format-time'
-import { shotStatusDotClassName, shotStatusLabel } from '@/lib/shot-display'
+import { shotStatusClassName, shotStatusLabel } from '@/lib/shot-display'
 import type { HeaderCheckboxState, ShotSelection } from '@/lib/shot-bulk'
+import type { ShotSortKey, SortDirection } from '@/lib/shot-list-view'
 import { posterViewFor, type ShotPosterMap } from '@/lib/shot-posters'
 
 export type ShotListCompactProps = {
@@ -15,19 +18,37 @@ export type ShotListCompactProps = {
   readonly checked: ShotSelection
   readonly headerState: HeaderCheckboxState
   readonly busy: boolean
+  readonly sort: { readonly key: ShotSortKey; readonly direction: SortDirection }
+  readonly onSort: (key: ShotSortKey) => void
   readonly onSelect: (shotId: ShotId) => void
-  readonly onToggle: (shotId: ShotId) => void
+  /** `range` は Shift で押したとき（起点からここまでをまとめてチェック）。 */
+  readonly onToggle: (shotId: ShotId, range: boolean) => void
   readonly onToggleAll: () => void
+  /** ツリーの素材を行へ落として割り当てる口（PHASE 8.5）。 */
+  readonly dropHandlers?: (shot: Shot) => {
+    readonly onDragOver: (event: DragEvent<HTMLElement>) => void
+    readonly onDragLeave: () => void
+    readonly onDrop: (event: DragEvent<HTMLElement>) => void
+  }
+  readonly dropState?: (shotId: ShotId) => AssetDropState
+  /** 時間順での番号（1 始まり）。並べ替えても番号は Shot に付いたまま。 */
+  readonly numberOf: (shotId: ShotId) => number
 }
 
 const CELL = 'px-1.5 align-middle'
 
+const SORT_LABELS: Readonly<Record<ShotSortKey, string>> = {
+  order: '#',
+  duration: '尺',
+  status: '状態',
+}
+
 /**
- * 右ペインの Shot 一覧（UI-WORKBENCH §3.1）。**列は 5 つ**（番号・絵・コード・尺・状態）＋チェック。
- * 320px に収まらない説明・mood・カメラはインスペクターで直す（§12）。
+ * 右ペインの Shot 一覧（UI-WORKBENCH-2 §7）。
  *
- * 行を押すと選択（インスペクター・Take 比較・ストーリーボードが連動する）。
- * チェックは一括操作の対象で、選択とは別物。
+ * - **行全体を押せる**（コードの文字だけが押せた）。Shift + チェックで範囲、⌘ + 行でチェックを足す
+ * - 状態は**文字の小さなバッジ**（点だけでは「レビュー待ち」と「生成可能」の見分けが付かなかった）
+ * - 見出しを押して並べ替え。素材をツリーから行へ落とすと割り当てる
  */
 export const ShotListCompact = ({
   shots,
@@ -36,9 +57,14 @@ export const ShotListCompact = ({
   checked,
   headerState,
   busy,
+  sort,
+  onSort,
   onSelect,
   onToggle,
   onToggleAll,
+  dropHandlers,
+  dropState,
+  numberOf,
 }: ShotListCompactProps) => {
   const headerRef = useRef<HTMLInputElement>(null)
 
@@ -46,6 +72,37 @@ export const ShotListCompact = ({
   useEffect(() => {
     if (headerRef.current) headerRef.current.indeterminate = headerState === 'partial'
   }, [headerState])
+
+  const sortHeader = (key: ShotSortKey, align: 'left' | 'right' = 'left') => (
+    <th
+      scope="col"
+      className={`${CELL} ${align === 'right' ? 'text-right' : ''}`}
+      aria-sort={
+        sort.key === key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'
+      }
+    >
+      <button
+        type="button"
+        onClick={() => onSort(key)}
+        className="inline-flex h-6 items-center gap-0.5 hover:text-text"
+      >
+        {SORT_LABELS[key]}
+        <span aria-hidden className="text-xs">
+          {sort.key === key ? (sort.direction === 'asc' ? '▲' : '▼') : ''}
+        </span>
+      </button>
+    </th>
+  )
+
+  const onRowClick = (event: MouseEvent<HTMLTableRowElement>, shot: Shot): void => {
+    // チェックボックスやボタンの上の押下は、その部品に任せる。
+    if (event.target instanceof HTMLElement && event.target.closest('input,button') !== null) return
+    if (event.metaKey || event.ctrlKey) {
+      onToggle(shot.id, false)
+      return
+    }
+    onSelect(shot.id)
+  }
 
   return (
     <table className="w-full border-collapse text-left text-xs">
@@ -65,32 +122,39 @@ export const ShotListCompact = ({
               className="h-3.5 w-3.5"
             />
           </th>
-          <th scope="col" className={CELL}>
-            #
-          </th>
+          {sortHeader('order')}
           <th scope="col" className={CELL}>
             <span className="sr-only">サムネイル</span>
           </th>
           <th scope="col" className={CELL}>
             コード
           </th>
-          <th scope="col" className={`${CELL} text-right`}>
-            尺
-          </th>
-          <th scope="col" className={CELL}>
-            <span className="sr-only">状態</span>
-          </th>
+          {sortHeader('duration', 'right')}
+          {sortHeader('status')}
         </tr>
       </thead>
       <tbody>
-        {shots.map((shot, index) => {
+        {shots.map((shot) => {
           const selected = shot.id === selectedShotId
           const poster = posterViewFor(posters, shot.id)
+          const drop = dropState?.(shot.id) ?? 'idle'
           return (
             <tr
               key={shot.id}
               aria-selected={selected}
-              className={`h-6 border-t border-line ${selected ? 'bg-accent/15' : checked.has(shot.id) ? 'bg-info/10' : 'hover:bg-surface-2'}`}
+              onClick={(event) => {
+                onRowClick(event, shot)
+              }}
+              {...(dropHandlers?.(shot) ?? {})}
+              className={`h-7 cursor-pointer border-t border-line ${
+                drop !== 'idle'
+                  ? 'bg-accent/25 outline outline-2 -outline-offset-2 outline-accent'
+                  : selected
+                    ? 'bg-accent/15'
+                    : checked.has(shot.id)
+                      ? 'bg-info/10'
+                      : 'hover:bg-surface-2'
+              }`}
             >
               <td className={CELL}>
                 <input
@@ -98,14 +162,16 @@ export const ShotListCompact = ({
                   checked={checked.has(shot.id)}
                   disabled={busy}
                   aria-label={`${shot.code} を一括操作の対象にする`}
-                  onChange={() => {
-                    onToggle(shot.id)
+                  onClick={(event) => {
+                    event.preventDefault()
+                    onToggle(shot.id, event.shiftKey)
                   }}
+                  onChange={() => undefined}
                   className="h-3.5 w-3.5"
                 />
               </td>
               <td className={`${CELL} tabular-nums text-muted`}>
-                {String(index + 1).padStart(2, '0')}
+                {String(numberOf(shot.id)).padStart(2, '0')}
               </td>
               <td className={`${CELL} w-10`}>
                 <span className="relative block h-5 w-9">
@@ -134,11 +200,10 @@ export const ShotListCompact = ({
               </td>
               <td className={CELL}>
                 <span
-                  role="img"
-                  aria-label={shotStatusLabel(shot.status)}
-                  title={shotStatusLabel(shot.status)}
-                  className={`inline-block h-2 w-2 rounded-full ${shotStatusDotClassName(shot.status)}`}
-                />
+                  className={`inline-block whitespace-nowrap rounded px-1 text-xs ring-1 ring-inset ${shotStatusClassName(shot.status)}`}
+                >
+                  {shotStatusLabel(shot.status)}
+                </span>
               </td>
             </tr>
           )

@@ -6,7 +6,7 @@ import { useAssets } from '@/components/workbench/asset-store'
 import { INPUT_CLASS } from '@/components/workbench/ui/section'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
-import { castWithCharacter, type CastEntry } from '@/lib/asset-actions'
+import { castWithCharacter, defaultLook, type CastEntry } from '@/lib/asset-actions'
 
 /** 送る形（shotId はパスで渡す）へ写す。 */
 const toEntry = (entry: CastEntry & { readonly shotId?: unknown }): CastEntry => ({
@@ -157,8 +157,8 @@ export const ShotCastSection = ({
           onChange={(event) => {
             const characterId = CharacterId.parse(event.target.value)
             const characterLooks = looks.get(characterId) ?? []
-            const look = characterLooks.find((l) => l.isDefault) ?? characterLooks[0]
-            if (look === undefined) {
+            const look = defaultLook(characterLooks)
+            if (look === null) {
               setError(
                 'このキャラクターには Look がありません。ツリーで Look を足してから選んでください。',
               )

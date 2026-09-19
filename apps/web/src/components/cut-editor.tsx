@@ -2,7 +2,7 @@
 
 import type { MusicTrack, ProjectId, Sequence, SequenceId } from '@ixa/domain'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { AudioTransport } from '@/components/audio-transport'
 import { CutMarkList } from '@/components/cut-mark-list'
 import { CutWaveformOverlay } from '@/components/cut-waveform-overlay'
@@ -13,14 +13,7 @@ import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { HelpDisclosure } from '@/components/ui/help-disclosure'
 import { resolveCutEditorCommand, describeCutEditorKeys } from '@/lib/cut-editor-keys'
-import {
-  ZOOM_STEP,
-  canFollowPlayhead,
-  centerView,
-  isTimeInView,
-  panView,
-  zoomView,
-} from '@/lib/cut-editor-pointer'
+import { centerView, isTimeInView, panView, zoomView } from '@/lib/cut-editor-pointer'
 import {
   addMark,
   buildCutMarkCandidates,
@@ -62,8 +55,6 @@ import { fullView, pixelsPerSecond, sectionBoundaries, type ViewRange } from '@/
  */
 
 const NO_SEQUENCE_VALUE = 'none'
-/** 窓を横へ送る量。見えている幅に対する割合で決める。 */
-const PAN_RATIO = 0.25
 
 export type CutEditorProps = {
   readonly projectId: ProjectId
@@ -80,6 +71,8 @@ export type CutEditorProps = {
   readonly keyboardShortcuts?: boolean
   /** ワークベンチの再生位置と繋ぐ口（PHASE 7.2）。渡さなければ単独で動く。 */
   readonly sync?: CutEditorSync
+  /** 操作の行に足すもの（「セクションから割る…」など。PHASE 8.4）。 */
+  readonly toolbarExtra?: ReactNode
 }
 
 /** 再生位置の共有（UI-WORKBENCH §7.2）。形と規則は `use-cut-editor-sync.ts`。 */
@@ -98,6 +91,7 @@ export const CutEditor = ({
   initialSnapEnabled = true,
   keyboardShortcuts = true,
   sync,
+  toolbarExtra,
 }: CutEditorProps) => {
   const router = useRouter()
 
@@ -363,108 +357,47 @@ export const CutEditor = ({
   const sectionBoundarySec = sectionBoundaries(analysis.sections)
 
   return (
-    <div className="space-y-4">
-      <section className="rounded-lg border border-line bg-surface p-5">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-base font-semibold text-text">聴きながら切る</h2>
-          <p className="text-sm text-muted">
-            {`BPM ${analysis.bpm.toFixed(1)} / 拍 ${String(analysis.beats.length)} 個 / 小節 ${String(analysis.downbeats.length)} 個`}
-          </p>
-        </div>
+    <div className="space-y-2">
+      {/**
+       * ワークベンチのパネルの中（UI-WORKBENCH-2 §6）。**タブと同じ見出しを繰り返さない。箱に箱を入れない。**
+       * 1 行目 = 再生、2 行目 = このパネルの主の操作（区切りを置く）と表示の切り替え。
+       */}
+      <AudioTransport
+        playback={playback}
+        label={track.title}
+        keyboardShortcuts={false}
+        layout="inline"
+      />
 
-        {sourceError !== null && (
-          <p role="alert" className="mt-3 text-sm text-danger">
-            {`音源を読み込めませんでした: ${sourceError}`}
-          </p>
-        )}
-
-        <div className="mt-4">
-          <AudioTransport
-            playback={playback}
-            label={track.title}
-            keyboardShortcuts={false}
-            layout="inline"
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          tone="primary"
+          size="sm"
+          onClick={() => {
+            placeMarkAt(playback.currentSec)
+          }}
+          disabled={saving}
+        >
+          {`ここに区切りを置く（${formatClock(playback.currentSec)}）`}
+        </Button>
+        <label className="flex items-center gap-1.5 text-sm text-text">
+          <input
+            type="checkbox"
+            checked={snapEnabled}
+            disabled={saving}
+            onChange={(event) => {
+              setSnapEnabled(event.target.checked)
+              setSnapNotice(null)
+            }}
+            className="h-3.5 w-3.5"
           />
-        </div>
-
-        <div ref={(node) => setWidthPx(node?.clientWidth ?? 0)} className="mt-4">
-          {peaks === null ? (
-            <p role="status" className="text-sm text-muted">
-              波形を読み込んでいます…
-            </p>
-          ) : (
-            <WaveformCanvas
-              peaks={peaks}
-              durationSec={durationSec}
-              view={view}
-              beats={analysis.beats}
-              downbeats={analysis.downbeats}
-              drops={analysis.drops}
-              sectionBoundarySec={sectionBoundarySec}
-            >
-              <CutWaveformOverlay
-                marks={marks}
-                selectedIndex={selectedIndex}
-                currentSec={playback.currentSec}
-                durationSec={durationSec}
-                view={view}
-                disabled={saving}
-                onSeek={playback.seekTo}
-                onSelectMark={setSelectedIndex}
-                onDragStart={() => {
-                  setDragging(true)
-                }}
-                onMoveMark={(index, sec) => {
-                  moveMarkTo(index, sec, false)
-                }}
-                onDragEnd={() => {
-                  setDragging(false)
-                  const mark = marks[selectedIndex]
-                  if (mark !== undefined) moveMarkTo(selectedIndex, mark.atSec, true)
-                }}
-                onZoom={(anchorSec, factor) => {
-                  setView((current) => zoomView(current, anchorSec, factor, durationSec))
-                }}
-              />
-            </WaveformCanvas>
-          )}
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            onClick={() => {
-              setView((current) => zoomView(current, playback.currentSec, ZOOM_STEP, durationSec))
-            }}
-          >
-            寄る
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => {
-              setView((current) =>
-                zoomView(current, playback.currentSec, 1 / ZOOM_STEP, durationSec),
-              )
-            }}
-          >
-            引く
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => {
-              panBy(-PAN_RATIO)
-            }}
-          >
-            ← 左へ
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => {
-              panBy(PAN_RATIO)
-            }}
-          >
-            右へ →
-          </Button>
+          拍に吸着
+        </label>
+        {toolbarExtra}
+        <span className="ml-auto flex items-center gap-2 text-xs text-muted">
+          <span className="tabular-nums">
+            {`BPM ${analysis.bpm.toFixed(1)}・表示 ${formatClock(view.startSec)}〜${formatClock(view.endSec)}`}
+          </span>
           <Button
             size="sm"
             onClick={() => {
@@ -473,98 +406,104 @@ export const CutEditor = ({
           >
             全体
           </Button>
-          <span className="text-sm text-muted">
-            {`表示 ${formatClock(view.startSec)} 〜 ${formatClock(view.endSec)}`}
-          </span>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-          <label className="flex items-center gap-2 text-sm text-text">
+          <label
+            className="flex items-center gap-1"
+            title="鳴っている間は窓が流れ、止めている間は再生位置が画面から出たときだけ追いかけます"
+          >
             <input
               type="checkbox"
               checked={followPlayhead}
               onChange={(event) => {
                 setFollowPlayhead(event.target.checked)
               }}
-              className="h-4 w-4 rounded border-line-strong"
+              className="h-3.5 w-3.5"
             />
-            再生位置を中央に保つ
+            再生位置を追う
           </label>
+        </span>
+      </div>
 
-          {/**
-           * **効いていないのか、効いた上で動く必要が無いのかを区別して出す**（L-015）。
-           * 曲全体を映している窓では中央へ寄せても押し戻されるので、何も起きない。
-           * 黙っていると設定が壊れているように見える。
-           */}
-          <span className="text-sm text-muted">
-            {!followPlayhead
-              ? '窓は動かしません。「← 左へ」「右へ →」で自分で送ってください。'
-              : !canFollowPlayhead(view, durationSec)
-                ? '曲全体を表示しているので動きません。「寄る」で拡大すると中央に保ちます。'
-                : '鳴っている間は窓が流れます。止めている間は、再生位置が画面から出たときだけ追いかけます。'}
-          </span>
-        </div>
-      </section>
+      {sourceError !== null && (
+        <p role="alert" className="text-sm text-danger">
+          {`音源を読み込めませんでした: ${sourceError}`}
+        </p>
+      )}
 
-      <section className="rounded-lg border border-line bg-surface p-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            tone="primary"
-            onClick={() => {
-              placeMarkAt(playback.currentSec)
-            }}
-            disabled={saving}
-          >
-            {`ここに区切りを置く（${formatClock(playback.currentSec)}）`}
-          </Button>
-
-          <label className="flex items-center gap-2 text-sm text-text">
-            <input
-              type="checkbox"
-              checked={snapEnabled}
-              disabled={saving}
-              onChange={(event) => {
-                setSnapEnabled(event.target.checked)
-                setSnapNotice(null)
-              }}
-              className="h-4 w-4 rounded border-line-strong"
-            />
-            拍に吸着させる
-          </label>
-        </div>
-
-        {snapNotice !== null && (
-          <p role="status" className={`mt-3 text-sm ${snapNoticeClassName(snapNotice.state)}`}>
-            {snapNotice.message}
+      <div ref={(node) => setWidthPx(node?.clientWidth ?? 0)}>
+        {peaks === null ? (
+          <p role="status" className="text-sm text-muted">
+            波形を読み込んでいます…
           </p>
+        ) : (
+          <WaveformCanvas
+            peaks={peaks}
+            durationSec={durationSec}
+            view={view}
+            beats={analysis.beats}
+            downbeats={analysis.downbeats}
+            drops={analysis.drops}
+            sectionBoundarySec={sectionBoundarySec}
+          >
+            <CutWaveformOverlay
+              marks={marks}
+              selectedIndex={selectedIndex}
+              currentSec={playback.currentSec}
+              durationSec={durationSec}
+              view={view}
+              disabled={saving}
+              onSeek={playback.seekTo}
+              onSelectMark={setSelectedIndex}
+              onDragStart={() => {
+                setDragging(true)
+              }}
+              onMoveMark={(index, sec) => {
+                moveMarkTo(index, sec, false)
+              }}
+              onDragEnd={() => {
+                setDragging(false)
+                const mark = marks[selectedIndex]
+                if (mark !== undefined) moveMarkTo(selectedIndex, mark.atSec, true)
+              }}
+              onZoom={(anchorSec, factor) => {
+                setView((current) => zoomView(current, anchorSec, factor, durationSec))
+              }}
+              onPan={(ratio) => {
+                panBy(ratio)
+              }}
+            />
+          </WaveformCanvas>
         )}
+      </div>
 
-        {/**
-         * **キーの一覧はこの画面に 1 つだけ置く。**
-         *
-         * `CutMarkKeyHelp`（区切り側）も `AudioTransport` の `KEY_HINTS`（再生側）も
-         * それぞれ自前の一覧を持っているが、この画面では両者の割り当てが
-         * `←` `→` で重なっており、並べると同じキーに 2 つの説明が出る。
-         * 実際に一度そうなり、再生側だけが「1 秒 戻る / 進む」と嘘を出していた。
-         * ここでは `describeCutEditorKeys` が**実際の行き先から作った一覧**だけを出す。
-         */}
-        {/* **既定では畳む。** 初めは要るが、慣れると縦を食うだけになる。 */}
-        <div className="mt-4">
-          <HelpDisclosure label="キーの割り当て">
-            <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-              {keyHelp.map((entry) => (
-                <div key={entry.keys} className="flex justify-between gap-3">
-                  <dt className="font-mono text-text">{entry.keys}</dt>
-                  <dd className="text-right text-muted">{entry.action}</dd>
-                </div>
-              ))}
-            </dl>
-            <p className="mt-2 text-xs text-muted">
-              文字を打っている間はこれらのキーは効きません。
-            </p>
-          </HelpDisclosure>
-        </div>
-      </section>
+      {snapNotice !== null && (
+        <p role="status" className={`text-sm ${snapNoticeClassName(snapNotice.state)}`}>
+          {snapNotice.message}
+        </p>
+      )}
+
+      {/**
+       * **キーの一覧はこの画面に 1 つだけ置く**（`describeCutEditorKeys` が実際の行き先から作る）。
+       * 既定では畳む。拡大 / 縮小は ⌘・Ctrl + ホイール、横送りは Shift + ホイール。
+       */}
+      <HelpDisclosure label="キーとホイールの割り当て">
+        <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+          {keyHelp.map((entry) => (
+            <div key={entry.keys} className="flex justify-between gap-3">
+              <dt className="font-mono text-text">{entry.keys}</dt>
+              <dd className="text-right text-muted">{entry.action}</dd>
+            </div>
+          ))}
+          <div className="flex justify-between gap-3">
+            <dt className="font-mono text-text">⌘ / Ctrl + ホイール</dt>
+            <dd className="text-right text-muted">拡大 / 縮小</dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="font-mono text-text">Shift + ホイール</dt>
+            <dd className="text-right text-muted">横に送る</dd>
+          </div>
+        </dl>
+        <p className="mt-2 text-xs text-muted">文字を打っている間はこれらのキーは効きません。</p>
+      </HelpDisclosure>
 
       <CutMarkList
         marks={marks}
@@ -578,10 +517,10 @@ export const CutEditor = ({
         rejection={rejection}
       />
 
-      <section className="rounded-lg border border-line bg-surface p-5">
-        <h2 className="text-base font-semibold text-text">Shot にする</h2>
+      <section className="border-t border-line pt-2">
+        <h3 className="text-xs font-semibold text-muted">Shot にする</h3>
 
-        <div className="mt-3 max-w-sm">
+        <div className="mt-2 max-w-sm">
           <SelectField
             id="cutSequenceId"
             label="Sequence"
@@ -595,9 +534,11 @@ export const CutEditor = ({
           />
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="mt-2 flex flex-wrap items-center gap-3">
           <Button
-            tone="primary"
+            // 主の操作は「区切りを置く」。こちらは区切りが揃ってから押す 2 番目の操作（P6）。
+            tone="secondary"
+            size="sm"
             disabled={saving || cuts.state !== 'cuts'}
             onClick={() => {
               void save()

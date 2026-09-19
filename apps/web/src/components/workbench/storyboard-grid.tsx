@@ -2,6 +2,8 @@
 
 import type { Shot, ShotId } from '@ixa/domain'
 import { useEffect, useRef, useState } from 'react'
+import type { DragEvent } from 'react'
+import type { AssetDropState } from '@/components/workbench/use-asset-drop'
 import { ShotPoster } from '@/components/shot-poster'
 import { formatSpan } from '@/lib/format-time'
 import { shotStatusDotClassName, shotStatusLabel } from '@/lib/shot-display'
@@ -21,6 +23,17 @@ export type StoryboardGridProps = {
   readonly onSelect: (shotId: ShotId) => void
   /** 拍とのズレ。判定は `@ixa/domain` の `alignBoundary`。ここは色を付けるだけ。 */
   readonly alignments?: readonly ShotBeatAlignmentView[]
+  /** ダブルクリック（Take 比較を開くなど。UI-WORKBENCH-2 §6）。 */
+  readonly onOpen?: (shotId: ShotId) => void
+  /** ロケーションの名前（素材の共有状態から引く）。無ければ出さない。 */
+  readonly locationName?: (shot: Shot) => string | null
+  /** ツリーの素材をカードへ落として割り当てる口（PHASE 8.5）。 */
+  readonly dropHandlers?: (shot: Shot) => {
+    readonly onDragOver: (event: DragEvent<HTMLElement>) => void
+    readonly onDragLeave: () => void
+    readonly onDrop: (event: DragEvent<HTMLElement>) => void
+  }
+  readonly dropState?: (shotId: ShotId) => AssetDropState
 }
 
 /**
@@ -57,6 +70,10 @@ export const StoryboardGrid = ({
   selectedShotId,
   onSelect,
   alignments,
+  onOpen,
+  locationName,
+  dropHandlers,
+  dropState,
 }: StoryboardGridProps) => {
   const [ref, width] = useRegionWidth()
   const columns = storyboardColumns(width)
@@ -78,19 +95,24 @@ export const StoryboardGrid = ({
           const edge = posterEdgeClass(alignment?.alignment ?? null)
           const description = shot.description.trim()
           return (
-            <li key={shot.id}>
+            <li key={shot.id} {...(dropHandlers?.(shot) ?? {})}>
               <button
                 type="button"
                 aria-pressed={selected}
                 onClick={() => {
                   onSelect(shot.id)
                 }}
+                onDoubleClick={() => {
+                  onOpen?.(shot.id)
+                }}
                 title={alignment === null ? undefined : describeDrift(alignment)}
                 className={`block w-full rounded-md border bg-surface p-1.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus ${
-                  selected
-                    ? 'border-accent ring-2 ring-accent'
-                    : // 拍の色は左の辺だけ。4 辺を塗り替えるホバーを重ねると、指を乗せた瞬間に色が消える。
-                      `border-line ${edge === '' ? 'hover:border-line-strong' : 'hover:ring-1 hover:ring-line-strong'}`
+                  (dropState?.(shot.id) ?? 'idle') !== 'idle'
+                    ? 'border-accent bg-accent/10 ring-2 ring-accent ring-offset-2 ring-offset-bg'
+                    : selected
+                      ? 'border-accent ring-2 ring-accent'
+                      : // 拍の色は左の辺だけ。4 辺を塗り替えるホバーを重ねると、指を乗せた瞬間に色が消える。
+                        `border-line ${edge === '' ? 'hover:border-line-strong' : 'hover:ring-1 hover:ring-line-strong'}`
                 } ${edge}`}
               >
                 <span className="relative block">
@@ -129,6 +151,9 @@ export const StoryboardGrid = ({
                 >
                   {description === '' ? '説明はまだありません' : description}
                 </span>
+                {locationName?.(shot) != null && (
+                  <span className="block truncate text-xs text-muted">{`⌂ ${locationName(shot) ?? ''}`}</span>
+                )}
               </button>
             </li>
           )

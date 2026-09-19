@@ -70,6 +70,14 @@ export const castWithCharacter = (
   ]
 }
 
+/**
+ * 登場人物に足すときの Look。**既定の Look、無ければ先頭。どちらも無ければ null**（足せない）。
+ * ツリーからのドラッグとインスペクターの「＋」が同じ規則を使う（L-012: 規則を書き写さない）。
+ */
+export const defaultLook = <T extends { readonly isDefault: boolean }>(
+  looks: readonly T[],
+): T | null => looks.find((look) => look.isDefault) ?? looks[0] ?? null
+
 // --- 落とされたファイル ---
 
 export type DroppedFileKind = 'audio' | 'image' | 'other'

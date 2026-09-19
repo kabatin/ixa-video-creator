@@ -91,6 +91,20 @@ export const transitionTypeLabel = (type: TransitionType): string => TRANSITION_
 /** ズーム率の選択肢。単位は「1 秒あたりの px」。 */
 export const ZOOM_LEVELS: readonly number[] = [10, 20, 40, 80, 160]
 
+/**
+ * ズームの呼び名（UI-WORKBENCH-2 §6 / P7）。**px を画面に出さない。** 作る人の言葉で並べる。
+ * 116 秒の曲なら 10px/s で約 1160px（全体が 1 画面）、160px/s で 1 拍（約 0.5 秒）が 80px。
+ */
+export const ZOOM_LABELS: Readonly<Record<number, string>> = Object.freeze({
+  10: '全体',
+  20: 'フレーズ',
+  40: '小節',
+  80: '拍',
+  160: '細かく',
+})
+
+export const zoomLabel = (pxPerSec: number): string => ZOOM_LABELS[pxPerSec] ?? `${String(pxPerSec)}px/秒`
+
 export const DEFAULT_PX_PER_SEC = 40
 
 /** 尺 0 のクリップを幅 0 で描くと画面から消える。消さずに最低幅で必ず出す。 */

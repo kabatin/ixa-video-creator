@@ -173,8 +173,8 @@ export const CutMarkList = ({
   }
 
   return (
-    <section className="rounded-lg border border-line bg-surface p-5">
-      <h2 className="text-base font-semibold text-text">できるカット</h2>
+    <section className="border-t border-line pt-2">
+      <h3 className="text-xs font-semibold text-muted">できるカット</h3>
 
       {rejection === null ? null : (
         <p role="alert" className="mt-3 text-sm text-danger">

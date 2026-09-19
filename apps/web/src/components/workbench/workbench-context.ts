@@ -101,6 +101,9 @@ export type WorkbenchContextValue = {
   /** インスペクターのどのタブを前に出すか。メニュー「生成」から生成タブを開くのに使う。 */
   readonly inspectorTab: InspectorTab
   readonly openInspector: (tab: InspectorTab) => void
+  /** 画面上端の知らせ（1 行）。操作の結果や、取り込めなかった理由を出す。 */
+  readonly notice: string | null
+  readonly notify: (message: string | null) => void
   /** 中央上の素材ビューアを前に出す（PHASE 8.2）。 */
   readonly openViewer: () => void
 }

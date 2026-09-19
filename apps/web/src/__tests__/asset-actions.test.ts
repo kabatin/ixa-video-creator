@@ -2,6 +2,7 @@ import { CharacterId, CharacterLookId } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import {
   castWithCharacter,
+  defaultLook,
   droppedFileKind,
   encodeAssetDrag,
   lookKeyFromName,
@@ -63,5 +64,13 @@ describe('droppedFileKind', () => {
     [{ type: 'application/pdf', name: 'a.pdf' }, 'other'],
   ] as const)('%o → %s', (file, kind) => {
     expect(droppedFileKind(file)).toBe(kind)
+  })
+})
+
+describe('defaultLook', () => {
+  it('既定、無ければ先頭、空なら null', () => {
+    expect(defaultLook([{ isDefault: false, id: 1 }, { isDefault: true, id: 2 }])?.id).toBe(2)
+    expect(defaultLook([{ isDefault: false, id: 1 }])?.id).toBe(1)
+    expect(defaultLook([])).toBeNull()
   })
 })

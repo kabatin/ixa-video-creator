@@ -133,7 +133,8 @@ export const AudioTransport = ({
           className="flex flex-wrap items-center gap-x-2 gap-y-2 xl:flex-nowrap"
         >
           <Button
-            tone="primary"
+            // 並んだ画面の主の操作は別にある（聴きながら切るなら「区切りを置く」。P6）。
+            tone="secondary"
             onClick={toggle}
             disabled={error !== null}
             aria-label={isPlaying ? '一時停止' : '再生'}

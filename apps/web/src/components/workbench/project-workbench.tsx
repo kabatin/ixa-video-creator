@@ -124,7 +124,8 @@ const WorkbenchShell = ({
   readonly query: WorkbenchQuery
 }) => {
   const workbench = useWorkbench()
-  const [notice, setNotice] = useState<string | null>(null)
+  const notice = workbench.notice
+  const setNotice = workbench.notify
   /** ドックの配置・前のタブが変わるたびに進む。メニューの作業モードの表示を追わせる。 */
   const [dockEpoch, setDockEpoch] = useState(0)
   const history = useEditHistory(workbench.projectId, workbench.serverEpoch)

@@ -80,7 +80,7 @@ export type AssetStoreValue = {
   readonly actions: AssetActions
 }
 
-const AssetStoreContext = createContext<AssetStoreValue | null>(null)
+export const AssetStoreContext = createContext<AssetStoreValue | null>(null)
 
 export const useAssets = (): AssetStoreValue => {
   const value = useContext(AssetStoreContext)

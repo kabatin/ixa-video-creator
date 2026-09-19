@@ -2,6 +2,7 @@
 
 import type { ProjectId, ShotId } from '@ixa/domain'
 import { useEffect, useMemo, useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { createRequester } from '@/lib/requester'
@@ -57,6 +58,8 @@ export type StoryboardDraftPanelProps = {
   readonly onAdopted?: (shots: readonly WireAdoptedShot[]) => void
   /** テストから差し替えるための注入口。 */
   readonly api?: StoryboardDraftApi
+  /** CUT を押したらその Shot を選ぶ（ワークベンチ）。 */
+  readonly onSelectShot?: (shotId: ShotId) => void
 }
 
 /** 行の状態を表す色。**役割の名前だけ**を使う（`design-tokens.test.ts`）。 */
@@ -65,20 +68,29 @@ const DECISION_CLASSES = {
   undecided: 'text-muted',
 } as const
 
+/**
+ * 1 行 1 Shot（UI-WORKBENCH-2 §6）。**「いまの説明」と「案」を横に並べて見比べる。**
+ * 以前は 1 件ずつ大きなカードで、27 件を見比べられなかった。
+ * なぜこの絵かは案の下に小さく出す（採否の根拠なので省かない）。同じ内容の行は薄くする。
+ */
 const DraftRowView = ({
   row,
   checked,
   onToggle,
+  onSelectShot,
 }: {
   readonly row: DraftRow
   readonly checked: boolean
   readonly onToggle: (shotId: ShotId) => void
+  readonly onSelectShot?: (shotId: ShotId) => void
 }) => (
-  <li className="rounded-md border border-line bg-surface-2 p-3">
-    <div className="flex items-start gap-3">
+  <tr
+    className={`border-t border-line align-top ${row.unchanged ? 'opacity-60' : ''} ${checked ? 'bg-info/10' : ''}`}
+  >
+    <td className="px-1.5 py-1">
       <input
         type="checkbox"
-        className="mt-1"
+        className="mt-0.5 h-3.5 w-3.5"
         checked={checked}
         disabled={!row.selectable}
         onChange={() => {
@@ -86,43 +98,34 @@ const DraftRowView = ({
         }}
         aria-label={`${row.code} の案を採用する`}
       />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="text-sm font-semibold text-text">{row.code}</p>
-          <p className={`text-xs ${DECISION_CLASSES[row.decision]}`}>
-            {row.decision === 'adopted' ? '採用済み' : 'まだ決めていません'}
-          </p>
-        </div>
-
-        {/*
-          **「いまの説明」と「案」を必ず並べる。** 案だけを見せると、
-          採用によって何が変わるのかが分からないまま押すことになる。
-        */}
-        <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-xs text-muted">いまの説明</dt>
-            <dd className="text-text">{describeCurrent(row.currentDescription)}</dd>
-            <dd className="text-xs text-muted">雰囲気: {describeMood(row.currentMood)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted">案</dt>
-            <dd className="text-text">{row.proposedDescription}</dd>
-            <dd className="text-xs text-muted">雰囲気: {describeMood(row.proposedMood)}</dd>
-          </div>
-        </dl>
-
-        {/* なぜこの絵か。**案と同じ重みで出す。** */}
-        <p className="mt-2 text-sm text-muted">
-          <span className="text-xs">なぜこの絵か: </span>
-          {row.reason}
-        </p>
-
-        {row.unchanged ? (
-          <p className="mt-1 text-xs text-muted">いまの説明と同じ内容です</p>
-        ) : null}
-      </div>
-    </div>
-  </li>
+    </td>
+    <th scope="row" className="px-1.5 py-1 text-left">
+      <button
+        type="button"
+        onClick={() => onSelectShot?.(row.shotId)}
+        className="whitespace-nowrap text-sm font-semibold text-text hover:underline"
+      >
+        {row.code}
+      </button>
+    </th>
+    <td className="px-1.5 py-1 text-sm text-text">
+      {describeCurrent(row.currentDescription)}
+      <span className="block text-xs text-muted">雰囲気: {describeMood(row.currentMood)}</span>
+    </td>
+    <td className={`px-1.5 py-1 text-sm ${row.unchanged ? 'text-text' : 'text-text'}`}>
+      <span className={row.unchanged ? '' : 'rounded bg-accent/10 px-0.5'}>
+        {row.proposedDescription}
+      </span>
+      <span className="block text-xs text-muted">雰囲気: {describeMood(row.proposedMood)}</span>
+      <span className="mt-0.5 block text-xs text-muted">なぜこの絵か: {row.reason}</span>
+      {row.unchanged ? (
+        <span className="block text-xs text-muted">いまの説明と同じ内容です</span>
+      ) : null}
+    </td>
+    <td className={`whitespace-nowrap px-1.5 py-1 text-xs ${DECISION_CLASSES[row.decision]}`}>
+      {row.decision === 'adopted' ? '採用済み' : 'まだ決めていません'}
+    </td>
+  </tr>
 )
 
 export const StoryboardDraftPanel = ({
@@ -133,6 +136,7 @@ export const StoryboardDraftPanel = ({
   preloaded = false,
   onAdopted,
   api,
+  onSelectShot,
 }: StoryboardDraftPanelProps) => {
   const client = useMemo(
     () => api ?? createStoryboardDraftApi(createRequester(resolveApiBaseUrl())),
@@ -217,9 +221,7 @@ export const StoryboardDraftPanel = ({
       .adopt(projectId, run.id, shotIds)
       .then((result) => {
         const adoptedById = new Map(result.adopted.map((item) => [item.id, item] as const))
-        setItems((previous) =>
-          previous.map((item) => adoptedById.get(item.id) ?? item),
-        )
+        setItems((previous) => previous.map((item) => adoptedById.get(item.id) ?? item))
 
         // 返ってきた Shot で「いまの説明」を差し替える。**他の Shot は触らない。**
         const updatedById = new Map(result.shots.map((shot) => [shot.id, shot] as const))
@@ -243,9 +245,8 @@ export const StoryboardDraftPanel = ({
   }
 
   return (
-    <section className="rounded-lg border border-line bg-surface p-4" aria-label="絵コンテの下書き">
+    <section aria-label="絵コンテの下書き">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold text-text">絵コンテの下書き</h2>
         <p className="text-xs text-muted">{summary.headline}</p>
       </div>
 
@@ -255,42 +256,30 @@ export const StoryboardDraftPanel = ({
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          className="rounded-md border border-line bg-surface-2 px-3 py-1.5 text-sm text-text disabled:opacity-50"
-          onClick={onDraft}
-          disabled={busy || loading}
-        >
+        <Button size="sm" onClick={onDraft} disabled={busy || loading}>
           {run === null ? '下書きする' : '作り直す'}
-        </button>
-        <button
-          type="button"
-          className="rounded-md border border-line bg-surface-2 px-3 py-1.5 text-sm text-text disabled:opacity-50"
+        </Button>
+        <Button
+          size="sm"
           onClick={() => {
             setSelected(selectAllSelectable(rows))
           }}
           disabled={busy || rows.length === 0}
         >
           まだ決めていない案をすべて選ぶ
-        </button>
-        <button
-          type="button"
-          className="rounded-md border border-line bg-surface-2 px-3 py-1.5 text-sm text-text disabled:opacity-50"
+        </Button>
+        <Button
+          size="sm"
           onClick={() => {
             setSelected(clearSelection())
           }}
           disabled={busy || selected.size === 0}
         >
           選択を外す
-        </button>
-        <button
-          type="button"
-          className="rounded-md bg-accent px-3 py-1.5 text-sm text-accent-fg disabled:opacity-50"
-          onClick={onAdopt}
-          disabled={busy || !summary.canAdopt}
-        >
+        </Button>
+        <Button size="sm" tone="primary" onClick={onAdopt} disabled={busy || !summary.canAdopt}>
           {summary.adoptLabel}
-        </button>
+        </Button>
       </div>
 
       {summary.notice === null ? null : (
@@ -311,18 +300,41 @@ export const StoryboardDraftPanel = ({
       ) : rows.length === 0 ? (
         <p className="mt-3 text-sm text-muted">まだ案がありません</p>
       ) : (
-        <ul className="mt-3 flex flex-col gap-2">
-          {rows.map((row) => (
-            <DraftRowView
-              key={row.shotId}
-              row={row}
-              checked={selected.has(row.shotId)}
-              onToggle={(shotId) => {
-                setSelected((previous) => toggleSelection(previous, shotId))
-              }}
-            />
-          ))}
-        </ul>
+        <table className="mt-2 w-full border-collapse text-left">
+          <caption className="sr-only">絵コンテの案</caption>
+          <thead className="sticky top-0 bg-surface-2 text-xs text-muted">
+            <tr className="h-6">
+              <th scope="col" className="w-6 px-1.5">
+                <span className="sr-only">採用する</span>
+              </th>
+              <th scope="col" className="px-1.5">
+                CUT
+              </th>
+              <th scope="col" className="w-2/5 px-1.5">
+                いまの説明
+              </th>
+              <th scope="col" className="w-2/5 px-1.5">
+                案
+              </th>
+              <th scope="col" className="px-1.5">
+                状態
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <DraftRowView
+                key={row.shotId}
+                row={row}
+                checked={selected.has(row.shotId)}
+                onToggle={(shotId) => {
+                  setSelected((previous) => toggleSelection(previous, shotId))
+                }}
+                onSelectShot={onSelectShot}
+              />
+            ))}
+          </tbody>
+        </table>
       )}
     </section>
   )
