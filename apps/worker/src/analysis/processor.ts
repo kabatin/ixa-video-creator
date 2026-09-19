@@ -29,7 +29,7 @@ export type AnalysisJobData = z.infer<typeof AnalysisJobData>
  * 既定の解析器バージョン（ADR-0009）。`apps/audio` の `ANALYZER_VERSION` と対になる。
  * 解析前に「解析済みか」を判定するには、解析器が名乗る前にその名前を知っている必要がある。
  */
-export const DEFAULT_ANALYZER_VERSION = 'librosa-v1'
+export const DEFAULT_ANALYZER_VERSION = 'librosa-v2'
 
 /** 波形ピークの保存形式。キーの中身が何かを読み手が推測しなくて済むよう object で包む。 */
 export const WAVEFORM_CONTENT_TYPE = 'application/json'
@@ -84,10 +84,15 @@ const errorCodeOf = (error: unknown): string => {
 const storePeaks = async (
   storage: ObjectStorage,
   track: MusicTrack,
-  peaks: readonly number[],
+  result: Pick<MusicAnalysisResult, 'peaks' | 'waveform'>,
 ): Promise<string> => {
   const key = waveformKey(track.projectId, track.id)
-  const body = new TextEncoder().encode(JSON.stringify({ peaks }))
+  // v2（PHASE 8.1）: 音の大きさと 3 帯域も同じ JSON に置く。画面は version で描き分ける。
+  const payload =
+    result.waveform === null
+      ? { peaks: result.peaks }
+      : { version: 2, peaks: result.peaks, ...result.waveform }
+  const body = new TextEncoder().encode(JSON.stringify(payload))
   await storage.put(key, body, { contentType: WAVEFORM_CONTENT_TYPE })
   return key
 }
@@ -112,7 +117,7 @@ const analyzeAndStore = async (
     )
   }
 
-  const waveformPeaksKey = await storePeaks(deps.storage, track, result.peaks)
+  const waveformPeaksKey = await storePeaks(deps.storage, track, result)
 
   const analysis = await deps.musicAnalyses.create({
     musicTrackId: track.id,

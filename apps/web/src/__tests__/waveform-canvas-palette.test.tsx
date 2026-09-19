@@ -50,7 +50,7 @@ const setToken = (token: string, rgb: string): void => {
 const renderCanvas = () =>
   render(
     <WaveformCanvas
-      peaks={{ status: 'ok', peaks: [0.2, 0.9, 0.4] }}
+      peaks={{ status: 'ok', peaks: [0.2, 0.9, 0.4], bands: null }}
       durationSec={8}
       beats={[1, 2, 3, 4]}
       downbeats={[1, 5]}
@@ -151,6 +151,28 @@ describe('波形の色', () => {
 
     await waitFor(() => {
       expect(recorder.fills).toContain('rgb(250 250 250)')
+    })
+  })
+
+  it('3 帯域の色を CSS 変数から読み、透かして塗る（PHASE 8.1）', async () => {
+    setToken(WAVEFORM_COLOR_TOKENS.bands.low, '11 12 13')
+    render(
+      <WaveformCanvas
+        peaks={{
+          status: 'ok',
+          peaks: [0.2, 0.9, 0.4],
+          bands: { rms: [0.2, 0.9, 0.4], low: [0, 1, 0.5], mid: [0.3, 0.2, 0.1], high: [0.1, 0.1, 0.9] },
+        }}
+        durationSec={8}
+        beats={[]}
+        downbeats={[]}
+        drops={[]}
+        sectionBoundarySec={[]}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(recorder.fills.some((fill) => fill.startsWith('rgb(11 12 13 / '))).toBe(true)
     })
   })
 

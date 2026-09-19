@@ -5,12 +5,25 @@ import { formatClock, formatDuration } from '@/lib/format-time'
 import { THEME_ATTRIBUTE } from '@/lib/theme'
 import type { WaveformPeaksResult } from '@/lib/waveform-api'
 import { peaksOf } from '@/lib/waveform-api'
+import { HelpDisclosure } from '@/components/ui/help-disclosure'
+import {
+  BAND_HEIGHT_RATIO,
+  BAND_ORDER,
+  RULER_HEIGHT_PX,
+  WAVEFORM_HEIGHT_PX,
+  sectionStripes,
+  seriesColumns,
+  stretchBands,
+  stretchSeries,
+  type BandName,
+} from '@/lib/waveform-bands'
 import {
   DEFAULT_WAVEFORM_PALETTE,
-  MARKER_DRAW_ORDER,
   MARKER_STYLES,
   WAVEFORM_COLOR_TOKENS,
   WAVE_FILL_ALPHA,
+  BAND_FILL_ALPHA,
+  STRIPE_ALPHA,
   beatGridAnchor,
   clampView,
   describeWaveform,
@@ -39,7 +52,6 @@ import {
  * 描いた内容を文字にし、凡例でも線の形を示す。
  */
 
-const DEFAULT_HEIGHT_PX = 128
 /** 波形が上下いっぱいに触れないようにする。目印の上端の印と重なって読めなくなるため。 */
 const WAVE_VERTICAL_FILL = 0.88
 
@@ -139,6 +151,18 @@ const resolvePalette = (root: HTMLElement): WaveformPalette => {
       downbeat: marker('downbeat'),
       drop: marker('drop'),
     },
+    bands: {
+      low:
+        readTokenColor(styles, WAVEFORM_COLOR_TOKENS.bands.low, BAND_FILL_ALPHA) ??
+        fallback.bands.low,
+      mid:
+        readTokenColor(styles, WAVEFORM_COLOR_TOKENS.bands.mid, BAND_FILL_ALPHA) ??
+        fallback.bands.mid,
+      high:
+        readTokenColor(styles, WAVEFORM_COLOR_TOKENS.bands.high, BAND_FILL_ALPHA) ??
+        fallback.bands.high,
+    },
+    stripe: readTokenColor(styles, WAVEFORM_COLOR_TOKENS.stripe, STRIPE_ALPHA) ?? fallback.stripe,
   }
 }
 
@@ -207,33 +231,85 @@ const fillTriangleCap = (ctx: CanvasRenderingContext2D, x: number, sizeDev: numb
 }
 
 type DrawParams = {
+  /** 振幅（帯域が無い古い解析のときだけ使う）。引き伸ばし済み。 */
   readonly columns: readonly number[]
+  /** 3 帯域の列（引き伸ばし済み）。null なら振幅だけで描く。 */
+  readonly bandColumns: Readonly<Record<BandName, readonly number[]>> | null
+  readonly stripes: readonly (readonly [number, number, 0 | 1])[]
   readonly picks: readonly MarkerPick[]
   readonly view: ViewRange
   readonly widthDev: number
   readonly heightDev: number
+  readonly rulerDev: number
   readonly dpr: number
   readonly palette: WaveformPalette
 }
 
+/**
+ * 目印（UI-WORKBENCH-2 §3.2）。**波の上に線を重ねない。**
+ * 小節頭・セクションの境目・ドロップは上の帯（ruler）に刻む。
+ * 拍は間引かずに描ける近さ（1 本ずつ 7px 以上空く）のときだけ、波の上に薄く描く。
+ */
 const drawMarkers = (ctx: CanvasRenderingContext2D, params: DrawParams): void => {
   const byKind = new Map<MarkerKind, MarkerPick>(params.picks.map((pick) => [pick.kind, pick]))
-  for (const kind of MARKER_DRAW_ORDER) {
+  const ruler = params.rulerDev
+  const tick = (kind: MarkerKind, top: number, bottom: number, widthPx: number): void => {
     const pick = byKind.get(kind)
-    if (pick === undefined) continue
-    const style: MarkerStyle = MARKER_STYLES[kind]
-    const [top, bottom] = markerSegment(style, params.heightDev)
+    if (pick === undefined) return
+    ctx.fillStyle = params.palette.marker[kind]
+    for (const time of pick.times) {
+      fillVerticalLine(
+        ctx,
+        timeToX(time, params.view, params.widthDev),
+        top,
+        bottom,
+        widthPx * params.dpr,
+        null,
+      )
+    }
+  }
+
+  const beats = byKind.get('beat')
+  if (beats !== undefined && beats.stride === 1) {
+    const style = MARKER_STYLES.beat
     const dash =
       style.dashPx === null
         ? null
         : ([style.dashPx[0] * params.dpr, style.dashPx[1] * params.dpr] as const)
-    ctx.fillStyle = params.palette.marker[kind]
-    for (const time of pick.times) {
-      const x = timeToX(time, params.view, params.widthDev)
-      fillVerticalLine(ctx, x, top, bottom, style.lineWidthPx * params.dpr, dash)
-      if (style.capMarker === 'triangle') fillTriangleCap(ctx, x, 4 * params.dpr)
+    ctx.fillStyle = params.palette.marker.beat
+    for (const time of beats.times) {
+      fillVerticalLine(
+        ctx,
+        timeToX(time, params.view, params.widthDev),
+        ruler,
+        params.heightDev,
+        params.dpr,
+        dash,
+      )
     }
   }
+  tick('downbeat', ruler * 0.5, ruler, 1)
+  tick('section', 0, ruler, 1.5)
+
+  const drops = byKind.get('drop')
+  if (drops !== undefined) {
+    ctx.fillStyle = params.palette.marker.drop
+    for (const time of drops.times)
+      fillTriangleCap(ctx, timeToX(time, params.view, params.widthDev), 4 * params.dpr)
+  }
+}
+
+/** 中心から上下対称に 1 列ずつ塗る。 */
+const fillMirrored = (
+  ctx: CanvasRenderingContext2D,
+  values: readonly number[],
+  middle: number,
+  maxHeight: number,
+): void => {
+  values.forEach((value, column) => {
+    const height = Math.max(1, value * maxHeight)
+    ctx.fillRect(column, middle - height / 2, 1, height)
+  })
 }
 
 const draw = (canvas: HTMLCanvasElement, params: DrawParams): boolean => {
@@ -244,12 +320,29 @@ const draw = (canvas: HTMLCanvasElement, params: DrawParams): boolean => {
   ctx.fillStyle = params.palette.background
   ctx.fillRect(0, 0, params.widthDev, params.heightDev)
 
-  const middle = params.heightDev / 2
-  ctx.fillStyle = params.palette.wave
-  params.columns.forEach((amplitude, column) => {
-    const barHeight = Math.max(1, amplitude * params.heightDev * WAVE_VERTICAL_FILL)
-    ctx.fillRect(column, middle - barHeight / 2, 1, barHeight)
+  // セクションは面で見せる。交互に薄く敷く（線を重ねない）。
+  ctx.fillStyle = params.palette.stripe
+  params.stripes.forEach(([start, end, parity]) => {
+    if (parity === 0) return
+    const left = timeToX(start, params.view, params.widthDev)
+    const right = timeToX(end, params.view, params.widthDev)
+    ctx.fillRect(left, 0, right - left, params.heightDev)
   })
+
+  const waveTop = params.rulerDev
+  const waveHeight = params.heightDev - waveTop
+  const middle = waveTop + waveHeight / 2
+  const usable = waveHeight * WAVE_VERTICAL_FILL
+
+  if (params.bandColumns === null) {
+    ctx.fillStyle = params.palette.wave
+    fillMirrored(ctx, params.columns, middle, usable)
+  } else {
+    for (const band of BAND_ORDER) {
+      ctx.fillStyle = params.palette.bands[band]
+      fillMirrored(ctx, params.bandColumns[band], middle, usable * BAND_HEIGHT_RATIO[band])
+    }
+  }
 
   drawMarkers(ctx, params)
   return true
@@ -282,9 +375,7 @@ const MarkerSample = ({
         strokeWidth={style.lineWidthPx}
         strokeDasharray={style.dashPx === null ? undefined : style.dashPx.join(' ')}
       />
-      {style.capMarker === 'triangle' && (
-        <polygon points="4,0 10,0 7,5" fill={color} />
-      )}
+      {style.capMarker === 'triangle' && <polygon points="4,0 10,0 7,5" fill={color} />}
     </svg>
   )
 }
@@ -313,6 +404,29 @@ const MarkerLegend = ({
   </ul>
 )
 
+const BAND_LABELS: Readonly<Record<BandName, string>> = {
+  low: '低域（キック・ベース）',
+  mid: '中域（歌・メロディ）',
+  high: '高域（ハイハット・シンバル）',
+}
+
+/** 帯域の色の意味。ブレイクでは低域（奥の太い層）が細くなる。 */
+const BandLegend = ({ palette }: { readonly palette: WaveformPalette }) => (
+  <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+    {BAND_ORDER.map((band) => (
+      <li key={band} className="flex items-center gap-1.5">
+        <span
+          aria-hidden
+          className="inline-block h-2 w-3 rounded-sm"
+          style={{ background: palette.bands[band] }}
+        />
+        {BAND_LABELS[band]}
+      </li>
+    ))}
+    <li>高さは曲の中での強さ。セクションは背景の縞、小節頭とドロップ（▼）は上の帯に刻む。</li>
+  </ul>
+)
+
 // --- 本体 ---
 
 export const WaveformCanvas = ({
@@ -323,7 +437,7 @@ export const WaveformCanvas = ({
   downbeats,
   drops,
   sectionBoundarySec,
-  heightPx = DEFAULT_HEIGHT_PX,
+  heightPx = WAVEFORM_HEIGHT_PX,
   children,
 }: WaveformCanvasProps) => {
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -353,15 +467,50 @@ export const WaveformCanvas = ({
   const widthDev = Math.max(0, Math.round(widthPx * dpr))
   const heightDev = Math.max(0, Math.round(heightPx * dpr))
 
+  /**
+   * 曲ごとの引き伸ばしは**曲を開いたときに 1 回だけ**（列ごとに分位を取ると重い）。
+   * 帯域が無い古い解析は振幅を引き伸ばす。音圧の高い曲でも起伏が出る。
+   */
+  const stretched = useMemo(() => {
+    const bands = peaks.status === 'ok' ? peaks.bands : null
+    return {
+      peaks: stretchSeries(points),
+      bands: bands === null ? null : stretchBands(bands),
+    }
+  }, [peaks, points])
+
+  const stripes = useMemo(
+    () => sectionStripes(sectionBoundarySec, durationSec),
+    [sectionBoundarySec, durationSec],
+  )
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (canvas === null || widthDev <= 0 || heightDev <= 0) return
     canvas.width = widthDev
     canvas.height = heightDev
-    const columns = peakColumns(points, safeView, durationSec, widthDev)
-    const ok = draw(canvas, { columns, picks, view: safeView, widthDev, heightDev, dpr, palette })
-    setDrawError(ok ? null : 'この端末では波形を描画できませんでした（canvas を初期化できません）。')
-  }, [points, safeView, durationSec, picks, widthDev, heightDev, dpr, palette])
+    const columnsOf = (series: readonly number[]): readonly number[] =>
+      seriesColumns(series, safeView, durationSec, widthDev)
+    const bands = stretched.bands
+    const ok = draw(canvas, {
+      columns: peakColumns(stretched.peaks, safeView, durationSec, widthDev),
+      bandColumns:
+        bands === null
+          ? null
+          : { low: columnsOf(bands.low), mid: columnsOf(bands.mid), high: columnsOf(bands.high) },
+      stripes,
+      picks,
+      view: safeView,
+      widthDev,
+      heightDev,
+      rulerDev: Math.round(RULER_HEIGHT_PX * dpr),
+      dpr,
+      palette,
+    })
+    setDrawError(
+      ok ? null : 'この端末では波形を描画できませんでした（canvas を初期化できません）。',
+    )
+  }, [stretched, stripes, safeView, durationSec, picks, widthDev, heightDev, dpr, palette])
 
   if (peaks.status === 'failed') {
     return (
@@ -389,12 +538,7 @@ export const WaveformCanvas = ({
         className="relative w-full overflow-hidden rounded-lg border border-line"
         style={{ height: `${heightPx}px` }}
       >
-        <canvas
-          ref={canvasRef}
-          role="img"
-          aria-label={label}
-          className="block h-full w-full"
-        />
+        <canvas ref={canvasRef} role="img" aria-label={label} className="block h-full w-full" />
         {children}
       </div>
 
@@ -406,20 +550,30 @@ export const WaveformCanvas = ({
 
       {peaks.status === 'empty' && (
         <p className="mt-2 text-sm text-warn">
-          波形の点が 0 個でした。解析は終わっていますが、音の形は表示できません。目印だけを描いています。
+          波形の点が 0
+          個でした。解析は終わっていますが、音の形は表示できません。目印だけを描いています。
         </p>
       )}
 
       {/*
-        canvas の中身を文字で出す 2 本立て。読み上げ用は canvas の `aria-label` が持つので、
-        ここを `sr-only` で二重に置かない（同じ文が 2 回読まれる）。
-        代わりに、目で見ても分からない「いまどこを映しているか」を出す。
+        いまどこを映しているかと、目印の読み方。凡例は波形の下を 2 行占めていたので、
+        `?` の中へ畳む（UI-WORKBENCH-2 §3.2）。読み上げは canvas の `aria-label` が持つ。
       */}
-      <p className="mt-2 text-xs text-muted">
-        {formatClock(safeView.startSec)} – {formatClock(safeView.endSec)}（
-        {formatDuration(viewDurationSec(safeView))} / 全体 {formatDuration(durationSec)}）
-      </p>
-      <MarkerLegend picks={picks} palette={palette} />
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+        <span className="tabular-nums">
+          {formatClock(safeView.startSec)} – {formatClock(safeView.endSec)}（
+          {formatDuration(viewDurationSec(safeView))} / 全体 {formatDuration(durationSec)}）
+        </span>
+        {peaks.status === 'ok' && peaks.bands === null && (
+          <span className="text-warn">
+            古い解析のため帯域の色がありません。再解析すると出ます。
+          </span>
+        )}
+        <HelpDisclosure label="波形の読み方">
+          <BandLegend palette={palette} />
+          <MarkerLegend picks={picks} palette={palette} />
+        </HelpDisclosure>
+      </div>
     </div>
   )
 }

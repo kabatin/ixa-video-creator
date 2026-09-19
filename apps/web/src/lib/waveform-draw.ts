@@ -174,6 +174,10 @@ export type WaveformPalette = {
   readonly background: string
   readonly wave: string
   readonly marker: Readonly<Record<MarkerKind, string>>
+  /** 3 帯域の色（PHASE 8.1）。低 = 暖色、中 = 中間、高 = 寒色。 */
+  readonly bands: Readonly<Record<'low' | 'mid' | 'high', string>>
+  /** セクションの背景の帯（交互に塗る側）。 */
+  readonly stripe: string
 }
 
 /**
@@ -190,7 +194,15 @@ export const WAVEFORM_COLOR_TOKENS = Object.freeze({
     downbeat: 'text',
     drop: 'accent',
   } satisfies Record<MarkerKind, string>),
+  bands: Object.freeze({ low: 'wave-low', mid: 'wave-mid', high: 'wave-high' }),
+  stripe: 'line',
 })
+
+/** 帯域の層の不透明度。手前の層から奥の層が透けて、重なりで帯域の比が読める。 */
+export const BAND_FILL_ALPHA = 0.85
+
+/** セクションの帯の不透明度。波の後ろに薄く敷くだけ。 */
+export const STRIPE_ALPHA = 0.35
 
 /**
  * 波形の柱の不透明度。目印の線より後ろへ下げるために透かす。
@@ -214,6 +226,12 @@ export const DEFAULT_WAVEFORM_PALETTE: WaveformPalette = Object.freeze({
     downbeat: 'rgb(230 234 240)',
     drop: 'rgb(255 210 0)',
   }),
+  bands: Object.freeze({
+    low: 'rgb(251 146 60 / 0.85)',
+    mid: 'rgb(52 211 153 / 0.85)',
+    high: 'rgb(125 211 252 / 0.85)',
+  }),
+  stripe: 'rgb(38 48 64 / 0.35)',
 })
 
 /** 縦線が占める範囲（上端 y, 下端 y）。単位は呼び出し側の高さに合わせる。 */

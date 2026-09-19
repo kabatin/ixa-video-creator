@@ -31,7 +31,7 @@ def test_analyze_returns_analysis_and_peaks(client: TestClient, click_wav: Path)
 
     body = response.json()
     assert abs(body["bpm"] - 120.0) <= 2.0, f"実測 BPM = {body['bpm']}"
-    assert body["analyzer_version"] == "librosa-v1"
+    assert body["analyzer_version"] == "librosa-v2"
     assert len(body["peaks"]) == 2000
     assert all(0.0 <= p <= 1.0 for p in body["peaks"])
     assert set(body["downbeats"]).issubset(set(body["beats"]))

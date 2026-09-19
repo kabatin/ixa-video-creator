@@ -57,10 +57,11 @@ import { fullView, pixelsPerSecond, sectionBoundaries, type ViewRange } from '@/
  *
  * 区切りは N 個で N-1 カット。隣り合う 2 個がそのままカットの端になるので、
  * **隙間も重なりも構造的に作れない。**
+ *
+ * 波形の高さは `waveform-bands.ts` の既定（80px。PHASE 8.1 で 160px から半分に）。
  */
 
 const NO_SEQUENCE_VALUE = 'none'
-const WAVEFORM_HEIGHT_PX = 160
 /** 窓を横へ送る量。見えている幅に対する割合で決める。 */
 const PAN_RATIO = 0.25
 
@@ -400,7 +401,6 @@ export const CutEditor = ({
               downbeats={analysis.downbeats}
               drops={analysis.drops}
               sectionBoundarySec={sectionBoundarySec}
-              heightPx={WAVEFORM_HEIGHT_PX}
             >
               <CutWaveformOverlay
                 marks={marks}

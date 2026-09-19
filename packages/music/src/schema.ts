@@ -24,6 +24,11 @@ export const AnalyzeResponseWire = z.object({
   drops: z.array(z.number()),
   duration_sec: z.number().nonnegative(),
   peaks: z.array(z.number()),
+  /** v2（PHASE 8.1）から。古い解析器は返さないので省略できる。 */
+  rms: z.array(z.number()).optional(),
+  bands: z
+    .object({ low: z.array(z.number()), mid: z.array(z.number()), high: z.array(z.number()) })
+    .optional(),
 })
 export type AnalyzeResponseWire = z.infer<typeof AnalyzeResponseWire>
 
@@ -45,6 +50,18 @@ export const MusicAnalysisResult = z.object({
   durationSec: Seconds,
   /** UI 描画用の波形ピーク（0..1）。 */
   peaks: z.array(z.number().min(0).max(1)),
+  /**
+   * UI 描画用の音の大きさと 3 帯域（各 0..1。PHASE 8.1）。**古い解析器では null。**
+   * 振幅の最大だけでは、音圧を揃えた曲が平らな四角に見える。
+   */
+  waveform: z
+    .object({
+      rms: z.array(z.number().min(0).max(1)),
+      low: z.array(z.number().min(0).max(1)),
+      mid: z.array(z.number().min(0).max(1)),
+      high: z.array(z.number().min(0).max(1)),
+    })
+    .nullable(),
 })
 export type MusicAnalysisResult = z.infer<typeof MusicAnalysisResult>
 
@@ -67,4 +84,8 @@ export const toMusicAnalysisResult = (wire: AnalyzeResponseWire): MusicAnalysisR
     drops: wire.drops,
     durationSec: wire.duration_sec,
     peaks: wire.peaks,
+    waveform:
+      wire.rms === undefined || wire.bands === undefined
+        ? null
+        : { rms: wire.rms, low: wire.bands.low, mid: wire.bands.mid, high: wire.bands.high },
   })

@@ -145,6 +145,11 @@ describe('色の割り当て', () => {
     WAVEFORM_COLOR_TOKENS.background,
     WAVEFORM_COLOR_TOKENS.wave,
     ...MARKER_DRAW_ORDER.map((kind) => WAVEFORM_COLOR_TOKENS.marker[kind]),
+    // 3 帯域（PHASE 8.1）と、セクションの縞
+    WAVEFORM_COLOR_TOKENS.bands.low,
+    WAVEFORM_COLOR_TOKENS.bands.mid,
+    WAVEFORM_COLOR_TOKENS.bands.high,
+    WAVEFORM_COLOR_TOKENS.stripe,
   ]
 
   it('4 種類すべてに色の割り当てがある', () => {
@@ -418,7 +423,35 @@ describe('fetchWaveformPeaks', () => {
     const result = await fetchWaveformPeaks('https://example.invalid/peaks.json', {
       fetchImpl: respond(JSON.stringify({ peaks: [0, 0.5, 1] })),
     })
-    expect(result).toEqual({ status: 'ok', peaks: [0, 0.5, 1] })
+    // 古い JSON（peaks だけ）は帯域なし。振幅で描く。
+    expect(result).toEqual({ status: 'ok', peaks: [0, 0.5, 1], bands: null })
+  })
+
+  it('v2 の JSON なら 3 帯域も返す（PHASE 8.1）', async () => {
+    const payload = {
+      version: 2,
+      peaks: [0, 0.5, 1],
+      rms: [0.1, 0.2, 0.3],
+      low: [1, 0, 0],
+      mid: [0, 1, 0],
+      high: [0, 0, 1],
+    }
+    const result = await fetchWaveformPeaks('https://example.invalid/peaks.json', {
+      fetchImpl: respond(JSON.stringify(payload)),
+    })
+    expect(result).toEqual({
+      status: 'ok',
+      peaks: [0, 0.5, 1],
+      bands: { rms: [0.1, 0.2, 0.3], low: [1, 0, 0], mid: [0, 1, 0], high: [0, 0, 1] },
+    })
+  })
+
+  it('帯域の長さが振幅と食い違えば、帯域だけ捨てて振幅で描く', async () => {
+    const payload = { version: 2, peaks: [0, 0.5, 1], rms: [0.1], low: [1], mid: [0], high: [0] }
+    const result = await fetchWaveformPeaks('https://example.invalid/peaks.json', {
+      fetchImpl: respond(JSON.stringify(payload)),
+    })
+    expect(result).toEqual({ status: 'ok', peaks: [0, 0.5, 1], bands: null })
   })
 
   it('点が 0 個は empty であり failed ではない', async () => {

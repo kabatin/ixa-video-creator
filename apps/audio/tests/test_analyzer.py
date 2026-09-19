@@ -89,4 +89,4 @@ def test_onsets_and_drops_are_sorted_within_duration(result: AnalysisResult) -> 
 
 
 def test_analyzer_version_is_fixed(result: AnalysisResult) -> None:
-    assert result.analyzer_version == "librosa-v1"
+    assert result.analyzer_version == "librosa-v2"

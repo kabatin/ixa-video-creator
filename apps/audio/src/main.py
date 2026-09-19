@@ -14,9 +14,9 @@ from pydantic import BaseModel, Field
 
 from .analyzer import analyze
 from .errors import AudioError, AudioFileNotFoundError, PathNotAllowedError
-from .models import AnalyzeResponse
+from .models import AnalyzeResponse, WaveformBands
 from .paths import resolve_audio_path
-from .waveform import DEFAULT_BUCKETS, compute_peaks
+from .waveform import DEFAULT_BUCKETS, compute_waveform_v2
 
 DEFAULT_PORT = 8100
 DEFAULT_HOST = "127.0.0.1"
@@ -51,7 +51,7 @@ def create_app() -> FastAPI:
 
         try:
             result = analyze(str(path))
-            peaks = compute_peaks(str(path), DEFAULT_BUCKETS)
+            wave = compute_waveform_v2(str(path), DEFAULT_BUCKETS)
         except AudioError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         except Exception as exc:  # noqa: BLE001 - 想定外も文脈を付けて 500 にする
@@ -59,7 +59,12 @@ def create_app() -> FastAPI:
                 status_code=500, detail=f"解析中に予期しないエラーが発生しました: {exc}"
             ) from exc
 
-        return AnalyzeResponse(**result.model_dump(), peaks=peaks)
+        return AnalyzeResponse(
+            **result.model_dump(),
+            peaks=wave.peaks,
+            rms=wave.rms,
+            bands=WaveformBands(low=wave.low, mid=wave.mid, high=wave.high),
+        )
 
     return app
 

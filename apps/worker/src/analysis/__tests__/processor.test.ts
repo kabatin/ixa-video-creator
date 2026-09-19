@@ -97,6 +97,20 @@ const harness = async (options: HarnessOptions = {}): Promise<Harness> => {
 }
 
 describe('processAnalysisJob', () => {
+  it('v2 の解析器なら、音の大きさと 3 帯域も同じ JSON に置く（PHASE 8.1）', async () => {
+    const waveform = { rms: [0, 1, 0.5], low: [0.2, 1, 0], mid: [0.1, 0.5, 0.4], high: [0, 0.3, 1] }
+    const { deps, storage, track } = await harness({
+      analyzer: fakeAnalyzer(analysisResult({ waveform })),
+    })
+
+    await processAnalysisJob(deps, { musicTrackId: track.id })
+
+    const stored: unknown = JSON.parse(
+      new TextDecoder().decode(await storage.get(waveformKey(track.projectId, track.id))),
+    )
+    expect(stored).toEqual({ version: 2, peaks: [0, 0.5, 1], ...waveform })
+  })
+
   it('解析結果を保存し、波形ピークをストレージへ置く', async () => {
     const { deps, analyses, analyzer, storage, track } = await harness()
 

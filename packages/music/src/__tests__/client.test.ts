@@ -80,11 +80,33 @@ describe('analyze', () => {
     const result = await createMusicAnalyzer(BASE_URL).analyze(AUDIO_PATH)
 
     expect(result.analyzerVersion).toBe('librosa-v1')
+    // 古い解析器は波形の v2 を返さない。null に畳んで、画面が振幅だけで描けるようにする。
+    expect(result.waveform).toBeNull()
     expect(result.bpmConfidence).toBe(0.63)
     expect(result.energyCurve.hopSec).toBe(0.023)
     expect(result.durationSec).toBe(2)
     expect(result.sections).toEqual([{ start: 0, end: 2, label: 'verse', energy: 0.42 }])
     expect(result.peaks).toEqual([0, 0.5, 1])
+  })
+
+  it('v2 の波形（rms と 3 帯域）を camelCase の 1 つにまとめる（PHASE 8.1）', async () => {
+    mockFetch(() =>
+      Promise.resolve(
+        jsonResponse({
+          ...wireResponse(),
+          analyzer_version: 'librosa-v2',
+          rms: [0, 1, 0.5],
+          bands: { low: [1, 0, 0], mid: [0, 1, 0], high: [0, 0, 1] },
+        }),
+      ),
+    )
+    const result = await createMusicAnalyzer(BASE_URL).analyze(AUDIO_PATH)
+    expect(result.waveform).toEqual({
+      rms: [0, 1, 0.5],
+      low: [1, 0, 0],
+      mid: [0, 1, 0],
+      high: [0, 0, 1],
+    })
   })
 
   it('audio_path を snake_case で POST する', async () => {

@@ -169,7 +169,7 @@ export type FakeAnalyzer = MusicAnalyzer & {
 export const analysisResult = (
   overrides: Partial<MusicAnalysisResult> = {},
 ): MusicAnalysisResult => ({
-  analyzerVersion: 'librosa-v1',
+  analyzerVersion: 'librosa-v2',
   bpm: 119.9984,
   bpmConfidence: 0.93,
   beats: [0, 0.5, 1],
@@ -180,6 +180,7 @@ export const analysisResult = (
   drops: [32.5],
   durationSec: 116,
   peaks: [0, 0.5, 1],
+  waveform: null,
   ...overrides,
 })
 

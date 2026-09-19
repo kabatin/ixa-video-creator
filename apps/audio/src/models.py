@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-ANALYZER_VERSION = "librosa-v1"
+#: v2（PHASE 8.1）: 波形に音の大きさと 3 帯域を足した。拍・セクションの求め方は v1 と同じ。
+#: 版を上げるのは、既存の曲を「再解析」で v2 の波形にできるようにするため
+#: （worker は同じ版の解析があれば何もしない）。
+ANALYZER_VERSION = "librosa-v2"
 
 # セクションのラベル命名は LLM が TS 側で行う（ARCHITECTURE.md §14 / ADR-0009）。
 # このサービスは境界とエネルギーのみを出し、ラベルは常にこの仮値を入れる。
@@ -47,7 +50,18 @@ class AnalysisResult(BaseModel):
     analyzer_version: str = ANALYZER_VERSION
 
 
+class WaveformBands(BaseModel):
+    """3 帯域の強さ（各 0..1）。低 = キック・ベース、中 = 歌、高 = ハイハット。"""
+
+    low: list[float]
+    mid: list[float]
+    high: list[float]
+
+
 class AnalyzeResponse(AnalysisResult):
-    """HTTP 応答。解析結果に UI 描画用のピークを加えたもの。"""
+    """HTTP 応答。解析結果に UI 描画用の波形を加えたもの。"""
 
     peaks: list[float]
+    #: 音の大きさ（区間ごとの RMS を最大で割ったもの）。v2 から。
+    rms: list[float]
+    bands: WaveformBands
