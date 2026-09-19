@@ -4,6 +4,8 @@ import type {
 } from '@ixa/db'
 import {
   CreateMusicTrackInput as CreateMusicTrackInputSchema,
+  UpdateMusicTrackPatch as UpdateMusicTrackPatchSchema,
+  nextMasterAfterRemoval,
   CreateRenderJobInput as CreateRenderJobInputSchema,
   CreateTimelineClipInput as CreateTimelineClipInputSchema,
   CreateTransitionInput as CreateTransitionInputSchema,
@@ -180,6 +182,34 @@ export const createInMemoryMusicTrackRepository = (
       })
       store = [...store, created]
       return Promise.resolve(created)
+    },
+
+    update: (id, patch) => {
+      const found = store.find((track) => track.id === id)
+      if (found === undefined) return Promise.resolve(null)
+      const updated = MusicTrackSchema.parse({ ...found, ...UpdateMusicTrackPatchSchema.parse(patch) })
+      store = store.map((track) => (track.id === id ? updated : track))
+      return Promise.resolve(updated)
+    },
+
+    setMaster: (id) => {
+      const found = store.find((track) => track.id === id)
+      if (found === undefined) return Promise.resolve(null)
+      store = store.map((track) =>
+        track.projectId === found.projectId ? { ...track, isMaster: track.id === id } : track,
+      )
+      return Promise.resolve(store.find((track) => track.id === id) ?? null)
+    },
+
+    softDelete: (id) => {
+      const found = store.find((track) => track.id === id)
+      if (found === undefined) return Promise.resolve(false)
+      const siblings = store.filter((track) => track.projectId === found.projectId)
+      const promote = nextMasterAfterRemoval(siblings, id)
+      store = store
+        .filter((track) => track.id !== id)
+        .map((track) => (track.id === promote ? { ...track, isMaster: true } : track))
+      return Promise.resolve(true)
     },
   }
 }

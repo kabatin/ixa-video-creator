@@ -1,11 +1,17 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { MediaAssetRepository, MusicAnalysisRepository, MusicTrackRepository, ProjectRepository } from '@ixa/db'
+import type {
+  MediaAssetRepository,
+  MusicAnalysisRepository,
+  MusicTrackRepository,
+  ProjectRepository,
+} from '@ixa/db'
 import {
   CreateMusicTrackInput as CreateMusicTrackInputSchema,
   MusicAnalysis as MusicAnalysisSchema,
   MusicTrack as MusicTrackSchema,
   MusicTrackId as MusicTrackIdSchema,
   ProjectId as ProjectIdSchema,
+  UpdateMusicTrackPatch as UpdateMusicTrackPatchSchema,
   type MusicAnalysis,
   type MusicTrack,
   type MusicTrackId,
@@ -110,7 +116,9 @@ const commonErrors = {
 }
 
 const listMusicTracksRoute = createRoute({
-  method: 'get', path: '/projects/{projectId}/music-tracks', tags: ['music'],
+  method: 'get',
+  path: '/projects/{projectId}/music-tracks',
+  tags: ['music'],
   summary: 'Project の楽曲一覧',
   request: { params: ProjectParams },
   responses: {
@@ -120,7 +128,9 @@ const listMusicTracksRoute = createRoute({
 })
 
 const createMusicTrackRoute = createRoute({
-  method: 'post', path: '/projects/{projectId}/music-tracks', tags: ['music'],
+  method: 'post',
+  path: '/projects/{projectId}/music-tracks',
+  tags: ['music'],
   summary: '楽曲を登録する',
   request: { params: ProjectParams, body: body(CreateMusicTrackBody) },
   responses: {
@@ -129,8 +139,45 @@ const createMusicTrackRoute = createRoute({
   },
 })
 
+const UpdateMusicTrackBody = UpdateMusicTrackPatchSchema.openapi('UpdateMusicTrackInput')
+
+const updateMusicTrackRoute = createRoute({
+  method: 'patch',
+  path: '/music-tracks/{id}',
+  tags: ['music'],
+  summary: '楽曲の題名・オフセット・音量を直す（マスターは set-master で変える）',
+  request: { params: MusicTrackParams, body: body(UpdateMusicTrackBody) },
+  responses: {
+    200: jsonContent('更新後の楽曲', successResponse(MusicTrackResponse)),
+    ...commonErrors,
+  },
+})
+
+const setMasterRoute = createRoute({
+  method: 'post',
+  path: '/music-tracks/{id}/set-master',
+  tags: ['music'],
+  summary: 'この楽曲をマスターにする（同じ Project の他の楽曲は降格する）',
+  request: { params: MusicTrackParams },
+  responses: {
+    200: jsonContent('Project の楽曲一覧（付け替え後）', listResponse(MusicTrackResponse)),
+    ...commonErrors,
+  },
+})
+
+const deleteMusicTrackRoute = createRoute({
+  method: 'delete',
+  path: '/music-tracks/{id}',
+  tags: ['music'],
+  summary: '楽曲をソフトデリートする。マスターを消したら残りの最古をマスターにする',
+  request: { params: MusicTrackParams },
+  responses: { 204: { description: '削除した（本文なし）' }, ...commonErrors },
+})
+
 const requestAnalysisRoute = createRoute({
-  method: 'post', path: '/music-tracks/{id}/analysis', tags: ['music'],
+  method: 'post',
+  path: '/music-tracks/{id}/analysis',
+  tags: ['music'],
   summary: '音楽解析をキューへ投入する（結果は待たない）',
   request: { params: MusicTrackParams },
   responses: {
@@ -140,7 +187,9 @@ const requestAnalysisRoute = createRoute({
 })
 
 const getAnalysisRoute = createRoute({
-  method: 'get', path: '/music-tracks/{id}/analysis', tags: ['music'],
+  method: 'get',
+  path: '/music-tracks/{id}/analysis',
+  tags: ['music'],
   summary: '最新の解析結果を取得する',
   request: { params: MusicTrackParams },
   responses: {
@@ -184,7 +233,10 @@ export const musicRoutes = (deps: MusicRoutesDeps) => {
        */
       const asset = await deps.mediaAssets.findById(input.mediaAssetId)
       if (asset === null) {
-        return c.json(fail(VALIDATION_ERROR_MESSAGE, { mediaAssetId: [MISSING_ASSET_MESSAGE] }), 422)
+        return c.json(
+          fail(VALIDATION_ERROR_MESSAGE, { mediaAssetId: [MISSING_ASSET_MESSAGE] }),
+          422,
+        )
       }
       if (asset.kind !== 'audio') {
         return c.json(fail(VALIDATION_ERROR_MESSAGE, { mediaAssetId: [NOT_AUDIO_MESSAGE] }), 422)
@@ -192,6 +244,22 @@ export const musicRoutes = (deps: MusicRoutesDeps) => {
 
       const created = await deps.musicTracks.create({ ...input, projectId })
       return c.json(ok(created), 201)
+    })
+    .openapi(updateMusicTrackRoute, async (c) => {
+      const updated = await deps.musicTracks.update(c.req.valid('param').id, c.req.valid('json'))
+      if (updated === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      return c.json(ok(updated), 200)
+    })
+    .openapi(setMasterRoute, async (c) => {
+      const updated = await deps.musicTracks.setMaster(c.req.valid('param').id)
+      if (updated === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      // 降格した側も画面が持ち直せるよう、Project の全曲を返す。
+      return c.json(okList(await deps.musicTracks.findByProject(updated.projectId)), 200)
+    })
+    .openapi(deleteMusicTrackRoute, async (c) => {
+      const removed = await deps.musicTracks.softDelete(c.req.valid('param').id)
+      if (!removed) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      return c.body(null, 204)
     })
     .openapi(requestAnalysisRoute, async (c) => {
       const { id } = c.req.valid('param')

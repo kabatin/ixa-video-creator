@@ -1,4 +1,9 @@
-import { LocationId as LocationIdSchema, TakeId as TakeIdSchema, newId } from '@ixa/domain'
+import {
+  LocationId as LocationIdSchema,
+  ShotId as ShotIdSchema,
+  TakeId as TakeIdSchema,
+  newId,
+} from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../app.js'
 import { type ShotResponse } from '../routes/shots.js'
@@ -60,6 +65,55 @@ describe('POST /shots/:id/select-take', () => {
       takeId: newId(TakeIdSchema),
     })
     expect(res.status).toBe(422)
+  })
+})
+
+describe('DELETE /shots/:id/selected-take（PHASE 8）', () => {
+  const adopt = async (f: ReturnType<typeof buildFixture>) => {
+    const take = await f.takes.create({
+      shotId: f.shot.id,
+      mediaAssetId: aTake(f.shot, 'c'.repeat(64)).mediaAssetId,
+      spec: aTake(f.shot, 'c'.repeat(64)).spec,
+      specHash: 'c'.repeat(64),
+      providerId: aTake(f.shot, 'c'.repeat(64)).providerId,
+      modelId: aTake(f.shot, 'c'.repeat(64)).modelId,
+      providerParams: { kind: 'http', request: {} },
+      seedUsed: null,
+      costUsd: 0,
+      generationTimeSec: 1,
+      parentTakeId: null,
+      regenerationReason: null,
+    })
+    await postJson(f.app, `/shots/${f.shot.id}/select-take`, { takeId: take.id })
+    return take
+  }
+
+  it('採用を外し、Take は消さず、状態を review に戻す', async () => {
+    const f = buildFixture()
+    const take = await adopt(f)
+
+    const res = await f.app.request(`/shots/${f.shot.id}/selected-take`, { method: 'DELETE' })
+
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as Ok<ShotResponse>
+    expect(json.data.selectedTakeId).toBeNull()
+    expect(json.data.status).toBe('review')
+    expect(await f.takes.findById(take.id)).not.toBeNull()
+  })
+
+  it('採用が無い Shot でも 200 で何も変えない', async () => {
+    const f = buildFixture()
+    const res = await f.app.request(`/shots/${f.shot.id}/selected-take`, { method: 'DELETE' })
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as Ok<ShotResponse>).data.selectedTakeId).toBeNull()
+  })
+
+  it('存在しない Shot は 404', async () => {
+    const f = buildFixture()
+    const res = await f.app.request(`/shots/${newId(ShotIdSchema)}/selected-take`, {
+      method: 'DELETE',
+    })
+    expect(res.status).toBe(404)
   })
 })
 

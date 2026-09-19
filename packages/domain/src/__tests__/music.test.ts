@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { expandBeatGrid, snapToBeat } from '../music/music.js'
+import { MusicTrackId } from '../common/ids.js'
+import {
+  UpdateMusicTrackPatch,
+  expandBeatGrid,
+  nextMasterAfterRemoval,
+  snapToBeat,
+} from '../music/music.js'
 import { canonicalJson } from '../generation/spec.js'
 import { framesToSeconds, rangesOverlap, secondsToFrames } from '../common/time.js'
 
@@ -43,5 +49,45 @@ describe('time', () => {
   it('境界が一致する範囲は重ならない', () => {
     expect(rangesOverlap({ start: 0, end: 5 }, { start: 5, end: 10 })).toBe(false)
     expect(rangesOverlap({ start: 0, end: 5 }, { start: 4, end: 10 })).toBe(true)
+  })
+})
+
+describe('nextMasterAfterRemoval（PHASE 8）', () => {
+  const a = { id: MusicTrackId.parse('01ARZ3NDEKTSV4RRFFQ69G5FA1'), isMaster: false }
+  const b = { id: MusicTrackId.parse('01ARZ3NDEKTSV4RRFFQ69G5FA2'), isMaster: true }
+  const c = { id: MusicTrackId.parse('01ARZ3NDEKTSV4RRFFQ69G5FA3'), isMaster: false }
+
+  it('マスターでない曲を外してもマスターは変えない', () => {
+    expect(nextMasterAfterRemoval([a, b, c], a.id)).toBeNull()
+  })
+
+  it('マスターを外したら、残りで最初に登録した曲をマスターにする', () => {
+    expect(nextMasterAfterRemoval([c, b, a], b.id)).toBe(a.id)
+  })
+
+  it('最後の 1 曲を外したら誰もマスターにならない', () => {
+    expect(nextMasterAfterRemoval([b], b.id)).toBeNull()
+  })
+
+  it('知らない曲なら何もしない', () => {
+    expect(nextMasterAfterRemoval([a, b], c.id)).toBeNull()
+  })
+})
+
+describe('UpdateMusicTrackPatch（PHASE 8）', () => {
+  it('題名・オフセット・音量だけを受ける', () => {
+    expect(UpdateMusicTrackPatch.parse({ title: '新しい題名', volume: 0.5 })).toEqual({
+      title: '新しい題名',
+      volume: 0.5,
+    })
+  })
+
+  it('マスターはこの口では変えない（知らない項目は拒否）', () => {
+    expect(UpdateMusicTrackPatch.safeParse({ isMaster: true }).success).toBe(false)
+  })
+
+  it('空の題名・範囲外の音量を拒否する', () => {
+    expect(UpdateMusicTrackPatch.safeParse({ title: '  ' }).success).toBe(false)
+    expect(UpdateMusicTrackPatch.safeParse({ volume: 3 }).success).toBe(false)
   })
 })

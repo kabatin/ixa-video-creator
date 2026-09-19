@@ -20,6 +20,39 @@ export type MusicTrack = z.infer<typeof MusicTrack>
 export const CreateMusicTrackInput = MusicTrack.omit({ id: true })
 export type CreateMusicTrackInput = z.input<typeof CreateMusicTrackInput>
 
+/**
+ * 楽曲の後から直せる項目（PHASE 8）。**マスターはここでは変えない**
+ * （マスターは Project に 1 つだけなので、付け替えは別の操作 `setMaster` にする）。
+ */
+export const UpdateMusicTrackPatch = z
+  .object({
+    title: z.string().trim().min(1).optional(),
+    offsetSec: Seconds.optional(),
+    volume: z.number().min(0).max(2).optional(),
+  })
+  .strict()
+export type UpdateMusicTrackPatch = z.infer<typeof UpdateMusicTrackPatch>
+
+/**
+ * 楽曲を 1 曲外したあと、どれをマスターにするか。**変えないなら null。**
+ *
+ * - 外したのがマスターでなければ変えない
+ * - マスターを外したら、残りのうち**最初に登録した曲**（ULID の昇順）をマスターにする
+ *   （登録時の「最初の 1 曲は必ずマスター」と同じ規則。マスターが 0 曲の Project を作らない）
+ */
+export const nextMasterAfterRemoval = (
+  tracks: readonly Pick<MusicTrack, 'id' | 'isMaster'>[],
+  removedId: MusicTrackId,
+): MusicTrackId | null => {
+  const removed = tracks.find((track) => track.id === removedId)
+  if (removed === undefined || !removed.isMaster) return null
+  const remaining = tracks
+    .filter((track) => track.id !== removedId)
+    .map((track) => track.id)
+    .sort()
+  return remaining[0] ?? null
+}
+
 export const SectionLabel = z.enum([
   'intro', 'verse', 'pre_chorus', 'chorus', 'bridge', 'break', 'drop', 'outro',
 ])

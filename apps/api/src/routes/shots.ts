@@ -322,6 +322,15 @@ const selectTakeRoute = createRoute({
   responses: { 200: jsonContent('更新後の Shot', successResponse(ShotResponse)), ...commonErrors },
 })
 
+const unselectTakeRoute = createRoute({
+  method: 'delete',
+  path: '/shots/{id}/selected-take',
+  tags: ['shots'],
+  summary: '採用 Take を外す（Take そのものは消さない）',
+  request: { params: ShotParams },
+  responses: { 200: jsonContent('更新後の Shot', successResponse(ShotResponse)), ...commonErrors },
+})
+
 export type ShotRoutesDeps = {
   shots: ShotRepository
   projects: ProjectRepository
@@ -448,6 +457,26 @@ export const applySelectedTake = async (
 }
 
 /**
+ * 採用を外す（PHASE 8）。**Take は追記のみで消さない**（規約 2）。外すのは Shot の指し先だけ。
+ * Take が残っているので状態は `review`（Take はあるが未承認）へ戻す。
+ * 生成中の Shot は触らない（生成が終われば状態は worker が進める）。
+ */
+export const clearSelectedTake = async (
+  deps: Pick<ShotRoutesDeps, 'shots' | 'events' | 'logger'>,
+  shot: Shot,
+): Promise<Shot> => {
+  if (shot.selectedTakeId === null) return shot
+  await deps.shots.selectTake(shot.id, null)
+  const updated =
+    shot.status === 'generating'
+      ? await deps.shots.findById(shot.id)
+      : await deps.shots.updateStatus(shot.id, 'review')
+  if (updated === null) throw new Error(`採用を外した Shot が見つかりません: ${shot.id}`)
+  await publishShotStatus(deps, updated)
+  return updated
+}
+
+/**
  * `buildGeneration` の**知っている失敗だけ**をフィールド単位の 422 へ畳む。
  * 未知の失敗は `null` を返す。呼び出し側は投げ直して 500 にすること
  * （DB の接続断を「モデルが不正」として返さないため）。
@@ -537,6 +566,11 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
 
       const updated = await applySelectedTake(deps, shot.id, take)
       return c.json(ok(toShotResponse(updated)), 200)
+    })
+    .openapi(unselectTakeRoute, async (c) => {
+      const shot = await deps.shots.findById(c.req.valid('param').id)
+      if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      return c.json(ok(toShotResponse(await clearSelectedTake(deps, shot))), 200)
     })
     .openapi(generateRoute, async (c) => {
       const shot = await deps.shots.findById(c.req.valid('param').id)

@@ -301,3 +301,57 @@ describe('解析結果の取得', () => {
     ).toBe(404)
   })
 })
+
+describe('楽曲を直す・マスターを付け替える・消す（PHASE 8）', () => {
+  it('PATCH で題名・オフセット・音量を直す', async () => {
+    const track = await createTrack()
+    const res = await send('PATCH', `/music-tracks/${track.id}`, { title: '差し替え', volume: 0.5 })
+    expect(res.status).toBe(200)
+    const body = await json<SuccessBody<TrackBody & { volume: number }>>(res)
+    expect(body.data.title).toBe('差し替え')
+    expect(body.data.volume).toBe(0.5)
+  })
+
+  it('PATCH でマスターは変えられない（422）', async () => {
+    const track = await createTrack()
+    const res = await send('PATCH', `/music-tracks/${track.id}`, { isMaster: false })
+    expect(res.status).toBe(422)
+  })
+
+  it('存在しない楽曲の PATCH は 404', async () => {
+    const res = await send('PATCH', `/music-tracks/${newId(MusicTrackIdSchema)}`, { title: 'x' })
+    expect(res.status).toBe(404)
+  })
+
+  it('set-master で付け替え、マスターは常に 1 曲だけ', async () => {
+    const first = await createTrack({ title: '1 曲目' })
+    const second = await createTrack({ title: '2 曲目', isMaster: false })
+
+    const res = await send('POST', `/music-tracks/${second.id}/set-master`)
+
+    expect(res.status).toBe(200)
+    const body = await json<ListBody<TrackBody & { isMaster: boolean }>>(res)
+    expect(body.data.filter((track) => track.isMaster).map((track) => track.id)).toEqual([
+      second.id,
+    ])
+    expect(musicTracks.snapshot().find((track) => track.id === first.id)?.isMaster).toBe(false)
+  })
+
+  it('マスターを消したら、残りで最初に登録した曲がマスターになる', async () => {
+    const first = await createTrack({ title: '1 曲目' })
+    const second = await createTrack({ title: '2 曲目', isMaster: false })
+
+    const res = await send('DELETE', `/music-tracks/${first.id}`)
+
+    expect(res.status).toBe(204)
+    expect(musicTracks.snapshot().map((track) => [track.id, track.isMaster])).toEqual([
+      [second.id, true],
+    ])
+  })
+
+  it('消した楽曲をもう一度消すと 404', async () => {
+    const track = await createTrack()
+    await send('DELETE', `/music-tracks/${track.id}`)
+    expect((await send('DELETE', `/music-tracks/${track.id}`)).status).toBe(404)
+  })
+})

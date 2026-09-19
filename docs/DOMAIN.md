@@ -278,7 +278,14 @@ type MusicTrack = {
   isMaster: boolean                 // プロジェクトの尺を決める1曲
   offsetSec: Seconds                // タイムライン上の開始位置（通常 0）
 }
+```
 
+**マスターの規則**（PHASE 8 / ADR-0022）
+- マスターは Project に**常にちょうど 1 曲**（楽曲が 1 曲以上あるとき）。最初の 1 曲は必ずマスター
+- 付け替えは `setMaster`（他は降格）。題名・オフセット・音量の変更（`UpdateMusicTrackPatch`）ではマスターを変えない
+- マスターを消したら、残りで最初に登録した曲をマスターにする（`nextMasterAfterRemoval`）。削除はソフトデリート
+
+```ts
 type MusicAnalysis = {
   id: MusicAnalysisId
   musicTrackId: MusicTrackId
@@ -365,7 +372,7 @@ type Shot = {
   sourceType: ShotSourceType
 
   // 状態
-  selectedTakeId: TakeId | null
+  selectedTakeId: TakeId | null     // 外せる（PHASE 8）。外しても Take は消えず、状態は review へ戻る
   status: ShotStatus
   lockedAt: Date | null             // ロック中は自動再生成の対象外
 

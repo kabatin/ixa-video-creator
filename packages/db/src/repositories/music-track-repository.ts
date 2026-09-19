@@ -1,7 +1,15 @@
 import { and, asc, eq, isNull } from 'drizzle-orm'
-import type { CreateMusicTrackInput, MusicTrack, MusicTrackId, ProjectId } from '@ixa/domain'
+import type {
+  CreateMusicTrackInput,
+  MusicTrack,
+  MusicTrackId,
+  ProjectId,
+  UpdateMusicTrackPatch,
+} from '@ixa/domain'
 import {
   CreateMusicTrackInput as CreateMusicTrackInputSchema,
+  UpdateMusicTrackPatch as UpdateMusicTrackPatchSchema,
+  nextMasterAfterRemoval,
   MusicTrack as MusicTrackSchema,
   MusicTrackId as MusicTrackIdSchema,
   newId,
@@ -25,6 +33,18 @@ export type MusicTrackRepository = {
   /** 投入順（ULID の昇順 = 時系列）。ソフトデリート済みは含まない。 */
   findByProject(projectId: ProjectId): Promise<MusicTrack[]>
   create(input: CreateMusicTrackInput): Promise<MusicTrack>
+  /** 題名・オフセット・音量を直す（PHASE 8）。無い・消した曲なら null。 */
+  update(id: MusicTrackId, patch: UpdateMusicTrackPatch): Promise<MusicTrack | null>
+  /**
+   * この曲をマスターにし、同じ Project の他の曲を降格する（PHASE 8）。
+   * **マスターは Project に 1 つだけ**（create と同じ規則）。無い・消した曲なら null。
+   */
+  setMaster(id: MusicTrackId): Promise<MusicTrack | null>
+  /**
+   * ソフトデリートする（PHASE 8）。**マスターを消したら残りの最古をマスターにする**
+   * （`nextMasterAfterRemoval`）。消せたら true、無い・消し済みなら false。
+   */
+  softDelete(id: MusicTrackId): Promise<boolean>
 }
 
 /** row → Domain。zod で検証して branded ID を付ける。 */
@@ -95,6 +115,68 @@ export const createMusicTrackRepository = (db: DbClient): MusicTrackRepository =
       const row = rows[0]
       if (!row) throw new Error('music_tracks への INSERT が行を返しませんでした')
       return musicTrackRowToDomain(row)
+    })
+  },
+
+  async update(id, patch) {
+    const validated = UpdateMusicTrackPatchSchema.parse(patch)
+    if (Object.keys(validated).length === 0) return this.findById(id)
+    const rows = await db
+      .update(musicTracks)
+      .set(validated)
+      .where(and(eq(musicTracks.id, id), isNull(musicTracks.deletedAt)))
+      .returning()
+    const row = rows[0]
+    return row ? musicTrackRowToDomain(row) : null
+  },
+
+  async setMaster(id) {
+    // 降格と昇格を 1 トランザクションにまとめる。途中で失敗すると 0 個か 2 個になる。
+    return db.transaction(async (tx) => {
+      const found = await tx
+        .select()
+        .from(musicTracks)
+        .where(and(eq(musicTracks.id, id), isNull(musicTracks.deletedAt)))
+        .limit(1)
+      const target = found[0]
+      if (!target) return null
+      await tx
+        .update(musicTracks)
+        .set({ isMaster: false })
+        .where(and(eq(musicTracks.projectId, target.projectId), isNull(musicTracks.deletedAt)))
+      const rows = await tx
+        .update(musicTracks)
+        .set({ isMaster: true })
+        .where(eq(musicTracks.id, id))
+        .returning()
+      const row = rows[0]
+      if (!row) throw new Error('music_tracks の UPDATE が行を返しませんでした')
+      return musicTrackRowToDomain(row)
+    })
+  },
+
+  async softDelete(id) {
+    return db.transaction(async (tx) => {
+      const found = await tx
+        .select()
+        .from(musicTracks)
+        .where(and(eq(musicTracks.id, id), isNull(musicTracks.deletedAt)))
+        .limit(1)
+      const target = found[0]
+      if (!target) return false
+      const siblings = await tx
+        .select()
+        .from(musicTracks)
+        .where(and(eq(musicTracks.projectId, target.projectId), isNull(musicTracks.deletedAt)))
+      const promote = nextMasterAfterRemoval(siblings.map(musicTrackRowToDomain), id)
+      await tx
+        .update(musicTracks)
+        .set({ deletedAt: new Date(), isMaster: false })
+        .where(eq(musicTracks.id, id))
+      if (promote !== null) {
+        await tx.update(musicTracks).set({ isMaster: true }).where(eq(musicTracks.id, promote))
+      }
+      return true
     })
   },
 })
