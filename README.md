@@ -1,6 +1,7 @@
 # iXA Video Creator
 
-**An AI-native music-video workbench. Cut to the beat, generate each shot, and render what you previewed.**
+**Start from the song. Cut it, generate a shot for every cut, and render a music video that
+matches exactly what you previewed.**
 
 [日本語版 README](./README.ja.md) · MIT licensed · TypeScript monorepo
 
@@ -8,23 +9,38 @@
 
 ---
 
-Most AI video tools give you a prompt box and a clip. This one is built around the part
-that actually takes the time: deciding **where** each cut lands, keeping a character
-consistent across 27 of them, and getting a finished file out that matches what you saw
-on screen.
+## Music first
 
-It is a working tool, not a demo. The first film made with it is a 1m56s music video.
+Most AI video tools begin with a text prompt, hand you a clip, and leave you to slide music
+underneath afterwards. This one runs the other way round.
+
+**The finished track is the input.** You drop a song onto the window, it is analysed with
+librosa — beats, downbeats, drops, three-band RMS — and from that moment the song *is* the
+timeline:
+
+- the film's length is the song's length; there is nothing to overrun
+- every cut is a position in the waveform, placed while listening to it
+- a shot's duration is a consequence of where you cut, not a number typed into a form
+- that duration is what gets sent to the video model, so what comes back is the length the
+  music asked for
+
+The work is therefore *edit against the music, then fill each slot* — never *generate clips
+and hope they fit*. The first film made with it is a 1m56s music video in 27 shots.
 
 ## Why it might interest you
 
-**Preview is the render.** The player and the exported file consume the *same*
-`TimelineDocument` through the *same* Remotion composition. There is no separate
-"preview path" that can drift from the output — a class of bug that eats hours.
+**The song's structure is data, not a picture of a waveform.** Beats and downbeats are
+numbers you can snap to, filter by and sort against. The tool shows where each shot sits
+relative to the beat *without calling it a mistake* — cutting to a vocal onset rather than a
+beat is a choice, and on the reference project 16 of 27 cuts are deliberately off the grid.
 
-**Cut to the music, not to a grid.** Audio is analysed with librosa (beats, downbeats,
-drops, 3-band RMS). You place cuts while listening; snapping to the beat is optional and
-the tool tells you where each shot sits relative to the beat *without calling it a
-mistake* — cutting to a vocal onset is a choice, not an error.
+**Preview is the render.** The player and the exported file consume the *same*
+`TimelineDocument` through the *same* Remotion composition. There is no separate "preview
+path" that can drift from the output — a class of bug that eats hours.
+
+**Built for keeping one character across a whole film.** Looks, locations and brand assets
+are reusable entities that resolve into each shot's reference images, rather than prompt text
+you retype 27 times and get subtly wrong.
 
 **Providers are swappable, and the swap is free to test.** `VideoProvider` is a
 three-method interface (`submit` / `poll` / `cancel`). A local FFmpeg stub implements it
@@ -59,9 +75,10 @@ packages/
 The dependency direction is always `apps → packages → domain`, never back.
 
 **Shot First.** Storyboard, generation, takes, review and the timeline all hang off one
-entity. A `Shot` owns its position on the master timeline, so there is no second place
-where time can disagree. Time is stored in seconds as a float — never frames, never
-milliseconds.
+entity. A `Shot` owns its position on the master timeline — the position you gave it by
+cutting the song — so there is no second place where time can disagree. Time is stored in
+seconds as a float, because that is the unit the audio analysis speaks; frames and
+milliseconds never enter the domain or the database.
 
 ## Quick start
 
@@ -139,7 +156,9 @@ operator:
 Issues and pull requests are welcome. Please read [AGENTS.md](./AGENTS.md) first — it
 documents the conventions this codebase actually enforces (immutability, zod at every
 boundary, no `any`, secrets only via env, append-only takes). `CLAUDE.md` holds the naming
-and wording rules.
+and wording rules, and [docs/LESSONS.md](./docs/LESSONS.md) collects the mistakes this
+project actually made and the rules that came out of them — mostly variations on *a green
+test suite that was checking nothing*.
 
 Run what CI runs before opening a PR:
 
