@@ -131,8 +131,11 @@ export type TransportControls = {
    * 作業モードによって出ているパネルが変わるので、**誰を鳴らせるかは固定できない。**
    */
   readonly registerPlayer: (owner: TransportOwner) => () => void
-  /** ひとつだけの再生ボタンが鳴らす相手。画面に再生器が無ければ `null`。 */
-  readonly preferredOwner: TransportOwner | null
+  /**
+   * 再生の操作を出す場所。**そこが鳴らす相手でもある。**
+   * 見えているプレイヤーの直下に 1 つだけ出す。画面に再生器が無ければ `null`。
+   */
+  readonly host: TransportOwner | null
 }
 
 export const WorkbenchContext = createContext<WorkbenchContextValue | null>(null)

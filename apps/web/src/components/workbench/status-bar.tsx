@@ -4,11 +4,7 @@ import type { Project } from '@ixa/domain'
 import { useEffect, useState } from 'react'
 import { CostMeterPanel } from '@/components/cost-meter'
 import { LiveStatusBadge } from '@/components/live-status-badge'
-import type {
-  TransportControls,
-  WorkbenchLive,
-  WorkbenchTransport,
-} from '@/components/workbench/workbench-context'
+import type { WorkbenchLive, WorkbenchTransport } from '@/components/workbench/workbench-context'
 import { TRANSPORT_OWNER_LABELS } from '@/lib/transport-labels'
 import { usePlaybackVolume } from '@/lib/use-playback-volume'
 import { describeVolume } from '@/lib/playback-state'
@@ -28,8 +24,6 @@ export type StatusBarProps = {
   readonly loadErrors: readonly string[]
   /** いま鳴っている場所と位置。鳴っていなければ null。 */
   readonly transport: WorkbenchTransport
-  /** 画面でただひとつの再生操作。パネル側は再生ボタンを持たない。 */
-  readonly transportControls: TransportControls
   /**
    * 走っている書き出し。**ダイアログを閉じてもここに残る。**
    * 以前は追跡がダイアログの中だけにあり、閉じると「いま書き出している」が
@@ -67,7 +61,6 @@ type Cost =
 export const StatusBar = ({
   project,
   shotCount,
-  transportControls,
   live,
   loadErrors,
   transport,
@@ -92,7 +85,7 @@ export const StatusBar = ({
         * 区別が無く、押す側は選べない。裏のタブでも鳴り続けるので、
         * パネルを見ても止める場所が分からなかった。**常にここにある。**
         */}
-      <PlaybackControls transport={transport} controls={transportControls} />
+      <PlaybackControls transport={transport} />
       {/* 走っている書き出し。閉じたダイアログの中で終わっても、ここで気づける。 */}
       {renderWatch.active.length > 0 && (
         <span className="text-info">{describeActiveRenders(renderWatch)}</span>
@@ -137,41 +130,31 @@ export const StatusBar = ({
   )
 }
 
-/** 再生と音量。**ここ以外に置かない。** */
+/**
+ * 音量。**ここにひとつだけ。**
+ *
+ * 再生ボタンは**見えているプレイヤーの直下**にある（`transport-bar.tsx`）。
+ * 一度ここに置いたが、映像の道具で再生ボタンが画面の最下段にあるのは
+ * 探す場所として素直ではない（制作者の指摘）。音量は作業中に何度も触るものでは
+ * ないので、画面の端に 1 つあれば足りる。
+ *
+ * 鳴っている場所はここが言う。**裏のタブでも鳴り続ける**ので、パネルを見ても
+ * 分からず、音を止める場所を探す羽目になっていた。
+ */
 const PlaybackControls = ({
   transport,
-  controls,
 }: {
   readonly transport: WorkbenchTransport
-  readonly controls: TransportControls
 }) => {
   const { volume, muted, setVolume, toggleMute } = usePlaybackVolume()
-  const owner = controls.preferredOwner
   const playing = transport.playing && transport.owner !== null
 
   return (
     <span className="flex items-center gap-1.5">
-      <button
-        type="button"
-        disabled={owner === null}
-        aria-pressed={playing}
-        aria-label={playing ? '一時停止' : '再生'}
-        title={
-          owner === null
-            ? '鳴らせるパネルが開いていません'
-            : `${TRANSPORT_OWNER_LABELS[owner]} を${playing ? '止める' : '鳴らす'}`
-        }
-        onClick={() => {
-          if (owner !== null) controls.togglePlayback(owner)
-        }}
-        className="inline-flex h-6 min-w-6 items-center justify-center rounded hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:text-muted/50"
-      >
-        {playing ? '⏸' : '▶'}
-      </button>
-      <span className="tabular-nums">{formatClock(transport.currentSec)}</span>
-      {/* 鳴っている場所は言葉で出す。裏のタブで鳴っていても分かるように。 */}
       {playing && transport.owner !== null && (
-        <span className="text-accent">{TRANSPORT_OWNER_LABELS[transport.owner]}</span>
+        <span className="text-accent">
+          {`▶ ${TRANSPORT_OWNER_LABELS[transport.owner]} ${formatClock(transport.currentSec)}`}
+        </span>
       )}
       <button
         type="button"

@@ -110,17 +110,22 @@ export const useWorkbenchTransport = (): {
   }, [])
 
   /**
-   * ひとつだけの再生ボタンが鳴らす相手。
+   * **再生の操作を出す場所**。ひとつだけ。
    *
-   * すでに誰かが持っていればその相手。まだなら、**音を主に扱う「聴きながら切る」を先に**
-   * 選ぶ（曲から作る道具なので、音が出る側が既定として自然）。それも無ければ残り。
-   * どちらも画面に無ければ `null` — ボタンは押せない見た目にする。
+   * 置き場所はフッターではなく**見えているプレイヤーの直下**にする。映像の道具で
+   * 再生ボタンが画面の最下段にあるのは、探す場所として素直ではない。
+   *
+   * 作業モードで出ているものが変わる（「構成」にプレビューは無く、「通し」「仕上げ」に
+   * 聴きながら切るは無い）ので、絵が出るほうを先に選ぶ。押した人が見ているのはそちら。
+   * どちらも無ければ `null` — 操作は出さない。
+   *
+   * **出した場所が鳴らす相手になる。** 押したものと鳴るものが食い違わないように。
    */
-  const preferredOwner = useMemo<TransportOwner | null>(() => {
-    if (transport.owner !== null && available.includes(transport.owner)) return transport.owner
+  const host = useMemo<TransportOwner | null>(() => {
+    if (available.includes('monitor')) return 'monitor'
     if (available.includes('cutter')) return 'cutter'
-    return available[0] ?? null
-  }, [available, transport.owner])
+    return null
+  }, [available])
 
   const controls = useMemo(
     () => ({
@@ -131,9 +136,9 @@ export const useWorkbenchTransport = (): {
       toggle,
       togglePlayback,
       registerPlayer,
-      preferredOwner,
+      host,
     }),
-    [setCurrentSec, seekTo, play, pause, toggle, togglePlayback, registerPlayer, preferredOwner],
+    [setCurrentSec, seekTo, play, pause, toggle, togglePlayback, registerPlayer, host],
   )
 
   return { transport, controls }

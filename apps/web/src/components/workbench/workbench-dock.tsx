@@ -51,11 +51,24 @@ const CutterDock: FunctionComponent<IDockviewPanelProps> = ({ api }) => {
   return <CutterPanel visible={visible} />
 }
 
+/**
+ * プレビューにも見えているかどうかを渡す。
+ *
+ * **裏のタブも mount されたままになる**（だから `useVisible` がある）。
+ * 再生の操作を出す場所は「見えているプレイヤーの直下」なので、
+ * 見えていないパネルが名乗ると、操作列が隠れたタブの中に出てしまう
+ * （実機で再生ボタンが 1 つも見えなくなった）。
+ */
+const PreviewDock: FunctionComponent<IDockviewPanelProps> = ({ api }) => {
+  const visible = useVisible(api)
+  return <PreviewPanel visible={visible} />
+}
+
 /** Dockview に渡す部品。id は `workbench-layout.ts` の `PANEL_IDS` と同じ。 */
 const COMPONENTS: Readonly<Record<PanelId, FunctionComponent<IDockviewPanelProps>>> = Object.freeze(
   {
     storyboard: () => <StoryboardPanel />,
-    preview: () => <PreviewPanel />,
+    preview: PreviewDock,
     compare: () => <ComparePanel />,
     viewer: () => <ViewerPanel />,
     draft: () => <DraftPanel />,

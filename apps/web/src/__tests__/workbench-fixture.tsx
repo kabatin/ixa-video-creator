@@ -71,7 +71,7 @@ export const workbenchValue = (
     pause: vi.fn(),
     toggle: vi.fn(),
     registerPlayer: vi.fn(() => vi.fn()),
-    preferredOwner: 'cutter' as const,
+    host: 'cutter' as const,
     togglePlayback: vi.fn(),
   },
   live: { state: 'live', lastEventAt: null, attempt: 0, invalidCount: 0, newTakeCount: 0 },

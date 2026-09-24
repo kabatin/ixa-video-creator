@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ProgramMonitor } from '@/components/program-monitor'
 import { useSelectedShot, useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelFrame, PanelNotice } from '@/components/workbench/panels/panel-frame'
-import { formatClock } from '@/lib/format-time'
-import { TRANSPORT_OWNER_LABELS } from '@/lib/transport-labels'
+import { TransportBar } from '@/components/workbench/transport-bar'
 import { loadTimelineDocument, type Part } from '@/lib/timeline-loader'
 import type { WireTimelineDocument } from '@/lib/timeline-api'
 
@@ -20,7 +19,7 @@ import type { WireTimelineDocument } from '@/lib/timeline-api'
  * どちらが何を鳴らすのか区別が無く、押す側は選べない。操作は下の帯に 1 つだけ置く。
  * 鳴らしているのが自分でないときは、絵だけ共有の位置へ合わせる（`followSec`）。
  */
-export const PreviewPanel = () => {
+export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean }) => {
   const workbench = useWorkbench()
   const { transport, transportControls } = workbench
   const shot = useSelectedShot()
@@ -47,8 +46,16 @@ export const PreviewPanel = () => {
    * **開いた直後は動かさない。** その 1 回で頭出しすると、前に見ていた位置が失われる。
    * **鳴っている間も動かさない。** 再生中に選択が変わるたび飛ぶのは邪魔でしかない。
    */
-  // 下の帯のひとつだけの再生ボタンに、鳴らせる相手として名乗る。
-  useEffect(() => transportControls.registerPlayer('monitor'), [transportControls])
+  /**
+   * 操作列に「自分は画面にいる」と名乗る。
+   *
+   * **依存は `registerPlayer` だけにする。** `transportControls` 全体に依存すると、
+   * `host` がその中にあるため「登録 → host が変わる → controls の同一性が変わる →
+   * 登録解除して登録し直す」が回り続け、誰も登録されていない状態に落ち着く
+   * （実機で再生ボタンが 1 つも出なくなった）。
+   */
+  const { registerPlayer } = transportControls
+  useEffect(() => (visible ? registerPlayer('monitor') : undefined), [registerPlayer, visible])
 
   const movedToRef = useRef<string | undefined>(undefined)
   useEffect(() => {
@@ -68,24 +75,8 @@ export const PreviewPanel = () => {
   const mine = transport.owner === 'monitor'
   const playing = transport.playing && mine
 
-  /** 鳴っているのが誰かを言う。無言だと「壊れている」と読まれる。 */
-  const elsewhere =
-    transport.playing && !mine && transport.owner !== null
-      ? `${TRANSPORT_OWNER_LABELS[transport.owner]} で再生中`
-      : null
-
   return (
-    <PanelFrame
-      toolbar={
-        <>
-          <span className="tabular-nums text-muted" aria-live="off">
-            {formatClock(transport.currentSec)}
-            {loaded !== null && ` / ${formatClock(loaded.durationSec)}`}
-          </span>
-          {elsewhere !== null && <span className="text-accent">{elsewhere}</span>}
-        </>
-      }
-    >
+    <PanelFrame>
       {/**
        * パネルの高さいっぱいを絵に使う。知らせは上に積み、残り全部をモニターへ渡す。
        * 幅で頭打ちにしない（`max-w-*` を置くと、広いパネルで絵が伸びない）。
@@ -116,6 +107,8 @@ export const PreviewPanel = () => {
             onError={setMonitorError}
           />
         </div>
+        {/* 再生の操作はプレイヤーの直下。画面にひとつだけ（`transport-bar.tsx`）。 */}
+        <TransportBar owner="monitor" durationSec={loaded?.durationSec ?? null} />
       </div>
     </PanelFrame>
   )

@@ -36,13 +36,18 @@ export type AudioTransportProps = {
    */
   readonly keyboardShortcuts?: boolean
   /**
-   * 再生ボタンと音量をこの行に出すか。既定は出す。
+   * 再生ボタンをこの行に出すか。既定は出す。
    *
-   * ワークベンチの中では **false**。再生と音量は画面の下の帯にひとつだけ置く。
-   * 以前はパネルごとに再生ボタンがあり、「聴きながら切る」とプレビューを同時に開くと
-   * 同じ見た目のボタンが 2 つ並んだ。音量も片方にしか無く、もう片方は 100% で鳴った。
+   * ワークベンチの中では、**見えているプレイヤーの直下にひとつだけ**出す
+   * （`transport-bar.tsx`）。プレビューが開いていればそちらが出すので、ここは false。
+   * 以前はパネルごとに再生ボタンがあり、同時に開くと同じ見た目のボタンが 2 つ並んだ。
    */
-  readonly showPlayAndVolume?: boolean
+  readonly showPlay?: boolean
+  /**
+   * 音量をこの行に出すか。既定は出す。
+   * ワークベンチの中では **false**（ステータスバーにひとつだけ置く）。
+   */
+  readonly showVolume?: boolean
 }
 
 /**
@@ -51,9 +56,18 @@ export type AudioTransportProps = {
  * **取り直し中の断りを最優先で出す。** 一瞬の途切れに理由が付かないと、
  * 利用者には原因不明の引っかかりとして残る。
  */
-const stateMessage = (playback: AudioPlayback): string => {
+/**
+ * この行が言うこと。
+ *
+ * **鳴っているかどうかを言うのは、再生の操作を持っているときだけ。**
+ * 持っていないときに「停止中」と出すと、プレビューが鳴っている最中に
+ * 「停止中」と書いてあることになり、画面の中で食い違う（実際に食い違った）。
+ * 読み込みと知らせ（URL の期限切れなど）は持ち主かどうかに関わらず出す。
+ */
+const stateMessage = (playback: AudioPlayback, showPlayState: boolean): string => {
   if (playback.notice !== null) return playback.notice
   if (playback.isLoading) return '音源を読み込んでいます'
+  if (!showPlayState) return ''
   if (playback.isPlaying) return '再生中'
   return '停止中'
 }
@@ -63,7 +77,8 @@ export const AudioTransport = ({
   label,
   layout = 'stacked',
   keyboardShortcuts = true,
-  showPlayAndVolume = true,
+  showPlay = true,
+  showVolume = true,
 }: AudioTransportProps) => {
   const {
     isPlaying,
@@ -141,7 +156,7 @@ export const AudioTransport = ({
           aria-label="再生位置と音量"
           className="flex flex-wrap items-center gap-x-2 gap-y-2 xl:flex-nowrap"
         >
-          {showPlayAndVolume && (
+          {showPlay && (
             <Button
               // 並んだ画面の主の操作は別にある（聴きながら切るなら「区切りを置く」。P6）。
               tone="secondary"
@@ -161,7 +176,7 @@ export const AudioTransport = ({
             role="status"
             className={`shrink-0 ${playback.notice !== null ? 'text-xs text-warn' : 'text-xs text-muted'}`}
           >
-            {stateMessage(playback)}
+            {stateMessage(playback, showPlay)}
           </p>
           <span aria-hidden="true" className="hidden h-6 border-l border-line xl:block" />
           <input
@@ -176,7 +191,7 @@ export const AudioTransport = ({
             aria-valuetext={`${formatClock(currentSec)} / ${formatClock(durationSec)}`}
             className="min-w-32 flex-[2_1_20rem] accent-accent disabled:cursor-not-allowed disabled:opacity-40"
           />
-          {showPlayAndVolume && (
+          {showVolume && (
             <>
               <span aria-hidden="true" className="hidden h-6 border-l border-line xl:block" />
               <span className="shrink-0 text-sm text-text">音量</span>
@@ -222,7 +237,7 @@ export const AudioTransport = ({
               role="status"
               className={playback.notice !== null ? 'text-xs text-warn' : 'text-xs text-muted'}
             >
-              {stateMessage(playback)}
+              {stateMessage(playback, showPlay)}
             </p>
           </div>
 

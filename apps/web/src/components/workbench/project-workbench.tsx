@@ -219,7 +219,6 @@ const WorkbenchShell = ({
         live={workbench.live}
         loadErrors={workbench.loadErrors}
         transport={workbench.transport}
-        transportControls={workbench.transportControls}
         renderWatch={renderWatch}
       />
       <WorkbenchDialogs onHistoryChanged={history.reload} renderWatch={renderWatch} />

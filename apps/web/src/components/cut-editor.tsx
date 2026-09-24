@@ -88,6 +88,12 @@ export type CutEditorProps = {
   readonly keyboardShortcuts?: boolean
   /** ワークベンチの再生位置と繋ぐ口（PHASE 7.2）。渡さなければ単独で動く。 */
   readonly sync?: CutEditorSync
+  /**
+   * 再生ボタンをこの画面に出すか。既定は出す。
+   * ワークベンチでは**見えているプレイヤーの直下にひとつだけ**なので、
+   * プレビューが開いているときは false（`transport-bar.tsx`）。
+   */
+  readonly showPlay?: boolean
   /** 操作の行に足すもの（「セクションから割る…」など。PHASE 8.4）。 */
   readonly toolbarExtra?: ReactNode
 }
@@ -108,6 +114,7 @@ export const CutEditor = ({
   initialSnapEnabled = true,
   keyboardShortcuts = true,
   sync,
+  showPlay = true,
   toolbarExtra,
 }: CutEditorProps) => {
   const router = useRouter()
@@ -456,8 +463,13 @@ export const CutEditor = ({
        */}
       <AudioTransport
         playback={playback}
-        // ワークベンチでは再生と音量は下の帯にひとつだけ。ここには出さない。
-        showPlayAndVolume={sync === undefined}
+        /**
+         * 再生ボタンは**見えているプレイヤーの直下にひとつだけ**（`transport-bar.tsx`）。
+         * プレビューが開いていればそちらが出すので、ここには出さない。
+         * 音量はステータスバーにひとつだけ置くので、ここには出さない。
+         */
+        showPlay={showPlay}
+        showVolume={sync === undefined}
         label={track.title}
         keyboardShortcuts={false}
         layout="inline"

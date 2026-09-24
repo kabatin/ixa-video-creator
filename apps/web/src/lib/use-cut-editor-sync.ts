@@ -4,6 +4,9 @@ import { useEffect, useRef } from 'react'
 import type { AudioPlayback } from '@/lib/use-audio-playback'
 import type { SeekCommand } from '@/lib/program-monitor'
 
+/** これ以下の差では合わせ直さない。止まっている要素への seek を毎フレーム出さない。 */
+const FOLLOW_TOLERANCE_SEC = 0.05
+
 /** `cut-editor` の `CutEditorSync` と同じ形。循環 import を避けてここにも型を置く。 */
 export type TransportSyncPort = {
   readonly othersPlaying: boolean
@@ -18,6 +21,12 @@ export type TransportSyncPort = {
    * `null` は「指示しない」（このパネル単体で使うとき）。
    */
   readonly commandPlaying?: boolean | null
+  /**
+   * 自分が鳴らしていないときに、再生位置だけ合わせにいく秒。
+   * 別のパネルが鳴らしている間、波形の線が止まって絵と食い違うのを防ぐ。
+   * `null` / 省略なら追従しない。
+   */
+  readonly followSec?: number | null
 }
 
 /**
@@ -68,6 +77,18 @@ export const useCutEditorSync = (
     if (commandPlaying && !control.current.isPlaying) void control.current.play()
     if (!commandPlaying && control.current.isPlaying) control.current.pause()
   }, [commandPlaying])
+
+  /**
+   * 共有の位置へ線だけ合わせる。**鳴らしているときは合わせない**（位置が往復する。L-023）。
+   * 秒の細かい揺れでは動かさない。止まっている要素への seek を毎フレーム出さない。
+   */
+  const followSec = sync?.followSec ?? null
+  useEffect(() => {
+    if (followSec === null) return
+    if (control.current.isPlaying) return
+    if (Math.abs(control.current.currentSec - followSec) < FOLLOW_TOLERANCE_SEC) return
+    control.current.seekTo(followSec)
+  }, [followSec])
 
   const seekSerial = sync?.seek?.serial ?? null
   const seenSerial = useRef(seekSerial)
