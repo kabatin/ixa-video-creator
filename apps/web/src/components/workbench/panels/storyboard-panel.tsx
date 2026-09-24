@@ -57,7 +57,7 @@ export const StoryboardPanel = () => {
           workbench.focusPanel('draft')
         }}
       >
-        絵コンテ下書き…
+        絵コンテの案…
       </Button>
     </>
   )
@@ -96,7 +96,7 @@ export const StoryboardPanel = () => {
               workbench.focusPanel('draft')
             }}
           >
-            絵コンテ下書きを開く
+            絵コンテの案を開く
           </Button>
         </PanelNotice>
       )}

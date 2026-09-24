@@ -34,12 +34,25 @@ type PanelSpec = {
   readonly area: DockArea
 }
 
+/**
+ * パネルの名前。**メニューの項目名（`menu-model.ts`）と必ず一致させること。**
+ * 突き合わせは `menu-panel-names.test.ts` が検査する。
+ *
+ * 名前の付け方:
+ * - そこで**何をするか**が読めること（「聴きながら切る」が一番良い例）
+ * - 英語のままにするのは Shot / Take / Look の 3 語だけ。
+ *   これらは `docs/DOMAIN.md` のドメイン語で、訳すと DB の列名や API と食い違う。
+ *   それ以外（キャラクター・ロケーション・ブランド資産・楽曲）は日本語にする。
+ * - 同じ語を別の意味で使わない。「素材」はワークスペースの素材全体を指すので、
+ *   その 1 件を大きく見るパネルは「素材ビューア」と呼び分ける。
+ *   Shot の状態「下書き」と紛れるので、AI の案の一覧は「絵コンテの案」と呼ぶ。
+ */
 export const PANEL_SPECS: Readonly<Record<PanelId, PanelSpec>> = Object.freeze({
   storyboard: { title: 'ストーリーボード', area: 'main' },
   preview: { title: 'プレビュー', area: 'main' },
   compare: { title: 'Take 比較', area: 'main' },
-  viewer: { title: '素材', area: 'main' },
-  draft: { title: '絵コンテ下書き', area: 'main' },
+  viewer: { title: '素材ビューア', area: 'main' },
+  draft: { title: '絵コンテの案', area: 'main' },
   cutter: { title: '聴きながら切る', area: 'bottom' },
   timeline: { title: 'タイムライン', area: 'bottom' },
   shots: { title: 'Shot 一覧', area: 'side' },
