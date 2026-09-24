@@ -42,25 +42,60 @@ export const useWorkbenchTransport = (): {
     }))
   }, [])
 
+  /**
+   * 持ち主を替えて鳴らす。**新しい側を共有の位置へ連れて行く。**
+   *
+   * 再生器は自分の位置を自分で覚えていて、外の位置は明示的な `seek` のときしか追わない
+   * （位置が双方向に流れるのを防ぐため。lessons L-023）。そのため持ち主が替わると、
+   * 新しい側は**自分が最後にいたコマ**から鳴り出していた。
+   * プレビューを 0:50 で止めてカッターへ移ると 0:00 に巻き戻り、
+   * そこに区切りが入る。持ち主が替わる瞬間だけは、こちらから位置を渡す。
+   */
+  const handOver = (current: WorkbenchTransport, owner: TransportOwner): WorkbenchTransport =>
+    current.owner === owner
+      ? { ...current, playing: true, owner }
+      : {
+          ...current,
+          playing: true,
+          owner,
+          seek: nextSeekCommand(current.seek, current.currentSec),
+        }
+
   const play = useCallback((owner: TransportOwner): void => {
-    setTransport((current) => ({ ...current, playing: true, owner }))
+    setTransport((current) => handOver(current, owner))
   }, [])
 
   const pause = useCallback((): void => {
     setTransport((current) => (current.playing ? { ...current, playing: false } : current))
   }, [])
 
+  /** そのパネルの再生ボタン。自分が鳴っていれば止め、そうでなければ自分が鳴る。 */
   const toggle = useCallback((owner: TransportOwner): void => {
     setTransport((current) =>
       current.playing && current.owner === owner
         ? { ...current, playing: false }
-        : { ...current, playing: true, owner },
+        : handOver(current, owner),
+    )
+  }, [])
+
+  /**
+   * 画面共通の 1 打（Space）。**鳴っている間は必ず止める。持ち主が誰であっても。**
+   *
+   * `toggle(owner)` をそのまま割り当てると、裏のタブで鳴っているときに
+   * 「止める」ではなく「別の場所を鳴らし始める」になる。止めるつもりの 1 打で
+   * 曲の違う場所が鳴り出すのは、操作としてまず通じない。
+   */
+  const togglePlayback = useCallback((fallbackOwner: TransportOwner): void => {
+    setTransport((current) =>
+      current.playing
+        ? { ...current, playing: false }
+        : handOver(current, current.owner ?? fallbackOwner),
     )
   }, [])
 
   const controls = useMemo(
-    () => ({ setCurrentSec, seekTo, play, pause, toggle }),
-    [setCurrentSec, seekTo, play, pause, toggle],
+    () => ({ setCurrentSec, seekTo, play, pause, toggle, togglePlayback }),
+    [setCurrentSec, seekTo, play, pause, toggle, togglePlayback],
   )
 
   return { transport, controls }

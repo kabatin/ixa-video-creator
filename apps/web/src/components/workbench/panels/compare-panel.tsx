@@ -69,7 +69,7 @@ export const ComparePanel = () => {
       {takes === null ? (
         error === null && <p className="text-sm text-muted">Take を読み込んでいます…</p>
       ) : (
-        <div className="space-y-3">
+        <div className="flex h-full min-h-0 flex-col gap-3">
           <TakeComparePanel
             // Shot が変わったら A/B の選び直しをさせる（前の Shot の Take を掴んだままにしない）。
             key={shot.id}
@@ -81,7 +81,7 @@ export const ComparePanel = () => {
               void adopt(takeId)
             }}
           />
-          <section aria-label="Take 一覧">
+          <section aria-label="Take 一覧" className="shrink-0">
             <h3 className="mb-1 text-sm font-semibold text-muted">Take 一覧</h3>
             <TakeGrid
               takes={takes}

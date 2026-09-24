@@ -4,7 +4,12 @@ import type { Project } from '@ixa/domain'
 import { useEffect, useState } from 'react'
 import { CostMeterPanel } from '@/components/cost-meter'
 import { LiveStatusBadge } from '@/components/live-status-badge'
-import type { WorkbenchLive } from '@/components/workbench/workbench-context'
+import type {
+  TransportOwner,
+  WorkbenchLive,
+  WorkbenchTransport,
+} from '@/components/workbench/workbench-context'
+import { formatClock } from '@/lib/format-time'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { buildCostMeterView, type CostMeterView } from '@/lib/cost-meter'
@@ -16,6 +21,14 @@ export type StatusBarProps = {
   readonly live: WorkbenchLive
   /** 読み込みに失敗した部分。**1 件でもあれば必ず出す**（§7.3）。 */
   readonly loadErrors: readonly string[]
+  /** いま鳴っている場所と位置。鳴っていなければ null。 */
+  readonly transport: WorkbenchTransport
+}
+
+/** 鳴っている場所の呼び名。パネルのタブと同じ言葉にする。 */
+const OWNER_LABELS: Readonly<Record<TransportOwner, string>> = {
+  cutter: '聴きながら切る',
+  monitor: 'プレビュー',
 }
 
 type Cost =
@@ -29,7 +42,13 @@ type Cost =
  * **読めなかったことを畳まない。** 読み込みエラーは件数と先頭の理由を常に出し、
  * 全文は title と読み上げに渡す。費用は額だけを出さず、ⓘ で出どころを開ける。
  */
-export const StatusBar = ({ project, shotCount, live, loadErrors }: StatusBarProps) => {
+export const StatusBar = ({
+  project,
+  shotCount,
+  live,
+  loadErrors,
+  transport,
+}: StatusBarProps) => {
   const cost = useCost(project.id)
   const [costOpen, setCostOpen] = useState(false)
 
@@ -39,6 +58,15 @@ export const StatusBar = ({ project, shotCount, live, loadErrors }: StatusBarPro
       {live.invalidCount > 0 && (
         <span role="alert" className="text-warn">
           {`読めない更新 ${String(live.invalidCount)} 件（表示が古い可能性があります）`}
+        </span>
+      )}
+      {/**
+        * **どこが鳴っているかを 1 箇所で出す。** 裏のタブでも鳴り続けるので、
+        * パネルを見ても分からない。音を止める場所を探す羽目になっていた。
+        */}
+      {transport.playing && transport.owner !== null && (
+        <span className="text-accent">
+          {`▶ ${OWNER_LABELS[transport.owner]} ${formatClock(transport.currentSec)}`}
         </span>
       )}
       <span>{shotCount === null ? 'Shot を読めていません' : `${String(shotCount)} Shots`}</span>

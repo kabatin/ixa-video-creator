@@ -119,6 +119,12 @@ export type TransportControls = {
   readonly seekTo: (sec: number) => void
   readonly play: (owner: TransportOwner) => void
   readonly pause: () => void
+  /**
+   * 画面共通の 1 打（Space）。**鳴っていれば必ず止める。**
+   * `toggle` はそのパネルのボタン用で、鳴っている相手が別でも自分を鳴らし始める。
+   * その違いを呼び分けないと、止めるつもりの 1 打で別の場所が鳴り出す。
+   */
+  readonly togglePlayback: (fallbackOwner: TransportOwner) => void
   readonly toggle: (owner: TransportOwner) => void
 }
 

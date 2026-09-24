@@ -152,10 +152,8 @@ const WorkbenchShell = ({
 
   useQueryNavigation(query)
 
-  useWorkbenchKeys({
-    undo,
-    cutterActive: () => (wide ? dock.current?.getPanel('cutter')?.api.isVisible === true : false),
-  })
+  // 「聴きながら切る」へ譲るかはフックがフォーカスから決める。可視は渡さない。
+  useWorkbenchKeys({ undo })
 
   return (
     <div className="flex h-full flex-col bg-bg">
@@ -212,6 +210,7 @@ const WorkbenchShell = ({
         shotCount={workbench.shots?.length ?? null}
         live={workbench.live}
         loadErrors={workbench.loadErrors}
+        transport={workbench.transport}
       />
       <WorkbenchDialogs onHistoryChanged={history.reload} />
       <FileIntake

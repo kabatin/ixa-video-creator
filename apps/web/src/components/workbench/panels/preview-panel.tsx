@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ProgramMonitor } from '@/components/program-monitor'
-import { useWorkbench } from '@/components/workbench/workbench-context'
+import { useSelectedShot, useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelFrame, PanelNotice } from '@/components/workbench/panels/panel-frame'
 import { Button } from '@/components/ui/button'
 import { formatClock } from '@/lib/format-time'
@@ -19,6 +19,7 @@ import type { WireTimelineDocument } from '@/lib/timeline-api'
 export const PreviewPanel = () => {
   const workbench = useWorkbench()
   const { transport, transportControls } = workbench
+  const shot = useSelectedShot()
   const [document, setDocument] = useState<Part<WireTimelineDocument> | null>(null)
   const [monitorError, setMonitorError] = useState<string | null>(null)
 
@@ -32,6 +33,28 @@ export const PreviewPanel = () => {
       cancelled = true
     }
   }, [workbench.projectId, workbench.posterEpoch, workbench.serverEpoch])
+
+  /**
+   * 選んだ Shot の頭へ移る。
+   *
+   * プレビューは共有の選択を一度も読んでいなかったため、Shot を選んでも絵は動かず、
+   * 見たい Shot を出すにはタイムラインの目盛りを手で押しにいくしかなかった。
+   *
+   * **開いた直後は動かさない。** その 1 回で頭出しすると、前に見ていた位置が失われる。
+   * **鳴っている間も動かさない。** 再生中に選択が変わるたび飛ぶのは邪魔でしかない。
+   */
+  const movedToRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (shot === null) return
+    if (movedToRef.current === undefined) {
+      movedToRef.current = shot.id
+      return
+    }
+    if (movedToRef.current === shot.id) return
+    movedToRef.current = shot.id
+    if (transport.playing) return
+    transportControls.seekTo(shot.startSec)
+  }, [shot, transport.playing, transportControls])
 
   const loaded = document?.value ?? null
   const loadError = document?.error ?? null

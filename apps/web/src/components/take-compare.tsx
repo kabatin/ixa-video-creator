@@ -123,7 +123,7 @@ const CompareBoard = ({ compare, labelA, labelB }: CompareBoardProps) => {
   }
 
   return (
-    <section aria-label="Take の比較" className="flex flex-col gap-3">
+    <section aria-label="Take の比較" className="flex h-full min-h-0 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -161,8 +161,11 @@ const CompareBoard = ({ compare, labelA, labelB }: CompareBoardProps) => {
         </p>
       )}
 
+      {/* 絵が残りの高さを全部使う。拍の目盛りと知らせは下に固定する。 */}
       <div
-        className={`grid gap-3 ${compareColumns(hasB) === 2 ? 'lg:grid-cols-2' : 'grid-cols-1'}`}
+        className={`grid min-h-0 flex-1 gap-3 ${
+          compareColumns(hasB) === 2 ? 'lg:grid-cols-2' : 'grid-cols-1'
+        }`}
       >
         <MonitorColumn
           label={labelA}
@@ -238,9 +241,11 @@ const MonitorColumn = ({
   onPlayingChange,
   onError,
 }: MonitorColumnProps) => (
-  <section aria-label={label} className="flex flex-col gap-1">
-    <h3 className="text-xs font-medium text-muted">{label}</h3>
+  <section aria-label={label} className="flex min-h-0 flex-col gap-1">
+    <h3 className="shrink-0 text-xs font-medium text-muted">{label}</h3>
     <ProgramMonitor
+      // 横に 2 枚並ぶが、縦もパネルに収める。幅だけで決めるとペインを縮めたとき下へはみ出す。
+      fit="contain"
       document={take.document}
       currentSec={currentSec}
       seek={seek}
