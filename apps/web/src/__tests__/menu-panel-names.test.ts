@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildMenus, type MenuState } from '@/lib/menu-model'
-import { PANEL_IDS, PANEL_SPECS, type PanelId } from '@/lib/workbench-layout'
+import { PANEL_IDS, PANEL_SPECS } from '@/lib/workbench-layout'
 
 /**
  * 「表示」メニューの項目名とパネルのタブ名を突き合わせる。
@@ -15,7 +15,7 @@ const viewItems = (menus: ReturnType<typeof buildMenus>) =>
   menus
     .flatMap((menu) => menu.items)
     .flatMap((item) =>
-      item.action?.kind === 'panel' ? [{ panel: item.action.panel as PanelId, label: item.label }] : [],
+      item.action?.kind === 'panel' ? [{ panel: item.action.panel, label: item.label }] : [],
     )
 
 describe('メニューの項目名とパネル名', () => {
