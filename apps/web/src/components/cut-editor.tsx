@@ -415,6 +415,8 @@ export const CutEditor = ({
        */}
       <AudioTransport
         playback={playback}
+        // ワークベンチでは再生と音量は下の帯にひとつだけ。ここには出さない。
+        showPlayAndVolume={sync === undefined}
         label={track.title}
         keyboardShortcuts={false}
         layout="inline"

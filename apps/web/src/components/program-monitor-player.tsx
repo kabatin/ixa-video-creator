@@ -4,6 +4,7 @@ import type { TimelineDocument } from '@ixa/domain'
 import { TimelineComposition, type TimelineCompositionProps } from '@ixa/render/composition'
 import { Player, type PlayerRef } from '@remotion/player'
 import { useEffect, useMemo, useRef } from 'react'
+import { usePlaybackVolume } from '@/lib/use-playback-volume'
 import {
   frameToSec,
   monitorDurationInFrames,
@@ -37,6 +38,12 @@ export type ProgramMonitorPlayerProps = {
   /** 利用者の明示的なシーク。`serial` が変わったときだけ飛ぶ。 */
   readonly seek: SeekCommand | null
   readonly playing: boolean
+  /**
+   * 自分が鳴らしていないときに、絵だけ合わせにいく位置（秒）。
+   * ほかのパネルが鳴らしている間、時計だけ進んで絵が止まるのを防ぐ。
+   * `null` / 省略なら追従しない。
+   */
+  readonly followSec?: number | null
   /** 再生する区間の先頭（秒）。省略すると先頭から。 */
   readonly inSec?: number
   /** 再生する区間の終わり（秒）。**この秒自体は再生しない。** 省略すると終端まで。 */
@@ -89,6 +96,7 @@ export const ProgramMonitorPlayer = ({
   initialSec,
   seek,
   playing,
+  followSec = null,
   inSec,
   outSec,
   loop = false,
@@ -98,6 +106,15 @@ export const ProgramMonitorPlayer = ({
   onMediaError,
 }: ProgramMonitorPlayerProps) => {
   const playerRef = useRef<PlayerRef | null>(null)
+
+  /**
+   * 音量は画面でひとつ（`usePlaybackVolume`）。**Player の既定に任せない。**
+   *
+   * 以前ここは音量を一度も見ておらず、「聴きながら切る」で 15% にしていても
+   * プレビューは 100% で鳴っていた（実測）。曲を聴きながら切る道具で、
+   * 別のパネルを押した瞬間に最大音量が出るのは事故に近い。
+   */
+  const { volume, muted } = usePlaybackVolume()
 
   /**
    * **自分のシークが起こした `pause` を外へ出さないための印。**
@@ -211,6 +228,38 @@ export const ProgramMonitorPlayer = ({
     if (playing && !player.isPlaying()) player.play()
     if (!playing && player.isPlaying()) player.pause()
   }, [playing])
+
+  // 取り付け直後にも当てる。`initiallyMuted` だけだと音量そのものが 100% のまま残る。
+  useEffect(() => {
+    const player = playerRef.current
+    if (player === null) return
+    player.setVolume(volume)
+    if (muted) player.mute()
+    else player.unmute()
+  }, [volume, muted])
+
+  /**
+   * 共有の位置に**絵だけ**追従する。
+   *
+   * 自分が鳴らしていないとき（「聴きながら切る」が鳴っているとき）、以前のここは
+   * 明示的な `seek` しか見ていなかったので、時計だけ進んで**絵は止まったまま**だった。
+   * 画面には「停止中」と出るのに曲は流れている、という食い違いになる。
+   *
+   * 鳴らしている最中は当てない。自分の報告が返ってきたものと区別できず、
+   * 位置が双方向に流れる（L-023）。同じコマなら飛ばさない（毎フレームの seek は重い）。
+   */
+  useEffect(() => {
+    const player = playerRef.current
+    if (player === null || playing || followSec === null || followSec === undefined) return
+    const frame = secToFrame(followSec, fps)
+    if (player.getCurrentFrame() === frame) return
+    seekingRef.current = true
+    try {
+      player.seekTo(frame)
+    } finally {
+      seekingRef.current = false
+    }
+  }, [followSec, playing, fps])
 
   return (
     <Player

@@ -2,6 +2,7 @@ import type { TimelineDocument } from '@ixa/domain'
 import { render } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProgramMonitorPlayer } from '@/components/program-monitor-player'
+import { PreferencesWrapper } from './preferences-wrapper'
 
 /**
  * 「この Shot の区間だけを繰り返す」を Player の props まで確かめる（P61-2）。
@@ -45,7 +46,7 @@ const makeDocument = (durationSec = 10): TimelineDocument => ({
 const noop = () => undefined
 
 const renderPlayer = (span: { inSec?: number; outSec?: number; loop?: boolean }) =>
-  render(
+  renderWithPrefs(
     <ProgramMonitorPlayer
       document={makeDocument()}
       initialSec={0}
@@ -62,6 +63,10 @@ const renderPlayer = (span: { inSec?: number; outSec?: number; loop?: boolean })
 beforeEach(() => {
   captured.props = null
 })
+
+/** 音量の持ち主（PreferencesRoot）の中で描く。最初の描画を既定に固定するのも殻の役目。 */
+const renderWithPrefs = (ui: Parameters<typeof render>[0]) =>
+  render(ui, { wrapper: PreferencesWrapper })
 
 describe('区間の指定', () => {
   it('終端の秒は再生しない（outFrame は 1 つ手前）', () => {

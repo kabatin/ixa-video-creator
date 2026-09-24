@@ -35,6 +35,14 @@ export type AudioTransportProps = {
    * **1 つの画面に 2 つ置くときは片方を false にする。** 両方が同じ打鍵に反応する。
    */
   readonly keyboardShortcuts?: boolean
+  /**
+   * 再生ボタンと音量をこの行に出すか。既定は出す。
+   *
+   * ワークベンチの中では **false**。再生と音量は画面の下の帯にひとつだけ置く。
+   * 以前はパネルごとに再生ボタンがあり、「聴きながら切る」とプレビューを同時に開くと
+   * 同じ見た目のボタンが 2 つ並んだ。音量も片方にしか無く、もう片方は 100% で鳴った。
+   */
+  readonly showPlayAndVolume?: boolean
 }
 
 /**
@@ -55,6 +63,7 @@ export const AudioTransport = ({
   label,
   layout = 'stacked',
   keyboardShortcuts = true,
+  showPlayAndVolume = true,
 }: AudioTransportProps) => {
   const {
     isPlaying,
@@ -132,15 +141,17 @@ export const AudioTransport = ({
           aria-label="再生位置と音量"
           className="flex flex-wrap items-center gap-x-2 gap-y-2 xl:flex-nowrap"
         >
-          <Button
-            // 並んだ画面の主の操作は別にある（聴きながら切るなら「区切りを置く」。P6）。
-            tone="secondary"
-            onClick={toggle}
-            disabled={error !== null}
-            aria-label={isPlaying ? '一時停止' : '再生'}
-          >
-            <span className="whitespace-nowrap">{isPlaying ? '一時停止' : '再生'}</span>
-          </Button>
+          {showPlayAndVolume && (
+            <Button
+              // 並んだ画面の主の操作は別にある（聴きながら切るなら「区切りを置く」。P6）。
+              tone="secondary"
+              onClick={toggle}
+              disabled={error !== null}
+              aria-label={isPlaying ? '一時停止' : '再生'}
+            >
+              <span className="whitespace-nowrap">{isPlaying ? '一時停止' : '再生'}</span>
+            </Button>
+          )}
           <p className="shrink-0 font-mono text-sm tabular-nums text-text">
             <span>{formatClock(currentSec)}</span>
             <span className="text-faint"> / </span>
@@ -165,25 +176,29 @@ export const AudioTransport = ({
             aria-valuetext={`${formatClock(currentSec)} / ${formatClock(durationSec)}`}
             className="min-w-32 flex-[2_1_20rem] accent-accent disabled:cursor-not-allowed disabled:opacity-40"
           />
-          <span aria-hidden="true" className="hidden h-6 border-l border-line xl:block" />
-          <span className="shrink-0 text-sm text-text">音量</span>
-          <Button size="sm" onClick={toggleMute} aria-pressed={muted}>
-            <span className="whitespace-nowrap">{muted ? '消音を解除' : '消音'}</span>
-          </Button>
-          <input
-            type="range"
-            aria-label="音量"
-            min={MIN_VOLUME}
-            max={MAX_VOLUME}
-            step={0.01}
-            value={volume}
-            onChange={onVolumeChange}
-            aria-valuetext={describeVolume(volume, muted)}
-            className="w-24 accent-accent"
-          />
-          <span aria-hidden="true" className="w-9 text-right text-xs tabular-nums text-muted">
-            {volumePercent}
-          </span>
+          {showPlayAndVolume && (
+            <>
+              <span aria-hidden="true" className="hidden h-6 border-l border-line xl:block" />
+              <span className="shrink-0 text-sm text-text">音量</span>
+              <Button size="sm" onClick={toggleMute} aria-pressed={muted}>
+                <span className="whitespace-nowrap">{muted ? '消音を解除' : '消音'}</span>
+              </Button>
+              <input
+                type="range"
+                aria-label="音量"
+                min={MIN_VOLUME}
+                max={MAX_VOLUME}
+                step={0.01}
+                value={volume}
+                onChange={onVolumeChange}
+                aria-valuetext={describeVolume(volume, muted)}
+                className="w-24 accent-accent"
+              />
+              <span aria-hidden="true" className="w-9 text-right text-xs tabular-nums text-muted">
+                {volumePercent}
+              </span>
+            </>
+          )}
         </div>
       ) : (
         <>

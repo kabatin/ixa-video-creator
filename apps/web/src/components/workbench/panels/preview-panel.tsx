@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { ProgramMonitor } from '@/components/program-monitor'
 import { useSelectedShot, useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelFrame, PanelNotice } from '@/components/workbench/panels/panel-frame'
-import { Button } from '@/components/ui/button'
 import { formatClock } from '@/lib/format-time'
+import { TRANSPORT_OWNER_LABELS } from '@/lib/transport-labels'
 import { loadTimelineDocument, type Part } from '@/lib/timeline-loader'
 import type { WireTimelineDocument } from '@/lib/timeline-api'
 
@@ -14,7 +14,11 @@ import type { WireTimelineDocument } from '@/lib/timeline-api'
  *
  * **書き出しと同じ TimelineDocument を同じコンポジションで再生する。**
  * 再生位置はワークベンチの 1 箇所（`transport`）を見る。タイムラインの再生ヘッドも同じ値。
- * 聴きながら切るが鳴っている間はこちらは止まる（同時に鳴るのは 1 つだけ）。
+ *
+ * **ここは映すだけで、再生の操作は持たない。** 以前はこのパネルにも「再生」があり、
+ * 「聴きながら切る」を開いていると同じ見た目のボタンが縦に 2 つ並んでいた。
+ * どちらが何を鳴らすのか区別が無く、押す側は選べない。操作は下の帯に 1 つだけ置く。
+ * 鳴らしているのが自分でないときは、絵だけ共有の位置へ合わせる（`followSec`）。
  */
 export const PreviewPanel = () => {
   const workbench = useWorkbench()
@@ -43,6 +47,9 @@ export const PreviewPanel = () => {
    * **開いた直後は動かさない。** その 1 回で頭出しすると、前に見ていた位置が失われる。
    * **鳴っている間も動かさない。** 再生中に選択が変わるたび飛ぶのは邪魔でしかない。
    */
+  // 下の帯のひとつだけの再生ボタンに、鳴らせる相手として名乗る。
+  useEffect(() => transportControls.registerPlayer('monitor'), [transportControls])
+
   const movedToRef = useRef<string | undefined>(undefined)
   useEffect(() => {
     if (shot === null) return
@@ -61,25 +68,21 @@ export const PreviewPanel = () => {
   const mine = transport.owner === 'monitor'
   const playing = transport.playing && mine
 
+  /** 鳴っているのが誰かを言う。無言だと「壊れている」と読まれる。 */
+  const elsewhere =
+    transport.playing && !mine && transport.owner !== null
+      ? `${TRANSPORT_OWNER_LABELS[transport.owner]} で再生中`
+      : null
+
   return (
     <PanelFrame
       toolbar={
         <>
-          <Button
-            size="sm"
-            tone="primary"
-            disabled={loaded === null}
-            aria-pressed={playing}
-            onClick={() => {
-              transportControls.toggle('monitor')
-            }}
-          >
-            {playing ? '一時停止' : '再生'}
-          </Button>
           <span className="tabular-nums text-muted" aria-live="off">
             {formatClock(transport.currentSec)}
             {loaded !== null && ` / ${formatClock(loaded.durationSec)}`}
           </span>
+          {elsewhere !== null && <span className="text-accent">{elsewhere}</span>}
         </>
       }
     >
@@ -98,6 +101,8 @@ export const PreviewPanel = () => {
             currentSec={transport.currentSec}
             seek={transport.seek}
             playing={playing}
+            // 自分が鳴らしていない間も、絵は共有の位置へ付いていく。
+            followSec={mine ? null : transport.currentSec}
             // パネルを縦に縮めても絵が全部見えるよう、幅と高さの両方に収める。
             fit="contain"
             // 位置を返すのは自分が鳴らしている間だけ。両方が返すと位置が往復する（L-023）。

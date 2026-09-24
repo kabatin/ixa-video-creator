@@ -28,6 +28,22 @@ export const useWorkbenchTransport = (): {
 } => {
   const [transport, setTransport] = useState<WorkbenchTransport>(INITIAL)
 
+  /**
+   * いま画面にいる再生器。**作業モードで変わる。**
+   *
+   * 「通し」「仕上げ」では聴きながら切るが出ていない。再生の操作をひとつに
+   * まとめると、その 1 つがどれを鳴らすかを決める必要がある。パネル側が
+   * 取り付け・取り外しのたびに名乗り、ここが「いま鳴らせる相手」を持つ。
+   */
+  const [available, setAvailable] = useState<readonly TransportOwner[]>([])
+
+  const registerPlayer = useCallback((owner: TransportOwner): (() => void) => {
+    setAvailable((current) => (current.includes(owner) ? current : [...current, owner]))
+    return () => {
+      setAvailable((current) => current.filter((entry) => entry !== owner))
+    }
+  }, [])
+
   const setCurrentSec = useCallback((sec: number): void => {
     setTransport((current) =>
       current.currentSec === sec ? current : { ...current, currentSec: sec },
@@ -93,9 +109,31 @@ export const useWorkbenchTransport = (): {
     )
   }, [])
 
+  /**
+   * ひとつだけの再生ボタンが鳴らす相手。
+   *
+   * すでに誰かが持っていればその相手。まだなら、**音を主に扱う「聴きながら切る」を先に**
+   * 選ぶ（曲から作る道具なので、音が出る側が既定として自然）。それも無ければ残り。
+   * どちらも画面に無ければ `null` — ボタンは押せない見た目にする。
+   */
+  const preferredOwner = useMemo<TransportOwner | null>(() => {
+    if (transport.owner !== null && available.includes(transport.owner)) return transport.owner
+    if (available.includes('cutter')) return 'cutter'
+    return available[0] ?? null
+  }, [available, transport.owner])
+
   const controls = useMemo(
-    () => ({ setCurrentSec, seekTo, play, pause, toggle, togglePlayback }),
-    [setCurrentSec, seekTo, play, pause, toggle, togglePlayback],
+    () => ({
+      setCurrentSec,
+      seekTo,
+      play,
+      pause,
+      toggle,
+      togglePlayback,
+      registerPlayer,
+      preferredOwner,
+    }),
+    [setCurrentSec, seekTo, play, pause, toggle, togglePlayback, registerPlayer, preferredOwner],
   )
 
   return { transport, controls }

@@ -5,10 +5,13 @@ import { useEffect, useState } from 'react'
 import { CostMeterPanel } from '@/components/cost-meter'
 import { LiveStatusBadge } from '@/components/live-status-badge'
 import type {
-  TransportOwner,
+  TransportControls,
   WorkbenchLive,
   WorkbenchTransport,
 } from '@/components/workbench/workbench-context'
+import { TRANSPORT_OWNER_LABELS } from '@/lib/transport-labels'
+import { usePlaybackVolume } from '@/lib/use-playback-volume'
+import { describeVolume } from '@/lib/playback-state'
 import type { RenderWatch } from '@/components/workbench/use-render-watch'
 import { formatClock } from '@/lib/format-time'
 import { describeRenderJob } from '@/lib/render-display'
@@ -25,6 +28,8 @@ export type StatusBarProps = {
   readonly loadErrors: readonly string[]
   /** いま鳴っている場所と位置。鳴っていなければ null。 */
   readonly transport: WorkbenchTransport
+  /** 画面でただひとつの再生操作。パネル側は再生ボタンを持たない。 */
+  readonly transportControls: TransportControls
   /**
    * 走っている書き出し。**ダイアログを閉じてもここに残る。**
    * 以前は追跡がダイアログの中だけにあり、閉じると「いま書き出している」が
@@ -47,11 +52,6 @@ const describeActiveRenders = (watch: RenderWatch): string => {
     : `書き出し中 ${String(view.progressPercent)}%`
 }
 
-/** 鳴っている場所の呼び名。パネルのタブと同じ言葉にする。 */
-const OWNER_LABELS: Readonly<Record<TransportOwner, string>> = {
-  cutter: '聴きながら切る',
-  monitor: 'プレビュー',
-}
 
 type Cost =
   | { readonly state: 'loading' }
@@ -67,6 +67,7 @@ type Cost =
 export const StatusBar = ({
   project,
   shotCount,
+  transportControls,
   live,
   loadErrors,
   transport,
@@ -84,14 +85,14 @@ export const StatusBar = ({
         </span>
       )}
       {/**
-        * **どこが鳴っているかを 1 箇所で出す。** 裏のタブでも鳴り続けるので、
-        * パネルを見ても分からない。音を止める場所を探す羽目になっていた。
+        * **画面でただひとつの再生操作。**
+        *
+        * 以前はパネルごとに再生ボタンがあり、「聴きながら切る」とプレビューを
+        * 同時に開くと同じ見た目のボタンが縦に 2 つ並んだ。どちらが何を鳴らすのか
+        * 区別が無く、押す側は選べない。裏のタブでも鳴り続けるので、
+        * パネルを見ても止める場所が分からなかった。**常にここにある。**
         */}
-      {transport.playing && transport.owner !== null && (
-        <span className="text-accent">
-          {`▶ ${OWNER_LABELS[transport.owner]} ${formatClock(transport.currentSec)}`}
-        </span>
-      )}
+      <PlaybackControls transport={transport} controls={transportControls} />
       {/* 走っている書き出し。閉じたダイアログの中で終わっても、ここで気づける。 */}
       {renderWatch.active.length > 0 && (
         <span className="text-info">{describeActiveRenders(renderWatch)}</span>
@@ -133,6 +134,71 @@ export const StatusBar = ({
         </div>
       )}
     </footer>
+  )
+}
+
+/** 再生と音量。**ここ以外に置かない。** */
+const PlaybackControls = ({
+  transport,
+  controls,
+}: {
+  readonly transport: WorkbenchTransport
+  readonly controls: TransportControls
+}) => {
+  const { volume, muted, setVolume, toggleMute } = usePlaybackVolume()
+  const owner = controls.preferredOwner
+  const playing = transport.playing && transport.owner !== null
+
+  return (
+    <span className="flex items-center gap-1.5">
+      <button
+        type="button"
+        disabled={owner === null}
+        aria-pressed={playing}
+        aria-label={playing ? '一時停止' : '再生'}
+        title={
+          owner === null
+            ? '鳴らせるパネルが開いていません'
+            : `${TRANSPORT_OWNER_LABELS[owner]} を${playing ? '止める' : '鳴らす'}`
+        }
+        onClick={() => {
+          if (owner !== null) controls.togglePlayback(owner)
+        }}
+        className="inline-flex h-6 min-w-6 items-center justify-center rounded hover:bg-surface-2 hover:text-text disabled:cursor-not-allowed disabled:text-muted/50"
+      >
+        {playing ? '⏸' : '▶'}
+      </button>
+      <span className="tabular-nums">{formatClock(transport.currentSec)}</span>
+      {/* 鳴っている場所は言葉で出す。裏のタブで鳴っていても分かるように。 */}
+      {playing && transport.owner !== null && (
+        <span className="text-accent">{TRANSPORT_OWNER_LABELS[transport.owner]}</span>
+      )}
+      <button
+        type="button"
+        aria-pressed={muted}
+        aria-label={muted ? '消音を解除' : '消音'}
+        title={muted ? '消音を解除' : '消音'}
+        onClick={toggleMute}
+        className="inline-flex h-6 min-w-6 items-center justify-center rounded hover:bg-surface-2 hover:text-text"
+      >
+        {muted ? '🔇' : '🔊'}
+      </button>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.01}
+        value={volume}
+        aria-label="音量"
+        aria-valuetext={describeVolume(volume, muted)}
+        onChange={(event) => {
+          // 消音したまま音量を動かしたら、鳴らしたいということ。消音を解く。
+          if (muted) toggleMute()
+          setVolume(Number.parseFloat(event.target.value))
+        }}
+        className="h-1 w-20 accent-accent"
+      />
+    </span>
   )
 }
 

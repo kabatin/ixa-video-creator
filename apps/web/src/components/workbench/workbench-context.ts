@@ -126,6 +126,13 @@ export type TransportControls = {
    */
   readonly togglePlayback: (fallbackOwner: TransportOwner) => void
   readonly toggle: (owner: TransportOwner) => void
+  /**
+   * 再生器が「自分は画面にいる」と名乗る口。戻り値を取り外しのときに呼ぶ。
+   * 作業モードによって出ているパネルが変わるので、**誰を鳴らせるかは固定できない。**
+   */
+  readonly registerPlayer: (owner: TransportOwner) => () => void
+  /** ひとつだけの再生ボタンが鳴らす相手。画面に再生器が無ければ `null`。 */
+  readonly preferredOwner: TransportOwner | null
 }
 
 export const WorkbenchContext = createContext<WorkbenchContextValue | null>(null)

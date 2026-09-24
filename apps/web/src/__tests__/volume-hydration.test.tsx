@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_VOLUME } from '@/lib/playback-state'
 import { PREFERENCES_STORAGE_KEY } from '@/lib/preferences'
 import { useAudioPlayback } from '@/lib/use-audio-playback'
+import { PreferencesWrapper } from './preferences-wrapper'
 
 /**
  * **最初の描画は、サーバが描いたものと一致しなければならない。**
@@ -41,12 +42,16 @@ const Probe = ({ seen }: { readonly seen: number[] }) => {
   return <output>{String(playback.muted)}</output>
 }
 
+/** 音量の持ち主（PreferencesRoot）の中で描く。最初の描画を既定に固定するのも殻の役目。 */
+const renderWithPrefs = (ui: Parameters<typeof render>[0]) =>
+  render(ui, { wrapper: PreferencesWrapper })
+
 describe('覚えた音量の読み込み', () => {
   it('最初の描画では覚え書きを読まない', () => {
     store.set(PREFERENCES_STORAGE_KEY, SAVED)
     const seen: number[] = []
 
-    render(<Probe seen={seen} />)
+    renderWithPrefs(<Probe seen={seen} />)
 
     // サーバは localStorage を見られないので既定で描く。ここが違うと不一致になる。
     expect(seen[0]).toBe(DEFAULT_VOLUME)
@@ -56,7 +61,7 @@ describe('覚えた音量の読み込み', () => {
     store.set(PREFERENCES_STORAGE_KEY, SAVED)
     const seen: number[] = []
 
-    render(<Probe seen={seen} />)
+    renderWithPrefs(<Probe seen={seen} />)
 
     expect(seen.at(-1)).toBe(0.3)
     expect(screen.getByText('true')).toBeInTheDocument()
@@ -65,7 +70,7 @@ describe('覚えた音量の読み込み', () => {
   it('覚え書きが無ければ既定のまま', () => {
     const seen: number[] = []
 
-    render(<Probe seen={seen} />)
+    renderWithPrefs(<Probe seen={seen} />)
 
     expect(seen.at(-1)).toBe(DEFAULT_VOLUME)
     expect(screen.getByText('false')).toBeInTheDocument()
@@ -78,7 +83,7 @@ describe('覚えた音量の読み込み', () => {
   it('開いただけでは覚え書きを書き換えない', () => {
     store.set(PREFERENCES_STORAGE_KEY, SAVED)
 
-    render(<Probe seen={[]} />)
+    renderWithPrefs(<Probe seen={[]} />)
 
     expect(store.get(PREFERENCES_STORAGE_KEY)).toBe(SAVED)
   })

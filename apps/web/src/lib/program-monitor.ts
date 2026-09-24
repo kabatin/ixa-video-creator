@@ -69,12 +69,19 @@ export type MonitorState = {
   readonly canRender: boolean
 }
 
+/**
+ * モニターの下に出す文。**鳴っているかどうかは言わない。**
+ *
+ * 再生の状態は画面の下の帯（ただひとつの再生操作）とパネルの見出しが持つ。
+ * ここにも出していたため、別のパネルが鳴らしている間に**絵は動いているのに
+ * 「停止中」**と出て食い違った。ここが言うのは「絵を出せない理由」だけにする。
+ */
 const MONITOR_MESSAGES: Readonly<Record<MonitorStatus, string>> = {
   error: '',
   loading: 'タイムラインをまだ読めていません。',
   empty: 'タイムラインに Shot がまだ 1 つもありません。Shot を並べると絵が出ます。',
-  playing: '再生中',
-  paused: '停止中',
+  playing: '',
+  paused: '',
 }
 
 export const describeMonitorState = (

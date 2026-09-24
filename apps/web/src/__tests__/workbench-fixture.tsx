@@ -70,6 +70,8 @@ export const workbenchValue = (
     play: vi.fn(),
     pause: vi.fn(),
     toggle: vi.fn(),
+    registerPlayer: vi.fn(() => vi.fn()),
+    preferredOwner: 'cutter' as const,
     togglePlayback: vi.fn(),
   },
   live: { state: 'live', lastEventAt: null, attempt: 0, invalidCount: 0, newTakeCount: 0 },

@@ -4,6 +4,8 @@ import { useState, type Ref } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProgramMonitorPlayer } from '@/components/program-monitor-player'
 import { nextSeekCommand, type SeekCommand } from '@/lib/program-monitor'
+import { PreferencesWrapper } from './preferences-wrapper'
+import { PREFERENCES_STORAGE_KEY } from '@/lib/preferences'
 
 /**
  * **位置の反射がシークを起こさないことを固定する**（実機で出た不具合の再現）。
@@ -29,6 +31,9 @@ const harness = vi.hoisted(() => ({
   frame: 0,
   playing: false,
   seekToCalls: [] as number[],
+  /** 実物の `PlayerRef` が持つ音量の口。**代役に無いと「鳴らしすぎ」を検査できない。** */
+  volume: 1,
+  muted: false,
   initialFrame: null as number | null,
   listeners: new Map<string, Set<Listener>>(),
   setFrame: null as ((frame: number) => void) | null,
@@ -38,6 +43,8 @@ const harness = vi.hoisted(() => ({
   reset() {
     this.frame = 0
     this.playing = false
+    this.volume = 1
+    this.muted = false
     this.seekToCalls = []
     this.initialFrame = null
     this.listeners = new Map()
@@ -82,6 +89,18 @@ vi.mock('@remotion/player', async () => {
         isPlaying: () => harness.playing,
         getCurrentFrame: () => harness.frame,
         getContainerNode: () => containerRef.current,
+        // 実物と同じ名前・同じ効果。ここが抜けていると音量の検査が素通りする。
+        setVolume: (value: number) => {
+          harness.volume = value
+        },
+        getVolume: () => harness.volume,
+        mute: () => {
+          harness.muted = true
+        },
+        unmute: () => {
+          harness.muted = false
+        },
+        isMuted: () => harness.muted,
         /**
          * `@remotion/player` と同じ振る舞い。
          * **再生中なら一度 `pause` を配ってから飛び、直後に自分で再開する。**
@@ -210,9 +229,13 @@ beforeEach(() => {
   host.playingEvents = []
 })
 
+/** 音量の持ち主（PreferencesRoot）の中で描く。 */
+const renderWithPrefs = (ui: Parameters<typeof render>[0]) =>
+  render(ui, { wrapper: PreferencesWrapper })
+
 describe('再生中に自分をシークし返さない', () => {
   it('10 フレーム進めても seekTo を 1 度も呼ばない', () => {
-    render(<Host document={makeDocument()} />)
+    renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.setPlaying?.(true))
     for (let frame = 1; frame <= 10; frame += 1) advance(frame)
@@ -221,7 +244,7 @@ describe('再生中に自分をシークし返さない', () => {
   })
 
   it('再生ヘッドが進み、止まらない', () => {
-    render(<Host document={makeDocument()} />)
+    renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.setPlaying?.(true))
     for (let frame = 1; frame <= 10; frame += 1) advance(frame)
@@ -231,7 +254,7 @@ describe('再生中に自分をシークし返さない', () => {
   })
 
   it('もう一度 Space で止まる', () => {
-    render(<Host document={makeDocument()} />)
+    renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.setPlaying?.(true))
     for (let frame = 1; frame <= 5; frame += 1) advance(frame)
@@ -243,7 +266,7 @@ describe('再生中に自分をシークし返さない', () => {
 
   /** 親の位置を直接書き換えても（指示ではないので）飛ばない。位置の流れは一方通行。 */
   it('親の currentSec だけが変わっても飛ばない', () => {
-    render(<Host document={makeDocument()} />)
+    renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.setCurrentSec?.(3))
 
@@ -258,7 +281,7 @@ describe('Player が遅れて返した古い位置', () => {
    * その反射を見て 5 へ飛び返すと、今度は 90 の反射で 90 へ……と止まらなくなる。
    */
   it('シーク直後に古い位置が届いても飛び返さない', () => {
-    render(<Host document={makeDocument()} />)
+    renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.setPlaying?.(true))
     for (let frame = 1; frame <= 5; frame += 1) advance(frame)
@@ -270,7 +293,7 @@ describe('Player が遅れて返した古い位置', () => {
   })
 
   it('古い位置が届いたあとも、次の報告で素直に進む', () => {
-    render(<Host document={makeDocument()} />)
+    renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.setPlaying?.(true))
     act(() => host.seekTo?.(3))
@@ -286,7 +309,7 @@ describe('Player が遅れて返した古い位置', () => {
 
 describe('利用者が位置を指示したときは飛ぶ', () => {
   it('目盛りを押した位置へシークする', () => {
-    render(<Host document={makeDocument()} />)
+    renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.seekTo?.(1))
 
@@ -294,7 +317,7 @@ describe('利用者が位置を指示したときは飛ぶ', () => {
   })
 
   it('同じ位置をもう一度押しても飛び直す（指示ごとに serial が進む）', () => {
-    render(<Host document={makeDocument()} />)
+    renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.seekTo?.(1))
     advance(45)
@@ -311,7 +334,7 @@ describe('利用者が位置を指示したときは飛ぶ', () => {
    * **最終値だけを見ても素通りする**ので、親へ届いた知らせの並びを見る。
    */
   it('再生中に飛んでも、シークが起こす一時停止を親へ渡さない', () => {
-    render(<Host document={makeDocument()} />)
+    renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.setPlaying?.(true))
     for (let frame = 1; frame <= 5; frame += 1) advance(frame)
@@ -324,7 +347,7 @@ describe('利用者が位置を指示したときは飛ぶ', () => {
   })
 
   it('停止中に飛んでも再生は始まらない', () => {
-    render(<Host document={makeDocument()} />)
+    renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.seekTo?.(3))
 
@@ -334,7 +357,7 @@ describe('利用者が位置を指示したときは飛ぶ', () => {
 
   /** 末尾へ飛ぶと Player は再開せず `ended` を配る。飲み込んだ `pause` の代わりに、これで止まりを伝える。 */
   it('末尾に達したら（ended）親も停止になる', () => {
-    render(<Host document={makeDocument()} />)
+    renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.setPlaying?.(true))
     act(() => {
@@ -346,7 +369,7 @@ describe('利用者が位置を指示したときは飛ぶ', () => {
   })
 
   it('取り付け時の位置から始まる', () => {
-    render(<Host document={makeDocument()} initialSec={2} />)
+    renderWithPrefs(<Host document={makeDocument()} initialSec={2} />)
 
     expect(harness.initialFrame).toBe(60)
     expect(harness.seekToCalls).toEqual([])
@@ -355,7 +378,7 @@ describe('利用者が位置を指示したときは飛ぶ', () => {
 
 describe('素材を読めなかったとき', () => {
   it('黙って黒くせず、理由を親へ返す', () => {
-    const { getByTestId } = render(<Host document={makeDocument()} />)
+    const { getByTestId } = renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => {
       getByTestId('media').dispatchEvent(new Event('error'))
@@ -366,7 +389,7 @@ describe('素材を読めなかったとき', () => {
   })
 
   it('同じ失敗を何度も流さない', () => {
-    const { getByTestId } = render(<Host document={makeDocument()} />)
+    const { getByTestId } = renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => {
       getByTestId('media').dispatchEvent(new Event('error'))
@@ -378,7 +401,7 @@ describe('素材を読めなかったとき', () => {
   })
 
   it('署名付き URL を文に含めない', () => {
-    const { getByTestId } = render(<Host document={makeDocument()} />)
+    const { getByTestId } = renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => {
       getByTestId('media').dispatchEvent(new Event('error'))
@@ -387,3 +410,71 @@ describe('素材を読めなかったとき', () => {
     expect(host.mediaErrors[0]).not.toContain('http')
   })
 })
+
+/**
+ * 報告された 2 件の作り直し。どちらも**実機で確かめたうえで**ここに固定する。
+ *
+ * - 音量: 「聴きながら切る」で 15% にしてもプレビューは 100% で鳴っていた
+ * - 追従: 別のパネルが鳴らしている間、時計だけ進んで絵は止まっていた
+ */
+describe('鳴らす側が 2 つあるときの約束', () => {
+  it('音量は環境設定のひとつを Player にも当てる', () => {
+    window.localStorage.setItem(
+      PREFERENCES_STORAGE_KEY,
+      JSON.stringify({ playback: { volume: 0.15, muted: false } }),
+    )
+    renderWithPrefs(<Host document={makeDocument()} />)
+    expect(harness.volume).toBe(0.15)
+    expect(harness.muted).toBe(false)
+  })
+
+  it('消音も Player に当たる', () => {
+    window.localStorage.setItem(
+      PREFERENCES_STORAGE_KEY,
+      JSON.stringify({ playback: { volume: 0.8, muted: true } }),
+    )
+    renderWithPrefs(<Host document={makeDocument()} />)
+    expect(harness.muted).toBe(true)
+  })
+
+  it('自分が鳴らしていない間は、共有の位置へ絵だけ合わせる', () => {
+    renderWithPrefs(<Follower document={makeDocument()} followSec={3} />)
+    expect(harness.seekToCalls).toEqual([90])
+  })
+
+  it('同じコマなら合わせ直さない（毎フレームの seek は重い）', () => {
+    const view = renderWithPrefs(<Follower document={makeDocument()} followSec={3} />)
+    expect(harness.seekToCalls).toEqual([90])
+    // 3.00s と 3.01s は 30fps では同じコマ。合わせ直す必要はない。
+    view.rerender(<Follower document={makeDocument()} followSec={3.01} />)
+    expect(harness.seekToCalls).toEqual([90])
+  })
+
+  it('自分が鳴らしている間は追従しない（位置が往復する）', () => {
+    renderWithPrefs(<Follower document={makeDocument()} followSec={3} playing />)
+    expect(harness.seekToCalls).toEqual([])
+  })
+})
+
+/** 鳴らす役を持たないモニター。別のパネルが鳴らしている状況を作る。 */
+const Follower = ({
+  document,
+  followSec,
+  playing = false,
+}: {
+  readonly document: TimelineDocument
+  readonly followSec: number
+  readonly playing?: boolean
+}) => (
+  <ProgramMonitorPlayer
+    document={document}
+    initialSec={0}
+    seek={null}
+    playing={playing}
+    followSec={followSec}
+    onFrame={() => undefined}
+    onPlayingChange={() => undefined}
+    onFatalError={() => undefined}
+    onMediaError={() => undefined}
+  />
+)

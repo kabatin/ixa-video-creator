@@ -10,6 +10,14 @@ export type TransportSyncPort = {
   readonly seek: SeekCommand | null
   readonly onPosition: (sec: number) => void
   readonly onPlayingChange: (playing: boolean) => void
+  /**
+   * 「自分が鳴っているべきか」の指示。**再生ボタンが画面にひとつしかないため要る。**
+   *
+   * 以前はこのパネルの中のボタンだけが再生を始められたので、外からは鳴らせなかった。
+   * 下の帯のボタンを押したときに鳴り出すよう、指示として受け取る。
+   * `null` は「指示しない」（このパネル単体で使うとき）。
+   */
+  readonly commandPlaying?: boolean | null
 }
 
 /**
@@ -48,6 +56,18 @@ export const useCutEditorSync = (
   useEffect(() => {
     if (othersPlaying && control.current.isPlaying) control.current.pause()
   }, [othersPlaying])
+
+  /**
+   * 外からの再生指示に従う。**すでにその状態なら何もしない。**
+   * 自分の報告が `onPlayingChange` → 指示として返ってくるので、
+   * 比べずに実行すると止めた直後に鳴り直す。
+   */
+  const commandPlaying = sync?.commandPlaying ?? null
+  useEffect(() => {
+    if (commandPlaying === null) return
+    if (commandPlaying && !control.current.isPlaying) void control.current.play()
+    if (!commandPlaying && control.current.isPlaying) control.current.pause()
+  }, [commandPlaying])
 
   const seekSerial = sync?.seek?.serial ?? null
   const seenSerial = useRef(seekSerial)

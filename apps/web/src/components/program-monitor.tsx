@@ -58,6 +58,14 @@ export type ProgramMonitorProps = {
   /** 利用者が目盛りなどで明示的に指定した位置。`serial` が変わったときだけ Player が飛ぶ。 */
   readonly seek: SeekCommand | null
   readonly playing: boolean
+  /**
+   * 自分が鳴らしていないときに、絵だけ合わせにいく位置（秒）。
+   *
+   * 別のパネル（聴きながら切る）が鳴らしている間、共有の時計は進むのに
+   * ここの絵は止まったままだった。曲は流れているのに画面は真っ黒で「停止中」と出る、
+   * という食い違いになる。鳴らす役は渡さず、**絵だけ**合わせる。
+   */
+  readonly followSec?: number | null
   /** 再生する区間の先頭（秒）。省略すると先頭から。 */
   readonly inSec?: number
   /** 再生する区間の終わり（秒）。**この秒自体は再生しない。** 省略すると終端まで。 */
@@ -89,6 +97,7 @@ export const ProgramMonitor = ({
   currentSec,
   seek,
   playing,
+  followSec = null,
   inSec,
   outSec,
   loop,
@@ -161,6 +170,7 @@ export const ProgramMonitor = ({
           initialSec={currentSec}
           seek={seek}
           playing={playing}
+          followSec={followSec}
           inSec={inSec}
           outSec={outSec}
           loop={loop}
@@ -195,7 +205,9 @@ export const ProgramMonitor = ({
         frame
       )}
 
-      {state.canRender && <p className="shrink-0 text-xs text-muted">{state.message}</p>}
+      {state.canRender && state.message !== '' && (
+        <p className="shrink-0 text-xs text-muted">{state.message}</p>
+      )}
 
       {mediaFailure !== null && (
         <p role="alert" className="shrink-0 text-xs text-danger">

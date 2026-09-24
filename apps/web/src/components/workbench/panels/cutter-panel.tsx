@@ -21,6 +21,10 @@ export const CutterPanel = ({ visible }: { readonly visible: boolean }) => {
   const workbench = useWorkbench()
   const { preferences } = usePreferences()
   const { transport, transportControls } = workbench
+
+  // 下の帯のひとつだけの再生ボタンに、鳴らせる相手として名乗る。
+  useEffect(() => transportControls.registerPlayer('cutter'), [transportControls])
+
   return (
     <PanelFrame>
       <MusicGate>
@@ -41,6 +45,8 @@ export const CutterPanel = ({ visible }: { readonly visible: boolean }) => {
                 if (playing) transportControls.play('cutter')
                 else if (transport.owner === 'cutter') transportControls.pause()
               },
+              // 下の帯のボタンで鳴らせるようにする。自分が持ち主のときだけ従う。
+              commandPlaying: transport.owner === 'cutter' ? transport.playing : null,
             }}
           />
         )}

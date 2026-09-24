@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { StatusBar } from '@/components/workbench/status-bar'
 import { WireRenderJob } from '@/lib/render-api'
 import { aProject } from './workbench-fixture'
+import { PreferencesWrapper } from './preferences-wrapper'
 
 /** ステータスバー（UI-WORKBENCH §10）。読み込みエラーは 1 件でもあれば必ず出す。 */
 
@@ -33,6 +34,22 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+/** 再生操作の控え。ステータスバーは押されたことを外へ渡すだけなので、中身は空でよい。 */
+const STUB_TRANSPORT_CONTROLS = {
+  setCurrentSec: vi.fn(),
+  seekTo: vi.fn(),
+  play: vi.fn(),
+  pause: vi.fn(),
+  toggle: vi.fn(),
+  togglePlayback: vi.fn(),
+  registerPlayer: vi.fn(() => vi.fn()),
+  preferredOwner: 'cutter' as const,
+}
+
+/** 音量の持ち主（PreferencesRoot）の中で描く。 */
+const renderWithPrefs = (ui: Parameters<typeof render>[0]) =>
+  render(ui, { wrapper: PreferencesWrapper })
+
 describe('StatusBar', () => {
   /**
    * 書き出しはダイアログを閉じても走り続ける（上限 30 分）。
@@ -60,13 +77,13 @@ describe('StatusBar', () => {
     })
 
     it('走っていなければ出さない', () => {
-      render(<StatusBar project={aProject} shotCount={3} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
+      renderWithPrefs(<StatusBar transportControls={STUB_TRANSPORT_CONTROLS} project={aProject} shotCount={3} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
       expect(screen.queryByText(/書き出し中/)).toBeNull()
     })
 
     it('割合が取れていれば % を出す', () => {
-      render(
-        <StatusBar
+      renderWithPrefs(
+        <StatusBar transportControls={STUB_TRANSPORT_CONTROLS}
           project={aProject}
           shotCount={3}
           live={live}
@@ -79,8 +96,8 @@ describe('StatusBar', () => {
     })
 
     it('割合が取れていないときは % を作らない', () => {
-      render(
-        <StatusBar
+      renderWithPrefs(
+        <StatusBar transportControls={STUB_TRANSPORT_CONTROLS}
           project={aProject}
           shotCount={3}
           live={live}
@@ -102,14 +119,43 @@ describe('StatusBar', () => {
     const playing = (owner: 'cutter' | 'monitor', sec: number) =>
       ({ currentSec: sec, playing: true, seek: null, owner }) as const
 
-    it('止まっているときは出さない', () => {
-      render(<StatusBar project={aProject} shotCount={3} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
-      expect(screen.queryByText(/▶/)).toBeNull()
+    /**
+     * 再生ボタンは**止まっていても消えない。** 画面にひとつしか無いので、
+     * 消すと鳴らす手段が無くなる。消えるのは「どこが鳴っているか」の名前のほう。
+     */
+    it('止まっているときは、どこが鳴っているかを出さない', () => {
+      renderWithPrefs(<StatusBar transportControls={STUB_TRANSPORT_CONTROLS} project={aProject} shotCount={3} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
+      expect(screen.queryByText(/聴きながら切る|プレビュー/)).toBeNull()
+    })
+
+    it('止まっていても再生ボタンは出ている', () => {
+      renderWithPrefs(<StatusBar transportControls={STUB_TRANSPORT_CONTROLS} project={aProject} shotCount={3} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
+      expect(screen.getByRole('button', { name: '再生' })).toBeTruthy()
+    })
+
+    it('鳴らせるパネルが無ければ再生ボタンは押せない', () => {
+      renderWithPrefs(
+        <StatusBar
+          transportControls={{ ...STUB_TRANSPORT_CONTROLS, preferredOwner: null }}
+          project={aProject}
+          shotCount={3}
+          live={live}
+          transport={stopped}
+          renderWatch={idleRenders}
+          loadErrors={[]}
+        />,
+      )
+      expect(screen.getByRole('button', { name: '再生' })).toBeDisabled()
+    })
+
+    it('音量はここにひとつだけある', () => {
+      renderWithPrefs(<StatusBar transportControls={STUB_TRANSPORT_CONTROLS} project={aProject} shotCount={3} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
+      expect(screen.getAllByLabelText('音量')).toHaveLength(1)
     })
 
     it('カッターが鳴っていればその名前と位置を出す', () => {
-      render(
-        <StatusBar
+      renderWithPrefs(
+        <StatusBar transportControls={STUB_TRANSPORT_CONTROLS}
           project={aProject}
           shotCount={3}
           live={live}
@@ -122,8 +168,8 @@ describe('StatusBar', () => {
     })
 
     it('プレビューが鳴っていればそちらを出す', () => {
-      render(
-        <StatusBar
+      renderWithPrefs(
+        <StatusBar transportControls={STUB_TRANSPORT_CONTROLS}
           project={aProject}
           shotCount={3}
           live={live}
@@ -138,8 +184,8 @@ describe('StatusBar', () => {
   })
 
   it('読み込みエラーが 1 件でもあれば必ず出す', () => {
-    render(
-      <StatusBar
+    renderWithPrefs(
+      <StatusBar transportControls={STUB_TRANSPORT_CONTROLS}
         project={aProject}
         shotCount={3}
         live={live}
@@ -154,24 +200,24 @@ describe('StatusBar', () => {
   })
 
   it('複数あれば件数を出し、全文は title に渡す', () => {
-    render(<StatusBar project={aProject} shotCount={3} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={['A が読めない', 'B が読めない']} />)
+    renderWithPrefs(<StatusBar transportControls={STUB_TRANSPORT_CONTROLS} project={aProject} shotCount={3} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={['A が読めない', 'B が読めない']} />)
     const alert = screen.getByText(/読み込めなかった部分 2 件/)
     expect(alert).toHaveAttribute('title', 'A が読めない\nB が読めない')
   })
 
   it('エラーが無ければ出さない', () => {
-    render(<StatusBar project={aProject} shotCount={3} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
+    renderWithPrefs(<StatusBar transportControls={STUB_TRANSPORT_CONTROLS} project={aProject} shotCount={3} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
     expect(screen.queryByText(/読み込めなかった部分/)).toBeNull()
   })
 
   it('件数・解像度・fps を出す', () => {
-    render(<StatusBar project={aProject} shotCount={27} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
+    renderWithPrefs(<StatusBar transportControls={STUB_TRANSPORT_CONTROLS} project={aProject} shotCount={27} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
     expect(screen.getByText('27 Shots')).toBeInTheDocument()
     expect(screen.getByText('1920×1080・30fps')).toBeInTheDocument()
   })
 
   it('Shot を読めていないときは 0 件と言わない', () => {
-    render(<StatusBar project={aProject} shotCount={null} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
+    renderWithPrefs(<StatusBar transportControls={STUB_TRANSPORT_CONTROLS} project={aProject} shotCount={null} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
     expect(screen.getByText('Shot を読めていません')).toBeInTheDocument()
     expect(screen.queryByText('0 Shots')).toBeNull()
   })

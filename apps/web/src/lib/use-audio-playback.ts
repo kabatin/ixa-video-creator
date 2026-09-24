@@ -14,12 +14,7 @@ import {
   URL_REFRESHING_NOTICE,
   type SignedSource,
 } from '@/lib/playback-state'
-import {
-  DEFAULT_VOLUME_PREFERENCE,
-  readVolumePreference,
-  writeVolumePreference,
-  type VolumePreference,
-} from '@/lib/volume-preference'
+import { usePlaybackVolume } from '@/lib/use-playback-volume'
 
 /**
  * 音源を鳴らし、いまどこを鳴らしているかを伝えるフック。
@@ -117,14 +112,14 @@ export const useAudioPlayback = ({
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   /**
-   * 音量。**最初の描画では覚え書きを読まない。**
+   * 音量。**持ち主はここではない**（`usePlaybackVolume` → 環境設定）。
    *
-   * この画面はサーバでも描かれる。サーバに `localStorage` は無いので既定になり、
-   * 最初の描画で覚え書きを読むと**サーバの結果と食い違って**React が
-   * 木を作り直す（実際に「消音」と「消音を解除」で不一致になった）。
-   * 読むのは描画のあと、下の効果で行う。
+   * 以前はこのフックが自分で持ち、環境設定へ直接読み書きしていた。そのため
+   * プレビュー（Remotion Player）と値が分かれ、音量を絞ってもプレビューは 100% で鳴った。
+   * 最初の描画で覚え書きを読まないための工夫（ハイドレーション不一致の回避）は
+   * `PreferencesRoot` 側に入っているので、ここは引くだけでよい。
    */
-  const [preference, setPreference] = useState<VolumePreference>(DEFAULT_VOLUME_PREFERENCE)
+  const playbackVolume = usePlaybackVolume()
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const rafRef = useRef<number | null>(null)
@@ -137,7 +132,7 @@ export const useAudioPlayback = ({
    * 要素を作り直したときに音量を入れ直すための控え。
    * **state を直接読むと作成の効果に依存が増え、音量を変えるたびに要素が作り直される。**
    */
-  const preferenceRef = useRef<VolumePreference>(preference)
+  const volumeRef = useRef({ volume: playbackVolume.volume, muted: playbackVolume.muted })
 
   useEffect(() => {
     refreshRef.current = onRefreshSource
@@ -200,8 +195,8 @@ export const useAudioPlayback = ({
     audio.preload = 'metadata'
     // **作り直しても音量が戻らないようにする。** この効果は音量に依存しないので、
     // state ではなく控えから入れる。
-    audio.volume = clampVolume(preferenceRef.current.volume)
-    audio.muted = preferenceRef.current.muted
+    audio.volume = clampVolume(volumeRef.current.volume)
+    audio.muted = volumeRef.current.muted
     audioRef.current = audio
 
     const onLoadedMetadata = (): void => {
@@ -379,42 +374,13 @@ export const useAudioPlayback = ({
    * **`audio.src` を差し替えても `volume` は消えない**（要素の属性であって音源の性質ではない）。
    * 消えるのは要素ごと作り直したときだけで、それは生成の効果が控えから入れ直す。
    */
-  /** 描画が済んでから覚え書きを読む。ここまでは両側とも既定で揃っている。 */
   useEffect(() => {
-    const stored = readVolumePreference()
-    preferenceRef.current = stored
-    setPreference(stored)
-  }, [])
-
-  useEffect(() => {
-    preferenceRef.current = preference
+    volumeRef.current = { volume: playbackVolume.volume, muted: playbackVolume.muted }
     const audio = audioRef.current
     if (!audio) return
-    audio.volume = clampVolume(preference.volume)
-    audio.muted = preference.muted
-  }, [preference])
-
-  /**
-   * **保存は操作したときだけ行う。** 状態の変化に合わせて書くと、
-   * 覚え書きを読み込む前の既定値で上書きしてしまう。
-   */
-  const commit = useCallback((next: VolumePreference): void => {
-    preferenceRef.current = next
-    setPreference(next)
-    writeVolumePreference(next)
-  }, [])
-
-  const setVolume = useCallback(
-    (value: number): void => {
-      // 丸めてから持つ。範囲外のまま持つと、要素へ入れる側で毎回考えることになる。
-      commit({ ...preferenceRef.current, volume: clampVolume(value) })
-    },
-    [commit],
-  )
-
-  const toggleMute = useCallback((): void => {
-    commit({ ...preferenceRef.current, muted: !preferenceRef.current.muted })
-  }, [commit])
+    audio.volume = clampVolume(playbackVolume.volume)
+    audio.muted = playbackVolume.muted
+  }, [playbackVolume.volume, playbackVolume.muted])
 
   return {
     isPlaying,
@@ -428,9 +394,9 @@ export const useAudioPlayback = ({
     toggle,
     seekTo,
     nudge,
-    volume: preference.volume,
-    muted: preference.muted,
-    setVolume,
-    toggleMute,
+    volume: playbackVolume.volume,
+    muted: playbackVolume.muted,
+    setVolume: playbackVolume.setVolume,
+    toggleMute: playbackVolume.toggleMute,
   }
 }
