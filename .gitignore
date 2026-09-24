@@ -26,3 +26,6 @@ pnpm-lock.yaml.bak
 
 # ブラウザ自動操作の一時出力（MCP）
 .playwright-mcp/
+
+# 内部の作業記録（公開版は docs/LESSONS.md に整理してある）
+/tasks/

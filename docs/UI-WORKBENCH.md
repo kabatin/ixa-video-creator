@@ -412,5 +412,5 @@ apps/web/src/
 ## 13. 承認後にすること
 
 1. ADR-0021「Project は 1 画面のワークベンチで扱う」を書く（D1〜D5）
-2. `tasks/todo.md` に Phase 7.1〜7.4 の契約・Acceptance・Ownership を起こす
+2. Phase 7.1〜7.4 の契約・Acceptance・Ownership を起こす
 3. 7.1 から着手

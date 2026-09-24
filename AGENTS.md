@@ -13,8 +13,7 @@
 | なぜその技術・その形を選んだか | `docs/adr/` |
 | 全体構成・フェーズ・ライセンス上の制約 | `docs/ARCHITECTURE.md` |
 | コーディング規約・レイヤールール | `CLAUDE.md` |
-| 今のタスクと担当 | `tasks/todo.md` |
-| 過去に踏んだ失敗 | `tasks/lessons.md` |
+| 過去に踏んだ失敗と、そこで決めた規則 | `docs/LESSONS.md` |
 | 画面の構成・ワークベンチの作法 | `docs/UI-WORKBENCH*.md` |
 
 タスクに割り当てられた Acceptance Criteria と File Ownership は、指示に直接書かれている。

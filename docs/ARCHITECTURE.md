@@ -311,7 +311,7 @@ packages/*    ロジック。
 同じ仕様を組み立てる必要があるため**（ADR-0003 の再現性）。apps 同士は import
 できないので、片方の app に置くと必ずもう片方が空実装のまま取り残される。
 実際に `apps/api` へ置いたときに worker だけが古い実装のまま残り、specHash が
-食い違って全生成が spec_drift で失敗した（tasks/lessons.md L-012）。
+食い違って全生成が spec_drift で失敗した（`docs/LESSONS.md`「規則を 2 箇所に書くと、必ずズレる」）。
 
 **依存の向きは常に `apps → packages → domain`。逆流は禁止。**
 この規則は `eslint-plugin-boundaries` で機械的に強制する。
@@ -935,10 +935,8 @@ ixa-video-creator/
 │   ├── ARCHITECTURE.md   ← このファイル
 │   ├── DOMAIN.md         ← ドメインモデルの唯一の正
 │   ├── adr/              ← 技術決定の記録
+│   ├── LESSONS.md        ← 実装で踏んだ失敗と、そこで決めた規則
 │   └── CODEMAPS/         ← 自動生成のコードマップ
-├── tasks/
-│   ├── todo.md
-│   └── lessons.md
 ├── infra/
 │   └── docker-compose.yml    Postgres / Redis / MinIO
 ├── CLAUDE.md             コーディング規約
@@ -1220,6 +1218,6 @@ Constraints / Non-goals / Acceptance Criteria / Tests。
 
 ## 27. 次のアクション
 
-1. Phase 0 の実装計画と File Ownership 表を作成する（`tasks/todo.md`）。
+1. Phase 0 の実装計画と File Ownership 表を作成する。
 2. Q1 / Q2 の回答を待たずに着手できる範囲（monorepo 雛形・DB スキーマ・domain 型）から並列起動する。
 3. Q1 の回答次第で ADR-0010 を確定または差し替える。
