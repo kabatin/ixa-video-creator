@@ -1,7 +1,7 @@
 'use client'
 
-import { ShotSize, type Shot } from '@ixa/domain'
-import { useMemo, useState } from 'react'
+import { ShotSize, type Shot, type ShotId } from '@ixa/domain'
+import { useEffect, useMemo, useState } from 'react'
 import type {
   BulkGenerateInput,
   BulkOutcome,
@@ -20,8 +20,21 @@ import { parseBulkGenerateRejection, type BulkGenerateRejection } from '@/lib/sh
  * 判定は `shot-bulk.ts`、部品は `bulk-action-bar`。ここは送って結果を一覧へ映すだけ。
  * 一覧の書き換えは Provider の `replaceShots` 経由（UI-WORKBENCH §7.2）。
  */
+/**
+ * 投入した生成の進み具合。**投入したあとも見張る。**
+ *
+ * 以前は投入の往復が終わった時点で手が空き、そのあとは一覧の状態が
+ * 少しずつ変わるだけだった。押したのに何も起きていないように見え、
+ * 実際に「反応していない」と読み違えた。終わるまで数えて見せる。
+ */
+export type BulkProgress = {
+  readonly done: number
+  readonly total: number
+}
+
 export type BulkActions = {
   readonly busy: boolean
+  readonly progress: BulkProgress | null
   readonly outcome: BulkOutcome | null
   readonly clearOutcome: () => void
   readonly generate: (input: BulkGenerateInput) => void
@@ -66,7 +79,21 @@ export const useBulkActions = (): BulkActions => {
   const api = useMemo(() => createApiClient(), [])
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<BulkOutcome | null>(null)
+  /** 投入した Shot。生成中でなくなったら 1 件ぶん進んだとみなす。 */
+  const [watching, setWatching] = useState<readonly ShotId[] | null>(null)
   const shots: readonly Shot[] = workbench.shots ?? []
+
+  const progress = useMemo<BulkProgress | null>(() => {
+    if (watching === null) return null
+    const byId = new Map(shots.map((shot) => [shot.id, shot]))
+    const done = watching.filter((id) => byId.get(id)?.status !== 'generating').length
+    return { done, total: watching.length }
+  }, [watching, shots])
+
+  // 全部が生成中を抜けたら見張りを終える。結果の要約はそのまま残す。
+  useEffect(() => {
+    if (progress !== null && progress.done >= progress.total) setWatching(null)
+  }, [progress])
 
   const run = async (plan: BulkPlan, action: () => Promise<ActionResult>): Promise<void> => {
     if (plan.targetIds.length === 0) {
@@ -107,6 +134,8 @@ export const useBulkActions = (): BulkActions => {
             summary.succeededIds.has(shot.id) ? [{ ...shot, status: 'generating' as const }] : [],
           ),
         )
+        // 投入できたぶんだけ見張る。予算で弾かれたものは最初から走っていない。
+        setWatching(summary.succeededIds.size > 0 ? [...summary.succeededIds] : null)
         return { summary: summary.headline, failures: summary.failures.map(noteLine) }
       } catch (error) {
         // 予算超過は 1 件も投入されていない。合計と上限を必ず添える。
@@ -161,6 +190,7 @@ export const useBulkActions = (): BulkActions => {
 
   return {
     busy,
+    progress,
     outcome,
     clearOutcome: () => {
       setOutcome(null)

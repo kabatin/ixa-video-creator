@@ -12,6 +12,8 @@ import {
   type BulkUpdatePatch,
 } from '@/components/bulk-action-forms'
 import { Button } from '@/components/ui/button'
+import { ProgressDialog } from '@/components/ui/progress-dialog'
+import type { BulkProgress } from '@/components/workbench/use-bulk-actions'
 import { WORDING } from '@/lib/wording'
 
 /**
@@ -74,6 +76,8 @@ export type BulkActionBarProps = {
    */
   readonly estimatedTotalUsd: number | null
   readonly busy: boolean
+  /** 投入した生成の進み具合。走っている間だけ非 null。 */
+  readonly progress: BulkProgress | null
   readonly outcome: BulkOutcome | null
   readonly onGenerate: (input: BulkGenerateInput) => void
   readonly onSelectTakes: (rule: BulkTakeRule) => void
@@ -90,6 +94,7 @@ export const BulkActionBar = ({
   locationOptions,
   estimatedTotalUsd,
   busy,
+  progress,
   outcome,
   onGenerate,
   onSelectTakes,
@@ -204,13 +209,29 @@ export const BulkActionBar = ({
         </div>
       )}
 
-      {busy ? (
-        <p role="status" className="mt-3 text-sm text-text">
-          {WORDING.start}中です。終わるまでお待ちください。
-        </p>
-      ) : (
-        <BulkOutcomeView outcome={outcome} />
-      )}
+      {/**
+        * 投入してから終わるまで手を止める。
+        *
+        * 以前は往復が終わった時点で手が空き、そのあとは一覧の状態が少しずつ
+        * 変わるだけだった。**押したのに何も起きていないように見え**、実際に
+        * 「反応していない」と読み違えた。数えて見せる。
+        */}
+      <ProgressDialog
+        open={busy || progress !== null}
+        title={`${WORDING.start}しています`}
+        message={
+          progress === null
+            ? '依頼を送っています。'
+            : `${String(progress.done)} / ${String(progress.total)} 件 終わりました`
+        }
+        value={progress === null || progress.total === 0 ? null : progress.done / progress.total}
+      />
+
+      {/**
+        * 進捗はダイアログが出す。同じことをバーにも書くと読み上げが二重になる。
+        * **走っている間は前回の結果を出さない。** 出すと「終わった」と読み違える。
+        */}
+      {!busy && progress === null && <BulkOutcomeView outcome={outcome} />}
     </section>
   )
 }

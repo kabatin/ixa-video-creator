@@ -171,6 +171,7 @@ export const ShotListPanel = () => {
           */
           estimatedTotalUsd={null}
           busy={bulk.busy}
+          progress={bulk.progress}
           outcome={bulk.outcome}
           onGenerate={bulk.generate}
           onSelectTakes={bulk.selectTakes}

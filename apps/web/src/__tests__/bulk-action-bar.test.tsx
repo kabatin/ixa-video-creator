@@ -47,6 +47,7 @@ const baseProps = (overrides: Partial<BulkActionBarProps> = {}): BulkActionBarPr
   /** **事前見積は API から取れない。** 呼び出し元も null を渡す（F3a）。 */
   estimatedTotalUsd: null,
   busy: false,
+  progress: null,
   outcome: null,
   onGenerate: vi.fn(),
   onSelectTakes: vi.fn(),
@@ -103,12 +104,30 @@ describe('BulkActionBar — 出る / 出ない', () => {
     expect(screen.getByRole('group', { name: '一括で変える' })).toBeInTheDocument()
   })
 
-  it('実行中はバー全体が止まり、実行中と出る', () => {
+  /**
+   * 実行中は**進捗ダイアログが手を止める**。
+   * 以前はバーの中に 1 行出すだけで、密なパネルの下のほうだと気づけなかった。
+   */
+  it('実行中は進捗ダイアログが出て、バー全体が止まる', () => {
     setup({ busy: true })
 
-    expect(screen.getByRole('status')).toHaveTextContent('実行中です')
+    expect(screen.getByRole('progressbar')).toBeTruthy()
+    expect(screen.getByRole('status')).toHaveTextContent('依頼を送っています')
     expect(screen.getByRole('button', { name: '一括生成' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '選択を解除' })).toBeDisabled()
+  })
+
+  it('投入したあとも、終わった件数を数えて見せる', () => {
+    setup({ busy: false, progress: { done: 3, total: 8 } })
+
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '38')
+    expect(screen.getByRole('status')).toHaveTextContent('3 / 8 件 終わりました')
+  })
+
+  it('走っていなければ進捗ダイアログは出ない', () => {
+    setup({ busy: false })
+
+    expect(screen.queryByRole('progressbar')).toBeNull()
   })
 
   it('選択の解除はそのまま呼ぶ', async () => {
@@ -421,6 +440,7 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
           selectedCount={3}
           alreadySelectedCount={0}
           lockedCount={0}
+          progress={null}
           modelOptions={MODEL_OPTIONS}
           cameraSizeOptions={CAMERA_SIZE_OPTIONS}
           locationOptions={LOCATION_OPTIONS}

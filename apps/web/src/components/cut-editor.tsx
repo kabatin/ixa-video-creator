@@ -17,6 +17,8 @@ import { CutWaveformOverlay } from '@/components/cut-waveform-overlay'
 import { SelectField } from '@/components/form/select-field'
 import { Button } from '@/components/ui/button'
 import { WaveformCanvas } from '@/components/waveform-canvas'
+import { WAVEFORM_HEIGHT_PX } from '@/lib/waveform-bands'
+import { fillWaveformHeight, shouldResizeWaveform } from '@/lib/waveform-fill'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { HelpDisclosure } from '@/components/ui/help-disclosure'
@@ -140,6 +142,45 @@ export const CutEditor = ({
   const [dragging, setDragging] = useState(false)
   const [peaks, setPeaks] = useState<WaveformPeaksResult | null>(null)
   const [widthPx, setWidthPx] = useState(0)
+
+  /**
+   * 波形の高さ。**パネルの余りをもらう。**
+   *
+   * 既定の 78px 固定では、パネルを縦に広げても波形は変わらず、
+   * 増えるのは下のフォームの余白だけだった。ここがこのパネルの主役なので、
+   * 余ったぶんは波形に渡す。下限を切る狭さでは従来どおりスクロールで見せる。
+   */
+  const waveBoxRef = useRef<HTMLDivElement | null>(null)
+  const [waveHeightPx, setWaveHeightPx] = useState(WAVEFORM_HEIGHT_PX)
+
+  useEffect(() => {
+    const box = waveBoxRef.current
+    const body = box?.closest('[data-panel-body]')
+    const content = box?.closest('[data-cut-editor]')
+    if (!(body instanceof HTMLElement) || !(content instanceof HTMLElement)) return undefined
+    const measure = (): void => {
+      // `clientHeight` は内側の余白を含む。中身が使えるのはそれを引いたぶん。
+      const style = window.getComputedStyle(body)
+      const padding =
+        Number.parseFloat(style.paddingTop || '0') + Number.parseFloat(style.paddingBottom || '0')
+      setWaveHeightPx((current) => {
+        const next = fillWaveformHeight({
+          bodyClientHeight: body.clientHeight - padding,
+          // 入れ物ではなく中身の高さ。余裕があると scrollHeight は入れ物と同じ値になる。
+          contentHeight: content.offsetHeight,
+          currentHeight: current,
+        })
+        return shouldResizeWaveform(current, next) ? next : current
+      })
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(body)
+    observer.observe(content)
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
 
   const [sequenceId, setSequenceId] = useState<string>(NO_SEQUENCE_VALUE)
   const [saving, setSaving] = useState(false)
@@ -482,7 +523,12 @@ export const CutEditor = ({
         </p>
       )}
 
-      <div ref={(node) => setWidthPx(node?.clientWidth ?? 0)}>
+      <div
+        ref={(node) => {
+          waveBoxRef.current = node
+          setWidthPx(node?.clientWidth ?? 0)
+        }}
+      >
         {peaks === null ? (
           <p role="status" className="text-sm text-muted">
             波形を読み込んでいます…
@@ -496,6 +542,7 @@ export const CutEditor = ({
             downbeats={analysis.downbeats}
             drops={analysis.drops}
             sectionBoundarySec={sectionBoundarySec}
+            heightPx={waveHeightPx}
           >
             <CutWaveformOverlay
               marks={marks}

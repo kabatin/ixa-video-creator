@@ -8,6 +8,7 @@ import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { formatClock } from '@/lib/format-time'
 import { POLL_TIMEOUT_MS, startAsyncPolling, type PollHandle } from '@/lib/poller'
+import { ProgressDialog } from '@/components/ui/progress-dialog'
 import { WORDING } from '@/lib/wording'
 
 /**
@@ -20,10 +21,14 @@ import { WORDING } from '@/lib/wording'
  * 状態は 5 つを混ぜない。まだ始めていない / 送信中 / 待っている / 終わった /
  * 上限まで待った / 失敗した。特に「上限まで待った」を「終わった」にしない（lessons L-015）。
  *
- * **画面を開き直したときは `idle` に戻る。** API に「解析が走っているか」を問う口が無く、
- * `getAnalysis` は結果が出るまで null しか返さないため、
- * 「まだ始まっていない」と「走っている最中」を画面から区別できない。
- * 走っていると言い切るより、始まっていないものとして扱うほうが害が小さい。
+ * **解析は自分から始める。** 解析されていない曲では何もできないので、押させる意味が無い。
+ * 以前は曲を入れた直後に解析が走っているのに、画面は「まだ解析されていません・解析を実行」
+ * のままで、すでに動いているものをもう一度押させる形になっていた（実測）。
+ * 終わるまでは進捗ダイアログで手を止める。**押したのに何も起きないように見える**のを無くす。
+ *
+ * API に「解析が走っているか」を問う口が無く、`getAnalysis` は結果が出るまで null しか
+ * 返さないため、画面を開き直したときは始まっているかどうか分からない。分からないので
+ * もう一度頼む。解析は結果を上書きするだけで、二重に頼んでも壊れない（局所・無料）。
  */
 
 export type AnalysisStarterProps = {
@@ -101,11 +106,40 @@ export const AnalysisStarter = ({ track }: AnalysisStarterProps) => {
 
   const busy = phase.kind === 'sending' || phase.kind === 'waiting'
 
+  /**
+   * 取り付いたら自分で始める。**1 曲につき 1 回だけ。**
+   * 失敗したあとに勝手に繰り返すと、同じ失敗を延々と積むことになる。
+   */
+  const startedForRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (startedForRef.current === track.id) return
+    startedForRef.current = track.id
+    void start()
+    // start は track だけに依存する。依存に入れると毎描画で作り直されて何度も走る。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [track.id])
+
   return (
     <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+      <ProgressDialog
+        open={busy}
+        title="曲を解析しています"
+        message={
+          phase.kind === 'sending'
+            ? '解析を頼んでいます。'
+            : '拍と小節頭を数えています。終わったらそのまま切る画面になります。'
+        }
+        // 進み具合は返ってこない。作らない。
+        value={null}
+      >
+        {phase.kind === 'waiting' && (
+          <p className="text-xs text-muted">{`経過 ${formatClock(phase.elapsedMs / 1_000)}`}</p>
+        )}
+      </ProgressDialog>
+
       <h2 className="text-base font-semibold text-text">この楽曲はまだ解析されていません</h2>
       <p className="mt-1 text-sm text-muted">
-        Shot を割るにはビートとセクションが必要です。解析を実行してください。
+        Shot を割るにはビートとセクションが必要です。解析が終わるまで待ってください。
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -116,7 +150,7 @@ export const AnalysisStarter = ({ track }: AnalysisStarterProps) => {
             void start()
           }}
         >
-          {phase.kind === 'sending' ? '送信中…' : `解析を${WORDING.start}`}
+          {phase.kind === 'sending' ? '送信中…' : `解析をもう一度${WORDING.start}`}
         </Button>
 
         {(phase.kind === 'timeout' || phase.kind === 'failed') && (

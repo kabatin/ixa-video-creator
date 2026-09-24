@@ -169,6 +169,27 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
     }
   }, [api, projectId, posterEpoch])
 
+  /**
+   * Shot が増えたらサムネイルを引き直す。
+   *
+   * 引けていない Shot は「サムネイルを読み込み中」と出る（「まだ無い」と混ぜないため。L-021）。
+   * ところが引き直す合図は**生成が成功したとき**と `refresh()` しか無かったので、
+   * 区切りから Shot を作った直後の 8 件は**そのまま「読み込み中」で止まり続けた**（実測）。
+   * 待てば出ると読める文が、いつまでも出ないのは嘘になる。
+   *
+   * 同じ組み合わせでは二度頼まない（頼んでも埋まらない Shot があると回り続ける）。
+   */
+  const askedForRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (shots === null) return
+    const missing = shots.filter((shot) => !posters.has(shot.id)).map((shot) => shot.id)
+    if (missing.length === 0) return
+    const key = missing.join(',')
+    if (askedForRef.current === key) return
+    askedForRef.current = key
+    setPosterEpoch((epoch) => epoch + 1)
+  }, [shots, posters])
+
   const replaceShots = useCallback((updated: readonly Shot[]): void => {
     setShots((current) => (current === null ? current : replaceById(current, updated)))
   }, [])
