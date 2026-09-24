@@ -55,7 +55,8 @@ describe('listShots', () => {
 
     expect(error).toBeInstanceOf(ApiError)
     expect((error as ApiError).status).toBe(500)
-    expect((error as ApiError).message).toContain('database is on fire')
+    // 理由は body に残す。message には入れない（画面へ出る経路から参照されるため）。
+    expect((error as ApiError).body).toContain('database is on fire')
   })
 
   it('不正な形の Shot は zod が throw する', async () => {

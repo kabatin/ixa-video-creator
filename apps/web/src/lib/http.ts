@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import { ApiError, TRANSPORT_ERROR_STATUS, describeError } from '@/lib/api-error'
+import { ApiError, TRANSPORT_ERROR_STATUS, describeErrorForLog } from '@/lib/api-error'
 import { ApiEnvelope } from '@/lib/api-schemas'
 
 /**
@@ -28,7 +28,7 @@ export const send = async (url: string, init: RequestInit): Promise<RawResponse>
     return { status: response.status, ok: response.ok, text: await response.text() }
   } catch (cause) {
     throw new ApiError(
-      `API に接続できませんでした: ${method} ${url} — ${describeError(cause)}`,
+      `API に接続できませんでした: ${method} ${url} — ${describeErrorForLog(cause)}`,
       TRANSPORT_ERROR_STATUS,
       '',
       { cause },
@@ -41,7 +41,7 @@ const parseJson = (text: string, context: string, raw: RawResponse): unknown => 
     return JSON.parse(text) as unknown
   } catch (cause) {
     throw new ApiError(
-      `${context}: レスポンスが JSON ではありません — ${text.slice(0, 200)}`,
+      `${context}: レスポンスが JSON ではありません`,
       raw.status,
       text,
       { cause },
@@ -52,7 +52,7 @@ const parseJson = (text: string, context: string, raw: RawResponse): unknown => 
 export const ensureOk = (raw: RawResponse, context: string): void => {
   if (raw.ok) return
   throw new ApiError(
-    `${context}: API が ${String(raw.status)} を返しました — ${raw.text.slice(0, 500)}`,
+    `${context}: API が ${String(raw.status)} を返しました`,
     raw.status,
     raw.text,
   )
@@ -67,7 +67,7 @@ export const unwrap = <T>(
   const envelope = ApiEnvelope.parse(parseJson(raw.text, context, raw))
   if (!envelope.success) {
     throw new ApiError(
-      `${context}: API がエラーを返しました — ${envelope.error ?? '詳細不明'}`,
+      `${context}: API がエラーを返しました`,
       raw.status,
       raw.text,
     )

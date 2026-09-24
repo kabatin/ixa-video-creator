@@ -111,6 +111,7 @@ describe('look API', () => {
 
     expect(error).toBeInstanceOf(ApiError)
     expect((error as ApiError).status).toBe(422)
-    expect((error as ApiError).message).toContain('既定 Look は削除できません')
+    // 理由は body に残す。message には入れない（画面へ出る経路から参照されるため）。
+    expect((error as ApiError).body).toContain('既定 Look は削除できません')
   })
 })

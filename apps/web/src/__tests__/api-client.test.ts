@@ -85,7 +85,12 @@ describe('createApiClient', () => {
     await expect(createApiClient(BASE_URL).getProject(PROJECT_ID)).resolves.toBeNull()
   })
 
-  it('HTTP エラーはステータスと本文を含めて throw する', async () => {
+  /**
+   * 本文は `body` に持たせ、`message` には入れない。
+   * `message` は画面に出る経路（`describeError`）から参照されるため、
+   * ここに本文を入れるとレスポンスがそのまま利用者に見える。
+   */
+  it('HTTP エラーはステータスを message に、本文を body に持つ', async () => {
     fetchMock.mockResolvedValue(
       new Response('database is on fire', { status: 500, statusText: 'Internal Server Error' }),
     )
@@ -97,16 +102,22 @@ describe('createApiClient', () => {
     expect(error).toBeInstanceOf(ApiError)
     expect((error as ApiError).status).toBe(500)
     expect((error as ApiError).message).toContain('500')
-    expect((error as ApiError).message).toContain('database is on fire')
     expect((error as ApiError).message).toContain('/projects')
+    // 本文は残す。ただし message には入れない。
+    expect((error as ApiError).body).toContain('database is on fire')
+    expect((error as ApiError).message).not.toContain('database is on fire')
   })
 
-  it('API がエラー封筒を返したら内容を含めて throw する', async () => {
+  it('API がエラー封筒を返したら body に理由を残して throw する', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: false, error: 'workspace not found' }))
 
-    await expect(createApiClient(BASE_URL).listProjects(WORKSPACE_ID)).rejects.toThrow(
-      /workspace not found/u,
-    )
+    const error = await createApiClient(BASE_URL)
+      .listProjects(WORKSPACE_ID)
+      .catch((cause: unknown) => cause)
+
+    expect(error).toBeInstanceOf(ApiError)
+    // 理由は body から人向けに組み立てる（`describeForPerson`）。message には入れない。
+    expect((error as ApiError).body).toContain('workspace not found')
   })
 
   it('fetch 自体が失敗したら transport エラーとして throw する', async () => {
