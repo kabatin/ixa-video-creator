@@ -73,6 +73,15 @@ export type ProgramMonitorProps = {
   readonly onFrame: (sec: number) => void
   readonly onPlayingChange: (playing: boolean) => void
   readonly onError?: (message: string) => void
+  /**
+   * 絵の合わせ方。
+   *
+   * - `width`（既定）— 幅いっぱいに広げ、高さは比から決まる。
+   *   横に 2 枚並べる Take 比較のように、**高さが決まっていない入れ物**ではこちら。
+   * - `contain` — 入れ物の幅と高さの**両方**に収める。縦に潰れたパネルでも絵が全部見える。
+   *   高さの決まった入れ物（ドックのパネル）でのみ使う。
+   */
+  readonly fit?: 'width' | 'contain'
 }
 
 export const ProgramMonitor = ({
@@ -86,6 +95,7 @@ export const ProgramMonitor = ({
   onFrame,
   onPlayingChange,
   onError,
+  fit = 'width',
 }: ProgramMonitorProps) => {
   const [failure, setFailure] = useState<string | null>(null)
   /** 素材 1 本の失敗。絵は出したまま、下に理由を添える。 */
@@ -122,40 +132,73 @@ export const ProgramMonitor = ({
   )
 
   const state = describeMonitorState(document, playing, failure)
+  const ratio = monitorAspectRatio(document)
+
+  /**
+   * 絵の枠。`contain` では**幅を高さからも決める**。
+   *
+   * `aspectRatio` だけでは幅から高さが決まるため、パネルを縦に縮めると絵が下へはみ出し、
+   * スクロールしないと全部見えなくなる。入れ物を大きさのコンテナにして
+   * `min(幅いっぱい, 高さいっぱい × 比)` を取れば、幅と高さのどちらが先に尽きても収まる。
+   */
+  const frame = (
+    <div
+      className={`overflow-hidden rounded-lg border border-line bg-bg ${
+        fit === 'contain' ? '' : 'w-full'
+      }`}
+      style={
+        fit === 'contain'
+          ? {
+              aspectRatio: String(ratio),
+              width: `min(100cqw, calc(100cqh * ${String(ratio)}))`,
+            }
+          : { aspectRatio: String(ratio) }
+      }
+    >
+      {state.canRender && document !== null ? (
+        <ProgramMonitorPlayer
+          document={document}
+          initialSec={currentSec}
+          seek={seek}
+          playing={playing}
+          inSec={inSec}
+          outSec={outSec}
+          loop={loop}
+          onFrame={onFrame}
+          onPlayingChange={onPlayingChange}
+          onFatalError={handleFatalError}
+          onMediaError={handleMediaError}
+        />
+      ) : (
+        <MonitorMessage
+          role={state.status === 'error' ? 'alert' : 'status'}
+          tone={state.status === 'error' ? 'danger' : 'muted'}
+          message={state.message}
+        />
+      )}
+    </div>
+  )
 
   return (
-    <section aria-label="プログラムモニター" className="flex flex-col gap-2">
-      <div
-        className="w-full overflow-hidden rounded-lg border border-line bg-bg"
-        style={{ aspectRatio: String(monitorAspectRatio(document)) }}
-      >
-        {state.canRender && document !== null ? (
-          <ProgramMonitorPlayer
-            document={document}
-            initialSec={currentSec}
-            seek={seek}
-            playing={playing}
-            inSec={inSec}
-            outSec={outSec}
-            loop={loop}
-            onFrame={onFrame}
-            onPlayingChange={onPlayingChange}
-            onFatalError={handleFatalError}
-            onMediaError={handleMediaError}
-          />
-        ) : (
-          <MonitorMessage
-            role={state.status === 'error' ? 'alert' : 'status'}
-            tone={state.status === 'error' ? 'danger' : 'muted'}
-            message={state.message}
-          />
-        )}
-      </div>
+    <section
+      aria-label="プログラムモニター"
+      className={`flex flex-col gap-2 ${fit === 'contain' ? 'h-full min-h-0' : ''}`}
+    >
+      {fit === 'contain' ? (
+        <div
+          className="grid min-h-0 flex-1 place-items-center"
+          style={{ containerType: 'size' }}
+        >
+          {frame}
+        </div>
+      ) : (
+        frame
+      )}
 
-      {state.canRender && <p className="text-xs text-muted">{state.message}</p>}
+      {state.canRender && <p className="shrink-0 text-xs text-muted">{state.message}</p>}
 
       {mediaFailure !== null && (
-        <p role="alert" className="text-xs text-danger">
+        <p role="alert" className="shrink-0 text-xs text-danger">
           {mediaFailure}
         </p>
       )}

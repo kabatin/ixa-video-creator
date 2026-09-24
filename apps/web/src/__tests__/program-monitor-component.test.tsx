@@ -75,6 +75,61 @@ describe('ProgramMonitor', () => {
     expect(Number.parseFloat((frame as HTMLElement).style.aspectRatio)).toBeCloseTo(1080 / 1920, 6)
   })
 
+  /**
+   * パネルを縦に縮めたときに絵がはみ出さないこと。
+   * jsdom は寸法を計算しないので、**高さが幅の決定に入っていること**を式で確かめる。
+   * 実際に収まるかは実機で見る（L-011）。
+   */
+  describe('fit', () => {
+    const renderFit = (fit?: 'width' | 'contain') =>
+      render(
+        <ProgramMonitor
+          document={makeDocument({ resolution: { width: 1920, height: 1080 } })}
+          currentSec={0}
+          seek={null}
+          playing={false}
+          onFrame={noop}
+          onPlayingChange={noop}
+          {...(fit === undefined ? {} : { fit })}
+        />,
+      )
+
+    it('contain では幅が高さからも決まる（縦に縮めても絵が全部見える）', () => {
+      const { container } = renderFit('contain')
+
+      const stage = container.querySelector('section > div')
+      expect(stage).not.toBeNull()
+      expect((stage as HTMLElement).style.containerType).toBe('size')
+
+      const frame = stage?.firstElementChild as HTMLElement
+      // 高さ（cqh）が式に入っていないと、幅だけで決まり下へはみ出す。
+      // jsdom は `calc(100cqh * 1.777…)` を `177.77…cqh` に畳むので、単位で見る。
+      expect(frame.style.width).toMatch(/cqh/)
+      expect(frame.style.width).toMatch(/cqw/)
+      expect(frame.style.width).toMatch(/^min\(/)
+      expect(Number.parseFloat(frame.style.aspectRatio)).toBeCloseTo(1920 / 1080, 6)
+    })
+
+    it('contain では絵の枠が縦に伸び縮みできる', () => {
+      const { container } = renderFit('contain')
+
+      const section = container.querySelector('section')
+      expect(section?.className).toContain('h-full')
+      expect(container.querySelector('section > div')?.className).toContain('flex-1')
+    })
+
+    it('既定（width）は高さを見ない。横に 2 枚並べる比較を縦に潰さない', () => {
+      const { container } = renderFit()
+
+      const frame = container.querySelector('section > div') as HTMLElement
+      // 既定では入れ物が大きさのコンテナにならず、幅は class の w-full に任せる。
+      expect(frame.style.containerType).toBe('')
+      expect(frame.style.width).toBe('')
+      expect(frame.className).toContain('w-full')
+      expect(container.querySelector('section')?.className).not.toContain('h-full')
+    })
+  })
+
   it('読めていない間は onFrame も onPlayingChange も呼ばない', () => {
     const onFrame = vi.fn()
     const onPlayingChange = vi.fn()

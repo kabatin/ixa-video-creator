@@ -60,26 +60,34 @@ export const PreviewPanel = () => {
         </>
       }
     >
-      {loadError !== null && <PanelNotice tone="danger">{loadError}</PanelNotice>}
-      {monitorError !== null && (
-        <PanelNotice tone="warn">{`モニター: ${monitorError}`}</PanelNotice>
-      )}
-      <div className="mx-auto w-full max-w-5xl">
-        <ProgramMonitor
-          document={loaded}
-          currentSec={transport.currentSec}
-          seek={transport.seek}
-          playing={playing}
-          // 位置を返すのは自分が鳴らしている間だけ。両方が返すと位置が往復する（L-023）。
-          onFrame={(sec) => {
-            if (mine) transportControls.setCurrentSec(sec)
-          }}
-          onPlayingChange={(next) => {
-            if (next) transportControls.play('monitor')
-            else if (mine) transportControls.pause()
-          }}
-          onError={setMonitorError}
-        />
+      {/**
+       * パネルの高さいっぱいを絵に使う。知らせは上に積み、残り全部をモニターへ渡す。
+       * 幅で頭打ちにしない（`max-w-*` を置くと、広いパネルで絵が伸びない）。
+       */}
+      <div className="flex h-full min-h-0 flex-col">
+        {loadError !== null && <PanelNotice tone="danger">{loadError}</PanelNotice>}
+        {monitorError !== null && (
+          <PanelNotice tone="warn">{`モニター: ${monitorError}`}</PanelNotice>
+        )}
+        <div className="min-h-0 flex-1">
+          <ProgramMonitor
+            document={loaded}
+            currentSec={transport.currentSec}
+            seek={transport.seek}
+            playing={playing}
+            // パネルを縦に縮めても絵が全部見えるよう、幅と高さの両方に収める。
+            fit="contain"
+            // 位置を返すのは自分が鳴らしている間だけ。両方が返すと位置が往復する（L-023）。
+            onFrame={(sec) => {
+              if (mine) transportControls.setCurrentSec(sec)
+            }}
+            onPlayingChange={(next) => {
+              if (next) transportControls.play('monitor')
+              else if (mine) transportControls.pause()
+            }}
+            onError={setMonitorError}
+          />
+        </div>
       </div>
     </PanelFrame>
   )
