@@ -33,7 +33,7 @@ import {
   FalStatusResponse,
   FalSubmitResponse,
 } from './queue-api.js'
-import { buildSeedanceInput, FAL_GENERATE_AUDIO } from './request.js'
+import { buildSeedanceInput, FAL_CODEC, FAL_GENERATE_AUDIO, FAL_TASK } from './request.js'
 
 export type { FalFetch } from './http.js'
 
@@ -229,6 +229,8 @@ export const createFalVideoProvider = (options: FalVideoProviderOptions): VideoP
         generationDurationSec,
         costPerSecondUsd: model.economics.costPerSecondUsd,
         generateAudio: FAL_GENERATE_AUDIO,
+        task: FAL_TASK,
+        codec: FAL_CODEC,
         inferenceTimeSec,
         // URL は入れない。形式と大きさだけ残す。
         videoContentType: video.content_type ?? null,

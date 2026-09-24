@@ -19,6 +19,42 @@ import {
  */
 export const FAL_GENERATE_AUDIO = false
 
+/**
+ * `task`（2.5 で増えた軸）。**`reference` に固定する。**
+ *
+ * 2.5 は 1 つのエンドポイントで 3 つの仕事を兼ねる:
+ * `reference`（参照から作る）/ `editing`（既存の映像を直す）/ `extension`（映像の続きを作る）。
+ * 本システムが Shot に対してやるのは常に前者で、後者 2 つは `video_urls` に
+ * 元の映像を渡すことが前提になる。**ドメインの `ReferenceRole` はすべて静止画**なので
+ * （`start_frame` / `end_frame` / `previous_shot_last_frame` も 1 枚の絵）、
+ * 渡せる映像が最初から存在しない。使う当てのない軸を設定にすると、
+ * capability 宣言の外側に「試せるが必ず失敗する口」を作ることになる。
+ *
+ * 続きものを作りたくなったら、`extension` は `video_urls` と新しい role を要るので、
+ * ドメイン側の変更（= Architect の判断）から始まる。そのときにここを開ければよい。
+ */
+export const FAL_TASK = 'reference'
+
+/**
+ * `codec`（2.5 で増えた軸）。**`auto` に任せず H264 を明示する。**
+ *
+ * 書き出しは Remotion + ffmpeg（ADR-0010）で、素材は「同一 fps / 同一解像度 /
+ * 同一コーデック」の中間形式へ揃えてから合成する（ARCHITECTURE.md §874 付近）。
+ * `auto` はモデル側の都合で H264 と H265 が混ざりうる。混ざると Take ごとに
+ * 再エンコードの要否が変わり、**書き出しの時間と画質が Take によってばらつく**。
+ * しかもそれが現れるのは合成の段階で、生成の時点では何も起きないので原因が遠い。
+ * H264 は Remotion / ブラウザ / QuickTime のどれでもそのまま再生でき、
+ * レビュー画面のプレビューが Take によって映らない事故も防げる。
+ */
+export const FAL_CODEC = 'H264'
+
+/**
+ * `bitrate_mode`（2.5 で増えた軸）は**送らず fal の既定（`standard`）に任せる**。
+ * 画質の軸は Project の解像度で持っており、ここを触ると同じ仕様の Take の間で
+ * ビットレートだけが変わる。既定に任せていることを検査で固定しておくための印。
+ */
+export const FAL_BITRATE_MODE_IS_DEFAULT = true
+
 export type FalSeedanceInput = {
   readonly prompt: string
   readonly image_urls?: readonly string[]
@@ -26,6 +62,8 @@ export type FalSeedanceInput = {
   readonly duration: number
   readonly aspect_ratio: string
   readonly generate_audio: boolean
+  readonly task: typeof FAL_TASK
+  readonly codec: typeof FAL_CODEC
   readonly seed?: number
 }
 
@@ -35,7 +73,7 @@ type SpecReference = { readonly role: ReferenceRole }
 const MENTION_MARKER = '@Image'
 
 /**
- * Seedance 2.0 の参照は **本文から `@Image1` の形で指す**。
+ * Seedance の参照は **本文から `@Image1` の形で指す**（2.0 / 2.5 とも）。
  * 画像を渡しただけでは何のための絵かが伝わらないので、並び順と role の対応を添える。
  *
  * **並べ替えはしない。** `spec.references` は `resolveReferences`（domain）が
@@ -98,6 +136,8 @@ export const buildSeedanceInput = (input: BuildSeedanceInput): FalSeedanceInput 
     duration: generationDurationSec,
     aspect_ratio: spec.aspectRatio,
     generate_audio: FAL_GENERATE_AUDIO,
+    task: FAL_TASK,
+    codec: FAL_CODEC,
     ...(spec.seed === null ? {} : { seed: spec.seed }),
   }
 }

@@ -16,6 +16,7 @@ import type { ProviderRegistry } from '@ixa/provider-core'
 import type { ObjectStorage } from '@ixa/storage'
 import { registerErrorHandlers, validationHook } from './errors.js'
 import { environmentRoutes, type EnvironmentDeps } from './routes/environment.js'
+import { modelRoutes } from './routes/models.js'
 import type { Logger } from './logger.js'
 import { registerOpenApiDocument } from './openapi.js'
 import { healthRoutes } from './routes/health.js'
@@ -145,6 +146,8 @@ export const createApp = (deps: AppDeps) => {
   app.route('/', healthRoutes())
   // 鍵の設定状態。**値は返さない。設定する口も置かない**（無認証で全 IF に待ち受けているため）。
   if (deps.environment !== undefined) app.route('/', environmentRoutes(deps.environment))
+  // 画面がモデルの性質（fps・尺・参照の上限）を書き写さないための口。
+  app.route('/', modelRoutes({ registry: deps.registry }))
   app.route(
     '/',
     // 費用の出どころ判定は **過去の事実**。今 registry にいる Provider と突き合わせない

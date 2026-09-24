@@ -38,7 +38,7 @@ export const FalStatusResponse = z.discriminatedUnion('status', [
 ])
 export type FalStatusResponse = z.infer<typeof FalStatusResponse>
 
-/** `bytedance/seedance-2.0/reference-to-video` の出力。 */
+/** `bytedance/seedance-2.5/reference-to-video` の出力（形は 2.0 と同じ）。 */
 export const FalSeedanceOutput = z.object({
   video: z.object({
     /** **期限付き URL。DB にも例外にもログにも出さない**（CLAUDE.md 規約 7）。 */

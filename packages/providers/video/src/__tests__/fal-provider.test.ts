@@ -17,6 +17,9 @@ const REQUEST_ID = '9f3a-1234-req'
 const MODEL = falSeedanceReferenceToVideoModel
 const ENDPOINT = `${FAL_QUEUE_BASE_URL}/${FAL_SEEDANCE_REFERENCE_TO_VIDEO_PATH}`
 
+/** 経路が 2.5 を指していること。ここがずれると全部のモックが別のモデルを叩く。 */
+const EXPECTED_PATH = 'bytedance/seedance-2.5/reference-to-video'
+
 /** 期限付きの署名付き URL。**例外にも raw にも出てはいけない値**（規約 7）。 */
 const SIGNED_REFERENCE_URL = 'https://s3.example.com/ref-a.png?X-Amz-Signature=secret'
 /** Provider が返す出力 URL。これも外へ出さない。 */
@@ -100,6 +103,7 @@ describe('submit', () => {
 
     expect(calls).toHaveLength(1)
     expect(calls[0]?.url).toBe(ENDPOINT)
+    expect(calls[0]?.url).toContain(EXPECTED_PATH)
     expect(calls[0]?.method).toBe('POST')
     expect(decodeFalJobRef(handle.ref).requestId).toBe(REQUEST_ID)
     expect(handle.providerId).toBe(MODEL.providerId)
@@ -128,16 +132,53 @@ describe('submit', () => {
       ),
     )
 
-    const body = JSON.parse(calls[0]?.body ?? '') as { image_urls: string[] }
+    const body = JSON.parse(calls[0]?.body ?? '') as {
+      image_urls: string[]
+      task: string
+      codec: string
+    }
     expect(body.image_urls).toHaveLength(2)
     expect(body.image_urls[0]).toContain('asset-1')
     expect(body.image_urls[1]).toContain('asset-2')
+    // 2.5 で増えた軸も実際に載っていること。
+    expect(body.task).toBe('reference')
+    expect(body.codec).toBe('H264')
   })
 
-  it('モデルが出せない尺は投入前に弾く', async () => {
+  it('モデルが出せない尺は投入前に弾く（2.5 の上限は 30 秒）', async () => {
     const { fetch, calls } = createFetch(() => jsonResponse(200, SUBMIT_BODY))
     await expect(
-      makeProvider(fetch).submit(submitRequest(makeSpec({ durationSec: 30 }))),
+      makeProvider(fetch).submit(submitRequest(makeSpec({ durationSec: 31 }))),
+    ).rejects.toBeInstanceOf(CapabilityViolationError)
+    expect(calls).toHaveLength(0)
+  })
+
+  it('30 秒ちょうどは投入できる', async () => {
+    const { fetch, calls } = createFetch(() => jsonResponse(200, SUBMIT_BODY))
+    await makeProvider(fetch).submit(submitRequest(makeSpec({ durationSec: 30 })))
+    const body = JSON.parse(calls[0]?.body ?? '') as { duration: number }
+    expect(body.duration).toBe(30)
+  })
+
+  const manyReferences = (count: number) =>
+    Array.from({ length: count }, (_unused, i) => ({
+      mediaAssetId: `asset-${String(i)}` as MediaAssetId,
+      role: 'subject' as const,
+      weight: 1,
+    }))
+
+  it('参照 30 枚までは投入できる（2.5 で 9 → 30 に増えた）', async () => {
+    const { fetch, calls } = createFetch(() => jsonResponse(200, SUBMIT_BODY))
+    await makeProvider(fetch).submit(submitRequest(makeSpec({ references: manyReferences(30) })))
+    const body = JSON.parse(calls[0]?.body ?? '') as { image_urls: string[] }
+    expect(body.image_urls).toHaveLength(30)
+  })
+
+  /** 上限を超えた要求に金を払わない。投入前に弾き、HTTP を 1 回も叩かない。 */
+  it('参照が 31 枚なら投入前に弾く', async () => {
+    const { fetch, calls } = createFetch(() => jsonResponse(200, SUBMIT_BODY))
+    await expect(
+      makeProvider(fetch).submit(submitRequest(makeSpec({ references: manyReferences(31) }))),
     ).rejects.toBeInstanceOf(CapabilityViolationError)
     expect(calls).toHaveLength(0)
   })

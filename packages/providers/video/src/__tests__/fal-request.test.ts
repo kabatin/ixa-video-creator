@@ -3,6 +3,7 @@ import type { MediaAssetId } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import {
   FAL_MAX_IMAGE_REFERENCES,
+  FAL_MAX_REFERENCE_FILES,
   FAL_SEEDANCE_COST_PER_SECOND_USD,
   FAL_SEEDANCE_COST_PER_SECOND_WITH_VIDEO_USD,
   FAL_SEEDANCE_REFERENCE_TO_VIDEO_PATH,
@@ -10,7 +11,13 @@ import {
   pixelSizeFor,
   resolutionTierFor,
 } from '../fal/descriptor.js'
-import { buildSeedanceInput, withReferenceMentions } from '../fal/request.js'
+import {
+  buildSeedanceInput,
+  FAL_BITRATE_MODE_IS_DEFAULT,
+  FAL_CODEC,
+  FAL_TASK,
+  withReferenceMentions,
+} from '../fal/request.js'
 import { decodeFalJobRef, encodeFalJobRef } from '../fal/job-ref.js'
 import { makeSpec } from './fixtures.js'
 
@@ -52,10 +59,31 @@ describe('解像度の段', () => {
 })
 
 describe('capability 宣言', () => {
-  it('参照画像の上限は 9 枚', () => {
+  /** 2.5 で 9 枚 → 30 枚に増えた。定数どうしで突き合わせると据え置きを見逃す。 */
+  it('参照画像の上限は 30 枚（Seedance 2.5）', () => {
+    expect(FAL_MAX_IMAGE_REFERENCES).toBe(30)
     expect(falSeedanceReferenceToVideoModel.capabilities.referenceImages.max).toBe(
       FAL_MAX_IMAGE_REFERENCES,
     )
+  })
+
+  it('総ファイル数の上限は 50（Seedance 2.5）', () => {
+    expect(FAL_MAX_REFERENCE_FILES).toBe(50)
+    expect(FAL_MAX_REFERENCE_FILES).toBeGreaterThan(FAL_MAX_IMAGE_REFERENCES)
+  })
+
+  /** 2.5 で 15 秒 → 30 秒に伸びた。 */
+  it('尺は 4〜30 秒（Seedance 2.5）', () => {
+    expect(falSeedanceReferenceToVideoModel.capabilities.durations).toEqual({
+      mode: 'range',
+      min: 4,
+      max: 30,
+      step: 1,
+    })
+  })
+
+  it('モデル経路は 2.5 を指す', () => {
+    expect(FAL_SEEDANCE_REFERENCE_TO_VIDEO_PATH).toBe('bytedance/seedance-2.5/reference-to-video')
   })
 
   /** モデル側に role の概念が無いため、ドメインの全 role を受ける。 */
@@ -83,6 +111,7 @@ describe('capability 宣言', () => {
 
   it('モデル ID にエンドポイントの経路が入っている', () => {
     expect(falSeedanceReferenceToVideoModel.id).toContain(FAL_SEEDANCE_REFERENCE_TO_VIDEO_PATH)
+    expect(falSeedanceReferenceToVideoModel.label).toContain('2.5')
   })
 })
 
@@ -101,6 +130,30 @@ describe('buildSeedanceInput', () => {
     expect(input.generate_audio).toBe(false)
     expect(input.image_urls).toBeUndefined()
     expect(input.seed).toBeUndefined()
+  })
+
+  /** 2.5 で増えた軸。使い方が 1 つに決まっているものは定数で固定する。 */
+  it('task は reference、codec は H264 を明示する', () => {
+    const input = buildSeedanceInput({
+      spec: makeSpec(),
+      generationDurationSec: 4,
+      referenceUrls: [],
+    })
+    expect(input.task).toBe('reference')
+    expect(FAL_TASK).toBe('reference')
+    expect(input.codec).toBe('H264')
+    expect(FAL_CODEC).toBe('H264')
+  })
+
+  /** bitrate_mode は fal の既定に任せる。送っていないことを検査で固定する。 */
+  it('bitrate_mode は送らない', () => {
+    const input = buildSeedanceInput({
+      spec: makeSpec(),
+      generationDurationSec: 4,
+      referenceUrls: [],
+    })
+    expect(FAL_BITRATE_MODE_IS_DEFAULT).toBe(true)
+    expect(Object.keys(input)).not.toContain('bitrate_mode')
   })
 
   it('seed は指定があるときだけ載せる', () => {
@@ -130,6 +183,27 @@ describe('buildSeedanceInput', () => {
         referenceUrls: urls,
       }),
     ).toThrow()
+  })
+
+  it('上限ちょうど（30 枚）は通る', () => {
+    const references = Array.from({ length: 30 }, (_unused, i) => reference(i, 'subject'))
+    const input = buildSeedanceInput({
+      spec: makeSpec({ references }),
+      generationDurationSec: 4,
+      referenceUrls: references.map((_unused, i) => `https://s3.example.com/${String(i)}.png`),
+    })
+    expect(input.image_urls).toHaveLength(30)
+  })
+
+  it('上限を 1 枚でも超えたら黙って切り詰めず投げる', () => {
+    const references = Array.from({ length: 31 }, (_unused, i) => reference(i, 'subject'))
+    expect(() =>
+      buildSeedanceInput({
+        spec: makeSpec({ references }),
+        generationDurationSec: 4,
+        referenceUrls: references.map((_unused, i) => `https://s3.example.com/${String(i)}.png`),
+      }),
+    ).toThrow(/31/)
   })
 
   it('段に載らない解像度は黙って丸めず投げる', () => {
