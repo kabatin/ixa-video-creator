@@ -19,8 +19,8 @@ const getAnalysis = vi.fn()
 
 vi.mock('@/lib/api-client', () => ({
   createApiClient: () => ({
-    requestAnalysis: (...args: readonly unknown[]) => requestAnalysis(...args),
-    getAnalysis: (...args: readonly unknown[]) => getAnalysis(...args),
+    requestAnalysis: (id: string): Promise<unknown> => requestAnalysis(id) as Promise<unknown>,
+    getAnalysis: (id: string): Promise<unknown> => getAnalysis(id) as Promise<unknown>,
   }),
 }))
 

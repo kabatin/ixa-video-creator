@@ -115,8 +115,8 @@ export const AnalysisStarter = ({ track }: AnalysisStarterProps) => {
     if (startedForRef.current === track.id) return
     startedForRef.current = track.id
     void start()
-    // start は track だけに依存する。依存に入れると毎描画で作り直されて何度も走る。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `start` は依存に入れない。毎描画で作り直されるため、入れると効果が回り続ける。
+    // 二重に頼まないための歯止めは上の ref。
   }, [track.id])
 
   return (
