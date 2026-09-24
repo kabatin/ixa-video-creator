@@ -7,12 +7,13 @@ import {
   type Take,
   type TakeId,
 } from '@ixa/domain'
-import { createProviderRegistry } from '@ixa/provider-core'
+import { createProviderRegistry, ProviderError } from '@ixa/provider-core'
 import type { ProviderJobStatus } from '@ixa/provider-core'
 import { createMemoryStorage } from '@ixa/storage'
 import { describe, expect, it, vi } from 'vitest'
 import type { DownloadedObject } from '../download.js'
 import {
+  MAX_POLL_ATTEMPTS,
   POLL_BACKOFF_BASE_MS,
   POLL_BACKOFF_MAX_MS,
   pollDelayMs,
@@ -886,5 +887,73 @@ describe('失敗したときの Shot の解放', () => {
         .published()
         .some((event) => event.type === 'generation_job.status' && event.status === 'failed'),
     ).toBe(true)
+  })
+})
+
+/**
+ * 投入済みのジョブを、問い合わせの一時的な失敗で捨てない。
+ *
+ * `providerJobRef` があるということは Provider 側で生成が走っており、
+ * 実 Provider ではその時点で**課金が確定している**。
+ * 以前はここで `ProviderError.retryable` を見ずに `false` へ潰していたため、
+ * 通信が 1 回揺れただけで終端の `failed` になり、払った生成が捨てられていた。
+ * スタブは無料なので、実 Provider をつなぐまで誰も気づけない。
+ */
+describe('問い合わせが一時的に失敗したとき', () => {
+  /** submit は成功し、その後の poll で投げる Provider。 */
+  const pollThrows = (error: Error) => {
+    const base = createTestProvider([MODEL], [{ state: 'pending', progress: null }])
+    return {
+      ...base,
+      poll: () => Promise.reject(error),
+    }
+  }
+
+  const withProvider = async (error: Error) => {
+    const f = await buildFixture([{ state: 'pending', progress: null }])
+    const deps: GenerationProcessorDeps = {
+      ...f.deps,
+      registry: createProviderRegistry([pollThrows(error)]),
+    }
+    // 1 回目で submit し、providerJobRef を持たせる。
+    const first = await processGenerationJob(f.deps, { generationJobId: f.job.id })
+    expect(first.state).toBe('submitted')
+    return { f, deps }
+  }
+
+  it('やり直せる失敗なら捨てずに予約し直す', async () => {
+    const { f, deps } = await withProvider(new ProviderError('503', 'test', true))
+
+    const second = await processGenerationJob(deps, { generationJobId: f.job.id })
+
+    expect(second.state).toBe('polling')
+    expect(f.jobs.snapshot()[0]?.status).not.toBe('failed')
+    expect(f.scheduler.scheduled().length).toBeGreaterThan(1)
+  })
+
+  it('やり直せない失敗は終端にする（いつまでも粘らない）', async () => {
+    const { f, deps } = await withProvider(new ProviderError('401', 'test', false))
+
+    const second = await processGenerationJob(deps, { generationJobId: f.job.id })
+
+    expect(second.state).toBe('failed')
+    expect(f.jobs.snapshot()[0]?.status).toBe('failed')
+  })
+
+  it('終端にするときも、やり直せたかどうかを記録する', async () => {
+    const { f, deps } = await withProvider(new ProviderError('401', 'test', false))
+
+    await processGenerationJob(deps, { generationJobId: f.job.id })
+
+    expect(f.jobs.snapshot()[0]?.error?.retryable).toBe(false)
+  })
+
+  it('上限まで粘ったら諦める', async () => {
+    const { f, deps } = await withProvider(new ProviderError('503', 'test', true))
+    await f.jobs.update(f.job.id, { attempt: MAX_POLL_ATTEMPTS })
+
+    const second = await processGenerationJob(deps, { generationJobId: f.job.id })
+
+    expect(second.state).toBe('failed')
   })
 })

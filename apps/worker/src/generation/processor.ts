@@ -15,6 +15,7 @@ import {
   type Shot,
   type TakeId,
 } from '@ixa/domain'
+import { ProviderError } from '@ixa/provider-core'
 import type {
   ProviderJobHandle,
   ProviderJobStatus,
@@ -376,13 +377,29 @@ export const processGenerationJob = async (
       ? await submit(deps, ctx)
       : await poll(deps, ctx, job.providerJobRef)
   } catch (error) {
+    /**
+     * **投入済みのジョブは、問い合わせが一度こけただけで捨てない。**
+     *
+     * `providerJobRef` があるということは Provider 側で生成が走っており、
+     * 実 Provider ではその時点で課金が確定している。ここで終端の `failed` にすると、
+     * 払った生成をこちらの都合（一時的な 5xx・429・接続断）で捨てることになる。
+     * 以前は `ProviderError.retryable` を見ずに `false` へ潰していたため、
+     * 通信が 1 回揺れただけで Take が消えていた。
+     *
+     * 実 Provider をつなぐまでは無料なので誰も気づけない。つなぐ前にここを直す。
+     */
+    const retried = await reschedulePollAfterTransient(deps, job, error, now)
+    if (retried !== null) return retried
+
     const failure =
       error instanceof JobFailure
         ? error
         : new JobFailure(
             errorCodeOf(error),
             error instanceof Error ? error.message : String(error),
-            false,
+            // **Provider が「やり直せる」と言っているなら、そのまま記録する。**
+            // ここで false に潰すと、行を見ても再試行の余地があったか分からない。
+            isRetryableProviderError(error),
           )
 
     const message = failureMessageOf(failure)
@@ -452,6 +469,45 @@ const releaseShotAfterFailure = async (
       { jobId: failedJobId, shotId: shot.id, err: error },
       'Shot を生成中から戻せませんでした。生成中のまま残っている可能性がある',
     )
+  }
+}
+
+/** Provider が「やり直せる」と言っているか。形が違うものは false（推測しない）。 */
+const isRetryableProviderError = (error: unknown): boolean =>
+  error instanceof ProviderError && error.retryable
+
+/**
+ * 投入済みのジョブで、一時的な失敗なら問い合わせを予約し直す。
+ * 予約したら結果を返し、そうでなければ `null`（呼び出し側が終端の失敗にする）。
+ *
+ * **予約し直すのは問い合わせ中だけ。** 投入前（`providerJobRef` が無い）の失敗は
+ * まだ何も走っておらず、捨てても払ったものは無い。
+ */
+const reschedulePollAfterTransient = async (
+  deps: GenerationProcessorDeps,
+  job: GenerationJob,
+  error: unknown,
+  now: Date,
+): Promise<GenerationOutcome | null> => {
+  if (job.providerJobRef === null) return null
+  if (!isRetryableProviderError(error)) return null
+
+  const attempt = job.attempt + 1
+  if (attempt > MAX_POLL_ATTEMPTS) return null
+
+  try {
+    await deps.generationJobs.update(job.id, { attempt })
+    const delayMs = pollDelayMs(attempt)
+    await deps.scheduler.reschedule({ generationJobId: job.id }, delayMs)
+    deps.logger.warn(
+      { jobId: job.id, attempt, err: error, at: now.toISOString() },
+      '問い合わせが一時的に失敗した。投入済みなので捨てずに予約し直す',
+    )
+    return { state: 'polling', delayMs }
+  } catch (cause) {
+    // 予約し直せないなら、終端の失敗として扱わせる。握り潰さない。
+    deps.logger.error({ jobId: job.id, err: cause }, '問い合わせの予約し直しに失敗した')
+    return null
   }
 }
 
