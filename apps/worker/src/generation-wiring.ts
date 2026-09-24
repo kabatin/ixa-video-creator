@@ -96,6 +96,8 @@ export const createGenerationWiring = (
       outputDir: stubOutputDir,
       // 0 以外にすると失敗の経路を実際に走らせられる（`STUB_VIDEO_FAILURE_RATE`）。
       failureRate: config.providers.stubVideoFailureRate,
+      // 0 以外にすると予算ガードを無料で試せる（`STUB_VIDEO_COST_PER_SEC`）。
+      costPerSecondUsd: config.providers.stubVideoCostPerSecUsd,
     }),
   ])
 

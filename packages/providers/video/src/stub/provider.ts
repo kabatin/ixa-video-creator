@@ -34,11 +34,23 @@ export const StubProviderOptions = z.object({
    * 0.34 なら 3 本のうちおよそ 1 本が落ち、部分失敗も試せる。
    */
   failureRate: z.number().min(0).max(1).default(0),
+  /**
+   * 1 秒あたりの見かけの単価（USD）。既定 0。**開発と検証のための口。**
+   *
+   * スタブは本来ただなので `estimateCostUsd` が必ず 0 になり、
+   * **予算ガード（`checkCostLimits`）は構造上ぜったいに発火しない。**
+   * ドメインの単体テストは緑でも、API から画面までの経路は一度も走らない。
+   * 失敗したときの経路と同じで、初回が本番＝有料になってしまう。
+   *
+   * 0 以外にすると見積にも実績にも乗るので、上限で止まることを無料で確かめられる。
+   */
+  costPerSecondUsd: z.number().min(0).default(0),
 })
 export type StubProviderOptions = {
   outputDir: string
   simulatedLatencyMs?: number
   failureRate?: number
+  costPerSecondUsd?: number
 }
 
 /**
@@ -103,8 +115,11 @@ const hashToSeed = (ref: string): number => {
   return hash
 }
 
-const resolveModel = (model: VideoModelDescriptor): VideoModelDescriptor => {
-  const known = stubVideoModels.find((candidate) => candidate.id === model.id)
+const resolveModel = (
+  models: readonly VideoModelDescriptor[],
+  model: VideoModelDescriptor,
+): VideoModelDescriptor => {
+  const known = models.find((candidate) => candidate.id === model.id)
   if (known === undefined) {
     throw new ProviderError(
       `スタブ Provider は未知のモデル ${model.id} を扱えません`,
@@ -120,7 +135,24 @@ const resolveModel = (model: VideoModelDescriptor): VideoModelDescriptor => {
  * 一時的なモックではなく、CI と回帰テストのために恒久的に維持する実装。
  */
 export const createStubVideoProvider = (options: StubProviderOptions): VideoProvider => {
-  const { outputDir, simulatedLatencyMs, failureRate } = StubProviderOptions.parse(options)
+  const {
+    outputDir,
+    simulatedLatencyMs,
+    failureRate,
+    costPerSecondUsd,
+  } = StubProviderOptions.parse(options)
+
+  /**
+   * 値段を差し替えたモデル一覧。**見積と実績の両方がこれを見る。**
+   * 片方だけ差し替えると「見積は出るのに実績が 0」のような食い違いになる。
+   */
+  const models: readonly VideoModelDescriptor[] =
+    costPerSecondUsd === 0
+      ? stubVideoModels
+      : stubVideoModels.map((model) => ({
+          ...model,
+          economics: { ...model.economics, costPerSecondUsd },
+        }))
   const jobs = new Map<string, StubJob>()
 
   const update = (ref: string, patch: Partial<StubJob>): void => {
@@ -133,7 +165,7 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
     const job = jobs.get(ref)
     if (job === undefined) return
 
-    const model = resolveModel(request.model)
+    const model = resolveModel(models, request.model)
     const { spec } = request
     const generationDurationSec = quantizeDuration(spec.durationSec, model.capabilities.durations)
     const startedAt = Date.now()
@@ -232,7 +264,7 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
   }
 
   const submit = async (request: VideoGenerationRequest): Promise<ProviderJobHandle> => {
-    const model = resolveModel(request.model)
+    const model = resolveModel(models, request.model)
     const violations = validateAgainstCapabilities(request.spec, model)
     if (violations.length > 0) throw new CapabilityViolationError(model.id, violations)
 
@@ -280,7 +312,7 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
 
   return {
     id: STUB_PROVIDER_ID,
-    models: stubVideoModels,
+    models,
     submit,
     poll,
     cancel,

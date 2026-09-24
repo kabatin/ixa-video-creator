@@ -44,6 +44,14 @@ export const EnvSchema = z.object({
    */
   STUB_VIDEO_FAILURE_RATE: z.coerce.number().min(0).max(1).default(0),
   /**
+   * スタブ映像 Provider の見かけの単価（USD/秒）。既定 0。
+   *
+   * **開発と検証のための口。** スタブは本来ただなので見積が必ず 0 になり、
+   * 予算ガード（`checkCostLimits`）は構造上ぜったいに発火しない。
+   * 0 以外にすると、上限で止まることを無料で確かめられる。
+   */
+  STUB_VIDEO_COST_PER_SEC: z.coerce.number().min(0).default(0),
+  /**
    * 絵コンテ下書きに使う口（PHASE 6.3）。
    *
    * **既定はスタブ。** `claude_cli` にすると実際に Claude CLI を起動し、
@@ -99,5 +107,7 @@ export interface AppConfig {
     falApiKey: string | null
     /** スタブ映像 Provider をわざと失敗させる割合（0〜1）。本番では 0。 */
     stubVideoFailureRate: number
+    /** スタブ映像 Provider の見かけの単価（USD/秒）。本番では 0。 */
+    stubVideoCostPerSecUsd: number
   }
 }

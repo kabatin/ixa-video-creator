@@ -412,3 +412,64 @@ describe('POST /shots/:id/generate — 指摘の直し（corrections）', () => 
     expect(f.generationJobs.snapshot()).toHaveLength(0)
   })
 })
+
+/**
+ * 予算で止まること（API 経由）。
+ *
+ * `checkCostLimits` のドメイン単体テストは緑だが、**API から呼ばれて 422 が返り、
+ * ジョブが 1 件も作られない**ところまでは検査されていなかった。
+ * しかも本番のスタブ Provider は単価 0（`costPerSecondUsd: 0`）なので、
+ * 見積が必ず 0 になり、**実 Provider を有料でつなぐまでこの分岐は一度も走らない**。
+ * ここで走らせておく。失敗モードが「無制限に課金される」なので、
+ * 生成失敗の経路より優先度が高い。
+ */
+describe('予算の上限', () => {
+  const overBudget = () => buildFixture({ project: aProject({ budgetUsd: 0.01 }) })
+
+  it('予算を超える見積なら 422 でジョブを作らない', async () => {
+    const f = overBudget()
+
+    // test/good は 0.5 USD/秒。Shot の尺に関わらず 0.01 は超える。
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/good' })
+
+    expect(res.status).toBe(422)
+    expect(f.generationJobs.snapshot()).toHaveLength(0)
+    expect(f.queue.enqueued()).toHaveLength(0)
+  })
+
+  it('弾いた理由が cost として返る（何にぶつかったか分かる）', async () => {
+    const f = overBudget()
+
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/good' })
+    const body = (await res.json()) as ErrorBody
+
+    expect(Object.keys(body.fields ?? {})).toContain('cost')
+    expect(body.error).toBeTruthy()
+  })
+
+  it('予算に収まる見積なら通す（止めすぎない）', async () => {
+    const f = buildFixture({ project: aProject({ budgetUsd: 500 }) })
+
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/good' })
+
+    expect(res.status).toBe(202)
+    expect(f.queue.enqueued().length).toBeGreaterThan(0)
+  })
+
+  it('本数を増やすと上限にぶつかる（1 本あたりではなく合計で見る）', async () => {
+    // 1 本なら通り、4 本なら超える予算にする。
+    const f = buildFixture({ project: aProject({ budgetUsd: 2 }) })
+
+    const one = await postJson(f.app, `/shots/${f.shot.id}/generate`, {
+      model: 'test/good',
+      count: 1,
+    })
+    expect(one.status).toBe(202)
+
+    const many = await postJson(f.app, `/shots/${f.shot.id}/generate`, {
+      model: 'test/good',
+      count: MAX_TAKES_PER_REQUEST,
+    })
+    expect(many.status).toBe(422)
+  })
+})
