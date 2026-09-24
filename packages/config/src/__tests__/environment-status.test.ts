@@ -37,7 +37,7 @@ const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
       stubVideoCostPerSecUsd: 0,
     },
     ...overrides,
-  }) as AppConfig
+  })
 
 /** 出力のどこかに秘密が混ざっていないか、丸ごと文字列にして探す。 */
 const serialized = (config: AppConfig): string => JSON.stringify(describeEnvironment(config))
