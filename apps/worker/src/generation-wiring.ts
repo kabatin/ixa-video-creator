@@ -1,6 +1,6 @@
 import { createProviderRegistry } from '@ixa/provider-core'
 import { createGenerationContextSource } from '@ixa/generation'
-import { createStubVideoProvider } from '@ixa/provider-video'
+import { createFalVideoProvider, createStubVideoProvider } from '@ixa/provider-video'
 import { createS3Storage } from '@ixa/storage'
 import {
   createDbClient,
@@ -59,6 +59,23 @@ export type GenerationWiring = {
  * 出来事の配信先（Phase 5.8b）。**実体は `packages/events` が持ち、main.ts が注入する。**
  * 未注入のあいだは何も届かないので、握り潰さず warn を出す口を使う（`generation/events.ts`）。
  */
+/**
+ * `VIDEO_PROVIDER=fal` なのに鍵が無ければ、**起動時に止める**。
+ *
+ * 黙ってスタブへ落とすと、実 Provider で作ったつもりの色の四角が Take として残り、
+ * 気付くのは書き出しを見たときになる。**設定と実態が食い違ったまま動かさない。**
+ */
+const requireFalApiKey = (config: AppConfig): string => {
+  const key = config.providers.falApiKey
+  if (key === null || key.trim() === '') {
+    throw new Error(
+      'VIDEO_PROVIDER=fal が指定されていますが FAL_API_KEY がありません。' +
+        '鍵を .env に設定して再起動するか、VIDEO_PROVIDER=stub に戻してください。',
+    )
+  }
+  return key
+}
+
 export const createGenerationWiring = (
   config: AppConfig,
   connection: Redis,
@@ -91,14 +108,31 @@ export const createGenerationWiring = (
     },
   }
 
+  /**
+   * スタブは**常に登録する。** 過去に投入したスタブのジョブを問い合わせるのに要る
+   * （外すと `providerFor` が「未登録のモデル」で落ち、走っている生成が捨てられる）。
+   */
+  const stub = createStubVideoProvider({
+    outputDir: stubOutputDir,
+    // 0 以外にすると失敗の経路を実際に走らせられる（`STUB_VIDEO_FAILURE_RATE`）。
+    failureRate: config.providers.stubVideoFailureRate,
+    // 0 以外にすると予算ガードを無料で試せる（`STUB_VIDEO_COST_PER_SEC`）。
+    costPerSecondUsd: config.providers.stubVideoCostPerSecUsd,
+  })
+
+  /**
+   * 実 Provider は `VIDEO_PROVIDER=fal` のときだけ登録する。**既定はスタブで無料。**
+   *
+   * **鍵の有無で切り替えない。** 別の理由で `FAL_API_KEY` を置いた瞬間に
+   * 課金経路が開くのは事故のもと。
+   * `fal` を選んだのに鍵が無ければ**起動時に止める**。黙ってスタブへ落とすと、
+   * 実 Provider で作ったつもりの色の四角が Take として残り、気付くのがずっと後になる。
+   */
   const registry = createProviderRegistry([
-    createStubVideoProvider({
-      outputDir: stubOutputDir,
-      // 0 以外にすると失敗の経路を実際に走らせられる（`STUB_VIDEO_FAILURE_RATE`）。
-      failureRate: config.providers.stubVideoFailureRate,
-      // 0 以外にすると予算ガードを無料で試せる（`STUB_VIDEO_COST_PER_SEC`）。
-      costPerSecondUsd: config.providers.stubVideoCostPerSecUsd,
-    }),
+    stub,
+    ...(config.providers.videoProvider === 'fal'
+      ? [createFalVideoProvider({ apiKey: requireFalApiKey(config) })]
+      : []),
   ])
 
   const deps: GenerationProcessorDeps = {

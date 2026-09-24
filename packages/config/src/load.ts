@@ -82,6 +82,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       /** スタブをわざと失敗させる割合。既定 0。本番では 0 のままにする。 */
       stubVideoFailureRate: parsed.STUB_VIDEO_FAILURE_RATE,
       stubVideoCostPerSecUsd: parsed.STUB_VIDEO_COST_PER_SEC,
+      videoProvider: parsed.VIDEO_PROVIDER,
     },
   }
 }

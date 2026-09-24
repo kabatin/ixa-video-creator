@@ -35,6 +35,7 @@ const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
       falApiKey: SECRET,
       stubVideoFailureRate: 0,
       stubVideoCostPerSecUsd: 0,
+      videoProvider: 'stub',
     },
     ...overrides,
   })
@@ -65,7 +66,7 @@ describe('describeEnvironment', () => {
 
   it('未設定なら文字数を出さない（0 と書かない）', () => {
     const config = aConfig({
-      providers: { falApiKey: null, stubVideoFailureRate: 0, stubVideoCostPerSecUsd: 0 },
+      providers: { falApiKey: null, stubVideoFailureRate: 0, stubVideoCostPerSecUsd: 0, videoProvider: 'stub' },
     })
     const fal = describeEnvironment(config).secrets.find((s) => s.envName === 'FAL_API_KEY')
     expect(fal?.configured).toBe(false)
@@ -74,7 +75,7 @@ describe('describeEnvironment', () => {
 
   it('空白だけの値は未設定として扱う', () => {
     const config = aConfig({
-      providers: { falApiKey: '   ', stubVideoFailureRate: 0, stubVideoCostPerSecUsd: 0 },
+      providers: { falApiKey: '   ', stubVideoFailureRate: 0, stubVideoCostPerSecUsd: 0, videoProvider: 'stub' },
     })
     const fal = describeEnvironment(config).secrets.find((s) => s.envName === 'FAL_API_KEY')
     expect(fal?.configured).toBe(false)
@@ -96,12 +97,55 @@ describe('describeEnvironment', () => {
     it('検証用の口が開いていたら目立たせる', () => {
       const status = describeEnvironment(
         aConfig({
-          providers: { falApiKey: null, stubVideoFailureRate: 1, stubVideoCostPerSecUsd: 0.3 },
+          providers: { falApiKey: null, stubVideoFailureRate: 1, stubVideoCostPerSecUsd: 0.3, videoProvider: 'stub' },
         }),
       )
       const notable = status.settings.filter((s) => s.notable).map((s) => s.envName)
       expect(notable).toContain('STUB_VIDEO_FAILURE_RATE')
       expect(notable).toContain('STUB_VIDEO_COST_PER_SEC')
     })
+  })
+})
+
+/**
+ * 映像生成の切り替え。**お金が動くのはここだけ。**
+ * 鍵の有無で暗黙に切り替えない（別の理由で鍵を置いた瞬間に課金経路が開く）。
+ */
+describe('映像生成の切り替え', () => {
+  const settingFor = (config: AppConfig) =>
+    describeEnvironment(config).settings.find((s) => s.envName === 'VIDEO_PROVIDER')
+
+  it('既定（stub）は目立たせず、費用が出ないと書く', () => {
+    const setting = settingFor(aConfig())
+    expect(setting?.value).toBe('stub')
+    expect(setting?.notable).toBe(false)
+    expect(setting?.note).toContain('費用は発生しない')
+  })
+
+  it('fal のときは目立たせ、費用が出ると書く', () => {
+    const config = aConfig({
+      providers: {
+        falApiKey: SECRET,
+        stubVideoFailureRate: 0,
+        stubVideoCostPerSecUsd: 0,
+        videoProvider: 'fal',
+      },
+    })
+    const setting = settingFor(config)
+    expect(setting?.value).toBe('fal')
+    expect(setting?.notable).toBe(true)
+    expect(setting?.note).toContain('費用が発生')
+  })
+
+  it('切り替えの表示に鍵の値は混ざらない', () => {
+    const config = aConfig({
+      providers: {
+        falApiKey: SECRET,
+        stubVideoFailureRate: 0,
+        stubVideoCostPerSecUsd: 0,
+        videoProvider: 'fal',
+      },
+    })
+    expect(JSON.stringify(describeEnvironment(config))).not.toContain(SECRET)
   })
 })

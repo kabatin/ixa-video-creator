@@ -52,6 +52,15 @@ export const EnvSchema = z.object({
    */
   STUB_VIDEO_COST_PER_SEC: z.coerce.number().min(0).default(0),
   /**
+   * 映像生成に実 Provider を使うか。**既定は `stub`（無料）。**
+   *
+   * **鍵の有無で切り替えない。** 別の理由で `FAL_API_KEY` を置いた瞬間に
+   * 課金経路が開くのは事故のもと。金が動く切り替えは明示にする。
+   * `fal` にしたのに鍵が無ければ、黙ってスタブへ落とさず起動時に止める
+   * （落とすと「実 Provider で作ったつもりがスタブだった」に気付けない）。
+   */
+  VIDEO_PROVIDER: z.enum(['stub', 'fal']).default('stub'),
+  /**
    * 絵コンテ下書きに使う口（PHASE 6.3）。
    *
    * **既定はスタブ。** `claude_cli` にすると実際に Claude CLI を起動し、
@@ -109,5 +118,7 @@ export interface AppConfig {
     stubVideoFailureRate: number
     /** スタブ映像 Provider の見かけの単価（USD/秒）。本番では 0。 */
     stubVideoCostPerSecUsd: number
+    /** 映像生成に実 Provider を使うか。既定は `stub`（無料）。 */
+    videoProvider: Env['VIDEO_PROVIDER']
   }
 }

@@ -76,6 +76,17 @@ export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
   ],
   settings: [
     {
+      label: '映像生成',
+      envName: 'VIDEO_PROVIDER',
+      value: config.providers.videoProvider,
+      // **お金が動くのはここ。** 既定から外れていることが一目で分かるようにする。
+      notable: config.providers.videoProvider !== 'stub',
+      note:
+        config.providers.videoProvider === 'stub'
+          ? '色の四角を作るだけ。費用は発生しない。'
+          : '実際に fal.ai へ投げる。1 生成ごとに費用が発生する。',
+    },
+    {
       label: '絵コンテの下書き',
       envName: 'STORYBOARD_DRAFTER',
       value: config.storyboardDrafter,
