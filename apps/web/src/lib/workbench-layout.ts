@@ -161,6 +161,29 @@ export type SizableDock = {
     | undefined
 }
 
+/** タブ名を書き換える口。保存した配置を戻したあとに当てる。 */
+export type RetitlableDock = {
+  readonly getPanel: (
+    id: string,
+  ) => { readonly api: { readonly setTitle: (title: string) => void } } | undefined
+}
+
+/**
+ * 保存した配置のタブ名を、いまの `PANEL_SPECS` に合わせ直す。
+ *
+ * **`toJSON()` はタブ名も一緒に保存する。** そのためパネルの名前を変えても、
+ * 既に配置を保存している人の画面は古い名前のままになる。実際に「素材ビューア」と
+ * 「絵コンテの案」へ改名したのに、実機のタブは「素材」「絵コンテ下書き」のままだった。
+ *
+ * 版を上げて配置ごと捨てる手もあるが、それだと利用者が組んだ配置まで消える。
+ * **名前だけ当て直す。** 配置は残す。
+ */
+export const retitlePanels = (api: RetitlableDock): void => {
+  PANEL_IDS.forEach((id) => {
+    api.getPanel(id)?.api.setTitle(PANEL_SPECS[id].title)
+  })
+}
+
 /**
  * 既定配置の幅を 左 240 / 右 320 に揃える（§3）。**置いたあとで**区画ごとに指定する。
  * 実機（1440×900）で右が 720px に広がり、中央が 1 列しか入らなかった（2026-09-19）。

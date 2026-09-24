@@ -24,6 +24,7 @@ import {
   addDefaultPanels,
   focusPanel,
   readStoredWorkbenchLayout,
+  retitlePanels,
   sizeDefaultAreas,
   writeWorkbenchLayout,
   type PanelId,
@@ -104,6 +105,9 @@ export const WorkbenchDock = ({ projectId, query, onReady, onNotice }: Workbench
         onNotice(`保存した配置が壊れているため初期配置で開きました: ${stored.reason}`)
       }
     }
+
+    // 保存した配置はタブ名も持っている。パネルを改名しても古い名前が残るので当て直す。
+    retitlePanels(api)
 
     // URL で指定されたタブを前に出す。指定の無い区画は保存した配置のまま。
     ;[query.main, query.bottom, query.side].forEach((panel) => {
