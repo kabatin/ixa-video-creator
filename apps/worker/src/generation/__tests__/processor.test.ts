@@ -6,6 +6,7 @@ import {
   type ShotId,
   type Take,
   type TakeId,
+  ProviderId as ProviderIdSchema,
 } from '@ixa/domain'
 import { createProviderRegistry, ProviderError } from '@ixa/provider-core'
 import type { ProviderJobStatus } from '@ixa/provider-core'
@@ -900,6 +901,9 @@ describe('失敗したときの Shot の解放', () => {
  * スタブは無料なので、実 Provider をつなぐまで誰も気づけない。
  */
 describe('問い合わせが一時的に失敗したとき', () => {
+  /** `ProviderId` は branded。素の文字列は渡せない（tsc でしか気付けない）。 */
+  const TEST_PROVIDER_ID = ProviderIdSchema.parse('test')
+
   /** submit は成功し、その後の poll で投げる Provider。 */
   const pollThrows = (error: Error) => {
     const base = createTestProvider([MODEL], [{ state: 'pending', progress: null }])
@@ -922,7 +926,7 @@ describe('問い合わせが一時的に失敗したとき', () => {
   }
 
   it('やり直せる失敗なら捨てずに予約し直す', async () => {
-    const { f, deps } = await withProvider(new ProviderError('503', 'test', true))
+    const { f, deps } = await withProvider(new ProviderError('503', TEST_PROVIDER_ID, true))
 
     const second = await processGenerationJob(deps, { generationJobId: f.job.id })
 
@@ -932,7 +936,7 @@ describe('問い合わせが一時的に失敗したとき', () => {
   })
 
   it('やり直せない失敗は終端にする（いつまでも粘らない）', async () => {
-    const { f, deps } = await withProvider(new ProviderError('401', 'test', false))
+    const { f, deps } = await withProvider(new ProviderError('401', TEST_PROVIDER_ID, false))
 
     const second = await processGenerationJob(deps, { generationJobId: f.job.id })
 
@@ -941,7 +945,7 @@ describe('問い合わせが一時的に失敗したとき', () => {
   })
 
   it('終端にするときも、やり直せたかどうかを記録する', async () => {
-    const { f, deps } = await withProvider(new ProviderError('401', 'test', false))
+    const { f, deps } = await withProvider(new ProviderError('401', TEST_PROVIDER_ID, false))
 
     await processGenerationJob(deps, { generationJobId: f.job.id })
 
@@ -949,7 +953,7 @@ describe('問い合わせが一時的に失敗したとき', () => {
   })
 
   it('上限まで粘ったら諦める', async () => {
-    const { f, deps } = await withProvider(new ProviderError('503', 'test', true))
+    const { f, deps } = await withProvider(new ProviderError('503', TEST_PROVIDER_ID, true))
     await f.jobs.update(f.job.id, { attempt: MAX_POLL_ATTEMPTS })
 
     const second = await processGenerationJob(deps, { generationJobId: f.job.id })
