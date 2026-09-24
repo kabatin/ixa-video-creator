@@ -36,6 +36,14 @@ export const EnvSchema = z.object({
     .transform((v) => v.split(',').map((o) => o.trim()).filter((o) => o.length > 0)),
   AUDIO_SERVICE_URL: urlString.default('http://127.0.0.1:8100'),
   /**
+   * スタブ映像 Provider をわざと失敗させる割合（0〜1）。既定 0。
+   *
+   * **開発と検証のための口。** 生成が失敗したときの経路（Shot を生成中から戻す・
+   * 理由を画面まで運ぶ）は、これが無いと実 Provider を有料で回すまで一度も走らない。
+   * 1 で全部落ち、0.34 なら 3 本に 1 本ほど落ちて部分失敗も試せる。
+   */
+  STUB_VIDEO_FAILURE_RATE: z.coerce.number().min(0).max(1).default(0),
+  /**
    * 絵コンテ下書きに使う口（PHASE 6.3）。
    *
    * **既定はスタブ。** `claude_cli` にすると実際に Claude CLI を起動し、
@@ -89,5 +97,7 @@ export interface AppConfig {
   }
   providers: {
     falApiKey: string | null
+    /** スタブ映像 Provider をわざと失敗させる割合（0〜1）。本番では 0。 */
+    stubVideoFailureRate: number
   }
 }

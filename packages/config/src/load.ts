@@ -79,6 +79,8 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     },
     providers: {
       falApiKey: parsed.FAL_API_KEY ?? null,
+      /** スタブをわざと失敗させる割合。既定 0。本番では 0 のままにする。 */
+      stubVideoFailureRate: parsed.STUB_VIDEO_FAILURE_RATE,
     },
   }
 }

@@ -784,3 +784,107 @@ describe('processGenerationJob — 指摘の直し（corrections）', () => {
     expect(f.provider.submitted()).toHaveLength(0)
   })
 })
+
+/**
+ * 失敗したときに Shot を生成中から解放する（S1）。
+ *
+ * 生成に回すと API が Shot を `generating` にする。成功したときは worker が
+ * `review` へ戻すが、**失敗したときに戻す経路が無かった**。
+ * その結果、失敗した Shot は DB ごと生成中で固まり、リロードしても「生成中」、
+ * 生成ボタンは押せないまま、二度と生成できなくなっていた。
+ *
+ * この経路はスタブに失敗の口が無かったため、**実 Provider を有料で回すまで
+ * 一度も走らない**状態だった。ここで走らせる。
+ */
+describe('失敗したときの Shot の解放', () => {
+  const FAILED: ProviderJobStatus = {
+    state: 'failed',
+    error: { code: 'provider_error', message: 'Provider が 500 を返しました', retryable: true },
+  }
+
+  /** 投入時点の状態。API が `generating` にしてから worker が受け取る。 */
+  const startsGenerating = (f: Awaited<ReturnType<typeof buildFixture>>): void => {
+    expect(f.shots.snapshot()[0]?.status).toBe('generating')
+  }
+
+  const shotStatusEvents = (f: Awaited<ReturnType<typeof buildFixture>>) =>
+    f.events.published().flatMap((event) => (event.type === 'shot.status' ? [event.status] : []))
+
+  it('Take が 1 本も無ければ要判断にする（生成中のままにしない）', async () => {
+    const f = await buildFixture([FAILED])
+    startsGenerating(f)
+
+    await runToCompletion(f)
+
+    expect(f.takes.snapshot()).toHaveLength(0)
+    expect(f.shots.snapshot()[0]?.status).toBe('blocked')
+    expect(shotStatusEvents(f)).toContain('blocked')
+  })
+
+  it('生成可能へ戻さない。失敗の痕跡を一覧から消さない', async () => {
+    const f = await buildFixture([FAILED])
+
+    await runToCompletion(f)
+
+    const status = f.shots.snapshot()[0]?.status
+    expect(status).not.toBe('ready')
+    expect(status).not.toBe('generating')
+  })
+
+  it('失敗の理由を画面まで運ぶ（空にしない）', async () => {
+    const f = await buildFixture([FAILED])
+
+    await runToCompletion(f)
+
+    const failure = f.events
+      .published()
+      .find((event) => event.type === 'generation_job.status' && event.status === 'failed')
+    expect(failure).toBeDefined()
+    if (failure?.type === 'generation_job.status') {
+      expect(failure.error).toBeTruthy()
+      expect(failure.error).not.toBe('')
+      expect(failure.takeId).toBeNull()
+    }
+  })
+
+  it('ほかのジョブがまだ走っていれば、状態を動かさない', async () => {
+    const f = await buildFixture([FAILED])
+    // 同じ Shot にもう 1 本。3 本頼んで 1 本だけ落ちる形。
+    await f.jobs.create({
+      shotId: f.shot.id,
+      specHash: f.specHash,
+      requestedModel: 'AUTO',
+      resolvedModel: MODEL.id,
+      corrections: [],
+    })
+
+    await runToCompletion(f)
+
+    // まだ決着していないので生成中のまま。後続の成功／失敗が決める。
+    expect(f.shots.snapshot()[0]?.status).toBe('generating')
+    expect(shotStatusEvents(f)).not.toContain('blocked')
+  })
+
+  it('解放に失敗しても、失敗の報告そのものは止めない', async () => {
+    const f = await buildFixture([FAILED])
+    const broken: GenerationProcessorDeps = {
+      ...f.deps,
+      shots: {
+        ...f.shots,
+        updateStatus: () => Promise.reject(new Error('DB に書けません')),
+      },
+    }
+
+    const first = await processGenerationJob(broken, { generationJobId: f.job.id })
+    const second = await processGenerationJob(broken, { generationJobId: f.job.id })
+
+    expect(first.state).toBe('submitted')
+    expect(second).toEqual({ state: 'failed', code: 'provider_error' })
+    // 状態は戻せなかったが、理由は流れている。
+    expect(
+      f.events
+        .published()
+        .some((event) => event.type === 'generation_job.status' && event.status === 'failed'),
+    ).toBe(true)
+  })
+})

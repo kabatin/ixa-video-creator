@@ -92,7 +92,11 @@ export const createGenerationWiring = (
   }
 
   const registry = createProviderRegistry([
-    createStubVideoProvider({ outputDir: stubOutputDir }),
+    createStubVideoProvider({
+      outputDir: stubOutputDir,
+      // 0 以外にすると失敗の経路を実際に走らせられる（`STUB_VIDEO_FAILURE_RATE`）。
+      failureRate: config.providers.stubVideoFailureRate,
+    }),
   ])
 
   const deps: GenerationProcessorDeps = {

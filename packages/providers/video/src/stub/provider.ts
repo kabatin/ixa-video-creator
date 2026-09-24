@@ -23,10 +23,38 @@ export const StubProviderOptions = z.object({
   outputDir: z.string().min(1),
   /** ポーリングの挙動を試すための擬似レイテンシ。既定 0。 */
   simulatedLatencyMs: z.number().int().nonnegative().default(0),
+  /**
+   * 失敗させる割合（0〜1）。既定 0。**開発と検証のための口。**
+   *
+   * 失敗したときの経路（Shot を生成中から戻す・理由を画面まで運ぶ）は、
+   * これが無いと**実 Provider を有料で回すまで一度も走らない**。
+   * 初めて走るのが本番、という状態を作らないために置く。
+   *
+   * ジョブ参照から決定的に決めるので、同じジョブは何度試しても同じ結果になる。
+   * 0.34 なら 3 本のうちおよそ 1 本が落ち、部分失敗も試せる。
+   */
+  failureRate: z.number().min(0).max(1).default(0),
 })
 export type StubProviderOptions = {
   outputDir: string
   simulatedLatencyMs?: number
+  failureRate?: number
+}
+
+/**
+ * このジョブを失敗させるか。**乱数を使わない。**
+ * 同じジョブが試すたびに違う結果になると、失敗の経路を追いかけられない。
+ */
+export const stubShouldFail = (ref: string, failureRate: number): boolean => {
+  if (failureRate <= 0) return false
+  if (failureRate >= 1) return true
+  // ハッシュを 0..1 へ均す。seed 用の hashToSeed とは別の散らし方にして、
+  // 「落ちるジョブだけ絵も同じ」のような偏りを作らない。
+  let hash = 2_166_136_261
+  for (let i = 0; i < ref.length; i += 1) {
+    hash = Math.imul(hash ^ ref.charCodeAt(i), 16_777_619)
+  }
+  return ((hash >>> 8) % 1000) / 1000 < failureRate
 }
 
 type StubJob = {
@@ -92,7 +120,7 @@ const resolveModel = (model: VideoModelDescriptor): VideoModelDescriptor => {
  * 一時的なモックではなく、CI と回帰テストのために恒久的に維持する実装。
  */
 export const createStubVideoProvider = (options: StubProviderOptions): VideoProvider => {
-  const { outputDir, simulatedLatencyMs } = StubProviderOptions.parse(options)
+  const { outputDir, simulatedLatencyMs, failureRate } = StubProviderOptions.parse(options)
   const jobs = new Map<string, StubJob>()
 
   const update = (ref: string, patch: Partial<StubJob>): void => {
@@ -126,6 +154,23 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
        */
       const effectiveSeed = spec.seed ?? hashToSeed(ref)
       if (simulatedLatencyMs > 0) await delay(simulatedLatencyMs, job.controller.signal)
+
+      // **わざと落とす口**（`failureRate`）。実 Provider が落ちたときと同じ形で返す。
+      // retryable にするのは、実際の失敗の大半が一時的なものだから。
+      if (stubShouldFail(ref, failureRate)) {
+        if (jobs.get(ref)?.cancelled === true) return
+        update(ref, {
+          status: {
+            state: 'failed',
+            error: {
+              code: 'stub_injected_failure',
+              message: 'スタブの設定により失敗させました（STUB_VIDEO_FAILURE_RATE）',
+              retryable: true,
+            },
+          },
+        })
+        return
+      }
       // 待っている間に cancel されていたら running で上書きしない。
       if (jobs.get(ref)?.cancelled === true) return
       update(ref, { status: { state: 'running', progress: null } })
