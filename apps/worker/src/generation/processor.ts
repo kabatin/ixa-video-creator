@@ -8,6 +8,7 @@ import type {
 import {
   type GenerationContextSource,
   type GenerationJob,
+  type GenerationJobId,
   type MediaAssetId,
   type Project,
   type ProjectEventPublisher,
@@ -26,6 +27,7 @@ import { recordTake, type RecordTakeDeps } from './complete.js'
 import { failureMessageOf, publishJobStatus, publishShotStatus } from './events.js'
 import { parseGenerationJobData, type GenerationJobData } from './job-data.js'
 import { checkLineage, lineageFailureOf, lineageFieldsOf, type LineageCheck } from './lineage.js'
+import { shotStatusAfterFailure } from './shot-status-after-failure.js'
 import { rebuildSpec } from './spec.js'
 
 /**
@@ -398,6 +400,10 @@ export const processGenerationJob = async (
         'Shot を読めなかったため、失敗の出来事を流せませんでした',
       )
     } else {
+      // **Shot を `generating` のままにしない。** 戻す経路が無いと、失敗した Shot は
+      // DB ごと生成中で固まり、画面の生成ボタンが二度と押せなくなる。
+      await releaseShotAfterFailure(deps, loadedShot, job.id, now)
+
       // **黙って失敗にしない。** 行に残したのと同じ理由を画面まで運ぶ。
       await publishJobStatus(deps, {
         shot: loadedShot,
@@ -410,6 +416,42 @@ export const processGenerationJob = async (
     }
 
     return { state: 'failed', code: failure.code }
+  }
+}
+
+/**
+ * 失敗したジョブの分だけ Shot を生成中から解放する。
+ *
+ * **ここで投げない。** 呼ぶのは失敗処理の途中で、ジョブの行と出来事はもう確定している。
+ * 解放に失敗したことで失敗処理そのものを壊すと、理由が誰にも届かなくなる。
+ * 落ちたら warn に残して先へ進む（`ProjectEventPublisher` と同じ約束）。
+ */
+const releaseShotAfterFailure = async (
+  deps: GenerationProcessorDeps,
+  shot: Shot,
+  failedJobId: GenerationJobId,
+  now: Date,
+): Promise<void> => {
+  try {
+    const [jobs, takes] = await Promise.all([
+      deps.generationJobs.findByShot(shot.id),
+      deps.takes.findByShot(shot.id),
+    ])
+    const next = shotStatusAfterFailure({
+      jobs,
+      failedJobId,
+      hasTakes: takes.length > 0,
+    })
+    // null は「ほかのジョブがまだ走っている」。状態はそちらの決着に任せる。
+    if (next === null) return
+
+    const moved = await deps.shots.updateStatus(shot.id, next)
+    await publishShotStatus(deps, { shot: moved, jobId: failedJobId, status: next, at: now })
+  } catch (error) {
+    deps.logger.warn(
+      { jobId: failedJobId, shotId: shot.id, err: error },
+      'Shot を生成中から戻せませんでした。生成中のまま残っている可能性がある',
+    )
   }
 }
 

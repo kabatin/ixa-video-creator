@@ -126,6 +126,11 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
         // 採用 Take が変わればサムネイルも変わる。まとめて 1 往復で引き直す。
         setPosterEpoch((epoch) => epoch + 1)
       }
+      // **失敗を画面まで運ぶ。** worker が作った理由をここで捨てると、
+      // 利用者から見て「遅い」と「死んだ」が区別できなくなる。
+      if (event.type === 'generation_job.status' && event.status === 'failed') {
+        setNotice(`生成に失敗しました: ${event.error ?? '理由が届きませんでした。'}`)
+      }
     },
   })
 

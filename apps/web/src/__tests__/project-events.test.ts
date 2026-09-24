@@ -214,6 +214,67 @@ describe('applyProjectEvent', () => {
     expect(applyProjectEvent(makeShots(), jobEvent('failed', null)).newTake).toBeNull()
   })
 
+  /**
+   * **失敗を捨てない。** worker は理由まで作って流している。ここで落とすと
+   * 画面には何も出ず、Shot は「生成中」のまま固まったように見える。
+   */
+  describe('失敗の受け取り', () => {
+    // `jobEvent` を広げると union の別の枝（shot.status）に `error` を足す形になり
+    // 型が通らない。ここは素直に組み立てる。
+    const failedEvent = (error: string | null): ProjectEvent => ({
+      type: 'generation_job.status',
+      projectId,
+      at: AT,
+      shotId: shotA,
+      jobId,
+      status: 'failed',
+      takeId: null,
+      error,
+    })
+
+    it('失敗した Shot と理由を返す', () => {
+      const result = applyProjectEvent(makeShots(), failedEvent('Provider が 500 を返しました'))
+
+      expect(result.failure).toEqual({
+        shotId: shotA,
+        jobId,
+        message: 'Provider が 500 を返しました',
+      })
+    })
+
+    it('理由が空でも「失敗した」ことは落とさない', () => {
+      const result = applyProjectEvent(makeShots(), failedEvent(null))
+
+      expect(result.failure?.shotId).toBe(shotA)
+      expect(result.failure?.message).not.toBe('')
+    })
+
+    it('成功・実行中では失敗にしない', () => {
+      expect(applyProjectEvent(makeShots(), jobEvent('succeeded', takeId)).failure).toBeNull()
+      expect(applyProjectEvent(makeShots(), jobEvent('running', null)).failure).toBeNull()
+    })
+
+    it('一覧に無い Shot の失敗は拾わない', () => {
+      const unknown = ShotId.parse('01ARZ3NDEKTSV4RRFFQ69G5FZ9')
+      const result = applyProjectEvent(makeShots(), {
+        type: 'generation_job.status',
+        projectId,
+        at: AT,
+        shotId: unknown,
+        jobId,
+        status: 'failed',
+        takeId: null,
+        error: 'だめでした',
+      })
+
+      expect(result.failure).toBeNull()
+    })
+
+    it('Shot の状態の出来事では失敗にならない', () => {
+      expect(applyProjectEvent(makeShots(), statusEvent(shotA, 'blocked')).failure).toBeNull()
+    })
+  })
+
   it('一覧に無い Shot のジョブ成功は印にしない', () => {
     const other: readonly LiveShot[] = [{ id: shotB, status: 'draft' }]
     expect(applyProjectEvent(other, jobEvent('succeeded', takeId)).newTake).toBeNull()

@@ -162,7 +162,22 @@ export type ApplyProjectEventResult<T extends LiveShot> = {
    * 呼び出し側が印を付けられるよう、副次情報として返す。
    */
   readonly newTake: { readonly shotId: ShotId; readonly takeId: TakeId } | null
+  /**
+   * この出来事で生成が失敗した Shot。無ければ null。
+   *
+   * **捨てない。** worker は理由まで作って流している（`generation/events.ts` の
+   * `failureMessageOf`）。ここで落とすと、画面には何も出ないまま Shot が
+   * 「生成中」で固まり、利用者は遅いのか死んだのか区別できない。
+   */
+  readonly failure: {
+    readonly shotId: ShotId
+    readonly jobId: string
+    readonly message: string
+  } | null
 }
+
+/** 理由が空で届いたときの文。**「失敗した」ことだけは必ず伝える。** */
+const UNKNOWN_FAILURE = '理由が届きませんでした。変更履歴か生成の記録を確認してください。'
 
 /**
  * 出来事を Shot の一覧へ当てる。**入力を変更しない。**
@@ -182,16 +197,26 @@ export const applyProjectEvent = <T extends LiveShot>(
         known && event.status === 'succeeded' && takeId !== null
           ? { shotId: event.shotId, takeId }
           : null,
+      failure:
+        known && event.status === 'failed'
+          ? {
+              shotId: event.shotId,
+              jobId: event.jobId,
+              message: event.error ?? UNKNOWN_FAILURE,
+            }
+          : null,
     }
   }
 
   const target = shots.find((shot) => shot.id === event.shotId)
-  if (target === undefined || target.status === event.status) return { shots, newTake: null }
+  if (target === undefined || target.status === event.status)
+    return { shots, newTake: null, failure: null }
 
   return {
     shots: shots.map((shot) =>
       shot.id === event.shotId ? { ...shot, status: event.status } : shot,
     ),
     newTake: null,
+    failure: null,
   }
 }
