@@ -2,7 +2,7 @@
 
 import type { TransitionInsertionPoint } from '@/lib/timeline-insert'
 import { transitionInsertionLeftPx } from '@/lib/timeline-insert'
-import { formatDuration, transitionTypeLabel } from '@/lib/timeline-display'
+import { formatLongDuration, transitionTypeLabel } from '@/lib/timeline-display'
 
 /**
  * Shot と Shot の境目に、その場で挿すための帯。
@@ -108,7 +108,7 @@ export const TimelineTransitionRow = ({
                 </span>
               </>
             ) : (
-              `${transitionTypeLabel(existing.type)} ${formatDuration(existing.durationSec)}`
+              `${transitionTypeLabel(existing.type)} ${formatLongDuration(existing.durationSec)}`
             )}
           </button>
         )

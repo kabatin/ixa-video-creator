@@ -8,6 +8,7 @@ import {
   type TransitionType,
 } from '@ixa/domain'
 import type { TimelineIssueSeverity, TimelineIssueView } from '@/lib/timeline-issues'
+import { formatClock } from '@/lib/format-time'
 
 /**
  * タイムライン編集画面の表示用ロジック。**React を含まない純粋関数だけを置く。**
@@ -209,18 +210,19 @@ export const lanesForTrack = (
 
 // --- 尺と時刻の整形 ---
 
-/** `m:ss.SS`。秒は小数第 2 位まで。フレームへ丸めない（CLAUDE.md 規約 3）。 */
-export const formatClock = (seconds: number): string => {
-  const sign = seconds < 0 ? '-' : ''
-  const hundredths = Math.round(Math.abs(seconds) * 100)
-  const minutes = Math.floor(hundredths / 6000)
-  const rest = (hundredths - minutes * 6000) / 100
-  return `${sign}${String(minutes)}:${rest.toFixed(2).padStart(5, '0')}`
-}
-
-/** 尺の表示。時刻ではないので `m:ss.SS` と生の秒を併記する。 */
-export const formatDuration = (seconds: number): string =>
-  `${formatClock(seconds)}（${seconds.toFixed(2)}s）`
+/**
+ * **書式の正は `lib/format-time.ts` の 1 箇所。** ここでは持たない。
+ *
+ * かつてこのファイルは `formatClock` と `formatDuration` を独自に実装しており、
+ * `format-time.ts` と**名前が同じで規則が正反対**だった
+ * （format-time は「尺は秒。時計形式だと長さに見えない」、こちらは
+ * 「尺は時計形式と秒を併記する」）。どちらを import したかで同じ値が別物に見え、
+ * 画面ごとに表記が割れる原因になっていた。
+ *
+ * 書き写さず、同じ関数を通す。長い尺の併記が要る場所は名前で区別する。
+ */
+export { formatLongDuration } from '@/lib/format-time'
+export { formatClock }
 
 /** 区間の表示。開始と終了を同じ書式で並べる。 */
 export const formatTimeSpan = (span: TimeSpan): string =>

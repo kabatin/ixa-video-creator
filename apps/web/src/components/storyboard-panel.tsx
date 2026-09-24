@@ -9,6 +9,7 @@ import { TextField } from '@/components/form/text-field'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import type { WireMusicAnalysis } from '@/lib/music-api'
+import { formatClock, formatDuration } from '@/lib/format-time'
 import {
   NO_SEQUENCE_VALUE,
   SUBDIVISION_OPTIONS,
@@ -182,7 +183,7 @@ export const StoryboardPanel = ({
           <ul className="mt-3 space-y-1 text-sm text-text">
             {outcome.shots.map((shot) => (
               <li key={shot.id}>
-                {`${shot.code} ${shot.startSec.toFixed(2)}s から ${shot.durationSec.toFixed(2)}s`}
+                {`${shot.code} ${formatClock(shot.startSec)} から ${formatDuration(shot.durationSec)}`}
               </li>
             ))}
           </ul>

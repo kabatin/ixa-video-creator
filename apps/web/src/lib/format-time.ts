@@ -11,17 +11,33 @@
  */
 export const TIME_DECIMALS = 2
 
-/** `0:03.75`。タイムライン上の位置に使う。 */
+/**
+ * `0:03.75`。タイムライン上の位置に使う。
+ *
+ * **先に 1/100 秒へ丸めてから分と秒に割る。** 秒の側だけを `toFixed` すると
+ * 59.999 が `0:60.00` になる。
+ *
+ * **負と NaN は 0 に倒す。** 位置が負になることは無く、そうなっているのは
+ * どこかの計算が壊れているとき。画面に `-0:05.00` と出しても読み手は何もできない。
+ */
 export const formatClock = (sec: number): string => {
   const safe = Number.isFinite(sec) ? Math.max(sec, 0) : 0
-  const minutes = Math.floor(safe / 60)
-  const seconds = safe - minutes * 60
-  return `${String(minutes)}:${seconds.toFixed(TIME_DECIMALS).padStart(TIME_DECIMALS + 3, '0')}`
+  const hundredths = Math.round(safe * 100)
+  const minutes = Math.floor(hundredths / 6000)
+  const rest = (hundredths - minutes * 6000) / 100
+  return `${String(minutes)}:${rest.toFixed(TIME_DECIMALS).padStart(TIME_DECIMALS + 3, '0')}`
 }
 
-/** `3.75s`。長さに使う。 */
+/** `3.75s`。長さに使う。**時計形式にしない**（長さに見えない）。 */
 export const formatDuration = (sec: number): string =>
   `${(Number.isFinite(sec) ? sec : 0).toFixed(TIME_DECIMALS)}s`
+
+/**
+ * `1:56.04（116.04s）`。**長い尺**に使う。曲全体のように分をまたぐ長さは、
+ * 秒だけだと読み取れない。短い尺には使わない（`formatDuration` で足りる）。
+ */
+export const formatLongDuration = (sec: number): string =>
+  `${formatClock(sec)}（${formatDuration(sec)}）`
 
 /** `0:03.75 – 0:07.50（3.75s）`。区間に使う。 */
 export const formatSpan = (startSec: number, durationSec: number): string =>

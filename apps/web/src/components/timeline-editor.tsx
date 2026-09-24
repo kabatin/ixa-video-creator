@@ -43,7 +43,7 @@ import {
   ZOOM_LEVELS,
   zoomLabel,
   formatClock,
-  formatDuration,
+  formatLongDuration,
   programEndSec,
 } from '@/lib/timeline-display'
 import {
@@ -567,7 +567,7 @@ export const TimelineEditor = ({
       {!collapseAuxiliary && auxiliary}
 
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm text-text">{`全体の尺 ${formatDuration(durationSec)}`}</span>
+        <span className="text-sm text-text">{`全体の尺 ${formatLongDuration(durationSec)}`}</span>
         <span className="text-sm text-muted">ズーム</span>
         {ZOOM_LEVELS.map((level) => (
           <button

@@ -21,7 +21,7 @@ import {
   adjacentShotPairs,
   describeClipContent,
   formatClock,
-  formatDuration,
+  formatLongDuration,
   formatTimeSpan,
   lanesForTrack,
   parseDurationSec,
@@ -160,12 +160,24 @@ describe('尺と時刻の整形', () => {
     expect(formatClock(59.999)).toBe('1:00.00')
   })
 
-  it('負の秒に符号を付ける', () => {
-    expect(formatClock(-1.5)).toBe('-0:01.50')
+  /**
+   * 以前このモジュールは独自の `formatClock` を持ち、負に符号を付けていた。
+   * 一方 `format-time.ts` の同名関数は負と NaN を 0 に倒しており、
+   * `ui-primitives.test.ts` がそちらを「壊れた値でも表示を壊さない」として固定していた。
+   * **同じ名前の関数に、正反対の期待を置いた 2 つのテストが並んでいた。**
+   *
+   * 書式の正を `format-time.ts` の 1 つにまとめ、倒す側を採った。
+   * 位置が負になることは無い（`rulerTicks` は `index * step` で 0 以上、
+   * ほかの呼び出し元も位置か尺）。負が出ているならどこかの計算が壊れているときで、
+   * 画面に `-0:01.50` と出しても読み手は何もできない。
+   * 符号付きの差分が要る場所は `timeline-drag.ts` の `signedSec` が持つ。
+   */
+  it('負の秒は 0 に倒す（書式の正は format-time.ts）', () => {
+    expect(formatClock(-1.5)).toBe('0:00.00')
   })
 
   it('尺は時刻と生の秒を併記する', () => {
-    expect(formatDuration(116)).toBe('1:56.00（116.00s）')
+    expect(formatLongDuration(116)).toBe('1:56.00（116.00s）')
   })
 
   it('区間は開始と終了を並べる', () => {

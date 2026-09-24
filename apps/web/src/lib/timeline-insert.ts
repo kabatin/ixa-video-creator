@@ -17,7 +17,7 @@ import {
   adjacentShotPairs,
   describeClipContent,
   formatClock,
-  formatDuration,
+  formatLongDuration,
   formatTimeSpan,
   lanesForTrack,
   parseDurationSec,
@@ -147,7 +147,7 @@ export type TransitionInsertionPoint = {
 const pointNotices = (existing: Transition | null, gapSec: number): readonly string[] =>
   nonEmpty([
     gapSec > TIME_EPSILON
-      ? `この境目には ${formatDuration(gapSec)} の隙間があり、そこは黒画面になる`
+      ? `この境目には ${formatLongDuration(gapSec)} の隙間があり、そこは黒画面になる`
       : null,
     existing?.type === 'cut'
       ? 'ここに置かれているのは「カット」なので、実際には切り替えの効果が無い'
@@ -157,9 +157,9 @@ const pointNotices = (existing: Transition | null, gapSec: number): readonly str
 
 const pointMessage = (pair: ShotPair, existing: Transition | null, maxSec: number): string =>
   existing === null
-    ? `${pair.from.code} → ${pair.to.code} の間にトランジションを挿せる（上限 ${formatDuration(maxSec)}）`
+    ? `${pair.from.code} → ${pair.to.code} の間にトランジションを挿せる（上限 ${formatLongDuration(maxSec)}）`
     : `${pair.from.code} → ${pair.to.code} は ${transitionTypeLabel(existing.type)} ` +
-      `${formatDuration(existing.durationSec)}。差し替え・削除ができる`
+      `${formatLongDuration(existing.durationSec)}。差し替え・削除ができる`
 
 /**
  * 隣り合う Shot の境目それぞれについて、挿せるか差し替えられるかを返す。
@@ -226,9 +226,9 @@ const tooLongIssue = (point: TransitionInsertionPoint, durationSec: number): Ins
     ? {
         field: 'durationSec',
         message:
-          `尺は両隣の Shot（${point.pair.from.code}=${formatDuration(point.pair.from.durationSec)} / ` +
-          `${point.pair.to.code}=${formatDuration(point.pair.to.durationSec)}）を超えられません。` +
-          `上限は ${formatDuration(point.maxDurationSec)} です`,
+          `尺は両隣の Shot（${point.pair.from.code}=${formatLongDuration(point.pair.from.durationSec)} / ` +
+          `${point.pair.to.code}=${formatLongDuration(point.pair.to.durationSec)}）を超えられません。` +
+          `上限は ${formatLongDuration(point.maxDurationSec)} です`,
       }
     : null
 
@@ -410,8 +410,8 @@ export const probeTextInsertion = (args: {
   if (room < MIN_TEXT_CLIP_DURATION_SEC - TIME_EPSILON) {
     return refuse(
       'too_narrow',
-      `ここは残り ${formatDuration(room)} しかありません。` +
-        `テロップは ${formatDuration(MIN_TEXT_CLIP_DURATION_SEC)} 以上必要です`,
+      `ここは残り ${formatLongDuration(room)} しかありません。` +
+        `テロップは ${formatLongDuration(MIN_TEXT_CLIP_DURATION_SEC)} 以上必要です`,
     )
   }
 
@@ -424,8 +424,8 @@ export const probeTextInsertion = (args: {
     span,
     shortened,
     message: shortened
-      ? `${formatTimeSpan(span)} に置けます（次のクリップにぶつかるので ${formatDuration(durationSec)} に縮めた）`
-      : `${formatTimeSpan(span)} に置けます（${formatDuration(durationSec)}）`,
+      ? `${formatTimeSpan(span)} に置けます（次のクリップにぶつかるので ${formatLongDuration(durationSec)} に縮めた）`
+      : `${formatTimeSpan(span)} に置けます（${formatLongDuration(durationSec)}）`,
   }
 }
 
@@ -512,7 +512,7 @@ export const validateTextClipInsert = (args: {
       duration.ok && duration.value < MIN_TEXT_CLIP_DURATION_SEC - TIME_EPSILON
         ? {
             field: 'durationSec',
-            message: `テロップは ${formatDuration(MIN_TEXT_CLIP_DURATION_SEC)} 以上必要です`,
+            message: `テロップは ${formatLongDuration(MIN_TEXT_CLIP_DURATION_SEC)} 以上必要です`,
           }
         : null,
       span === null ? null : overlapIssue(clips, track, layer, span),

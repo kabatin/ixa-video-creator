@@ -571,7 +571,11 @@ export const WaveformCanvas = ({
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
           <span className="tabular-nums">
             {formatClock(safeView.startSec)} – {formatClock(safeView.endSec)}（
-            {formatDuration(viewDurationSec(safeView))} / 全体 {formatDuration(durationSec)}）
+            {formatDuration(viewDurationSec(safeView))}
+            {/* 全体を映しているときは同じ数字を 2 回出さない。 */}
+            {Math.abs(viewDurationSec(safeView) - durationSec) > 0.01 &&
+              ` / 全体 ${formatDuration(durationSec)}`}
+            ）
           </span>
           {peaks.status === 'ok' && peaks.bands === null && (
             <span className="text-warn">
