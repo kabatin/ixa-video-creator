@@ -101,7 +101,9 @@ describe('uploadMedia', () => {
     const error = await upload()
 
     expect(stageOf(error)).toBe('sign')
-    expect((error as UploadError).message).toContain('署名付き URL の発行')
+    // 段階は `stage` で検査する。文面は利用者向けなので、内部の呼び名を固定しない。
+    expect((error as UploadError).message).toContain('送信の準備')
+    expect((error as UploadError).message).not.toContain('署名付き URL')
     expect((error as UploadError).message).toContain('contentType')
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
@@ -114,7 +116,8 @@ describe('uploadMedia', () => {
     const error = await upload()
 
     expect(stageOf(error)).toBe('upload')
-    expect((error as UploadError).message).toContain('ストレージへの送信')
+    expect((error as UploadError).message).toContain('ファイルの送信')
+    expect((error as UploadError).message).not.toContain('ストレージ')
     expect((error as UploadError).message).toContain('403')
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
@@ -141,7 +144,7 @@ describe('uploadMedia', () => {
     const error = await upload()
 
     expect(stageOf(error)).toBe('complete')
-    expect((error as UploadError).message).toContain('完了通知')
+    expect((error as UploadError).message).toContain('取り込み')
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 

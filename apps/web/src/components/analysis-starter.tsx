@@ -145,7 +145,7 @@ export const AnalysisStarter = ({ track }: AnalysisStarterProps) => {
 
         {phase.kind === 'timeout' && (
           <p role="alert" className="text-sm text-warn">
-            {`${timeoutMinutes()} 分待ちましたが結果が出ませんでした。追いかけるのをやめます。解析が失敗している可能性があるので、worker のログを確認してください。`}
+            {`${timeoutMinutes()} 分待ちましたが結果が出ませんでした。追いかけるのをやめます。解析はまだ続いているかもしれません。画面を開き直すと今の状態が分かります。それでも変わらなければ、もう一度解析を始めてください。`}
           </p>
         )}
 

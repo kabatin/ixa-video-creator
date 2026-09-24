@@ -20,8 +20,6 @@ export const WEB_UPLOADER = 'web-ui'
 /** ブラウザが MIME を判定できなかったときの既定値。 */
 const FALLBACK_CONTENT_TYPE = 'application/octet-stream'
 
-/** ストレージのエラー本文をそのまま流し込まないための上限。 */
-const STORAGE_ERROR_BODY_LIMIT = 300
 
 export type UploadMediaParams = {
   readonly workspaceId: WorkspaceId
@@ -52,8 +50,9 @@ const putToStorage = async (uploadUrl: string, file: File, contentType: string):
     cache: 'no-store',
   })
   if (response.ok) return
-  const body = (await response.text()).slice(0, STORAGE_ERROR_BODY_LIMIT)
-  throw new UploadError('upload', `ストレージが ${String(response.status)} を返しました — ${body}`)
+  // **レスポンス本文を文に載せない。** ストレージのエラー応答は署名の一部
+  // （AWSAccessKeyId や正規化リクエスト）を反射することがある。状態だけを言う。
+  throw new UploadError('upload', `保存先が受け取りませんでした（${String(response.status)}）`)
 }
 
 export const createUploadApi = (requester: Requester): UploadApi => {

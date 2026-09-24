@@ -127,6 +127,23 @@ textarea {
   --dv-separator-handle-background-color: rgb(var(--line));
 }
 
+/**
+ * 表のタブに印を付ける。
+ *
+ * 下地は `surface-2`（#1A212A）と `surface`（#12171E）で、**比はおよそ 1.2:1**。
+ * ほぼ同じ色で、前後を分けているのは文字色だけだった。中央上には 5 枚並ぶので、
+ * 表がどれかは分かっても「5 枚ある」ことに気づけない。
+ * 色の濃さに頼らず、選択中であることを線で言う。
+ */
+.workbench-dock .dv-active-tab {
+  box-shadow: inset 0 2px 0 rgb(var(--accent));
+}
+
+/** 裏のタブも境目が分かるようにする（隣と地続きに見えると枚数が読めない）。 */
+.workbench-dock .dv-inactive-tab {
+  box-shadow: inset -1px 0 0 rgb(var(--line));
+}
+
 /*
  * パネル内の余白（UI-WORKBENCH §3.4 / §5.2）。環境設定の「画面の密度」で p-2 / p-3。
  * 部品は環境設定を直接読まず、`<html data-density>` だけを見る。
