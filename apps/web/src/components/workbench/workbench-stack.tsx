@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { AssetsPanel } from '@/components/workbench/panels/assets-panel'
 import { ComparePanel } from '@/components/workbench/panels/compare-panel'
 import { CutterPanel } from '@/components/workbench/panels/cutter-panel'
+import { DraftPanel } from '@/components/workbench/panels/draft-panel'
 import { InspectorPanel } from '@/components/workbench/panels/inspector-panel'
 import { PreviewPanel } from '@/components/workbench/panels/preview-panel'
 import { ShotListPanel } from '@/components/workbench/panels/shot-list-panel'
@@ -12,13 +13,20 @@ import { TimelinePanel } from '@/components/workbench/panels/timeline-panel'
 import { ViewerPanel } from '@/components/workbench/panels/viewer-panel'
 import { PANEL_SPECS, type PanelId } from '@/lib/workbench-layout'
 
-/** 狭い画面で縦に並べる順。判断に要る順（絵 → 選ぶ → 直す → 比べる → 切る）。 */
+/**
+ * 狭い画面で縦に並べる順。判断に要る順（絵 → 選ぶ → 直す → 比べる → 切る）。
+ *
+ * **`PANEL_IDS` の全部をここに置くこと。** 抜けたパネルは、狭い画面では
+ * `stackSectionId` の行き先が存在せず、メニューもボタンも押して何も起きない
+ * ＝機能そのものに到達できなくなる。網羅は `workbench-layout.test.ts` で検査する。
+ */
 const STACK: readonly {
   readonly id: PanelId
   readonly body: ReactNode
   readonly tall?: boolean
 }[] = [
   { id: 'storyboard', body: <StoryboardPanel /> },
+  { id: 'draft', body: <DraftPanel />, tall: true },
   { id: 'shots', body: <ShotListPanel /> },
   { id: 'inspector', body: <InspectorPanel />, tall: true },
   { id: 'compare', body: <ComparePanel />, tall: true },
@@ -28,6 +36,12 @@ const STACK: readonly {
   { id: 'assets', body: <AssetsPanel /> },
   { id: 'viewer', body: <ViewerPanel /> },
 ]
+
+/**
+ * 縦一列に置くパネルの id。**`PANEL_IDS` と同じ集合であること**を検査するために出す
+ * （`draft` が抜けていて、狭い画面から絵コンテ下書きに到達できなかった）。
+ */
+export const STACK_PANEL_IDS: readonly PanelId[] = STACK.map((entry) => entry.id)
 
 export const stackSectionId = (id: PanelId): string => `workbench-section-${id}`
 

@@ -10,7 +10,8 @@ import { z } from 'zod'
  * **読めない値は既定へ倒す。** 古いリンクや打ち間違いでワークベンチが開かないのは困る。
  */
 
-export const MAIN_TABS = ['storyboard', 'preview', 'compare'] as const
+/** 中央上のタブ。**`PANEL_SPECS` の `area: 'main'` と同じ集合であること**（テストで検査）。 */
+export const MAIN_TABS = ['storyboard', 'preview', 'compare', 'viewer', 'draft'] as const
 export type MainTab = (typeof MAIN_TABS)[number]
 
 export const BOTTOM_TABS = ['cutter', 'timeline'] as const
@@ -43,24 +44,28 @@ export const EMPTY_WORKBENCH_QUERY: WorkbenchQuery = Object.freeze({
   dialog: null,
 })
 
-/** 指定はあるが読めない値のときの行き先。 */
-const FALLBACK = Object.freeze({ main: 'storyboard', bottom: 'cutter', side: 'shots' } as const)
-
 type RawParams = Readonly<Record<string, string | readonly string[] | undefined>>
 
 const first = (value: string | readonly string[] | undefined): string | null =>
   (typeof value === 'string' ? value : value?.[0]) ?? null
 
-/** 無ければ null、あるのに知らない値なら `fallback`。 */
-const tab = <T extends readonly [string, ...string[]]>(values: T, fallback: T[number]) =>
-  z.enum(values).nullable().catch(fallback)
+/**
+ * 無ければ null、**あるのに知らない値でも null**。
+ *
+ * 以前は知らない値を既定のタブ（storyboard など）へ倒していた。しかし
+ * この関数の `null` は「指定なし＝保存した配置のまま開く」を意味するので、
+ * 打ち間違いや古いリンクが**利用者の配置を勝手に書き換える**ことになっていた。
+ * 読めない指定は「指定が無かった」と同じに扱うのが、この型の約束に合う。
+ */
+const tab = <T extends readonly [string, ...string[]]>(values: T) =>
+  z.enum(values).nullable().catch(null)
 
 const Query = z.object({
   // 不正な Shot ID は無視する（既定の選択＝先頭 Shot で開く）。
   shot: ShotId.nullable().catch(null),
-  main: tab(MAIN_TABS, FALLBACK.main),
-  bottom: tab(BOTTOM_TABS, FALLBACK.bottom),
-  side: tab(SIDE_TABS, FALLBACK.side),
+  main: tab(MAIN_TABS),
+  bottom: tab(BOTTOM_TABS),
+  side: tab(SIDE_TABS),
   // 知らないダイアログは開かない。開けないものの代わりに別のものを開かない。
   dialog: z.enum(URL_DIALOGS).nullable().catch(null),
 })

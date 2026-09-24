@@ -3,11 +3,13 @@ import { describe, expect, it } from 'vitest'
 import {
   EMPTY_WORKBENCH_QUERY,
   LEGACY_SECTIONS,
+  MAIN_TABS,
   legacySectionHref,
   legacyShotHref,
   parseWorkbenchQuery,
   workbenchHref,
 } from '@/lib/workbench-url'
+import { PANEL_IDS, PANEL_SPECS } from '@/lib/workbench-layout'
 import { PROJECT_ID, SHOT_ID } from './fixtures'
 
 /** ワークベンチの URL（UI-WORKBENCH §7.1 / §10）。 */
@@ -36,14 +38,32 @@ describe('parseWorkbenchQuery', () => {
     expect(parseWorkbenchQuery({ shot: 'not-a-ulid' }).shot).toBeNull()
   })
 
-  it('main の未知の値は storyboard', () => {
-    expect(parseWorkbenchQuery({ main: 'monitor' }).main).toBe('storyboard')
+  /**
+   * **読めない指定は「指定なし」と同じに倒す。**
+   *
+   * 以前は既定のタブ（storyboard など）へ倒していた。しかし `null` は
+   * 「保存した配置のまま開く」を意味するので、既定へ倒すと打ち間違いや古いリンクが
+   * **利用者の配置を勝手に書き換える**ことになっていた。触らないのが正しい。
+   */
+  it('main の未知の値は配置を触らない', () => {
+    expect(parseWorkbenchQuery({ main: 'monitor' }).main).toBeNull()
   })
 
-  it('bottom / side の未知の値もそれぞれの既定', () => {
+  it('bottom / side の未知の値も配置を触らない', () => {
     const query = parseWorkbenchQuery({ bottom: 'x', side: 'y' })
-    expect(query.bottom).toBe('cutter')
-    expect(query.side).toBe('shots')
+    expect(query.bottom).toBeNull()
+    expect(query.side).toBeNull()
+  })
+
+  it('中央上の 5 枚はすべて URL で開ける', () => {
+    MAIN_TABS.forEach((tab) => {
+      expect(parseWorkbenchQuery({ main: tab }).main).toBe(tab)
+    })
+  })
+
+  it('中央上のタブは PANEL_SPECS の main 区画と同じ集合', () => {
+    const mainPanels = PANEL_IDS.filter((id) => PANEL_SPECS[id].area === 'main')
+    expect([...MAIN_TABS].sort()).toEqual([...mainPanels].sort())
   })
 
   it('知らないダイアログは開かない', () => {

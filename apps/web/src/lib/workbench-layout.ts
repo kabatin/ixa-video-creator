@@ -178,17 +178,28 @@ export const focusPanel = (api: DockLike, id: PanelId): void => {
 
 // --- 作業モード（§6） ---
 
-export const PRESETS = ['compose', 'finish'] as const
+export const PRESETS = ['compose', 'watch', 'finish'] as const
 export type Preset = (typeof PRESETS)[number]
 
 export const PRESET_LABELS: Readonly<Record<Preset, string>> = Object.freeze({
   compose: '構成',
+  watch: '通し',
   finish: '仕上げ',
 })
 
-/** モードごとに前に出す 3 枚（中央上・中央下・右）。 */
+/**
+ * モードごとに前に出す 3 枚（中央上・中央下・右）。
+ *
+ * **中央上の 3 枚は必ず別にすること。** 同じ区画に 2 枚入れると後の 1 枚が勝ち、
+ * どのモードを押しても同じ見た目になる。ここが「押しても何も起きない」の元。
+ *
+ * `compose` は既定配置と同じ組。押しても見た目は変わらないが、
+ * それが「いまその状態だ」という表示（`aria-pressed`）で伝わる。
+ */
 export const PRESET_PANELS: Readonly<Record<Preset, readonly PanelId[]>> = Object.freeze({
   compose: ['storyboard', 'cutter', 'shots'],
+  // 通しで観る。仕上げ中にプレビューがどのモードにも入っていなかった。
+  watch: ['preview', 'timeline', 'shots'],
   finish: ['compare', 'timeline', 'inspector'],
 })
 
