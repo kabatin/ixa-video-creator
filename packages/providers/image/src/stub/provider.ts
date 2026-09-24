@@ -65,8 +65,21 @@ const delay = (ms: number, signal: AbortSignal): Promise<void> =>
     signal.addEventListener('abort', onAbort, { once: true })
   })
 
+/**
+ * 記録が見つからないときに利用者へ見せる文。**内部の参照（UUID）を入れない。**
+ *
+ * 見せても利用者に打つ手は増えず、CLAUDE.md の「画面に出さない: 内部 ID」に反する。
+ * 実装の言葉（ジョブ・poll・provider）も使わない。映像スタブと同じ方針
+ * （`packages/providers/video/src/stub/provider.ts`）。
+ */
+const UNKNOWN_JOB_MESSAGE =
+  'この生成の記録が見つかりませんでした。結果は残っていないので、もう一度生成してください。'
+
+/** 参照はログで追えるよう `cause` に残す。 */
 const unknownJobError = (ref: string): ProviderError =>
-  new ProviderError(`未知のジョブ ${ref} です`, STUB_IMAGE_PROVIDER_ID, false)
+  new ProviderError(UNKNOWN_JOB_MESSAGE, STUB_IMAGE_PROVIDER_ID, false, {
+    cause: new Error(`ジョブ参照 ${ref} の記録が見つかりません`),
+  })
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)

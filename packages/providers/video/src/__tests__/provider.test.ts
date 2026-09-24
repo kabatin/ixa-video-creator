@@ -231,7 +231,8 @@ describe('createStubVideoProvider（実 ffmpeg）', () => {
     )
   })
 
-  it('未知のジョブを poll すると失敗する', async () => {
+  // 文面と記録の読み書きは `job-persistence.test.ts` が見る。ここは経路だけ。
+  it('記録の無いジョブを poll すると失敗する', async () => {
     const provider = createStubVideoProvider({ outputDir })
     const handle = {
       providerId: provider.id,
@@ -240,7 +241,7 @@ describe('createStubVideoProvider（実 ffmpeg）', () => {
       submittedAt: new Date(),
     }
 
-    await expect(provider.poll(handle)).rejects.toThrow('未知のジョブ')
+    await expect(provider.poll(handle)).rejects.toThrow('記録が見つかりません')
   })
 })
 

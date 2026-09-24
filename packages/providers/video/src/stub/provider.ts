@@ -15,6 +15,7 @@ import {
 import { z } from 'zod'
 import { colorForShot } from './color.js'
 import { STUB_PROVIDER_ID, stubVideoModels } from './descriptor.js'
+import { readStubJob, writeStubJob, type StoredStubJob } from './job-store.js'
 import { placeholderLines } from './lines.js'
 import { renderPlaceholder } from './render-placeholder.js'
 
@@ -102,8 +103,26 @@ const delay = (ms: number, signal: AbortSignal): Promise<void> =>
     signal.addEventListener('abort', onAbort, { once: true })
   })
 
-const unknownJobError = (ref: string): ProviderError =>
-  new ProviderError(`未知のジョブ ${ref} です`, STUB_PROVIDER_ID, false)
+/**
+ * 記録が見つからないときに利用者へ見せる文。**内部の参照（UUID）を入れない。**
+ *
+ * 見せても利用者に打つ手は増えず、CLAUDE.md の「画面に出さない: 内部 ID」に反する。
+ * ここは Provider の失敗理由がそのまま画面の通知へ流れる経路なので、
+ * 実装の言葉（ジョブ・poll・provider）も使わない。
+ */
+const UNKNOWN_JOB_MESSAGE =
+  'この生成の記録が見つかりませんでした。結果は残っていないので、もう一度生成してください。'
+
+/** 参照と、読めなかった理由は `cause` に残す。ログでは追えるようにする。 */
+const unknownJobError = (ref: string, cause?: unknown): ProviderError =>
+  new ProviderError(UNKNOWN_JOB_MESSAGE, STUB_PROVIDER_ID, false, {
+    cause: new Error(`ジョブ参照 ${ref} の記録が見つかりません`, { cause }),
+  })
+
+const failedStatus = (code: string, message: string, retryable: boolean): ProviderJobStatus => ({
+  state: 'failed',
+  error: { code, message, retryable },
+})
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
@@ -155,10 +174,40 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
         }))
   const jobs = new Map<string, StubJob>()
 
-  const update = (ref: string, patch: Partial<StubJob>): void => {
+  /** ディスクへ写す形。`AbortController` はプロセスを跨げないので持っていかない。 */
+  const toStored = (job: StubJob): StoredStubJob => ({
+    ref: job.handle.ref,
+    status: job.status,
+    cancelled: job.cancelled,
+  })
+
+  /** メモリだけを更新する。**ここは必ず成功する。** */
+  const remember = (ref: string, patch: Partial<StubJob>): StubJob | null => {
     const job = jobs.get(ref)
-    if (job === undefined) return
-    jobs.set(ref, { ...job, ...patch })
+    if (job === undefined) return null
+    const next = { ...job, ...patch }
+    jobs.set(ref, next)
+    return next
+  }
+
+  /** メモリを更新し、続けてディスクへ写す。書けなければ throw する（呼び出し側の try が拾う）。 */
+  const update = async (ref: string, patch: Partial<StubJob>): Promise<void> => {
+    const next = remember(ref, patch)
+    if (next !== null) await writeStubJob(outputDir, toStored(next))
+  }
+
+  /**
+   * 失敗として決着させる。**ここから例外を出さない。**
+   *
+   * `render` は待たれないので、投げても unhandled rejection になるだけで理由が残らない。
+   * ディスクへ書けなかったときは、その理由も同じ文へ畳んでメモリには必ず残す。
+   */
+  const settleFailed = async (ref: string, code: string, message: string): Promise<void> => {
+    try {
+      await update(ref, { status: failedStatus(code, message, true) })
+    } catch (error) {
+      remember(ref, { status: failedStatus(code, `${message}（${errorMessage(error)}）`, true) })
+    }
   }
 
   const render = async (ref: string, request: VideoGenerationRequest): Promise<void> => {
@@ -191,21 +240,16 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
       // retryable にするのは、実際の失敗の大半が一時的なものだから。
       if (stubShouldFail(ref, failureRate)) {
         if (jobs.get(ref)?.cancelled === true) return
-        update(ref, {
-          status: {
-            state: 'failed',
-            error: {
-              code: 'stub_injected_failure',
-              message: 'スタブの設定により失敗させました（STUB_VIDEO_FAILURE_RATE）',
-              retryable: true,
-            },
-          },
-        })
+        await settleFailed(
+          ref,
+          'stub_injected_failure',
+          'スタブの設定により失敗させました（STUB_VIDEO_FAILURE_RATE）',
+        )
         return
       }
       // 待っている間に cancel されていたら running で上書きしない。
       if (jobs.get(ref)?.cancelled === true) return
-      update(ref, { status: { state: 'running', progress: null } })
+      await update(ref, { status: { state: 'running', progress: null } })
 
       const rendered = await renderPlaceholder(
         {
@@ -224,7 +268,7 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
 
       if (jobs.get(ref)?.cancelled === true) return
 
-      update(ref, {
+      await update(ref, {
         status: {
           state: 'succeeded',
           output: { type: 'local', path: job.outputPath },
@@ -250,16 +294,7 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
       })
     } catch (error) {
       if (jobs.get(ref)?.cancelled === true) return
-      update(ref, {
-        status: {
-          state: 'failed',
-          error: {
-            code: 'stub_render_failed',
-            message: errorMessage(error),
-            retryable: true,
-          },
-        },
-      })
+      await settleFailed(ref, 'stub_render_failed', errorMessage(error))
     }
   }
 
@@ -278,13 +313,18 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
       submittedAt: new Date(),
     }
 
-    jobs.set(ref, {
+    const job: StubJob = {
       handle,
       controller: new AbortController(),
       outputPath: join(outputDir, `${ref}.mp4`),
       status: { state: 'pending', progress: null },
       cancelled: false,
-    })
+    }
+    jobs.set(ref, job)
+
+    // **ハンドルを返す前にディスクへ残す。** ここを後回しにすると、投入した直後に
+    // 別のプロセスが問い合わせたとき記録が無く、走っている生成が捨てられる。
+    await writeStubJob(outputDir, toStored(job))
 
     // 生成完了を待たずにハンドルを返す。実 Provider と同じくポーリングで結果を取る。
     void render(ref, request)
@@ -292,22 +332,45 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
     return handle
   }
 
-  // interface が Promise を返す以上、未知のハンドルも同期 throw ではなく reject で返す。
-  const poll = (handle: ProviderJobHandle): Promise<ProviderJobStatus> => {
+  /**
+   * 状態を返す。メモリに無ければディスクを見る。
+   *
+   * **別のプロセスが投入したジョブもここで拾える。** これがこの Provider の肝で、
+   * worker が再起動しても 2 つ動いていても、投入済みの生成を捨てずに済む。
+   */
+  const poll = async (handle: ProviderJobHandle): Promise<ProviderJobStatus> => {
     const job = jobs.get(handle.ref)
-    return job === undefined
-      ? Promise.reject(unknownJobError(handle.ref))
-      : Promise.resolve(job.status)
+    if (job !== undefined) return job.status
+
+    const stored = await readStubJob(outputDir, handle.ref)
+    if (stored.kind === 'found') return stored.job.status
+    // 壊れた JSON は「無い」と同じ扱い。中身を推測して状態を作らない。
+    throw unknownJobError(handle.ref, stored.kind === 'unreadable' ? stored.cause : undefined)
   }
 
-  const cancel = (handle: ProviderJobHandle): Promise<void> => {
+  const cancel = async (handle: ProviderJobHandle): Promise<void> => {
     const job = jobs.get(handle.ref)
-    if (job === undefined) return Promise.reject(unknownJobError(handle.ref))
-    if (job.status.state === 'succeeded' || job.status.state === 'failed') return Promise.resolve()
+    if (job !== undefined) {
+      if (job.status.state === 'succeeded' || job.status.state === 'failed') return
+      job.controller.abort(new Error('ジョブがキャンセルされました'))
+      await update(handle.ref, { cancelled: true, status: CANCELLED })
+      return
+    }
 
-    job.controller.abort(new Error('ジョブがキャンセルされました'))
-    update(handle.ref, { cancelled: true, status: CANCELLED })
-    return Promise.resolve()
+    const stored = await readStubJob(outputDir, handle.ref)
+    if (stored.kind !== 'found') {
+      throw unknownJobError(handle.ref, stored.kind === 'unreadable' ? stored.cause : undefined)
+    }
+    if (stored.job.status.state === 'succeeded' || stored.job.status.state === 'failed') return
+
+    /**
+     * 別のプロセスが走らせているジョブ。**既に動いている ffmpeg は落とせない。**
+     * `AbortController` はプロセスを跨げないので、ここでできるのは記録を
+     * cancelled にすることだけ。描画はそのまま最後まで走り、終わった時点で
+     * 走らせている側が結果を書き戻す（向こうのメモリではキャンセルされていないため）。
+     * 本当に止めるには、実 Provider と同じく走らせている側に取り消しの口が要る。
+     */
+    await writeStubJob(outputDir, { ...stored.job, cancelled: true, status: CANCELLED })
   }
 
   return {

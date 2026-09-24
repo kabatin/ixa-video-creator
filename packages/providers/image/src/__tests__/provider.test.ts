@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { CapabilityViolationError, ProviderError } from '@ixa/provider-core'
+import { CapabilityViolationError, ProviderError, type ProviderJobHandle } from '@ixa/provider-core'
 import { probeMedia } from '@ixa/media'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { stubGeminiLikeImageModel } from '../stub/descriptor.js'
@@ -249,3 +249,38 @@ describe('seed と署名', () => {
     expect(signatureForPrompt('takepi')).not.toBe(signatureForPrompt('hinata'))
   })
 })
+
+/**
+ * 記録が無いジョブを問い合わせたときの文。
+ *
+ * **内部の参照（UUID）を画面へ出さない**（CLAUDE.md「画面に出さない: 内部 ID」）。
+ * Provider の失敗理由はそのまま画面の通知へ流れる経路にある。
+ * 映像スタブで同じ漏れを直したので、こちらにも歯止めを置く。
+ */
+describe('内部の参照を画面へ出さない', () => {
+  const unknownHandle = {
+    providerId: 'stub-image' as ProviderJobHandle['providerId'],
+    modelId: stubGeminiLikeImageModel.id,
+    ref: '11111111-2222-3333-4444-555555555555',
+    submittedAt: new Date(),
+  }
+
+  it('文面に参照も実装の言葉も出さない', async () => {
+    const provider = createStubImageProvider({ outputDir: join(process.cwd(), 'never-used') })
+    const caught = await provider.poll(unknownHandle).catch((error: unknown) => error)
+
+    expect(caught).toBeInstanceOf(ProviderError)
+    const message = (caught as ProviderError).message
+    expect(message).not.toContain(unknownHandle.ref)
+    expect(message).not.toMatch(/ジョブ|poll|provider|uuid/i)
+    expect(message).toContain('もう一度生成してください')
+  })
+
+  it('参照は cause に残す（ログでは追える）', async () => {
+    const provider = createStubImageProvider({ outputDir: join(process.cwd(), 'never-used') })
+    const caught = await provider.poll(unknownHandle).catch((error: unknown) => error)
+
+    expect(String((caught as ProviderError).cause)).toContain(unknownHandle.ref)
+  })
+})
+
