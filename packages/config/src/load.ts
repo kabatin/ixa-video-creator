@@ -70,6 +70,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     },
     api: {
       port: parsed.API_PORT,
+      host: parsed.API_HOST,
     },
     web: {
       port: parsed.WEB_PORT,

@@ -23,6 +23,14 @@ export const EnvSchema = z.object({
   // 任意（既定値あり）
   S3_FORCE_PATH_STYLE: booleanFromString.default('true'),
   API_PORT: z.coerce.number().int().positive().default(3001),
+  /**
+   * API の待ち受けアドレス。**既定は `127.0.0.1`（このマシンからのみ）。**
+   *
+   * この API には認証が無い。全インターフェース（`0.0.0.0`）で待ち受けると、
+   * 同じネットワークにいる誰でも Project を消せて、課金される生成を投げられる。
+   * LAN から触りたいときだけ明示的に `0.0.0.0` にし、**終わったら戻すこと。**
+   */
+  API_HOST: z.string().min(1).default('127.0.0.1'),
   WEB_PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   /**
@@ -104,6 +112,8 @@ export interface AppConfig {
   }
   api: {
     port: number
+    /** 待ち受けアドレス。既定は `127.0.0.1`。認証が無いので既定を広げない。 */
+    host: string
   }
   corsOrigins: readonly string[]
   web: {

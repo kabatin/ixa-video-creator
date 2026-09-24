@@ -265,9 +265,22 @@ export const main = (): void => {
     logger,
   })
 
-  const server = serve({ fetch: app.fetch, port: config.api.port }, (info) => {
-    logger.info({ port: info.port }, 'api を起動しました')
-  })
+  /**
+   * **既定は `127.0.0.1`。** この API には認証が無いので、既定で外に開かない。
+   * LAN から触るときだけ `API_HOST=0.0.0.0` にし、終わったら戻す。
+   */
+  const server = serve(
+    { fetch: app.fetch, port: config.api.port, hostname: config.api.host },
+    (info) => {
+      logger.info({ port: info.port, host: config.api.host }, 'api を起動しました')
+      if (config.api.host !== '127.0.0.1' && config.api.host !== 'localhost') {
+        logger.warn(
+          { host: config.api.host },
+          '認証の無い API をこのマシンの外へ公開している。検証が終わったら API_HOST を戻すこと',
+        )
+      }
+    },
+  )
 
   registerShutdownHandlers(server, db, generationQueue, logger, () => projectEvents.close())
 }
