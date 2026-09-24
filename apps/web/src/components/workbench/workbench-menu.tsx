@@ -4,6 +4,7 @@ import type { DockviewApi } from 'dockview-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { MenuBar } from '@/components/workbench/menu-bar'
+import { undoConfirmMessage, type UndoState } from '@/components/workbench/use-edit-history'
 import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
 import { useSelectedShot, useWorkbench } from '@/components/workbench/workbench-context'
 import { Button } from '@/components/ui/button'
@@ -22,7 +23,12 @@ import {
 import { BOTTOM_TABS, MAIN_TABS, SIDE_TABS, workbenchHref } from '@/lib/workbench-url'
 
 export type WorkbenchMenuProps = {
-  readonly canUndo: boolean
+  /**
+   * 「元に戻す」の状態一式（`useEditHistory`）。**boolean ではない。**
+   * 名前が `canUndo` なのは `project-workbench.tsx` の配線を変えないため（同ファイルは別作業中）。
+   */
+  readonly canUndo: UndoState
+  /** 「元に戻す」を**求める**だけ。実行はこのあとの確認ダイアログで決まる。 */
   readonly onUndo: () => void
   readonly onResetLayout: () => void
   readonly onNotice: (message: string) => void
@@ -42,7 +48,7 @@ const visibleOf = <T extends PanelId>(dock: DockviewApi | null, ids: readonly T[
  * 右端: 作業モード（構成 / 仕上げ）・歯車（プロジェクト設定）・主ボタン「書き出し」。
  */
 export const WorkbenchMenu = ({
-  canUndo,
+  canUndo: undo,
   onUndo,
   onResetLayout,
   onNotice,
@@ -57,9 +63,20 @@ export const WorkbenchMenu = ({
   const menus = buildMenus({
     hasCurrentShot: current !== null,
     checkedCount: workbench.checked.size,
-    canUndo,
+    canUndo: undo.availability,
     currentHasTake: (current?.selectedTakeId ?? null) !== null,
   })
+
+  /**
+   * 確認の「戻す」。**ここが押されるまで取り消しの API は呼ばれない。**
+   * 複数 Shot に及び、やり直しも無い操作なので、⌘Z もメニューもこの 1 箇所を通す。
+   */
+  const runUndo = (): void => {
+    void undo.confirm().then((message) => {
+      onNotice(message)
+      workbench.refresh()
+    })
+  }
 
   /** いまの見た目から作ったリンク。**URL を操作のたびに書き換えないので、共有はここから。** */
   const copyLink = (): void => {
@@ -166,6 +183,24 @@ export const WorkbenchMenu = ({
 
   return (
     <>
+      <WorkbenchDialog
+        open={undo.pending !== null}
+        title="一括操作を元に戻す"
+        size="medium"
+        onClose={undo.cancel}
+      >
+        <p className="text-sm text-text">
+          {undo.pending === null ? '' : undoConfirmMessage(undo.pending)}
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button size="sm" onClick={undo.cancel}>
+            やめる
+          </Button>
+          <Button size="sm" tone="danger" onClick={runUndo}>
+            戻す
+          </Button>
+        </div>
+      </WorkbenchDialog>
       <WorkbenchDialog
         open={confirmDelete && current !== null}
         title="Shot を削除"

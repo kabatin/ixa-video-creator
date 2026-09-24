@@ -5,6 +5,7 @@ import {
   listShortcuts,
   type MenuItem,
   type MenuState,
+  type UndoAvailability,
 } from '@/lib/menu-model'
 import { PANEL_IDS } from '@/lib/workbench-layout'
 
@@ -58,6 +59,70 @@ describe('有効判定', () => {
       .forEach((entry) => {
         expect(entry.disabledReason).toBeUndefined()
       })
+  })
+})
+
+/**
+ * 「元に戻す」の 3 つの「戻せない」（S4）。
+ *
+ * **「読めなかった」を「戻せるものがありません」と同じ文にしない。**
+ * 同じにすると、通信不良が「もう戻せない」に化け、戻せるはずの操作を諦めさせる（lessons L-015）。
+ */
+describe('元に戻す', () => {
+  const undoItem = (canUndo: MenuState['canUndo']): MenuItem => find({ ...READY, canUndo }, 'undo')
+
+  const aSummary = '粗編集を 49 件の Shot へ適用しました'
+  const READY_UNDO: UndoAvailability = {
+    state: 'ready',
+    target: { summary: aSummary, shotCount: 49 },
+  }
+
+  it('まだ読めていない間は無効。「ありません」と言い切らない', () => {
+    const entry = undoItem({ state: 'loading' })
+    expect(entry.enabled).toBe(false)
+    expect(entry.disabledReason).toBe('履歴をまだ読み込んでいません')
+  })
+
+  it('読めなかったときは無効。理由に原因まで出し、0 件と同じ文にしない', () => {
+    const entry = undoItem({ state: 'unreadable', reason: 'API に接続できません' })
+    expect(entry.enabled).toBe(false)
+    expect(entry.disabledReason).toContain('履歴を読めませんでした')
+    expect(entry.disabledReason).toContain('API に接続できません')
+    expect(entry.disabledReason).not.toBe(undoItem({ state: 'none' }).disabledReason)
+  })
+
+  it('0 件のときだけ「戻せる一括操作がありません」', () => {
+    const entry = undoItem({ state: 'none' })
+    expect(entry.enabled).toBe(false)
+    expect(entry.disabledReason).toBe('戻せる一括操作がありません')
+  })
+
+  it('3 つの「戻せない」がすべて違う文になる（畳んでいないことの確認）', () => {
+    const reasons = (
+      [{ state: 'loading' }, { state: 'unreadable', reason: 'offline' }, { state: 'none' }] as const
+    ).map((undo) => undoItem(undo).disabledReason)
+    expect(reasons.every((reason) => reason !== undefined)).toBe(true)
+    expect(new Set(reasons).size).toBe(3)
+  })
+
+  it('戻せるときは有効で、項目名に何が戻るのかを出す（S2）', () => {
+    const entry = undoItem(READY_UNDO)
+    expect(entry.enabled).toBe(true)
+    expect(entry.disabledReason).toBeUndefined()
+    expect(entry.label).toContain(aSummary)
+    expect(entry.shortcut).toBe('⌘Z')
+  })
+
+  it('長い見出しは項目名で省く（メニューを横に伸ばさない）', () => {
+    const entry = undoItem({ state: 'ready', target: { summary: 'あ'.repeat(120), shotCount: 3 } })
+    expect(entry.label.length).toBeLessThan(50)
+    expect(entry.label).toContain('…')
+  })
+
+  it('履歴を持たない見本（boolean）は対象を名乗らない', () => {
+    expect(undoItem(true).label).toBe('元に戻す')
+    expect(undoItem(true).enabled).toBe(true)
+    expect(undoItem(false).disabledReason).toBe('戻せる一括操作がありません')
   })
 })
 

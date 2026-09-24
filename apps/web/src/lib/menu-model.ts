@@ -50,14 +50,44 @@ export type Menu = {
   readonly items: readonly MenuItem[]
 }
 
+/** 何が戻るのか。**押す前に見せるためだけの材料**（実行に要る id は持たない）。 */
+export type UndoSummary = {
+  /** サーバが付けた見出し。「粗編集を 49 件の Shot へ適用しました」など。 */
+  readonly summary: string
+  /** 変わる Shot の件数。 */
+  readonly shotCount: number
+}
+
+/**
+ * 「元に戻す」で何が起きるか。
+ *
+ * **「まだ読めていない」「読めなかった」「0 件」を 1 つに畳まない**（lessons L-015 / L-021）。
+ * 畳むと通信不良が「もう戻せない」に化け、利用者は戻せるはずのものを諦める。
+ * `timeline-loader.ts` の `Part<T>` や `BeatSource` と同じ流儀で、状態を名前で分けて持つ。
+ */
+export type UndoAvailability =
+  /** 履歴をまだ取れていない。待てば変わる。 */
+  | { readonly state: 'loading' }
+  /** 履歴を取りに行って失敗した。**「戻せるものが無い」ではない。** */
+  | { readonly state: 'unreadable'; readonly reason: string }
+  /** 履歴は読めた。戻せる一括操作が 1 つも無い。 */
+  | { readonly state: 'none' }
+  /** 戻せる。`target` が `null` なのは履歴を持たない見本（ショートカット一覧）だけ。 */
+  | { readonly state: 'ready'; readonly target: UndoSummary | null }
+
 /** 有効判定の材料。**これ以外を見ない。** */
 export type MenuState = {
   /** インスペクターで開いている Shot があるか。 */
   readonly hasCurrentShot: boolean
   /** 一覧でチェックした Shot の数。 */
   readonly checkedCount: number
-  /** 取り消せる一括操作があるか（判定はサーバの `canUndo`）。 */
-  readonly canUndo: boolean
+  /**
+   * 「元に戻す」の状態（判定はサーバの `canUndo`）。
+   *
+   * `boolean` は**履歴を持たない見本用の省略形**で、`true` は「戻せる（対象は示さない）」、
+   * `false` は `{ state: 'none' }` と同じ。実画面は必ず `UndoAvailability` を渡す。
+   */
+  readonly canUndo: boolean | UndoAvailability
   /** 選んでいる Shot に採用 Take があるか（「採用を外す」の有効判定）。 */
   readonly currentHasTake: boolean
 }
@@ -88,10 +118,51 @@ const NO_CHECKED = '一覧で Shot にチェックを付けてください'
 
 export const REDO_DISABLED_REASON = 'やり直しはまだありません'
 
+/** メニューの項目名に入れる見出しの長さ。これを超えたら末尾を省く。 */
+const UNDO_SUMMARY_MAX = 32
+
+const UNDO_LABEL = '元に戻す'
+
+const clip = (text: string): string =>
+  text.length <= UNDO_SUMMARY_MAX ? text : `${text.slice(0, UNDO_SUMMARY_MAX - 1)}…`
+
+/** 見本用の省略形（`boolean`）を正の形に直す。 */
+const undoOf = (value: boolean | UndoAvailability): UndoAvailability =>
+  typeof value !== 'boolean' ? value : value ? { state: 'ready', target: null } : { state: 'none' }
+
+/**
+ * 「元に戻す」の項目名。**何が戻るのかを押す前に出す。**
+ * 名前に出さないと、利用者は「自分の 1 手」を戻すつもりで
+ * 他人の・1 時間前の一括操作を戻すことになる。
+ */
+export const undoMenuLabel = (undo: UndoAvailability): string =>
+  undo.state === 'ready' && undo.target !== null
+    ? `${UNDO_LABEL}: 「${clip(undo.target.summary)}」`
+    : UNDO_LABEL
+
+/**
+ * 押せない理由。押せるなら `null`。
+ * **3 つの「戻せない」に同じ文を使わない**（L-015）。⌘Z の返事もこの文を使い、
+ * メニューと言い方を二重に持たない（L-016）。
+ */
+export const undoDisabledReason = (undo: UndoAvailability): string | null => {
+  switch (undo.state) {
+    case 'ready':
+      return null
+    case 'loading':
+      return '履歴をまだ読み込んでいません'
+    case 'unreadable':
+      return `履歴を読めませんでした（${undo.reason}）`
+    case 'none':
+      return '戻せる一括操作がありません'
+  }
+}
+
 /** メニューの全体。`state` が同じなら同じ値を返す。 */
 export const buildMenus = (state: MenuState): readonly Menu[] => {
   const noCurrent = state.hasCurrentShot ? null : NO_CURRENT_SHOT
   const noChecked = state.checkedCount > 0 ? null : NO_CHECKED
+  const undo = undoOf(state.canUndo)
   return [
     {
       id: 'app',
@@ -116,9 +187,9 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
       id: 'edit',
       label: '編集',
       items: [
-        item('undo', '元に戻す', command('undo'), {
+        item('undo', undoMenuLabel(undo), command('undo'), {
           shortcut: '⌘Z',
-          disabledReason: state.canUndo ? null : '戻せる一括操作がありません',
+          disabledReason: undoDisabledReason(undo),
         }),
         // 実装が無い。モックでも灰色。押せるように見せない。
         item('redo', 'やり直す', command('redo'), {
