@@ -82,7 +82,7 @@ const LibraryPage = async () => {
         action={<CharacterLink />}
       />
 
-      <div className="space-y-12">
+      <div className="max-w-4xl space-y-12">
         <LocationManager
           workspaceId={workspace.workspaceId}
           initialLocations={loaded.locations.value}

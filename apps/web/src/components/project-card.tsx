@@ -48,7 +48,7 @@ export const ProjectCard = ({ project, coverUrl, coverReason }: ProjectCardProps
           {statusLabel(project.status)}
         </span>
       </div>
-      <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm text-muted sm:grid-cols-4">
+      <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm text-muted">
         <div>
           <dt className="text-xs uppercase tracking-wide text-muted">解像度</dt>
           <dd>{formatResolution(project.resolution)}</dd>

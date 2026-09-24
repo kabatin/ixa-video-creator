@@ -14,10 +14,14 @@ import { SITE_NAV_ENTRIES } from '@/lib/site-nav'
 
 export const SiteHeader = () => (
   <header className="sticky top-0 z-20 border-b border-line bg-bg/90 backdrop-blur">
-    <nav aria-label="サイト全体" className="flex h-12 items-center gap-5 px-6">
-      <Link href="/" className="text-sm font-semibold tracking-tight text-text">
+    <nav aria-label="サイト全体" className="flex h-14 items-center gap-6 px-6">
+      <Link
+        href="/"
+        className="text-xl font-bold tracking-tight text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+      >
         <span className="text-accent">iXA</span> Video Creator
       </Link>
+      <span aria-hidden className="h-5 w-px shrink-0 bg-line" />
       {SITE_NAV_ENTRIES.map((entry) => (
         <Link
           key={entry.id}
