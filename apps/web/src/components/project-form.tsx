@@ -19,6 +19,7 @@ import {
   FPS_OPTIONS,
   resolutionPresetsFor,
 } from '@/lib/resolution-presets'
+import { workbenchHref } from '@/lib/workbench-url'
 import { SelectField } from '@/components/form/select-field'
 import { TextField } from '@/components/form/text-field'
 import { FieldError } from '@/components/form/field-error'
@@ -99,8 +100,10 @@ export const ProjectForm = ({ workspaceId }: ProjectFormProps) => {
     setErrors({})
     setSubmitting(true)
     try {
-      await createApiClient().createProject(validation.input)
-      router.push('/')
+      const created = await createApiClient().createProject(validation.input)
+      // **作った本人はそのプロジェクトに入りたい。** 一覧へ戻すと、次に何をするかを
+      // もう一度選ばせることになる。曲を入れるのが次の一手なので、そこまで運ぶ。
+      router.push(workbenchHref(created.id))
       router.refresh()
     } catch (error) {
       setErrors({ form: `プロジェクトを作成できませんでした: ${describeError(error)}` })
@@ -199,7 +202,7 @@ export const ProjectForm = ({ workspaceId }: ProjectFormProps) => {
           {submitting ? '作成中…' : 'プロジェクトを作成'}
         </button>
         <a href="/" className="text-sm text-muted underline hover:text-text">
-          キャンセル
+          やめる
         </a>
       </div>
     </form>

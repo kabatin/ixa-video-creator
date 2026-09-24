@@ -2,11 +2,9 @@ import { ProjectId, ShotId } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import {
   EMPTY_WORKBENCH_QUERY,
-  LEGACY_SECTIONS,
   MAIN_TABS,
-  legacySectionHref,
-  legacyShotHref,
   parseWorkbenchQuery,
+  shotHref,
   workbenchHref,
 } from '@/lib/workbench-url'
 import { PANEL_IDS, PANEL_SPECS } from '@/lib/workbench-layout'
@@ -87,29 +85,14 @@ describe('workbenchHref', () => {
   })
 })
 
-describe('旧 URL の行き先（§7.1 の表）', () => {
-  const cases: readonly (readonly [string, string])[] = [
-    ['storyboard', '?main=storyboard&bottom=cutter'],
-    ['shots', '?side=shots'],
-    ['timeline', '?bottom=timeline'],
-    ['music', '?dialog=music'],
-    ['render', '?dialog=render'],
-    ['settings', '?dialog=settings'],
-  ]
-
-  it('表の全部を押さえている', () => {
-    expect(cases.map(([section]) => section)).toEqual([...LEGACY_SECTIONS])
-  })
-
-  it.each(cases)('%s → %s', (section, search) => {
-    const target = LEGACY_SECTIONS.find((entry) => entry === section)
-    if (target === undefined) throw new Error(section)
-    expect(legacySectionHref(projectId, target)).toBe(`/projects/${PROJECT_ID}${search}`)
-  })
-
-  it('/shots/[id] → Shot を選び、Take 比較とインスペクター', () => {
-    expect(legacyShotHref(projectId, shotId)).toBe(
+describe('shotHref', () => {
+  it('その Shot を選び、Take 比較とインスペクターを前に出す', () => {
+    expect(shotHref(projectId, shotId)).toBe(
       `/projects/${PROJECT_ID}?shot=${SHOT_ID}&main=compare&side=inspector`,
     )
+  })
+
+  it('プロジェクトの外へは出ない', () => {
+    expect(shotHref(projectId, shotId).startsWith(`/projects/${PROJECT_ID}?`)).toBe(true)
   })
 })

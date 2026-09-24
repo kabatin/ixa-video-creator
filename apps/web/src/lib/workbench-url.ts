@@ -100,31 +100,11 @@ export const workbenchHref = (
 }
 
 /**
- * 旧 URL の行き先（§7.1 の表）。**ページ側の `redirect()` から呼ぶ。**
- * 表を 1 箇所に置き、各リダイレクトページはこれを引くだけにする。
+ * その Shot を開いたワークベンチ。Take 比較とインスペクターを前に出す。
+ *
+ * Shot を指すリンクはすべてこれを通す。以前は `/shots/[id]?projectId=` という
+ * 別ページがあり、その行き先を組む表がここに別途あった。ページごと畳んだので、
+ * 行き先は 1 本になった。
  */
-export const LEGACY_SECTIONS = [
-  'storyboard',
-  'shots',
-  'timeline',
-  'music',
-  'render',
-  'settings',
-] as const
-export type LegacySection = (typeof LEGACY_SECTIONS)[number]
-
-const LEGACY_QUERY: Readonly<Record<LegacySection, Partial<WorkbenchQuery>>> = Object.freeze({
-  storyboard: { main: 'storyboard', bottom: 'cutter' },
-  shots: { side: 'shots' },
-  timeline: { bottom: 'timeline' },
-  music: { dialog: 'music' },
-  render: { dialog: 'render' },
-  settings: { dialog: 'settings' },
-})
-
-export const legacySectionHref = (projectId: ProjectId, section: LegacySection): string =>
-  workbenchHref(projectId, LEGACY_QUERY[section])
-
-/** `/shots/[id]` の行き先。Take 比較とインスペクターを前に出す。 */
-export const legacyShotHref = (projectId: ProjectId, shotId: ShotId): string =>
+export const shotHref = (projectId: ProjectId, shotId: ShotId): string =>
   workbenchHref(projectId, { shot: shotId, main: 'compare', side: 'inspector' })

@@ -1,8 +1,6 @@
 'use client'
 
 import type { Location, ProjectId, Shot } from '@ixa/domain'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { CameraFields } from '@/components/camera-fields'
 import { FieldError } from '@/components/form/field-error'
@@ -17,8 +15,6 @@ import {
   type ShotFormErrors,
   type ShotFormValues,
 } from '@/lib/shot-form'
-import { shotListHref } from '@/lib/shot-links'
-
 export type ShotFormProps = {
   readonly projectId: ProjectId
   /** 末尾へ追加するための order。一覧の最後の Shot から算出して渡す。 */
@@ -28,10 +24,13 @@ export type ShotFormProps = {
   readonly locations: readonly Location[]
   readonly locationsError?: string
   /**
-   * 作ったあとの行き先（PHASE 7.1 ワークベンチ）。渡せばそれを呼び、一覧へは移らない。
-   * 渡さなければ従来どおり Shot 一覧へ戻る。
+   * 作ったあとの扱い。**このフォームは自分で画面を移動しない。**
+   * 以前は「渡されなければ Shot 一覧ページへ戻る」という分岐があり、
+   * そのページを畳んだあとも分岐だけが残って行き先が無くなっていた。
    */
-  readonly onCreated?: (shot: Shot) => void
+  readonly onCreated: (shot: Shot) => void
+  /** やめたときの扱い。ダイアログを閉じるなど、置いた側が決める。 */
+  readonly onCancel: () => void
 }
 
 export const ShotForm = ({
@@ -41,8 +40,8 @@ export const ShotForm = ({
   locations,
   locationsError,
   onCreated,
+  onCancel,
 }: ShotFormProps) => {
-  const router = useRouter()
   const [values, setValues] = useState<ShotFormValues>(() => initialShotFormValues(defaultStartSec))
   const [errors, setErrors] = useState<ShotFormErrors>({})
   const [submitting, setSubmitting] = useState(false)
@@ -62,9 +61,7 @@ export const ShotForm = ({
     setSubmitting(true)
     try {
       const created = await createApiClient().createShot(projectId, validation.input)
-      if (onCreated === undefined) router.push(shotListHref(projectId))
-      else onCreated(created)
-      router.refresh()
+      onCreated(created)
     } catch (error) {
       setErrors({ form: `Shot を作成できませんでした: ${describeError(error)}` })
       setSubmitting(false)
@@ -163,12 +160,13 @@ export const ShotForm = ({
         >
           {submitting ? '作成中…' : 'Shot を作成'}
         </button>
-        <Link
-          href={shotListHref(projectId)}
+        <button
+          type="button"
+          onClick={onCancel}
           className="text-sm text-muted underline hover:text-text"
         >
-          キャンセル
-        </Link>
+          やめる
+        </button>
       </div>
     </form>
   )

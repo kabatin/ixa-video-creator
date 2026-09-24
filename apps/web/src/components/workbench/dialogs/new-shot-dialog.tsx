@@ -23,6 +23,7 @@ export const NewShotDialogBody = () => {
           workbench.selectShot(shot.id)
           workbench.openInspector('settings')
         }}
+        onCancel={workbench.closeDialog}
       />
     </div>
   )

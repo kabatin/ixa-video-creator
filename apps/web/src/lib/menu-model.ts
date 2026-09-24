@@ -1,11 +1,11 @@
-import { CHARACTER_LIST_HREF } from '@/lib/character-links'
+import { NEW_PROJECT_HREF, SITE_NAV_ENTRIES } from '@/lib/site-nav'
 import type { PanelId } from '@/lib/workbench-layout'
 
 /**
  * メニューバーの中身（UI-WORKBENCH §4）。**データとして持ち、React を含まない。**
  *
  * - 行き先は全部ここに集める。ページを消して到達できない機能が生まれないように
- *   （`project-links.ts` / `SiteHeader` の方針。§12）
+ *   （`SiteHeader` と同じ方針。§12）
  * - 「押せるかどうか」はここの純粋関数が決め、ユニットテストで固定する
  * - 実行は部品側がアクション名から引く。ここは何をするかの**名前**だけを持つ
  */
@@ -168,9 +168,7 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
       id: 'app',
       label: 'iXA',
       items: [
-        item('projects', 'プロジェクト一覧', href('/')),
-        item('characters', 'キャラクター', href(CHARACTER_LIST_HREF)),
-        item('library', '素材ライブラリ', href('/library')),
+        ...SITE_NAV_ENTRIES.map((entry) => item(entry.id, entry.label, href(entry.href))),
         item('preferences', '環境設定…', dialog('preferences'), { shortcut: '⌘,' }),
       ],
     },
@@ -178,7 +176,7 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
       id: 'file',
       label: 'ファイル',
       items: [
-        item('new-project', '新規プロジェクト', href('/projects/new')),
+        item('new-project', '新規プロジェクト', href(NEW_PROJECT_HREF)),
         item('settings', '設定…', dialog('settings')),
         item('render', '書き出し…', dialog('render')),
       ],

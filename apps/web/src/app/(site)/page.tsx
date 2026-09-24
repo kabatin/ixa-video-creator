@@ -7,6 +7,7 @@ import { ProjectList } from '@/components/project-list'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { pickProjectCover, type PosterView } from '@/lib/shot-posters'
+import { NEW_PROJECT_HREF } from '@/lib/site-nav'
 import { resolveWorkspaceId } from '@/lib/workspace'
 
 export const dynamic = 'force-dynamic'
@@ -49,7 +50,7 @@ const loadCovers = async (
 
 const NewProjectLink = () => (
   <Link
-    href="/projects/new"
+    href={NEW_PROJECT_HREF}
     className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90"
   >
     新規プロジェクト
@@ -79,7 +80,7 @@ const ProjectsPage = async () => {
     <main>
       <PageHeader
         title="プロジェクト"
-        description="AI ネイティブ映像制作プラットフォーム"
+        description="カードを押すと、その映像のワークベンチが開きます。"
         action={<NewProjectLink />}
       />
       {!result.ok ? (
@@ -91,7 +92,7 @@ const ProjectsPage = async () => {
       ) : result.projects.length === 0 ? (
         <EmptyState
           message="プロジェクトがありません"
-          actionHref="/projects/new"
+          actionHref={NEW_PROJECT_HREF}
           actionLabel="最初のプロジェクトを作成"
         />
       ) : (
