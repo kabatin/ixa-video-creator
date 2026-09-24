@@ -83,11 +83,12 @@ export const alignmentByShotId = (
 
 // --- 言い換え ---
 
+/** **間違いとして書かない。** どこに合っているかを言うだけ（`onBeatSentence` 参照）。 */
 const ALIGNMENT_LABELS: Readonly<Record<BeatAlignment, string>> = {
   on_downbeat: '小節頭に乗っています',
   on_beat: '拍に乗っています',
-  near: '拍からわずかにズレています',
-  off_beat: '拍から外れています',
+  near: '拍のすぐ近くです',
+  off_beat: '拍以外に合っています',
   no_beats: '拍が分かっていません',
 }
 
@@ -112,8 +113,9 @@ export const describeDrift = (view: ShotBeatAlignmentView): string => {
 const CHIP_RING: Readonly<Record<BeatAlignment, string>> = {
   on_downbeat: 'ring-1 ring-ok',
   on_beat: 'ring-1 ring-ok/60',
-  near: 'ring-2 ring-warn',
-  off_beat: 'ring-2 ring-danger',
+  // **警告の色（warn / danger）を使わない。** 拍以外に合わせるのは編集の選択であって誤りではない。
+  near: 'ring-1 ring-line-strong',
+  off_beat: 'ring-1 ring-line-strong',
   // 拍が分かっていないだけ。**ズレの色（warn / danger）と同じ見た目にしない。**
   no_beats: 'ring-1 ring-line-strong',
 }
@@ -134,8 +136,9 @@ export const chipRingClass = (input: {
 const POSTER_EDGE: Readonly<Record<BeatAlignment, string>> = {
   on_downbeat: 'border-l-4 border-l-ok',
   on_beat: 'border-l-4 border-l-ok/50',
-  near: 'border-l-4 border-l-warn',
-  off_beat: 'border-l-4 border-l-danger',
+  // 拍に乗っているものだけ色を付ける。乗っていないことは色で咎めない。
+  near: '',
+  off_beat: '',
   no_beats: '',
 }
 
@@ -160,8 +163,9 @@ const TONE_CLASSES: Readonly<Record<BeatAlignmentTone, string>> = {
 const ALIGNMENT_MARKS: Readonly<Record<BeatAlignment, string>> = {
   on_downbeat: '◎',
   on_beat: '○',
-  near: '△',
-  off_beat: '✕',
+  // `✕` は間違いに見える。拍以外に合っているだけなので、記号も中立にする。
+  near: '≈',
+  off_beat: '·',
   no_beats: '—',
 }
 
@@ -170,8 +174,9 @@ export const alignmentMark = (alignment: BeatAlignment): string => ALIGNMENT_MAR
 const ALIGNMENT_TEXT: Readonly<Record<BeatAlignment, string>> = {
   on_downbeat: 'text-ok',
   on_beat: 'text-ok/70',
-  near: 'text-warn',
-  off_beat: 'text-danger',
+  // 一覧の数字も咎めない。印（△ / ✕）で種類が分かれば足りる。
+  near: 'text-muted',
+  off_beat: 'text-text',
   no_beats: 'text-muted',
 }
 
@@ -218,27 +223,35 @@ export const countByAlignment = (
 const trackName = (trackTitle: string | null): string =>
   trackTitle === null ? 'この楽曲' : `「${trackTitle}」`
 
+/**
+ * 集計の 1 行。**事実だけを出す。直すべき間違いとして書かない。**
+ *
+ * 以前は「N 件が拍から外れています」を赤（danger）で出していた。しかし本制作で
+ * 実測したところ、外れている 16 件は |ズレ| 0.136〜0.222s（半拍 0.244s の 56〜91%）に
+ * 集中し、0〜0.136s には 1 件も無かった。手で外したならここに散らばる。
+ * つまりこれは**拍ではないもの（歌い出し・言葉の頭・裏拍）に合わせて切った**形であって、
+ * 間違いではない。拍へ吸着させれば 0.14〜0.22s 動く＝聴いて分かる量で、
+ * 耳で合わせた位置を壊すことになる。
+ *
+ * **道具が編集の意図を間違いと決めない。** 数えて並べるところまでが仕事。
+ */
 const onBeatSentence = (
   total: number,
   counts: Readonly<Record<BeatAlignment, number>>,
 ): BeatAlignmentSummary => {
   const n = (count: number): string => String(count)
-  if (counts.off_beat > 0) {
-    const near = counts.near === 0 ? '' : `。ほか ${n(counts.near)} 件がわずかにズレています`
+  const onBeat = counts.on_beat + counts.on_downbeat
+  const other = counts.near + counts.off_beat
+
+  if (other === 0) {
     return {
-      tone: 'danger',
-      text: `${n(total)} 件中 ${n(counts.off_beat)} 件が拍から外れています${near}`,
-    }
-  }
-  if (counts.near > 0) {
-    return {
-      tone: 'warn',
-      text: `${n(total)} 件中 ${n(counts.near)} 件が拍からわずかにズレています`,
+      tone: 'ok',
+      text: `${n(total)} 件すべてが拍に乗っています（うち ${n(counts.on_downbeat)} 件は小節頭）`,
     }
   }
   return {
-    tone: 'ok',
-    text: `${n(total)} 件すべてが拍に乗っています（うち ${n(counts.on_downbeat)} 件は小節頭）`,
+    tone: 'muted',
+    text: `拍に乗っている ${n(onBeat)} 件 / 拍以外に合わせている ${n(other)} 件`,
   }
 }
 

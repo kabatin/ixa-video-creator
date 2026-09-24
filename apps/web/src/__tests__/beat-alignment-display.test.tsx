@@ -69,9 +69,9 @@ const renderTracks = (renderedShotIds: readonly ShotIdType[], withAlignment: boo
   )
 
 describe('TimelineTracks の拍の色', () => {
-  it('拍から外れた Shot の縁を強い色にする', () => {
+  it('拍に乗っている Shot だけ色を付け、拍以外を警告色にしない', () => {
     renderTracks([onDownbeatShot.id, offBeatShot.id], true)
-    expect(chipFor('S01-002').className).toContain('ring-danger')
+    expect(chipFor('S01-002').className).not.toContain('ring-danger')
     expect(chipFor('S01-001').className).toContain('ring-ok')
   })
 
@@ -82,15 +82,15 @@ describe('TimelineTracks の拍の色', () => {
     expect(chipFor('S01-002').className).not.toContain('ring-danger')
   })
 
-  it('何件が外れているかを文でも出す', () => {
+  it('乗っている数と拍以外の数を文でも出す', () => {
     renderTracks([onDownbeatShot.id, offBeatShot.id], true)
-    expect(screen.getByText(/2 件中 1 件が拍から外れています/)).toBeTruthy()
+    expect(screen.getByText(/拍以外に合わせている 1 件/)).toBeTruthy()
   })
 
   it('要約は横に流しても見えたままにする', () => {
     // 帯は横スクロールする。流して消えると、長い曲ほど全体像が見えなくなる。
     renderTracks([onDownbeatShot.id, offBeatShot.id], true)
-    expect(screen.getByText(/2 件中 1 件/).className).toContain('sticky')
+    expect(screen.getByText(/拍以外に合わせている/).className).toContain('sticky')
   })
 
   it('ズレを渡さなければ従来どおり（色も 1 行も出ない）', () => {
@@ -147,10 +147,10 @@ describe('StoryboardGrid の拍の色（PHASE 7.1）', () => {
       />,
     )
 
-  it('拍から外れた Shot の左の辺を強い色にする', () => {
+  it('拍に乗っている Shot だけ左の辺を塗る', () => {
     renderGrid(true)
     const buttons = screen.getAllByRole('button')
-    expect(buttons[1]?.className).toContain('border-l-danger')
+    expect(buttons[1]?.className).not.toContain('border-l-danger')
     expect(buttons[0]?.className).toContain('border-l-ok')
   })
 
@@ -164,10 +164,11 @@ describe('StoryboardGrid の拍の色（PHASE 7.1）', () => {
   it('拍の色が付いたカードは、ホバーで縁を塗り替えない', () => {
     // `hover:border-line-strong` は 4 辺をまとめて塗るので、
     // 指を乗せた瞬間だけ左の辺の色が消える。色が付く側ではホバーを縁に掛けない。
+    // **色が付くのは拍に乗っている側**になったので、例も 0 番（on_downbeat）で見る。
     renderGrid(true)
     const buttons = screen.getAllByRole('button')
-    expect(buttons[1]?.className).toContain('border-l-danger')
-    expect(buttons[1]?.className).not.toContain('hover:border-line-strong')
+    expect(buttons[0]?.className).toContain('border-l-ok')
+    expect(buttons[0]?.className).not.toContain('hover:border-line-strong')
   })
 })
 

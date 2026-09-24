@@ -62,7 +62,7 @@ const renderEditor = (beatAlignment: WireTimelineBeatAlignment | null) =>
 describe('タイムライン画面への配線', () => {
   it('サーバから来た整列が帯の要約まで届く', () => {
     renderEditor(alignment)
-    expect(screen.getByText(/2 件中 1 件が拍から外れています/)).toBeTruthy()
+    expect(screen.getByText(/拍以外に合わせている 1 件/)).toBeTruthy()
   })
 
   it('整列を読めていないときは、色も要約も出さない', () => {
@@ -127,7 +127,7 @@ describe('ストーリーボードのパネルへの配線（PHASE 7.1）', () =
     renderInWorkbench(<StoryboardPanel />, { shots, track: aTrack, analysis: anAnalysis })
 
     await waitFor(() => {
-      expect(screen.getByText(/2 件中 1 件が拍から外れています/)).toBeTruthy()
+      expect(screen.getByText(/拍以外に合わせている 1 件/)).toBeTruthy()
     })
     // **小節頭まで渡っていること。** 拍だけを渡すと `on_beat` に落ちるが、
     // 件数の文は変わらないので、要約だけでは気づけない。

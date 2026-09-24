@@ -94,10 +94,18 @@ describe('describeDrift', () => {
 })
 
 describe('chipRingClass', () => {
-  it('外れているほど強い縁になる', () => {
+  /**
+   * **拍以外に合わせているのは間違いではない。**
+   * 本制作で実測したところ、外れている 16 件は半拍の 56〜91% に集中し、
+   * 0〜0.136s には 1 件も無かった。手で外したならそこに散らばる。
+   * 拍ではないもの（歌い出し・言葉の頭）に合わせて切った形であって、
+   * 吸着させると 0.14〜0.22s 動く＝耳で合わせた位置を壊す。
+   * 道具が編集の意図を警告の色で咎めない（制作者の判断 2026-09-24）。
+   */
+  it('拍に乗っているものだけ色を付け、そうでないものを警告色にしない', () => {
     expect(chipRingClass({ rendered: true, alignment: 'on_downbeat' })).toContain('ring-ok')
-    expect(chipRingClass({ rendered: true, alignment: 'near' })).toContain('ring-warn')
-    expect(chipRingClass({ rendered: true, alignment: 'off_beat' })).toContain('ring-danger')
+    expect(chipRingClass({ rendered: true, alignment: 'near' })).not.toContain('warn')
+    expect(chipRingClass({ rendered: true, alignment: 'off_beat' })).not.toContain('danger')
   })
 
   it('拍が分からないときはズレの色を使わない', () => {
@@ -120,10 +128,10 @@ describe('chipRingClass', () => {
 })
 
 describe('posterEdgeClass', () => {
-  it('ズレの強さで左の辺の色が変わる', () => {
-    expect(posterEdgeClass('off_beat')).toContain('border-l-danger')
-    expect(posterEdgeClass('near')).toContain('border-l-warn')
+  it('拍に乗っているものだけ塗る。拍以外を警告色にしない', () => {
     expect(posterEdgeClass('on_downbeat')).toContain('border-l-ok')
+    expect(posterEdgeClass('off_beat')).not.toContain('danger')
+    expect(posterEdgeClass('near')).not.toContain('warn')
   })
 
   it('拍が分からない・取得前は何も塗らない', () => {
@@ -155,20 +163,33 @@ describe('summarizeBeatAlignment', () => {
     trackTitle: string | null = 'iXA CUP',
   ) => summarizeBeatAlignment({ source, trackTitle, views })
 
-  it('外れている件数を全体の件数と一緒に出す', () => {
+  /**
+   * **事実だけを出す。間違いとして書かない**（制作者の判断 2026-09-24）。
+   * 本制作の実測では、外れている 16 件は半拍の 56〜91% に集中し 0〜0.136s は 0 件だった。
+   * 手で外したなら散らばる形にならない。拍ではないもの（歌い出し・言葉の頭）に
+   * 合わせて切った編集であって、吸着させれば耳で合わせた位置が壊れる。
+   */
+  it('乗っている数と拍以外の数を並べる（咎めない）', () => {
     const views = [
       ...Array.from({ length: 3 }, (_unused, index) => aView('on_beat', index)),
       aView('off_beat', 9),
     ]
     const summary = summarize('available', views)
-    expect(summary.text).toContain('4 件中 1 件が拍から外れています')
-    expect(summary.tone).toBe('danger')
+    expect(summary.text).toContain('拍に乗っている 3 件')
+    expect(summary.text).toContain('拍以外に合わせている 1 件')
+    expect(summary.text).not.toContain('外れ')
+    expect(summary.tone).not.toBe('danger')
+    expect(summary.tone).not.toBe('warn')
   })
 
-  it('外れているものとわずかなズレを両方数える', () => {
+  it('わずかなズレも「拍以外」として同じ側で数える', () => {
     const summary = summarize('available', [aView('off_beat', 1), aView('near', 2)])
-    expect(summary.text).toContain('2 件中 1 件が拍から外れています')
-    expect(summary.text).toContain('ほか 1 件')
+    expect(summary.text).toContain('拍以外に合わせている 2 件')
+  })
+
+  it('小節頭も拍に乗っている側で数える', () => {
+    const summary = summarize('available', [aView('on_downbeat', 1), aView('off_beat', 2)])
+    expect(summary.text).toContain('拍に乗っている 1 件')
   })
 
   it('すべて乗っていれば、そのことと小節頭の数を出す', () => {

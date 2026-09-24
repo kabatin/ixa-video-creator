@@ -50,7 +50,7 @@ export const ShotListPanel = () => {
   const workbench = useWorkbench()
   const bulk = useBulkActions()
   const drop = useAssetDrop(workbench.notify)
-  /** 状態のほかに「拍からズレているもの」でも絞れる。集計の 1 行から直す先へ行けるように。 */
+  /** 状態のほかに「拍以外に合わせているもの」でも絞れる。集計の 1 行から中身へ行けるように。 */
   const [filter, setFilter] = useState<ShotFilter>(null)
   const [sort, setSort] = useState<{ key: ShotSortKey; direction: SortDirection }>({
     key: 'order',
@@ -136,7 +136,7 @@ export const ShotListPanel = () => {
         chip(status, shotStatusLabel(status), count),
       )}
       {/* 集計を読むだけで終わらせない。押すとその Shot だけになる。 */}
-      {alignments !== null && driftingCount > 0 && chip(DRIFT_FILTER, '拍ズレ', driftingCount)}
+      {alignments !== null && driftingCount > 0 && chip(DRIFT_FILTER, '拍以外', driftingCount)}
       <span className="ml-auto" />
       <Button size="sm" onClick={() => workbench.openDialog('new-shot')}>
         新規
