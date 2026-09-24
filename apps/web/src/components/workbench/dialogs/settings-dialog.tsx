@@ -1,5 +1,6 @@
 'use client'
 
+import { EnvironmentPanel } from '@/components/environment-panel'
 import { ProjectSettingsForm } from '@/components/project-settings-form'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 
@@ -15,6 +16,14 @@ export const SettingsDialogBody = () => {
         出力仕様と制作の制約を変更します。生成済みの Take には遡って効きません。
       </p>
       <ProjectSettingsForm project={project} />
+
+      <hr className="my-6 border-line" />
+
+      <h2 className="mb-1 text-base font-semibold text-text">接続先と実行の設定</h2>
+      <p className="mb-3 text-sm text-muted">
+        この環境が何につながっていて、何にお金が掛かるか。Project ごとではなく、この環境全体の設定です。
+      </p>
+      <EnvironmentPanel />
     </div>
   )
 }

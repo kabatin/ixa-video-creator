@@ -1,5 +1,5 @@
 import { serve, type ServerType } from '@hono/node-server'
-import { getConfig } from '@ixa/config'
+import { describeEnvironment, getConfig } from '@ixa/config'
 import {
   closeDbClient,
   createDbClient,
@@ -200,6 +200,8 @@ export const main = (): void => {
   const mediaAssets = createMediaAssetRepository(db)
 
   const app = createApp({
+    // 鍵の設定状態だけを返す口。**値は渡さない**（`describeEnvironment` が落とす）。
+    environment: { status: () => describeEnvironment(config) },
     projects: createProjectRepository(db),
     mediaAssets,
     shots,

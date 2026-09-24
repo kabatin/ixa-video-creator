@@ -15,6 +15,7 @@ import type {
 import type { ProviderRegistry } from '@ixa/provider-core'
 import type { ObjectStorage } from '@ixa/storage'
 import { registerErrorHandlers, validationHook } from './errors.js'
+import { environmentRoutes, type EnvironmentDeps } from './routes/environment.js'
 import type { Logger } from './logger.js'
 import { registerOpenApiDocument } from './openapi.js'
 import { healthRoutes } from './routes/health.js'
@@ -104,6 +105,11 @@ export type AppDeps = {
   events: ProjectEventPublisher & ProjectEventSubscriber
   /** media キューへの投入。未配線なら登録のみ行い queued: false を返す。 */
   mediaIngest?: MediaIngestDeps
+  /**
+   * この環境の状態を返す口（`describeEnvironment(config)`）。
+   * **app 層が config を直接読まない。** 注入して、テストから差し替えられるようにする。
+   */
+  environment?: EnvironmentDeps
   storage: ObjectStorage
   /** CORS で許可するオリジン。空なら CORS を有効にしない。 */
   corsOrigins: readonly string[]
@@ -137,6 +143,8 @@ export const createApp = (deps: AppDeps) => {
   }
 
   app.route('/', healthRoutes())
+  // 鍵の設定状態。**値は返さない。設定する口も置かない**（無認証で全 IF に待ち受けているため）。
+  if (deps.environment !== undefined) app.route('/', environmentRoutes(deps.environment))
   app.route(
     '/',
     // 費用の出どころ判定は **過去の事実**。今 registry にいる Provider と突き合わせない
