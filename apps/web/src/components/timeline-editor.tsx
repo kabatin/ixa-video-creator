@@ -622,7 +622,12 @@ export const TimelineEditor = ({
 
       {document !== null && (
         <p role="status" className="text-sm text-muted">
-          {`${playing ? '再生中' : '停止中'} ${formatClock(currentSec)}（Space で再生 / 一時停止、目盛りを押すとその位置へ）`}
+          {/*
+            Space の説明を常設しない。キーの持ち主はフォーカスの場所で決まるようになり
+            （`resolveKeyOwner`）、「Space で再生」と無条件に書くと嘘になる。
+            割り当ては ヘルプ > キーボードショートカット が持つ。
+          */}
+          {`${playing ? '再生中' : '停止中'} ${formatClock(currentSec)}`}
         </p>
       )}
 

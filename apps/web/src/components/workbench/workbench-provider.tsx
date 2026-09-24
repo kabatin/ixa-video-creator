@@ -102,14 +102,31 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
     setServerEpoch((epoch) => epoch + 1)
   }, [props.initialShots])
 
-  /** 消えた Shot を選んだまま・チェックしたままにしない。 */
+  /**
+   * 消えた Shot を選んだまま・チェックしたままにしない。
+   *
+   * **インスペクターが見ている物も一緒に直す。** 以前はここが `selectedShotId` だけを
+   * 先頭へ戻し、`inspected` を放置していた。結果、一覧は先頭行を強調し、
+   * Take 比較は先頭 Shot の Take を並べ、右のインスペクターだけが
+   * 「この Shot は見つかりません」と出す。3 つのパネルが 3 通りのことを言い、
+   * どれが正しいか画面からは決められなかった。
+   *
+   * 素材（キャラクター・楽曲など）を見ているときは触らない。Shot の増減とは無関係。
+   */
   useEffect(() => {
     if (shots === null) return
     const ids = shots.map((shot) => shot.id)
+    const nextShotId = (current: ShotId | null): ShotId | null =>
+      current !== null && ids.includes(current) ? current : (ids[0] ?? null)
+
     setCheckedState((current) => pruneSelection(current, ids))
-    setSelectedShotId((current) =>
-      current !== null && ids.includes(current) ? current : (ids[0] ?? null),
-    )
+    setSelectedShotId(nextShotId)
+    setInspected((current) => {
+      if (current === null || current.kind !== 'shot') return current
+      if (ids.includes(current.id)) return current
+      const fallback = ids[0] ?? null
+      return fallback === null ? null : { kind: 'shot', id: fallback }
+    })
   }, [shots])
 
   const live = useProjectEvents({
