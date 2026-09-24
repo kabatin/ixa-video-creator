@@ -6,6 +6,7 @@ import { PreferencesDialogBody } from '@/components/workbench/dialogs/preference
 import { RenderDialogBody } from '@/components/workbench/dialogs/render-dialog'
 import { SettingsDialogBody } from '@/components/workbench/dialogs/settings-dialog'
 import { ShortcutList } from '@/components/workbench/dialogs/shortcuts-dialog'
+import type { RenderWatch } from '@/components/workbench/use-render-watch'
 import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import type { WorkbenchDialog as DialogKind } from '@/lib/menu-model'
@@ -27,8 +28,14 @@ const MEDIUM: ReadonlySet<DialogKind> = new Set(['history', 'shortcuts', 'new-sh
  */
 export const WorkbenchDialogs = ({
   onHistoryChanged,
+  renderWatch,
 }: {
   readonly onHistoryChanged: () => void
+  /**
+   * 走っている書き出しの見守り。**ダイアログの外で作ったものを渡す。**
+   * 中で作るとダイアログを閉じた瞬間に追跡が止まる。
+   */
+  readonly renderWatch: RenderWatch
 }) => {
   const workbench = useWorkbench()
   const dialog = workbench.dialog
@@ -40,7 +47,7 @@ export const WorkbenchDialogs = ({
       guardUnsaved={dialog === 'settings' || dialog === 'new-shot'}
       size={dialog !== null && MEDIUM.has(dialog) ? 'medium' : 'large'}
     >
-      {dialog === 'render' && <RenderDialogBody />}
+      {dialog === 'render' && <RenderDialogBody watch={renderWatch} />}
       {dialog === 'settings' && <SettingsDialogBody />}
       {dialog === 'preferences' && <PreferencesDialogBody />}
       {dialog === 'history' && <HistoryDialogBody onUndone={onHistoryChanged} />}

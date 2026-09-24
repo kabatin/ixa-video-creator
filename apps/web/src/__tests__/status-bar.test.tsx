@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { StatusBar } from '@/components/workbench/status-bar'
+import { WireRenderJob } from '@/lib/render-api'
 import { aProject } from './workbench-fixture'
 
 /** ステータスバー（UI-WORKBENCH §10）。読み込みエラーは 1 件でもあれば必ず出す。 */
@@ -9,6 +10,19 @@ const live = { state: 'live' as const, lastEventAt: null, attempt: 0, invalidCou
 
 /** 止まっている状態。鳴っているところの表示はここを差し替えて確かめる。 */
 const stopped = { currentSec: 0, playing: false, seek: null, owner: null } as const
+
+/** 書き出しが走っていない状態。走っている表示はここを差し替えて確かめる。 */
+const idleRenders = {
+  jobs: [],
+  active: [],
+  error: null,
+  note: null,
+  nowMs: null,
+  timeoutMs: 0,
+  refresh: () => Promise.resolve(undefined),
+  watchedJobId: null,
+  watchJob: () => undefined,
+}
 
 beforeEach(() => {
   // 費用は取りに行かせない（失敗してもバーは出る）。
@@ -21,6 +35,66 @@ afterEach(() => {
 
 describe('StatusBar', () => {
   /**
+   * 書き出しはダイアログを閉じても走り続ける（上限 30 分）。
+   * 閉じた瞬間に「いま書き出している」がどこにも出ないと、終わったことに気づけない。
+   */
+  describe('走っている書き出し', () => {
+    /** 状態の正は `RenderJobStatus`（queued / rendering / encoding / …）。`running` は無い。 */
+    const aJob = (status: 'queued' | 'rendering', progress: number): WireRenderJob =>
+      WireRenderJob.parse({
+        id: '01ARZ3NDEKTSV4RRFFQ69G5FC0',
+        projectId: aProject.id,
+        scope: { type: 'full' },
+        preset: 'master_1080p',
+        status,
+        progress,
+        outputAssetId: null,
+        error: null,
+        createdAt: '2026-09-24T00:00:00.000Z',
+        finishedAt: null,
+      })
+    const withActive = (job: ReturnType<typeof aJob>) => ({
+      ...idleRenders,
+      active: [job],
+      jobs: [job],
+    })
+
+    it('走っていなければ出さない', () => {
+      render(<StatusBar project={aProject} shotCount={3} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
+      expect(screen.queryByText(/書き出し中/)).toBeNull()
+    })
+
+    it('割合が取れていれば % を出す', () => {
+      render(
+        <StatusBar
+          project={aProject}
+          shotCount={3}
+          live={live}
+          transport={stopped}
+          renderWatch={withActive(aJob('rendering', 0.42))}
+          loadErrors={[]}
+        />,
+      )
+      expect(screen.getByText(/書き出し中 42%/)).toBeTruthy()
+    })
+
+    it('割合が取れていないときは % を作らない', () => {
+      render(
+        <StatusBar
+          project={aProject}
+          shotCount={3}
+          live={live}
+          transport={stopped}
+          renderWatch={withActive(aJob('queued', 0))}
+          loadErrors={[]}
+        />,
+      )
+      expect(screen.getByText(/書き出し中/)).toBeTruthy()
+      expect(screen.queryByText(/%/)).toBeNull()
+    })
+  })
+
+  /**
    * 裏のタブでも鳴り続けるので、パネルを見てもどこが鳴っているか分からない。
    * 音を止める場所を探す羽目になっていた。
    */
@@ -29,7 +103,7 @@ describe('StatusBar', () => {
       ({ currentSec: sec, playing: true, seek: null, owner }) as const
 
     it('止まっているときは出さない', () => {
-      render(<StatusBar project={aProject} shotCount={3} live={live} transport={stopped} loadErrors={[]} />)
+      render(<StatusBar project={aProject} shotCount={3} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
       expect(screen.queryByText(/▶/)).toBeNull()
     })
 
@@ -39,6 +113,7 @@ describe('StatusBar', () => {
           project={aProject}
           shotCount={3}
           live={live}
+          renderWatch={idleRenders}
           transport={playing('cutter', 30)}
           loadErrors={[]}
         />,
@@ -52,6 +127,7 @@ describe('StatusBar', () => {
           project={aProject}
           shotCount={3}
           live={live}
+          renderWatch={idleRenders}
           transport={playing('monitor', 5)}
           loadErrors={[]}
         />,
@@ -68,6 +144,7 @@ describe('StatusBar', () => {
         shotCount={3}
         live={live}
         transport={stopped}
+        renderWatch={idleRenders}
         loadErrors={['シーケンスを読み込めませんでした: 500']}
       />,
     )
@@ -77,24 +154,24 @@ describe('StatusBar', () => {
   })
 
   it('複数あれば件数を出し、全文は title に渡す', () => {
-    render(<StatusBar project={aProject} shotCount={3} live={live} transport={stopped} loadErrors={['A が読めない', 'B が読めない']} />)
+    render(<StatusBar project={aProject} shotCount={3} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={['A が読めない', 'B が読めない']} />)
     const alert = screen.getByText(/読み込めなかった部分 2 件/)
     expect(alert).toHaveAttribute('title', 'A が読めない\nB が読めない')
   })
 
   it('エラーが無ければ出さない', () => {
-    render(<StatusBar project={aProject} shotCount={3} live={live} transport={stopped} loadErrors={[]} />)
+    render(<StatusBar project={aProject} shotCount={3} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
     expect(screen.queryByText(/読み込めなかった部分/)).toBeNull()
   })
 
   it('件数・解像度・fps を出す', () => {
-    render(<StatusBar project={aProject} shotCount={27} live={live} transport={stopped} loadErrors={[]} />)
+    render(<StatusBar project={aProject} shotCount={27} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
     expect(screen.getByText('27 Shots')).toBeInTheDocument()
     expect(screen.getByText('1920×1080・30fps')).toBeInTheDocument()
   })
 
   it('Shot を読めていないときは 0 件と言わない', () => {
-    render(<StatusBar project={aProject} shotCount={null} live={live} transport={stopped} loadErrors={[]} />)
+    render(<StatusBar project={aProject} shotCount={null} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
     expect(screen.getByText('Shot を読めていません')).toBeInTheDocument()
     expect(screen.queryByText('0 Shots')).toBeNull()
   })

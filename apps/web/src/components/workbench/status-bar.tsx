@@ -9,7 +9,9 @@ import type {
   WorkbenchLive,
   WorkbenchTransport,
 } from '@/components/workbench/workbench-context'
+import type { RenderWatch } from '@/components/workbench/use-render-watch'
 import { formatClock } from '@/lib/format-time'
+import { describeRenderJob } from '@/lib/render-display'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { buildCostMeterView, type CostMeterView } from '@/lib/cost-meter'
@@ -23,6 +25,26 @@ export type StatusBarProps = {
   readonly loadErrors: readonly string[]
   /** いま鳴っている場所と位置。鳴っていなければ null。 */
   readonly transport: WorkbenchTransport
+  /**
+   * 走っている書き出し。**ダイアログを閉じてもここに残る。**
+   * 以前は追跡がダイアログの中だけにあり、閉じると「いま書き出している」が
+   * どこにも出なくなって、終わったことに気づけなかった。
+   */
+  readonly renderWatch: RenderWatch
+}
+
+/**
+ * 走っている書き出しの 1 行。**割合が取れないときは書かない**（偽の進捗を出さない）。
+ * 2 件以上あれば件数だけにする（バーは 1 行しかない）。
+ */
+const describeActiveRenders = (watch: RenderWatch): string => {
+  if (watch.active.length > 1) return `書き出し中 ${String(watch.active.length)} 件`
+  const job = watch.active[0]
+  if (job === undefined) return ''
+  const view = describeRenderJob(job)
+  return view.progressPercent === null
+    ? `書き出し中（${view.statusLabel}）`
+    : `書き出し中 ${String(view.progressPercent)}%`
 }
 
 /** 鳴っている場所の呼び名。パネルのタブと同じ言葉にする。 */
@@ -48,6 +70,7 @@ export const StatusBar = ({
   live,
   loadErrors,
   transport,
+  renderWatch,
 }: StatusBarProps) => {
   const cost = useCost(project.id)
   const [costOpen, setCostOpen] = useState(false)
@@ -68,6 +91,10 @@ export const StatusBar = ({
         <span className="text-accent">
           {`▶ ${OWNER_LABELS[transport.owner]} ${formatClock(transport.currentSec)}`}
         </span>
+      )}
+      {/* 走っている書き出し。閉じたダイアログの中で終わっても、ここで気づける。 */}
+      {renderWatch.active.length > 0 && (
+        <span className="text-info">{describeActiveRenders(renderWatch)}</span>
       )}
       <span>{shotCount === null ? 'Shot を読めていません' : `${String(shotCount)} Shots`}</span>
       <span>

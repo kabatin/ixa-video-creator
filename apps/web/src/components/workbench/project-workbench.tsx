@@ -4,6 +4,7 @@ import type { Location, MusicTrack, Project, Sequence, Shot } from '@ixa/domain'
 import type { DockviewApi } from 'dockview-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StatusBar } from '@/components/workbench/status-bar'
+import { useRenderWatch } from '@/components/workbench/use-render-watch'
 import { WorkbenchDialogs } from '@/components/workbench/workbench-dialogs'
 import { WorkbenchDock } from '@/components/workbench/workbench-dock'
 import { WorkbenchMenu } from '@/components/workbench/workbench-menu'
@@ -150,6 +151,13 @@ const WorkbenchShell = ({
     })
   }
 
+  /**
+   * 走っている書き出しの見守り。**ダイアログより上で作る。**
+   * 中で作っていたころは、閉じた瞬間に部品ごと unmount されて追跡が止まり、
+   * 「いま書き出している」がどこにも残らなかった（上限は 30 分に設定してある）。
+   */
+  const renderWatch = useRenderWatch({ projectId: workbench.projectId })
+
   useQueryNavigation(query)
 
   // 「聴きながら切る」へ譲るかはフックがフォーカスから決める。可視は渡さない。
@@ -211,8 +219,9 @@ const WorkbenchShell = ({
         live={workbench.live}
         loadErrors={workbench.loadErrors}
         transport={workbench.transport}
+        renderWatch={renderWatch}
       />
-      <WorkbenchDialogs onHistoryChanged={history.reload} />
+      <WorkbenchDialogs onHistoryChanged={history.reload} renderWatch={renderWatch} />
       <FileIntake
         onNotice={setNotice}
         registerOpener={(open) => {

@@ -162,7 +162,7 @@ export const describeRenderJob = (job: RenderJobLike): RenderJobView => {
     return {
       ...base,
       progressPercent: null,
-      detail: 'まだ始まっていません。worker の順番待ちです。',
+      detail: 'まだ始まっていません。前の書き出しが終わるのを待っています。',
     }
   }
   if (phase === 'running') {

@@ -5,6 +5,7 @@ import { RenderPanel } from '@/components/render-panel'
 import { TimelineIssuePanel } from '@/components/timeline-issue-panel'
 import { Button } from '@/components/ui/button'
 import { useLoaded } from '@/components/workbench/use-loaded'
+import type { RenderWatch } from '@/components/workbench/use-render-watch'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
@@ -50,7 +51,7 @@ const loadRenderMaterials = async (projectId: ProjectId): Promise<RenderMaterial
  * 書き出し（ダイアログ。UI-WORKBENCH §3.3）。設定と実行・投入前の検査・履歴。
  * 開いたまま書き出しが終わっても、閉じればワークベンチの選択はそのまま残る。
  */
-export const RenderDialogBody = () => {
+export const RenderDialogBody = ({ watch }: { readonly watch: RenderWatch }) => {
   const workbench = useWorkbench()
   const loaded = useLoaded(
     '書き出しの材料',
@@ -74,6 +75,7 @@ export const RenderDialogBody = () => {
         projectId={workbench.projectId}
         initialJobs={jobs.value}
         jobsError={jobs.error}
+        watch={watch}
         blockingIssueCount={
           issues.value === null
             ? null
