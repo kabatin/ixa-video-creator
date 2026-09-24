@@ -286,7 +286,7 @@ export const analysisNotice = (phase: AnalysisPhase): AnalysisNotice | null => {
     case 'timeout':
       return {
         tone: 'alert',
-        text: `結果を待ちきれませんでした。解析が終わっていない可能性があります。worker のログを確認して${WORDING.reload}してください。`,
+        text: `結果を待ちきれませんでした。解析はまだ続いているかもしれません。${WORDING.reload}すると今の状態が分かります。`,
       }
     case 'error':
       return { tone: 'alert', text: phase.message }

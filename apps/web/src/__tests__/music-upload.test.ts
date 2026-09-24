@@ -302,7 +302,8 @@ describe('解析状態の知らせ方', () => {
   it('待ちきれなかったことは終了と区別して警告にする', () => {
     const notice = analysisNotice({ kind: 'timeout' })
     expect(notice?.tone).toBe('alert')
-    expect(notice?.text).toContain('終わっていない可能性')
+    // 検査したいのは「終わったと言い切らない」こと。実装の言い回しは変わりうる。
+    expect(notice?.text).toContain('まだ続いている')
   })
 
   it('失敗はそのまま理由を出す', () => {

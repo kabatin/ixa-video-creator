@@ -61,10 +61,18 @@ export type BulkActionBarProps = {
   readonly cameraSizeOptions: readonly BulkSelectOption[]
   readonly locationOptions: readonly BulkSelectOption[]
   /**
-   * 合計の見積（USD）。**`null` は「まだ取っていない」で、出さない。**
+   * 合計の見積（USD）。**省略できない。**
+   *
+   * 以前は省略可能で既定 `null` だったため、唯一の呼び出し元（`shot-list-panel`）が
+   * 渡しておらず、「合計の見積」は一度も描画されなかった。利用者は
+   * 「27 件の Shot に 3 本ずつ生成を依頼します。投入した生成は取り消せません（費用が
+   * 発生します）」という確認を、**金額が伏せられたまま**押していた。
+   * 省略できる形に戻すと同じ事故が再発するので、型で渡し忘れを止める。
+   *
+   * **`null` は「事前に見積もれない」。** 黙って空欄にせず、その旨を画面に出す。
    * `0` は「見積もった結果 0」。混ぜると、課金の有無を取り違える。
    */
-  readonly estimatedTotalUsd?: number | null
+  readonly estimatedTotalUsd: number | null
   readonly busy: boolean
   readonly outcome: BulkOutcome | null
   readonly onGenerate: (input: BulkGenerateInput) => void
@@ -80,7 +88,7 @@ export const BulkActionBar = ({
   modelOptions,
   cameraSizeOptions,
   locationOptions,
-  estimatedTotalUsd = null,
+  estimatedTotalUsd,
   busy,
   outcome,
   onGenerate,

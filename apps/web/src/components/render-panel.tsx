@@ -1,23 +1,18 @@
 'use client'
 
 import type { MediaAssetId, ProjectId, RenderPreset } from '@ixa/domain'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { RenderJobList } from '@/components/render-job-list'
 import { Button } from '@/components/ui/button'
+import { useRenderWatch, type RenderWatch } from '@/components/workbench/use-render-watch'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
-import { describeError } from '@/lib/api-error'
+import { describeForPerson } from '@/lib/api-error'
 import { formatDuration } from '@/lib/format-time'
-import { startAsyncPolling } from '@/lib/poller'
-import {
-  createRenderApi,
-  type RenderApi,
-  type RenderRejection,
-  type WireRenderJob,
-} from '@/lib/render-api'
+import { createRenderApi, type RenderApi, type RenderRejection } from '@/lib/render-api'
+import type { WireRenderJob } from '@/lib/render-api'
 import {
   DEFAULT_RENDER_PRESET,
   describeRenderJob,
-  isRenderJobActive,
   latestRenderJob,
   RENDER_PRESET_OPTIONS,
   summarizeReasons,
@@ -33,15 +28,13 @@ import { WORDING } from '@/lib/wording'
  * そのために「まだ始まっていない」「進捗の報告が無い」「失敗した」を
  * 別の言葉で出す（判定は `render-display.ts`。lessons L-015）。
  *
+ * **追いかける仕事はこのパネルが持たない。** `use-render-watch.ts` が持つ。
+ * ダイアログを閉じるとこのパネルは unmount されるので、ここに置くと追跡が消える。
+ * `watch` を渡せば外の見守りに相乗りし、省略すれば自分で 1 つ作る（従来どおり）。
+ *
  * 投入前の検査結果の表示は**ページ側（サーバ）が担当する**。
  * ここが使うのは「error が何件あるか」だけで、判定規則は持たない。
  */
-
-/** 数分かかる処理なので、1 秒ごとに叩かない。 */
-export const RENDER_POLL_INTERVAL_MS = 5_000
-
-/** 4K は長い。既定の 5 分では足りないので延ばす。超えたら止めて理由を出す。 */
-export const RENDER_POLL_TIMEOUT_MS = 30 * 60 * 1_000
 
 export type RenderPanelProps = {
   readonly projectId: ProjectId
@@ -55,6 +48,11 @@ export type RenderPanelProps = {
   readonly blockingIssueCount: number | null
   /** 書き出される長さ。読めなければ null。 */
   readonly timelineDurationSec: number | null
+  /**
+   * 走っている書き出しの見守り。**ダイアログより長生きする場所で作ったものを渡す。**
+   * 省略するとこのパネルが自分で作る＝閉じると追跡が止まる。
+   */
+  readonly watch?: RenderWatch
   /** テストや Storybook から差し替えるための注入口。 */
   readonly api?: RenderApi
   readonly resolveOutputUrl?: (assetId: MediaAssetId) => Promise<string>
@@ -79,7 +77,9 @@ const Rejected = ({ rejection }: { readonly rejection: RenderRejection }) => {
     <section role="alert" className="rounded-lg border border-danger/40 bg-danger/10 p-4">
       <h3 className="text-sm font-semibold text-danger">{`書き出しを受け付けられませんでした: ${rejection.message}`}</h3>
       {entries.length === 0 && (
-        <p className="mt-1 text-sm text-danger">理由が返っていません。API のログを確認してください。</p>
+        <p className="mt-1 text-sm text-danger">
+          理由が分かりませんでした。もう一度書き出すと直ることがあります。
+        </p>
       )}
       {entries.map(([field, reasons]) => {
         const summary = summarizeReasons(reasons)
@@ -103,84 +103,51 @@ const Rejected = ({ rejection }: { readonly rejection: RenderRejection }) => {
   )
 }
 
-export const RenderPanel = ({
+/**
+ * 見守りを外から渡されなかったときだけ、このパネルが 1 つ作る。
+ * **フックを条件分岐の中で呼ばない**ため、殻を分けている。
+ */
+const SelfWatchedRenderPanel = (props: RenderPanelProps) => {
+  const watch = useRenderWatch({
+    projectId: props.projectId,
+    initialJobs: props.initialJobs,
+    initialError: props.jobsError,
+    api: props.api,
+  })
+  return <RenderPanelView {...props} watch={watch} />
+}
+
+export const RenderPanel = (props: RenderPanelProps) => {
+  const { watch } = props
+  return watch === undefined ? (
+    <SelfWatchedRenderPanel {...props} />
+  ) : (
+    <RenderPanelView {...props} watch={watch} />
+  )
+}
+
+type RenderPanelViewProps = RenderPanelProps & { readonly watch: RenderWatch }
+
+const RenderPanelView = ({
   projectId,
-  initialJobs,
-  jobsError,
   blockingIssueCount,
   timelineDurationSec,
+  watch,
   api,
   resolveOutputUrl,
-}: RenderPanelProps) => {
+}: RenderPanelViewProps) => {
   const client = useMemo<RenderApi>(() => api ?? defaultApi(), [api])
   const toOutputUrl = useMemo(() => resolveOutputUrl ?? defaultResolveOutputUrl, [resolveOutputUrl])
 
   const [preset, setPreset] = useState<RenderPreset>(DEFAULT_RENDER_PRESET)
-  const [jobs, setJobs] = useState<readonly WireRenderJob[] | null>(initialJobs)
-  const [loadError, setLoadError] = useState<string | null>(jobsError)
   const [submitting, setSubmitting] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [rejection, setRejection] = useState<RenderRejection | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
-  const [watchedJobId, setWatchedJobId] = useState<string | null>(null)
   const [outputs, setOutputs] = useState<Readonly<Record<string, string>>>({})
   const [pendingOutputId, setPendingOutputId] = useState<string | null>(null)
-  // 最初の描画ではサーバとブラウザで値が変わるため「いま」を持たない。
-  const [nowMs, setNowMs] = useState<number | null>(null)
-  /** 自動更新が止まった理由。**「終わった」と「諦めた」と「引けなくなった」を混ぜない。** */
-  const [pollNote, setPollNote] = useState<'timeout' | 'failed' | null>(null)
 
-  const hasActive = (jobs ?? []).some((job) => isRenderJobActive(job.status))
   const blocked = blockingIssueCount !== null && blockingIssueCount > 0
-
-  const refresh = useCallback(async (): Promise<void> => {
-    try {
-      const next = await client.listRenderJobs(projectId)
-      setJobs(next)
-      setLoadError(null)
-      setNowMs(Date.now())
-    } catch (caught) {
-      // 一覧を空に畳まない。読めていないことを残す（lessons L-015）。
-      setLoadError(describeError(caught))
-    }
-  }, [client, projectId])
-
-  useEffect(() => {
-    setNowMs(Date.now())
-  }, [])
-
-  /**
-   * 動いているジョブがある間だけ引き直す。終わったら自分で止まる。
-   * 止まった理由は分けて出す。まとめて「終わり」にすると、
-   * 諦めただけのものを完了だと見せてしまう（lessons L-015）。
-   */
-  useEffect(() => {
-    if (!hasActive) return undefined
-    setPollNote(null)
-    const handle = startAsyncPolling<readonly WireRenderJob[]>({
-      intervalMs: RENDER_POLL_INTERVAL_MS,
-      timeoutMs: RENDER_POLL_TIMEOUT_MS,
-      probe: async () => {
-        const next = await client.listRenderJobs(projectId)
-        return { running: next.some((job) => isRenderJobActive(job.status)), value: next }
-      },
-      onProbe: ({ value }) => {
-        setJobs(value)
-        setLoadError(null)
-        setNowMs(Date.now())
-      },
-      onTimeout: () => {
-        setPollNote('timeout')
-      },
-      onFailed: (caught) => {
-        setLoadError(describeError(caught))
-        setPollNote('failed')
-      },
-    })
-    return () => {
-      handle.stop()
-    }
-  }, [hasActive, client, projectId])
 
   const submit = async (): Promise<void> => {
     setSubmitting(true)
@@ -192,11 +159,12 @@ export const RenderPanel = ({
         setRejection(outcome.rejection)
         return
       }
-      setWatchedJobId(outcome.renderJobId)
+      // 見守りに預ける。**この画面を閉じても追跡は続く。**
+      watch.watchJob(outcome.renderJobId)
       setFeedback({ tone: 'success', message: acceptedMessage(outcome.warnings.length) })
-      await refresh()
+      await watch.refresh()
     } catch (caught) {
-      setFeedback({ tone: 'error', message: describeError(caught) })
+      setFeedback({ tone: 'error', message: describeForPerson(caught) })
     } finally {
       setSubmitting(false)
     }
@@ -204,7 +172,7 @@ export const RenderPanel = ({
 
   const reload = async (): Promise<void> => {
     setRefreshing(true)
-    await refresh()
+    await watch.refresh()
     setRefreshing(false)
   }
 
@@ -220,7 +188,7 @@ export const RenderPanel = ({
       } catch (caught) {
         setFeedback({
           tone: 'error',
-          message: `出力の URL を取得できませんでした: ${describeError(caught)}`,
+          message: `出力の URL を取得できませんでした: ${describeForPerson(caught)}`,
         })
       } finally {
         setPendingOutputId(null)
@@ -228,7 +196,8 @@ export const RenderPanel = ({
     })()
   }
 
-  const watched = jobs === null ? null : (jobs.find((job) => job.id === watchedJobId) ?? null)
+  const jobs = watch.jobs
+  const watched = jobs === null ? null : (jobs.find((job) => job.id === watch.watchedJobId) ?? null)
   const shown = watched ?? (jobs === null ? null : latestRenderJob(jobs))
   const shownView = shown === null ? null : describeRenderJob(shown)
   const presetHint = RENDER_PRESET_OPTIONS.find((option) => option.value === preset)?.hint ?? ''
@@ -306,6 +275,16 @@ export const RenderPanel = ({
           )}
         </div>
 
+        {/*
+          **閉じても追跡は続く。** それを押した人に言っておかないと、
+          消えたのか動いているのか分からないまま閉じることになる。
+        */}
+        {watch.active.length > 0 && (
+          <p role="status" className="mt-4 text-sm text-text">
+            {`${String(watch.active.length)} 件の書き出しが動いています。この画面を閉じても続きます。`}
+          </p>
+        )}
+
         {shownView !== null && (
           <p
             role={shownView.phase === 'failed' ? 'alert' : 'status'}
@@ -315,10 +294,10 @@ export const RenderPanel = ({
           </p>
         )}
 
-        {pollNote !== null && (
+        {watch.note !== null && (
           <p role="status" className="mt-2 text-sm text-warn">
-            {pollNote === 'timeout'
-              ? `${String(RENDER_POLL_TIMEOUT_MS / 60_000)} 分待っても終わらないため自動更新を止めました。終わったかどうかは分かっていません。`
+            {watch.note === 'timeout'
+              ? `${String(Math.round(watch.timeoutMs / 60_000))} 分待っても終わらないため自動更新を止めました。終わったかどうかは分かっていません。`
               : '状態を引き直せなくなったため自動更新を止めました。'}
             {`「${WORDING.refresh}」を押してください。`}
           </p>
@@ -332,12 +311,12 @@ export const RenderPanel = ({
         <div className="mt-3">
           <RenderJobList
             jobs={jobs}
-            error={loadError}
-            nowMs={nowMs}
+            error={watch.error}
+            nowMs={watch.nowMs}
             outputs={outputs}
             pendingOutputId={pendingOutputId}
             onOpenOutput={openOutput}
-            highlightJobId={watchedJobId}
+            highlightJobId={watch.watchedJobId}
           />
         </div>
       </section>

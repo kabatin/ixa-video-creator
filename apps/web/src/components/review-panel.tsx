@@ -149,7 +149,7 @@ const WatchNotice = ({ watch }: { readonly watch: WatchState }) => {
     case 'timeout':
       return (
         <p role="alert" className="text-sm text-warn">
-          {`${timeoutMinutes()} 分待ちましたが終わりませんでした。追いかけるのをやめます。「${WORDING.refresh}」で引き直すか、worker のログを確認してください。`}
+          {`${timeoutMinutes()} 分待ちましたが終わりませんでした。追いかけるのをやめます。まだ続いているかもしれないので、「${WORDING.refresh}」で今の状態を確かめてください。`}
         </p>
       )
     case 'failed':

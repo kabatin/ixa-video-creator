@@ -102,6 +102,20 @@ const withKeep = (options: readonly BulkSelectOption[]): readonly BulkSelectOpti
 /** 「件」を数える文。ロック・採用済みの断りに使う。 */
 const countLabel = (count: number): string => `${String(count)} 件`
 
+/**
+ * 合計の見積の 1 行。**`null` を空欄にしない。**
+ *
+ * いまの API には**投入前に見積だけ取る口が無い**。
+ * `POST .../shots/bulk/generate` が `estimatedTotalUsd` を返すのは 202（投入したあと）と
+ * 422（予算超過で 1 件も投入しなかったとき）だけ（`apps/api/src/routes/shots-bulk.ts`）。
+ * 出せないものを黙って空欄にすると、金額が伏せられたまま「取り消せません」を押させることになる。
+ * **出せないなら、出せないと書く**（lessons L-015）。
+ */
+const estimateLine = (estimatedTotalUsd: number | null): string =>
+  estimatedTotalUsd === null
+    ? '合計の見積: いまは投入する前に出せません。投入すると実際の合計が出ます。'
+    : `合計の見積: $${estimatedTotalUsd.toFixed(2)}`
+
 // --- 一括生成 ---
 
 export type BulkGenerateFormProps = {
@@ -111,8 +125,9 @@ export type BulkGenerateFormProps = {
   readonly lockedCount: number
   readonly modelOptions: readonly BulkModelOption[]
   /**
-   * 合計の見積（USD）。**`null` は「まだ取っていない」。**
+   * 合計の見積（USD）。**`null` は「事前には見積もれない」。**
    * `0` は「見積もった結果 0」であって、同じ意味ではない（lessons L-015）。
+   * どちらでも 1 行出す。**空欄にしない**（`estimateLine`）。
    */
   readonly estimatedTotalUsd: number | null
   readonly busy: boolean
@@ -159,7 +174,8 @@ export const BulkGenerateForm = ({
         <ConfirmButton
           label={`${countLabel(targetCount)}に生成を依頼`}
           confirmLabel="依頼する"
-          message={`${countLabel(targetCount)}の Shot に ${count} 本ずつ生成を依頼します。投入した生成は取り消せません（費用が発生します）。`}
+          // 金額（か、金額が出せないこと）は**押す直前**に出す。フォームの隅では見ずに押される。
+          message={`${countLabel(targetCount)}の Shot に ${count} 本ずつ生成を依頼します。${estimateLine(estimatedTotalUsd)} 投入した生成は取り消せません（費用が発生します）。`}
           disabled={busy || targetCount === 0}
           size="sm"
           onConfirm={() => {
@@ -176,9 +192,8 @@ export const BulkGenerateForm = ({
         {targetCount === 0 && (
           <p className={FIELD_HINT_CLASS}>生成できる Shot が選ばれていません。</p>
         )}
-        {estimatedTotalUsd !== null && (
-          <p className={FIELD_HINT_CLASS}>合計の見積: ${estimatedTotalUsd.toFixed(2)}</p>
-        )}
+        {/* **条件を付けない。** 付けていたせいで、この行は一度も描かれなかった。 */}
+        <p className={FIELD_HINT_CLASS}>{estimateLine(estimatedTotalUsd)}</p>
       </div>
     </div>
   )

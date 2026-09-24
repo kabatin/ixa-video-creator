@@ -127,6 +127,14 @@ export const ShotListPanel = () => {
           modelOptions={MODEL_CHOICES}
           cameraSizeOptions={SHOT_SIZE_OPTIONS}
           locationOptions={locationOptions}
+          /*
+            **押す前の金額は API から取れない。** `POST .../shots/bulk/generate` が
+            `estimatedTotalUsd` を返すのは 202（投入したあと）か 422（予算超過で 1 件も
+            投入しなかったとき）だけで、投入せずに見積だけ取る口は無い
+            （`apps/api/src/routes/shots-bulk.ts`）。だから `null` を渡し、
+            確認の文面で「事前には出せない」と断る。**黙って空欄にしない。**
+          */
+          estimatedTotalUsd={null}
           busy={bulk.busy}
           outcome={bulk.outcome}
           onGenerate={bulk.generate}

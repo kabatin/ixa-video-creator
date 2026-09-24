@@ -93,6 +93,16 @@ export const renderStatusClassName = (status: RenderJobStatus): string => STATUS
 export const isRenderJobActive = (status: RenderJobStatus): boolean =>
   status === 'queued' || status === 'rendering' || status === 'encoding'
 
+/**
+ * まだ動いているジョブだけ。**入力は変更しない。**
+ *
+ * 「走っている書き出しがあるか」はダイアログの外でも要る（画面を閉じても
+ * 書き出しは走り続ける）。判定を画面ごとに書き写さないため、ここに 1 つだけ置く。
+ */
+export const activeRenderJobs = <T extends { readonly status: RenderJobStatus }>(
+  jobs: readonly T[],
+): readonly T[] => jobs.filter((job) => isRenderJobActive(job.status))
+
 export type RenderJobPhase = 'waiting' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
 export type RenderJobView = {

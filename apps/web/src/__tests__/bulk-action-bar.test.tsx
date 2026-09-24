@@ -37,27 +37,31 @@ const LOCATION_OPTIONS = [
   { value: 'loc-1', label: '倉庫（参照画像 2 枚）' },
 ]
 
+const baseProps = (overrides: Partial<BulkActionBarProps> = {}): BulkActionBarProps => ({
+  selectedCount: 12,
+  alreadySelectedCount: 0,
+  lockedCount: 0,
+  modelOptions: MODEL_OPTIONS,
+  cameraSizeOptions: CAMERA_SIZE_OPTIONS,
+  locationOptions: LOCATION_OPTIONS,
+  /** **事前見積は API から取れない。** 呼び出し元も null を渡す（F3a）。 */
+  estimatedTotalUsd: null,
+  busy: false,
+  outcome: null,
+  onGenerate: vi.fn(),
+  onSelectTakes: vi.fn(),
+  onUpdate: vi.fn(),
+  onClearSelection: vi.fn(),
+  ...overrides,
+})
+
 const setup = (
   overrides: Partial<BulkActionBarProps> = {},
 ): {
   readonly props: BulkActionBarProps
   readonly user: ReturnType<typeof userEvent.setup>
 } => {
-  const props: BulkActionBarProps = {
-    selectedCount: 12,
-    alreadySelectedCount: 0,
-    lockedCount: 0,
-    modelOptions: MODEL_OPTIONS,
-    cameraSizeOptions: CAMERA_SIZE_OPTIONS,
-    locationOptions: LOCATION_OPTIONS,
-    busy: false,
-    outcome: null,
-    onGenerate: vi.fn(),
-    onSelectTakes: vi.fn(),
-    onUpdate: vi.fn(),
-    onClearSelection: vi.fn(),
-    ...overrides,
-  }
+  const props = baseProps(overrides)
   render(<BulkActionBar {...props} />)
   return { props, user: userEvent.setup() }
 }
@@ -162,12 +166,17 @@ describe('BulkActionBar — 一括生成は 2 段階', () => {
     expect(screen.getByText('生成できる Shot が選ばれていません。')).toBeInTheDocument()
   })
 
-  it('見積が未取得なら何も出さない', async () => {
+  /**
+   * **以前はここが「何も出さない」を正としていた**（F3a）。
+   * そのせいで、金額が伏せられたまま「取り消せません」を押させる形が
+   * テストで固定されていた。出せないものは「出せない」と書く（lessons L-015）。
+   */
+  it('見積が取れないときは、取れないと書く', async () => {
     const { user } = setup({ estimatedTotalUsd: null })
 
     await user.click(screen.getByRole('button', { name: '一括生成' }))
 
-    expect(screen.queryByText(/合計の見積/)).toBeNull()
+    expect(screen.getByText(/合計の見積: いまは投入する前に出せません/)).toBeInTheDocument()
   })
 
   it('見積 0 は「未取得」と混ぜず、0 として出す', async () => {
@@ -415,6 +424,7 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
           modelOptions={MODEL_OPTIONS}
           cameraSizeOptions={CAMERA_SIZE_OPTIONS}
           locationOptions={LOCATION_OPTIONS}
+          estimatedTotalUsd={null}
           busy={false}
           outcome={null}
           onGenerate={vi.fn()}
@@ -432,5 +442,56 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
     await user.keyboard('{Escape}')
 
     expect(onOuterKeyDown).not.toHaveBeenCalled()
+  })
+})
+
+describe('BulkActionBar — 合計の見積（F3a）', () => {
+  /**
+   * **渡し忘れは型で止める。テストで止めない。**
+   *
+   * 以前は省略できる prop で既定が `null` だったため、唯一の呼び出し元
+   * （`panels/shot-list-panel.tsx`）が渡しておらず「合計の見積」は一度も
+   * 描画されなかった。省略できる形に戻ると `@ts-expect-error` が余計になり、
+   * `tsc` がこの行で落ちる。
+   */
+  it('見積を渡し忘れたら型で落ちる', () => {
+    const { estimatedTotalUsd, ...withoutEstimate } = baseProps({ estimatedTotalUsd: 1 })
+    expect(estimatedTotalUsd).toBe(1)
+
+    // @ts-expect-error estimatedTotalUsd は省略できない（省略できると F3a が再発する）
+    const invalid: BulkActionBarProps = withoutEstimate
+    expect(invalid.selectedCount).toBe(12)
+  })
+
+  /**
+   * **確認ダイアログは「押す直前」。** 金額を出すならここに出す。
+   * 出せないなら出せないと書く。空欄のまま押させない。
+   */
+  it('事前見積が取れないことを確認の文に書く', async () => {
+    const { user } = setup({ estimatedTotalUsd: null })
+
+    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: '12 件に生成を依頼' }))
+
+    const asking = screen.getByRole('alertdialog')
+    expect(asking).toHaveTextContent('いまは投入する前に出せません')
+    expect(asking).toHaveTextContent('取り消せません')
+  })
+
+  it('見積が取れていれば確認の文に金額を出す', async () => {
+    const { user } = setup({ estimatedTotalUsd: 12.5 })
+
+    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: '12 件に生成を依頼' }))
+
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('$12.50')
+  })
+
+  it('見積が取れていれば一括生成の中に出す', async () => {
+    const { user } = setup({ estimatedTotalUsd: 12.5 })
+
+    await user.click(screen.getByRole('button', { name: '一括生成' }))
+
+    expect(screen.getByRole('group', { name: '一括生成' })).toHaveTextContent('$12.50')
   })
 })

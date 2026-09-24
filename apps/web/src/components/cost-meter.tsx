@@ -2,7 +2,7 @@
 
 import type { ProjectId } from '@ixa/domain'
 import { useEffect, useMemo, useState } from 'react'
-import { describeError } from '@/lib/api-error'
+import { describeForPerson } from '@/lib/api-error'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { buildCostMeterView, type CostTone } from '@/lib/cost-meter'
 import { createCostMeterApi, type CostMeterApi, type WireCostMeter } from '@/lib/cost-meter-api'
@@ -67,7 +67,8 @@ export const CostMeterPanel = ({
       })
       .catch((cause: unknown) => {
         // 握り潰さない。読めなかったことを画面に出す（規約 5 / lessons L-015）。
-        if (!cancelled) setError(describeError(cause))
+        // **`describeError` は使わない。** 完全な URL とレスポンス本文が利用者に出る。
+        if (!cancelled) setError(describeForPerson(cause))
       })
 
     return () => {

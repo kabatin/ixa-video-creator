@@ -1,6 +1,7 @@
 import { RenderPreset } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import {
+  activeRenderJobs,
   DEFAULT_RENDER_PRESET,
   describeRenderJob,
   formatJobTime,
@@ -181,5 +182,25 @@ describe('拒否理由の要約', () => {
 
     expect(summary.shown).toEqual(['1 件だけ'])
     expect(summary.hiddenCount).toBe(0)
+  })
+})
+
+describe('走っている書き出しだけを取り出す', () => {
+  it('動いているものだけを、元の並びのまま返す', () => {
+    const jobs = [
+      job({ status: 'succeeded' }),
+      job({ status: 'rendering' }),
+      job({ status: 'queued' }),
+      job({ status: 'failed' }),
+    ]
+    expect(activeRenderJobs(jobs).map((entry) => entry.status)).toEqual(['rendering', 'queued'])
+  })
+
+  /** ダイアログを閉じても追跡が残るかは、この判定が 0 件と「読めていない」を混ぜないことに乗る。 */
+  it('1 件も動いていなければ空。入力は変更しない', () => {
+    const jobs = [job({ status: 'cancelled' }), job({ status: 'succeeded' })]
+    const before = [...jobs]
+    expect(activeRenderJobs(jobs)).toEqual([])
+    expect(jobs).toEqual(before)
   })
 })
