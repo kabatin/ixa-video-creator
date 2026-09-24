@@ -484,7 +484,13 @@ export const CutEditor = ({
           }}
           disabled={saving}
         >
-          {`ここに区切りを置く（${formatClock(playback.currentSec)}）`}
+          {/**
+            * 秒が変わるたびにボタンの幅が動くと、置こうとしている的が揺れる。
+            * 数字は等幅（`tabular-nums`）にし、桁が増えても動かないよう幅を決め打つ。
+            */}
+          <span className="inline-block w-[13.5rem] text-center tabular-nums">
+            {`ここに区切りを置く（${formatClock(playback.currentSec)}）`}
+          </span>
         </Button>
         <label className="flex items-center gap-1.5 text-sm text-text">
           <input

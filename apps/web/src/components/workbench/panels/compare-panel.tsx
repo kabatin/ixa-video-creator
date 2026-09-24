@@ -69,7 +69,16 @@ export const ComparePanel = () => {
       {takes === null ? (
         error === null && <p className="text-sm text-muted">Take を読み込んでいます…</p>
       ) : (
-        <div className="flex h-full min-h-0 flex-col gap-3">
+        <div
+          /*
+            **高さを押し付けない。** `h-full` にすると、中身（比較 2 枚 + 拍の帯 + Take 一覧で
+            679px）が入れ物（341px）に収まらず、中の帯が自分の枠からはみ出して
+            「Take 一覧」の見出しに重なっていた（実測）。
+            並べる絵は幅から高さが決まる（`fit="width"`）ので、縦は中身なりでよい。
+            入り切らないぶんはパネル本文が従来どおりスクロールで見せる。
+          */
+          className="flex flex-col gap-3"
+        >
           <TakeComparePanel
             // Shot が変わったら A/B の選び直しをさせる（前の Shot の Take を掴んだままにしない）。
             key={shot.id}

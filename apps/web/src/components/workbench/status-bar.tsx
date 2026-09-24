@@ -6,8 +6,6 @@ import { CostMeterPanel } from '@/components/cost-meter'
 import { LiveStatusBadge } from '@/components/live-status-badge'
 import type { WorkbenchLive, WorkbenchTransport } from '@/components/workbench/workbench-context'
 import { TRANSPORT_OWNER_LABELS } from '@/lib/transport-labels'
-import { usePlaybackVolume } from '@/lib/use-playback-volume'
-import { describeVolume } from '@/lib/playback-state'
 import type { RenderWatch } from '@/components/workbench/use-render-watch'
 import { formatClock } from '@/lib/format-time'
 import { describeRenderJob } from '@/lib/render-display'
@@ -131,56 +129,17 @@ export const StatusBar = ({
 }
 
 /**
- * 音量。**ここにひとつだけ。**
+ * 鳴っている場所。**裏のタブでも鳴り続ける**ので、パネルを見ても分からず、
+ * 音を止める場所を探す羽目になっていた。ここが唯一それを言う。
  *
- * 再生ボタンは**見えているプレイヤーの直下**にある（`transport-bar.tsx`）。
- * 一度ここに置いたが、映像の道具で再生ボタンが画面の最下段にあるのは
- * 探す場所として素直ではない（制作者の指摘）。音量は作業中に何度も触るものでは
- * ないので、画面の端に 1 つあれば足りる。
- *
- * 鳴っている場所はここが言う。**裏のタブでも鳴り続ける**ので、パネルを見ても
- * 分からず、音を止める場所を探す羽目になっていた。
+ * 再生ボタンは**見えているプレイヤーの直下**（`transport-bar.tsx`）、
+ * 音量は**上の帯の右**（`volume-control.tsx`）。画面の最下段はどちらの定位置でもない。
  */
-const PlaybackControls = ({
-  transport,
-}: {
-  readonly transport: WorkbenchTransport
-}) => {
-  const { volume, muted, setVolume, toggleMute } = usePlaybackVolume()
-  const playing = transport.playing && transport.owner !== null
-
+const PlaybackControls = ({ transport }: { readonly transport: WorkbenchTransport }) => {
+  if (!transport.playing || transport.owner === null) return null
   return (
-    <span className="flex items-center gap-1.5">
-      {playing && transport.owner !== null && (
-        <span className="text-accent">
-          {`▶ ${TRANSPORT_OWNER_LABELS[transport.owner]} ${formatClock(transport.currentSec)}`}
-        </span>
-      )}
-      <button
-        type="button"
-        aria-pressed={muted}
-        aria-label={muted ? '消音を解除' : '消音'}
-        title={muted ? '消音を解除' : '消音'}
-        onClick={toggleMute}
-        className="inline-flex h-6 min-w-6 items-center justify-center rounded hover:bg-surface-2 hover:text-text"
-      >
-        {muted ? '🔇' : '🔊'}
-      </button>
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.01}
-        value={volume}
-        aria-label="音量"
-        aria-valuetext={describeVolume(volume, muted)}
-        onChange={(event) => {
-          // 消音したまま音量を動かしたら、鳴らしたいということ。消音を解く。
-          if (muted) toggleMute()
-          setVolume(Number.parseFloat(event.target.value))
-        }}
-        className="h-1 w-20 accent-accent"
-      />
+    <span className="text-accent">
+      {`▶ ${TRANSPORT_OWNER_LABELS[transport.owner]} ${formatClock(transport.currentSec)}`}
     </span>
   )
 }

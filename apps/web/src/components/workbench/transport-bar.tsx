@@ -33,8 +33,16 @@ export const TransportBar = ({ owner, durationSec = null }: TransportBarProps) =
       ? TRANSPORT_OWNER_LABELS[transport.owner]
       : null
 
+  /**
+   * **ボタンは絵の真下の中央。** 左端に寄せると、絵の中心を見ている目から遠い。
+   * 3 列にして中の列だけを中央に置く（左右に何を置いてもボタンの位置は動かない）。
+   */
   return (
-    <div className="flex shrink-0 items-center gap-2 border-t border-line bg-surface px-2 py-1">
+    <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-line bg-surface px-2 py-1">
+      {/* 鳴らしているのが別のパネルなら言う。無言だと壊れていると読まれる。 */}
+      <span className="justify-self-start text-xs text-accent">
+        {elsewhere === null ? '' : `${elsewhere} が再生中`}
+      </span>
       <button
         type="button"
         aria-pressed={playing}
@@ -42,11 +50,11 @@ export const TransportBar = ({ owner, durationSec = null }: TransportBarProps) =
         onClick={() => {
           transportControls.togglePlayback(owner)
         }}
-        className="inline-flex h-7 min-w-9 items-center justify-center rounded bg-accent text-base text-accent-fg hover:bg-accent/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        className="inline-flex h-7 min-w-10 items-center justify-center rounded bg-accent text-base text-accent-fg hover:bg-accent/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
       >
         {playing ? '⏸' : '▶'}
       </button>
-      <span className="font-mono text-sm tabular-nums text-text">
+      <span className="justify-self-end font-mono text-sm tabular-nums text-text">
         {formatClock(transport.currentSec)}
         {durationSec !== null && (
           <>
@@ -55,8 +63,6 @@ export const TransportBar = ({ owner, durationSec = null }: TransportBarProps) =
           </>
         )}
       </span>
-      {/* 鳴らしているのが別のパネルなら言う。無言だと壊れていると読まれる。 */}
-      {elsewhere !== null && <span className="text-xs text-accent">{`${elsewhere} が再生中`}</span>}
     </div>
   )
 }

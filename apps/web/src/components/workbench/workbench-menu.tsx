@@ -7,6 +7,7 @@ import { MenuBar } from '@/components/workbench/menu-bar'
 import { undoConfirmMessage, type UndoState } from '@/components/workbench/use-edit-history'
 import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
 import { useSelectedShot, useWorkbench } from '@/components/workbench/workbench-context'
+import { VolumeControl } from '@/components/workbench/volume-control'
 import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
@@ -230,6 +231,8 @@ export const WorkbenchMenu = ({
         onSelect={select}
         trailing={
           <>
+            {/* 音量は作業モードの左。以前はステータスバーにあり、目が行かなかった。 */}
+            <VolumeControl />
             <div
               role="group"
               aria-label="作業モード"

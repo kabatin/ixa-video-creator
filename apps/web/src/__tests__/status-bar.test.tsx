@@ -125,9 +125,13 @@ describe('StatusBar', () => {
       expect(screen.queryByRole('button', { name: '再生' })).toBeNull()
     })
 
-    it('音量はここにひとつだけある', () => {
+    /**
+     * 音量もここには無い。**上の帯の右**（`volume-control.tsx`）。
+     * 画面の最下段は再生ボタンの定位置でも音量の定位置でもない。
+     */
+    it('音量はここには無い', () => {
       renderWithPrefs(<StatusBar project={aProject} shotCount={3} live={live} transport={stopped} renderWatch={idleRenders} loadErrors={[]} />)
-      expect(screen.getAllByLabelText('音量')).toHaveLength(1)
+      expect(screen.queryByLabelText('音量')).toBeNull()
     })
 
     it('カッターが鳴っていればその名前と位置を出す', () => {

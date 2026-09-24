@@ -171,10 +171,10 @@ const CompareBoard = ({ compare, labelA, labelB }: CompareBoardProps) => {
           label={labelA}
           take={compare.a}
           span={span}
-          currentSec={currentSec}
-          seek={seek}
-          playing={playing}
-          loop={loop}
+            currentSec={currentSec}
+            seek={seek}
+            playing={playing}
+            loop={loop}
           // **位置を報告するのは A だけ。** 2 つが報告し合うと往復が戻る（L-023）。
           onFrame={setCurrentSec}
           onPlayingChange={setPlaying}
@@ -243,19 +243,27 @@ const MonitorColumn = ({
 }: MonitorColumnProps) => (
   <section aria-label={label} className="flex min-h-0 flex-col gap-1">
     <h3 className="shrink-0 text-xs font-medium text-muted">{label}</h3>
-    <ProgramMonitor
-      // 横に 2 枚並ぶが、縦もパネルに収める。幅だけで決めるとペインを縮めたとき下へはみ出す。
-      fit="contain"
-      document={take.document}
+    {/**
+      * **絵の高さはここで決める。** `fit="contain"` は入れ物の高さが決まっていることを
+      * 前提にしている。親から高さが降ってこない置き方をすると `100cqh` の相手が無くなり、
+      * コンポジションの実寸（1920×1080）で描かれて画面の外へ出る（実際に出た）。
+      * 上下を切って、狭い窓でも 2 枚が横に並んだまま見えるようにする。
+      */}
+    <div className="h-[clamp(9rem,26vh,18rem)] min-h-0">
+      <ProgramMonitor
+        // 横に 2 枚並ぶが、縦もこの枠に収める。幅だけで決めると下へはみ出す。
+        fit="contain"
+        document={take.document}
       currentSec={currentSec}
       seek={seek}
       playing={playing}
-      inSec={span.startSec}
-      outSec={spanEndSec(span)}
+        inSec={span.startSec}
+        outSec={spanEndSec(span)}
       loop={loop}
-      onFrame={onFrame}
-      onPlayingChange={onPlayingChange}
-      onError={onError}
-    />
+        onFrame={onFrame}
+        onPlayingChange={onPlayingChange}
+        onError={onError}
+      />
+    </div>
   </section>
 )
