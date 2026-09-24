@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 export type PanelFrameProps = {
-  /** パネル内ツールバー（高さ 2rem）。無ければ出さない。 */
+  /** パネル内ツールバー（既定 2rem、入り切らなければ折り返して伸びる）。無ければ出さない。 */
   readonly toolbar?: ReactNode
   /** 本文の余白を持たない（表や帯のように端まで使うもの）。 */
   readonly flush?: boolean
@@ -12,11 +12,16 @@ export type PanelFrameProps = {
  * ワークベンチのパネルの殻（UI-WORKBENCH §5.2）。
  * 本文の余白は `.workbench-panel-body` が環境設定の「画面の密度」で決める（p-2 / p-3）。
  * 本文は自前でスクロールする。ドックの区画からははみ出さない。
+ *
+ * ツールバーは**横スクロールさせない**。以前は `h-8` 固定 + `overflow-x-auto` だったので、
+ * 絞り込みが増えたパネル（Shot 一覧）では帯の中に横スクロールバーが出ていた。
+ * 帯の中のスクロールは見つけにくく、狭いほど押す的も小さくなる。
+ * 入り切らなければ折り返して、帯のほうが伸びる。
  */
 export const PanelFrame = ({ toolbar, flush = false, children }: PanelFrameProps) => (
   <div className="flex h-full flex-col bg-bg text-text">
     {toolbar !== undefined && (
-      <div className="flex h-8 shrink-0 items-center gap-2 overflow-x-auto border-b border-line bg-surface px-2 text-sm">
+      <div className="flex min-h-8 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-surface px-2 py-1 text-sm">
         {toolbar}
       </div>
     )}

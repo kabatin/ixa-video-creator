@@ -60,9 +60,15 @@ export const PANEL_SPECS: Readonly<Record<PanelId, PanelSpec>> = Object.freeze({
   assets: { title: '素材ツリー', area: 'left' },
 })
 
-/** 区画の幅（px）。1440×900 で中央 ≈ 880px になる値（§5.3）。 */
+/**
+ * 区画の幅（px）。1440×900 で中央 ≈ 840px になる値（§5.3）。
+ *
+ * 右は 320 だった。Shot 一覧の表は 7 列（選択 / # / サムネイル / コード / 尺 / 拍 / 状態）で、
+ * いちばん長い状態ラベル「採用済み」が出ると 344px 要る。320 のままだと**既定の幅で
+ * 横スクロールバーが出る**。列を足したらこの数字を見直すこと。
+ */
 export const LEFT_WIDTH_PX = 240
-export const SIDE_WIDTH_PX = 320
+export const SIDE_WIDTH_PX = 360
 
 /**
  * 区画に初めて置くときの位置。中央上を起点に、下・右・左へ広げる。
@@ -161,6 +167,19 @@ export type SizableDock = {
     | undefined
 }
 
+/** 区画の下限を決める口。窓が狭くなったときに、どこから先を削らせないかを決める。 */
+export type ConstrainableDock = {
+  readonly getPanel: (
+    id: string,
+  ) =>
+    | {
+        readonly group: {
+          readonly api: { readonly setConstraints: (c: { minimumWidth?: number }) => void }
+        }
+      }
+    | undefined
+}
+
 /** タブ名を書き換える口。保存した配置を戻したあとに当てる。 */
 export type RetitlableDock = {
   readonly getPanel: (
@@ -191,6 +210,18 @@ export const retitlePanels = (api: RetitlableDock): void => {
 export const sizeDefaultAreas = (api: SizableDock): void => {
   api.getPanel(firstOfArea('left'))?.group.api.setSize({ width: LEFT_WIDTH_PX })
   api.getPanel(firstOfArea('side'))?.group.api.setSize({ width: SIDE_WIDTH_PX })
+}
+
+/**
+ * 区画を縮めてよい下限。**保存した配置にも当てる**ので `sizeDefaultAreas` とは別にする。
+ *
+ * 窓を狭めるとドックは全区画を比例して縮める。右が下限なしだと Shot 一覧の表
+ * （最小 344px）より狭くなり、**表の中に横スクロールバーが出る**。
+ * 実際 1024px の窓で右が 256px まで潰れていた。狭くなったぶんは中央が引き受ける。
+ */
+export const constrainAreas = (api: ConstrainableDock): void => {
+  api.getPanel(firstOfArea('left'))?.group.api.setConstraints({ minimumWidth: LEFT_WIDTH_PX })
+  api.getPanel(firstOfArea('side'))?.group.api.setConstraints({ minimumWidth: SIDE_WIDTH_PX })
 }
 
 /**

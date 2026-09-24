@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { MenuBar } from '@/components/workbench/menu-bar'
+import { APP_NAME } from '@/lib/app-name'
 import { buildMenus, type MenuItem } from '@/lib/menu-model'
 
 /** メニューバー（UI-WORKBENCH §4 / §10）。← → ↑ ↓ Esc の操作と aria-expanded。 */
@@ -16,7 +17,7 @@ describe('MenuBar', () => {
       .getAllByRole('menuitem')
       .filter((element) => element.getAttribute('tabindex') === '0')
     expect(tabbable).toHaveLength(1)
-    expect(tabbable[0]).toHaveTextContent('iXA')
+    expect(tabbable[0]).toHaveTextContent(APP_NAME)
   })
 
   it('↓ で開いて先頭の項目へ、aria-expanded が立つ', () => {
@@ -51,8 +52,8 @@ describe('MenuBar', () => {
 
   it('閉じている間の ← → は見出しの間を動くだけ', () => {
     render(<MenuBar menus={menus} onSelect={vi.fn()} />)
-    top('iXA').focus()
-    fireEvent.keyDown(top('iXA'), { key: 'ArrowLeft' })
+    top(APP_NAME).focus()
+    fireEvent.keyDown(top(APP_NAME), { key: 'ArrowLeft' })
     expect(document.activeElement).toBe(top('ヘルプ'))
     expect(screen.queryByRole('menu')).toBeNull()
   })

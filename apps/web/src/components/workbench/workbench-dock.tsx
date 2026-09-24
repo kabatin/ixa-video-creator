@@ -24,6 +24,7 @@ import {
   addDefaultPanels,
   focusPanel,
   readStoredWorkbenchLayout,
+  constrainAreas,
   retitlePanels,
   sizeDefaultAreas,
   writeWorkbenchLayout,
@@ -108,6 +109,9 @@ export const WorkbenchDock = ({ projectId, query, onReady, onNotice }: Workbench
 
     // 保存した配置はタブ名も持っている。パネルを改名しても古い名前が残るので当て直す。
     retitlePanels(api)
+
+    // 窓を狭めたときに潰されない下限。保存した配置にも当てる。
+    constrainAreas(api)
 
     // URL で指定されたタブを前に出す。指定の無い区画は保存した配置のまま。
     ;[query.main, query.bottom, query.side].forEach((panel) => {

@@ -34,7 +34,7 @@ describe('一覧のセル', () => {
     expect(alignmentCellText(view('on_downbeat', 0))).toBe(alignmentMark('on_downbeat'))
   })
 
-  /** 単位は列の見出し「拍」と title が持つ。右ペインは 320px で、列を増やすと状態が見切れる。 */
+  /** 単位は列の見出し「拍」と title が持つ。右ペインは 360px しかないので、値は短く保つ。 */
   it('ズレているものだけ秒を添える（単位はセルに書かない）', () => {
     expect(alignmentCellText(view('off_beat', 0.184))).toContain('+0.18')
     expect(alignmentCellText(view('near', -0.052))).toContain('-0.05')

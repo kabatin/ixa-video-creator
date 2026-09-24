@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { APP_NAME } from '@/lib/app-name'
 import {
   EXTRA_SHORTCUTS,
   buildMenus,
@@ -131,7 +132,7 @@ describe('行き先', () => {
 
   it('§4 の 8 メニューがこの順で並ぶ', () => {
     expect(menus.map((menu) => menu.label)).toEqual([
-      'iXA',
+      APP_NAME,
       'ファイル',
       '編集',
       '表示',

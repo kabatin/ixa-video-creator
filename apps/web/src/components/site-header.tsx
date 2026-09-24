@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { PreferencesButton } from '@/components/preferences-button'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { APP_NAME_ACCENT, APP_NAME_REST } from '@/lib/app-name'
 import { SITE_NAV_ENTRIES } from '@/lib/site-nav'
 
 /**
@@ -19,7 +20,8 @@ export const SiteHeader = () => (
         href="/"
         className="text-xl font-bold tracking-tight text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
       >
-        <span className="text-accent">iXA</span> Video Creator
+        <span className="text-accent">{APP_NAME_ACCENT}</span>
+        {APP_NAME_REST}
       </Link>
       <span aria-hidden className="h-5 w-px shrink-0 bg-line" />
       {SITE_NAV_ENTRIES.map((entry) => (

@@ -1,3 +1,4 @@
+import { APP_NAME } from '@/lib/app-name'
 import { NEW_PROJECT_HREF, SITE_NAV_ENTRIES } from '@/lib/site-nav'
 import type { PanelId } from '@/lib/workbench-layout'
 
@@ -166,7 +167,7 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
   return [
     {
       id: 'app',
-      label: 'iXA',
+      label: APP_NAME,
       items: [
         ...SITE_NAV_ENTRIES.map((entry) => item(entry.id, entry.label, href(entry.href))),
         item('preferences', '環境設定…', dialog('preferences'), { shortcut: '⌘,' }),

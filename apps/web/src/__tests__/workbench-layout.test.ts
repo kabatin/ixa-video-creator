@@ -77,10 +77,10 @@ describe('既定配置', () => {
     expect(byId.get('assets')?.position).toEqual({ direction: 'left' })
   })
 
-  it('右は 320px、左は 240px', () => {
+  it('右は 360px、左は 240px', () => {
     expect(byId.get('shots')?.initialWidth).toBe(SIDE_WIDTH_PX)
     expect(byId.get('assets')?.initialWidth).toBe(LEFT_WIDTH_PX)
-    expect(SIDE_WIDTH_PX).toBe(320)
+    expect(SIDE_WIDTH_PX).toBe(360)
     expect(LEFT_WIDTH_PX).toBe(240)
   })
 
@@ -194,7 +194,7 @@ describe('保存', () => {
 })
 
 describe('sizeDefaultAreas', () => {
-  it('左 240 / 右 320 に揃える', () => {
+  it('左 240 / 右 360 に揃える', () => {
     const sizes = new Map<string, number | undefined>()
     const dock = {
       getPanel: (id: string) => ({
@@ -208,6 +208,6 @@ describe('sizeDefaultAreas', () => {
       }),
     }
     sizeDefaultAreas(dock)
-    expect(sizes).toEqual(new Map([['assets', 240], ['shots', 320]]))
+    expect(sizes).toEqual(new Map([['assets', 240], ['shots', 360]]))
   })
 })

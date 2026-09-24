@@ -188,7 +188,7 @@ export const alignmentCellText = (view: ShotBeatAlignmentView | undefined): stri
   const mark = alignmentMark(view.alignment)
   if (view.driftSec === null) return mark
   if (view.alignment === 'on_beat' || view.alignment === 'on_downbeat') return mark
-  // 列が狭い（右ペインは 320px）。単位は列の見出し「拍」と title が持つ。
+  // 列が狭い（右ペインは 360px）。単位は列の見出し「拍」と title が持つ。
   const sign = view.driftSec >= 0 ? '+' : ''
   return `${mark}${sign}${view.driftSec.toFixed(2)}`
 }

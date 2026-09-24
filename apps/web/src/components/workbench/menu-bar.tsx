@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
+import { APP_NAME_ACCENT, APP_NAME_REST } from '@/lib/app-name'
 import type { Menu, MenuItem } from '@/lib/menu-model'
 
 export type MenuBarProps = {
@@ -175,11 +176,21 @@ export const MenuBar = ({ menus, onSelect, trailing }: MenuBarProps) => {
                 onKeyDown={(event) => {
                   onTopKeyDown(event, index)
                 }}
-                className={`h-6 rounded px-2 ${index === 0 ? 'font-semibold text-accent' : 'text-text'} ${
+                className={`h-6 shrink-0 whitespace-nowrap rounded px-2 ${
+                  index === 0 ? 'font-bold text-text' : 'text-text'
+                } ${
                   expanded ? 'bg-surface-2' : 'hover:bg-surface-2'
                 } focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus`}
               >
-                {menu.label}
+                {/* アプリ名だけはヘッダと同じ二色にする。帯が低いので大きさは変えない。 */}
+                {index === 0 ? (
+                  <>
+                    <span className="text-accent">{APP_NAME_ACCENT}</span>
+                    {APP_NAME_REST}
+                  </>
+                ) : (
+                  menu.label
+                )}
               </button>
               {expanded && (
                 <div
