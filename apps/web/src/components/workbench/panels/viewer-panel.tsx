@@ -3,7 +3,6 @@
 import type {
   BrandAsset,
   CharacterId,
-  CharacterIdentityImage,
   CharacterLookId,
   CharacterLookImage,
   Location,
@@ -13,6 +12,7 @@ import type {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent, ReactNode } from 'react'
 import { MediaImage } from '@/components/media-image'
+import { ConfirmButton } from '@/components/ui/confirm-button'
 import { WaveformCanvas } from '@/components/waveform-canvas'
 import { useAssets } from '@/components/workbench/asset-store'
 import { acceptsImages, useImageAttach } from '@/components/workbench/use-image-attach'
@@ -21,9 +21,12 @@ import { PanelEmpty, PanelFrame, PanelNotice } from '@/components/workbench/pane
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import { droppedFileKind } from '@/lib/asset-actions'
+import { identityRoleLabel } from '@/lib/identity-images'
+import { lookRoleLabel } from '@/lib/look-images'
 import type { WireMusicAnalysis } from '@/lib/music-api'
 import { fetchWaveformPeaks, type WaveformPeaksResult } from '@/lib/waveform-api'
 import { sectionBoundaries } from '@/lib/waveform-draw'
+import { WORDING, deleteConfirmMessage } from '@/lib/wording'
 import { INSPECTED_LABELS, isAssetSelection } from '@/lib/workbench-selection'
 
 /**
@@ -136,9 +139,12 @@ const Gallery = ({
             alt={item.caption}
             className="aspect-square w-full object-cover"
           />
-          <div className="flex items-center gap-1 px-1.5 py-1 text-xs text-muted">
-            <span className="min-w-0 flex-1 truncate">{item.caption}</span>
-            {item.actions}
+          <div className="px-1.5 py-1 text-xs text-muted">
+            <span className="block truncate">{item.caption}</span>
+            {/* 確認は同じカードの中に開く。押した画像と確認文が離れると、別の画像を消す。 */}
+            {item.actions !== undefined && (
+              <div className="mt-1 flex flex-wrap items-center gap-1">{item.actions}</div>
+            )}
           </div>
         </li>
       ))}
@@ -174,14 +180,42 @@ const useReloadable = <T,>(load: () => Promise<T>, key: string) => {
   return { ...value, reload }
 }
 
-const IDENTITY_ROLE_LABELS: Readonly<Record<CharacterIdentityImage['role'], string>> = {
-  four_view: '四面図',
-  face_front: '顔（正面）',
-  face_side: '顔（横）',
-  face_three_quarter: '顔（斜め）',
-  full_body: '全身',
-  profile: 'プロフィール',
+type ActionStatus = { readonly tone: 'info' | 'danger'; readonly text: string }
+
+/**
+ * 画像に対する操作の進み具合と失敗を出す。**`ImageDrop` の `status` と同じ作法**で、
+ * 新しい仕組みは作らない。
+ *
+ * 大事なのは失敗したときで、**一覧には何もしない**（読み直しは成功したときだけ）。
+ * 以前は `.catch` が無く、通信が落ちると unhandled rejection になって画面は無反応だった。
+ * 利用者は消えたのか分からず押し直し、実は成功していた場合に 2 枚目を消していた。
+ * 文面は `describeForPerson` を通す（`describeError` は URL とレスポンス本文をそのまま出す）。
+ */
+const useActionStatus = () => {
+  const [status, setStatus] = useState<ActionStatus | null>(null)
+  const run = useCallback(
+    (
+      labels: { readonly pending: string; readonly failed: string },
+      action: () => Promise<unknown>,
+      onDone: () => void,
+    ): void => {
+      setStatus({ tone: 'info', text: labels.pending })
+      action()
+        .then(() => {
+          setStatus(null)
+          onDone()
+        })
+        .catch((cause: unknown) => {
+          setStatus({ tone: 'danger', text: `${labels.failed}: ${describeForPerson(cause)}` })
+        })
+    },
+    [],
+  )
+  return { status, run }
 }
+
+const ActionNotice = ({ status }: { readonly status: ActionStatus | null }) =>
+  status === null ? null : <PanelNotice tone={status.tone}>{status.text}</PanelNotice>
 
 const CharacterView = ({ characterId }: { readonly characterId: CharacterId }) => {
   const api = useMemo(() => createApiClient(), [])
@@ -190,6 +224,7 @@ const CharacterView = ({ characterId }: { readonly characterId: CharacterId }) =
     (c) => c.id === characterId,
   )
   const images = useReloadable(() => api.listIdentityImages(characterId), characterId)
+  const action = useActionStatus()
 
   return (
     <div className="space-y-4">
@@ -201,38 +236,54 @@ const CharacterView = ({ characterId }: { readonly characterId: CharacterId }) =
         {images.error !== null && (
           <PanelNotice tone="danger">{`識別画像を読めません: ${images.error}`}</PanelNotice>
         )}
+        <ActionNotice status={action.status} />
         <Gallery
-          items={(images.data ?? []).map((image) => ({
-            key: image.id,
-            mediaAssetId: image.mediaAssetId,
-            caption: `${IDENTITY_ROLE_LABELS[image.role]}${image.isPrimary ? '・主' : ''}`,
-            marked: image.isPrimary,
-            actions: (
-              <>
-                {!image.isPrimary && (
-                  <button
-                    type="button"
-                    className="underline hover:text-text"
-                    onClick={() => {
-                      void api.setPrimaryIdentityImage(image.id).then(images.reload)
+          items={(images.data ?? []).map((image) => {
+            // 文面は旧画面（`identity-image-grid.tsx`）と同じにする。
+            // 主画像を消すとその role の参照が無くなるので、そこまで書く。
+            const roleLabel = identityRoleLabel(image.role)
+            const target = image.isPrimary ? `${roleLabel} の主画像` : `${roleLabel} の画像`
+            return {
+              key: image.id,
+              mediaAssetId: image.mediaAssetId,
+              caption: `${roleLabel}${image.isPrimary ? '・主' : ''}`,
+              marked: image.isPrimary,
+              actions: (
+                <>
+                  {!image.isPrimary && (
+                    <button
+                      type="button"
+                      className="underline hover:text-text"
+                      onClick={() => {
+                        action.run(
+                          { pending: '主にしています…', failed: '主にできませんでした' },
+                          () => api.setPrimaryIdentityImage(image.id),
+                          images.reload,
+                        )
+                      }}
+                    >
+                      主にする
+                    </button>
+                  )}
+                  <ConfirmButton
+                    size="sm"
+                    label={`${WORDING.delete}（${roleLabel}）`}
+                    message={deleteConfirmMessage(target)}
+                    onConfirm={() => {
+                      action.run(
+                        {
+                          pending: `${target}を削除しています…`,
+                          failed: `${target}を削除できませんでした`,
+                        },
+                        () => api.removeIdentityImage(image.id),
+                        images.reload,
+                      )
                     }}
-                  >
-                    主にする
-                  </button>
-                )}
-                <button
-                  type="button"
-                  aria-label="この画像を外す"
-                  className="hover:text-danger"
-                  onClick={() => {
-                    void api.removeIdentityImage(image.id).then(images.reload)
-                  }}
-                >
-                  ✕
-                </button>
-              </>
-            ),
-          }))}
+                  />
+                </>
+              ),
+            }
+          })}
         />
       </ImageDrop>
       {(looks.get(characterId) ?? []).map((look) => (
@@ -254,30 +305,43 @@ const LookImages = ({ lookId }: { readonly lookId: CharacterLookId }) => {
     () => api.listLookImages(lookId),
     lookId,
   )
+  const action = useActionStatus()
   return (
     <>
       {images.error !== null && (
         <PanelNotice tone="danger">{`Look の画像を読めません: ${images.error}`}</PanelNotice>
       )}
+      <ActionNotice status={action.status} />
       <Gallery
-        items={(images.data ?? []).map((image) => ({
-          key: image.id,
-          mediaAssetId: image.mediaAssetId,
-          caption: image.role,
-          marked: image.isPrimary,
-          actions: (
-            <button
-              type="button"
-              aria-label="この画像を外す"
-              className="hover:text-danger"
-              onClick={() => {
-                void api.removeLookImage(image.id).then(images.reload)
-              }}
-            >
-              ✕
-            </button>
-          ),
-        }))}
+        items={(images.data ?? []).map((image) => {
+          // 文面は旧画面（`look-image-grid.tsx`）と同じ。
+          // canonical frame かどうかはここでは分からないので、それを名乗らない。
+          const roleLabel = lookRoleLabel(image.role)
+          const target = `${roleLabel} の画像`
+          return {
+            key: image.id,
+            mediaAssetId: image.mediaAssetId,
+            caption: roleLabel,
+            marked: image.isPrimary,
+            actions: (
+              <ConfirmButton
+                size="sm"
+                label={`${WORDING.delete}（${roleLabel}）`}
+                message={deleteConfirmMessage(target)}
+                onConfirm={() => {
+                  action.run(
+                    {
+                      pending: `${target}を削除しています…`,
+                      failed: `${target}を削除できませんでした`,
+                    },
+                    () => api.removeLookImage(image.id),
+                    images.reload,
+                  )
+                }}
+              />
+            ),
+          }
+        })}
       />
     </>
   )
@@ -298,6 +362,7 @@ const LookView = ({ lookId }: { readonly lookId: CharacterLookId }) => {
 
 const LocationView = ({ id }: { readonly id: Location['id'] }) => {
   const { locations, actions } = useAssets()
+  const action = useActionStatus()
   const location = (locations.state === 'ready' ? locations.value : []).find(
     (item) => item.id === id,
   )
@@ -308,26 +373,45 @@ const LocationView = ({ id }: { readonly id: Location['id'] }) => {
       {location.description !== '' && <p className="text-sm text-muted">{location.description}</p>}
       <ImageDrop onAdded={() => undefined}>
         <h3 className="mb-1 text-xs font-semibold text-muted">参照画像（Shot の生成に渡る）</h3>
+        <ActionNotice status={action.status} />
         <Gallery
-          items={location.referenceAssetIds.map((assetId, index) => ({
-            key: `${assetId}-${String(index)}`,
-            mediaAssetId: assetId,
-            caption: `参照 ${String(index + 1)}`,
-            actions: (
-              <button
-                type="button"
-                aria-label="この画像を外す"
-                className="hover:text-danger"
-                onClick={() => {
-                  void actions.updateLocation(location.id, {
-                    referenceAssetIds: location.referenceAssetIds.filter((_, i) => i !== index),
-                  })
-                }}
-              >
-                ✕
-              </button>
-            ),
-          }))}
+          items={location.referenceAssetIds.map((assetId, index) => {
+            /**
+             * ここだけは実体が**解除**。`referenceAssetIds` から 1 件抜くだけで、
+             * MediaAsset も他のロケーションからの参照も残る
+             * （`packages/domain/src/asset/library.ts` の `Location`）。
+             * だから「削除」とも「元に戻せません」とも言わない。
+             */
+            const target = `参照 ${String(index + 1)}`
+            return {
+              key: `${assetId}-${String(index)}`,
+              mediaAssetId: assetId,
+              caption: target,
+              actions: (
+                <ConfirmButton
+                  size="sm"
+                  label={`${WORDING.unlink}（${target}）`}
+                  message={`${target}をこのロケーションから${WORDING.unlink}します。画像そのものは消えません。`}
+                  confirmLabel={WORDING.unlink}
+                  onConfirm={() => {
+                    action.run(
+                      {
+                        pending: `${target}を${WORDING.unlink}しています…`,
+                        failed: `${target}を${WORDING.unlink}できませんでした`,
+                      },
+                      () =>
+                        actions.updateLocation(location.id, {
+                          referenceAssetIds: location.referenceAssetIds.filter(
+                            (_, i) => i !== index,
+                          ),
+                        }),
+                      () => undefined,
+                    )
+                  }}
+                />
+              ),
+            }
+          })}
         />
       </ImageDrop>
     </div>
