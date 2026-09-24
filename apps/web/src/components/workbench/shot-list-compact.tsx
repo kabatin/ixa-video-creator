@@ -5,6 +5,12 @@ import { useEffect, useRef } from 'react'
 import type { DragEvent, MouseEvent } from 'react'
 import { ShotPoster } from '@/components/shot-poster'
 import type { AssetDropState } from '@/components/workbench/use-asset-drop'
+import {
+  alignmentCellText,
+  alignmentTextClass,
+  describeDrift,
+  type ShotBeatAlignmentView,
+} from '@/lib/beat-alignment-view'
 import { formatDuration } from '@/lib/format-time'
 import { shotStatusClassName, shotStatusLabel } from '@/lib/shot-display'
 import type { HeaderCheckboxState, ShotSelection } from '@/lib/shot-bulk'
@@ -33,6 +39,14 @@ export type ShotListCompactProps = {
   readonly dropState?: (shotId: ShotId) => AssetDropState
   /** 時間順での番号（1 始まり）。並べ替えても番号は Shot に付いたまま。 */
   readonly numberOf: (shotId: ShotId) => number
+  /**
+   * 拍とのズレ。**どれが・どれだけズレているかは一覧でしか見比べられない。**
+   * 集計の 1 行（「27 件中 16 件が外れています」）だけでは、直す先が分からなかった。
+   * 拍が分かっていないときは空の Map を渡す（列ごと出さない）。
+   */
+  readonly alignmentOf: (shotId: ShotId) => ShotBeatAlignmentView | undefined
+  /** 拍の列を出すか。楽曲や解析が無いときは false。 */
+  readonly showBeat: boolean
 }
 
 const CELL = 'px-1.5 align-middle'
@@ -65,6 +79,8 @@ export const ShotListCompact = ({
   dropHandlers,
   dropState,
   numberOf,
+  alignmentOf,
+  showBeat,
 }: ShotListCompactProps) => {
   const headerRef = useRef<HTMLInputElement>(null)
 
@@ -130,6 +146,11 @@ export const ShotListCompact = ({
             コード
           </th>
           {sortHeader('duration', 'right')}
+          {showBeat && (
+            <th scope="col" className={CELL} title="Shot の頭が拍に乗っているか">
+              拍
+            </th>
+          )}
           {sortHeader('status')}
         </tr>
       </thead>
@@ -198,6 +219,19 @@ export const ShotListCompact = ({
               <td className={`${CELL} text-right tabular-nums text-muted`}>
                 {formatDuration(shot.durationSec)}
               </td>
+              {showBeat && (
+                <td className={`${CELL} whitespace-nowrap tabular-nums`}>
+                  {(() => {
+                    const view = alignmentOf(shot.id)
+                    if (view === undefined) return <span className="text-muted">—</span>
+                    return (
+                      <span className={alignmentTextClass(view.alignment)} title={describeDrift(view)}>
+                        {alignmentCellText(view)}
+                      </span>
+                    )
+                  })()}
+                </td>
+              )}
               <td className={CELL}>
                 <span
                   className={`inline-block whitespace-nowrap rounded px-1 text-xs ring-1 ring-inset ${shotStatusClassName(shot.status)}`}

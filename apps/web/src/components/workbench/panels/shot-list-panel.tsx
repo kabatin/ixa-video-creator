@@ -16,6 +16,11 @@ import { PanelEmpty, PanelFrame, PanelNotice } from '@/components/workbench/pane
 import { Button } from '@/components/ui/button'
 import { SHOT_SIZE_OPTIONS } from '@/lib/camera-options'
 import { MODEL_OPTIONS } from '@/lib/generation-options'
+import {
+  alignmentByShotId,
+  buildShotAlignments,
+  isDrifting,
+} from '@/lib/beat-alignment-view'
 import { toLocationOptions } from '@/lib/location-options'
 import { clearSelection, headerCheckboxState, selectAllVisible, toggleShot } from '@/lib/shot-bulk'
 import { shotStatusLabel } from '@/lib/shot-display'
@@ -37,11 +42,16 @@ const MODEL_CHOICES: readonly BulkModelOption[] = MODEL_OPTIONS.flatMap((option)
  * 絞り込みは状態のチップ。**チェックは絞り込みで隠れても外さない**（隠れた行を黙って対象から外さない）。
  * 一括操作はチェックがあるときだけ、一覧の**上**に出す（下に積むと 27 行の下に沈む）。
  */
+/** 絞り込みの値。状態そのものと、状態ではない「拍ズレ」を 1 つの型で持つ。 */
+const DRIFT_FILTER = 'drift' as const
+type ShotFilter = ShotStatus | typeof DRIFT_FILTER | null
+
 export const ShotListPanel = () => {
   const workbench = useWorkbench()
   const bulk = useBulkActions()
   const drop = useAssetDrop(workbench.notify)
-  const [filter, setFilter] = useState<ShotStatus | null>(null)
+  /** 状態のほかに「拍からズレているもの」でも絞れる。集計の 1 行から直す先へ行けるように。 */
+  const [filter, setFilter] = useState<ShotFilter>(null)
   const [sort, setSort] = useState<{ key: ShotSortKey; direction: SortDirection }>({
     key: 'order',
     direction: 'asc',
@@ -56,14 +66,37 @@ export const ShotListPanel = () => {
       ),
     [shots],
   )
+  /**
+   * 拍とのズレ。判定は `@ixa/domain` の 1 箇所なので、ストーリーボードやタイムラインと必ず一致する。
+   * 楽曲や解析が無いときは null にして列ごと出さない（「—」を並べても読み手に情報が無い）。
+   */
+  const alignments = useMemo(() => {
+    const { analysis, track } = workbench
+    if (shots === null || analysis === null || track === null || analysis.beats.length === 0) {
+      return null
+    }
+    return alignmentByShotId(buildShotAlignments(shots, analysis.beats, analysis.downbeats))
+  }, [shots, workbench.analysis, workbench.track])
+
+  const driftingCount = useMemo(
+    () => (shots ?? []).filter((shot) => isDrifting(alignments?.get(shot.id))).length,
+    [shots, alignments],
+  )
+
   const visible = useMemo(
     () =>
       sortShots(
-        (shots ?? []).filter((shot) => filter === null || shot.status === filter),
+        (shots ?? []).filter((shot) =>
+          filter === null
+            ? true
+            : filter === DRIFT_FILTER
+              ? isDrifting(alignments?.get(shot.id))
+              : shot.status === filter,
+        ),
         sort.key,
         sort.direction,
       ),
-    [shots, filter, sort],
+    [shots, filter, sort, alignments],
   )
   const visibleIds = visible.map((shot) => shot.id)
   const chosen = (shots ?? []).filter((shot) => workbench.checked.has(shot.id))
@@ -80,7 +113,7 @@ export const ShotListPanel = () => {
           },
         ]
 
-  const chip = (value: ShotStatus | null, label: string, count: number) => (
+  const chip = (value: ShotFilter, label: string, count: number) => (
     <button
       key={value ?? 'all'}
       type="button"
@@ -102,6 +135,8 @@ export const ShotListPanel = () => {
       {statusCounts(shots ?? []).map(([status, count]) =>
         chip(status, shotStatusLabel(status), count),
       )}
+      {/* 集計を読むだけで終わらせない。押すとその Shot だけになる。 */}
+      {alignments !== null && driftingCount > 0 && chip(DRIFT_FILTER, '拍ズレ', driftingCount)}
       <span className="ml-auto" />
       <Button size="sm" onClick={() => workbench.openDialog('new-shot')}>
         新規
@@ -164,6 +199,8 @@ export const ShotListPanel = () => {
           busy={bulk.busy}
           sort={sort}
           numberOf={(id) => numbers.get(id) ?? 0}
+          alignmentOf={(id) => alignments?.get(id)}
+          showBeat={alignments !== null}
           onSort={(key) => {
             setSort((current) =>
               current.key === key

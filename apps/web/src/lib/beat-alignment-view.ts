@@ -153,6 +153,45 @@ const TONE_CLASSES: Readonly<Record<BeatAlignmentTone, string>> = {
   muted: 'text-muted',
 }
 
+/**
+ * 一覧に出す短い印。**列は狭いので、乗っているものは点だけにする。**
+ * 6 割が外れている状態で全部に文字を出すと、どれを見ればいいか分からなくなる。
+ */
+const ALIGNMENT_MARKS: Readonly<Record<BeatAlignment, string>> = {
+  on_downbeat: '◎',
+  on_beat: '○',
+  near: '△',
+  off_beat: '✕',
+  no_beats: '—',
+}
+
+export const alignmentMark = (alignment: BeatAlignment): string => ALIGNMENT_MARKS[alignment]
+
+const ALIGNMENT_TEXT: Readonly<Record<BeatAlignment, string>> = {
+  on_downbeat: 'text-ok',
+  on_beat: 'text-ok/70',
+  near: 'text-warn',
+  off_beat: 'text-danger',
+  no_beats: 'text-muted',
+}
+
+export const alignmentTextClass = (alignment: BeatAlignment): string => ALIGNMENT_TEXT[alignment]
+
+/** 一覧のセルに出す 1 行。ズレているものだけ秒を添える（乗っているものに 0.000s と書かない）。 */
+export const alignmentCellText = (view: ShotBeatAlignmentView | undefined): string => {
+  if (view === undefined) return ''
+  const mark = alignmentMark(view.alignment)
+  if (view.driftSec === null) return mark
+  if (view.alignment === 'on_beat' || view.alignment === 'on_downbeat') return mark
+  // 列が狭い（右ペインは 320px）。単位は列の見出し「拍」と title が持つ。
+  const sign = view.driftSec >= 0 ? '+' : ''
+  return `${mark}${sign}${view.driftSec.toFixed(2)}`
+}
+
+/** 拍から外れている（または わずかにズレている）Shot。絞り込みに使う。 */
+export const isDrifting = (view: ShotBeatAlignmentView | undefined): boolean =>
+  view !== undefined && (view.alignment === 'off_beat' || view.alignment === 'near')
+
 export const beatAlignmentToneClass = (tone: BeatAlignmentTone): string => TONE_CLASSES[tone]
 
 export type BeatAlignmentSummary = {
