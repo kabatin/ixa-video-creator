@@ -2,15 +2,14 @@ import {
   CUT_MARK_KEY_HELP,
   COARSE_NUDGE_SEC,
   FINE_NUDGE_SEC,
-  isTypingTarget,
   resolveCutMarkCommand,
   type CutMarkCommand,
 } from '@/lib/cut-marks'
 import { formatDuration } from '@/lib/format-time'
 import {
   KEY_HINTS,
-  isTextEntryTarget,
   keyToPlaybackCommand,
+  resolveKeyOwner,
   type PlaybackCommand,
 } from '@/lib/playback-state'
 
@@ -30,14 +29,28 @@ import {
  * 細かく詰める `,` `.` は区切りと重ならないので、そのまま効く。
  */
 
-/** 判定に要るぶんだけのキーイベント。両モジュールの `KeyEventLike` を同時に満たす形。 */
+/**
+ * 判定に要るぶんだけのキーイベント。両モジュールの `KeyEventLike` を同時に満たす形。
+ *
+ * `role` を持つのは、`role="menuitem"` のようにタグでは分からないボタンを避けるため
+ * （`ownsPlainKeys`）。ここを見ていなかったので、メニュー項目の上の Enter を横取りしていた。
+ */
 export type CutEditorKeyEvent = {
   readonly key: string
   readonly shiftKey: boolean
   readonly altKey: boolean
   readonly ctrlKey: boolean
   readonly metaKey: boolean
-  readonly target: { readonly tagName: string; readonly isContentEditable: boolean } | null
+  readonly target: {
+    readonly tagName: string
+    readonly isContentEditable: boolean
+    readonly role?: string | null
+  } | null
+  /**
+   * フォーカスがこの画面の入れ物の中にあるか。**見えているかではない。**
+   * `closest` を引くのは呼び出し側（`cut-editor.tsx`）で、ここへは真偽値だけが来る。
+   */
+  readonly insideCutEditor: boolean
 }
 
 /** どちらの割り当てが受けたか。画面はこれを見て実行先を選ぶ。 */
@@ -48,11 +61,13 @@ export type CutEditorCommand =
 /**
  * キー 1 打を操作へ変換する。区切りが先、余ったものを再生が受ける。
  *
- * 文字を打っている最中は何も返さない。両モジュールとも自前で見ているが、
- * `keyToPlaybackCommand` は飛び先を受け取らないので**ここで先に見る**。
+ * **まず持ち主を確かめる。** `resolveKeyOwner` はワークベンチ側（`workbench-keys.ts`）と
+ * 同じ関数で、答えは必ず 1 つ。だから同じ 1 打で両方が動くことが構造的に起きない。
+ * 文字を打っている最中とボタンの上はここで落ちる（`keyToPlaybackCommand` は
+ * 飛び先を受け取らないので、見るのは呼ぶ側の責任）。
  */
 export const resolveCutEditorCommand = (event: CutEditorKeyEvent): CutEditorCommand | null => {
-  if (isTypingTarget(event.target) || isTextEntryTarget(event.target)) return null
+  if (resolveKeyOwner(event.target, event.insideCutEditor) !== 'cut-editor') return null
 
   const mark = resolveCutMarkCommand(event)
   if (mark !== null) return { source: 'mark', command: mark }
@@ -87,6 +102,8 @@ const press = (
   ctrlKey: false,
   metaKey: false,
   target: null,
+  // 一覧は「この画面を操作している人」から見た説明。フォーカスは中にある前提で引く。
+  insideCutEditor: true,
 })
 
 /**

@@ -62,10 +62,16 @@ export type KeyEventLike = {
   readonly altKey: boolean
 }
 
-/** キーの飛び先。入力欄かどうかだけを見る。 */
+/**
+ * キーの飛び先。**持ち主を決めるのに要る分だけ。**
+ *
+ * `role` まで見るのは、`role="menuitem"` のように見た目も振る舞いもボタンなのに
+ * タグが `div` の要素があるため。タグだけで判断すると、メニューの上の Space を横取りする。
+ */
 export type KeyTargetLike = {
   readonly tagName?: string
   readonly isContentEditable?: boolean
+  readonly role?: string | null
 }
 
 const TEXT_ENTRY_TAGS: ReadonlySet<string> = new Set(['INPUT', 'TEXTAREA', 'SELECT'])
@@ -80,6 +86,67 @@ export const isTextEntryTarget = (target: KeyTargetLike | null | undefined): boo
   if (!target) return false
   if (target.isContentEditable === true) return true
   return TEXT_ENTRY_TAGS.has((target.tagName ?? '').toUpperCase())
+}
+
+// ---------------------------------------------------------------------------
+// キーの持ち主
+// ---------------------------------------------------------------------------
+
+/**
+ * カット編集の入れ物に付ける目印。
+ *
+ * **DOM を引くのは呼び出し側（フック / 部品）の仕事。** ここは属性の名前だけを持つ。
+ * 名前を両側でベタ書きすると、片方だけ変えたときに誰も気づかない（L-016）。
+ */
+export const CUT_EDITOR_ATTRIBUTE = 'data-cut-editor'
+
+/** `closest` に渡す形。 */
+export const CUT_EDITOR_SELECTOR = `[${CUT_EDITOR_ATTRIBUTE}]`
+
+/** 押すと自分が動く要素。Space や矢印はそちらのもの。 */
+const OWN_KEYS_TAGS: ReadonlySet<string> = new Set(['BUTTON', 'A', 'SUMMARY'])
+const OWN_KEYS_ROLES: ReadonlySet<string> = new Set([
+  'menuitem',
+  'tab',
+  'option',
+  'slider',
+  'checkbox',
+])
+
+/**
+ * その要素が素のキー（Space・矢印・Enter）を自分で使うか。
+ *
+ * **ワークベンチとカット編集の両方がこれを見る。** 片方だけが見ていた頃は、
+ * Tab で「新規」ボタンへ移って Enter を押すと、ボタンは押されずに
+ * 区切りだけが 1 本増えた。
+ */
+export const ownsPlainKeys = (target: KeyTargetLike | null | undefined): boolean => {
+  if (!target) return false
+  if (OWN_KEYS_TAGS.has((target.tagName ?? '').toUpperCase())) return true
+  const role = target.role
+  return typeof role === 'string' && OWN_KEYS_ROLES.has(role)
+}
+
+/** キー 1 打の持ち主。**必ずどれか 1 つ。** 2 つが同時に動くことが構造的に起きない。 */
+export type KeyOwner = 'text-entry' | 'widget' | 'cut-editor' | 'workbench'
+
+/**
+ * キー 1 打を誰が受けるかを決める。**見えているかでは決めない。**
+ *
+ * 見えている ≠ 操作している。既定の配置では「聴きながら切る」が常に見えているので、
+ * 可視で決めるとワークベンチの Space と `←` `→` が開いた直後から一度も効かない。
+ * 逆に狭い画面では可視の判定が常に false になり、1 打で両方が動いていた。
+ *
+ * `insideCutEditor` は**呼び出し側が `CUT_EDITOR_SELECTOR` で `closest` して**渡す。
+ * ここに DOM を持ち込むと、ブラウザ無しで確かめられなくなる。
+ */
+export const resolveKeyOwner = (
+  target: KeyTargetLike | null | undefined,
+  insideCutEditor: boolean,
+): KeyOwner => {
+  if (isTextEntryTarget(target)) return 'text-entry'
+  if (ownsPlainKeys(target)) return 'widget'
+  return insideCutEditor ? 'cut-editor' : 'workbench'
 }
 
 /** 1 秒。波の山をひとつ跨ぐくらい。 */

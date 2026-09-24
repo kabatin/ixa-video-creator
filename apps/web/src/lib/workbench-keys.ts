@@ -1,4 +1,4 @@
-import { isTextEntryTarget, type KeyTargetLike } from '@/lib/playback-state'
+import { isTextEntryTarget, resolveKeyOwner, type KeyTargetLike } from '@/lib/playback-state'
 
 /**
  * ワークベンチの打鍵（UI-WORKBENCH §9 7.2）。**React を含まない。衝突はここ 1 か所で解く**（L-018）。
@@ -13,7 +13,8 @@ import { isTextEntryTarget, type KeyTargetLike } from '@/lib/playback-state'
  * | ← → | 前 / 次の Shot |
  *
  * - **入力欄の中の打鍵は取らない。** ⌘Z は文字の取り消しとしてブラウザに任せる
- * - Space と ← → は「聴きながら切る」が見えている間はそちらに任せる（区切りの操作に使う）
+ * - Space と ← → は**フォーカスが「聴きながら切る」の中にある間だけ**そちらに任せる。
+ *   見えているかでは決めない（見えている ≠ 操作している）。判定は `resolveKeyOwner`
  * - ボタンの上の Space はボタンを押す打鍵。再生に変えない
  */
 export type WorkbenchKeyEvent = {
@@ -22,28 +23,16 @@ export type WorkbenchKeyEvent = {
   readonly ctrlKey: boolean
   readonly shiftKey: boolean
   readonly altKey: boolean
-  readonly target: (KeyTargetLike & { readonly role?: string | null }) | null
-  /** 聴きながら切るが見えていて、自分の打鍵を受けている。 */
-  readonly cutterActive: boolean
+  readonly target: KeyTargetLike | null
+  /**
+   * フォーカスが「聴きながら切る」の中にあるか。**見えているかではない。**
+   * 呼び出し側が `CUT_EDITOR_SELECTOR` で `closest` して渡す。
+   */
+  readonly insideCutEditor: boolean
 }
 
 export type WorkbenchKeyCommand =
   'undo' | 'redo' | 'history' | 'preferences' | 'toggle-play' | 'previous-shot' | 'next-shot'
-
-/** 押すと自分が動く要素。Space や矢印はそちらのもの。 */
-const OWN_KEYS_TAGS: ReadonlySet<string> = new Set(['BUTTON', 'A', 'SUMMARY'])
-const OWN_KEYS_ROLES: ReadonlySet<string> = new Set([
-  'menuitem',
-  'tab',
-  'option',
-  'slider',
-  'checkbox',
-])
-
-const ownsPlainKeys = (target: WorkbenchKeyEvent['target']): boolean =>
-  target !== null &&
-  (OWN_KEYS_TAGS.has((target.tagName ?? '').toUpperCase()) ||
-    (target.role !== null && target.role !== undefined && OWN_KEYS_ROLES.has(target.role)))
 
 export const resolveWorkbenchKey = (event: WorkbenchKeyEvent): WorkbenchKeyCommand | null => {
   if (isTextEntryTarget(event.target)) return null
@@ -58,7 +47,8 @@ export const resolveWorkbenchKey = (event: WorkbenchKeyEvent): WorkbenchKeyComma
   }
 
   if (command || event.altKey || event.shiftKey) return null
-  if (event.cutterActive || ownsPlainKeys(event.target)) return null
+  // 素のキーはフォーカスの持ち主のもの。カット編集・ボタン・入力欄のどれでもないときだけ受ける。
+  if (resolveKeyOwner(event.target, event.insideCutEditor) !== 'workbench') return null
   if (event.key === ' ' || event.key === 'Spacebar') return 'toggle-play'
   if (event.key === 'ArrowLeft') return 'previous-shot'
   if (event.key === 'ArrowRight') return 'next-shot'

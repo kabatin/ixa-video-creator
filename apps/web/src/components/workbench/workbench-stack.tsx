@@ -31,6 +31,11 @@ const STACK: readonly {
   { id: 'inspector', body: <InspectorPanel />, tall: true },
   { id: 'compare', body: <ComparePanel />, tall: true },
   { id: 'preview', body: <PreviewPanel /> },
+  /**
+   * 縦一列では全部が実際に見えているので `visible` は真で正しい。
+   * **キーの持ち主はもう可視では決まらない**（フォーカスが入れ物の中にあるかで決まる）。
+   * 可視で決めていた頃は、ここが常に真・ワークベンチ側が常に偽で、1 打で両方が動いた。
+   */
   { id: 'cutter', body: <CutterPanel visible />, tall: true },
   { id: 'timeline', body: <TimelinePanel />, tall: true },
   { id: 'assets', body: <AssetsPanel /> },

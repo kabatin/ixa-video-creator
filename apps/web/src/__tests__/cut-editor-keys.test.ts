@@ -14,6 +14,10 @@ import { keyToPlaybackCommand } from '@/lib/playback-state'
  * 重なりを解いたことと、**画面に出す説明が実際の動作と一致すること**を固定する。
  */
 
+/**
+ * 既定は「フォーカスがこの画面の中にある」。持ち主の判定そのものは
+ * `key-ownership.test.ts` が持ち、ここは中に居る前提での割り当てを固定する。
+ */
 const press = (
   key: string,
   modifiers: Partial<Omit<CutEditorKeyEvent, 'key' | 'target'>> = {},
@@ -25,6 +29,7 @@ const press = (
   ctrlKey: modifiers.ctrlKey ?? false,
   metaKey: modifiers.metaKey ?? false,
   target,
+  insideCutEditor: modifiers.insideCutEditor ?? true,
 })
 
 /** 両方の割り当てが受け取るキー。ここが重なりの正体。 */
@@ -132,6 +137,32 @@ describe('文字を打っている最中', () => {
     expect(keyToPlaybackCommand(press(' '))).not.toBeNull()
     expect(resolveCutEditorCommand(press(' ', {}, field))).toBeNull()
   })
+})
+
+describe('キーの持ち主', () => {
+  const button = { tagName: 'BUTTON', isContentEditable: false }
+  const menuItem = { tagName: 'DIV', isContentEditable: false, role: 'menuitem' }
+
+  /**
+   * Tab でボタンへ移って Enter を押したら、**ボタンが押されるべき**。
+   * 以前は飛び先が `tagName` と `isContentEditable` しか持たず、
+   * ボタンの上でも区切りが 1 本増えていた（B3）。
+   */
+  it.each([' ', 'Enter'])('ボタンの上の %s は横取りしない', (key) => {
+    expect(resolveCutEditorCommand(press(key, {}, button))).toBeNull()
+  })
+
+  it.each([' ', 'Enter'])('role=menuitem の上の %s も横取りしない', (key) => {
+    expect(resolveCutEditorCommand(press(key, {}, menuItem))).toBeNull()
+  })
+
+  /** 見えていても、操作しているのが別の場所ならこの画面のものではない（B2）。 */
+  it.each([' ', 'Enter', 'ArrowLeft', 'Backspace', 'n'])(
+    'フォーカスが外にあるときの %s は取らない',
+    (key) => {
+      expect(resolveCutEditorCommand(press(key, { insideCutEditor: false }))).toBeNull()
+    },
+  )
 })
 
 describe('修飾キー', () => {

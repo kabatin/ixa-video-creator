@@ -2,17 +2,21 @@
 
 import { useEffect, useRef } from 'react'
 import { useWorkbench } from '@/components/workbench/workbench-context'
+import { CUT_EDITOR_SELECTOR } from '@/lib/playback-state'
 import { neighborShotId, resolveWorkbenchKey } from '@/lib/workbench-keys'
 
 export type WorkbenchKeysOptions = {
   readonly undo: () => void
-  /** 聴きながら切るが見えているか。見えている間は Space と ← → をそちらに任せる。 */
-  readonly cutterActive: () => boolean
 }
 
 /**
  * ワークベンチの打鍵を 1 箇所で受ける（UI-WORKBENCH 7.2）。判定は `workbench-keys.ts`。
  * **ダイアログを開いている間は受けない。** 裏の画面を打鍵で動かさない。
+ *
+ * 「聴きながら切る」へ譲るかは**フォーカスの居場所だけ**で決める。
+ * 見えているかで決めていた頃は、既定の配置で常に見えているため Space と ← → が
+ * 一度も効かず、狭い画面では逆に 1 打で両方が動いた。`closest` を引くのはここで、
+ * `resolveWorkbenchKey` には真偽値だけを渡す（`lib` に DOM を持ち込まない）。
  */
 export const useWorkbenchKeys = (options: WorkbenchKeysOptions): void => {
   const workbench = useWorkbench()
@@ -38,7 +42,7 @@ export const useWorkbenchKeys = (options: WorkbenchKeysOptions): void => {
                 isContentEditable: target.isContentEditable,
                 role: target.getAttribute('role'),
               },
-        cutterActive: opts.cutterActive(),
+        insideCutEditor: target?.closest(CUT_EDITOR_SELECTOR) != null,
       })
       if (command === null) return
       event.preventDefault()
@@ -56,7 +60,10 @@ export const useWorkbenchKeys = (options: WorkbenchKeysOptions): void => {
           current.openDialog('preferences')
           return
         case 'toggle-play':
-          current.transportControls.toggle('monitor')
+          // **鳴っていれば持ち主が誰でも止める。** `toggle('monitor')` だと、裏で
+          // カッターが鳴っているときに「止める」ではなく「プレビューを鳴らし始める」に
+          // なる。まだ誰も鳴っていないときの持ち主だけを渡す。
+          current.transportControls.togglePlayback('monitor')
           return
         case 'previous-shot':
         case 'next-shot': {

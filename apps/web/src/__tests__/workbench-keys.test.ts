@@ -10,7 +10,7 @@ const press = (key: string, options: Partial<WorkbenchKeyEvent> = {}): Workbench
   shiftKey: false,
   altKey: false,
   target: { tagName: 'DIV' },
-  cutterActive: false,
+  insideCutEditor: false,
   ...options,
 })
 
@@ -34,11 +34,23 @@ describe('resolveWorkbenchKey', () => {
     expect(resolveWorkbenchKey(press('ArrowLeft', { target: { isContentEditable: true } }))).toBeNull()
   })
 
-  it('聴きながら切るが見えている間は Space と ← → を任せる', () => {
-    expect(resolveWorkbenchKey(press(' ', { cutterActive: true }))).toBeNull()
-    expect(resolveWorkbenchKey(press('ArrowRight', { cutterActive: true }))).toBeNull()
+  /**
+   * **見えているかではなく、フォーカスの居場所で決める。**
+   * 以前は「聴きながら切るが見えているか」で譲っていたが、既定の配置では常に見えているので
+   * Space と ← → が開いた直後から一度も効かなかった（B2）。持ち主の正は `resolveKeyOwner`。
+   */
+  it('フォーカスが聴きながら切るの中にある間は Space と ← → を任せる', () => {
+    expect(resolveWorkbenchKey(press(' ', { insideCutEditor: true }))).toBeNull()
+    expect(resolveWorkbenchKey(press('ArrowRight', { insideCutEditor: true }))).toBeNull()
     // ⌘Z はワークベンチのもの
-    expect(resolveWorkbenchKey(press('z', { metaKey: true, cutterActive: true }))).toBe('undo')
+    expect(resolveWorkbenchKey(press('z', { metaKey: true, insideCutEditor: true }))).toBe('undo')
+  })
+
+  it('聴きながら切るが見えていても、フォーカスが外なら Space と ← → は効く', () => {
+    expect(resolveWorkbenchKey(press(' ', { insideCutEditor: false }))).toBe('toggle-play')
+    expect(resolveWorkbenchKey(press('ArrowLeft', { insideCutEditor: false }))).toBe(
+      'previous-shot',
+    )
   })
 
   it('ボタンやタブの上の Space / 矢印はその部品のもの', () => {

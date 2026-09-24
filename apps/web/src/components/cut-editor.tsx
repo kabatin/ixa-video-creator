@@ -2,7 +2,15 @@
 
 import type { MusicTrack, ProjectId, Sequence, SequenceId } from '@ixa/domain'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react'
 import { AudioTransport } from '@/components/audio-transport'
 import { CutMarkList } from '@/components/cut-mark-list'
 import { CutWaveformOverlay } from '@/components/cut-waveform-overlay'
@@ -56,6 +64,10 @@ import { fullView, pixelsPerSecond, sectionBoundaries, type ViewRange } from '@/
 
 const NO_SEQUENCE_VALUE = 'none'
 
+/** 自分でフォーカスを受ける物。ここを押したときは入れ物が横取りしない。 */
+const FOCUSABLE_SELECTOR =
+  'a[href], button, input, select, textarea, [contenteditable="true"], [role="button"]'
+
 export type CutEditorProps = {
   readonly projectId: ProjectId
   readonly track: MusicTrack
@@ -64,9 +76,12 @@ export type CutEditorProps = {
   /** 「拍に吸着」の初期値。環境設定の既定を渡す（UI-WORKBENCH §3.4）。 */
   readonly initialSnapEnabled?: boolean
   /**
-   * 画面全体の打鍵を受けるか（PHASE 7.2 ワークベンチ）。
-   * ワークベンチでは「聴きながら切る」が見えている間だけ受ける。見えていないのに
-   * Space や ← → を取ると、別のパネルを見ている人の操作を横取りする（lessons L-018）。
+   * 打鍵を聞き取るか（PHASE 7.2 ワークベンチ）。
+   *
+   * **「取るかどうか」はここでは決まらない。** 実際に受けるのは
+   * **フォーカスがこの画面の入れ物の中にあるとき**だけで、判定は `resolveKeyOwner`
+   * がワークベンチ側と共通で持つ。ここは「そもそも聞き耳を立てるか」だけ
+   * （裏のタブやダイアログを開いている間は立てない。lessons L-018）。
    */
   readonly keyboardShortcuts?: boolean
   /** ワークベンチの再生位置と繋ぐ口（PHASE 7.2）。渡さなければ単独で動く。 */
@@ -94,6 +109,15 @@ export const CutEditor = ({
   toolbarExtra,
 }: CutEditorProps) => {
   const router = useRouter()
+
+  /**
+   * キーの持ち主を決める入れ物。
+   *
+   * **波形は `<canvas>` でフォーカスを受けない。** 目印（`data-cut-editor`）と
+   * `tabIndex={-1}` を入れ物に付け、中で `pointerdown` が起きたらここへフォーカスを移す。
+   * これが無いと、波形をクリックしても持ち主が変わらない。
+   */
+  const containerRef = useRef<HTMLDivElement>(null)
 
   const [marks, setMarks] = useState<readonly CutMark[]>([])
   const [selectedIndex, setSelectedIndex] = useState(-1)
@@ -268,17 +292,24 @@ export const CutEditor = ({
   useEffect(() => {
     if (!keyboardShortcuts) return undefined
     const onKeyDown = (event: KeyboardEvent): void => {
-      const target =
-        event.target instanceof HTMLElement
-          ? { tagName: event.target.tagName, isContentEditable: event.target.isContentEditable }
-          : null
+      const node = event.target instanceof HTMLElement ? event.target : null
       const resolved = resolveCutEditorCommand({
         key: event.key,
         shiftKey: event.shiftKey,
         altKey: event.altKey,
         ctrlKey: event.ctrlKey,
         metaKey: event.metaKey,
-        target,
+        target:
+          node === null
+            ? null
+            : {
+                tagName: node.tagName,
+                isContentEditable: node.isContentEditable,
+                role: node.getAttribute('role'),
+              },
+        // **この画面の入れ物に限る。** 目印で `closest` すると、別の CutEditor の中でも
+        // 真になり、両方が同じ打鍵で動く。
+        insideCutEditor: node !== null && containerRef.current?.contains(node) === true,
       })
       if (resolved === null) return
       event.preventDefault()
@@ -353,11 +384,31 @@ export const CutEditor = ({
     }
   }
 
+  /**
+   * 中を押したら入れ物がフォーカスを受け取る。
+   *
+   * **自分でフォーカスを受ける物の上では譲る。** ボタンや入力欄まで奪うと、
+   * Tab で移れるのに押した瞬間にフォーカスが外れ、Enter が別の意味になる。
+   */
+  const grabFocus = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (!(event.target instanceof HTMLElement)) return
+    if (event.target.closest(FOCUSABLE_SELECTOR) !== null) return
+    containerRef.current?.focus({ preventScroll: true })
+  }
+
   const keyHelp = describeCutEditorKeys()
   const sectionBoundarySec = sectionBoundaries(analysis.sections)
 
   return (
-    <div className="space-y-2">
+    <div
+      ref={containerRef}
+      // ワークベンチ側はこの目印を `closest` で探す。名前の正は `CUT_EDITOR_ATTRIBUTE`
+      // で、食い違えば `cut-editor-focus.test.tsx` がこの要素を見つけられず落ちる。
+      data-cut-editor=""
+      tabIndex={-1}
+      onPointerDown={grabFocus}
+      className="space-y-2 outline-none"
+    >
       {/**
        * ワークベンチのパネルの中（UI-WORKBENCH-2 §6）。**タブと同じ見出しを繰り返さない。箱に箱を入れない。**
        * 1 行目 = 再生、2 行目 = このパネルの主の操作（区切りを置く）と表示の切り替え。
