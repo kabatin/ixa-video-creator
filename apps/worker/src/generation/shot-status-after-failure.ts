@@ -1,4 +1,9 @@
-import type { GenerationJobId, GenerationJobStatus, ShotStatus } from '@ixa/domain'
+import {
+  settledShotStatus,
+  type GenerationJobId,
+  type GenerationJobStatus,
+  type ShotStatus,
+} from '@ixa/domain'
 
 /**
  * 生成が失敗したとき、Shot を何にするか（純粋関数）。
@@ -25,6 +30,8 @@ export type ShotFailureContext = {
   readonly failedJobId: GenerationJobId
   /** その Shot に Take が 1 本でもあるか。 */
   readonly hasTakes: boolean
+  /** その Shot が Take を採用しているか。採用していれば作り直しに失敗しても採用済みのまま。 */
+  readonly hasSelectedTake: boolean
 }
 
 /**
@@ -32,8 +39,9 @@ export type ShotFailureContext = {
  * 「何もしなくてよい」ではない。ほかのジョブが走っている間に状態を確定させると、
  * あとから成功した Take が届いたときに食い違う。
  *
- * 残りが無くなったときだけ決める。
- * - Take がある → `review`。失敗した本数はあっても、見るものはできている。
+ * 残りが無くなったときだけ決める。決め方は `settledShotStatus`（domain）に 1 つだけ置く。
+ * - 採用している Take がある → `approved`。作り直しに失敗しても、使う Take は決まっている
+ * - Take はある → `review`。失敗した本数はあっても、見るものはできている
  * - Take が 1 本も無い → `blocked`（要判断）。
  *   `ready` へ戻さないのは、**失敗の痕跡が消えて一覧から気づけなくなる**ため。
  */
@@ -42,5 +50,5 @@ export const shotStatusAfterFailure = (ctx: ShotFailureContext): ShotStatus | nu
     (job) => job.id !== ctx.failedJobId && PENDING.has(job.status),
   )
   if (stillRunning) return null
-  return ctx.hasTakes ? 'review' : 'blocked'
+  return settledShotStatus({ hasSelectedTake: ctx.hasSelectedTake, hasTakes: ctx.hasTakes })
 }

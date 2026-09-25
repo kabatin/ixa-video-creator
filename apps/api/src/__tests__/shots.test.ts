@@ -36,7 +36,9 @@ describe('POST /shots/:id/select-take', () => {
     expect(res.status).toBe(200)
     const json = (await res.json()) as Ok<ShotResponse>
     expect(json.data.selectedTakeId).toBe(take.id)
-    expect(json.data.status).toBe('review')
+    // **採用が決定。** 人の承認を別に待たない（ADR-0023）。以前は humanVerdict が
+    // approved でない限り 'review' のままで、採用しても状態列が「レビュー待ち」から動かなかった。
+    expect(json.data.status).toBe('approved')
   })
 
   it('他 Shot の Take を指定したら 422 で Shot を変更しない', async () => {

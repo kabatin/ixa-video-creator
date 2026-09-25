@@ -21,6 +21,7 @@ describe('shotStatusAfterFailure', () => {
       jobs: [job('job-failed', 'failed'), job('job-b', 'running')],
       failedJobId: FAILED,
       hasTakes: false,
+      hasSelectedTake: false,
     })
 
     expect(next).toBeNull()
@@ -31,6 +32,7 @@ describe('shotStatusAfterFailure', () => {
       jobs: [job('job-failed', 'failed'), job('job-b', 'queued')],
       failedJobId: FAILED,
       hasTakes: false,
+      hasSelectedTake: false,
     })
 
     expect(next).toBeNull()
@@ -41,6 +43,7 @@ describe('shotStatusAfterFailure', () => {
       jobs: [job('job-failed', 'failed')],
       failedJobId: FAILED,
       hasTakes: false,
+      hasSelectedTake: false,
     })
 
     expect(next).toBe('blocked')
@@ -51,6 +54,7 @@ describe('shotStatusAfterFailure', () => {
       jobs: [job('job-failed', 'failed')],
       failedJobId: FAILED,
       hasTakes: false,
+      hasSelectedTake: false,
     })
 
     // `ready` に戻すと一覧から失敗に気づけなくなる。
@@ -58,11 +62,12 @@ describe('shotStatusAfterFailure', () => {
     expect(next).not.toBe('generating')
   })
 
-  it('残りが無く Take があるならレビュー待ちにする', () => {
+  it('残りが無く Take があるなら採用待ちにする', () => {
     const next = shotStatusAfterFailure({
       jobs: [job('job-failed', 'failed'), job('job-b', 'succeeded')],
       failedJobId: FAILED,
       hasTakes: true,
+      hasSelectedTake: false,
     })
 
     expect(next).toBe('review')
@@ -74,6 +79,7 @@ describe('shotStatusAfterFailure', () => {
       jobs: [job('job-failed', 'queued')],
       failedJobId: FAILED,
       hasTakes: false,
+      hasSelectedTake: false,
     })
 
     expect(next).toBe('blocked')
@@ -88,8 +94,25 @@ describe('shotStatusAfterFailure', () => {
       ],
       failedJobId: FAILED,
       hasTakes: true,
+      hasSelectedTake: false,
     })
 
     expect(next).toBe('review')
+  })
+
+  /**
+   * **採用している Take があれば、作り直しに失敗しても採用済みのまま**（ADR-0023）。
+   * 以前は Take があれば一律 `review` に戻していたので、採用済みの Shot で
+   * 作り直しを試して失敗しただけで「採用待ち」に落ちた。
+   */
+  it('採用している Take があれば採用済みのまま', () => {
+    const next = shotStatusAfterFailure({
+      jobs: [job('job-failed', 'failed')],
+      failedJobId: FAILED,
+      hasTakes: true,
+      hasSelectedTake: true,
+    })
+
+    expect(next).toBe('approved')
   })
 })

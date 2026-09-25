@@ -1,13 +1,6 @@
 'use client'
 
-import type {
-  HumanVerdict,
-  ReviewFinding,
-  ReviewFindingId,
-  ShotId,
-  Take,
-  TakeId,
-} from '@ixa/domain'
+import type { ReviewFinding, ReviewFindingId, ShotId, TakeId } from '@ixa/domain'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RegenerateForm, type RegenerateApi } from '@/components/regenerate-form'
 import { ReviewFindingList, isCorrectable, selectedDeltas } from '@/components/review-finding-list'
@@ -16,9 +9,8 @@ import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { formatClock } from '@/lib/format-time'
 import { POLL_TIMEOUT_MS, startAsyncPolling, type PollHandle } from '@/lib/poller'
-import { type HumanDecision, type ReviewApi, type WireReviewRun } from '@/lib/review-api'
+import { type ReviewApi, type WireReviewRun } from '@/lib/review-api'
 import {
-  humanDecisionLabel,
   isReviewRunPending,
   latestReviewRun,
   reviewRunStatusLabel,
@@ -27,7 +19,6 @@ import {
   summarizeFindings,
   summarizeRun,
 } from '@/lib/review-display'
-import { humanVerdictLabel } from '@/lib/shot-display'
 import { WORDING } from '@/lib/wording'
 
 /**
@@ -51,11 +42,8 @@ export type ReviewPanelProps = {
    * 画面だけ出来上がる。必須にして、渡し忘れを型で止める。
    */
   readonly shotId: ShotId
-  /** 保存済みの人手判定。保存に成功したらこの画面の表示が優先される。 */
-  readonly humanVerdict: HumanVerdict
   /** 生成中など、他の操作で画面が動いている間は触らせない。 */
   readonly disabled?: boolean
-  readonly onVerdictSaved?: (take: Take) => void
   /** テストや Storybook から差し替えるための注入口。既定は既存の API クライアント。 */
   readonly api?: ReviewApi
   /** 作り直しを頼む口。レビューの口とは関心が違うので別に受け取る。 */
@@ -88,7 +76,6 @@ const FEEDBACK_CLASS = {
   error: 'text-danger',
 } as const
 
-const DECISIONS: readonly HumanDecision[] = ['approved', 'rejected']
 
 const WATCH_OFF: WatchState = { kind: 'off' }
 
@@ -164,9 +151,7 @@ const WatchNotice = ({ watch }: { readonly watch: WatchState }) => {
 export const ReviewPanel = ({
   takeId,
   shotId,
-  humanVerdict,
   disabled = false,
-  onVerdictSaved,
   api,
   generateApi,
 }: ReviewPanelProps) => {
@@ -174,10 +159,7 @@ export const ReviewPanel = ({
   const [watch, setWatch] = useState<WatchState>(WATCH_OFF)
   const [reloadKey, setReloadKey] = useState(0)
   const [requesting, setRequesting] = useState(false)
-  const [savingVerdict, setSavingVerdict] = useState<HumanDecision | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
-  // 保存に成功するまでは親から渡された値を表示する。保存後はこちらが優先する。
-  const [savedVerdict, setSavedVerdict] = useState<HumanVerdict | null>(null)
   // 直しに使う指摘の選択と、入力欄を開いているか。Take を切り替えたら両方畳む。
   const [selectedIds, setSelectedIds] = useState<readonly ReviewFindingId[]>([])
   const [regenerating, setRegenerating] = useState(false)
@@ -185,8 +167,7 @@ export const ReviewPanel = ({
 
   // 毎レンダーで作り直すと effect が回り続ける。注入された api が変わらない限り固定する。
   const client = useMemo<ReviewApi>(() => api ?? defaultApi(), [api])
-  const currentVerdict = savedVerdict ?? humanVerdict
-  const busy = disabled || requesting || savingVerdict !== null
+  const busy = disabled || requesting
 
   const startWatching = useCallback(() => {
     pollRef.current?.stop()
@@ -281,26 +262,14 @@ export const ReviewPanel = ({
     }
   }
 
-  const saveVerdict = async (decision: HumanDecision): Promise<void> => {
-    setSavingVerdict(decision)
-    setFeedback(null)
-    try {
-      const take = await client.setTakeVerdict(takeId, decision)
-      setSavedVerdict(take.humanVerdict)
-      setFeedback({ tone: 'success', message: `${humanDecisionLabel(decision)}しました。` })
-      onVerdictSaved?.(take)
-    } catch (caught) {
-      setFeedback({ tone: 'error', message: describeError(caught) })
-    } finally {
-      setSavingVerdict(null)
-    }
-  }
-
   return (
     <section className="rounded-lg border border-line bg-surface p-6 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-text">自動レビューと判断</h2>
-        <span className="text-xs text-muted">{humanVerdictLabel(currentVerdict)}</span>
+        {/*
+          人の「承認 / 却下」はここに置かない（ADR-0023）。**使う Take を採用することが決定。**
+          以前は承認が別の操作としてここにあり、採用しても Shot が「レビュー待ち」のまま動かなかった。
+        */}
+        <h2 className="text-base font-semibold text-text">自動レビュー</h2>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -406,18 +375,6 @@ export const ReviewPanel = ({
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
-        {DECISIONS.map((decision) => (
-          <Button
-            key={decision}
-            tone={decision === 'approved' ? 'primary' : 'secondary'}
-            disabled={busy || currentVerdict === decision}
-            onClick={() => {
-              void saveVerdict(decision)
-            }}
-          >
-            {savingVerdict === decision ? '保存中…' : humanDecisionLabel(decision)}
-          </Button>
-        ))}
 
         {feedback !== null && (
           <p

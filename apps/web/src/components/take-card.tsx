@@ -7,7 +7,6 @@ import { describeError } from '@/lib/api-error'
 import {
   formatSeconds,
   formatUsd,
-  humanVerdictLabel,
   reviewStatusClassName,
   reviewStatusLabel,
 } from '@/lib/shot-display'
@@ -126,7 +125,7 @@ export const TakeCard = ({ take, selected, busy, onSelect }: TakeCardProps) => {
         >
           {reviewStatusLabel(take.reviewStatus)}
         </span>
-        <span className="text-xs text-muted">{humanVerdictLabel(take.humanVerdict)}</span>
+        {/* 「人手未確認 / 人手承認」は出さない。採用が決定で、別の承認は無い（ADR-0023）。 */}
       </div>
 
       <button

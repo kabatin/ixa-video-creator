@@ -346,7 +346,7 @@ const TakeSection = ({ shot }: { readonly shot: Shot }) => {
 /** レビュー。採用中の Take に対して行う。 */
 const ReviewSection = ({ shot }: { readonly shot: Shot }) => {
   const workbench = useWorkbench()
-  const { takes, replaceTake } = useShotTakes(shot, workbench.posterEpoch)
+  const { takes } = useShotTakes(shot, workbench.posterEpoch)
   const selected = takes?.find((take) => take.id === shot.selectedTakeId) ?? null
   return (
     <Section title="レビュー">
@@ -358,8 +358,6 @@ const ReviewSection = ({ shot }: { readonly shot: Shot }) => {
         <ReviewPanel
           shotId={shot.id}
           takeId={selected.id}
-          humanVerdict={selected.humanVerdict}
-          onVerdictSaved={replaceTake}
         />
       )}
     </Section>

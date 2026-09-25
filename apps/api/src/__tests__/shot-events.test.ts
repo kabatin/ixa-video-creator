@@ -156,7 +156,8 @@ describe('Take の採用で shot.status を流す', () => {
       type: 'shot.status',
       projectId: project.id,
       shotId: shot.id,
-      status: 'review',
+      // 採用が決定（ADR-0023）。
+      status: 'approved',
     })
   })
 
@@ -188,7 +189,7 @@ describe('Take の採用で shot.status を流す', () => {
     const events = parsedEvents(f.events.published())
     expect(events).toHaveLength(3)
     expect(events.map((e) => ('shotId' in e ? e.shotId : null))).toEqual(shots.map((s) => s.id))
-    expect(events.every((e) => e.type === 'shot.status' && e.status === 'review')).toBe(true)
+    expect(events.every((e) => e.type === 'shot.status' && e.status === 'approved')).toBe(true)
   })
 
   it('採用できなかった Shot の分は流さない', async () => {
@@ -241,7 +242,7 @@ describe('publish が失敗しても本処理は止まらない', () => {
     expect(res.status).toBe(200)
     const json = (await res.json()) as Ok<{ selectedTakeId: string; status: string }>
     expect(json.data.selectedTakeId).toBe(take.id)
-    expect(json.data.status).toBe('review')
+    expect(json.data.status).toBe('approved')
     expect(failing.attempts()).toBe(1)
   })
 

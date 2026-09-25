@@ -14,6 +14,7 @@ import {
   type ProjectEventPublisher,
   type Shot,
   type TakeId,
+  settledShotStatus,
 } from '@ixa/domain'
 import { ProviderError } from '@ixa/provider-core'
 import type {
@@ -263,7 +264,15 @@ const complete = async (
     )
   }
 
-  await deps.shots.updateStatus(shot.id, 'review')
+  /**
+   * 状態は `settledShotStatus`（domain）で決める。**採用が決定**（ADR-0023）なので、
+   * 採用済みの Shot で作り直しに成功しても採用済みのまま。以前は一律 `review` に戻し、
+   * 作り直しを 1 本試すだけで「採用待ち」に落ちていた。
+   * 採用は生成の最中にも変わりうるので、ジョブの頭で読んだ値ではなく読み直した値を使う。
+   */
+  const latest = (await deps.shots.findById(shot.id)) ?? shot
+  const settled = settledShotStatus({ hasSelectedTake: latest.selectedTakeId !== null, hasTakes: true })
+  await deps.shots.updateStatus(shot.id, settled)
   await deps.generationJobs.update(job.id, { status: 'succeeded', finishedAt: now })
 
   /**
@@ -271,7 +280,7 @@ const complete = async (
    * ここより上で Take もジョブの行も確定済みで、通知はその上乗せでしかない。
    * 落ちたら warn に残すだけにする（`ProjectEventPublisher` の契約）。
    */
-  await publishShotStatus(deps, { shot, jobId: job.id, status: 'review', at: now })
+  await publishShotStatus(deps, { shot, jobId: job.id, status: settled, at: now })
   await publishJobStatus(deps, {
     shot,
     jobId: job.id,
@@ -450,14 +459,17 @@ const releaseShotAfterFailure = async (
   now: Date,
 ): Promise<void> => {
   try {
-    const [jobs, takes] = await Promise.all([
+    const [jobs, takes, latest] = await Promise.all([
       deps.generationJobs.findByShot(shot.id),
       deps.takes.findByShot(shot.id),
+      deps.shots.findById(shot.id),
     ])
     const next = shotStatusAfterFailure({
       jobs,
       failedJobId,
       hasTakes: takes.length > 0,
+      // 採用は生成の最中にも変わりうる。頭で読んだ値ではなく読み直した値を使う。
+      hasSelectedTake: (latest ?? shot).selectedTakeId !== null,
     })
     // null は「ほかのジョブがまだ走っている」。状態はそちらの決着に任せる。
     if (next === null) return

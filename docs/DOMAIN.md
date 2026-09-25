@@ -384,8 +384,8 @@ type ShotStatus =
   | 'draft'         // 記述のみ
   | 'ready'         // 生成可能（必要な参照が揃っている）
   | 'generating'
-  | 'review'        // Take はあるが未承認
-  | 'approved'      // selectedTake が承認済み
+  | 'review'        // Take はあるが、まだ採用していない（画面: 採用待ち）
+  | 'approved'      // Take を採用した（画面: 採用済み）。採用が決定で、別の承認は無い（ADR-0023）
   | 'blocked'       // 人間の判断待ち
 
 type ShotCamera = {

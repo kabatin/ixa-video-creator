@@ -1,8 +1,8 @@
 import { ReviewRunId, TakeId } from '@ixa/domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SHOT_ID, TAKE_ID, takeJson } from '@/__tests__/fixtures'
+import { TAKE_ID } from '@/__tests__/fixtures'
 import { createRequester } from '@/lib/requester'
-import { createReviewApi, HumanDecision, VerdictBody } from '@/lib/review-api'
+import { createReviewApi } from '@/lib/review-api'
 
 const BASE_URL = 'http://127.0.0.1:3001'
 
@@ -158,45 +158,5 @@ describe('レビュー実行の詳細', () => {
     )
 
     await expect(api().getReviewRun(reviewRunId)).rejects.toThrow()
-  })
-})
-
-describe('人間の判断', () => {
-  it('承認を送り、更新後の Take を返す', async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ success: true, data: { ...takeJson, humanVerdict: 'approved' } }),
-    )
-
-    const take = await api().setTakeVerdict(takeId, 'approved')
-
-    expect(take.humanVerdict).toBe('approved')
-    expect(take.shotId).toBe(SHOT_ID)
-
-    const [url, init] = fetchMock.mock.calls[0] ?? []
-    expect(url).toBe(`${BASE_URL}/takes/${TAKE_ID}/verdict`)
-    expect(init?.method).toBe('POST')
-    expect(requestBodyOf(init)).toEqual({ verdict: 'approved' })
-  })
-
-  it('却下も同じ経路で送る', async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ success: true, data: { ...takeJson, humanVerdict: 'rejected' } }),
-    )
-
-    await api().setTakeVerdict(takeId, 'rejected')
-
-    expect(requestBodyOf(fetchMock.mock.calls[0]?.[1])).toEqual({ verdict: 'rejected' })
-  })
-
-  it('unreviewed は人間が下せる判断ではないので送れない', () => {
-    expect(HumanDecision.safeParse('unreviewed').success).toBe(false)
-    expect(VerdictBody.safeParse({ verdict: 'unreviewed' }).success).toBe(false)
-    expect(VerdictBody.safeParse({ verdict: 'approved' }).success).toBe(true)
-  })
-
-  it('保存の失敗は握り潰さず投げる', async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ success: false, error: '権限がありません' }, 403))
-
-    await expect(api().setTakeVerdict(takeId, 'approved')).rejects.toThrow()
   })
 })

@@ -5,7 +5,7 @@ import {
   type GenerationJob,
   type ShotId,
   type Take,
-  type TakeId,
+  TakeId,
   ProviderId as ProviderIdSchema,
 } from '@ixa/domain'
 import { createProviderRegistry, ProviderError } from '@ixa/provider-core'
@@ -183,7 +183,21 @@ describe('processGenerationJob', () => {
     ])
   })
 
-  it('成功したら MediaAsset と Take を作り、Shot を review にする', async () => {
+  /**
+   * **採用が決定**（ADR-0023）。採用済みの Shot で作り直しに成功しても、採用している
+   * Take は変わらないので採用済みのまま。以前は成功のたびに `review` へ戻し、
+   * 作り直しを 1 本試すだけで「採用待ち」に落ちていた。
+   */
+  it('採用済みの Shot で作り直しに成功しても、採用済みのまま', async () => {
+    const f = await buildFixture([SUCCEEDED])
+    await f.deps.shots.selectTake(f.shot.id, TakeId.parse('01HZZZZZZZZZZZZZZZZZZZZZZZ'))
+
+    await runToCompletion(f)
+
+    expect(f.shots.snapshot()[0]?.status).toBe('approved')
+  })
+
+  it('成功したら MediaAsset と Take を作り、採用していなければ Shot を採用待ち（review）にする', async () => {
     const f = await buildFixture([SUCCEEDED])
 
     const { second } = await runToCompletion(f)

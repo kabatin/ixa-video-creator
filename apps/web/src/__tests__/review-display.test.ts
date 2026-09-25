@@ -4,7 +4,6 @@ import {
   findingSeverityClassName,
   findingSeverityLabel,
   formatEvidenceMoment,
-  humanDecisionLabel,
   isReviewRunPending,
   latestReviewRun,
   reviewRunStatusLabel,
@@ -92,11 +91,6 @@ describe('レビュア名と人手判断のラベル', () => {
     for (const reviewer of ReviewerType.options) {
       expect(reviewerLabel(reviewer)).not.toBe('')
     }
-  })
-
-  it('承認と却下でラベルが違う', () => {
-    expect(humanDecisionLabel('approved')).toBe('承認')
-    expect(humanDecisionLabel('rejected')).toBe('却下')
   })
 })
 

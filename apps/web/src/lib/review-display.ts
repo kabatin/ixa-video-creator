@@ -1,6 +1,5 @@
 import type { ReviewFinding, ReviewRun, ReviewerType, Severity, Verdict } from '@ixa/domain'
 import { formatSeconds } from '@/lib/shot-display'
-import type { HumanDecision } from '@/lib/review-api'
 
 /**
  * レビュー結果の表示用ラベル・色・並び順。React を含まない純粋関数だけを置く。
@@ -69,14 +68,6 @@ const REVIEWER_LABELS: Readonly<Record<ReviewerType, string>> = {
 }
 
 export const reviewerLabel = (reviewer: ReviewerType): string => REVIEWER_LABELS[reviewer]
-
-const HUMAN_DECISION_LABELS: Readonly<Record<HumanDecision, string>> = {
-  approved: '承認',
-  rejected: '却下',
-}
-
-export const humanDecisionLabel = (decision: HumanDecision): string =>
-  HUMAN_DECISION_LABELS[decision]
 
 /**
  * 最新の ReviewRun。API の並び順に依存しないよう、こちらで createdAt から決める。

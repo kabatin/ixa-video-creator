@@ -1,10 +1,9 @@
-import { ShotStatus, ReviewStatus, HumanVerdict, SourceTypeName } from '@ixa/domain'
+import { ShotStatus, ReviewStatus, SourceTypeName } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import {
   formatSeconds,
   formatTimecode,
   formatUsd,
-  humanVerdictLabel,
   isGeneratingStatus,
   reviewStatusClassName,
   reviewStatusLabel,
@@ -39,11 +38,6 @@ describe('reviewStatus / humanVerdict', () => {
     }
   })
 
-  it('すべての人手判定にラベルがある', () => {
-    for (const verdict of HumanVerdict.options) {
-      expect(humanVerdictLabel(verdict)).not.toBe('')
-    }
-  })
 })
 
 describe('isGeneratingStatus', () => {

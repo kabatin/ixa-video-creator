@@ -31,6 +31,7 @@ import {
   type CostLimits,
   DurationNotSupportedError,
   Corrections as CorrectionsSchema,
+  settledShotStatus,
 } from '@ixa/domain'
 import {
   GenerationContextError,
@@ -439,17 +440,23 @@ export const publishShotStatus = async (
  * 採用 Take を確定し、Shot の状態を進める。
  *
  * **1 件ずつの採用と一括採用で同じ判断を使う**（tasks/lessons.md L-016）。
- * 人が承認済みの Take なら見直す先が無いので `approved`、それ以外は `review`。
+ *
+ * **採用が決定。** Take を採用したら Shot は `approved`（画面では「採用済み」）。
+ * 以前は採用した Take に人の承認（`humanVerdict`）が付いていない限り `review` のままで、
+ * 採用しても状態列が「レビュー待ち」から動かなかった。承認の操作はインスペクター最下部に
+ * 1 件ずつしか無く、しかも書き出しには要らない。人がいちばん意思を込める操作は
+ * 「どの Take を使うか」なので、それを決定として扱う（ADR-0023）。
  */
 export const applySelectedTake = async (
   deps: Pick<ShotRoutesDeps, 'shots' | 'events' | 'logger'>,
   shotId: ShotId,
-  take: Pick<Take, 'id' | 'humanVerdict'>,
+  take: Pick<Take, 'id'>,
 ): Promise<Shot> => {
   await deps.shots.selectTake(shotId, take.id)
+  // 判断は domain の 1 箇所（worker の成功・失敗と同じ関数を引く）。
   const updated = await deps.shots.updateStatus(
     shotId,
-    take.humanVerdict === 'approved' ? 'approved' : 'review',
+    settledShotStatus({ hasSelectedTake: true, hasTakes: true }),
   )
   // 1 件ずつの採用も一括採用もここを通るので、出来事もここで 1 回だけ流す。
   await publishShotStatus(deps, updated)
@@ -458,7 +465,7 @@ export const applySelectedTake = async (
 
 /**
  * 採用を外す（PHASE 8）。**Take は追記のみで消さない**（規約 2）。外すのは Shot の指し先だけ。
- * Take が残っているので状態は `review`（Take はあるが未承認）へ戻す。
+ * Take が残っているので状態は `review`（Take はあるが採用前）へ戻す。
  * 生成中の Shot は触らない（生成が終われば状態は worker が進める）。
  */
 export const clearSelectedTake = async (
@@ -470,7 +477,10 @@ export const clearSelectedTake = async (
   const updated =
     shot.status === 'generating'
       ? await deps.shots.findById(shot.id)
-      : await deps.shots.updateStatus(shot.id, 'review')
+      : await deps.shots.updateStatus(
+          shot.id,
+          settledShotStatus({ hasSelectedTake: false, hasTakes: true }),
+        )
   if (updated === null) throw new Error(`採用を外した Shot が見つかりません: ${shot.id}`)
   await publishShotStatus(deps, updated)
   return updated

@@ -1,6 +1,5 @@
 import {
   cameraToPromptFragment,
-  type HumanVerdict,
   type ReviewStatus,
   type Shot,
   type ShotCamera,
@@ -22,8 +21,10 @@ const SHOT_STATUS_LABELS: Readonly<Record<ShotStatus, string>> = {
   draft: '下書き',
   ready: '生成可能',
   generating: '生成中',
-  review: 'レビュー待ち',
-  approved: '承認済み',
+  // 「レビュー待ち」だと、何かが来るのを待っているように読める。実際は人が選ぶ番（ADR-0023）。
+  review: '採用待ち',
+  // 採用が決定。別の「承認」は無い。
+  approved: '採用済み',
   blocked: '要判断',
 }
 
@@ -81,13 +82,6 @@ export const reviewStatusLabel = (status: ReviewStatus): string => REVIEW_STATUS
 
 export const reviewStatusClassName = (status: ReviewStatus): string => REVIEW_STATUS_CLASSES[status]
 
-const HUMAN_VERDICT_LABELS: Readonly<Record<HumanVerdict, string>> = {
-  unreviewed: '人手未確認',
-  approved: '人手承認',
-  rejected: '人手却下',
-}
-
-export const humanVerdictLabel = (verdict: HumanVerdict): string => HUMAN_VERDICT_LABELS[verdict]
 
 /**
  * 生成方式の日本語ラベル。

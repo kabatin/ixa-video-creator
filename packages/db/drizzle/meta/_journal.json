@@ -71,6 +71,13 @@
       "when": 1789737158519,
       "tag": "0009_lame_silver_fox",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790327255835,
+      "tag": "0010_adoption_is_decision",
+      "breakpoints": true
     }
   ]
 }

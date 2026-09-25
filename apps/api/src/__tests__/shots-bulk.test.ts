@@ -418,7 +418,7 @@ describe('POST /projects/:projectId/shots/bulk/select-take', () => {
     expect(res.status).toBe(200)
     const json = (await res.json()) as Ok<BulkSelectTakeData>
 
-    expect(json.data.results[0]).toMatchObject({ ok: true, status: 'review' })
+    expect(json.data.results[0]).toMatchObject({ ok: true, status: 'approved' })
     // 2 件あるものは勝手に選ばない。何件あるか理由に出す
     expect(json.data.results[1]).toMatchObject({ ok: false })
     const ambiguous = json.data.results[1]

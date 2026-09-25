@@ -1,13 +1,5 @@
-import {
-  HumanVerdict,
-  ReviewFinding,
-  ReviewRun,
-  type ReviewRunId,
-  type Take,
-  TakeId,
-} from '@ixa/domain'
+import { ReviewFinding, ReviewRun, type ReviewRunId, TakeId } from '@ixa/domain'
 import { z } from 'zod'
-import { WireTake } from '@/lib/api-schemas'
 import type { Requester } from '@/lib/requester'
 
 /**
@@ -41,22 +33,16 @@ export const WireReviewAccepted = z.object({
 })
 export type WireReviewAccepted = z.infer<typeof WireReviewAccepted>
 
-/**
- * 人間が下せる判断。`unreviewed` は「まだ判断していない」初期値であり、
- * 画面から明示的に戻す操作は用意しないためドメインの enum から除く。
+/*
+ * 人の「承認 / 却下」を送る口は持たない（ADR-0023）。**使う Take を採用することが決定。**
+ * サーバの `/takes/{id}/verdict` は過去の記録のために残っているが、画面からは使わない。
  */
-export const HumanDecision = HumanVerdict.exclude(['unreviewed'])
-export type HumanDecision = z.infer<typeof HumanDecision>
-
-export const VerdictBody = z.object({ verdict: HumanDecision })
-export type VerdictBody = z.infer<typeof VerdictBody>
 
 export type ReviewApi = {
   /** レビューをキューへ積む。完了は待たない。 */
   requestReview: (takeId: TakeId) => Promise<WireReviewAccepted>
   listReviewRuns: (takeId: TakeId) => Promise<WireReviewRun[]>
   getReviewRun: (id: ReviewRunId) => Promise<WireReviewDetail>
-  setTakeVerdict: (takeId: TakeId, verdict: HumanDecision) => Promise<Take>
 }
 
 const takePath = (id: TakeId, suffix = ''): string => `/takes/${encodeURIComponent(id)}${suffix}`
@@ -70,6 +56,4 @@ export const createReviewApi = (requester: Requester): ReviewApi => ({
   getReviewRun: async (id) =>
     requester.get(`/review-runs/${encodeURIComponent(id)}`, WireReviewDetail),
 
-  setTakeVerdict: async (takeId, verdict) =>
-    requester.post(takePath(takeId, '/verdict'), VerdictBody.parse({ verdict }), WireTake),
 })
