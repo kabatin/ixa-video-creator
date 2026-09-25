@@ -100,7 +100,7 @@ const IssueGroupBlock = ({
         {group.shotCount > 0 && (
           <span className="text-xs text-muted">{`Shot ${String(group.shotCount)} 件が関係`}</span>
         )}
-        <code className="ml-auto text-xs text-muted">{group.code}</code>
+        {/* 種類の内部コード（shot_gap_head など）は出さない。見出しが言っている。 */}
       </summary>
 
       <ul className="px-3 pb-2">

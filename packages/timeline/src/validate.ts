@@ -7,7 +7,7 @@ import {
   type ShotId,
   type Transition,
 } from '@ixa/domain'
-import type { TimelineSource } from './build.js'
+import { timelineDurationSec, type TimelineSource } from './build.js'
 import { TIME_EPSILON, shotsEndSec, sortShotsByStart } from './ordering.js'
 
 export type TimelineIssue = {
@@ -24,6 +24,8 @@ export const TIMELINE_ISSUE_CODES = {
   transitionNotAdjacent: 'transition_not_adjacent',
   transitionTooLong: 'transition_too_long',
   shotGap: 'shot_gap',
+  shotGapHead: 'shot_gap_head',
+  shotGapTail: 'shot_gap_tail',
   shotMissingTake: 'shot_missing_take',
   clipOutOfRange: 'clip_out_of_range',
   transitionDegraded: 'transition_degraded',
@@ -92,6 +94,47 @@ const checkGaps = (sorted: readonly Shot[]): TimelineIssue[] => {
         shotId: current.id,
       })
     }
+  }
+  return issues
+}
+
+/**
+ * 曲の頭と尻の黒（warning）。`checkGaps` は Shot と Shot の**間**しか見ない。
+ *
+ * タイムラインの尺は曲の終わりまで伸びる（`timelineDurationSec`）ので、
+ * 0 秒から最初の Shot まで、最後の Shot から尺の終わりまでは黒画面で書き出される。
+ * 以前はここを見ておらず、頭と尻が黒い動画を「指摘なし」のまま書き出していた。
+ *
+ * **埋めはしない。** 歌い出しまで黒にしたい、という意図もありうる。秒数を添えて言うだけ。
+ */
+const checkEdgeGaps = (source: TimelineSource, sorted: readonly Shot[]): TimelineIssue[] => {
+  const first = sorted[0]
+  const last = sorted[sorted.length - 1]
+  if (first === undefined || last === undefined) return []
+
+  const issues: TimelineIssue[] = []
+  if (first.startSec > TIME_EPSILON) {
+    issues.push({
+      severity: 'warning',
+      code: TIMELINE_ISSUE_CODES.shotGapHead,
+      message:
+        `曲の頭から最初の Shot ${first.code} までの ${sec(first.startSec)} が黒画面になる` +
+        `（0.000s–${sec(first.startSec)}）`,
+      shotId: first.id,
+    })
+  }
+
+  const end = shotEndSec(last)
+  const tail = timelineDurationSec(source) - end
+  if (tail > TIME_EPSILON) {
+    issues.push({
+      severity: 'warning',
+      code: TIMELINE_ISSUE_CODES.shotGapTail,
+      message:
+        `最後の Shot ${last.code} から曲の終わりまでの ${sec(tail)} が黒画面になる` +
+        `（${sec(end)}–${sec(end + tail)}）`,
+      shotId: last.id,
+    })
   }
   return issues
 }
@@ -256,6 +299,7 @@ export const validateTimeline = (source: TimelineSource): TimelineIssue[] => {
     ...checkOverlaps(sorted),
     ...checkDurations(sorted),
     ...checkTransitions(sorted, source.transitions),
+    ...checkEdgeGaps(source, sorted),
     ...checkGaps(sorted),
     ...checkMissingTakes(sorted, source.resolveShotMedia),
     ...checkClips(source),

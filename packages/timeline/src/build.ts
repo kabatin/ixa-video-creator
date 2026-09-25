@@ -90,7 +90,7 @@ const toRenderableClip = (
  * 音楽は `TimelineDocument.audio` と同じく尺を持たない（配置位置しか分からない）ため、
  * 開始位置を終端として扱う。音楽が最後の Shot より後ろから始まる場合に尺が伸びる。
  */
-const timelineDurationSec = (source: TimelineSource): Seconds => {
+export const timelineDurationSec = (source: TimelineSource): Seconds => {
   // 音楽は開始位置ではなく**終了位置**で尺に効く。
   // Shot が曲より短くてもタイムラインを曲の終わりまで伸ばす。
   const musicEnd = source.musicTracks.reduce(

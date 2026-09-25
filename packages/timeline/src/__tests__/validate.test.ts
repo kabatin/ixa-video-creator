@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { TIMELINE_ISSUE_CODES, validateTimeline, type TimelineIssue } from '../validate.js'
 import type { TimelineClip, Transition } from '@ixa/domain'
+import type { TimelineMusicTrack } from '../build.js'
 import { makeClip, makeShot, makeSource, makeTransition, shotId, snapshot } from './fixtures.js'
 
 const codes = (issues: readonly TimelineIssue[]): string[] => issues.map((issue) => issue.code)
@@ -88,6 +89,68 @@ describe('validateTimeline / error', () => {
     const shots = [makeShot(1, 0, 4), makeShot(2, 4, 1)]
     const transitions = [makeTransition(31, shotId(1), shotId(2), 1)]
     expect(codes(validateTimeline(makeSource({ shots, transitions })))).toEqual([])
+  })
+})
+
+/**
+ * 曲の頭と尻の黒（warning）。
+ *
+ * 以前は Shot と Shot の**間**しか見ていなかった。セクションから割ると最初の区切りが
+ * 最初の拍（1.02s）に来るので、曲の頭から最初の Shot まで、最後の Shot から曲の終わりまでが
+ * 黒画面のまま書き出され、検査は「隙間・重なりともに指摘はありません」と言っていた（実測）。
+ * 本制作も CUT-01 が 2.67s から始まり、頭に 2.7s・尻に 2.5s の黒が入る状態だった。
+ *
+ * **埋めはしない。** 歌い出しまで黒にしたい、という意図もありうる。言うだけにする。
+ */
+describe('validateTimeline / 頭と尻の黒', () => {
+  const music = (durationSec: number): readonly TimelineMusicTrack[] => [
+    { mediaUrl: 'https://media.test/m.mp3', startSec: 0, durationSec, volume: 1 },
+  ]
+
+  it('曲の頭から最初の Shot までは warning（秒数つき）', () => {
+    const shots = [makeShot(1, 1.02, 4), makeShot(2, 5.02, 4)]
+    const issues = find(validateTimeline(makeSource({ shots })), TIMELINE_ISSUE_CODES.shotGapHead)
+
+    expect(issues).toHaveLength(1)
+    expect(issues[0]?.severity).toBe('warning')
+    expect(issues[0]?.shotId).toBe(shotId(1))
+    expect(issues[0]?.message).toContain('1.020s')
+  })
+
+  it('最後の Shot から曲の終わりまでは warning（秒数つき）', () => {
+    const shots = [makeShot(1, 0, 4), makeShot(2, 4, 4)]
+    const issues = find(
+      validateTimeline(makeSource({ shots, musicTracks: music(10) })),
+      TIMELINE_ISSUE_CODES.shotGapTail,
+    )
+
+    expect(issues).toHaveLength(1)
+    expect(issues[0]?.severity).toBe('warning')
+    expect(issues[0]?.shotId).toBe(shotId(2))
+    expect(issues[0]?.message).toContain('2.000s')
+  })
+
+  it('0 秒から曲の終わりまで埋まっていれば何も言わない', () => {
+    const shots = [makeShot(1, 0, 5), makeShot(2, 5, 5)]
+    const issues = validateTimeline(makeSource({ shots, musicTracks: music(10) }))
+
+    expect(find(issues, TIMELINE_ISSUE_CODES.shotGapHead)).toEqual([])
+    expect(find(issues, TIMELINE_ISSUE_CODES.shotGapTail)).toEqual([])
+  })
+
+  it('浮動小数の端数では言わない', () => {
+    const shots = [makeShot(1, 0.0000001, 5)]
+    const issues = validateTimeline(makeSource({ shots, musicTracks: music(5.0000001) }))
+
+    expect(find(issues, TIMELINE_ISSUE_CODES.shotGapHead)).toEqual([])
+    expect(find(issues, TIMELINE_ISSUE_CODES.shotGapTail)).toEqual([])
+  })
+
+  it('Shot が 1 つも無ければ言わない（別の検査の領分）', () => {
+    const issues = validateTimeline(makeSource({ shots: [], musicTracks: music(10) }))
+
+    expect(find(issues, TIMELINE_ISSUE_CODES.shotGapHead)).toEqual([])
+    expect(find(issues, TIMELINE_ISSUE_CODES.shotGapTail)).toEqual([])
   })
 })
 
@@ -226,6 +289,8 @@ describe('validateTimeline / 列挙', () => {
         TIMELINE_ISSUE_CODES.shotNonPositiveDuration,
         TIMELINE_ISSUE_CODES.transitionNotAdjacent,
         TIMELINE_ISSUE_CODES.shotGap,
+        // テキストが 100s まであるので、最後の Shot（14s で終わる）の後ろは 86s 黒になる。
+        TIMELINE_ISSUE_CODES.shotGapTail,
         TIMELINE_ISSUE_CODES.shotMissingTake,
         TIMELINE_ISSUE_CODES.clipOutOfRange,
       ]),

@@ -24,6 +24,8 @@ import type { TimelineIssueSeverity, TimelineIssueView } from '@/lib/timeline-is
 const ISSUE_CODE_LABELS: Readonly<Record<string, string>> = Object.freeze({
   [TIMELINE_ISSUE_CODES.shotOverlap]: 'Shot どうしが時間で重なっている',
   [TIMELINE_ISSUE_CODES.shotGap]: 'Shot と Shot の間に隙間がある',
+  [TIMELINE_ISSUE_CODES.shotGapHead]: '曲の頭が黒画面になる（最初の Shot より前）',
+  [TIMELINE_ISSUE_CODES.shotGapTail]: '曲の終わりが黒画面になる（最後の Shot より後）',
   [TIMELINE_ISSUE_CODES.shotNonPositiveDuration]: '尺が 0 以下の Shot がある',
   [TIMELINE_ISSUE_CODES.shotMissingTake]: 'Take が選ばれていない Shot がある',
   [TIMELINE_ISSUE_CODES.transitionNotAdjacent]: '隣り合っていない Shot に Transition がある',
