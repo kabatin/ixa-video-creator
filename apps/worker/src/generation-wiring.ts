@@ -7,6 +7,7 @@ import {
   createGenerationJobRepository,
   createMediaAssetRepository,
   createMusicAnalysisRepository,
+  createMusicAnalysisFailureRepository,
   createMusicTrackRepository,
   createProjectRepository,
   createRenderJobRepository,
@@ -204,6 +205,7 @@ export const createGenerationWiring = (
   const analysis: AnalysisProcessorDeps = {
     musicTracks: createMusicTrackRepository(db),
     musicAnalyses: createMusicAnalysisRepository(db),
+    analysisFailures: createMusicAnalysisFailureRepository(db),
     mediaAssets: createMediaAssetRepository(db),
     storage,
     analyzer: createMusicAnalyzer(config.audio.url),

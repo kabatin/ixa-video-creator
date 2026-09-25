@@ -1,4 +1,4 @@
-import type { MediaAssetRepository, MusicAnalysisRepository } from '@ixa/db'
+import type { MediaAssetRepository, MusicAnalysisRepository, MusicAnalysisFailureRepository } from '@ixa/db'
 import {
   MANUAL_ANALYZER_VERSION,
   MusicTrackId as MusicTrackIdSchema,
@@ -10,6 +10,7 @@ import type { MusicAnalysisResult, MusicAnalyzer } from '@ixa/music'
 import { waveformKey, type ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import { z } from 'zod'
+import { analysisFailureMessage } from './failure-message.js'
 import { withTempDir } from '../media/temp-dir.js'
 import { placeAudioForAnalysis } from './audio-source.js'
 
@@ -51,6 +52,11 @@ export type MusicTrackLookup = {
 export type AnalysisProcessorDeps = {
   readonly musicTracks: MusicTrackLookup
   readonly musicAnalyses: MusicAnalysisRepository
+  /**
+   * 解析の失敗の置き場。**失敗を画面が読める形で残す。**
+   * 以前はログにしか残らず、画面から「まだ終わっていない」と区別がつかなかった。
+   */
+  readonly analysisFailures: Pick<MusicAnalysisFailureRepository, 'record' | 'clear'>
   readonly mediaAssets: Pick<MediaAssetRepository, 'findById'>
   readonly storage: ObjectStorage
   readonly analyzer: MusicAnalyzer
@@ -199,13 +205,27 @@ export const processAnalysisJob = async (
   }
 
   try {
-    return await withTempDir(deps.audioRoot, TEMP_DIR_PREFIX, async (jobDir) => {
+    const outcome = await withTempDir(deps.audioRoot, TEMP_DIR_PREFIX, async (jobDir) => {
       const audioPath = await placeAudioForAnalysis(deps.storage, asset, deps.audioRoot, jobDir)
       return analyzeAndStore(deps, track, expectedVersion, audioPath)
     })
+    // 成功したら前の失敗を消す。消せなくても解析は成立しているので、ログに残すだけ。
+    await deps.analysisFailures.clear(musicTrackId).catch((error: unknown) => {
+      deps.logger.warn({ musicTrackId, err: error }, '前の解析の失敗を消せませんでした')
+    })
+    return outcome
   } catch (error) {
     const code = errorCodeOf(error)
     deps.logger.error({ musicTrackId, code, err: error }, '音楽解析に失敗しました')
+    /**
+     * **画面が読める形で残す。** 残せなかったら画面は「まだ終わっていない」と見続けるが、
+     * それで元の失敗を上書きしない（ログに両方残す）。
+     */
+    await deps.analysisFailures
+      .record(musicTrackId, analysisFailureMessage(error))
+      .catch((recordError: unknown) => {
+        deps.logger.error({ musicTrackId, err: recordError }, '解析の失敗を記録できませんでした')
+      })
     return { state: 'failed', code }
   }
 }

@@ -206,3 +206,28 @@ export const putAudio = async (storage: ObjectStorage, asset: MediaAsset): Promi
     contentType: asset.mimeType,
   })
 }
+
+/** 解析の失敗の置き場の代役。何が残ったかを見られるようにする。 */
+export type InMemoryAnalysisFailures = {
+  record(musicTrackId: MusicTrackId, message: string): Promise<void>
+  clear(musicTrackId: MusicTrackId): Promise<void>
+  snapshot(): ReadonlyMap<MusicTrackId, string>
+}
+
+export const inMemoryAnalysisFailures = (): InMemoryAnalysisFailures => {
+  let rows = new Map<MusicTrackId, string>()
+  return {
+    record: (musicTrackId, message) => {
+      rows = new Map(rows).set(musicTrackId, message)
+      return Promise.resolve()
+    },
+    clear: (musicTrackId) => {
+      const next = new Map(rows)
+      next.delete(musicTrackId)
+      rows = next
+      return Promise.resolve()
+    },
+    snapshot: () => rows,
+  }
+}
+

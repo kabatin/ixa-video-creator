@@ -6,6 +6,7 @@ import type {
   ProjectRepository,
   ShotRepository,
   TakeRepository,
+  MusicAnalysisFailureRepository,
 } from '@ixa/db'
 import type {
   GenerationContextSource,
@@ -96,6 +97,8 @@ export type AppDeps = {
   storyboardDrafter: StoryboardDrafter
   sequences: SequenceRepository
   musicAnalyses: MusicAnalysisRepository
+  /** 解析の失敗（worker が書く）。画面が「まだ」と「失敗」を分けるために読む。 */
+  musicAnalysisFailures: MusicAnalysisFailureRepository
   analysisQueue: AnalysisQueue
   reviews: ReviewRepository
   reviewQueue: ReviewQueue
@@ -218,6 +221,7 @@ export const createApp = (deps: AppDeps) => {
     musicRoutes({
       musicTracks: deps.musicTracks,
       musicAnalyses: deps.musicAnalyses,
+      analysisFailures: deps.musicAnalysisFailures,
       projects,
       mediaAssets,
       storage,

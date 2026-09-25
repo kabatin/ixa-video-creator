@@ -48,6 +48,16 @@ export const WireMusicAnalysis = z.object({
 })
 export type WireMusicAnalysis = z.infer<typeof WireMusicAnalysis>
 
+/**
+ * 直近の解析の失敗。worker が利用者に見せてよい文だけを書く（URL や例外の本文は入らない）。
+ * 解析を頼み直すと API が消すので、ここに在るのは「今の依頼」の失敗。
+ */
+export const WireAnalysisFailure = z.object({
+  message: z.string(),
+  failedAt: z.string(),
+})
+export type WireAnalysisFailure = z.infer<typeof WireAnalysisFailure>
+
 export const WireAnalysisAccepted = z.object({
   musicTrackId: z.string(),
   queued: z.boolean(),
@@ -102,6 +112,8 @@ export type MusicApi = {
   /** 未解析なら null。解析前でも画面を出せるようにするため 404 を畳む。 */
   getAnalysis: (musicTrackId: MusicTrackId) => Promise<WireMusicAnalysis | null>
   requestAnalysis: (musicTrackId: MusicTrackId) => Promise<WireAnalysisAccepted>
+  /** 直近の解析が失敗していればその理由。無ければ null（「まだ」と「失敗」を分けるため）。 */
+  getAnalysisFailure: (musicTrackId: MusicTrackId) => Promise<WireAnalysisFailure | null>
   allocateShots: (projectId: ProjectId, body: AllocateShotsBody) => Promise<WireAllocateResult>
   /** 区切りの列から Shot を作る。セクション解析を介さない経路。 */
   createCuts: (projectId: ProjectId, body: CreateCutsBody) => Promise<WireCreateCutsResult>
@@ -132,6 +144,9 @@ export const createMusicApi = (requester: Requester): MusicApi => ({
 
   requestAnalysis: async (musicTrackId) =>
     requester.post(trackPath(musicTrackId, '/analysis'), undefined, WireAnalysisAccepted),
+
+  getAnalysisFailure: async (musicTrackId) =>
+    requester.get(trackPath(musicTrackId, '/analysis/failure'), WireAnalysisFailure.nullable()),
 
   allocateShots: async (projectId, body) =>
     requester.post(

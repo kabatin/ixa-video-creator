@@ -1027,6 +1027,7 @@ locations
 motion_templates
 music_tracks
 music_analyses               (JSONB: beats / downbeats / sections / energy_curve)
+music_analysis_failures      (直近の解析の失敗。楽曲 1 件につき 1 行。頼み直すと消える)
 scripts
 script_versions
 sequences

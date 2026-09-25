@@ -8,6 +8,7 @@ import {
   type MusicAnalysis,
   type MusicTrackId,
 } from '@ixa/domain'
+import { MusicAnalyzerConnectionError, MusicAnalyzerResponseError } from '@ixa/music'
 import { createMemoryStorage, waveformKey, type ObjectStorage } from '@ixa/storage'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
@@ -18,6 +19,8 @@ import {
 import {
   aMusicTrack,
   anAnalysis,
+  inMemoryAnalysisFailures,
+  type InMemoryAnalysisFailures,
   anAudioAsset,
   analysisResult,
   fakeAnalyzer,
@@ -51,6 +54,7 @@ type Harness = {
   readonly analyzer: FakeAnalyzer
   readonly storage: ObjectStorage
   readonly track: ReturnType<typeof aMusicTrack>
+  readonly failures: InMemoryAnalysisFailures
 }
 
 type HarnessOptions = {
@@ -78,15 +82,18 @@ const harness = async (options: HarnessOptions = {}): Promise<Harness> => {
 
   const analyses = inMemoryMusicAnalyses(options.seed?.(track.id) ?? [])
   const analyzer = options.analyzer ?? fakeAnalyzer()
+  const failures = inMemoryAnalysisFailures()
 
   return {
     track,
     analyses,
     analyzer,
     storage,
+    failures,
     deps: {
       musicTracks: tracks,
       musicAnalyses: analyses,
+      analysisFailures: failures,
       mediaAssets,
       storage,
       analyzer,
@@ -184,6 +191,45 @@ describe('processAnalysisJob', () => {
 
     expect(outcome.state).toBe('failed')
     expect(analyses.snapshot()).toHaveLength(0)
+  })
+
+  /**
+   * **失敗を画面が読める形で残す。** 以前はログにしか残らず、画面からは
+   * 「まだ終わっていない」と区別がつかなかった。解析中は画面を止めるダイアログが出るので、
+   * 解析サービスが止まっていると画面ごと固まり、理由も出なかった（まっさらな clone で実際に）。
+   */
+  it('解析サービスに接続できなければ、接続できないと人向けの文で残す（URL は出さない）', async () => {
+    const failing = fakeAnalyzer(
+      analysisResult(),
+      new MusicAnalyzerConnectionError('http://127.0.0.1:8100/analyze'),
+    )
+    const { deps, track, failures } = await harness({ analyzer: failing })
+
+    await processAnalysisJob(deps, { musicTrackId: track.id })
+
+    const message = failures.snapshot().get(track.id)
+    expect(message).toContain('接続できませんでした')
+    expect(message).not.toMatch(/https?:|127\.0\.0\.1|8100|ECONN/)
+  })
+
+  it('解析そのものが失敗したら、そう残す', async () => {
+    const failing = fakeAnalyzer(analysisResult(), new MusicAnalyzerResponseError(422, 'bad audio'))
+    const { deps, track, failures } = await harness({ analyzer: failing })
+
+    await processAnalysisJob(deps, { musicTrackId: track.id })
+
+    expect(failures.snapshot().get(track.id)).toContain('解析できませんでした')
+    expect(failures.snapshot().get(track.id)).not.toContain('bad audio')
+  })
+
+  it('成功したら前の失敗を消す', async () => {
+    const { deps, track, failures } = await harness()
+    await failures.record(track.id, '前の失敗')
+
+    const outcome = await processAnalysisJob(deps, { musicTrackId: track.id })
+
+    expect(outcome.state).toBe('analyzed')
+    expect(failures.snapshot().has(track.id)).toBe(false)
   })
 
   it('MusicTrack が見つからなければ throw する', async () => {

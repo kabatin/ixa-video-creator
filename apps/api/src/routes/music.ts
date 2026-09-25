@@ -4,6 +4,7 @@ import type {
   MusicAnalysisRepository,
   MusicTrackRepository,
   ProjectRepository,
+  MusicAnalysisFailureRepository,
 } from '@ixa/db'
 import {
   CreateMusicTrackInput as CreateMusicTrackInputSchema,
@@ -186,6 +187,27 @@ const requestAnalysisRoute = createRoute({
   },
 })
 
+const AnalysisFailureResponse = z
+  .object({
+    /** 利用者に見せてよい文。URL や例外の本文は入っていない（worker が作る時点で落とす）。 */
+    message: z.string(),
+    failedAt: z.string().datetime(),
+  })
+  .nullable()
+  .openapi('MusicAnalysisFailure')
+
+const getAnalysisFailureRoute = createRoute({
+  method: 'get',
+  path: '/music-tracks/{id}/analysis/failure',
+  tags: ['music'],
+  summary: '直近の解析の失敗（無ければ null）',
+  request: { params: MusicTrackParams },
+  responses: {
+    200: jsonContent('直近の失敗。無ければ null', successResponse(AnalysisFailureResponse)),
+    ...commonErrors,
+  },
+})
+
 const getAnalysisRoute = createRoute({
   method: 'get',
   path: '/music-tracks/{id}/analysis',
@@ -201,6 +223,11 @@ const getAnalysisRoute = createRoute({
 export type MusicRoutesDeps = {
   musicTracks: MusicTrackRepository
   musicAnalyses: MusicAnalysisRepository
+  /**
+   * 解析の失敗（worker が書く）。**画面が「まだ」と「失敗」を分けるために読む。**
+   * 以前は失敗がログにしか残らず、画面は「まだ終わっていない」と見て待ち続けた。
+   */
+  analysisFailures: Pick<MusicAnalysisFailureRepository, 'find' | 'clear'>
   /** Project の実在確認だけに使う。 */
   projects: ProjectRepository
   /** 登録しようとしている音源の実在と種別の確認に使う。 */
@@ -269,8 +296,24 @@ export const musicRoutes = (deps: MusicRoutesDeps) => {
        * 解析済みかどうかはここでは見ない。冪等判定は worker が持つ（`skipReason`）。
        * API 側にも同じ判定を置くと、**手動補正の優先規則が 2 箇所に散る**ため。
        */
+      // やり直す前に前の失敗を消す。消さないと、画面がやり直した直後に古い失敗で止まる。
+      await deps.analysisFailures.clear(id)
       await deps.queue.enqueue(id)
       return c.json(ok({ musicTrackId: id, queued: true }), 202)
+    })
+    .openapi(getAnalysisFailureRoute, async (c) => {
+      const { id } = c.req.valid('param')
+      if ((await findTrack(id)) === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+
+      const failure = await deps.analysisFailures.find(id)
+      return c.json(
+        ok(
+          failure === null
+            ? null
+            : { message: failure.message, failedAt: failure.failedAt.toISOString() },
+        ),
+        200,
+      )
     })
     .openapi(getAnalysisRoute, async (c) => {
       const { id } = c.req.valid('param')

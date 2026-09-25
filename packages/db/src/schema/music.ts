@@ -1,6 +1,6 @@
 import { boolean, doublePrecision, index, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
 import type { MusicAnalysis, MusicSection, Seconds } from '@ixa/domain'
-import { createdAt, deletedAt, seconds, ulidPk, ulidRef } from './columns.js'
+import { createdAt, deletedAt, seconds, timestampTz, ulidPk, ulidRef } from './columns.js'
 import { mediaAssets } from './media.js'
 import { projects } from './workspace.js'
 
@@ -57,3 +57,21 @@ export const musicAnalyses = pgTable(
   },
   (t) => [index('music_analyses_music_track_id_idx').on(t.musicTrackId)],
 )
+
+/**
+ * 解析の**失敗**。1 曲につき直近の 1 件だけ持つ（成功したら消す）。
+ *
+ * **なぜ要るか。** 解析結果（`music_analyses`）は成功したときにしか行ができない。
+ * 失敗は worker のログにしか残らず、画面から見ると「まだ終わっていない」と区別がつかなかった。
+ * 解析中は画面の操作を止めるダイアログを出すので、解析サービスが止まっていると
+ * **画面ごと固まったまま、理由も出なかった**（まっさらな clone で実際にそうなった）。
+ *
+ * 利用者に見せる文だけを持つ。URL や例外の本文は入れない（ログにだけ残す）。
+ */
+export const musicAnalysisFailures = pgTable('music_analysis_failures', {
+  musicTrackId: ulidRef('music_track_id')
+    .primaryKey()
+    .references(() => musicTracks.id, { onDelete: 'cascade' }),
+  message: text('message').notNull(),
+  failedAt: timestampTz('failed_at').notNull().defaultNow(),
+})

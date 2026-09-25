@@ -24,6 +24,7 @@ import {
   createStoryboardDraftRepository,
   createSequenceRepository,
   createMusicAnalysisRepository,
+  createMusicAnalysisFailureRepository,
   createReviewRepository,
 } from '@ixa/db'
 import { createProviderRegistry } from '@ixa/provider-core'
@@ -232,6 +233,7 @@ export const main = (): void => {
         : createStubStoryboardDrafter(),
     sequences: createSequenceRepository(db),
     musicAnalyses: createMusicAnalysisRepository(db),
+    musicAnalysisFailures: createMusicAnalysisFailureRepository(db),
     analysisQueue: analysisQueuePort,
     reviews: createReviewRepository(db),
     reviewQueue: reviewQueuePort,

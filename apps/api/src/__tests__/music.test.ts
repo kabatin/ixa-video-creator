@@ -33,6 +33,7 @@ import {
   createInMemoryMusicTrackRepository,
   type InMemoryMusicTrackRepository,
 } from './in-memory-timeline-repositories.js'
+import { createInMemoryMusicAnalysisFailureRepository } from './in-memory-music-analysis-failure-repository.js'
 
 type SuccessBody<T> = { success: true; data: T }
 type ListBody<T> = { success: true; data: T[]; meta: { total: number } }
@@ -91,6 +92,7 @@ const createRecordingQueue = (): AnalysisQueue & { enqueued: () => readonly Musi
 
 let musicTracks: InMemoryMusicTrackRepository
 let musicAnalyses: InMemoryMusicAnalysisRepository
+let analysisFailures: ReturnType<typeof createInMemoryMusicAnalysisFailureRepository>
 let queue: ReturnType<typeof createRecordingQueue>
 let audioAsset: MediaAsset
 let app: OpenAPIHono
@@ -127,10 +129,12 @@ beforeEach(() => {
   audioAsset = anAudioAsset()
   musicTracks = createInMemoryMusicTrackRepository()
   musicAnalyses = createInMemoryMusicAnalysisRepository()
+  analysisFailures = createInMemoryMusicAnalysisFailureRepository()
   queue = createRecordingQueue()
   app = buildApp({
     musicTracks,
     musicAnalyses,
+    analysisFailures,
     projects: createInMemoryProjectRepository([project, otherProject]),
     mediaAssets: createInMemoryMediaAssetRepository([audioAsset]),
     storage: createMemoryStorage(),
@@ -181,6 +185,7 @@ describe('楽曲の登録', () => {
     app = buildApp({
       musicTracks,
       musicAnalyses,
+      analysisFailures,
       projects: createInMemoryProjectRepository([project]),
       mediaAssets: createInMemoryMediaAssetRepository([video]),
       storage: createMemoryStorage(),
@@ -355,3 +360,46 @@ describe('楽曲を直す・マスターを付け替える・消す（PHASE 8）
     expect((await send('DELETE', `/music-tracks/${track.id}`)).status).toBe(404)
   })
 })
+
+/**
+ * 解析の失敗を画面が読めるようにする（まっさらな clone で見つけた）。
+ *
+ * 以前は失敗が worker のログにしか残らず、`GET .../analysis` は 404（まだ無い）を返し続けた。
+ * 画面は「まだ終わっていない」と見て、操作を止めるダイアログが回り続けた。
+ */
+describe('解析の失敗', () => {
+  it('失敗が無ければ null', async () => {
+    const track = await createTrack()
+    const res = await send('GET', `/music-tracks/${track.id}/analysis/failure`)
+    expect(res.status).toBe(200)
+    expect((await json<SuccessBody<unknown>>(res)).data).toBeNull()
+  })
+
+  it('worker が残した失敗を、人向けの文のまま返す', async () => {
+    const track = await createTrack()
+    await analysisFailures.record(track.id as MusicTrackId, '曲を解析するサービスに接続できませんでした。')
+
+    const res = await send('GET', `/music-tracks/${track.id}/analysis/failure`)
+
+    expect(res.status).toBe(200)
+    const body = (await json<SuccessBody<{ message: string; failedAt: string }>>(res)).data
+    expect(body.message).toBe('曲を解析するサービスに接続できませんでした。')
+    expect(typeof body.failedAt).toBe('string')
+  })
+
+  it('解析をやり直すと前の失敗を消す（やり直した直後に古い失敗で止めない）', async () => {
+    const track = await createTrack()
+    await analysisFailures.record(track.id as MusicTrackId, '前の失敗')
+
+    const res = await send('POST', `/music-tracks/${track.id}/analysis`)
+
+    expect(res.status).toBe(202)
+    expect(analysisFailures.snapshot().has(track.id as MusicTrackId)).toBe(false)
+  })
+
+  it('無い曲なら 404', async () => {
+    const res = await send('GET', `/music-tracks/${newId(MusicTrackIdSchema)}/analysis/failure`)
+    expect(res.status).toBe(404)
+  })
+})
+

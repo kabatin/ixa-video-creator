@@ -29,6 +29,10 @@ import { WORDING } from '@/lib/wording'
  * API に「解析が走っているか」を問う口が無く、`getAnalysis` は結果が出るまで null しか
  * 返さないため、画面を開き直したときは始まっているかどうか分からない。分からないので
  * もう一度頼む。解析は結果を上書きするだけで、二重に頼んでも壊れない（局所・無料）。
+ *
+ * **失敗も追いかける。** 結果が null のあいだは失敗の有無も問い、あればダイアログを閉じて
+ * 理由を出す。以前は解析サービスが止まっていると「数えています」のまま 5 分回り、
+ * 手も止められていた（新しく clone して実測）。
  */
 
 export type AnalysisStarterProps = {
@@ -45,6 +49,9 @@ type Phase =
   | { readonly kind: 'failed'; readonly message: string }
 
 const IDLE: Phase = { kind: 'idle' }
+
+/** 追いかけた結果。解析が出たか、失敗が記録されたか。 */
+type Outcome = { readonly kind: 'done' } | { readonly kind: 'failed'; readonly message: string }
 
 const timeoutMinutes = (): string => String(Math.round(POLL_TIMEOUT_MS / 60_000))
 
@@ -68,9 +75,13 @@ export const AnalysisStarter = ({ track }: AnalysisStarterProps) => {
     pollRef.current?.stop()
     setPhase({ kind: 'waiting', startedAtMs, elapsedMs: 0 })
     pollRef.current = startAsyncPolling({
-      probe: async () => {
+      probe: async (): Promise<{ running: boolean; value: Outcome | null }> => {
         const analysis = await api.getAnalysis(track.id)
-        return { running: analysis === null, value: analysis }
+        if (analysis !== null) return { running: false, value: { kind: 'done' } }
+        const failure = await api.getAnalysisFailure(track.id)
+        return failure === null
+          ? { running: true, value: null }
+          : { running: false, value: { kind: 'failed', message: failure.message } }
       },
       onProbe: () => {
         setPhase((current) =>
@@ -79,7 +90,12 @@ export const AnalysisStarter = ({ track }: AnalysisStarterProps) => {
             : current,
         )
       },
-      onSettled: () => {
+      onSettled: (outcome) => {
+        // worker が作った見せてよい文なので、describeError を通さずそのまま出す。
+        if (outcome?.kind === 'failed') {
+          setPhase(outcome)
+          return
+        }
         setPhase({ kind: 'done' })
         // 解析結果が要るのはサーバ側で組み立てる画面なので、取り直させる。
         router.refresh()

@@ -78,6 +78,13 @@
       "when": 1790327255835,
       "tag": "0010_adoption_is_decision",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790331935676,
+      "tag": "0011_music_analysis_failures",
+      "breakpoints": true
     }
   ]
 }

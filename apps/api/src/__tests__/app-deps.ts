@@ -38,6 +38,7 @@ import { createInMemoryProjectEvents } from './in-memory-project-events.js'
 import { createInMemoryStoryboardDraftRepository } from './in-memory-storyboard-draft-repository.js'
 import { createStubStoryboardDrafter } from '@ixa/provider-llm'
 import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryMusicAnalysisFailureRepository } from './in-memory-music-analysis-failure-repository.js'
 
 /** 投入されたジョブ ID を記録するだけのキュー。Redis には接続しない。 */
 export type RecordingQueue = GenerationQueue & {
@@ -133,6 +134,7 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   storyboardDrafter: createStubStoryboardDrafter(),
   sequences: createInMemorySequenceRepository(),
   musicAnalyses: createInMemoryMusicAnalysisRepository(),
+  musicAnalysisFailures: createInMemoryMusicAnalysisFailureRepository(),
   analysisQueue: createRecordingAnalysisQueue(),
   reviews: createInMemoryReviewRepository(),
   reviewQueue: createRecordingReviewQueue(),
