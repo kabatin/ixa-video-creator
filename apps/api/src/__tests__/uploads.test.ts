@@ -76,7 +76,7 @@ const completeBody = (
   mimeType: 'video/mp4',
   bytes: CONTENT.byteLength,
   checksumSha256: CHECKSUM,
-  uploadedBy: 'h.kabayama',
+  uploadedBy: 'editor',
   ...overrides,
 })
 
@@ -202,7 +202,7 @@ describe('POST /uploads/complete', () => {
     expect(json.data.storageKey).toBe(sign.storageKey)
     expect(json.data.bytes).toBe(CONTENT.byteLength)
     expect(json.data.checksumSha256).toBe(CHECKSUM)
-    expect(json.data.origin).toEqual({ type: 'upload', uploadedBy: 'h.kabayama' })
+    expect(json.data.origin).toEqual({ type: 'upload', uploadedBy: 'editor' })
     expect(repo.snapshot()).toHaveLength(1)
   })
 

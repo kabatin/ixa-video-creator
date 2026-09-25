@@ -18,7 +18,7 @@ import {
 /** 画面に出てはいけないものが混ざった、いかにもな失敗。 */
 const leaky = (status: number, body: string) =>
   new ApiError(
-    `POST http://192.168.0.42:3001/projects/01ABC/renders: API が ${String(status)} を返しました`,
+    `POST http://10.0.0.5:3001/projects/01ABC/renders: API が ${String(status)} を返しました`,
     status,
     body,
   )
@@ -26,7 +26,7 @@ const leaky = (status: number, body: string) =>
 describe('describeForPerson', () => {
   it('検証の失敗は項目ごとの理由にする（URL も JSON も出さない）', () => {
     const error = new ApiError(
-      'POST http://192.168.0.42:3001/brand-assets: API が 422 を返しました',
+      'POST http://10.0.0.5:3001/brand-assets: API が 422 を返しました',
       422,
       JSON.stringify({
         success: false,
@@ -82,13 +82,13 @@ describe('describeError', () => {
 
   it('URL もレスポンス本文も画面に出さない', () => {
     const text = describeError(leaky(500, JSON.stringify({ token: 'SECRET' })))
-    expect(text).not.toContain('192.168.0.42')
+    expect(text).not.toContain('10.0.0.5')
     expect(text).not.toContain('SECRET')
   })
 })
 
 describe('describeErrorForLog', () => {
   it('技術的な文はログ向けとして残る', () => {
-    expect(describeErrorForLog(leaky(500, ''))).toContain('192.168.0.42')
+    expect(describeErrorForLog(leaky(500, ''))).toContain('10.0.0.5')
   })
 })

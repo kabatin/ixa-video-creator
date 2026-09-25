@@ -26,7 +26,6 @@ describe('loadConfig', () => {
       forcePathStyle: true,
     })
     expect(config.api.port).toBe(3001)
-    expect(config.web.port).toBe(3000)
     expect(config.logLevel).toBe('info')
     expect(config.nodeEnv).toBe('development')
     expect(config.audio.url).toBe('http://127.0.0.1:8100')

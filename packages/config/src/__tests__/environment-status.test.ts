@@ -26,7 +26,6 @@ const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
     },
     api: { port: 3001, host: '127.0.0.1' },
     corsOrigins: [],
-    web: { port: 3000 },
     audio: { url: 'http://audio' },
     storyboardDrafter: 'stub',
     logLevel: 'info',

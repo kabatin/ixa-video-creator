@@ -72,9 +72,6 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       port: parsed.API_PORT,
       host: parsed.API_HOST,
     },
-    web: {
-      port: parsed.WEB_PORT,
-    },
     audio: {
       url: parsed.AUDIO_SERVICE_URL,
     },

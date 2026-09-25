@@ -31,7 +31,6 @@ export const EnvSchema = z.object({
    * LAN から触りたいときだけ明示的に `0.0.0.0` にし、**終わったら戻すこと。**
    */
   API_HOST: z.string().min(1).default('127.0.0.1'),
-  WEB_PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   /**
    * CORS で許可するオリジン。カンマ区切り。
@@ -116,9 +115,6 @@ export interface AppConfig {
     host: string
   }
   corsOrigins: readonly string[]
-  web: {
-    port: number
-  }
   audio: {
     url: string
   }

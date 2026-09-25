@@ -65,7 +65,7 @@ const seedAsset = async (
     mimeType: 'video/mp4',
     bytes: CONTENT.byteLength,
     checksumSha256: overrides.checksum ?? 'b'.repeat(64),
-    origin: { type: 'upload', uploadedBy: 'h.kabayama' },
+    origin: { type: 'upload', uploadedBy: 'editor' },
     tags: [],
   })
 }

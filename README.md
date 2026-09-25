@@ -82,7 +82,8 @@ milliseconds never enter the domain or the database.
 
 ## Quick start
 
-Requires Node 22, pnpm 9, Docker, FFmpeg, and Python 3.11+ for the audio service.
+Requires Node 22, pnpm 9, Docker, FFmpeg, and [uv](https://docs.astral.sh/uv/) with
+Python 3.11+ for the audio service (`uv` installs its Python dependencies on first run).
 
 ```bash
 git clone https://github.com/kabatin/ixa-video-creator.git
@@ -92,9 +93,9 @@ pnpm install
 cp .env.example .env          # defaults are safe: nothing bills
 pnpm infra:up                 # postgres, redis, minio
 pnpm db:migrate
-pnpm db:seed
+pnpm db:seed                  # creates a workspace and writes its id into .env
 
-pnpm dev                      # web :3000, api :3001, worker
+pnpm dev                      # web :3000, api :3001, worker, audio :8100
 ```
 
 Open <http://localhost:3000>, create a project, drop an audio file onto the window, and

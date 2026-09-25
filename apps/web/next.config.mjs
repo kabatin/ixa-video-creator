@@ -1,3 +1,15 @@
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+/**
+ * **リポジトリ直下の `.env` も読む。** Next.js は `apps/web/.env*` しか読まないので、
+ * README どおり直下に `.env` を 1 つ作っても `NEXT_PUBLIC_*` が届かず、
+ * まっさらな clone では一覧が「設定が不足しています」で止まっていた。
+ * `apps/web/.env.local` があればそちらが先に読まれ、ここは上書きしない。
+ */
+const rootEnv = resolve(process.cwd(), '../../.env')
+if (existsSync(rootEnv)) process.loadEnvFile(rootEnv)
+
 /**
  * @typedef {Record<string, unknown> & {
  *   resolve?: Record<string, unknown> & { extensionAlias?: Record<string, string[]> }

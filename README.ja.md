@@ -76,7 +76,8 @@ packages/
 
 ## 動かす
 
-Node 22 / pnpm 9 / Docker / FFmpeg、音声サービスに Python 3.11+ が要る。
+Node 22 / pnpm 9 / Docker / FFmpeg、音声サービスに [uv](https://docs.astral.sh/uv/) と Python 3.11+ が要る
+（Python の依存は初回起動時に `uv` が入れる）。
 
 ```bash
 git clone https://github.com/kabatin/ixa-video-creator.git
@@ -86,9 +87,9 @@ pnpm install
 cp .env.example .env          # 既定は安全。課金は発生しない
 pnpm infra:up                 # postgres / redis / minio
 pnpm db:migrate
-pnpm db:seed
+pnpm db:seed                  # ワークスペースを作り、その ID を .env に書く
 
-pnpm dev                      # web :3000, api :3001, worker
+pnpm dev                      # web :3000, api :3001, worker, audio :8100
 ```
 
 <http://localhost:3000> を開き、Project を作り、音声ファイルを画面に落として切り始める。

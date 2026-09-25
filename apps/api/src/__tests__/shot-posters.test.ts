@@ -47,7 +47,7 @@ const seedAsset = async (
     bytes: 1024,
     checksumSha256: options.checksum,
     thumbnailKey: options.thumbnailKey,
-    origin: { type: 'upload', uploadedBy: 'h.kabayama' },
+    origin: { type: 'upload', uploadedBy: 'editor' },
     tags: [],
   })
 
