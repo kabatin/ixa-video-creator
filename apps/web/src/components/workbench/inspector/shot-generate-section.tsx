@@ -1,7 +1,7 @@
 'use client'
 
 import type { ProjectId, Shot, ShotId } from '@ixa/domain'
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { FieldRow, INPUT_CLASS } from '@/components/workbench/ui/section'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,7 @@ import { formatClock } from '@/lib/format-time'
 import { AUTO_MODEL, MODEL_OPTIONS, TAKE_COUNT_OPTIONS } from '@/lib/generation-options'
 import { POLL_TIMEOUT_MS, startAsyncPolling } from '@/lib/poller'
 import { isGeneratingStatus } from '@/lib/shot-display'
+import { offerReviewAfterGeneration } from '@/lib/offer-review'
 
 /**
  * 生成（UI-WORKBENCH-2 §5.2）。**このパネルの主ボタン**はここ。
@@ -30,7 +31,10 @@ import { isGeneratingStatus } from '@/lib/shot-display'
  */
 
 /** この画面が使う口だけ。**テストから差し替えるための注入口。** */
-export type ShotGenerateApi = Pick<ApiClient, 'generateTakes' | 'listTakes' | 'getCostMeter'>
+export type ShotGenerateApi = Pick<
+  ApiClient,
+  'generateTakes' | 'listTakes' | 'getCostMeter' | 'requestReview'
+>
 
 /** 上限まで待って諦めるまでの分数。数字を書き写さない（lessons L-016）。 */
 const TIMEOUT_MINUTES = String(Math.round(POLL_TIMEOUT_MS / 60_000))
@@ -90,6 +94,24 @@ export const ShotGenerateSection = ({
    * サーバの読み直しで進む。**mount 時 1 回では固まる。**
    */
   const costEpoch = `${String(workbench.serverEpoch)}:${String(workbench.live.newTakeCount)}:${String(submissions)}`
+
+  /**
+   * この画面から投入した生成が終わったら、**自動レビューをするか聞く**（1 回の投入につき 1 回）。
+   * 一括生成と同じ口（`offer-review.ts`）。Take ができていなければ聞かない。
+   */
+  const offeredForRef = useRef<number | null>(null)
+  const { notify } = workbench
+  useEffect(() => {
+    if (watched === null || generating) return
+    if (offeredForRef.current === watched.startedAtMs) return
+    offeredForRef.current = watched.startedAtMs
+    void offerReviewAfterGeneration({
+      shotIds: [watched.shotId],
+      api: client,
+      confirm: (message) => window.confirm(message),
+      notify,
+    })
+  }, [watched, generating, client, notify])
   const cost = useCost(client, workbench.projectId, costEpoch)
 
   const generate = async (): Promise<void> => {

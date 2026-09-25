@@ -32,6 +32,11 @@ export type StoryboardPanelProps = {
   readonly track: MusicTrack
   readonly analysis: WireMusicAnalysis
   readonly sequences: readonly Sequence[]
+  /**
+   * 割り終えたときに呼ぶ。吹き出しの中に置いたとき、閉じて結果を知らせるのに使う。
+   * 渡さなければ結果はこの画面の中に出す。
+   */
+  readonly onCreated?: (summary: string) => void
 }
 
 type AllocateOutcome = {
@@ -47,6 +52,7 @@ export const StoryboardPanel = ({
   track,
   analysis,
   sequences,
+  onCreated,
 }: StoryboardPanelProps) => {
   const router = useRouter()
   const [values, setValues] = useState<StoryboardFormValues>(() =>
@@ -81,6 +87,10 @@ export const StoryboardPanel = ({
     setSubmitting(true)
     try {
       const result = await createApiClient().allocateShots(projectId, validation.input)
+      onCreated?.(
+        `${result.section.label} を ${String(result.createdCount)} カットに割りました。` +
+          (result.warnings.length > 0 ? ` 注意: ${result.warnings.join(' / ')}` : ''),
+      )
       setOutcome({
         createdCount: result.createdCount,
         requestedCount: result.requestedCount,

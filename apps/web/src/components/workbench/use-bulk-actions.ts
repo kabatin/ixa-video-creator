@@ -10,6 +10,7 @@ import type {
 } from '@/components/bulk-action-bar'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { createApiClient } from '@/lib/api-client'
+import { offerReviewAfterGeneration } from '@/lib/offer-review'
 import { describeError } from '@/lib/api-error'
 import { planBulkOperation, summarizeBulkResult, type BulkPlan } from '@/lib/shot-bulk'
 import { parseBulkGenerateRejection, type BulkGenerateRejection } from '@/lib/shot-bulk-api'
@@ -90,10 +91,22 @@ export const useBulkActions = (): BulkActions => {
     return { done, total: watching.length }
   }, [watching, shots])
 
-  // 全部が生成中を抜けたら見張りを終える。結果の要約はそのまま残す。
+  /**
+   * 全部が生成中を抜けたら見張りを終え、**自動レビューをするか聞く**。
+   * 聞くのは 1 回の一括につき 1 回（件数ぶん聞かない）。結果の要約はそのまま残す。
+   */
+  const { notify } = workbench
   useEffect(() => {
-    if (progress !== null && progress.done >= progress.total) setWatching(null)
-  }, [progress])
+    if (progress === null || watching === null || progress.done < progress.total) return
+    const finished = watching
+    setWatching(null)
+    void offerReviewAfterGeneration({
+      shotIds: finished,
+      api,
+      confirm: (message) => window.confirm(message),
+      notify,
+    })
+  }, [progress, watching, api, notify])
 
   const run = async (plan: BulkPlan, action: () => Promise<ActionResult>): Promise<void> => {
     if (plan.targetIds.length === 0) {

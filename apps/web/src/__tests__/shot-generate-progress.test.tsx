@@ -1,4 +1,4 @@
-import { Take, type Shot } from '@ixa/domain'
+import { Take, type Shot, TakeId } from '@ixa/domain'
 import { act, render, screen } from '@testing-library/react'
 import { useMemo, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -57,6 +57,7 @@ const fakeApi = (overrides: ApiOverrides = {}): ShotGenerateApi => ({
   generateTakes: vi.fn(() => Promise.resolve(generateResult(3))),
   listTakes: vi.fn(() => Promise.resolve([])),
   getCostMeter: vi.fn(() => Promise.resolve(meter(0))),
+  requestReview: vi.fn((takeId: TakeId) => Promise.resolve({ takeId, queued: true })),
   ...overrides,
 })
 

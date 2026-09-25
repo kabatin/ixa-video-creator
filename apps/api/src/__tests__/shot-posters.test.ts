@@ -109,6 +109,46 @@ const mixedFixture = async (): Promise<Fixture & { readonly thumbnailKey: string
   }
 }
 
+/**
+ * 採用 Take が無いときの文を、Shot の状態で言い分ける。
+ *
+ * 以前は一律「Take が選ばれていません」で、生成直後のカードにも生成前のカードにも同じ文が出た。
+ * 生成が終わって「採用待ち」の Shot では、次の一手（採用する）が読めなかった。
+ */
+describe('採用 Take が無いときの文', () => {
+  const reasonFor = async (status: 'draft' | 'generating' | 'review' | 'blocked') => {
+    const project = aProject()
+    const shot = aShot(project.id, { order: 1000, code: 'shot_001', status })
+    const res = await buildApp({
+      project,
+      shots: [shot],
+      takes: [],
+      mediaAssets: createInMemoryMediaAssetRepository(),
+      storage: createMemoryStorage(),
+    }).request(`/projects/${project.id}/shot-posters`)
+    const json = (await res.json()) as ListBody
+    return json.data[0]?.reason
+  }
+
+  it('採用待ち（Take はある）なら、採用すれば出ると言う', async () => {
+    expect(await reasonFor('review')).toBe(SHOT_POSTER_REASON.notAdopted)
+  })
+
+  it('生成中なら、生成中と言う', async () => {
+    expect(await reasonFor('generating')).toBe(SHOT_POSTER_REASON.generating)
+  })
+
+  it('まだ Take が無ければ、そう言う', async () => {
+    expect(await reasonFor('draft')).toBe(SHOT_POSTER_REASON.noTake)
+    expect(await reasonFor('blocked')).toBe(SHOT_POSTER_REASON.noTake)
+  })
+
+  it('3 つの文はすべて違う（同じ文だと言い分けた意味が無い）', () => {
+    const texts = [SHOT_POSTER_REASON.notAdopted, SHOT_POSTER_REASON.generating, SHOT_POSTER_REASON.noTake]
+    expect(new Set(texts).size).toBe(3)
+  })
+})
+
 describe('GET /projects/:projectId/shot-posters', () => {
   it('Take なし / 派生物なし / 正常 が 1 応答に混ざり、順序は Shot の order に従う', async () => {
     const fixture = await mixedFixture()

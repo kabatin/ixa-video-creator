@@ -35,8 +35,16 @@ import { DEFAULT_SIGNED_URL_EXPIRES_SEC, DERIVED_NOT_READY_MESSAGE } from './med
  * まとめて「出せません」にすると、待てば出るのか壊れているのかが消える。
  */
 export const SHOT_POSTER_REASON = {
-  /** そもそも採用 Take が選ばれていない。生成・選択がまだ。 */
-  noTake: 'Take が選ばれていません',
+  /**
+   * 採用 Take が無い理由は **Shot の状態で言い分ける**。以前は一律「Take が選ばれていません」で、
+   * 生成直後のカードにも生成前のカードにも同じ文が出て、次の一手が読めなかった。
+   */
+  /** まだ Take が 1 本も無い（下書き・生成可能・要判断）。 */
+  noTake: 'まだ Take がありません',
+  /** Take はあるが採用していない（採用待ち）。次の一手は採用。 */
+  notAdopted: 'Take を採用すると表示されます',
+  /** 生成中。待てば Take ができる。 */
+  generating: '生成中です',
   /** 採用 Take の行が引けない。選択と実体がずれている（異常）。 */
   takeMissing: '採用 Take が見つかりません',
   /** MediaAsset の行が引けない。削除済みか、取り込みが失敗している（異常）。 */
@@ -120,7 +128,13 @@ const resolveShotPoster = (
   const base = { shotId: shot.id }
 
   if (shot.selectedTakeId === null) {
-    return { ...base, takeId: null, thumbnailUrl: null, reason: SHOT_POSTER_REASON.noTake }
+    const reason =
+      shot.status === 'review'
+        ? SHOT_POSTER_REASON.notAdopted
+        : shot.status === 'generating'
+          ? SHOT_POSTER_REASON.generating
+          : SHOT_POSTER_REASON.noTake
+    return { ...base, takeId: null, thumbnailUrl: null, reason }
   }
 
   const take = takesById.get(shot.selectedTakeId)

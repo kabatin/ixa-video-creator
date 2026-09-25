@@ -118,6 +118,12 @@ const AutoSplitPopover = ({
             track={track}
             analysis={analysis}
             sequences={workbench.sequences}
+            // 割り終えたら閉じる。開いたままだと波形の半分を塞ぎ続ける（実機でそうなった）。
+            // 結果は上端の知らせに出す（吹き出しと一緒に消えないように）。
+            onCreated={(summary) => {
+              setOpen(false)
+              workbench.notify(summary)
+            }}
           />
         </div>
       )}
