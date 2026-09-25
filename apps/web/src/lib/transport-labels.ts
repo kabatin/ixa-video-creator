@@ -9,4 +9,5 @@ import type { TransportOwner } from '@/components/workbench/workbench-context'
 export const TRANSPORT_OWNER_LABELS: Readonly<Record<TransportOwner, string>> = Object.freeze({
   cutter: '聴きながら切る',
   monitor: 'プレビュー',
+  compare: 'Take 比較',
 })

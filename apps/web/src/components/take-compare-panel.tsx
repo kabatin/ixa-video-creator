@@ -2,7 +2,7 @@
 
 import type { ShotId, Take, TakeId } from '@ixa/domain'
 import { useEffect, useState } from 'react'
-import { TakeCompare } from '@/components/take-compare'
+import { TakeCompare, type ExclusivePlayback } from '@/components/take-compare'
 import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
@@ -33,6 +33,8 @@ export type TakeComparePanelProps = {
   readonly onAdopt?: (takeId: TakeId) => void
   /** 採用の送信中。ボタンを押せなくする。 */
   readonly adopting?: boolean
+  /** 画面の他の再生器と同時に鳴らないための口（`take-compare.tsx`）。 */
+  readonly exclusive?: ExclusivePlayback
 }
 
 const takeLabel = (take: Take): string => `Take ${String(take.index)}`
@@ -43,6 +45,7 @@ export const TakeComparePanel = ({
   selectedTakeId,
   onAdopt,
   adopting = false,
+  exclusive,
 }: TakeComparePanelProps) => {
   /**
    * A の既定は採用中の Take。まだ無ければ先頭。
@@ -130,7 +133,7 @@ export const TakeComparePanel = ({
         </label>
       </div>
 
-      <TakeCompare compare={compare} error={error} />
+      <TakeCompare compare={compare} error={error} exclusive={exclusive} />
 
       {onAdopt !== undefined && (
         <div className="flex flex-wrap items-center gap-2">

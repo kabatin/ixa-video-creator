@@ -89,6 +89,19 @@ export const ComparePanel = () => {
             onAdopt={(takeId) => {
               void adopt(takeId)
             }}
+            // 同時に鳴らない。聴きながら切ると一緒に鳴ると、曲がずれて二重に聞こえる。
+            exclusive={{
+              othersPlaying:
+                workbench.transport.playing && workbench.transport.owner !== 'compare',
+              onPlayingChange: (playing) => {
+                if (playing) workbench.transportControls.play('compare')
+                else if (workbench.transport.owner === 'compare')
+                  workbench.transportControls.pause()
+              },
+              // 画面の ⏸ や Space で止められたら、ここも止まる。
+              commandPlaying:
+                workbench.transport.owner === 'compare' ? workbench.transport.playing : null,
+            }}
           />
           <section aria-label="Take 一覧" className="shrink-0">
             <h3 className="mb-1 text-sm font-semibold text-muted">Take 一覧</h3>

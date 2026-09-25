@@ -56,7 +56,22 @@ describe('TransportBar', () => {
   it('押すと、出している場所が鳴る（押したものと鳴るものを食い違わせない）', () => {
     const value = renderBar('monitor', withHost('monitor'))
     screen.getByRole('button', { name: '再生' }).click()
-    expect(value.transportControls.togglePlayback).toHaveBeenCalledWith('monitor')
+    expect(value.transportControls.play).toHaveBeenCalledWith('monitor')
+  })
+
+  /**
+   * 別のパネル（Take 比較など）が鳴っているときは ⏸ を出し、押すと止まる。
+   * 以前は波形側のボタンが**自分の音**しか見ておらず、比較が鳴っていても「再生」と出ていた。
+   */
+  it('別のパネルが鳴っていても ⏸ を出し、押すと止まる', () => {
+    const base = workbenchValue()
+    const value = renderBar('cutter', {
+      transportControls: { ...base.transportControls, host: 'cutter' },
+      transport: { currentSec: 1, playing: true, seek: null, owner: 'compare' },
+    })
+    screen.getByRole('button', { name: '一時停止' }).click()
+    expect(value.transportControls.pause).toHaveBeenCalled()
+    expect(value.transportControls.play).not.toHaveBeenCalled()
   })
 
   it('別のパネルが鳴らしているときは、どこが鳴っているかを言う', () => {

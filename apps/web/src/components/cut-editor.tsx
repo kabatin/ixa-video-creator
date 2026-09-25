@@ -94,6 +94,8 @@ export type CutEditorProps = {
    * プレビューが開いているときは false（`transport-bar.tsx`）。
    */
   readonly showPlay?: boolean
+  /** 再生ボタンの差し替え（`audio-transport.tsx` の `playButton`）。 */
+  readonly playButton?: ReactNode
   /** 操作の行に足すもの（「セクションから割る…」など。PHASE 8.4）。 */
   readonly toolbarExtra?: ReactNode
 }
@@ -115,6 +117,7 @@ export const CutEditor = ({
   keyboardShortcuts = true,
   sync,
   showPlay = true,
+  playButton,
   toolbarExtra,
 }: CutEditorProps) => {
   const router = useRouter()
@@ -469,6 +472,7 @@ export const CutEditor = ({
          * 音量はステータスバーにひとつだけ置くので、ここには出さない。
          */
         showPlay={showPlay}
+        playButton={playButton}
         showVolume={sync === undefined}
         label={track.title}
         keyboardShortcuts={false}

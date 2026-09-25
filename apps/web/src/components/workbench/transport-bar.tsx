@@ -3,6 +3,7 @@
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { formatClock } from '@/lib/format-time'
 import { TRANSPORT_OWNER_LABELS } from '@/lib/transport-labels'
+import { SharedPlayButton } from '@/components/workbench/shared-play-button'
 
 /**
  * 再生の操作。**画面にひとつだけ、見えているプレイヤーの直下に置く。**
@@ -43,17 +44,7 @@ export const TransportBar = ({ owner, durationSec = null }: TransportBarProps) =
       <span className="justify-self-start text-xs text-accent">
         {elsewhere === null ? '' : `${elsewhere} が再生中`}
       </span>
-      <button
-        type="button"
-        aria-pressed={playing}
-        aria-label={playing ? '一時停止' : '再生'}
-        onClick={() => {
-          transportControls.togglePlayback(owner)
-        }}
-        className="inline-flex h-7 min-w-10 items-center justify-center rounded bg-accent text-base text-accent-fg hover:bg-accent/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-      >
-        {playing ? '⏸' : '▶'}
-      </button>
+      <SharedPlayButton owner={owner} />
       <span className="justify-self-end font-mono text-sm tabular-nums text-text">
         {formatClock(transport.currentSec)}
         {durationSec !== null && (

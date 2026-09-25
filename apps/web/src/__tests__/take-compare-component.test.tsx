@@ -68,7 +68,7 @@ describe('A/B は 1 つの位置に従う', () => {
   it('2 つのモニターに同じ seek と playing が渡る', () => {
     render(<TakeCompare compare={makeCompare()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: '再生' }))
+    fireEvent.click(screen.getByRole('button', { name: 'この Shot を再生' }))
 
     expect(monitor('a.mp4').playing).toBe(true)
     expect(monitor('b.mp4').playing).toBe(true)
@@ -127,7 +127,7 @@ describe('位置を報告するのは A だけ', () => {
 
   it('B が停止を知らせても再生は止まらない', () => {
     render(<TakeCompare compare={makeCompare()} />)
-    fireEvent.click(screen.getByRole('button', { name: '再生' }))
+    fireEvent.click(screen.getByRole('button', { name: 'この Shot を再生' }))
 
     act(() => {
       monitor('b.mp4').onPlayingChange(false)
@@ -138,7 +138,7 @@ describe('位置を報告するのは A だけ', () => {
 
   it('A が停止を知らせたら両方止まる', () => {
     render(<TakeCompare compare={makeCompare()} />)
-    fireEvent.click(screen.getByRole('button', { name: '再生' }))
+    fireEvent.click(screen.getByRole('button', { name: 'この Shot を再生' }))
 
     act(() => {
       monitor('a.mp4').onPlayingChange(false)
@@ -206,7 +206,7 @@ describe('A の素材が読めないとき', () => {
   it('再生の操作盤も出さない（押しても何も映らない）', () => {
     render(<TakeCompare compare={makeCompare({ b: null, reason: 'a_media_unresolved' })} />)
 
-    expect(screen.queryByRole('button', { name: '再生' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'この Shot を再生' })).toBeNull()
     expect(screen.queryByLabelText('拍の目盛り')).toBeNull()
   })
 })
@@ -243,3 +243,55 @@ describe('拍の目盛り', () => {
     expect(screen.getByLabelText('拍の目盛り')).toHaveTextContent('まだ解析されていません')
   })
 })
+
+/**
+ * 他の再生器と**同時に鳴らない**。
+ *
+ * 以前は参加しておらず、「聴きながら切る」と一緒に鳴って、曲が 0.5 秒ずれて
+ * 二重に聞こえた（実機で確認: original.mp3 が 3.01s、カッターが 3.49s）。
+ */
+describe('他の再生器と同時に鳴らない', () => {
+  const port = (patch: Partial<{ othersPlaying: boolean; commandPlaying: boolean | null }> = {}) => ({
+    othersPlaying: false,
+    commandPlaying: null,
+    onPlayingChange: vi.fn(),
+    ...patch,
+  })
+
+  it('鳴り始めたら知らせる（他を止めるため）', () => {
+    const exclusive = port()
+    render(<TakeCompare compare={makeCompare()} exclusive={exclusive} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'この Shot を再生' }))
+
+    expect(exclusive.onPlayingChange).toHaveBeenCalledWith(true)
+  })
+
+  it('取り付けただけでは知らせない（他の再生を止めてしまう）', () => {
+    const exclusive = port()
+    render(<TakeCompare compare={makeCompare()} exclusive={exclusive} />)
+
+    expect(exclusive.onPlayingChange).not.toHaveBeenCalled()
+  })
+
+  it('他が鳴り始めたら止まる', () => {
+    const first = port()
+    const view = render(<TakeCompare compare={makeCompare()} exclusive={first} />)
+    fireEvent.click(screen.getByRole('button', { name: 'この Shot を再生' }))
+    expect(monitor('a.mp4').playing).toBe(true)
+
+    view.rerender(<TakeCompare compare={makeCompare()} exclusive={port({ othersPlaying: true })} />)
+
+    expect(monitor('a.mp4').playing).toBe(false)
+  })
+
+  it('画面の ⏸ で止められたら止まる（持ち主のときの指示に従う）', () => {
+    const view = render(<TakeCompare compare={makeCompare()} exclusive={port()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'この Shot を再生' }))
+
+    view.rerender(<TakeCompare compare={makeCompare()} exclusive={port({ commandPlaying: false })} />)
+
+    expect(monitor('a.mp4').playing).toBe(false)
+  })
+})
+

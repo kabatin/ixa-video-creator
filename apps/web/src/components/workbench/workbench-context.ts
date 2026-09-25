@@ -32,7 +32,13 @@ export type WorkbenchTransport = {
   readonly owner: TransportOwner | null
 }
 
-export type TransportOwner = 'cutter' | 'monitor'
+/**
+ * 鳴らす側。**同時に鳴るのは 1 つだけ。**
+ * `compare`（Take 比較）は操作列の持ち主にはならない（Shot の区間だけを繰り返す別の道具で、
+ * 自分のボタンを持つ）。ただし鳴るときは他を止め、他が鳴ったら止まる。
+ * 以前は参加しておらず、聴きながら切ると同時に鳴って曲が 0.5 秒ずれて二重に聞こえた。
+ */
+export type TransportOwner = 'cutter' | 'monitor' | 'compare'
 
 export type WorkbenchLive = {
   readonly state: LiveState

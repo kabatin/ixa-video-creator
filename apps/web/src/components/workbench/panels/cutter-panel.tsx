@@ -10,6 +10,7 @@ import { usePreferences } from '@/components/preferences-root'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { MusicGate } from '@/components/workbench/panels/music-gate'
 import { PanelFrame } from '@/components/workbench/panels/panel-frame'
+import { SharedPlayButton } from '@/components/workbench/shared-play-button'
 
 /**
  * 聴きながら切る（中央下）。中身は既存の `cut-editor`。
@@ -39,6 +40,8 @@ export const CutterPanel = ({ visible }: { readonly visible: boolean }) => {
             keyboardShortcuts={visible && workbench.dialog === null}
             // 再生ボタンを出すのは、いま操作列を持っているパネルだけ。
             showPlay={transportControls.host === 'cutter'}
+            // プレビューの下と同じ部品。見た目も「いま何か鳴っているか」の読み方も揃える。
+            playButton={<SharedPlayButton owner="cutter" />}
             toolbarExtra={<AutoSplitPopover track={track} analysis={analysis} />}
             sync={{
               othersPlaying: transport.playing && transport.owner !== 'cutter',

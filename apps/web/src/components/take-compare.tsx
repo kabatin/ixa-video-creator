@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { BeatRuler } from '@/components/beat-ruler'
 import { ProgramMonitor } from '@/components/program-monitor'
 import { nextSeekCommand, type SeekCommand } from '@/lib/program-monitor'
@@ -31,9 +31,26 @@ import {
 /** B は位置も再生状態も報告しない。**同じ関数を渡し続ける**ため外に置く。 */
 const ignore = () => {}
 
+/**
+ * 画面の他の再生器と**同時に鳴らない**ための口。
+ * 渡さなければ自分だけで完結する（単体で置くとき）。
+ */
+export type ExclusivePlayback = {
+  /** 他が鳴っている。真になったら自分は止まる。 */
+  readonly othersPlaying: boolean
+  /** 自分が鳴り始めた・止まったことを知らせる。鳴り始めたら他が止まる。 */
+  readonly onPlayingChange: (playing: boolean) => void
+  /**
+   * 「自分が鳴っているべきか」の指示。自分が持ち主のときだけ値を持ち、それ以外は `null`。
+   * 画面の ⏸ や Space で止められたとき、ここで止まる（`othersPlaying` だけだと止まらない）。
+   */
+  readonly commandPlaying: boolean | null
+}
+
 export type TakeCompareProps = {
   /** **null は「まだ読めていない」。** 比較するものが無いのとは別物（L-015 / L-021）。 */
   readonly compare: WireShotCompare | null
+  readonly exclusive?: ExclusivePlayback
   /** 読み込みそのものに失敗したときの理由。 */
   readonly error?: string | null
   readonly labelA?: string
@@ -42,6 +59,7 @@ export type TakeCompareProps = {
 
 export const TakeCompare = ({
   compare,
+  exclusive,
   error = null,
   labelA = '採用候補 A',
   labelB = '比較 B',
@@ -73,6 +91,7 @@ export const TakeCompare = ({
       compare={compare}
       labelA={labelA}
       labelB={labelB}
+      exclusive={exclusive}
     />
   )
 }
@@ -81,9 +100,10 @@ type CompareBoardProps = {
   readonly compare: WireShotCompare
   readonly labelA: string
   readonly labelB: string
+  readonly exclusive: ExclusivePlayback | undefined
 }
 
-const CompareBoard = ({ compare, labelA, labelB }: CompareBoardProps) => {
+const CompareBoard = ({ compare, labelA, labelB, exclusive }: CompareBoardProps) => {
   const span: CompareSpan = {
     startSec: compare.shot.startSec,
     durationSec: compare.shot.durationSec,
@@ -95,6 +115,31 @@ const CompareBoard = ({ compare, labelA, labelB }: CompareBoardProps) => {
   const [seek, setSeek] = useState<SeekCommand | null>(null)
   const [loop, setLoop] = useState(true)
   const [failure, setFailure] = useState<string | null>(null)
+
+  /**
+   * 他と同時に鳴らない。**鳴り始め・止まりを知らせ、他が鳴ったら止まる。**
+   * 知らせは変化のときだけ（取り付け時の「止まっている」を知らせると、他の再生を止めてしまう）。
+   */
+  const reportRef = useRef(exclusive?.onPlayingChange)
+  reportRef.current = exclusive?.onPlayingChange
+  const wasPlayingRef = useRef(playing)
+  useEffect(() => {
+    if (wasPlayingRef.current === playing) return
+    wasPlayingRef.current = playing
+    reportRef.current?.(playing)
+  }, [playing])
+
+  const othersPlaying = exclusive?.othersPlaying ?? false
+  useEffect(() => {
+    if (othersPlaying) setPlaying(false)
+  }, [othersPlaying])
+
+  // 外からの指示に従う。すでにその状態なら何もしない（自分の知らせが返ってくるため）。
+  const commandPlaying = exclusive?.commandPlaying ?? null
+  useEffect(() => {
+    if (commandPlaying === null) return
+    setPlaying((current) => (current === commandPlaying ? current : commandPlaying))
+  }, [commandPlaying])
 
   /** 利用者の明示的な指示。反射（`onFrame`）とは別の値として渡す（L-023）。 */
   const seekTo = useCallback((sec: number) => {
@@ -130,7 +175,11 @@ const CompareBoard = ({ compare, labelA, labelB }: CompareBoardProps) => {
           onClick={() => setPlaying((previous) => !previous)}
           className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg"
         >
-          {playing ? '停止' : '再生'}
+          {/*
+            「再生」とだけ書くと、画面の再生ボタンと区別がつかない。
+            ここは**この Shot の区間だけ**を鳴らす別の操作なので、言葉で分ける。
+          */}
+          {playing ? '停止' : 'この Shot を再生'}
         </button>
 
         <button

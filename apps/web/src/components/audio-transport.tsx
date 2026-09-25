@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, type ChangeEvent } from 'react'
+import { useEffect, type ChangeEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { formatClock } from '@/lib/format-time'
 import {
@@ -48,6 +48,11 @@ export type AudioTransportProps = {
    * ワークベンチの中では **false**（ステータスバーにひとつだけ置く）。
    */
   readonly showVolume?: boolean
+  /**
+   * 再生ボタンを差し替える。ワークベンチでは画面共通のボタン（`shared-play-button.tsx`）を渡す。
+   * 渡さなければこの部品自身のボタン（この音源だけを鳴らす）を出す。
+   */
+  readonly playButton?: ReactNode
 }
 
 /**
@@ -79,6 +84,7 @@ export const AudioTransport = ({
   keyboardShortcuts = true,
   showPlay = true,
   showVolume = true,
+  playButton,
 }: AudioTransportProps) => {
   const {
     isPlaying,
@@ -156,7 +162,8 @@ export const AudioTransport = ({
           aria-label="再生位置と音量"
           className="flex flex-wrap items-center gap-x-2 gap-y-2 xl:flex-nowrap"
         >
-          {showPlay && (
+          {showPlay && playButton}
+          {showPlay && playButton === undefined && (
             <Button
               // 並んだ画面の主の操作は別にある（聴きながら切るなら「区切りを置く」。P6）。
               tone="secondary"
