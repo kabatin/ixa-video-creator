@@ -155,6 +155,21 @@ describe('BulkActionBar — 一括生成は 2 段階', () => {
     expect(props.onGenerate).toHaveBeenCalledWith({ model: 'AUTO', count: 1 })
   })
 
+  /**
+   * **依頼したらフォームを閉じる。** 閉じないと「12 件に生成を依頼」が押せる状態のまま残り、
+   * 実 Provider では同じ 12 件に二重に課金される（実機で残っていた）。
+   */
+  it('依頼したらフォームを閉じ、依頼ボタンを残さない', async () => {
+    const { user } = setup({ selectedCount: 12 })
+
+    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: '12 件に生成を依頼' }))
+    await user.click(screen.getByRole('button', { name: '依頼する' }))
+
+    expect(screen.queryByRole('button', { name: '12 件に生成を依頼' })).toBeNull()
+    expect(screen.getByRole('button', { name: '一括生成' })).toHaveAttribute('aria-expanded', 'false')
+  })
+
   it('選んだモデルと本数がそのまま渡る', async () => {
     const { props, user } = setup()
 

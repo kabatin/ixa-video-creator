@@ -184,7 +184,12 @@ export const BulkActionBar = ({
               modelOptions={modelOptions}
               estimatedTotalUsd={estimatedTotalUsd}
               busy={busy}
-              onGenerate={onGenerate}
+              onGenerate={(input) => {
+                // **依頼したら閉じる。** 開いたままだと同じ件数に二重に依頼できてしまう
+                // （実 Provider では二重に課金される）。進み具合は進捗ダイアログが出す。
+                close('generate')
+                onGenerate(input)
+              }}
             />
           )}
           {open === 'selectTakes' && (
@@ -193,7 +198,10 @@ export const BulkActionBar = ({
               targetCount={selectedCount}
               alreadySelectedCount={alreadySelectedCount}
               busy={busy}
-              onSelectTakes={onSelectTakes}
+              onSelectTakes={(rule) => {
+                close('selectTakes')
+                onSelectTakes(rule)
+              }}
             />
           )}
           {open === 'update' && (
