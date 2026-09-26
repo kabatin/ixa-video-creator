@@ -39,6 +39,25 @@ describe('planStillMotion', () => {
     expect(plans.size).toBeGreaterThan(1)
   })
 
+  /**
+   * カメラ指定があっても seed で量をわずかに揺らす。以前は指定があると動きが完全に決まり、
+   * 2 本頼んでも同じ動画になって重複として 1 本にまとめられた（撮影用の作例で実測）。
+   */
+  it('カメラ指定があっても、seed が違えば動く量が違う（同じ動画にならない）', () => {
+    const a = planStillMotion(camera('push_in', 'moderate'), 1)
+    const b = planStillMotion(camera('push_in', 'moderate'), 2)
+    expect(a.kind).toBe(b.kind)
+    expect(a.amount).not.toBe(b.amount)
+  })
+
+  it('揺らしても、強さの順は崩れない', () => {
+    for (let seed = 0; seed < 50; seed += 1) {
+      expect(planStillMotion(camera('push_in', 'strong'), seed).amount).toBeGreaterThan(
+        planStillMotion(camera('push_in', 'moderate'), seed + 7).amount,
+      )
+    }
+  })
+
   it('同じ seed なら同じ動き（再現できる）', () => {
     expect(planStillMotion(camera(null), 42)).toEqual(planStillMotion(camera(null), 42))
   })

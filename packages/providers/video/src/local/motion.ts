@@ -24,14 +24,21 @@ const FREE_CHOICES: readonly MotionKind[] = ['push_in', 'pull_out', 'pan_left', 
 
 const pick = <T>(choices: readonly T[], seed: number): T => choices[Math.abs(seed) % choices.length] as T
 
+/**
+ * seed で量をわずかに揺らす（±0.015）。**カメラ指定があっても同じ動画にしない。**
+ * 指定があると動きが完全に決まり、2 本頼んでも同じバイト列になって、worker の checksum の
+ * 重複判定で 1 本にまとめられた。揺れ幅は強さの段の差（0.06 以上）より十分小さい。
+ */
+const jitter = (seed: number): number => ((Math.abs(seed) % 7) - 3) * 0.005
+
 export const planStillMotion = (camera: ShotCamera, seed: number): StillMotion => {
   const amount =
     camera.movementIntensity === null
       ? 0.08 + (Math.abs(seed) % 5) * 0.01
-      : AMOUNT_BY_INTENSITY[camera.movementIntensity]
+      : AMOUNT_BY_INTENSITY[camera.movementIntensity] + jitter(seed)
   switch (camera.movement) {
     case 'static':
-      return { kind: 'push_in', amount: STATIC_AMOUNT }
+      return { kind: 'push_in', amount: STATIC_AMOUNT + (Math.abs(seed) % 7) * 0.002 }
     case 'push_in':
     case 'pull_out':
       return { kind: camera.movement, amount }
