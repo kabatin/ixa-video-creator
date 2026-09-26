@@ -225,24 +225,50 @@ export type Cut = {
   readonly index: number
   readonly startSec: number
   readonly durationSec: number
-  readonly startMark: CutMark
-  readonly endMark: CutMark
+  /** このカットを始める区切り。**null は曲の頭**（区切りを置かなくても境界になる）。 */
+  readonly startMark: CutMark | null
+  /** このカットを終える区切り。**null は曲の終わり**。 */
+  readonly endMark: CutMark | null
 }
 
-/** 区切りの集合からカットの列を作る。N 個の区切りから N-1 個。 */
-export const buildCuts = (marks: readonly CutMark[]): readonly Cut[] => {
-  const sorted = sortMarks(marks)
-  return sorted.slice(0, -1).map((startMark, index) => {
-    // slice(0, -1) の要素には必ず次が存在する。無い場合は尺 0 として潰れるだけで嘘は出ない。
-    const endMark = sorted[index + 1] ?? startMark
-    return {
-      index,
-      startSec: startMark.atSec,
-      durationSec: endMark.atSec - startMark.atSec,
-      startMark,
-      endMark,
-    }
-  })
+/**
+ * 区切りの集合からカットの列を作る。**曲の頭と終わりも境界にする。**
+ *
+ * 以前は置いた区切りの「間」だけがカットになり、頭から最初の区切りまでと、最後の区切りから
+ * 終わりまでが抜けた（区切り 4 本で 3 カット）。両端に毎回区切りを置かせるのは手間なだけで、
+ * 置き忘れると書き出しで頭と尻が黒くなる。
+ *
+ * 頭・終わりから最短の尺（`MIN_CUT_DURATION_SEC`）未満の区切りは、短いカットを作らずに
+ * 曲の頭・終わりとして扱う（隣のカットを端まで伸ばす）。区切りが 0 個なら何も作らない。
+ * 曲まるごと 1 カットを黙って作ると、置き忘れと区別がつかない。
+ */
+export const buildCuts = (marks: readonly CutMark[], songDurationSec: number): readonly Cut[] => {
+  const inner = sortMarks(marks).filter(
+    (mark) =>
+      mark.atSec >= MIN_CUT_DURATION_SEC &&
+      mark.atSec <= songDurationSec - MIN_CUT_DURATION_SEC,
+  )
+  if (marks.length === 0) return []
+  const edges: readonly (CutMark | null)[] = [null, ...inner, null]
+  const timeOf = (index: number): number => {
+    if (index === 0) return 0
+    if (index === edges.length - 1) return songDurationSec
+    return (edges[index] as CutMark).atSec
+  }
+  return edges.slice(0, -1).map((startMark, index) => ({
+    index,
+    startSec: timeOf(index),
+    durationSec: timeOf(index + 1) - timeOf(index),
+    startMark,
+    endMark: edges[index + 1] ?? null,
+  }))
+}
+
+/** API へ送る境界の列。曲の頭と終わりを含む。区切りが 0 個なら空。 */
+export const cutBoundaries = (marks: readonly CutMark[], songDurationSec: number): readonly number[] => {
+  const cuts = buildCuts(marks, songDurationSec)
+  const last = cuts[cuts.length - 1]
+  return last === undefined ? [] : [...cuts.map((cut) => cut.startSec), last.startSec + last.durationSec]
 }
 
 /**
@@ -255,16 +281,15 @@ export const buildCuts = (marks: readonly CutMark[]): readonly Cut[] => {
 export type CutsOutcome =
   | { readonly state: 'unreadable' }
   | { readonly state: 'no_marks' }
-  | { readonly state: 'single_mark'; readonly atSec: number }
   | { readonly state: 'cuts'; readonly cuts: readonly Cut[] }
 
-export const describeCuts = (marks: readonly CutMark[] | null): CutsOutcome => {
+export const describeCuts = (
+  marks: readonly CutMark[] | null,
+  songDurationSec: number,
+): CutsOutcome => {
   if (marks === null) return { state: 'unreadable' }
-  const sorted = sortMarks(marks)
-  const only = sorted[0]
-  if (only === undefined) return { state: 'no_marks' }
-  if (sorted.length === 1) return { state: 'single_mark', atSec: only.atSec }
-  return { state: 'cuts', cuts: buildCuts(sorted) }
+  if (marks.length === 0) return { state: 'no_marks' }
+  return { state: 'cuts', cuts: buildCuts(marks, songDurationSec) }
 }
 
 // --- 吸着 ---

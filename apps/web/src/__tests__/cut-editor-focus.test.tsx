@@ -82,7 +82,8 @@ const track = MusicTrack.parse({
 })
 
 const NO_MARKS = '区切りがまだありません。'
-const ONE_MARK = /区切りが 1 個だけです/
+// 区切りが 1 個置かれたことだけを見る。0 秒に置くと曲の頭と重なるのでカット数は変わる。
+const ONE_MARK = /区切り 1 個 → カット/
 
 const renderEditor = async (): Promise<HTMLElement> => {
   render(

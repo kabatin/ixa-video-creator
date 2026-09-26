@@ -28,6 +28,7 @@ import {
   addMark,
   buildCutMarkCandidates,
   cutMarkToleranceSec,
+  cutBoundaries,
   describeCuts,
   moveMark,
   nextMarkIndex,
@@ -415,7 +416,7 @@ export const CutEditor = ({
 
   // --- 保存 ---
 
-  const cuts = describeCuts(marks)
+  const cuts = describeCuts(marks, durationSec)
 
   const save = async (): Promise<void> => {
     if (cuts.state !== 'cuts') return
@@ -423,7 +424,7 @@ export const CutEditor = ({
     setSaveError(null)
     try {
       const result = await createApiClient().createCuts(projectId, {
-        boundariesSec: marks.map((mark) => mark.atSec),
+        boundariesSec: [...cutBoundaries(marks, durationSec)],
         sequenceId: sequenceId === NO_SEQUENCE_VALUE ? null : (sequenceId as SequenceId),
       })
       setOutcome({ createdCount: result.createdCount, warnings: result.warnings })
@@ -626,6 +627,7 @@ export const CutEditor = ({
 
       <CutMarkList
         marks={marks}
+        songDurationSec={durationSec}
         busy={saving}
         selectedIndex={selectedIndex}
         onSelect={selectAndSeek}
@@ -672,9 +674,7 @@ export const CutEditor = ({
 
           {cuts.state !== 'cuts' && (
             <p className="text-sm text-muted">
-              {cuts.state === 'single_mark'
-                ? '区切りが 1 個だけです。カットは隣り合う 2 個の区切りで決まります。'
-                : '区切りがまだありません。'}
+              区切りがまだありません。
             </p>
           )}
         </div>

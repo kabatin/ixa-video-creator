@@ -10,6 +10,7 @@ import {
   buildCutMarkCandidates,
   buildCuts,
   cutMarkToleranceSec,
+  cutBoundaries,
   describeCuts,
   isTypingTarget,
   moveMark,
@@ -132,7 +133,8 @@ describe('addMark', () => {
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(buildCuts(result.marks)[0]?.durationSec).toBeCloseTo(MIN_CUT_DURATION_SEC, 9)
+    const [first, second] = result.marks
+    expect((second?.atSec ?? 0) - (first?.atSec ?? 0)).toBeCloseTo(MIN_CUT_DURATION_SEC, 9)
   })
 
   it('後ろ側の区切りに近すぎる場合も断る', () => {
@@ -308,14 +310,26 @@ describe('previousMarkIndex / nextMarkIndex', () => {
   })
 })
 
+/**
+ * **曲の頭と終わりは、区切りを置かなくても境界にする**（制作者の指摘 2026-09-26）。
+ *
+ * 以前は置いた区切りの「間」だけがカットになり、区切り 4 本で 3 カット、曲の頭から
+ * 最初の区切りまでと最後の区切りから終わりまでが抜けた。毎回両端に区切りを置かせるのは
+ * 手間なだけで、置き忘れると書き出しで頭と尻が黒くなる。
+ */
 describe('buildCuts', () => {
-  it('N 個の区切りから N-1 個のカットができる', () => {
-    expect(buildCuts(marksAt(0, 4, 8, 12))).toHaveLength(3)
+  const SONG = 30
+
+  it('両端から離れた N 個の区切りで N+1 個のカットができる', () => {
+    expect(buildCuts(marksAt(4, 8, 12), SONG).map((cut) => cut.startSec)).toEqual([0, 4, 8, 12])
   })
 
-  it('隣り合うカットに隙間も重なりもできない', () => {
-    const cuts = buildCuts(marksAt(0, 4, 8, 12))
+  it('曲の頭から終わりまで、隙間も重なりもなく覆う', () => {
+    const cuts = buildCuts(marksAt(4, 8, 12), SONG)
 
+    expect(cuts[0]?.startSec).toBe(0)
+    const last = cuts[cuts.length - 1]
+    expect((last?.startSec ?? 0) + (last?.durationSec ?? 0)).toBeCloseTo(SONG, 9)
     cuts.slice(1).forEach((cut, index) => {
       const previous = cuts[index]
       expect(previous).toBeDefined()
@@ -324,47 +338,79 @@ describe('buildCuts', () => {
     })
   })
 
-  it('開始・尺・両端の区切りを持つ', () => {
-    const cuts = buildCuts([
-      { atSec: 1, snappedTo: 'beat' },
-      { atSec: 3.5, snappedTo: 'section' },
+  it('区切り 1 個で 2 カットになる', () => {
+    expect(buildCuts(marksAt(10), SONG).map((cut) => [cut.startSec, cut.durationSec])).toEqual([
+      [0, 10],
+      [10, 20],
     ])
+  })
 
-    expect(cuts[0]?.startSec).toBe(1)
-    expect(cuts[0]?.durationSec).toBeCloseTo(2.5, 9)
-    expect(cuts[0]?.startMark.snappedTo).toBe('beat')
-    expect(cuts[0]?.endMark.snappedTo).toBe('section')
+  it('区切りをちょうど頭と終わりに置いても、同じ境界を二重にしない', () => {
+    expect(buildCuts(marksAt(0, 10, SONG), SONG).map((cut) => cut.startSec)).toEqual([0, 10])
+  })
+
+  /**
+   * 頭の近くの区切りから短いカットを作らない（最短の尺を割る）。
+   * その区切りを曲の頭として扱い、最初のカットを 0 秒まで伸ばす。黒い頭を残さない。
+   */
+  it('頭から最短の尺未満の区切りは、曲の頭として扱う', () => {
+    const cuts = buildCuts(marksAt(MIN_CUT_DURATION_SEC - 0.1, 10), SONG)
+
+    expect(cuts.map((cut) => cut.startSec)).toEqual([0, 10])
+  })
+
+  it('終わりまで最短の尺未満の区切りは、曲の終わりとして扱う', () => {
+    const cuts = buildCuts(marksAt(10, SONG - (MIN_CUT_DURATION_SEC - 0.1)), SONG)
+
+    expect(cuts.map((cut) => [cut.startSec, cut.durationSec])).toEqual([
+      [0, 10],
+      [10, 20],
+    ])
+  })
+
+  it('両端のカットは、区切りの代わりに曲の頭・終わりを持つ（null）', () => {
+    const cuts = buildCuts([{ atSec: 10, snappedTo: 'section' }], SONG)
+
+    expect(cuts[0]?.startMark).toBeNull()
+    expect(cuts[0]?.endMark?.snappedTo).toBe('section')
+    expect(cuts[1]?.startMark?.snappedTo).toBe('section')
+    expect(cuts[1]?.endMark).toBeNull()
   })
 
   it('並んでいない入力でも昇順のカットになる', () => {
-    expect(buildCuts(marksAt(8, 0, 4)).map((cut) => cut.startSec)).toEqual([0, 4])
+    expect(buildCuts(marksAt(8, 2, 4), SONG).map((cut) => cut.startSec)).toEqual([0, 2, 4, 8])
   })
 
-  it('区切り 0 個・1 個ではカットができない', () => {
-    expect(buildCuts([])).toEqual([])
-    expect(buildCuts(marksAt(3))).toEqual([])
+  it('区切りが 0 個ならカットは作らない（曲まるごと 1 カットを勝手に作らない）', () => {
+    expect(buildCuts([], SONG)).toEqual([])
+  })
+})
+
+describe('cutBoundaries', () => {
+  it('送る境界は曲の頭と終わりを含む', () => {
+    expect(cutBoundaries(marksAt(4, 8), 30)).toEqual([0, 4, 8, 30])
+  })
+
+  it('区切りが 0 個なら空', () => {
+    expect(cutBoundaries([], 30)).toEqual([])
   })
 })
 
 describe('describeCuts', () => {
   it('読み込めていない状態をカット 0 件と混ぜない', () => {
-    expect(describeCuts(null)).toEqual({ state: 'unreadable' })
+    expect(describeCuts(null, 30)).toEqual({ state: 'unreadable' })
   })
 
   it('区切り 0 個は no_marks', () => {
-    expect(describeCuts([])).toEqual({ state: 'no_marks' })
+    expect(describeCuts([], 30)).toEqual({ state: 'no_marks' })
   })
 
-  it('区切り 1 個は single_mark で位置まで返す', () => {
-    expect(describeCuts(marksAt(3.25))).toEqual({ state: 'single_mark', atSec: 3.25 })
-  })
-
-  it('区切り 2 個で初めてカットになる', () => {
-    const outcome = describeCuts(marksAt(0, 4))
+  it('区切り 1 個でカットになる（頭と終わりが境界になるため）', () => {
+    const outcome = describeCuts(marksAt(4), 30)
 
     expect(outcome.state).toBe('cuts')
     if (outcome.state !== 'cuts') return
-    expect(outcome.cuts).toHaveLength(1)
+    expect(outcome.cuts).toHaveLength(2)
   })
 })
 
@@ -543,13 +589,14 @@ describe('叩きながら置く一連の操作', () => {
     // 0 秒はビートでもあるがタイムラインの原点が優先される（優先度の正は packages/timeline）。
     expect(placed.map((entry) => entry.snappedTo)).toEqual(['origin', 'beat', 'beat'])
 
-    const cuts = buildCuts(placed)
-    expect(cuts).toHaveLength(2)
+    // 曲は 3 秒。0 は曲の頭と重なるので、頭・1・2.5・終わりの 3 カット。
+    const cuts = buildCuts(placed, 3)
+    expect(cuts).toHaveLength(3)
     expect(cuts.every((cut) => cut.durationSec >= MIN_CUT_DURATION_SEC)).toBe(true)
 
     const removed = removeMarkAt(placed, 1)
     expect(removed.ok).toBe(true)
     if (!removed.ok) return
-    expect(buildCuts(removed.marks)).toHaveLength(1)
+    expect(buildCuts(removed.marks, 3)).toHaveLength(2)
   })
 })

@@ -34,6 +34,8 @@ import { HelpDisclosure } from '@/components/ui/help-disclosure'
 export type CutMarkListProps = {
   /** null は「読み込めていない」。区切り 0 個と混同させない。 */
   readonly marks: readonly CutMark[] | null
+  /** 曲の尺。曲の頭と終わりも境界にするので要る。 */
+  readonly songDurationSec: number
   readonly busy: boolean
   /** 選んでいる区切りの位置。未選択は -1。 */
   readonly selectedIndex: number
@@ -128,8 +130,14 @@ const MarkRow = ({
 }
 
 /** カットが 1 つもできない理由。**「無い」と「分からない」を必ず書き分ける。** */
-const EmptyNotice = ({ marks }: { readonly marks: readonly CutMark[] | null }) => {
-  const outcome = describeCuts(marks)
+const EmptyNotice = ({
+  marks,
+  songDurationSec,
+}: {
+  readonly marks: readonly CutMark[] | null
+  readonly songDurationSec: number
+}) => {
+  const outcome = describeCuts(marks, songDurationSec)
   switch (outcome.state) {
     case 'unreadable':
       return (
@@ -140,13 +148,7 @@ const EmptyNotice = ({ marks }: { readonly marks: readonly CutMark[] | null }) =
     case 'no_marks':
       return (
         <p role="status" className="mt-3 text-sm text-muted">
-          {`区切りがまだ 1 個もありません。カットは区切り 2 個からできます（1 カットは ${formatDuration(MIN_CUT_DURATION_SEC)} 以上）。`}
-        </p>
-      )
-    case 'single_mark':
-      return (
-        <p role="status" className="mt-3 text-sm text-muted">
-          {`区切りは ${formatClock(outcome.atSec)} の 1 個だけです。カットは区切り 2 個からできるので、まだ 1 カットもできていません。`}
+          {`区切りがまだ 1 個もありません。曲の頭と終わりも境界になるので、区切りを 1 個置けば 2 カットになります（1 カットは ${formatDuration(MIN_CUT_DURATION_SEC)} 以上）。`}
         </p>
       )
     case 'cuts':
@@ -156,6 +158,7 @@ const EmptyNotice = ({ marks }: { readonly marks: readonly CutMark[] | null }) =
 
 export const CutMarkList = ({
   marks,
+  songDurationSec,
   busy,
   selectedIndex,
   onSelect,
@@ -164,12 +167,22 @@ export const CutMarkList = ({
   rejection,
 }: CutMarkListProps) => {
   const sorted = marks === null ? null : sortMarks(marks)
-  const cuts = sorted === null ? [] : buildCuts(sorted)
+  const cuts = sorted === null ? [] : buildCuts(sorted, songDurationSec)
+  const headCut = cuts[0]
 
+  /**
+   * 区切りごとの見出し。**その区切りから始まるカット**を出す。
+   * 端に近すぎて境界にならなかった区切りは、曲の頭・終わりとして扱ったことを言う。
+   */
   const cutLabelAt = (index: number): string => {
-    const cut = cuts[index]
-    if (cut === undefined) return '最後の区切り（ここで最後のカットが終わります）'
-    return `カット ${String(index + 1)} — ${formatSpan(cut.startSec, cut.durationSec)}`
+    const mark = sorted?.[index]
+    const cut = cuts.find((candidate) => candidate.startMark === mark)
+    if (cut !== undefined) {
+      return `カット ${String(cut.index + 1)} — ${formatSpan(cut.startSec, cut.durationSec)}`
+    }
+    return (mark?.atSec ?? 0) < songDurationSec / 2
+      ? `曲の頭として扱います（頭から ${formatDuration(MIN_CUT_DURATION_SEC)} 未満）`
+      : `曲の終わりとして扱います（終わりまで ${formatDuration(MIN_CUT_DURATION_SEC)} 未満）`
   }
 
   return (
@@ -182,13 +195,18 @@ export const CutMarkList = ({
         </p>
       )}
 
-      <EmptyNotice marks={marks} />
+      <EmptyNotice marks={marks} songDurationSec={songDurationSec} />
 
       {sorted === null || cuts.length === 0 ? null : (
         <>
           <p role="status" className="mt-3 text-sm text-text">
-            {`区切り ${String(sorted.length)} 個 → カット ${String(cuts.length)} 個。隣り合う区切りがそのまま境界なので、隙間も重なりもできません。`}
+            {`区切り ${String(sorted.length)} 個 → カット ${String(cuts.length)} 個。曲の頭と終わりも境界にするので、頭から終わりまで隙間も重なりもできません。`}
           </p>
+          {headCut !== undefined && headCut.startMark === null && (
+            <p className="mt-2 text-sm text-text">
+              {`カット 1 — ${formatSpan(headCut.startSec, headCut.durationSec)}（曲の頭から）`}
+            </p>
+          )}
           <ul className="mt-2">
             {sorted.map((mark, index) => (
               <MarkRow
