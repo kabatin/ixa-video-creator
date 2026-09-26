@@ -83,6 +83,8 @@ export type BulkActionBarProps = {
   readonly onSelectTakes: (rule: BulkTakeRule) => void
   readonly onUpdate: (patch: BulkUpdatePatch) => void
   readonly onClearSelection: () => void
+  /** 確認のダイアログを開く。**ここでは消さない**（取り消しが無いため、確認は開いた先が取る）。 */
+  readonly onDelete: () => void
 }
 
 export const BulkActionBar = ({
@@ -100,6 +102,7 @@ export const BulkActionBar = ({
   onSelectTakes,
   onUpdate,
   onClearSelection,
+  onDelete,
 }: BulkActionBarProps) => {
   const idPrefix = useId()
   const [open, setOpen] = useState<PanelKey | null>(null)
@@ -144,9 +147,12 @@ export const BulkActionBar = ({
     >
       <div className="flex items-center gap-2">
         <p className="text-sm font-semibold text-text">{selectedCount} 件を選択中</p>
-        <div className="ml-auto">
+        <div className="ml-auto flex gap-1">
           <Button size="sm" tone="secondary" disabled={busy} onClick={onClearSelection}>
             選択を{WORDING.unlink}
+          </Button>
+          <Button size="sm" tone="danger" disabled={busy} onClick={onDelete}>
+            削除…
           </Button>
         </div>
       </div>

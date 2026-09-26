@@ -83,3 +83,35 @@ describe('neighborShotId', () => {
     expect(neighborShotId([], null, 1)).toBeNull()
   })
 })
+
+/** Shot の削除（制作者の要望 2026-09-26）。確認のダイアログを開くだけで、すぐには消さない。 */
+describe('Delete キー', () => {
+  it('Delete と Backspace は Shot の削除', () => {
+    expect(resolveWorkbenchKey(press('Delete'))).toBe('delete-shots')
+    expect(resolveWorkbenchKey(press('Backspace'))).toBe('delete-shots')
+  })
+
+  it('入力欄の中では文字を消す打鍵なので取らない', () => {
+    expect(resolveWorkbenchKey(press('Backspace', { target: { tagName: 'INPUT' } }))).toBeNull()
+    expect(resolveWorkbenchKey(press('Delete', { target: { tagName: 'TEXTAREA' } }))).toBeNull()
+  })
+
+  it('「聴きながら切る」の中では区切りを消す打鍵なので取らない', () => {
+    expect(resolveWorkbenchKey(press('Delete', { insideCutEditor: true }))).toBeNull()
+  })
+
+  it('修飾キー付きは取らない', () => {
+    expect(resolveWorkbenchKey(press('Backspace', { metaKey: true }))).toBeNull()
+  })
+
+  /**
+   * Shot のカードを押した直後は、フォーカスがカード（ボタン）にある。ボタンが自分で使うのは
+   * Space・矢印・Enter で、Delete は使わない。ここで捨てると、押して選んで Delete が効かない。
+   */
+  it('ボタンや一覧の行にフォーカスがあっても取る', () => {
+    expect(resolveWorkbenchKey(press('Delete', { target: { tagName: 'BUTTON' } }))).toBe('delete-shots')
+    expect(resolveWorkbenchKey(press('Backspace', { target: { tagName: 'DIV', role: 'row' } }))).toBe(
+      'delete-shots',
+    )
+  })
+})

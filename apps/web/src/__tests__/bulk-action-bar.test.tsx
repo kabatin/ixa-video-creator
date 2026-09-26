@@ -53,6 +53,7 @@ const baseProps = (overrides: Partial<BulkActionBarProps> = {}): BulkActionBarPr
   onSelectTakes: vi.fn(),
   onUpdate: vi.fn(),
   onClearSelection: vi.fn(),
+  onDelete: vi.fn(),
   ...overrides,
 })
 
@@ -136,6 +137,15 @@ describe('BulkActionBar — 出る / 出ない', () => {
     await user.click(screen.getByRole('button', { name: '選択を解除' }))
 
     expect(props.onClearSelection).toHaveBeenCalledTimes(1)
+  })
+
+  /** チェックした Shot をまとめて消す口（制作者の要望 2026-09-26）。確認は開いた先が取る。 */
+  it('削除はそのまま呼ぶ（すぐには消さない）', async () => {
+    const { props, user } = setup()
+
+    await user.click(screen.getByRole('button', { name: /削除/ }))
+
+    expect(props.onDelete).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -466,6 +476,7 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
           onSelectTakes={vi.fn()}
           onUpdate={vi.fn()}
           onClearSelection={vi.fn()}
+          onDelete={vi.fn()}
         />
       </div>,
     )

@@ -2,7 +2,6 @@
 
 import type { DockviewApi } from 'dockview-react'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
 import { MenuBar } from '@/components/workbench/menu-bar'
 import { undoConfirmMessage, type UndoState } from '@/components/workbench/use-edit-history'
 import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
@@ -11,9 +10,7 @@ import { VolumeControl } from '@/components/workbench/volume-control'
 import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
-import { formatSpan } from '@/lib/format-time'
 import { buildMenus, type MenuCommand, type MenuItem } from '@/lib/menu-model'
-import { deleteConfirmMessage } from '@/lib/wording'
 import {
   PRESETS,
   PRESET_LABELS,
@@ -60,7 +57,6 @@ export const WorkbenchMenu = ({
   const workbench = useWorkbench()
   const current = useSelectedShot()
 
-  const [confirmDelete, setConfirmDelete] = useState(false)
   const menus = buildMenus({
     hasCurrentShot: current !== null,
     checkedCount: workbench.checked.size,
@@ -99,21 +95,6 @@ export const WorkbenchMenu = ({
       })
   }
 
-  /** 取り消せない削除は確認を挟む。確認はワークベンチのダイアログの殻で出す（`window.confirm` を使わない）。 */
-  const deleteCurrent = (): void => {
-    if (current === null) return
-    setConfirmDelete(false)
-    createApiClient()
-      .deleteShot(current.id)
-      .then(() => {
-        onNotice(`${current.code} を削除しました。`)
-        workbench.refresh()
-      })
-      .catch((cause: unknown) => {
-        onNotice(`${current.code} を削除できませんでした: ${describeError(cause)}`)
-      })
-  }
-
   const unselectTake = (): void => {
     if (current === null) return
     createApiClient()
@@ -133,9 +114,6 @@ export const WorkbenchMenu = ({
     redo: () => undefined,
     'reset-layout': onResetLayout,
     'copy-link': copyLink,
-    'delete-shot': () => {
-      setConfirmDelete(true)
-    },
     'unselect-take': unselectTake,
     'import-files': onImportFiles,
     'inspect-master-track': () => {
@@ -199,30 +177,6 @@ export const WorkbenchMenu = ({
           </Button>
           <Button size="sm" tone="danger" onClick={runUndo}>
             戻す
-          </Button>
-        </div>
-      </WorkbenchDialog>
-      <WorkbenchDialog
-        open={confirmDelete && current !== null}
-        title="Shot を削除"
-        size="medium"
-        onClose={() => {
-          setConfirmDelete(false)
-        }}
-      >
-        <p className="text-sm text-text">
-          {current === null
-            ? ''
-            : deleteConfirmMessage(
-                `Shot ${current.code} ${formatSpan(current.startSec, current.durationSec)}`,
-              )}
-        </p>
-        <div className="mt-4 flex justify-end gap-2">
-          <Button size="sm" onClick={() => setConfirmDelete(false)}>
-            やめる
-          </Button>
-          <Button size="sm" tone="danger" onClick={deleteCurrent}>
-            削除する
           </Button>
         </div>
       </WorkbenchDialog>

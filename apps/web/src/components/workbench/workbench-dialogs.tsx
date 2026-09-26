@@ -1,5 +1,6 @@
 'use client'
 
+import { DeleteShotsDialogBody } from '@/components/workbench/dialogs/delete-shots-dialog'
 import { HistoryDialogBody } from '@/components/workbench/dialogs/history-dialog'
 import { NewShotDialogBody } from '@/components/workbench/dialogs/new-shot-dialog'
 import { PreferencesDialogBody } from '@/components/workbench/dialogs/preferences-dialog'
@@ -18,9 +19,16 @@ const TITLES: Readonly<Record<DialogKind, string>> = {
   history: '変更履歴',
   'new-shot': '新規 Shot',
   shortcuts: 'キーボードショートカット',
+  'delete-shots': 'Shot を削除',
 }
 
-const MEDIUM: ReadonlySet<DialogKind> = new Set(['history', 'shortcuts', 'new-shot', 'preferences'])
+const MEDIUM: ReadonlySet<DialogKind> = new Set([
+  'history',
+  'shortcuts',
+  'new-shot',
+  'preferences',
+  'delete-shots',
+])
 
 /**
  * ワークベンチのダイアログ（UI-WORKBENCH §3.3 / §3.4）。殻は 1 つ、中身を差し替えるだけ。
@@ -53,6 +61,7 @@ export const WorkbenchDialogs = ({
       {dialog === 'history' && <HistoryDialogBody onUndone={onHistoryChanged} />}
       {dialog === 'new-shot' && <NewShotDialogBody />}
       {dialog === 'shortcuts' && <ShortcutList />}
+      {dialog === 'delete-shots' && <DeleteShotsDialogBody />}
     </WorkbenchDialog>
   )
 }

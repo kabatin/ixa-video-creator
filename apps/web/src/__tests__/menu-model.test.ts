@@ -30,6 +30,22 @@ describe('有効判定', () => {
     expect(find(READY, 'delete-shot').enabled).toBe(true)
   })
 
+  /** チェックした Shot を消す口もここ。選んでいる Shot が無くても、チェックがあれば消せる。 */
+  it('チェックだけあれば削除は有効で、件数を項目名で言う', () => {
+    const checkedOnly: MenuState = { ...EMPTY, checkedCount: 2 }
+
+    expect(find(checkedOnly, 'delete-shot').enabled).toBe(true)
+    expect(find(checkedOnly, 'delete-shot').label).toBe('チェックした 2 件を削除…')
+    expect(find({ ...READY, checkedCount: 0 }, 'delete-shot').label).toBe('この Shot を削除…')
+  })
+
+  it('削除は確認のダイアログを開き、Delete キーを示す', () => {
+    const entry = find(READY, 'delete-shot')
+
+    expect(entry.action).toEqual({ kind: 'dialog', dialog: 'delete-shots' })
+    expect(entry.shortcut).toBe('Delete')
+  })
+
   it('履歴なしで元に戻すが無効', () => {
     expect(find(EMPTY, 'undo').enabled).toBe(false)
     expect(find(READY, 'undo').enabled).toBe(true)

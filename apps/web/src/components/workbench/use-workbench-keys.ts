@@ -65,6 +65,12 @@ export const useWorkbenchKeys = (options: WorkbenchKeysOptions): void => {
           // なる。まだ誰も鳴っていないときの持ち主だけを渡す。
           current.transportControls.togglePlayback('monitor')
           return
+        case 'delete-shots':
+          // すぐには消さない。何を消すかは確認のダイアログが言う（取り消しが無いため）。
+          if (current.checked.size > 0 || current.selectedShotId !== null) {
+            current.openDialog('delete-shots')
+          }
+          return
         case 'previous-shot':
         case 'next-shot': {
           const next = neighborShotId(

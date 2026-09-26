@@ -1,4 +1,5 @@
 import { APP_NAME } from '@/lib/app-name'
+import { deleteMenuLabel } from '@/lib/delete-shots'
 import { NEW_PROJECT_HREF, SITE_NAV_ENTRIES } from '@/lib/site-nav'
 import type { PanelId } from '@/lib/workbench-layout'
 
@@ -13,7 +14,7 @@ import type { PanelId } from '@/lib/workbench-layout'
 
 /** ダイアログで開くもの。`workbench-url.ts` の URL から開けるものより広い。 */
 export type WorkbenchDialog =
-  'render' | 'settings' | 'preferences' | 'history' | 'new-shot' | 'shortcuts'
+  'render' | 'settings' | 'preferences' | 'history' | 'new-shot' | 'shortcuts' | 'delete-shots'
 
 export type MenuAction =
   | { readonly kind: 'href'; readonly href: string }
@@ -26,7 +27,6 @@ export type MenuCommand =
   | 'redo'
   | 'reset-layout'
   | 'copy-link'
-  | 'delete-shot'
   | 'bulk-edit'
   | 'generate-shot'
   | 'bulk-generate'
@@ -237,7 +237,11 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
               : '採用している Take がありません'
             : NO_CURRENT_SHOT,
         }),
-        item('delete-shot', '選択を削除', command('delete-shot'), { disabledReason: noCurrent }),
+        // チェックがあればチェックした Shot、無ければ選んでいる Shot。何を消すかは項目名で言う。
+        item('delete-shot', deleteMenuLabel(state.checkedCount), dialog('delete-shots'), {
+          shortcut: 'Delete',
+          disabledReason: state.checkedCount > 0 ? null : noCurrent,
+        }),
       ],
     },
     {

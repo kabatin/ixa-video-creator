@@ -855,3 +855,83 @@ describe('一括採用は「変える前」を記録する', () => {
     expect(shots.snapshot()[0]?.status).toBe('ready')
   })
 })
+
+/**
+ * チェックした Shot をまとめて消す（制作者の要望 2026-09-26）。
+ *
+ * 以前はメニュー「Shot」→「選択を削除」で、いま選んでいる 1 件しか消せなかった。
+ * 区切りから Shot を作り直したいときに、1 件ずつ選んで消すことになる。
+ */
+describe('POST /projects/:projectId/shots/bulk/delete', () => {
+  type BulkDeleteData = {
+    results: ({ shotId: string; ok: true } | { shotId: string; ok: false; reason: string })[]
+    deletedCount: number
+  }
+
+  it('選んだ Shot をまとめて消し、1 件ずつの結果を返す', async () => {
+    const project = aProject()
+    const shots = threeShots(project)
+    const f = buildBulkFixture({ project, shots })
+
+    const res = await postJson(f.app, `/projects/${project.id}/shots/bulk/delete`, {
+      shotIds: [shots[0]?.id, shots[2]?.id],
+    })
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as Ok<BulkDeleteData>
+    expect(body.data.deletedCount).toBe(2)
+    expect(body.data.results.every((r) => r.ok)).toBe(true)
+    const left = await f.shots.findByProject(project.id)
+    expect(left.map((s) => s.code)).toEqual(['shot_002'])
+  })
+
+  it('別の Project の Shot は消さず、理由を返す', async () => {
+    const project = aProject()
+    const other = aProject()
+    const foreign = aShot(other.id, { code: 'other_001' })
+    const f = buildBulkFixture({ project, shots: [...threeShots(project), foreign], otherProjects: [other] })
+
+    const res = await postJson(f.app, `/projects/${project.id}/shots/bulk/delete`, {
+      shotIds: [foreign.id],
+    })
+
+    const body = (await res.json()) as Ok<BulkDeleteData>
+    expect(body.data.deletedCount).toBe(0)
+    expect(body.data.results[0]).toEqual({ shotId: foreign.id, ok: false, reason: FOREIGN_SHOT_REASON })
+    expect(await f.shots.findById(foreign.id)).not.toBeNull()
+  })
+
+  it('見つからない Shot は理由を返し、他は消す', async () => {
+    const project = aProject()
+    const shots = threeShots(project)
+    const f = buildBulkFixture({ project, shots })
+    const missing = newId(ShotIdSchema)
+
+    const res = await postJson(f.app, `/projects/${project.id}/shots/bulk/delete`, {
+      shotIds: [missing, shots[1]?.id],
+    })
+
+    const body = (await res.json()) as Ok<BulkDeleteData>
+    expect(body.data.deletedCount).toBe(1)
+    expect(body.data.results[0]).toEqual({ shotId: missing, ok: false, reason: SHOT_NOT_FOUND_REASON })
+  })
+
+  it('Project が無ければ 404', async () => {
+    const f = buildBulkFixture()
+
+    const res = await postJson(f.app, `/projects/${aProject().id}/shots/bulk/delete`, {
+      shotIds: [newId(ShotIdSchema)],
+    })
+
+    expect(res.status).toBe(404)
+  })
+
+  it('空の指定は 422（何も消さない操作を成功にしない）', async () => {
+    const project = aProject()
+    const f = buildBulkFixture({ project })
+
+    const res = await postJson(f.app, `/projects/${project.id}/shots/bulk/delete`, { shotIds: [] })
+
+    expect(res.status).toBe(422)
+  })
+})

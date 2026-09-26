@@ -205,6 +205,35 @@ const bulkUpdateRoute = createRoute({
   responses: { 200: jsonContent('1 件ずつの結果', successResponse(BulkUpdateData)), ...commonErrors },
 })
 
+const BulkDeleteBody = z.object({ shotIds: BulkShotIds }).openapi('BulkDeleteShotsInput')
+
+const BulkDeleteData = z
+  .object({
+    results: z.array(
+      z.discriminatedUnion('ok', [
+        z.object({ shotId: ShotIdSchema, ok: z.literal(true) }),
+        failedResult,
+      ]),
+    ),
+    deletedCount: z.number().int().nonnegative(),
+  })
+  .openapi('BulkDeleteShotsResult')
+
+/**
+ * 選んだ Shot をまとめてソフトデリートする（制作者の要望 2026-09-26）。
+ * 以前は選んでいる 1 件ずつしか消せず、区切りから作り直すたびに 1 件ずつ選んで消していた。
+ * **取り消しの記録は残さない**（一括編集の取り消しは値の変更だけが対象）。確認は画面が取る。
+ */
+const bulkDeleteRoute = createRoute({
+  method: 'post', path: '/projects/{projectId}/shots/bulk/delete', tags: ['shots'],
+  summary: '選んだ Shot をまとめて削除する（ソフトデリート）',
+  request: {
+    params: ProjectParams,
+    body: { required: true, content: { 'application/json': { schema: BulkDeleteBody } } },
+  },
+  responses: { 200: jsonContent('1 件ずつの結果', successResponse(BulkDeleteData)), ...commonErrors },
+})
+
 /** 対象として使える Shot か。使えないなら理由を返し、**その 1 件だけ**落とす。 */
 type ResolvedShot = { readonly shot: Shot } | { readonly reason: string }
 
@@ -512,4 +541,23 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
       }
 
       return c.json(ok({ results }), 200)
+    })
+    .openapi(bulkDeleteRoute, async (c) => {
+      const { projectId } = c.req.valid('param')
+      if ((await deps.projects.findById(projectId)) === null) {
+        return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      }
+
+      const results = []
+      for (const shotId of c.req.valid('json').shotIds) {
+        const resolved = await resolveShot(deps, projectId, shotId)
+        if (!('shot' in resolved)) {
+          results.push({ shotId, ok: false as const, reason: resolved.reason })
+          continue
+        }
+        await deps.shots.softDelete(shotId)
+        results.push({ shotId, ok: true as const })
+      }
+      const deletedCount = results.filter((result) => result.ok).length
+      return c.json(ok({ results, deletedCount }), 200)
     })

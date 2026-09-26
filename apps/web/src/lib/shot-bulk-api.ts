@@ -90,6 +90,19 @@ export const BulkSelectBody = z.object({
 })
 export type BulkSelectBody = z.input<typeof BulkSelectBody>
 
+// --- 一括削除 ---
+
+export const WireBulkDeleteResult = z.object({
+  results: z.array(
+    z.discriminatedUnion('ok', [
+      z.object({ shotId: z.string(), ok: z.literal(true) }),
+      z.object({ shotId: z.string(), ok: z.literal(false), reason: z.string() }),
+    ]),
+  ),
+  deletedCount: z.number(),
+})
+export type WireBulkDeleteResult = z.infer<typeof WireBulkDeleteResult>
+
 // --- 一括変更 ---
 
 /** 一括で変えてよい列だけ。尺・順序を一括で揃えるとタイムラインが壊れるため含めない。 */
@@ -227,6 +240,8 @@ export type ShotBulkApi = {
   ) => Promise<WireBulkGenerateResult>
   /** 規則に従って Take を採用する。Take が無い Shot は `ok: false` で残る。 */
   bulkSelectTakes: (projectId: ProjectId, body: BulkSelectBody) => Promise<WireBulkSelectResult>
+  /** ソフトデリート。取り消しは無い（確認は画面が取る）。 */
+  bulkDeleteShots: (projectId: ProjectId, shotIds: readonly ShotId[]) => Promise<WireBulkDeleteResult>
   /** 共通の値をまとめて変える。 */
   bulkUpdateShots: (projectId: ProjectId, body: BulkUpdateBody) => Promise<WireBulkUpdateResult>
 }
@@ -248,6 +263,9 @@ export const createShotBulkApi = (requester: Requester): ShotBulkApi => ({
       BulkSelectBody.parse(body),
       WireBulkSelectResult,
     ),
+
+  bulkDeleteShots: async (projectId, shotIds) =>
+    requester.post(bulkPath(projectId, '/delete'), { shotIds: [...shotIds] }, WireBulkDeleteResult),
 
   bulkUpdateShots: async (projectId, body) =>
     requester.patch(bulkPath(projectId), BulkUpdateBody.parse(body), WireBulkUpdateResult),

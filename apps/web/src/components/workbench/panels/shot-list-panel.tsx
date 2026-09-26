@@ -176,6 +176,9 @@ export const ShotListPanel = () => {
           onGenerate={bulk.generate}
           onSelectTakes={bulk.selectTakes}
           onUpdate={bulk.update}
+          onDelete={() => {
+            workbench.openDialog('delete-shots')
+          }}
           onClearSelection={() => {
             workbench.setChecked(clearSelection())
             bulk.clearOutcome()

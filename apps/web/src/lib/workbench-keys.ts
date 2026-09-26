@@ -11,6 +11,7 @@ import { isTextEntryTarget, resolveKeyOwner, type KeyTargetLike } from '@/lib/pl
  * | ⌘, | 環境設定 |
  * | Space | 再生 / 一時停止 |
  * | ← → | 前 / 次の Shot |
+ * | Delete / Backspace | Shot の削除（確認を開く。チェックがあればチェックした Shot） |
  *
  * - **入力欄の中の打鍵は取らない。** ⌘Z は文字の取り消しとしてブラウザに任せる
  * - Space と ← → は**フォーカスが「聴きながら切る」の中にある間だけ**そちらに任せる。
@@ -32,7 +33,14 @@ export type WorkbenchKeyEvent = {
 }
 
 export type WorkbenchKeyCommand =
-  'undo' | 'redo' | 'history' | 'preferences' | 'toggle-play' | 'previous-shot' | 'next-shot'
+  | 'undo'
+  | 'redo'
+  | 'history'
+  | 'preferences'
+  | 'toggle-play'
+  | 'previous-shot'
+  | 'next-shot'
+  | 'delete-shots'
 
 export const resolveWorkbenchKey = (event: WorkbenchKeyEvent): WorkbenchKeyCommand | null => {
   if (isTextEntryTarget(event.target)) return null
@@ -47,6 +55,15 @@ export const resolveWorkbenchKey = (event: WorkbenchKeyEvent): WorkbenchKeyComma
   }
 
   if (command || event.altKey || event.shiftKey) return null
+  /**
+   * Delete / Backspace は**ボタンや一覧の行の上でも取る。** ボタンが自分で使うのは
+   * Space・矢印・Enter で、Delete は使わない。カードを押して選んだ直後はフォーカスが
+   * カードにあるので、ここで捨てると「選んで Delete」が効かない。
+   * 文字入力（入力欄で文字を消す）と「聴きながら切る」（区切りを消す）の中だけは譲る。
+   */
+  if (event.key === 'Delete' || event.key === 'Backspace') {
+    return event.insideCutEditor ? null : 'delete-shots'
+  }
   // 素のキーはフォーカスの持ち主のもの。カット編集・ボタン・入力欄のどれでもないときだけ受ける。
   if (resolveKeyOwner(event.target, event.insideCutEditor) !== 'workbench') return null
   if (event.key === ' ' || event.key === 'Spacebar') return 'toggle-play'
