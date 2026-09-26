@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import {
   doublePrecision, index, integer, jsonb, pgTable, primaryKey, text, uniqueIndex,
 } from 'drizzle-orm/pg-core'
@@ -77,7 +78,8 @@ export const shots = pgTable(
   },
   (t) => [
     index('shots_project_id_order_idx').on(t.projectId, t.order),
-    uniqueIndex('shots_project_id_code_uidx').on(t.projectId, t.code),
+    // 一意は生きている行だけ。消した Shot のコードは作り直しで再び使えてよい（2026-09-26）。
+    uniqueIndex('shots_project_id_code_uidx').on(t.projectId, t.code).where(sql`${t.deletedAt} is null`),
   ],
 )
 
