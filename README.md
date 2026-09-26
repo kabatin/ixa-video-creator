@@ -3,6 +3,8 @@
 **Start from the song. Cut it, generate a shot for every cut, and render a music video that
 matches exactly what you previewed.**
 
+[![CI](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml/badge.svg)](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/kabatin/ixa-video-creator)](https://github.com/kabatin/ixa-video-creator/releases) [![License: MIT](https://img.shields.io/github/license/kabatin/ixa-video-creator)](./LICENSE) [![GitHub stars](https://img.shields.io/github/stars/kabatin/ixa-video-creator?style=social)](https://github.com/kabatin/ixa-video-creator/stargazers)
+
 [日本語版 README](./README.ja.md) · MIT licensed · TypeScript monorepo
 
 ![The workbench on the LUNA BREW sample: storyboard, beat-aligned timeline, and shot list](./docs/images/workbench.jpg)
@@ -179,7 +181,7 @@ operator:
 
 ## Contributing
 
-Issues and pull requests are welcome. Please read [AGENTS.md](./AGENTS.md) first — it
+Issues, [discussions](https://github.com/kabatin/ixa-video-creator/discussions) and pull requests are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md). Please read [AGENTS.md](./AGENTS.md) first — it
 documents the conventions this codebase actually enforces (immutability, zod at every
 boundary, no `any`, secrets only via env, append-only takes). `CLAUDE.md` holds the naming
 and wording rules, and [docs/LESSONS.md](./docs/LESSONS.md) collects the mistakes this
@@ -191,6 +193,8 @@ Run what CI runs before opening a PR:
 ```bash
 npx turbo run lint typecheck test --concurrency=2
 ```
+
+If this project is useful or interesting to you, a ⭐ helps other people find it.
 
 ## License
 

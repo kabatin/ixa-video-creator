@@ -2,6 +2,8 @@
 
 **曲から始める。曲を切り、切った一つずつに映像を生成し、プレビューで見たままをミュージックビデオとして書き出す。**
 
+[![CI](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml/badge.svg)](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/kabatin/ixa-video-creator)](https://github.com/kabatin/ixa-video-creator/releases) [![License: MIT](https://img.shields.io/github/license/kabatin/ixa-video-creator)](./LICENSE) [![GitHub stars](https://img.shields.io/github/stars/kabatin/ixa-video-creator?style=social)](https://github.com/kabatin/ixa-video-creator/stargazers)
+
 [English README](./README.md) · MIT · TypeScript モノレポ
 
 ![LUNA BREW の作例を開いたワークベンチ。ストーリーボード・拍に合わせたタイムライン・Shot 一覧](./docs/images/workbench.jpg)
@@ -167,7 +169,7 @@ H.264 書き出し）。実 Provider のアダプタ（fal.ai / Seedance 2.5）�
 
 ## 貢献
 
-Issue と Pull Request を歓迎する。まず [AGENTS.md](./AGENTS.md) を読んでほしい。
+Issue・[Discussions](https://github.com/kabatin/ixa-video-creator/discussions)・Pull Request を歓迎する（[CONTRIBUTING.md](./CONTRIBUTING.md)）。まず [AGENTS.md](./AGENTS.md) を読んでほしい。
 このコードベースが実際に守らせている規約（イミュータビリティ・境界すべてで zod・`any` 禁止・
 シークレットは env のみ・Take は追記のみ）が書いてある。命名と画面の言葉は `CLAUDE.md`。
 [docs/LESSONS.md](./docs/LESSONS.md) には、このプロジェクトで実際に踏んだ失敗と、そこで
@@ -178,6 +180,8 @@ PR を出す前に CI と同じものを回す:
 ```bash
 npx turbo run lint typecheck test --concurrency=2
 ```
+
+役に立ちそう・面白そうと思ったら、⭐ を付けてもらえると他の人が見つけやすくなる。
 
 ## ライセンス
 

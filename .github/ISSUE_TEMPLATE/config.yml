@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/kabatin/ixa-video-creator/discussions
+    about: Ask how to do something, or share what you made.
+  - name: Security vulnerability
+    url: https://github.com/kabatin/ixa-video-creator/security/advisories/new
+    about: Report privately. Do not open a public issue.

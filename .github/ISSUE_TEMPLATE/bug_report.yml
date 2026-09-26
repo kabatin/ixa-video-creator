@@ -1,0 +1,51 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. 日本語でも大丈夫です。
+        For security issues, do **not** use this form — see SECURITY.md.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Drop a song onto the workbench
+        2. Cut at ...
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Cutting / music analysis
+        - Storyboard / shots
+        - Generation / providers
+        - Timeline / preview / export
+        - Characters, locations, brand assets
+        - Setup / quick start
+        - Other
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Video provider
+      options:
+        - Local (stub / still-motion)
+        - fal
+        - Other
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, browser, Node version. Screenshots and logs help (remove any keys or signed URLs).
