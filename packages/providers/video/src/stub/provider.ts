@@ -128,10 +128,19 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
     return next
   }
 
-  /** メモリを更新し、続けてディスクへ写す。書けなければ throw する（呼び出し側の try が拾う）。 */
+  /**
+   * **ディスクへ書き終えてから**メモリへ反映する。書けなければ throw する（呼び出し側の try が拾う）。
+   *
+   * 逆順（メモリ → ディスク）だと、投入した instance が「完了」を返した瞬間に、別の instance が
+   * ディスクを読むとまだ「実行中」になる（CI で `expected 'running' to be 'succeeded'` として落ちた）。
+   * 書けなかったときは失敗の決着（`settleFailed`）がメモリにだけ残す。
+   */
   const update = async (ref: string, patch: Partial<StubJob>): Promise<void> => {
-    const next = remember(ref, patch)
-    if (next !== null) await writeStubJob(outputDir, toStored(next))
+    const job = jobs.get(ref)
+    if (job === undefined) return
+    const next = { ...job, ...patch }
+    await writeStubJob(outputDir, toStored(next))
+    jobs.set(ref, next)
   }
 
   /**

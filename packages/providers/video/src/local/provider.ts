@@ -62,8 +62,9 @@ export const createLocalImageToVideoProvider = (options: LocalProviderOptions): 
     const job = jobs.get(ref)
     if (job === undefined) return
     const next = { ...job, ...patch }
-    jobs.set(ref, next)
+    // ディスクへ書き終えてからメモリへ反映する（スタブと同じ。別の instance が古い状態を読まないように）。
     await writeStubJob(outputDir, toStored(next))
+    jobs.set(ref, next)
   }
 
   /** 失敗として決着させる。**ここから例外を出さない**（render は待たれない）。 */

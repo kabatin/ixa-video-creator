@@ -279,7 +279,7 @@ describe('processMediaJob', () => {
     expect(lastFrame?.bytes).toBeGreaterThan(0)
     // 実体がストレージに置かれていること
     expect(await storage.exists(lastFrame?.storageKey as string)).toBe(true)
-  })
+  }, FFMPEG_TIMEOUT_MS)
 
   it('image には最終フレームを作らない', async () => {
     const asset = await seedAsset(repo, storage, {
@@ -292,5 +292,5 @@ describe('processMediaJob', () => {
     expect(repo.snapshot().find((a) => a.id === asset.id)?.lastFrameAssetId).toBeNull()
     // 派生アセットが増えていないこと
     expect(repo.snapshot()).toHaveLength(1)
-  })
+  }, FFMPEG_TIMEOUT_MS)
 })
