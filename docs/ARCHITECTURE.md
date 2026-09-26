@@ -5,9 +5,9 @@ Status: v1 / Architect レビュー済み / 実装開始可能
 Architect: Claude Opus 5
 Date: 2026-09-16
 
-> 責任構造の注記: spec.md は Claude Fable を Lead Architect と定めていたが、
+> 責任構造の注記: 当初の仕様書（非公開）は Claude Fable を Lead Architect と定めていたが、
 > ユーザー指示により **Claude Opus 5 が Architect / Final Decision Maker を引き継いだ**。
-> 「One Architect, Many Implementers」の原則（spec.md §35）はそのまま維持する。
+> 「One Architect, Many Implementers」の原則（当初の仕様書）はそのまま維持する。
 
 ---
 
@@ -39,7 +39,7 @@ AI 動画が生成できることではない。
 ### 誰が使うのか
 
 想定ユーザーは 1〜数名のクリエイティブディレクター。
-「たくさんの人が同時に編集する」ことは MVP の要件ではない（spec.md §29）。
+「たくさんの人が同時に編集する」ことは MVP の要件ではない（当初の仕様書）。
 代わりに「1 人が数百カットを短時間でディレクションできる」ことを最適化する。
 
 ---
@@ -63,10 +63,10 @@ AI 動画が生成できることではない。
 
 ## 3. OSS Findings
 
-spec.md §9 が挙げた 2 つの参考領域を調査した。
+当初の仕様書が挙げた 2 つの参考領域を調査した。
 **結論から言うと、「Seedance Drama Maker」「AI Video Production Editor」という名前に
 完全一致する著名 OSS は存在しない。** 近い実装を実際のソースまで確認し、事実を以下に整理する。
-**Fork はしない。Greenfield で構築する**方針（spec.md §9）は変わらない。
+**Fork はしない。Greenfield で構築する**方針（当初の仕様書）は変わらない。
 
 ### 3-1. Character Reference / Storyboard 系
 
@@ -223,7 +223,7 @@ Take / バージョン管理も無い。
    §8 の設計は妥当と判断する。
 3. **どの実装も `Take` を一級のドメインとして持っていない。**
    生成は「作って選ぶ」運用で、判断の履歴も再現性も残らない。
-   spec.md §11 / §18 が要求する Shot First と Immutable Take は、**既存 OSS が埋めていない空白**である。
+   当初の仕様書が要求する Shot First と Immutable Take は、**既存 OSS が埋めていない空白**である。
 4. **AI Review と自動再生成のループを持つ実装は見つからなかった。** ここが最大の差別化点になる。
 5. **音楽ドリブンの編集（ビート同期）を持つ実装も見つからなかった。**
    iXA CUP MV という最初の案件がそのまま独自性になる。
@@ -456,7 +456,7 @@ draft ──(参照が揃う)──► ready ──(生成)──► generating 
 
 ## 8. Character / Look Architecture
 
-spec.md §13 の要求「同一人物が時系列によって外見を変更できること」を、
+当初の仕様書の要求「同一人物が時系列によって外見を変更できること」を、
 **Identity と Look の 2 層**で実装する。
 
 ```
@@ -657,7 +657,7 @@ Codex CLI の高volume 運用が不安定だった場合、追加契約なしで
 
 ## 10. Model Router
 
-`provider = AUTO` の実装（spec.md §17）。
+`provider = AUTO` の実装（当初の仕様書）。
 
 ```ts
 selectModel(
@@ -854,11 +854,11 @@ DB ──► TimelineDocument ──┬──► @remotion/player  （ブラウ�
 **プレビューとレンダリングが同じコードを通ることが、この設計の最大の利点。**
 「プレビューでは合っていたのに書き出すとズレる」という事故が構造的に起きない。
 
-### 機能範囲（spec.md §22）
+### 機能範囲（当初の仕様書）
 
 Drag / Trim / Move / Take swap / Waveform / Beat marker / Transition / Text / SFX / Preview / Export。
 **高度な NLE は作らない。** キーフレームアニメーション、ネスト、マルチカム、
-リップル編集の完全実装は Non Goal（spec.md §29）。
+リップル編集の完全実装は Non Goal（当初の仕様書）。
 
 ---
 
@@ -940,8 +940,7 @@ ixa-video-creator/
 ├── infra/
 │   └── docker-compose.yml    Postgres / Redis / MinIO
 ├── CLAUDE.md             コーディング規約
-├── AGENTS.md             実装エージェント運用規約
-└── spec.md               原典（不変）
+└── AGENTS.md             実装エージェント運用規約
 ```
 
 ---
@@ -1083,7 +1082,7 @@ BullMQ + Redis（ADR-0008）。
 
 ## 21. Vertical Slice
 
-spec.md §27 の通り、機能単位ではなく**通し動作する縦串**を最初に作る。
+当初の仕様書の通り、機能単位ではなく**通し動作する縦串**を最初に作る。
 
 ```
 Create Project → Upload Music → Music Analysis → Create Shot
@@ -1114,7 +1113,7 @@ Create Project → Upload Music → Music Analysis → Create Shot
 | **5** | Timeline 深化 | Take swap / Transition / Text / Motion Graphics / SFX / ビートスナップ |
 | **6** | Production | iXA CUP MV の実制作、書き出しプリセット、性能改善 |
 
-### MVP Definition of Done（spec.md §28）
+### MVP Definition of Done（当初の仕様書）
 
 Project作成 / Music Upload / Music Analysis / Character登録 / Brand登録 / Script /
 Storyboard / Shot編集 / Reference / Generation / Multiple Takes / Take selection /
