@@ -13,7 +13,7 @@ cp .env.example .env
 ## 起動
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d
+docker compose --env-file .env -f infra/docker-compose.yml up -d
 ```
 
 - Postgres: `127.0.0.1:5432`
@@ -25,17 +25,17 @@ docker compose -f infra/docker-compose.yml up -d
 ## 状態確認
 
 ```bash
-docker compose -f infra/docker-compose.yml ps
+docker compose --env-file .env -f infra/docker-compose.yml ps
 ```
 
 ## 停止
 
 ```bash
-docker compose -f infra/docker-compose.yml down
+docker compose --env-file .env -f infra/docker-compose.yml down
 ```
 
 ## データを初期化（ボリュームごと削除）
 
 ```bash
-docker compose -f infra/docker-compose.yml down -v
+docker compose --env-file .env -f infra/docker-compose.yml down -v
 ```

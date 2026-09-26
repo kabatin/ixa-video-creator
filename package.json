@@ -17,8 +17,8 @@
     "format:check": "prettier --check .",
     "db:generate": "pnpm --filter @ixa/db db:generate",
     "db:migrate": "pnpm --filter @ixa/db db:migrate",
-    "infra:up": "docker compose -f infra/docker-compose.yml up -d",
-    "infra:down": "docker compose -f infra/docker-compose.yml down",
+    "infra:up": "docker compose --env-file .env -f infra/docker-compose.yml up -d",
+    "infra:down": "docker compose --env-file .env -f infra/docker-compose.yml down",
     "db:seed": "pnpm --filter @ixa/db db:seed"
   },
   "devDependencies": {
