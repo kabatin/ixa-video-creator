@@ -6,7 +6,9 @@
 
 [English README](./README.md) · MIT · TypeScript モノレポ
 
-![LUNA BREW の作例を開いたワークベンチ。ストーリーボード・拍に合わせたタイムライン・Shot 一覧](./docs/images/workbench.jpg)
+![デモ。空の Project に曲を落とすと解析され、セクションの境目が一度で区切りになり、Shot になり、最初のフレームから Take ができ、曲に合わせて通しで再生される](./docs/images/demo.webp)
+
+<sub>曲を落とす → セクションの境目で切る → Shot → Shot ごとに Take → 通しで再生。LUNA BREW の作例を実際に操作して録画した（Take の生成待ちだけ切っている）。</sub>
 
 ---
 

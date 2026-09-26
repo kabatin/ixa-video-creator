@@ -7,7 +7,9 @@ matches exactly what you previewed.**
 
 [日本語版 README](./README.ja.md) · MIT licensed · TypeScript monorepo
 
-![The workbench on the LUNA BREW sample: storyboard, beat-aligned timeline, and shot list](./docs/images/workbench.jpg)
+![Demo: drop a song onto an empty project, it is analysed, section boundaries become cuts in one click, the cuts become shots, each shot gets a take from its start frame, and the whole thing plays back in sync with the music](./docs/images/demo.webp)
+
+<sub>Drop a song → cut at its section boundaries → shots → a take for every shot → play it through. Recorded in real time on the LUNA BREW sample; only the waiting for takes is cut.</sub>
 
 ---
 
