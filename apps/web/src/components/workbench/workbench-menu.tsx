@@ -229,6 +229,7 @@ export const WorkbenchMenu = ({
       <MenuBar
         menus={menus}
         onSelect={select}
+        title={workbench.project.name}
         trailing={
           <>
             {/* 音量は作業モードの左。以前はステータスバーにあり、目が行かなかった。 */}

@@ -10,6 +10,11 @@ export type MenuBarProps = {
   readonly onSelect: (item: MenuItem) => void
   /** 右端（作業モード・歯車・書き出し）。 */
   readonly trailing?: ReactNode
+  /**
+   * 開いているプロジェクトの名前。メニューと右端のあいだの空きに出す。
+   * 以前はワークベンチのどこにも無く、いまどのプロジェクトを触っているか画面から分からなかった。
+   */
+  readonly title?: string
 }
 
 const wrap = (index: number, length: number): number => (index + length) % length
@@ -22,7 +27,7 @@ const wrap = (index: number, length: number): number => (index + length) % lengt
  * - 無効な項目も焦点は当たる（`aria-disabled`）。押せない理由を読み上げで知れるように
  * - 見出しは roving tabindex。Tab 1 回でメニューバーに入り、もう 1 回で出る
  */
-export const MenuBar = ({ menus, onSelect, trailing }: MenuBarProps) => {
+export const MenuBar = ({ menus, onSelect, trailing, title }: MenuBarProps) => {
   const [open, setOpen] = useState<number | null>(null)
   const [focusedTop, setFocusedTop] = useState(0)
   const topRefs = useRef<(HTMLButtonElement | null)[]>([])
@@ -231,7 +236,14 @@ export const MenuBar = ({ menus, onSelect, trailing }: MenuBarProps) => {
           )
         })}
       </div>
-      {trailing !== undefined && <div className="ml-auto flex items-center gap-2">{trailing}</div>}
+      {/* 空きを取り合うので、長い名前は切って全体はツールチップで読ませる。 */}
+      <span
+        title={title}
+        className="min-w-0 flex-1 truncate px-2 text-center text-xs font-semibold text-text"
+      >
+        {title}
+      </span>
+      {trailing !== undefined && <div className="flex shrink-0 items-center gap-2">{trailing}</div>}
     </div>
   )
 }

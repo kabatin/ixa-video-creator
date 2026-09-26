@@ -18,6 +18,14 @@ import { WORDING } from '@/lib/wording'
  * `digest` はサーバ側のログと突き合わせるための識別子。本番ではメッセージが
  * 伏せられるため、これが無いと原因に辿り着けない。
  */
+/**
+ * **原因を決めつけない。** この境界は通信の失敗も画面の不具合も受ける。以前は
+ * 「読めなかった」の既定文（通信か API 側の問題）をそのまま出していて、スマホ幅での
+ * 無限更新でも利用者を通信の確認へ向かわせた。
+ */
+const BOUNDARY_HINT =
+  '通信の途切れか、画面の不具合です。再読み込みで直らなければ、この画面の内容を添えて知らせてください。'
+
 type ErrorPageProps = {
   readonly error: Error & { readonly digest?: string }
   readonly reset: () => void
@@ -34,8 +42,8 @@ const ErrorPage = ({ error, reset }: ErrorPageProps) => {
         message={error.message.length > 0 ? error.message : '原因を特定できませんでした。'}
         hint={
           error.digest === undefined
-            ? state.hint
-            : `${state.hint}（問い合わせ用の識別子: ${error.digest}）`
+            ? BOUNDARY_HINT
+            : `${BOUNDARY_HINT}（問い合わせ用の識別子: ${error.digest}）`
         }
         actions={[{ href: '/', label: 'プロジェクト一覧へ' }]}
       >

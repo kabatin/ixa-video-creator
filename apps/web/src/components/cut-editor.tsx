@@ -45,6 +45,7 @@ import { AUDIO_URL_EXPIRES_IN_SEC, type SignedSource } from '@/lib/playback-stat
 import { snapNoticeClassName, type BeatSource, type SnapNotice } from '@/lib/timeline-snap'
 import { useAudioPlayback } from '@/lib/use-audio-playback'
 import { useCutEditorSync, type TransportSyncPort } from '@/lib/use-cut-editor-sync'
+import { useElementWidth } from '@/lib/use-element-width'
 import { fetchWaveformPeaks, type WaveformPeaksResult } from '@/lib/waveform-api'
 import { fullView, pixelsPerSecond, sectionBoundaries, type ViewRange } from '@/lib/waveform-draw'
 
@@ -151,7 +152,6 @@ export const CutEditor = ({
   /** 区切りを掴んでいる間。掴んだ場所が指の下から逃げないよう、追従を止める。 */
   const [dragging, setDragging] = useState(false)
   const [peaks, setPeaks] = useState<WaveformPeaksResult | null>(null)
-  const [widthPx, setWidthPx] = useState(0)
 
   /**
    * 波形の高さ。**パネルの余りをもらう。**
@@ -162,6 +162,8 @@ export const CutEditor = ({
    */
   const waveBoxRef = useRef<HTMLDivElement | null>(null)
   const [waveHeightPx, setWaveHeightPx] = useState(WAVEFORM_HEIGHT_PX)
+  /** 波形の幅。大きさが変わったときだけ測る（描画のたびに測るとスマホ幅で止まらなくなった）。 */
+  const widthPx = useElementWidth(waveBoxRef)
 
   useEffect(() => {
     const box = waveBoxRef.current
@@ -545,12 +547,7 @@ export const CutEditor = ({
         </p>
       )}
 
-      <div
-        ref={(node) => {
-          waveBoxRef.current = node
-          setWidthPx(node?.clientWidth ?? 0)
-        }}
-      >
+      <div ref={waveBoxRef}>
         {peaks === null ? (
           <p role="status" className="text-sm text-muted">
             波形を読み込んでいます…

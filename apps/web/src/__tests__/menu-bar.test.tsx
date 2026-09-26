@@ -101,3 +101,22 @@ describe('MenuBar', () => {
     expect(outer).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * 開いているプロジェクトの名前をヘッダーに出す（制作者の指摘 2026-09-26）。
+ * 以前はワークベンチのどこにも名前が無く、複数のプロジェクトを行き来すると
+ * いまどれを触っているのか画面から分からなかった。
+ */
+describe('MenuBar のプロジェクト名', () => {
+  it('渡された名前を出す', () => {
+    render(<MenuBar menus={menus} onSelect={vi.fn()} title="LUNA BREW 30秒CM" />)
+
+    expect(screen.getByText('LUNA BREW 30秒CM')).toBeTruthy()
+  })
+
+  it('切れて見えても全体を読めるよう、ツールチップにも同じ名前を置く', () => {
+    render(<MenuBar menus={menus} onSelect={vi.fn()} title="とても長いプロジェクト名" />)
+
+    expect(screen.getByText('とても長いプロジェクト名').getAttribute('title')).toBe('とても長いプロジェクト名')
+  })
+})

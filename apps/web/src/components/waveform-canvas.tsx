@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { formatClock, formatDuration } from '@/lib/format-time'
+import { useElementWidth } from '@/lib/use-element-width'
 import { THEME_ATTRIBUTE } from '@/lib/theme'
 import type { WaveformPeaksResult } from '@/lib/waveform-api'
 import { peaksOf } from '@/lib/waveform-api'
@@ -73,27 +74,6 @@ export type WaveformCanvasProps = {
 }
 
 // --- 計測 ---
-
-/** 要素の実寸（CSS px）。`ResizeObserver` が無い環境では 0 のままにして描画を諦める。 */
-const useElementWidth = (ref: React.RefObject<HTMLElement | null>): number => {
-  const [width, setWidth] = useState(0)
-
-  useEffect(() => {
-    const element = ref.current
-    if (element === null || typeof ResizeObserver === 'undefined') return
-    setWidth(element.clientWidth)
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0]
-      if (entry !== undefined) setWidth(entry.contentRect.width)
-    })
-    observer.observe(element)
-    return () => {
-      observer.disconnect()
-    }
-  }, [ref])
-
-  return width
-}
 
 /** キャンバスの幅の画素数の上限。ブラウザの上限（約 32767）より余裕を持たせる。 */
 const MAX_CANVAS_WIDTH_PX = 16_384
