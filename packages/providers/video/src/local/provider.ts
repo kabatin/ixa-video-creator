@@ -115,6 +115,10 @@ export const createLocalImageToVideoProvider = (options: LocalProviderOptions): 
           '-crf', '18',
           '-pix_fmt', 'yuv420p',
           '-movflags', '+faststart',
+          // ジョブごとに必ず別のファイルにする。動きの組み合わせは有限で、別々のジョブが
+          // 同じ動きを引くと同じバイト列になり、worker の checksum の重複判定で 1 本に
+          // まとめられる（CI で 1 度そうなった）。同じジョブの取り込み直しは同じファイルのまま。
+          '-metadata', `comment=ixa local/still-motion job ${ref}`,
           '-an',
           job.outputPath,
         ],

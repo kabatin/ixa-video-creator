@@ -85,6 +85,29 @@ describe('createLocalImageToVideoProvider', () => {
     TEST_TIMEOUT_MS,
   )
 
+  /**
+   * **確率に頼らない。** 動きの組み合わせは有限なので、別々のジョブがたまたま同じ動きを
+   * 引くことがある（CI で 1 度そうなって落ちた）。同じ seed を明示して必ず同じ動きにしても、
+   * ジョブが違えば別のファイルになる（checksum の重複判定で 1 本にまとめられない）。
+   */
+  it(
+    '同じ seed・同じ動きでも、ジョブが違えば別のファイルになる',
+    async () => {
+      const provider = createLocalImageToVideoProvider({ outputDir: join(dir, 'same-seed') })
+      const sums = []
+      for (let i = 0; i < 2; i += 1) {
+        const status = await pollUntilSettled(
+          provider,
+          await provider.submit(request(withStartFrame({ durationSec: 1, seed: 42 }))),
+        )
+        if (status.state !== 'succeeded' || status.output.type !== 'local') throw new Error('失敗した')
+        sums.push(createHash('sha256').update(await readFile(status.output.path)).digest('hex'))
+      }
+      expect(sums[0]).not.toBe(sums[1])
+    },
+    TEST_TIMEOUT_MS,
+  )
+
   it('最初のフレームが無ければ投入しない', async () => {
     const provider = createLocalImageToVideoProvider({ outputDir: join(dir, 'none') })
 
