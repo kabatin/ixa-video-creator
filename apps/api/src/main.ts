@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { serve, type ServerType } from '@hono/node-server'
 import { describeEnvironment, getConfig } from '@ixa/config'
 import {
@@ -33,7 +34,7 @@ import { RENDER_QUEUE_NAME, type RenderQueue } from './routes/renders.js'
 import { ANALYSIS_QUEUE_NAME, type AnalysisQueue } from './routes/music.js'
 import { REVIEW_QUEUE_NAME, type ReviewQueue } from './routes/reviews.js'
 import type { MediaIngestDeps } from './routes/uploads.js'
-import { createStubVideoProvider } from '@ixa/provider-video'
+import { createLocalImageToVideoProvider, createStubVideoProvider } from '@ixa/provider-video'
 import { createS3Storage } from '@ixa/storage'
 import { Queue } from 'bullmq'
 import IORedis from 'ioredis'
@@ -216,6 +217,7 @@ export const main = (): void => {
     characters,
     looks,
     shotCharacters,
+    shotReferences,
     brandAssets,
     locations,
     scripts: createScriptRepository(db),
@@ -242,6 +244,10 @@ export const main = (): void => {
     // API 側は capability の参照と Model Router のためだけに使い、実行は worker が行う。
     registry: createProviderRegistry([
       createStubVideoProvider({ outputDir: process.env.STUB_OUTPUT_DIR ?? '/tmp/ixa-stub-output' }),
+      // worker と同じ一覧にする（API はモデル一覧・見積り・検証のためだけに使う）。ADR-0025。
+      createLocalImageToVideoProvider({
+        outputDir: join(process.env.STUB_OUTPUT_DIR ?? '/tmp/ixa-stub-output', 'local'),
+      }),
     ]),
     /**
      * Phase 2 で空実装から差し替えた。

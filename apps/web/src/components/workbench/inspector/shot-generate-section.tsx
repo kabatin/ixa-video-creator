@@ -10,7 +10,13 @@ import { describeForPerson } from '@/lib/api-error'
 import { GenerateTakesBody, type WireGenerateResult } from '@/lib/api-schemas'
 import { buildCostMeterView, type CostMeterView } from '@/lib/cost-meter'
 import { formatClock } from '@/lib/format-time'
-import { AUTO_MODEL, MODEL_OPTIONS, TAKE_COUNT_OPTIONS } from '@/lib/generation-options'
+import {
+  AUTO_MODEL,
+  TAKE_COUNT_OPTIONS,
+  generateBlocker,
+  modelOptionsFrom,
+} from '@/lib/generation-options'
+import type { WireVideoModel } from '@/lib/models-api'
 import { POLL_TIMEOUT_MS, startAsyncPolling } from '@/lib/poller'
 import { isGeneratingStatus } from '@/lib/shot-display'
 import { offerReviewAfterGeneration } from '@/lib/offer-review'
@@ -33,7 +39,7 @@ import { offerReviewAfterGeneration } from '@/lib/offer-review'
 /** この画面が使う口だけ。**テストから差し替えるための注入口。** */
 export type ShotGenerateApi = Pick<
   ApiClient,
-  'generateTakes' | 'listTakes' | 'getCostMeter' | 'requestReview'
+  'generateTakes' | 'listTakes' | 'getCostMeter' | 'requestReview' | 'listModels'
 >
 
 /** 上限まで待って諦めるまでの分数。数字を書き写さない（lessons L-016）。 */
@@ -67,15 +73,39 @@ type GenerateProgress = {
 export const ShotGenerateSection = ({
   shot,
   api,
+  hasStartFrame = false,
 }: {
   readonly shot: Shot
   readonly api?: ShotGenerateApi
+  /** 最初のフレームが付いているか（ADR-0025）。要るモデルで無ければ押す前に理由を出す。 */
+  readonly hasStartFrame?: boolean
 }) => {
   const workbench = useWorkbench()
   const client = useMemo<ShotGenerateApi>(() => api ?? createApiClient(), [api])
   const modelId = useId()
   const countId = useId()
   const [model, setModel] = useState(AUTO_MODEL)
+  /** 登録されているモデル。**null は「読めていない」**（AUTO だけ選べる）。 */
+  const [models, setModels] = useState<readonly WireVideoModel[] | null>(null)
+  const [modelsError, setModelsError] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    client
+      .listModels()
+      .then((loaded) => {
+        if (alive) setModels(loaded)
+      })
+      .catch((cause: unknown) => {
+        if (alive) setModelsError(describeForPerson(cause))
+      })
+    return () => {
+      alive = false
+    }
+  }, [client])
+  const blocker = generateBlocker(
+    (models ?? []).find((candidate) => candidate.id === model) ?? null,
+    hasStartFrame,
+  )
   const [count, setCount] = useState('1')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -151,7 +181,7 @@ export const ShotGenerateSection = ({
           onChange={(e) => setModel(e.target.value)}
           className={INPUT_CLASS}
         >
-          {MODEL_OPTIONS.map((option) => (
+          {modelOptionsFrom(models).map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -175,7 +205,15 @@ export const ShotGenerateSection = ({
       <p className="text-xs text-muted" title={cost.view?.provenance}>
         {costLabel(cost)}
       </p>
-      <Button tone="primary" disabled={busy || generating} onClick={() => void generate()}>
+      {modelsError !== null && (
+        <p className="text-xs text-warn">{`モデルの一覧を読めませんでした（AUTO だけ選べます）: ${modelsError}`}</p>
+      )}
+      {blocker !== null && <p className="text-xs text-warn">{blocker}</p>}
+      <Button
+        tone="primary"
+        disabled={busy || generating || blocker !== null}
+        onClick={() => void generate()}
+      >
         {generating ? '生成中…' : busy ? '送っています…' : 'Take を生成'}
       </Button>
       {generating && (

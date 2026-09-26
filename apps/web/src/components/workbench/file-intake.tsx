@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAssets } from '@/components/workbench/asset-store'
 import {
-  acceptsImages,
+  imageChoicesFor,
   useImageAttach,
   type ImageTarget,
 } from '@/components/workbench/use-image-attach'
@@ -12,7 +12,6 @@ import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
 import { Button } from '@/components/ui/button'
 import { describeForPerson } from '@/lib/api-error'
 import { ASSET_DRAG_TYPE, droppedFileKind } from '@/lib/asset-actions'
-import { INSPECTED_LABELS } from '@/lib/workbench-selection'
 
 /**
  * ファイルを落とせば入る（UI-WORKBENCH-2 §4.5 / P8）。
@@ -108,13 +107,7 @@ export const FileIntake = ({
   }
 
   const current = workbench.inspected
-  const choices: readonly { readonly label: string; readonly target: ImageTarget }[] = [
-    ...(acceptsImages(current)
-      ? [{ label: `いま選んでいる${INSPECTED_LABELS[current.kind]}に入れる`, target: current }]
-      : []),
-    { label: '新しいロケーションの参照画像にする', target: { kind: 'new-location' } },
-    { label: '新しいブランド資産（ロゴ）にする', target: { kind: 'new-brand-asset' } },
-  ]
+  const choices = imageChoicesFor(current)
 
   return (
     <>

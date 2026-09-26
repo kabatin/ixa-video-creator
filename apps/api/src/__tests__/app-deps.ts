@@ -12,6 +12,7 @@ import {
   createInMemoryLocationRepository,
   createInMemoryMediaAssetRepository,
   createInMemoryShotCharacterRepository,
+  createInMemoryShotReferenceRepository,
   createInMemoryShotRepository,
   createInMemoryTakeRepository,
 } from '@ixa/generation/testing'
@@ -125,6 +126,7 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   characters: createInMemoryCharacterRepository(),
   looks: createInMemoryCharacterLookRepository(),
   shotCharacters: createInMemoryShotCharacterRepository(),
+  shotReferences: createInMemoryShotReferenceRepository(),
   brandAssets: createInMemoryBrandAssetRepository(),
   locations: createInMemoryLocationRepository(),
   scripts: createInMemoryScriptRepository(),

@@ -44,6 +44,10 @@ const VideoModel = z
     costPerSecondUsd: z.number().nonnegative(),
     /** 音を一緒に作れるか。このシステムは楽曲を別に持つので、基本は使わない。 */
     audioGeneration: z.boolean(),
+    /** 最初のフレーム（画像）が無ければ使えない（ADR-0025）。 */
+    requiresStartFrame: z.boolean(),
+    /** AUTO（ルーター）の候補になるか。false は明示して選ぶモデル。 */
+    routable: z.boolean(),
   })
   .openapi('VideoModel')
 
@@ -83,6 +87,8 @@ export const modelRoutes = (deps: ModelsDeps) =>
             maxReferenceImages: model.capabilities.referenceImages.max,
             costPerSecondUsd: model.economics.costPerSecondUsd,
             audioGeneration: model.capabilities.audioGeneration,
+            requiresStartFrame: model.capabilities.requiresStartFrame === true,
+            routable: model.routable !== false,
           })),
         ),
       ),

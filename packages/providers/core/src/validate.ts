@@ -49,6 +49,10 @@ export const validateAgainstCapabilities = (
     violations.push(`未対応の参照ロール: ${unsupportedRoles.join(', ')}`)
   }
 
+  if (caps.requiresStartFrame === true && !spec.references.some((r) => r.role === 'start_frame')) {
+    violations.push('最初のフレーム（画像）が要る。Shot に最初のフレームを付けてください')
+  }
+
   if (spec.seed !== null && !caps.seed) {
     violations.push('seed 指定に非対応')
   }

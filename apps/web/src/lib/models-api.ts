@@ -33,6 +33,10 @@ export const WireVideoModel = z.object({
   maxReferenceImages: z.number().int().nonnegative(),
   costPerSecondUsd: z.number().nonnegative(),
   audioGeneration: z.boolean(),
+  /** 最初のフレーム（画像）が無ければ使えない（ADR-0025）。 */
+  requiresStartFrame: z.boolean(),
+  /** AUTO の候補になるか。false は明示して選ぶモデル。 */
+  routable: z.boolean(),
 })
 export type WireVideoModel = z.infer<typeof WireVideoModel>
 

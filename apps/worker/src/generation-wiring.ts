@@ -1,6 +1,11 @@
+import { join } from 'node:path'
 import { createProviderRegistry } from '@ixa/provider-core'
 import { createGenerationContextSource } from '@ixa/generation'
-import { createFalVideoProvider, createStubVideoProvider } from '@ixa/provider-video'
+import {
+  createFalVideoProvider,
+  createLocalImageToVideoProvider,
+  createStubVideoProvider,
+} from '@ixa/provider-video'
 import { createS3Storage } from '@ixa/storage'
 import {
   createDbClient,
@@ -131,6 +136,8 @@ export const createGenerationWiring = (
    */
   const registry = createProviderRegistry([
     stub,
+    // 最初のフレームの画像を動かすローカルの画像→動画（ADR-0025）。無料・鍵不要なので常に登録する。
+    createLocalImageToVideoProvider({ outputDir: join(stubOutputDir, 'local') }),
     ...(config.providers.videoProvider === 'fal'
       ? [createFalVideoProvider({ apiKey: requireFalApiKey(config) })]
       : []),

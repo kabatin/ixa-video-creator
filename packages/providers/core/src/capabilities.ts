@@ -36,6 +36,11 @@ export const VideoModelCapabilities = z.object({
   negativePrompt: z.boolean(),
   cameraControl: CameraControl,
   audioGeneration: z.boolean(),
+  /**
+   * 最初のフレーム（`start_frame` の参照）が無ければ何も作れない（ADR-0025）。
+   * 画像を動かすだけのモデル（ローカルの画像→動画）が宣言する。省略は「要らない」。
+   */
+  requiresStartFrame: z.boolean().optional(),
 })
 export type VideoModelCapabilities = z.infer<typeof VideoModelCapabilities>
 

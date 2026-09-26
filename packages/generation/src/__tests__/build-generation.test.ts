@@ -183,6 +183,29 @@ describe('buildGeneration — モデルを明示したとき', () => {
     expect(router.drafts).toHaveLength(0)
   })
 
+  /**
+   * Shot に付けた最初のフレーム（手動の start_frame 参照・ADR-0025）は、画像を動かすだけの
+   * モデルでも仕様に入る。他の役割はそのモデルが受けないので落ちる。
+   */
+  it('手動の最初のフレームは、start_frame だけを受けるモデルの仕様に入る', async () => {
+    const shot = aShot(projectId)
+    const stillMotion = aModel('local/still-motion', {
+      durations: { mode: 'range', min: 0.5, max: 60 },
+      referenceImages: { max: 1, roles: ['start_frame'] },
+    })
+    const startFrame = aManualReference(shot, 'start_frame', 0)
+    const context = contextWith({
+      manualReferencesForShot: () => Promise.resolve([aManualReference(shot, 'subject', 1), startFrame]),
+    })
+    const { deps } = depsOf([stillMotion], context)
+
+    const compiled = await buildGeneration(deps, shot, aProject(), stillMotion.id)
+
+    expect(compiled.spec.references).toEqual([
+      { mediaAssetId: startFrame.mediaAssetId, role: 'start_frame', weight: 1 },
+    ])
+  })
+
   it('編集尺をモデルが出せる尺へ切り上げる', async () => {
     const shot = aShot(projectId) // 編集尺 3.75 秒
     const { deps } = depsOf([modelA])

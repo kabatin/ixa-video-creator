@@ -92,6 +92,10 @@ export const selectModel = (
 
   // --- ハードフィルタ
   for (const model of models) {
+    if (model.routable === false) {
+      rejected.push({ modelId: model.id, reason: 'AUTO の候補にしないモデル（明示して選ぶ）' })
+      continue
+    }
     if (constraints.allowedModels && !constraints.allowedModels.includes(model.id)) {
       rejected.push({ modelId: model.id, reason: '許可されたモデルに含まれない' })
       continue

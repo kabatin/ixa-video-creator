@@ -36,6 +36,7 @@ export const makeModel = (overrides: ModelOverrides): VideoModelDescriptor => ({
     ...overrides.qualities,
   },
   economics: { costPerSecondUsd: 0.1, typicalLatencySec: 60, ...overrides.economics },
+  ...(overrides.routable === undefined ? {} : { routable: overrides.routable }),
 })
 
 export const makeSpec = (overrides: Partial<ShotGenerationSpec> = {}): ShotGenerationSpec => ({

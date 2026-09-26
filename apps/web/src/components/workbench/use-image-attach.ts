@@ -5,11 +5,13 @@ import { useAssets } from '@/components/workbench/asset-store'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { createApiClient } from '@/lib/api-client'
 import { fileBaseName } from '@/lib/asset-actions'
-import type { Inspected } from '@/lib/workbench-selection'
+import { INSPECTED_LABELS, type Inspected } from '@/lib/workbench-selection'
 
 /** 画像を入れられる先（UI-WORKBENCH-2 §4.5）。Shot と楽曲には画像を入れない。 */
 export type ImageTarget =
   | Extract<Inspected, { kind: 'character' | 'look' | 'location' | 'brand-asset' }>
+  /** Shot の最初のフレーム（ADR-0025）。画像から動画で Take にするため。 */
+  | Extract<Inspected, { kind: 'shot' }>
   | { readonly kind: 'new-location' }
   | { readonly kind: 'new-brand-asset' }
 
@@ -27,8 +29,21 @@ export const acceptsImages = (
  * （ビューアに落とした・ツリーから選んだ・画面のどこかに落とした、で振る舞いを変えない）。
  * 付け終わった素材の行き先（Inspected）を返す。呼び出し側はそれを選び直して見せる。
  */
+export type ImageChoice = { readonly label: string; readonly target: ImageTarget }
+
+/** 画像を落としたときの入れ先。見ている物に入れられるなら、それを先頭に出す。 */
+export const imageChoicesFor = (current: Inspected | null): readonly ImageChoice[] => [
+  ...(current?.kind === 'shot'
+    ? [{ label: 'いま選んでいる Shot の最初のフレームにする', target: current }]
+    : acceptsImages(current)
+      ? [{ label: `いま選んでいる${INSPECTED_LABELS[current.kind]}に入れる`, target: current }]
+      : []),
+  { label: '新しいロケーションの参照画像にする', target: { kind: 'new-location' } },
+  { label: '新しいブランド資産（ロゴ）にする', target: { kind: 'new-brand-asset' } },
+]
+
 export const useImageAttach = () => {
-  const { project } = useWorkbench()
+  const { project, refresh } = useWorkbench()
   const { actions, locations, brandAssets } = useAssets()
   const api = useMemo(() => createApiClient(), [])
 
@@ -42,6 +57,15 @@ export const useImageAttach = () => {
     async (target: ImageTarget, files: readonly File[]): Promise<Inspected> => {
       if (files.length === 0) throw new Error('画像がありません')
       switch (target.kind) {
+        case 'shot': {
+          // 最初のフレームは 1 枚。2 枚以上なら先頭だけ使う（残りは呼び出し側が伝える）。
+          const first = files[0]
+          if (first === undefined) throw new Error('画像がありません')
+          await api.setStartFrame(target.id, await upload(first))
+          // インスペクターの欄が読み直すように（serverEpoch が進む）。
+          refresh()
+          return target
+        }
         case 'character': {
           const existing = await api.listIdentityImages(target.id)
           for (const [index, file] of files.entries()) {
@@ -99,6 +123,6 @@ export const useImageAttach = () => {
         }
       }
     },
-    [actions, api, brandAssets, locations, upload],
+    [actions, api, brandAssets, locations, refresh, upload],
   )
 }

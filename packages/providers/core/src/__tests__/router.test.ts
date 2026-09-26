@@ -101,3 +101,17 @@ describe('selectModel', () => {
     expect(runs[0]).toBe(modelId('aaa'))
   })
 })
+
+/**
+ * AUTO の候補にしないモデル（ADR-0025）。最初のフレームを付けただけで、AUTO が勝手に
+ * 無料のローカルの寄りへ切り替わると、生成を頼んだつもりが画像を動かすだけになる。
+ */
+describe('routable: false', () => {
+  it('ルーターは選ばず、理由を残す', () => {
+    const local = makeModel({ id: 'local', economics: { costPerSecondUsd: 0, typicalLatencySec: 1 }, routable: false })
+    const d = selectModel(makeSpec(), [local, cheap])
+
+    expect(d.modelId).toBe(modelId('cheap'))
+    expect(d.rejected.some((r) => r.modelId === modelId('local') && r.reason.includes('明示'))).toBe(true)
+  })
+})

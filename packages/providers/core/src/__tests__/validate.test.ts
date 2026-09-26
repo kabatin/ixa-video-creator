@@ -59,3 +59,31 @@ describe('validateAgainstCapabilities', () => {
     expect(validateAgainstCapabilities(spec, limited).length).toBeGreaterThanOrEqual(4)
   })
 })
+
+/**
+ * 最初のフレームが無いと使えないモデル（ADR-0025）。ローカルの画像→動画は
+ * 画像を動かすだけなので、画像が無ければ何も作れない。
+ */
+describe('requiresStartFrame', () => {
+  const stillMotion = makeModel({
+    id: 'local/still-motion',
+    capabilities: {
+      referenceImages: { max: 1, roles: ['start_frame'] },
+      requiresStartFrame: true,
+    } as never,
+  })
+
+  it('最初のフレームが無ければ違反にする', () => {
+    expect(validateAgainstCapabilities(makeSpec(), stillMotion).join()).toContain('最初のフレーム')
+  })
+
+  it('最初のフレームがあれば通す', () => {
+    const spec = makeSpec({ references: [{ mediaAssetId: asset(), role: 'start_frame', weight: 1 }] })
+
+    expect(validateAgainstCapabilities(spec, stillMotion)).toEqual([])
+  })
+
+  it('宣言していないモデルは、最初のフレームが無くても通す（既定は要らない）', () => {
+    expect(validateAgainstCapabilities(makeSpec(), makeModel({ id: 'plain' }))).toEqual([])
+  })
+})

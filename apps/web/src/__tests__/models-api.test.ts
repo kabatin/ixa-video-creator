@@ -21,6 +21,8 @@ const aModel = (fps: readonly number[]): WireVideoModel =>
     maxReferenceImages: 30,
     costPerSecondUsd: 0.3024,
     audioGeneration: false,
+    requiresStartFrame: false,
+    routable: true,
   })
 
 describe('recommendedFps', () => {

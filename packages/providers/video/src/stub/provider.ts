@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { computeSpecHash, quantizeDuration } from '@ixa/domain'
 import {
   CapabilityViolationError,
-  ProviderError,
   validateAgainstCapabilities,
   type ProviderJobHandle,
   type ProviderJobStatus,
@@ -15,6 +14,15 @@ import {
 import { z } from 'zod'
 import { colorForShot } from './color.js'
 import { STUB_PROVIDER_ID, stubVideoModels } from './descriptor.js'
+import {
+  CANCELLED,
+  delay,
+  errorMessage,
+  failedStatus,
+  hashToSeed,
+  resolveModel,
+  unknownJobError,
+} from './job-helpers.js'
 import { readStubJob, writeStubJob, type StoredStubJob } from './job-store.js'
 import { placeholderLines } from './lines.js'
 import { renderPlaceholder } from './render-placeholder.js'
@@ -77,76 +85,6 @@ type StubJob = {
   readonly status: ProviderJobStatus
   /** cancel 後に ffmpeg の失敗で状態を上書きしないためのフラグ。 */
   readonly cancelled: boolean
-}
-
-const CANCELLED: ProviderJobStatus = {
-  state: 'failed',
-  error: { code: 'cancelled', message: 'ジョブはキャンセルされました', retryable: false },
-}
-
-const delay = (ms: number, signal: AbortSignal): Promise<void> =>
-  new Promise<void>((resolve, reject) => {
-    // 既に中断済みなら abort イベントはもう飛ばない。ここで弾かないと待ち続けてしまう。
-    if (signal.aborted) {
-      reject(new Error('待機前に中断されました', { cause: signal.reason }))
-      return
-    }
-
-    const onAbort = (): void => {
-      clearTimeout(timer)
-      reject(new Error('待機中に中断されました', { cause: signal.reason }))
-    }
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort)
-      resolve()
-    }, ms)
-    signal.addEventListener('abort', onAbort, { once: true })
-  })
-
-/**
- * 記録が見つからないときに利用者へ見せる文。**内部の参照（UUID）を入れない。**
- *
- * 見せても利用者に打つ手は増えず、CLAUDE.md の「画面に出さない: 内部 ID」に反する。
- * ここは Provider の失敗理由がそのまま画面の通知へ流れる経路なので、
- * 実装の言葉（ジョブ・poll・provider）も使わない。
- */
-const UNKNOWN_JOB_MESSAGE =
-  'この生成の記録が見つかりませんでした。結果は残っていないので、もう一度生成してください。'
-
-/** 参照と、読めなかった理由は `cause` に残す。ログでは追えるようにする。 */
-const unknownJobError = (ref: string, cause?: unknown): ProviderError =>
-  new ProviderError(UNKNOWN_JOB_MESSAGE, STUB_PROVIDER_ID, false, {
-    cause: new Error(`ジョブ参照 ${ref} の記録が見つかりません`, { cause }),
-  })
-
-const failedStatus = (code: string, message: string, retryable: boolean): ProviderJobStatus => ({
-  state: 'failed',
-  error: { code, message, retryable },
-})
-
-const errorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
-
-/** ジョブ参照（UUID）から決定的に seed を作る。同じジョブなら常に同じ値。 */
-const hashToSeed = (ref: string): number => {
-  let hash = 0
-  for (const char of ref) hash = (hash * 31 + char.charCodeAt(0)) % 2_147_483_647
-  return hash
-}
-
-const resolveModel = (
-  models: readonly VideoModelDescriptor[],
-  model: VideoModelDescriptor,
-): VideoModelDescriptor => {
-  const known = models.find((candidate) => candidate.id === model.id)
-  if (known === undefined) {
-    throw new ProviderError(
-      `スタブ Provider は未知のモデル ${model.id} を扱えません`,
-      STUB_PROVIDER_ID,
-      false,
-    )
-  }
-  return known
 }
 
 /**
@@ -214,7 +152,7 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
     const job = jobs.get(ref)
     if (job === undefined) return
 
-    const model = resolveModel(models, request.model)
+    const model = resolveModel(STUB_PROVIDER_ID, models, request.model)
     const { spec } = request
     const generationDurationSec = quantizeDuration(spec.durationSec, model.capabilities.durations)
     const startedAt = Date.now()
@@ -299,7 +237,7 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
   }
 
   const submit = async (request: VideoGenerationRequest): Promise<ProviderJobHandle> => {
-    const model = resolveModel(models, request.model)
+    const model = resolveModel(STUB_PROVIDER_ID, models, request.model)
     const violations = validateAgainstCapabilities(request.spec, model)
     if (violations.length > 0) throw new CapabilityViolationError(model.id, violations)
 
@@ -345,7 +283,7 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
     const stored = await readStubJob(outputDir, handle.ref)
     if (stored.kind === 'found') return stored.job.status
     // 壊れた JSON は「無い」と同じ扱い。中身を推測して状態を作らない。
-    throw unknownJobError(handle.ref, stored.kind === 'unreadable' ? stored.cause : undefined)
+    throw unknownJobError(STUB_PROVIDER_ID, handle.ref, stored.kind === 'unreadable' ? stored.cause : undefined)
   }
 
   const cancel = async (handle: ProviderJobHandle): Promise<void> => {
@@ -359,7 +297,7 @@ export const createStubVideoProvider = (options: StubProviderOptions): VideoProv
 
     const stored = await readStubJob(outputDir, handle.ref)
     if (stored.kind !== 'found') {
-      throw unknownJobError(handle.ref, stored.kind === 'unreadable' ? stored.cause : undefined)
+      throw unknownJobError(STUB_PROVIDER_ID, handle.ref, stored.kind === 'unreadable' ? stored.cause : undefined)
     }
     if (stored.job.status.state === 'succeeded' || stored.job.status.state === 'failed') return
 

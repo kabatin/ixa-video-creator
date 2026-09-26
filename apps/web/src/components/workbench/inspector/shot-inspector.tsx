@@ -7,6 +7,7 @@ import { ShotStatusBadge } from '@/components/shot-status-badge'
 import { useAssets } from '@/components/workbench/asset-store'
 import { ShotCastSection } from '@/components/workbench/inspector/shot-cast-section'
 import { ShotGenerateSection } from '@/components/workbench/inspector/shot-generate-section'
+import { StartFrameField } from '@/components/workbench/inspector/start-frame-field'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { AutoSaveCheckbox, AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
 import { MoreMenu } from '@/components/workbench/ui/more-menu'
@@ -45,6 +46,8 @@ export const ShotInspector = ({
     await workbench.saveShot(shot.id, patch)
   }
   const generating = isGeneratingStatus(shot.status)
+  /** 最初のフレームが付いているか（ADR-0025）。生成欄が押せるかの判定に渡す。 */
+  const [hasStartFrame, setHasStartFrame] = useState(false)
   const sections = useRef<Partial<Record<InspectorTab, HTMLDivElement | null>>>({})
 
   // メニュー「生成」などから来たら、その区切りまで送る。
@@ -143,6 +146,13 @@ export const ShotInspector = ({
           <Section title="参照">
             <LocationField shot={shot} disabled={generating} onSave={save} />
             <ShotCastSection shot={shot} version={workbench.serverEpoch} />
+            <StartFrameField
+              shot={shot}
+              workspaceId={workbench.project.workspaceId}
+              disabled={generating}
+              onChange={setHasStartFrame}
+              version={workbench.serverEpoch}
+            />
           </Section>
         </div>
 
@@ -160,7 +170,7 @@ export const ShotInspector = ({
           }}
         >
           <Section title="生成">
-            <ShotGenerateSection shot={shot} />
+            <ShotGenerateSection shot={shot} hasStartFrame={hasStartFrame} />
           </Section>
         </div>
 

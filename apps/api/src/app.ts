@@ -26,6 +26,7 @@ import { projectRoutes } from './routes/projects.js'
 import { shotRoutes, type GenerationQueue } from './routes/shots.js'
 import { shotBulkRoutes } from './routes/shots-bulk.js'
 import { shotEditRoutes } from './routes/shot-edits.js'
+import { shotStartFrameRoutes } from './routes/shot-start-frame.js'
 import { shotPosterRoutes } from './routes/shot-posters.js'
 import { uploadRoutes, type MediaIngestDeps } from './routes/uploads.js'
 import { shotCompareRoutes } from './routes/shot-compare.js'
@@ -59,6 +60,7 @@ import type {
   StoryboardDraftRepository,
   SequenceRepository,
   ShotCharacterRepository,
+  ShotReferenceRepository,
   TimelineClipRepository,
   TransitionRepository,
 } from '@ixa/db'
@@ -84,6 +86,8 @@ export type AppDeps = {
   characters: CharacterRepository
   looks: CharacterLookRepository
   shotCharacters: ShotCharacterRepository
+  /** 手動の参照（いまは最初のフレームだけ・ADR-0025）。 */
+  shotReferences: ShotReferenceRepository
   brandAssets: BrandAssetRepository
   locations: LocationRepository
   scripts: ScriptRepository
@@ -191,6 +195,15 @@ export const createApp = (deps: AppDeps) => {
       projects,
       takes: deps.takes,
       shotCharacters: deps.shotCharacters,
+    }),
+  )
+  app.route(
+    '/',
+    shotStartFrameRoutes({
+      shots: deps.shots,
+      projects,
+      mediaAssets,
+      shotReferences: deps.shotReferences,
     }),
   )
   app.route(

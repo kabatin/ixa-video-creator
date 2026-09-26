@@ -9,6 +9,12 @@ export type VideoModelDescriptor = {
   readonly capabilities: VideoModelCapabilities
   readonly qualities: ModelQualities
   readonly economics: ModelEconomics
+  /**
+   * AUTO（Model Router）の候補にするか。**省略は候補にする。**
+   * ローカルの画像→動画は false（ADR-0025）。最初のフレームを付けただけで AUTO が
+   * 無料の寄りへ切り替わると、生成を頼んだつもりが画像を動かすだけになる。明示して選ばせる。
+   */
+  readonly routable?: boolean
 }
 
 /** Provider 側のジョブを指す不透明なハンドル。中身の形は Provider ごとに異なる。 */
