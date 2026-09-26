@@ -17,7 +17,7 @@ import type { WorkbenchDialog } from '@/lib/menu-model'
 import type { WireMusicAnalysis } from '@/lib/music-api'
 import { applyProjectEvent } from '@/lib/project-events'
 import { EMPTY_SELECTION, pruneSelection, type ShotSelection } from '@/lib/shot-bulk'
-import { posterByShotId, type ShotPosterMap } from '@/lib/shot-posters'
+import { posterByShotId, posterRetryDelayMs, type ShotPosterMap } from '@/lib/shot-posters'
 import { useProjectEvents } from '@/lib/use-project-events'
 import type { PanelId } from '@/lib/workbench-layout'
 import type { Inspected } from '@/lib/workbench-selection'
@@ -134,6 +134,9 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
     baseUrl: resolveApiBaseUrl(),
     onEvent: (event) => {
       setShots((current) => (current === null ? current : applyProjectEvent(current, event).shots))
+      // 採用が変わると表紙の絵も変わる。**別の経路の採用**（一括・別の画面・API）もここで拾う。
+      // 以前は生成の成功でしか取り直さず、採用した Shot の絵が読み直すまで出なかった。
+      if (event.type === 'shot.status') setPosterEpoch((epoch) => epoch + 1)
       if (
         event.type === 'generation_job.status' &&
         event.status === 'succeeded' &&
@@ -151,14 +154,25 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
     },
   })
 
+  /** 続けて取り直した回数。作っている行が無くなったら 0 に戻す。 */
+  const posterAttempt = useRef(0)
   useEffect(() => {
     let cancelled = false
+    let retry: ReturnType<typeof setTimeout> | null = null
     api
       .listShotPosters(projectId)
       .then((list) => {
         if (cancelled) return
         setPosters(posterByShotId(list))
         setPosterError(null)
+        // サムネイルを作っている行があれば、少し待って取り直す（できたら自動で出る）。
+        const delay = posterRetryDelayMs(list, posterAttempt.current)
+        posterAttempt.current = delay === null ? 0 : posterAttempt.current + 1
+        if (delay !== null) {
+          retry = setTimeout(() => {
+            setPosterEpoch((epoch) => epoch + 1)
+          }, delay)
+        }
       })
       .catch((error: unknown) => {
         // 取れなかったことを黙らせない。空の Map のままだと「絵が無い」に化ける（L-015）。
@@ -166,6 +180,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       })
     return () => {
       cancelled = true
+      if (retry !== null) clearTimeout(retry)
     }
   }, [api, projectId, posterEpoch])
 

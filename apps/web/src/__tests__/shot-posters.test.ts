@@ -7,7 +7,10 @@ import {
   describeMissingPoster,
   pickProjectCover,
   posterByShotId,
+  posterRetryDelayMs,
   posterViewFor,
+  MAX_POSTER_RETRIES,
+  POSTER_RETRY_MS,
 } from '@/lib/shot-posters'
 import type { WireShotPoster } from '@/lib/shot-posters-api'
 
@@ -22,6 +25,7 @@ const withPoster = (id: string, url: string): WireShotPoster => ({
   takeId: TakeId.parse(TAKE_ID),
   thumbnailUrl: url,
   reason: null,
+  pending: false,
 })
 
 const withoutPoster = (id: string, reason: string): WireShotPoster => ({
@@ -29,6 +33,7 @@ const withoutPoster = (id: string, reason: string): WireShotPoster => ({
   takeId: null,
   thumbnailUrl: null,
   reason,
+  pending: false,
 })
 
 describe('posterByShotId', () => {
@@ -106,5 +111,25 @@ describe('pickProjectCover', () => {
 
     expect(cover.url).toBeNull()
     expect(cover.reason).not.toBeNull()
+  })
+})
+
+/**
+ * サムネイルを作っている間だけ取り直す（2026-09-27）。以前は生成が終わった瞬間に 1 回取るだけで、
+ * サムネイルがその後にできても出ず、読み直すまで「作られていません」のままだった。
+ */
+describe('posterRetryDelayMs', () => {
+  const making = (id: string): WireShotPoster => ({ ...withoutPoster(id, 'サムネイルを作っています'), pending: true })
+
+  it('作っている行があれば、少し待って取り直す', () => {
+    expect(posterRetryDelayMs([withPoster(SHOT_ID, 'https://example.invalid/a.jpg'), making(OTHER_SHOT_ID)], 0)).toBe(POSTER_RETRY_MS)
+  })
+
+  it('待っても出ない行（Take が無いなど）だけなら取り直さない', () => {
+    expect(posterRetryDelayMs([withoutPoster(SHOT_ID, 'まだ Take がありません')], 0)).toBeNull()
+  })
+
+  it('上限まで取り直したら止める（出ないまま回り続けない）', () => {
+    expect(posterRetryDelayMs([making(SHOT_ID)], MAX_POSTER_RETRIES)).toBeNull()
   })
 })

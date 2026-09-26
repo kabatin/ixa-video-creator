@@ -35,6 +35,7 @@ describe('WireShotPoster のスキーマ', () => {
       takeId: TAKE_ID,
       thumbnailUrl: 'https://example.invalid/thumb.jpg?sig=x',
       reason: null,
+      pending: false,
     })
 
     expect(parsed.thumbnailUrl).toBe('https://example.invalid/thumb.jpg?sig=x')
@@ -47,6 +48,7 @@ describe('WireShotPoster のスキーマ', () => {
       takeId: null,
       thumbnailUrl: null,
       reason: 'no_take',
+      pending: false,
     })
 
     expect(parsed.reason).toBe('no_take')
@@ -59,6 +61,7 @@ describe('WireShotPoster のスキーマ', () => {
         takeId: null,
         thumbnailUrl: null,
         reason: null,
+        pending: false,
       }),
     ).toThrow()
   })
@@ -70,6 +73,7 @@ describe('WireShotPoster のスキーマ', () => {
         takeId: TAKE_ID,
         thumbnailUrl: 'https://example.invalid/thumb.jpg?sig=x',
         reason: 'no_take',
+        pending: false,
       }),
     ).toThrow()
   })
@@ -86,6 +90,7 @@ describe('listShotPosters', () => {
             takeId: TAKE_ID,
             thumbnailUrl: 'https://example.invalid/thumb.jpg?sig=x',
             reason: null,
+            pending: false,
           },
         ],
       }),

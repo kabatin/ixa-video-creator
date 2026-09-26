@@ -173,6 +173,28 @@ describe('GET /projects/:projectId/shot-posters', () => {
     expect(ready?.reason).toBeNull()
   })
 
+  /**
+   * 待てば出る行だけに印を付ける（2026-09-27）。画面はこの印がある間だけ取り直す。
+   * 以前は生成が終わった瞬間に 1 回取るだけで、サムネイルがその後にできても出なかった
+   * （読み直すまで「作られていません」のまま。デモの録画で実測）。
+   */
+  it('サムネイルを作っている行だけ pending が true', async () => {
+    const fixture = await mixedFixture()
+
+    const res = await buildApp(fixture).request(`/projects/${fixture.project.id}/shot-posters`)
+    const [noTake, notReady, ready] = ((await res.json()) as ListBody).data
+
+    expect((notReady as { pending?: boolean }).pending).toBe(true)
+    expect((noTake as { pending?: boolean }).pending).toBe(false)
+    expect((ready as { pending?: boolean }).pending).toBe(false)
+  })
+
+  it('画面に出る理由に実装の言葉（media / worker / API）を入れない', () => {
+    for (const reason of Object.values(SHOT_POSTER_REASON)) {
+      expect(reason).not.toMatch(/media|worker|API/i)
+    }
+  })
+
   it('URL が null の行には必ず理由が付く（空欄のまま見過ごさない / L-015）', async () => {
     const fixture = await mixedFixture()
 
@@ -205,6 +227,7 @@ describe('GET /projects/:projectId/shot-posters', () => {
     const base = {
       shotId: newId(ShotIdSchema),
       takeId: null,
+      pending: false,
     }
 
     expect(

@@ -23,6 +23,8 @@ export const WireShotPoster = z
     takeId: TakeId.nullable(),
     thumbnailUrl: z.string().nullable(),
     reason: z.string().nullable(),
+    /** 待てば出る（サムネイルを作っている）。true の間だけ取り直す。 */
+    pending: z.boolean(),
   })
   .refine((entry) => (entry.thumbnailUrl === null) !== (entry.reason === null), {
     message:

@@ -29,11 +29,11 @@ export const MAX_SIGNED_URL_EXPIRES_SEC = 3600
  * （`thumbnailKey` / `posterKeys`）が空なだけで、待てば埋まる。
  * 一覧側（`shot-posters.ts`）も同じ状態を説明するため、文言はここだけに置く（L-016）。
  */
-export const DERIVED_NOT_READY_MESSAGE = 'サムネイルがまだ作られていません（media の処理待ち）'
+export const DERIVED_NOT_READY_MESSAGE = 'サムネイルを作っています。まもなく表示されます'
 
 /** ポスターフレームがまだ切り出されていないときの理由。 */
 export const POSTERS_NOT_READY_MESSAGE =
-  'ポスターフレームがまだ作られていません（media の処理待ち）'
+  'ポスターフレームを作っています。まもなく表示されます'
 
 /** `index` が `posterKeys` の範囲を超えたときの理由。 */
 export const POSTER_INDEX_OUT_OF_RANGE_MESSAGE = 'ポスターフレームの index が範囲外です'

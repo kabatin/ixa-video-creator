@@ -75,6 +75,9 @@ export const ShotPosterResponse = z
       .min(1)
       .nullable()
       .openapi({ description: 'thumbnailUrl が null のときの理由。URL があるときは null' }),
+    pending: z.boolean().openapi({
+      description: '待てば出る（サムネイルを作っている）。画面はこれが true の間だけ取り直す',
+    }),
   })
   .refine((entry) => (entry.thumbnailUrl === null) !== (entry.reason === null), {
     message: URL_AND_REASON_PAIR_MESSAGE,
@@ -89,6 +92,17 @@ export type ShotPosterResponse = z.infer<typeof ShotPosterResponse>
 export type ShotPoster =
   | { shotId: ShotId; takeId: TakeId | null; thumbnailUrl: string; reason: null }
   | { shotId: ShotId; takeId: TakeId | null; thumbnailUrl: null; reason: string }
+
+/**
+ * 待てば出るか（2026-09-27）。**サムネイルを作っている行だけ。**
+ * 以前は生成が終わった瞬間に 1 回取るだけで、サムネイルがその後にできても画面が
+ * 取り直さず、読み直すまで出なかった。画面はこれが true の間だけ取り直す。
+ */
+/** 応答の 1 行。待てば出るかの印を添える。 */
+export type ShotPosterEntry = ShotPoster & { readonly pending: boolean }
+
+const isPending = (poster: ShotPoster): boolean =>
+  poster.reason === SHOT_POSTER_REASON.thumbnailNotReady
 
 export type ShotPosterRoutesDeps = {
   projects: ProjectRepository
@@ -189,7 +203,7 @@ const resolveShotPoster = (
 export const buildShotPosters = async (
   deps: Omit<ShotPosterRoutesDeps, 'projects'>,
   shots: readonly Shot[],
-): Promise<ShotPoster[]> => {
+): Promise<ShotPosterEntry[]> => {
   const takeIds = shots.flatMap((shot) =>
     shot.selectedTakeId === null ? [] : [shot.selectedTakeId],
   )
@@ -213,7 +227,10 @@ export const buildShotPosters = async (
   )
   const urlByKey = new Map(signed)
 
-  return shots.map((shot) => resolveShotPoster(shot, takesById, assetsById, urlByKey))
+  return shots.map((shot) => {
+    const poster = resolveShotPoster(shot, takesById, assetsById, urlByKey)
+    return { ...poster, pending: isPending(poster) }
+  })
 }
 
 const ProjectParams = z.object({

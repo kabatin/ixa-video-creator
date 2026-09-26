@@ -42,6 +42,25 @@ const MISSING_POSTER_TEXT: Readonly<Record<string, string>> = {
   [NO_SHOTS_REASON]: 'Shot がありません',
 }
 
+/** 取り直すまでの間隔。サムネイルは数秒でできる。 */
+export const POSTER_RETRY_MS = 3_000
+
+/** 続けて取り直す上限（約 2 分）。出ないまま回り続けない。 */
+export const MAX_POSTER_RETRIES = 40
+
+/**
+ * 取り直すなら何ミリ秒後か。取り直さないなら null（2026-09-27）。
+ *
+ * **サムネイルを作っている行（`pending`）があるときだけ**取り直す。以前は生成が終わった
+ * 瞬間に 1 回取るだけで、サムネイルがその後にできても出ず、読み直すまで出なかった。
+ * Take が無いなど、待っても出ない行では取り直さない。
+ */
+export const posterRetryDelayMs = (
+  list: readonly WireShotPoster[],
+  attempt: number,
+): number | null =>
+  attempt < MAX_POSTER_RETRIES && list.some((entry) => entry.pending) ? POSTER_RETRY_MS : null
+
 /** 行から Shot ごとに引ける形へ直す。同じ Shot が 2 度来たら後勝ち（API は 1 件ずつ返す）。 */
 export const posterByShotId = (list: readonly WireShotPoster[]): ShotPosterMap =>
   new Map(list.map((entry) => [entry.shotId, { url: entry.thumbnailUrl, reason: entry.reason }]))
