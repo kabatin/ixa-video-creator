@@ -28,7 +28,9 @@ import {
   addMark,
   buildCutMarkCandidates,
   cutMarkToleranceSec,
+  addSectionMarks,
   cutBoundaries,
+  describeSectionMarks,
   describeCuts,
   moveMark,
   nextMarkIndex,
@@ -453,6 +455,18 @@ export const CutEditor = ({
   const keyHelp = describeCutEditorKeys()
   const sectionBoundarySec = sectionBoundaries(analysis.sections)
 
+  /**
+   * 青い線（セクションの境目）すべてに区切りを置く（制作者の要望 2026-09-26）。
+   * 1 本ずつ置いていた操作をまとめるだけ。置いたあとは普通の区切りなので消せる。
+   */
+  const placeSectionMarks = (): void => {
+    const result = addSectionMarks(marks, sectionBoundarySec, durationSec)
+    setMarks(result.marks)
+    setRejection(null)
+    setOutcome(null)
+    setSnapNotice({ state: 'none', label: '区切り', message: describeSectionMarks(result) })
+  }
+
   return (
     <div
       ref={containerRef}
@@ -512,6 +526,9 @@ export const CutEditor = ({
           />
           拍に吸着
         </label>
+        <Button size="sm" disabled={saving} onClick={placeSectionMarks}>
+          セクションの境目に区切りを置く
+        </Button>
         {toolbarExtra}
         <span className="ml-auto flex items-center gap-2 text-xs text-muted">
           <span className="tabular-nums">

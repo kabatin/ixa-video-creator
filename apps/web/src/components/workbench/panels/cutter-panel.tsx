@@ -1,11 +1,7 @@
 'use client'
 
-import type { MusicTrack } from '@ixa/domain'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect } from 'react'
 import { CutEditor } from '@/components/cut-editor'
-import { StoryboardPanel as AutoSplit } from '@/components/storyboard-panel'
-import { Button } from '@/components/ui/button'
-import type { WireMusicAnalysis } from '@/lib/music-api'
 import { usePreferences } from '@/components/preferences-root'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { MusicGate } from '@/components/workbench/panels/music-gate'
@@ -42,7 +38,6 @@ export const CutterPanel = ({ visible }: { readonly visible: boolean }) => {
             showPlay={transportControls.host === 'cutter'}
             // プレビューの下と同じ部品。見た目も「いま何か鳴っているか」の読み方も揃える。
             playButton={<SharedPlayButton owner="cutter" />}
-            toolbarExtra={<AutoSplitPopover track={track} analysis={analysis} />}
             sync={{
               othersPlaying: transport.playing && transport.owner !== 'cutter',
               seek: transport.seek,
@@ -64,69 +59,5 @@ export const CutterPanel = ({ visible }: { readonly visible: boolean }) => {
         )}
       </MusicGate>
     </PanelFrame>
-  )
-}
-
-/**
- * セクションから粗く割る補助（UI-WORKBENCH-2 §6 / Q4）。**独立したタブにしない。**
- * 主の操作は聴きながら切るなので、その操作の行から吹き出しで開く。
- */
-const AutoSplitPopover = ({
-  track,
-  analysis,
-}: {
-  readonly track: MusicTrack
-  readonly analysis: WireMusicAnalysis
-}) => {
-  const workbench = useWorkbench()
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return undefined
-    const onPointer = (event: PointerEvent): void => {
-      if (!(event.target instanceof Node) || ref.current?.contains(event.target) !== true)
-        setOpen(false)
-    }
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    window.addEventListener('pointerdown', onPointer)
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('pointerdown', onPointer)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-
-  return (
-    <div ref={ref} className="relative">
-      <Button size="sm" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
-        セクションから割る…
-      </Button>
-      {open && (
-        <div
-          role="dialog"
-          aria-label="セクションから割る"
-          className="absolute left-0 top-full z-40 mt-1 w-[min(36rem,80vw)] rounded-md border border-line bg-surface p-3 shadow-xl"
-        >
-          <p className="mb-2 text-xs text-muted">
-            解析のセクションから粗く割る補助です。主の操作は波形の上で区切りを置くことです。
-          </p>
-          <AutoSplit
-            projectId={workbench.projectId}
-            track={track}
-            analysis={analysis}
-            sequences={workbench.sequences}
-            // 割り終えたら閉じる。開いたままだと波形の半分を塞ぎ続ける（実機でそうなった）。
-            // 結果は上端の知らせに出す（吹き出しと一緒に消えないように）。
-            onCreated={(summary) => {
-              setOpen(false)
-              workbench.notify(summary)
-            }}
-          />
-        </div>
-      )}
-    </div>
   )
 }

@@ -159,6 +159,57 @@ export const addMark = (
   return { ok: true, ...insertMark(marks, mark) }
 }
 
+export type SectionMarksResult = {
+  readonly marks: readonly CutMark[]
+  /** 置けた本数。 */
+  readonly added: number
+  /** 既にある区切りと重なる・近すぎるので置かなかった本数。**黙って捨てない**ために数える。 */
+  readonly skipped: number
+}
+
+/**
+ * セクションの境目すべてに区切りを置く（制作者の要望 2026-09-26）。
+ *
+ * 以前の「セクションから割る」は 1 つのセクションの中を N 等分するもので、数秒しかない
+ * セクションを割る場面が無かった。制作者は青い線を目印に 1 本ずつ置いていたので、一度に置く。
+ * 置いたあとは普通の区切りなので消せる（セクション判定は外れることがある）。
+ *
+ * 曲の頭と終わりには置かない（もともと境界になる）。置けるかどうかは `addMark` の規則に従う。
+ */
+export const addSectionMarks = (
+  marks: readonly CutMark[],
+  boundariesSec: readonly number[],
+  songDurationSec: number,
+): SectionMarksResult =>
+  boundariesSec
+    .filter(
+      (atSec) =>
+        atSec >= MIN_CUT_DURATION_SEC && atSec <= songDurationSec - MIN_CUT_DURATION_SEC,
+    )
+    .reduce<SectionMarksResult>(
+      (current, atSec) => {
+        const result = addMark(current.marks, { atSec, snappedTo: 'section' })
+        return result.ok
+          ? { marks: result.marks, added: current.added + 1, skipped: current.skipped }
+          : { ...current, skipped: current.skipped + 1 }
+      },
+      { marks, added: 0, skipped: 0 },
+    )
+
+/** まとめて置いた結果の知らせ。**何も起きなかったときも理由を言う。** */
+export const describeSectionMarks = (result: SectionMarksResult): string => {
+  if (result.added === 0) {
+    return result.skipped === 0
+      ? 'セクションの境目が見つかっていません（解析では曲全体が 1 つのセクションです）。'
+      : 'セクションの境目には、すでに区切りがあります。'
+  }
+  const skipped =
+    result.skipped === 0
+      ? ''
+      : `（${String(result.skipped)} 本は近くに区切りがあるので置きませんでした）`
+  return `セクションの境目に区切りを ${String(result.added)} 本置きました${skipped}。`
+}
+
 /** 区切りを 1 個消す。消したあとは、同じ位置に来る区切り（無ければ最後）を選び直す。 */
 export const removeMarkAt = (marks: readonly CutMark[], index: number): MarkChangeResult => {
   if (!Number.isInteger(index) || index < 0 || index >= marks.length) {

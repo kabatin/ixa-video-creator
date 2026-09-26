@@ -7,6 +7,8 @@ import {
   FINE_NUDGE_SEC,
   MIN_CUT_DURATION_SEC,
   addMark,
+  addSectionMarks,
+  describeSectionMarks,
   buildCutMarkCandidates,
   buildCuts,
   cutMarkToleranceSec,
@@ -598,5 +600,64 @@ describe('叩きながら置く一連の操作', () => {
     expect(removed.ok).toBe(true)
     if (!removed.ok) return
     expect(buildCuts(removed.marks, 3)).toHaveLength(2)
+  })
+})
+
+/**
+ * セクションの境目にまとめて区切りを置く（制作者の要望 2026-09-26）。
+ *
+ * 以前の「セクションから割る」はセクションを 1 つ選んで中を N 等分するもので、
+ * 数秒しかないセクションを割る場面が無かった。制作者は青い線（セクションの境目）を
+ * 目印に 1 本ずつ区切りを置いていたので、それを一度にできるようにする。
+ * 置いたあとは普通の区切りなので、要らないものは消せる（セクション判定は外れることがある）。
+ */
+describe('addSectionMarks', () => {
+  const SONG = 30
+
+  it('境目すべてに区切りを置き、吸着先はセクション', () => {
+    const result = addSectionMarks([], [8.5, 16.5, 24.4], SONG)
+
+    expect(result.marks.map((m) => m.atSec)).toEqual([8.5, 16.5, 24.4])
+    expect(result.marks.every((m) => m.snappedTo === 'section')).toBe(true)
+    expect(result.added).toBe(3)
+    expect(result.skipped).toBe(0)
+  })
+
+  it('曲の頭と終わりには置かない（もともと境界なので）', () => {
+    const result = addSectionMarks([], [0, 8.5, SONG], SONG)
+
+    expect(result.marks.map((m) => m.atSec)).toEqual([8.5])
+    expect(result.skipped).toBe(0)
+  })
+
+  it('すでにある区切りは残し、近すぎる境目は置かずに数える', () => {
+    const result = addSectionMarks(marksAt(8.4), [8.5, 16.5], SONG)
+
+    expect(result.marks.map((m) => m.atSec)).toEqual([8.4, 16.5])
+    expect(result.added).toBe(1)
+    expect(result.skipped).toBe(1)
+  })
+
+  it('入力の区切りを書き換えない', () => {
+    const before = marksAt(4)
+    addSectionMarks(before, [8.5], SONG)
+
+    expect(before.map((m) => m.atSec)).toEqual([4])
+  })
+})
+
+describe('describeSectionMarks', () => {
+  it('置いた本数と、置かなかった本数を言う', () => {
+    expect(describeSectionMarks({ marks: [], added: 3, skipped: 1 })).toBe(
+      'セクションの境目に区切りを 3 本置きました（1 本は近くに区切りがあるので置きませんでした）。',
+    )
+  })
+
+  it('境目が無いときは、押しても何も起きない理由を言う', () => {
+    expect(describeSectionMarks({ marks: [], added: 0, skipped: 0 })).toContain('境目が見つかっていません')
+  })
+
+  it('全部すでにあるときは、そう言う', () => {
+    expect(describeSectionMarks({ marks: [], added: 0, skipped: 2 })).toContain('すでに区切りがあります')
   })
 })
