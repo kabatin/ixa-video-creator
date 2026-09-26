@@ -5,7 +5,7 @@ matches exactly what you previewed.**
 
 [日本語版 README](./README.ja.md) · MIT licensed · TypeScript monorepo
 
-![The workbench: storyboard, beat-accurate waveform cutter, and shot list](./docs/images/workbench.png)
+![The workbench on the LUNA BREW sample: storyboard, beat-aligned timeline, and shot list](./docs/images/workbench.jpg)
 
 ---
 
@@ -26,6 +26,29 @@ timeline:
 
 The work is therefore *edit against the music, then fill each slot* — never *generate clips
 and hope they fit*. The first film made with it is a 1m56s music video in 27 shots.
+
+![Cutting while listening: section boundaries placed as cuts in one click, with the cuts they make](./docs/images/cutter.jpg)
+
+## A 30-second spot, start to finish
+
+The sample project is **LUNA BREW**, a fictional night coffee stand: a 30-second spot cut to a
+120 BPM track, nine shots, two recurring characters. Everything below is the real app running
+on that project.
+
+![Nine stills of the LUNA BREW spot: a rainy back street, a crescent-moon neon in a puddle, the barista pulling an espresso, latte art, the rider in the rain, the handoff at the counter, steam, and the two of them on a rooftop at dawn](./docs/images/luna-brew-stills.jpg)
+
+The stills were made with an image model outside the app and brought in as each shot's
+**start frame**. The built-in `local/still-motion` model turns a start frame into a take —
+a slow push, pull or pan that follows the shot's camera setting — for free and without an API
+key. Swap in a real image-to-video provider later and the same start frames carry over.
+
+| | |
+|---|---|
+| ![Playing the cut end to end: the preview player above the timeline](./docs/images/preview.jpg) | ![Take comparison: two takes of the same shot side by side on the same beats](./docs/images/take-compare.jpg) |
+| **Preview is the render** — the player and the export share one composition. | **Compare takes on the beat** — two takes of a shot, looped over the shot's span. |
+| ![The inspector: timing, camera, cast, location and start frame of a shot](./docs/images/inspector.jpg) | ![The library: a character's identity image and looks](./docs/images/library.jpg) |
+| **One shot, everything in one place** — camera, cast with looks, location, start frame. | **Characters, looks, locations, brand** — reusable across every shot. |
+
 
 ## Why it might interest you
 
@@ -55,7 +78,9 @@ leaving it stuck, and a transient network error never discards work you already 
 **Takes are append-only.** Generating again never overwrites a previous result. You adopt
 one; the others stay for comparison.
 
-![Take comparison against the timeline, with per-shot inspector](./docs/images/timeline.png)
+**Bring your own frames.** Give a shot a start frame — a still from any image tool, or a
+photo — and the free local model turns it into a take that goes through the same adopt,
+review and timeline flow as anything generated.
 
 ## How it fits together
 
