@@ -12,8 +12,22 @@ import { PANEL_IDS } from '@/lib/workbench-layout'
 
 /** メニューの有効判定（UI-WORKBENCH §4 / §10）。 */
 
-const READY: MenuState = { hasCurrentShot: true, checkedCount: 3, canUndo: true, currentHasTake: true }
-const EMPTY: MenuState = { hasCurrentShot: false, checkedCount: 0, canUndo: false, currentHasTake: false }
+const READY: MenuState = {
+  hasCurrentShot: true,
+  checkedCount: 3,
+  canUndo: true,
+  currentHasTake: true,
+  splitBlocker: null,
+  mergeBlocker: null,
+}
+const EMPTY: MenuState = {
+  hasCurrentShot: false,
+  checkedCount: 0,
+  canUndo: false,
+  currentHasTake: false,
+  splitBlocker: 'Shot を選んでいません',
+  mergeBlocker: 'Shot を 2 件以上チェックしてください',
+}
 
 const find = (state: MenuState, id: string): MenuItem => {
   const found = buildMenus(state)
@@ -44,6 +58,20 @@ describe('有効判定', () => {
 
     expect(entry.action).toEqual({ kind: 'dialog', dialog: 'delete-shots' })
     expect(entry.shortcut).toBe('Delete')
+  })
+
+  /** 分割と結合（ADR-0024）。押せない理由は呼び出し側が domain の規則で決めて渡す。 */
+  it('分割は再生位置で割り、⌘K を示す。押せない理由をそのまま出す', () => {
+    expect(find(READY, 'split-shot').enabled).toBe(true)
+    expect(find(READY, 'split-shot').shortcut).toBe('⌘K')
+    expect(find({ ...READY, splitBlocker: 'Take があります' }, 'split-shot').disabledReason).toBe(
+      'Take があります',
+    )
+  })
+
+  it('結合は確認のダイアログを開く', () => {
+    expect(find(READY, 'merge-shots').action).toEqual({ kind: 'dialog', dialog: 'merge-shots' })
+    expect(find(EMPTY, 'merge-shots').enabled).toBe(false)
   })
 
   it('履歴なしで元に戻すが無効', () => {

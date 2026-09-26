@@ -19,6 +19,7 @@ export * from './shot/reference.js'
 export * from './shot/shot.js'
 export * from './shot/status.js'
 export * from './shot/edit-batch.js'
+export * from './shot/split-merge.js'
 
 // 生成
 export * from './generation/duration.js'

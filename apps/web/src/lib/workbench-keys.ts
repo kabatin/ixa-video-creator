@@ -9,6 +9,7 @@ import { isTextEntryTarget, resolveKeyOwner, type KeyTargetLike } from '@/lib/pl
  * | ⇧⌘Z | やり直す（未実装。何もしない） |
  * | ⌘Y | 変更履歴 |
  * | ⌘, | 環境設定 |
+ * | ⌘K / Ctrl+K | 再生位置で分割（ADR-0024） |
  * | Space | 再生 / 一時停止 |
  * | ← → | 前 / 次の Shot |
  * | Delete / Backspace | Shot の削除（確認を開く。チェックがあればチェックした Shot） |
@@ -41,6 +42,7 @@ export type WorkbenchKeyCommand =
   | 'previous-shot'
   | 'next-shot'
   | 'delete-shots'
+  | 'split-shot'
 
 export const resolveWorkbenchKey = (event: WorkbenchKeyEvent): WorkbenchKeyCommand | null => {
   if (isTextEntryTarget(event.target)) return null
@@ -51,6 +53,7 @@ export const resolveWorkbenchKey = (event: WorkbenchKeyEvent): WorkbenchKeyComma
     if (key === 'z') return event.shiftKey ? 'redo' : 'undo'
     if (key === 'y' && !event.shiftKey) return 'history'
     if (key === ',' && !event.shiftKey) return 'preferences'
+    if (key === 'k' && !event.shiftKey) return 'split-shot'
     return null
   }
 

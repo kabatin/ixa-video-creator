@@ -23,7 +23,7 @@ describe('メニューの項目名とパネル名', () => {
     hasCurrentShot: true,
     checkedCount: 0,
     canUndo: false,
-    currentHasTake: false,
+    currentHasTake: false, splitBlocker: null, mergeBlocker: null,
   }
   const menus = buildMenus(state)
   const items = viewItems(menus)

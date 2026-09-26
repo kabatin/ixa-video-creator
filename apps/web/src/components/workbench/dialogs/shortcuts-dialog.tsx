@@ -10,7 +10,7 @@ export const ShortcutList = () => {
   const rows = [
     ...listShortcuts(
       // チェック 0 件で組む。項目名が「チェックした 1 件を削除」のような一時の言い方にならないように。
-      buildMenus({ hasCurrentShot: true, checkedCount: 0, canUndo: true, currentHasTake: true }),
+      buildMenus({ hasCurrentShot: true, checkedCount: 0, canUndo: true, currentHasTake: true, splitBlocker: null, mergeBlocker: null }),
     ),
     ...EXTRA_SHORTCUTS,
   ]

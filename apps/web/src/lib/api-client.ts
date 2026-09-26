@@ -28,6 +28,7 @@ import { createReviewApi, type ReviewApi } from '@/lib/review-api'
 import { createTimelineApi, type TimelineApi } from '@/lib/timeline-api'
 import { createRenderApi, type RenderApi } from '@/lib/render-api'
 import { createShotBulkApi, type ShotBulkApi } from '@/lib/shot-bulk-api'
+import { createShotEditApi, type ShotEditApi } from '@/lib/shot-edit-api'
 import { createShotCastApi, type ShotCastApi } from '@/lib/shot-cast-api'
 import { createCostMeterApi, type CostMeterApi } from '@/lib/cost-meter-api'
 import { createRoughCutApi, type RoughCutApi } from '@/lib/rough-cut-api'
@@ -88,6 +89,7 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
   ReviewApi &
   SequenceApi &
   ShotBulkApi &
+  ShotEditApi &
   ShotCastApi &
   ShotPostersApi &
   ShotCompareApi &
@@ -170,6 +172,7 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
     ...createTimelineApi(requester),
     ...createRenderApi(requester),
     ...createShotBulkApi(requester),
+    ...createShotEditApi(requester),
     ...createShotCastApi(requester),
     ...createShotPostersApi(requester),
     ...createShotCompareApi(requester),

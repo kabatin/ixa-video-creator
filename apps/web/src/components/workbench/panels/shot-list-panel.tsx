@@ -176,6 +176,9 @@ export const ShotListPanel = () => {
           onGenerate={bulk.generate}
           onSelectTakes={bulk.selectTakes}
           onUpdate={bulk.update}
+          onMerge={() => {
+            workbench.openDialog('merge-shots')
+          }}
           onDelete={() => {
             workbench.openDialog('delete-shots')
           }}

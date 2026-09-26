@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { splitAtPlayhead } from '@/components/workbench/shot-edit-actions'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { CUT_EDITOR_SELECTOR } from '@/lib/playback-state'
 import { neighborShotId, resolveWorkbenchKey } from '@/lib/workbench-keys'
@@ -64,6 +65,12 @@ export const useWorkbenchKeys = (options: WorkbenchKeysOptions): void => {
           // カッターが鳴っているときに「止める」ではなく「プレビューを鳴らし始める」に
           // なる。まだ誰も鳴っていないときの持ち主だけを渡す。
           current.transportControls.togglePlayback('monitor')
+          return
+        case 'split-shot':
+          splitAtPlayhead(
+            current,
+            (current.shots ?? []).find((shot) => shot.id === current.selectedShotId) ?? null,
+          )
           return
         case 'delete-shots':
           // すぐには消さない。何を消すかは確認のダイアログが言う（取り消しが無いため）。

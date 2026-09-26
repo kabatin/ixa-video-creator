@@ -14,7 +14,14 @@ import type { PanelId } from '@/lib/workbench-layout'
 
 /** ダイアログで開くもの。`workbench-url.ts` の URL から開けるものより広い。 */
 export type WorkbenchDialog =
-  'render' | 'settings' | 'preferences' | 'history' | 'new-shot' | 'shortcuts' | 'delete-shots'
+  | 'render'
+  | 'settings'
+  | 'preferences'
+  | 'history'
+  | 'new-shot'
+  | 'shortcuts'
+  | 'delete-shots'
+  | 'merge-shots'
 
 export type MenuAction =
   | { readonly kind: 'href'; readonly href: string }
@@ -33,6 +40,7 @@ export type MenuCommand =
   | 'import-files'
   | 'inspect-master-track'
   | 'unselect-take'
+  | 'split-shot'
 
 export type MenuItem = {
   readonly id: string
@@ -91,6 +99,13 @@ export type MenuState = {
   readonly canUndo: boolean | UndoAvailability
   /** 選んでいる Shot に採用 Take があるか（「採用を外す」の有効判定）。 */
   readonly currentHasTake: boolean
+  /**
+   * 「再生位置で分割」できない理由。できるなら null（ADR-0024）。
+   * 規則は `@ixa/domain` の `planSplit` が持つので、呼び出し側がそれで決めて渡す。
+   */
+  readonly splitBlocker: string | null
+  /** 「チェックした Shot を結合」できない理由。できるなら null（`planMerge`）。 */
+  readonly mergeBlocker: string | null
 }
 
 const href = (value: string): MenuAction => ({ kind: 'href', href: value })
@@ -236,6 +251,15 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
               ? null
               : '採用している Take がありません'
             : NO_CURRENT_SHOT,
+        }),
+        // Take の無い Shot だけ（ADR-0024）。分割は結合で戻せるので確認を挟まない。
+        item('split-shot', '再生位置で分割', command('split-shot'), {
+          shortcut: '⌘K',
+          disabledReason: state.splitBlocker,
+        }),
+        // 先頭以外が消えるので確認を挟む。
+        item('merge-shots', 'チェックした Shot を結合…', dialog('merge-shots'), {
+          disabledReason: state.mergeBlocker,
         }),
         // チェックがあればチェックした Shot、無ければ選んでいる Shot。何を消すかは項目名で言う。
         item('delete-shot', deleteMenuLabel(state.checkedCount), dialog('delete-shots'), {

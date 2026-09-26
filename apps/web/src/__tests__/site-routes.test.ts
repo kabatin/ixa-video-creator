@@ -76,7 +76,7 @@ describe('入口のリンク', () => {
     hasCurrentShot: true,
     checkedCount: 0,
     canUndo: false,
-    currentHasTake: false,
+    currentHasTake: false, splitBlocker: null, mergeBlocker: null,
   }
   const menuHrefs = buildMenus(state)
     .flatMap((menu) => menu.items)

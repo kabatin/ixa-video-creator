@@ -54,6 +54,7 @@ const baseProps = (overrides: Partial<BulkActionBarProps> = {}): BulkActionBarPr
   onUpdate: vi.fn(),
   onClearSelection: vi.fn(),
   onDelete: vi.fn(),
+  onMerge: vi.fn(),
   ...overrides,
 })
 
@@ -146,6 +147,15 @@ describe('BulkActionBar — 出る / 出ない', () => {
     await user.click(screen.getByRole('button', { name: /削除/ }))
 
     expect(props.onDelete).toHaveBeenCalledTimes(1)
+  })
+
+  /** 隣り合う Shot を先頭にまとめる（ADR-0024）。確認は開いた先が取る。 */
+  it('結合はそのまま呼ぶ（すぐにはまとめない）', async () => {
+    const { props, user } = setup()
+
+    await user.click(screen.getByRole('button', { name: '結合…' }))
+
+    expect(props.onMerge).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -477,6 +487,7 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
           onUpdate={vi.fn()}
           onClearSelection={vi.fn()}
           onDelete={vi.fn()}
+          onMerge={vi.fn()}
         />
       </div>,
     )

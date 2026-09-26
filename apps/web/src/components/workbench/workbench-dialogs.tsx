@@ -1,6 +1,7 @@
 'use client'
 
 import { DeleteShotsDialogBody } from '@/components/workbench/dialogs/delete-shots-dialog'
+import { MergeShotsDialogBody } from '@/components/workbench/dialogs/merge-shots-dialog'
 import { HistoryDialogBody } from '@/components/workbench/dialogs/history-dialog'
 import { NewShotDialogBody } from '@/components/workbench/dialogs/new-shot-dialog'
 import { PreferencesDialogBody } from '@/components/workbench/dialogs/preferences-dialog'
@@ -20,6 +21,7 @@ const TITLES: Readonly<Record<DialogKind, string>> = {
   'new-shot': '新規 Shot',
   shortcuts: 'キーボードショートカット',
   'delete-shots': 'Shot を削除',
+  'merge-shots': 'Shot を結合',
 }
 
 const MEDIUM: ReadonlySet<DialogKind> = new Set([
@@ -28,6 +30,7 @@ const MEDIUM: ReadonlySet<DialogKind> = new Set([
   'new-shot',
   'preferences',
   'delete-shots',
+  'merge-shots',
 ])
 
 /**
@@ -62,6 +65,7 @@ export const WorkbenchDialogs = ({
       {dialog === 'new-shot' && <NewShotDialogBody />}
       {dialog === 'shortcuts' && <ShortcutList />}
       {dialog === 'delete-shots' && <DeleteShotsDialogBody />}
+      {dialog === 'merge-shots' && <MergeShotsDialogBody />}
     </WorkbenchDialog>
   )
 }

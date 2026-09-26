@@ -115,3 +115,15 @@ describe('Delete キー', () => {
     )
   })
 })
+
+/** 再生位置で分割（ADR-0024）。編集ソフトの「編集点を追加」と同じ ⌘K。 */
+describe('⌘K', () => {
+  it('⌘K と Ctrl+K は再生位置で分割', () => {
+    expect(resolveWorkbenchKey(press('k', { metaKey: true }))).toBe('split-shot')
+    expect(resolveWorkbenchKey(press('K', { ctrlKey: true }))).toBe('split-shot')
+  })
+
+  it('入力欄の中では取らない', () => {
+    expect(resolveWorkbenchKey(press('k', { metaKey: true, target: { tagName: 'INPUT' } }))).toBeNull()
+  })
+})

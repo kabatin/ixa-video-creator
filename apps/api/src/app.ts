@@ -25,6 +25,7 @@ import { mediaRoutes } from './routes/media.js'
 import { projectRoutes } from './routes/projects.js'
 import { shotRoutes, type GenerationQueue } from './routes/shots.js'
 import { shotBulkRoutes } from './routes/shots-bulk.js'
+import { shotEditRoutes } from './routes/shot-edits.js'
 import { shotPosterRoutes } from './routes/shot-posters.js'
 import { uploadRoutes, type MediaIngestDeps } from './routes/uploads.js'
 import { shotCompareRoutes } from './routes/shot-compare.js'
@@ -183,6 +184,15 @@ export const createApp = (deps: AppDeps) => {
   app.route('/', shotRoutes(shotDeps))
   // 一括変更だけが記録を作る。1 件ずつの変更は戻す対象にしない（横断 ROADMAP）。
   app.route('/', shotBulkRoutes({ ...shotDeps, editBatches: deps.editBatches }))
+  app.route(
+    '/',
+    shotEditRoutes({
+      shots: deps.shots,
+      projects,
+      takes: deps.takes,
+      shotCharacters: deps.shotCharacters,
+    }),
+  )
   app.route(
     '/',
     shotPosterRoutes({ shots: deps.shots, takes: deps.takes, mediaAssets, projects, storage }),

@@ -3,6 +3,11 @@
 import type { DockviewApi } from 'dockview-react'
 import { useRouter } from 'next/navigation'
 import { MenuBar } from '@/components/workbench/menu-bar'
+import {
+  mergeBlockerOf,
+  splitAtPlayhead,
+  splitBlockerOf,
+} from '@/components/workbench/shot-edit-actions'
 import { undoConfirmMessage, type UndoState } from '@/components/workbench/use-edit-history'
 import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
 import { useSelectedShot, useWorkbench } from '@/components/workbench/workbench-context'
@@ -62,6 +67,10 @@ export const WorkbenchMenu = ({
     checkedCount: workbench.checked.size,
     canUndo: undo.availability,
     currentHasTake: (current?.selectedTakeId ?? null) !== null,
+    splitBlocker: splitBlockerOf(current, workbench.transport.currentSec),
+    mergeBlocker: mergeBlockerOf(
+      (workbench.shots ?? []).filter((shot) => workbench.checked.has(shot.id)),
+    ),
   })
 
   /**
@@ -115,6 +124,9 @@ export const WorkbenchMenu = ({
     'reset-layout': onResetLayout,
     'copy-link': copyLink,
     'unselect-take': unselectTake,
+    'split-shot': () => {
+      splitAtPlayhead(workbench, current)
+    },
     'import-files': onImportFiles,
     'inspect-master-track': () => {
       if (workbench.track === null) {

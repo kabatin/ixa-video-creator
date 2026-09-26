@@ -85,6 +85,8 @@ export type BulkActionBarProps = {
   readonly onClearSelection: () => void
   /** 確認のダイアログを開く。**ここでは消さない**（取り消しが無いため、確認は開いた先が取る）。 */
   readonly onDelete: () => void
+  /** 結合の確認を開く（ADR-0024）。まとめられない組み合わせなら、開いた先が理由を言う。 */
+  readonly onMerge: () => void
 }
 
 export const BulkActionBar = ({
@@ -103,6 +105,7 @@ export const BulkActionBar = ({
   onUpdate,
   onClearSelection,
   onDelete,
+  onMerge,
 }: BulkActionBarProps) => {
   const idPrefix = useId()
   const [open, setOpen] = useState<PanelKey | null>(null)
@@ -150,6 +153,9 @@ export const BulkActionBar = ({
         <div className="ml-auto flex gap-1">
           <Button size="sm" tone="secondary" disabled={busy} onClick={onClearSelection}>
             選択を{WORDING.unlink}
+          </Button>
+          <Button size="sm" tone="secondary" disabled={busy || selectedCount < 2} onClick={onMerge}>
+            結合…
           </Button>
           <Button size="sm" tone="danger" disabled={busy} onClick={onDelete}>
             削除…
