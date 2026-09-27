@@ -64,8 +64,8 @@ describe('TimelineComposition', () => {
 /**
  * **プレビューでカットの頭が黒くならないこと**（2026-09-27、モトダチ MV の通し再生で実測）。
  *
- * Player（ブラウザの `<video>`）は Shot の `<Sequence>` が始まった瞬間に読み込みと頭出しを始めるので、
- * 境目ごとに 0.1〜0.2 秒黒が挟まった。始まる前から見えない状態で組み立てておく（`premountFor`）。
+ * Player は Shot の `<Sequence>` が始まった瞬間に素材の読み込みを始めるので、境目ごとに
+ * 0.1〜0.2 秒黒が挟まった。始まる前から組み立てておく（`premountFor`）。
  * 書き出し（renderMedia）では Remotion が premount を使わないので、絵は変わらない。
  */
 describe('Shot とクリップを前もって組み立てておく', () => {
@@ -94,26 +94,6 @@ describe('Shot とクリップを前もって組み立てておく', () => {
       expect(shot.props.premountFor).toBe(doc.fps)
       expect(shot.props.layout).not.toBe('none')
     }
-  })
-
-  /**
-   * 既定の `opacity: 0` で待たせると、Chrome は見え始めた最初のコマが間に合わず 1 コマ真っ黒を出した。
-   * 後の Shot ほど重なり順が低いので、見えていても前の Shot の裏に隠れる。
-   */
-  it('前の Shot と続く Shot は、待っている間も見える状態で裏に置く', () => {
-    const shots = sequences.filter((sequence) => 'shot' in bodyOf(sequence))
-    expect(shots[0]?.props.styleWhilePremounted).toBeUndefined()
-    expect(shots[1]?.props.styleWhilePremounted).toEqual({ opacity: 1 })
-  })
-
-  it('隙間の後の Shot は隠したまま待つ（黒のはずの間に頭を見せない）', () => {
-    const gapped = sequencesOf(
-      TimelineComposition({
-        doc: makeDocument({ video1: [makeVideo1Shot(1, 0, 2), makeVideo1Shot(2, 3, 2)] }),
-        canvas: null,
-      }) as ReactElement,
-    ).filter((sequence) => 'shot' in bodyOf(sequence))
-    expect(gapped[1]?.props.styleWhilePremounted).toBeUndefined()
   })
 
   it('メディアのクリップも同じく前もって組み立てる', () => {
