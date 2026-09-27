@@ -1,6 +1,6 @@
 import type { TimelineDocument } from '@ixa/domain'
 import { act, render } from '@testing-library/react'
-import { useState, type Ref } from 'react'
+import { useEffect, useState, type Ref } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProgramMonitorPlayer } from '@/components/program-monitor-player'
 import { nextSeekCommand, type SeekCommand } from '@/lib/program-monitor'
@@ -210,16 +210,21 @@ const Host = ({
   )
 }
 
-/** 再生 1 フレーム分。**親の描画は 1 コミット遅れる**ので、そこで旧版の不具合が出た。 */
-const advance = (frame: number) =>
-  act(() => {
+/**
+ * 再生 1 フレーム分。**親の描画は 1 コミット遅れる**ので、そこで旧版の不具合が出た。
+ * 位置の報告はマイクロタスクで届くので、それが流れるまで待つ。
+ */
+const advance = async (frame: number) =>
+  act(async () => {
     harness.setFrame?.(frame)
+    await Promise.resolve()
   })
 
 /** Player が遅れて配った古い位置。実機では seek の直後にこれが届いて往復を起こした。 */
-const echoStale = (frame: number) =>
-  act(() => {
+const echoStale = async (frame: number) =>
+  act(async () => {
     harness.emit('frameupdate', { frame })
+    await Promise.resolve()
   })
 
 beforeEach(() => {
@@ -234,30 +239,30 @@ const renderWithPrefs = (ui: Parameters<typeof render>[0]) =>
   render(ui, { wrapper: PreferencesWrapper })
 
 describe('再生中に自分をシークし返さない', () => {
-  it('10 フレーム進めても seekTo を 1 度も呼ばない', () => {
+  it('10 フレーム進めても seekTo を 1 度も呼ばない', async () => {
     renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.setPlaying?.(true))
-    for (let frame = 1; frame <= 10; frame += 1) advance(frame)
+    for (let frame = 1; frame <= 10; frame += 1) await advance(frame)
 
     expect(harness.seekToCalls).toEqual([])
   })
 
-  it('再生ヘッドが進み、止まらない', () => {
+  it('再生ヘッドが進み、止まらない', async () => {
     renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.setPlaying?.(true))
-    for (let frame = 1; frame <= 10; frame += 1) advance(frame)
+    for (let frame = 1; frame <= 10; frame += 1) await advance(frame)
 
     expect(host.currentSec).toBeCloseTo(10 / FPS, 6)
     expect(host.playing).toBe(true)
   })
 
-  it('もう一度 Space で止まる', () => {
+  it('もう一度 Space で止まる', async () => {
     renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.setPlaying?.(true))
-    for (let frame = 1; frame <= 5; frame += 1) advance(frame)
+    for (let frame = 1; frame <= 5; frame += 1) await advance(frame)
     act(() => host.setPlaying?.(false))
 
     expect(host.playing).toBe(false)
@@ -280,26 +285,26 @@ describe('Player が遅れて返した古い位置', () => {
    * 目盛りで 3 秒へ飛んだ直後、Player が飛ぶ前の位置（5 フレーム目）を遅れて配る。
    * その反射を見て 5 へ飛び返すと、今度は 90 の反射で 90 へ……と止まらなくなる。
    */
-  it('シーク直後に古い位置が届いても飛び返さない', () => {
+  it('シーク直後に古い位置が届いても飛び返さない', async () => {
     renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.setPlaying?.(true))
-    for (let frame = 1; frame <= 5; frame += 1) advance(frame)
+    for (let frame = 1; frame <= 5; frame += 1) await advance(frame)
     act(() => host.seekTo?.(3))
-    echoStale(5)
-    echoStale(4)
+    await echoStale(5)
+    await echoStale(4)
 
     expect(harness.seekToCalls).toEqual([90])
   })
 
-  it('古い位置が届いたあとも、次の報告で素直に進む', () => {
+  it('古い位置が届いたあとも、次の報告で素直に進む', async () => {
     renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.setPlaying?.(true))
     act(() => host.seekTo?.(3))
-    echoStale(5)
-    advance(91)
-    advance(92)
+    await echoStale(5)
+    await advance(91)
+    await advance(92)
 
     expect(harness.seekToCalls).toEqual([90])
     expect(host.currentSec).toBeCloseTo(92 / FPS, 6)
@@ -316,11 +321,11 @@ describe('利用者が位置を指示したときは飛ぶ', () => {
     expect(harness.seekToCalls).toEqual([30])
   })
 
-  it('同じ位置をもう一度押しても飛び直す（指示ごとに serial が進む）', () => {
+  it('同じ位置をもう一度押しても飛び直す（指示ごとに serial が進む）', async () => {
     renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.seekTo?.(1))
-    advance(45)
+    await advance(45)
     act(() => host.seekTo?.(1))
 
     expect(harness.seekToCalls).toEqual([30, 30])
@@ -333,11 +338,11 @@ describe('利用者が位置を指示したときは飛ぶ', () => {
    *
    * **最終値だけを見ても素通りする**ので、親へ届いた知らせの並びを見る。
    */
-  it('再生中に飛んでも、シークが起こす一時停止を親へ渡さない', () => {
+  it('再生中に飛んでも、シークが起こす一時停止を親へ渡さない', async () => {
     renderWithPrefs(<Host document={makeDocument()} />)
 
     act(() => host.setPlaying?.(true))
-    for (let frame = 1; frame <= 5; frame += 1) advance(frame)
+    for (let frame = 1; frame <= 5; frame += 1) await advance(frame)
     host.playingEvents = []
     act(() => host.seekTo?.(3))
 
@@ -478,3 +483,50 @@ const Follower = ({
     onMediaError={() => undefined}
   />
 )
+
+/**
+ * **再生を続けると開発時に「Maximum update depth exceeded」が積もった不具合**（2026-09-27、モトダチ MV）。
+ *
+ * `@remotion/player` は `frameupdate` を自分の `useEffect` から配る。そこで親の state を
+ * 同期的に更新すると、React は「effect の flush 中に予約された更新」と数える。
+ * 画面には位置を見て effect で state を動かす部品（聴きながら切るの追従など）があり、
+ * 読み込み待ちで間の空いた flush が無くなると、毎フレームの更新が途切れずに 50 回続いて警告になる。
+ * ここでは「位置を受けた effect が次のフレームを進める」形で、途切れない連鎖を作る。
+ */
+describe('フレームの報告を Player の effect の中で state にしない', () => {
+  const Chain = ({ until }: { readonly until: number }) => {
+    const [currentSec, setCurrentSec] = useState(0)
+    // 位置を見て effect で動く部品の代役。次のフレームを進める（連鎖を途切れさせない）。
+    useEffect(() => {
+      const frame = Math.round(currentSec * FPS)
+      if (frame > 0 && frame < until) harness.setFrame?.(frame + 1)
+    }, [currentSec, until])
+    return (
+      <ProgramMonitorPlayer
+        document={makeDocument()}
+        initialSec={0}
+        seek={null}
+        playing
+        onFrame={setCurrentSec}
+        onPlayingChange={() => undefined}
+        onFatalError={() => undefined}
+        onMediaError={() => undefined}
+      />
+    )
+  }
+
+  it('80 フレーム続けても update depth の警告を出さない', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    renderWithPrefs(<Chain until={80} />)
+
+    await act(async () => {
+      harness.setFrame?.(1)
+      for (let i = 0; i < 200; i += 1) await Promise.resolve()
+    })
+
+    const depth = errors.mock.calls.filter((call) => String(call[0]).includes('Maximum update depth'))
+    errors.mockRestore()
+    expect(harness.frame).toBe(80)
+    expect(depth).toEqual([])
+  })
+})

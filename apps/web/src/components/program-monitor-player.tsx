@@ -156,9 +156,22 @@ export const ProgramMonitorPlayer = ({
   useEffect(() => {
     const player = playerRef.current
     if (player === null) return
+    let active = true
 
+    /**
+     * **位置の報告は Player の effect の外で渡す。**
+     *
+     * `@remotion/player` は `frameupdate` を自分の `useEffect` から配る。ここで親の state を
+     * 同期的に更新すると、React は毎フレーム「effect の flush 中の更新」と数える。位置を見て
+     * effect で動く部品（聴きながら切るの追従など）と繋がり、読み込み待ちで途切れが無くなると、
+     * 開発時に `Maximum update depth exceeded` が積もった（2026-09-27、モトダチ MV の再生で実測）。
+     * マイクロタスクへ出せば flush の外になり、位置は同じ順番で、ほぼ遅れずに届く。
+     */
     const handleFrame = ({ detail }: { detail: { frame: number } }) => {
-      handlersRef.current.onFrame(frameToSec(detail.frame, fps))
+      const sec = frameToSec(detail.frame, fps)
+      queueMicrotask(() => {
+        if (active) handlersRef.current.onFrame(sec)
+      })
     }
     const handlePlay = () => handlersRef.current.onPlayingChange(true)
     const handlePause = () => {
@@ -176,6 +189,7 @@ export const ProgramMonitorPlayer = ({
     player.addEventListener('error', handleError)
 
     return () => {
+      active = false
       player.removeEventListener('frameupdate', handleFrame)
       player.removeEventListener('play', handlePlay)
       player.removeEventListener('pause', handlePause)
