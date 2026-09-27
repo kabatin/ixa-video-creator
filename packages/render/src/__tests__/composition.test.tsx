@@ -1,4 +1,5 @@
-import { createElement, isValidElement } from 'react'
+import { Children, createElement, isValidElement, type ReactElement, type ReactNode } from 'react'
+import { Sequence } from 'remotion'
 import { describe, expect, it } from 'vitest'
 import { TIMELINE_COMPOSITION_ID } from '../composition-id.js'
 import { RemotionRoot } from '../compositions/Root.js'
@@ -57,5 +58,47 @@ describe('TimelineComposition', () => {
 
   it('コンポジション ID は Timeline', () => {
     expect(TIMELINE_COMPOSITION_ID).toBe('Timeline')
+  })
+})
+
+/**
+ * **プレビューでカットの頭が黒くならないこと**（2026-09-27、モトダチ MV の通し再生で実測）。
+ *
+ * Player（ブラウザの `<video>`）は Shot の `<Sequence>` が始まった瞬間に読み込みと頭出しを始めるので、
+ * 境目ごとに 0.1〜0.2 秒黒が挟まった。始まる前から見えない状態で組み立てておく（`premountFor`）。
+ * 書き出し（renderMedia）では Remotion が premount を使わないので、絵は変わらない。
+ */
+describe('Shot とクリップを前もって組み立てておく', () => {
+  const doc = makeDocument({
+    video1: [makeVideo1Shot(1, 0, 2), makeVideo1Shot(2, 2, 2)],
+    transitions: [makeTransition(1, shotId(1), shotId(2), 'dip_to_black', 0.5)],
+    clips: [makeClip(1, 'VIDEO2', 1, 1, 0, mediaContent('video')), makeClip(2, 'TEXT', 0, 1)],
+  })
+
+  const sequencesOf = (node: ReactNode): ReactElement<Record<string, unknown>>[] =>
+    Children.toArray(node).flatMap((child) => {
+      if (!isValidElement<Record<string, unknown>>(child)) return []
+      const own = child.type === Sequence ? [child] : []
+      return [...own, ...sequencesOf(child.props.children as ReactNode)]
+    })
+
+  // フックを持たない関数なので、素の関数として呼んで要素の木を見る。
+  const sequences = sequencesOf(TimelineComposition({ doc, canvas: null }) as ReactElement)
+  const bodyOf = (sequence: ReactElement<Record<string, unknown>>) =>
+    (Children.only(sequence.props.children as ReactElement<Record<string, unknown>>).props)
+
+  it('Shot の Sequence は 1 秒前から組み立てる（layout="none" では premount できない）', () => {
+    const shots = sequences.filter((sequence) => 'shot' in bodyOf(sequence))
+    expect(shots).toHaveLength(2)
+    for (const shot of shots) {
+      expect(shot.props.premountFor).toBe(doc.fps)
+      expect(shot.props.layout).not.toBe('none')
+    }
+  })
+
+  it('メディアのクリップも同じく前もって組み立てる', () => {
+    const clips = sequences.filter((sequence) => 'clip' in bodyOf(sequence))
+    expect(clips).toHaveLength(2)
+    for (const clip of clips) expect(clip.props.premountFor).toBe(doc.fps)
   })
 })

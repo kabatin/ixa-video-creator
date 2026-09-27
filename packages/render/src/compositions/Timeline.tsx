@@ -198,6 +198,17 @@ const AudioTrack: React.FC<{ track: AudioPlan }> = ({ track }) => (
 )
 
 /**
+ * プレビューで Shot とクリップを**始まる前から見えない状態で組み立てておく**秒数。
+ *
+ * Player（ブラウザの `<video>`）は `<Sequence>` が始まった瞬間に読み込みと頭出しを始めるので、
+ * 以前はカットの境目ごとに 0.1〜0.2 秒黒が挟まった（2026-09-27、モトダチ MV で実測）。
+ * 1 秒前から組み立てておけば、境目では頭のコマが出ている。Remotion の推奨も 1 秒。
+ * 書き出し（renderMedia）では Remotion が premount を使わないので、絵は変わらない。
+ * `premountFor` は `layout="none"` と組み合わせられないため、Shot とクリップは既定の layout にする。
+ */
+const PREMOUNT_SEC = 1
+
+/**
  * プレビュー（`@remotion/player`）とレンダリング（`renderMedia`）の共通コンポジション（ADR-0010）。
  *
  * `TimelineDocument` **だけ**を入力に取る。メディアの URL と種別は
@@ -205,6 +216,7 @@ const AudioTrack: React.FC<{ track: AudioPlan }> = ({ track }) => (
  */
 export const TimelineComposition: React.FC<TimelineCompositionProps> = ({ doc, canvas }) => {
   const plan = buildTimelinePlan(doc, canvas ?? doc.resolution)
+  const premountFor = Math.round(PREMOUNT_SEC * plan.fps)
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#000000' }}>
@@ -213,7 +225,7 @@ export const TimelineComposition: React.FC<TimelineCompositionProps> = ({ doc, c
           key={shot.shotId}
           from={shot.range.from}
           durationInFrames={shot.range.durationInFrames}
-          layout="none"
+          premountFor={premountFor}
         >
           <ShotBody shot={shot} video={plan.video} />
         </Sequence>
@@ -235,7 +247,7 @@ export const TimelineComposition: React.FC<TimelineCompositionProps> = ({ doc, c
           key={clip.clipId}
           from={clip.range.from}
           durationInFrames={clip.range.durationInFrames}
-          layout="none"
+          premountFor={premountFor}
         >
           <ClipBody clip={clip} fps={plan.fps} video={plan.video} />
         </Sequence>
