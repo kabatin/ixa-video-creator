@@ -56,17 +56,29 @@ const money = (usd: number): string => `$${usd.toFixed(2)}`
 const percent = (ratio: number): string => `${Math.round(ratio * 100).toString()}%`
 
 /**
+ * 持ち込んだ Take の件数（ADR-0026）。API では実測に数えられるが、額は 0 でアプリの外で払っている。
+ * 「実測 58 件で $0」と読ませないため、画面では生成した分と分けて数える。
+ */
+const importedCount = (meter: WireCostMeter): number =>
+  meter.measured.byProvider.find((provider) => provider.providerId === IMPORT_PROVIDER_ID)?.takeCount ?? 0
+
+/** 実 Provider で**生成した** Take の件数。持ち込みを除く。 */
+const generatedCount = (meter: WireCostMeter): number => meter.measured.takeCount - importedCount(meter)
+
+/**
  * 出どころの 1 行を作る。**実測が 0 件なら必ずそう書く。**
  * 予算が入っていても省略しない。省略した瞬間に額が独り歩きする。
  */
 const describeProvenance = (meter: WireCostMeter): string => {
-  const measured = meter.measured.takeCount
-  const stub = meter.stub.takeCount
+  const measured = generatedCount(meter)
+  const others = [
+    ...(meter.stub.takeCount > 0 ? [`スタブ ${meter.stub.takeCount.toString()} 件`] : []),
+    ...(importedCount(meter) > 0 ? [`持ち込み ${importedCount(meter).toString()} 件`] : []),
+  ]
 
-  if (measured === 0 && stub === 0) return 'まだ 1 件も生成していません'
-  if (measured === 0) return `実測 0 件（スタブ ${stub.toString()} 件）`
-  if (stub === 0) return `実測 ${measured.toString()} 件`
-  return `実測 ${measured.toString()} 件・スタブ ${stub.toString()} 件`
+  if (measured === 0 && others.length === 0) return 'まだ 1 件も生成していません'
+  if (measured === 0) return `実測 0 件（${others.join('・')}）`
+  return [`実測 ${measured.toString()} 件`, ...others].join('・')
 }
 
 /**
@@ -94,8 +106,10 @@ const computeTone = (budgetUsd: number | null, spentUsd: number): CostTone => {
  * 符号のままでは読めない Provider の名前。**知らない Provider は符号のまま出す**（載せ忘れに気付くため）。
  * 持ち込んだ Take の $0 は「無料」ではなく「アプリの外で払った」（ADR-0026）。
  */
+const IMPORT_PROVIDER_ID = 'import'
+
 const PROVIDER_LABELS: Readonly<Record<string, string>> = {
-  import: '持ち込み（費用はアプリの外）',
+  [IMPORT_PROVIDER_ID]: '持ち込み（費用はアプリの外）',
 }
 
 /**
@@ -159,7 +173,7 @@ export const buildCostMeterView = (meter: WireCostMeter): CostMeterView => {
     ratioLabel: ratio === null ? null : percent(ratio),
     tone: computeTone(meter.budgetUsd, spentUsd),
     provenance: describeProvenance(meter),
-    measuredIsEmpty: meter.measured.takeCount === 0,
+    measuredIsEmpty: generatedCount(meter) === 0,
     // **合計で見る。** Take が 0 件でも下書きで払っていれば額には意味がある。
     spendIsEmpty: meter.totalUsd === 0,
     measuredProviders: describeMeasuredProviders(meter),

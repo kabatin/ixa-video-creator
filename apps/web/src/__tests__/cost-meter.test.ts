@@ -65,6 +65,27 @@ describe('buildCostMeterView', () => {
     expect(view.measuredIsEmpty).toBe(false)
   })
 
+  /**
+   * 持ち込みの Take は API では実測に数えられる（額は 0）。そのまま「実測 58 件」と出すと、
+   * 58 本を生成して $0 だったと読める。**持ち込みは別に数える**（ADR-0026）。
+   */
+  it('持ち込みは実測から外し、持ち込みとして数える', () => {
+    const imported = (count: number, extra: readonly { providerId: string; takeCount: number; totalUsd: number }[] = []) =>
+      measuredOf(count + extra.reduce((sum, p) => sum + p.takeCount, 0), 0, [
+        { providerId: 'import', takeCount: count, totalUsd: 0 },
+        ...extra,
+      ])
+
+    expect(buildCostMeterView(meter({ measured: imported(58) })).provenance).toBe('実測 0 件（持ち込み 58 件）')
+    expect(
+      buildCostMeterView(meter({ measured: imported(2), stub: { takeCount: 3, totalUsd: 0 } })).provenance,
+    ).toBe('実測 0 件（スタブ 3 件・持ち込み 2 件）')
+    expect(
+      buildCostMeterView(meter({ measured: imported(2, [{ providerId: 'byteplus', takeCount: 4, totalUsd: 0 }]) }))
+        .provenance,
+    ).toBe('実測 4 件・持ち込み 2 件')
+  })
+
   it('スタブが無ければスタブの件数を書かない', () => {
     const view = buildCostMeterView(meter({ measured: measuredOf(2, 3) }))
     expect(view.provenance).toBe('実測 2 件')
