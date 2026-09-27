@@ -4,12 +4,8 @@ import type { MediaAssetId, Take, TakeId } from '@ixa/domain'
 import { useEffect, useState } from 'react'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
-import {
-  formatSeconds,
-  formatUsd,
-  reviewStatusClassName,
-  reviewStatusLabel,
-} from '@/lib/shot-display'
+import { reviewStatusClassName, reviewStatusLabel } from '@/lib/shot-display'
+import { takeCostLabel, takeModelLabel, takeTimeLabel } from '@/lib/take-display'
 
 export type TakeCardProps = {
   readonly take: Take
@@ -108,15 +104,15 @@ export const TakeCard = ({ take, selected, busy, onSelect }: TakeCardProps) => {
 
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted">
         <dt className="text-muted">モデル</dt>
-        <dd className="truncate" title={take.modelId}>
-          {take.modelId}
+        <dd className="truncate" title={takeModelLabel(take)}>
+          {takeModelLabel(take)}
         </dd>
         <dt className="text-muted">seed</dt>
         <dd>{take.seedUsed === null ? '—' : take.seedUsed}</dd>
         <dt className="text-muted">コスト</dt>
-        <dd>{formatUsd(take.costUsd)}</dd>
+        <dd>{takeCostLabel(take)}</dd>
         <dt className="text-muted">生成時間</dt>
-        <dd>{formatSeconds(take.generationTimeSec)}</dd>
+        <dd>{takeTimeLabel(take)}</dd>
       </dl>
 
       <div className="flex flex-wrap items-center gap-2">

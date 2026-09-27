@@ -245,6 +245,7 @@ describe('issueCodeLabel', () => {
   it('知っているコードは直し方の分かる言葉にする', () => {
     expect(issueCodeLabel('shot_overlap')).toBe('Shot どうしが時間で重なっている')
     expect(issueCodeLabel('shot_gap')).toBe('Shot と Shot の間に隙間がある')
+    expect(issueCodeLabel('shot_take_short')).toBe('Take が短く、最後のコマで止まる Shot がある')
   })
 
   it('知らないコードは黙って消さず、そのまま出す', () => {

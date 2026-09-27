@@ -147,13 +147,17 @@ const compareRoute = createRoute({
  *
  * 期限は書き出し用のタイムラインと同じ定数を使う。ここで数字を書き直さない。
  */
+/** Take の素材。長さは尺に合わせる速度に使う（ADR-0026）。分からなければ null。 */
+type TakeMedia = { readonly url: string; readonly durationSec: number | null }
+
 const resolveTakeMedia = async (
   deps: Pick<ShotCompareRoutesDeps, 'mediaAssets' | 'storage'>,
   take: Take,
-): Promise<string | undefined> => {
+): Promise<TakeMedia | undefined> => {
   const asset = await deps.mediaAssets.findById(take.mediaAssetId)
   if (asset === null) return undefined
-  return deps.storage.signedGetUrl(asset.storageKey, TIMELINE_SIGNED_URL_EXPIRES_SEC)
+  const url = await deps.storage.signedGetUrl(asset.storageKey, TIMELINE_SIGNED_URL_EXPIRES_SEC)
+  return { url, durationSec: asset.probe?.durationSec ?? null }
 }
 
 /**
@@ -166,7 +170,7 @@ const resolveTakeMedia = async (
 const compareSource = (
   base: TimelineSource,
   shot: Shot,
-  mediaUrl: string | undefined,
+  media: TakeMedia | undefined,
   withMusic: boolean,
 ): TimelineSource => ({
   ...base,
@@ -175,7 +179,9 @@ const compareSource = (
   clips: [],
   musicTracks: withMusic ? base.musicTracks : [],
   // Shot は 1 本しか乗せないので、どの Shot を聞かれても同じ Take を返す。
-  resolveShotMedia: () => mediaUrl,
+  resolveShotMedia: () => media?.url,
+  // A と B は長さが違いうるので、速度は Take ごとに決める。
+  resolveShotMediaDurationSec: () => media?.durationSec ?? null,
 })
 
 /** A の Take として受け付けられるか。別の Shot の Take は「この Shot の Take」ではない。 */

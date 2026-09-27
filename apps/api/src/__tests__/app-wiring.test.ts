@@ -51,6 +51,21 @@ describe('createApp のルート配線', () => {
     expect(await res.json()).toMatchObject({ success: true })
   })
 
+  it('動画を Take に取り込むルートが生えている（ADR-0026）', async () => {
+    // 未知のパスも封筒付きの 404 になるので、404 では配線を見分けられない。
+    // 本文の検証（422 と mediaAssetId の指摘）はルートが生えていないと返らない。
+    const res = await buildApp().request('/shots/01ARZ3NDEKTSV4RRFFQ69G5FAV/takes/import', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+
+    expect(res.status).toBe(422)
+    const body = (await res.json()) as { success: boolean; fields?: Record<string, unknown> }
+    expect(body.success).toBe(false)
+    expect(Object.keys(body.fields ?? {})).toContain('mediaAssetId')
+  })
+
   it('レビューのルートが生えている', async () => {
     // Take が無いので 404。配線されていなければ Hono の 404 と区別が付かないため、
     // 本文が API の封筒（success: false）であることまで見る。

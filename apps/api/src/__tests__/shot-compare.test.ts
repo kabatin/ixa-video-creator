@@ -106,6 +106,9 @@ type SceneOptions = {
   /** A の Take のメディアを登録するか。false なら `a_media_unresolved` になる。 */
   readonly withMediaA?: boolean
   readonly shot?: Partial<Shot>
+  /** A / B の素材の長さ（probe）。省略は probe なし。 */
+  readonly probeSecA?: number
+  readonly probeSecB?: number
 }
 
 type Scene = {
@@ -136,15 +139,21 @@ const scene = (options: SceneOptions = {}): Scene => {
   })
   const otherShot = aShot(project.id, { code: 'shot_011', startSec: 44, durationSec: 4 })
 
+  const probeOf = (sec: number | undefined) =>
+    sec === undefined
+      ? null
+      : { durationSec: sec, width: 1280, height: 720, fps: 24, hasAudio: false, codec: 'h264' }
   const assetA = aMediaAsset({
     workspaceId: project.workspaceId,
     projectId: project.id,
     storageKey: 'media/ws/take-a/original.mp4',
+    probe: probeOf(options.probeSecA),
   })
   const assetB = aMediaAsset({
     workspaceId: project.workspaceId,
     projectId: project.id,
     storageKey: 'media/ws/take-b/original.mp4',
+    probe: probeOf(options.probeSecB),
   })
   const otherAsset = aMediaAsset({
     workspaceId: project.workspaceId,
@@ -218,6 +227,15 @@ describe('GET /shots/:shotId/compare — 書き出しと同じ窓で切り出す
 
     expect(body.data.a.document.video1).toHaveLength(1)
     expect(body.data.a.document.video1[0]?.shotId).toBe(s.shot.id)
+  })
+
+  /** 尺に合わせる Shot では、A と B は**それぞれの Take の長さ**で速度が決まる（ADR-0026）。 */
+  it('fit の Shot は A と B で別の速度になる', async () => {
+    const s = scene({ shot: { timing: 'fit', sourceInSec: 0 }, probeSecA: 6, probeSecB: 2 })
+    const { body } = await compare(s, `a=${s.takeA.id}&b=${s.takeB.id}`)
+
+    expect(body.data.a.document.video1[0]?.playbackRate).toBeCloseTo(1.5, 9)
+    expect(body.data.b?.document.video1[0]?.playbackRate).toBeCloseTo(0.5, 9)
   })
 
   it('A と B はそれぞれの Take のメディアを映す', async () => {

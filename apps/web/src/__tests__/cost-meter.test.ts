@@ -155,6 +155,15 @@ describe('実測した Provider の名前', () => {
 
     expect(view.measuredProviders).toBe('byteplus 1 件・stub-v2 40 件')
   })
+
+  /** 持ち込んだ Take の $0 は「無料」ではなく「アプリの外で払った」（ADR-0026）。 */
+  it('持ち込みは Provider の符号でなく、費用がアプリの外だと言う', () => {
+    const view = buildCostMeterView(
+      meter({ measured: measuredOf(60, 0, [{ providerId: 'import', takeCount: 60, totalUsd: 0 }]) }),
+    )
+
+    expect(view.measuredProviders).toBe('持ち込み（費用はアプリの外） 60 件')
+  })
 })
 
 describe('内訳に出せなかった分', () => {

@@ -204,6 +204,43 @@ describe('validateTimeline / warning', () => {
  * 読めないテロップは**書き出すまで分からない**（レンダラは赤で描くだけ）。
  * 押す前の検査に出す。「知らない種類」と「文言が無い」は直し方が違うので分ける。
  */
+/** Take が尺に足りない（ADR-0026）。最後のコマで止まるので、速度で埋めるかを選ばせる。 */
+describe('Take が足りない', () => {
+  it('trim で足りない Shot は warning（何秒足りないかを言う）', () => {
+    const shots = [makeShot(1, 0, 5)]
+    const issues = find(
+      validateTimeline(makeSource({ shots, resolveShotMediaDurationSec: () => 4 })),
+      TIMELINE_ISSUE_CODES.shotTakeShort,
+    )
+
+    expect(issues).toHaveLength(1)
+    expect(issues[0]?.severity).toBe('warning')
+    expect(issues[0]?.message).toContain('1.00')
+  })
+
+  it('fit で埋まれば出さない', () => {
+    const shots = [makeShot(1, 0, 5, { timing: 'fit' })]
+    const issues = find(
+      validateTimeline(makeSource({ shots, resolveShotMediaDurationSec: () => 4 })),
+      TIMELINE_ISSUE_CODES.shotTakeShort,
+    )
+
+    expect(issues).toHaveLength(0)
+  })
+
+  it('わずかな差（0.05 秒以内）と、長さが分からない Shot では出さない', () => {
+    const shots = [makeShot(1, 0, 4), makeShot(2, 4, 4)]
+    const issues = find(
+      validateTimeline(
+        makeSource({ shots, resolveShotMediaDurationSec: (shot) => (shot.id === shotId(1) ? 3.97 : null) }),
+      ),
+      TIMELINE_ISSUE_CODES.shotTakeShort,
+    )
+
+    expect(issues).toHaveLength(0)
+  })
+})
+
 describe('読めないテロップ', () => {
   const textClip = (n: number, content: TimelineClip['content']): TimelineClip => ({
     ...makeClip(n, 'TEXT', 0, 2),

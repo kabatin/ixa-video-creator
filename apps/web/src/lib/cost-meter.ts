@@ -91,6 +91,14 @@ const computeTone = (budgetUsd: number | null, spentUsd: number): CostTone => {
 }
 
 /**
+ * 符号のままでは読めない Provider の名前。**知らない Provider は符号のまま出す**（載せ忘れに気付くため）。
+ * 持ち込んだ Take の $0 は「無料」ではなく「アプリの外で払った」（ADR-0026）。
+ */
+const PROVIDER_LABELS: Readonly<Record<string, string>> = {
+  import: '持ち込み（費用はアプリの外）',
+}
+
+/**
  * 実測として数えた Provider を名前で並べる。
  * 1 件も無ければ「該当 Provider なし」。**空欄にしない。**
  */
@@ -98,7 +106,7 @@ const describeMeasuredProviders = (meter: WireCostMeter): string =>
   meter.measured.byProvider.length === 0
     ? '該当 Provider なし'
     : meter.measured.byProvider
-        .map((p) => `${p.providerId} ${p.takeCount.toString()} 件`)
+        .map((p) => `${PROVIDER_LABELS[p.providerId] ?? p.providerId} ${p.takeCount.toString()} 件`)
         .join('・')
 
 /**

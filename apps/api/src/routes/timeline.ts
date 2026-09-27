@@ -80,7 +80,10 @@ export type TimelineRoutesDeps = {
 type ResolvedMedia = {
   readonly url: string
   readonly kind: RenderableKind
+  /** 音源の尺に使う。未解析なら 0（尺に効かせない）。 */
   readonly durationSec: number
+  /** probe の尺そのもの。**分からなければ null**（Take の速度に使うので 0 と区別する）。 */
+  readonly probedSec: number | null
 }
 
 /**
@@ -104,7 +107,10 @@ const resolveMediaAssets = async (
         asset.storageKey,
         TIMELINE_SIGNED_URL_EXPIRES_SEC,
       )
-      return [id, { url, kind, durationSec: asset.probe?.durationSec ?? 0 }] as const
+      return [
+        id,
+        { url, kind, durationSec: asset.probe?.durationSec ?? 0, probedSec: asset.probe?.durationSec ?? null },
+      ] as const
     }),
   )
   return new Map(entries.filter((entry): entry is readonly [MediaAssetId, ResolvedMedia] =>
@@ -184,6 +190,11 @@ export const loadTimelineSource = async (
     resolveShotMedia: (shot) => {
       const assetId = shotAssetIds.get(shot.id)
       return assetId === undefined ? undefined : media.get(assetId)?.url
+    },
+    // 尺に合わせた速度と「Take が足りない」の検査に使う（ADR-0026）。分からなければ null（0 と読み違えない）。
+    resolveShotMediaDurationSec: (shot) => {
+      const assetId = shotAssetIds.get(shot.id)
+      return assetId === undefined ? null : (media.get(assetId)?.probedSec ?? null)
     },
     resolveClipMedia: (mediaAssetId) => {
       const resolved = media.get(mediaAssetId)

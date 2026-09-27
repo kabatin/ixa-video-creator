@@ -5,9 +5,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ReviewPanel } from '@/components/review-panel'
 import { ShotStatusBadge } from '@/components/shot-status-badge'
 import { useAssets } from '@/components/workbench/asset-store'
+import { FootageImportForm } from '@/components/workbench/inspector/footage-import-form'
 import { ShotCastSection } from '@/components/workbench/inspector/shot-cast-section'
 import { ShotGenerateSection } from '@/components/workbench/inspector/shot-generate-section'
 import { StartFrameField } from '@/components/workbench/inspector/start-frame-field'
+import { TakeTimingField } from '@/components/workbench/inspector/take-timing-field'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { AutoSaveCheckbox, AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
 import { MoreMenu } from '@/components/workbench/ui/more-menu'
@@ -290,7 +292,10 @@ const LocationField = ({
   )
 }
 
-/** Take の要約と、採用の外し方（PHASE 8 / ADR-0022）。比べるのは中央の Take 比較。 */
+/**
+ * Take の要約と、採用の外し方（PHASE 8 / ADR-0022）。比べるのは中央の Take 比較。
+ * 手持ちの動画もここから Take にできる（ADR-0026）。
+ */
 const TakeSection = ({ shot }: { readonly shot: Shot }) => {
   const workbench = useWorkbench()
   const { takes, error } = useShotTakes(shot, workbench.posterEpoch)
@@ -339,6 +344,14 @@ const TakeSection = ({ shot }: { readonly shot: Shot }) => {
           ? '読み込んでいます…'
           : `${String(takes.length)} 本 / 採用: ${adopted === null ? 'なし' : `Take ${String(adopted.index)}`}`}
       </p>
+      <TakeTimingField
+        shot={shot}
+        adopted={adopted}
+        disabled={isGeneratingStatus(shot.status)}
+        onSave={async (timing) => {
+          await workbench.saveShot(shot.id, { timing })
+        }}
+      />
       {adopted !== null && (
         <Button size="sm" disabled={busy} onClick={() => void unselect()}>
           {busy ? '外しています…' : '採用を外す'}
@@ -349,6 +362,15 @@ const TakeSection = ({ shot }: { readonly shot: Shot }) => {
           {message}
         </p>
       )}
+      <FootageImportForm
+        shot={shot}
+        workspaceId={workbench.project.workspaceId}
+        projectId={workbench.projectId}
+        disabled={isGeneratingStatus(shot.status)}
+        onImported={() => {
+          workbench.refresh()
+        }}
+      />
     </Section>
   )
 }

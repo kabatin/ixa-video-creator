@@ -44,10 +44,17 @@ const videoFilters = (
     const input = index + 1
     const start = shot.startSec
     const end = shot.startSec + shot.durationSec
+    // 尺に合わせた速度（ADR-0026）。尺 × 速度だけ素材を使い、時間を 1/速度 に伸び縮みさせる。
+    // Remotion の合成（OffthreadVideo の playbackRate）と同じ結果にする。
+    const rate = shot.playbackRate ?? 1
+    const timing =
+      rate === 1
+        ? `setpts=PTS-STARTPTS+${sec(start)}/TB`
+        : `setpts=(PTS-STARTPTS)/${sec(rate)}+${sec(start)}/TB`
 
     filters.push(
-      `[${input}:v]trim=start=${sec(shot.inSec)}:duration=${sec(shot.durationSec)},` +
-        `setpts=PTS-STARTPTS+${sec(start)}/TB,${fitFilter(width, height)},fps=${doc.fps}[v${index}]`,
+      `[${input}:v]trim=start=${sec(shot.inSec)}:duration=${sec(shot.durationSec * rate)},` +
+        `${timing},${fitFilter(width, height)},fps=${doc.fps}[v${index}]`,
     )
     filters.push(
       `[${current}][v${index}]overlay=eof_action=pass:enable='between(t,${sec(start)},${sec(end)})'[o${index}]`,

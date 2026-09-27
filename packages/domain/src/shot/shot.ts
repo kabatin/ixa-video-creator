@@ -26,6 +26,14 @@ export type ShotContinuityMode = z.infer<typeof ShotContinuityMode>
  * Shot がマスタータイムライン VIDEO1 上の位置を所有する（ADR-0002）。
  * 生成尺と編集尺は別物（ADR-0011）。durationSec は編集尺。
  */
+/**
+ * Take の長さが Shot の尺と違うときの扱い（ADR-0026）。
+ * - `trim`（既定）: 速度は変えない。長ければ切り、短ければ最後のコマで止まる
+ * - `fit`: 速度を変えて Take 全体を Shot の尺に収める（0.5〜2.5 倍）
+ */
+export const ShotTiming = z.enum(['trim', 'fit'])
+export type ShotTiming = z.infer<typeof ShotTiming>
+
 export const Shot = z.object({
   id: ShotId,
   projectId: ProjectId,
@@ -37,6 +45,7 @@ export const Shot = z.object({
   startSec: Seconds,
   durationSec: Seconds.refine((d) => d > 0, '編集尺は 0 より大きいこと'),
   sourceInSec: Seconds.default(0),
+  timing: ShotTiming.default('trim'),
 
   // 演出
   description: z.string().default(''),
@@ -136,7 +145,7 @@ export const UpdateShotPatch = Shot.pick({
   sequenceId: true, order: true, code: true,
   startSec: true, durationSec: true, sourceInSec: true,
   description: true, dialogue: true, camera: true, mood: true,
-  continuityMode: true,
+  continuityMode: true, timing: true,
   locationId: true, sourceType: true, lockedAt: true,
 }).partial()
 export type UpdateShotPatch = z.input<typeof UpdateShotPatch>

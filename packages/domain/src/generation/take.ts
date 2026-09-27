@@ -28,6 +28,15 @@ export const ProviderParams = z.discriminatedUnion('kind', [
     exitCode: z.number().int(),
     stdoutDigest: z.string(),
   }),
+  /**
+   * 手持ちの動画を持ち込んだ Take（ADR-0026）。アプリの外で作ったので送ったパラメータは無い。
+   * **どのモデルで作ったかは分からないことがある**。分からなければ null、推定なら推定と書く。
+   */
+  z.object({
+    kind: z.literal('import'),
+    sourceModel: z.string().trim().min(1).max(120).nullable(),
+    fileName: z.string().max(255).nullable(),
+  }),
 ])
 export type ProviderParams = z.infer<typeof ProviderParams>
 

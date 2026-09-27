@@ -80,7 +80,7 @@ export const defaultLook = <T extends { readonly isDefault: boolean }>(
 
 // --- 落とされたファイル ---
 
-export type DroppedFileKind = 'audio' | 'image' | 'other'
+export type DroppedFileKind = 'audio' | 'image' | 'video' | 'other'
 
 /** 種類で行き先を分ける（§4.5）。拡張子より MIME を優先し、無ければ拡張子で見る。 */
 export const droppedFileKind = (file: {
@@ -89,11 +89,31 @@ export const droppedFileKind = (file: {
 }): DroppedFileKind => {
   if (file.type.startsWith('audio/')) return 'audio'
   if (file.type.startsWith('image/')) return 'image'
+  if (file.type.startsWith('video/')) return 'video'
   const ext = file.name.toLowerCase().split('.').at(-1) ?? ''
   if (['wav', 'mp3', 'aac', 'm4a', 'flac', 'ogg', 'aiff', 'aif'].includes(ext)) return 'audio'
   if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) return 'image'
+  if (['mp4', 'mov', 'm4v', 'webm'].includes(ext)) return 'video'
   return 'other'
 }
+
+export type GroupedFiles<F> = {
+  readonly audio: readonly F[]
+  readonly image: readonly F[]
+  /** 手持ちの動画。選んでいる Shot の Take にする（ADR-0026）。 */
+  readonly video: readonly F[]
+  readonly otherCount: number
+}
+
+/** 落とされたファイルを種類で分ける。受けられない種類は数だけ返す（黙って捨てず、呼び出し側が伝える）。 */
+export const groupDroppedFiles = <F extends { readonly type: string; readonly name: string }>(
+  files: readonly F[],
+): GroupedFiles<F> => ({
+  audio: files.filter((file) => droppedFileKind(file) === 'audio'),
+  image: files.filter((file) => droppedFileKind(file) === 'image'),
+  video: files.filter((file) => droppedFileKind(file) === 'video'),
+  otherCount: files.filter((file) => droppedFileKind(file) === 'other').length,
+})
 
 /** ファイル名から拡張子を外した名前（新しい素材の仮の名前）。空なら元の名前。 */
 export const fileBaseName = (fileName: string): string => {

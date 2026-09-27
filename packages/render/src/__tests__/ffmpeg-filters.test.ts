@@ -36,6 +36,14 @@ describe('buildFfmpegArgs', () => {
     expect(graph).toContain("enable='between(t,2.000000,5.000000)'")
   })
 
+  /** 尺に合わせた速度（ADR-0026）。Remotion の合成と同じ結果になるよう、切り出す長さと時間を揃える。 */
+  it('再生速度があれば、素材を尺 × 速度だけ切り出し、時間を伸び縮みさせる', () => {
+    const doc = makeDocument({ video1: [{ ...makeVideo1Shot(1, 2, 3, 1.5), playbackRate: 0.5 }] })
+    const graph = filterGraph(buildFfmpegArgs(doc, 'preview_720p', OUT))
+    expect(graph).toContain('trim=start=1.500000:duration=1.500000')
+    expect(graph).toContain('setpts=(PTS-STARTPTS)/0.500000+2.000000/TB')
+  })
+
   it('アスペクト比を保って収める（切り落とさない）', () => {
     const doc = makeDocument({ video1: [makeVideo1Shot(1, 0, 2)] })
     const graph = filterGraph(buildFfmpegArgs(doc, 'preview_720p', OUT))

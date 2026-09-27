@@ -1,7 +1,9 @@
 'use client'
 
+import type { ShotId } from '@ixa/domain'
 import { useEffect, useRef, useState } from 'react'
 import { useAssets } from '@/components/workbench/asset-store'
+import { FootageImportForm } from '@/components/workbench/inspector/footage-import-form'
 import {
   imageChoicesFor,
   useImageAttach,
@@ -11,13 +13,14 @@ import { useWorkbench } from '@/components/workbench/workbench-context'
 import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
 import { Button } from '@/components/ui/button'
 import { describeForPerson } from '@/lib/api-error'
-import { ASSET_DRAG_TYPE, droppedFileKind } from '@/lib/asset-actions'
+import { ASSET_DRAG_TYPE, groupDroppedFiles } from '@/lib/asset-actions'
 
 /**
  * ファイルを落とせば入る（UI-WORKBENCH-2 §4.5 / P8）。
  *
  * - 音声 → 楽曲として登録し、解析を始める
  * - 画像 → 行き先を 1 回だけ聞く（選んでいる素材 / 新しいロケーション / 新しいブランド資産）
+ * - 動画 → 選んでいる Shot の Take にする（ADR-0026）。Shot を選んでいなければ、そう伝える
  * - 素材ビューアや Shot のカードの上に落とした場合は、そちらが先に受けて止める（ここへ来ない）
  *
  * 「ファイルを取り込む…」（メニュー）はここのファイル選択を開く。
@@ -35,6 +38,11 @@ export const FileIntake = ({
   const input = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [pendingImages, setPendingImages] = useState<readonly File[]>([])
+  /** 落とした時点で選んでいた Shot に入れる（確かめている間に選び直しても行き先を変えない）。 */
+  const [pendingVideos, setPendingVideos] = useState<{
+    readonly shotId: ShotId
+    readonly files: readonly File[]
+  } | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -44,11 +52,9 @@ export const FileIntake = ({
   }, [registerOpener])
 
   const intake = async (files: readonly File[]): Promise<void> => {
-    const audio = files.filter((file) => droppedFileKind(file) === 'audio')
-    const images = files.filter((file) => droppedFileKind(file) === 'image')
-    const others = files.length - audio.length - images.length
-    if (others > 0)
-      onNotice(`${String(others)} 件は取り込めない種類のファイルでした（音声と画像だけ受けます）。`)
+    const { audio, image: images, video: videos, otherCount } = groupDroppedFiles(files)
+    if (otherCount > 0)
+      onNotice(`${String(otherCount)} 件は取り込めない種類のファイルでした（音声・画像・動画だけ受けます）。`)
     for (const file of audio) {
       try {
         const track = await actions.addTrackFromFile(file)
@@ -59,6 +65,11 @@ export const FileIntake = ({
       }
     }
     if (images.length > 0) setPendingImages(images)
+    if (videos.length > 0) {
+      const inspected = workbench.inspected
+      if (inspected?.kind === 'shot') setPendingVideos({ shotId: inspected.id, files: videos })
+      else onNotice('動画は、Shot を選んでから落とすとその Shot の Take になります。')
+    }
   }
 
   useEffect(() => {
@@ -108,6 +119,10 @@ export const FileIntake = ({
 
   const current = workbench.inspected
   const choices = imageChoicesFor(current)
+  const videoShot =
+    pendingVideos === null
+      ? null
+      : (workbench.shots?.find((shot) => shot.id === pendingVideos.shotId) ?? null)
 
   return (
     <>
@@ -115,7 +130,7 @@ export const FileIntake = ({
         ref={input}
         type="file"
         multiple
-        accept="audio/*,image/*"
+        accept="audio/*,image/*,video/*"
         className="hidden"
         aria-hidden
         tabIndex={-1}
@@ -128,7 +143,7 @@ export const FileIntake = ({
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-bg/60 backdrop-blur-sm">
           <p className="rounded-lg border-2 border-dashed border-accent bg-surface px-6 py-4 text-base text-text">
-            落とすと取り込みます（音声 → 楽曲、画像 → 行き先を選ぶ）
+            落とすと取り込みます（音声 → 楽曲、画像 → 行き先を選ぶ、動画 → 選んでいる Shot の Take）
           </p>
         </div>
       )}
@@ -158,6 +173,33 @@ export const FileIntake = ({
           <p className="mt-3 text-xs text-muted">
             ブランド資産は画像 1 枚です。2 枚以上なら先頭の 1 枚を使います。
           </p>
+        )}
+      </WorkbenchDialog>
+      <WorkbenchDialog
+        open={pendingVideos !== null}
+        title={`動画 ${String(pendingVideos?.files.length ?? 0)} 本を Take にしますか`}
+        size="medium"
+        onClose={() => {
+          setPendingVideos(null)
+        }}
+      >
+        {pendingVideos !== null && videoShot === null && (
+          <p role="alert" className="text-sm text-danger">
+            落としたときに選んでいた Shot が見つかりません。
+          </p>
+        )}
+        {pendingVideos !== null && videoShot !== null && (
+          <FootageImportForm
+            shot={videoShot}
+            workspaceId={workbench.project.workspaceId}
+            projectId={workbench.projectId}
+            files={pendingVideos.files}
+            onImported={(takes) => {
+              setPendingVideos(null)
+              onNotice(`動画 ${String(takes.length)} 本を Shot ${videoShot.code} の Take にしました。`)
+              workbench.refresh()
+            }}
+          />
         )}
       </WorkbenchDialog>
     </>

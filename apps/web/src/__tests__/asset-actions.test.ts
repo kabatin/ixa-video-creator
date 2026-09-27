@@ -4,6 +4,7 @@ import {
   castWithCharacter,
   defaultLook,
   droppedFileKind,
+  groupDroppedFiles,
   encodeAssetDrag,
   lookKeyFromName,
   parseAssetDrag,
@@ -61,9 +62,24 @@ describe('droppedFileKind', () => {
     [{ type: '', name: 'Theme.MP3' }, 'audio'],
     [{ type: 'image/png', name: 'x' }, 'image'],
     [{ type: '', name: 'ref.jpeg' }, 'image'],
+    // 手持ちの動画は Shot の Take として取り込む（ADR-0026）。
+    [{ type: 'video/mp4', name: 'x' }, 'video'],
+    [{ type: '', name: '12_deep_lean.MOV' }, 'video'],
     [{ type: 'application/pdf', name: 'a.pdf' }, 'other'],
   ] as const)('%o → %s', (file, kind) => {
     expect(droppedFileKind(file)).toBe(kind)
+  })
+})
+
+describe('groupDroppedFiles', () => {
+  it('種類ごとに分け、受けられない数を数える（順は保つ）', () => {
+    const f = (name: string, type = '') => ({ name, type })
+    const grouped = groupDroppedFiles([f('a.wav'), f('b.mp4'), f('c.png'), f('d.pdf'), f('e.mov')])
+
+    expect(grouped.audio.map((x) => x.name)).toEqual(['a.wav'])
+    expect(grouped.image.map((x) => x.name)).toEqual(['c.png'])
+    expect(grouped.video.map((x) => x.name)).toEqual(['b.mp4', 'e.mov'])
+    expect(grouped.otherCount).toBe(1)
   })
 })
 

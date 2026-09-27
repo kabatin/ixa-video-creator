@@ -93,6 +93,7 @@ export const makeShot = (overrides: Partial<Shot> = {}): Shot => ({
   startSec: 0,
   durationSec: 4,
   sourceInSec: 0,
+  timing: 'trim',
   description: '',
   dialogue: null,
   camera: CAMERA,

@@ -112,6 +112,11 @@ export const TimelineDocument = z.object({
       durationSec: Seconds,
       mediaUrl: z.string(),
       inSec: Seconds,
+      /**
+       * 再生速度（ADR-0026）。尺に合わせる Shot だけが持つ。**無ければ 1**。
+       * 省略可能にして version は 1 のまま（過去の書き出し記録もそのまま読める）。
+       */
+      playbackRate: z.number().positive().optional(),
     }),
   ),
   transitions: z.array(Transition),

@@ -213,6 +213,35 @@ describe('GET /projects/:projectId/timeline', () => {
   })
 })
 
+/** 尺に合わせた速度（ADR-0026）。採用 Take の長さは素材の probe から取る。 */
+describe('再生速度', () => {
+  const withProbe = (project: Project, timing: 'trim' | 'fit', probeSec: number | null) => {
+    const base = aShotWithTake(project, { code: 'shot_001', startSec: 0, durationSec: 5, timing })
+    const asset = {
+      ...base.asset,
+      probe:
+        probeSec === null
+          ? null
+          : { durationSec: probeSec, width: 1280, height: 720, fps: 24, hasAudio: true, codec: 'h264' },
+    }
+    return timelineDeps({ project, shots: [base.shot], takes: [base.take], mediaAssets: [asset], clips: [] })
+  }
+
+  it('fit の Shot は、採用 Take の長さから速度を決めて文書に書く', async () => {
+    const project = aProject()
+    const { body } = await getTimeline(withProbe(project, 'fit', 4), project)
+
+    expect(body.data.video1[0]?.playbackRate).toBeCloseTo(0.8, 9)
+  })
+
+  it('Take の長さが分からなければ速度を書かない（0 秒と読み違えない）', async () => {
+    const project = aProject()
+    const { body } = await getTimeline(withProbe(project, 'fit', null), project)
+
+    expect(body.data.video1[0]).not.toHaveProperty('playbackRate')
+  })
+})
+
 describe('音楽の音量', () => {
   it('MusicTrack の音量がタイムラインへ引き継がれる', async () => {
     const project = aProject()

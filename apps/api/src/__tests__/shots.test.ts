@@ -177,6 +177,20 @@ describe('Shot CRUD', () => {
     expect(json.data.description).toBe(f.shot.description)
   })
 
+  /** Take を尺に合わせる（ADR-0026）。既定は trim。 */
+  it('PATCH で Take の合わせ方（timing）を変えられる', async () => {
+    const f = buildFixture()
+
+    const res = await f.app.request(`/shots/${f.shot.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ timing: 'fit' }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as Ok<ShotResponse>).data.timing).toBe('fit')
+  })
+
   it('PATCH でロケーションを付け外しできる（ADR-0015）', async () => {
     const f = buildFixture()
     const locationId = newId(LocationIdSchema)

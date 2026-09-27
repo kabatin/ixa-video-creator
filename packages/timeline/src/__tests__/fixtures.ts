@@ -43,6 +43,7 @@ export const makeShot = (
   startSec,
   durationSec,
   sourceInSec: 0,
+  timing: 'trim',
   description: '',
   dialogue: null,
   camera: {

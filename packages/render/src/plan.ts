@@ -48,6 +48,8 @@ export type ShotPlan = {
   /** 末尾のクロスディゾルブ長。0 ならディゾルブ無し。 */
   readonly fadeOutFrames: number
   readonly zIndex: number
+  /** 再生速度（ADR-0026）。尺に合わせる Shot だけ 1 以外。 */
+  readonly playbackRate: number
 }
 
 /** dip_to_black / dip_to_white で挟む単色。 */
@@ -136,6 +138,7 @@ const buildShots = (doc: TimelineDocument): readonly ShotPlan[] =>
       startFrom: sourceOffsetFrames(shot.inSec, doc.fps),
       fadeOutFrames,
       zIndex: shotZIndex(index, doc.video1.length),
+      playbackRate: shot.playbackRate ?? 1,
     }
   })
 

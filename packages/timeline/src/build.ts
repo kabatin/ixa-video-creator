@@ -9,6 +9,7 @@ import type {
   Transition,
 } from '@ixa/domain'
 import { clipsEndSec, shotsEndSec, sortClips, sortShotsByStart } from './ordering.js'
+import { shotPlaybackRate } from './speed.js'
 
 /** 音楽トラックの投影。 */
 export type TimelineMusicTrack = {
@@ -31,6 +32,11 @@ export type TimelineSource = {
   readonly musicTracks: readonly TimelineMusicTrack[]
   /** Shot の採用 Take のメディア URL を引く。未生成の Shot は undefined を返してよい。 */
   readonly resolveShotMedia: (shot: Shot) => string | undefined
+  /**
+   * 採用 Take の長さ（秒）。尺に合わせる速度と「Take が足りない」の検査に使う（ADR-0026）。
+   * 省略・null は「分からない」。分からなければ速度は 1 にし、足りないとも言わない。
+   */
+  readonly resolveShotMediaDurationSec?: (shot: Shot) => number | null
   /**
    * クリップのメディアを URL と種別に解決する。解決できなければ undefined を返してよい。
    * レンダラは ID を URL に解決できないため、ここで解決しておく（video1 と同じ扱い）。
@@ -111,6 +117,7 @@ const buildVideo1 = (source: TimelineSource): TimelineDocument['video1'] =>
   sortShotsByStart(source.shots).flatMap((shot) => {
     const mediaUrl = source.resolveShotMedia(shot)
     if (mediaUrl === undefined) return []
+    const playbackRate = shotPlaybackRate(shot, source.resolveShotMediaDurationSec?.(shot) ?? null)
     return [
       {
         shotId: shot.id,
@@ -118,6 +125,8 @@ const buildVideo1 = (source: TimelineSource): TimelineDocument['video1'] =>
         durationSec: shot.durationSec,
         mediaUrl,
         inSec: shot.sourceInSec,
+        // 1 のときは書かない。速度を変えない Shot の文書は今までと同じ形のまま。
+        ...(playbackRate === 1 ? {} : { playbackRate }),
       },
     ]
   })

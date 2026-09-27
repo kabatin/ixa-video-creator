@@ -44,6 +44,8 @@ export const shots = pgTable(
     durationSec: seconds('duration_sec').notNull(),
     /** 採用 Take のメディア内開始オフセット。Take を差し替えても維持する（ADR-0011）。 */
     sourceInSec: seconds('source_in_sec').notNull().default(0),
+    /** Take の長さが尺と違うときの扱い。`fit` は速度を変えて尺に収める（ADR-0026）。 */
+    timing: text('timing', { enum: ['trim', 'fit'] }).notNull().default('trim'),
 
     // 演出
     description: text('description').notNull().default(''),

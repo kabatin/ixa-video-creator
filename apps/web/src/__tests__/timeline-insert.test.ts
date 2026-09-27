@@ -49,6 +49,7 @@ const makeShot = (suffix: string, code: string, startSec: number, durationSec: n
   startSec,
   durationSec,
   sourceInSec: 0,
+  timing: 'trim',
   description: '',
   dialogue: null,
   camera,

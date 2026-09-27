@@ -160,3 +160,27 @@ describe('クリップのメディア解決', () => {
     expect(doc.clips[0]?.content.type).toBe('text')
   })
 })
+
+/** 尺に合わせた速度（ADR-0026）。プレビューと書き出しが同じ値を読む。 */
+describe('再生速度', () => {
+  it('fit の Shot は Take の長さから速度を決める', () => {
+    const shots = [makeShot(1, 0, 5, { timing: 'fit' })]
+    const document = buildTimelineDocument(makeSource({ shots, resolveShotMediaDurationSec: () => 4 }))
+
+    expect(document.video1[0]?.playbackRate).toBeCloseTo(0.8, 9)
+  })
+
+  it('trim の Shot には速度を書かない（今の文書と同じ形のまま）', () => {
+    const shots = [makeShot(1, 0, 5)]
+    const document = buildTimelineDocument(makeSource({ shots, resolveShotMediaDurationSec: () => 4 }))
+
+    expect(document.video1[0]).not.toHaveProperty('playbackRate')
+  })
+
+  it('Take の長さを引けなければ速度を書かない', () => {
+    const shots = [makeShot(1, 0, 5, { timing: 'fit' })]
+    const document = buildTimelineDocument(makeSource({ shots }))
+
+    expect(document.video1[0]).not.toHaveProperty('playbackRate')
+  })
+})

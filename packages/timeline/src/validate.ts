@@ -9,6 +9,7 @@ import {
 } from '@ixa/domain'
 import { timelineDurationSec, type TimelineSource } from './build.js'
 import { TIME_EPSILON, shotsEndSec, sortShotsByStart } from './ordering.js'
+import { TAKE_SHORT_TOLERANCE_SEC, takeShortfallSec } from './speed.js'
 
 export type TimelineIssue = {
   readonly severity: 'error' | 'warning'
@@ -27,6 +28,7 @@ export const TIMELINE_ISSUE_CODES = {
   shotGapHead: 'shot_gap_head',
   shotGapTail: 'shot_gap_tail',
   shotMissingTake: 'shot_missing_take',
+  shotTakeShort: 'shot_take_short',
   clipOutOfRange: 'clip_out_of_range',
   transitionDegraded: 'transition_degraded',
   textClipUnreadable: 'text_clip_unreadable',
@@ -230,6 +232,27 @@ const checkTransitions = (
 }
 
 /**
+ * 採用 Take が尺に足りない Shot（warning / ADR-0026）。足りない分は**最後のコマで止まる**。
+ * 「Take を尺に合わせる」（timing: fit）で速度を落とせば埋まる。長さが分からない Shot は数えない。
+ */
+const checkTakeShort = (source: TimelineSource, shots: readonly Shot[]): TimelineIssue[] =>
+  shots.flatMap((shot) => {
+    if (source.resolveShotMedia(shot) === undefined) return []
+    const shortfall = takeShortfallSec(shot, source.resolveShotMediaDurationSec?.(shot) ?? null)
+    if (shortfall <= TAKE_SHORT_TOLERANCE_SEC) return []
+    return [
+      {
+        severity: 'warning' as const,
+        code: TIMELINE_ISSUE_CODES.shotTakeShort,
+        message:
+          `Shot ${shot.code} の Take が ${shortfall.toFixed(2)}s 足りず、最後のコマで止まる` +
+          (shot.timing === 'fit' ? '（速度の下限 0.5 倍でも足りない）' : '（「Take を尺に合わせる」で速度を落とせば埋まる）'),
+        shotId: shot.id,
+      },
+    ]
+  })
+
+/**
  * タイムラインの尺をはみ出したクリップ（warning）。
  *
  * 基準は Shot 列の終端。`buildTimelineDocument` の `durationSec` はクリップ自身も含めて
@@ -302,6 +325,7 @@ export const validateTimeline = (source: TimelineSource): TimelineIssue[] => {
     ...checkEdgeGaps(source, sorted),
     ...checkGaps(sorted),
     ...checkMissingTakes(sorted, source.resolveShotMedia),
+    ...checkTakeShort(source, sorted),
     ...checkClips(source),
     ...checkTextClips(source),
   ]

@@ -40,6 +40,7 @@ const makeShot = (suffix: string, startSec: number, durationSec: number): Shot =
   startSec,
   durationSec,
   sourceInSec: 0,
+  timing: 'trim',
   description: '',
   dialogue: null,
   camera,

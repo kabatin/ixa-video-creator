@@ -57,6 +57,7 @@ export const shotRowToDomain = (row: ShotRow): Shot =>
     startSec: row.startSec,
     durationSec: row.durationSec,
     sourceInSec: row.sourceInSec,
+    timing: row.timing,
     description: row.description,
     dialogue: row.dialogue,
     camera: row.camera,

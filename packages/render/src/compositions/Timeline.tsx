@@ -64,7 +64,17 @@ const ShotBody: React.FC<{ shot: ShotPlan; video: FitRect }> = ({ shot, video })
 
   return (
     <AbsoluteFill style={{ zIndex: shot.zIndex, opacity }}>
-      <OffthreadVideo src={shot.mediaUrl} startFrom={shot.startFrom} style={fitStyle(video)} />
+      {/*
+        速度は尺に合わせる Shot だけ 1 以外（ADR-0026）。startFrom は素材のフレームで数える。
+        **Shot の音は鳴らさない**。音楽が先のアプリで、音は曲（AI の動画には音が付いてくることが多い）。
+      */}
+      <OffthreadVideo
+        src={shot.mediaUrl}
+        startFrom={shot.startFrom}
+        playbackRate={shot.playbackRate}
+        muted
+        style={fitStyle(video)}
+      />
     </AbsoluteFill>
   )
 }

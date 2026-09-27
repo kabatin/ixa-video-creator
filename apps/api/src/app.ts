@@ -27,6 +27,7 @@ import { shotRoutes, type GenerationQueue } from './routes/shots.js'
 import { shotBulkRoutes } from './routes/shots-bulk.js'
 import { shotEditRoutes } from './routes/shot-edits.js'
 import { shotStartFrameRoutes } from './routes/shot-start-frame.js'
+import { shotTakeImportRoutes } from './routes/shot-take-import.js'
 import { shotPosterRoutes } from './routes/shot-posters.js'
 import { uploadRoutes, type MediaIngestDeps } from './routes/uploads.js'
 import { shotCompareRoutes } from './routes/shot-compare.js'
@@ -204,6 +205,18 @@ export const createApp = (deps: AppDeps) => {
       projects,
       mediaAssets,
       shotReferences: deps.shotReferences,
+    }),
+  )
+  // 手持ちの動画を Take にする（ADR-0026）。
+  app.route(
+    '/',
+    shotTakeImportRoutes({
+      shots: deps.shots,
+      projects,
+      mediaAssets,
+      takes: deps.takes,
+      events: deps.events,
+      logger,
     }),
   )
   app.route(
