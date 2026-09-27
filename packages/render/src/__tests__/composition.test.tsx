@@ -96,6 +96,26 @@ describe('Shot とクリップを前もって組み立てておく', () => {
     }
   })
 
+  /**
+   * 既定の `opacity: 0` で待たせると、Chrome は見え始めた最初のコマが間に合わず 1 コマ真っ黒を出した。
+   * 後の Shot ほど重なり順が低いので、見えていても前の Shot の裏に隠れる。
+   */
+  it('前の Shot と続く Shot は、待っている間も見える状態で裏に置く', () => {
+    const shots = sequences.filter((sequence) => 'shot' in bodyOf(sequence))
+    expect(shots[0]?.props.styleWhilePremounted).toBeUndefined()
+    expect(shots[1]?.props.styleWhilePremounted).toEqual({ opacity: 1 })
+  })
+
+  it('隙間の後の Shot は隠したまま待つ（黒のはずの間に頭を見せない）', () => {
+    const gapped = sequencesOf(
+      TimelineComposition({
+        doc: makeDocument({ video1: [makeVideo1Shot(1, 0, 2), makeVideo1Shot(2, 3, 2)] }),
+        canvas: null,
+      }) as ReactElement,
+    ).filter((sequence) => 'shot' in bodyOf(sequence))
+    expect(gapped[1]?.props.styleWhilePremounted).toBeUndefined()
+  })
+
   it('メディアのクリップも同じく前もって組み立てる', () => {
     const clips = sequences.filter((sequence) => 'clip' in bodyOf(sequence))
     expect(clips).toHaveLength(2)

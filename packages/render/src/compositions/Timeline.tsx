@@ -198,7 +198,7 @@ const AudioTrack: React.FC<{ track: AudioPlan }> = ({ track }) => (
 )
 
 /**
- * プレビューで Shot とクリップを**始まる前から見えない状態で組み立てておく**秒数。
+ * プレビューで Shot とクリップを**始まる前から組み立てておく**秒数。
  *
  * Player（ブラウザの `<video>`）は `<Sequence>` が始まった瞬間に読み込みと頭出しを始めるので、
  * 以前はカットの境目ごとに 0.1〜0.2 秒黒が挟まった（2026-09-27、モトダチ MV で実測）。
@@ -207,6 +207,26 @@ const AudioTrack: React.FC<{ track: AudioPlan }> = ({ track }) => (
  * `premountFor` は `layout="none"` と組み合わせられないため、Shot とクリップは既定の layout にする。
  */
 const PREMOUNT_SEC = 1
+
+/**
+ * **待っている Shot は見える状態のまま、いまの Shot の裏に置く。**
+ *
+ * Remotion の既定は待っている間 `opacity: 0` で隠す。すると Chrome はその `<video>` を画面に
+ * 載せておらず、見え始めた最初のコマが間に合わずに 1 コマ真っ黒が出た（画面のコマを全部取って実測。
+ * 45 秒で境目 9 か所中 6 回）。後の Shot ほど重なり順が低い（`shotZIndex`）ので、見えていても
+ * いまの Shot に隠れ、切り替わった瞬間には既に描かれている。
+ *
+ * **前の Shot と隙間なく続くときだけ。** 隙間があると、黒のはずの間に次の Shot の頭が早く見えてしまう。
+ */
+const SHOW_BEHIND_WHILE_PREMOUNTED: React.CSSProperties = { opacity: 1 }
+
+/** 前の Shot の終わりまでに始まるか（隙間が無いか）。重なり（ディゾルブ）も含む。 */
+const followsPrevious = (shots: readonly ShotPlan[], index: number): boolean => {
+  const previous = shots[index - 1]
+  const current = shots[index]
+  if (previous === undefined || current === undefined) return false
+  return current.range.from <= previous.range.from + previous.range.durationInFrames
+}
 
 /**
  * プレビュー（`@remotion/player`）とレンダリング（`renderMedia`）の共通コンポジション（ADR-0010）。
@@ -220,12 +240,15 @@ export const TimelineComposition: React.FC<TimelineCompositionProps> = ({ doc, c
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#000000' }}>
-      {plan.shots.map((shot) => (
+      {plan.shots.map((shot, index) => (
         <Sequence
           key={shot.shotId}
           from={shot.range.from}
           durationInFrames={shot.range.durationInFrames}
           premountFor={premountFor}
+          styleWhilePremounted={
+            followsPrevious(plan.shots, index) ? SHOW_BEHIND_WHILE_PREMOUNTED : undefined
+          }
         >
           <ShotBody shot={shot} video={plan.video} />
         </Sequence>
