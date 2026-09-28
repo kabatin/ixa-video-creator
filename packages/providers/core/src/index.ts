@@ -1,4 +1,5 @@
 export * from './capabilities.js'
+export * from './cli-runner.js'
 export * from './provider.js'
 export * from './image.js'
 export * from './validate.js'

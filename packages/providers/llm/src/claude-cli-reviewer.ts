@@ -1,7 +1,13 @@
-import { execFile } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { LLM_REVIEWERS, ReviewerType } from '@ixa/domain'
 import { z } from 'zod'
+import {
+  DEFAULT_CLI_TIMEOUT_MS,
+  execFileCliRunner,
+  redactCommand,
+  type CliInvocation,
+  type CliRunResult,
+  type CliRunner,
+} from '@ixa/provider-core'
 import {
   CliExitFailedError,
   CliNotFoundError,
@@ -32,33 +38,18 @@ import {
 
 export const CLAUDE_CLI_REVIEWER_NAME = 'claude-cli-vision-reviewer'
 
-/** ハングした CLI がキューを詰まらせるため必ず設定する。既定 10 分（ADR-0012）。 */
-export const DEFAULT_CLI_TIMEOUT_MS = 10 * 60 * 1000
-
-/** stdout を無制限に溜めない。巨大な出力は CLI 側の異常なので切り上げてよい。 */
-const MAX_STDOUT_BYTES = 10 * 1024 * 1024
-
 /**
- * サブプロセス実行のポート。**実 CLI を CI で叩かないため**に注入できるようにしてある
- * （ADR-0004 の契約テスト方針）。
+ * CLI を呼ぶ口は `@ixa/provider-core` の `cli-runner.ts` へ移した（Codex CLI と共有する。ADR-0029）。
+ * 呼び出し側を壊さないよう、ここからも同じ名前で出す。
  */
-export type CliInvocation = {
-  readonly command: string
-  readonly args: readonly string[]
-  readonly timeoutMs: number
+export {
+  DEFAULT_CLI_TIMEOUT_MS,
+  execFileCliRunner,
+  redactCommand,
+  type CliInvocation,
+  type CliRunResult,
+  type CliRunner,
 }
-
-/**
- * 実行結果。**想定内の失敗は throw せず kind で返す。**
- * こうしておくとテスト側のモックが Node のエラー形（`ENOENT` など）を真似ずに済む。
- */
-export type CliRunResult =
-  | { readonly kind: 'completed'; readonly exitCode: number; readonly stdout: string; readonly stderr: string }
-  | { readonly kind: 'timeout'; readonly timeoutMs: number }
-  | { readonly kind: 'not_found'; readonly reason: string }
-  | { readonly kind: 'spawn_failed'; readonly reason: string }
-
-export type CliRunner = (invocation: CliInvocation) => Promise<CliRunResult>
 
 /** Claude Code CLI がヘッドレス実行で返す外枠（ADR-0012）。必要な項目だけを契約にする。 */
 export const ClaudeCliEnvelope = z.object({
@@ -69,25 +60,6 @@ export const ClaudeCliEnvelope = z.object({
 })
 export type ClaudeCliEnvelope = z.infer<typeof ClaudeCliEnvelope>
 
-const sha256Short = (value: string): string =>
-  createHash('sha256').update(value).digest('hex').slice(0, 12)
-
-/**
- * プロンプト本文を伏せたコマンド文字列。
- * プロンプトには都度発行した署名付き URL が入るため、**そのままログへ出さない**
- * （CLAUDE.md 規約 7）。同一性の追跡はダイジェストで足りる。
- */
-export const redactCommand = (
-  binary: string,
-  args: readonly string[],
-  prompt: string,
-): string =>
-  [
-    binary,
-    ...args.map((arg) =>
-      arg === prompt ? `<prompt:${prompt.length}chars sha256=${sha256Short(prompt)}>` : arg,
-    ),
-  ].join(' ')
 
 const imageLines = (title: string, images: readonly { label: string; url: string }[]): string =>
   images.length === 0
@@ -175,35 +147,6 @@ const parseJson = (
 const formatIssues = (error: z.ZodError): readonly string[] =>
   error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
 
-/** 既定のサブプロセス実行。想定内の失敗は kind へ落とし、例外は投げない。 */
-export const execFileCliRunner: CliRunner = (invocation) =>
-  new Promise<CliRunResult>((resolve) => {
-    execFile(
-      invocation.command,
-      [...invocation.args],
-      { timeout: invocation.timeoutMs, maxBuffer: MAX_STDOUT_BYTES, killSignal: 'SIGKILL' },
-      (error, stdout, stderr) => {
-        if (error === null) {
-          resolve({ kind: 'completed', exitCode: 0, stdout, stderr })
-          return
-        }
-        if (error.code === 'ENOENT') {
-          resolve({ kind: 'not_found', reason: error.message })
-          return
-        }
-        // execFile は timeout で killSignal を送る。exit code より先に判定する。
-        if (error.code === 'ETIMEDOUT' || error.killed === true) {
-          resolve({ kind: 'timeout', timeoutMs: invocation.timeoutMs })
-          return
-        }
-        if (typeof error.code === 'number') {
-          resolve({ kind: 'completed', exitCode: error.code, stdout, stderr })
-          return
-        }
-        resolve({ kind: 'spawn_failed', reason: error.message })
-      },
-    )
-  })
 
 const ClaudeCliOptionsSchema = z.object({
   name: z.string().min(1).default(CLAUDE_CLI_REVIEWER_NAME),

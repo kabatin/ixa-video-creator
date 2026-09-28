@@ -409,6 +409,9 @@ importers:
       '@ixa/domain':
         specifier: workspace:*
         version: link:../../domain
+      '@ixa/provider-core':
+        specifier: workspace:*
+        version: link:../core
       zod:
         specifier: ^3.24.1
         version: 3.25.76
