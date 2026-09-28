@@ -5,6 +5,7 @@
 export * from './testing/call-recorder.js'
 export * from './testing/fixtures.js'
 export * from './testing/in-memory-character-repositories.js'
+export * from './testing/in-memory-image-job-repository.js'
 export * from './testing/in-memory-library-repositories.js'
 export * from './testing/in-memory-media-asset-repository.js'
 export * from './testing/in-memory-shot-link-repositories.js'

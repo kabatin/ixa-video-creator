@@ -1,4 +1,4 @@
-import { createPhase1EmptyContextSource, type GenerationJobId } from '@ixa/domain'
+import { createPhase1EmptyContextSource, ModelId, ProviderId, type GenerationJobId } from '@ixa/domain'
 import { createProviderRegistry, type VideoProvider } from '@ixa/provider-core'
 import { createMemoryStorage } from '@ixa/storage'
 import type { AppDeps } from '../app.js'
@@ -13,6 +13,7 @@ import {
   createInMemoryMediaAssetRepository,
   createInMemoryShotCharacterRepository,
   createInMemoryShotReferenceRepository,
+  createInMemoryImageJobRepository,
   createInMemoryShotRepository,
   createInMemoryTakeRepository,
 } from '@ixa/generation/testing'
@@ -129,6 +130,10 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   looks: createInMemoryCharacterLookRepository(),
   shotCharacters: createInMemoryShotCharacterRepository(),
   shotReferences: createInMemoryShotReferenceRepository(),
+  imageJobs: createInMemoryImageJobRepository(),
+  // キューへは入れるだけ（作るのは worker）。テストでは記録もしない。
+  imageQueue: { enqueue: () => Promise.resolve() },
+  imageModel: { providerId: ProviderId.parse('stub-image'), modelId: ModelId.parse('stub/gemini-like-image') },
   brandAssets: createInMemoryBrandAssetRepository(),
   locations: createInMemoryLocationRepository(),
   scripts: createInMemoryScriptRepository(),

@@ -8,10 +8,15 @@ import {
   type Shot,
   type Take,
 } from '@ixa/domain'
+import { replaceManualStartFrame } from '@ixa/generation'
 import {
   aShot,
   aTake,
+  createInMemoryImageJobRepository,
   createInMemoryMediaAssetRepository,
+  createInMemoryShotReferenceRepository,
+  type InMemoryImageJobRepository,
+  type InMemoryShotReferenceRepository,
   createInMemoryShotRepository,
   createInMemoryTakeRepository,
   type InMemoryMediaAssetRepository,
@@ -57,6 +62,8 @@ type Fixture = {
   readonly takes: readonly Take[]
   readonly mediaAssets: InMemoryMediaAssetRepository
   readonly storage: ObjectStorage
+  readonly shotReferences?: InMemoryShotReferenceRepository
+  readonly imageJobs?: InMemoryImageJobRepository
 }
 
 const buildApp = (fixture: Fixture) => {
@@ -66,6 +73,8 @@ const buildApp = (fixture: Fixture) => {
     takes: createInMemoryTakeRepository(fixture.takes),
     mediaAssets: fixture.mediaAssets,
     storage: fixture.storage,
+    shotReferences: fixture.shotReferences ?? createInMemoryShotReferenceRepository(),
+    imageJobs: fixture.imageJobs ?? createInMemoryImageJobRepository(),
   }
   return shotPosterRoutes(deps)
 }
@@ -340,6 +349,8 @@ describe('GET /projects/:projectId/shot-posters', () => {
       takes: countingTakes,
       mediaAssets,
       storage,
+      shotReferences: createInMemoryShotReferenceRepository(),
+      imageJobs: createInMemoryImageJobRepository(),
     })
 
     const json = (await (
@@ -400,4 +411,74 @@ describe('GET /projects/:projectId/shot-posters', () => {
     expect(res.status).toBe(422)
   })
 
+})
+
+/**
+ * **採用 Take が無い Shot は、最初のフレーム（絵コンテの画像）を絵に使う**（ADR-0029）。
+ * 以前は採用 Take のサムネイルしか見ず、絵コンテの画像を作ってもストーリーボードに絵が出なかった。
+ */
+describe('最初のフレームを絵に使う', () => {
+  const setup = async (options: { thumbnail: boolean; adopted?: boolean; drawing?: boolean }) => {
+    const project = aProject()
+    const storage = createMemoryStorage()
+    const mediaAssets = createInMemoryMediaAssetRepository()
+    const shotReferences = createInMemoryShotReferenceRepository()
+    const imageJobs = createInMemoryImageJobRepository()
+    const frame = await mediaAssets.create({
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+      kind: 'image',
+      storageKey: `media/${project.workspaceId}/frame/original.png`,
+      mimeType: 'image/png',
+      bytes: 10,
+      checksumSha256: 'c'.repeat(64),
+      thumbnailKey: options.thumbnail ? `media/${project.workspaceId}/frame/thumb.jpg` : null,
+      origin: { type: 'upload', uploadedBy: 'editor' },
+      tags: [],
+    })
+    const video = await seedAsset(mediaAssets, project, { thumbnailKey: `media/${project.workspaceId}/take/thumb.jpg`, checksum: 'd'.repeat(64) })
+    const base = aShot(project.id, { order: 1000, code: 'shot_001' })
+    const take = aTake(base, '3'.repeat(64), { mediaAssetId: video.id })
+    const shot = options.adopted === true ? { ...base, selectedTakeId: take.id } : base
+    await replaceManualStartFrame(shotReferences, shot.id, frame.id)
+    if (options.drawing === true) {
+      await imageJobs.create({
+        projectId: project.id,
+        shotId: shot.id,
+        providerId: 'codex-cli' as never,
+        modelId: 'codex-cli/image-gen' as never,
+      })
+    }
+    const res = await buildApp({ project, shots: [shot], takes: [take], mediaAssets, storage, shotReferences, imageJobs }).request(
+      `/projects/${project.id}/shot-posters`,
+    )
+    return ((await res.json()) as ListBody).data[0]
+  }
+
+  it('採用 Take が無ければ、最初のフレームのサムネイルを出す', async () => {
+    const poster = await setup({ thumbnail: true })
+    expect(poster?.thumbnailUrl).toContain('frame/thumb.jpg')
+    expect(poster).toMatchObject({ takeId: null, reason: null, pending: false })
+  })
+
+  it('最初のフレームのサムネイルがまだなら、待てば出ると言う', async () => {
+    expect(await setup({ thumbnail: false })).toMatchObject({
+      thumbnailUrl: null,
+      reason: SHOT_POSTER_REASON.thumbnailNotReady,
+      pending: true,
+    })
+  })
+
+  it('絵コンテの画像を作っている間は、そう言って待つ', async () => {
+    expect(await setup({ thumbnail: true, drawing: true })).toMatchObject({
+      thumbnailUrl: null,
+      reason: SHOT_POSTER_REASON.drawing,
+      pending: true,
+    })
+  })
+
+  it('採用 Take があれば、そちらを出す（最初のフレームより優先）', async () => {
+    const poster = await setup({ thumbnail: true, adopted: true })
+    expect(poster?.thumbnailUrl).toContain('take/thumb.jpg')
+  })
 })

@@ -1,7 +1,9 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import type { MediaAsset, Project, Shot } from '@ixa/domain'
+import { ModelId, ProviderId } from '@ixa/domain'
 import {
   aShot,
+  createInMemoryImageJobRepository,
   createInMemoryMediaAssetRepository,
   createInMemoryShotReferenceRepository,
   createInMemoryShotRepository,
@@ -28,6 +30,7 @@ const build = (project: Project, shot: Shot, assets: readonly MediaAsset[]) => {
     projects: createInMemoryProjectRepository([project]),
     mediaAssets: createInMemoryMediaAssetRepository([...assets]),
     shotReferences: createInMemoryShotReferenceRepository(),
+    imageJobs: createInMemoryImageJobRepository(),
   }
   const app = new OpenAPIHono({ defaultHook: validationHook })
   registerErrorHandlers(app, createLogger('silent'))
@@ -126,5 +129,40 @@ describe('/shots/:id/start-frame', () => {
     await f.call('DELETE')
 
     expect((await f.shotReferences.findByShot(shot.id)).map((r) => r.role)).toEqual(['subject'])
+  })
+})
+
+/**
+ * 絵コンテの画像（ADR-0029）。**作っている間と失敗は、直近のジョブで言う。** 画面は開き直しても
+ * 「作っています」「作れませんでした: 理由」を出せる（出来事を取り逃しても分かる）。
+ */
+describe('/shots/:id/start-frame の直近のジョブ', () => {
+  it('頼んだことが無ければ null', async () => {
+    const { project, shot, image } = setup()
+    const f = build(project, shot, [image])
+
+    const res = await f.call('GET')
+
+    expect(((await res.json()) as Ok<{ job: unknown }>).data.job).toBeNull()
+  })
+
+  it('失敗したら、その理由を返す', async () => {
+    const { project, shot, image } = setup()
+    const f = build(project, shot, [image])
+    const job = await f.imageJobs.create({
+      projectId: project.id,
+      shotId: shot.id,
+      providerId: ProviderId.parse('codex-cli'),
+      modelId: ModelId.parse('codex-cli/image-gen'),
+    })
+    await f.imageJobs.markFailed(job.id, { code: 'no_image', message: 'Codex CLI が絵を返しませんでした。', retryable: true }, null)
+
+    const res = await f.call('GET')
+
+    expect(((await res.json()) as Ok<{ job: unknown }>).data.job).toEqual({
+      id: job.id,
+      status: 'failed',
+      error: 'Codex CLI が絵を返しませんでした。',
+    })
   })
 })

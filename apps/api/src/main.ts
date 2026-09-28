@@ -21,6 +21,7 @@ import {
   createLocationRepository,
   createShotCharacterRepository,
   createShotReferenceRepository,
+  createImageJobRepository,
   createScriptRepository,
   createEditBatchRepository,
   createStoryboardDraftRepository,
@@ -43,6 +44,8 @@ import { createRedisProjectEvents } from '@ixa/events'
 import { createApp } from './app.js'
 import { createLogger, type Logger } from './logger.js'
 import { GENERATION_QUEUE_NAME, type GenerationQueue } from './routes/shots.js'
+import { IMAGE_QUEUE_NAME, type ImageJobQueue } from './routes/shot-start-frame-generate.js'
+import { codexCliImageModel, stubGeminiLikeImageModel } from '@ixa/provider-image'
 import {
   createClaudeCliStoryboardDrafter,
   createStubStoryboardDrafter,
@@ -177,6 +180,15 @@ export const main = (): void => {
     },
   }
 
+  // 絵コンテの画像（ADR-0029）。どの口で作るかは IMAGE_PROVIDER（既定スタブ）。作るのは worker。
+  const imageQueue = new Queue(IMAGE_QUEUE_NAME, { connection })
+  const imageQueuePort: ImageJobQueue = {
+    enqueue: async (imageJobId) => {
+      await imageQueue.add('draw', { imageJobId })
+    },
+  }
+  const imageModel = config.imageProvider === 'codex_cli' ? codexCliImageModel : stubGeminiLikeImageModel
+
   // キュー名は apps/worker/src/queues.ts の QUEUE_NAMES と一致させること。
   // apps 同士を import できないため、文字列で合わせるしかない。
   const mediaQueue = new Queue('media', { connection })
@@ -266,6 +278,9 @@ export const main = (): void => {
       mediaAssets,
     }),
     generationQueue: queuePort,
+    imageJobs: createImageJobRepository(db),
+    imageQueue: imageQueuePort,
+    imageModel: { providerId: imageModel.providerId, modelId: imageModel.id },
     storage,
     corsOrigins: config.corsOrigins,
     events: {

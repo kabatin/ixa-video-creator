@@ -10,14 +10,17 @@ import type { MediaAssetId, ShotId, ShotReference } from '@ixa/domain'
  */
 export type StartFrameReferences = Pick<ShotReferenceRepository, 'findByShot' | 'create' | 'delete'>
 
-const manualStartFrames = async (references: StartFrameReferences, shotId: ShotId): Promise<ShotReference[]> =>
+const manualStartFrames = async (
+  references: Pick<StartFrameReferences, 'findByShot'>,
+  shotId: ShotId,
+): Promise<ShotReference[]> =>
   (await references.findByShot(shotId)).filter(
     (reference) => reference.role === 'start_frame' && reference.sourceKind === 'manual',
   )
 
 /** いまの最初のフレームの素材。無ければ null。 */
 export const manualStartFrameOf = async (
-  references: StartFrameReferences,
+  references: Pick<StartFrameReferences, 'findByShot'>,
   shotId: ShotId,
 ): Promise<MediaAssetId | null> => (await manualStartFrames(references, shotId))[0]?.mediaAssetId ?? null
 

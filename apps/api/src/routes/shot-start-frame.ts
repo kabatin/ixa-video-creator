@@ -1,11 +1,17 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type {
+  ImageJobRepository,
   MediaAssetRepository,
   ProjectRepository,
   ShotReferenceRepository,
   ShotRepository,
 } from '@ixa/db'
-import { MediaAssetId as MediaAssetIdSchema, ShotId as ShotIdSchema } from '@ixa/domain'
+import {
+  ImageGenerationJobId as ImageGenerationJobIdSchema,
+  ImageGenerationJobStatus as ImageGenerationJobStatusSchema,
+  MediaAssetId as MediaAssetIdSchema,
+  ShotId as ShotIdSchema,
+} from '@ixa/domain'
 import { clearManualStartFrame, manualStartFrameOf, replaceManualStartFrame } from '@ixa/generation'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
@@ -23,6 +29,8 @@ export type ShotStartFrameRoutesDeps = {
   readonly projects: Pick<ProjectRepository, 'findById'>
   readonly mediaAssets: Pick<MediaAssetRepository, 'findById'>
   readonly shotReferences: Pick<ShotReferenceRepository, 'findByShot' | 'create' | 'delete'>
+  /** 絵コンテの画像を作るジョブ（ADR-0029）。直近の 1 件の状態と失敗の理由を返す。 */
+  readonly imageJobs: Pick<ImageJobRepository, 'findLatestByShot'>
 }
 
 const NOT_IMAGE_MESSAGE = '最初のフレームには画像を指定してください'
@@ -35,6 +43,20 @@ const StartFrameBody = z.object({ mediaAssetId: MediaAssetIdSchema }).openapi('S
 const StartFrameData = z
   .object({ mediaAssetId: MediaAssetIdSchema.nullable() })
   .openapi('ShotStartFrame')
+/**
+ * 付いている絵と、絵コンテの画像を作った直近のジョブ（ADR-0029）。**開き直しても**
+ * 「作っています」「作れませんでした: 理由」を出せる（出来事を取り逃しても分かる）。
+ */
+const StartFrameState = StartFrameData.extend({
+  job: z
+    .object({
+      id: ImageGenerationJobIdSchema,
+      status: ImageGenerationJobStatusSchema,
+      /** 失敗したときの理由（利用者にそのまま見せる文）。 */
+      error: z.string().nullable(),
+    })
+    .nullable(),
+}).openapi('ShotStartFrameState')
 
 const jsonContent = <T extends z.ZodTypeAny>(description: string, schema: T) => ({
   description,
@@ -51,7 +73,7 @@ const getRoute = createRoute({
   method: 'get', path: '/shots/{id}/start-frame', tags: ['shots'],
   summary: 'Shot の最初のフレーム（無ければ null）',
   request: { params: ShotParams },
-  responses: { 200: jsonContent('最初のフレーム', successResponse(StartFrameData)), ...commonErrors },
+  responses: { 200: jsonContent('最初のフレームと直近の絵のジョブ', successResponse(StartFrameState)), ...commonErrors },
 })
 
 const putRoute = createRoute({
@@ -76,7 +98,12 @@ export const shotStartFrameRoutes = (deps: ShotStartFrameRoutesDeps) =>
     .openapi(getRoute, async (c) => {
       const shot = await deps.shots.findById(c.req.valid('param').id)
       if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
-      return c.json(ok({ mediaAssetId: await manualStartFrameOf(deps.shotReferences, shot.id) }), 200)
+      const [mediaAssetId, latest] = await Promise.all([
+        manualStartFrameOf(deps.shotReferences, shot.id),
+        deps.imageJobs.findLatestByShot(shot.id),
+      ])
+      const job = latest === null ? null : { id: latest.id, status: latest.status, error: latest.error?.message ?? null }
+      return c.json(ok({ mediaAssetId, job }), 200)
     })
     .openapi(putRoute, async (c) => {
       const shot = await deps.shots.findById(c.req.valid('param').id)

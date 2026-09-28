@@ -1,10 +1,13 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type {
+  ImageJobRepository,
   MediaAssetRepository,
   ProjectRepository,
+  ShotReferenceRepository,
   ShotRepository,
   TakeRepository,
 } from '@ixa/db'
+import { manualStartFrameOf } from '@ixa/generation'
 import {
   ProjectId as ProjectIdSchema,
   ShotId as ShotIdSchema,
@@ -51,6 +54,8 @@ export const SHOT_POSTER_REASON = {
   mediaMissing: 'メディアが見つかりません',
   /** MediaAsset は在るが派生物がまだ。待てば出る。 */
   thumbnailNotReady: DERIVED_NOT_READY_MESSAGE,
+  /** 絵コンテの画像（最初のフレーム）を作っている（ADR-0029）。 */
+  drawing: '絵コンテの画像を作っています',
 } as const
 
 /**
@@ -102,7 +107,7 @@ export type ShotPoster =
 export type ShotPosterEntry = ShotPoster & { readonly pending: boolean }
 
 const isPending = (poster: ShotPoster): boolean =>
-  poster.reason === SHOT_POSTER_REASON.thumbnailNotReady
+  poster.reason === SHOT_POSTER_REASON.thumbnailNotReady || poster.reason === SHOT_POSTER_REASON.drawing
 
 export type ShotPosterRoutesDeps = {
   projects: ProjectRepository
@@ -110,6 +115,10 @@ export type ShotPosterRoutesDeps = {
   takes: TakeRepository
   mediaAssets: MediaAssetRepository
   storage: ObjectStorage
+  /** 最初のフレーム（採用 Take が無い Shot の絵に使う。ADR-0029）。 */
+  shotReferences: Pick<ShotReferenceRepository, 'findByShot'>
+  /** 絵コンテの画像を作っている Shot（その間は「作っています」と出す）。 */
+  imageJobs: Pick<ImageJobRepository, 'findActiveByProject'>
 }
 
 /**
@@ -133,23 +142,49 @@ const loadById = async <Id, Entity>(
 }
 
 /** 1 Shot について、どの状態で止まったかを決める。署名だけは呼び出し側が行う。 */
+/** 採用 Take が無い Shot の最初のフレーム（ADR-0029）。絵を作っている間は `drawing`。 */
+type StartFrameState = { readonly drawing: boolean; readonly assetId: MediaAssetId | null }
+
+/**
+ * 採用 Take が無い Shot の絵。**最初のフレーム（絵コンテの画像）があればそれを使う**（ADR-0029）。
+ * 作っている間は「作っています」と言って待たせる。どちらも無ければ Shot の状態で言い分ける。
+ */
+const posterWithoutTake = (
+  shot: Shot,
+  startFrame: StartFrameState,
+  assetsById: ReadonlyMap<MediaAssetId, MediaAsset>,
+  urlByKey: ReadonlyMap<string, string>,
+): ShotPoster => {
+  const base = { shotId: shot.id, takeId: null }
+  if (startFrame.drawing) return { ...base, thumbnailUrl: null, reason: SHOT_POSTER_REASON.drawing }
+
+  const frame = startFrame.assetId === null ? undefined : assetsById.get(startFrame.assetId)
+  if (frame !== undefined) {
+    const url = frame.thumbnailKey === null ? undefined : urlByKey.get(frame.thumbnailKey)
+    return url === undefined
+      ? { ...base, thumbnailUrl: null, reason: SHOT_POSTER_REASON.thumbnailNotReady }
+      : { ...base, thumbnailUrl: url, reason: null }
+  }
+
+  const reason =
+    shot.status === 'review'
+      ? SHOT_POSTER_REASON.notAdopted
+      : shot.status === 'generating'
+        ? SHOT_POSTER_REASON.generating
+        : SHOT_POSTER_REASON.noTake
+  return { ...base, thumbnailUrl: null, reason }
+}
+
 const resolveShotPoster = (
   shot: Shot,
+  startFrame: StartFrameState,
   takesById: ReadonlyMap<TakeId, Take>,
   assetsById: ReadonlyMap<MediaAssetId, MediaAsset>,
   urlByKey: ReadonlyMap<string, string>,
 ): ShotPoster => {
   const base = { shotId: shot.id }
 
-  if (shot.selectedTakeId === null) {
-    const reason =
-      shot.status === 'review'
-        ? SHOT_POSTER_REASON.notAdopted
-        : shot.status === 'generating'
-          ? SHOT_POSTER_REASON.generating
-          : SHOT_POSTER_REASON.noTake
-    return { ...base, takeId: null, thumbnailUrl: null, reason }
-  }
+  if (shot.selectedTakeId === null) return posterWithoutTake(shot, startFrame, assetsById, urlByKey)
 
   const take = takesById.get(shot.selectedTakeId)
   if (take === undefined) {
@@ -209,7 +244,29 @@ export const buildShotPosters = async (
   )
   const takesById = await loadById(takeIds, (id) => deps.takes.findById(id))
 
-  const assetIds = [...takesById.values()].map((take) => take.mediaAssetId)
+  const projectId = shots[0]?.projectId
+  const drawing = new Set(
+    projectId === undefined ? [] : (await deps.imageJobs.findActiveByProject(projectId)).map((job) => job.shotId),
+  )
+  const startFrames = new Map<ShotId, StartFrameState>(
+    await Promise.all(
+      shots.map(async (shot): Promise<readonly [ShotId, StartFrameState]> => {
+        const needsFrame = shot.selectedTakeId === null && !drawing.has(shot.id)
+        return [
+          shot.id,
+          {
+            drawing: drawing.has(shot.id),
+            assetId: needsFrame ? await manualStartFrameOf(deps.shotReferences, shot.id) : null,
+          },
+        ]
+      }),
+    ),
+  )
+
+  const assetIds = [
+    ...[...takesById.values()].map((take) => take.mediaAssetId),
+    ...[...startFrames.values()].flatMap((frame) => (frame.assetId === null ? [] : [frame.assetId])),
+  ]
   const assetsById = await loadById(assetIds, (id) => deps.mediaAssets.findById(id))
 
   const thumbnailKeys = [
@@ -228,7 +285,13 @@ export const buildShotPosters = async (
   const urlByKey = new Map(signed)
 
   return shots.map((shot) => {
-    const poster = resolveShotPoster(shot, takesById, assetsById, urlByKey)
+    const poster = resolveShotPoster(
+      shot,
+      startFrames.get(shot.id) ?? { drawing: false, assetId: null },
+      takesById,
+      assetsById,
+      urlByKey,
+    )
     return { ...poster, pending: isPending(poster) }
   })
 }

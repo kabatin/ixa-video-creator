@@ -27,6 +27,7 @@ import { shotRoutes, type GenerationQueue } from './routes/shots.js'
 import { shotBulkRoutes } from './routes/shots-bulk.js'
 import { shotEditRoutes } from './routes/shot-edits.js'
 import { shotStartFrameRoutes } from './routes/shot-start-frame.js'
+import { shotStartFrameGenerateRoutes, type StartFrameGenerateRoutesDeps } from './routes/shot-start-frame-generate.js'
 import { shotTakeImportRoutes } from './routes/shot-take-import.js'
 import { shotPosterRoutes } from './routes/shot-posters.js'
 import { uploadRoutes, type MediaIngestDeps } from './routes/uploads.js'
@@ -94,6 +95,11 @@ export type AppDeps = {
   shotCharacters: ShotCharacterRepository
   /** 手動の参照（いまは最初のフレームだけ・ADR-0025）。 */
   shotReferences: ShotReferenceRepository
+  /** 絵コンテの画像を作るジョブ（ADR-0029）。 */
+  imageJobs: StartFrameGenerateRoutesDeps['imageJobs']
+  imageQueue: StartFrameGenerateRoutesDeps['imageQueue']
+  /** どの口で作るか（`IMAGE_PROVIDER` から main.ts が決める）。 */
+  imageModel: StartFrameGenerateRoutesDeps['imageModel']
   brandAssets: BrandAssetRepository
   locations: LocationRepository
   scripts: ScriptRepository
@@ -210,6 +216,21 @@ export const createApp = (deps: AppDeps) => {
       projects,
       mediaAssets,
       shotReferences: deps.shotReferences,
+      imageJobs: deps.imageJobs,
+    }),
+  )
+  // 絵コンテの画像を作る（ADR-0029）。作るのは worker。
+  app.route(
+    '/',
+    shotStartFrameGenerateRoutes({
+      shots: deps.shots,
+      projects,
+      shotReferences: deps.shotReferences,
+      imageJobs: deps.imageJobs,
+      imageQueue: deps.imageQueue,
+      imageModel: deps.imageModel,
+      events: deps.events,
+      logger,
     }),
   )
   // 手持ちの動画を Take にする（ADR-0026）。
@@ -226,7 +247,15 @@ export const createApp = (deps: AppDeps) => {
   )
   app.route(
     '/',
-    shotPosterRoutes({ shots: deps.shots, takes: deps.takes, mediaAssets, projects, storage }),
+    shotPosterRoutes({
+      shots: deps.shots,
+      takes: deps.takes,
+      mediaAssets,
+      projects,
+      storage,
+      shotReferences: deps.shotReferences,
+      imageJobs: deps.imageJobs,
+    }),
   )
   app.route('/', eventRoutes({ projects, events: deps.events, logger }))
 

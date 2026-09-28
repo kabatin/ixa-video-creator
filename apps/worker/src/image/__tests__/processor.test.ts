@@ -13,7 +13,7 @@ import {
   type ShotReference,
 } from '@ixa/domain'
 import { manualStartFrameOf, replaceManualStartFrame } from '@ixa/generation'
-import { createInMemoryShotReferenceRepository } from '@ixa/generation/testing'
+import { createInMemoryImageJobRepository, createInMemoryShotReferenceRepository } from '@ixa/generation/testing'
 import { codexCliImageModel } from '@ixa/provider-image'
 import { createMemoryStorage } from '@ixa/storage'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -28,7 +28,7 @@ import {
   silentLogger,
 } from '../../generation/__tests__/doubles.js'
 import { processImageJob, type ImageProcessorDeps } from '../processor.js'
-import { FAKE_PNG, fakeImageProvider, inMemoryImageJobs } from './doubles.js'
+import { FAKE_PNG, fakeImageProvider } from './doubles.js'
 
 /**
  * 絵コンテの画像を 1 枚作る（ADR-0029）。成功したら素材として取り込み、Shot の最初のフレームを差し替える。
@@ -83,7 +83,7 @@ const contextWithManual = (references: readonly Pick<ShotReference, 'mediaAssetI
 const setup = (options: { outcome?: Parameters<typeof fakeImageProvider>[1]; context?: GenerationContextSource } = {}) => {
   const job = queuedJob()
   const deps = {
-    imageJobs: inMemoryImageJobs([job]),
+    imageJobs: createInMemoryImageJobRepository([job]),
     shots: inMemoryShots([shot]),
     projects: inMemoryProjects([project]),
     mediaAssets: inMemoryMediaAssets(),
