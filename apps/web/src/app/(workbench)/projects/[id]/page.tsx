@@ -46,7 +46,7 @@ const attempt = async <T,>(label: string, run: () => Promise<T>): Promise<Part<T
 const BACK = Object.freeze([Object.freeze({ href: '/', label: 'プロジェクト一覧へ' })])
 
 const Blocked = ({ title, message, hint }: { title: string; message: string; hint: string }) => (
-  <main className="h-full overflow-auto p-6">
+  <main className="relative h-full overflow-auto p-6">
     <ErrorPanel title={title} message={message} hint={hint} actions={BACK} />
   </main>
 )

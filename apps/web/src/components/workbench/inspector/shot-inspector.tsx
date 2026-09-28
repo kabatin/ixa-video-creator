@@ -80,7 +80,7 @@ export const ShotInspector = ({
           />
         }
       />
-      <div className="workbench-panel-body min-h-0 flex-1 overflow-auto">
+      <div className="workbench-panel-body relative min-h-0 flex-1 overflow-auto">
         <div
           ref={(element) => {
             sections.current.settings = element

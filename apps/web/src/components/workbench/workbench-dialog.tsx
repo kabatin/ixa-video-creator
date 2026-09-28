@@ -112,7 +112,7 @@ export const WorkbenchDialog = ({
               閉じる
             </button>
           </header>
-          <div className="min-h-0 flex-1 overflow-auto p-4">{children}</div>
+          <div className="relative min-h-0 flex-1 overflow-auto p-4">{children}</div>
         </div>
       )}
     </dialog>

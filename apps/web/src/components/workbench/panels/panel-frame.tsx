@@ -28,7 +28,7 @@ export const PanelFrame = ({ toolbar, flush = false, children }: PanelFrameProps
     <div
       // 中の部品が「このパネルにどれだけ高さがあるか」を測る足がかり（`cut-editor` の波形）。
       data-panel-body=""
-      className={`min-h-0 flex-1 overflow-auto ${flush ? '' : 'workbench-panel-body'}`}
+      className={`relative min-h-0 flex-1 overflow-auto ${flush ? '' : 'workbench-panel-body'}`}
     >
       {children}
     </div>

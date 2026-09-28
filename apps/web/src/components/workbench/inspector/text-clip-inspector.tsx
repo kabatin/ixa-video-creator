@@ -119,7 +119,7 @@ export const TextClipInspector = ({ id, api }: { readonly id: TimelineClipId; re
           />
         }
       />
-      <div className="workbench-panel-body min-h-0 flex-1 overflow-auto">
+      <div className="workbench-panel-body relative min-h-0 flex-1 overflow-auto">
         <Section title="文字">
           <AutoSaveField
             label="文字"

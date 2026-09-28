@@ -62,7 +62,7 @@ export const AssetTree = () => {
         className="h-7 w-full rounded border border-line-strong bg-bg px-2 text-sm text-text"
       />
 
-      <nav aria-label="素材" className="min-h-0 flex-1 space-y-1 overflow-auto">
+      <nav aria-label="素材" className="relative min-h-0 flex-1 space-y-1 overflow-auto">
         <Group
           label="楽曲"
           count={tracks}

@@ -39,7 +39,7 @@ const splitTags = (text: string): string[] =>
     .filter((value) => value !== '')
 
 const Body = ({ children }: { readonly children: React.ReactNode }) => (
-  <div className="workbench-panel-body min-h-0 flex-1 overflow-auto">{children}</div>
+  <div className="workbench-panel-body relative min-h-0 flex-1 overflow-auto">{children}</div>
 )
 
 const Frame = ({

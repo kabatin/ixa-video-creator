@@ -56,7 +56,7 @@ export const stackSectionId = (id: PanelId): string => `workbench-section-${id}`
  * 各パネルは自前でスクロールするので、区画ごとに高さを与える。
  */
 export const WorkbenchStack = () => (
-  <div className="h-full space-y-3 overflow-auto p-2">
+  <div className="relative h-full space-y-3 overflow-auto p-2">
     {STACK.map((entry) => (
       <section
         key={entry.id}
