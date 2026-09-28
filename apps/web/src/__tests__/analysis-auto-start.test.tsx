@@ -92,10 +92,12 @@ describe('解析が失敗したとき', () => {
 
     render(<AnalysisStarter track={aTrack()} />)
 
+    // ダイアログを閉じるのは描いた後（`ProgressDialog` の effect）なので、理由が出た瞬間には
+    // まだ開いていることがある。**両方が揃うのを待つ**（CI の遅いときにだけ落ちていた）。
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toContain(FAILURE)
+      expect(screen.queryByRole('progressbar')).toBeNull()
     }, PROBE_WAIT)
-    expect(screen.queryByRole('progressbar')).toBeNull()
   })
 
   it('失敗が無いあいだは待ち続ける', async () => {
