@@ -488,8 +488,7 @@ export const CutEditor = ({
       <AudioTransport
         playback={playback}
         /**
-         * 再生ボタンは**見えているプレイヤーの直下にひとつだけ**（`transport-bar.tsx`）。
-         * プレビューが開いていればそちらが出すので、ここには出さない。
+         * ワークベンチでは操作列（`TransportButtons`）を `playButton` で差し込む（`transport-bar.tsx` の経緯）。
          * 音量はステータスバーにひとつだけ置くので、ここには出さない。
          */
         showPlay={showPlay}

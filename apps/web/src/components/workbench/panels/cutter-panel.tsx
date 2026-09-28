@@ -6,7 +6,7 @@ import { usePreferences } from '@/components/preferences-root'
 import { useTransport, useWorkbench } from '@/components/workbench/workbench-context'
 import { MusicGate } from '@/components/workbench/panels/music-gate'
 import { PanelFrame } from '@/components/workbench/panels/panel-frame'
-import { SharedPlayButton } from '@/components/workbench/shared-play-button'
+import { TransportButtons } from '@/components/workbench/transport-buttons'
 
 /**
  * 聴きながら切る（中央下）。中身は既存の `cut-editor`。
@@ -35,10 +35,9 @@ export const CutterPanel = ({ visible }: { readonly visible: boolean }) => {
             sequences={workbench.sequences}
             initialSnapEnabled={preferences.playback.snapToBeat}
             keyboardShortcuts={visible && workbench.dialog === null}
-            // 再生ボタンを出すのは、いま操作列を持っているパネルだけ。
-            showPlay={transportControls.host === 'cutter'}
-            // プレビューの下と同じ部品。見た目も「いま何か鳴っているか」の読み方も揃える。
-            playButton={<SharedPlayButton owner="cutter" />}
+            // プレビューの下と同じ操作列。波形の直下に置くので、押せばこのパネルが鳴るのは場所で分かる
+            // （2026-09-28、制作者の提案で両方に置く）。見た目も「いま何か鳴っているか」の読み方も揃える。
+            playButton={<TransportButtons owner="cutter" durationSec={analysis.durationSec} />}
             sync={{
               othersPlaying: transport.playing && transport.owner !== 'cutter',
               seek: transport.seek,

@@ -3,17 +3,19 @@
 import { useTransport, useWorkbench } from '@/components/workbench/workbench-context'
 import { formatClock } from '@/lib/format-time'
 import { TRANSPORT_OWNER_LABELS } from '@/lib/transport-labels'
-import { SharedPlayButton } from '@/components/workbench/shared-play-button'
+import { TransportButtons } from '@/components/workbench/transport-buttons'
 
 /**
- * 再生の操作。**画面にひとつだけ、見えているプレイヤーの直下に置く。**
+ * プレビューの下の操作列（前の境目へ・1 コマ戻る・再生・1 コマ進む・次の境目へ）。
  *
- * 以前はパネルごとに再生ボタンがあり、プレビューと「聴きながら切る」を同時に開くと
- * 同じ見た目のボタンが縦に 2 つ並んだ。どちらが何を鳴らすのか区別が無い。
- * 一度ステータスバーへまとめたが、**映像の道具で再生ボタンが画面の最下段にあるのは
- * 探す場所として素直ではない**（制作者の指摘）。プレイヤーの下が定位置。
+ * 経緯:
+ * 1. はじめはパネルごとに見た目の同じ再生ボタンがあり、縦に 2 つ並んでどちらが何を鳴らすのか
+ *    区別が無かった → 画面にひとつだけにした
+ * 2. **映像の道具で再生ボタンが画面の最下段にあるのは探す場所として素直ではない**（制作者の指摘）
+ *    → プレイヤーの直下を定位置にした
+ * 3. ボタン 1 つでは寂しい。一般的な動画編集ツールの並びにし、「聴きながら切る」にも置く
+ *    （2026-09-28、制作者の提案）。**それぞれのプレイヤーの直下に置くので、どれが鳴るかは場所で分かる**
  *
- * 出す場所は `transportControls.host` が決める（絵が出るほうを先に選ぶ）。
  * **出した場所が鳴らす相手でもある。** 押したものと鳴るものが食い違わないように。
  * 音量は作業中に何度も触るものではないのでステータスバーに置いたまま。
  */
@@ -45,7 +47,7 @@ export const TransportBar = ({ owner, durationSec = null }: TransportBarProps) =
       <span className="justify-self-start text-xs text-accent">
         {elsewhere === null ? '' : `${elsewhere} が再生中`}
       </span>
-      <SharedPlayButton owner={owner} />
+      <TransportButtons owner={owner} durationSec={durationSec} />
       <span className="justify-self-end font-mono text-sm tabular-nums text-text">
         {formatClock(transport.currentSec)}
         {durationSec !== null && (

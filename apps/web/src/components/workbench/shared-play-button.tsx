@@ -1,9 +1,10 @@
 'use client'
 
+import { PauseIcon, PlayIcon } from '@/components/workbench/transport-icons'
 import { useTransportState, useWorkbench, type TransportOwner } from '@/components/workbench/workbench-context'
 
 /**
- * 画面でただひとつの再生ボタン。**プレビューの下でも波形の上でも同じ部品を使う。**
+ * 再生ボタン。**プレビューの下でも波形の上でも同じ部品を使う**（操作列 `TransportButtons` の真ん中）。
  *
  * 以前は置き場所で別の部品だった（プレビューは黄色の ▶、波形は文字の「再生」）。
  * 見た目が違うだけでなく、波形側は**自分の音**しか見ていなかったので、
@@ -29,7 +30,7 @@ export const SharedPlayButton = ({ owner }: { readonly owner: TransportOwner }) 
       }}
       className="inline-flex h-7 min-w-10 shrink-0 items-center justify-center rounded bg-accent text-base text-accent-fg hover:bg-accent/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
     >
-      {playing ? '⏸' : '▶'}
+      {playing ? <PauseIcon /> : <PlayIcon />}
     </button>
   )
 }
