@@ -42,6 +42,7 @@ export const StoryboardDraftItemId = brandedId('StoryboardDraftItemId')
 export const EditBatchId = brandedId('EditBatchId')
 export const RenderJobId = brandedId('RenderJobId')
 export const TextStyleId = brandedId('TextStyleId')
+export const ImageGenerationJobId = brandedId('ImageGenerationJobId')
 
 export type WorkspaceId = z.infer<typeof WorkspaceId>
 export type ProjectId = z.infer<typeof ProjectId>
@@ -71,6 +72,7 @@ export type StoryboardDraftItemId = z.infer<typeof StoryboardDraftItemId>
 export type EditBatchId = z.infer<typeof EditBatchId>
 export type RenderJobId = z.infer<typeof RenderJobId>
 export type TextStyleId = z.infer<typeof TextStyleId>
+export type ImageGenerationJobId = z.infer<typeof ImageGenerationJobId>
 
 /**
  * ID の発行器。**同じミリ秒でも必ず増える**（`monotonicFactory`）。

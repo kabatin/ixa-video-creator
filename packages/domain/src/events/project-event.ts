@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { GenerationJobId, ProjectId, ShotId, TakeId } from '../common/ids.js'
+import { GenerationJobId, ImageGenerationJobId, ProjectId, ShotId, TakeId } from '../common/ids.js'
+import { ImageGenerationJobStatus } from '../generation/image-job.js'
 import { GenerationJobStatus } from '../generation/take.js'
 import { ShotStatus } from '../shot/shot.js'
 
@@ -44,6 +45,16 @@ export const ProjectEvent = z.discriminatedUnion('type', [
     /** 失敗したときの理由。成功・実行中は null。**黙って失敗にしない**（lessons L-015）。 */
     error: z.string().nullable(),
   }),
+  /** 絵コンテの画像を作るジョブの状態が変わった（ADR-0029）。成功したら最初のフレームも替わっている。 */
+  z.object({
+    ...base,
+    type: z.literal('image_job.status'),
+    shotId: ShotId,
+    jobId: ImageGenerationJobId,
+    status: ImageGenerationJobStatus,
+    /** 失敗したときの理由。成功・実行中は null。 */
+    error: z.string().nullable(),
+  }),
 ])
 export type ProjectEvent = z.infer<typeof ProjectEvent>
 
@@ -73,4 +84,5 @@ export type ProjectEventSubscriber = {
 export const SHOT_LIST_EVENT_TYPES: readonly ProjectEventType[] = [
   'shot.status',
   'generation_job.status',
+  'image_job.status',
 ]

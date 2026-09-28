@@ -1038,6 +1038,7 @@ timeline_clips
 text_styles                  (テロップの見た目に名前を付けたもの。当てると値をテロップへ写す / ADR-0028)
 generation_jobs
 takes                        (JSONB: spec / provider_params。追記のみ)
+image_generation_jobs        (絵コンテの画像を作るジョブ。Shot の最初のフレームになる / ADR-0029。追記のみ)
 review_runs
 review_findings
 storyboard_draft_runs        (絵コンテ下書きの実行 1 回分)

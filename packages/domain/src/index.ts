@@ -30,6 +30,7 @@ export * from './generation/context-port.js'
 export * from './generation/cost-guard.js'
 export * from './generation/cost-meter.js'
 export * from './generation/take.js'
+export * from './generation/image-job.js'
 
 // ストーリーボード（音楽セクション → Shot 割り）
 export * from './storyboard/shot-allocation.js'
