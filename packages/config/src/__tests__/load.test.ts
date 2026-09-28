@@ -50,6 +50,16 @@ describe('loadConfig', () => {
     }
   })
 
+  /**
+   * 絵コンテの画像（ADR-0029）。**既定はスタブ。** `codex_cli` は手元の Codex CLI を呼び、
+   * 契約の利用枠を使うので、明示的に切り替えたときだけ走らせる。
+   */
+  it('絵コンテの画像は既定でスタブ。codex_cli に切り替えられ、知らない値は弾く', () => {
+    expect(loadConfig({ ...requiredEnv }).imageProvider).toBe('stub')
+    expect(loadConfig({ ...requiredEnv, IMAGE_PROVIDER: 'codex_cli' }).imageProvider).toBe('codex_cli')
+    expect(() => loadConfig({ ...requiredEnv, IMAGE_PROVIDER: 'openai' })).toThrow(/IMAGE_PROVIDER/)
+  })
+
   it('既定値が効く: S3_FORCE_PATH_STYLE 未指定で true、LOG_LEVEL 未指定で info', () => {
     const config = loadConfig({ ...requiredEnv })
 

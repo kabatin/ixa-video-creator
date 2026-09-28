@@ -75,6 +75,13 @@ export const EnvSchema = z.object({
    * 無制限でもないので、明示的に切り替えたときだけ走らせる。
    */
   STORYBOARD_DRAFTER: z.enum(['stub', 'claude_cli']).default('stub'),
+  /**
+   * 絵コンテの画像（Shot の最初のフレーム）を作る口（ADR-0029）。
+   *
+   * **既定はスタブ。** `codex_cli` にすると手元の Codex CLI を起動し、契約の利用枠を使う。
+   * 従量課金ではないが無制限でもないので、明示的に切り替えたときだけ走らせる。
+   */
+  IMAGE_PROVIDER: z.enum(['stub', 'codex_cli']).default('stub'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
   // 任意（既定値なし・nullable）
@@ -94,6 +101,8 @@ export interface AppConfig {
   nodeEnv: Env['NODE_ENV']
   /** 絵コンテ下書きに使う口。既定はスタブ。 */
   storyboardDrafter: Env['STORYBOARD_DRAFTER']
+  /** 絵コンテの画像を作る口（ADR-0029）。既定はスタブ。 */
+  imageProvider: Env['IMAGE_PROVIDER']
   logLevel: Env['LOG_LEVEL']
   database: {
     url: string

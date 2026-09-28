@@ -28,6 +28,7 @@ const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
     corsOrigins: [],
     audio: { url: 'http://audio' },
     storyboardDrafter: 'stub',
+    imageProvider: 'stub',
     logLevel: 'info',
     nodeEnv: 'development',
     providers: {
@@ -86,6 +87,13 @@ describe('describeEnvironment', () => {
       const drafter = status.settings.find((s) => s.envName === 'STORYBOARD_DRAFTER')
       expect(drafter?.notable).toBe(true)
       expect(drafter?.note).toContain('利用枠')
+    })
+
+    it('絵コンテの画像が Codex CLI なら目立たせる（契約の利用枠を使う）', () => {
+      const status = describeEnvironment(aConfig({ imageProvider: 'codex_cli' }))
+      const image = status.settings.find((s) => s.envName === 'IMAGE_PROVIDER')
+      expect(image?.notable).toBe(true)
+      expect(image?.note).toContain('利用枠')
     })
 
     it('スタブの既定（stub / 0 / 0）は目立たせない', () => {

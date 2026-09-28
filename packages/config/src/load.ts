@@ -52,6 +52,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
   return {
     nodeEnv: parsed.NODE_ENV,
     storyboardDrafter: parsed.STORYBOARD_DRAFTER,
+    imageProvider: parsed.IMAGE_PROVIDER,
     logLevel: parsed.LOG_LEVEL,
     corsOrigins: parsed.CORS_ORIGINS,
     database: {

@@ -98,6 +98,16 @@ export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
           : 'Claude を実際に呼ぶ。契約の利用枠を使う。',
     },
     {
+      label: '絵コンテの画像',
+      envName: 'IMAGE_PROVIDER',
+      value: config.imageProvider,
+      notable: config.imageProvider !== 'stub',
+      note:
+        config.imageProvider === 'stub'
+          ? '仮の絵（色の面）を作る。費用は発生しない。'
+          : 'Codex CLI を実際に呼ぶ。契約の利用枠を使う（1 枚 70 秒ほど）。',
+    },
+    {
       label: 'スタブをわざと失敗させる割合',
       envName: 'STUB_VIDEO_FAILURE_RATE',
       value: config.providers.stubVideoFailureRate.toFixed(2),
