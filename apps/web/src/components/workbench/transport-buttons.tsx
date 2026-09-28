@@ -45,6 +45,7 @@ const StepButton = ({
  * - 再生だけは**置かれたパネルが鳴る**（`SharedPlayButton`）
  * - 1 コマは書き出しと同じ 1/fps 秒。コマ送りは止めてから動かす（一般的な道具と同じ）
  * - 境目は Shot の頭と終わり・曲の頭と終わり。境目へ飛んでも再生は止めない
+ * - 再生中の「前の境目へ」は、いまの Shot の頭を飛ばして 1 つ前の Shot の頭へ（`previousEditPoint`）
  *
  * 位置は押した瞬間に読む（`getTransport`）。**毎コマ描き直さない**（`@/lib/playhead-sec`）。
  */
@@ -72,7 +73,13 @@ export const TransportButtons = ({
 
   return (
     <div role="group" aria-label="再生の操作" className="flex shrink-0 items-center gap-0.5">
-      <StepButton label="前の境目へ" onClick={() => jumpTo(previousEditPoint(points, now(), fps))}>
+      <StepButton
+        label="前の境目へ"
+        onClick={() => {
+          const { currentSec, playing } = transportControls.getTransport()
+          jumpTo(previousEditPoint(points, currentSec, fps, { playing }))
+        }}
+      >
         <PreviousEditIcon />
       </StepButton>
       <StepButton label="1コマ戻る" onClick={() => stepFrame(-1)}>

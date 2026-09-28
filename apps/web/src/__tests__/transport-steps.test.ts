@@ -71,6 +71,20 @@ describe('前の境目へ・次の境目へ', () => {
     expect(nextEditPoint(points, 7, FPS)).toBe(9.5)
   })
 
+  /**
+   * **再生中は、いまの Shot の頭を飛ばして 1 つ前の Shot の頭へ。** 押す間にも位置は進むので、
+   * 止まっているときと同じ規則だと、何度押してもいまの Shot の頭へ戻るだけになる
+   * （2026-09-28、制作者の指摘）。
+   */
+  it('再生中は、いまの Shot の頭を飛ばして 1 つ前へ', () => {
+    expect(previousEditPoint(points, 7, FPS, { playing: true })).toBe(0)
+    expect(previousEditPoint(points, 10, FPS, { playing: true })).toBe(5)
+  })
+
+  it('再生中でも最初の Shot の中なら曲の頭へ', () => {
+    expect(previousEditPoint(points, 3, FPS, { playing: true })).toBe(0)
+  })
+
   it('頭より前・最後より後ろは無い（null）', () => {
     expect(previousEditPoint(points, 0, FPS)).toBeNull()
     expect(nextEditPoint(points, 12, FPS)).toBeNull()

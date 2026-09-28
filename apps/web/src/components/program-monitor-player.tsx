@@ -223,6 +223,20 @@ export const ProgramMonitorPlayer = ({
     }
   }, [])
 
+  /**
+   * 止める・鳴らすの指示。**飛ぶ指示より先に当てる**（effect は書いた順に走る）。
+   *
+   * Player の `seekTo` は、再生中だと一度止めて飛び、次の描画のあとで自分から再開する。
+   * 先に飛ぶと、同じ描画で届いた「止める」はもう止まっているとして素通りし、そのあと再開された
+   * （再生中のコマ送りで、止まらずに元の位置へ引き戻されて見えた。2026-09-28、制作者の指摘）。
+   */
+  useEffect(() => {
+    const player = playerRef.current
+    if (player === null) return
+    if (playing && !player.isPlaying()) player.play()
+    if (!playing && player.isPlaying()) player.pause()
+  }, [playing])
+
   // 利用者の指示があったときだけ飛ぶ。同じ指示（同じ serial）では飛び直さない。
   useEffect(() => {
     const player = playerRef.current
@@ -235,13 +249,6 @@ export const ProgramMonitorPlayer = ({
       seekingRef.current = false
     }
   }, [seek, fps])
-
-  useEffect(() => {
-    const player = playerRef.current
-    if (player === null) return
-    if (playing && !player.isPlaying()) player.play()
-    if (!playing && player.isPlaying()) player.pause()
-  }, [playing])
 
   // 取り付け直後にも当てる。`initiallyMuted` だけだと音量そのものが 100% のまま残る。
   useEffect(() => {

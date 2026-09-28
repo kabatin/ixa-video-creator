@@ -37,6 +37,9 @@ const harness = vi.hoisted(() => ({
   initialFrame: null as number | null,
   listeners: new Map<string, Set<Listener>>(),
   setFrame: null as ((frame: number) => void) | null,
+  /** 再生中の seekTo で止めた。実物は**次の描画のあと**で自分から再開する。 */
+  pausedToResume: false,
+  rerender: null as (() => void) | null,
   emit(name: string, detail: unknown) {
     for (const listener of this.listeners.get(name) ?? []) listener({ detail })
   },
@@ -49,6 +52,8 @@ const harness = vi.hoisted(() => ({
     this.initialFrame = null
     this.listeners = new Map()
     this.setFrame = null
+    this.pausedToResume = false
+    this.rerender = null
   },
 }))
 
@@ -68,10 +73,12 @@ vi.mock('@remotion/player', async () => {
     readonly initialFrame?: number
   }) => {
     const [frame, setFrame] = useReactState(initialFrame ?? 0)
+    const [, setTick] = useReactState(0)
     const containerRef = useRef<HTMLDivElement | null>(null)
 
     harness.frame = frame
     harness.setFrame = setFrame
+    harness.rerender = () => setTick((tick) => tick + 1)
     harness.initialFrame = initialFrame ?? null
 
     useImperativeHandle(
@@ -102,22 +109,19 @@ vi.mock('@remotion/player', async () => {
         },
         isMuted: () => harness.muted,
         /**
-         * `@remotion/player` と同じ振る舞い。
-         * **再生中なら一度 `pause` を配ってから飛び、直後に自分で再開する。**
-         * この一瞬の `pause` を親へ渡すと再生が勝手に止まる。
+         * `@remotion/player` と同じ振る舞い（`PlayerUI.js` の `seekTo`）。
+         * **再生中なら一度 `pause` を配ってから飛び、次の描画のあとの effect で自分から再開する。**
+         * この一瞬の `pause` を親へ渡すと再生が勝手に止まる。再開は**その間に止めても**起きる。
          */
         seekTo: (target: number) => {
           harness.seekToCalls.push(target)
-          const resume = harness.playing
-          if (resume) {
+          if (harness.playing) {
+            harness.pausedToResume = true
             harness.playing = false
             harness.emit('pause', undefined)
+            harness.rerender?.()
           }
           harness.setFrame?.(target)
-          if (resume) {
-            harness.playing = true
-            harness.emit('play', undefined)
-          }
         },
         addEventListener: (name: string, listener: Listener) => {
           const set = harness.listeners.get(name) ?? new Set<Listener>()
@@ -135,6 +139,14 @@ vi.mock('@remotion/player', async () => {
     useEffect(() => {
       harness.emit('frameupdate', { frame })
     }, [frame])
+
+    // 実物の「止めて飛んだら再開する」effect（`hasPausedToResume && !playing` で play）。
+    useEffect(() => {
+      if (!harness.pausedToResume || harness.playing) return
+      harness.pausedToResume = false
+      harness.playing = true
+      harness.emit('play', undefined)
+    })
 
     return (
       <div ref={containerRef}>
@@ -349,6 +361,29 @@ describe('利用者が位置を指示したときは飛ぶ', () => {
     expect(harness.seekToCalls).toEqual([90])
     expect(host.playingEvents).not.toContain(false)
     expect(host.playing).toBe(true)
+  })
+
+  /**
+   * 再生中のコマ送り（止めて 1 コマ動かす）。一時停止と移動の指示が**同じ描画で**届く。
+   * 以前は先に飛んでいたので、Player が「止めて飛んだら再開する」を始め、止める指示は
+   * 「もう止まっている」として素通りした。結果、再生が続いて元の位置へ引き戻されたように見えた
+   * （2026-09-28、制作者の指摘）。**止めてから飛ぶ。**
+   */
+  it('再生中に「止めて飛ぶ」を同時に指示すると、止まってその位置に居る', async () => {
+    renderWithPrefs(<Host document={makeDocument()} />)
+
+    act(() => host.setPlaying?.(true))
+    for (let frame = 1; frame <= 5; frame += 1) await advance(frame)
+    await act(async () => {
+      host.setPlaying?.(false)
+      host.seekTo?.(3)
+      await Promise.resolve()
+    })
+
+    expect(harness.seekToCalls).toEqual([90])
+    expect(harness.playing).toBe(false)
+    expect(host.playing).toBe(false)
+    expect(harness.frame).toBe(90)
   })
 
   it('停止中に飛んでも再生は始まらない', () => {

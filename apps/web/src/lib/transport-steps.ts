@@ -47,12 +47,23 @@ export const editPointsOf = (
  */
 const onPointSec = (fps: number): number => 0.5 / fps
 
-/** 手前の境目。無ければ null。 */
+/**
+ * 手前の境目。無ければ null。
+ *
+ * **再生中は、いまの Shot の頭を飛ばして 1 つ前へ。** 押す間にも位置は進むので、
+ * 止まっているときと同じ規則だと、何度押してもいまの Shot の頭へ戻るだけになる
+ * （2026-09-28、制作者の指摘）。最初の Shot の中なら曲の頭へ。
+ */
 export const previousEditPoint = (
   points: readonly number[],
   currentSec: number,
   fps: number,
-): number | null => points.findLast((sec) => sec < currentSec - onPointSec(fps)) ?? null
+  options: { readonly playing?: boolean } = {},
+): number | null => {
+  const behind = points.filter((sec) => sec < currentSec - onPointSec(fps))
+  const skip = options.playing === true && behind.length > 1 ? 2 : 1
+  return behind.at(-skip) ?? null
+}
 
 /** 先の境目。無ければ null。 */
 export const nextEditPoint = (

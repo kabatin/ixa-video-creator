@@ -55,14 +55,23 @@ describe('TransportButtons', () => {
     expect(vi.mocked(value.transportControls.seekTo).mock.calls.at(-1)?.[0]).toBeCloseTo(29 / 30)
   })
 
-  it('次の境目へ・前の境目へは、Shot の境目へ飛ぶ（再生は止めない）', async () => {
-    const value = renderButtons(at(5, true))
+  it('止まっているとき、次の境目へ・前の境目へは Shot の境目へ飛ぶ', async () => {
+    const value = renderButtons(at(5))
 
     await userEvent.click(screen.getByRole('button', { name: '次の境目へ' }))
     await userEvent.click(screen.getByRole('button', { name: '前の境目へ' }))
 
     expect(value.transportControls.seekTo).toHaveBeenNthCalledWith(1, 8)
     expect(value.transportControls.seekTo).toHaveBeenNthCalledWith(2, 4)
+  })
+
+  /** 再生中はいまの Shot の頭を飛ばす。再生は止めない。 */
+  it('再生中の前の境目へは、1 つ前の Shot の頭へ（再生は止めない）', async () => {
+    const value = renderButtons(at(10, true))
+
+    await userEvent.click(screen.getByRole('button', { name: '前の境目へ' }))
+
+    expect(value.transportControls.seekTo).toHaveBeenCalledWith(4)
     expect(value.transportControls.pause).not.toHaveBeenCalled()
   })
 
