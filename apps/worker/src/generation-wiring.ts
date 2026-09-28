@@ -40,6 +40,8 @@ import {
 import type { MediaProcessorDeps } from './media/index.js'
 import type { RenderProcessorDeps } from './render/index.js'
 import { createReviewWiring, type ReviewWiring } from './review-wiring.js'
+import { createImageWiring } from './image-wiring.js'
+import type { ImageProcessorDeps } from './image/index.js'
 import { createRegenerationEnqueue } from './regeneration-wiring.js'
 import { QUEUE_NAMES } from './queues.js'
 
@@ -57,6 +59,8 @@ export type GenerationWiring = {
   readonly analysis: AnalysisProcessorDeps
   readonly review: ReviewWiring['review']
   readonly regeneration: ReviewWiring['regeneration']
+  /** 絵コンテの画像（ADR-0029）。 */
+  readonly image: ImageProcessorDeps
   readonly queue: Queue
   close(): Promise<void>
 }
@@ -251,6 +255,16 @@ export const createGenerationWiring = (
     analysis,
     review: reviewWiring.review,
     regeneration: reviewWiring.regeneration,
+    image: createImageWiring({
+      config,
+      db,
+      storage,
+      context: deps.context,
+      mediaQueue: deps.mediaQueue,
+      events: deps.events,
+      logger,
+      stubOutputDir,
+    }),
     queue,
     close: async () => {
       await queue.close()

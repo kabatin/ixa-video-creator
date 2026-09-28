@@ -10,6 +10,7 @@ export const QUEUE_NAMES = {
   render: 'render',
   analysis: 'analysis',
   regeneration: 'regeneration',
+  image: 'image',
 } as const
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES]
@@ -37,6 +38,11 @@ export const QUEUE_CONFIGS: readonly QueueConfig[] = [
    * 再生成の投入に失敗しただけでレビューをやり直させたくない。
    */
   { name: QUEUE_NAMES.regeneration, concurrency: 4 },
+  /**
+   * 絵コンテの画像（ADR-0029）。**同時 1 本。** Codex CLI は契約の利用枠で動き、1 枚 70 秒ほどかかる。
+   * 何本も同時に走らせると利用枠の上限に当たりやすく、手元の機械も重くなる。
+   */
+  { name: QUEUE_NAMES.image, concurrency: 1 },
 ]
 
 const concurrencyEnvVarName = (queueName: QueueName): string =>

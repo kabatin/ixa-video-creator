@@ -24,6 +24,7 @@
     "@ixa/media": "workspace:*",
     "@ixa/music": "workspace:*",
     "@ixa/provider-core": "workspace:*",
+    "@ixa/provider-image": "workspace:*",
     "@ixa/provider-llm": "workspace:*",
     "@ixa/provider-video": "workspace:*",
     "@ixa/render": "workspace:*",

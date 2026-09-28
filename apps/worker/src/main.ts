@@ -14,6 +14,7 @@ import { processRenderJob } from './render/index.js'
 import { processAnalysisJob } from './analysis/index.js'
 import { processReviewJob } from './review/index.js'
 import { processRegenerationJob } from './regeneration/index.js'
+import { processImageJob } from './image/index.js'
 
 /** graceful shutdown の既定タイムアウト（ミリ秒）。超過したら強制終了する。 */
 const SHUTDOWN_TIMEOUT_MS = 30_000
@@ -51,6 +52,8 @@ const createWorkers = (
             return (await processReviewJob(generation.review, job.data)).state
           case QUEUE_NAMES.regeneration:
             return (await processRegenerationJob(generation.regeneration, job.data)).state
+          case QUEUE_NAMES.image:
+            return (await processImageJob(generation.image, job.data)).state
           default:
             return (await processNoopJob(job.data as NoopJobData)).echoed
         }

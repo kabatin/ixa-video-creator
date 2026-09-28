@@ -8,8 +8,8 @@ import {
 } from '../queues.js'
 
 describe('QUEUE_CONFIGS', () => {
-  it('6つのキューがすべて定義されている', () => {
-    expect(QUEUE_CONFIGS).toHaveLength(6)
+  it('7つのキューがすべて定義されている', () => {
+    expect(QUEUE_CONFIGS).toHaveLength(7)
     expect(QUEUE_CONFIGS.map((config) => config.name).sort()).toEqual(
       Object.values(QUEUE_NAMES).sort(),
     )
@@ -27,6 +27,8 @@ describe('QUEUE_CONFIGS', () => {
       render: 1,
       analysis: 2,
       regeneration: 4,
+      // 絵コンテの画像（ADR-0029）。Codex CLI は契約の利用枠で動くので、同時に何本も走らせない。
+      image: 1,
     })
   })
 })
@@ -85,6 +87,7 @@ describe('resolveQueueConfigs', () => {
       render: 1,
       analysis: 2,
       regeneration: 4,
+      image: 1,
     })
   })
 

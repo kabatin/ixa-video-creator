@@ -201,6 +201,9 @@ importers:
       '@ixa/provider-core':
         specifier: workspace:*
         version: link:../../packages/providers/core
+      '@ixa/provider-image':
+        specifier: workspace:*
+        version: link:../../packages/providers/image
       '@ixa/provider-llm':
         specifier: workspace:*
         version: link:../../packages/providers/llm
