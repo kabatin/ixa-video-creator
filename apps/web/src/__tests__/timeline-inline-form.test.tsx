@@ -55,7 +55,6 @@ const setup = (
     readonly errors?: InlineFormErrors
     readonly busy?: boolean
     readonly withRemove?: boolean
-    readonly onEditLook?: () => void
   } = {},
 ): Handlers & {
   readonly user: ReturnType<typeof userEvent.setup>
@@ -74,7 +73,6 @@ const setup = (
       onSubmit={onSubmit}
       onDismiss={onDismiss}
       onRemove={options.withRemove === true ? onRemove : undefined}
-      {...(options.onEditLook === undefined ? {} : { onEditLook: options.onEditLook })}
     />,
   )
   return { onSubmit, onDismiss, onRemove, user: userEvent.setup(), unmount: view.unmount }
@@ -276,23 +274,6 @@ describe('TimelineInlineForm — 既にあるものを開いたとき', () => {
     await user.click(screen.getByRole('button', { name: '削除（トランジション）' }))
 
     expect(onRemove).toHaveBeenCalledTimes(1)
-  })
-})
-
-/** テロップの見た目はインスペクターで直す（ADR-0028）。小窓は狭いので入口だけ置く。 */
-describe('TimelineInlineForm — 見た目を編集', () => {
-  it('渡されたときだけ出し、押すと呼ぶ', async () => {
-    const onEditLook = vi.fn()
-    const { user } = setup(TEXT_DRAFT, { withRemove: true, onEditLook })
-
-    await user.click(screen.getByRole('button', { name: '見た目を編集' }))
-
-    expect(onEditLook).toHaveBeenCalledTimes(1)
-  })
-
-  it('渡されなければ出さない', () => {
-    setup(TEXT_DRAFT)
-    expect(screen.queryByRole('button', { name: '見た目を編集' })).toBeNull()
   })
 })
 

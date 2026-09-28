@@ -131,8 +131,12 @@ export type TimelineEditorProps = {
   readonly posters?: ShotPosterMap
   readonly selectedShotId?: ShotId | null
   readonly onSelectShot?: (shotId: ShotId) => void
-  /** テロップの見た目をインスペクターで直す（ADR-0028）。無ければ小窓にボタンを出さない。 */
-  readonly onEditTextLook?: (clipId: TimelineClipId) => void
+  /**
+   * 帯のテロップを押したとき・置いたときに、インスペクターで開く（ワークベンチ）。
+   * **渡すと帯の上の小窓では直さない。** 小窓はパネルの端で見切れて編集しづらかった
+   * （2026-09-28、制作者の指摘）。渡さなければ今までどおり小窓で直す（単独のタイムライン）。
+   */
+  readonly onOpenTextClip?: (clipId: TimelineClipId) => void
   /** 楽曲の波形の帯。`TimelineTracks` へそのまま渡す。 */
   readonly audioLane?: { readonly durationSec: number; readonly node: ReactNode }
 }
@@ -170,7 +174,7 @@ export const TimelineEditor = ({
   posters,
   selectedShotId,
   onSelectShot,
-  onEditTextLook,
+  onOpenTextClip,
   audioLane,
 }: TimelineEditorProps) => {
   const api = useMemo(() => createTimelineApi(createRequester(resolveApiBaseUrl())), [])
@@ -179,6 +183,16 @@ export const TimelineEditor = ({
 
   const [transitions, setTransitions] = useState(initialTransitions)
   const [clips, setClips] = useState(initialClips)
+  /**
+   * 読み直した一覧が届いたら差し替える。インスペクターで直した文字・時間・削除が、
+   * 手元の古い一覧のまま帯に残らないように。最初の描画は初期値そのものなので数えない。
+   */
+  const lastInitialClips = useRef(initialClips)
+  useEffect(() => {
+    if (lastInitialClips.current === initialClips) return
+    lastInitialClips.current = initialClips
+    setClips(initialClips)
+  }, [initialClips])
   const [pxPerSec, setPxPerSec] = useState(DEFAULT_PX_PER_SEC)
   const [snapEnabled, setSnapEnabled] = useState(initialSnapEnabled)
   const [selectedClipId, setSelectedClipId] = useState<TimelineClipId | null>(null)
@@ -372,6 +386,11 @@ export const TimelineEditor = ({
     anchor: InlineFormAnchor,
     opener: HTMLElement | null,
   ): void => {
+    if (onOpenTextClip !== undefined && clip.content.type === 'text') {
+      closeForm()
+      onOpenTextClip(clip.id)
+      return
+    }
     openerRef.current = opener
     setOpen({ kind: 'text_edit', clip, anchor })
     // 読めなかった値は `null` のまま渡す。断りは入力部品が出す。
@@ -447,6 +466,8 @@ export const TimelineEditor = ({
         })
         setClips((current) => (current === null ? [created] : [...current, created]))
         closeForm()
+        // 置いたらすぐ見た目・時間を直せるように、インスペクターで開く。
+        onOpenTextClip?.(created.id)
       })
       return
     }
@@ -699,14 +720,6 @@ export const TimelineEditor = ({
                   else submitTextClip(next, open.kind === 'text_edit' ? open.clip : null)
                 }}
                 onDismiss={closeForm}
-                {...(open.kind === 'text_edit' && onEditTextLook !== undefined
-                  ? {
-                      onEditLook: () => {
-                        onEditTextLook(open.clip.id)
-                        closeForm()
-                      },
-                    }
-                  : {})}
                 onRemove={
                   open.kind === 'transition' && open.point.existing !== null
                     ? () => {

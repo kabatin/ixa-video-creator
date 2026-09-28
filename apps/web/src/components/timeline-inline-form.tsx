@@ -129,8 +129,6 @@ export type TimelineInlineFormProps = {
    * 置き直せないものだけに確認を挟む判断は `timeline-delete-confirm.test.tsx`。
    */
   readonly onRemove?: () => void
-  /** テロップの見た目（書体・色・位置など）をインスペクターで直す（ADR-0028）。既にあるテロップだけ。 */
-  readonly onEditLook?: () => void
   /**
    * 開く元になったボタン。閉じるときに焦点をここへ戻す。**戻すのはこの部品の
    * 仕事にする**（呼び出し側は ref を渡して外すだけ）。閉じ方は Escape・やめる・
@@ -152,7 +150,6 @@ export const TimelineInlineForm = ({
   onSubmit,
   onDismiss,
   onRemove,
-  onEditLook,
   returnFocusRef,
 }: TimelineInlineFormProps) => {
   const idPrefix = useId()
@@ -329,11 +326,6 @@ export const TimelineInlineForm = ({
         <Button size="sm" disabled={busy} onClick={onDismiss}>
           {WORDING.cancel}
         </Button>
-        {onEditLook === undefined ? null : (
-          <Button size="sm" disabled={busy} onClick={onEditLook}>
-            見た目を編集
-          </Button>
-        )}
         {onRemove === undefined ? null : (
           <Button size="sm" disabled={busy} onClick={onRemove}>
             {`${WORDING.delete}（${PANEL_TITLES[values.kind]}）`}

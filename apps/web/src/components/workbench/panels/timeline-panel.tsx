@@ -88,8 +88,8 @@ export const TimelinePanel = () => {
         posters={workbench.posters}
         selectedShotId={workbench.selectedShotId}
         onSelectShot={workbench.selectShot}
-        // テロップの小窓の「見た目を編集」→ インスペクターで開く（ADR-0028）。
-        onEditTextLook={(id) => {
+        // 帯のテロップは小窓でなくインスペクターで開く（小窓は見切れて編集しづらい）。
+        onOpenTextClip={(id) => {
           workbench.inspect({ kind: 'text-clip', id })
           workbench.focusPanel('inspector')
         }}

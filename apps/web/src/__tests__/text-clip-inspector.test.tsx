@@ -15,13 +15,12 @@ const OTHER_TEXT = TimelineClipId.parse('01ARZ3NDEKTSV4RRFFQ69G5FB1')
 const MEDIA_CLIP = TimelineClipId.parse('01ARZ3NDEKTSV4RRFFQ69G5FB2')
 const PRESET_ID = TextStyleId.parse('01ARZ3NDEKTSV4RRFFQ69G5FB3')
 
-const clip = (id: string, content: TimelineClip['content']) =>
+const clip = (id: string, content: TimelineClip['content'], span = { startSec: 1, durationSec: 2 }) =>
   TimelineClip.parse({
     id,
     projectId: aProject.id,
     track: content.type === 'media' ? 'VIDEO2' : 'TEXT',
-    startSec: 1,
-    durationSec: 2,
+    ...span,
     layer: 0,
     content,
     opacity: 1,
@@ -31,6 +30,7 @@ const clip = (id: string, content: TimelineClip['content']) =>
 const fake = vi.hoisted(() => ({
   listClips: vi.fn(),
   updateClip: vi.fn(),
+  deleteClip: vi.fn(),
   listTextStyles: vi.fn(),
   createTextStyle: vi.fn(),
   updateTextStyle: vi.fn(),
@@ -52,12 +52,19 @@ beforeEach(() => {
   for (const fn of Object.values(fake)) fn.mockReset()
   fake.listClips.mockResolvedValue([
     clip(CLIP_ID, { type: 'text', templateKey: 'plain', params: { text: '一行目', style: { size: 0.05 }, styleId: null } }),
-    clip(OTHER_TEXT, { type: 'text', templateKey: 'plain', params: { text: '二行目' } }),
+    clip(OTHER_TEXT, { type: 'text', templateKey: 'plain', params: { text: '二行目' } }, { startSec: 5, durationSec: 2 }),
     clip(MEDIA_CLIP, { type: 'media', mediaAssetId: MediaAssetId.parse('01ARZ3NDEKTSV4RRFFQ69G5FB4'), inSec: 0, outSec: 2, volume: 1 }),
   ])
-  fake.updateClip.mockImplementation((id: string, patch: { content: TimelineClip['content'] }) =>
-    Promise.resolve(clip(id, patch.content)),
+  fake.updateClip.mockImplementation(
+    (id: string, patch: { content?: TimelineClip['content']; startSec?: number; durationSec?: number }) =>
+      Promise.resolve(
+        clip(id, patch.content ?? { type: 'text', templateKey: 'plain', params: { text: '一行目' } }, {
+          startSec: patch.startSec ?? 1,
+          durationSec: patch.durationSec ?? 2,
+        }),
+      ),
   )
+  fake.deleteClip.mockResolvedValue(undefined)
   fake.listTextStyles.mockResolvedValue([preset])
   fake.applyTextStyle.mockResolvedValue([])
   fake.createTextStyle.mockImplementation((_project: string, body: { name: string; style: object }) =>
@@ -66,8 +73,9 @@ beforeEach(() => {
 })
 
 const open = async () => {
-  renderInWorkbench(<TextClipInspector id={CLIP_ID} />)
+  const { value } = renderInWorkbench(<TextClipInspector id={CLIP_ID} />)
   await screen.findByText('一行目')
+  return value
 }
 const sentParams = () => (fake.updateClip.mock.calls.at(-1)?.[1] as { content: { params: unknown } }).content.params
 
@@ -168,5 +176,60 @@ describe('TextClipInspector', () => {
     await waitFor(() => {
       expect(sentParams()).toEqual({ text: '直した', style: { size: 0.05 }, styleId: null })
     })
+  })
+})
+
+/**
+ * 帯のテロップを押すと、小窓ではなくインスペクターで開く（2026-09-28、制作者の指摘「小窓は見切れて編集しづらい」）。
+ * 小窓が受け持っていた開始・尺・削除も、ここで直せる。
+ */
+describe('TextClipInspector の時間と削除', () => {
+  const retype = async (label: string, next: string) => {
+    const field = screen.getByLabelText(label)
+    await userEvent.clear(field)
+    await userEvent.type(field, `${next}{Enter}`)
+  }
+
+  it('開始を直すと、開始だけを送る', async () => {
+    await open()
+
+    await retype('開始', '0:02.50')
+
+    await waitFor(() => {
+      expect(fake.updateClip).toHaveBeenCalledWith(CLIP_ID, { startSec: 2.5 })
+    })
+  })
+
+  it('尺を直すと、尺だけを送る', async () => {
+    await open()
+
+    await retype('尺', '3.25s')
+
+    await waitFor(() => {
+      expect(fake.updateClip).toHaveBeenCalledWith(CLIP_ID, { durationSec: 3.25 })
+    })
+  })
+
+  it('別のテロップと重なる開始は保存せず、理由を出す', async () => {
+    await open()
+
+    await retype('開始', '0:04.50')
+
+    expect(await screen.findByText(/重なります/)).toBeTruthy()
+    expect(fake.updateClip).not.toHaveBeenCalled()
+  })
+
+  it('削除は確かめてから。消したらインスペクターを閉じる', async () => {
+    const value = await open()
+
+    await userEvent.click(screen.getByRole('button', { name: 'テロップ「一行目」のその他の操作' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'テロップを削除' }))
+    expect(fake.deleteClip).not.toHaveBeenCalled()
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'テロップを削除' }))
+
+    await waitFor(() => {
+      expect(fake.deleteClip).toHaveBeenCalledWith(CLIP_ID)
+    })
+    expect(value.inspect).toHaveBeenCalledWith(null)
   })
 })

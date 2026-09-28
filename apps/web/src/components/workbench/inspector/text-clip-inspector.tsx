@@ -7,14 +7,18 @@ import { TextStylePresets } from '@/components/workbench/inspector/text-style-pr
 import { PanelEmpty } from '@/components/workbench/panels/panel-frame'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
+import { MoreMenu } from '@/components/workbench/ui/more-menu'
 import { ObjectHeader } from '@/components/workbench/ui/object-header'
 import { Section } from '@/components/workbench/ui/section'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
-import { formatSpan } from '@/lib/format-time'
+import { formatClock, formatDuration, formatSpan } from '@/lib/format-time'
+import { textClipSpanIssue } from '@/lib/text-clip-span'
 import { TEXT_TEMPLATE_LABELS, readTextClipParams, withStyle } from '@/lib/text-style-form'
 import type { TimelineApi, WireTimelineClip } from '@/lib/timeline-api'
+import { programEndSec } from '@/lib/timeline-display'
+import { parseClockInput, parseDurationInput } from '@/lib/time-input'
 
 type Loaded =
   | { readonly kind: 'loading' }
@@ -24,9 +28,11 @@ type Loaded =
 const TEMPLATE_OPTIONS = TextTemplateKey.options.map((key) => ({ value: key, label: TEXT_TEMPLATE_LABELS[key] }))
 
 /**
- * テロップのインスペクター（ADR-0028）。文字・型・見た目・位置・フェードと、スタイルの保存・一括適用。
- * 欄は確定ごとに自動保存し、プレビューは読み直しで追いつく（`workbench.refresh`）。
- * 開始と尺はタイムラインで動かす（ここでは直さない）。
+ * テロップのインスペクター（ADR-0028）。文字・型・開始・尺・見た目・位置・フェードと、スタイルの保存・一括適用。
+ * 欄は確定ごとに自動保存し、プレビューとタイムラインは読み直しで追いつく（`workbench.refresh`）。
+ *
+ * **帯のテロップを押すとここで開く。** 以前は帯の上の小窓で直していたが、パネルの端で見切れて
+ * 編集しづらかった（2026-09-28、制作者の指摘）。小窓が受け持っていた開始・尺・削除もここに置く。
  */
 export const TextClipInspector = ({ id, api }: { readonly id: TimelineClipId; readonly api?: TimelineApi }) => {
   const workbench = useWorkbench()
@@ -68,6 +74,20 @@ export const TextClipInspector = ({ id, api }: { readonly id: TimelineClipId; re
     replace([await client.updateClip(clip.id, { content: { ...content, ...next } })])
   }
   const saveStyle = (patch: TextStylePatch) => save({ params: withStyle(content.params, patch) })
+  const saveSpan = async (span: { readonly startSec?: number; readonly durationSec?: number }): Promise<void> => {
+    replace([await client.updateClip(clip.id, span)])
+  }
+  /** 帯の小窓と同じ規則（重なり・短すぎる尺）で見る。形が読めなければ書式を案内する。 */
+  const spanIssue = (startSec: number | null, durationSec: number | null, format: string): string | null =>
+    startSec === null || durationSec === null
+      ? format
+      : textClipSpanIssue({
+          clips: loaded.clips,
+          clip,
+          programEndSec: programEndSec(workbench.shots ?? []),
+          startSec,
+          durationSec,
+        })
 
   const textClips = loaded.clips
     .filter((candidate) => candidate.content.type === 'text')
@@ -82,6 +102,22 @@ export const TextClipInspector = ({ id, api }: { readonly id: TimelineClipId; re
         kind="テロップ"
         title={params?.text ?? '（文字が読めません）'}
         meta={formatSpan(clip.startSec, clip.durationSec)}
+        menu={
+          <MoreMenu
+            label={`テロップ「${params?.text ?? ''}」のその他の操作`}
+            items={[
+              {
+                label: 'テロップを削除',
+                confirm: `テロップ「${params?.text ?? ''}」${formatSpan(clip.startSec, clip.durationSec)} を削除します。`,
+                run: async () => {
+                  await client.deleteClip(clip.id)
+                  workbench.inspect(null)
+                  workbench.refresh()
+                },
+              },
+            ]}
+          />
+        }
       />
       <div className="workbench-panel-body min-h-0 flex-1 overflow-auto">
         <Section title="文字">
@@ -103,6 +139,24 @@ export const TextClipInspector = ({ id, api }: { readonly id: TimelineClipId; re
               {`知らない型「${content.templateKey}」です。型を選び直すと見た目を直せます。`}
             </p>
           )}
+        </Section>
+        <Section title="時間">
+          <AutoSaveField
+            label="開始"
+            value={formatClock(clip.startSec)}
+            validate={(next) =>
+              spanIssue(parseClockInput(next), clip.durationSec, '0:12.34 か 12.34 の形で入れてください')
+            }
+            onSave={(next) => saveSpan({ startSec: parseClockInput(next) ?? clip.startSec })}
+          />
+          <AutoSaveField
+            label="尺"
+            value={formatDuration(clip.durationSec)}
+            validate={(next) =>
+              spanIssue(clip.startSec, parseDurationInput(next), '1.50s のように 0 より大きい秒で入れてください')
+            }
+            onSave={(next) => saveSpan({ durationSec: parseDurationInput(next) ?? clip.durationSec })}
+          />
         </Section>
         {template.success && params !== null && (
           <>
