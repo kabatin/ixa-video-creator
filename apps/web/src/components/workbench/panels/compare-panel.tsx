@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { TakeComparePanel } from '@/components/take-compare-panel'
 import { TakeGrid } from '@/components/take-grid'
 import { useShotTakes } from '@/components/workbench/use-shot-takes'
-import { useSelectedShot, useWorkbench } from '@/components/workbench/workbench-context'
+import { useSelectedShot, useTransportState, useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty, PanelFrame, PanelNotice } from '@/components/workbench/panels/panel-frame'
 import { ShotStatusBadge } from '@/components/shot-status-badge'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,7 @@ import { describeError } from '@/lib/api-error'
  */
 export const ComparePanel = () => {
   const workbench = useWorkbench()
+  const transport = useTransportState()
   const shot = useSelectedShot()
   const { takes, error, reload } = useShotTakes(shot, workbench.posterEpoch)
   const [adopting, setAdopting] = useState(false)
@@ -92,15 +93,15 @@ export const ComparePanel = () => {
             // 同時に鳴らない。聴きながら切ると一緒に鳴ると、曲がずれて二重に聞こえる。
             exclusive={{
               othersPlaying:
-                workbench.transport.playing && workbench.transport.owner !== 'compare',
+                transport.playing && transport.owner !== 'compare',
               onPlayingChange: (playing) => {
                 if (playing) workbench.transportControls.play('compare')
-                else if (workbench.transport.owner === 'compare')
+                else if (transport.owner === 'compare')
                   workbench.transportControls.pause()
               },
               // 画面の ⏸ や Space で止められたら、ここも止まる。
               commandPlaying:
-                workbench.transport.owner === 'compare' ? workbench.transport.playing : null,
+                transport.owner === 'compare' ? transport.playing : null,
             }}
           />
           <section aria-label="Take 一覧" className="shrink-0">

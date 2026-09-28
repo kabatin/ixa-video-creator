@@ -10,7 +10,7 @@ import {
 } from '@/components/workbench/shot-edit-actions'
 import { undoConfirmMessage, type UndoState } from '@/components/workbench/use-edit-history'
 import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
-import { useSelectedShot, useWorkbench } from '@/components/workbench/workbench-context'
+import { useSelectedShot, useTransport, useWorkbench } from '@/components/workbench/workbench-context'
 import { VolumeControl } from '@/components/workbench/volume-control'
 import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
@@ -60,6 +60,8 @@ export const WorkbenchMenu = ({
 }: WorkbenchMenuProps) => {
   const router = useRouter()
   const workbench = useWorkbench()
+  // 分割できるかは再生位置で変わる。メニューの帯だけが毎フレーム描き直す（ワークベンチ全体は巻き込まない）。
+  const transport = useTransport()
   const current = useSelectedShot()
 
   const menus = buildMenus({
@@ -67,7 +69,7 @@ export const WorkbenchMenu = ({
     checkedCount: workbench.checked.size,
     canUndo: undo.availability,
     currentHasTake: (current?.selectedTakeId ?? null) !== null,
-    splitBlocker: splitBlockerOf(current, workbench.transport.currentSec),
+    splitBlocker: splitBlockerOf(current, transport.currentSec),
     mergeBlocker: mergeBlockerOf(
       (workbench.shots ?? []).filter((shot) => workbench.checked.has(shot.id)),
     ),
@@ -125,7 +127,7 @@ export const WorkbenchMenu = ({
     'copy-link': copyLink,
     'unselect-take': unselectTake,
     'split-shot': () => {
-      splitAtPlayhead(workbench, current)
+      splitAtPlayhead(workbench, current, transport.currentSec)
     },
     'import-files': onImportFiles,
     'inspect-master-track': () => {

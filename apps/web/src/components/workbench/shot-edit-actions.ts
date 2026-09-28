@@ -21,11 +21,10 @@ export const mergeBlockerOf = (checked: readonly Shot[]): string | null => {
   return plan.ok ? null : plan.reason
 }
 
-type SplitPort = Pick<WorkbenchContextValue, 'notify' | 'refresh' | 'transport'>
+type SplitPort = Pick<WorkbenchContextValue, 'notify' | 'refresh'>
 
 /** 再生位置で割る。**結合で戻せるので確認は挟まない。** 結果は上端の知らせに出す。 */
-export const splitAtPlayhead = (workbench: SplitPort, current: Shot | null): void => {
-  const atSec = workbench.transport.currentSec
+export const splitAtPlayhead = (workbench: SplitPort, current: Shot | null, atSec: number): void => {
   const blocker = splitBlockerOf(current, atSec)
   if (current === null || blocker !== null) {
     workbench.notify(`分割できません: ${blocker ?? ''}`)

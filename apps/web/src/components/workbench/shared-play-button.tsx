@@ -1,6 +1,6 @@
 'use client'
 
-import { useWorkbench, type TransportOwner } from '@/components/workbench/workbench-context'
+import { useTransportState, useWorkbench, type TransportOwner } from '@/components/workbench/workbench-context'
 
 /**
  * 画面でただひとつの再生ボタン。**プレビューの下でも波形の上でも同じ部品を使う。**
@@ -14,7 +14,8 @@ import { useWorkbench, type TransportOwner } from '@/components/workbench/workbe
  * - 止まっていれば ▶（押すと**置かれた場所が**鳴る。押したものと鳴るものを食い違わせない）
  */
 export const SharedPlayButton = ({ owner }: { readonly owner: TransportOwner }) => {
-  const { transport, transportControls } = useWorkbench()
+  const { transportControls } = useWorkbench()
+  const transport = useTransportState()
   const playing = transport.playing && transport.owner !== null
 
   return (

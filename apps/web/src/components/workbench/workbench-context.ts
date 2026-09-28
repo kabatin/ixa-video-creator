@@ -5,6 +5,7 @@ import { createContext, useContext } from 'react'
 import type { UpdateShotBody } from '@/lib/api-schemas'
 import type { WireMusicAnalysis } from '@/lib/music-api'
 import type { WorkbenchDialog } from '@/lib/menu-model'
+import { usePlayheadSec } from '@/lib/playhead-sec'
 import type { LiveState } from '@/lib/project-events'
 import type { SeekCommand } from '@/lib/program-monitor'
 import type { ShotSelection } from '@/lib/shot-bulk'
@@ -86,7 +87,11 @@ export type WorkbenchContextValue = {
   /** 一覧でチェックした Shot（一括操作の対象）。メニューの有効判定にも使う。 */
   readonly checked: ShotSelection
   readonly setChecked: (next: ShotSelection) => void
-  readonly transport: WorkbenchTransport
+  /**
+   * 再生の操作（止める・飛ぶ・鳴らす）。**再生位置そのものはここに置かない**（`useTransport`）。
+   * 位置は毎フレーム変わるので、ここに置くとワークベンチ全体が毎フレーム描き直し、
+   * メインスレッドが埋まって音とコマがずれ、Remotion が曲を巻き戻していた（2026-09-28 実測）。
+   */
   readonly transportControls: TransportControls
   readonly live: WorkbenchLive
 
@@ -142,9 +147,35 @@ export type TransportControls = {
    * 見えているプレイヤーの直下に 1 つだけ出す。画面に再生器が無ければ `null`。
    */
   readonly host: TransportOwner | null
+  /**
+   * 今の再生位置を**描き直さずに**読む。キー操作のように、最上位の部品で押した瞬間だけ位置が要るとき用。
+   * 画面に出す位置は `usePlayheadSec()` / `useTransport()` で読む（こちらは変わっても描き直さない）。
+   */
+  readonly getTransport: () => WorkbenchTransport
 }
 
 export const WorkbenchContext = createContext<WorkbenchContextValue | null>(null)
+WorkbenchContext.displayName = 'WorkbenchContext'
+
+/** 位置を除いた再生の状態（鳴っているか・持ち主・明示的な移動）。変わるのは操作したときだけ。 */
+export type TransportState = Omit<WorkbenchTransport, 'currentSec'>
+
+/**
+ * 再生の状態の文脈。**位置は入れない**（位置は `PlayheadSecContext`）。
+ * 位置は毎コマ変わるので、同じ値に入れるとパネルが毎コマ丸ごと描き直される。
+ */
+export const WorkbenchTransportContext = createContext<TransportState | null>(null)
+WorkbenchTransportContext.displayName = 'WorkbenchTransportContext'
+
+/** 再生の状態（位置を除く）。パネルはこちらを読む。 */
+export const useTransportState = (): TransportState => {
+  const value = useContext(WorkbenchTransportContext)
+  if (value === null) throw new Error('再生の状態を読む部品が WorkbenchProvider の外にあります')
+  return value
+}
+
+/** 再生の状態と位置。**位置は毎コマ変わる**ので、位置を描く末端の部品だけで使う。 */
+export const useTransport = (): WorkbenchTransport => ({ ...useTransportState(), currentSec: usePlayheadSec() })
 
 export const useWorkbench = (): WorkbenchContextValue => {
   const value = useContext(WorkbenchContext)

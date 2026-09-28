@@ -6,7 +6,7 @@ import { WaveformCanvas } from '@/components/waveform-canvas'
 import { fetchWaveformPeaks, type WaveformPeaksResult } from '@/lib/waveform-api'
 import { sectionBoundaries } from '@/lib/waveform-draw'
 import { usePreferences } from '@/components/preferences-root'
-import { useWorkbench } from '@/components/workbench/workbench-context'
+import { useTransportState, useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelFrame } from '@/components/workbench/panels/panel-frame'
 import {
   loadTimelineMaterials,
@@ -24,7 +24,8 @@ import {
 export const TimelinePanel = () => {
   const workbench = useWorkbench()
   const { preferences } = usePreferences()
-  const { transport, transportControls } = workbench
+  const { transportControls } = workbench
+  const transport = useTransportState()
   const [materials, setMaterials] = useState<TimelineMaterials | null>(null)
   const peaks = useTrackPeaks(workbench.analysis?.waveformPeaksUrl ?? null)
 
@@ -95,7 +96,6 @@ export const TimelinePanel = () => {
         {...(audioLane === null ? {} : { audioLane })}
         initialSnapEnabled={preferences.playback.snapToBeat}
         playback={{
-          currentSec: transport.currentSec,
           playing: transport.playing && mine,
           seek: transport.seek,
           onSeek: transportControls.seekTo,

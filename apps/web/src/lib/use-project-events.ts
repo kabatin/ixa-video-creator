@@ -1,7 +1,7 @@
 'use client'
 
 import { SHOT_LIST_EVENT_TYPES, type ProjectEvent, type ProjectId } from '@ixa/domain'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   parseProjectEvent,
   projectEventsUrl,
@@ -143,5 +143,9 @@ export const useProjectEvents = ({
     }
   }, [projectId, baseUrl, enabled])
 
-  return { state, lastEventAt, attempt, invalidCount }
+  // 同じ値なら同じ物を返す。受け手（ワークベンチの共有値）が毎回描き直さないように。
+  return useMemo(
+    () => ({ state, lastEventAt, attempt, invalidCount }),
+    [state, lastEventAt, attempt, invalidCount],
+  )
 }

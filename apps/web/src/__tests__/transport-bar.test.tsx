@@ -1,9 +1,14 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { TransportBar } from '@/components/workbench/transport-bar'
-import { WorkbenchContext, type WorkbenchContextValue } from '@/components/workbench/workbench-context'
+import {
+  WorkbenchContext,
+  type WorkbenchContextValue,
+  type WorkbenchTransport,
+} from '@/components/workbench/workbench-context'
+import { WorkbenchTransportProvider } from '@/components/workbench/workbench-transport-provider'
 import { PreferencesWrapper } from './preferences-wrapper'
-import { workbenchValue } from './workbench-fixture'
+import { STOPPED, workbenchValue } from './workbench-fixture'
 
 /**
  * 再生の操作は**画面にひとつだけ、見えているプレイヤーの直下**（UI-WORKBENCH §7.2）。
@@ -18,13 +23,16 @@ import { workbenchValue } from './workbench-fixture'
 
 const renderBar = (
   owner: 'cutter' | 'monitor',
-  patch: Partial<WorkbenchContextValue> = {},
+  patch: Partial<WorkbenchContextValue> & { readonly transport?: WorkbenchTransport } = {},
 ): WorkbenchContextValue => {
-  const value = { ...workbenchValue(), ...patch }
+  const { transport = STOPPED, ...rest } = patch
+  const value = { ...workbenchValue(), ...rest }
   render(
     <PreferencesWrapper>
       <WorkbenchContext.Provider value={value}>
-        <TransportBar owner={owner} durationSec={120} />
+        <WorkbenchTransportProvider transport={transport}>
+          <TransportBar owner={owner} durationSec={120} />
+        </WorkbenchTransportProvider>
       </WorkbenchContext.Provider>
     </PreferencesWrapper>,
   )

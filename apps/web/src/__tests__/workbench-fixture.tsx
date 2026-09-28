@@ -5,8 +5,10 @@ import { vi } from 'vitest'
 import {
   WorkbenchContext,
   type WorkbenchContextValue,
+  type WorkbenchTransport,
 } from '@/components/workbench/workbench-context'
 import { AssetStoreContext, type AssetStoreValue } from '@/components/workbench/asset-store'
+import { WorkbenchTransportProvider } from '@/components/workbench/workbench-transport-provider'
 import { EMPTY_SELECTION } from '@/lib/shot-bulk'
 import { PROJECT_ID, WORKSPACE_ID, shotJson } from './fixtures'
 
@@ -43,6 +45,9 @@ export const aWorkbenchShot = (index: number, patch: Partial<Record<string, unkn
     ...patch,
   })
 
+/** 止まっている再生位置。再生位置は別の文脈（`useTransport`）で渡す。 */
+export const STOPPED: WorkbenchTransport = { currentSec: 0, playing: false, seek: null, owner: null }
+
 export const workbenchValue = (
   patch: Partial<WorkbenchContextValue> = {},
 ): WorkbenchContextValue => ({
@@ -63,7 +68,6 @@ export const workbenchValue = (
   selectShot: vi.fn(),
   checked: EMPTY_SELECTION,
   setChecked: vi.fn(),
-  transport: { currentSec: 0, playing: false, seek: null, owner: null },
   transportControls: {
     setCurrentSec: vi.fn(),
     seekTo: vi.fn(),
@@ -73,6 +77,7 @@ export const workbenchValue = (
     registerPlayer: vi.fn(() => vi.fn()),
     host: 'cutter' as const,
     togglePlayback: vi.fn(),
+    getTransport: vi.fn(() => STOPPED),
   },
   live: { state: 'live', lastEventAt: null, attempt: 0, invalidCount: 0, newTakeCount: 0 },
   saveShot: vi.fn(),
@@ -126,13 +131,16 @@ export const renderInWorkbench = (
   ui: ReactElement,
   patch: Partial<WorkbenchContextValue> = {},
   assets: Partial<AssetStoreValue> = {},
+  transport: WorkbenchTransport = STOPPED,
 ) => {
   const value = workbenchValue(patch)
   return {
     value,
     ...render(
       <AssetStoreContext.Provider value={assetStoreValue(assets)}>
-        <WorkbenchContext.Provider value={value}>{ui}</WorkbenchContext.Provider>
+        <WorkbenchContext.Provider value={value}>
+          <WorkbenchTransportProvider transport={transport}>{ui}</WorkbenchTransportProvider>
+        </WorkbenchContext.Provider>
       </AssetStoreContext.Provider>,
     ),
   }

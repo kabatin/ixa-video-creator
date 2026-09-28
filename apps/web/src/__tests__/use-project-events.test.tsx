@@ -236,4 +236,18 @@ describe('useProjectEvents', () => {
     const probe = renderProbe()
     expect(probe.last().state).toBe('stopped')
   })
+
+  /**
+   * 何も変わっていなければ同じ値を返す。ワークベンチの共有値はこれを依存に持つので、
+   * 描くたびに新しい値を返すと**再生中の毎コマ、全パネルが描き直される**。
+   * 主スレッドが詰まり、プレビューの音が 0.7〜0.9 秒巻き戻って鳴り直した（実測）。
+   */
+  it('何も変わっていない描き直しでは同じ値を返す', () => {
+    const probe = renderProbe()
+    act(() => {
+      latest().emit('ready')
+    })
+    probe.view.rerender(<Probe seen={probe.seen} events={probe.events} />)
+    expect(probe.seen.at(-1)).toBe(probe.seen.at(-2))
+  })
 })

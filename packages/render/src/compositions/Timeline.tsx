@@ -1,4 +1,5 @@
 import type { RenderableClip, Resolution, TimelineDocument } from '@ixa/domain'
+import { useMemo, type ReactNode } from 'react'
 import type React from 'react'
 import {
   AbsoluteFill,
@@ -16,9 +17,10 @@ import {
   type ClipPlan,
   type DipPlan,
   type ShotPlan,
+  type TimelinePlan,
 } from '../plan.js'
 import type { FitRect } from '../presets.js'
-import { sourceOffsetFrames } from '../timing.js'
+import { sourceOffsetFrames, type FrameRange } from '../timing.js'
 import { ShotVideo } from './shot-video.js'
 import { TextClip, resolveTextClip } from './text-clip.js'
 
@@ -255,62 +257,95 @@ const followsPrevious = (shots: readonly ShotPlan[], index: number): boolean => 
 }
 
 /**
+ * 区間の前後の組み立てる幅を足した範囲に、いまのコマが入っているか。null はコマに依らず入れる。
+ * 境目の 1 コマで外し違えないよう、前後に 1 コマずつ余分に取る。
+ */
+const isNear = (range: FrameRange, frame: number | null, before: number, after: number): boolean =>
+  frame === null ||
+  (frame >= range.from - before - 1 && frame < range.from + range.durationInFrames + after + 1)
+
+/**
+ * Shot・暗転・クリップ・音を並べる。**いまのコマの近くだけ組み立てる**（null はすべて。検査用）。
+ *
+ * Remotion の `<Sequence>` は範囲の外でも毎コマ描き直される。モトダチ MV（Shot 27・テロップ 28）では
+ * 1 コマごとに部品 300 余りを描き直し、主スレッドが詰まって、プレビューの音が 0.7〜0.9 秒
+ * 巻き戻って鳴り直した（2026-09-28 実測）。範囲外の Sequence は何も描かないので、外しても絵は同じ。
+ * 音は区間が長く数も少ないので外さない（付け外しのたびに頭出しし直させない）。
+ */
+export const timelineLayers = (plan: TimelinePlan, frame: number | null): ReactNode => {
+  const premountFor = Math.round(PREMOUNT_SEC * plan.fps)
+  const postmountFor = Math.round(POSTMOUNT_SEC * plan.fps)
+
+  return (
+    <>
+      {plan.shots.map((shot, index) => {
+        const holds = followsPrevious(plan.shots, index + 1)
+        if (!isNear(shot.range, frame, premountFor, holds ? postmountFor : 0)) return null
+        return (
+          <Sequence
+            key={shot.shotId}
+            from={shot.range.from}
+            durationInFrames={shot.range.durationInFrames}
+            premountFor={premountFor}
+            styleWhilePremounted={
+              followsPrevious(plan.shots, index) ? SHOW_BEHIND_WHILE_PREMOUNTED : undefined
+            }
+            // 次の Shot が隙間なく続くときだけ残す。最後の Shot や隙間の前では、黒のはずの間に絵を残さない。
+            {...(holds ? { postmountFor, styleWhilePostmounted: HOLD_UNDER_WHILE_POSTMOUNTED } : {})}
+          >
+            <ShotBody shot={shot} video={plan.video} />
+          </Sequence>
+        )
+      })}
+
+      {plan.dips.map((dip) =>
+        isNear(dip.range, frame, 0, 0) ? (
+          <Sequence
+            key={dip.transitionId}
+            from={dip.range.from}
+            durationInFrames={dip.range.durationInFrames}
+            layout="none"
+          >
+            <DipBody dip={dip} />
+          </Sequence>
+        ) : null,
+      )}
+
+      {plan.clips.map((clip) =>
+        isNear(clip.range, frame, premountFor, 0) ? (
+          <Sequence
+            key={clip.clipId}
+            from={clip.range.from}
+            durationInFrames={clip.range.durationInFrames}
+            premountFor={premountFor}
+          >
+            <ClipBody clip={clip} fps={plan.fps} video={plan.video} />
+          </Sequence>
+        ) : null,
+      )}
+
+      {plan.audio.map((track, index) => (
+        <AudioTrack key={`${String(index)}:${track.mediaUrl}:${track.range.from}`} track={track} />
+      ))}
+    </>
+  )
+}
+
+/**
  * プレビュー（`@remotion/player`）とレンダリング（`renderMedia`）の共通コンポジション（ADR-0010）。
  *
  * `TimelineDocument` **だけ**を入力に取る。メディアの URL と種別は
  * `packages/timeline` の構築時に解決済みなので、外から辞書を受け取る必要はない。
  */
 export const TimelineComposition: React.FC<TimelineCompositionProps> = ({ doc, canvas }) => {
-  const plan = buildTimelinePlan(doc, canvas ?? doc.resolution)
-  const premountFor = Math.round(PREMOUNT_SEC * plan.fps)
-  const postmountFor = Math.round(POSTMOUNT_SEC * plan.fps)
+  const frame = useCurrentFrame()
+  // 毎コマ描き直すようになったので、並べ方は文書が変わったときだけ組み直す。
+  const plan = useMemo(() => buildTimelinePlan(doc, canvas ?? doc.resolution), [doc, canvas])
 
   return (
     // `isolation` で重なりの基準をここに閉じる。zIndex が負の要素を背景の黒より上に描くため。
     <AbsoluteFill style={{ backgroundColor: '#000000', isolation: 'isolate' }}>
-      {plan.shots.map((shot, index) => (
-        <Sequence
-          key={shot.shotId}
-          from={shot.range.from}
-          durationInFrames={shot.range.durationInFrames}
-          premountFor={premountFor}
-          styleWhilePremounted={
-            followsPrevious(plan.shots, index) ? SHOW_BEHIND_WHILE_PREMOUNTED : undefined
-          }
-          // 次の Shot が隙間なく続くときだけ残す。最後の Shot や隙間の前では、黒のはずの間に絵を残さない。
-          {...(followsPrevious(plan.shots, index + 1)
-            ? { postmountFor, styleWhilePostmounted: HOLD_UNDER_WHILE_POSTMOUNTED }
-            : {})}
-        >
-          <ShotBody shot={shot} video={plan.video} />
-        </Sequence>
-      ))}
-
-      {plan.dips.map((dip) => (
-        <Sequence
-          key={dip.transitionId}
-          from={dip.range.from}
-          durationInFrames={dip.range.durationInFrames}
-          layout="none"
-        >
-          <DipBody dip={dip} />
-        </Sequence>
-      ))}
-
-      {plan.clips.map((clip) => (
-        <Sequence
-          key={clip.clipId}
-          from={clip.range.from}
-          durationInFrames={clip.range.durationInFrames}
-          premountFor={premountFor}
-        >
-          <ClipBody clip={clip} fps={plan.fps} video={plan.video} />
-        </Sequence>
-      ))}
-
-      {plan.audio.map((track, index) => (
-        <AudioTrack key={`${String(index)}:${track.mediaUrl}:${track.range.from}`} track={track} />
-      ))}
+      {timelineLayers(plan, frame)}
     </AbsoluteFill>
   )
 }

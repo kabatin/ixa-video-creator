@@ -3,7 +3,12 @@ import { Sequence } from 'remotion'
 import { describe, expect, it } from 'vitest'
 import { TIMELINE_COMPOSITION_ID } from '../composition-id.js'
 import { RemotionRoot } from '../compositions/Root.js'
-import { TimelineComposition, type TimelineCompositionProps } from '../compositions/Timeline.js'
+import {
+  TimelineComposition,
+  timelineLayers,
+  type TimelineCompositionProps,
+} from '../compositions/Timeline.js'
+import { buildTimelinePlan } from '../plan.js'
 import {
   makeClip,
   makeDocument,
@@ -82,8 +87,9 @@ describe('Shot とクリップを前もって組み立てておく', () => {
       return [...own, ...sequencesOf(child.props.children as ReactNode)]
     })
 
-  // フックを持たない関数なので、素の関数として呼んで要素の木を見る。
-  const sequences = sequencesOf(TimelineComposition({ doc, canvas: null }) as ReactElement)
+  // 並べ方はフックを持たない関数に切り出してある。null はコマに依らずすべて。
+  const layersOf = (target: typeof doc) => sequencesOf(timelineLayers(buildTimelinePlan(target, target.resolution), null))
+  const sequences = layersOf(doc)
   const bodyOf = (sequence: ReactElement<Record<string, unknown>>) =>
     (Children.only(sequence.props.children as ReactElement<Record<string, unknown>>).props)
 
@@ -107,11 +113,8 @@ describe('Shot とクリップを前もって組み立てておく', () => {
   })
 
   it('隙間の後の Shot は隠したまま待つ（黒のはずの間に頭を見せない）', () => {
-    const gapped = sequencesOf(
-      TimelineComposition({
-        doc: makeDocument({ video1: [makeVideo1Shot(1, 0, 2), makeVideo1Shot(2, 3, 2)] }),
-        canvas: null,
-      }) as ReactElement,
+    const gapped = layersOf(
+      makeDocument({ video1: [makeVideo1Shot(1, 0, 2), makeVideo1Shot(2, 3, 2)] }),
     ).filter((sequence) => 'shot' in bodyOf(sequence))
     expect(gapped[1]?.props.styleWhilePremounted).toBeUndefined()
   })
@@ -131,11 +134,8 @@ describe('Shot とクリップを前もって組み立てておく', () => {
   })
 
   it('隙間の前の Shot は残さない', () => {
-    const gapped = sequencesOf(
-      TimelineComposition({
-        doc: makeDocument({ video1: [makeVideo1Shot(1, 0, 2), makeVideo1Shot(2, 3, 2)] }),
-        canvas: null,
-      }) as ReactElement,
+    const gapped = layersOf(
+      makeDocument({ video1: [makeVideo1Shot(1, 0, 2), makeVideo1Shot(2, 3, 2)] }),
     ).filter((sequence) => 'shot' in bodyOf(sequence))
     expect(gapped[0]?.props.postmountFor).toBeUndefined()
   })
@@ -144,5 +144,56 @@ describe('Shot とクリップを前もって組み立てておく', () => {
     const clips = sequences.filter((sequence) => 'clip' in bodyOf(sequence))
     expect(clips).toHaveLength(2)
     for (const clip of clips) expect(clip.props.premountFor).toBe(doc.fps)
+  })
+})
+
+/**
+ * **いまのコマの近くだけ組み立てる。**
+ *
+ * Remotion の `<Sequence>` は範囲の外でも毎コマ描き直される。モトダチ MV（Shot 27・テロップ 28）では
+ * 1 コマごとに部品 300 余りを描き直し、主スレッドが詰まって、プレビューの音が 0.7〜0.9 秒
+ * 巻き戻って鳴り直した（2026-09-28 実測）。範囲外の Sequence は何も描かないので、外しても絵は同じ。
+ */
+describe('いまのコマの近くだけ組み立てる', () => {
+  const fps = 30
+  const doc = makeDocument({
+    video1: [makeVideo1Shot(1, 0, 2), makeVideo1Shot(2, 2, 2), makeVideo1Shot(3, 4, 2)],
+    clips: [makeClip(1, 'TEXT', 5, 1)],
+    audio: [{ mediaUrl: 'https://media.test/mv.mp3', startSec: 0, durationSec: 6, volume: 1 }],
+  })
+  const plan = buildTimelinePlan(doc, doc.resolution)
+  /** 木の中の Shot・クリップ・音の部品を、並んだ順に名前で拾う。 */
+  const kindsIn = (node: ReactNode): string[] =>
+    Children.toArray(node).flatMap((child) => {
+      if (!isValidElement<Record<string, unknown>>(child)) return []
+      const props = child.props
+      if ('shot' in props) return [(props.shot as { shotId: string }).shotId]
+      if ('clip' in props) return ['clip']
+      if ('track' in props) return ['audio']
+      return kindsIn(props.children as ReactNode)
+    })
+  const kindsAt = (frame: number): string[] => kindsIn(timelineLayers(plan, frame))
+
+  it('範囲の外の Shot とクリップは組み立てない', () => {
+    expect(kindsAt(0)).toEqual([shotId(1), 'audio'])
+  })
+
+  it('始まる 1 秒前からは組み立てる（premount の間）', () => {
+    expect(kindsAt(2 * fps - fps)).toEqual([shotId(1), shotId(2), 'audio'])
+  })
+
+  it('続く Shot がある間は、終わった後も 1 秒残す（postmount の間）', () => {
+    expect(kindsAt(2 * fps + fps - 1)).toContain(shotId(1))
+    expect(kindsAt(2 * fps + fps + 2)).not.toContain(shotId(1))
+  })
+
+  it('クリップも始まる 1 秒前から、終わったら外す', () => {
+    expect(kindsAt(5 * fps - fps)).toContain('clip')
+    expect(kindsAt(5 * fps - fps - 2)).not.toContain('clip')
+    expect(kindsAt(6 * fps + 1)).not.toContain('clip')
+  })
+
+  it('音は区間に依らず組み立てたまま（付け外しで頭出しし直さない）', () => {
+    expect(kindsAt(6 * fps + 10)).toContain('audio')
   })
 })

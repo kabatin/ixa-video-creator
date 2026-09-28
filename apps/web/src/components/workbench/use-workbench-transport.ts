@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useRef, useMemo, useState } from 'react'
 import { nextSeekCommand } from '@/lib/program-monitor'
 import type {
   TransportControls,
@@ -27,6 +27,10 @@ export const useWorkbenchTransport = (): {
   readonly controls: TransportControls
 } => {
   const [transport, setTransport] = useState<WorkbenchTransport>(INITIAL)
+  /** 描き直さずに今の位置を読むための控え（キー操作など、最上位で位置が要るとき）。 */
+  const latest = useRef(transport)
+  latest.current = transport
+  const getTransport = useCallback((): WorkbenchTransport => latest.current, [])
 
   /**
    * いま画面にいる再生器。**作業モードで変わる。**
@@ -137,8 +141,9 @@ export const useWorkbenchTransport = (): {
       togglePlayback,
       registerPlayer,
       host,
+      getTransport,
     }),
-    [setCurrentSec, seekTo, play, pause, toggle, togglePlayback, registerPlayer, host],
+    [setCurrentSec, seekTo, play, pause, toggle, togglePlayback, registerPlayer, host, getTransport],
   )
 
   return { transport, controls }

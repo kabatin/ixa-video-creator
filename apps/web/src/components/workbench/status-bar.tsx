@@ -4,7 +4,7 @@ import type { Project } from '@ixa/domain'
 import { useEffect, useState } from 'react'
 import { CostMeterPanel } from '@/components/cost-meter'
 import { LiveStatusBadge } from '@/components/live-status-badge'
-import type { WorkbenchLive, WorkbenchTransport } from '@/components/workbench/workbench-context'
+import { useTransport, type WorkbenchLive } from '@/components/workbench/workbench-context'
 import { TRANSPORT_OWNER_LABELS } from '@/lib/transport-labels'
 import type { RenderWatch } from '@/components/workbench/use-render-watch'
 import { formatClock } from '@/lib/format-time'
@@ -20,8 +20,6 @@ export type StatusBarProps = {
   readonly live: WorkbenchLive
   /** 読み込みに失敗した部分。**1 件でもあれば必ず出す**（§7.3）。 */
   readonly loadErrors: readonly string[]
-  /** いま鳴っている場所と位置。鳴っていなければ null。 */
-  readonly transport: WorkbenchTransport
   /**
    * 走っている書き出し。**ダイアログを閉じてもここに残る。**
    * 以前は追跡がダイアログの中だけにあり、閉じると「いま書き出している」が
@@ -61,7 +59,6 @@ export const StatusBar = ({
   shotCount,
   live,
   loadErrors,
-  transport,
   renderWatch,
 }: StatusBarProps) => {
   const cost = useCost(project.id)
@@ -83,7 +80,7 @@ export const StatusBar = ({
         * 区別が無く、押す側は選べない。裏のタブでも鳴り続けるので、
         * パネルを見ても止める場所が分からなかった。**常にここにある。**
         */}
-      <PlaybackControls transport={transport} />
+      <PlaybackControls />
       {/* 走っている書き出し。閉じたダイアログの中で終わっても、ここで気づける。 */}
       {renderWatch.active.length > 0 && (
         <span className="text-info">{describeActiveRenders(renderWatch)}</span>
@@ -135,7 +132,9 @@ export const StatusBar = ({
  * 再生ボタンは**見えているプレイヤーの直下**（`transport-bar.tsx`）、
  * 音量は**上の帯の右**（`volume-control.tsx`）。画面の最下段はどちらの定位置でもない。
  */
-const PlaybackControls = ({ transport }: { readonly transport: WorkbenchTransport }) => {
+const PlaybackControls = () => {
+  // **ここだけが再生位置を読む。** バー全体に渡すと、バーごと毎フレーム描き直す。
+  const transport = useTransport()
   if (!transport.playing || transport.owner === null) return null
   return (
     <span className="text-accent">

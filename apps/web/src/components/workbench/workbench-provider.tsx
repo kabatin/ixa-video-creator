@@ -11,6 +11,7 @@ import {
   type WorkbenchContextValue,
 } from '@/components/workbench/workbench-context'
 import { useWorkbenchTransport } from '@/components/workbench/use-workbench-transport'
+import { WorkbenchTransportProvider } from '@/components/workbench/workbench-transport-provider'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import type { WorkbenchDialog } from '@/lib/menu-model'
@@ -268,7 +269,6 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       },
       checked,
       setChecked: setCheckedState,
-      transport,
       transportControls: controls,
       live: { ...live, newTakeCount },
       saveShot,
@@ -306,7 +306,6 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       serverEpoch,
       selectedShotId,
       checked,
-      transport,
       controls,
       live,
       newTakeCount,
@@ -321,5 +320,9 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
     ],
   )
 
-  return <WorkbenchContext.Provider value={value}>{props.children}</WorkbenchContext.Provider>
+  return (
+    <WorkbenchContext.Provider value={value}>
+      <WorkbenchTransportProvider transport={transport}>{props.children}</WorkbenchTransportProvider>
+    </WorkbenchContext.Provider>
+  )
 }

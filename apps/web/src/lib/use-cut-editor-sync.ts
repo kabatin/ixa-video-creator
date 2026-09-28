@@ -89,16 +89,23 @@ export const useCutEditorSync = (
   }, [commandPlaying])
 
   /**
-   * 共有の位置へ線だけ合わせる。**鳴らしているときは合わせない**（位置が往復する。L-023）。
-   * 秒の細かい揺れでは動かさない。止まっている要素への seek を毎フレーム出さない。
+   * 共有の位置へ付いていく。**鳴らしているときは合わせない**（位置が往復する。L-023）。
+   *
+   * **他が鳴っている間は再生器を動かさず、見せる位置だけ付いていく**（下の `shownSec`）。
+   * 以前は止まっている音声を 1 秒に 8 回ほど頭出しし直し、そのたびに読み込みと描き直しが走って
+   * 主スレッドが詰まり、鳴っているプレビューの音が巻き戻った（2026-09-28 実測）。
+   * 再生器を合わせるのは、他が止まっているときの移動（と止まった瞬間）だけ。
    */
   const followSec = sync?.followSec ?? null
   useEffect(() => {
-    if (followSec === null) return
+    if (followSec === null || othersPlaying) return
     if (control.current.isPlaying) return
     if (Math.abs(control.current.currentSec - followSec) < FOLLOW_TOLERANCE_SEC) return
     control.current.seekTo(followSec)
-  }, [followSec])
+  }, [followSec, othersPlaying])
+  const shownSec = othersPlaying && followSec !== null ? followSec : playback.currentSec
+  const shown = useRef(shownSec)
+  shown.current = shownSec
 
   const seekSerial = sync?.seek?.serial ?? null
   const seenSerial = useRef(seekSerial)
@@ -113,12 +120,15 @@ export const useCutEditorSync = (
     control.current.seekTo(sec)
     port.current?.onSeek?.(sec)
   }, [])
+  /** 1 歩は見えている位置から（他が鳴っている間、再生器の位置は古いまま）。 */
   const nudge = useCallback(
     (deltaSec: number): void => {
-      const { currentSec, durationSec } = control.current
-      seekTo(resolveSeekTarget(currentSec, deltaSec, durationSec))
+      seekTo(resolveSeekTarget(shown.current, deltaSec, control.current.durationSec))
     },
     [seekTo],
   )
-  return useMemo(() => ({ ...playback, seekTo, nudge }), [playback, seekTo, nudge])
+  return useMemo(
+    () => ({ ...playback, currentSec: shownSec, seekTo, nudge }),
+    [playback, shownSec, seekTo, nudge],
+  )
 }

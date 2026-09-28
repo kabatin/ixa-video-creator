@@ -1,6 +1,6 @@
 'use client'
 
-import { useWorkbench } from '@/components/workbench/workbench-context'
+import { useTransport, useWorkbench } from '@/components/workbench/workbench-context'
 import { formatClock } from '@/lib/format-time'
 import { TRANSPORT_OWNER_LABELS } from '@/lib/transport-labels'
 import { SharedPlayButton } from '@/components/workbench/shared-play-button'
@@ -25,7 +25,8 @@ export type TransportBarProps = {
 }
 
 export const TransportBar = ({ owner, durationSec = null }: TransportBarProps) => {
-  const { transport, transportControls } = useWorkbench()
+  const { transportControls } = useWorkbench()
+  const transport = useTransport()
   if (transportControls.host !== owner) return null
 
   const playing = transport.playing && transport.owner !== null

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { ProgramMonitor } from '@/components/program-monitor'
-import { useSelectedShot, useWorkbench } from '@/components/workbench/workbench-context'
+import { useSelectedShot, useTransport, useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelFrame, PanelNotice } from '@/components/workbench/panels/panel-frame'
 import { TransportBar } from '@/components/workbench/transport-bar'
 import { loadTimelineDocument, type Part } from '@/lib/timeline-loader'
@@ -21,7 +21,8 @@ import type { WireTimelineDocument } from '@/lib/timeline-api'
  */
 export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean }) => {
   const workbench = useWorkbench()
-  const { transport, transportControls } = workbench
+  const { transportControls } = workbench
+  const transport = useTransport()
   const shot = useSelectedShot()
   const [document, setDocument] = useState<Part<WireTimelineDocument> | null>(null)
   const [monitorError, setMonitorError] = useState<string | null>(null)

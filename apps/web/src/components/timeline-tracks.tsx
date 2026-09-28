@@ -23,6 +23,7 @@ import type { InlineFormAnchor } from '@/components/timeline-inline-form'
 import type { TransitionInsertionPoint } from '@/lib/timeline-insert'
 import type { ShotPosterMap } from '@/lib/shot-posters'
 import { posterViewFor } from '@/lib/shot-posters'
+import { usePlayheadSec } from '@/lib/playhead-sec'
 import { playheadLeftPx, seekSecAtClientX } from '@/lib/timeline-playhead'
 import {
   alignmentByShotId,
@@ -92,8 +93,8 @@ export type TimelineTracksProps = {
    * 渡した Shot の分だけ絵が下地になり、文字は暗い被せの上に乗る。
    */
   readonly posters?: ShotPosterMap
-  /** 再生ヘッドの位置（秒）。null なら描かない。 */
-  readonly playheadSec?: number | null
+  /** 再生ヘッドを引くか。位置は `PlayheadSecContext` から読む（持ち主の内側で使う）。 */
+  readonly showPlayhead?: boolean
   /** 目盛りの帯を押した。その秒へ飛ぶ。 */
   readonly onSeek?: (sec: number) => void
   /** 帯の上に重ねるもの（その場で出る入力）。位置は呼び出し側が持つ。 */
@@ -168,7 +169,7 @@ export const TimelineTracks = ({
   onClipDragMove,
   onClipDragEnd,
   posters,
-  playheadSec = null,
+  showPlayhead = false,
   onSeek,
   overlay,
   beatAlignment,
@@ -380,21 +381,24 @@ export const TimelineTracks = ({
           </Row>
         ))}
 
-        {playheadSec !== null && (
-          /**
-           * 再生ヘッド。行をまたいで 1 本引く。ラベル列（w-44 = 11rem）の右が時間軸の 0 秒。
-           * `pointer-events-none` で、下の帯の操作を邪魔しない。
-           */
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-danger"
-            style={{
-              left: `calc(11rem + ${String(playheadLeftPx(playheadSec, durationSec, pxPerSec))}px)`,
-            }}
-          />
-        )}
+        {showPlayhead && <PlayheadLine durationSec={durationSec} pxPerSec={pxPerSec} />}
         {overlay}
       </div>
     </div>
   )
 }
+
+/**
+ * 再生ヘッド。行をまたいで 1 本引く。ラベル列（w-44 = 11rem）の右が時間軸の 0 秒。
+ * `pointer-events-none` で、下の帯の操作を邪魔しない。
+ * **位置を毎コマ読むのはこの線だけ**（帯の全体を描き直さない。`@/lib/playhead-sec`）。
+ */
+const PlayheadLine = ({ durationSec, pxPerSec }: { readonly durationSec: number; readonly pxPerSec: number }) => (
+  <div
+    aria-hidden="true"
+    className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-danger"
+    style={{
+      left: `calc(11rem + ${String(playheadLeftPx(usePlayheadSec(), durationSec, pxPerSec))}px)`,
+    }}
+  />
+)

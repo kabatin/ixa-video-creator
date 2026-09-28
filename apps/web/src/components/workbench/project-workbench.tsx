@@ -218,7 +218,6 @@ const WorkbenchShell = ({
         shotCount={workbench.shots?.length ?? null}
         live={workbench.live}
         loadErrors={workbench.loadErrors}
-        transport={workbench.transport}
         renderWatch={renderWatch}
       />
       <WorkbenchDialogs onHistoryChanged={history.reload} renderWatch={renderWatch} />

@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { CutEditor } from '@/components/cut-editor'
 import { usePreferences } from '@/components/preferences-root'
-import { useWorkbench } from '@/components/workbench/workbench-context'
+import { useTransport, useWorkbench } from '@/components/workbench/workbench-context'
 import { MusicGate } from '@/components/workbench/panels/music-gate'
 import { PanelFrame } from '@/components/workbench/panels/panel-frame'
 import { SharedPlayButton } from '@/components/workbench/shared-play-button'
@@ -17,7 +17,8 @@ import { SharedPlayButton } from '@/components/workbench/shared-play-button'
 export const CutterPanel = ({ visible }: { readonly visible: boolean }) => {
   const workbench = useWorkbench()
   const { preferences } = usePreferences()
-  const { transport, transportControls } = workbench
+  const { transportControls } = workbench
+  const transport = useTransport()
 
   // 操作列に名乗る。**依存は registerPlayer だけ**（preview-panel に理由を書いた）。
   const { registerPlayer } = transportControls

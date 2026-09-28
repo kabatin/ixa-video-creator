@@ -22,13 +22,14 @@ import {
 } from '@/components/timeline-inline-form'
 import { TimelineIssuePanel } from '@/components/timeline-issue-panel'
 import { TimelineSnapPanel } from '@/components/timeline-snap-panel'
-import { ProgramMonitor } from '@/components/program-monitor'
+import { ProgramMonitor, type ProgramMonitorProps } from '@/components/program-monitor'
 import { TEXT_INSERT_LAYER, TimelineTracks } from '@/components/timeline-tracks'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import type { WireTimelineBeatAlignment } from '@/lib/beat-alignment-view'
 import { EditHistoryPanel } from '@/components/edit-history-panel'
 import { RoughCutPanel } from '@/components/rough-cut-panel'
+import { PlayheadSecContext, usePlayheadSec } from '@/lib/playhead-sec'
 import { nextSeekCommand, type SeekCommand } from '@/lib/program-monitor'
 import type { ShotPosterMap } from '@/lib/shot-posters'
 import { createRequester } from '@/lib/requester'
@@ -136,8 +137,12 @@ export type TimelineEditorProps = {
   readonly audioLane?: { readonly durationSec: number; readonly node: ReactNode }
 }
 
+/**
+ * 外から渡す再生の状態。**位置は入れない。** 位置は毎コマ変わるので、props で受けると
+ * 編集画面の全体が毎コマ描き直される。位置は外の持ち主が `PlayheadSecContext` で配り、
+ * 再生ヘッドと時刻の表示だけが読む（`@/lib/playhead-sec`）。
+ */
 export type TimelinePlayback = {
-  readonly currentSec: number
   readonly playing: boolean
   readonly seek: SeekCommand | null
   /** 目盛りを押した。明示的に飛ぶ。 */
@@ -206,8 +211,7 @@ export const TimelineEditor = ({
   const [ownSeek, setOwnSeek] = useState<SeekCommand | null>(null)
   const document = initialDocument
 
-  /** 外から渡されていればそちらが正。内部の状態は使わない。 */
-  const currentSec = playback?.currentSec ?? ownCurrentSec
+  /** 外から渡されていればそちらが正。内部の状態は使わない。位置は外の `PlayheadSecContext` が正。 */
   const playing = playback?.playing ?? ownPlaying
   const seek = playback === undefined ? ownSeek : playback.seek
   const setCurrentSec = playback?.onFrame ?? setOwnCurrentSec
@@ -557,7 +561,7 @@ export const TimelineEditor = ({
     </>
   )
 
-  return (
+  const body = (
     <div className="space-y-6">
       {loadErrors.length > 0 && (
         <ul role="alert" className="space-y-1 rounded-lg border border-danger/40 bg-danger/10 p-4">
@@ -611,9 +615,8 @@ export const TimelineEditor = ({
        */}
       {showMonitor && (
         <div className="mx-auto w-full max-w-4xl">
-          <ProgramMonitor
+          <MonitorAtPlayhead
             document={document}
-            currentSec={currentSec}
             seek={seek}
             playing={playing}
             onFrame={setCurrentSec}
@@ -632,7 +635,7 @@ export const TimelineEditor = ({
             （`resolveKeyOwner`）、「Space で再生」と無条件に書くと嘘になる。
             割り当ては ヘルプ > キーボードショートカット が持つ。
           */}
-          {`${playing ? '再生中' : '停止中'} ${formatClock(currentSec)}`}
+          <PlaybackClock playing={playing} />
         </p>
       )}
 
@@ -663,7 +666,7 @@ export const TimelineEditor = ({
           onClipDragBegin={beginDrag}
           onClipDragMove={dragMove}
           onClipDragEnd={dragEnd}
-          playheadSec={document === null ? null : currentSec}
+          showPlayhead={document !== null}
           {...(posters === undefined ? {} : { posters })}
           selectedShotId={selectedShotId ?? null}
           {...(onSelectShot === undefined ? {} : { onSelectShot })}
@@ -763,4 +766,17 @@ export const TimelineEditor = ({
       )}
     </div>
   )
+
+  // 外から位置を受けないときは、自分の位置を配る。受けるときは外の持ち主が配っている。
+  return controlled ? body : <PlayheadSecContext.Provider value={ownCurrentSec}>{body}</PlayheadSecContext.Provider>
 }
+
+/** 位置を毎コマ読むのはこの末端だけ（`@/lib/playhead-sec`）。 */
+const MonitorAtPlayhead = (props: Omit<ProgramMonitorProps, 'currentSec'>) => (
+  <ProgramMonitor {...props} currentSec={usePlayheadSec()} />
+)
+
+const PlaybackClock = ({ playing }: { readonly playing: boolean }) => (
+  <>{`${playing ? '再生中' : '停止中'} ${formatClock(usePlayheadSec())}`}</>
+)
+

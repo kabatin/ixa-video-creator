@@ -70,6 +70,7 @@ export const useWorkbenchKeys = (options: WorkbenchKeysOptions): void => {
           splitAtPlayhead(
             current,
             (current.shots ?? []).find((shot) => shot.id === current.selectedShotId) ?? null,
+            current.transportControls.getTransport().currentSec,
           )
           return
         case 'delete-shots':
