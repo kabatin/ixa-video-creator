@@ -1,7 +1,7 @@
 'use client'
 
 import type { Shot, ShotId, TimelineClip, TimelineClipId, TimelineTrack } from '@ixa/domain'
-import { useRef, type KeyboardEvent, type ReactNode } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
 import { ShotPoster } from '@/components/shot-poster'
 import { TimelineClipLane } from '@/components/timeline-clip-lane'
 import { TimelineTransitionRow } from '@/components/timeline-transition-row'
@@ -177,18 +177,17 @@ export const TimelineTracks = ({
   onSelectShot,
   audioLane,
 }: TimelineTracksProps) => {
-  const contentRef = useRef<HTMLDivElement>(null)
   const alignments = beatAlignment === undefined ? null : alignmentByShotId(beatAlignment.views)
   const contentWidthPx = Math.max(secondsToPx(durationSec, pxPerSec), MIN_CONTENT_WIDTH_PX)
   const ticks = rulerTicks(durationSec, pxPerSec)
 
   /**
-   * 子は自分がどの行にいるかを知らないので、画面上の縦位置だけを渡してくる。
-   * **入力を重ねるのはこの器の中なので、器から見た座標へ直すのはここの仕事。**
+   * 入力は画面全体に出す（パネルの中に出すと、縦幅を越えた分が切れて見えなかった）。
+   * 子が渡す画面の座標をそのまま置き場所にする。
    */
-  const anchorFrom = (leftPx: number, clientY: number): InlineFormAnchor => ({
-    leftPx,
-    topPx: clientY - (contentRef.current?.getBoundingClientRect().top ?? 0),
+  const anchorFrom = (clientX: number, clientY: number): InlineFormAnchor => ({
+    leftPx: clientX,
+    topPx: clientY,
   })
 
   const shownTracks = visibleTracks(clips)
@@ -217,17 +216,17 @@ export const TimelineTracks = ({
         previewId={previewClipId}
         previewSpan={previewSpan}
         onSelect={onSelectClip}
-        onOpen={(clip, leftPx, clientY) => {
+        onOpen={(clip, clientX, clientY) => {
           // 帯の上のクリップはボタンではないので、戻す先は無い（マウスで開く）。
-          onOpenClip(clip, anchorFrom(leftPx, clientY), null)
+          onOpenClip(clip, anchorFrom(clientX, clientY), null)
         }}
         onDragBegin={onClipDragBegin}
         onDragMove={onClipDragMove}
         onDragEnd={onClipDragEnd}
-        onInsertAt={(atSec, leftPx, clientY) => {
+        onInsertAt={(atSec, clientX, clientY) => {
           // 置けるのは TEXT だけ。他は素材の選択が要るのでこの画面では受けない。
           if (isInsertableTrack(track))
-            onInsertText(track, atSec, anchorFrom(leftPx, clientY), null)
+            onInsertText(track, atSec, anchorFrom(clientX, clientY), null)
         }}
       />
     ))
@@ -262,7 +261,7 @@ export const TimelineTracks = ({
           {`まだ置けない帯は隠しています: ${hidden.join(' / ')}`}
         </p>
       )}
-      <div ref={contentRef} className="relative" style={{ minWidth: contentWidthPx }}>
+      <div className="relative" style={{ minWidth: contentWidthPx }}>
         <Row label={`尺 ${formatClock(durationSec)}`} contentWidthPx={contentWidthPx}>
           {/* 目盛りを押したらその秒へ。判定は `timeline-playhead` が持つ。 */}
           <div
@@ -364,8 +363,8 @@ export const TimelineTracks = ({
             heightPx={TRANSITION_ROW_HEIGHT_PX}
             busy={busy}
             openAtSec={openTransitionAtSec}
-            onOpen={(point, leftPx, clientY, opener) => {
-              onOpenTransition(point, anchorFrom(leftPx, clientY), opener)
+            onOpen={(point, clientX, clientY, opener) => {
+              onOpenTransition(point, anchorFrom(clientX, clientY), opener)
             }}
           />
         </Row>

@@ -10,6 +10,7 @@ import {
   type TransitionType,
 } from '@ixa/domain'
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { FIELD_HINT_CLASS } from '@/components/form/field-styles'
 import { SelectField } from '@/components/form/select-field'
 import { TextField } from '@/components/form/text-field'
@@ -17,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { transitionTypeLabel } from '@/lib/timeline-display'
 import { TEXT_TEMPLATE_LABELS } from '@/lib/text-style-form'
 import {
+  INLINE_PANEL_MARGIN_PX,
   clampInlinePanelPosition,
   resolveInlineFormKey,
   type InlineFieldName,
@@ -107,7 +109,7 @@ const PANEL_TITLES: Readonly<Record<InlineFormDraft['kind'], string>> = {
 export type TimelineInlineFormProps = {
   /** 初期値。**開く場所が変わったら `key` も変えること。** 打ちかけが残る。 */
   readonly draft: InlineFormDraft
-  /** 帯の上のどこに出すか。位置指定済みの親要素から見た px。 */
+  /** どこに出すか。**画面の座標**（押した場所）。この部品は画面全体（body の直下）に出す。 */
   readonly anchor: InlineFormAnchor
   /** どこを触っているかの説明（`0:03.75 の境目` など）。 */
   readonly caption?: string
@@ -176,18 +178,16 @@ export const TimelineInlineForm = ({
     }
   }, [returnFocusRef])
 
-  // 器からはみ出さない場所へ寄せる。**依存配列を置かない。** エラーや注意で
+  // 画面からはみ出さない場所へ寄せる。**依存配列を置かない。** エラーや注意で
   // 高さが変わるため毎回測る。同じ値なら更新しないので繰り返しは起きない。
   useLayoutEffect(() => {
     const panel = panelRef.current
-    const parent = panel?.offsetParent
-    if (!panel || !(parent instanceof HTMLElement)) return
     // 測れない（描画されていない）ときは動かさない。0 へ寄せると左上へ飛ぶ。
-    if (parent.clientWidth === 0 || panel.offsetWidth === 0) return
+    if (!panel || panel.offsetWidth === 0) return
     const next = clampInlinePanelPosition(
       anchor,
       { widthPx: panel.offsetWidth, heightPx: panel.offsetHeight },
-      { widthPx: parent.clientWidth, heightPx: parent.clientHeight },
+      { widthPx: window.innerWidth, heightPx: window.innerHeight },
     )
     setPlacement((current) => (samePlacement(current, next) ? current : next))
   })
@@ -227,7 +227,9 @@ export const TimelineInlineForm = ({
     else submit()
   }
 
-  return (
+  // body の直下に出す。パネルの中に出すと、縦幅を越えた分が切れて一部しか見えなかった
+  // （2026-09-28、制作者の指摘）。React の木の上では帯の中にいるので、打鍵の扱いは変わらない。
+  return createPortal(
     <div
       ref={panelRef}
       role="dialog"
@@ -237,8 +239,15 @@ export const TimelineInlineForm = ({
       onBlurCapture={(event) =>
         (focusInside.current = panelRef.current?.contains(event.relatedTarget) ?? false)
       }
-      style={{ left: `${String(placement.leftPx)}px`, top: `${String(placement.topPx)}px` }}
-      className="absolute z-20 w-64 rounded-lg border border-line-strong bg-surface p-3 shadow-lg"
+      style={{
+        position: 'fixed',
+        left: `${String(placement.leftPx)}px`,
+        top: `${String(placement.topPx)}px`,
+        // 画面より高くても切らない。中をスクロールさせる。
+        maxHeight: `calc(100vh - ${String(INLINE_PANEL_MARGIN_PX * 2)}px)`,
+        overflowY: 'auto',
+      }}
+      className="z-50 w-64 rounded-lg border border-line-strong bg-surface p-3 shadow-lg"
     >
       <p className="text-sm font-semibold text-text">{PANEL_TITLES[values.kind]}</p>
       {caption === undefined ? null : <p className={`mt-0.5 ${FIELD_HINT_CLASS}`}>{caption}</p>}
@@ -332,6 +341,7 @@ export const TimelineInlineForm = ({
           </Button>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

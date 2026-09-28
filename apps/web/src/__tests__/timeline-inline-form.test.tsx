@@ -475,3 +475,69 @@ describe('TimelineInlineForm — 閉じたら開く元へ焦点を戻す', () =>
     }).not.toThrow()
   })
 })
+
+/**
+ * **パネルの外（画面全体）に出す。** 以前はタイムラインのパネルの中に描いていたので、
+ * パネルの縦幅を越えた分が切れて一部しか見えなかった（2026-09-28、制作者の指摘）。
+ * 位置は画面の座標で受け、画面の端に当たるときは内側へ寄せる。
+ */
+describe('TimelineInlineForm — 画面全体に出す', () => {
+  const sizeOf = (width: number, height: number) => {
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(width)
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(height)
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('パネルの中ではなく body の直下に出す', () => {
+    const pane = document.createElement('div')
+    document.body.append(pane)
+    render(
+      <TimelineInlineForm
+        draft={TEXT_DRAFT}
+        anchor={{ leftPx: 100, topPx: 40 }}
+        onSubmit={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+      { container: pane },
+    )
+
+    const dialog = screen.getByRole('dialog')
+    expect(pane.contains(dialog)).toBe(false)
+    expect(dialog.parentElement).toBe(document.body)
+    expect(dialog.style.position).toBe('fixed')
+  })
+
+  it('画面の右下で開いても、画面の中に収める（下に入らなければ上へ返す）', () => {
+    sizeOf(256, 300)
+    render(
+      <TimelineInlineForm
+        draft={TEXT_DRAFT}
+        anchor={{ leftPx: window.innerWidth - 4, topPx: window.innerHeight - 8 }}
+        onSubmit={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    )
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.style.left).toBe(`${String(window.innerWidth - 256 - 8)}px`)
+    expect(dialog.style.top).toBe(`${String(window.innerHeight - 8 - 300 - 8)}px`)
+  })
+
+  it('画面より高いときは、中をスクロールできるようにする（切らない）', () => {
+    render(
+      <TimelineInlineForm
+        draft={TEXT_DRAFT}
+        anchor={{ leftPx: 100, topPx: 40 }}
+        onSubmit={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    )
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.style.maxHeight).not.toBe('')
+    expect(dialog.style.overflowY).toBe('auto')
+  })
+})

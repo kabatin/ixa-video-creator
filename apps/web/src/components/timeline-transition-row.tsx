@@ -26,14 +26,12 @@ export type TimelineTransitionRowProps = {
   /** いま開いている境目。開いている印を付けるために使う。 */
   readonly openAtSec: number | null
   /**
-   * 押された。`leftPx` は帯の左端からの位置。`clientY` は画面上の縦位置で、
-   * **入力を出す縦の場所を親が計算するために要る**（帯は縦に積まれていて、
-   * どの行かはこの部品からは分からない）。
+   * 押された。`clientX` / `clientY` は入力を出す場所（画面の座標。入力は画面全体に出す）。
    */
   /** `opener` は押されたボタン。**閉じたあと焦点を戻す先**として要る。 */
   readonly onOpen: (
     point: TransitionInsertionPoint,
-    leftPx: number,
+    clientX: number,
     clientY: number,
     opener: HTMLElement,
   ) => void
@@ -74,7 +72,7 @@ export const TimelineTransitionRow = ({
             title={point.message}
             onClick={(event) => {
               const rect = event.currentTarget.getBoundingClientRect()
-              onOpen(point, leftPx, rect.bottom, event.currentTarget)
+              onOpen(point, rect.left + rect.width / 2, rect.bottom, event.currentTarget)
             }}
             className={
               existing === null

@@ -114,3 +114,51 @@ describe('帯のテロップを押したとき', () => {
     expect(screen.getByTitle(/直した行/)).toBeTruthy()
   })
 })
+
+/**
+ * 小窓は画面全体に出すので、**開く位置は画面の座標で渡す**。帯の左端からの位置のまま渡すと、
+ * 帯が画面の左端に無いぶん（ラベルの列・パネルの位置）ずれて出る。
+ */
+describe('小窓を開く位置', () => {
+  it('押した帯の場所を、画面の座標で渡す', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      left: 100,
+      top: 50,
+      right: 1100,
+      bottom: 90,
+      width: 1000,
+      height: 40,
+      x: 100,
+      y: 50,
+      toJSON: () => ({}),
+    })
+    render(editor([]))
+
+    const lane = screen.getByText('layer 0').parentElement
+    if (lane === null) throw new Error('TEXT の帯が無い')
+    const at = { clientX: 100 + 10 * DEFAULT_PX_PER_SEC, pointerId: 1 }
+    fireEvent.pointerDown(lane, at)
+    fireEvent.pointerUp(lane, at)
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.style.left).toBe(`${String(100 + 10 * DEFAULT_PX_PER_SEC)}px`)
+    expect(dialog.style.top).toBe('90px')
+    vi.restoreAllMocks()
+  })
+})
+
+/**
+ * 空きを押すと、押した瞬間（pointerdown）に小窓を開く。**そのままだとブラウザの既定の動きで
+ * 焦点がパネルへ移り、小窓の欄から焦点が抜ける**（Esc で閉じられず、打った文字も届かない）。
+ * 小窓はパネルの外に出すので、パネルに焦点が移ると戻ってこない（2026-09-28、実機で確認）。
+ */
+it('空きを押して開くときは、焦点をパネルへ移す既定の動きを止める', () => {
+  render(editor([]))
+  const lane = screen.getByText('layer 0').parentElement
+  if (lane === null) throw new Error('TEXT の帯が無い')
+
+  const notPrevented = fireEvent.pointerDown(lane, { clientX: 10 * DEFAULT_PX_PER_SEC, pointerId: 1 })
+
+  expect(screen.getByRole('dialog')).toBeTruthy()
+  expect(notPrevented).toBe(false)
+})

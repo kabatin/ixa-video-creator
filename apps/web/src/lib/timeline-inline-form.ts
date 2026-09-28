@@ -82,6 +82,7 @@ export const inlineFormErrors = (issues: readonly InlineFormIssue[]): InlineForm
 // --- 画面の端で切れないようにする ---
 
 /** 出したい場所。x は**帯の上の点**（境目やクリップの中心）、y は帯の下端を渡す。 */
+/** 入力を出す点。**画面（viewport）の座標。** 入力は画面全体に出す（パネルの中だと縦幅を越えた分が切れた）。 */
 export type InlineFormAnchor = { readonly leftPx: number; readonly topPx: number }
 
 export type InlinePanelBox = { readonly widthPx: number; readonly heightPx: number }

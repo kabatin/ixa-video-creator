@@ -39,14 +39,14 @@ export type TimelineClipLaneProps = {
   readonly previewId: TimelineClipId | null
   readonly previewSpan: { readonly startSec: number; readonly durationSec: number } | null
   readonly onSelect: (id: TimelineClipId) => void
-  /** クリップを押した。`clientY` は入力を出す縦の場所を親が計算するために要る。 */
-  readonly onOpen: (clip: TimelineClip, leftPx: number, clientY: number) => void
+  /** クリップを押した。`clientX` / `clientY` は入力を出す場所（画面の座標。入力は画面全体に出す）。 */
+  readonly onOpen: (clip: TimelineClip, clientX: number, clientY: number) => void
   /** 掴んだ。**この時点で吸着候補を作る**（動かすたびに作らない）。 */
   readonly onDragBegin: (clip: TimelineClip) => ClipDragContext
   readonly onDragMove: (clip: TimelineClip, outcome: ClipDragOutcome) => void
   readonly onDragEnd: (clip: TimelineClip, outcome: ClipDragOutcome) => void
-  /** 空いているところを押した。テロップを挿す起点。 */
-  readonly onInsertAt: (atSec: number, leftPx: number, clientY: number) => void
+  /** 空いているところを押した。テロップを挿す起点。座標は `onOpen` と同じく画面の座標。 */
+  readonly onInsertAt: (atSec: number, clientX: number, clientY: number) => void
 }
 
 type DragState = {
@@ -95,7 +95,10 @@ export const TimelineClipLane = ({
         null,
     )
     if (hit === undefined) {
-      onInsertAt(atSec, atSec * pxPerSec, laneRef.current?.getBoundingClientRect().bottom ?? 0)
+      // 押した瞬間に小窓を開く。既定の動きのままだと、このあと焦点がパネルへ移って
+      // 小窓（パネルの外に出す）の欄から抜ける。Esc も打った文字も届かなくなる。
+      event.preventDefault()
+      onInsertAt(atSec, bounds.left + atSec * pxPerSec, laneRef.current?.getBoundingClientRect().bottom ?? 0)
       return
     }
 
@@ -144,7 +147,7 @@ export const TimelineClipLane = ({
     if (!movedRef.current && !outcome.moved) {
       onOpen(
         drag.clip,
-        (drag.clip.startSec + drag.clip.durationSec / 2) * pxPerSec,
+        boundsOf().left + (drag.clip.startSec + drag.clip.durationSec / 2) * pxPerSec,
         laneRef.current?.getBoundingClientRect().bottom ?? 0,
       )
       return
