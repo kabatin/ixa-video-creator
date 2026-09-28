@@ -5,6 +5,7 @@ import type {
   LocationId,
   MusicTrackId,
   ShotId,
+  TimelineClipId,
 } from '@ixa/domain'
 
 /**
@@ -18,14 +19,16 @@ export type Inspected =
   | { readonly kind: 'location'; readonly id: LocationId }
   | { readonly kind: 'brand-asset'; readonly id: BrandAssetId }
   | { readonly kind: 'track'; readonly id: MusicTrackId }
+  /** テロップ（ADR-0028）。見た目・位置・フェードとスタイルを直す。 */
+  | { readonly kind: 'text-clip'; readonly id: TimelineClipId }
 
 export type InspectedKind = Inspected['kind']
 
-/** 素材（Shot 以外）か。素材ビューアに出せるのはこちら。 */
+/** 素材（Shot・テロップ以外）か。素材ビューアに出せるのはこちら。 */
 export const isAssetSelection = (
   selection: Inspected | null,
-): selection is Exclude<Inspected, { kind: 'shot' }> =>
-  selection !== null && selection.kind !== 'shot'
+): selection is Exclude<Inspected, { kind: 'shot' | 'text-clip' }> =>
+  selection !== null && selection.kind !== 'shot' && selection.kind !== 'text-clip'
 
 export const sameSelection = (a: Inspected | null, b: Inspected | null): boolean =>
   a !== null && b !== null && a.kind === b.kind && a.id === b.id
@@ -37,4 +40,5 @@ export const INSPECTED_LABELS: Readonly<Record<InspectedKind, string>> = Object.
   location: 'ロケーション',
   'brand-asset': 'ブランド資産',
   track: '楽曲',
+  'text-clip': 'テロップ',
 })

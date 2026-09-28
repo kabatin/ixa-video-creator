@@ -33,6 +33,8 @@ const ISSUE_CODE_LABELS: Readonly<Record<string, string>> = Object.freeze({
   [TIMELINE_ISSUE_CODES.transitionTooLong]: 'Transition が隣の Shot より長い',
   [TIMELINE_ISSUE_CODES.transitionDegraded]: 'Transition が縮退している',
   [TIMELINE_ISSUE_CODES.clipOutOfRange]: 'クリップが尺の外にある',
+  [TIMELINE_ISSUE_CODES.textClipUnreadable]: '書き出すと赤い枠になるテロップがある',
+  [TIMELINE_ISSUE_CODES.textStyleUnreadable]: 'テロップの見た目が読めない（既定の見た目で出る）',
 })
 
 export const issueCodeLabel = (code: string): string => ISSUE_CODE_LABELS[code] ?? code

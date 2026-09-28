@@ -3,10 +3,21 @@ import {
   TextTemplateKey,
   isPlaceholderTextTemplate,
   parseTextClipParams,
+  resolveTextStyle,
+  type ResolvedTextStyle,
   type TextClipParams,
 } from '@ixa/domain'
 import type React from 'react'
+import { useCurrentFrame } from 'remotion'
 import type { FitRect } from '../presets.js'
+import {
+  FONT_STACKS,
+  FONT_WEIGHTS,
+  TEXT_SHADOWS,
+  anchorBoxStyle,
+  anchorMargins,
+  rgba,
+} from './text-style-css.js'
 
 /**
  * テロップの描画。
@@ -22,16 +33,6 @@ import type { FitRect } from '../presets.js'
 /** 行間。文字の大きさから帯の高さを逆算するのにも使う。 */
 const LINE_HEIGHT = 1.3
 
-/** 映像の上に載るので、背景が明るくても読めるように影を敷く。 */
-const TEXT_SHADOW = '0 2px 12px rgba(0, 0, 0, 0.85)'
-
-/**
- * Remotion（ヘッドレス Chromium）の既定で出るフォントだけを指定する。
- * 外部フォントを読み込むと、レンダリング環境ごとに出たり出なかったりするため。
- * 日本語は最終的に `sans-serif` のシステムフォールバックで描かれる。
- */
-const FONT_FAMILY = "'Hiragino Sans', 'Noto Sans JP', 'Yu Gothic', sans-serif"
-
 /** テンプレートごとの文字の置き場所。文字の大きさはここから逆算する。 */
 export type TextLayout = {
   /** 文字を流し込める幅（映像の幅に対する割合）。 */
@@ -42,11 +43,24 @@ export type TextLayout = {
   readonly maxSizeRatio: number
 }
 
+/**
+ * 型だけが持つ飾り。見た目（色・位置など）は domain の既定値（`TEXT_TEMPLATE_STYLE_DEFAULTS`）が持ち、
+ * ここは「帯を幅いっぱいに敷くか」「左に線を引くか」だけ（ADR-0028）。
+ */
+type TemplateDecor = {
+  /** 帯の幅。full = 流し込み幅いっぱい、fit = 文字に合わせる。 */
+  readonly width: 'full' | 'fit'
+  readonly leftBar: boolean
+}
+
 type DrawProps = {
   readonly text: string
   readonly video: FitRect
   readonly layout: TextLayout
+  readonly decor: TemplateDecor
+  readonly style: ResolvedTextStyle
   readonly fontSize: number
+  readonly template: TextTemplateKey
 }
 
 /** 映像の矩形に重ねる箱。レターボックスの黒帯に文字がはみ出さないようにする。 */
@@ -60,52 +74,61 @@ const videoBoxStyle = (video: FitRect): React.CSSProperties => ({
   overflow: 'hidden',
 })
 
-const bodyStyle = (fontSize: number): React.CSSProperties => ({
-  fontFamily: FONT_FAMILY,
-  fontSize,
-  lineHeight: LINE_HEIGHT,
-  color: '#ffffff',
-  fontWeight: 700,
-  // 日本語は単語の境目が無いので、どこでも折り返せるようにしておく。
-  overflowWrap: 'anywhere',
-  whiteSpace: 'pre-wrap',
-})
+const bodyStyle = (style: ResolvedTextStyle, fontSize: number): React.CSSProperties => {
+  const shadow = TEXT_SHADOWS[style.shadow]
+  return {
+    fontFamily: FONT_STACKS[style.font],
+    fontSize,
+    lineHeight: LINE_HEIGHT,
+    color: style.color,
+    fontWeight: FONT_WEIGHTS[style.weight],
+    textAlign: style.align,
+    ...(shadow === undefined ? {} : { textShadow: shadow }),
+    // 縁取りは線の半分が文字の内側に食い込むので、塗りを後から重ねて外側だけ残す。
+    ...(style.stroke === null
+      ? {}
+      : {
+          WebkitTextStroke: `${String(Math.round(fontSize * style.stroke.width))}px ${style.stroke.color}`,
+          paintOrder: 'stroke fill',
+        }),
+    // 日本語は単語の境目が無いので、どこでも折り返せるようにしておく。
+    overflowWrap: 'anywhere',
+    whiteSpace: 'pre-wrap',
+  }
+}
 
-/** 画面の中央に文字を置くだけ。飾りは無い。 */
-const PlainText: React.FC<DrawProps> = ({ text, video, layout, fontSize }) => (
-  <div
-    data-text-template="plain"
-    style={{ ...videoBoxStyle(video), alignItems: 'center', justifyContent: 'center' }}
-  >
-    <div
-      style={{
-        ...bodyStyle(fontSize),
-        maxWidth: `${layout.widthRatio * 100}%`,
-        textAlign: 'center',
-        textShadow: TEXT_SHADOW,
-      }}
-    >
-      {text}
-    </div>
-  </div>
-)
+/** 文字の入れ物（帯）。背景・左の線・幅・ずらしを持つ。 */
+const bandStyle = ({ video, layout, decor, style, fontSize }: DrawProps): React.CSSProperties => {
+  const { x, y } = style.offset
+  return {
+    ...(decor.width === 'full'
+      ? { width: `${String(layout.widthRatio * 100)}%` }
+      : { maxWidth: `${String(layout.widthRatio * 100)}%` }),
+    ...anchorMargins(style.anchor, video),
+    ...(style.background === null
+      ? {}
+      : {
+          padding: `${String(fontSize * 0.5)}px ${String(fontSize * 0.75)}px`,
+          backgroundColor: rgba(style.background.color, style.background.opacity),
+        }),
+    // 左の線は帯の飾り。帯を消したら線も引かない（線だけ残ると浮く）。
+    ...(decor.leftBar && style.background !== null
+      ? { borderLeft: `${String(Math.max(2, Math.round(fontSize * 0.12)))}px solid #ffffff` }
+      : {}),
+    ...(x === 0 && y === 0
+      ? {}
+      : { transform: `translate(${String(x * video.width)}px, ${String(y * video.height)}px)` }),
+  }
+}
 
-/** 下寄せの帯に載せる。よくある字幕の形。 */
-const LowerThird: React.FC<DrawProps> = ({ text, video, layout, fontSize }) => (
+/** 型の既定値に見た目を重ねた 1 つの描き方。 */
+const StyledText: React.FC<DrawProps> = (props) => (
   <div
-    data-text-template="lower_third"
-    style={{ ...videoBoxStyle(video), alignItems: 'flex-end', justifyContent: 'center' }}
+    data-text-template={props.template}
+    style={{ ...videoBoxStyle(props.video), ...anchorBoxStyle(props.style.anchor) }}
   >
-    <div
-      style={{
-        width: `${layout.widthRatio * 100}%`,
-        marginBottom: video.height * 0.08,
-        padding: `${fontSize * 0.5}px ${fontSize * 0.75}px`,
-        backgroundColor: 'rgba(0, 0, 0, 0.55)',
-        borderLeft: `${Math.max(2, Math.round(fontSize * 0.12))}px solid #ffffff`,
-      }}
-    >
-      <div style={{ ...bodyStyle(fontSize), textAlign: 'left' }}>{text}</div>
+    <div style={bandStyle(props)}>
+      <div style={bodyStyle(props.style, props.fontSize)}>{props.text}</div>
     </div>
   </div>
 )
@@ -115,15 +138,15 @@ const LowerThird: React.FC<DrawProps> = ({ text, video, layout, fontSize }) => (
  * domain にキーを足して描き方を足し忘れたら型検査で落ちる。
  */
 const TEXT_TEMPLATES: Readonly<
-  Record<TextTemplateKey, { readonly layout: TextLayout; readonly Draw: React.FC<DrawProps> }>
+  Record<TextTemplateKey, { readonly layout: TextLayout; readonly decor: TemplateDecor }>
 > = Object.freeze({
   plain: {
     layout: { widthRatio: 0.8, maxLines: 3, maxSizeRatio: 0.12 },
-    Draw: PlainText,
+    decor: { width: 'fit', leftBar: false },
   },
   lower_third: {
     layout: { widthRatio: 0.9, maxLines: 2, maxSizeRatio: 0.07 },
-    Draw: LowerThird,
+    decor: { width: 'full', leftBar: true },
   },
 })
 
@@ -214,21 +237,79 @@ export const resolveTextClip = (content: {
 }
 
 /**
+ * フェードの濃さ（ADR-0028）。頭から `fadeInSec` で 0 → 1、終わりへ `fadeOutSec` で 1 → 0。
+ * それぞれ尺の半分より長くはしない（両方が重なって最後まで薄いままにならないよう）。
+ */
+export const textFadeOpacity = ({
+  frame,
+  durationInFrames,
+  fps,
+  fadeInSec,
+  fadeOutSec,
+}: {
+  readonly frame: number
+  readonly durationInFrames: number
+  readonly fps: number
+  readonly fadeInSec: number
+  readonly fadeOutSec: number
+}): number => {
+  const half = durationInFrames / 2
+  const inFrames = Math.min(fadeInSec * fps, half)
+  const outFrames = Math.min(fadeOutSec * fps, half)
+  const clamp = (value: number): number => Math.min(1, Math.max(0, value))
+  const fadeIn = inFrames > 0 ? clamp(frame / inFrames) : 1
+  const fadeOut = outFrames > 0 ? clamp((durationInFrames - frame) / outFrames) : 1
+  return Math.min(fadeIn, fadeOut)
+}
+
+/** クリップの尺。フェードの計算に使う。 */
+export type TextClipTiming = { readonly durationInFrames: number; readonly fps: number }
+
+/** フェードがあるときだけ使う。**フックを持つ**ので、フェードの無いテロップはこれを通さない。 */
+const Fade: React.FC<{
+  readonly timing: TextClipTiming
+  readonly style: ResolvedTextStyle
+  readonly children: React.ReactNode
+}> = ({ timing, style, children }) => {
+  const frame = useCurrentFrame()
+  const opacity = textFadeOpacity({ frame, ...timing, fadeInSec: style.fadeInSec, fadeOutSec: style.fadeOutSec })
+  return <div style={{ position: 'absolute', inset: 0, opacity }}>{children}</div>
+}
+
+/**
  * 解決済みのテロップ本体。`resolveTextClip` が `renderable` を返したときだけ呼ぶ。
- * 自身はフックを持たないので、テストから素の関数としても呼べる。
+ * フェードが無ければフックを持たないので、テストから素の関数としても呼べる。
  */
 export const TextClip: React.FC<{
   readonly template: TextTemplateKey
   readonly params: TextClipParams
   readonly video: FitRect
-}> = ({ template, params, video }) => {
-  const { layout, Draw } = TEXT_TEMPLATES[template]
-  return (
-    <Draw
+  /** 無ければフェードしない（静的な確認用）。 */
+  readonly timing?: TextClipTiming
+}> = ({ template, params, video, timing }) => {
+  const { layout, decor } = TEXT_TEMPLATES[template]
+  const style = resolveTextStyle(template, params.style)
+  const fontSize =
+    style.size === null
+      ? textClipFontSize(template, params.text, video)
+      : Math.max(1, Math.round(style.size * video.height))
+  const body = (
+    <StyledText
       text={params.text}
       video={video}
       layout={layout}
-      fontSize={textClipFontSize(template, params.text, video)}
+      decor={decor}
+      style={style}
+      fontSize={fontSize}
+      template={template}
     />
+  )
+  const fades = style.fadeInSec > 0 || style.fadeOutSec > 0
+  return fades && timing !== undefined ? (
+    <Fade timing={timing} style={style}>
+      {body}
+    </Fade>
+  ) : (
+    body
   )
 }

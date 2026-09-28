@@ -32,6 +32,7 @@ import { createShotEditApi, type ShotEditApi } from '@/lib/shot-edit-api'
 import { createModelsApi, type ModelsApi } from '@/lib/models-api'
 import { createShotStartFrameApi, type ShotStartFrameApi } from '@/lib/shot-start-frame-api'
 import { createFootageApi, type FootageApi } from '@/lib/footage-api'
+import { createTextStyleApi, type TextStyleApi } from '@/lib/text-style-api'
 import { createShotCastApi, type ShotCastApi } from '@/lib/shot-cast-api'
 import { createCostMeterApi, type CostMeterApi } from '@/lib/cost-meter-api'
 import { createRoughCutApi, type RoughCutApi } from '@/lib/rough-cut-api'
@@ -96,6 +97,7 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
   ModelsApi &
   ShotStartFrameApi &
   FootageApi &
+  TextStyleApi &
   ShotCastApi &
   ShotPostersApi &
   ShotCompareApi &
@@ -182,6 +184,7 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
     ...createModelsApi(requester),
     ...createShotStartFrameApi(requester),
     ...createFootageApi(requester),
+    ...createTextStyleApi(requester),
     ...createShotCastApi(requester),
     ...createShotPostersApi(requester),
     ...createShotCompareApi(requester),

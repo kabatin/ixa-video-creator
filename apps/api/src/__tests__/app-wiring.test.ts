@@ -66,6 +66,20 @@ describe('createApp のルート配線', () => {
     expect(Object.keys(body.fields ?? {})).toContain('mediaAssetId')
   })
 
+  it('テロップのスタイルのルートが生えている（ADR-0028）', async () => {
+    const list = await buildApp().request(`/projects/${project.id}/text-styles`)
+    expect(list.status).toBe(200)
+    // まとめて当てる口: 本文の検証（422 と clipIds の指摘）はルートが無いと返らない。
+    const apply = await buildApp().request(`/projects/${project.id}/clips/text-style`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    expect(apply.status).toBe(422)
+    const body = (await apply.json()) as { fields?: Record<string, unknown> }
+    expect(Object.keys(body.fields ?? {})).toContain('clipIds')
+  })
+
   it('レビューのルートが生えている', async () => {
     // Take が無いので 404。配線されていなければ Hono の 404 と区別が付かないため、
     // 本文が API の封筒（success: false）であることまで見る。

@@ -1035,6 +1035,7 @@ shot_characters
 shot_references
 transitions
 timeline_clips
+text_styles                  (テロップの見た目に名前を付けたもの。当てると値をテロップへ写す / ADR-0028)
 generation_jobs
 takes                        (JSONB: spec / provider_params。追記のみ)
 review_runs

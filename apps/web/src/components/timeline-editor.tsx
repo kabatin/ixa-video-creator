@@ -60,6 +60,7 @@ import {
   type InsertIssue,
   type TransitionInsertionPoint,
 } from '@/lib/timeline-insert'
+import { keepTextParams } from '@/lib/text-style-form'
 import {
   openFormCaption,
   textEditDraft,
@@ -129,6 +130,8 @@ export type TimelineEditorProps = {
   readonly posters?: ShotPosterMap
   readonly selectedShotId?: ShotId | null
   readonly onSelectShot?: (shotId: ShotId) => void
+  /** テロップの見た目をインスペクターで直す（ADR-0028）。無ければ小窓にボタンを出さない。 */
+  readonly onEditTextLook?: (clipId: TimelineClipId) => void
   /** 楽曲の波形の帯。`TimelineTracks` へそのまま渡す。 */
   readonly audioLane?: { readonly durationSec: number; readonly node: ReactNode }
 }
@@ -162,6 +165,7 @@ export const TimelineEditor = ({
   posters,
   selectedShotId,
   onSelectShot,
+  onEditTextLook,
   audioLane,
 }: TimelineEditorProps) => {
   const api = useMemo(() => createTimelineApi(createRequester(resolveApiBaseUrl())), [])
@@ -450,7 +454,8 @@ export const TimelineEditor = ({
         content: {
           type: 'text',
           templateKey: value.templateKey,
-          params: { ...value.params },
+          // 文字だけ新しくし、インスペクターで付けた見た目とスタイルは残す（ADR-0028）。
+          params: keepTextParams(existing.content, value.params),
         },
       })
       setClips((current) =>
@@ -691,6 +696,14 @@ export const TimelineEditor = ({
                   else submitTextClip(next, open.kind === 'text_edit' ? open.clip : null)
                 }}
                 onDismiss={closeForm}
+                {...(open.kind === 'text_edit' && onEditTextLook !== undefined
+                  ? {
+                      onEditLook: () => {
+                        onEditTextLook(open.clip.id)
+                        closeForm()
+                      },
+                    }
+                  : {})}
                 onRemove={
                   open.kind === 'transition' && open.point.existing !== null
                     ? () => {

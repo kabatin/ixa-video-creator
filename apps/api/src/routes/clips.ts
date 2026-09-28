@@ -7,6 +7,7 @@ import {
   TimelineClipId as TimelineClipIdSchema,
   TimelineTrack as TimelineTrackSchema,
   UpdateTimelineClipPatch as UpdateTimelineClipPatchSchema,
+  isTextStyleUnreadable,
   type ProjectId,
   type TimelineClip,
   type TimelineClipContent,
@@ -64,6 +65,13 @@ export const TRIM_NEEDS_DURATION_MESSAGE =
  */
 const TIME_EPSILON = 1e-6
 export const NON_POSITIVE_DURATION_MESSAGE = 'durationSec は 0 より大きい必要があります'
+/**
+ * テロップの見た目（ADR-0028）が読めない。描く側は既定の見た目に落とすだけなので、
+ * 保存させると「指定したのに効かない」まま気付けない。**保存の時点で弾く。**
+ * 文字そのもの（昔の形式を含む）は今までどおり受ける。
+ */
+export const UNREADABLE_TEXT_STYLE_MESSAGE =
+  'テロップの見た目を読めません（色は #RRGGBB、大きさ・ずらし・フェードは決まった範囲、知らない項目は付けない）'
 
 /**
  * Domain の enum に「なぜ弾かれるか」が伝わるメッセージだけを足したもの。
@@ -195,7 +203,12 @@ export const clipShapeErrors = (input: {
       ? { durationSec: [TRIM_LENGTH_MISMATCH_MESSAGE] }
       : {}
 
-  const fields: FieldErrors = { ...durationError, ...trimError, ...lengthError }
+  const styleError: FieldErrors =
+    input.content?.type === 'text' && isTextStyleUnreadable(input.content.params)
+      ? { 'content.params.style': [UNREADABLE_TEXT_STYLE_MESSAGE] }
+      : {}
+
+  const fields: FieldErrors = { ...durationError, ...trimError, ...lengthError, ...styleError }
   return Object.keys(fields).length === 0 ? null : fields
 }
 

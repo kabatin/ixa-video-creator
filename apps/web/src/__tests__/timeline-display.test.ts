@@ -186,8 +186,12 @@ describe('尺と時刻の整形', () => {
   })
 
   it('クリップの中身を種別ごとに説明する', () => {
+    // テロップは文字そのものを出す（型の名前では何が出るか分からない）。読めなければそう言う。
+    expect(describeClipContent({ type: 'text', templateKey: 'lower_third', params: { text: '歌詞の一行' } })).toBe(
+      'テロップ「歌詞の一行」',
+    )
     expect(describeClipContent({ type: 'text', templateKey: 'lower-third', params: {} })).toBe(
-      'テキスト lower-third',
+      'テロップ（文字が読めません）',
     )
     expect(
       describeClipContent({ type: 'media', mediaAssetId, inSec: 0, outSec: 1.5, volume: 1 }),

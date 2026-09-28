@@ -166,7 +166,12 @@ export const ClipBody: React.FC<{ clip: ClipPlan; fps: number; video: FitRect }>
     if (resolved.status === 'renderable') {
       return (
         <AbsoluteFill style={layerStyle}>
-          <TextClip template={resolved.template} params={resolved.params} video={video} />
+          <TextClip
+            template={resolved.template}
+            params={resolved.params}
+            video={video}
+            timing={{ durationInFrames: clip.range.durationInFrames, fps }}
+          />
         </AbsoluteFill>
       )
     }

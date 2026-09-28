@@ -17,6 +17,7 @@ import {
   TRIM_NEEDS_DURATION_MESSAGE,
   MISSING_ASSET_MESSAGE,
   NON_POSITIVE_DURATION_MESSAGE,
+  UNREADABLE_TEXT_STYLE_MESSAGE,
   type ClipRoutesDeps,
 } from '../routes/clips.js'
 import { aProject } from './fixtures.js'
@@ -522,5 +523,32 @@ describe('トリムの長さと配置尺の整合（Architect 追加）', () => 
     const created = await createClip(project.id, mediaClipPayload())
 
     expect((await send('PATCH', `/clips/${created.id}`, { opacity: 0.5 })).status).toBe(200)
+  })
+})
+
+/** テロップの見た目（ADR-0028）。読めない見た目は保存させない（描く側は既定値に落とすだけなので気付けない）。 */
+describe('テロップの見た目の検査', () => {
+  const styled = (style: unknown) =>
+    textClipPayload({ content: { type: 'text', templateKey: 'plain', params: { text: '歌詞', style } } })
+
+  it('読める見た目は保存する', async () => {
+    const created = await createClip(project.id, styled({ color: '#FFD100', anchor: 'top-left' }))
+    expect(created.content).toMatchObject({ params: { text: '歌詞', style: { color: '#FFD100', anchor: 'top-left' } } })
+  })
+
+  it('作成で読めない見た目は 422', async () => {
+    const res = await send('POST', `/projects/${project.id}/clips`, styled({ color: 'red' }))
+    expect(res.status).toBe(422)
+    const body = await json<ErrorBody>(res)
+    expect(body.fields?.['content.params.style']).toEqual([UNREADABLE_TEXT_STYLE_MESSAGE])
+  })
+
+  it('更新で読めない見た目は 422（元の見た目は残る）', async () => {
+    const created = await createClip(project.id, styled({ color: '#FFD100' }))
+    const res = await send('PATCH', `/clips/${created.id}`, {
+      content: { type: 'text', templateKey: 'plain', params: { text: '歌詞', style: { size: 9 } } },
+    })
+    expect(res.status).toBe(422)
+    expect(timelineClips.snapshot()[0]?.content).toMatchObject({ params: { style: { color: '#FFD100' } } })
   })
 })

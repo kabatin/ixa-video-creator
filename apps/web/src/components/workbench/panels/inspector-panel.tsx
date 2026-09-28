@@ -8,12 +8,13 @@ import {
   TrackInspector,
 } from '@/components/workbench/inspector/asset-inspectors'
 import { ShotInspector } from '@/components/workbench/inspector/shot-inspector'
+import { TextClipInspector } from '@/components/workbench/inspector/text-clip-inspector'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty, PanelFrame } from '@/components/workbench/panels/panel-frame'
 
 /**
  * インスペクター（右。UI-WORKBENCH-2 §5）。**選んだ物の種類で中身が変わる**
- * （Shot・キャラクター・Look・ロケーション・ブランド資産・楽曲）。
+ * （Shot・キャラクター・Look・ロケーション・ブランド資産・楽曲・テロップ）。
  */
 export const InspectorPanel = () => {
   const { inspected, shots } = useWorkbench()
@@ -42,6 +43,14 @@ export const InspectorPanel = () => {
         ) : (
           <ShotInspector key={shot.id} shot={shot} isFirst={index === 0} />
         )}
+      </PanelFrame>
+    )
+  }
+
+  if (inspected.kind === 'text-clip') {
+    return (
+      <PanelFrame flush>
+        <TextClipInspector key={inspected.id} id={inspected.id} />
       </PanelFrame>
     )
   }

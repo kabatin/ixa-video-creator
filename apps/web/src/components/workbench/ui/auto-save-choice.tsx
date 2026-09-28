@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { describeForPerson } from '@/lib/api-error'
 import { FieldRow, INPUT_CLASS } from '@/components/workbench/ui/section'
 
@@ -108,5 +108,60 @@ export const AutoSaveCheckbox = ({
       {hint !== undefined && <p className="ml-5 text-xs text-muted">{hint}</p>}
       <StatusLine id={`${id}-status`} status={status} />
     </div>
+  )
+}
+
+/**
+ * 色（ADR-0028）。**ピッカーを閉じた（確定した）時点で保存する。**
+ * React の onChange は動かしている間ずっと呼ばれるので、そこで保存すると 1 回の操作で何十回も書く。
+ * 確定はブラウザの `change` で拾う。保存する値は `#RRGGBB`（大文字）。
+ */
+export const AutoSaveColor = ({
+  label,
+  value,
+  onSave,
+  disabled = false,
+}: {
+  readonly label: string
+  readonly value: string
+  readonly onSave: (next: string) => Promise<void>
+  readonly disabled?: boolean
+}) => {
+  const id = useId()
+  const input = useRef<HTMLInputElement>(null)
+  const { status, save } = useSaver(onSave)
+  const saveRef = useRef(save)
+  saveRef.current = save
+  const [draft, setDraft] = useState(value.toLowerCase())
+  useEffect(() => {
+    setDraft(value.toLowerCase())
+  }, [value])
+  useEffect(() => {
+    const element = input.current
+    if (element === null) return undefined
+    const commit = (): void => {
+      saveRef.current(element.value.toUpperCase())
+    }
+    element.addEventListener('change', commit)
+    return () => {
+      element.removeEventListener('change', commit)
+    }
+  }, [])
+  return (
+    <FieldRow label={label} htmlFor={id}>
+      <input
+        ref={input}
+        id={id}
+        type="color"
+        value={draft}
+        disabled={disabled || status.kind === 'saving'}
+        aria-describedby={`${id}-status`}
+        onChange={(event) => {
+          setDraft(event.target.value)
+        }}
+        className="h-7 w-14 cursor-pointer rounded border border-line-strong bg-bg"
+      />
+      <StatusLine id={`${id}-status`} status={status} />
+    </FieldRow>
   )
 }

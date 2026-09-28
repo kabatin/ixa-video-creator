@@ -17,6 +17,7 @@ import {
   createInMemoryTakeRepository,
 } from '@ixa/generation/testing'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
+import { createInMemoryTextStyleRepository } from './in-memory-text-style-repository.js'
 import {
   createInMemoryScriptRepository,
   createInMemorySequenceRepository,
@@ -120,6 +121,7 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   generationQueue: createRecordingQueue(),
   transitions: createInMemoryTransitionRepository(),
   timelineClips: createInMemoryTimelineClipRepository(),
+  textStyles: createInMemoryTextStyleRepository(),
   musicTracks: createInMemoryMusicTrackRepository(),
   renderJobs: createInMemoryRenderJobRepository(),
   renderQueue: createRecordingRenderQueue(),

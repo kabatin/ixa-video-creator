@@ -1,4 +1,5 @@
 import {
+  parseTextClipParams,
   TimelineTrack as TimelineTrackSchema,
   shotEndSec,
   type Shot,
@@ -233,8 +234,11 @@ export const describeClipContent = (content: TimelineClip['content']): string =>
   switch (content.type) {
     case 'media':
       return `メディア ${content.mediaAssetId}（${content.inSec.toFixed(2)}s–${content.outSec.toFixed(2)}s）`
-    case 'text':
-      return `テキスト ${content.templateKey}`
+    case 'text': {
+      // 文字そのものを出す。型の名前（lower_third）では何が出るのか分からない。
+      const params = parseTextClipParams(content.params)
+      return params === null ? 'テロップ（文字が読めません）' : `テロップ「${params.text}」`
+    }
     case 'motion_graphics':
       return `モーショングラフィックス ${content.templateKey}`
   }

@@ -247,6 +247,27 @@ describe('読めないテロップ', () => {
     content,
   })
 
+  /** 見た目（ADR-0028）が読めなくても文字は既定の見た目で出る。赤枠にはならないが、黙って捨てない。 */
+  it('見た目が読めなければ、文言とは別の種類で warning', () => {
+    const clips = [
+      textClip(22, { type: 'text', templateKey: 'plain', params: { text: '歌詞', style: { color: 'red' } } }),
+    ]
+    const issues = validateTimeline(makeSource({ shots: [makeShot(1, 0, 10)], clips }))
+
+    expect(find(issues, TIMELINE_ISSUE_CODES.textStyleUnreadable)).toHaveLength(1)
+    expect(find(issues, TIMELINE_ISSUE_CODES.textStyleUnreadable)[0]?.message).toContain('既定の見た目')
+    expect(find(issues, TIMELINE_ISSUE_CODES.textClipUnreadable)).toHaveLength(0)
+  })
+
+  it('読める見た目なら何も言わない', () => {
+    const clips = [
+      textClip(23, { type: 'text', templateKey: 'plain', params: { text: '歌詞', style: { color: '#FFD100' } } }),
+    ]
+    const issues = validateTimeline(makeSource({ shots: [makeShot(1, 0, 10)], clips }))
+
+    expect(find(issues, TIMELINE_ISSUE_CODES.textStyleUnreadable)).toHaveLength(0)
+  })
+
   it('文言が入っていなければ warning', () => {
     const clips = [textClip(21, { type: 'text', templateKey: 'lower_third', params: {} })]
     const issues = find(

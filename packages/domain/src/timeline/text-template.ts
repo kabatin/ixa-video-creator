@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { TextStyleId } from '../common/ids.js'
+import { TextStyle } from './text-style.js'
 
 /**
  * テロップの見せ方（テンプレート）。
@@ -42,11 +44,24 @@ export const MAX_TEXT_CLIP_LENGTH = 120
  * `params` は `Record<string, unknown>` なので、**形の正はここだけが持つ。**
  * 読む側（レンダラ・画面）は必ずこのスキーマを通す。
  */
+const TextClipText = z
+  .string()
+  .trim()
+  .min(1, 'テロップの文字を入れてください')
+  .max(MAX_TEXT_CLIP_LENGTH)
+
 export const TextClipParams = z.object({
   /** 出す文字。空のテロップは置けない。 */
-  text: z.string().trim().min(1, 'テロップの文字を入れてください').max(MAX_TEXT_CLIP_LENGTH),
+  text: TextClipText,
+  /** 見た目の上書き（ADR-0028）。無い項目は型の既定値。 */
+  style: TextStyle.optional(),
+  /** どの保存済みスタイルから当てたか。スタイルを直したとき「使っているテロップ」を探すのに使う。 */
+  styleId: TextStyleId.nullable().optional(),
 })
 export type TextClipParams = z.infer<typeof TextClipParams>
+
+/** 文字だけ。見た目が読めないときの控え。 */
+const TextOnly = z.object({ text: TextClipText })
 
 /**
  * `params` からテロップの中身を取り出す。
@@ -57,6 +72,18 @@ export type TextClipParams = z.infer<typeof TextClipParams>
  * （lessons L-015）。
  */
 export const parseTextClipParams = (params: unknown): TextClipParams | null => {
-  const parsed = TextClipParams.safeParse(params)
-  return parsed.success ? parsed.data : null
+  const textOnly = TextOnly.safeParse(params)
+  if (!textOnly.success) return null
+  /**
+   * **見た目・どのスタイルからか は項目ごとに読む。** どちらかが壊れていても、もう片方と文字は残す。
+   * 読めない見た目は捨て、検査（`isTextStyleUnreadable`）で知らせる。
+   */
+  const raw = params as { readonly style?: unknown; readonly styleId?: unknown }
+  const style = raw.style === undefined ? null : TextStyle.safeParse(raw.style)
+  const styleId = raw.styleId === undefined ? null : TextStyleId.nullable().safeParse(raw.styleId)
+  return {
+    text: textOnly.data.text,
+    ...(style?.success === true ? { style: style.data } : {}),
+    ...(styleId?.success === true ? { styleId: styleId.data } : {}),
+  }
 }

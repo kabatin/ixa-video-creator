@@ -40,6 +40,11 @@ const CENTER_BAND: Rect = { x: 300, y: 300, width: 680, height: 120 }
 const LOWER_BAND: Rect = { x: 300, y: 565, width: 500, height: 80 }
 /** 帯の中で文字が来ない右側。帯そのものが敷かれたかを見る。 */
 const BAND_ONLY: Rect = { x: 820, y: 575, width: 180, height: 60 }
+/**
+ * 見た目を上書きしたテロップ（左上・画面の高さの 10%・緑）の文字が来る場所（ADR-0028）。
+ * 映像の枠は x=160〜1120。左上の定位置は枠の端から少し内側。
+ */
+const TOP_LEFT_BAND: Rect = { x: 215, y: 62, width: 300, height: 70 }
 /** テロップが一切来ない、Shot のベタ塗りだけが写る場所。 */
 const SHOT_PATCH: Rect = { x: 200, y: 60, width: 200, height: 80 }
 
@@ -88,6 +93,14 @@ const buildDocument = (media: MediaServer): TimelineDocument =>
         type: 'text',
         templateKey: 'lower_third',
         params: { text: JP_TEXT },
+      }),
+      makeClip(3, 'TEXT', 1.25, 0.75, 0, {
+        type: 'text',
+        templateKey: 'plain',
+        params: {
+          text: JP_TEXT,
+          style: { color: '#00FF00', anchor: 'top-left', align: 'left', size: 0.1, fadeInSec: 0.5 },
+        },
       }),
     ],
     audio: [],
@@ -162,6 +175,19 @@ describe('テロップのピクセル検証', () => {
     const after = await frameAt(21)
     expect(countPixels(after, CENTER_BAND, isWhitish)).toBeLessThan(20)
     expect(countPixels(after, LOWER_BAND, isWhitish)).toBeLessThan(20)
+  })
+
+  const isGreen = (pixel: { r: number; g: number; b: number }): boolean =>
+    pixel.g > 150 && pixel.r < 110 && pixel.b < 110
+
+  it('見た目を上書きしたテロップは、指定の色で左上に出る（ADR-0028）', async () => {
+    const frame = await frameAt(23)
+    expect(countPixels(frame, TOP_LEFT_BAND, isGreen)).toBeGreaterThan(200)
+    expect(countPixels(frame, CENTER_BAND, isGreen)).toBeLessThan(20)
+  })
+
+  it('フェードインの頭ではまだ見えない（0.5 秒かけて出てくる）', async () => {
+    expect(countPixels(await frameAt(16), TOP_LEFT_BAND, isGreen)).toBeLessThan(20)
   })
 
   it('テロップは Shot の絵を塗りつぶさない', async () => {

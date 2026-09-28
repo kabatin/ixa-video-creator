@@ -1,5 +1,6 @@
 import {
   isDegradedTransition,
+  isTextStyleUnreadable,
   parseTextClipParams,
   shotEndSec,
   TextTemplateKey,
@@ -32,6 +33,8 @@ export const TIMELINE_ISSUE_CODES = {
   clipOutOfRange: 'clip_out_of_range',
   transitionDegraded: 'transition_degraded',
   textClipUnreadable: 'text_clip_unreadable',
+  /** テロップの見た目（ADR-0028）が読めない。文字は既定の見た目で出る。 */
+  textStyleUnreadable: 'text_style_unreadable',
 } as const
 
 const sec = (value: number): string => `${value.toFixed(3)}s`
@@ -284,7 +287,7 @@ const checkClips = (source: TimelineSource): TimelineIssue[] => {
  * 直し方が違う。同じ文にすると、どちらを直せばよいのか分からない。
  */
 const checkTextClips = (source: TimelineSource): TimelineIssue[] =>
-  source.clips.flatMap((clip) => {
+  source.clips.flatMap((clip): TimelineIssue[] => {
     if (clip.content.type !== 'text') return []
     const { templateKey, params } = clip.content
 
@@ -300,7 +303,17 @@ const checkTextClips = (source: TimelineSource): TimelineIssue[] =>
       ]
     }
 
-    if (parseTextClipParams(params) !== null) return []
+    if (parseTextClipParams(params) !== null) {
+      if (!isTextStyleUnreadable(params)) return []
+      return [
+        {
+          severity: 'warning' as const,
+          code: TIMELINE_ISSUE_CODES.textStyleUnreadable,
+          message:
+            `${sec(clip.startSec)} のテロップの見た目（色・大きさなど）が読めず、既定の見た目で書き出される`,
+        },
+      ]
+    }
     return [
       {
         severity: 'warning' as const,
