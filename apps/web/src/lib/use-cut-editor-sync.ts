@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { resolveSeekTarget } from '@/lib/playback-state'
 import type { AudioPlayback } from '@/lib/use-audio-playback'
 import type { SeekCommand } from '@/lib/program-monitor'
 
@@ -12,6 +13,11 @@ export type TransportSyncPort = {
   readonly othersPlaying: boolean
   readonly seek: SeekCommand | null
   readonly onPosition: (sec: number) => void
+  /**
+   * 利用者が**ここで**飛んだ（波形・再生位置のスライダー・印へのジャンプ・キー）。
+   * 共有の位置へのシークとして伝える。省略なら伝えない（このパネル単体で使うとき）。
+   */
+  readonly onSeek?: (sec: number) => void
   readonly onPlayingChange: (playing: boolean) => void
   /**
    * 「自分が鳴っているべきか」の指示。**再生ボタンが画面にひとつしかないため要る。**
@@ -36,11 +42,15 @@ export type TransportSyncPort = {
  *   プレビューで止めていた位置を 0 へ潰し、鳴っている映像まで止めてしまう
  * - 他が鳴り始めたら止まる（同時に鳴るのは 1 つだけ）
  * - 明示的に飛んだ指示（`seek.serial` が変わる）だけを追う。位置の報告と往復させない（L-023）
+ * - **利用者の操作に使う `seekTo` / `nudge` を返す。** 自分の再生器を動かし、共有の位置へも飛ばす。
+ *   以前は自分の中だけで動かしていたので、プレビューが鳴っている間は `followSec` で
+ *   鳴っている位置へ引き戻され、ガタついて見えた（2026-09-28、制作者の指摘）。
+ *   付いていく動き（`followSec` / `seek`）は生の再生器で行い、伝え返さない
  */
 export const useCutEditorSync = (
   playback: AudioPlayback,
   sync: TransportSyncPort | undefined,
-): void => {
+): AudioPlayback => {
   const port = useRef(sync)
   port.current = sync
   const control = useRef(playback)
@@ -98,4 +108,17 @@ export const useCutEditorSync = (
     const seek = port.current?.seek
     if (seek !== null && seek !== undefined) control.current.seekTo(seek.sec)
   }, [seekSerial])
+
+  const seekTo = useCallback((sec: number): void => {
+    control.current.seekTo(sec)
+    port.current?.onSeek?.(sec)
+  }, [])
+  const nudge = useCallback(
+    (deltaSec: number): void => {
+      const { currentSec, durationSec } = control.current
+      seekTo(resolveSeekTarget(currentSec, deltaSec, durationSec))
+    },
+    [seekTo],
+  )
+  return useMemo(() => ({ ...playback, seekTo, nudge }), [playback, seekTo, nudge])
 }

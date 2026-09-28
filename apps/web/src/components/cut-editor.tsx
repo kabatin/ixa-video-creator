@@ -172,7 +172,7 @@ export const CutEditor = ({
     const box = waveBoxRef.current
     const body = box?.closest('[data-panel-body]')
     const content = box?.closest('[data-cut-editor]')
-    if (!(body instanceof HTMLElement) || !(content instanceof HTMLElement)) return undefined
+    if (!box || !(body instanceof HTMLElement) || !(content instanceof HTMLElement)) return undefined
     const measure = (): void => {
       // `clientHeight` は内側の余白を含む。中身が使えるのはそれを引いたぶん。
       const style = window.getComputedStyle(body)
@@ -184,6 +184,10 @@ export const CutEditor = ({
           // 入れ物ではなく中身の高さ。余裕があると scrollHeight は入れ物と同じ値になる。
           contentHeight: content.offsetHeight,
           currentHeight: current,
+          // 状態ではなく画面の高さで「波形以外」を求める（Safari で 96 ↔ 416 を往復した）。
+          // 波形がまだ無い（読み込み中）なら、中身に波形の高さは含まれていない。
+          renderedHeight:
+            box.querySelector<HTMLElement>('[data-waveform-body]')?.offsetHeight ?? 0,
         })
         return shouldResizeWaveform(current, next) ? next : current
       })
@@ -243,8 +247,8 @@ export const CutEditor = ({
     }
   }, [analysis.waveformPeaksUrl])
 
-  const playback = useAudioPlayback({ source, onRefreshSource: loadSource })
-  useCutEditorSync(playback, sync)
+  // 利用者の操作で飛んだ位置は共有の位置へも伝える（`useCutEditorSync`）。
+  const playback = useCutEditorSync(useAudioPlayback({ source, onRefreshSource: loadSource }), sync)
 
   /** 尺はメタデータが読めるまで 0 なので、解析側の値を控えに使う。 */
   const durationSec = playback.durationSec > 0 ? playback.durationSec : analysis.durationSec

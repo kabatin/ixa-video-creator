@@ -63,6 +63,29 @@ describe('fillWaveformHeight', () => {
   })
 })
 
+/**
+ * **状態の値と画面の高さが食い違っている間は、画面の高さで「波形以外」を求める。**
+ *
+ * Safari（WebKit）で、状態は 416px なのに画面の箱はまだ 94px、という瞬間に測ると、
+ * 「波形以外」を 6px と見誤って上限へ、次の瞬間は逆に下限へ、と毎描画 96 ↔ 416 を往復した
+ * （開発時の Maximum update depth の元でもあった。WebKit で実測）。
+ */
+describe('fillWaveformHeight（画面の高さ）', () => {
+  it('状態が 416 でも画面が 94 なら、画面の高さで余りを出す', () => {
+    // 本文 430、中身 422（うち波形の箱 94）→ 波形以外 328、余り 102。
+    expect(
+      fillWaveformHeight({ bodyClientHeight: 430, contentHeight: 422, currentHeight: 416, renderedHeight: 94 }),
+    ).toBe(102)
+  })
+
+  it('画面が追いついた後も同じ答えになる（往復しない）', () => {
+    // 102 を当てた後: 中身 = 328 + 102。
+    expect(
+      fillWaveformHeight({ bodyClientHeight: 430, contentHeight: 430, currentHeight: 102, renderedHeight: 102 }),
+    ).toBe(102)
+  })
+})
+
 describe('shouldResizeWaveform', () => {
   it('わずかな揺れでは描き直さない', () => {
     expect(shouldResizeWaveform(200, 202)).toBe(false)

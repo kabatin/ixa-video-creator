@@ -42,6 +42,8 @@ export const CutterPanel = ({ visible }: { readonly visible: boolean }) => {
               othersPlaying: transport.playing && transport.owner !== 'cutter',
               seek: transport.seek,
               onPosition: transportControls.setCurrentSec,
+              // 波形・スライダーで飛んだら、鳴っているのがプレビューでもそこへ飛ぶ。
+              onSeek: transportControls.seekTo,
               onPlayingChange: (playing) => {
                 if (playing) transportControls.play('cutter')
                 else if (transport.owner === 'cutter') transportControls.pause()

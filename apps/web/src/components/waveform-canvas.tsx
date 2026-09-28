@@ -523,6 +523,8 @@ export const WaveformCanvas = ({
     <div>
       <div
         ref={wrapperRef}
+        // 高さを決める側（聴きながら切る）が、画面に出ている波形の高さをここで測る。
+        data-waveform-body=""
         className={`relative w-full overflow-hidden ${compact ? '' : 'rounded-lg border border-line'}`}
         style={{ height: `${heightPx}px` }}
       >

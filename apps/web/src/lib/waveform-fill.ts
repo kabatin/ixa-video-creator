@@ -26,8 +26,14 @@ export type WaveformFillInput = {
    * 入れ物ではなく**中身そのもの**の高さを渡すこと。
    */
   readonly contentHeight: number
-  /** いまの波形の高さ。 */
+  /** いまの波形の高さ（状態）。測れないときはこれを保つ。 */
   readonly currentHeight: number
+  /**
+   * 画面に出ている波形の箱の高さ。**状態と画面が食い違っている間は、こちらで「波形以外」を求める。**
+   * 状態の値で引くと、まだ画面に出ていない高さを引いてしまい、上限と下限を往復した（WebKit で実測）。
+   * 省略時は `currentHeight`。
+   */
+  readonly renderedHeight?: number
 }
 
 /**
@@ -41,9 +47,10 @@ export const fillWaveformHeight = ({
   bodyClientHeight,
   contentHeight,
   currentHeight,
+  renderedHeight = currentHeight,
 }: WaveformFillInput): number => {
   if (bodyClientHeight <= 0 || contentHeight <= 0) return currentHeight
-  const others = contentHeight - currentHeight
+  const others = contentHeight - renderedHeight
   const available = bodyClientHeight - others
   return Math.round(
     Math.min(MAX_WAVEFORM_HEIGHT_PX, Math.max(MIN_WAVEFORM_HEIGHT_PX, available)),
