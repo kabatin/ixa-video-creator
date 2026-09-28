@@ -141,6 +141,27 @@ describe('Codex CLI 画像アダプタ', () => {
     expect(await readdir(join(codexHome, 'generated_images'))).toEqual([])
   })
 
+  /** 取り込んだら作業ディレクトリも消す（1 枚 2MB ほどが /tmp に積もっていた）。 */
+  it('片付けを頼むと、その回の作業ディレクトリを消し、記録も忘れる', async () => {
+    const provider = providerWith(fakeCli())
+    const handle = await provider.submit(storyboardRequest())
+    await pollUntilSettled(provider, handle)
+
+    await provider.release?.(handle)
+
+    expect(await readdir(join(root, 'work'))).toEqual([])
+    await expect(provider.poll(handle)).rejects.toThrow(/記録が見つかりません/)
+  })
+
+  it('片付けで消すのは自分が切ったディレクトリだけ（参照に ../ が来ても外を消さない）', async () => {
+    const provider = providerWith(fakeCli())
+    await mkdir(join(root, 'keep'), { recursive: true })
+
+    await provider.release?.({ providerId: CODEX_CLI_PROVIDER_ID, modelId: codexCliImageModel.id, ref: '../keep', submittedAt: new Date() })
+
+    expect(await readdir(root)).toContain('keep')
+  })
+
   it('絵ができなければ、理由を付けて失敗にする（やり直せる）', async () => {
     const { status } = await run(fakeCli({ image: false }))
 

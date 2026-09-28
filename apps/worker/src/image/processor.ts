@@ -96,8 +96,12 @@ const localReferenceResolver =
     return path
   }
 
-const waitForResult = async (deps: ImageProcessorDeps, submit: () => Promise<Parameters<ImageProvider['poll']>[0]>): Promise<Extract<ImageJobStatus, { state: 'succeeded' }>> => {
-  const handle = await submit()
+type Handle = Parameters<ImageProvider['poll']>[0]
+
+const waitForResult = async (
+  deps: ImageProcessorDeps,
+  handle: Handle,
+): Promise<Extract<ImageJobStatus, { state: 'succeeded' }>> => {
   const deadline = Date.now() + MAX_WAIT_MS
   for (;;) {
     const status = await deps.provider.poll(handle)
@@ -161,28 +165,35 @@ const generate = async (deps: ImageProcessorDeps, job: ImageGenerationJob, dir: 
   await publishImageJobStatus(deps, running)
 
   const shape = requestShapeFor(deps.model, project.aspectRatio)
-  const result = await waitForResult(deps, () =>
-    deps.provider.submit({
-      model: deps.model,
-      prompt: compileStartFramePrompt({ project, shot, characters, references }),
-      negativePrompt: null,
-      resolution: shape.resolution,
-      aspectRatio: shape.aspectRatio,
-      seed: null,
-      references: references.map(({ mediaAssetId, role }) => ({ mediaAssetId, role })),
-      resolveReference: localReferenceResolver(deps, dir),
-      count: 1,
-    }),
-  )
-  const output = result.outputs[0]
-  if (output === undefined) {
-    throw new ImageJobFailure({ code: 'no_image', message: '絵が返ってきませんでした。', retryable: true }, result.raw)
-  }
+  const handle = await deps.provider.submit({
+    model: deps.model,
+    prompt: compileStartFramePrompt({ project, shot, characters, references }),
+    negativePrompt: null,
+    resolution: shape.resolution,
+    aspectRatio: shape.aspectRatio,
+    seed: null,
+    references: references.map(({ mediaAssetId, role }) => ({ mediaAssetId, role })),
+    resolveReference: localReferenceResolver(deps, dir),
+    count: 1,
+  })
   const cropped = join(dir, 'start-frame.png')
-  await (deps.crop ?? cropToAspect)(localPathOf(output), cropped, project.aspectRatio)
+  const raw = await (async () => {
+    try {
+      const result = await waitForResult(deps, handle)
+      const output = result.outputs[0]
+      if (output === undefined) {
+        throw new ImageJobFailure({ code: 'no_image', message: '絵が返ってきませんでした。', retryable: true }, result.raw)
+      }
+      await (deps.crop ?? cropToAspect)(localPathOf(output), cropped, project.aspectRatio)
+      return result.raw
+    } finally {
+      // 手元に置いた出力（Codex の作業ディレクトリ）は、切り抜いて写したらもう要らない。失敗しても片付ける。
+      await deps.provider.release?.(handle)
+    }
+  })()
   const mediaAssetId = await ingest(deps, project, job, cropped)
   await replaceManualStartFrame(deps.shotReferences, shot.id, mediaAssetId)
-  const succeeded = await deps.imageJobs.markSucceeded(job.id, mediaAssetId, result.raw)
+  const succeeded = await deps.imageJobs.markSucceeded(job.id, mediaAssetId, raw)
   await deps.mediaQueue.enqueue(mediaAssetId)
   await publishImageJobStatus(deps, succeeded)
 }

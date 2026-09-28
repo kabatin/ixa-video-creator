@@ -6,7 +6,11 @@ import { codexCliImageModel } from '@ixa/provider-image'
 /** 1 PNG 相当の中身（切り抜きは差し替えるので、本物の画像である必要はない）。 */
 export const FAKE_PNG = Buffer.from('89504e470d0a1a0a0000', 'hex')
 
-export type FakeImageProvider = ImageProvider & { readonly requests: ImageGenerationRequest[] }
+export type FakeImageProvider = ImageProvider & {
+  readonly requests: ImageGenerationRequest[]
+  /** 片付けを頼まれたジョブ参照。 */
+  readonly released: string[]
+}
 
 /** 要求を覚え、`outcome` どおりに終わる偽の画像 Provider。成功なら `outputDir` に PNG を書く。 */
 export const fakeImageProvider = (
@@ -14,11 +18,17 @@ export const fakeImageProvider = (
   outcome: 'succeeded' | { readonly code: string; readonly message: string } = 'succeeded',
 ): FakeImageProvider => {
   const requests: ImageGenerationRequest[] = []
+  const released: string[] = []
   const statuses = new Map<string, ImageJobStatus>()
   return {
     id: codexCliImageModel.providerId,
     models: [codexCliImageModel],
     requests,
+    released,
+    release: (handle) => {
+      released.push(handle.ref)
+      return Promise.resolve()
+    },
     submit: async (request) => {
       requests.push(request)
       // 実物と同じく、参照はここで手元のパスへ解決される。

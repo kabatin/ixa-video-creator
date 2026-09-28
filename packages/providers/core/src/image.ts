@@ -101,6 +101,11 @@ export interface ImageProvider {
   submit(request: ImageGenerationRequest): Promise<ProviderJobHandle>
   poll(handle: ProviderJobHandle): Promise<ImageJobStatus>
   cancel(handle: ProviderJobHandle): Promise<void>
+  /**
+   * 呼び出し側が出力を取り込み終えたあとの片付け（手元に置いた出力や作業ディレクトリを消す）。
+   * 手元に何も置かない Provider は持たなくてよい。呼んだあとの poll は「記録が無い」になる。
+   */
+  release?(handle: ProviderJobHandle): Promise<void>
 }
 
 const describeResolutions = (resolutions: readonly Resolution[]): string =>

@@ -185,6 +185,17 @@ describe('processImageJob', () => {
     })
   })
 
+  /** Provider が手元に置いた出力（Codex の作業ディレクトリ）は、取り込んだら片付けてもらう。 */
+  it('取り込んだ後も、失敗した後も、Provider に片付けを頼む', async () => {
+    const ok = setup()
+    await processImageJob(ok.deps, { imageJobId: ok.job.id })
+    const failing = setup({ outcome: { code: 'no_image', message: '絵が無い' } })
+    await processImageJob(failing.deps, { imageJobId: failing.job.id })
+
+    expect(ok.deps.provider.released).toEqual(['job-1'])
+    expect(failing.deps.provider.released).toEqual(['job-1'])
+  })
+
   it('始まった・終わったを出来事で知らせる', async () => {
     const { job, deps } = setup()
 

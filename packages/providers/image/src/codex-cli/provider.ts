@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, rm } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import {
@@ -76,6 +76,8 @@ const failed = (code: string, message: string, retryable: boolean): ImageJobStat
 /** stderr の最後の 1 行（長すぎれば切る）。CLI が理由を最後に書くため。 */
 const lastLine = (text: string): string =>
   (text.trim().split('\n').at(-1) ?? '').trim().slice(0, 200)
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const isLocalFile = (path: string): boolean => isAbsolute(path) && !/^[a-z]+:\/\//i.test(path)
 
@@ -207,5 +209,13 @@ export const createCodexCliImageProvider = (options: CodexCliImageProviderOption
     return Promise.resolve()
   }
 
-  return { id: CODEX_CLI_PROVIDER_ID, models: codexCliImageModels, submit, poll, cancel }
+  /** 取り込み終えたら、その回の作業ディレクトリ（frame.png ごと）を消し、記録も忘れる。 */
+  const release = async (handle: ProviderJobHandle): Promise<void> => {
+    jobs.delete(handle.ref)
+    // 消すのは自分が切った UUID のディレクトリだけ（`../` などで外を消さない）。
+    if (!UUID_PATTERN.test(handle.ref)) return
+    await rm(join(workingDirRoot, handle.ref), { recursive: true, force: true })
+  }
+
+  return { id: CODEX_CLI_PROVIDER_ID, models: codexCliImageModels, submit, poll, cancel, release }
 }
