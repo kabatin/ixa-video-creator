@@ -148,6 +148,9 @@ export const WorkbenchMenu = ({
     'bulk-generate': () => {
       workbench.focusPanel('shots')
     },
+    'bulk-draw': () => {
+      workbench.focusPanel('shots')
+    },
     'generate-shot': () => {
       workbench.openInspector('generate')
     },

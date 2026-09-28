@@ -7,7 +7,7 @@ import { MediaImage } from '@/components/media-image'
 import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
-import type { ShotStartFrameApi } from '@/lib/shot-start-frame-api'
+import type { ShotStartFrameApi, WireStartFrameState } from '@/lib/shot-start-frame-api'
 
 /**
  * Shot の最初のフレーム（ADR-0025）。
@@ -15,12 +15,19 @@ import type { ShotStartFrameApi } from '@/lib/shot-start-frame-api'
  * 画像を 1 枚付けると、生成のモデル「画像から動画（ローカル・無料）」で Take にできる。
  * 他のツールで作った絵や撮った写真を、そのまま Take・採用・レビューの流れに載せる口。
  * **「まだ読めていない」と「付いていない」を混ぜない**（L-015）。
+ *
+ * 絵コンテの画像を AI で作ることもできる（ADR-0029）。作るのは worker で 1 枚 1 分ほど。
+ * できたら出来事が届いて `version` が変わり、読み直して差し替わる。作っている間と失敗は直近のジョブで言う。
  */
+
+type Job = WireStartFrameState['job']
 
 type State =
   | { readonly kind: 'loading' }
-  | { readonly kind: 'ready'; readonly mediaAssetId: MediaAssetId | null }
+  | { readonly kind: 'ready'; readonly mediaAssetId: MediaAssetId | null; readonly job: Job }
   | { readonly kind: 'error'; readonly message: string }
+
+const isDrawing = (job: Job): boolean => job?.status === 'queued' || job?.status === 'running'
 
 export type StartFrameFieldProps = {
   readonly shot: Shot
@@ -28,7 +35,7 @@ export type StartFrameFieldProps = {
   readonly disabled?: boolean
   /** 付いているかが変わったら知らせる（生成欄が押せるかの判定に使う）。 */
   readonly onChange?: (hasStartFrame: boolean) => void
-  /** 変わったら読み直す（`workbench.serverEpoch`。ドロップで付けたときに追いつく）。 */
+  /** 変わったら読み直す（ドロップで付けたとき・絵ができたときに追いつく）。 */
   readonly version?: number
   readonly api?: ShotStartFrameApi
 }
@@ -52,7 +59,7 @@ export const StartFrameField = ({
     client
       .getStartFrame(shot.id)
       .then((current) => {
-        if (alive) setState({ kind: 'ready', mediaAssetId: current.mediaAssetId })
+        if (alive) setState({ kind: 'ready', mediaAssetId: current.mediaAssetId, job: current.job })
       })
       .catch((cause: unknown) => {
         if (alive) setState({ kind: 'error', message: describeForPerson(cause) })
@@ -63,6 +70,8 @@ export const StartFrameField = ({
   }, [client, shot.id, version])
 
   const current = state.kind === 'ready' ? state.mediaAssetId : null
+  const job = state.kind === 'ready' ? state.job : null
+  const drawing = isDrawing(job)
   useEffect(() => {
     if (state.kind === 'ready') onChange?.(state.mediaAssetId !== null)
   }, [state, onChange])
@@ -70,7 +79,7 @@ export const StartFrameField = ({
   const attach = async (mediaAssetId: MediaAssetId): Promise<void> => {
     setError(null)
     const saved = await client.setStartFrame(shot.id, mediaAssetId)
-    setState({ kind: 'ready', mediaAssetId: saved.mediaAssetId })
+    setState({ kind: 'ready', mediaAssetId: saved.mediaAssetId, job })
   }
 
   const detach = async (): Promise<void> => {
@@ -78,9 +87,25 @@ export const StartFrameField = ({
     setError(null)
     try {
       await client.clearStartFrame(shot.id)
-      setState({ kind: 'ready', mediaAssetId: null })
+      setState({ kind: 'ready', mediaAssetId: null, job })
     } catch (cause) {
       setError(`外せませんでした: ${describeForPerson(cause)}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** AI で作る。頼めたら「作っています」にし、できあがりは出来事で読み直す。 */
+  const draw = async (): Promise<void> => {
+    setBusy(true)
+    setError(null)
+    try {
+      const { jobId } = await client.generateStartFrame(shot.id)
+      setState((previous) =>
+        previous.kind === 'ready' ? { ...previous, job: { id: jobId, status: 'queued', error: null } } : previous,
+      )
+    } catch (cause) {
+      setError(`頼めませんでした: ${describeForPerson(cause)}`)
     } finally {
       setBusy(false)
     }
@@ -111,6 +136,21 @@ export const StartFrameField = ({
             外す
           </Button>
         </div>
+      )}
+      {state.kind === 'ready' && (
+        <Button size="sm" disabled={disabled || busy || drawing} onClick={() => void draw()}>
+          {current === null ? 'AI で絵を作る' : 'AI で作り直す'}
+        </Button>
+      )}
+      {drawing && (
+        <p role="status" className="text-xs text-muted">
+          絵コンテの画像を作っています（1 枚 1 分ほど）。できたら、ここに出ます。
+        </p>
+      )}
+      {job?.status === 'failed' && (
+        <p role="alert" className="text-xs text-danger">
+          {`絵を作れませんでした: ${job.error ?? '理由が届きませんでした。'}`}
+        </p>
       )}
       {state.kind === 'ready' && (
         <ImageUploader

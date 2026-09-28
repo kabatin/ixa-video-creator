@@ -115,6 +115,20 @@ describe('一括生成の適格性', () => {
   })
 })
 
+/** 絵コンテの画像をまとめて作る（ADR-0029）。生成と同じく、ロック済みの Shot には触らない。 */
+describe('絵コンテの画像をまとめて作るときの適格性', () => {
+  it('ロック済みは理由つきで止める', () => {
+    const verdict = eligibilityFor('draw', aShot(A, 'CUT-01', { lockedAt: new Date() }))
+
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.reason).toContain('ロック')
+  })
+
+  it('ロックされていなければ通す（絵があるかどうかはサーバが見る）', () => {
+    expect(eligibilityFor('draw', aShot(A, 'CUT-01')).ok).toBe(true)
+  })
+})
+
 describe('一括採用の適格性', () => {
   /** 画面は Take の本数を知らない。ここで止めると「採用できるのに押せない」が起きる。 */
   it('Take の有無を画面で判定しない。常に通す', () => {

@@ -37,6 +37,7 @@ export type MenuCommand =
   | 'bulk-edit'
   | 'generate-shot'
   | 'bulk-generate'
+  | 'bulk-draw'
   | 'import-files'
   | 'inspect-master-track'
   | 'unselect-take'
@@ -276,6 +277,10 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
           disabledReason: noCurrent,
         }),
         item('bulk-generate', '一括生成…', command('bulk-generate'), {
+          disabledReason: noChecked,
+        }),
+        // 絵コンテの画像（ADR-0029）。一括生成と同じく、Shot 一覧の一括操作へ連れて行く。
+        item('bulk-draw', '絵コンテの画像をまとめて作る…', command('bulk-draw'), {
           disabledReason: noChecked,
         }),
       ],

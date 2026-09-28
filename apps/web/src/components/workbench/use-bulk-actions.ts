@@ -41,6 +41,8 @@ export type BulkActions = {
   readonly generate: (input: BulkGenerateInput) => void
   readonly selectTakes: (rule: BulkTakeRule) => void
   readonly update: (patch: BulkUpdatePatch) => void
+  /** 絵コンテの画像をまとめて作る（ADR-0029）。既定は絵の無い Shot だけ。 */
+  readonly drawStartFrames: (input: { readonly onlyMissing: boolean }) => void
 }
 
 const noteLine = (note: { readonly code: string; readonly message: string }): string =>
@@ -201,6 +203,33 @@ export const useBulkActions = (): BulkActions => {
     })
   }
 
+  /**
+   * 絵コンテの画像をまとめて作る（ADR-0029）。頼むだけで、作るのは worker（1 枚 1 分ほど）。
+   * できあがりは出来事が届いてストーリーボードに出る。飛ばした数は必ず言う（黙って減らさない）。
+   */
+  const drawStartFrames = (input: { readonly onlyMissing: boolean }): void => {
+    const plan = planBulkOperation('draw', workbench.checked, shots)
+    void run(plan, async () => {
+      const result = await api.generateStartFrames(workbench.projectId, {
+        shotIds: [...plan.targetIds],
+        onlyMissing: input.onlyMissing,
+      })
+      const skipped = [
+        ...(result.skipped.drawing > 0 ? [`作っている ${String(result.skipped.drawing)} 件`] : []),
+        ...(result.skipped.hasFrame > 0 ? [`絵がある ${String(result.skipped.hasFrame)} 件`] : []),
+      ]
+      const count = result.jobIds.length
+      const started =
+        count === 0
+          ? '作る Shot がありませんでした。'
+          : `${String(count)} 件の絵コンテの画像を作り始めました（1 枚 1 分ほど、全部で ${String(count)} 分ほど）。`
+      return {
+        summary: started + (skipped.length === 0 ? '' : `${skipped.join('・')}は飛ばしました。`),
+        failures: [],
+      }
+    })
+  }
+
   return {
     busy,
     progress,
@@ -211,5 +240,6 @@ export const useBulkActions = (): BulkActions => {
     generate,
     selectTakes,
     update,
+    drawStartFrames,
   }
 }

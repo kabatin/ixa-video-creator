@@ -1,5 +1,6 @@
 import {
   GenerationJobId,
+  ImageGenerationJobId,
   ProjectId,
   ShotId,
   TakeId,
@@ -174,6 +175,27 @@ describe('applyProjectEvent', () => {
     const shots = makeShots()
     const result = applyProjectEvent(shots, statusEvent(shotA, 'ready'))
     expect(result.shots).toBe(shots)
+  })
+
+  /**
+   * 絵コンテの画像のジョブ（ADR-0029）は Shot の状態ではない。**Shot の状態として当てない。**
+   * 以前の書き方だと、生成ジョブ以外の出来事をすべて Shot の状態として当てていたので、
+   * 絵を作っている間の「running」が Shot の状態に書き込まれていた。
+   */
+  it('絵コンテの画像のジョブの出来事では、Shot の状態を変えない', () => {
+    const shots = makeShots()
+    const result = applyProjectEvent(shots, {
+      type: 'image_job.status',
+      projectId,
+      at: AT,
+      shotId: shotA,
+      jobId: ImageGenerationJobId.parse(JOB_ID),
+      status: 'running',
+      error: null,
+    })
+    expect(result.shots).toBe(shots)
+    expect(result.newTake).toBeNull()
+    expect(result.failure).toBeNull()
   })
 
   it('一覧に無い Shot は無視する', () => {

@@ -153,7 +153,8 @@ export const ShotInspector = ({
               workspaceId={workbench.project.workspaceId}
               disabled={generating}
               onChange={setHasStartFrame}
-              version={workbench.serverEpoch}
+              // 絵ができたとき（出来事で posterEpoch が進む）にも読み直す。どちらも増えるだけなので和で足りる。
+              version={workbench.serverEpoch + workbench.posterEpoch}
             />
           </Section>
         </div>

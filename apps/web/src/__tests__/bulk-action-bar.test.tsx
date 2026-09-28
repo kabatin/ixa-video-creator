@@ -55,6 +55,7 @@ const baseProps = (overrides: Partial<BulkActionBarProps> = {}): BulkActionBarPr
   onClearSelection: vi.fn(),
   onDelete: vi.fn(),
   onMerge: vi.fn(),
+  onDrawStartFrames: vi.fn(),
   ...overrides,
 })
 
@@ -488,6 +489,7 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
           onClearSelection={vi.fn()}
           onDelete={vi.fn()}
           onMerge={vi.fn()}
+          onDrawStartFrames={vi.fn()}
         />
       </div>,
     )
@@ -550,5 +552,39 @@ describe('BulkActionBar — 合計の見積（F3a）', () => {
     await user.click(screen.getByRole('button', { name: '一括生成' }))
 
     expect(screen.getByRole('group', { name: '一括生成' })).toHaveTextContent('$12.50')
+  })
+})
+
+/**
+ * 絵コンテの画像をまとめて作る（ADR-0029）。**既定は絵の無い Shot だけ**（作り直しは選んだときだけ）。
+ * Codex は 1 枚 1 分ほどかかるので、かかる時間の目安を先に言う。
+ */
+describe('BulkActionBar — 絵コンテの画像', () => {
+  it('開くと、枚数とかかる時間の目安を言う', async () => {
+    const { user } = setup({ selectedCount: 12 })
+
+    await user.click(screen.getByRole('button', { name: '絵コンテの画像' }))
+
+    expect(screen.getByText(/チェックした 12 件の絵コンテの画像/)).toBeTruthy()
+    expect(screen.getByText(/1 枚 1 分ほど/)).toBeTruthy()
+  })
+
+  it('既定は絵の無い Shot だけを作る', async () => {
+    const { props, user } = setup()
+
+    await user.click(screen.getByRole('button', { name: '絵コンテの画像' }))
+    await user.click(screen.getByRole('button', { name: '作る' }))
+
+    expect(props.onDrawStartFrames).toHaveBeenCalledWith({ onlyMissing: true })
+  })
+
+  it('選べば、絵がある Shot も作り直す', async () => {
+    const { props, user } = setup()
+
+    await user.click(screen.getByRole('button', { name: '絵コンテの画像' }))
+    await user.click(screen.getByRole('checkbox', { name: /絵がある Shot も作り直す/ }))
+    await user.click(screen.getByRole('button', { name: '作る' }))
+
+    expect(props.onDrawStartFrames).toHaveBeenCalledWith({ onlyMissing: false })
   })
 })

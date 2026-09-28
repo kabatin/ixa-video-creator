@@ -138,6 +138,13 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       // 採用が変わると表紙の絵も変わる。**別の経路の採用**（一括・別の画面・API）もここで拾う。
       // 以前は生成の成功でしか取り直さず、採用した Shot の絵が読み直すまで出なかった。
       if (event.type === 'shot.status') setPosterEpoch((epoch) => epoch + 1)
+      // 絵コンテの画像（ADR-0029）。できたら・作り始めたら絵を取り直す（ストーリーボードとインスペクター）。
+      if (event.type === 'image_job.status') {
+        setPosterEpoch((epoch) => epoch + 1)
+        if (event.status === 'failed') {
+          setNotice(`絵コンテの画像を作れませんでした: ${event.error ?? '理由が届きませんでした。'}`)
+        }
+      }
       if (
         event.type === 'generation_job.status' &&
         event.status === 'succeeded' &&

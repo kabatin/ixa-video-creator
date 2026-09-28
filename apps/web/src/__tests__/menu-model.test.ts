@@ -89,6 +89,9 @@ describe('有効判定', () => {
     expect(find(EMPTY, 'bulk-generate').enabled).toBe(false)
     expect(find(READY, 'bulk-edit').enabled).toBe(true)
     expect(find(READY, 'bulk-generate').enabled).toBe(true)
+    // 絵コンテの画像をまとめて作る（ADR-0029）も、チェックした Shot が要る。
+    expect(find(EMPTY, 'bulk-draw').enabled).toBe(false)
+    expect(find(READY, 'bulk-draw').enabled).toBe(true)
   })
 
   it('採用を外すは、選んだ Shot に採用 Take があるときだけ（PHASE 8）', () => {

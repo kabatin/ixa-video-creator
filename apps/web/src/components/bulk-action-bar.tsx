@@ -12,6 +12,7 @@ import {
   type BulkUpdatePatch,
 } from '@/components/bulk-action-forms'
 import { Button } from '@/components/ui/button'
+import { BulkDrawForm } from '@/components/bulk-draw-form'
 import { ProgressDialog } from '@/components/ui/progress-dialog'
 import type { BulkProgress } from '@/components/workbench/use-bulk-actions'
 import { WORDING } from '@/lib/wording'
@@ -37,15 +38,16 @@ export type {
   BulkUpdatePatch,
 } from '@/components/bulk-action-forms'
 
-type PanelKey = 'generate' | 'selectTakes' | 'update'
+type PanelKey = 'generate' | 'selectTakes' | 'update' | 'draw'
 
 const PANEL_LABELS: Readonly<Record<PanelKey, string>> = {
   generate: '一括生成',
   selectTakes: '一括採用',
   update: '一括で変える',
+  draw: '絵コンテの画像',
 }
 
-const PANEL_ORDER: readonly PanelKey[] = ['generate', 'selectTakes', 'update']
+const PANEL_ORDER: readonly PanelKey[] = ['generate', 'selectTakes', 'update', 'draw']
 
 /** 一括の結果。**1 件ずつの失敗を畳まない**（lessons L-015）。要約は呼び出し側が作る。 */
 export type BulkOutcome = {
@@ -87,6 +89,8 @@ export type BulkActionBarProps = {
   readonly onDelete: () => void
   /** 結合の確認を開く（ADR-0024）。まとめられない組み合わせなら、開いた先が理由を言う。 */
   readonly onMerge: () => void
+  /** 絵コンテの画像をまとめて作る（ADR-0029）。既定は絵の無い Shot だけ。 */
+  readonly onDrawStartFrames: (input: { readonly onlyMissing: boolean }) => void
 }
 
 export const BulkActionBar = ({
@@ -106,6 +110,7 @@ export const BulkActionBar = ({
   onClearSelection,
   onDelete,
   onMerge,
+  onDrawStartFrames,
 }: BulkActionBarProps) => {
   const idPrefix = useId()
   const [open, setOpen] = useState<PanelKey | null>(null)
@@ -162,7 +167,7 @@ export const BulkActionBar = ({
           </Button>
         </div>
       </div>
-      <div className="mt-1.5 grid grid-cols-3 gap-1">
+      <div className="mt-1.5 grid grid-cols-2 gap-1">
         {PANEL_ORDER.map((key) => (
           <Button
             key={key}
@@ -224,6 +229,18 @@ export const BulkActionBar = ({
               locationOptions={locationOptions}
               busy={busy}
               onUpdate={onUpdate}
+            />
+          )}
+          {open === 'draw' && (
+            <BulkDrawForm
+              idPrefix={`${idPrefix}-draw`}
+              targetCount={selectedCount}
+              busy={busy}
+              onDraw={(input) => {
+                // 頼んだら閉じる。開いたままだと同じ件数に二重に頼める。
+                close('draw')
+                onDrawStartFrames(input)
+              }}
             />
           )}
         </div>

@@ -208,6 +208,10 @@ export const applyProjectEvent = <T extends LiveShot>(
     }
   }
 
+  // **Shot の状態として当てるのは shot.status だけ。** ほかの出来事（絵コンテの画像のジョブなど）を
+  // 当てると、ジョブの状態（running など）が Shot の状態に書き込まれる（ADR-0029 で実際に起きかけた）。
+  if (event.type !== 'shot.status') return { shots, newTake: null, failure: null }
+
   const target = shots.find((shot) => shot.id === event.shotId)
   if (target === undefined || target.status === event.status)
     return { shots, newTake: null, failure: null }
