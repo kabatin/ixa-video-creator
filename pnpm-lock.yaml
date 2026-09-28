@@ -456,9 +456,6 @@ importers:
       '@remotion/bundler':
         specifier: 4.0.525
         version: 4.0.525(@swc/helpers@0.5.15)(postcss@8.5.28)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@remotion/media':
-        specifier: 4.0.525
-        version: 4.0.525(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@remotion/renderer':
         specifier: 4.0.525
         version: 4.0.525(react-dom@19.3.0(react@19.3.0))(react@19.3.0)

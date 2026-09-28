@@ -96,6 +96,50 @@ describe('Shot とクリップを前もって組み立てておく', () => {
     }
   })
 
+  /**
+   * 既定の `opacity: 0` で待たせると、ブラウザはコマを画面に出さず、見え始めの 1 コマが黒になった。
+   * コマが出なければ下敷きにも写せない。後の Shot ほど重なり順が低いので、見えていても前の Shot の裏に隠れる。
+   */
+  it('前の Shot と続く Shot は、待っている間も見える状態で裏に置く', () => {
+    const shots = sequences.filter((sequence) => 'shot' in bodyOf(sequence))
+    expect(shots[0]?.props.styleWhilePremounted).toBeUndefined()
+    expect(shots[1]?.props.styleWhilePremounted).toEqual({ opacity: 1 })
+  })
+
+  it('隙間の後の Shot は隠したまま待つ（黒のはずの間に頭を見せない）', () => {
+    const gapped = sequencesOf(
+      TimelineComposition({
+        doc: makeDocument({ video1: [makeVideo1Shot(1, 0, 2), makeVideo1Shot(2, 3, 2)] }),
+        canvas: null,
+      }) as ReactElement,
+    ).filter((sequence) => 'shot' in bodyOf(sequence))
+    expect(gapped[1]?.props.styleWhilePremounted).toBeUndefined()
+  })
+
+  /**
+   * 次の Shot の動画が読み込みに間に合わないと、Safari では動画も下敷きも空で黒が出た。
+   * 前の Shot を一番下に 1 秒残し、下敷きに残る最後のコマを見せる。
+   */
+  it('次の Shot が続く Shot だけ、切り替わった後も一番下に残す', () => {
+    const shots = sequences.filter((sequence) => 'shot' in bodyOf(sequence))
+    expect(shots[0]?.props).toMatchObject({
+      postmountFor: doc.fps,
+      styleWhilePostmounted: { opacity: 1, zIndex: -1 },
+    })
+    // 最後の Shot は残さない（終わった後の黒のはずの間に絵を残さない）。
+    expect(shots[1]?.props.postmountFor).toBeUndefined()
+  })
+
+  it('隙間の前の Shot は残さない', () => {
+    const gapped = sequencesOf(
+      TimelineComposition({
+        doc: makeDocument({ video1: [makeVideo1Shot(1, 0, 2), makeVideo1Shot(2, 3, 2)] }),
+        canvas: null,
+      }) as ReactElement,
+    ).filter((sequence) => 'shot' in bodyOf(sequence))
+    expect(gapped[0]?.props.postmountFor).toBeUndefined()
+  })
+
   it('メディアのクリップも同じく前もって組み立てる', () => {
     const clips = sequences.filter((sequence) => 'clip' in bodyOf(sequence))
     expect(clips).toHaveLength(2)

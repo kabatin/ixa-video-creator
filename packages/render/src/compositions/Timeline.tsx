@@ -79,7 +79,7 @@ const ShotBody: React.FC<{ shot: ShotPlan; video: FitRect }> = ({ shot, video })
       {/*
         速度は尺に合わせる Shot だけ 1 以外（ADR-0026）。切り出し位置は素材のフレームで数える。
         **Shot の音は鳴らさない**。音楽が先のアプリで、音は曲（AI の動画には音が付いてくることが多い）。
-        プレビューは WebCodecs、書き出しは OffthreadVideo（ADR-0027）。
+        プレビューは直近のコマを写した下敷きを敷く（ADR-0027）。
       */}
       <ShotVideo shot={shot} box={boxStyle(video)} rendering={isRendering} />
     </AbsoluteFill>
@@ -209,12 +209,45 @@ const AudioTrack: React.FC<{ track: AudioPlan }> = ({ track }) => (
  *
  * Player は `<Sequence>` が始まった瞬間に素材の読み込みを始めるので、以前はカットの境目ごとに
  * 0.1〜0.2 秒黒が挟まった（2026-09-27、モトダチ MV で実測）。1 秒前から組み立てておけば、
- * 境目では頭のコマをもう描ける（Shot はプレビューで WebCodecs が先にデコードする / ADR-0027）。
+ * 境目では頭のコマをもう描ける（Safari の空白は下敷きが埋める / ADR-0027）。
  * Remotion の推奨も 1 秒。
  * 書き出し（renderMedia）では Remotion が premount を使わないので、絵は変わらない。
  * `premountFor` は `layout="none"` と組み合わせられないため、Shot とクリップは既定の layout にする。
  */
 const PREMOUNT_SEC = 1
+
+/**
+ * **待っている Shot は見える状態のまま、いまの Shot の裏に置く。**
+ *
+ * Remotion の既定は待っている間 `opacity: 0` で隠す。するとブラウザはその `<video>` のコマを
+ * 画面に出さず、見え始めの 1 コマが黒になった（Chrome で画面のコマを全部取って実測。45 秒で 9 か所中 6 回）。
+ * コマが出なければ下敷き（`PreviewShotVideo`）にも頭のコマを写せない。後の Shot ほど重なり順が低い
+ * （`shotZIndex`）ので、見えていてもいまの Shot に隠れる。
+ *
+ * **前の Shot と隙間なく続くときだけ。** 隙間があると、黒のはずの間に次の Shot の頭が早く見えてしまう。
+ */
+const SHOW_BEHIND_WHILE_PREMOUNTED: React.CSSProperties = { opacity: 1 }
+
+/**
+ * **切り替わった後も、前の Shot を 1 秒だけ一番下に残す。**
+ *
+ * 次の Shot の動画が読み込みに間に合わないと、動画も下敷きも空で、1 秒近く黒が出た
+ * （WebKit の録画で実測）。前の Shot を重なり順の一番下に残せば、その動画は最後のコマへ頭出しされて
+ * 空白になっても、下敷き（`PreviewShotVideo`）に最後のコマが残っている。次の Shot が描かれれば上に来て隠れる。
+ * 書き出しは postmount を使わないので絵は変わらない。
+ */
+const POSTMOUNT_SEC = 1
+
+/** 残しておく前の Shot は、ほかの何よりも下に置く（根に `isolation` を付けて背景の黒よりは上）。 */
+const HOLD_UNDER_WHILE_POSTMOUNTED: React.CSSProperties = { opacity: 1, zIndex: -1 }
+
+/** 前の Shot の終わりまでに始まるか（隙間が無いか）。重なり（ディゾルブ）も含む。 */
+const followsPrevious = (shots: readonly ShotPlan[], index: number): boolean => {
+  const previous = shots[index - 1]
+  const current = shots[index]
+  if (previous === undefined || current === undefined) return false
+  return current.range.from <= previous.range.from + previous.range.durationInFrames
+}
 
 /**
  * プレビュー（`@remotion/player`）とレンダリング（`renderMedia`）の共通コンポジション（ADR-0010）。
@@ -225,15 +258,24 @@ const PREMOUNT_SEC = 1
 export const TimelineComposition: React.FC<TimelineCompositionProps> = ({ doc, canvas }) => {
   const plan = buildTimelinePlan(doc, canvas ?? doc.resolution)
   const premountFor = Math.round(PREMOUNT_SEC * plan.fps)
+  const postmountFor = Math.round(POSTMOUNT_SEC * plan.fps)
 
   return (
-    <AbsoluteFill style={{ backgroundColor: '#000000' }}>
-      {plan.shots.map((shot) => (
+    // `isolation` で重なりの基準をここに閉じる。zIndex が負の要素を背景の黒より上に描くため。
+    <AbsoluteFill style={{ backgroundColor: '#000000', isolation: 'isolate' }}>
+      {plan.shots.map((shot, index) => (
         <Sequence
           key={shot.shotId}
           from={shot.range.from}
           durationInFrames={shot.range.durationInFrames}
           premountFor={premountFor}
+          styleWhilePremounted={
+            followsPrevious(plan.shots, index) ? SHOW_BEHIND_WHILE_PREMOUNTED : undefined
+          }
+          // 次の Shot が隙間なく続くときだけ残す。最後の Shot や隙間の前では、黒のはずの間に絵を残さない。
+          {...(followsPrevious(plan.shots, index + 1)
+            ? { postmountFor, styleWhilePostmounted: HOLD_UNDER_WHILE_POSTMOUNTED }
+            : {})}
         >
           <ShotBody shot={shot} video={plan.video} />
         </Sequence>
