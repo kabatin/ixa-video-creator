@@ -252,3 +252,44 @@ export const stallingResponse = (init: RequestInit, contentType: string): Respon
     }),
     { headers: { 'content-type': contentType } },
   )
+
+/**
+ * **実サーバから取った応答**（2026-09-30、M5 の Mac で動く vpipe-api 0.1.0。1280x720・56 コマの draft を
+ * 文章だけから作った回）。文書の例より細かい（時刻がマイクロ秒まで入る）ので、形の食い違いはここで気付く。
+ */
+export const REAL_JOB_ID = 'job_01M3RBXYZ2HM6HXAPKJ51QE9MN'
+
+export const REAL_SUCCEEDED_JOB = {
+  id: REAL_JOB_ID,
+  workflow: 'minimax-h3-turbo-video',
+  status: 'succeeded',
+  progress: 1.0,
+  queue_position: null,
+  created_at: '2026-09-30T05:17:23.298241Z',
+  started_at: '2026-09-30T05:17:23.298989Z',
+  finished_at: '2026-09-30T05:20:51.170482Z',
+  result: {
+    output: {
+      media_type: 'video/mp4',
+      width: 1280,
+      height: 720,
+      frames: 56,
+      fps: 24,
+      duration_sec: 2.333,
+    },
+    seed_used: 120698028,
+    details: { generation: { width: 832, height: 480, frames: 56, steps: 6, quality: 'draft' } },
+  },
+  error: null,
+}
+
+/** 実サーバの 429（走っている 1 本と待ちの 1 本で埋まっていたとき）。`retry-after: 175` が付いていた。 */
+export const REAL_BUSY_BODY = {
+  error: {
+    code: 'busy',
+    message: 'the GPU slot and the waiting queue are full',
+    retryable: true,
+    details: null,
+  },
+}
+export const REAL_BUSY_RETRY_AFTER = '175'
