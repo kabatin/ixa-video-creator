@@ -33,6 +33,7 @@ import { createModelsApi, type ModelsApi } from '@/lib/models-api'
 import { createShotStartFrameApi, type ShotStartFrameApi } from '@/lib/shot-start-frame-api'
 import { createProjectConceptApi, type ProjectConceptApi } from '@/lib/project-concept-api'
 import { createAiSettingsApi, type AiSettingsApi } from '@/lib/ai-settings-api'
+import { createGenerationActivityApi, type GenerationActivityApi } from '@/lib/generation-activity-api'
 import { createFootageApi, type FootageApi } from '@/lib/footage-api'
 import { createTextStyleApi, type TextStyleApi } from '@/lib/text-style-api'
 import { createShotCastApi, type ShotCastApi } from '@/lib/shot-cast-api'
@@ -100,6 +101,7 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
   ShotStartFrameApi &
   ProjectConceptApi &
   AiSettingsApi &
+  GenerationActivityApi &
   FootageApi &
   TextStyleApi &
   ShotCastApi &
@@ -189,6 +191,7 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
     ...createShotStartFrameApi(requester),
     ...createProjectConceptApi(requester),
     ...createAiSettingsApi(requester),
+    ...createGenerationActivityApi(requester),
     ...createFootageApi(requester),
     ...createTextStyleApi(requester),
     ...createShotCastApi(requester),

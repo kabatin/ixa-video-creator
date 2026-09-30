@@ -1,6 +1,7 @@
 'use client'
 
 import type { Location, MusicTrack, Project, ProjectId, Sequence, Shot, ShotId } from '@ixa/domain'
+import type { ActiveGenerations } from '@/components/workbench/use-active-generations'
 import { createContext, useContext } from 'react'
 import type { UpdateShotBody } from '@/lib/api-schemas'
 import type { WireMusicAnalysis } from '@/lib/music-api'
@@ -119,6 +120,11 @@ export type WorkbenchContextValue = {
   readonly notify: (message: string | null) => void
   /** 中央上の素材ビューアを前に出す（PHASE 8.2）。 */
   readonly openViewer: () => void
+  /**
+   * 動いている生成（Shot ごと。作成中を先に）。どのモデルで・いつから・目安は何秒か。
+   * 生成中の Shot があるあいだだけ追う（`use-active-generations.ts`）。
+   */
+  readonly activeGenerations: ActiveGenerations
 }
 
 export type ShotPatch = UpdateShotBody

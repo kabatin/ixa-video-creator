@@ -1,5 +1,6 @@
 'use client'
 
+import type { ShotId } from '@ixa/domain'
 import { useEffect, useMemo, useState } from 'react'
 import { StoryboardGrid } from '@/components/workbench/storyboard-grid'
 import { readyOr, useAssets } from '@/components/workbench/asset-store'
@@ -14,6 +15,8 @@ import {
   buildShotAlignments,
   summarizeBeatAlignment,
 } from '@/lib/beat-alignment-view'
+import { useNow } from '@/components/workbench/use-active-generations'
+import { describeActiveGeneration } from '@/lib/generation-progress'
 
 /**
  * ストーリーボード（中央上）。カードを最大 3 列で並べる（UI-WORKBENCH §5.3）。
@@ -23,6 +26,12 @@ import {
  */
 export const StoryboardPanel = () => {
   const workbench = useWorkbench()
+  // 生成中の様子（どのモデルで・経過・目安）。動いている生成があるあいだだけ毎秒刻む。
+  const now = useNow(workbench.activeGenerations.size > 0)
+  const activityOf = (shotId: ShotId): string | null => {
+    const generation = workbench.activeGenerations.get(shotId)?.[0]
+    return generation === undefined ? null : describeActiveGeneration(generation, now).short
+  }
   const { shots, analysis, track } = workbench
   const pendingDrafts = usePendingDraftCount()
   const { locations } = useAssets()
@@ -118,6 +127,7 @@ export const StoryboardPanel = () => {
           workbench.selectShot(shotId)
           workbench.openInspector('generate')
         }}
+        activityOf={activityOf}
         locationName={(shot) =>
           shot.locationId === null
             ? null

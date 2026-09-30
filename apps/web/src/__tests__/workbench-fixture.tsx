@@ -90,6 +90,7 @@ export const workbenchValue = (
   focusPanel: vi.fn(),
   inspectorTab: 'settings',
   inspectorRequest: 0,
+  activeGenerations: new Map(),
   openInspector: vi.fn(),
   inspected: null,
   notice: null,

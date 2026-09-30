@@ -29,6 +29,7 @@ import {
   createMusicAnalysisRepository,
   createMusicAnalysisFailureRepository,
   createReviewRepository,
+  findActiveGenerationJobs,
 } from '@ixa/db'
 import { createProviderRegistry } from '@ixa/provider-core'
 import { createGenerationContextSource } from '@ixa/generation'
@@ -220,6 +221,8 @@ export const main = (): void => {
     environment: { status: () => describeEnvironment(config) },
     // 使う AI（ADR-0032）。見つかった AI と、用途ごとの選択。
     ai,
+    // 生成中の Shot で、いま何が起きているか（モデル・順番待ちか作成中か・経過）。
+    activeGenerations: (projectId) => findActiveGenerationJobs(db, projectId),
     projects: createProjectRepository(db),
     mediaAssets,
     shots,

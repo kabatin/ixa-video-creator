@@ -143,4 +143,23 @@ describe('StoryboardGrid', () => {
       expect(screen.queryByRole('button', { name: /Take を作る/ })).toBeNull()
     })
   })
+
+  /** 「生成中」の点だけでは分からなかった（制作者 2026-09-30）。カードの下に様子を 1 行で出す。 */
+  it('生成中の Shot には、様子の 1 行（作成中 2:31 / 約 4 分 など）を出す', () => {
+    const cards = [aWorkbenchShot(1, { status: 'generating' }), aWorkbenchShot(2, { status: 'draft' })]
+    render(
+      <StoryboardGrid
+        shots={cards}
+        posters={new Map()}
+        selectedShotId={null}
+        onSelect={vi.fn()}
+        onMakeTake={vi.fn()}
+        activityOf={(shotId) => (shotId === cards[0]?.id ? '作成中 2:31 / 約 4 分' : null)}
+      />,
+    )
+
+    expect(screen.getByText('作成中 2:31 / 約 4 分')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /Take を作る/ })).toHaveLength(1)
+  })
 })
+

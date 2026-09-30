@@ -42,3 +42,16 @@ export const formatLongDuration = (sec: number): string =>
 /** `0:03.75 – 0:07.50（3.75s）`。区間に使う。 */
 export const formatSpan = (startSec: number, durationSec: number): string =>
   `${formatClock(startSec)} – ${formatClock(startSec + durationSec)}（${formatDuration(durationSec)}）`
+
+/**
+ * 待っている間の経過（`2:31`）。生成などを待つ間に使う。**秒の小数は出さない**（1 秒ずつ増えれば足りる）。
+ * 負と NaN は 0 に倒す（`formatClock` と同じ）。
+ */
+export const formatElapsed = (sec: number): string => {
+  const whole = Number.isFinite(sec) && sec > 0 ? Math.floor(sec) : 0
+  return `${String(Math.floor(whole / 60))}:${String(whole % 60).padStart(2, '0')}`
+}
+
+/** 目安の長さ（`約 45 秒`・`約 4 分`）。90 秒未満は秒、それ以上は分に丸める。 */
+export const formatApproxDuration = (sec: number): string =>
+  sec < 90 ? `約 ${String(Math.round(sec))} 秒` : `約 ${String(Math.round(sec / 60))} 分`

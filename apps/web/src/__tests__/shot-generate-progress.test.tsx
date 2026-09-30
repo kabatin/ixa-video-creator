@@ -9,6 +9,7 @@ import {
 import { WorkbenchContext } from '@/components/workbench/workbench-context'
 import { WireGenerateResult } from '@/lib/api-schemas'
 import type { WireCostMeter } from '@/lib/cost-meter-api'
+import type { WireActiveGeneration } from '@/lib/generation-activity-api'
 import { POLL_INTERVAL_MS } from '@/lib/poller'
 import { JOB_ID, SHOT_ID, takeJson } from './fixtures'
 import { aWorkbenchShot, workbenchValue } from './workbench-fixture'
@@ -69,9 +70,12 @@ const fakeApi = (overrides: ApiOverrides = {}): ShotGenerateApi => ({
 const Harness = ({
   api,
   initialStatus = 'draft',
+  activity = [],
 }: {
   readonly api: ShotGenerateApi
   readonly initialStatus?: Shot['status']
+  /** サーバが知っている、この Shot で動いている生成。 */
+  readonly activity?: readonly WireActiveGeneration[]
 }) => {
   const [shot, setShot] = useState<Shot>(() =>
     aWorkbenchShot(1, { id: SHOT_ID, status: initialStatus }),
@@ -80,12 +84,13 @@ const Harness = ({
     () =>
       workbenchValue({
         shots: [shot],
+        activeGenerations: new Map(activity.length === 0 ? [] : [[shot.id, activity]]),
         replaceShots: (updated) => {
           const next = updated[0]
           if (next !== undefined) setShot(next)
         },
       }),
-    [shot],
+    [shot, activity],
   )
   return (
     <WorkbenchContext.Provider value={value}>
@@ -165,6 +170,31 @@ describe('生成の進み具合（F1）', () => {
     expect(line).toHaveTextContent('生成中です')
     expect(line).toHaveTextContent('分かりません')
     expect(line).not.toHaveTextContent('経過 0:')
+  })
+
+  /**
+   * サーバが知っていれば、どのモデルで・どれだけ経ったかを先に言う（制作者 2026-09-30「生成中です、だけでわかりづらい」）。
+   * 画面を開き直した生成でも出せる（時刻はサーバの記録）。
+   */
+  it('サーバの記録があれば、モデルと経過と目安を言う（開き直した生成でも）', async () => {
+    vi.setSystemTime(new Date('2026-09-30T10:02:36Z'))
+    const running: WireActiveGeneration = {
+      jobId: 'job-1',
+      shotId: SHOT_ID,
+      status: 'running',
+      modelId: 'vpipe/minimax-h3-turbo-draft',
+      modelLabel: 'MiniMax H3 Turbo 下書き',
+      typicalLatencySec: 210,
+      queuedAt: '2026-09-30T10:00:00.000Z',
+      startedAt: '2026-09-30T10:00:05.000Z',
+      attempt: 1,
+    }
+    render(<Harness api={fakeApi()} initialStatus="generating" activity={[running]} />)
+    await tick()
+
+    const line = screen.getByRole('status')
+    expect(line).toHaveTextContent('MiniMax H3 Turbo 下書きで作成中です（経過 2:31 / 目安 約 4 分）')
+    expect(line).not.toHaveTextContent('分かりません')
   })
 
   /** 数えられないことを「0 本終わった」に畳まない（lessons L-015）。 */

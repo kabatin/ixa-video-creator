@@ -30,6 +30,8 @@ export type StoryboardGridProps = {
    * Shot を作った後に Take をどこで作るか迷った（制作者 2026-09-30）ので、カードから直接行けるようにする。
    */
   readonly onMakeTake?: (shotId: ShotId) => void
+  /** 生成中の Shot の様子（`作成中 2:31 / 約 4 分`）。分からなければ null（状態の点だけ）。 */
+  readonly activityOf?: (shotId: ShotId) => string | null
   /** ロケーションの名前（素材の共有状態から引く）。無ければ出さない。 */
   readonly locationName?: (shot: Shot) => string | null
   /** ツリーの素材をカードへ落として割り当てる口（PHASE 8.5）。 */
@@ -77,6 +79,7 @@ export const StoryboardGrid = ({
   alignments,
   onOpen,
   onMakeTake,
+  activityOf,
   locationName,
   dropHandlers,
   dropState,
@@ -161,6 +164,11 @@ export const StoryboardGrid = ({
                   <span className="block truncate text-xs text-muted">{`⌂ ${locationName(shot) ?? ''}`}</span>
                 )}
               </button>
+              {activityOf?.(shot.id) != null && (
+                <p role="status" className="mt-1 truncate px-1 text-xs tabular-nums text-info">
+                  {activityOf(shot.id)}
+                </p>
+              )}
               {onMakeTake !== undefined && hasNoTakeYet(shot.status) && (
                 <button
                   type="button"

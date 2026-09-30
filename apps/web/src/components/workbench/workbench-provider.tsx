@@ -10,6 +10,8 @@ import {
   type ShotPatch,
   type WorkbenchContextValue,
 } from '@/components/workbench/workbench-context'
+import { useActiveGenerations } from '@/components/workbench/use-active-generations'
+import { isGeneratingStatus } from '@/lib/shot-display'
 import { useWorkbenchTransport } from '@/components/workbench/use-workbench-transport'
 import { WorkbenchTransportProvider } from '@/components/workbench/workbench-transport-provider'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
@@ -89,6 +91,12 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
   const [inspectorRequest, setInspectorRequest] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
   const { transport, controls } = useWorkbenchTransport()
+  // 生成中の Shot があるあいだだけ、どのモデルで・いつから作っているかを追う（2026-09-30）。
+  const activeGenerations = useActiveGenerations(
+    api,
+    projectId,
+    (shots ?? []).some((shot) => isGeneratingStatus(shot.status)),
+  )
 
   const [serverEpoch, setServerEpoch] = useState(0)
   const lastServerShots = useRef(props.initialShots)
@@ -305,6 +313,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       openViewer: () => {
         props.focusPanel('viewer')
       },
+      activeGenerations,
     }),
     [
       props,
@@ -326,6 +335,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       dialog,
       inspectorTab,
       inspectorRequest,
+      activeGenerations,
       inspected,
       notice,
     ],

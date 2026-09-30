@@ -31,6 +31,8 @@ import {
   type ShotSortKey,
   type SortDirection,
 } from '@/lib/shot-list-view'
+import { useNow } from '@/components/workbench/use-active-generations'
+import { describeActiveGeneration } from '@/lib/generation-progress'
 
 /** 選べるモデル。いまは AUTO だけだが、選択肢の正は `generation-options` に置いたまま。 */
 const MODEL_CHOICES: readonly BulkModelOption[] = MODEL_OPTIONS.flatMap((option) =>
@@ -48,6 +50,12 @@ type ShotFilter = ShotStatus | typeof DRIFT_FILTER | null
 
 export const ShotListPanel = () => {
   const workbench = useWorkbench()
+  // 生成中の様子（どのモデルで・経過・目安）。動いている生成があるあいだだけ毎秒刻む。
+  const now = useNow(workbench.activeGenerations.size > 0)
+  const activityOf = (shotId: ShotId): string | null => {
+    const generation = workbench.activeGenerations.get(shotId)?.[0]
+    return generation === undefined ? null : describeActiveGeneration(generation, now).short
+  }
   const bulk = useBulkActions()
   const drop = useAssetDrop(workbench.notify)
   /** 状態のほかに「拍以外に合わせているもの」でも絞れる。集計の 1 行から中身へ行けるように。 */
@@ -240,6 +248,7 @@ export const ShotListPanel = () => {
           }}
           dropHandlers={drop.handlers}
           dropState={drop.stateOf}
+          activityOf={activityOf}
         />
       </div>
     </PanelFrame>

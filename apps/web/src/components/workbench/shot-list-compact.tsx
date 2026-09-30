@@ -47,6 +47,8 @@ export type ShotListCompactProps = {
   readonly alignmentOf: (shotId: ShotId) => ShotBeatAlignmentView | undefined
   /** 拍の列を出すか。楽曲や解析が無いときは false。 */
   readonly showBeat: boolean
+  /** 生成中の Shot の様子（`作成中 2:31 / 約 4 分`）。分からなければ null（「生成中」だけ出す）。 */
+  readonly activityOf?: (shotId: ShotId) => string | null
 }
 
 const CELL = 'px-1.5 align-middle'
@@ -81,6 +83,7 @@ export const ShotListCompact = ({
   numberOf,
   alignmentOf,
   showBeat,
+  activityOf,
 }: ShotListCompactProps) => {
   const headerRef = useRef<HTMLInputElement>(null)
 
@@ -239,6 +242,9 @@ export const ShotListCompact = ({
                 >
                   {shotStatusLabel(shot.status)}
                 </span>
+                {activityOf?.(shot.id) != null && (
+                  <span className="ml-1 whitespace-nowrap text-xs tabular-nums text-muted">{activityOf(shot.id)}</span>
+                )}
               </td>
             </tr>
           )

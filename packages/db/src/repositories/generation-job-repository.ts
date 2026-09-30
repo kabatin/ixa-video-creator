@@ -1,6 +1,6 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import type {
-  CreateGenerationJobInput, GenerationJob, GenerationJobId, ShotId, UpdateGenerationJobPatch,
+  CreateGenerationJobInput, GenerationJob, GenerationJobId, ProjectId, ShotId, UpdateGenerationJobPatch,
 } from '@ixa/domain'
 import {
   CreateGenerationJobInput as CreateGenerationJobInputSchema,
@@ -13,6 +13,7 @@ import {
 import type { DbClient } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { generationJobs } from '../schema/generation.js'
+import { shots } from '../schema/shot.js'
 
 /** drizzle の row 型。パッケージ外へは出さない。 */
 export type GenerationJobRow = typeof generationJobs.$inferSelect
@@ -113,3 +114,23 @@ export const createGenerationJobRepository = (db: DbClient): GenerationJobReposi
     return generationJobRowToDomain(row)
   },
 })
+
+/**
+ * プロジェクトで動いている生成（順番待ち・作成中）。生きている Shot のものだけ、投入順。
+ * 「生成中です」だけでは分からなかったので、画面にモデルと経過を出すのに使う（2026-09-30）。
+ */
+export const findActiveGenerationJobs = async (db: DbClient, projectId: ProjectId): Promise<GenerationJob[]> => {
+  const rows = await db
+    .select({ job: generationJobs })
+    .from(generationJobs)
+    .innerJoin(shots, eq(shots.id, generationJobs.shotId))
+    .where(
+      and(
+        eq(shots.projectId, projectId),
+        isNull(shots.deletedAt),
+        inArray(generationJobs.status, ['queued', 'running']),
+      ),
+    )
+    .orderBy(asc(generationJobs.id))
+  return rows.map((row) => generationJobRowToDomain(row.job))
+}

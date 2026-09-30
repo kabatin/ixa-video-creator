@@ -91,4 +91,31 @@ describe('Shot 一覧のチェック', () => {
     expect(onRange).toHaveBeenNthCalledWith(1, SHOTS[0]?.id, false)
     expect(onRange).toHaveBeenNthCalledWith(2, SHOTS[2]?.id, true)
   })
+
+  /** 状態の「生成中」だけでは分からなかった（制作者 2026-09-30）。一覧にも経過を出す。 */
+  it('生成中の Shot の状態の横に、様子を短く出す', () => {
+    const generating = [aShot(1), { ...aShot(2), status: 'generating' as const }]
+    render(
+      <ShotListCompact
+        shots={generating}
+        posters={new Map()}
+        selectedShotId={null}
+        checked={new Set()}
+        headerState="none"
+        busy={false}
+        sort={{ key: 'order', direction: 'asc' }}
+        onSort={() => undefined}
+        onSelect={() => undefined}
+        onToggle={() => undefined}
+        onToggleAll={() => undefined}
+        numberOf={() => 1}
+        alignmentOf={() => undefined}
+        showBeat={false}
+        activityOf={(shotId) => (shotId === generating[1]?.id ? '作成中 0:42' : null)}
+      />,
+    )
+
+    expect(screen.getByText('作成中 0:42')).toBeInTheDocument()
+  })
 })
+

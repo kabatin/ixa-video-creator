@@ -19,6 +19,7 @@ import type { ObjectStorage } from '@ixa/storage'
 import { registerErrorHandlers, validationHook } from './errors.js'
 import { environmentRoutes, type EnvironmentDeps } from './routes/environment.js'
 import { aiRoutes, type AiRoutesDeps } from './routes/ai.js'
+import { generationActivityRoutes, type GenerationActivityDeps } from './routes/generation-activity.js'
 import { modelRoutes } from './routes/models.js'
 import type { Logger } from './logger.js'
 import { registerOpenApiDocument } from './openapi.js'
@@ -137,6 +138,8 @@ export type AppDeps = {
   environment?: EnvironmentDeps
   /** 使う AI（ADR-0032）。無ければ口を置かない（テストの多くは要らない）。 */
   ai?: AiRoutesDeps
+  /** 動いている生成（順番待ち・作成中）の一覧。無ければ口を置かない。 */
+  activeGenerations?: GenerationActivityDeps['activeJobs']
   storage: ObjectStorage
   /** CORS で許可するオリジン。空なら CORS を有効にしない。 */
   corsOrigins: readonly string[]
@@ -174,6 +177,12 @@ export const createApp = (deps: AppDeps) => {
   // 鍵の設定状態。**値は返さない。設定する口も置かない**（無認証で全 IF に待ち受けているため）。
   if (deps.environment !== undefined) app.route('/', environmentRoutes(deps.environment))
   if (deps.ai !== undefined) app.route('/', aiRoutes(deps.ai))
+  if (deps.activeGenerations !== undefined) {
+    app.route(
+      '/',
+      generationActivityRoutes({ projects: deps.projects, activeJobs: deps.activeGenerations, registry: deps.registry }),
+    )
+  }
   // 画面がモデルの性質（fps・尺・参照の上限）を書き写さないための口。
   app.route('/', modelRoutes({ registry: deps.registry }))
   app.route(

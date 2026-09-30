@@ -20,6 +20,8 @@ import type { WireVideoModel } from '@/lib/models-api'
 import { POLL_TIMEOUT_MS, startAsyncPolling } from '@/lib/poller'
 import { isGeneratingStatus } from '@/lib/shot-display'
 import { offerReviewAfterGeneration } from '@/lib/offer-review'
+import { useNow } from '@/components/workbench/use-active-generations'
+import { describeActiveGeneration } from '@/lib/generation-progress'
 
 /**
  * 生成（UI-WORKBENCH-2 §5.2）。**このパネルの主ボタン**はここ。
@@ -118,6 +120,9 @@ export const ShotGenerateSection = ({
   // 前の Shot の見守りは「持っていない」として扱う。
   const watched = watch !== null && watch.shotId === shot.id ? watch : null
   const progress = useGenerateProgress(client, watched, generating)
+  // サーバが知っている、この Shot で動いている生成（どのモデルで・いつから）。経過は毎秒刻む。
+  const activity = workbench.activeGenerations.get(shot.id)?.[0] ?? null
+  const now = useNow(generating && activity !== null)
 
   /**
    * 費用を取り直す合図。投入（自分が使った）と Take の到着（実際に金が動いた）と
@@ -218,7 +223,7 @@ export const ShotGenerateSection = ({
       </Button>
       {generating && (
         <p role="status" className="text-xs text-text">
-          {generatingLine(watched, progress)}
+          {generatingLine(watched, progress, activity === null ? null : describeActiveGeneration(activity, now).long)}
         </p>
       )}
       {result !== null && (
@@ -245,8 +250,18 @@ export const ShotGenerateSection = ({
 const generatingLine = (
   watch: GenerateWatch | null,
   progress: GenerateProgress | null,
+  /** サーバの記録から組んだ 1 文（どのモデルで・経過・目安）。読めていなければ null。 */
+  activity: string | null,
 ): string => {
   const tail = '終わった Take から Take 比較に並びます。'
+  if (activity !== null) {
+    // 経過はサーバの記録で言う（開き直しても出る）。この画面から投入していれば、何本終わったかも添える。
+    if (watch === null || progress === null) return `${activity}${tail}`
+    const counted =
+      progress.done === null ? '終わった本数は数えられません' : `${String(watch.requested)} 本中 ${String(progress.done)} 本`
+    const stopped = progress.stopped === null ? '' : ` ${progress.stopped}`
+    return `${activity}（${counted}）${tail}${stopped}`
+  }
   if (watch === null || progress === null) {
     return `生成中です（この画面から投入した生成ではないため、経過時間と本数は分かりません）。${tail}`
   }
