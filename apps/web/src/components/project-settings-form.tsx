@@ -7,7 +7,6 @@ import { FieldError } from '@/components/form/field-error'
 import { SelectField, type SelectOption } from '@/components/form/select-field'
 import { TextField } from '@/components/form/text-field'
 import { Button } from '@/components/ui/button'
-import { ConfirmButton } from '@/components/ui/confirm-button'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { createLibraryClient, fieldErrorsOf } from '@/lib/library-api'
@@ -22,7 +21,7 @@ import {
   type ProjectSettingsValues,
 } from '@/lib/project-settings-form'
 import { ASPECT_RATIOS, FPS_OPTIONS, resolutionPresetsFor } from '@/lib/resolution-presets'
-import { WORDING, deleteConfirmMessage } from '@/lib/wording'
+import { WORDING } from '@/lib/wording'
 
 /**
  * Project の設定（P55-9）。
@@ -131,20 +130,6 @@ export const ProjectSettingsForm = ({ project }: ProjectSettingsFormProps) => {
     } catch (error) {
       setErrors(errorsFromServer(error))
     } finally {
-      setBusy(false)
-    }
-  }
-
-  const remove = async (): Promise<void> => {
-    setErrors({})
-    setBusy(true)
-    setNotice(null)
-    try {
-      await createLibraryClient(resolveApiBaseUrl()).deleteProject(saved.id)
-      router.push('/')
-      router.refresh()
-    } catch (error) {
-      setErrors({ form: `削除できませんでした: ${describeError(error)}` })
       setBusy(false)
     }
   }
@@ -270,33 +255,6 @@ export const ProjectSettingsForm = ({ project }: ProjectSettingsFormProps) => {
         </div>
       </form>
 
-      <section className="rounded-lg border border-danger/40 bg-surface p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-danger">プロジェクトの削除</h2>
-        <p className="mt-2 text-sm text-text">
-          このプロジェクトに紐づくものが、すべて画面から辿れなくなります。
-        </p>
-        <div className="mt-4">
-          <ConfirmButton
-            label={`${WORDING.delete}（プロジェクト）`}
-            message={deleteConfirmMessage(`プロジェクト「${saved.name}」`)}
-            confirmLabel="削除する"
-            disabled={busy}
-            onConfirm={() => {
-              void remove()
-            }}
-          >
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-danger">
-              <li>すべての Shot と、その生成結果（Take）</li>
-              <li>ストーリーボード・タイムライン・トランジション</li>
-              <li>登録した楽曲と解析結果</li>
-              <li>レンダリング結果</li>
-            </ul>
-            <p className="mt-2 text-sm text-danger">
-              キャラクター・ロケーション・ブランド資産はワークスペースのものなので残ります。
-            </p>
-          </ConfirmButton>
-        </div>
-      </section>
     </div>
   )
 }

@@ -183,11 +183,12 @@ export const ShotListCompact = ({
                   checked={checked.has(shot.id)}
                   disabled={busy}
                   aria-label={`${shot.code} を一括操作の対象にする`}
-                  onClick={(event) => {
-                    event.preventDefault()
-                    onToggle(shot.id, event.shiftKey)
+                  // 既定の動き（チェックの切り替え）は止めない。止めるとブラウザが押す前の見た目に戻し、
+                  // 次に描き直すまで古いチェックのまま見えていた（2026-09-30）。Shift は押した瞬間の値を使う。
+                  onChange={(event) => {
+                    const native = event.nativeEvent
+                    onToggle(shot.id, native instanceof MouseEvent && native.shiftKey)
                   }}
-                  onChange={() => undefined}
                   className="h-3.5 w-3.5"
                 />
               </td>

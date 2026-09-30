@@ -1,6 +1,7 @@
 'use client'
 
 import { EnvironmentPanel } from '@/components/environment-panel'
+import { ProjectDeleteSection } from '@/components/project-delete-section'
 import { ProjectSettingsForm } from '@/components/project-settings-form'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 
@@ -24,6 +25,11 @@ export const SettingsDialogBody = () => {
         この環境が何につながっていて、何にお金が掛かるか。Project ごとではなく、この環境全体の設定です。
       </p>
       <EnvironmentPanel />
+
+      <hr className="my-6 border-line" />
+
+      {/* 取り返しのつかない操作は一番下（保存と「接続先と実行の設定」の間に挟まっていた）。 */}
+      <ProjectDeleteSection project={project} />
     </div>
   )
 }
