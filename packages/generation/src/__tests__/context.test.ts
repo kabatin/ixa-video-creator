@@ -413,6 +413,7 @@ describe('resolveReferences との統合（ARCHITECTURE.md §8）', () => {
       manualReferences,
       previousShotLastFrameId,
       startFrameId,
+      styleReferenceIds: [],
       maxReferences,
       supportedRoles: TIGHT_ROLES,
     })

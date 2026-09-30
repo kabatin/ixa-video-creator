@@ -158,6 +158,8 @@ const generate = async (deps: ImageProcessorDeps, job: ImageGenerationJob, dir: 
     manualReferences,
     previousShotLastFrameId: null,
     startFrameId: null,
+    // 作品の手本画像（ADR-0030）。1 枚目は人物の次に優先される。
+    styleReferenceIds: project.styleReferenceAssetIds,
     maxReferences: caps.referenceImages.max,
     supportedRoles: caps.referenceImages.roles,
   })

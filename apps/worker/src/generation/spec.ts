@@ -49,6 +49,8 @@ export const rebuildSpec = async (
     manualReferences,
     previousShotLastFrameId,
     startFrameId,
+    // 作品の手本画像（ADR-0030）。受け付ける映像モデルにだけ届く（役割 style）。
+    styleReferenceIds: project.styleReferenceAssetIds,
     maxReferences: caps.referenceImages.max,
     supportedRoles: caps.referenceImages.roles,
   })

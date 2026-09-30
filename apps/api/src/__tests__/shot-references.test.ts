@@ -43,6 +43,7 @@ describe('参照がある場合の生成（Phase 2 への備え）', () => {
           manualReferences: [],
           previousShotLastFrameId: null,
           startFrameId: null,
+          styleReferenceIds: [],
           maxReferences,
           supportedRoles: [...ReferenceRoleSchema.options],
         }),

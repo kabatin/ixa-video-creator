@@ -75,7 +75,7 @@ export type BuildGenerationDeps<M extends GenerationModel> = {
 }
 
 /** 仕様の組み立てに必要な Project の属性だけ。予算や状態はここでは使わない。 */
-export type GenerationProject = Pick<Project, 'aspectRatio' | 'resolution' | 'fps' | 'styleGuide'>
+export type GenerationProject = Pick<Project, 'aspectRatio' | 'resolution' | 'fps' | 'styleGuide' | 'styleReferenceAssetIds'>
 
 /** 組み上がった生成仕様と、それを出したモデル。 */
 export type CompiledGeneration<M extends GenerationModel> = {
@@ -151,6 +151,8 @@ export const buildGeneration = async <M extends GenerationModel>(
       manualReferences,
       previousShotLastFrameId,
       startFrameId,
+      // 作品の手本画像（ADR-0030）。
+      styleReferenceIds: project.styleReferenceAssetIds,
       maxReferences,
       supportedRoles,
     })

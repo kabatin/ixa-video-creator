@@ -38,7 +38,13 @@ const shot = (overrides: Partial<Shot> = {}): Shot => ({
 })
 
 const input = (overrides: Partial<StartFramePromptInput> = {}): StartFramePromptInput => ({
-  project: { aspectRatio: '16:9', resolution: { width: 1920, height: 1080 }, fps: 30, styleGuide: '夜明け前、フィルムグレイン' },
+  project: {
+    aspectRatio: '16:9',
+    resolution: { width: 1920, height: 1080 },
+    fps: 30,
+    styleGuide: '夜明け前、フィルムグレイン',
+    avoid: '',
+  },
   shot: shot(),
   characters: [],
   references: [],
@@ -67,5 +73,20 @@ describe('compileStartFramePrompt', () => {
 
   it('説明が空でも組み立てられる（画角とスタイルだけでも絵にはなる）', () => {
     expect(compileStartFramePrompt(input({ shot: shot({ description: '' }) }))).toContain('medium closeup')
+  })
+})
+
+/**
+ * 作品の方針の「避けたいもの」（ADR-0030）。否定の指定を受けるモデルが無いので、
+ * 絵の指示文に「避けること」として入れる（Codex は指示文をよく守る）。
+ */
+describe('compileStartFramePrompt — 避けたいもの', () => {
+  it('書いてあれば「避けること」として入れる', () => {
+    const prompt = compileStartFramePrompt(input({ project: { ...input().project, avoid: '文字、透かし、アニメ調' } }))
+    expect(prompt).toContain('避けること: 文字、透かし、アニメ調')
+  })
+
+  it('空なら入れない', () => {
+    expect(compileStartFramePrompt(input())).not.toContain('避けること')
   })
 })

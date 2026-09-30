@@ -14,6 +14,8 @@ const baseRow = (): ProjectRow => ({
   durationSec: 116,
   budgetUsd: 50,
   styleGuide: 'cinematic',
+  avoid: '文字、透かし',
+  styleReferenceAssetIds: ['01ARZ3NDEKTSV4RRFFQ69G5FAV'],
   status: 'planning',
   createdAt: new Date('2026-09-16T00:00:00Z'),
   updatedAt: new Date('2026-09-16T00:00:00Z'),
@@ -34,6 +36,9 @@ describe('projectRowToDomain', () => {
       durationSec: 116,
       budgetUsd: 50,
       styleGuide: 'cinematic',
+      // 作品の方針（ADR-0030）。
+      avoid: '文字、透かし',
+      styleReferenceAssetIds: ['01ARZ3NDEKTSV4RRFFQ69G5FAV'],
       status: 'planning',
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,

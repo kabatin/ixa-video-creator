@@ -34,6 +34,9 @@ export const projects = pgTable(
     durationSec: seconds('duration_sec'),
     budgetUsd: doublePrecision('budget_usd'),
     styleGuide: text('style_guide').notNull().default(''),
+    // 作品の方針（ADR-0030）。避けたいものと、手本画像（ムードボード、3 枚まで）。
+    avoid: text('avoid').notNull().default(''),
+    styleReferenceAssetIds: text('style_reference_asset_ids').array().notNull().default([]),
 
     status: text('status', { enum: ProjectStatusSchema.options }).$type<ProjectStatus>().notNull(),
     createdAt: createdAt(),

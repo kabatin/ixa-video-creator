@@ -43,6 +43,7 @@ const base = (overrides: Partial<ResolveInput> = {}): ResolveInput => ({
   manualReferences: [],
   previousShotLastFrameId: null,
   startFrameId: null,
+  styleReferenceIds: [],
   maxReferences: 9,
   supportedRoles: ALL_ROLES,
   ...overrides,
@@ -139,5 +140,43 @@ describe('resolveReferences', () => {
     const runs = Array.from({ length: 5 }, () => resolveReferences(base({ maxReferences: 3 })))
     const serialized = runs.map((r) => JSON.stringify(r.map((x) => x.mediaAssetId)))
     expect(new Set(serialized).size).toBe(1)
+  })
+})
+
+/**
+ * 作品の手本画像（ムードボード、ADR-0030）。全 Shot の生成に見た目の手本（役割 `style`）として添える。
+ * **1 枚目は人物の次に優先**（上限 4 枚でも必ず 1 枚届く）。2・3 枚目は空きがあれば。
+ */
+describe('resolveReferences — 作品の手本画像', () => {
+  const mood = [asset(70), asset(71), asset(72)]
+  const styleOf = (refs: ReturnType<typeof resolveReferences>) =>
+    refs.filter((ref) => ref.role === 'style').map((ref) => ref.mediaAssetId)
+
+  it('枠に余裕があれば 3 枚とも添える', () => {
+    expect(styleOf(resolveReferences(base({ styleReferenceIds: mood })))).toEqual(mood)
+  })
+
+  it('上限 4 枚でも 1 枚目は人物の次に残る（衣装・場所より先）', () => {
+    const refs = resolveReferences(
+      base({
+        styleReferenceIds: mood,
+        locations: [{ name: '雨の路地', referenceAssetIds: [asset(60)] } as never],
+        maxReferences: 4,
+      }),
+    )
+    expect(styleOf(refs)).toEqual([asset(70)])
+    expect(refs.filter((ref) => ref.role === 'subject')).toHaveLength(3)
+  })
+
+  it('最初のフレームより先にはしない（開始画像は動画の始点そのもの）', () => {
+    const refs = resolveReferences(
+      base({ characters: [], styleReferenceIds: mood, startFrameId: asset(50), maxReferences: 1 }),
+    )
+    expect(refs.map((ref) => ref.role)).toEqual(['start_frame'])
+  })
+
+  it('手本を受けないモデルには渡さない', () => {
+    const roles = ALL_ROLES.filter((role) => role !== 'style')
+    expect(styleOf(resolveReferences(base({ styleReferenceIds: mood, supportedRoles: roles })))).toEqual([])
   })
 })

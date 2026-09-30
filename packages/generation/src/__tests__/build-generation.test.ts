@@ -41,6 +41,7 @@ const aProject = (overrides: Partial<GenerationProject> = {}): GenerationProject
   resolution: { width: 1920, height: 1080 },
   fps: 30,
   styleGuide: 'cinematic, high contrast',
+  styleReferenceAssetIds: [],
   ...overrides,
 })
 

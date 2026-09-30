@@ -7,6 +7,13 @@ import { CANONICAL_FRAME_PRIORITY, MANUAL_PRIORITY, REFERENCE_PRIORITY } from '.
 /** 四面図は 1 枚で正面・側面・背面・斜めを兼ねるため、枠が少ないモデルで優先される。 */
 export const FOUR_VIEW_PRIORITY = 1.5
 
+/**
+ * 作品の手本画像（ADR-0030）の 1 枚目。**人物と最初のフレームの次、衣装・場所より先。**
+ * 参照の上限（Codex は 4 枚）でも作品の見た目の手本が必ず 1 枚届くようにする。
+ * 最初のフレーム（3）より後ろなのは、開始画像が動画の始点そのものだから。
+ */
+export const STYLE_REFERENCE_LEAD_PRIORITY = 3.5
+
 export type ResolvedReference = {
   readonly mediaAssetId: MediaAssetId
   readonly role: ReferenceRole
@@ -30,6 +37,11 @@ export type ResolveInput = {
   readonly manualReferences: readonly ShotReference[]
   readonly previousShotLastFrameId: MediaAssetId | null
   readonly startFrameId: MediaAssetId | null
+  /**
+   * 作品の手本画像（`Project.styleReferenceAssetIds`、ADR-0030）。**必ず渡す**（無ければ空配列）。
+   * 省略できる形にすると、渡し忘れた経路だけ作品の見た目が揃わない。
+   */
+  readonly styleReferenceIds: readonly MediaAssetId[]
   /** モデルが受け付ける参照枚数の上限。 */
   readonly maxReferences: number
   /** モデルが受け付ける参照ロール。 */
@@ -144,6 +156,17 @@ export const resolveReferences = (input: ResolveInput): ResolvedReference[] => {
         origin: `location:${location.name}`,
       })
     }
+  }
+
+  // 作品の手本画像。1 枚目は上の優先度、2 枚目以降は空きがあれば（`style` の優先度）。
+  for (const [index, assetId] of input.styleReferenceIds.entries()) {
+    candidates.push({
+      mediaAssetId: assetId,
+      role: 'style',
+      weight: 0.8,
+      priority: index === 0 ? STYLE_REFERENCE_LEAD_PRIORITY : REFERENCE_PRIORITY.style + index * 0.1,
+      origin: `project_style:${String(index + 1)}`,
+    })
   }
 
   // モデルが対応しないロールは落とす
