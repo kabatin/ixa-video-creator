@@ -15,6 +15,8 @@ type SaveState =
 
 export type AutoSaveFieldProps = {
   readonly label: string
+  /** 見出しが同じ名前を言っているときだけ。ラベルは読み上げに残す（`FieldRow`）。 */
+  readonly hideLabel?: boolean
   /** 保存済みの値。保存に成功すると親が新しい値を渡し直す。 */
   readonly value: string
   /** 確定した値を保存する。失敗は reject（理由を欄の横に出す）。 */
@@ -35,6 +37,7 @@ export type AutoSaveFieldProps = {
  */
 export const AutoSaveField = ({
   label,
+  hideLabel = false,
   value,
   onSave,
   validate,
@@ -111,7 +114,7 @@ export const AutoSaveField = ({
   }
 
   return (
-    <FieldRow label={label} htmlFor={id}>
+    <FieldRow label={label} htmlFor={id} hideLabel={hideLabel}>
       {multiline ? (
         <textarea {...common} rows={3} className={TEXTAREA_CLASS} />
       ) : (

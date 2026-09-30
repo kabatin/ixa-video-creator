@@ -40,6 +40,7 @@ export type MenuCommand =
   | 'bulk-draw'
   | 'import-files'
   | 'inspect-master-track'
+  | 'inspect-project'
   | 'unselect-take'
   | 'split-shot'
 
@@ -194,6 +195,8 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
       label: 'ファイル',
       items: [
         item('new-project', '新規プロジェクト', href(NEW_PROJECT_HREF)),
+        // 作品全体のコンセプト・ルック（ADR-0030）。ダイアログではなくインスペクターに出す。
+        item('concept', '作品の方針…', command('inspect-project')),
         item('settings', '設定…', dialog('settings')),
         item('render', '書き出し…', dialog('render')),
       ],

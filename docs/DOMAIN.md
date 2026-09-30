@@ -112,7 +112,10 @@ type Project = {
   // 制作制約
   durationSec: Seconds | null      // 楽曲確定後に確定
   budgetUsd: number | null         // 生成コスト上限（超過で自動生成停止）
-  styleGuide: string               // 全 Shot の prompt に注入される共通スタイル記述
+  // 作品の方針（ADR-0030）。コンセプトは Script が持つ
+  styleGuide: string               // ルック。全 Shot の prompt の末尾に注入される共通スタイル記述
+  avoid: string                    // 避けたいもの。Shot の絵の指示と AI の下書きにだけ入る（映像モデルは否定指定を受けない）
+  styleReferenceAssetIds: MediaAssetId[]  // 手本画像（3 枚まで）。全 Shot の生成に参照 style として添える
   status: 'planning' | 'production' | 'review' | 'finalizing' | 'done'
   createdAt: Date
   updatedAt: Date

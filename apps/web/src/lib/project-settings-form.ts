@@ -14,7 +14,7 @@ import { defaultResolutionKeyFor, findResolution } from '@/lib/resolution-preset
  *
  * 作成フォーム（`project-form.ts`）とは別物として置いている。作成時は
  * 名前・比率・解像度・fps しか決められないが、設定画面はそれに加えて
- * **尺・予算・スタイルガイド・状態**を扱い、どれも「未設定（null）」を持てる。
+ * **尺・予算・状態**を扱い、尺と予算は「未設定（null）」を持てる。
  * 同じ関数に両方を入れると、作成時に送ってはいけない列が紛れ込む。
  *
  * ここは純粋関数だけ。IO も React も持たない。
@@ -28,7 +28,6 @@ export type ProjectSettingsValues = {
   /** 空文字は「未設定」。0 と未設定は別の事実なので畳まない。 */
   readonly durationSec: string
   readonly budgetUsd: string
-  readonly styleGuide: string
   readonly status: string
 }
 
@@ -56,7 +55,6 @@ export const initialProjectSettingsValues = (project: Project): ProjectSettingsV
   fps: String(project.fps),
   durationSec: numberToField(project.durationSec),
   budgetUsd: numberToField(project.budgetUsd),
-  styleGuide: project.styleGuide,
   status: project.status,
 })
 
@@ -168,7 +166,6 @@ export const validateProjectSettings = (
     fps: fps.data,
     durationSec: durationSec.value,
     budgetUsd: budgetUsd.value,
-    styleGuide: values.styleGuide,
     status: status.data,
   })
 

@@ -31,6 +31,11 @@ export const AssetTree = () => {
   const show = (...labels: readonly string[]): boolean =>
     labels.some((label) => matchesAssetQuery(label, query))
 
+  const projectSelection: Inspected = { kind: 'project', id: workbench.projectId }
+  const inspectProject = (): void => {
+    workbench.inspect(projectSelection)
+    workbench.focusPanel('inspector')
+  }
   const select = (selection: Inspected): void => {
     workbench.inspect(selection)
   }
@@ -63,6 +68,14 @@ export const AssetTree = () => {
       />
 
       <nav aria-label="素材" className="relative min-h-0 flex-1 space-y-1 overflow-auto">
+        {/* 作品全体の方針（ADR-0030）。インスペクターにしか出ないので、1 回押すだけで前に出す。 */}
+        <Row
+          icon="◆"
+          label="作品の方針"
+          selected={sameSelection(workbench.inspected, projectSelection)}
+          onSelect={inspectProject}
+          onOpen={inspectProject}
+        />
         <Group
           label="楽曲"
           count={tracks}

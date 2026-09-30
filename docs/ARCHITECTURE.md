@@ -527,8 +527,8 @@ Shot から Provider へ渡す参照画像は、**自動導出 + 手動追加**�
   4. 前 Shot の最終フレームを role='previous_shot_last_frame' として追加（連続性が要るとき）
   5. 手動追加分（sourceKind='manual'）を最優先で前に置く
   6. モデルの maxReferenceImages に合わせて優先度順に切り詰める
-     優先度: manual > canonical_frame > four_view > subject(primary) > wardrobe
-             > start_frame > location > brand > style
+     優先度: manual > canonical_frame > four_view > subject(primary) > start_frame
+             > 作品の手本の 1 枚目（ADR-0030） > wardrobe > location > brand > style
   7. モデルが role をサポートしない場合の縮退ルールを適用
 出力: ShotGenerationSpec.references[]（順序確定・重み付き）
 ```

@@ -207,6 +207,20 @@ describe('行き先', () => {
     })
   })
 
+  it('作品の方針はファイルから開ける（インスペクターに出す。ADR-0030）', () => {
+    const file = menus.find((menu) => menu.id === 'file')
+    expect(file?.items.map((entry) => entry.label)).toEqual([
+      '新規プロジェクト',
+      '作品の方針…',
+      '設定…',
+      '書き出し…',
+    ])
+    expect(file?.items.find((entry) => entry.label === '作品の方針…')?.action).toEqual({
+      kind: 'command',
+      command: 'inspect-project',
+    })
+  })
+
   it('項目の id は重ならない', () => {
     const ids = menus.flatMap((menu) => menu.items.map((entry) => entry.id))
     expect(new Set(ids).size).toBe(ids.length)

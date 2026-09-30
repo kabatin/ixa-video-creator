@@ -39,7 +39,6 @@ describe('initialProjectSettingsValues', () => {
       fps: '30',
       durationSec: '116',
       budgetUsd: '250',
-      styleGuide: 'シネマティック',
       status: 'production',
     })
   })
@@ -93,7 +92,7 @@ describe('resolveResolution', () => {
 })
 
 describe('validateProjectSettings', () => {
-  it('更新可能な 8 列すべてを patch にする', () => {
+  it('設定で直す 7 列を patch にする', () => {
     const result = validateProjectSettings(values())
 
     expect(result.ok).toBe(true)
@@ -105,9 +104,17 @@ describe('validateProjectSettings', () => {
       fps: 30,
       durationSec: 116,
       budgetUsd: 250,
-      styleGuide: 'シネマティック',
       status: 'production',
     })
+  })
+
+  /** ルックは作品の方針で直す（ADR-0030）。設定の保存で、あちらで直した値を古い値に戻さない。 */
+  it('ルック（styleGuide）は送らない', () => {
+    const result = validateProjectSettings(values())
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.patch).not.toHaveProperty('styleGuide')
   })
 
   it('尺と予算の空欄は null（未設定）として送る', () => {

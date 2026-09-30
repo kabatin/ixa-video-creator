@@ -23,23 +23,36 @@ export const Section = ({
   </section>
 )
 
-/** 欄の並び。ラベルは左（狭ければ上）。 */
+/**
+ * 欄の並び。ラベルは左（狭ければ上）。
+ * `hideLabel` は見出しが同じ名前を言っている欄だけ。ラベルは読み上げに残し、欄を横いっぱいに使う。
+ */
 export const FieldRow = ({
   label,
   htmlFor,
+  hideLabel = false,
   children,
 }: {
   readonly label: string
   readonly htmlFor?: string
+  readonly hideLabel?: boolean
   readonly children: ReactNode
-}) => (
-  <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] items-start gap-x-2">
-    <label htmlFor={htmlFor} className="pt-1 text-sm text-muted">
-      {label}
-    </label>
-    <div className="min-w-0">{children}</div>
-  </div>
-)
+}) =>
+  hideLabel ? (
+    <div className="min-w-0">
+      <label htmlFor={htmlFor} className="sr-only">
+        {label}
+      </label>
+      {children}
+    </div>
+  ) : (
+    <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] items-start gap-x-2">
+      <label htmlFor={htmlFor} className="pt-1 text-sm text-muted">
+        {label}
+      </label>
+      <div className="min-w-0">{children}</div>
+    </div>
+  )
 
 /** 入力欄の見た目（高さ 1.75rem）。部品ごとに書き写さない。 */
 export const INPUT_CLASS =

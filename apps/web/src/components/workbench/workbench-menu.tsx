@@ -141,6 +141,10 @@ export const WorkbenchMenu = ({
       workbench.inspect({ kind: 'track', id: workbench.track.id })
       workbench.openViewer()
     },
+    'inspect-project': () => {
+      workbench.inspect({ kind: 'project', id: workbench.projectId })
+      workbench.focusPanel('inspector')
+    },
     // 一括の操作バーは Shot 一覧の下にある。チェックした行と同じ場所で決めさせる。
     'bulk-edit': () => {
       workbench.focusPanel('shots')

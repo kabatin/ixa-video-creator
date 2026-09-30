@@ -6,7 +6,6 @@ import { useState } from 'react'
 import { FieldError } from '@/components/form/field-error'
 import { SelectField, type SelectOption } from '@/components/form/select-field'
 import { TextField } from '@/components/form/text-field'
-import { TextareaField } from '@/components/form/textarea-field'
 import { Button } from '@/components/ui/button'
 import { ConfirmButton } from '@/components/ui/confirm-button'
 import { resolveApiBaseUrl } from '@/lib/api-client'
@@ -78,7 +77,6 @@ const FIELD_BY_COLUMN: Readonly<Record<string, ProjectSettingsField>> = Object.f
   fps: 'fps',
   durationSec: 'durationSec',
   budgetUsd: 'budgetUsd',
-  styleGuide: 'styleGuide',
   status: 'status',
 })
 
@@ -254,18 +252,9 @@ export const ProjectSettingsForm = ({ project }: ProjectSettingsFormProps) => {
           尺と予算は空欄にすると「未設定」になります。0 と未設定は別の意味で扱われます。
         </p>
 
-        <TextareaField
-          id="project-style-guide"
-          label="スタイルガイド"
-          value={values.styleGuide}
-          rows={4}
-          placeholder="全 Shot の生成プロンプトの先頭に入る指示"
-          disabled={busy}
-          error={errors.styleGuide}
-          onChange={(styleGuide) => {
-            set({ styleGuide })
-          }}
-        />
+        <p className="text-xs text-muted">
+          画風・光・質感（ルック）やコンセプトは、素材ツリーの一番上の「作品の方針」で決めます。
+        </p>
 
         <FieldError id="project-settings-error" message={errors.form} />
 
