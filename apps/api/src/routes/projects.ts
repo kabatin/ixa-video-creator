@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { ProjectRepository, ShotRepository, TakeRepository } from '@ixa/db'
+import type { MediaAssetRepository, ProjectRepository, ShotRepository, TakeRepository } from '@ixa/db'
 import {
   CreateProjectInput as CreateProjectInputSchema,
   Project as ProjectSchema,
@@ -9,10 +9,11 @@ import {
   WorkspaceId as WorkspaceIdSchema,
   buildCostMeter,
   type CostMeter,
+  type MediaAssetId,
   type Project,
   type ProjectId,
 } from '@ixa/domain'
-import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
+import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
 
 /**
@@ -229,6 +230,8 @@ const getProjectCostRoute = createRoute({
 
 export type ProjectRoutesDeps = {
   projects: ProjectRepository
+  /** 作品の手本画像（ADR-0030）が、画像で同じワークスペースのものかを確かめるために引く。 */
+  mediaAssets: Pick<MediaAssetRepository, 'findById'>
   /** 行として出せる Shot を知るために引く。**額の合計には使わない。** */
   shots: ShotRepository
   takes: TakeRepository
@@ -257,8 +260,28 @@ export type ProjectRoutesDeps = {
   stubProviderIds: readonly string[]
 }
 
+/**
+ * 作品の手本画像（ADR-0030）の検査。**画像・同じワークスペース・重ならない。** 破れていれば理由、
+ * 通れば null。3 枚までは型（`MAX_STYLE_REFERENCES`）が見る。
+ */
+const styleReferenceProblem = async (
+  mediaAssets: Pick<MediaAssetRepository, 'findById'>,
+  workspaceId: Project['workspaceId'],
+  ids: readonly MediaAssetId[],
+): Promise<string | null> => {
+  if (new Set(ids).size !== ids.length) return '同じ画像を 2 回選んでいます'
+  for (const id of ids) {
+    const asset = await mediaAssets.findById(id)
+    if (asset === null) return '手本画像が見つかりません'
+    if (asset.workspaceId !== workspaceId) return 'この作品のワークスペースの画像ではありません'
+    if (asset.kind !== 'image') return '手本には画像を指定してください'
+  }
+  return null
+}
+
 export const projectRoutes = ({
   projects,
+  mediaAssets,
   shots,
   takes,
   storyboardDrafts,
@@ -283,7 +306,17 @@ export const projectRoutes = ({
       return c.json(ok(toProjectResponse(found)), 200)
     })
     .openapi(updateProjectRoute, async (c) => {
-      const updated = await projects.update(c.req.valid('param').id, c.req.valid('json'))
+      const id = c.req.valid('param').id
+      const patch = c.req.valid('json')
+      if (patch.styleReferenceAssetIds !== undefined) {
+        const project = await projects.findById(id)
+        if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+        const problem = await styleReferenceProblem(mediaAssets, project.workspaceId, patch.styleReferenceAssetIds)
+        if (problem !== null) {
+          return c.json(fail(VALIDATION_ERROR_MESSAGE, { styleReferenceAssetIds: [problem] }), 422)
+        }
+      }
+      const updated = await projects.update(id, patch)
       return c.json(ok(toProjectResponse(updated)), 200)
     })
     .openapi(deleteProjectRoute, async (c) => {

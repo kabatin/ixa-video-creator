@@ -46,6 +46,7 @@ const buildRoutes = (options: {
   return {
     app: projectRoutes({
       projects: createInMemoryProjectRepository(project === null ? [] : [project]),
+      mediaAssets: { findById: () => Promise.resolve(null) },
       shots: createInMemoryShotRepository(options.shots ?? []),
       takes: createInMemoryTakeRepository(options.takes ?? []),
       storyboardDrafts: { findRunsByProject: () => Promise.resolve(draftRuns) },

@@ -290,6 +290,19 @@ describe('POST /projects/{id}/storyboard/drafts', () => {
     expect(request?.sections.map((section) => section.label)).toEqual(['intro', 'chorus'])
   })
 
+  /** 作品の方針（ADR-0030）。ルックと避けたいものも案の材料にする。 */
+  it('作品のルックと避けたいものを下書きに渡す', async () => {
+    const project = { ...aProject(), styleGuide: '35mm フィルム、夜の雨', avoid: '文字' }
+    const shots = [aShot(project.id)]
+    const drafter = drafterFor(shots)
+    const { app } = await buildRoutes({ project, shots, drafter })
+
+    await postDraft(app, project.id)
+    const [request] = drafter.seen() as { look: string; avoid: string }[]
+
+    expect(request).toMatchObject({ look: '35mm フィルム、夜の雨', avoid: '文字' })
+  })
+
   it('脚本も解析も無くても下書きできる（null と空で渡す）', async () => {
     const project = aProject()
     const shots = [aShot(project.id)]

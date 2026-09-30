@@ -1,4 +1,9 @@
-import { ProjectId as ProjectIdSchema, WorkspaceId as WorkspaceIdSchema, newId } from '@ixa/domain'
+import {
+  MediaAssetId as MediaAssetIdSchema,
+  ProjectId as ProjectIdSchema,
+  WorkspaceId as WorkspaceIdSchema,
+  newId,
+} from '@ixa/domain'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp, type AppDeps } from '../app.js'
 import { INTERNAL_ERROR_MESSAGE } from '../errors.js'
@@ -6,6 +11,7 @@ import { createLogger } from '../logger.js'
 import type { ProjectResponse } from '../routes/projects.js'
 import { createMemoryStorage } from '@ixa/storage'
 import { baseAppDeps } from './app-deps.js'
+import { aMediaAsset } from './in-memory-timeline-repositories.js'
 import { createInMemoryMediaAssetRepository } from '@ixa/generation/testing'
 import {
   createFailingProjectRepository,
@@ -238,5 +244,69 @@ describe('500 応答', () => {
 
     const json = JSON.parse(text) as ErrorBody
     expect(json).toEqual({ success: false, error: INTERNAL_ERROR_MESSAGE })
+  })
+})
+
+/**
+ * 作品の方針（ADR-0030）。ルック・避けたいもの・手本画像は Project の部分更新で保存する。
+ * 手本画像は**画像・同じワークスペース・3 枚まで**。外れれば何も変えずに 422。
+ */
+describe('PATCH /projects/:id — 作品の方針', () => {
+  const workspaceId = newId(WorkspaceIdSchema)
+  const image = aMediaAsset({ workspaceId, kind: 'image', mimeType: 'image/png', storageKey: 'media/ws/a/original.png' })
+  const video = aMediaAsset({ workspaceId, kind: 'video' })
+  const foreign = aMediaAsset({ workspaceId: newId(WorkspaceIdSchema), kind: 'image', mimeType: 'image/png' })
+
+  const setup = async () => {
+    const app = createApp({
+      ...baseAppDeps(),
+      projects: createInMemoryProjectRepository(),
+      mediaAssets: createInMemoryMediaAssetRepository([image, video, foreign]),
+      storage: createMemoryStorage(),
+      logger: createLogger('silent'),
+    })
+    const created = (await (await postJson(app, '/projects', validBody({ workspaceId }))).json()) as SuccessBody
+    return { app, id: created.data.id }
+  }
+
+  it('ルック・避けたいもの・手本画像を保存する', async () => {
+    const { app, id } = await setup()
+
+    const res = await patchJson(app, `/projects/${id}`, {
+      styleGuide: '35mm フィルム、夜の雨',
+      avoid: '文字、透かし',
+      styleReferenceAssetIds: [image.id],
+    })
+
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as SuccessBody).data).toMatchObject({
+      styleGuide: '35mm フィルム、夜の雨',
+      avoid: '文字、透かし',
+      styleReferenceAssetIds: [image.id],
+    })
+  })
+
+  it.each([
+    ['画像でない', () => [video.id]],
+    ['別のワークスペース', () => [foreign.id]],
+    ['見つからない', () => [newId(MediaAssetIdSchema)]],
+    ['同じ画像が 2 回', () => [image.id, image.id]],
+  ])('手本画像が%sなら 422（何も変えない）', async (_label, ids) => {
+    const { app, id } = await setup()
+
+    const res = await patchJson(app, `/projects/${id}`, { avoid: '文字', styleReferenceAssetIds: ids() })
+
+    expect(res.status).toBe(422)
+    expect(((await res.json()) as ErrorBody).fields?.styleReferenceAssetIds).toBeDefined()
+    const after = (await (await app.request(`/projects/${id}`)).json()) as SuccessBody
+    expect(after.data.avoid).toBe('')
+  })
+
+  it('手本画像は 3 枚まで', async () => {
+    const { app, id } = await setup()
+
+    const res = await patchJson(app, `/projects/${id}`, { styleReferenceAssetIds: [image.id, image.id, image.id, image.id] })
+
+    expect(res.status).toBe(422)
   })
 })

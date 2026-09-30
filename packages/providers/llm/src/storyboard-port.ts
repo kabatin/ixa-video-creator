@@ -47,6 +47,10 @@ export const StoryboardDraftRequest = z.object({
   /** 曲の構成。解析が無ければ空配列。 */
   sections: z.array(MusicSection),
   shots: z.array(StoryboardDraftShot).min(1),
+  /** 作品のルック（`Project.styleGuide`、ADR-0030）。書いていなければ空文字。 */
+  look: z.string(),
+  /** 作品の避けたいもの（`Project.avoid`、ADR-0030）。書いていなければ空文字。 */
+  avoid: z.string(),
 })
 export type StoryboardDraftRequest = z.infer<typeof StoryboardDraftRequest>
 

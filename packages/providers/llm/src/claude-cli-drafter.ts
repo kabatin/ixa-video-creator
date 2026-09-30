@@ -54,6 +54,9 @@ const sectionLines = (request: StoryboardDraftRequest): readonly string[] =>
  * 依頼をプロンプトへ組み立てる。**自由文を返させない**ため出力形式を明示する。
  * テストが固定できるよう公開する。
  */
+/** 空欄は「指定なし」と書く。空のまま渡すと、書き忘れか意図的に無いのかが LLM に分からない。 */
+const orUnspecified = (text: string): string => (text.trim() === '' ? '(指定なし)' : text.trim())
+
 export const buildDraftPrompt = (request: StoryboardDraftRequest): string =>
   [
     'あなたは映像作品の絵コンテ作家です。既に決まっている Shot の並びに対して、',
@@ -61,8 +64,17 @@ export const buildDraftPrompt = (request: StoryboardDraftRequest): string =>
     '',
     '**Shot の並び・尺・順番は変更しないでください。** 案を出すのは説明と雰囲気だけです。',
     '',
-    '## 脚本',
+    '## 作品のコンセプト・あらすじ（脚本）',
     request.script === null || request.script.trim() === '' ? '(まだ書かれていません)' : request.script,
+    '',
+    '## 作品のルック（画風・光・質感）',
+    orUnspecified(request.look),
+    '',
+    'ルックは生成のときに全 Shot へ自動で足されます。**説明に書き写さないでください**（二重に入ります）。',
+    'ルックに合う被写体・場面・構図を説明に書いてください。',
+    '',
+    '## 避けたいもの',
+    orUnspecified(request.avoid),
     '',
     '## 曲の構成',
     ...sectionLines(request),

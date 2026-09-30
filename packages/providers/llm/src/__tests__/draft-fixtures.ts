@@ -30,6 +30,8 @@ export const aDraftRequest = (
   script: overrides.script === undefined ? '# 台本\n\niXA CUP の決勝。' : overrides.script,
   sections: overrides.sections ?? [...SECTIONS],
   shots: overrides.shots ?? [aDraftShot()],
+  look: overrides.look ?? '',
+  avoid: overrides.avoid ?? '',
 })
 
 export const aDraftedItem = (

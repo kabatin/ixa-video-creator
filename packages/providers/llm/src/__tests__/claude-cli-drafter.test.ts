@@ -118,6 +118,23 @@ describe('Claude CLI 下書きが組み立てるプロンプト', () => {
   it('解析が無ければ「未解析」と書く', () => {
     expect(buildDraftPrompt(aDraftRequest({ sections: [] }))).toContain('未解析')
   })
+
+  /**
+   * 作品の方針（ADR-0030）。脚本はコンセプト・あらすじとして読み、ルックと避けたいものも渡す。
+   * **ルックは生成時に全 Shot へ自動で足されるので、説明に書き写させない**（二重に入る）。
+   */
+  it('作品のルックと避けたいものを渡し、ルックを説明に書き写さないよう言う', () => {
+    const prompt = buildDraftPrompt(aDraftRequest({ look: '35mm フィルム、夜の雨', avoid: '文字、アニメ調' }))
+    expect(prompt).toContain('コンセプト・あらすじ')
+    expect(prompt).toContain('35mm フィルム、夜の雨')
+    expect(prompt).toContain('文字、アニメ調')
+    expect(prompt).toMatch(/書き写さない/)
+  })
+
+  it('ルックや避けたいものが空なら「指定なし」と書く（空欄を渡さない）', () => {
+    const prompt = buildDraftPrompt(aDraftRequest())
+    expect(prompt.match(/指定なし/g)).toHaveLength(2)
+  })
 })
 
 describe('Claude CLI 下書きの異常系', () => {

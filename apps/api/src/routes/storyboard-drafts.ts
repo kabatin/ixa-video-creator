@@ -309,7 +309,8 @@ export const storyboardDraftRoutes = (deps: StoryboardDraftRoutesDeps) =>
     })
     .openapi(createDraftRoute, async (c) => {
       const { projectId } = c.req.valid('param')
-      if ((await deps.projects.findById(projectId)) === null) {
+      const project = await deps.projects.findById(projectId)
+      if (project === null) {
         return c.json(fail(NOT_FOUND_MESSAGE), 404)
       }
 
@@ -353,6 +354,9 @@ export const storyboardDraftRoutes = (deps: StoryboardDraftRoutesDeps) =>
           script,
           sections: [...sections],
           shots: shots.map(toDraftShot),
+          // 作品の方針（ADR-0030）。案が作品のルックに合い、避けたいものを描かないように。
+          look: project.styleGuide,
+          avoid: project.avoid,
         })
       } catch (error) {
         // 握り潰さない。理由を run に書き残してから返す（CLAUDE.md 規約 5）。

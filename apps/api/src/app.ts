@@ -174,6 +174,8 @@ export const createApp = (deps: AppDeps) => {
     // （外した瞬間に過去の Take が「実測」に化ける）。素性の一覧を app 層が注入する。
     projectRoutes({
       projects,
+      // 作品の手本画像（ADR-0030）の検査に使う。
+      mediaAssets,
       // 行として出せる Shot を知るために引く。**額の合計には使わない**
       // （削除済み Shot の Take も払った額なので、合計は takes.findByProject が数える）。
       shots: deps.shots,
