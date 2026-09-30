@@ -36,7 +36,11 @@ import { RENDER_QUEUE_NAME, type RenderQueue } from './routes/renders.js'
 import { ANALYSIS_QUEUE_NAME, type AnalysisQueue } from './routes/music.js'
 import { REVIEW_QUEUE_NAME, type ReviewQueue } from './routes/reviews.js'
 import type { MediaIngestDeps } from './routes/uploads.js'
-import { createLocalImageToVideoProvider, createStubVideoProvider } from '@ixa/provider-video'
+import {
+  createLocalImageToVideoProvider,
+  createStubVideoProvider,
+  createVpipeVideoProvider,
+} from '@ixa/provider-video'
 import { createS3Storage } from '@ixa/storage'
 import { Queue } from 'bullmq'
 import IORedis from 'ioredis'
@@ -262,6 +266,16 @@ export const main = (): void => {
       createLocalImageToVideoProvider({
         outputDir: join(process.env.STUB_OUTPUT_DIR ?? '/tmp/ixa-stub-output', 'local'),
       }),
+      // 手元の生成サーバの MiniMax H3（ADR-0030）。worker と同じ条件で登録する（作るだけでは通信しない）。
+      ...(config.providers.localVideoGenerator === 'vpipe'
+        ? [
+            createVpipeVideoProvider({
+              baseUrl: config.providers.vpipeApiUrl,
+              ...(config.providers.vpipeApiToken === null ? {} : { token: config.providers.vpipeApiToken }),
+              outputDir: join(process.env.STUB_OUTPUT_DIR ?? '/tmp/ixa-stub-output', 'vpipe'),
+            }),
+          ]
+        : []),
     ]),
     /**
      * Phase 2 で空実装から差し替えた。

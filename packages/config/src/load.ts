@@ -1,4 +1,5 @@
 import type { ZodIssue } from 'zod'
+import { localVideoGeneratorProblem } from './local-video.js'
 import { EnvSchema, type AppConfig } from './schema.js'
 
 /**
@@ -49,6 +50,13 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
 
   const parsed = result.data
 
+  /**
+   * 形は正しくても組み合わせが成り立たない設定。**黙って動かさず起動時に止める**
+   * （`VIDEO_PROVIDER=fal` で鍵が無いときと同じ考え方）。
+   */
+  const problem = localVideoGeneratorProblem(parsed)
+  if (problem !== null) throw new Error(problem)
+
   return {
     nodeEnv: parsed.NODE_ENV,
     storyboardDrafter: parsed.STORYBOARD_DRAFTER,
@@ -82,6 +90,9 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       stubVideoFailureRate: parsed.STUB_VIDEO_FAILURE_RATE,
       stubVideoCostPerSecUsd: parsed.STUB_VIDEO_COST_PER_SEC,
       videoProvider: parsed.VIDEO_PROVIDER,
+      localVideoGenerator: parsed.LOCAL_VIDEO_GENERATOR,
+      vpipeApiUrl: parsed.VPIPE_API_URL,
+      vpipeApiToken: parsed.VPIPE_API_TOKEN ?? null,
     },
   }
 }

@@ -12,6 +12,13 @@ import type { AppConfig } from '../schema.js'
 
 const SECRET = 'fal-live-SUPERSECRET-0123456789'
 
+/** ローカルの動画生成（ADR-0030）の既定。使わない。 */
+const VPIPE_OFF = {
+  localVideoGenerator: 'none',
+  vpipeApiUrl: 'http://127.0.0.1:8765',
+  vpipeApiToken: null,
+} as const
+
 const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
   ({
     database: { url: 'postgres://x' },
@@ -36,6 +43,7 @@ const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
       stubVideoFailureRate: 0,
       stubVideoCostPerSecUsd: 0,
       videoProvider: 'stub',
+      ...VPIPE_OFF,
     },
     ...overrides,
   })
@@ -66,7 +74,7 @@ describe('describeEnvironment', () => {
 
   it('未設定なら文字数を出さない（0 と書かない）', () => {
     const config = aConfig({
-      providers: { falApiKey: null, stubVideoFailureRate: 0, stubVideoCostPerSecUsd: 0, videoProvider: 'stub' },
+      providers: { falApiKey: null, stubVideoFailureRate: 0, stubVideoCostPerSecUsd: 0, videoProvider: 'stub', ...VPIPE_OFF },
     })
     const fal = describeEnvironment(config).secrets.find((s) => s.envName === 'FAL_API_KEY')
     expect(fal?.configured).toBe(false)
@@ -75,7 +83,7 @@ describe('describeEnvironment', () => {
 
   it('空白だけの値は未設定として扱う', () => {
     const config = aConfig({
-      providers: { falApiKey: '   ', stubVideoFailureRate: 0, stubVideoCostPerSecUsd: 0, videoProvider: 'stub' },
+      providers: { falApiKey: '   ', stubVideoFailureRate: 0, stubVideoCostPerSecUsd: 0, videoProvider: 'stub', ...VPIPE_OFF },
     })
     const fal = describeEnvironment(config).secrets.find((s) => s.envName === 'FAL_API_KEY')
     expect(fal?.configured).toBe(false)
@@ -104,7 +112,7 @@ describe('describeEnvironment', () => {
     it('検証用の口が開いていたら目立たせる', () => {
       const status = describeEnvironment(
         aConfig({
-          providers: { falApiKey: null, stubVideoFailureRate: 1, stubVideoCostPerSecUsd: 0.3, videoProvider: 'stub' },
+          providers: { falApiKey: null, stubVideoFailureRate: 1, stubVideoCostPerSecUsd: 0.3, videoProvider: 'stub', ...VPIPE_OFF },
         }),
       )
       const notable = status.settings.filter((s) => s.notable).map((s) => s.envName)
@@ -136,6 +144,7 @@ describe('映像生成の切り替え', () => {
         stubVideoFailureRate: 0,
         stubVideoCostPerSecUsd: 0,
         videoProvider: 'fal',
+        ...VPIPE_OFF,
       },
     })
     const setting = settingFor(config)
@@ -151,8 +160,71 @@ describe('映像生成の切り替え', () => {
         stubVideoFailureRate: 0,
         stubVideoCostPerSecUsd: 0,
         videoProvider: 'fal',
+        ...VPIPE_OFF,
       },
     })
     expect(JSON.stringify(describeEnvironment(config))).not.toContain(SECRET)
+  })
+})
+
+/**
+ * ローカルの動画生成（ADR-0030）。費用は掛からないが、機械を長く占めるので使っていることを見せる。
+ */
+describe('ローカルの動画生成', () => {
+  const VPIPE_TOKEN = 'vpipe-SUPERSECRET-token-42'
+  const vpipeOn = (token: string | null): AppConfig =>
+    aConfig({
+      providers: {
+        ...aConfig().providers,
+        localVideoGenerator: 'vpipe',
+        vpipeApiToken: token,
+      },
+    })
+
+  const settingFor = (config: AppConfig) =>
+    describeEnvironment(config).settings.find((s) => s.envName === 'LOCAL_VIDEO_GENERATOR')
+
+  it('既定（none）は目立たせない', () => {
+    expect(settingFor(aConfig())).toMatchObject({ value: 'none', notable: false })
+  })
+
+  it('vpipe のときは目立たせ、無料だが遅く 1 本ずつだと書く', () => {
+    const setting = settingFor(vpipeOn(null))
+    expect(setting).toMatchObject({ value: 'vpipe', notable: true })
+    expect(setting?.note).toContain('費用は掛からない')
+    expect(setting?.note).toContain('1 本ずつ')
+  })
+
+  it('合言葉は設定されているかと文字数だけ出し、値は出さない', () => {
+    const status = describeEnvironment(vpipeOn(VPIPE_TOKEN))
+    const token = status.secrets.find((s) => s.envName === 'VPIPE_API_TOKEN')
+    expect(token).toMatchObject({ configured: true, length: VPIPE_TOKEN.length })
+    expect(JSON.stringify(status)).not.toContain(VPIPE_TOKEN)
+    expect(JSON.stringify(status)).not.toContain(VPIPE_TOKEN.slice(-4))
+  })
+
+  it('別のマシンのサーバを http で使うなら、暗号化されないことを書く（URL は出さない）', () => {
+    const remote = aConfig({
+      providers: {
+        ...aConfig().providers,
+        localVideoGenerator: 'vpipe',
+        vpipeApiUrl: 'http://192.168.1.20:8765',
+        vpipeApiToken: VPIPE_TOKEN,
+      },
+    })
+    const note = settingFor(remote)?.note ?? ''
+    expect(note).toContain('暗号化されずに')
+    expect(note).toContain('LAN')
+    expect(JSON.stringify(describeEnvironment(remote))).not.toContain('192.168.1.20')
+    // このマシンのサーバ・https なら書かない。
+    expect(settingFor(vpipeOn(null))?.note).not.toContain('暗号化')
+    const https = aConfig({
+      providers: { ...remote.providers, vpipeApiUrl: 'https://gpu.example.lan:8765' },
+    })
+    expect(settingFor(https)?.note).not.toContain('暗号化')
+  })
+
+  it('サーバの URL は画面に出さない', () => {
+    expect(JSON.stringify(describeEnvironment(vpipeOn(null)))).not.toContain('127.0.0.1:8765')
   })
 })

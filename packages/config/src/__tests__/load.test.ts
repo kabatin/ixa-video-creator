@@ -136,3 +136,70 @@ describe('空文字の任意変数', () => {
     expect(config.providers.falApiKey).toBe('fal-key-123')
   })
 })
+
+/**
+ * ローカルの動画生成（ADR-0030）。**URL やトークンの有無で切り替えない。**
+ */
+describe('ローカルの動画生成（vpipe）', () => {
+  it('既定は使わない。URL は既定でこのマシンだけ、トークンは未設定', () => {
+    const config = loadConfig({ ...requiredEnv })
+    expect(config.providers.localVideoGenerator).toBe('none')
+    expect(config.providers.vpipeApiUrl).toBe('http://127.0.0.1:8765')
+    expect(config.providers.vpipeApiToken).toBeNull()
+  })
+
+  it('トークンや URL を置いただけでは有効にならない', () => {
+    const config = loadConfig({
+      ...requiredEnv,
+      VPIPE_API_URL: 'http://127.0.0.1:9999',
+      VPIPE_API_TOKEN: 'token',
+    })
+    expect(config.providers.localVideoGenerator).toBe('none')
+  })
+
+  it('vpipe に切り替えられ、知らない値は弾く', () => {
+    expect(loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: 'vpipe' }).providers.localVideoGenerator).toBe(
+      'vpipe',
+    )
+    expect(() => loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: 'comfy' })).toThrow(
+      /LOCAL_VIDEO_GENERATOR/,
+    )
+  })
+
+  it('トークンが空なら未設定として扱う', () => {
+    expect(loadConfig({ ...requiredEnv, VPIPE_API_TOKEN: '  ' }).providers.vpipeApiToken).toBeNull()
+    expect(loadConfig({ ...requiredEnv, VPIPE_API_TOKEN: 'tok' }).providers.vpipeApiToken).toBe('tok')
+  })
+
+  it('URL でないものは弾く', () => {
+    expect(() => loadConfig({ ...requiredEnv, VPIPE_API_URL: 'not-a-url' })).toThrow(/VPIPE_API_URL/)
+  })
+
+  it('このマシンのサーバならトークン無しで起動できる', () => {
+    for (const url of ['http://127.0.0.1:8765', 'http://localhost:8765', 'http://[::1]:8765', 'http://127.1.2.3:80']) {
+      expect(() =>
+        loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: 'vpipe', VPIPE_API_URL: url }),
+      ).not.toThrow()
+    }
+  })
+
+  /** サーバはループバック以外ではトークン必須。必ず 401 になる設定を、押す前に止める。 */
+  it('外のサーバをトークン無しで指したら起動時に止める（値は文に入れない）', () => {
+    const env = {
+      ...requiredEnv,
+      LOCAL_VIDEO_GENERATOR: 'vpipe',
+      VPIPE_API_URL: 'http://192.168.1.20:8765',
+    }
+    expect(() => loadConfig(env)).toThrow(/VPIPE_API_TOKEN/)
+    try {
+      loadConfig(env)
+    } catch (error) {
+      expect(error instanceof Error ? error.message : '').not.toContain('192.168.1.20')
+    }
+    expect(() => loadConfig({ ...env, VPIPE_API_TOKEN: 'tok' })).not.toThrow()
+  })
+
+  it('使わない設定なら外の URL でも止めない', () => {
+    expect(() => loadConfig({ ...requiredEnv, VPIPE_API_URL: 'http://192.168.1.20:8765' })).not.toThrow()
+  })
+})
