@@ -112,4 +112,35 @@ describe('StoryboardGrid', () => {
     expect(screen.getByText(/0:04\.00 – 0:08\.00（4\.00s）/)).toBeInTheDocument()
     expect(screen.getByRole('img', { name: '下書き' })).toBeInTheDocument()
   })
+
+  /** Shot を作った後に、Take をどこで作るか迷った（制作者 2026-09-30）。カードから直接行けるようにする。 */
+  describe('Take を作る', () => {
+    const cards = [
+      aWorkbenchShot(1, { status: 'draft' }),
+      aWorkbenchShot(2, { status: 'ready' }),
+      aWorkbenchShot(3, { status: 'approved' }),
+      aWorkbenchShot(4, { status: 'generating' }),
+    ]
+
+    it('Take がまだ無い Shot（下書き・生成可能）にだけ出し、押すとその Shot で知らせる', () => {
+      const onMakeTake = vi.fn()
+      render(
+        <StoryboardGrid shots={cards} posters={new Map()} selectedShotId={null} onSelect={vi.fn()} onMakeTake={onMakeTake} />,
+      )
+
+      const buttons = screen.getAllByRole('button', { name: /Take を作る/ })
+      expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
+        'CUT-01 の Take を作る',
+        'CUT-02 の Take を作る',
+      ])
+      buttons[1]?.click()
+      expect(onMakeTake).toHaveBeenCalledWith(cards[1]?.id)
+    })
+
+    it('口を渡さなければ出さない（見るだけの画面）', () => {
+      render(<StoryboardGrid shots={cards} posters={new Map()} selectedShotId={null} onSelect={vi.fn()} />)
+
+      expect(screen.queryByRole('button', { name: /Take を作る/ })).toBeNull()
+    })
+  })
 })

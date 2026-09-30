@@ -141,8 +141,15 @@ export const BulkActionBar = ({
     close(open)
   }
 
-  // 選択が 0 件のときは出さない。空のバーが画面の下を占め続けない。
-  if (selectedCount <= 0) return null
+  // 選択が 0 件のときは操作のバーを出さない（空のバーが画面を占め続けない）。
+  // ただ、チェックしないと一括の操作があることすら見えず、Take をどこで作るか迷った（制作者 2026-09-30）。1 行だけ言う。
+  if (selectedCount <= 0) {
+    return (
+      <p className="border-b border-line px-2 py-1 text-xs text-muted">
+        チェックを付けると、まとめて Take を作れます（まとめて変更・絵コンテの画像・結合・削除も）。
+      </p>
+    )
+  }
 
   const generatableCount = Math.max(0, selectedCount - lockedCount)
 

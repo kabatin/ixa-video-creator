@@ -114,5 +114,8 @@ export const formatUsd = (amountUsd: number): string => `$${amountUsd.toFixed(3)
 /** カメラ指定の一行要約。ドメインのプロンプト断片をそのまま使い、表記を二重定義しない。 */
 export const formatCamera = (camera: ShotCamera): string => cameraToPromptFragment(camera)
 
+/** Take がまだ 1 本も無い状態か（下書き・生成可能）。「Take を作る」を出す判定。 */
+export const hasNoTakeYet = (status: ShotStatus): boolean => status === 'draft' || status === 'ready'
+
 /** 生成中は Take 一覧をポーリングする。判定をここに一本化する。 */
 export const isGeneratingStatus = (status: ShotStatus): boolean => status === 'generating'

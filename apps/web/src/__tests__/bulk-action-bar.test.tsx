@@ -79,10 +79,17 @@ const lastPatch = (onUpdate: BulkActionBarProps['onUpdate']): BulkUpdatePatch =>
 }
 
 describe('BulkActionBar — 出る / 出ない', () => {
-  it('選択が 0 件のときは何も描かない', () => {
+  it('選択が 0 件のときは操作のバーを出さない', () => {
     setup({ selectedCount: 0 })
 
     expect(screen.queryByRole('region', { name: '一括操作' })).toBeNull()
+  })
+
+  /** Take をどこで作るか迷った（制作者 2026-09-30）。チェックしないと一括の操作があることすら見えなかった。 */
+  it('選択が 0 件のときは、チェックすればまとめて Take を作れると 1 行で言う', () => {
+    setup({ selectedCount: 0 })
+
+    expect(screen.getByText(/チェックを付けると、まとめて Take を作れます/)).toBeInTheDocument()
   })
 
   it('選ばれていれば件数と 3 つの操作が出る', () => {

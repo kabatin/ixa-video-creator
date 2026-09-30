@@ -86,6 +86,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
   const [newTakeCount, setNewTakeCount] = useState(0)
   const [dialog, setDialog] = useState<WorkbenchDialog | null>(props.initialDialog)
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('settings')
+  const [inspectorRequest, setInspectorRequest] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
   const { transport, controls } = useWorkbenchTransport()
 
@@ -293,8 +294,10 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       },
       focusPanel: props.focusPanel,
       inspectorTab,
+      inspectorRequest,
       openInspector: (tab) => {
         setInspectorTab(tab)
+        setInspectorRequest((count) => count + 1)
         props.focusPanel('inspector')
       },
       notice,
@@ -322,6 +325,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       refresh,
       dialog,
       inspectorTab,
+      inspectorRequest,
       inspected,
       notice,
     ],

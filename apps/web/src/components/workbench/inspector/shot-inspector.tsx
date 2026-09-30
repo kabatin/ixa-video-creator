@@ -52,10 +52,10 @@ export const ShotInspector = ({
   const [hasStartFrame, setHasStartFrame] = useState(false)
   const sections = useRef<Partial<Record<InspectorTab, HTMLDivElement | null>>>({})
 
-  // メニュー「生成」などから来たら、その区切りまで送る。
+  // メニュー「生成」や「Take を作る」から来たら、その区切りまで送る（同じタブをもう一度頼まれても送り直す）。
   useEffect(() => {
     sections.current[workbench.inspectorTab]?.scrollIntoView({ block: 'start' })
-  }, [workbench.inspectorTab, shot.id])
+  }, [workbench.inspectorTab, workbench.inspectorRequest, shot.id])
 
   return (
     <div className="flex h-full flex-col">
@@ -81,6 +81,19 @@ export const ShotInspector = ({
         }
       />
       <div className="workbench-panel-body relative min-h-0 flex-1 overflow-auto">
+        {/*
+          Take を作る欄は一番上（制作者 2026-09-30「Take を作るところでどうやって作るか迷った」）。
+          下に置いて送る形では、上の欄（Take の一覧・最初のフレーム）が遅れて読み込まれて押し下げられ、欄が画面の下で切れた。
+        */}
+        <div
+          ref={(element) => {
+            sections.current.generate = element
+          }}
+        >
+          <Section title="Take を作る">
+            <ShotGenerateSection shot={shot} hasStartFrame={hasStartFrame} />
+          </Section>
+        </div>
         <div
           ref={(element) => {
             sections.current.settings = element
@@ -167,15 +180,6 @@ export const ShotInspector = ({
           <TakeSection shot={shot} />
         </div>
 
-        <div
-          ref={(element) => {
-            sections.current.generate = element
-          }}
-        >
-          <Section title="生成">
-            <ShotGenerateSection shot={shot} hasStartFrame={hasStartFrame} />
-          </Section>
-        </div>
 
         <ReviewSection shot={shot} />
       </div>

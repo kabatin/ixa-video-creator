@@ -111,6 +111,8 @@ export type WorkbenchContextValue = {
   readonly focusPanel: (panel: PanelId) => void
   /** インスペクターのどのタブを前に出すか。メニュー「生成」から生成タブを開くのに使う。 */
   readonly inspectorTab: InspectorTab
+  /** 何回目の「開いて」か。同じタブをもう一度頼まれても、その区切りまで送り直すために使う。 */
+  readonly inspectorRequest: number
   readonly openInspector: (tab: InspectorTab) => void
   /** 画面上端の知らせ（1 行）。操作の結果や、取り込めなかった理由を出す。 */
   readonly notice: string | null

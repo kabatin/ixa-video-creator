@@ -113,6 +113,11 @@ export const StoryboardPanel = () => {
           workbench.selectShot(shotId)
           workbench.focusPanel('compare')
         }}
+        // Take がまだ無い Shot から、そのまま作る欄へ（インスペクターを前に出して送る）。
+        onMakeTake={(shotId) => {
+          workbench.selectShot(shotId)
+          workbench.openInspector('generate')
+        }}
         locationName={(shot) =>
           shot.locationId === null
             ? null

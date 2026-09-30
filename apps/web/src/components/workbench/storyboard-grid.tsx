@@ -6,7 +6,7 @@ import type { DragEvent } from 'react'
 import type { AssetDropState } from '@/components/workbench/use-asset-drop'
 import { ShotPoster } from '@/components/shot-poster'
 import { formatSpan } from '@/lib/format-time'
-import { shotStatusDotClassName, shotStatusLabel } from '@/lib/shot-display'
+import { shotStatusDotClassName, shotStatusLabel, hasNoTakeYet } from '@/lib/shot-display'
 import { posterViewFor, type ShotPosterMap } from '@/lib/shot-posters'
 import {
   alignmentByShotId,
@@ -25,6 +25,11 @@ export type StoryboardGridProps = {
   readonly alignments?: readonly ShotBeatAlignmentView[]
   /** ダブルクリック（Take 比較を開くなど。UI-WORKBENCH-2 §6）。 */
   readonly onOpen?: (shotId: ShotId) => void
+  /**
+   * 「Take を作る」を押した（Take がまだ無い Shot だけに出す）。渡さなければ出さない。
+   * Shot を作った後に Take をどこで作るか迷った（制作者 2026-09-30）ので、カードから直接行けるようにする。
+   */
+  readonly onMakeTake?: (shotId: ShotId) => void
   /** ロケーションの名前（素材の共有状態から引く）。無ければ出さない。 */
   readonly locationName?: (shot: Shot) => string | null
   /** ツリーの素材をカードへ落として割り当てる口（PHASE 8.5）。 */
@@ -71,6 +76,7 @@ export const StoryboardGrid = ({
   onSelect,
   alignments,
   onOpen,
+  onMakeTake,
   locationName,
   dropHandlers,
   dropState,
@@ -155,6 +161,18 @@ export const StoryboardGrid = ({
                   <span className="block truncate text-xs text-muted">{`⌂ ${locationName(shot) ?? ''}`}</span>
                 )}
               </button>
+              {onMakeTake !== undefined && hasNoTakeYet(shot.status) && (
+                <button
+                  type="button"
+                  aria-label={`${shot.code} の Take を作る`}
+                  onClick={() => {
+                    onMakeTake(shot.id)
+                  }}
+                  className="mt-1 w-full rounded border border-dashed border-line-strong px-2 py-0.5 text-xs text-muted hover:border-accent hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+                >
+                  ＋ Take を作る
+                </button>
+              )}
             </li>
           )
         })}
