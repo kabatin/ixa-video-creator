@@ -51,6 +51,10 @@ import { useCutEditorSync, type TransportSyncPort } from '@/lib/use-cut-editor-s
 import { useElementWidth } from '@/lib/use-element-width'
 import { fetchWaveformPeaks, type WaveformPeaksResult } from '@/lib/waveform-api'
 import { fullView, pixelsPerSecond, sectionBoundaries, type ViewRange } from '@/lib/waveform-draw'
+import { useOptionalContextMenuHost } from '@/components/workbench/ui/context-menu'
+import type { MenuPoint } from '@/components/workbench/use-context-menu'
+import { toMenuItems } from '@/components/workbench/use-shot-menu'
+import { cutMarkMenuEntries } from '@/lib/context-menus'
 
 /**
  * 音を鳴らしながら、波形の上で「ここからここまでが 1 カット」を決める画面（P56）。
@@ -305,6 +309,25 @@ export const CutEditor = ({
     setSnapNotice(snapped.notice)
     applyChange(moveMark(marks, index, snapped.mark))
   }
+
+  // 区切りの右クリック（長押し）のメニュー（2026-09-30）。ワークベンチの外で単独に描くときは出さない。
+  const menuHost = useOptionalContextMenuHost()
+  const openMarkMenu =
+    menuHost === null
+      ? undefined
+      : (index: number, at: MenuPoint, origin: HTMLElement): void => {
+          setSelectedIndex(index)
+          menuHost.open({
+            label: `区切り ${String(index + 1)} の操作`,
+            items: toMenuItems(cutMarkMenuEntries(), {
+              remove: () => {
+                removeAt(index)
+              },
+            }),
+            at,
+            origin,
+          })
+        }
 
   const removeAt = (index: number): void => {
     applyChange(removeMarkAt(marks, index))
@@ -585,6 +608,7 @@ export const CutEditor = ({
             heightPx={waveHeightPx}
           >
             <CutWaveformOverlay
+              {...(openMarkMenu === undefined ? {} : { onMarkContextMenu: openMarkMenu })}
               marks={marks}
               selectedIndex={selectedIndex}
               currentSec={playback.currentSec}
@@ -646,6 +670,7 @@ export const CutEditor = ({
       </HelpDisclosure>
 
       <CutMarkList
+        {...(openMarkMenu === undefined ? {} : { onMarkContextMenu: openMarkMenu })}
         marks={marks}
         songDurationSec={durationSec}
         busy={saving}

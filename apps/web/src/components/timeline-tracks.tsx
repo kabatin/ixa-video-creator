@@ -34,7 +34,7 @@ import {
   type BeatAlignmentSource,
   type ShotBeatAlignmentView,
 } from '@/lib/beat-alignment-view'
-import type { ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
+import type { ContextMenuTriggerProps, MenuPoint } from '@/components/workbench/use-context-menu'
 
 /**
  * Shot と TimelineClip を時間軸に並べ、**その場で置いて動かせる**帯。
@@ -117,6 +117,8 @@ export type TimelineTracksProps = {
   readonly onSelectShot?: (shotId: ShotId) => void
   /** 右クリック・長押し・Shift+F10 でその Shot のメニューを開く口（「Take 無し」から直接 Take を作れるように）。 */
   readonly shotContextMenu?: (shot: Shot) => ContextMenuTriggerProps
+  /** 帯のクリップの右クリック（長押し）。メニューを開いたら true。 */
+  readonly onClipContextMenu?: (clip: TimelineClip, at: MenuPoint, origin: HTMLElement) => boolean
   /**
    * 楽曲の波形の帯（PHASE 8.4 / UI-WORKBENCH-2 §6 F2）。聴きながら切ると同じ 3 帯域の波形を、
    * **このタイムラインの尺度（px/秒）で**並べる。渡さなければ出さない。
@@ -179,6 +181,7 @@ export const TimelineTracks = ({
   selectedShotId = null,
   onSelectShot,
   shotContextMenu,
+  onClipContextMenu,
   audioLane,
 }: TimelineTracksProps) => {
   const alignments = beatAlignment === undefined ? null : alignmentByShotId(beatAlignment.views)
@@ -232,6 +235,7 @@ export const TimelineTracks = ({
           if (isInsertableTrack(track))
             onInsertText(track, atSec, anchorFrom(clientX, clientY), null)
         }}
+        {...(onClipContextMenu === undefined ? {} : { onClipContextMenu })}
       />
     ))
   }

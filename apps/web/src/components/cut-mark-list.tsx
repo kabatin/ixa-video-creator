@@ -17,6 +17,7 @@ import { parseSeconds } from '@/lib/timeline-display'
 import { snapTargetLabel } from '@/lib/timeline-snap'
 import { WORDING } from '@/lib/wording'
 import { HelpDisclosure } from '@/components/ui/help-disclosure'
+import { useContextMenuTrigger, type ContextMenuTriggerProps, type MenuPoint } from '@/components/workbench/use-context-menu'
 
 /**
  * 区切りからできるカットの一覧（P56-4）。**表示だけを持つ。**
@@ -42,6 +43,8 @@ export type CutMarkListProps = {
   readonly onSelect: (index: number) => void
   readonly onRemove: (index: number) => void
   readonly onMove: (index: number, atSec: number) => void
+  /** 区切りの右クリック（長押し・Shift+F10）。渡さなければブラウザのメニューのまま。 */
+  readonly onMarkContextMenu?: (index: number, at: MenuPoint, origin: HTMLElement) => void
   /** 直前の操作が断られた理由。断られていなければ null。 */
   readonly rejection: MarkRejection | null
 }
@@ -58,6 +61,7 @@ type MarkRowProps = {
   readonly onSelect: (index: number) => void
   readonly onRemove: (index: number) => void
   readonly onMove: (index: number, atSec: number) => void
+  readonly contextMenu?: ContextMenuTriggerProps
 }
 
 const MarkRow = ({
@@ -69,6 +73,7 @@ const MarkRow = ({
   onSelect,
   onRemove,
   onMove,
+  contextMenu,
 }: MarkRowProps) => {
   const [raw, setRaw] = useState(mark.atSec.toFixed(TIME_DECIMALS))
   const [error, setError] = useState<string | undefined>(undefined)
@@ -85,6 +90,7 @@ const MarkRow = ({
 
   return (
     <li
+      {...contextMenu}
       className={`flex flex-wrap items-end gap-3 border-t border-line py-3 ${
         selected ? 'bg-info/10' : ''
       }`}
@@ -164,8 +170,12 @@ export const CutMarkList = ({
   onSelect,
   onRemove,
   onMove,
+  onMarkContextMenu,
   rejection,
 }: CutMarkListProps) => {
+  const markMenu = useContextMenuTrigger<number>((index, at, origin) => {
+    onMarkContextMenu?.(index, at, origin)
+  })
   const sorted = marks === null ? null : sortMarks(marks)
   const cuts = sorted === null ? [] : buildCuts(sorted, songDurationSec)
   const headCut = cuts[0]
@@ -219,6 +229,7 @@ export const CutMarkList = ({
                 onSelect={onSelect}
                 onRemove={onRemove}
                 onMove={onMove}
+                {...(onMarkContextMenu === undefined ? {} : { contextMenu: markMenu(index) })}
               />
             ))}
           </ul>

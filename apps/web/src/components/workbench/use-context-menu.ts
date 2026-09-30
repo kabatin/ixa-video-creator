@@ -11,7 +11,7 @@ import {
 /** 長押しとみなすまでの時間。iOS の長押しと同じくらい。 */
 export const LONG_PRESS_MS = 500
 /** これ以上動いたら長押しではなくドラッグ（タイムラインの移動・素材のドラッグを邪魔しない）。 */
-const LONG_PRESS_SLOP_PX = 8
+export const LONG_PRESS_SLOP_PX = 8
 
 export type MenuPoint = { readonly x: number; readonly y: number }
 

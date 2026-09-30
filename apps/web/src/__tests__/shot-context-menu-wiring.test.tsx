@@ -1,10 +1,13 @@
 import type { Shot } from '@ixa/domain'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { TakeGrid } from '@/components/take-grid'
 import { TimelineTracks } from '@/components/timeline-tracks'
 import { ShotListCompact } from '@/components/workbench/shot-list-compact'
 import { StoryboardGrid } from '@/components/workbench/storyboard-grid'
 import type { ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
+import { Take } from '@ixa/domain'
+import { takeJson } from './fixtures'
 import { aWorkbenchShot } from './workbench-fixture'
 
 /**
@@ -110,3 +113,36 @@ describe('Shot の右クリックが届く', () => {
     expect(opened).toEqual([SHOTS[1]?.id])
   })
 })
+
+describe('Take の右クリックが届く', () => {
+  it('Take 比較のカード', () => {
+    const take = Take.parse({ ...takeJson, createdAt: new Date(takeJson.createdAt) })
+    const opened: string[] = []
+    render(
+      <TakeGrid
+        takes={[take]}
+        selectedTakeId={null}
+        busy={false}
+        onSelect={vi.fn()}
+        takeContextMenu={(target) => ({
+          onContextMenu: (event) => {
+            event.preventDefault()
+            opened.push(target.id)
+          },
+          onPointerDown: () => undefined,
+          onPointerMove: () => undefined,
+          onPointerUp: () => undefined,
+          onPointerCancel: () => undefined,
+          onKeyDown: () => undefined,
+          onClickCapture: () => undefined,
+          style: {},
+        })}
+      />,
+    )
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: '採用する' }))
+
+    expect(opened).toEqual([take.id])
+  })
+})
+

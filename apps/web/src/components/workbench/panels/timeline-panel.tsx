@@ -17,6 +17,7 @@ import {
 } from '@/lib/timeline-loader'
 import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
 import { useShotMenu } from '@/components/workbench/use-shot-menu'
+import { useTextClipMenu } from '@/components/workbench/use-text-clip-menu'
 
 /**
  * タイムライン（中央下）。中身は既存の `timeline-editor`。
@@ -28,6 +29,7 @@ export const TimelinePanel = () => {
   const workbench = useWorkbench()
   // Shot の右クリック（長押し・Shift+F10）のメニュー。
   const shotMenuActions = useShotMenu()
+  const textClipMenu = useTextClipMenu()
   const shotMenu = useContextMenuTrigger<Shot>((shot, at, origin) => {
     shotMenuActions.open(shot, at, origin)
   })
@@ -97,6 +99,11 @@ export const TimelinePanel = () => {
         selectedShotId={workbench.selectedShotId}
         onSelectShot={workbench.selectShot}
         shotContextMenu={shotMenu}
+        // 帯のテロップの右クリック（長押し）のメニュー（2026-09-30）。
+        onTextClipContextMenu={(id, at, origin) => {
+          const clip = (materials.clips.value ?? []).find((candidate) => candidate.id === id)
+          if (clip !== undefined) textClipMenu.open(clip, at, origin)
+        }}
         // 帯のテロップは小窓でなくインスペクターで開く（小窓は見切れて編集しづらい）。
         onOpenTextClip={(id) => {
           workbench.inspect({ kind: 'text-clip', id })

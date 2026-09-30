@@ -24,7 +24,11 @@ export type ContextMenuEntry<A extends string> =
 const item = <A extends string>(
   action: A,
   label: string,
-  options: { readonly shortcut?: string; readonly disabledReason?: string | null; readonly confirm?: string } = {},
+  options: {
+    readonly shortcut?: string
+    readonly disabledReason?: string | null
+    readonly confirm?: string
+  } = {},
 ): ContextMenuEntry<A> => ({
   kind: 'item',
   action,
@@ -72,7 +76,8 @@ export const shotMenuEntries = (input: {
   item('delete', '削除…', { shortcut: DELETE_SHORTCUT }),
 ]
 
-export type AssetMenuAction = 'open-viewer' | 'inspect' | 'set-default-look' | 'set-master' | 'reanalyze' | 'delete'
+export type AssetMenuAction =
+  'open-viewer' | 'inspect' | 'set-default-look' | 'set-master' | 'reanalyze' | 'delete'
 
 export type AssetMenuKind = 'character' | 'look' | 'location' | 'brand-asset' | 'track' | 'project'
 
@@ -85,7 +90,11 @@ const ASSET_KIND_LABELS: Readonly<Record<Exclude<AssetMenuKind, 'project'>, stri
 }
 
 /** 削除の確認の文。何が起きるかを言う（素材ツリーとインスペクターで同じ文）。 */
-const deleteConfirmOf = (kind: Exclude<AssetMenuKind, 'project'>, name: string, isMaster: boolean): string => {
+const deleteConfirmOf = (
+  kind: Exclude<AssetMenuKind, 'project'>,
+  name: string,
+  isMaster: boolean,
+): string => {
   switch (kind) {
     case 'character':
       return `${name} を削除します。この人が出ている Shot からも外れます。`
@@ -113,7 +122,8 @@ export const assetMenuEntries = (input: {
   readonly isDefaultLook?: boolean
   readonly isMaster?: boolean
 }): readonly ContextMenuEntry<AssetMenuAction>[] => {
-  const inspect = input.where === 'tree' ? [item<AssetMenuAction>('inspect', 'インスペクターで直す')] : []
+  const inspect =
+    input.where === 'tree' ? [item<AssetMenuAction>('inspect', 'インスペクターで直す')] : []
   if (input.kind === 'project') return inspect
   const kind = input.kind
   const extra: readonly ContextMenuEntry<AssetMenuAction>[] =
@@ -141,6 +151,44 @@ export const assetMenuEntries = (input: {
     }),
   ]
 }
+
+export type TakeMenuAction = 'adopt' | 'unadopt'
+
+/** Take のメニュー（Take 比較のカード）。採用するか、採用を外すか。 */
+export const takeMenuEntries = (input: {
+  readonly adopted: boolean
+}): readonly ContextMenuEntry<TakeMenuAction>[] => [
+  item('adopt', '採用する', {
+    disabledReason: input.adopted ? 'この Take を採用しています' : null,
+  }),
+  item('unadopt', '採用を外す', {
+    disabledReason: input.adopted ? null : 'この Take は採用していません',
+  }),
+]
+
+export type TextClipMenuAction = 'edit' | 'delete'
+
+/** テロップのメニュー（帯の右クリックと、インスペクターの「…」）。インスペクターでは直すは出さない。 */
+export const textClipMenuEntries = (input: {
+  readonly text: string
+  /** 画面の書式（`formatSpan`）の時間。確認の文に入れる。 */
+  readonly span: string
+  readonly where: 'timeline' | 'inspector'
+}): readonly ContextMenuEntry<TextClipMenuAction>[] => [
+  ...(input.where === 'timeline'
+    ? [item<TextClipMenuAction>('edit', 'インスペクターで直す'), SEPARATOR]
+    : []),
+  item('delete', 'テロップを削除', {
+    confirm: `テロップ「${input.text}」${input.span} を削除します。`,
+  }),
+]
+
+export type CutMarkMenuAction = 'remove'
+
+/** 聴きながら切るの区切りのメニュー。Delete でも消せる（選んでいる区切り）。 */
+export const cutMarkMenuEntries = (): readonly ContextMenuEntry<CutMarkMenuAction>[] => [
+  item('remove', 'この区切りを消す', { shortcut: DELETE_SHORTCUT }),
+]
 
 /** 画面の縁からこれだけは離す（枠線が縁と重なって切れて見えないように）。 */
 const MENU_MARGIN_PX = 8

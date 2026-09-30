@@ -46,6 +46,9 @@ type Host = { readonly open: (request: ContextMenuRequest) => void }
 
 const ContextMenuContext = createContext<Host | null>(null)
 
+/** 置き場の外（ワークベンチの外で単独に描く部品）では null。そこではメニューを出さない。 */
+export const useOptionalContextMenuHost = (): Host | null => useContext(ContextMenuContext)
+
 /** 開いているメニューは 1 つだけ。開く口を配る。 */
 export const useContextMenuHost = (): Host => {
   const host = useContext(ContextMenuContext)

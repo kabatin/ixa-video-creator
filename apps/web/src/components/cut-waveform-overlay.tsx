@@ -11,6 +11,7 @@ import {
 import type { CutMark } from '@/lib/cut-marks'
 import { formatClock } from '@/lib/format-time'
 import { clampView, type ViewRange } from '@/lib/waveform-draw'
+import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX, type MenuPoint } from '@/components/workbench/use-context-menu'
 
 /**
  * 波形の上に重ねる操作の層（Architect が配線のために持つ）。
@@ -45,6 +46,8 @@ export type CutWaveformOverlayProps = {
   readonly onZoom: (anchorSec: number, factor: number) => void
   /** Shift + ホイール・横スクロールで横に送る（窓の幅に対する割合）。渡さなければ送らない。 */
   readonly onPan?: (ratio: number) => void
+  /** 区切りの右クリック（長押し）。渡さなければブラウザのメニューのまま。 */
+  readonly onMarkContextMenu?: (index: number, at: MenuPoint, origin: HTMLElement) => void
 }
 
 type DragState = { readonly index: number; readonly pointerId: number }
@@ -75,9 +78,15 @@ export const CutWaveformOverlay = ({
   onDragEnd,
   onZoom,
   onPan,
+  onMarkContextMenu,
 }: CutWaveformOverlayProps) => {
   const layerRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragState | null>(null)
+  const pressRef = useRef<{ readonly x: number; readonly y: number; readonly timer: ReturnType<typeof setTimeout> } | null>(null)
+  const cancelPress = (): void => {
+    if (pressRef.current !== null) clearTimeout(pressRef.current.timer)
+    pressRef.current = null
+  }
   const safeView = clampView(view, durationSec)
 
   const positionOf = (sec: number): string => {
@@ -87,6 +96,8 @@ export const CutWaveformOverlay = ({
   }
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    // 右・中ボタンは再生位置の移動でも区切りの引きずりでもない（右クリックはメニュー）。
+    if (event.button !== 0) return
     if (disabled) return
     const bounds = boundsOf(event.currentTarget)
     const intent = resolvePointerIntent(marks, event.clientX, bounds, safeView, durationSec)
@@ -112,9 +123,26 @@ export const CutWaveformOverlay = ({
     dragRef.current = { index: intent.index, pointerId: event.pointerId }
     onSelectMark(intent.index)
     onDragStart()
+
+    // 指の長押しでメニュー（iPad の Safari は長押しで contextmenu を出さない）。動いたら取りやめ。
+    if (event.pointerType === 'touch' && onMarkContextMenu !== undefined) {
+      cancelPress()
+      const origin = event.currentTarget
+      const at = { x: event.clientX, y: event.clientY }
+      const index = intent.index
+      pressRef.current = {
+        ...at,
+        timer: setTimeout(() => {
+          pressRef.current = null
+          onMarkContextMenu(index, at, origin)
+        }, LONG_PRESS_MS),
+      }
+    }
   }
 
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    const press = pressRef.current
+    if (press !== null && Math.hypot(event.clientX - press.x, event.clientY - press.y) > LONG_PRESS_SLOP_PX) cancelPress()
     const drag = dragRef.current
     if (drag === null || drag.pointerId !== event.pointerId) return
     const sec = timeAtClientX(event.clientX, boundsOf(event.currentTarget), safeView, durationSec)
@@ -122,6 +150,7 @@ export const CutWaveformOverlay = ({
   }
 
   const endDrag = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    cancelPress()
     const drag = dragRef.current
     if (drag === null || drag.pointerId !== event.pointerId) return
     dragRef.current = null
@@ -166,6 +195,13 @@ export const CutWaveformOverlay = ({
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onWheel={onWheel}
+      onContextMenu={(event) => {
+        if (onMarkContextMenu === undefined || disabled) return
+        const intent = resolvePointerIntent(marks, event.clientX, boundsOf(event.currentTarget), safeView, durationSec)
+        if (intent.kind !== 'drag_mark') return
+        event.preventDefault()
+        onMarkContextMenu(intent.index, { x: event.clientX, y: event.clientY }, event.currentTarget)
+      }}
     >
       {marks.map((mark, index) =>
         !isVisible(mark.atSec, safeView) ? null : (

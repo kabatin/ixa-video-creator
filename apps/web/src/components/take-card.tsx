@@ -6,12 +6,15 @@ import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { reviewStatusClassName, reviewStatusLabel } from '@/lib/shot-display'
 import { takeCostLabel, takeModelLabel, takeTimeLabel } from '@/lib/take-display'
+import type { ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
 
 export type TakeCardProps = {
   readonly take: Take
   readonly selected: boolean
   readonly busy: boolean
   readonly onSelect: (takeId: TakeId) => void
+  /** 右クリック・長押し・Shift+F10 でこの Take のメニューを開く口。 */
+  readonly contextMenu?: ContextMenuTriggerProps
 }
 
 type UrlState =
@@ -81,11 +84,12 @@ const TakePreview = ({ state }: { readonly state: UrlState }) => {
   )
 }
 
-export const TakeCard = ({ take, selected, busy, onSelect }: TakeCardProps) => {
+export const TakeCard = ({ take, selected, busy, onSelect, contextMenu }: TakeCardProps) => {
   const urlState = useSignedUrl(take.mediaAssetId)
 
   return (
     <li
+      {...contextMenu}
       aria-current={selected ? 'true' : undefined}
       className={`flex w-80 shrink-0 flex-col gap-3 rounded-lg border bg-surface p-4 shadow-sm ${
         selected ? 'border-ok/40 ring-2 ring-ok/40' : 'border-line'

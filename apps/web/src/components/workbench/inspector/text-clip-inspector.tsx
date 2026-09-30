@@ -7,7 +7,8 @@ import { TextStylePresets } from '@/components/workbench/inspector/text-style-pr
 import { PanelEmpty } from '@/components/workbench/panels/panel-frame'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
-import { MoreMenu } from '@/components/workbench/ui/more-menu'
+import { MenuButton } from '@/components/workbench/ui/more-menu'
+import { useTextClipMenu } from '@/components/workbench/use-text-clip-menu'
 import { ObjectHeader } from '@/components/workbench/ui/object-header'
 import { Section } from '@/components/workbench/ui/section'
 import { useWorkbench } from '@/components/workbench/workbench-context'
@@ -36,6 +37,7 @@ const TEMPLATE_OPTIONS = TextTemplateKey.options.map((key) => ({ value: key, lab
  */
 export const TextClipInspector = ({ id, api }: { readonly id: TimelineClipId; readonly api?: TimelineApi }) => {
   const workbench = useWorkbench()
+  const textClipMenu = useTextClipMenu()
   const client = useMemo<TimelineApi>(() => api ?? createApiClient(), [api])
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' })
 
@@ -103,19 +105,10 @@ export const TextClipInspector = ({ id, api }: { readonly id: TimelineClipId; re
         title={params?.text ?? '（文字が読めません）'}
         meta={formatSpan(clip.startSec, clip.durationSec)}
         menu={
-          <MoreMenu
+          // 帯の右クリックと同じ中身（2026-09-30）。インスペクターでは削除だけ。
+          <MenuButton
             label={`テロップ「${params?.text ?? ''}」のその他の操作`}
-            items={[
-              {
-                label: 'テロップを削除',
-                confirm: `テロップ「${params?.text ?? ''}」${formatSpan(clip.startSec, clip.durationSec)} を削除します。`,
-                run: async () => {
-                  await client.deleteClip(clip.id)
-                  workbench.inspect(null)
-                  workbench.refresh()
-                },
-              },
-            ]}
+            items={textClipMenu.itemsFor(clip, 'inspector')}
           />
         }
       />

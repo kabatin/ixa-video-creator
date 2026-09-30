@@ -77,7 +77,7 @@ import {
   type SnapSpanInput,
   type SnapSpanOutcome,
 } from '@/lib/timeline-snap'
-import type { ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
+import type { ContextMenuTriggerProps, MenuPoint } from '@/components/workbench/use-context-menu'
 
 /**
  * タイムライン編集画面の操作盤（P5-4）。
@@ -134,6 +134,8 @@ export type TimelineEditorProps = {
   readonly onSelectShot?: (shotId: ShotId) => void
   /** Shot の右クリックのメニューを開く口（帯の上の Shot）。 */
   readonly shotContextMenu?: (shot: Shot) => ContextMenuTriggerProps
+  /** 帯のテロップの右クリック（長押し）でメニューを開く口。テロップ以外のクリップはブラウザのメニューのまま。 */
+  readonly onTextClipContextMenu?: (id: TimelineClipId, at: MenuPoint, origin: HTMLElement) => void
   /**
    * 帯のテロップを押したとき・置いたときに、インスペクターで開く（ワークベンチ）。
    * **渡すと帯の上の小窓では直さない。** 小窓はパネルの端で見切れて編集しづらかった
@@ -178,6 +180,7 @@ export const TimelineEditor = ({
   selectedShotId,
   onSelectShot,
   shotContextMenu,
+  onTextClipContextMenu,
   onOpenTextClip,
   audioLane,
 }: TimelineEditorProps) => {
@@ -696,6 +699,15 @@ export const TimelineEditor = ({
           selectedShotId={selectedShotId ?? null}
           {...(onSelectShot === undefined ? {} : { onSelectShot })}
           {...(shotContextMenu === undefined ? {} : { shotContextMenu })}
+          {...(onTextClipContextMenu === undefined
+            ? {}
+            : {
+                onClipContextMenu: (clip: TimelineClip, at: MenuPoint, origin: HTMLElement) => {
+                  if (clip.content.type !== 'text') return false
+                  onTextClipContextMenu(clip.id, at, origin)
+                  return true
+                },
+              })}
           {...(audioLane === undefined ? {} : { audioLane })}
           beatAlignment={
             beatAlignment === null

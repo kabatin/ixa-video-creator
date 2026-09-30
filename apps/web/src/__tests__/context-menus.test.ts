@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   assetMenuEntries,
+  takeMenuEntries,
+  textClipMenuEntries,
   placeContextMenu,
   shotMenuEntries,
   type AssetMenuAction,
   type ContextMenuEntry,
   type ShotMenuAction,
+  type TakeMenuAction,
+  type TextClipMenuAction,
 } from '@/lib/context-menus'
 import { DELETE_SHORTCUT, NO_ADOPTED_TAKE, SPLIT_SHORTCUT } from '@/lib/menu-model'
 import { aWorkbenchShot } from './workbench-fixture'
@@ -119,24 +123,36 @@ describe('assetMenuEntries', () => {
   })
 
   it('インスペクターの「…」では、直す（いま開いている）は出さない', () => {
-    expect(labels(assetMenuEntries({ kind: 'location', name: '体育館', where: 'inspector' }))).toEqual([
-      '素材ビューアで見る',
-      'ロケーションを削除',
-    ])
+    expect(
+      labels(assetMenuEntries({ kind: 'location', name: '体育館', where: 'inspector' })),
+    ).toEqual(['素材ビューアで見る', 'ロケーションを削除'])
   })
 
   it('削除は確認を挟み、何が起きるかを言う（インスペクターと同じ文）', () => {
-    expect(find(assetMenuEntries({ kind: 'character', name: 'ミナ', where: 'tree' }), 'delete')?.confirm).toBe(
-      'ミナ を削除します。この人が出ている Shot からも外れます。',
-    )
     expect(
-      find(assetMenuEntries({ kind: 'track', name: 'ぼくははると', where: 'tree', isMaster: true }), 'delete')?.confirm,
+      find(assetMenuEntries({ kind: 'character', name: 'ミナ', where: 'tree' }), 'delete')?.confirm,
+    ).toBe('ミナ を削除します。この人が出ている Shot からも外れます。')
+    expect(
+      find(
+        assetMenuEntries({ kind: 'track', name: 'ぼくははると', where: 'tree', isMaster: true }),
+        'delete',
+      )?.confirm,
     ).toMatch(/マスターの「ぼくははると」を削除します/)
   })
 
   it('Look は既定にでき、すでに既定なら押せない理由を言う', () => {
-    const plain = assetMenuEntries({ kind: 'look', name: '仕事帰り', where: 'tree', isDefaultLook: false })
-    const already = assetMenuEntries({ kind: 'look', name: 'バリスタ', where: 'tree', isDefaultLook: true })
+    const plain = assetMenuEntries({
+      kind: 'look',
+      name: '仕事帰り',
+      where: 'tree',
+      isDefaultLook: false,
+    })
+    const already = assetMenuEntries({
+      kind: 'look',
+      name: 'バリスタ',
+      where: 'tree',
+      isDefaultLook: true,
+    })
 
     expect(find(plain, 'set-default-look')?.disabledReason).toBeNull()
     expect(find(already, 'set-default-look')?.disabledReason).toBe('もう既定の Look です')
@@ -150,9 +166,55 @@ describe('assetMenuEntries', () => {
   })
 
   it('作品の方針は直すだけ（消せない・素材ビューアには出ない）', () => {
-    expect(labels(assetMenuEntries({ kind: 'project', name: '作品の方針', where: 'tree' }))).toEqual([
-      'インスペクターで直す',
-    ])
+    expect(
+      labels(assetMenuEntries({ kind: 'project', name: '作品の方針', where: 'tree' })),
+    ).toEqual(['インスペクターで直す'])
   })
 })
 
+describe('takeMenuEntries', () => {
+  type TakeItem = Extract<ContextMenuEntry<TakeMenuAction>, { kind: 'item' }>
+  const find = (entries: readonly ContextMenuEntry<TakeMenuAction>[], action: TakeMenuAction) =>
+    entries.find((entry): entry is TakeItem => entry.kind === 'item' && entry.action === action)
+
+  it('採用していない Take は採用でき、外せない', () => {
+    const entries = takeMenuEntries({ adopted: false })
+
+    expect(find(entries, 'adopt')?.disabledReason).toBeNull()
+    expect(find(entries, 'unadopt')?.disabledReason).toBe('この Take は採用していません')
+  })
+
+  it('採用している Take は外せ、採用し直せない', () => {
+    const entries = takeMenuEntries({ adopted: true })
+
+    expect(find(entries, 'adopt')?.disabledReason).toBe('この Take を採用しています')
+    expect(find(entries, 'unadopt')?.disabledReason).toBeNull()
+  })
+})
+
+describe('textClipMenuEntries', () => {
+  type TextItem = Extract<ContextMenuEntry<TextClipMenuAction>, { kind: 'item' }>
+  const items = (entries: readonly ContextMenuEntry<TextClipMenuAction>[]) =>
+    entries.filter((entry): entry is TextItem => entry.kind === 'item')
+
+  it('帯では、直す・削除（確認はインスペクターと同じ文）', () => {
+    const entries = items(
+      textClipMenuEntries({
+        text: '一行目',
+        span: '0:01.00 – 0:03.00（2.00s）',
+        where: 'timeline',
+      }),
+    )
+
+    expect(entries.map((entry) => entry.label)).toEqual(['インスペクターで直す', 'テロップを削除'])
+    expect(entries[1]?.confirm).toBe('テロップ「一行目」0:01.00 – 0:03.00（2.00s） を削除します。')
+  })
+
+  it('インスペクターの「…」では削除だけ', () => {
+    expect(
+      items(textClipMenuEntries({ text: 'x', span: '', where: 'inspector' })).map(
+        (entry) => entry.label,
+      ),
+    ).toEqual(['テロップを削除'])
+  })
+})

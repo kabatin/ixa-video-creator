@@ -1,6 +1,6 @@
 'use client'
 
-import type { TakeId } from '@ixa/domain'
+import type { Take, TakeId } from '@ixa/domain'
 import { useState } from 'react'
 import { TakeComparePanel } from '@/components/take-compare-panel'
 import { TakeGrid } from '@/components/take-grid'
@@ -11,6 +11,11 @@ import { ShotStatusBadge } from '@/components/shot-status-badge'
 import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import { unselectAdoptedTake } from '@/components/workbench/shot-edit-actions'
+import { useContextMenuHost } from '@/components/workbench/ui/context-menu'
+import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
+import { toMenuItems } from '@/components/workbench/use-shot-menu'
+import { takeMenuEntries, type TakeMenuAction } from '@/lib/context-menus'
 
 /**
  * Take 比較（中央上）。選択中の Shot の A（採用）/ B（候補）を拍の上で並べる（D7: 2 枚まで）。
@@ -25,6 +30,25 @@ export const ComparePanel = () => {
   const { takes, error, reload } = useShotTakes(shot, workbench.posterEpoch)
   const [adopting, setAdopting] = useState(false)
   const [adoptError, setAdoptError] = useState<string | null>(null)
+  // Take の右クリック（長押し・Shift+F10）のメニュー: 採用する / 採用を外す（2026-09-30）。
+  const host = useContextMenuHost()
+  const takeMenu = useContextMenuTrigger<Take>((take, at, origin) => {
+    if (shot === null) return
+    const run: Record<TakeMenuAction, () => void> = {
+      adopt: () => {
+        void adopt(take.id)
+      },
+      unadopt: () => {
+        unselectAdoptedTake(workbench, shot, workbench.notify)
+      },
+    }
+    host.open({
+      label: `Take ${String(take.index)} の操作`,
+      items: toMenuItems(takeMenuEntries({ adopted: shot.selectedTakeId === take.id }), run),
+      at,
+      origin,
+    })
+  })
 
   if (shot === null) {
     return (
@@ -37,7 +61,8 @@ export const ComparePanel = () => {
     )
   }
 
-  const adopt = async (takeId: TakeId): Promise<void> => {
+  async function adopt(takeId: TakeId): Promise<void> {
+    if (shot === null) return
     setAdopting(true)
     setAdoptError(null)
     try {
@@ -113,6 +138,7 @@ export const ComparePanel = () => {
               onSelect={(takeId) => {
                 void adopt(takeId)
               }}
+              takeContextMenu={takeMenu}
             />
           </section>
         </div>
