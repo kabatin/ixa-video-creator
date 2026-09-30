@@ -22,8 +22,21 @@ export const isLoopbackUrl = (url: string): boolean => {
   }
 }
 
+/**
+ * トークンの形。**vpipe-api と同じ規則**（空白を含まない印字可能な ASCII を 32 文字以上）。
+ * 短いトークンや、貼るときに紛れ込んだ空白・全角文字は、投入を押したときの 401 で初めて分かる。
+ * それを起動の時点で止める。
+ */
+export const VPIPE_TOKEN_PATTERN = /^[\x21-\x7e]{32,}$/
+
 /** 食い違いがあれば理由の文を返す。**値（URL やトークン）は文に入れない。** */
 export const localVideoGeneratorProblem = (env: Env): string | null => {
+  if (env.VPIPE_API_TOKEN !== undefined && !VPIPE_TOKEN_PATTERN.test(env.VPIPE_API_TOKEN)) {
+    return (
+      'VPIPE_API_TOKEN の形が違います（空白を含まない半角の英数字・記号で 32 文字以上。vpipe-api と同じ規則）。' +
+      'サーバに設定したトークンをそのまま .env に貼り直すか、使わないなら空にして再起動してください。'
+    )
+  }
   if (env.LOCAL_VIDEO_GENERATOR !== 'vpipe') return null
   if (isLoopbackUrl(env.VPIPE_API_URL) || env.VPIPE_API_TOKEN !== undefined) return null
   return (

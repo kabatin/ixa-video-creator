@@ -171,6 +171,19 @@ describe('冪等キー（応答が失われた投入を二重に生成しない�
     expect(result).not.toBeInstanceOf(ProviderBusyError)
   })
 
+  /** vpipe-api 7a05f82: 同じキーの投入がまだ処理中なら 409 idempotency_in_flight（retryable）。 */
+  it('同じキーの投入がまだ処理中（409 idempotency_in_flight）なら、後で同じ投入をやり直す', async () => {
+    const inFlight = serverRoutes({
+      submit: () => jsonResponse(409, errorEnvelope('idempotency_in_flight', true)),
+    })
+    const withKey = await submitWith(inFlight)
+    expect(withKey.result).toBeInstanceOf(ProviderBusyError)
+
+    const withoutKey = await submitWith(inFlight, keyed(null))
+    expect(withoutKey.result).not.toBeInstanceOf(ProviderBusyError)
+    expect(withoutKey.result).toMatchObject({ code: 'vpipe_idempotency_in_flight' })
+  })
+
   it('5xx でもサーバがやり直せないと言うなら終端にする', async () => {
     const { result } = await submitWith(
       serverRoutes({ submit: () => jsonResponse(500, errorEnvelope('internal', false)) }),

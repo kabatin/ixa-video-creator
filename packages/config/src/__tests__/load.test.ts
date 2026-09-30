@@ -140,7 +140,42 @@ describe('空文字の任意変数', () => {
 /**
  * ローカルの動画生成（ADR-0030）。**URL やトークンの有無で切り替えない。**
  */
+/** vpipe-api と同じ規則（空白を含まない印字可能な ASCII を 32 文字以上）を満たすトークン。 */
+const GOOD_TOKEN = 'vpipe_0123456789abcdefABCDEF-._~!'
+
 describe('ローカルの動画生成（vpipe）', () => {
+  /** 短い・空白や全角が混ざったトークンは、押したときの 401 ではなく起動時に止める。 */
+  it('トークンの形が vpipe-api の規則に合わなければ起動時に止める（値は文に入れない）', () => {
+    expect(GOOD_TOKEN.length).toBeGreaterThanOrEqual(32)
+    const bad = [
+      'short-token-31-chars-xxxxxxxxxx',
+      'has space in the middle of token 0123456789',
+      'zenkaku-ｔｏｋｅｎ-0123456789abcdefghij',
+      'tab\tinside-0123456789abcdefghijklmnop',
+    ]
+    for (const token of bad) {
+      const run = () =>
+        loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: 'vpipe', VPIPE_API_TOKEN: token })
+      expect(run).toThrow(/VPIPE_API_TOKEN の形が違います/)
+      try {
+        run()
+      } catch (error) {
+        expect(error instanceof Error ? error.message : '').not.toContain(token)
+      }
+    }
+    expect(() =>
+      loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: 'vpipe', VPIPE_API_TOKEN: GOOD_TOKEN }),
+    ).not.toThrow()
+  })
+
+  it('32 文字ちょうどのトークンは受ける', () => {
+    const token = 'a'.repeat(32)
+    expect(loadConfig({ ...requiredEnv, VPIPE_API_TOKEN: token }).providers.vpipeApiToken).toBe(token)
+    expect(() => loadConfig({ ...requiredEnv, VPIPE_API_TOKEN: 'a'.repeat(31) })).toThrow(
+      /VPIPE_API_TOKEN/,
+    )
+  })
+
   it('既定は使わない。URL は既定でこのマシンだけ、トークンは未設定', () => {
     const config = loadConfig({ ...requiredEnv })
     expect(config.providers.localVideoGenerator).toBe('none')
@@ -152,7 +187,7 @@ describe('ローカルの動画生成（vpipe）', () => {
     const config = loadConfig({
       ...requiredEnv,
       VPIPE_API_URL: 'http://127.0.0.1:9999',
-      VPIPE_API_TOKEN: 'token',
+      VPIPE_API_TOKEN: GOOD_TOKEN,
     })
     expect(config.providers.localVideoGenerator).toBe('none')
   })
@@ -168,7 +203,9 @@ describe('ローカルの動画生成（vpipe）', () => {
 
   it('トークンが空なら未設定として扱う', () => {
     expect(loadConfig({ ...requiredEnv, VPIPE_API_TOKEN: '  ' }).providers.vpipeApiToken).toBeNull()
-    expect(loadConfig({ ...requiredEnv, VPIPE_API_TOKEN: 'tok' }).providers.vpipeApiToken).toBe('tok')
+    expect(loadConfig({ ...requiredEnv, VPIPE_API_TOKEN: GOOD_TOKEN }).providers.vpipeApiToken).toBe(
+      GOOD_TOKEN,
+    )
   })
 
   it('URL でないものは弾く', () => {
@@ -196,7 +233,7 @@ describe('ローカルの動画生成（vpipe）', () => {
     } catch (error) {
       expect(error instanceof Error ? error.message : '').not.toContain('192.168.1.20')
     }
-    expect(() => loadConfig({ ...env, VPIPE_API_TOKEN: 'tok' })).not.toThrow()
+    expect(() => loadConfig({ ...env, VPIPE_API_TOKEN: GOOD_TOKEN })).not.toThrow()
   })
 
   it('使わない設定なら外の URL でも止めない', () => {

@@ -122,9 +122,9 @@ export const postJob = async (
   }
   if (!response.ok) {
     const error = vpipeErrorFor(response.status, response.body, '投入')
-    // サーバが「やり直せる」と言う失敗（5xx など）は、キーがあれば同じ投入を後で投げ直す。
-    // 409 idempotency_conflict（中身の違う同じキー・同じキーの投入がまだ処理中）はサーバが
-    // やり直せないと答えるので、ここを通らず終端になる。
+    // サーバが「やり直せる」と言う失敗は、キーがあれば同じ投入を後で投げ直す。
+    // 5xx と、409 idempotency_in_flight（同じキーの投入がまだ処理中）がこれに当たる。
+    // 409 idempotency_conflict（同じキーで中身が違う）はやり直せないので、ここを通らず終端になる。
     if (idempotencyKey !== null && error.retryable) {
       throw busy(error.message, retryAfterMsFrom(response.headers), error)
     }
