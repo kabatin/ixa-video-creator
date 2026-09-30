@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  assetMenuEntries,
   placeContextMenu,
   shotMenuEntries,
+  type AssetMenuAction,
   type ContextMenuEntry,
   type ShotMenuAction,
 } from '@/lib/context-menus'
@@ -100,3 +102,57 @@ describe('placeContextMenu', () => {
     })
   })
 })
+
+describe('assetMenuEntries', () => {
+  type AssetItem = Extract<ContextMenuEntry<AssetMenuAction>, { kind: 'item' }>
+  const labels = (entries: readonly ContextMenuEntry<AssetMenuAction>[]) =>
+    entries.filter((entry): entry is AssetItem => entry.kind === 'item').map((entry) => entry.label)
+  const find = (entries: readonly ContextMenuEntry<AssetMenuAction>[], action: AssetMenuAction) =>
+    entries.find((entry): entry is AssetItem => entry.kind === 'item' && entry.action === action)
+
+  it('素材ツリーでは、見る・直す・削除', () => {
+    expect(labels(assetMenuEntries({ kind: 'character', name: 'ミナ', where: 'tree' }))).toEqual([
+      '素材ビューアで見る',
+      'インスペクターで直す',
+      'キャラクターを削除',
+    ])
+  })
+
+  it('インスペクターの「…」では、直す（いま開いている）は出さない', () => {
+    expect(labels(assetMenuEntries({ kind: 'location', name: '体育館', where: 'inspector' }))).toEqual([
+      '素材ビューアで見る',
+      'ロケーションを削除',
+    ])
+  })
+
+  it('削除は確認を挟み、何が起きるかを言う（インスペクターと同じ文）', () => {
+    expect(find(assetMenuEntries({ kind: 'character', name: 'ミナ', where: 'tree' }), 'delete')?.confirm).toBe(
+      'ミナ を削除します。この人が出ている Shot からも外れます。',
+    )
+    expect(
+      find(assetMenuEntries({ kind: 'track', name: 'ぼくははると', where: 'tree', isMaster: true }), 'delete')?.confirm,
+    ).toMatch(/マスターの「ぼくははると」を削除します/)
+  })
+
+  it('Look は既定にでき、すでに既定なら押せない理由を言う', () => {
+    const plain = assetMenuEntries({ kind: 'look', name: '仕事帰り', where: 'tree', isDefaultLook: false })
+    const already = assetMenuEntries({ kind: 'look', name: 'バリスタ', where: 'tree', isDefaultLook: true })
+
+    expect(find(plain, 'set-default-look')?.disabledReason).toBeNull()
+    expect(find(already, 'set-default-look')?.disabledReason).toBe('もう既定の Look です')
+  })
+
+  it('楽曲はマスターにでき、再解析もできる', () => {
+    const entries = assetMenuEntries({ kind: 'track', name: '曲', where: 'tree', isMaster: true })
+
+    expect(find(entries, 'set-master')?.disabledReason).toBe('もうマスターの楽曲です')
+    expect(find(entries, 'reanalyze')).toBeDefined()
+  })
+
+  it('作品の方針は直すだけ（消せない・素材ビューアには出ない）', () => {
+    expect(labels(assetMenuEntries({ kind: 'project', name: '作品の方針', where: 'tree' }))).toEqual([
+      'インスペクターで直す',
+    ])
+  })
+})
+

@@ -2,7 +2,11 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { AssetTree } from '@/components/workbench/asset-tree'
+import { Location } from '@ixa/domain'
+import { locationJson } from './fixtures'
 import { assetStoreValue, renderInWorkbench } from './workbench-fixture'
+
+const aLocation = Location.parse({ ...locationJson, createdAt: new Date(), updatedAt: new Date() })
 
 /**
  * 素材ツリー（UI-WORKBENCH-2 §4.1）。実物が並び、＋ でその場に作れて、作った物を選ぶ。
@@ -43,4 +47,17 @@ describe('AssetTree', () => {
     expect(header).toHaveTextContent('…')
     expect(header).not.toHaveTextContent('(0)')
   })
+
+  /** 素材の上で右クリック（長押し）すると、その素材のメニュー（2026-09-30）。 */
+  it('行を右クリックすると、その素材のメニューが開く', async () => {
+    renderInWorkbench(<AssetTree />, {}, {
+      locations: { state: 'ready', value: [{ ...aLocation, name: '体育館' }] },
+    })
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /体育館/ }))
+
+    expect(await screen.findByRole('menu', { name: '体育館 の操作' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'ロケーションを削除' })).toBeInTheDocument()
+  })
 })
+

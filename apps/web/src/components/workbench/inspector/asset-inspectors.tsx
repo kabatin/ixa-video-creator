@@ -12,7 +12,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { readyOr, useAssets } from '@/components/workbench/asset-store'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { AutoSaveCheckbox, AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
-import { MoreMenu } from '@/components/workbench/ui/more-menu'
+import { MenuButton } from '@/components/workbench/ui/more-menu'
+import { useAssetMenu } from '@/components/workbench/use-asset-menu'
 import { ObjectHeader } from '@/components/workbench/ui/object-header'
 import { Section } from '@/components/workbench/ui/section'
 import { useWorkbench } from '@/components/workbench/workbench-context'
@@ -62,6 +63,7 @@ const Missing = ({ what }: { readonly what: string }) => (
 // --- キャラクター ---
 
 export const CharacterInspector = ({ id }: { readonly id: CharacterId }) => {
+  const assetMenu = useAssetMenu()
   const workbench = useWorkbench()
   const { characters, looks, actions } = useAssets()
   const character = readyOr(characters).find((item) => item.id === id)
@@ -76,18 +78,9 @@ export const CharacterInspector = ({ id }: { readonly id: CharacterId }) => {
           kind="キャラクター"
           title={character.displayName}
           menu={
-            <MoreMenu
+            <MenuButton
               label={`${character.displayName} のその他の操作`}
-              items={[
-                {
-                  label: 'キャラクターを削除',
-                  confirm: `${character.displayName} を削除します。この人が出ている Shot からも外れます。`,
-                  run: async () => {
-                    await actions.deleteCharacter(id)
-                    workbench.inspect(null)
-                  },
-                },
-              ]}
+              items={assetMenu.itemsFor({ kind: 'character', id }, 'inspector') ?? []}
             />
           }
         />
@@ -152,7 +145,7 @@ export const LookInspector = ({
   readonly id: CharacterLookId
   readonly characterId: CharacterId
 }) => {
-  const workbench = useWorkbench()
+  const assetMenu = useAssetMenu()
   const { looks, actions } = useAssets()
   const look = (looks.get(characterId) ?? []).find((item) => item.id === id)
   if (look === undefined) return <Missing what="Look" />
@@ -167,18 +160,9 @@ export const LookInspector = ({
           title={look.name}
           meta={look.key}
           menu={
-            <MoreMenu
+            <MenuButton
               label={`${look.name} のその他の操作`}
-              items={[
-                {
-                  label: 'Look を削除',
-                  confirm: `Look「${look.name}」を削除します。この Look で出ている Shot は、登場人物の Look を選び直す必要があります。`,
-                  run: async () => {
-                    await actions.deleteLook(look)
-                    workbench.inspect(null)
-                  },
-                },
-              ]}
+              items={assetMenu.itemsFor({ kind: 'look', id, characterId }, 'inspector') ?? []}
             />
           }
         />
@@ -222,7 +206,7 @@ export const LookInspector = ({
 // --- ロケーション ---
 
 export const LocationInspector = ({ id }: { readonly id: LocationId }) => {
-  const workbench = useWorkbench()
+  const assetMenu = useAssetMenu()
   const { locations, actions } = useAssets()
   const location = readyOr(locations).find((item) => item.id === id)
   if (location === undefined) return <Missing what="ロケーション" />
@@ -234,18 +218,9 @@ export const LocationInspector = ({ id }: { readonly id: LocationId }) => {
           title={location.name}
           meta={`参照 ${String(location.referenceAssetIds.length)} 枚`}
           menu={
-            <MoreMenu
+            <MenuButton
               label={`${location.name} のその他の操作`}
-              items={[
-                {
-                  label: 'ロケーションを削除',
-                  confirm: `ロケーション「${location.name}」を削除します。これを使っている Shot は「なし」になります。`,
-                  run: async () => {
-                    await actions.deleteLocation(id)
-                    workbench.inspect(null)
-                  },
-                },
-              ]}
+              items={assetMenu.itemsFor({ kind: 'location', id }, 'inspector') ?? []}
             />
           }
         />
@@ -289,7 +264,7 @@ const CATEGORY_LABELS: Readonly<Record<BrandCategory, string>> = {
 }
 
 export const BrandAssetInspector = ({ id }: { readonly id: BrandAssetId }) => {
-  const workbench = useWorkbench()
+  const assetMenu = useAssetMenu()
   const { brandAssets, actions } = useAssets()
   const asset = readyOr(brandAssets).find((item) => item.id === id)
   if (asset === undefined) return <Missing what="ブランド資産" />
@@ -303,18 +278,9 @@ export const BrandAssetInspector = ({ id }: { readonly id: BrandAssetId }) => {
           kind="ブランド資産"
           title={asset.name}
           menu={
-            <MoreMenu
+            <MenuButton
               label={`${asset.name} のその他の操作`}
-              items={[
-                {
-                  label: 'ブランド資産を削除',
-                  confirm: `「${asset.name}」を削除します。レビューはこの資産で照合しなくなります。`,
-                  run: async () => {
-                    await actions.deleteBrandAsset(id)
-                    workbench.inspect(null)
-                  },
-                },
-              ]}
+              items={assetMenu.itemsFor({ kind: 'brand-asset', id }, 'inspector') ?? []}
             />
           }
         />
@@ -362,7 +328,7 @@ export const BrandAssetInspector = ({ id }: { readonly id: BrandAssetId }) => {
 // --- 楽曲 ---
 
 export const TrackInspector = ({ id }: { readonly id: MusicTrackId }) => {
-  const workbench = useWorkbench()
+  const assetMenu = useAssetMenu()
   const { tracks, actions } = useAssets()
   const track = readyOr(tracks).find((item) => item.id === id)
   const api = useMemo(() => createApiClient(), [])
@@ -409,20 +375,9 @@ export const TrackInspector = ({ id }: { readonly id: MusicTrackId }) => {
           title={track.title}
           badge={track.isMaster ? <span className="text-xs text-accent">マスター</span> : undefined}
           menu={
-            <MoreMenu
+            <MenuButton
               label={`${track.title} のその他の操作`}
-              items={[
-                {
-                  label: '楽曲を削除',
-                  confirm: track.isMaster
-                    ? `マスターの「${track.title}」を削除します。残りの楽曲で最初に登録した曲がマスターになり、拍・尺の基準が変わります。`
-                    : `「${track.title}」を削除します。`,
-                  run: async () => {
-                    await actions.deleteTrack(id)
-                    workbench.inspect(null)
-                  },
-                },
-              ]}
+              items={assetMenu.itemsFor({ kind: 'track', id }, 'inspector') ?? []}
             />
           }
         />

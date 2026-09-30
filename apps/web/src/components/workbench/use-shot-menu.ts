@@ -16,7 +16,7 @@ import { shotMenuEntries, type ContextMenuEntry, type ShotMenuAction } from '@/l
 /** 中身（データ）に実行を結び付ける。アクションの無い行は作らない。 */
 export const toMenuItems = <A extends string>(
   entries: readonly ContextMenuEntry<A>[],
-  run: Readonly<Record<A, () => void>>,
+  run: Readonly<Record<A, () => void | Promise<void>>>,
 ): readonly ContextMenuItem[] =>
   entries.map((entry) =>
     entry.kind === 'separator'
@@ -28,6 +28,7 @@ export const toMenuItems = <A extends string>(
           disabledReason: entry.disabledReason,
           run: run[entry.action],
           ...(entry.shortcut === undefined ? {} : { shortcut: entry.shortcut }),
+          ...(entry.confirm === undefined ? {} : { confirm: entry.confirm }),
         },
   )
 

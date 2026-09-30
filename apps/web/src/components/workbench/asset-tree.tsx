@@ -9,6 +9,8 @@ import { describeForPerson } from '@/lib/api-error'
 import { ASSET_DRAG_TYPE, encodeAssetDrag, type AssetDragPayload } from '@/lib/asset-actions'
 import { matchesAssetQuery } from '@/lib/asset-tree'
 import { sameSelection, type Inspected } from '@/lib/workbench-selection'
+import { useAssetMenu, type AssetTarget } from '@/components/workbench/use-asset-menu'
+import { useContextMenuTrigger, type ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
 
 const ITEM =
   'flex h-6 w-full min-w-0 items-center gap-1.5 rounded px-1 text-left text-sm text-text ' +
@@ -31,7 +33,12 @@ export const AssetTree = () => {
   const show = (...labels: readonly string[]): boolean =>
     labels.some((label) => matchesAssetQuery(label, query))
 
-  const projectSelection: Inspected = { kind: 'project', id: workbench.projectId }
+  // 素材の右クリック（長押し・Shift+F10）のメニュー（2026-09-30）。
+  const assetMenu = useAssetMenu()
+  const assetMenuTrigger = useContextMenuTrigger<AssetTarget>((target, at, origin) => {
+    assetMenu.open(target, at, origin)
+  })
+  const projectSelection: AssetTarget = { kind: 'project', id: workbench.projectId }
   const inspectProject = (): void => {
     workbench.inspect(projectSelection)
     workbench.focusPanel('inspector')
@@ -43,8 +50,9 @@ export const AssetTree = () => {
     workbench.inspect(selection)
     workbench.openViewer()
   }
-  const rowProps = (selection: Inspected, drag?: AssetDragPayload) => ({
+  const rowProps = (selection: AssetTarget, drag?: AssetDragPayload) => ({
     selected: sameSelection(workbench.inspected, selection),
+    contextMenu: assetMenuTrigger(selection),
     onSelect: () => {
       select(selection)
     },
@@ -75,6 +83,7 @@ export const AssetTree = () => {
           selected={sameSelection(workbench.inspected, projectSelection)}
           onSelect={inspectProject}
           onOpen={inspectProject}
+          contextMenu={assetMenuTrigger(projectSelection)}
         />
         <Group
           label="楽曲"
@@ -401,6 +410,7 @@ const Row = ({
   onSelect,
   onOpen,
   drag,
+  contextMenu,
 }: {
   readonly icon: ReactNode
   readonly label: string
@@ -410,10 +420,13 @@ const Row = ({
   readonly onOpen: () => void
   /** ドラッグで Shot に割り当てられる素材なら、その中身。 */
   readonly drag?: AssetDragPayload
+  /** 右クリック・長押し・Shift+F10 でその素材のメニューを開く口。 */
+  readonly contextMenu?: ContextMenuTriggerProps
 }) => (
   <button
     type="button"
     aria-current={selected ? 'true' : undefined}
+    {...contextMenu}
     draggable={drag !== undefined}
     onDragStart={(event: DragEvent<HTMLButtonElement>) => {
       if (drag === undefined) return
@@ -423,6 +436,9 @@ const Row = ({
     onClick={onSelect}
     onDoubleClick={onOpen}
     onKeyDown={(event) => {
+      // Shift+F10・メニューキーはメニューへ（それ以外はこれまでどおり）。
+      contextMenu?.onKeyDown(event)
+      if (event.defaultPrevented) return
       if (event.key !== 'Enter') return
       event.preventDefault()
       onOpen()

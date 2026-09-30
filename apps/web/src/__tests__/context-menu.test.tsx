@@ -140,4 +140,47 @@ describe('ContextMenu', () => {
 
     expect(screen.queryByRole('menu')).toBeNull()
   })
+
+  /** 取り消せない操作は、押したあとに確認を挟む（インスペクターの「…」と同じ）。 */
+  describe('確認が要る項目', () => {
+    const openWithConfirm = async (run: () => Promise<void>) => {
+      const items: ContextMenuItem[] = [
+        { kind: 'item', id: 'd', label: 'キャラクターを削除', disabledReason: null, confirm: 'ミナを削除します。', run },
+      ]
+      render(
+        <ContextMenuHost>
+          <Opener items={items} />
+        </ContextMenuHost>,
+      )
+      await openMenu()
+      await userEvent.click(screen.getByRole('menuitem', { name: 'キャラクターを削除' }))
+    }
+
+    it('押すと確認を出し、「やめる」なら実行しない', async () => {
+      const run = vi.fn(() => Promise.resolve())
+      await openWithConfirm(run)
+
+      expect(screen.getByText('ミナを削除します。')).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'やめる' }))
+      expect(run).not.toHaveBeenCalled()
+    })
+
+    it('確かめて押すと実行する', async () => {
+      const run = vi.fn(() => Promise.resolve())
+      await openWithConfirm(run)
+
+      await userEvent.click(screen.getByRole('button', { name: 'キャラクターを削除' }))
+
+      expect(run).toHaveBeenCalledTimes(1)
+    })
+
+    it('失敗したら理由を出して閉じない', async () => {
+      await openWithConfirm(() => Promise.reject(new Error('使われています')))
+
+      await userEvent.click(screen.getByRole('button', { name: 'キャラクターを削除' }))
+
+      expect((await screen.findByRole('alert')).textContent).toContain('使われています')
+    })
+  })
 })
+

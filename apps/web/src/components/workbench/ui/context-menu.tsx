@@ -13,6 +13,9 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { placeContextMenu } from '@/lib/context-menus'
+import { Button } from '@/components/ui/button'
+import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
+import { describeForPerson } from '@/lib/api-error'
 
 /** メニューの 1 行。実行は `run`（右クリックした物に結び付けて作る）。 */
 export type ContextMenuItem =
@@ -23,7 +26,9 @@ export type ContextMenuItem =
       readonly shortcut?: string
       /** 押せない理由。押せるなら null。 */
       readonly disabledReason: string | null
-      readonly run: () => void
+      /** 取り消せない操作。確認の文を渡すと、押したあとに確認を挟む（`window.confirm` を使わない）。 */
+      readonly confirm?: string
+      readonly run: () => void | Promise<void>
     }
   | { readonly kind: 'separator' }
 
@@ -57,9 +62,12 @@ const actionableIndexes = (items: readonly ContextMenuItem[]): readonly number[]
 const ContextMenu = ({
   request,
   onClose,
+  onChoose,
 }: {
   readonly request: ContextMenuRequest
   readonly onClose: () => void
+  /** 選ばれた項目（確認が要れば置き場が確認を挟む）。 */
+  readonly onChoose: (item: Enabled) => void
 }) => {
   const menuRef = useRef<HTMLDivElement>(null)
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
@@ -105,7 +113,7 @@ const ContextMenu = ({
   const activate = (item: Enabled): void => {
     if (item.disabledReason !== null) return
     close()
-    item.run()
+    onChoose(item)
   }
 
   const move = (from: number, step: 1 | -1): void => {
@@ -191,9 +199,11 @@ const ContextMenu = ({
               onKeyDown(event, index, item)
             }}
             className={`flex w-full items-start gap-6 px-3 py-1 text-left ${
-              item.disabledReason === null
-                ? 'text-text hover:bg-surface-2'
-                : 'cursor-default text-muted'
+              item.disabledReason !== null
+                ? 'cursor-default text-muted'
+                : item.confirm === undefined
+                  ? 'text-text hover:bg-surface-2'
+                  : 'text-danger hover:bg-surface-2'
             } focus:bg-surface-2 focus:outline-none`}
           >
             <span className="flex-1">
@@ -219,6 +229,10 @@ const ContextMenu = ({
  */
 export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) => {
   const [request, setRequest] = useState<ContextMenuRequest | null>(null)
+  /** 確認を待っている項目（失敗したときは理由を出すためにも使う）。 */
+  const [pending, setPending] = useState<Enabled | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const host = useMemo<Host>(() => ({ open: setRequest }), [])
   const close = useMemo(
     () => () => {
@@ -226,6 +240,32 @@ export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) 
     },
     [],
   )
+
+  const run = async (item: Enabled): Promise<void> => {
+    setBusy(true)
+    setError(null)
+    try {
+      await item.run()
+      setPending(null)
+    } catch (cause) {
+      // 握り潰さない。確認の中なら確認の中に、そうでなければ同じ殻で理由を出す。
+      setPending(item)
+      setError(describeForPerson(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const choose = (item: Enabled): void => {
+    if (item.confirm === undefined) void run(item)
+    else setPending(item)
+  }
+
+  const dismiss = (): void => {
+    setPending(null)
+    setError(null)
+  }
+
   return (
     <ContextMenuContext.Provider value={host}>
       {children}
@@ -234,8 +274,34 @@ export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) 
           key={`${String(request.at.x)}:${String(request.at.y)}:${request.label}`}
           request={request}
           onClose={close}
+          onChoose={choose}
         />
       )}
+      <WorkbenchDialog open={pending !== null} title={pending?.label ?? ''} size="medium" onClose={dismiss}>
+        {pending?.confirm !== undefined && <p className="text-sm text-text">{pending.confirm}</p>}
+        {error !== null && (
+          <p role="alert" className="mt-2 text-sm text-danger">
+            {error}
+          </p>
+        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <Button size="sm" onClick={dismiss}>
+            {pending?.confirm === undefined ? '閉じる' : 'やめる'}
+          </Button>
+          {pending?.confirm !== undefined && (
+            <Button
+              size="sm"
+              tone="danger"
+              disabled={busy}
+              onClick={() => {
+                void run(pending)
+              }}
+            >
+              {busy ? '実行中…' : pending.label}
+            </Button>
+          )}
+        </div>
+      </WorkbenchDialog>
     </ContextMenuContext.Provider>
   )
 }
