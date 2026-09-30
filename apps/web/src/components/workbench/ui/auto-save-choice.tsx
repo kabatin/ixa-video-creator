@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { describeForPerson } from '@/lib/api-error'
 import { FieldRow, INPUT_CLASS } from '@/components/workbench/ui/section'
 
@@ -136,7 +136,8 @@ export const AutoSaveColor = ({
   useEffect(() => {
     setDraft(value.toLowerCase())
   }, [value])
-  useEffect(() => {
+  // 描いたその場で付ける（`useEffect` だと DOM に入ってから付くまでに隙間があり、そこで確定した色を落としていた）。
+  useLayoutEffect(() => {
     const element = input.current
     if (element === null) return undefined
     const commit = (): void => {
