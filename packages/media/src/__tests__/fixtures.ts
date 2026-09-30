@@ -50,6 +50,28 @@ export const makeTestVideo = async (outputPath: string, spec: FixtureSpec): Prom
   return outputPath
 }
 
+/**
+ * 1 枚だけの静止画。形式は拡張子で決まる（.jpg は image2 + mjpeg、.png は png_pipe + png）。
+ * JPEG は ffprobe 上「25fps で 1 フレーム（0.04 秒）」の素材に見える。
+ */
+export const makeTestStill = async (
+  outputPath: string,
+  size: { width: number; height: number },
+): Promise<string> => {
+  await runFfmpeg([
+    '-y',
+    '-f',
+    'lavfi',
+    '-i',
+    `testsrc=size=${size.width}x${size.height}:rate=1`,
+    '-frames:v',
+    '1',
+    outputPath,
+  ])
+
+  return outputPath
+}
+
 export const makeTestAudio = async (outputPath: string, durationSec: number): Promise<string> => {
   await runFfmpeg([
     '-y',

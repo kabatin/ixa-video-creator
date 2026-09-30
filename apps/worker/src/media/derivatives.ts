@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { MediaKind, MediaProbe } from '@ixa/domain'
 import { createProxy, createThumbnail, extractPosterFrames, type RunOptions,
-  extractLastFrame,
+  extractLastFrame, thumbnailPositionSec,
 } from '@ixa/media'
 
 /**
@@ -17,9 +17,6 @@ export const PROXY_FILE_NAME = 'proxy.mp4'
 export const THUMBNAIL_FILE_NAME = 'thumb.jpg'
 export const LAST_FRAME_FILE_NAME = 'last-frame.jpg'
 const POSTER_DIR_NAME = 'posters'
-
-/** サムネイルを切り出す位置。冒頭は黒フレームやフェードインになりがちなので尺の 10% を採る。 */
-const THUMBNAIL_POSITION_RATIO = 0.1
 
 /** 一時ディレクトリ内に作られた生成物のパス。作らなかったものは null / 空配列。 */
 export type LocalDerivatives = {
@@ -46,10 +43,6 @@ export type BuildDerivativesInput = {
   readonly posterCount: number
   readonly runOptions: RunOptions
 }
-
-/** 尺が取れない素材（静止画など）では 0 秒を使う。 */
-const thumbnailPositionSec = (probe: MediaProbe): number =>
-  probe.durationSec === null ? 0 : probe.durationSec * THUMBNAIL_POSITION_RATIO
 
 /** ポスターフレームは尺が分かっている動画にしか引けない。 */
 const canExtractPosters = (probe: MediaProbe): probe is MediaProbe & { durationSec: number } =>
@@ -97,6 +90,7 @@ export const buildDerivatives = async (
         join(outDir, POSTER_DIR_NAME),
         posterCount,
         probe.durationSec,
+        probe.fps,
         runOptions,
       )
     : []
@@ -110,7 +104,7 @@ export const buildDerivatives = async (
     durationSec !== null && durationSec > 0
       ? await (async (): Promise<string> => {
           const path = join(outDir, LAST_FRAME_FILE_NAME)
-          await extractLastFrame(sourcePath, path, durationSec, runOptions)
+          await extractLastFrame(sourcePath, path, durationSec, probe.fps, runOptions)
           return path
         })()
       : null

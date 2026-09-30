@@ -10,8 +10,12 @@ const SMALL_SIZE = '320x240'
 const FPS = 10
 
 /** 音声付きの短い動画。プロキシ・サムネ・ポスターの全経路を通すために使う。 */
-export const makeTestVideo = async (dir: string, durationSec = 1.5): Promise<string> => {
-  const outputPath = join(dir, 'source.mp4')
+export const makeTestVideo = async (
+  dir: string,
+  durationSec = 1.5,
+  fileName = 'source.mp4',
+): Promise<string> => {
+  const outputPath = join(dir, fileName)
   await runFfmpeg([
     '-y',
     '-f', 'lavfi',
@@ -29,9 +33,12 @@ export const makeTestVideo = async (dir: string, durationSec = 1.5): Promise<str
   return outputPath
 }
 
-/** 静止画。サムネイルだけが作られることの確認に使う。 */
-export const makeTestImage = async (dir: string): Promise<string> => {
-  const outputPath = join(dir, 'source.png')
+/**
+ * 静止画。サムネイルだけが作られることの確認に使う。
+ * 形式は拡張子で決まる。JPEG は image2 デマルチプレクサで読まれ、PNG とは ffmpeg の扱いが違う。
+ */
+export const makeTestImage = async (dir: string, ext: 'png' | 'jpg' = 'png'): Promise<string> => {
+  const outputPath = join(dir, `source.${ext}`)
   await runFfmpeg([
     '-y',
     '-f', 'lavfi',

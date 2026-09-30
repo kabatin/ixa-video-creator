@@ -19,12 +19,17 @@ const FFMPEG_TIMEOUT_MS = 120_000
 let fixtureDir: string
 let videoBytes: Uint8Array
 let imageBytes: Uint8Array
+let jpegBytes: Uint8Array
+/** 10fps・0.1 秒＝ 1 フレームだけの動画。 */
+let oneFrameVideoBytes: Uint8Array
 let audioBytes: Uint8Array
 
 beforeAll(async () => {
   fixtureDir = await mkdtemp(join(tmpdir(), 'ixa-media-fixture-'))
   videoBytes = await readBytes(await makeTestVideo(fixtureDir))
   imageBytes = await readBytes(await makeTestImage(fixtureDir))
+  jpegBytes = await readBytes(await makeTestImage(fixtureDir, 'jpg'))
+  oneFrameVideoBytes = await readBytes(await makeTestVideo(fixtureDir, 0.1, 'one-frame.mp4'))
   audioBytes = await readBytes(await makeTestAudio(fixtureDir))
 }, FFMPEG_TIMEOUT_MS)
 
@@ -119,6 +124,37 @@ describe('processMediaJob', () => {
     await expect(storage.exists(thumbnailKey(asset.workspaceId, asset.id))).resolves.toBe(true)
     await expect(storage.exists(proxyKey(asset.workspaceId, asset.id))).resolves.toBe(false)
     await expect(storage.exists(posterKey(asset.workspaceId, asset.id, 0))).resolves.toBe(false)
+  }, FFMPEG_TIMEOUT_MS)
+
+  it('JPEG の image でもサムネイルを作る（入力側の -ss で 1 枚も出ず ENOENT になっていた）', async () => {
+    const asset = await seedAsset(repo, storage, {
+      kind: 'image',
+      ext: 'jpg',
+      mimeType: 'image/jpeg',
+      body: jpegBytes,
+    })
+
+    processed(await processMediaJob(deps(), { mediaAssetId: asset.id }))
+
+    expect(repo.snapshot()[0]?.thumbnailKey).toBe(thumbnailKey(asset.workspaceId, asset.id))
+    await expect(storage.exists(thumbnailKey(asset.workspaceId, asset.id))).resolves.toBe(true)
+  }, FFMPEG_TIMEOUT_MS)
+
+  it('1 フレームしかない video でもサムネイル・ポスター・最終フレームを作る', async () => {
+    const asset = await seedAsset(repo, storage, {
+      kind: 'video',
+      ext: 'mp4',
+      mimeType: 'video/mp4',
+      body: oneFrameVideoBytes,
+    })
+
+    const outcome = processed(await processMediaJob(deps(), { mediaAssetId: asset.id }))
+    expect(outcome.posterCount).toBe(DEFAULT_POSTER_COUNT)
+
+    const source = repo.snapshot().find((a) => a.id === asset.id)
+    expect(source?.thumbnailKey).toBe(thumbnailKey(asset.workspaceId, asset.id))
+    expect(source?.lastFrameAssetId).not.toBeNull()
+    await expect(storage.exists(thumbnailKey(asset.workspaceId, asset.id))).resolves.toBe(true)
   }, FFMPEG_TIMEOUT_MS)
 
   it('audio は probe だけを入れ、画像系の生成物を一切作らない', async () => {
