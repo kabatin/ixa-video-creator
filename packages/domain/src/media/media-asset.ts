@@ -6,7 +6,13 @@ export const MediaKind = z.enum(['image', 'video', 'audio', 'font', 'lut', 'othe
 export type MediaKind = z.infer<typeof MediaKind>
 
 export const MediaProbe = z.object({
+  /** コンテナの尺。音声が映像より長ければ音声の尺になる。タイムラインや Take の尺はこれを使う。 */
   durationSec: Seconds.nullable(),
+  /**
+   * 映像ストリームだけの尺。フレームを切り出す位置の基準にする（durationSec だと映像の外を指しうる）。
+   * 取れない素材では null。これを持つ前に保存された probe には無いので省略できる。
+   */
+  videoDurationSec: Seconds.nullable().optional(),
   width: z.number().int().positive().nullable(),
   height: z.number().int().positive().nullable(),
   fps: z.number().positive().nullable(),

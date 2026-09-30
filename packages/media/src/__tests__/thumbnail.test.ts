@@ -91,7 +91,7 @@ describe('createThumbnail / extractPosterFrames（実 ffmpeg）', () => {
     '指定枚数のポスターフレームを 3 桁ゼロ埋めで生成する',
     async () => {
       const outputDir = join(tempDir, 'posters')
-      const paths = await extractPosterFrames(sourcePath, outputDir, 3, SOURCE_DURATION_SEC)
+      const paths = await extractPosterFrames(sourcePath, outputDir, 3, SOURCE_DURATION_SEC, 30)
 
       expect(paths).toHaveLength(3)
       expect(paths).toEqual([

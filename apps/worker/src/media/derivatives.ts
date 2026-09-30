@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { MediaKind, MediaProbe } from '@ixa/domain'
 import { createProxy, createThumbnail, extractPosterFrames, type RunOptions,
-  extractLastFrame,
+  extractLastFrame, seekableDurationSec, thumbnailPositionSec,
 } from '@ixa/media'
 
 /**
@@ -17,9 +17,6 @@ export const PROXY_FILE_NAME = 'proxy.mp4'
 export const THUMBNAIL_FILE_NAME = 'thumb.jpg'
 export const LAST_FRAME_FILE_NAME = 'last-frame.jpg'
 const POSTER_DIR_NAME = 'posters'
-
-/** サムネイルを切り出す位置。冒頭は黒フレームやフェードインになりがちなので尺の 10% を採る。 */
-const THUMBNAIL_POSITION_RATIO = 0.1
 
 /** 一時ディレクトリ内に作られた生成物のパス。作らなかったものは null / 空配列。 */
 export type LocalDerivatives = {
@@ -47,13 +44,9 @@ export type BuildDerivativesInput = {
   readonly runOptions: RunOptions
 }
 
-/** 尺が取れない素材（静止画など）では 0 秒を使う。 */
-const thumbnailPositionSec = (probe: MediaProbe): number =>
-  probe.durationSec === null ? 0 : probe.durationSec * THUMBNAIL_POSITION_RATIO
-
-/** ポスターフレームは尺が分かっている動画にしか引けない。 */
-const canExtractPosters = (probe: MediaProbe): probe is MediaProbe & { durationSec: number } =>
-  probe.durationSec !== null && probe.durationSec > 0
+/** ポスターフレームと最終フレームは尺が分かっている動画にしか引けない。 */
+const isKnownDuration = (durationSec: number | null): durationSec is number =>
+  durationSec !== null && durationSec > 0
 
 /**
  * kind ごとに必要な生成物だけを作る。
@@ -91,12 +84,19 @@ export const buildDerivatives = async (
   const proxyPath = join(outDir, PROXY_FILE_NAME)
   await createProxy(sourcePath, proxyPath, undefined, runOptions)
 
-  const posterPaths = canExtractPosters(probe)
+  /**
+   * 切り出す位置は映像ストリームの尺を基準にする。コンテナの尺は音声が映像より長いと
+   * そちらに引っ張られ、映像がもう終わった位置を指してしまう。
+   */
+  const durationSec = seekableDurationSec(probe)
+
+  const posterPaths = isKnownDuration(durationSec)
     ? await extractPosterFrames(
         sourcePath,
         join(outDir, POSTER_DIR_NAME),
         posterCount,
-        probe.durationSec,
+        durationSec,
+        probe.fps,
         runOptions,
       )
     : []
@@ -105,15 +105,13 @@ export const buildDerivatives = async (
    * 最終フレームは連続性の参照に使うため、ポスターフレームとは別に 1 枚切り出す。
    * ポスターは等間隔で末尾を踏まないので、最後の絵はここでしか取れない。
    */
-  const durationSec = probe.durationSec
-  const lastFramePath =
-    durationSec !== null && durationSec > 0
-      ? await (async (): Promise<string> => {
-          const path = join(outDir, LAST_FRAME_FILE_NAME)
-          await extractLastFrame(sourcePath, path, durationSec, runOptions)
-          return path
-        })()
-      : null
+  const lastFramePath = isKnownDuration(durationSec)
+    ? await (async (): Promise<string> => {
+        const path = join(outDir, LAST_FRAME_FILE_NAME)
+        await extractLastFrame(sourcePath, path, durationSec, probe.fps, runOptions)
+        return path
+      })()
+    : null
 
   return { proxyPath, thumbnailPath, posterPaths, lastFramePath }
 }

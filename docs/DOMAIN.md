@@ -150,7 +150,8 @@ type MediaAsset = {
 }
 
 type MediaProbe = {
-  durationSec: Seconds | null
+  durationSec: Seconds | null       // コンテナの尺（音声が長ければ音声の尺）
+  videoDurationSec?: Seconds | null // 映像ストリームだけの尺。フレームを切り出す位置の基準
   width: number | null
   height: number | null
   fps: number | null

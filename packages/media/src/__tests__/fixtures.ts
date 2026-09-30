@@ -50,6 +50,62 @@ export const makeTestVideo = async (outputPath: string, spec: FixtureSpec): Prom
   return outputPath
 }
 
+/**
+ * 音声が映像より長い動画。-shortest を付けないので、コンテナの尺は音声の尺になる。
+ * 映像の尺より後ろには映像のフレームが無い。
+ */
+export const makeTestVideoWithLongerAudio = async (
+  outputPath: string,
+  spec: { fps: number; videoSec: number; audioSec: number },
+): Promise<string> => {
+  await runFfmpeg([
+    '-y',
+    '-f',
+    'lavfi',
+    '-i',
+    `testsrc=size=320x240:rate=${spec.fps}:duration=${spec.videoSec}`,
+    '-f',
+    'lavfi',
+    '-i',
+    `sine=frequency=440:sample_rate=48000:duration=${spec.audioSec}`,
+    '-c:v',
+    'libx264',
+    '-preset',
+    'ultrafast',
+    '-pix_fmt',
+    'yuv420p',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '64k',
+    outputPath,
+  ])
+
+  return outputPath
+}
+
+/**
+ * 1 枚だけの静止画。形式は拡張子で決まる（.jpg は image2 + mjpeg、.png は png_pipe + png）。
+ * JPEG は ffprobe 上「25fps で 1 フレーム（0.04 秒）」の素材に見える。
+ */
+export const makeTestStill = async (
+  outputPath: string,
+  size: { width: number; height: number },
+): Promise<string> => {
+  await runFfmpeg([
+    '-y',
+    '-f',
+    'lavfi',
+    '-i',
+    `testsrc=size=${size.width}x${size.height}:rate=1`,
+    '-frames:v',
+    '1',
+    outputPath,
+  ])
+
+  return outputPath
+}
+
 export const makeTestAudio = async (outputPath: string, durationSec: number): Promise<string> => {
   await runFfmpeg([
     '-y',
