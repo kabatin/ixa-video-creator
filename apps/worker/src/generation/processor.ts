@@ -16,7 +16,7 @@ import {
   type TakeId,
   settledShotStatus,
 } from '@ixa/domain'
-import { ProviderError } from '@ixa/provider-core'
+import { ProviderBusyError, ProviderError } from '@ixa/provider-core'
 import type {
   ProviderJobHandle,
   ProviderJobStatus,
@@ -25,6 +25,11 @@ import type {
 } from '@ixa/provider-core'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
+import {
+  SUBMIT_BUSY_TIMEOUT_MESSAGE,
+  submitBusyDelayMs,
+  submitBusyExpired,
+} from './busy.js'
 import { recordTake, type RecordTakeDeps } from './complete.js'
 import { failureMessageOf, publishJobStatus, publishShotStatus } from './events.js'
 import { parseGenerationJobData, type GenerationJobData } from './job-data.js'
@@ -93,8 +98,21 @@ export type GenerationOutcome =
   | { readonly state: 'skipped'; readonly reason: string }
   | { readonly state: 'submitted'; readonly providerJobRef: string }
   | { readonly state: 'polling'; readonly delayMs: number }
+  /** Provider が満杯で投入を断った。queued のまま投入し直しを予約した（ADR-0030）。 */
+  | { readonly state: 'busy'; readonly delayMs: number }
   | { readonly state: 'succeeded'; readonly takeId: TakeId }
   | { readonly state: 'failed'; readonly code: string }
+
+/**
+ * 頼んだあとで仕様が変わったときの文（画面に出る）。
+ *
+ * Shot 自身の編集だけでなく、**前の Shot の採用 Take が変わっても**仕様は変わる
+ * （連続性の参照＝前の Shot の最後のコマが、採用 Take から決まるため）。
+ * 順番待ちが長い Provider（ADR-0030）では、待っている間に前の Shot で採用し直すと起きる。
+ */
+export const SPEC_DRIFT_MESSAGE =
+  '頼んだあとで、この Shot の内容か、前の Shot の採用 Take（続きの最初のフレームに使う最後のコマ）が変わりました。' +
+  '古い内容のまま作らないよう取りやめたので、もう一度生成してください。'
 
 /** 作業を続けられない状態。GenerationJob.error に落として failed にする。 */
 class JobFailure extends Error {
@@ -170,19 +188,29 @@ const submit = async (
   const { spec, specHash } = await rebuildSpec(deps.context, shot, project, model, job.corrections)
   if (specHash !== job.specHash) {
     // Shot が編集されて仕様が変わっている。古い仕様で課金しないよう止める。
-    throw new JobFailure(
-      'spec_drift',
-      `Shot が変更されたため仕様が一致しません（job=${job.specHash} / now=${specHash}）`,
-      false,
+    // ハッシュは内部の値なので画面の文には入れず、ログにだけ残す。
+    deps.logger.warn(
+      { jobId: job.id, jobSpecHash: job.specHash, currentSpecHash: specHash },
+      '頼んだときと仕様が変わったため投入しません',
     )
+    throw new JobFailure('spec_drift', SPEC_DRIFT_MESSAGE, false)
   }
 
   const provider = deps.registry.providerFor(model.id)
-  const handle = await provider.submit({
-    model,
-    spec,
-    resolveReference: referenceResolver(deps.mediaAssets, deps.storage),
-  })
+  const handle = await provider
+    .submit({
+      model,
+      spec,
+      resolveReference: referenceResolver(deps.mediaAssets, deps.storage),
+      // 投げ直しても同じ生成だと Provider が分かるように（応答が失われた投入の二重生成を防ぐ。ADR-0030）。
+      idempotencyKey: job.id,
+    })
+    // 満杯の断りだけは失敗にしない。ほかの例外はそのまま投げる（下の catch が終端にする）。
+    .catch((error: unknown) => {
+      if (error instanceof ProviderBusyError) return error
+      throw error
+    })
+  if (handle instanceof ProviderBusyError) return waitForProviderSlot(deps, ctx, handle)
 
   await deps.generationJobs.update(job.id, {
     status: 'running',
@@ -202,6 +230,34 @@ const submit = async (
 
   deps.logger.info({ jobId: job.id, ref: handle.ref }, 'Provider へ生成ジョブを投入しました')
   return { state: 'submitted', providerJobRef: handle.ref }
+}
+
+/**
+ * Provider が満杯で断った投入を、**queued のまま**時間を置いて予約し直す（ADR-0030）。
+ *
+ * 何も投入されていないので `running` にもしないし `attempt` も増やさない（`busy.ts`）。
+ * 次の回も系譜と仕様の検査から通るので、待っている間に Shot が編集されれば spec_drift で止まる。
+ * 積んでから `SUBMIT_BUSY_DEADLINE_MS` を過ぎたら終端の失敗にする（やり直せる失敗として記録する）。
+ * 予約し直しに失敗したら（キューに入れられない）、ここから投げて終端の失敗にする。
+ * 何も投入していないので捨てても払ったものは無く、queued のまま取り残すよりよい。
+ */
+const waitForProviderSlot = async (
+  deps: GenerationProcessorDeps,
+  ctx: JobContext,
+  busy: ProviderBusyError,
+): Promise<GenerationOutcome> => {
+  const { job, now } = ctx
+  if (submitBusyExpired(job.queuedAt, now)) {
+    throw new JobFailure('provider_busy_timeout', SUBMIT_BUSY_TIMEOUT_MESSAGE, true)
+  }
+
+  const delayMs = submitBusyDelayMs(busy.retryAfterMs)
+  await deps.scheduler.reschedule(ctx.data, delayMs)
+  deps.logger.info(
+    { jobId: job.id, providerId: busy.providerId, delayMs, queuedAt: job.queuedAt.toISOString() },
+    'Provider が満杯のため、投入を待って予約し直しました',
+  )
+  return { state: 'busy', delayMs }
 }
 
 /** 完了応答から MediaAsset と Take を作り、ジョブを succeeded にする。 */
