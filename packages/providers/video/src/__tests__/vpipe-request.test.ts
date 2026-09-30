@@ -9,11 +9,13 @@ import {
   VPIPE_DURATIONS_SEC,
   VPIPE_MODEL_QUALITIES,
   VPIPE_NATIVE_FRAME_COUNTS,
+  VPIPE_POLL_POLICY,
   VPIPE_PROVIDER_ID,
   vpipeH3TurboDraftModel,
   vpipeH3TurboModel,
   vpipeVideoModels,
 } from '../vpipe/descriptor.js'
+import { createVpipeVideoProvider } from '../vpipe/provider.js'
 import { reasonOf, retryAfterMsFrom, vpipeErrorFor } from '../vpipe/http.js'
 import { decodeVpipeJobRef, encodeVpipeJobRef } from '../vpipe/job-ref.js'
 import {
@@ -131,6 +133,25 @@ describe('capability 宣言', () => {
     expect(caps.audioGeneration).toBe(false)
     expect(caps.seed).toBe(true)
     expect(caps.requiresStartFrame).toBeUndefined()
+  })
+})
+
+/** 手元のサーバなので 30 秒おきに問い合わせる（ADR-0030。既定の最大 2 分おきでは 9〜99 秒遅れた）。 */
+describe('問い合わせの方針', () => {
+  it('30 秒おき・360 回。Provider がそれを持つ', () => {
+    expect(VPIPE_POLL_POLICY).toEqual({ maxIntervalMs: 30_000, maxAttempts: 360 })
+    const provider = createVpipeVideoProvider({ outputDir: '/tmp/ixa-vpipe-unused' })
+    expect(provider.pollPolicy).toEqual(VPIPE_POLL_POLICY)
+  })
+
+  it('360 回で待てる時間が、前の 1 本と自分（各 25 分）を十分に覆う（約 3 時間）', () => {
+    // worker の伸ばし方（5 秒から倍々、上限で頭打ち）と同じ計算。
+    const budgetMs = Array.from({ length: VPIPE_POLL_POLICY.maxAttempts }, (_unused, i) =>
+      Math.min(5_000 * 2 ** i, VPIPE_POLL_POLICY.maxIntervalMs),
+    ).reduce((sum, ms) => sum + ms, 0)
+    const worstCaseMs = 2 * 25 * 60 * 1000
+    expect(budgetMs).toBeGreaterThan(3 * worstCaseMs)
+    expect(budgetMs / 3_600_000).toBeCloseTo(2.98, 1)
   })
 })
 

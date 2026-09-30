@@ -74,6 +74,21 @@ export type VideoGenerationRequest = {
 }
 
 /**
+ * 投入後の問い合わせの間隔と回数（ADR-0030）。**省略は worker の既定**
+ * （5 秒から倍々に伸ばして最大 2 分おき・60 回 ≈ 約 2 時間）。
+ *
+ * 既定は、遠くの有料 API を叩きすぎず、長い生成も待てるように決めてある。
+ * 手元のサーバのように問い合わせが安く、終わりにすぐ気付きたい Provider だけが細かくする。
+ * 間隔を縮めるなら回数を増やし、`maxAttempts` 回で待てる時間が最悪の生成時間を覆うようにすること。
+ */
+export type PollPolicy = {
+  /** 間隔の上限（ミリ秒）。5 秒から倍々に伸ばし、ここで頭打ちにする。 */
+  readonly maxIntervalMs: number
+  /** これを超えたら諦めて failed にする回数。 */
+  readonly maxAttempts: number
+}
+
+/**
  * すべての動画 Provider が実装する interface。
  * HTTP・CLI・ローカルのいずれの形態でもこの形に合わせる（ADR-0004 / 0012 / 0014）。
  * 同期 API しか無い Provider も「即座に完了するジョブ」として包むこと。
@@ -81,6 +96,8 @@ export type VideoGenerationRequest = {
 export interface VideoProvider {
   readonly id: ProviderId
   readonly models: readonly VideoModelDescriptor[]
+  /** 問い合わせの間隔と回数。省略は worker の既定（`PollPolicy`）。 */
+  readonly pollPolicy?: PollPolicy
   submit(request: VideoGenerationRequest): Promise<ProviderJobHandle>
   poll(handle: ProviderJobHandle): Promise<ProviderJobStatus>
   cancel(handle: ProviderJobHandle): Promise<void>

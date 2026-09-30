@@ -33,6 +33,7 @@ import {
 import { recordTake, type RecordTakeDeps } from './complete.js'
 import { failureMessageOf, publishJobStatus, publishShotStatus } from './events.js'
 import { parseGenerationJobData, type GenerationJobData } from './job-data.js'
+import { pollDelayMs, pollPolicyForJob, pollPolicyOf } from './poll-policy.js'
 import { checkLineage, lineageFailureOf, lineageFieldsOf, type LineageCheck } from './lineage.js'
 import { shotStatusAfterFailure } from './shot-status-after-failure.js'
 import { rebuildSpec } from './spec.js'
@@ -45,18 +46,16 @@ import { rebuildSpec } from './spec.js'
  * - 冪等。終了済みのジョブを再実行しても Take を二重に作らない
  */
 
-/** ポーリング間隔の初期値と上限。 */
-export const POLL_BACKOFF_BASE_MS = 5_000
-export const POLL_BACKOFF_MAX_MS = 120_000
-/** これを超えたら諦めて failed にする。既定で約 2 時間分。 */
-export const MAX_POLL_ATTEMPTS = 60
+/** 問い合わせの間隔と回数は `poll-policy.ts`（Provider ごとに変えられる。ADR-0030）。 */
+export {
+  MAX_POLL_ATTEMPTS,
+  POLL_BACKOFF_BASE_MS,
+  POLL_BACKOFF_MAX_MS,
+  pollDelayMs,
+} from './poll-policy.js'
 
 /** 参照画像を Provider に見せるための署名付き URL の有効期限（秒）。 */
 export const REFERENCE_URL_EXPIRES_SEC = 900
-
-/** 指数バックオフ。attempt は 1 始まり。 */
-export const pollDelayMs = (attempt: number): number =>
-  Math.min(POLL_BACKOFF_BASE_MS * 2 ** Math.max(0, attempt - 1), POLL_BACKOFF_MAX_MS)
 
 /** ポーリングの再スケジュール口。BullMQ への依存を配線側に閉じ込める。 */
 export type PollScheduler = {
@@ -226,7 +225,7 @@ const submit = async (
     at: now,
   })
   // 運ぶのは ID だけ。系譜は行に載っているので、入れ直しで失われることがない。
-  await deps.scheduler.reschedule(ctx.data, pollDelayMs(1))
+  await deps.scheduler.reschedule(ctx.data, pollDelayMs(1, pollPolicyOf(provider)))
 
   deps.logger.info({ jobId: job.id, ref: handle.ref }, 'Provider へ生成ジョブを投入しました')
   return { state: 'submitted', providerJobRef: handle.ref }
@@ -373,17 +372,19 @@ const poll = async (
     throw new JobFailure(status.error.code, status.error.message, status.error.retryable)
   }
 
+  // 間隔の上限と諦める回数は Provider の方針に従う（無ければ既定。ADR-0030）。
+  const policy = pollPolicyOf(provider)
   const attempt = job.attempt + 1
-  if (attempt > MAX_POLL_ATTEMPTS) {
+  if (attempt > policy.maxAttempts) {
     throw new JobFailure(
       'poll_timeout',
-      `ポーリングが ${String(MAX_POLL_ATTEMPTS)} 回を超えました`,
+      `ポーリングが ${String(policy.maxAttempts)} 回を超えました`,
       false,
     )
   }
 
   await deps.generationJobs.update(job.id, { attempt })
-  const delayMs = pollDelayMs(attempt)
+  const delayMs = pollDelayMs(attempt, policy)
   // repeatable job は使わない。都度、指数バックオフで入れ直す（ARCHITECTURE.md §20）。
   await deps.scheduler.reschedule(ctx.data, delayMs)
   return { state: 'polling', delayMs }
@@ -560,12 +561,14 @@ const reschedulePollAfterTransient = async (
   if (job.providerJobRef === null) return null
   if (!isRetryableProviderError(error)) return null
 
+  // 普段の問い合わせと同じ方針（間隔の上限・諦める回数）を使う。
+  const policy = pollPolicyForJob(deps.registry, job)
   const attempt = job.attempt + 1
-  if (attempt > MAX_POLL_ATTEMPTS) return null
+  if (attempt > policy.maxAttempts) return null
 
   try {
     await deps.generationJobs.update(job.id, { attempt })
-    const delayMs = pollDelayMs(attempt)
+    const delayMs = pollDelayMs(attempt, policy)
     await deps.scheduler.reschedule({ generationJobId: job.id }, delayMs)
     deps.logger.warn(
       { jobId: job.id, attempt, err: error, at: now.toISOString() },

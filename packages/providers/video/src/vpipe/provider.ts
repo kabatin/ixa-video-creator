@@ -17,6 +17,7 @@ import {
   framesForDuration,
   VPIPE_DEFAULT_BASE_URL,
   VPIPE_MODEL_QUALITIES,
+  VPIPE_POLL_POLICY,
   VPIPE_PROVIDER_ID,
   vpipeVideoModels,
   type VpipeQuality,
@@ -314,7 +315,15 @@ export const createVpipeVideoProvider = (options: VpipeVideoProviderOptions): Vi
     throw vpipeErrorFor(response.status, response.body, '取消')
   }
 
-  return { id: VPIPE_PROVIDER_ID, models: vpipeVideoModels, submit, poll, cancel }
+  return {
+    id: VPIPE_PROVIDER_ID,
+    models: vpipeVideoModels,
+    // 手元のサーバなので細かく問い合わせる（30 秒おき・約 3 時間。descriptor.ts）。
+    pollPolicy: VPIPE_POLL_POLICY,
+    submit,
+    poll,
+    cancel,
+  }
 }
 
 /**

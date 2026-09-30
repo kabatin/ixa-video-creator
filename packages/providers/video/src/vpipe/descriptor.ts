@@ -1,6 +1,6 @@
 import { ModelId, ProviderId } from '@ixa/domain'
 import type { AspectRatio, Resolution } from '@ixa/domain'
-import { ProviderError, type VideoModelDescriptor } from '@ixa/provider-core'
+import { ProviderError, type PollPolicy, type VideoModelDescriptor } from '@ixa/provider-core'
 
 /**
  * 手元の生成サーバ vpipe-api（https://github.com/kabatin/vpipe-api）経由の
@@ -190,4 +190,22 @@ export const vpipeVideoModels: readonly VideoModelDescriptor[] = [
 export const VPIPE_MODEL_QUALITIES: Readonly<Record<string, VpipeQuality>> = Object.freeze({
   [VPIPE_H3_TURBO_DRAFT_MODEL_ID]: 'draft',
   [VPIPE_H3_TURBO_MODEL_ID]: 'standard',
+})
+
+/**
+ * 投入後の問い合わせの間隔と回数（ADR-0030）。**30 秒おき・360 回（約 3 時間）。**
+ *
+ * worker の既定（5 秒から倍々で最大 2 分おき）では、実機の E2E でサーバが作り終えてから
+ * ixa が気付くまで 9〜99 秒遅れた。1 本 3〜25 分の生成に最大 2 分の遅れは大きく、
+ * しかも問い合わせ先は手元のサーバなので、細かく聞いても費用も負荷もほとんど無い。
+ *
+ * 回数は、投入後に待ちうる最悪の時間を覆うように取る。受け付けられたジョブの前には
+ * 走っている 1 本しかいない（待ちの枠が既定の 1 のとき）ので、最悪は
+ * 前の 1 本（243 コマの standard で約 25 分）+ 自分（約 25 分）= 約 50 分。
+ * サーバの再起動や、書き出し・Codex とのメモリの取り合いで遅くなる分を見て約 3 時間とし、
+ * 30 秒おきで 360 回（冒頭の 5・10・20 秒を含めて約 179 分）にする。
+ */
+export const VPIPE_POLL_POLICY: PollPolicy = Object.freeze({
+  maxIntervalMs: 30_000,
+  maxAttempts: 360,
 })
