@@ -1,6 +1,6 @@
 'use client'
 
-import type { ShotId, ShotStatus } from '@ixa/domain'
+import type { Shot, ShotId, ShotStatus } from '@ixa/domain'
 import { useMemo, useState } from 'react'
 import {
   BulkActionBar,
@@ -33,6 +33,8 @@ import {
 } from '@/lib/shot-list-view'
 import { useNow } from '@/components/workbench/use-active-generations'
 import { describeActiveGeneration } from '@/lib/generation-progress'
+import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
+import { useShotMenu } from '@/components/workbench/use-shot-menu'
 
 /** 選べるモデル。いまは AUTO だけだが、選択肢の正は `generation-options` に置いたまま。 */
 const MODEL_CHOICES: readonly BulkModelOption[] = MODEL_OPTIONS.flatMap((option) =>
@@ -50,6 +52,16 @@ type ShotFilter = ShotStatus | typeof DRIFT_FILTER | null
 
 export const ShotListPanel = () => {
   const workbench = useWorkbench()
+  // Shot の右クリック（長押し・Shift+F10）のメニュー。一覧ではチェックの付け外しも並べる。
+  const openShotMenu = useShotMenu()
+  const shotMenu = useContextMenuTrigger<Shot>((shot, at, origin) => {
+    openShotMenu(shot, at, origin, {
+      checked: workbench.checked.has(shot.id),
+      toggle: () => {
+        workbench.setChecked(toggleShot(workbench.checked, shot.id))
+      },
+    })
+  })
   // 生成中の様子（どのモデルで・経過・目安）。動いている生成があるあいだだけ毎秒刻む。
   const now = useNow(workbench.activeGenerations.size > 0)
   const activityOf = (shotId: ShotId): string | null => {
@@ -249,6 +261,7 @@ export const ShotListPanel = () => {
           dropHandlers={drop.handlers}
           dropState={drop.stateOf}
           activityOf={activityOf}
+          contextMenu={shotMenu}
         />
       </div>
     </PanelFrame>

@@ -15,6 +15,7 @@ import {
   type ShotBeatAlignmentView,
 } from '@/lib/beat-alignment-view'
 import { storyboardColumns } from '@/lib/storyboard-grid'
+import type { ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
 
 export type StoryboardGridProps = {
   readonly shots: readonly Shot[]
@@ -32,6 +33,8 @@ export type StoryboardGridProps = {
   readonly onMakeTake?: (shotId: ShotId) => void
   /** 生成中の Shot の様子（`作成中 2:31 / 約 4 分`）。分からなければ null（状態の点だけ）。 */
   readonly activityOf?: (shotId: ShotId) => string | null
+  /** 右クリック・長押し・Shift+F10 でその Shot のメニューを開く口。 */
+  readonly contextMenu?: (shot: Shot) => ContextMenuTriggerProps
   /** ロケーションの名前（素材の共有状態から引く）。無ければ出さない。 */
   readonly locationName?: (shot: Shot) => string | null
   /** ツリーの素材をカードへ落として割り当てる口（PHASE 8.5）。 */
@@ -80,6 +83,7 @@ export const StoryboardGrid = ({
   onOpen,
   onMakeTake,
   activityOf,
+  contextMenu,
   locationName,
   dropHandlers,
   dropState,
@@ -108,6 +112,7 @@ export const StoryboardGrid = ({
               <button
                 type="button"
                 aria-pressed={selected}
+                {...contextMenu?.(shot)}
                 onClick={() => {
                   onSelect(shot.id)
                 }}

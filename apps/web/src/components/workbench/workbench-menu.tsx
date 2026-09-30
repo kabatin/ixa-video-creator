@@ -7,13 +7,13 @@ import {
   mergeBlockerOf,
   splitAtPlayhead,
   splitBlockerOf,
+  unselectAdoptedTake,
 } from '@/components/workbench/shot-edit-actions'
 import { undoConfirmMessage, type UndoState } from '@/components/workbench/use-edit-history'
 import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
 import { useSelectedShot, useTransport, useWorkbench } from '@/components/workbench/workbench-context'
 import { VolumeControl } from '@/components/workbench/volume-control'
 import { Button } from '@/components/ui/button'
-import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { buildMenus, type MenuCommand, type MenuItem } from '@/lib/menu-model'
 import {
@@ -108,16 +108,7 @@ export const WorkbenchMenu = ({
 
   const unselectTake = (): void => {
     if (current === null) return
-    createApiClient()
-      .unselectTake(current.id)
-      .then((updated) => {
-        workbench.replaceShots([updated])
-        workbench.refresh()
-        onNotice(`${current.code} の採用を外しました（Take は残っています）。`)
-      })
-      .catch((cause: unknown) => {
-        onNotice(`採用を外せませんでした: ${describeError(cause)}`)
-      })
+    unselectAdoptedTake(workbench, current, onNotice)
   }
 
   const COMMANDS: Readonly<Record<MenuCommand, () => void>> = {

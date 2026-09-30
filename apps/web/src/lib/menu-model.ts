@@ -133,6 +133,11 @@ const item = (
 })
 
 const NO_CURRENT_SHOT = 'Shot を選んでいません'
+
+/** メニューバーと右クリックのメニューで同じ言い方をする（書き写さない）。 */
+export const NO_ADOPTED_TAKE = '採用している Take がありません'
+export const SPLIT_SHORTCUT = '⌘K'
+export const DELETE_SHORTCUT = 'Delete'
 const NO_CHECKED = '一覧で Shot にチェックを付けてください'
 
 export const REDO_DISABLED_REASON = 'やり直しはまだありません'
@@ -256,12 +261,12 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
           disabledReason: state.hasCurrentShot
             ? state.currentHasTake
               ? null
-              : '採用している Take がありません'
+              : NO_ADOPTED_TAKE
             : NO_CURRENT_SHOT,
         }),
         // Take の無い Shot だけ（ADR-0024）。分割は結合で戻せるので確認を挟まない。
         item('split-shot', '再生位置で分割', command('split-shot'), {
-          shortcut: '⌘K',
+          shortcut: SPLIT_SHORTCUT,
           disabledReason: state.splitBlocker,
         }),
         // 先頭以外が消えるので確認を挟む。
@@ -270,7 +275,7 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
         }),
         // チェックがあればチェックした Shot、無ければ選んでいる Shot。何を消すかは項目名で言う。
         item('delete-shot', deleteMenuLabel(state.checkedCount), dialog('delete-shots'), {
-          shortcut: 'Delete',
+          shortcut: DELETE_SHORTCUT,
           disabledReason: state.checkedCount > 0 ? null : noCurrent,
         }),
       ],

@@ -40,3 +40,19 @@ export const splitAtPlayhead = (workbench: SplitPort, current: Shot | null, atSe
       workbench.notify(`${current.code} を分割できませんでした: ${describeError(cause)}`)
     })
 }
+
+type UnselectPort = Pick<WorkbenchContextValue, 'replaceShots' | 'refresh'>
+
+/** 採用を外す（Take は残る）。メニューバーと右クリックのメニューの両方がここを通す。結果は `notify` へ。 */
+export const unselectAdoptedTake = (workbench: UnselectPort, shot: Shot, notify: (message: string) => void): void => {
+  createApiClient()
+    .unselectTake(shot.id)
+    .then((updated) => {
+      workbench.replaceShots([updated])
+      workbench.refresh()
+      notify(`${shot.code} の採用を外しました（Take は残っています）。`)
+    })
+    .catch((cause: unknown) => {
+      notify(`採用を外せませんでした: ${describeError(cause)}`)
+    })
+}

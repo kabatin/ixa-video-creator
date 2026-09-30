@@ -1,3 +1,4 @@
+import { aWorkbenchShot } from './workbench-fixture'
 import type { Shot, ShotId } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import {
@@ -38,6 +39,19 @@ describe('resolveDeleteTargets', () => {
 
   it('どちらも無ければ空', () => {
     expect(resolveDeleteTargets(SHOTS, new Set(), null)).toEqual([])
+  })
+})
+
+
+/** 右クリックのメニューの「削除…」は、右クリックした Shot だけ（チェックとは混ぜない。2026-09-30）。 */
+describe('resolveDeleteTargets（右クリックした Shot）', () => {
+  it('対象を渡されたら、チェックや選択より優先して、それだけを消す', () => {
+    const shots = [aWorkbenchShot(1), aWorkbenchShot(2), aWorkbenchShot(3)]
+    const checked = new Set([shots[0]!.id, shots[1]!.id])
+
+    expect(resolveDeleteTargets(shots, checked, shots[0]!.id, [shots[2]!.id]).map((shot) => shot.id)).toEqual([
+      shots[2]!.id,
+    ])
   })
 })
 

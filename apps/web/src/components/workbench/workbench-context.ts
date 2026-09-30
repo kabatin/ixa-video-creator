@@ -107,7 +107,10 @@ export type WorkbenchContextValue = {
 
   // --- 画面の操作 ---
   readonly dialog: WorkbenchDialog | null
-  readonly openDialog: (dialog: WorkbenchDialog) => void
+  /** `shotIds` は右クリックのメニューから開くときの対象（削除: 右クリックした Shot だけ）。 */
+  readonly openDialog: (dialog: WorkbenchDialog, options?: { readonly shotIds?: readonly ShotId[] }) => void
+  /** ダイアログの対象として渡された Shot。渡されなければ null（チェック・選択から決める）。 */
+  readonly dialogShotIds: readonly ShotId[] | null
   readonly closeDialog: () => void
   readonly focusPanel: (panel: PanelId) => void
   /** インスペクターのどのタブを前に出すか。メニュー「生成」から生成タブを開くのに使う。 */

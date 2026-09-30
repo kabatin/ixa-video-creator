@@ -87,6 +87,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
   const [posterEpoch, setPosterEpoch] = useState(0)
   const [newTakeCount, setNewTakeCount] = useState(0)
   const [dialog, setDialog] = useState<WorkbenchDialog | null>(props.initialDialog)
+  const [dialogShotIds, setDialogShotIds] = useState<readonly ShotId[] | null>(null)
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('settings')
   const [inspectorRequest, setInspectorRequest] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
@@ -292,13 +293,16 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       applyAdoptedShots,
       refresh,
       dialog,
-      openDialog: (next) => {
+      openDialog: (next, options) => {
         // ダイアログを開いている間はプレビューを止める。ぼかしの下で再生すると重い（§12）。
         controls.pause()
+        setDialogShotIds(options?.shotIds ?? null)
         setDialog(next)
       },
+      dialogShotIds,
       closeDialog: () => {
         setDialog(null)
+        setDialogShotIds(null)
       },
       focusPanel: props.focusPanel,
       inspectorTab,
@@ -333,6 +337,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       applyAdoptedShots,
       refresh,
       dialog,
+      dialogShotIds,
       inspectorTab,
       inspectorRequest,
       activeGenerations,

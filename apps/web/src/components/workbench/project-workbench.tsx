@@ -27,6 +27,7 @@ import type { Inspected } from '@/lib/workbench-selection'
 import { AssetStoreProvider } from '@/components/workbench/asset-store'
 import { FileIntake } from '@/components/workbench/file-intake'
 import type { WorkbenchQuery } from '@/lib/workbench-url'
+import { ContextMenuHost } from '@/components/workbench/ui/context-menu'
 
 export type ProjectWorkbenchProps = {
   readonly project: Project
@@ -110,7 +111,10 @@ export const ProjectWorkbench = (props: ProjectWorkbenchProps) => {
         initialInspected={initialInspected}
         focusPanel={focusPanel}
       >
-        <WorkbenchShell dock={dock} wide={wide} query={props.query} />
+        {/* 右クリック（長押し・Shift+F10）のメニューの置き場。開いているのは 1 つだけ。 */}
+        <ContextMenuHost>
+          <WorkbenchShell dock={dock} wide={wide} query={props.query} />
+        </ContextMenuHost>
       </WorkbenchProvider>
     </AssetStoreProvider>
   )

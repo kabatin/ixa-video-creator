@@ -16,6 +16,7 @@ import { shotStatusClassName, shotStatusLabel } from '@/lib/shot-display'
 import type { HeaderCheckboxState, ShotSelection } from '@/lib/shot-bulk'
 import type { ShotSortKey, SortDirection } from '@/lib/shot-list-view'
 import { posterViewFor, type ShotPosterMap } from '@/lib/shot-posters'
+import type { ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
 
 export type ShotListCompactProps = {
   readonly shots: readonly Shot[]
@@ -49,6 +50,8 @@ export type ShotListCompactProps = {
   readonly showBeat: boolean
   /** 生成中の Shot の様子（`作成中 2:31 / 約 4 分`）。分からなければ null（「生成中」だけ出す）。 */
   readonly activityOf?: (shotId: ShotId) => string | null
+  /** 右クリック・長押し・Shift+F10 でその Shot のメニューを開く口。 */
+  readonly contextMenu?: (shot: Shot) => ContextMenuTriggerProps
 }
 
 const CELL = 'px-1.5 align-middle'
@@ -84,6 +87,7 @@ export const ShotListCompact = ({
   alignmentOf,
   showBeat,
   activityOf,
+  contextMenu,
 }: ShotListCompactProps) => {
   const headerRef = useRef<HTMLInputElement>(null)
 
@@ -166,6 +170,7 @@ export const ShotListCompact = ({
             <tr
               key={shot.id}
               aria-selected={selected}
+              {...contextMenu?.(shot)}
               onClick={(event) => {
                 onRowClick(event, shot)
               }}

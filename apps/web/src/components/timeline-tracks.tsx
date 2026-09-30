@@ -34,6 +34,7 @@ import {
   type BeatAlignmentSource,
   type ShotBeatAlignmentView,
 } from '@/lib/beat-alignment-view'
+import type { ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
 
 /**
  * Shot と TimelineClip を時間軸に並べ、**その場で置いて動かせる**帯。
@@ -114,6 +115,8 @@ export type TimelineTracksProps = {
   readonly selectedShotId?: ShotId | null
   /** 帯の Shot を押した。渡さなければ押せない（従来どおり）。 */
   readonly onSelectShot?: (shotId: ShotId) => void
+  /** 右クリック・長押し・Shift+F10 でその Shot のメニューを開く口（「Take 無し」から直接 Take を作れるように）。 */
+  readonly shotContextMenu?: (shot: Shot) => ContextMenuTriggerProps
   /**
    * 楽曲の波形の帯（PHASE 8.4 / UI-WORKBENCH-2 §6 F2）。聴きながら切ると同じ 3 帯域の波形を、
    * **このタイムラインの尺度（px/秒）で**並べる。渡さなければ出さない。
@@ -175,6 +178,7 @@ export const TimelineTracks = ({
   beatAlignment,
   selectedShotId = null,
   onSelectShot,
+  shotContextMenu,
   audioLane,
 }: TimelineTracksProps) => {
   const alignments = beatAlignment === undefined ? null : alignmentByShotId(beatAlignment.views)
@@ -301,9 +305,11 @@ export const TimelineTracks = ({
                 const poster = posters === undefined ? null : posterViewFor(posters, shot.id)
                 const alignment = alignments?.get(shot.id) ?? null
                 const selected = shot.id === selectedShotId
+                const menu = shotContextMenu?.(shot)
                 return (
                   <div
                     key={shot.id}
+                    {...menu}
                     {...(onSelectShot === undefined
                       ? {}
                       : {
@@ -314,6 +320,9 @@ export const TimelineTracks = ({
                             onSelectShot(shot.id)
                           },
                           onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+                            // Shift+F10・メニューキーはメニューへ（それ以外はこれまでどおり）。
+                            menu?.onKeyDown(event)
+                            if (event.defaultPrevented) return
                             if (event.key !== 'Enter' && event.key !== ' ') return
                             event.preventDefault()
                             // 帯の上の Space を再生に流さない（L-018）。
@@ -332,7 +341,7 @@ export const TimelineTracks = ({
                       // 拍の色は ring。選択は outline にして両方を同時に見せる。
                       selected ? 'outline outline-2 outline-offset-1 outline-accent' : ''
                     } ${onSelectShot === undefined ? '' : 'cursor-pointer'}`}
-                    style={{ left: rect.leftPx, width: rect.widthPx, height: LANE_HEIGHT_PX - 16 }}
+                    style={{ ...menu?.style, left: rect.leftPx, width: rect.widthPx, height: LANE_HEIGHT_PX - 16 }}
                   >
                     {poster !== null && (
                       <>

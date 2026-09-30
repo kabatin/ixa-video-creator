@@ -1,6 +1,6 @@
 'use client'
 
-import type { ShotId } from '@ixa/domain'
+import type { Shot, ShotId } from '@ixa/domain'
 import { useEffect, useMemo, useState } from 'react'
 import { StoryboardGrid } from '@/components/workbench/storyboard-grid'
 import { readyOr, useAssets } from '@/components/workbench/asset-store'
@@ -17,6 +17,8 @@ import {
 } from '@/lib/beat-alignment-view'
 import { useNow } from '@/components/workbench/use-active-generations'
 import { describeActiveGeneration } from '@/lib/generation-progress'
+import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
+import { useShotMenu } from '@/components/workbench/use-shot-menu'
 
 /**
  * ストーリーボード（中央上）。カードを最大 3 列で並べる（UI-WORKBENCH §5.3）。
@@ -26,6 +28,11 @@ import { describeActiveGeneration } from '@/lib/generation-progress'
  */
 export const StoryboardPanel = () => {
   const workbench = useWorkbench()
+  // Shot の右クリック（長押し・Shift+F10）のメニュー。
+  const openShotMenu = useShotMenu()
+  const shotMenu = useContextMenuTrigger<Shot>((shot, at, origin) => {
+    openShotMenu(shot, at, origin)
+  })
   // 生成中の様子（どのモデルで・経過・目安）。動いている生成があるあいだだけ毎秒刻む。
   const now = useNow(workbench.activeGenerations.size > 0)
   const activityOf = (shotId: ShotId): string | null => {
@@ -128,6 +135,7 @@ export const StoryboardPanel = () => {
           workbench.openInspector('generate')
         }}
         activityOf={activityOf}
+        contextMenu={shotMenu}
         locationName={(shot) =>
           shot.locationId === null
             ? null

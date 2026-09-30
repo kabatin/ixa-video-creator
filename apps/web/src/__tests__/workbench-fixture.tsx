@@ -11,6 +11,7 @@ import { AssetStoreContext, type AssetStoreValue } from '@/components/workbench/
 import { WorkbenchTransportProvider } from '@/components/workbench/workbench-transport-provider'
 import { EMPTY_SELECTION } from '@/lib/shot-bulk'
 import { PROJECT_ID, WORKSPACE_ID, shotJson } from './fixtures'
+import { ContextMenuHost } from '@/components/workbench/ui/context-menu'
 
 /**
  * ワークベンチのパネルを Provider 抜きで描くための偽の共有状態。
@@ -86,6 +87,7 @@ export const workbenchValue = (
   refresh: vi.fn(),
   dialog: null,
   openDialog: vi.fn(),
+  dialogShotIds: null,
   closeDialog: vi.fn(),
   focusPanel: vi.fn(),
   inspectorTab: 'settings',
@@ -141,7 +143,9 @@ export const renderInWorkbench = (
     ...render(
       <AssetStoreContext.Provider value={assetStoreValue(assets)}>
         <WorkbenchContext.Provider value={value}>
-          <WorkbenchTransportProvider transport={transport}>{ui}</WorkbenchTransportProvider>
+          <WorkbenchTransportProvider transport={transport}>
+            <ContextMenuHost>{ui}</ContextMenuHost>
+          </WorkbenchTransportProvider>
         </WorkbenchContext.Provider>
       </AssetStoreContext.Provider>,
     ),

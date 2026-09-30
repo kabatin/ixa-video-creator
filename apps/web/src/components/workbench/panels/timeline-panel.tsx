@@ -1,5 +1,6 @@
 'use client'
 
+import type { Shot } from '@ixa/domain'
 import { useEffect, useState } from 'react'
 import { TimelineEditor } from '@/components/timeline-editor'
 import { WaveformCanvas } from '@/components/waveform-canvas'
@@ -14,6 +15,8 @@ import {
   timelineLoadErrors,
   type TimelineMaterials,
 } from '@/lib/timeline-loader'
+import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
+import { useShotMenu } from '@/components/workbench/use-shot-menu'
 
 /**
  * タイムライン（中央下）。中身は既存の `timeline-editor`。
@@ -23,6 +26,11 @@ import {
  */
 export const TimelinePanel = () => {
   const workbench = useWorkbench()
+  // Shot の右クリック（長押し・Shift+F10）のメニュー。
+  const openShotMenu = useShotMenu()
+  const shotMenu = useContextMenuTrigger<Shot>((shot, at, origin) => {
+    openShotMenu(shot, at, origin)
+  })
   const { preferences } = usePreferences()
   const { transportControls } = workbench
   const transport = useTransportState()
@@ -88,6 +96,7 @@ export const TimelinePanel = () => {
         posters={workbench.posters}
         selectedShotId={workbench.selectedShotId}
         onSelectShot={workbench.selectShot}
+        shotContextMenu={shotMenu}
         // 帯のテロップは小窓でなくインスペクターで開く（小窓は見切れて編集しづらい）。
         onOpenTextClip={(id) => {
           workbench.inspect({ kind: 'text-clip', id })

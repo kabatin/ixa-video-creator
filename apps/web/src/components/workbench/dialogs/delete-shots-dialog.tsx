@@ -18,7 +18,12 @@ export const DeleteShotsDialogBody = () => {
   const workbench = useWorkbench()
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const targets = resolveDeleteTargets(workbench.shots ?? [], workbench.checked, workbench.selectedShotId)
+  const targets = resolveDeleteTargets(
+    workbench.shots ?? [],
+    workbench.checked,
+    workbench.selectedShotId,
+    workbench.dialogShotIds,
+  )
 
   const run = async (): Promise<void> => {
     setDeleting(true)

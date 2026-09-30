@@ -77,6 +77,7 @@ import {
   type SnapSpanInput,
   type SnapSpanOutcome,
 } from '@/lib/timeline-snap'
+import type { ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
 
 /**
  * タイムライン編集画面の操作盤（P5-4）。
@@ -131,6 +132,8 @@ export type TimelineEditorProps = {
   readonly posters?: ShotPosterMap
   readonly selectedShotId?: ShotId | null
   readonly onSelectShot?: (shotId: ShotId) => void
+  /** Shot の右クリックのメニューを開く口（帯の上の Shot）。 */
+  readonly shotContextMenu?: (shot: Shot) => ContextMenuTriggerProps
   /**
    * 帯のテロップを押したとき・置いたときに、インスペクターで開く（ワークベンチ）。
    * **渡すと帯の上の小窓では直さない。** 小窓はパネルの端で見切れて編集しづらかった
@@ -174,6 +177,7 @@ export const TimelineEditor = ({
   posters,
   selectedShotId,
   onSelectShot,
+  shotContextMenu,
   onOpenTextClip,
   audioLane,
 }: TimelineEditorProps) => {
@@ -691,6 +695,7 @@ export const TimelineEditor = ({
           {...(posters === undefined ? {} : { posters })}
           selectedShotId={selectedShotId ?? null}
           {...(onSelectShot === undefined ? {} : { onSelectShot })}
+          {...(shotContextMenu === undefined ? {} : { shotContextMenu })}
           {...(audioLane === undefined ? {} : { audioLane })}
           beatAlignment={
             beatAlignment === null
