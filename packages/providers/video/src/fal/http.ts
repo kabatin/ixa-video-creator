@@ -1,5 +1,5 @@
 import { ProviderError } from '@ixa/provider-core'
-import type { z } from 'zod'
+import { clipReason, redactUrls } from '../common/reason.js'
 import { FAL_PROVIDER_ID } from './descriptor.js'
 
 /**
@@ -44,29 +44,10 @@ export const falErrorCodeFor = (status: number): FalErrorCode => {
 }
 
 /**
- * URL らしき部分を落とす。
- *
- * 参照の署名付き URL も出力 URL も期限付きの秘密で、**DB だけでなく例外にもログにも
- * 出してはいけない**（CLAUDE.md 規約 7 と同じ理由）。Provider が返す文だけは
- * 理由として運ぶ必要があるので、運ぶ前にここを通す。
+ * 理由の下ごしらえ（URL を落とす・長さを切る）は vpipe と共有する（`common/reason.ts`）。
+ * 公開の名前はここからも引けるように残す。
  */
-const URL_PATTERNS: readonly RegExp[] = [
-  // scheme://host/... の形
-  /[a-z][a-z0-9+.-]*:\/\/[^\s"'<>)\]]*/gi,
-  // data: / blob: のように // を持たない形
-  /\b(?:data|blob):[^\s"'<>)\]]*/gi,
-  // scheme を省いた host/path の形（fal.media/files/... など）
-  /\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?\/[^\s"'<>)\]]*/gi,
-]
-
-export const redactUrls = (text: string): string =>
-  URL_PATTERNS.reduce((acc, pattern) => acc.replace(pattern, '[url]'), text)
-
-/** 値を含めずに zod の不一致を要約する。**受け取った値を書かない**のは URL 混入を防ぐため。 */
-export const formatIssues = (error: z.ZodError): string =>
-  error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`).join(', ')
-
-const MAX_REASON_LENGTH = 300
+export { formatIssues, redactUrls } from '../common/reason.js'
 
 /** 応答本文から人が読める理由を取り出す。長すぎるものは切る。 */
 export const reasonFrom = (body: unknown, fallback: string): string => {
@@ -80,9 +61,7 @@ export const reasonFrom = (body: unknown, fallback: string): string => {
     return null
   })()
 
-  const text = redactUrls(picked ?? fallback).trim()
-  const reason = text === '' ? fallback : text
-  return reason.length > MAX_REASON_LENGTH ? `${reason.slice(0, MAX_REASON_LENGTH)}…` : reason
+  return clipReason(redactUrls(picked ?? fallback), fallback)
 }
 
 export const falErrorFor = (status: number, body: unknown, what: string): FalRequestError =>
