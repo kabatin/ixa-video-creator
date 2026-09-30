@@ -21,6 +21,7 @@ docker compose --env-file .env -f infra/docker-compose.yml up -d
 - MinIO API: `127.0.0.1:9000`
 - MinIO コンソール: `127.0.0.1:9001`（ブラウザで S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY でログイン）
 - `minio-init` が起動時に一度だけ `ixa-media` バケットを作成する（既にあれば何もしない）
+- MinIO のイメージは Chainguard 版（`cgr.dev/chainguard/minio`）。公式イメージの配布が止まったため（経緯は `docker-compose.yml` のコメント）
 
 ## 状態確認
 
