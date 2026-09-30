@@ -20,7 +20,10 @@ const missing = (reason = '見つかりません'): AiToolStatus => ({ state: 'm
 
 const allMissing = (): Record<AiToolId, AiToolStatus> =>
   Object.fromEntries(
-    Object.keys(AI_TOOLS).map((id) => [id, AI_TOOLS[id as AiToolId].detect.kind === 'builtin' ? ready() : missing()]),
+    Object.keys(AI_TOOLS).map((id) => [
+      id,
+      AI_TOOLS[id as AiToolId].detect.kind === 'builtin' ? ready() : missing(),
+    ]),
   ) as Record<AiToolId, AiToolStatus>
 
 describe('aiChoiceProblem', () => {
@@ -36,18 +39,26 @@ describe('aiChoiceProblem', () => {
   })
 
   it('その用途に使えない AI は、入っていても選べない（理由に用途を言う）', () => {
-    expect(aiChoiceProblem('image', 'claude_cli', ready('2.1.283'))).toMatch(/Claude Code は画像にはまだ使えません/)
+    expect(aiChoiceProblem('image', 'claude_cli', ready('2.1.283'))).toMatch(
+      /Claude Code は画像にはまだ使えません/,
+    )
     expect(aiChoiceProblem('text', 'fal', ready())).toMatch(/テキスト/)
   })
 
   it('見つからない AI は選べない（見つからない理由をそのまま出す）', () => {
-    expect(aiChoiceProblem('image', 'codex_cli', missing('codex が入っていません'))).toMatch(/codex が入っていません/)
+    expect(aiChoiceProblem('image', 'codex_cli', missing('codex が入っていません'))).toMatch(
+      /codex が入っていません/,
+    )
   })
 })
 
 describe('recommendAiSettings', () => {
   it('外の AI が何も無ければ、テキストと画像はお試し、動画はアプリに入っている「静止画を動かす」', () => {
-    expect(recommendAiSettings(allMissing())).toEqual({ text: 'stub', image: 'stub', video: 'local' })
+    expect(recommendAiSettings(allMissing())).toEqual({
+      text: 'stub',
+      image: 'stub',
+      video: 'local',
+    })
   })
 
   it('動画は、手元の生成サーバ（vpipe）が起動していればそれを勧める', () => {
@@ -57,7 +68,11 @@ describe('recommendAiSettings', () => {
   it('テキストは Claude、画像は Codex、動画は無料の「静止画を動かす」を勧める', () => {
     const statuses = { ...allMissing(), claude_cli: ready(), codex_cli: ready() }
 
-    expect(recommendAiSettings(statuses)).toEqual({ text: 'claude_cli', image: 'codex_cli', video: 'local' })
+    expect(recommendAiSettings(statuses)).toEqual({
+      text: 'claude_cli',
+      image: 'codex_cli',
+      video: 'local',
+    })
   })
 
   /** お金が掛かるものは、キーがあっても勧めない（選ぶのは人）。 */
@@ -68,7 +83,12 @@ describe('recommendAiSettings', () => {
   })
 
   it('勧めた組み合わせは必ず選べる', () => {
-    const statuses: Record<AiToolId, AiToolStatus> = { ...allMissing(), claude_cli: ready(), codex_cli: ready(), gemini_cli: ready() }
+    const statuses: Record<AiToolId, AiToolStatus> = {
+      ...allMissing(),
+      claude_cli: ready(),
+      codex_cli: ready(),
+      gemini_cli: ready(),
+    }
     const recommended = recommendAiSettings(statuses)
 
     for (const purpose of ['text', 'image', 'video'] as const) {
@@ -94,31 +114,36 @@ describe('resolveAiSettings', () => {
 
 /** まだ画面で選んでいない間は、今までどおり環境変数で決まる（既存の `.env` と CI を壊さない）。 */
 describe('aiDefaultsFromEnv', () => {
-  const env = { storyboardDrafter: 'stub', imageProvider: 'stub', videoProvider: 'stub', localVideoGenerator: 'none' } as const
+  const env = { storyboardDrafter: 'stub', imageProvider: 'stub' } as const
 
   it('何も指定が無ければ全部お試し', () => {
     expect(aiDefaultsFromEnv(env)).toEqual({ text: 'stub', image: 'stub', video: 'stub' })
   })
 
-  it('環境変数で選んだ口をそのまま初期値にする', () => {
-    expect(aiDefaultsFromEnv({ ...env, storyboardDrafter: 'claude_cli', imageProvider: 'codex_cli' })).toEqual({
+  it('テキストと画像は、環境変数で選んだ口をそのまま初期値にする', () => {
+    expect(
+      aiDefaultsFromEnv({ storyboardDrafter: 'claude_cli', imageProvider: 'codex_cli' }),
+    ).toEqual({
       text: 'claude_cli',
       image: 'codex_cli',
       video: 'stub',
     })
-    expect(aiDefaultsFromEnv({ ...env, localVideoGenerator: 'vpipe' }).video).toBe('vpipe')
-    expect(aiDefaultsFromEnv({ ...env, videoProvider: 'fal' }).video).toBe('fal')
   })
 
-  /** 今までは fal があれば AUTO が fal を選んでいた。vpipe は手で選ぶものだった。その振る舞いを変えない。 */
-  it('fal と vpipe の両方が指定されていれば fal', () => {
-    expect(aiDefaultsFromEnv({ ...env, videoProvider: 'fal', localVideoGenerator: 'vpipe' }).video).toBe('fal')
+  /**
+   * 動画の AUTO は今まで、VIDEO_PROVIDER=fal でも LOCAL_VIDEO_GENERATOR=vpipe でもお試しを選んでいた
+   * （fal は API に登録されず、vpipe は AUTO に出ない）。選ぶ前に、黙ってお金の掛かる口へ変えない。
+   */
+  it('動画の初期値は、環境変数にかかわらずお試し', () => {
+    expect(aiDefaultsFromEnv(env).video).toBe('stub')
   })
 })
 
 describe('AiSettings', () => {
   it('知らない AI の名前は受けない', () => {
-    expect(AiSettings.safeParse({ text: 'chatgpt', image: 'stub', video: 'stub' }).success).toBe(false)
+    expect(AiSettings.safeParse({ text: 'chatgpt', image: 'stub', video: 'stub' }).success).toBe(
+      false,
+    )
   })
 
   it('3 つの用途がすべて要る', () => {

@@ -35,7 +35,16 @@ const shotA = aShot(project.id, { order: 1000, code: 'shot_001' })
 const shotB = aShot(project.id, { order: 2000, code: 'shot_002' })
 const foreign = aShot(other.id, { order: 1000, code: 'shot_001' })
 
-const build = (options: { failEnqueue?: boolean; shots?: readonly Shot[] } = {}) => {
+const CODEX = { providerId: ProviderId.parse('codex-cli'), modelId: ModelId.parse('codex-cli/image-gen') }
+
+const build = (
+  options: {
+    failEnqueue?: boolean
+    shots?: readonly Shot[]
+    /** いま選んでいる画像の AI（ADR-0032）。作るたびに呼ばれる。 */
+    imageModel?: () => { providerId: ProviderId; modelId: ModelId }
+  } = {},
+) => {
   const enqueued: ImageGenerationJobId[] = []
   const published: ProjectEvent[] = []
   const deps = {
@@ -47,7 +56,7 @@ const build = (options: { failEnqueue?: boolean; shots?: readonly Shot[] } = {})
       enqueue: (id: ImageGenerationJobId) =>
         options.failEnqueue === true ? Promise.reject(new Error('Redis に繋がりません')) : Promise.resolve(void enqueued.push(id)),
     },
-    imageModel: { providerId: ProviderId.parse('codex-cli'), modelId: ModelId.parse('codex-cli/image-gen') },
+    imageModel: () => Promise.resolve(options.imageModel?.() ?? CODEX),
     events: { publish: (event: ProjectEvent) => Promise.resolve(void published.push(event)) },
     logger: createLogger('silent'),
   }
@@ -80,6 +89,20 @@ describe('POST /shots/:id/start-frame/generate', () => {
     })
     expect(f.enqueued).toEqual([jobId])
     expect(f.published).toMatchObject([{ type: 'image_job.status', shotId: shotA.id, jobId, status: 'queued' }])
+  })
+
+  /** 使う AI は画面で選び直せる（ADR-0032）。起動し直さなくても、次の 1 枚から効く。 */
+  it('作るたびに、いま選んでいる AI をジョブに記す', async () => {
+    const stub = { providerId: ProviderId.parse('stub-image'), modelId: ModelId.parse('stub/gemini-like-image') }
+    const current = { model: CODEX }
+    const f = build({ imageModel: () => current.model })
+
+    const first = ((await (await f.post(`/shots/${shotA.id}/start-frame/generate`)).json()) as Ok<{ jobId: ImageGenerationJobId }>).data
+    current.model = stub
+    const second = ((await (await f.post(`/shots/${shotB.id}/start-frame/generate`)).json()) as Ok<{ jobId: ImageGenerationJobId }>).data
+
+    expect(await f.imageJobs.findById(first.jobId)).toMatchObject({ providerId: 'codex-cli' })
+    expect(await f.imageJobs.findById(second.jobId)).toMatchObject({ providerId: 'stub-image' })
   })
 
   it('同じ Shot で作っている間は重ねない（409）', async () => {

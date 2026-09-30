@@ -118,6 +118,8 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   takes: createInMemoryTakeRepository(),
   generationJobs: createInMemoryGenerationJobRepository(),
   registry: createProviderRegistry(providers),
+  // テストの動画 Provider（`createTestVideoProvider`）の既定の id。AUTO はこの中から選ぶ（ADR-0032）。
+  videoProvider: () => Promise.resolve(ProviderId.parse('test')),
   generationContext: createPhase1EmptyContextSource(),
   generationQueue: createRecordingQueue(),
   transitions: createInMemoryTransitionRepository(),
@@ -133,14 +135,14 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   imageJobs: createInMemoryImageJobRepository(),
   // キューへは入れるだけ（作るのは worker）。テストでは記録もしない。
   imageQueue: { enqueue: () => Promise.resolve() },
-  imageModel: { providerId: ProviderId.parse('stub-image'), modelId: ModelId.parse('stub/gemini-like-image') },
+  imageModel: () => Promise.resolve({ providerId: ProviderId.parse('stub-image'), modelId: ModelId.parse('stub/gemini-like-image') }),
   brandAssets: createInMemoryBrandAssetRepository(),
   locations: createInMemoryLocationRepository(),
   scripts: createInMemoryScriptRepository(),
   storyboardDrafts: createInMemoryStoryboardDraftRepository(),
   editBatches: createInMemoryEditBatchRepository(),
   // テストは必ずスタブ。実 CLI が CI で走ることはない。
-  storyboardDrafter: createStubStoryboardDrafter(),
+  storyboardDrafter: () => Promise.resolve(createStubStoryboardDrafter()),
   sequences: createInMemorySequenceRepository(),
   musicAnalyses: createInMemoryMusicAnalysisRepository(),
   musicAnalysisFailures: createInMemoryMusicAnalysisFailureRepository(),

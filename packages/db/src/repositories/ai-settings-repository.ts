@@ -21,7 +21,11 @@ export type AiSettingsRepository = {
  * 毎回の読み込みで落とすと、テキストも画像も動画も使えなくなる。画面が選び直しを促す。
  */
 export const aiSettingsRowToDomain = (row: AiSettingsRow): AiSettings | null => {
-  const parsed = AiSettingsSchema.safeParse({ text: row.textTool, image: row.imageTool, video: row.videoTool })
+  const parsed = AiSettingsSchema.safeParse({
+    text: row.textTool,
+    image: row.imageTool,
+    video: row.videoTool,
+  })
   return parsed.success ? parsed.data : null
 }
 
@@ -34,7 +38,12 @@ export const createAiSettingsRepository = (db: DbClient): AiSettingsRepository =
 
   async save(settings) {
     const valid = AiSettingsSchema.parse(settings)
-    const values = { textTool: valid.text, imageTool: valid.image, videoTool: valid.video, updatedAt: new Date() }
+    const values = {
+      textTool: valid.text,
+      imageTool: valid.image,
+      videoTool: valid.video,
+      updatedAt: new Date(),
+    }
     await db
       .insert(aiSettings)
       .values({ id: AI_SETTINGS_ROW_ID, ...values })

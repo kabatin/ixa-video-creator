@@ -13,13 +13,28 @@ const DEFAULTS: AiSettings = { text: 'stub', image: 'stub', video: 'stub' }
 
 const statuses = (ready: readonly AiToolId[]): Record<AiToolId, AiToolStatus> =>
   Object.fromEntries(
-    (['stub', 'claude_cli', 'codex_cli', 'gemini_cli', 'grok_cli', 'local', 'vpipe', 'fal'] as const).map((id) => [
+    (
+      [
+        'stub',
+        'claude_cli',
+        'codex_cli',
+        'gemini_cli',
+        'grok_cli',
+        'local',
+        'vpipe',
+        'fal',
+      ] as const
+    ).map((id) => [
       id,
-      ready.includes(id) ? { state: 'ready', version: '1.0.0' } : { state: 'missing', reason: '入っていません' },
+      ready.includes(id)
+        ? { state: 'ready', version: '1.0.0' }
+        : { state: 'missing', reason: '入っていません' },
     ]),
   ) as Record<AiToolId, AiToolStatus>
 
-const setup = (ready: readonly AiToolId[] = ['stub', 'local', 'claude_cli', 'codex_cli', 'gemini_cli']) => {
+const setup = (
+  ready: readonly AiToolId[] = ['stub', 'local', 'claude_cli', 'codex_cli', 'gemini_cli'],
+) => {
   const store: { value: AiSettings | null } = { value: null }
   const deps: AiRoutesDeps = {
     settings: {
@@ -36,11 +51,20 @@ const setup = (ready: readonly AiToolId[] = ['stub', 'local', 'claude_cli', 'cod
 }
 
 const put = (app: ReturnType<typeof setup>['app'], body: unknown) =>
-  app.request('/ai/settings', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+  app.request('/ai/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 
 type ToolsBody = {
   data: {
-    tools: { id: string; label: string; status: AiToolStatus; problems: Record<string, string | null> }[]
+    tools: {
+      id: string
+      label: string
+      status: AiToolStatus
+      problems: Record<string, string | null>
+    }[]
     recommended: AiSettings
   }
 }
@@ -58,9 +82,13 @@ describe('GET /ai/tools', () => {
     expect(claude?.problems.text).toBeNull()
     expect(claude?.problems.image).toMatch(/画像にはまだ使えません/)
     // 入っているが口の無い AI も見せる（選べない理由つき）。
-    expect(body.data.tools.find((tool) => tool.id === 'gemini_cli')?.problems.text).toMatch(/まだ使えません/)
+    expect(body.data.tools.find((tool) => tool.id === 'gemini_cli')?.problems.text).toMatch(
+      /まだ使えません/,
+    )
     // 使える用途でも、見つからなければその理由。
-    expect(body.data.tools.find((tool) => tool.id === 'vpipe')?.problems.video).toMatch(/入っていません/)
+    expect(body.data.tools.find((tool) => tool.id === 'vpipe')?.problems.video).toMatch(
+      /入っていません/,
+    )
   })
 
   it('初めて選ぶときの組み合わせを添える', async () => {
@@ -68,7 +96,11 @@ describe('GET /ai/tools', () => {
 
     const body = (await (await app.request('/ai/tools')).json()) as ToolsBody
 
-    expect(body.data.recommended).toEqual({ text: 'claude_cli', image: 'codex_cli', video: 'local' })
+    expect(body.data.recommended).toEqual({
+      text: 'claude_cli',
+      image: 'codex_cli',
+      video: 'local',
+    })
   })
 })
 

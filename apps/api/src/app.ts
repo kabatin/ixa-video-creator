@@ -12,6 +12,7 @@ import type {
   GenerationContextSource,
   ProjectEventPublisher,
   ProjectEventSubscriber,
+  ProviderId,
 } from '@ixa/domain'
 import type { ProviderRegistry } from '@ixa/provider-core'
 import type { ObjectStorage } from '@ixa/storage'
@@ -82,6 +83,8 @@ export type AppDeps = {
   takes: TakeRepository
   generationJobs: GenerationJobRepository
   registry: ProviderRegistry
+  /** いま選んでいる動画の AI（ADR-0032）。AUTO はこの中から選ぶ。 */
+  videoProvider: () => Promise<ProviderId>
   generationContext: GenerationContextSource
   generationQueue: GenerationQueue
   transitions: TransitionRepository
@@ -112,7 +115,7 @@ export type AppDeps = {
    * （レビュアと同じ方針。`apps/worker/src/review-wiring.ts`）。
    * テストはスタブを渡すので、実 CLI が CI で走ることはない。
    */
-  storyboardDrafter: StoryboardDrafter
+  storyboardDrafter: () => Promise<StoryboardDrafter>
   sequences: SequenceRepository
   musicAnalyses: MusicAnalysisRepository
   /** 解析の失敗（worker が書く）。画面が「まだ」と「失敗」を分けるために読む。 */
@@ -198,6 +201,7 @@ export const createApp = (deps: AppDeps) => {
     takes: deps.takes,
     generationJobs: deps.generationJobs,
     registry: deps.registry,
+    videoProvider: deps.videoProvider,
     context: deps.generationContext,
     queue: deps.generationQueue,
     events: deps.events,

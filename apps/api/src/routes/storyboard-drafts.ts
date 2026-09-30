@@ -226,7 +226,8 @@ export type StoryboardDraftRoutesDeps = {
     | 'findItemsByRun'
     | 'adoptItems'
   >
-  drafter: StoryboardDrafter
+  /** いま選んでいるテキストの AI。**押すたびに呼ぶ**（画面で選び直したら次から効く。ADR-0032）。 */
+  drafter: () => Promise<StoryboardDrafter>
   /**
    * 採用の**直前**に「変える前」を残す口（P64-1）。
    * 27 件が一度に書き換わる操作なので、記録が無いと戻せない。
@@ -329,9 +330,10 @@ export const storyboardDraftRoutes = (deps: StoryboardDraftRoutesDeps) =>
        * **先に run を作る。** 走らせてから作ると、途中で落ちたときに
        * 「押したのに何も残らない」状態になり、失敗したことすら分からない。
        */
+      const drafter = await deps.drafter()
       const run = await deps.drafts.createRun({
         projectId,
-        drafter: deps.drafter.name,
+        drafter: drafter.name,
         status: 'running',
       })
 
@@ -350,7 +352,7 @@ export const storyboardDraftRoutes = (deps: StoryboardDraftRoutesDeps) =>
 
       let outcome: StoryboardDraftOutcome
       try {
-        outcome = await deps.drafter.draft({
+        outcome = await drafter.draft({
           script,
           sections: [...sections],
           shots: shots.map(toDraftShot),

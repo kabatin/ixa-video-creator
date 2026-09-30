@@ -19,7 +19,10 @@ describe('checkVpipeHealth', () => {
   it('health が答えれば起動している（版も拾う）', async () => {
     const { fetch, calls } = createFetch(() => jsonResponse(200, healthBody()))
 
-    expect(await checkVpipeHealth({ baseUrl: BASE_URL, token: null, fetch })).toEqual({ state: 'up', version: '0.1.0' })
+    expect(await checkVpipeHealth({ baseUrl: BASE_URL, token: null, fetch })).toEqual({
+      state: 'up',
+      version: '0.1.0',
+    })
     expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([`GET ${HEALTH_URL}`])
   })
 
@@ -32,24 +35,42 @@ describe('checkVpipeHealth', () => {
   })
 
   it('接続を拒まれたら「起動していません」と言い、起こし方を添える', async () => {
-    const result = await checkVpipeHealth({ baseUrl: BASE_URL, token: null, fetch: () => connectionRefused() })
+    const result = await checkVpipeHealth({
+      baseUrl: BASE_URL,
+      token: null,
+      fetch: () => connectionRefused(),
+    })
 
     expect(result.state).toBe('down')
     if (result.state === 'down') expect(result.reason).toMatch(/起動していません.*vpipe-api serve/)
   })
 
   it('途中で切れた・時間切れは「応答がありません」（起動していないとは言い切らない）', async () => {
-    const result = await checkVpipeHealth({ baseUrl: BASE_URL, token: null, fetch: () => connectionReset() })
+    const result = await checkVpipeHealth({
+      baseUrl: BASE_URL,
+      token: null,
+      fetch: () => connectionReset(),
+    })
 
-    expect(result).toEqual({ state: 'down', reason: expect.stringMatching(/応答がありません/) as unknown })
+    expect(result).toEqual({
+      state: 'down',
+      reason: expect.stringMatching(/応答がありません/) as unknown,
+    })
   })
 
   it('合言葉が合わなければそう言う', async () => {
-    const { fetch } = createFetch(() => jsonResponse(401, { error: { code: 'unauthorized', message: 'x', retryable: false, details: null } }))
+    const { fetch } = createFetch(() =>
+      jsonResponse(401, {
+        error: { code: 'unauthorized', message: 'x', retryable: false, details: null },
+      }),
+    )
 
     const result = await checkVpipeHealth({ baseUrl: BASE_URL, token: 'wrong-token', fetch })
 
-    expect(result).toEqual({ state: 'down', reason: expect.stringMatching(/VPIPE_API_TOKEN/) as unknown })
+    expect(result).toEqual({
+      state: 'down',
+      reason: expect.stringMatching(/VPIPE_API_TOKEN/) as unknown,
+    })
   })
 
   it('vpipe-api ではない何かが答えたら使えない扱い', async () => {

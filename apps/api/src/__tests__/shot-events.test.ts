@@ -6,6 +6,7 @@ import {
   type ProjectEventPublisher,
   type Shot,
   type Take,
+  ProviderId,
 } from '@ixa/domain'
 import {
   aShot,
@@ -57,6 +58,8 @@ const buildFixture = (options: FixtureOptions = {}) => {
     takes: createInMemoryTakeRepository(options.takes ?? []),
     generationJobs: createInMemoryGenerationJobRepository(),
     registry: createProviderRegistry([createTestVideoProvider([CHEAP_MODEL, GOOD_MODEL])]),
+    // テストの動画 Provider の id。AUTO はこの中から選ぶ（ADR-0032）。
+    videoProvider: () => Promise.resolve(ProviderId.parse('test')),
     context: createPhase1EmptyContextSource(),
     queue: createRecordingQueue(),
     events: options.events ?? events,

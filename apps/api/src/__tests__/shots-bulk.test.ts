@@ -7,6 +7,7 @@ import {
   type Project,
   type Shot,
   type Take,
+  ProviderId,
 } from '@ixa/domain'
 import {
   aShot,
@@ -111,6 +112,8 @@ const buildBulkFixture = (options: BulkFixtureOptions = {}) => {
     registry: createProviderRegistry([
       createTestVideoProvider(options.models ?? [CHEAP_MODEL, GOOD_MODEL]),
     ]),
+    // テストの動画 Provider の id。AUTO はこの中から選ぶ（ADR-0032）。
+    videoProvider: () => Promise.resolve(ProviderId.parse('test')),
     context: createPhase1EmptyContextSource(),
     queue,
     events,

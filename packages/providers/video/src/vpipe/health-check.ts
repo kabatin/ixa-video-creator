@@ -31,9 +31,13 @@ export const checkVpipeHealth = async (input: {
     if (response.status === 401 || response.status === 403) {
       return { state: 'down', reason: '合言葉（VPIPE_API_TOKEN）が合いません' }
     }
-    if (!response.ok) return { state: 'down', reason: `応答が異常です（${String(response.status)}）` }
+    if (!response.ok)
+      return { state: 'down', reason: `応答が異常です（${String(response.status)}）` }
     if (!VpipeHealth.safeParse(response.body).success) {
-      return { state: 'down', reason: 'vpipe-api ではないものが応答しています（VPIPE_API_URL を確かめてください）' }
+      return {
+        state: 'down',
+        reason: 'vpipe-api ではないものが応答しています（VPIPE_API_URL を確かめてください）',
+      }
     }
     const version = VersionOnly.safeParse(response.body)
     return { state: 'up', version: version.success ? version.data.version : null }

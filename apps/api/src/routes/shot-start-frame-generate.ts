@@ -32,8 +32,11 @@ export type StartFrameGenerateRoutesDeps = {
   readonly shotReferences: Pick<ShotReferenceRepository, 'findByShot'>
   readonly imageJobs: ImageJobRepository
   readonly imageQueue: ImageJobQueue
-  /** どの口で作るか（`IMAGE_PROVIDER` から main.ts が決める）。ジョブに記録する。 */
-  readonly imageModel: { readonly providerId: ProviderId; readonly modelId: ModelId }
+  /**
+   * どの口で作るか。**作るたびに呼ぶ**（画面の「使う AI」で選び直したら次の 1 枚から効く。ADR-0032）。
+   * ジョブに記録し、worker はジョブに書かれた口で作る。
+   */
+  readonly imageModel: () => Promise<{ readonly providerId: ProviderId; readonly modelId: ModelId }>
   readonly events: ProjectEventPublisher
   readonly logger: Logger
 }
@@ -116,7 +119,7 @@ const publish = async (deps: StartFrameGenerateRoutesDeps, job: ImageGenerationJ
  * その Shot は「作っています」のまま二度と頼めなくなる。
  */
 const start = async (deps: StartFrameGenerateRoutesDeps, shot: Shot): Promise<ImageGenerationJob> => {
-  const job = await deps.imageJobs.create({ projectId: shot.projectId, shotId: shot.id, ...deps.imageModel })
+  const job = await deps.imageJobs.create({ projectId: shot.projectId, shotId: shot.id, ...(await deps.imageModel()) })
   try {
     await deps.imageQueue.enqueue(job.id)
   } catch (error) {

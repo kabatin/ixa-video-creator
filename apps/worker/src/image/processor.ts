@@ -47,8 +47,11 @@ export type ImageProcessorDeps = {
   readonly shotReferences: StartFrameReferences
   readonly storage: ObjectStorage
   readonly context: GenerationContextSource
-  readonly provider: ImageProvider
-  readonly model: ImageModelDescriptor
+  /**
+   * この環境で作れる口。**ジョブに記された口（providerId・modelId）で作る**（ADR-0032）。
+   * どの口で作るかは API が「使う AI」から決めてジョブに記す。worker は起動時の設定で選ばない。
+   */
+  readonly adapters: readonly ImageAdapter[]
   readonly mediaQueue: { readonly enqueue: (mediaAssetId: MediaAssetId) => Promise<void> }
   readonly events: ProjectEventPublisher
   readonly workDir: string
@@ -58,6 +61,11 @@ export type ImageProcessorDeps = {
   /** 比への切り抜き。テストで ffmpeg を使わないための差し込み口。 */
   readonly crop?: (input: string, output: string, aspect: AspectRatio) => Promise<Resolution>
 }
+
+export type ImageAdapter = { readonly provider: ImageProvider; readonly model: ImageModelDescriptor }
+
+/** 1 件のジョブを作るときの材料（ジョブに記された口を選んだ後）。 */
+type JobDeps = ImageProcessorDeps & ImageAdapter
 
 export type ImageJobResult = { readonly state: 'succeeded' | 'failed' | 'skipped' | 'missing' }
 
@@ -73,7 +81,7 @@ class ImageJobFailure extends Error {
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
-const loadShotAndProject = async (deps: ImageProcessorDeps, job: ImageGenerationJob): Promise<{ shot: Shot; project: Project }> => {
+const loadShotAndProject = async (deps: JobDeps, job: ImageGenerationJob): Promise<{ shot: Shot; project: Project }> => {
   const shot = await deps.shots.findById(job.shotId)
   const project = shot === null ? null : await deps.projects.findById(shot.projectId)
   if (shot === null || project === null) {
@@ -84,7 +92,7 @@ const loadShotAndProject = async (deps: ImageProcessorDeps, job: ImageGeneration
 
 /** 参照を手元のファイルへ落とす（Codex CLI には手元のファイルしか渡せない。署名付き URL も作らない）。 */
 const localReferenceResolver =
-  (deps: ImageProcessorDeps, dir: string) =>
+  (deps: JobDeps, dir: string) =>
   async (id: MediaAssetId): Promise<string> => {
     const asset = await deps.mediaAssets.findById(id)
     if (asset === null) {
@@ -99,7 +107,7 @@ const localReferenceResolver =
 type Handle = Parameters<ImageProvider['poll']>[0]
 
 const waitForResult = async (
-  deps: ImageProcessorDeps,
+  deps: JobDeps,
   handle: Handle,
 ): Promise<Extract<ImageJobStatus, { state: 'succeeded' }>> => {
   const deadline = Date.now() + MAX_WAIT_MS
@@ -124,7 +132,7 @@ const localPathOf = (output: ProviderOutput): string => {
 }
 
 /** 切り抜いた PNG を素材として保存する。出どころはこのジョブ。 */
-const ingest = async (deps: ImageProcessorDeps, project: Project, job: ImageGenerationJob, path: string): Promise<MediaAssetId> => {
+const ingest = async (deps: JobDeps, project: Project, job: ImageGenerationJob, path: string): Promise<MediaAssetId> => {
   const body = await readFile(path)
   const id = newId(MediaAssetIdSchema)
   const storageKey = mediaKey(project.workspaceId, id, 'png')
@@ -143,7 +151,7 @@ const ingest = async (deps: ImageProcessorDeps, project: Project, job: ImageGene
   return id
 }
 
-const generate = async (deps: ImageProcessorDeps, job: ImageGenerationJob, dir: string): Promise<void> => {
+const generate = async (deps: JobDeps, job: ImageGenerationJob, dir: string): Promise<void> => {
   const { shot, project } = await loadShotAndProject(deps, job)
   const [characters, locations, manualReferences] = await Promise.all([
     deps.context.charactersForShot(shot.id),
@@ -216,7 +224,17 @@ export const processImageJob = async (deps: ImageProcessorDeps, data: unknown): 
   if (job.status === 'succeeded' || job.status === 'failed') return { state: 'skipped' }
 
   try {
-    await withTempDir(deps.workDir, 'image-', (dir) => generate(deps, job, dir))
+    const adapter = deps.adapters.find(
+      (candidate) => candidate.model.providerId === job.providerId && candidate.model.id === job.modelId,
+    )
+    if (adapter === undefined) {
+      throw new ImageJobFailure({
+        code: 'provider_unavailable',
+        message: `この環境では「${job.modelId}」で絵を作れません。「使う AI」で画像の AI を選び直してください。`,
+        retryable: false,
+      })
+    }
+    await withTempDir(deps.workDir, 'image-', (dir) => generate({ ...deps, ...adapter }, job, dir))
     return { state: 'succeeded' }
   } catch (error) {
     // **握り潰さない。** 理由をジョブに残して画面へ出し、ログにも残す。最初のフレームは変えない。

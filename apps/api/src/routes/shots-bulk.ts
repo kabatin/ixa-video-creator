@@ -341,7 +341,7 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
 
         let compiled: CompiledGeneration<VideoModelDescriptor>
         try {
-          compiled = await buildGeneration(generationPorts(deps), shot, project, model)
+          compiled = await buildGeneration(await generationPorts(deps), shot, project, model)
         } catch (error) {
           // 知らない失敗は握り潰さない。1 件の不調で全体を 500 にするのが正しい。
           const fields = generationFailureFields(error)

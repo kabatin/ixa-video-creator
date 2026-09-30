@@ -37,6 +37,7 @@ import { ANALYSIS_QUEUE_NAME, type AnalysisQueue } from './routes/music.js'
 import { REVIEW_QUEUE_NAME, type ReviewQueue } from './routes/reviews.js'
 import type { MediaIngestDeps } from './routes/uploads.js'
 import {
+  createFalVideoProvider,
   createLocalImageToVideoProvider,
   createStubVideoProvider,
   createVpipeVideoProvider,
@@ -50,11 +51,6 @@ import { createApp } from './app.js'
 import { createLogger, type Logger } from './logger.js'
 import { GENERATION_QUEUE_NAME, type GenerationQueue } from './routes/shots.js'
 import { IMAGE_QUEUE_NAME, type ImageJobQueue } from './routes/shot-start-frame-generate.js'
-import { codexCliImageModel, stubGeminiLikeImageModel } from '@ixa/provider-image'
-import {
-  createClaudeCliStoryboardDrafter,
-  createStubStoryboardDrafter,
-} from '@ixa/provider-llm'
 
 /** graceful shutdown の上限時間（ミリ秒）。超過したら強制終了する。 */
 const SHUTDOWN_TIMEOUT_MS = 30_000
@@ -192,7 +188,6 @@ export const main = (): void => {
       await imageQueue.add('draw', { imageJobId })
     },
   }
-  const imageModel = config.imageProvider === 'codex_cli' ? codexCliImageModel : stubGeminiLikeImageModel
 
   // キュー名は apps/worker/src/queues.ts の QUEUE_NAMES と一致させること。
   // apps 同士を import できないため、文字列で合わせるしかない。
@@ -245,16 +240,8 @@ export const main = (): void => {
     scripts: createScriptRepository(db),
     storyboardDrafts: createStoryboardDraftRepository(db),
     editBatches: createEditBatchRepository(db),
-    /**
-     * **絵コンテ下書きの口を選ぶのはここだけ。** 既定はスタブで、
-     * `STORYBOARD_DRAFTER=claude_cli` のときだけ実 CLI を起動する。
-     * 生成 API のような従量課金ではないが、制作者の契約の利用枠を消費するため
-     * 明示的に切り替えたときだけ走らせる（memory: cost-bearing-work-goes-last）。
-     */
-    storyboardDrafter:
-      config.storyboardDrafter === 'claude_cli'
-        ? createClaudeCliStoryboardDrafter()
-        : createStubStoryboardDrafter(),
+    // 絵コンテの案の口は「使う AI」のテキストで決まる（ADR-0032。未選択なら STORYBOARD_DRAFTER）。
+    storyboardDrafter: ai.storyboardDrafter,
     sequences: createSequenceRepository(db),
     musicAnalyses: createMusicAnalysisRepository(db),
     musicAnalysisFailures: createMusicAnalysisFailureRepository(db),
@@ -270,6 +257,11 @@ export const main = (): void => {
       createLocalImageToVideoProvider({
         outputDir: join(process.env.STUB_OUTPUT_DIR ?? '/tmp/ixa-stub-output', 'local'),
       }),
+      // fal（従量課金）。worker と同じ条件（VIDEO_PROVIDER=fal と鍵）で登録する。作るだけでは通信しない。
+      // 登録していなかったため、モデル一覧に出ず、選んでも AUTO が見つけられなかった（ADR-0032）。
+      ...(config.providers.videoProvider === 'fal' && config.providers.falApiKey !== null
+        ? [createFalVideoProvider({ apiKey: config.providers.falApiKey })]
+        : []),
       // 手元の生成サーバの MiniMax H3（ADR-0031）。worker と同じ条件で登録する（作るだけでは通信しない）。
       ...(config.providers.localVideoGenerator === 'vpipe'
         ? [
@@ -298,7 +290,10 @@ export const main = (): void => {
     generationQueue: queuePort,
     imageJobs: createImageJobRepository(db),
     imageQueue: imageQueuePort,
-    imageModel: { providerId: imageModel.providerId, modelId: imageModel.id },
+    // Shot の絵の口は「使う AI」の画像で決まる（ADR-0032。未選択なら IMAGE_PROVIDER）。
+    imageModel: ai.imageModel,
+    // 動画の AUTO は「使う AI」の動画の中から選ぶ（ADR-0032）。
+    videoProvider: ai.videoProvider,
     storage,
     corsOrigins: config.corsOrigins,
     events: {

@@ -21,6 +21,7 @@ import {
   type GenerationJobId,
   type ModelId,
   type Project,
+  type ProviderId,
   type Shot,
   type ShotId,
   type Take,
@@ -37,6 +38,7 @@ import {
   GenerationContextError,
   SpecCompilationError,
   buildGeneration,
+  catalogForVideoChoice,
   type BuildGenerationDeps,
   type CompiledGeneration,
 } from '@ixa/generation'
@@ -340,6 +342,8 @@ export type ShotRoutesDeps = {
   takes: TakeRepository
   generationJobs: GenerationJobRepository
   registry: ProviderRegistry
+  /** いま選んでいる動画の AI（ADR-0032）。**AUTO はこの中から選ぶ。** 生成するたびに呼ぶ。 */
+  videoProvider: () => Promise<ProviderId>
   context: GenerationContextSource
   queue: GenerationQueue
   /** 状態を変えた瞬間に出来事を流す先（PHASE 5.8b）。配信の実体は main.ts が注入する。 */
@@ -355,11 +359,12 @@ export type ShotRoutesDeps = {
  * そのためロジックは packages 側にあり、ここは provider-core の実装を
  * 構造的な Port に差し込むだけの配線に徹する。
  */
-export const generationPorts = (
-  deps: Pick<ShotRoutesDeps, 'context' | 'registry'>,
-): BuildGenerationDeps<VideoModelDescriptor> => ({
+export const generationPorts = async (
+  deps: Pick<ShotRoutesDeps, 'context' | 'registry' | 'videoProvider'>,
+): Promise<BuildGenerationDeps<VideoModelDescriptor>> => ({
   context: deps.context,
-  catalog: deps.registry,
+  // AUTO は「使う AI」で選んだ動画の AI の中から（明示したモデルはそのまま引ける）。
+  catalog: catalogForVideoChoice(deps.registry, await deps.videoProvider()),
   router: { selectModel, validateAgainstCapabilities },
 })
 
@@ -595,7 +600,7 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
 
       let compiled: CompiledGeneration<VideoModelDescriptor>
       try {
-        compiled = await buildGeneration(generationPorts(deps), shot, project, model, {
+        compiled = await buildGeneration(await generationPorts(deps), shot, project, model, {
           corrections,
         })
       } catch (error) {

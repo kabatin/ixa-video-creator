@@ -34,7 +34,11 @@ const Tool = z
     label: z.string(),
     status: ToolStatus,
     /** 用途ごとの選べない理由。選べるなら null。 */
-    problems: z.object({ text: z.string().nullable(), image: z.string().nullable(), video: z.string().nullable() }),
+    problems: z.object({
+      text: z.string().nullable(),
+      image: z.string().nullable(),
+      video: z.string().nullable(),
+    }),
   })
   .openapi('AiTool')
 
@@ -49,7 +53,12 @@ const toolsRoute = createRoute({
   path: '/ai/tools',
   tags: ['ai'],
   summary: 'この環境で見つかった AI と、用途ごとに選べるか',
-  responses: { 200: { description: '見つかった AI', content: { 'application/json': { schema: successResponse(ToolsData) } } } },
+  responses: {
+    200: {
+      description: '見つかった AI',
+      content: { 'application/json': { schema: successResponse(ToolsData) } },
+    },
+  },
 })
 
 const getSettingsRoute = createRoute({
@@ -57,7 +66,12 @@ const getSettingsRoute = createRoute({
   path: '/ai/settings',
   tags: ['ai'],
   summary: '用途ごとに使う AI（まだ選んでいなければ環境変数の初期値）',
-  responses: { 200: { description: '使う AI', content: { 'application/json': { schema: successResponse(SettingsData) } } } },
+  responses: {
+    200: {
+      description: '使う AI',
+      content: { 'application/json': { schema: successResponse(SettingsData) } },
+    },
+  },
 })
 
 const putSettingsRoute = createRoute({
@@ -67,7 +81,10 @@ const putSettingsRoute = createRoute({
   summary: '用途ごとに使う AI を選ぶ',
   request: { body: { required: true, content: { 'application/json': { schema: Settings } } } },
   responses: {
-    200: { description: '保存した選択', content: { 'application/json': { schema: successResponse(SettingsData) } } },
+    200: {
+      description: '保存した選択',
+      content: { 'application/json': { schema: successResponse(SettingsData) } },
+    },
     422: errorContent('その用途に使えない、または見つからない AI を選んだ'),
   },
 })
@@ -84,10 +101,9 @@ export type AiRoutesDeps = {
 }
 
 const problemsOf = (id: AiToolId, status: AiToolStatus) =>
-  Object.fromEntries(AiPurpose.options.map((purpose) => [purpose, aiChoiceProblem(purpose, id, status)])) as Record<
-    AiPurpose,
-    string | null
-  >
+  Object.fromEntries(
+    AiPurpose.options.map((purpose) => [purpose, aiChoiceProblem(purpose, id, status)]),
+  ) as Record<AiPurpose, string | null>
 
 export const aiRoutes = (deps: AiRoutesDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })
@@ -101,7 +117,9 @@ export const aiRoutes = (deps: AiRoutesDeps) =>
       }))
       return c.json(ok({ tools, recommended: recommendAiSettings(statuses) }), 200)
     })
-    .openapi(getSettingsRoute, async (c) => c.json(ok(resolveAiSettings(await deps.settings.get(), deps.defaults)), 200))
+    .openapi(getSettingsRoute, async (c) =>
+      c.json(ok(resolveAiSettings(await deps.settings.get(), deps.defaults)), 200),
+    )
     .openapi(putSettingsRoute, async (c) => {
       const chosen = c.req.valid('json')
       const statuses = await deps.detect()
@@ -111,7 +129,8 @@ export const aiRoutes = (deps: AiRoutesDeps) =>
           return problem === null ? [] : [[purpose, [problem]]]
         }),
       ) as Record<string, string[]>
-      if (Object.keys(problems).length > 0) return c.json(fail(VALIDATION_ERROR_MESSAGE, problems), 422)
+      if (Object.keys(problems).length > 0)
+        return c.json(fail(VALIDATION_ERROR_MESSAGE, problems), 422)
       const saved = await deps.settings.save(chosen)
       return c.json(ok({ settings: saved, source: 'saved' as const }), 200)
     })

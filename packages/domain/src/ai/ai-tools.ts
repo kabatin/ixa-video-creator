@@ -17,7 +17,16 @@ export const AI_PURPOSE_LABELS: Readonly<Record<AiPurpose, string>> = Object.fre
   video: '動画',
 })
 
-export const AiToolId = z.enum(['stub', 'claude_cli', 'codex_cli', 'gemini_cli', 'grok_cli', 'local', 'vpipe', 'fal'])
+export const AiToolId = z.enum([
+  'stub',
+  'claude_cli',
+  'codex_cli',
+  'gemini_cli',
+  'grok_cli',
+  'local',
+  'vpipe',
+  'fal',
+])
 export type AiToolId = z.infer<typeof AiToolId>
 
 /** 見つけ方。叩いてよい CLI の名前はこの表にあるものだけ。 */
@@ -42,14 +51,54 @@ export type AiToolSpec = {
 const tool = (spec: AiToolSpec): AiToolSpec => Object.freeze(spec)
 
 export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
-  stub: tool({ id: 'stub', label: 'お試し（AI を使わない仮のもの）', detect: { kind: 'builtin' }, purposes: ['text', 'image', 'video'] }),
-  claude_cli: tool({ id: 'claude_cli', label: 'Claude Code', detect: { kind: 'cli', command: 'claude' }, purposes: ['text'] }),
-  codex_cli: tool({ id: 'codex_cli', label: 'Codex', detect: { kind: 'cli', command: 'codex' }, purposes: ['image'] }),
-  gemini_cli: tool({ id: 'gemini_cli', label: 'Gemini CLI', detect: { kind: 'cli', command: 'gemini' }, purposes: [] }),
-  grok_cli: tool({ id: 'grok_cli', label: 'Grok', detect: { kind: 'cli', command: 'grok' }, purposes: [] }),
-  local: tool({ id: 'local', label: '静止画を動かす（無料）', detect: { kind: 'builtin' }, purposes: ['video'] }),
-  vpipe: tool({ id: 'vpipe', label: '手元の MiniMax H3（vpipe・無料・1 本ずつ）', detect: { kind: 'local_server' }, purposes: ['video'] }),
-  fal: tool({ id: 'fal', label: 'fal（Seedance・従量課金）', detect: { kind: 'api_key', key: 'FAL_API_KEY' }, purposes: ['video'] }),
+  stub: tool({
+    id: 'stub',
+    label: 'お試し（AI を使わない仮のもの）',
+    detect: { kind: 'builtin' },
+    purposes: ['text', 'image', 'video'],
+  }),
+  claude_cli: tool({
+    id: 'claude_cli',
+    label: 'Claude Code',
+    detect: { kind: 'cli', command: 'claude' },
+    purposes: ['text'],
+  }),
+  codex_cli: tool({
+    id: 'codex_cli',
+    label: 'Codex',
+    detect: { kind: 'cli', command: 'codex' },
+    purposes: ['image'],
+  }),
+  gemini_cli: tool({
+    id: 'gemini_cli',
+    label: 'Gemini CLI',
+    detect: { kind: 'cli', command: 'gemini' },
+    purposes: [],
+  }),
+  grok_cli: tool({
+    id: 'grok_cli',
+    label: 'Grok',
+    detect: { kind: 'cli', command: 'grok' },
+    purposes: [],
+  }),
+  local: tool({
+    id: 'local',
+    label: '静止画を動かす（無料）',
+    detect: { kind: 'builtin' },
+    purposes: ['video'],
+  }),
+  vpipe: tool({
+    id: 'vpipe',
+    label: '手元の MiniMax H3（vpipe・無料・1 本ずつ）',
+    detect: { kind: 'local_server' },
+    purposes: ['video'],
+  }),
+  fal: tool({
+    id: 'fal',
+    label: 'fal（Seedance・従量課金）',
+    detect: { kind: 'api_key', key: 'FAL_API_KEY' },
+    purposes: ['video'],
+  }),
 })
 
 /** 見つかったか。見つからないときは理由（入っていない・起動していない・キーが無い）を持つ。 */
@@ -65,7 +114,11 @@ export const AiSettings = z.object({
 export type AiSettings = z.infer<typeof AiSettings>
 
 /** 選べない理由。選べるなら null。 */
-export const aiChoiceProblem = (purpose: AiPurpose, id: AiToolId, status: AiToolStatus): string | null => {
+export const aiChoiceProblem = (
+  purpose: AiPurpose,
+  id: AiToolId,
+  status: AiToolStatus,
+): string | null => {
   const spec = AI_TOOLS[id]
   if (!spec.purposes.includes(purpose)) {
     return `${spec.label} は${AI_PURPOSE_LABELS[purpose]}にはまだ使えません`
@@ -81,9 +134,13 @@ const RECOMMENDATION_ORDER: Readonly<Record<AiPurpose, readonly AiToolId[]>> = O
 })
 
 /** 初めて選ぶときの初期の組み合わせ。見つかって使えるものから選び、無ければお試し。 */
-export const recommendAiSettings = (statuses: Readonly<Record<AiToolId, AiToolStatus>>): AiSettings => {
+export const recommendAiSettings = (
+  statuses: Readonly<Record<AiToolId, AiToolStatus>>,
+): AiSettings => {
   const pick = (purpose: AiPurpose): AiToolId =>
-    RECOMMENDATION_ORDER[purpose].find((id) => aiChoiceProblem(purpose, id, statuses[id]) === null) ?? 'stub'
+    RECOMMENDATION_ORDER[purpose].find(
+      (id) => aiChoiceProblem(purpose, id, statuses[id]) === null,
+    ) ?? 'stub'
   return { text: pick('text'), image: pick('image'), video: pick('video') }
 }
 
@@ -98,16 +155,16 @@ export const resolveAiSettings = (
 export type AiEnvChoices = {
   readonly storyboardDrafter: 'stub' | 'claude_cli'
   readonly imageProvider: 'stub' | 'codex_cli'
-  readonly videoProvider: 'stub' | 'fal'
-  readonly localVideoGenerator: 'none' | 'vpipe'
 }
 
 /**
- * まだ画面で選んでいない間の初期値。**今までどおり環境変数で決まる**（既存の `.env` と CI を壊さない）。
- * 動画は、fal があれば今まで AUTO が fal を選んでいたので fal、次に vpipe、どちらも無ければお試し。
+ * まだ画面で選んでいない間の初期値。**今までどおりに動く**（既存の `.env` と CI を壊さない）。
+ * テキストと画像は環境変数のまま。動画の AUTO は今まで、`VIDEO_PROVIDER=fal` でも
+ * `LOCAL_VIDEO_GENERATOR=vpipe` でもお試しを選んでいた（fal は API に登録されず、vpipe は AUTO に出ない）
+ * ので、お試しにする。**選ぶ前に、黙ってお金の掛かる口へ変えない。**
  */
 export const aiDefaultsFromEnv = (env: AiEnvChoices): AiSettings => ({
   text: env.storyboardDrafter,
   image: env.imageProvider,
-  video: env.videoProvider === 'fal' ? 'fal' : env.localVideoGenerator === 'vpipe' ? 'vpipe' : 'stub',
+  video: 'stub',
 })

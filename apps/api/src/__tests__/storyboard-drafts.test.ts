@@ -120,7 +120,8 @@ const buildRoutes = async (options: {
   shots?: readonly Shot[]
   script?: string | null
   withAnalysis?: boolean
-  drafter?: StoryboardDrafter
+  /** 関数なら、押すたびに呼んで「いま選んでいる AI」を返す（ADR-0032）。 */
+  drafter?: StoryboardDrafter | (() => StoryboardDrafter)
   /** 記録の口を差し替える（作れないときの振る舞いを見るため）。 */
   editBatches?: EditBatchRecorder
 }) => {
@@ -157,7 +158,9 @@ const buildRoutes = async (options: {
     await musicAnalyses.create(anAnalysis(track.id))
   }
 
-  const drafter = options.drafter ?? drafterFor(shots)
+  const chosen = options.drafter ?? drafterFor(shots)
+  const drafter = typeof chosen === 'function' ? chosen() : chosen
+  const pickDrafter = typeof chosen === 'function' ? () => Promise.resolve(chosen()) : () => Promise.resolve(chosen)
   const editBatches = createInMemoryEditBatchRepository()
 
   return {
@@ -173,7 +176,7 @@ const buildRoutes = async (options: {
       musicTracks,
       musicAnalyses,
       drafts,
-      drafter,
+      drafter: pickDrafter,
       editBatches: options.editBatches ?? editBatches,
     }),
   }
@@ -269,6 +272,22 @@ describe('POST /projects/{id}/storyboard/drafts', () => {
 
     const { body } = await postDraft(app, project.id)
     expect(body.data.run.drafter).toBe('claude-cli-storyboard-drafter')
+  })
+
+  /** 使う AI は画面で選び直せる（ADR-0032）。起動し直さなくても、次に押したときから効く。 */
+  it('押すたびに、いま選んでいる AI で下書きする', async () => {
+    const project = aProject()
+    const shots = [aShot(project.id)]
+    const drafters = { first: drafterFor(shots, { name: 'first' }), second: drafterFor(shots, { name: 'second' }) }
+    const current = { name: 'first' as keyof typeof drafters }
+    const { app } = await buildRoutes({ project, shots, drafter: () => drafters[current.name] })
+
+    const before = await postDraft(app, project.id)
+    current.name = 'second'
+    const after = await postDraft(app, project.id)
+
+    expect(before.body.data.run.drafter).toBe('first')
+    expect(after.body.data.run.drafter).toBe('second')
   })
 
   it('脚本と曲の構成を下書きに渡す', async () => {

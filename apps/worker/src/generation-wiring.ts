@@ -9,6 +9,7 @@ import {
 } from '@ixa/provider-video'
 import { createS3Storage } from '@ixa/storage'
 import {
+  createAiSettingsRepository,
   createDbClient,
   createGenerationJobRepository,
   createMediaAssetRepository,
@@ -24,8 +25,15 @@ import {
   createLocationRepository,
   createShotCharacterRepository,
   createShotReferenceRepository,
+  type DbClient,
 } from '@ixa/db'
-import type { ProjectEventPublisher } from '@ixa/domain'
+import {
+  ProviderId as ProviderIdSchema,
+  aiDefaultsFromEnv,
+  resolveAiSettings,
+  type ProjectEventPublisher,
+  type ProviderId,
+} from '@ixa/domain'
 import type { AppConfig } from '@ixa/config'
 import { Queue } from 'bullmq'
 import type { Redis } from 'ioredis'
@@ -76,6 +84,17 @@ export type GenerationWiring = {
  * 黙ってスタブへ落とすと、実 Provider で作ったつもりの色の四角が Take として残り、
  * 気付くのは書き出しを見たときになる。**設定と実態が食い違ったまま動かさない。**
  */
+/**
+ * いま選んでいる動画の AI（ADR-0032）。**読むたびに DB を見る**（画面で選び直したら次の 1 回から効く）。
+ * まだ選んでいなければ、API と同じ初期値（`aiDefaultsFromEnv`）。
+ */
+const chosenVideoProvider = (config: AppConfig, db: DbClient) => {
+  const settings = createAiSettingsRepository(db)
+  const defaults = aiDefaultsFromEnv({ storyboardDrafter: config.storyboardDrafter, imageProvider: config.imageProvider })
+  return async (): Promise<ProviderId> =>
+    ProviderIdSchema.parse(resolveAiSettings(await settings.get(), defaults).settings.video)
+}
+
 const requireFalApiKey = (config: AppConfig): string => {
   const key = config.providers.falApiKey
   if (key === null || key.trim() === '') {
@@ -257,6 +276,7 @@ export const createGenerationWiring = (
       db,
       context: deps.context,
       registry,
+      videoProvider: chosenVideoProvider(config, db),
       queue,
       logger,
     }),
@@ -270,7 +290,6 @@ export const createGenerationWiring = (
     review: reviewWiring.review,
     regeneration: reviewWiring.regeneration,
     image: createImageWiring({
-      config,
       db,
       storage,
       context: deps.context,

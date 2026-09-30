@@ -4,8 +4,8 @@ import {
   createShotRepository,
   type DbClient,
 } from '@ixa/db'
-import { buildGeneration, type BuildGenerationDeps } from '@ixa/generation'
-import type { GenerationContextSource } from '@ixa/domain'
+import { buildGeneration, catalogForVideoChoice, type BuildGenerationDeps } from '@ixa/generation'
+import type { GenerationContextSource, ProviderId } from '@ixa/domain'
 import {
   selectModel,
   validateAgainstCapabilities,
@@ -33,9 +33,11 @@ import type { RegenerationQueue } from './regeneration/index.js'
 const generationPorts = (
   context: GenerationContextSource,
   registry: ProviderRegistry,
+  videoProvider: ProviderId,
 ): BuildGenerationDeps<VideoModelDescriptor> => ({
   context,
-  catalog: registry,
+  // 「使う AI」で選んだ動画の AI の中から選び直す（ADR-0032。有料の口へ黙って逃がさない）。
+  catalog: catalogForVideoChoice(registry, videoProvider),
   router: { selectModel, validateAgainstCapabilities },
 })
 
@@ -43,6 +45,8 @@ export type RegenerationEnqueueDeps = {
   readonly db: DbClient
   readonly context: GenerationContextSource
   readonly registry: ProviderRegistry
+  /** いま選んでいる動画の AI（ADR-0032）。選び直すたびに読む。 */
+  readonly videoProvider: () => Promise<ProviderId>
   readonly queue: Queue
   readonly logger: Logger
 }
@@ -68,7 +72,7 @@ export const createRegenerationEnqueue = (deps: RegenerationEnqueueDeps): Regene
       if (project === null) throw new Error(`Project が見つかりません: ${request.projectId}`)
 
       const compiled = await buildGeneration(
-        generationPorts(deps.context, deps.registry),
+        generationPorts(deps.context, deps.registry, await deps.videoProvider()),
         shot,
         project,
         'AUTO',

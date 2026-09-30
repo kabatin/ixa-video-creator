@@ -22,12 +22,26 @@ const runnerWith =
     return Promise.resolve(results[invocation.command] ?? { kind: 'not_found', reason: 'ENOENT' })
   }
 
-const completed = (stdout: string, exitCode = 0): CliRunResult => ({ kind: 'completed', exitCode, stdout, stderr: '' })
+const completed = (stdout: string, exitCode = 0): CliRunResult => ({
+  kind: 'completed',
+  exitCode,
+  stdout,
+  stderr: '',
+})
 
 const probe = (patch: Partial<AiToolProbe> = {}): AiToolProbe => ({
-  runCli: runnerWith(Object.fromEntries(Object.entries(VERSIONS).map(([name, out]) => [name, completed(out)]))),
+  runCli: runnerWith(
+    Object.fromEntries(Object.entries(VERSIONS).map(([name, out]) => [name, completed(out)])),
+  ),
   fal: { keyConfigured: false, enabled: false },
-  checkLocalServer: () => Promise.resolve({ state: 'down', reason: '起動していません（vpipe-api serve で起動します）' }),
+  localServer: {
+    enabled: true,
+    check: () =>
+      Promise.resolve({
+        state: 'down',
+        reason: '起動していません（vpipe-api serve で起動します）',
+      }),
+  },
   ...patch,
 })
 
@@ -63,10 +77,22 @@ describe('detectAiTools', () => {
       }),
     )
 
-    expect(found.claude_cli).toEqual({ state: 'missing', reason: expect.stringMatching(/応答がありません/) as unknown })
-    expect(found.codex_cli).toEqual({ state: 'missing', reason: expect.stringMatching(/終了コード 1/) as unknown })
-    expect(found.gemini_cli).toEqual({ state: 'missing', reason: expect.stringMatching(/起動できません/) as unknown })
-    expect(found.grok_cli).toEqual({ state: 'missing', reason: expect.stringMatching(/入っていません/) as unknown })
+    expect(found.claude_cli).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/応答がありません/) as unknown,
+    })
+    expect(found.codex_cli).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/終了コード 1/) as unknown,
+    })
+    expect(found.gemini_cli).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/起動できません/) as unknown,
+    })
+    expect(found.grok_cli).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/入っていません/) as unknown,
+    })
   })
 
   it('アプリに入っているもの（お試し・静止画を動かす）はいつでも使える', async () => {
@@ -77,11 +103,43 @@ describe('detectAiTools', () => {
   })
 
   it('手元の生成サーバは health の結果をそのまま使う', async () => {
-    const up = await detectAiTools(probe({ checkLocalServer: () => Promise.resolve({ state: 'up', version: '0.1.0' }) }))
+    const up = await detectAiTools(
+      probe({
+        localServer: {
+          enabled: true,
+          check: () => Promise.resolve({ state: 'up', version: '0.1.0' }),
+        },
+      }),
+    )
     const down = await detectAiTools(probe())
 
     expect(up.vpipe).toEqual({ state: 'ready', version: '0.1.0' })
-    expect(down.vpipe).toEqual({ state: 'missing', reason: expect.stringMatching(/vpipe-api serve/) as unknown })
+    expect(down.vpipe).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/vpipe-api serve/) as unknown,
+    })
+  })
+
+  /** 手元の生成サーバは .env で有効にしたときだけ一覧のモデルに出る（PR #4 / ADR-0031 のまま）。 */
+  it('手元の生成サーバは、.env で有効にしていなければ叩かずに有効にし方を言う', async () => {
+    let checked = false
+    const found = await detectAiTools(
+      probe({
+        localServer: {
+          enabled: false,
+          check: () => {
+            checked = true
+            return Promise.resolve({ state: 'up', version: '0.1.0' })
+          },
+        },
+      }),
+    )
+
+    expect(checked).toBe(false)
+    expect(found.vpipe).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/LOCAL_VIDEO_GENERATOR=vpipe/) as unknown,
+    })
   })
 
   /** お金が掛かるので、キーがあるだけでは使わない（`.env` の VIDEO_PROVIDER=fal で明示する。無認証の API のため）。 */
@@ -90,8 +148,14 @@ describe('detectAiTools', () => {
     const enabled = await detectAiTools(probe({ fal: { keyConfigured: true, enabled: true } }))
     const none = await detectAiTools(probe())
 
-    expect(keyOnly.fal).toEqual({ state: 'missing', reason: expect.stringMatching(/VIDEO_PROVIDER=fal/) as unknown })
+    expect(keyOnly.fal).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/VIDEO_PROVIDER=fal/) as unknown,
+    })
     expect(enabled.fal).toEqual({ state: 'ready', version: null })
-    expect(none.fal).toEqual({ state: 'missing', reason: expect.stringMatching(/FAL_API_KEY/) as unknown })
+    expect(none.fal).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/FAL_API_KEY/) as unknown,
+    })
   })
 })

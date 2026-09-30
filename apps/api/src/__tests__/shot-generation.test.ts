@@ -1,4 +1,4 @@
-import { compileSpec, computeSpecHash, type Project } from '@ixa/domain'
+import { ProviderId, compileSpec, computeSpecHash, type Project } from '@ixa/domain'
 import { GenerationContextError } from '@ixa/generation'
 import { createProviderRegistry } from '@ixa/provider-core'
 import { describe, expect, it } from 'vitest'
@@ -115,6 +115,53 @@ describe('POST /shots/:id/generate', () => {
     expect(job?.resolvedModel).toBe(json.data.resolvedModel)
     expect(job?.routerDecision?.modelId).toBe(json.data.resolvedModel)
     expect(job?.routerDecision?.weightsVersion).toBe('balanced-v1')
+  })
+
+  /**
+   * AUTO は「使う AI」で選んだ動画の AI の中から選ぶ（ADR-0032）。
+   * .env で有料の口を有効にしていても、別の AI を選んだ人の AUTO（一括生成の既定）がそれを選ばない。
+   */
+  describe('AUTO と「使う AI」', () => {
+    const PAID = testModel({ id: 'paid/best', providerId: 'paid', costPerSecondUsd: 0.001, characterConsistency: 1 })
+    const appChoosing = (videoProvider: string) => {
+      const project = aProject()
+      const shot = aShot(project.id)
+      const generationJobs = createInMemoryGenerationJobRepository()
+      const deps: AppDeps = {
+        ...baseAppDeps(),
+        projects: createInMemoryProjectRepository([project]),
+        shots: createInMemoryShotRepository([shot]),
+        generationJobs,
+        registry: createProviderRegistry([createTestVideoProvider([CHEAP_MODEL]), createTestVideoProvider([PAID])]),
+        videoProvider: () => Promise.resolve(ProviderId.parse(videoProvider)),
+      }
+      return { app: createApp(deps), shot }
+    }
+
+    it('選んだ AI のモデルだけから選ぶ（安くて良い別の AI があっても）', async () => {
+      const f = appChoosing('test')
+
+      const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'AUTO' })
+
+      expect(((await res.json()) as Ok<GenerateData>).data.resolvedModel).toBe('test/cheap')
+    })
+
+    it('明示したモデルは、選んだ AI の外でも使える', async () => {
+      const f = appChoosing('test')
+
+      const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'paid/best' })
+
+      expect(((await res.json()) as Ok<GenerateData>).data.resolvedModel).toBe('paid/best')
+    })
+
+    it('選んだ AI がこの環境に無ければ、AUTO は理由を付けて断る', async () => {
+      const f = appChoosing('vpipe')
+
+      const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'AUTO' })
+
+      expect(res.status).toBe(422)
+      expect(JSON.stringify(await res.json())).toContain('使う AI')
+    })
   })
 
   it('編集尺をモデルが出せる生成尺へ切り上げた仕様になる（ADR-0011）', async () => {

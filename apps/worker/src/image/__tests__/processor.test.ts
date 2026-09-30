@@ -82,6 +82,7 @@ const contextWithManual = (references: readonly Pick<ShotReference, 'mediaAssetI
 
 const setup = (options: { outcome?: Parameters<typeof fakeImageProvider>[1]; context?: GenerationContextSource } = {}) => {
   const job = queuedJob()
+  const provider = fakeImageProvider(dir, options.outcome)
   const deps = {
     imageJobs: createInMemoryImageJobRepository([job]),
     shots: inMemoryShots([shot]),
@@ -90,8 +91,7 @@ const setup = (options: { outcome?: Parameters<typeof fakeImageProvider>[1]; con
     shotReferences: createInMemoryShotReferenceRepository(),
     storage: createMemoryStorage(),
     context: options.context ?? contextWithManual(),
-    provider: fakeImageProvider(dir, options.outcome),
-    model: codexCliImageModel,
+    adapters: [{ provider, model: codexCliImageModel }],
     mediaQueue: createRecordingMediaQueue(),
     events: createRecordingEvents(),
     workDir: join(dir, 'work'),
@@ -102,10 +102,31 @@ const setup = (options: { outcome?: Parameters<typeof fakeImageProvider>[1]; con
       return { width: 1536, height: 864 }
     },
   } satisfies ImageProcessorDeps
-  return { job, deps }
+  return { job, deps, provider }
 }
 
 describe('processImageJob', () => {
+  /** 使う AI は画面で選び直せる（ADR-0032）。worker は起動時の口ではなく、ジョブに記された口で作る。 */
+  it('ジョブに記された口で作る', async () => {
+    const { job, deps, provider } = setup()
+    const other = { ...fakeImageProvider(dir), id: ProviderId.parse('stub-image') }
+    const otherModel = { ...codexCliImageModel, providerId: ProviderId.parse('stub-image'), id: ModelId.parse('stub/gemini-like-image') }
+
+    await processImageJob({ ...deps, adapters: [{ provider: other, model: otherModel }, { provider, model: codexCliImageModel }] }, { imageJobId: job.id })
+
+    expect(provider.requests).toHaveLength(1)
+    expect(other.requests).toHaveLength(0)
+  })
+
+  it('この環境に無い口のジョブは、理由を付けて失敗にする（作り直せない）', async () => {
+    const { job, deps } = setup()
+
+    const result = await processImageJob({ ...deps, adapters: [] }, { imageJobId: job.id })
+
+    expect(result).toEqual({ state: 'failed' })
+    expect((await deps.imageJobs.findById(job.id))?.error).toMatchObject({ code: 'provider_unavailable', retryable: false })
+  })
+
   it('作った絵を素材として取り込み、最初のフレームを差し替える', async () => {
     const { job, deps } = setup()
 
@@ -125,11 +146,11 @@ describe('processImageJob', () => {
   })
 
   it('Shot の説明から、比に合わせた形で 1 枚だけ頼む', async () => {
-    const { job, deps } = setup()
+    const { job, deps, provider } = setup()
 
     await processImageJob(deps, { imageJobId: job.id })
 
-    const request = deps.provider.requests[0]
+    const request = provider.requests[0]
     expect(request?.prompt).toContain('暗いガレージ')
     expect(request?.prompt).toMatch(/最初の 1 コマ/)
     expect(request).toMatchObject({ aspectRatio: '16:9', resolution: { width: 1536, height: 1024 }, count: 1 })
@@ -137,7 +158,7 @@ describe('processImageJob', () => {
 
   it('参照は手元のファイルへ落として渡し、使った素材を記録する', async () => {
     const referenceId: MediaAssetId = newId(MediaAssetIdSchema)
-    const { job, deps } = setup({ context: contextWithManual([{ mediaAssetId: referenceId, role: 'subject' }]) })
+    const { job, deps, provider } = setup({ context: contextWithManual([{ mediaAssetId: referenceId, role: 'subject' }]) })
     await deps.mediaAssets.create({
       id: referenceId,
       workspaceId: project.workspaceId,
@@ -151,7 +172,6 @@ describe('processImageJob', () => {
     })
     await deps.storage.put(`media/${project.workspaceId}/${referenceId}/original.png`, FAKE_PNG, { contentType: 'image/png' })
     let resolved: string | null = null
-    const provider = deps.provider
     const spying = {
       ...provider,
       submit: async (request: Parameters<typeof provider.submit>[0]) => {
@@ -162,7 +182,7 @@ describe('processImageJob', () => {
       },
     }
 
-    await processImageJob({ ...deps, provider: spying }, { imageJobId: job.id })
+    await processImageJob({ ...deps, adapters: [{ provider: spying, model: codexCliImageModel }] }, { imageJobId: job.id })
 
     expect(resolved).not.toMatch(/^https?:/)
     expect((await deps.imageJobs.findById(job.id))?.referenceAssetIds).toEqual([referenceId])
@@ -192,8 +212,8 @@ describe('processImageJob', () => {
     const failing = setup({ outcome: { code: 'no_image', message: '絵が無い' } })
     await processImageJob(failing.deps, { imageJobId: failing.job.id })
 
-    expect(ok.deps.provider.released).toEqual(['job-1'])
-    expect(failing.deps.provider.released).toEqual(['job-1'])
+    expect(ok.provider.released).toEqual(['job-1'])
+    expect(failing.provider.released).toEqual(['job-1'])
   })
 
   it('始まった・終わったを出来事で知らせる', async () => {
@@ -208,22 +228,22 @@ describe('processImageJob', () => {
   })
 
   it('頼む前に断られても（大きさ違いなど）、理由を残して終える（投げっぱなしにしない）', async () => {
-    const { job, deps } = setup()
-    const refusing = { ...deps.provider, submit: () => Promise.reject(new Error('モデルでは次の要求を満たせません')) }
+    const { job, deps, provider } = setup()
+    const refusing = { ...provider, submit: () => Promise.reject(new Error('モデルでは次の要求を満たせません')) }
 
-    const result = await processImageJob({ ...deps, provider: refusing }, { imageJobId: job.id })
+    const result = await processImageJob({ ...deps, adapters: [{ provider: refusing, model: codexCliImageModel }] }, { imageJobId: job.id })
 
     expect(result.state).toBe('failed')
     expect((await deps.imageJobs.findById(job.id))?.error?.message).toContain('満たせません')
   })
 
   it('もう終わったジョブはやり直さない', async () => {
-    const { job, deps } = setup()
+    const { job, deps, provider } = setup()
     await processImageJob(deps, { imageJobId: job.id })
 
     const again = await processImageJob(deps, { imageJobId: job.id })
 
     expect(again.state).toBe('skipped')
-    expect(deps.provider.requests).toHaveLength(1)
+    expect(provider.requests).toHaveLength(1)
   })
 })

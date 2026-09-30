@@ -1,5 +1,4 @@
 import { join } from 'node:path'
-import type { AppConfig } from '@ixa/config'
 import {
   createImageJobRepository,
   createMediaAssetRepository,
@@ -9,7 +8,6 @@ import {
   type DbClient,
 } from '@ixa/db'
 import type { GenerationContextSource, MediaAssetId, ProjectEventPublisher } from '@ixa/domain'
-import type { ImageModelDescriptor, ImageProvider } from '@ixa/provider-core'
 import {
   codexCliImageModel,
   createCodexCliImageProvider,
@@ -18,23 +16,19 @@ import {
 } from '@ixa/provider-image'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
-import type { ImageProcessorDeps } from './image/index.js'
+import type { ImageAdapter, ImageProcessorDeps } from './image/index.js'
 
 /**
- * 絵コンテの画像を作る口（ADR-0029）。**`IMAGE_PROVIDER` で決める。既定はスタブ（仮の絵、費用なし）。**
- * `codex_cli` は手元の Codex CLI を呼び、契約の利用枠を使う。
+ * 絵コンテの画像を作る口（ADR-0029）。**どちらで作るかはジョブに記された口で決まる**（ADR-0032。
+ * API が「使う AI」から決める）。ここは作れる口を並べるだけ。
+ * Codex CLI は手元の CLI を呼び、契約の利用枠を使う（作るだけでは何も起動しない）。
  */
-const providerFor = (
-  config: AppConfig,
-  workDir: string,
-  stubOutputDir: string,
-): { readonly provider: ImageProvider; readonly model: ImageModelDescriptor } =>
-  config.imageProvider === 'codex_cli'
-    ? { provider: createCodexCliImageProvider({ workingDirRoot: join(workDir, 'codex') }), model: codexCliImageModel }
-    : { provider: createStubImageProvider({ outputDir: join(stubOutputDir, 'image') }), model: stubGeminiLikeImageModel }
+const imageAdapters = (workDir: string, stubOutputDir: string): readonly ImageAdapter[] => [
+  { provider: createStubImageProvider({ outputDir: join(stubOutputDir, 'image') }), model: stubGeminiLikeImageModel },
+  { provider: createCodexCliImageProvider({ workingDirRoot: join(workDir, 'codex') }), model: codexCliImageModel },
+]
 
 export const createImageWiring = (input: {
-  readonly config: AppConfig
   readonly db: DbClient
   readonly storage: ObjectStorage
   readonly context: GenerationContextSource
@@ -52,7 +46,7 @@ export const createImageWiring = (input: {
     shotReferences: createShotReferenceRepository(input.db),
     storage: input.storage,
     context: input.context,
-    ...providerFor(input.config, workDir, input.stubOutputDir),
+    adapters: imageAdapters(workDir, input.stubOutputDir),
     mediaQueue: input.mediaQueue,
     events: input.events,
     workDir,
