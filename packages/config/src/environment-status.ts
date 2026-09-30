@@ -1,3 +1,4 @@
+import { isLoopbackUrl } from './local-video.js'
 import type { AppConfig } from './schema.js'
 
 /**
@@ -53,6 +54,22 @@ const secretStatus = (
   return { label, envName, configured, length: configured ? trimmed.length : null, purpose }
 }
 
+/**
+ * ローカルの動画生成の説明。**サーバがこのマシンの外にあり http なら、そう書く。**
+ * 合言葉も最初のフレームの画像も暗号化されずに流れるので、信頼できる LAN の中だけで使う。
+ * URL そのものは出さない（画面に URL を出さない）。
+ */
+const localVideoNote = (config: AppConfig): string => {
+  if (config.providers.localVideoGenerator === 'none') return '使わない。'
+  const base =
+    'このマシンの動画生成サーバ（vpipe-api）で MiniMax H3 を動かす。費用は掛からないが、1 本に 7〜25 分かかり、1 本ずつ順に作る。'
+  const url = config.providers.vpipeApiUrl
+  const plainOverNetwork = !isLoopbackUrl(url) && url.toLowerCase().startsWith('http://')
+  return plainOverNetwork
+    ? `${base}サーバが別のマシンにあり、合言葉と画像が暗号化されずに流れる。信頼できる LAN の中だけで使うこと。`
+    : base
+}
+
 export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
   secrets: [
     secretStatus(
@@ -60,6 +77,12 @@ export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
       'FAL_API_KEY',
       config.providers.falApiKey,
       '実際の映像生成に使う。未設定のあいだはスタブだけが動き、費用は発生しない。',
+    ),
+    secretStatus(
+      'ローカルの動画生成（vpipe）の合言葉',
+      'VPIPE_API_TOKEN',
+      config.providers.vpipeApiToken,
+      '別のマシンの動画生成サーバを使うときだけ要る。このマシンのサーバなら未設定でよい。',
     ),
     secretStatus(
       'ストレージのアクセスキー',
@@ -85,6 +108,14 @@ export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
         config.providers.videoProvider === 'stub'
           ? '色の四角を作るだけ。費用は発生しない。'
           : '実際に fal.ai へ投げる。1 生成ごとに費用が発生する。',
+    },
+    {
+      label: 'ローカルの動画生成',
+      envName: 'LOCAL_VIDEO_GENERATOR',
+      value: config.providers.localVideoGenerator,
+      // 費用は掛からないが、この機械の GPU とメモリを長く占める。使っていることが見えるようにする。
+      notable: config.providers.localVideoGenerator !== 'none',
+      note: localVideoNote(config),
     },
     {
       label: '絵コンテの下書き',

@@ -82,6 +82,17 @@ export const EnvSchema = z.object({
    * 従量課金ではないが無制限でもないので、明示的に切り替えたときだけ走らせる。
    */
   IMAGE_PROVIDER: z.enum(['stub', 'codex_cli']).default('stub'),
+  /**
+   * 手元の生成サーバ（vpipe-api）で動画を作るか（ADR-0030）。**既定は `none`（使わない）。**
+   *
+   * **URL やトークンの有無で切り替えない**（LESSONS「鍵があることを、実行の合図にしない」）。
+   * `vpipe` にすると MiniMax H3 Turbo のモデルが選択肢に出る。費用は掛からないが、
+   * 1 本に 7〜25 分かかり 1 本ずつしか作れず、その間この機械の GPU とメモリを占める。
+   * AUTO には選ばれない（明示して選んだときだけ動く）。
+   */
+  LOCAL_VIDEO_GENERATOR: z.enum(['none', 'vpipe']).default('none'),
+  /** vpipe-api の場所。**既定はこのマシンだけ**（`127.0.0.1`）。 */
+  VPIPE_API_URL: urlString.default('http://127.0.0.1:8765'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
   // 任意（既定値なし・nullable）
@@ -90,6 +101,14 @@ export const EnvSchema = z.object({
    * 空文字を値として受け取ると、キー未取得のまま API を叩いて分かりにくい失敗をするため。
    */
   FAL_API_KEY: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v))
+    .optional(),
+  /**
+   * vpipe-api の合言葉（`Authorization: Bearer`）。空なら未設定（FAL_API_KEY と同じ扱い）。
+   * このマシンのサーバ（ループバック）なら要らない。別のマシンのサーバを使うときは必須。
+   */
+  VPIPE_API_TOKEN: z
     .string()
     .transform((v) => (v.trim() === '' ? undefined : v))
     .optional(),
@@ -135,5 +154,11 @@ export interface AppConfig {
     stubVideoCostPerSecUsd: number
     /** 映像生成に実 Provider を使うか。既定は `stub`（無料）。 */
     videoProvider: Env['VIDEO_PROVIDER']
+    /** 手元の生成サーバで動画を作るか（ADR-0030）。既定は `none`。 */
+    localVideoGenerator: Env['LOCAL_VIDEO_GENERATOR']
+    /** vpipe-api の場所。 */
+    vpipeApiUrl: string
+    /** vpipe-api の合言葉。未設定は null。 */
+    vpipeApiToken: string | null
   }
 }

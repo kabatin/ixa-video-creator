@@ -146,6 +146,22 @@ startup rather than silently falling back to the stub.
 Settings → *Connections and runtime* shows which keys are set (never their values) and
 whether the billing path is open.
 
+### Generating locally with MiniMax H3 (optional)
+
+If you run [vpipe-api](https://github.com/kabatin/vpipe-api) on the same machine, ixa can use
+its MiniMax H3 Turbo workflow as a free, local video provider:
+
+```bash
+# .env
+LOCAL_VIDEO_GENERATOR=vpipe   # default is `none`
+VPIPE_API_URL=http://127.0.0.1:8765
+VPIPE_API_TOKEN=              # required only when the URL points off this machine
+```
+
+Two models appear in the model picker (draft and standard). They are never chosen by AUTO:
+a clip takes 7–25 minutes on an M5 Mac and clips render one at a time, so queued generations
+wait their turn instead of failing. See [ADR-0030](./docs/adr/0030-local-h3-video-via-vpipe-api.md).
+
 ## Costs, honestly
 
 For the reference project — 27 shots, 110.9s of edited footage — Seedance 2.5 via fal.ai
@@ -172,7 +188,7 @@ a network you do not control — see [SECURITY.md](./SECURITY.md).
 
 ## Third-party licensing
 
-This project is MIT. Two dependencies carry obligations that pass to **you** as the
+This project is MIT. Some dependencies carry obligations that pass to **you** as the
 operator:
 
 - **[Remotion](https://www.remotion.dev/docs/license)** is free for individuals and
@@ -180,6 +196,9 @@ operator:
   license**, and headcount is aggregated across collaborating parties. MIT on this
   repository does not waive that.
 - Provider APIs (fal.ai and others) bill you directly under their own terms.
+- **MiniMax H3** (only if you enable the optional local generator) is released under the
+  MiniMax H3 Community License, which restricts where and how the weights may be used.
+  ixa does not ship the weights; check the license before enabling it.
 
 ## Contributing
 

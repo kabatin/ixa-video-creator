@@ -5,6 +5,7 @@ import {
   createFalVideoProvider,
   createLocalImageToVideoProvider,
   createStubVideoProvider,
+  createVpipeVideoProvider,
 } from '@ixa/provider-video'
 import { createS3Storage } from '@ixa/storage'
 import {
@@ -144,6 +145,19 @@ export const createGenerationWiring = (
     createLocalImageToVideoProvider({ outputDir: join(stubOutputDir, 'local') }),
     ...(config.providers.videoProvider === 'fal'
       ? [createFalVideoProvider({ apiKey: requireFalApiKey(config) })]
+      : []),
+    /**
+     * 手元の生成サーバ（vpipe-api）の MiniMax H3（ADR-0030）。`LOCAL_VIDEO_GENERATOR=vpipe` のときだけ。
+     * AUTO には選ばれない（`routable: false`）。API 側の登録と同じ条件にすること。
+     */
+    ...(config.providers.localVideoGenerator === 'vpipe'
+      ? [
+          createVpipeVideoProvider({
+            baseUrl: config.providers.vpipeApiUrl,
+            ...(config.providers.vpipeApiToken === null ? {} : { token: config.providers.vpipeApiToken }),
+            outputDir: join(stubOutputDir, 'vpipe'),
+          }),
+        ]
       : []),
   ])
 

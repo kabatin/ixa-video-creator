@@ -16,7 +16,7 @@ import {
   type TakeId,
   settledShotStatus,
 } from '@ixa/domain'
-import { ProviderError } from '@ixa/provider-core'
+import { ProviderBusyError, ProviderError } from '@ixa/provider-core'
 import type {
   ProviderJobHandle,
   ProviderJobStatus,
@@ -25,9 +25,15 @@ import type {
 } from '@ixa/provider-core'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
+import {
+  SUBMIT_BUSY_TIMEOUT_MESSAGE,
+  submitBusyDelayMs,
+  submitBusyExpired,
+} from './busy.js'
 import { recordTake, type RecordTakeDeps } from './complete.js'
 import { failureMessageOf, publishJobStatus, publishShotStatus } from './events.js'
 import { parseGenerationJobData, type GenerationJobData } from './job-data.js'
+import { pollDelayMs, pollPolicyForJob, pollPolicyOf } from './poll-policy.js'
 import { checkLineage, lineageFailureOf, lineageFieldsOf, type LineageCheck } from './lineage.js'
 import { shotStatusAfterFailure } from './shot-status-after-failure.js'
 import { rebuildSpec } from './spec.js'
@@ -40,18 +46,16 @@ import { rebuildSpec } from './spec.js'
  * - 冪等。終了済みのジョブを再実行しても Take を二重に作らない
  */
 
-/** ポーリング間隔の初期値と上限。 */
-export const POLL_BACKOFF_BASE_MS = 5_000
-export const POLL_BACKOFF_MAX_MS = 120_000
-/** これを超えたら諦めて failed にする。既定で約 2 時間分。 */
-export const MAX_POLL_ATTEMPTS = 60
+/** 問い合わせの間隔と回数は `poll-policy.ts`（Provider ごとに変えられる。ADR-0030）。 */
+export {
+  MAX_POLL_ATTEMPTS,
+  POLL_BACKOFF_BASE_MS,
+  POLL_BACKOFF_MAX_MS,
+  pollDelayMs,
+} from './poll-policy.js'
 
 /** 参照画像を Provider に見せるための署名付き URL の有効期限（秒）。 */
 export const REFERENCE_URL_EXPIRES_SEC = 900
-
-/** 指数バックオフ。attempt は 1 始まり。 */
-export const pollDelayMs = (attempt: number): number =>
-  Math.min(POLL_BACKOFF_BASE_MS * 2 ** Math.max(0, attempt - 1), POLL_BACKOFF_MAX_MS)
 
 /** ポーリングの再スケジュール口。BullMQ への依存を配線側に閉じ込める。 */
 export type PollScheduler = {
@@ -93,8 +97,21 @@ export type GenerationOutcome =
   | { readonly state: 'skipped'; readonly reason: string }
   | { readonly state: 'submitted'; readonly providerJobRef: string }
   | { readonly state: 'polling'; readonly delayMs: number }
+  /** Provider が満杯で投入を断った。queued のまま投入し直しを予約した（ADR-0030）。 */
+  | { readonly state: 'busy'; readonly delayMs: number }
   | { readonly state: 'succeeded'; readonly takeId: TakeId }
   | { readonly state: 'failed'; readonly code: string }
+
+/**
+ * 頼んだあとで仕様が変わったときの文（画面に出る）。
+ *
+ * Shot 自身の編集だけでなく、**前の Shot の採用 Take が変わっても**仕様は変わる
+ * （連続性の参照＝前の Shot の最後のコマが、採用 Take から決まるため）。
+ * 順番待ちが長い Provider（ADR-0030）では、待っている間に前の Shot で採用し直すと起きる。
+ */
+export const SPEC_DRIFT_MESSAGE =
+  '頼んだあとで、この Shot の内容か、前の Shot の採用 Take（続きの最初のフレームに使う最後のコマ）が変わりました。' +
+  '古い内容のまま作らないよう取りやめたので、もう一度生成してください。'
 
 /** 作業を続けられない状態。GenerationJob.error に落として failed にする。 */
 class JobFailure extends Error {
@@ -170,19 +187,29 @@ const submit = async (
   const { spec, specHash } = await rebuildSpec(deps.context, shot, project, model, job.corrections)
   if (specHash !== job.specHash) {
     // Shot が編集されて仕様が変わっている。古い仕様で課金しないよう止める。
-    throw new JobFailure(
-      'spec_drift',
-      `Shot が変更されたため仕様が一致しません（job=${job.specHash} / now=${specHash}）`,
-      false,
+    // ハッシュは内部の値なので画面の文には入れず、ログにだけ残す。
+    deps.logger.warn(
+      { jobId: job.id, jobSpecHash: job.specHash, currentSpecHash: specHash },
+      '頼んだときと仕様が変わったため投入しません',
     )
+    throw new JobFailure('spec_drift', SPEC_DRIFT_MESSAGE, false)
   }
 
   const provider = deps.registry.providerFor(model.id)
-  const handle = await provider.submit({
-    model,
-    spec,
-    resolveReference: referenceResolver(deps.mediaAssets, deps.storage),
-  })
+  const handle = await provider
+    .submit({
+      model,
+      spec,
+      resolveReference: referenceResolver(deps.mediaAssets, deps.storage),
+      // 投げ直しても同じ生成だと Provider が分かるように（応答が失われた投入の二重生成を防ぐ。ADR-0030）。
+      idempotencyKey: job.id,
+    })
+    // 満杯の断りだけは失敗にしない。ほかの例外はそのまま投げる（下の catch が終端にする）。
+    .catch((error: unknown) => {
+      if (error instanceof ProviderBusyError) return error
+      throw error
+    })
+  if (handle instanceof ProviderBusyError) return waitForProviderSlot(deps, ctx, handle)
 
   await deps.generationJobs.update(job.id, {
     status: 'running',
@@ -198,10 +225,38 @@ const submit = async (
     at: now,
   })
   // 運ぶのは ID だけ。系譜は行に載っているので、入れ直しで失われることがない。
-  await deps.scheduler.reschedule(ctx.data, pollDelayMs(1))
+  await deps.scheduler.reschedule(ctx.data, pollDelayMs(1, pollPolicyOf(provider)))
 
   deps.logger.info({ jobId: job.id, ref: handle.ref }, 'Provider へ生成ジョブを投入しました')
   return { state: 'submitted', providerJobRef: handle.ref }
+}
+
+/**
+ * Provider が満杯で断った投入を、**queued のまま**時間を置いて予約し直す（ADR-0030）。
+ *
+ * 何も投入されていないので `running` にもしないし `attempt` も増やさない（`busy.ts`）。
+ * 次の回も系譜と仕様の検査から通るので、待っている間に Shot が編集されれば spec_drift で止まる。
+ * 積んでから `SUBMIT_BUSY_DEADLINE_MS` を過ぎたら終端の失敗にする（やり直せる失敗として記録する）。
+ * 予約し直しに失敗したら（キューに入れられない）、ここから投げて終端の失敗にする。
+ * 何も投入していないので捨てても払ったものは無く、queued のまま取り残すよりよい。
+ */
+const waitForProviderSlot = async (
+  deps: GenerationProcessorDeps,
+  ctx: JobContext,
+  busy: ProviderBusyError,
+): Promise<GenerationOutcome> => {
+  const { job, now } = ctx
+  if (submitBusyExpired(job.queuedAt, now)) {
+    throw new JobFailure('provider_busy_timeout', SUBMIT_BUSY_TIMEOUT_MESSAGE, true)
+  }
+
+  const delayMs = submitBusyDelayMs(busy.retryAfterMs)
+  await deps.scheduler.reschedule(ctx.data, delayMs)
+  deps.logger.info(
+    { jobId: job.id, providerId: busy.providerId, delayMs, queuedAt: job.queuedAt.toISOString() },
+    'Provider が満杯のため、投入を待って予約し直しました',
+  )
+  return { state: 'busy', delayMs }
 }
 
 /** 完了応答から MediaAsset と Take を作り、ジョブを succeeded にする。 */
@@ -317,17 +372,19 @@ const poll = async (
     throw new JobFailure(status.error.code, status.error.message, status.error.retryable)
   }
 
+  // 間隔の上限と諦める回数は Provider の方針に従う（無ければ既定。ADR-0030）。
+  const policy = pollPolicyOf(provider)
   const attempt = job.attempt + 1
-  if (attempt > MAX_POLL_ATTEMPTS) {
+  if (attempt > policy.maxAttempts) {
     throw new JobFailure(
       'poll_timeout',
-      `ポーリングが ${String(MAX_POLL_ATTEMPTS)} 回を超えました`,
+      `ポーリングが ${String(policy.maxAttempts)} 回を超えました`,
       false,
     )
   }
 
   await deps.generationJobs.update(job.id, { attempt })
-  const delayMs = pollDelayMs(attempt)
+  const delayMs = pollDelayMs(attempt, policy)
   // repeatable job は使わない。都度、指数バックオフで入れ直す（ARCHITECTURE.md §20）。
   await deps.scheduler.reschedule(ctx.data, delayMs)
   return { state: 'polling', delayMs }
@@ -504,12 +561,14 @@ const reschedulePollAfterTransient = async (
   if (job.providerJobRef === null) return null
   if (!isRetryableProviderError(error)) return null
 
+  // 普段の問い合わせと同じ方針（間隔の上限・諦める回数）を使う。
+  const policy = pollPolicyForJob(deps.registry, job)
   const attempt = job.attempt + 1
-  if (attempt > MAX_POLL_ATTEMPTS) return null
+  if (attempt > policy.maxAttempts) return null
 
   try {
     await deps.generationJobs.update(job.id, { attempt })
-    const delayMs = pollDelayMs(attempt)
+    const delayMs = pollDelayMs(attempt, policy)
     await deps.scheduler.reschedule({ generationJobId: job.id }, delayMs)
     deps.logger.warn(
       { jobId: job.id, attempt, err: error, at: now.toISOString() },

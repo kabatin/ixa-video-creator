@@ -138,6 +138,21 @@ FAL_API_KEY=...
 設定 →「接続先と実行の設定」で、どの鍵が設定済みか（**値は出さない**）と、
 課金経路が開いているかが見える。
 
+### 手元の MiniMax H3 で作る（任意）
+
+同じマシンで [vpipe-api](https://github.com/kabatin/vpipe-api) を動かしていれば、その MiniMax H3 Turbo を
+無料のローカル Provider として使える。
+
+```bash
+# .env
+LOCAL_VIDEO_GENERATOR=vpipe   # 既定は none
+VPIPE_API_URL=http://127.0.0.1:8765
+VPIPE_API_TOKEN=              # URL がこのマシンの外を指すときだけ要る
+```
+
+モデル選択に下書きと標準の 2 つが出る。AUTO には選ばれない。M5 の Mac で 1 本 7〜25 分かかり、
+1 本ずつ順に作るので、まとめて頼んだ生成は失敗せず順番を待つ。詳細は [ADR-0030](./docs/adr/0030-local-h3-video-via-vpipe-api.md)。
+
 ## 費用について
 
 参考 Project（27 Shot・編集尺 110.9 秒）を fal.ai の Seedance 2.5 で作ると、
@@ -162,12 +177,14 @@ H.264 書き出し）。実 Provider のアダプタ（fal.ai / Seedance 2.5）�
 
 ## 第三者ライセンス
 
-このリポジトリは MIT だが、依存のうち 2 つは**動かす人**に義務が及ぶ。
+このリポジトリは MIT だが、依存のいくつかは**動かす人**に義務が及ぶ。
 
 - **[Remotion](https://www.remotion.dev/docs/license)** は、操作する人数が 3 人までなら
   無償。**4 人以上は有償ライセンスが要る**。共同で開発・運用する当事者の人数は合算される。
   このリポジトリが MIT であることはその義務を免除しない。
 - Provider の API（fal.ai ほか）は、各社の条件で利用者に直接課金される。
+- **MiniMax H3**（手元の生成を有効にした場合だけ）の重みは MiniMax H3 Community License で、
+  利用できる地域・用途に制限がある。ixa は重みを同梱しない。有効にする前に条件を確かめること。
 
 ## 貢献
 
