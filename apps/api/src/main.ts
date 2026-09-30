@@ -45,6 +45,7 @@ import { createS3Storage } from '@ixa/storage'
 import { Queue } from 'bullmq'
 import IORedis from 'ioredis'
 import { createRedisProjectEvents } from '@ixa/events'
+import { createAiWiring } from './ai/ai-wiring.js'
 import { createApp } from './app.js'
 import { createLogger, type Logger } from './logger.js'
 import { GENERATION_QUEUE_NAME, type GenerationQueue } from './routes/shots.js'
@@ -218,9 +219,12 @@ export const main = (): void => {
   const takes = createTakeRepository(db)
   const mediaAssets = createMediaAssetRepository(db)
 
+  const ai = createAiWiring(config, db)
   const app = createApp({
     // 鍵の設定状態だけを返す口。**値は渡さない**（`describeEnvironment` が落とす）。
     environment: { status: () => describeEnvironment(config) },
+    // 使う AI（ADR-0032）。見つかった AI と、用途ごとの選択。
+    ai,
     projects: createProjectRepository(db),
     mediaAssets,
     shots,

@@ -1046,6 +1046,7 @@ storyboard_draft_runs        (絵コンテ下書きの実行 1 回分)
 storyboard_draft_items       (Shot ごとの案。中身は追記のみ。動くのは adopted_at だけ)
 shot_edit_batches            (一括編集の記録と取り消し。中身は追記のみ。動くのは undone_at だけ)
 render_jobs                  (JSONB: timeline_snapshot)
+ai_settings                  (使う AI。この環境に 1 行だけ。無ければ環境変数が初期値 / ADR-0032)
 ```
 
 ### 規約

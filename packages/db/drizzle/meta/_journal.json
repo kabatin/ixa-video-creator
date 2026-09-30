@@ -120,6 +120,13 @@
       "when": 1790746863344,
       "tag": "0016_project_concept",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790751637835,
+      "tag": "0017_ai_settings",
+      "breakpoints": true
     }
   ]
 }
