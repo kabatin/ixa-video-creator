@@ -1,7 +1,13 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import type { MediaAsset, MusicAnalysis, Project, Shot, Take } from '@ixa/domain'
-import { posterFramePositions, probeMedia, runFfmpeg, type RunOptions } from '@ixa/media'
+import {
+  posterFramePositions,
+  probeMedia,
+  runFfmpeg,
+  seekableDurationSec,
+  type RunOptions,
+} from '@ixa/media'
 import type { BrandColorRequirement, FrameSample, ReviewMeasurements } from '@ixa/review'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
@@ -135,16 +141,21 @@ export const createFfmpegMeasurer = (deps: FfmpegMeasurerDeps): TakeMeasurer => 
       const probe = await probeMedia(sourcePath, runOptions)
 
       const durationSec = probe.durationSec ?? 0
+      /**
+       * フレームを抜く位置だけは映像ストリームの尺を基準にする。コンテナの尺（durationSec）は
+       * 音声が映像より長いとそちらに引っ張られ、映像がもう終わった位置を指してしまう。
+       */
+      const frameRangeSec = seekableDurationSec(probe) ?? 0
       const colors = input.brandColors.map(resolveBrandColor)
 
-      if (durationSec <= 0) {
+      if (frameRangeSec <= 0) {
         deps.logger.warn(
           { takeId: input.take.id, mediaAssetId: input.asset.id },
           '尺が取得できないためフレームを抽出できません。技術チェックで落とします',
         )
       }
 
-      const positions = durationSec > 0 ? posterFramePositions(durationSec, frameCount) : []
+      const positions = frameRangeSec > 0 ? posterFramePositions(frameRangeSec, frameCount) : []
 
       const frames: FrameSample[] = []
       for (const [index, atSec] of positions.entries()) {
