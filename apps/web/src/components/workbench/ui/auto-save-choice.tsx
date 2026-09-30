@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { describeForPerson } from '@/lib/api-error'
 import { FieldRow, INPUT_CLASS } from '@/components/workbench/ui/section'
 
@@ -133,9 +133,12 @@ export const AutoSaveColor = ({
   const saveRef = useRef(save)
   saveRef.current = save
   const [draft, setDraft] = useState(value.toLowerCase())
-  useEffect(() => {
+  // 保存済みの色が変わったときだけ写す。描くときに比べる（`AutoSaveField` と同じ。effect だと出た直後の選択を戻していた）。
+  const [shown, setShown] = useState(value)
+  if (shown !== value) {
+    setShown(value)
     setDraft(value.toLowerCase())
-  }, [value])
+  }
   // 描いたその場で付ける（`useEffect` だと DOM に入ってから付くまでに隙間があり、そこで確定した色を落としていた）。
   useLayoutEffect(() => {
     const element = input.current

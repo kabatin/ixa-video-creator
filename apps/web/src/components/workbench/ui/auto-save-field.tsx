@@ -51,9 +51,13 @@ export const AutoSaveField = ({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // 保存済みの値が外で変わったら（別のパネルで直した・Shot を替えた）打ちかけを捨てる。
-  useEffect(() => {
+  // **描くときに比べる。** effect で写すと欄が出た直後に 1 度走り、その間に打った値を元に戻していた
+  // （遅い CI で「5」を消して「8」と打つと「58」になった。2026-09-30）。
+  const [shown, setShown] = useState(value)
+  if (shown !== value) {
+    setShown(value)
     setDraft(value)
-  }, [value])
+  }
 
   useEffect(
     () => () => {
