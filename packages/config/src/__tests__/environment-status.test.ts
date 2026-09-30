@@ -12,7 +12,7 @@ import type { AppConfig } from '../schema.js'
 
 const SECRET = 'fal-live-SUPERSECRET-0123456789'
 
-/** ローカルの動画生成（ADR-0030）の既定。使わない。 */
+/** ローカルの動画生成（ADR-0031）の既定。使わない。 */
 const VPIPE_OFF = {
   localVideoGenerator: 'none',
   vpipeApiUrl: 'http://127.0.0.1:8765',
@@ -168,7 +168,7 @@ describe('映像生成の切り替え', () => {
 })
 
 /**
- * ローカルの動画生成（ADR-0030）。費用は掛からないが、機械を長く占めるので使っていることを見せる。
+ * ローカルの動画生成（ADR-0031）。費用は掛からないが、機械を長く占めるので使っていることを見せる。
  */
 describe('ローカルの動画生成', () => {
   const VPIPE_TOKEN = 'vpipe-SUPERSECRET-token-42'

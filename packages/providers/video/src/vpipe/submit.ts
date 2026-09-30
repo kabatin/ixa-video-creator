@@ -15,7 +15,7 @@ import {
 import type { VpipeJobBody } from './request.js'
 
 /**
- * 投入の口（ADR-0030）。満杯と「届いたか分からない」を、失敗ではなく `ProviderBusyError` で知らせる。
+ * 投入の口（ADR-0031）。満杯と「届いたか分からない」を、失敗ではなく `ProviderBusyError` で知らせる。
  */
 
 /**
@@ -117,7 +117,7 @@ export const postJob = async (
   })
 
   if (response.status === 429) {
-    // 何も積まれていない。失敗ではなく「後で来て」（ADR-0030）。
+    // 何も積まれていない。失敗ではなく「後で来て」（ADR-0031）。
     throw busy(FULL_MESSAGE, retryAfterMsFrom(response.headers))
   }
   if (!response.ok) {

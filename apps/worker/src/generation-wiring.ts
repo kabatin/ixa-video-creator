@@ -147,7 +147,7 @@ export const createGenerationWiring = (
       ? [createFalVideoProvider({ apiKey: requireFalApiKey(config) })]
       : []),
     /**
-     * 手元の生成サーバ（vpipe-api）の MiniMax H3（ADR-0030）。`LOCAL_VIDEO_GENERATOR=vpipe` のときだけ。
+     * 手元の生成サーバ（vpipe-api）の MiniMax H3（ADR-0031）。`LOCAL_VIDEO_GENERATOR=vpipe` のときだけ。
      * AUTO には選ばれない（`routable: false`）。API 側の登録と同じ条件にすること。
      */
     ...(config.providers.localVideoGenerator === 'vpipe'

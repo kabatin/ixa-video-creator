@@ -136,7 +136,7 @@ describe('capability 宣言', () => {
   })
 })
 
-/** 手元のサーバなので 30 秒おきに問い合わせる（ADR-0030。既定の最大 2 分おきでは 9〜99 秒遅れた）。 */
+/** 手元のサーバなので 30 秒おきに問い合わせる（ADR-0031。既定の最大 2 分おきでは 9〜99 秒遅れた）。 */
 describe('問い合わせの方針', () => {
   it('30 秒おき・360 回。Provider がそれを持つ', () => {
     expect(VPIPE_POLL_POLICY).toEqual({ maxIntervalMs: 30_000, maxAttempts: 360 })

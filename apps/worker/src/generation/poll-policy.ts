@@ -2,7 +2,7 @@ import type { GenerationJob } from '@ixa/domain'
 import type { PollPolicy, ProviderRegistry, VideoProvider } from '@ixa/provider-core'
 
 /**
- * 投入後の問い合わせの間隔と回数（ADR-0030）。
+ * 投入後の問い合わせの間隔と回数（ADR-0031）。
  *
  * 既定は 5 秒から倍々に伸ばして最大 2 分おき・60 回（約 2 時間）。Provider が `pollPolicy` を
  * 持っていればその上限と回数を使う（伸ばし方は同じで、頭打ちの間隔と諦める回数だけが変わる）。

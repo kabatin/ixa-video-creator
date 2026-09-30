@@ -151,7 +151,7 @@ VPIPE_API_TOKEN=              # URL がこのマシンの外を指すときだ�
 ```
 
 モデル選択に下書きと標準の 2 つが出る。AUTO には選ばれない。M5 の Mac で 1 本 7〜25 分かかり、
-1 本ずつ順に作るので、まとめて頼んだ生成は失敗せず順番を待つ。詳細は [ADR-0030](./docs/adr/0030-local-h3-video-via-vpipe-api.md)。
+1 本ずつ順に作るので、まとめて頼んだ生成は失敗せず順番を待つ。詳細は [ADR-0031](./docs/adr/0031-local-h3-video-via-vpipe-api.md)。
 
 ## 費用について
 

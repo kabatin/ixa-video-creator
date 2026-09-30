@@ -1,4 +1,4 @@
-# ADR-0030: 手元の MiniMax H3 を vpipe-api 経由の Provider として使う
+# ADR-0031: 手元の MiniMax H3 を vpipe-api 経由の Provider として使う
 
 Status: Accepted
 Date: 2026-09-30

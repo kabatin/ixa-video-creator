@@ -46,7 +46,7 @@ import { rebuildSpec } from './spec.js'
  * - 冪等。終了済みのジョブを再実行しても Take を二重に作らない
  */
 
-/** 問い合わせの間隔と回数は `poll-policy.ts`（Provider ごとに変えられる。ADR-0030）。 */
+/** 問い合わせの間隔と回数は `poll-policy.ts`（Provider ごとに変えられる。ADR-0031）。 */
 export {
   MAX_POLL_ATTEMPTS,
   POLL_BACKOFF_BASE_MS,
@@ -97,7 +97,7 @@ export type GenerationOutcome =
   | { readonly state: 'skipped'; readonly reason: string }
   | { readonly state: 'submitted'; readonly providerJobRef: string }
   | { readonly state: 'polling'; readonly delayMs: number }
-  /** Provider が満杯で投入を断った。queued のまま投入し直しを予約した（ADR-0030）。 */
+  /** Provider が満杯で投入を断った。queued のまま投入し直しを予約した（ADR-0031）。 */
   | { readonly state: 'busy'; readonly delayMs: number }
   | { readonly state: 'succeeded'; readonly takeId: TakeId }
   | { readonly state: 'failed'; readonly code: string }
@@ -107,7 +107,7 @@ export type GenerationOutcome =
  *
  * Shot 自身の編集だけでなく、**前の Shot の採用 Take が変わっても**仕様は変わる
  * （連続性の参照＝前の Shot の最後のコマが、採用 Take から決まるため）。
- * 順番待ちが長い Provider（ADR-0030）では、待っている間に前の Shot で採用し直すと起きる。
+ * 順番待ちが長い Provider（ADR-0031）では、待っている間に前の Shot で採用し直すと起きる。
  */
 export const SPEC_DRIFT_MESSAGE =
   '頼んだあとで、この Shot の内容か、前の Shot の採用 Take（続きの最初のフレームに使う最後のコマ）が変わりました。' +
@@ -201,7 +201,7 @@ const submit = async (
       model,
       spec,
       resolveReference: referenceResolver(deps.mediaAssets, deps.storage),
-      // 投げ直しても同じ生成だと Provider が分かるように（応答が失われた投入の二重生成を防ぐ。ADR-0030）。
+      // 投げ直しても同じ生成だと Provider が分かるように（応答が失われた投入の二重生成を防ぐ。ADR-0031）。
       idempotencyKey: job.id,
     })
     // 満杯の断りだけは失敗にしない。ほかの例外はそのまま投げる（下の catch が終端にする）。
@@ -232,7 +232,7 @@ const submit = async (
 }
 
 /**
- * Provider が満杯で断った投入を、**queued のまま**時間を置いて予約し直す（ADR-0030）。
+ * Provider が満杯で断った投入を、**queued のまま**時間を置いて予約し直す（ADR-0031）。
  *
  * 何も投入されていないので `running` にもしないし `attempt` も増やさない（`busy.ts`）。
  * 次の回も系譜と仕様の検査から通るので、待っている間に Shot が編集されれば spec_drift で止まる。
@@ -372,7 +372,7 @@ const poll = async (
     throw new JobFailure(status.error.code, status.error.message, status.error.retryable)
   }
 
-  // 間隔の上限と諦める回数は Provider の方針に従う（無ければ既定。ADR-0030）。
+  // 間隔の上限と諦める回数は Provider の方針に従う（無ければ既定。ADR-0031）。
   const policy = pollPolicyOf(provider)
   const attempt = job.attempt + 1
   if (attempt > policy.maxAttempts) {

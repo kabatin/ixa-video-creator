@@ -33,7 +33,7 @@ export type VpipeErrorEnvelope = z.infer<typeof VpipeErrorEnvelope>
 
 /** `POST /v1/workflows/{workflow_id}/jobs` の 202。 */
 /**
- * `GET /v1/health`。**投入の前に空きを確かめるためだけに使う**（ADR-0030）。
+ * `GET /v1/health`。**投入の前に空きを確かめるためだけに使う**（ADR-0031）。
  * 満杯なのに開始画像（最大 20MB）を取り寄せて送り、429 で断られるのを繰り返さないため。
  */
 export const VpipeHealth = z.object({

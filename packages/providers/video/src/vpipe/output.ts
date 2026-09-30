@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { pumpWithLimit } from './stream.js'
 
 /**
- * 出来た動画を手元に置く（ADR-0030）。
+ * 出来た動画を手元に置く（ADR-0031）。
  *
  * **出力は必ずローカルのファイルとして返す。** vpipe-api は 127.0.0.1 で待ち受けるので、
  * 出力 URL をそのまま `{ type: 'remote' }` で返すと worker の SSRF 検査（ループバック拒否）に

@@ -66,7 +66,7 @@ export type VideoGenerationRequest = {
   /** 参照アセットを Provider が読める形にするための解決関数（署名付き URL やローカルパス）。 */
   readonly resolveReference: (id: MediaAssetId) => Promise<string>
   /**
-   * 同じ生成の投入を見分ける鍵（ADR-0030）。**同じ鍵で投げ直したら、Provider は新しく作らず同じジョブを返す。**
+   * 同じ生成の投入を見分ける鍵（ADR-0031）。**同じ鍵で投げ直したら、Provider は新しく作らず同じジョブを返す。**
    * worker は GenerationJob の ID を渡す。投入の応答が途中で失われても、投げ直しで二重に生成しない。
    * 対応する Provider（vpipe）だけが使い、ほかは無視してよい。省略は「鍵なし」（投げ直しは新しい生成）。
    */
@@ -74,7 +74,7 @@ export type VideoGenerationRequest = {
 }
 
 /**
- * 投入後の問い合わせの間隔と回数（ADR-0030）。**省略は worker の既定**
+ * 投入後の問い合わせの間隔と回数（ADR-0031）。**省略は worker の既定**
  * （5 秒から倍々に伸ばして最大 2 分おき・60 回 ≈ 約 2 時間）。
  *
  * 既定は、遠くの有料 API を叩きすぎず、長い生成も待てるように決めてある。
@@ -116,7 +116,7 @@ export class ProviderError extends Error {
 }
 
 /**
- * Provider が「いまは受け付けられない。後で**同じ投入を**やり直して」と答えた（ADR-0030）。
+ * Provider が「いまは受け付けられない。後で**同じ投入を**やり直して」と答えた（ADR-0031）。
  *
  * 1 本ずつしか作れない手元の生成サーバ（vpipe-api）は、走っている 1 本と待ちの枠が埋まると
  * 投入を 429 で断る。これは入力の誤りでも故障でもなく「後で来て」なので、普通の失敗と

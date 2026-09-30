@@ -5,7 +5,7 @@ import { ProviderBusyError, ProviderError } from '../provider.js'
 const PROVIDER_ID = ProviderId.parse('vpipe')
 
 /**
- * 「満杯なので後で来て」（ADR-0030）。投入前の断りなので、終端の失敗と取り違えないこと。
+ * 「満杯なので後で来て」（ADR-0031）。投入前の断りなので、終端の失敗と取り違えないこと。
  */
 describe('ProviderBusyError', () => {
   it('ProviderError の一種で、常にやり直せる', () => {

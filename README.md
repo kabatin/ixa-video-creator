@@ -160,7 +160,7 @@ VPIPE_API_TOKEN=              # required only when the URL points off this machi
 
 Two models appear in the model picker (draft and standard). They are never chosen by AUTO:
 a clip takes 7–25 minutes on an M5 Mac and clips render one at a time, so queued generations
-wait their turn instead of failing. See [ADR-0030](./docs/adr/0030-local-h3-video-via-vpipe-api.md).
+wait their turn instead of failing. See [ADR-0031](./docs/adr/0031-local-h3-video-via-vpipe-api.md).
 
 ## Costs, honestly
 

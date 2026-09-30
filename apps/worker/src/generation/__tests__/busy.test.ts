@@ -132,7 +132,7 @@ describe('submitBusyExpired', () => {
 })
 
 /**
- * 1 本ずつしか作れない Provider が満杯で断っても、ジョブを失敗にしない（ADR-0030）。
+ * 1 本ずつしか作れない Provider が満杯で断っても、ジョブを失敗にしない（ADR-0031）。
  */
 describe('processGenerationJob — Provider が満杯のとき', () => {
   it('失敗にせず queued のまま、Retry-After に従って予約し直す', async () => {

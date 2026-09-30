@@ -266,7 +266,7 @@ export const main = (): void => {
       createLocalImageToVideoProvider({
         outputDir: join(process.env.STUB_OUTPUT_DIR ?? '/tmp/ixa-stub-output', 'local'),
       }),
-      // 手元の生成サーバの MiniMax H3（ADR-0030）。worker と同じ条件で登録する（作るだけでは通信しない）。
+      // 手元の生成サーバの MiniMax H3（ADR-0031）。worker と同じ条件で登録する（作るだけでは通信しない）。
       ...(config.providers.localVideoGenerator === 'vpipe'
         ? [
             createVpipeVideoProvider({

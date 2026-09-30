@@ -118,7 +118,7 @@ const secondsBetween = (from: string | null, to: string | null): number | null =
 }
 
 /**
- * vpipe-api（手元の MiniMax H3 Turbo）のアダプタ（ADR-0030）。
+ * vpipe-api（手元の MiniMax H3 Turbo）のアダプタ（ADR-0031）。
  *
  * - SDK を足さず素の `fetch` で書く。`fetch` は**引数で受ける**ので、契約テストはモック応答だけで完結する
  * - `process.env` はここから読まない。設定は `packages/config` が読んで配線が渡す

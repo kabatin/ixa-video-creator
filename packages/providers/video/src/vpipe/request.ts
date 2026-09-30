@@ -35,7 +35,7 @@ export type VpipeJobBody = {
   readonly seed: number | null
   readonly steps: number
   readonly start_image: VpipeImage | null
-  /** **常に null。** 最後のフレームを付ける画面がまだ無い（ADR-0030 の次の段階）。 */
+  /** **常に null。** 最後のフレームを付ける画面がまだ無い（ADR-0031 の次の段階）。 */
   readonly end_image: null
 }
 

@@ -83,7 +83,7 @@ export const EnvSchema = z.object({
    */
   IMAGE_PROVIDER: z.enum(['stub', 'codex_cli']).default('stub'),
   /**
-   * 手元の生成サーバ（vpipe-api）で動画を作るか（ADR-0030）。**既定は `none`（使わない）。**
+   * 手元の生成サーバ（vpipe-api）で動画を作るか（ADR-0031）。**既定は `none`（使わない）。**
    *
    * **URL やトークンの有無で切り替えない**（LESSONS「鍵があることを、実行の合図にしない」）。
    * `vpipe` にすると MiniMax H3 Turbo のモデルが選択肢に出る。費用は掛からないが、
@@ -154,7 +154,7 @@ export interface AppConfig {
     stubVideoCostPerSecUsd: number
     /** 映像生成に実 Provider を使うか。既定は `stub`（無料）。 */
     videoProvider: Env['VIDEO_PROVIDER']
-    /** 手元の生成サーバで動画を作るか（ADR-0030）。既定は `none`。 */
+    /** 手元の生成サーバで動画を作るか（ADR-0031）。既定は `none`。 */
     localVideoGenerator: Env['LOCAL_VIDEO_GENERATOR']
     /** vpipe-api の場所。 */
     vpipeApiUrl: string

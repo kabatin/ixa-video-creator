@@ -4,7 +4,7 @@ import { ProviderError, type PollPolicy, type VideoModelDescriptor } from '@ixa/
 
 /**
  * 手元の生成サーバ vpipe-api（https://github.com/kabatin/vpipe-api）経由の
- * MiniMax H3 Turbo（ADR-0030）。
+ * MiniMax H3 Turbo（ADR-0031）。
  *
  * **実測したものと、していないものを分けて書く。** 実測は M5（10 コア GPU・32GB）の Mac 1 台。
  * - 実測: 所要時間（832x480×124 コマ ≈ 7 分 / 1024x576×124 コマ ≈ 10.6 分 / 1024x576×243 コマ ≈ 24 分）、
@@ -118,7 +118,7 @@ const capabilities: VideoModelDescriptor['capabilities'] = {
     max: VPIPE_MAX_REFERENCE_IMAGES,
     /**
      * 開始画像にだけ使う。**end_frame は宣言しない。** vpipe-api は最後のフレームも受けるが、
-     * ixa にはまだ最後のフレームを付ける画面が無い（次の段階。ADR-0030）。
+     * ixa にはまだ最後のフレームを付ける画面が無い（次の段階。ADR-0031）。
      */
     roles: ['start_frame', 'previous_shot_last_frame'],
   },
@@ -193,7 +193,7 @@ export const VPIPE_MODEL_QUALITIES: Readonly<Record<string, VpipeQuality>> = Obj
 })
 
 /**
- * 投入後の問い合わせの間隔と回数（ADR-0030）。**30 秒おき・360 回（約 3 時間）。**
+ * 投入後の問い合わせの間隔と回数（ADR-0031）。**30 秒おき・360 回（約 3 時間）。**
  *
  * worker の既定（5 秒から倍々で最大 2 分おき）では、実機の E2E でサーバが作り終えてから
  * ixa が気付くまで 9〜99 秒遅れた。1 本 3〜25 分の生成に最大 2 分の遅れは大きく、
