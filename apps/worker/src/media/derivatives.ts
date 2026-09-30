@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { MediaKind, MediaProbe } from '@ixa/domain'
 import { createProxy, createThumbnail, extractPosterFrames, type RunOptions,
-  extractLastFrame, thumbnailPositionSec,
+  extractLastFrame, seekableDurationSec, thumbnailPositionSec,
 } from '@ixa/media'
 
 /**
@@ -44,9 +44,9 @@ export type BuildDerivativesInput = {
   readonly runOptions: RunOptions
 }
 
-/** ポスターフレームは尺が分かっている動画にしか引けない。 */
-const canExtractPosters = (probe: MediaProbe): probe is MediaProbe & { durationSec: number } =>
-  probe.durationSec !== null && probe.durationSec > 0
+/** ポスターフレームと最終フレームは尺が分かっている動画にしか引けない。 */
+const isKnownDuration = (durationSec: number | null): durationSec is number =>
+  durationSec !== null && durationSec > 0
 
 /**
  * kind ごとに必要な生成物だけを作る。
@@ -84,12 +84,18 @@ export const buildDerivatives = async (
   const proxyPath = join(outDir, PROXY_FILE_NAME)
   await createProxy(sourcePath, proxyPath, undefined, runOptions)
 
-  const posterPaths = canExtractPosters(probe)
+  /**
+   * 切り出す位置は映像ストリームの尺を基準にする。コンテナの尺は音声が映像より長いと
+   * そちらに引っ張られ、映像がもう終わった位置を指してしまう。
+   */
+  const durationSec = seekableDurationSec(probe)
+
+  const posterPaths = isKnownDuration(durationSec)
     ? await extractPosterFrames(
         sourcePath,
         join(outDir, POSTER_DIR_NAME),
         posterCount,
-        probe.durationSec,
+        durationSec,
         probe.fps,
         runOptions,
       )
@@ -99,15 +105,13 @@ export const buildDerivatives = async (
    * 最終フレームは連続性の参照に使うため、ポスターフレームとは別に 1 枚切り出す。
    * ポスターは等間隔で末尾を踏まないので、最後の絵はここでしか取れない。
    */
-  const durationSec = probe.durationSec
-  const lastFramePath =
-    durationSec !== null && durationSec > 0
-      ? await (async (): Promise<string> => {
-          const path = join(outDir, LAST_FRAME_FILE_NAME)
-          await extractLastFrame(sourcePath, path, durationSec, probe.fps, runOptions)
-          return path
-        })()
-      : null
+  const lastFramePath = isKnownDuration(durationSec)
+    ? await (async (): Promise<string> => {
+        const path = join(outDir, LAST_FRAME_FILE_NAME)
+        await extractLastFrame(sourcePath, path, durationSec, probe.fps, runOptions)
+        return path
+      })()
+    : null
 
   return { proxyPath, thumbnailPath, posterPaths, lastFramePath }
 }

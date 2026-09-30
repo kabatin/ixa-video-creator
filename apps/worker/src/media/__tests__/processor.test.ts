@@ -22,6 +22,8 @@ let imageBytes: Uint8Array
 let jpegBytes: Uint8Array
 /** 10fps・0.1 秒＝ 1 フレームだけの動画。 */
 let oneFrameVideoBytes: Uint8Array
+/** 映像 1 秒・音声 12 秒。コンテナの尺は 12 秒だが、1 秒より後ろに映像のフレームは無い。 */
+let longerAudioVideoBytes: Uint8Array
 let audioBytes: Uint8Array
 
 beforeAll(async () => {
@@ -29,7 +31,12 @@ beforeAll(async () => {
   videoBytes = await readBytes(await makeTestVideo(fixtureDir))
   imageBytes = await readBytes(await makeTestImage(fixtureDir))
   jpegBytes = await readBytes(await makeTestImage(fixtureDir, 'jpg'))
-  oneFrameVideoBytes = await readBytes(await makeTestVideo(fixtureDir, 0.1, 'one-frame.mp4'))
+  oneFrameVideoBytes = await readBytes(
+    await makeTestVideo(fixtureDir, 0.1, { fileName: 'one-frame.mp4' }),
+  )
+  longerAudioVideoBytes = await readBytes(
+    await makeTestVideo(fixtureDir, 1, { fileName: 'longer-audio.mp4', audioSec: 12 }),
+  )
   audioBytes = await readBytes(await makeTestAudio(fixtureDir))
 }, FFMPEG_TIMEOUT_MS)
 
@@ -155,6 +162,26 @@ describe('processMediaJob', () => {
     expect(source?.thumbnailKey).toBe(thumbnailKey(asset.workspaceId, asset.id))
     expect(source?.lastFrameAssetId).not.toBeNull()
     await expect(storage.exists(thumbnailKey(asset.workspaceId, asset.id))).resolves.toBe(true)
+  }, FFMPEG_TIMEOUT_MS)
+
+  it('音声が映像より長い video でも、サムネイル・ポスター・最終フレームを映像の範囲から作る', async () => {
+    const asset = await seedAsset(repo, storage, {
+      kind: 'video',
+      ext: 'mp4',
+      mimeType: 'video/mp4',
+      body: longerAudioVideoBytes,
+    })
+
+    const outcome = processed(await processMediaJob(deps(), { mediaAssetId: asset.id }))
+    // durationSec はコンテナの尺のまま（タイムラインや Take の尺はこれを使う）。
+    expect(outcome.probe.durationSec).toBeCloseTo(12, 0)
+    expect(outcome.probe.videoDurationSec).toBeCloseTo(1, 1)
+    expect(outcome.posterCount).toBe(DEFAULT_POSTER_COUNT)
+
+    const source = repo.snapshot().find((a) => a.id === asset.id)
+    expect(source?.lastFrameAssetId).not.toBeNull()
+    await expect(storage.exists(thumbnailKey(asset.workspaceId, asset.id))).resolves.toBe(true)
+    await expect(storage.exists(posterKey(asset.workspaceId, asset.id, 4))).resolves.toBe(true)
   }, FFMPEG_TIMEOUT_MS)
 
   it('audio は probe だけを入れ、画像系の生成物を一切作らない', async () => {

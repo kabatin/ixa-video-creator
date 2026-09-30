@@ -17,12 +17,39 @@ describe('toMediaProbe', () => {
 
     expect(probe).toEqual({
       durationSec: 3,
+      videoDurationSec: null,
       width: null,
       height: null,
       fps: null,
       hasAudio: true,
       codec: 'aac',
     })
+  })
+
+  it('映像ストリームの尺を videoDurationSec に入れ、durationSec はコンテナの尺のままにする', () => {
+    const probe = toMediaProbe(
+      JSON.stringify({
+        streams: [
+          { codec_type: 'video', codec_name: 'h264', r_frame_rate: '10/1', duration: '1.000000' },
+          { codec_type: 'audio', codec_name: 'aac', duration: '3.000000' },
+        ],
+        format: { duration: '3.000000' },
+      }),
+    )
+
+    expect(probe.durationSec).toBe(3)
+    expect(probe.videoDurationSec).toBe(1)
+  })
+
+  it('映像ストリームに尺が無ければ videoDurationSec は null', () => {
+    const probe = toMediaProbe(
+      JSON.stringify({
+        streams: [{ codec_type: 'video', codec_name: 'png', r_frame_rate: '25/1' }],
+        format: {},
+      }),
+    )
+
+    expect(probe.videoDurationSec).toBeNull()
   })
 
   it('"N/A" の duration を null に落とす', () => {

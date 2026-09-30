@@ -73,6 +73,8 @@ export const toMediaProbe = (rawJson: string): MediaProbe => {
 
   return MediaProbe.parse({
     durationSec,
+    // durationSec とは別に持つ。コンテナの尺は音声が映像より長いとそちらに引っ張られる。
+    videoDurationSec: parseDuration(videoStream?.duration),
     width: parsePositiveInt(videoStream?.width),
     height: parsePositiveInt(videoStream?.height),
     fps,

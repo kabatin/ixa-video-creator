@@ -1,5 +1,6 @@
 import { mkdir, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { MediaProbe } from '@ixa/domain'
 import { z } from 'zod'
 import { FfmpegError, runFfmpeg, type RunOptions } from './ffmpeg-runner.js'
 import { probeMedia } from './probe.js'
@@ -54,18 +55,23 @@ export const clampSeekSec = (
   return Math.max(0, Math.min(positionSec, latestSec))
 }
 
+/**
+ * フレームを切り出す位置の基準にする尺。映像ストリームの尺が取れればそれを使う。
+ * コンテナの尺（durationSec）は音声が映像より長いとそちらに引っ張られ、映像の外を指してしまう。
+ */
+export const seekableDurationSec = (
+  source: Pick<MediaProbe, 'durationSec' | 'videoDurationSec'>,
+): number | null => source.videoDurationSec ?? source.durationSec
+
 /** サムネイルを切り出す位置。尺の 10% 地点。尺が取れない素材（PNG など）では 0 秒。 */
-export const thumbnailPositionSec = (source: {
-  readonly durationSec: number | null
-  readonly fps: number | null
-}): number =>
-  source.durationSec === null
+export const thumbnailPositionSec = (
+  source: Pick<MediaProbe, 'durationSec' | 'videoDurationSec' | 'fps'>,
+): number => {
+  const durationSec = seekableDurationSec(source)
+  return durationSec === null
     ? 0
-    : clampSeekSec(
-        source.durationSec * DEFAULT_THUMBNAIL_POSITION_RATIO,
-        source.durationSec,
-        source.fps,
-      )
+    : clampSeekSec(durationSec * DEFAULT_THUMBNAIL_POSITION_RATIO, durationSec, source.fps)
+}
 
 /** ENOENT だけを「無い」とみなす。権限エラーなどは握り潰さずそのまま投げる。 */
 const isNonEmptyFile = async (path: string): Promise<boolean> => {
