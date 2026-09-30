@@ -131,6 +131,14 @@ Open <http://localhost:3000>, create a project, drop an audio file onto the wind
 start cutting. **Out of the box it runs entirely on the local stub provider — no API keys,
 no cost.**
 
+### Choosing which AI to use
+
+The first time you open the workbench, the *使う AI* (which AI to use) dialog appears. It looks for AI tools installed on this
+Mac (Claude Code, Codex, Gemini CLI, Grok) and a local generation server, and lets you pick one each for
+text (storyboard drafts), images (shot frames) and video. Change it later from
+*iXA Video Creator → 使う AI…*. Until you choose, the `.env` settings apply. fal (paid) and the local
+server must be enabled in `.env` below before they can be chosen — the screen alone never opens a billing path.
+
 ### Connecting a real provider
 
 ```bash

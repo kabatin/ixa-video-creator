@@ -22,6 +22,7 @@ export type WorkbenchDialog =
   | 'shortcuts'
   | 'delete-shots'
   | 'merge-shots'
+  | 'ai-setup'
 
 export type MenuAction =
   | { readonly kind: 'href'; readonly href: string }
@@ -188,6 +189,8 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
       items: [
         ...SITE_NAV_ENTRIES.map((entry) => item(entry.id, entry.label, href(entry.href))),
         item('preferences', '環境設定…', dialog('preferences'), { shortcut: '⌘,' }),
+        // この環境で使う AI（ADR-0032）。制作データではなく、この環境に 1 つ。
+        item('ai-setup', '使う AI…', dialog('ai-setup')),
       ],
     },
     {

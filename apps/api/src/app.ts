@@ -162,7 +162,8 @@ export const createApp = (deps: AppDeps) => {
       '*',
       cors({
         origin: [...deps.corsOrigins],
-        allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+        // 画面の Requester が使うメソッドはすべて（PUT を落としていて「使う AI」の保存と最初のフレームが止まっていた）。
+        allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
         allowHeaders: ['Content-Type'],
         maxAge: 600,
       }),

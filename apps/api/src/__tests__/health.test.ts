@@ -66,6 +66,19 @@ describe('CORS', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('http://127.0.0.1:3000')
   })
 
+  /**
+   * 画面の Requester が使うメソッドはすべて通す。PUT を許していなかったため、
+   * 「使う AI」の保存と、最初のフレームを手で付ける操作がブラウザで止まっていた（2026-09-30）。
+   */
+  it.each(['GET', 'POST', 'PATCH', 'PUT', 'DELETE'])('画面が使う %s のプリフライトを通す', async (method) => {
+    const app = createApp({ ...baseAppDeps(), corsOrigins: ['http://127.0.0.1:3000'] })
+    const res = await app.request('/ai/settings', {
+      method: 'OPTIONS',
+      headers: { Origin: 'http://127.0.0.1:3000', 'Access-Control-Request-Method': method },
+    })
+    expect(res.headers.get('access-control-allow-methods')?.split(',')).toContain(method)
+  })
+
   it('許可していないオリジンには許可ヘッダを返さない', async () => {
     const app = createApp({ ...baseAppDeps(), corsOrigins: ['http://127.0.0.1:3000'] })
     const res = await app.request('/health', {

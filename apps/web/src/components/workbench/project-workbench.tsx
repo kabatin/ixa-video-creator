@@ -5,6 +5,7 @@ import type { DockviewApi } from 'dockview-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StatusBar } from '@/components/workbench/status-bar'
 import { useRenderWatch } from '@/components/workbench/use-render-watch'
+import { AiSetupOffer } from '@/components/workbench/ai-setup-offer'
 import { WorkbenchDialogs } from '@/components/workbench/workbench-dialogs'
 import { WorkbenchDock } from '@/components/workbench/workbench-dock'
 import { WorkbenchMenu } from '@/components/workbench/workbench-menu'
@@ -221,6 +222,8 @@ const WorkbenchShell = ({
         renderWatch={renderWatch}
       />
       <WorkbenchDialogs onHistoryChanged={history.reload} renderWatch={renderWatch} />
+      {/* 初めて開いたときに「使う AI」を 1 度だけ勧める（ADR-0032）。 */}
+      <AiSetupOffer />
       <FileIntake
         onNotice={setNotice}
         registerOpener={(open) => {

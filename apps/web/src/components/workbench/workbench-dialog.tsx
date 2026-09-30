@@ -94,8 +94,12 @@ export const WorkbenchDialog = ({
       }}
       className={`workbench-dialog m-auto overflow-hidden rounded-lg border border-line bg-surface p-0 text-text shadow-2xl ${SIZES[size]}`}
     >
+      {/*
+        高さを決めてあるのは large だけ。medium（高さ auto・上限 80vh）で h-full にすると、WebKit は 0 に解いて
+        中身ごと 2px に潰れていた（2026-09-30。環境設定・変更履歴・新規 Shot など medium の全部）。
+      */}
       {open && (
-        <div className="flex h-full max-h-[inherit] flex-col">
+        <div className={`flex max-h-[inherit] flex-col ${size === 'large' ? 'h-full' : ''}`}>
           <header className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-3">
             <h2 id={titleId} className="text-lg font-semibold">
               {title}

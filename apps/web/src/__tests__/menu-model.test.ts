@@ -207,6 +207,13 @@ describe('行き先', () => {
     })
   })
 
+  it('使う AI はアプリのメニューから、ダイアログで開く（ADR-0032）', () => {
+    const app = menus.find((menu) => menu.id === 'app')
+    const entry = app?.items.find((item) => item.label === '使う AI…')
+
+    expect(entry?.action).toEqual({ kind: 'dialog', dialog: 'ai-setup' })
+  })
+
   it('作品の方針はファイルから開ける（インスペクターに出す。ADR-0030）', () => {
     const file = menus.find((menu) => menu.id === 'file')
     expect(file?.items.map((entry) => entry.label)).toEqual([
