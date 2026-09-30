@@ -1,4 +1,5 @@
 import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { ShotInspector } from '@/components/workbench/inspector/shot-inspector'
 import { aWorkbenchShot, renderInWorkbench } from './workbench-fixture'
@@ -50,4 +51,17 @@ describe('ShotInspector の Take を作る', () => {
 
     expect(screen.getByRole('heading', { name: 'Take を作る' })).toBeInTheDocument()
   })
+
+  /** インスペクターの「…」も、右クリックと同じ中身（2026-09-30）。 */
+  it('「…」は右クリックと同じ Shot のメニューを開く', async () => {
+    const shot = aWorkbenchShot(1)
+    renderInWorkbench(<ShotInspector shot={shot} isFirst />, { shots: [shot] })
+
+    await userEvent.click(screen.getByRole('button', { name: `${shot.code} のその他の操作` }))
+
+    // 行の名前だけ（押せない理由は名前の下に添えてある）。
+    const labels = screen.getAllByRole('menuitem').map((item) => item.firstChild?.firstChild?.textContent)
+    expect(labels).toEqual(['Take を作る…', 'Take 比較で見る', '絵コンテの画像を AI で作る', '再生位置で分割', '採用を外す', '削除…'])
+  })
 })
+

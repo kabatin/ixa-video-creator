@@ -24,7 +24,7 @@ const Opener = ({
   readonly shot: Shot
   readonly list?: { checked: boolean; toggle: () => void }
 }) => {
-  const openShotMenu = useShotMenu()
+  const { open: openShotMenu } = useShotMenu()
   return (
     <button
       type="button"

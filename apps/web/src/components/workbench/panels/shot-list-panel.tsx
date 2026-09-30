@@ -53,9 +53,9 @@ type ShotFilter = ShotStatus | typeof DRIFT_FILTER | null
 export const ShotListPanel = () => {
   const workbench = useWorkbench()
   // Shot の右クリック（長押し・Shift+F10）のメニュー。一覧ではチェックの付け外しも並べる。
-  const openShotMenu = useShotMenu()
+  const shotMenuActions = useShotMenu()
   const shotMenu = useContextMenuTrigger<Shot>((shot, at, origin) => {
-    openShotMenu(shot, at, origin, {
+    shotMenuActions.open(shot, at, origin, {
       checked: workbench.checked.has(shot.id),
       toggle: () => {
         workbench.setChecked(toggleShot(workbench.checked, shot.id))

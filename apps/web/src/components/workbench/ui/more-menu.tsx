@@ -44,7 +44,8 @@ export const MenuButton = ({
   items,
 }: {
   readonly label: string
-  readonly items: readonly ContextMenuItem[]
+  /** 関数なら押した瞬間に作る（再生位置のように、開くときの値で決まる行があるとき）。 */
+  readonly items: readonly ContextMenuItem[] | (() => readonly ContextMenuItem[])
 }) => {
   const host = useContextMenuHost()
   return (
@@ -54,7 +55,12 @@ export const MenuButton = ({
       aria-haspopup="menu"
       onClick={(event) => {
         const box = event.currentTarget.getBoundingClientRect()
-        host.open({ label, items, at: { x: box.left, y: box.bottom }, origin: event.currentTarget })
+        host.open({
+          label,
+          items: typeof items === 'function' ? items() : items,
+          at: { x: box.left, y: box.bottom },
+          origin: event.currentTarget,
+        })
       }}
       className="inline-flex h-6 min-w-6 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text"
     >

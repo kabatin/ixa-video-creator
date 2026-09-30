@@ -27,9 +27,9 @@ import { useShotMenu } from '@/components/workbench/use-shot-menu'
 export const TimelinePanel = () => {
   const workbench = useWorkbench()
   // Shot の右クリック（長押し・Shift+F10）のメニュー。
-  const openShotMenu = useShotMenu()
+  const shotMenuActions = useShotMenu()
   const shotMenu = useContextMenuTrigger<Shot>((shot, at, origin) => {
-    openShotMenu(shot, at, origin)
+    shotMenuActions.open(shot, at, origin)
   })
   const { preferences } = usePreferences()
   const { transportControls } = workbench

@@ -12,7 +12,8 @@ import { StartFrameField } from '@/components/workbench/inspector/start-frame-fi
 import { TakeTimingField } from '@/components/workbench/inspector/take-timing-field'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { AutoSaveCheckbox, AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
-import { MoreMenu } from '@/components/workbench/ui/more-menu'
+import { MenuButton } from '@/components/workbench/ui/more-menu'
+import { useShotMenu } from '@/components/workbench/use-shot-menu'
 import { ObjectHeader } from '@/components/workbench/ui/object-header'
 import { Section } from '@/components/workbench/ui/section'
 import { useShotTakes } from '@/components/workbench/use-shot-takes'
@@ -44,6 +45,7 @@ export const ShotInspector = ({
   readonly isFirst: boolean
 }) => {
   const workbench = useWorkbench()
+  const shotMenu = useShotMenu()
   const save = async (patch: Parameters<typeof workbench.saveShot>[1]): Promise<void> => {
     await workbench.saveShot(shot.id, patch)
   }
@@ -65,18 +67,10 @@ export const ShotInspector = ({
         meta={formatSpan(shot.startSec, shot.durationSec)}
         badge={<ShotStatusBadge status={shot.status} />}
         menu={
-          <MoreMenu
+          // 右クリック（長押し）と同じ中身（2026-09-30）。再生位置で決まる行があるので押した瞬間に作る。
+          <MenuButton
             label={`${shot.code} のその他の操作`}
-            items={[
-              {
-                label: 'Shot を削除',
-                confirm: `Shot ${shot.code} ${formatSpan(shot.startSec, shot.durationSec)} を削除します。Take は残りますが、この Shot は一覧から消えます。`,
-                run: async () => {
-                  await createApiClient().deleteShot(shot.id)
-                  workbench.refresh()
-                },
-              },
-            ]}
+            items={() => shotMenu.itemsFor(shot)}
           />
         }
       />

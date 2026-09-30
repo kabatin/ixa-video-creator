@@ -29,9 +29,9 @@ import { useShotMenu } from '@/components/workbench/use-shot-menu'
 export const StoryboardPanel = () => {
   const workbench = useWorkbench()
   // Shot の右クリック（長押し・Shift+F10）のメニュー。
-  const openShotMenu = useShotMenu()
+  const shotMenuActions = useShotMenu()
   const shotMenu = useContextMenuTrigger<Shot>((shot, at, origin) => {
-    openShotMenu(shot, at, origin)
+    shotMenuActions.open(shot, at, origin)
   })
   // 生成中の様子（どのモデルで・経過・目安）。動いている生成があるあいだだけ毎秒刻む。
   const now = useNow(workbench.activeGenerations.size > 0)

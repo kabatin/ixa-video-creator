@@ -43,29 +43,26 @@ export const useShotMenu = () => {
   const workbench = useWorkbench()
   const host = useContextMenuHost()
 
-  return (shot: Shot, at: MenuPoint, origin: HTMLElement, check?: ShotMenuCheck): void => {
-    // 再生位置は開いた瞬間だけ要る。描き直さずに読む（`useTransport` だと再生中にパネルが毎コマ描き直される）。
+  /** その Shot のメニューの行。再生位置は**作る瞬間に**描き直さずに読む（再生中にパネルを毎コマ描き直さない）。 */
+  const itemsFor = (shot: Shot, check?: ShotMenuCheck): readonly ContextMenuItem[] => {
     const atSec = workbench.transportControls.getTransport().currentSec
-    workbench.selectShot(shot.id)
     const run: Record<ShotMenuAction, () => void> = {
       'make-take': () => {
+        workbench.selectShot(shot.id)
         workbench.openInspector('generate')
       },
       'open-compare': () => {
+        workbench.selectShot(shot.id)
         workbench.focusPanel('compare')
       },
       'draw-start-frame': () => {
         createApiClient()
           .generateStartFrame(shot.id)
           .then(() => {
-            workbench.notify(
-              `${shot.code} の絵コンテの画像を作り始めました（「使う AI」の画像の AI で）。`,
-            )
+            workbench.notify(`${shot.code} の絵コンテの画像を作り始めました（「使う AI」の画像の AI で）。`)
           })
           .catch((cause: unknown) => {
-            workbench.notify(
-              `${shot.code} の絵コンテの画像を作れませんでした: ${describeForPerson(cause)}`,
-            )
+            workbench.notify(`${shot.code} の絵コンテの画像を作れませんでした: ${describeForPerson(cause)}`)
           })
       },
       split: () => {
@@ -86,6 +83,14 @@ export const useShotMenu = () => {
       splitBlocker: splitBlockerOf(shot, atSec),
       ...(check === undefined ? {} : { checked: check.checked }),
     })
-    host.open({ label: `Shot ${shot.code} の操作`, items: toMenuItems(entries, run), at, origin })
+    return toMenuItems(entries, run)
   }
+
+  /** 右クリックした Shot を選び、その Shot のメニューを開く。 */
+  const open = (shot: Shot, at: MenuPoint, origin: HTMLElement, check?: ShotMenuCheck): void => {
+    workbench.selectShot(shot.id)
+    host.open({ label: `Shot ${shot.code} の操作`, items: itemsFor(shot, check), at, origin })
+  }
+
+  return { itemsFor, open }
 }
