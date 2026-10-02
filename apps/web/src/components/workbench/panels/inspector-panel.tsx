@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import {
   BrandAssetInspector,
   CharacterInspector,
@@ -10,6 +11,7 @@ import {
 import { ProjectConceptInspector } from '@/components/workbench/inspector/project-concept-inspector'
 import { ShotInspector } from '@/components/workbench/inspector/shot-inspector'
 import { TextClipInspector } from '@/components/workbench/inspector/text-clip-inspector'
+import type { TextClipScopeId } from '@/lib/text-clip-scope'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty, PanelFrame } from '@/components/workbench/panels/panel-frame'
 
@@ -19,6 +21,11 @@ import { PanelEmpty, PanelFrame } from '@/components/workbench/panels/panel-fram
  */
 export const InspectorPanel = () => {
   const { inspected, shots } = useWorkbench()
+  /**
+   * テロップの「変える範囲」。テロップのインスペクターはテロップごとに作り直すので、ここで持つ。
+   * **別のテロップを開いても残す**（歌詞のテロップを続けて直せる。2026-10-02）。
+   */
+  const [textClipScope, setTextClipScope] = useState<TextClipScopeId>('this')
 
   if (inspected === null) {
     return (
@@ -59,7 +66,11 @@ export const InspectorPanel = () => {
   if (inspected.kind === 'text-clip') {
     return (
       <PanelFrame flush>
-        <TextClipInspector key={inspected.id} id={inspected.id} />
+        <TextClipInspector
+          key={inspected.id}
+          id={inspected.id}
+          scopeChoice={{ value: textClipScope, onChange: setTextClipScope }}
+        />
       </PanelFrame>
     )
   }

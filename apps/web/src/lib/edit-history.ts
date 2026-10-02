@@ -67,7 +67,11 @@ const toRow = (batch: WireEditBatch): EditHistoryRow => ({
   kindLabel: editBatchKindLabel(batch.kind),
   summary: batch.summary,
   when: formatEditBatchTime(batch.createdAt),
-  shotCountLabel: `${batch.shotCount.toString()} 件の Shot`,
+  // テロップの見た目のまとめ変更（2026-10-02）はテロップの件数で言う。
+  shotCountLabel:
+    batch.clipCount > 0 && batch.shotCount === 0
+      ? `${batch.clipCount.toString()} 件のテロップ`
+      : `${batch.shotCount.toString()} 件の Shot`,
   canUndo: batch.canUndo,
   undoneAt: batch.undoneAt === null ? null : formatEditBatchTime(batch.undoneAt),
   tone: batch.undoneAt !== null ? 'muted' : 'normal',
@@ -103,6 +107,8 @@ export type UndoResultView = {
   readonly tone: EditHistoryTone
   /** 戻せなかった分。**件数に畳まず、1 件ずつ理由を出す**（lessons L-015）。 */
   readonly failed: readonly UndoFailureView[]
+  /** 戻せなかったテロップ。同じく 1 件ずつ理由を出す。 */
+  readonly failedClips: readonly { readonly key: string; readonly reason: string }[]
 }
 
 /**
@@ -112,14 +118,21 @@ export type UndoResultView = {
  * 「なぜこの Shot だけ戻っていないのか」を自分で探すことになる。
  */
 export const buildUndoResultView = (result: WireUndoResult): UndoResultView => {
-  const restored = result.restored.length
-  const failed = result.failed.length
+  // テロップの記録（見た目のまとめ変更）ならテロップの件数で言う。Shot の記録は今までどおり。
+  const clips = result.restoredClips.length + result.failedClips.length > 0
+  const restored = clips ? result.restoredClips.length : result.restored.length
+  const failed = clips ? result.failedClips.length : result.failed.length
+  const subject = clips ? 'テロップ ' : ''
   return {
     summary:
       failed === 0
-        ? `${restored.toString()} 件を元に戻しました`
-        : `${restored.toString()} 件を元に戻し、${failed.toString()} 件は戻せませんでした`,
+        ? `${subject}${restored.toString()} 件を元に戻しました`
+        : `${subject}${restored.toString()} 件を元に戻し、${failed.toString()} 件は戻せませんでした`,
     tone: failed === 0 ? 'normal' : 'warn',
+    failedClips: result.failedClips.map((entry, index) => ({
+      key: `failed-clip:${entry.clipId}:${index.toString()}`,
+      reason: entry.reason,
+    })),
     failed: result.failed.map((entry, index) => ({
       key: `failed:${entry.shotId}:${index.toString()}`,
       shotId: entry.shotId,

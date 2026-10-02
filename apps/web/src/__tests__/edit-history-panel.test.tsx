@@ -2,6 +2,7 @@ import {
   EditBatchId as EditBatchIdSchema,
   ProjectId as ProjectIdSchema,
   ShotId as ShotIdSchema,
+  TimelineClipId as TimelineClipIdSchema,
   newId,
 } from '@ixa/domain'
 import { render, screen, waitFor } from '@testing-library/react'
@@ -35,6 +36,7 @@ const aBatch = (overrides: Partial<WireEditBatch> = {}): WireEditBatch => ({
   kind: 'rough_cut',
   summary: '粗編集を 49 件の Shot へ適用しました',
   shotCount: 49,
+  clipCount: 0,
   undoneAt: null,
   createdAt: '2026-09-18T01:00:00.000Z',
   canUndo: true,
@@ -61,6 +63,8 @@ const spyApi = (
           batch: { ...(first as WireEditBatch), undoneAt: '2026-09-18T02:00:00.000Z', canUndo: false },
           restored: [shotA],
           failed: [],
+          restoredClips: [],
+          failedClips: [],
         },
       )
     }),
@@ -125,6 +129,8 @@ describe('EditHistoryPanel', () => {
       batch: { ...batch, undoneAt: '2026-09-18T02:00:00.000Z', canUndo: false },
       restored: [shotA],
       failed: [{ shotId: shotB, reason: 'Shot が見つかりません' }],
+      restoredClips: [],
+      failedClips: [],
     })
     render(
       <EditHistoryPanel
@@ -188,10 +194,42 @@ describe('buildUndoResultView', () => {
       batch: aBatch(),
       restored: [shotA, shotB],
       failed: [],
+      restoredClips: [],
+      failedClips: [],
     })
     expect(view.summary).toBe('2 件を元に戻しました')
     expect(view.tone).toBe('normal')
     expect(view.failed).toEqual([])
+  })
+
+  /** テロップの見た目のまとめ変更（2026-10-02）。テロップの件数で言い、戻せなかったテロップも理由を出す。 */
+  it('テロップを戻したらテロップの件数で言い、戻せなかったテロップの理由も残す', () => {
+    const clipA = newId(TimelineClipIdSchema)
+    const clipB = newId(TimelineClipIdSchema)
+    const all = buildUndoResultView({
+      batch: aBatch({ kind: 'text_style', shotCount: 0, clipCount: 2 }),
+      restored: [],
+      failed: [],
+      restoredClips: [clipA, clipB],
+      failedClips: [],
+    })
+    expect(all.summary).toBe('テロップ 2 件を元に戻しました')
+
+    const partial = buildUndoResultView({
+      batch: aBatch({ kind: 'text_style', shotCount: 0, clipCount: 2 }),
+      restored: [],
+      failed: [],
+      restoredClips: [clipA],
+      failedClips: [{ clipId: clipB, reason: 'テロップが見つかりません（消された可能性があります）' }],
+    })
+    expect(partial.summary).toBe('テロップ 1 件を元に戻し、1 件は戻せませんでした')
+    expect(partial.tone).toBe('warn')
+    expect(partial.failedClips.map((entry) => entry.reason)).toEqual(['テロップが見つかりません（消された可能性があります）'])
+  })
+
+  it('履歴の行は、テロップの記録ならテロップの件数を出す', () => {
+    const view = buildEditHistoryView([aBatch({ kind: 'text_style', shotCount: 0, clipCount: 58 })])
+    expect(view.rows[0]?.shotCountLabel).toBe('58 件のテロップ')
   })
 
   it('戻せなかった分があれば、その件数と理由の両方を残す', () => {
@@ -199,6 +237,8 @@ describe('buildUndoResultView', () => {
       batch: aBatch(),
       restored: [],
       failed: [{ shotId: shotA, reason: 'この Project の Shot ではありません' }],
+      restoredClips: [],
+      failedClips: [],
     })
     expect(view.summary).toBe('0 件を元に戻し、1 件は戻せませんでした')
     expect(view.tone).toBe('warn')

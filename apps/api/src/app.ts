@@ -394,7 +394,12 @@ export const createApp = (deps: AppDeps) => {
   )
   app.route(
     '/',
-    clipTextStyleRoutes({ textStyles: deps.textStyles, projects, timelineClips: deps.timelineClips }),
+    clipTextStyleRoutes({
+      textStyles: deps.textStyles,
+      projects,
+      timelineClips: deps.timelineClips,
+      editBatches: deps.editBatches,
+    }),
   )
 
   app.route('/', timelineRoutes(timelineDeps))
@@ -418,7 +423,7 @@ export const createApp = (deps: AppDeps) => {
   // 一括で変えた記録と、その取り消し（横断 ROADMAP: Undo と履歴）。
   app.route(
     '/',
-    editBatchRoutes({ projects, shots: deps.shots, editBatches: deps.editBatches }),
+    editBatchRoutes({ projects, shots: deps.shots, editBatches: deps.editBatches, timelineClips: deps.timelineClips }),
   )
   app.route(
     '/',

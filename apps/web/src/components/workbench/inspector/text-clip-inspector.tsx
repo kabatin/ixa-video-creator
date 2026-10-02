@@ -1,6 +1,6 @@
 'use client'
 
-import { TextTemplateKey, type TimelineClipId } from '@ixa/domain'
+import { TextTemplateKey, textStyleChangeSummary, type TextStyle, type TextStyleKey, type TimelineClipId } from '@ixa/domain'
 import { useEffect, useMemo, useState } from 'react'
 import { TextStyleFields, type TextStylePatch } from '@/components/workbench/inspector/text-style-fields'
 import { TextStylePresets } from '@/components/workbench/inspector/text-style-presets'
@@ -18,6 +18,15 @@ import { formatClock, formatDuration, formatSpan } from '@/lib/format-time'
 import { textClipSpanIssue } from '@/lib/text-clip-span'
 import { TEXT_TEMPLATE_LABELS, readTextClipParams, withStyle } from '@/lib/text-style-form'
 import type { TimelineApi, WireTimelineClip } from '@/lib/timeline-api'
+import type { TextStyleApi } from '@/lib/text-style-api'
+import {
+  RESET_ALL_STYLE,
+  resolveTextClipScope,
+  textClipScopes,
+  toStyleChange,
+  type TextClipScope,
+  type TextClipScopeId,
+} from '@/lib/text-clip-scope'
 import { DEFAULT_PX_PER_SEC, programEndSec } from '@/lib/timeline-display'
 import {
   beatSourceOf,
@@ -39,16 +48,73 @@ type Loaded =
 const TEMPLATE_OPTIONS = TextTemplateKey.options.map((key) => ({ value: key, label: TEXT_TEMPLATE_LABELS[key] }))
 
 /**
+ * 変える範囲（制作者 2026-10-02「テロップをまとめて、サイズやスタイルや位置を変えられるようにしたい」）。
+ * 「このテロップだけ」以外のときは目立たせる（うっかり全部を変えないように）。
+ */
+const ScopePicker = ({
+  scopes,
+  current,
+  onChange,
+}: {
+  readonly scopes: readonly TextClipScope[]
+  readonly current: TextClipScope
+  readonly onChange: (id: TextClipScopeId) => void
+}) => (
+  <div
+    role="radiogroup"
+    aria-label="変える範囲"
+    className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded px-2 py-1.5 text-xs ${
+      current.id === 'this' ? 'text-muted' : 'bg-warn/15 text-text ring-1 ring-warn'
+    }`}
+  >
+    <span className="font-semibold">変える範囲</span>
+    {scopes.map((scope) => (
+      <label key={scope.id} className="flex items-center gap-1">
+        <input
+          type="radio"
+          name="text-clip-scope"
+          checked={scope.id === current.id}
+          onChange={() => {
+            onChange(scope.id)
+          }}
+          className="h-3.5 w-3.5"
+        />
+        {scope.label}
+      </label>
+    ))}
+  </div>
+)
+
+/**
  * テロップのインスペクター（ADR-0028）。文字・型・開始・尺・見た目・位置・フェードと、スタイルの保存・一括適用。
  * 欄は確定ごとに自動保存し、プレビューとタイムラインは読み直しで追いつく（`workbench.refresh`）。
  *
  * **帯のテロップを押すとここで開く。** 以前は帯の上の小窓で直していたが、パネルの端で見切れて
  * 編集しづらかった（2026-09-28、制作者の指摘）。小窓が受け持っていた開始・尺・削除もここに置く。
  */
-export const TextClipInspector = ({ id, api }: { readonly id: TimelineClipId; readonly api?: TimelineApi }) => {
+/** 「変える範囲」の選択を外で持つ口。インスペクターはテロップごとに作り直すので、続けて直すには外で持つ。 */
+export type TextClipScopeChoice = {
+  readonly value: TextClipScopeId
+  readonly onChange: (id: TextClipScopeId) => void
+}
+
+export const TextClipInspector = ({
+  id,
+  api,
+  scopeChoice,
+}: {
+  readonly id: TimelineClipId
+  readonly api?: TimelineApi
+  /** 渡さなければ、このインスペクターの中だけで持つ（「このテロップだけ」から）。 */
+  readonly scopeChoice?: TextClipScopeChoice
+}) => {
   const workbench = useWorkbench()
   const textClipMenu = useTextClipMenu()
   const client = useMemo<TimelineApi>(() => api ?? createApiClient(), [api])
+  const styleClient = useMemo<Pick<TextStyleApi, 'applyTextStyle'>>(() => createApiClient(), [])
+  const [ownScope, setOwnScope] = useState<TextClipScopeId>('this')
+  const wantedScope = scopeChoice?.value ?? ownScope
+  const chooseScope = scopeChoice?.onChange ?? setOwnScope
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' })
   const { preferences } = usePreferences()
   /** 開始・尺を拍へ寄せた結果。どのテロップのものかを持つ（別のテロップを開いたら出さない）。 */
@@ -90,7 +156,26 @@ export const TextClipInspector = ({ id, api }: { readonly id: TimelineClipId; re
   const save = async (next: Partial<typeof content>): Promise<void> => {
     replace([await client.updateClip(clip.id, { content: { ...content, ...next } })])
   }
-  const saveStyle = (patch: TextStylePatch) => save({ params: withStyle(content.params, patch) })
+  const scopes = textClipScopes(loaded.clips, clip.id)
+  const scope = resolveTextClipScope(scopes, wantedScope, clip.id)
+  /** 範囲の全部に、変えた項目だけを当てる。変更の履歴に残るので、件数と「戻せます」を知らせる。 */
+  const applyToScope = async (change: {
+    readonly set: TextStyle
+    readonly unset: readonly TextStyleKey[]
+  }): Promise<void> => {
+    const updated = await styleClient.applyTextStyle(workbench.projectId, {
+      clipIds: [...scope.clipIds],
+      set: change.set,
+      unset: [...change.unset],
+    })
+    replace(updated)
+    const keys = { set: Object.keys(change.set) as TextStyleKey[], unset: change.unset }
+    workbench.notify(`${textStyleChangeSummary(scope.clipIds.length, keys)}（変更の履歴から戻せます）`)
+  }
+  const saveStyle = (patch: TextStylePatch) =>
+    scope.id === 'this' ? save({ params: withStyle(content.params, patch) }) : applyToScope(toStyleChange(patch))
+  const resetStyle = () =>
+    scope.id === 'this' ? save({ params: { ...content.params, style: {} } }) : applyToScope(RESET_ALL_STYLE)
   const saveSpan = async (span: { readonly startSec?: number; readonly durationSec?: number }): Promise<void> => {
     replace([await client.updateClip(clip.id, span)])
   }
@@ -213,11 +298,16 @@ export const TextClipInspector = ({ id, api }: { readonly id: TimelineClipId; re
         </Section>
         {template.success && params !== null && (
           <>
+            <ScopePicker
+              scopes={scopes}
+              current={scope}
+              onChange={chooseScope}
+            />
             <TextStyleFields
               template={template.data}
               style={params.style}
               onChange={saveStyle}
-              onReset={() => save({ params: { ...content.params, style: {} } })}
+              onReset={resetStyle}
             />
             <TextStylePresets
               projectId={workbench.projectId}

@@ -7,6 +7,8 @@ import {
   type EditBatch,
   type Project,
   type Shot,
+  TimelineClip,
+  TimelineClipId,
 } from '@ixa/domain'
 import { aShot, createInMemoryShotRepository } from '@ixa/generation/testing'
 import { shotBeforePatch } from '../routes/edit-batch-recording.js'
@@ -22,6 +24,7 @@ import {
 } from '../routes/edit-batches.js'
 import { FOREIGN_SHOT_REASON, SHOT_NOT_FOUND_REASON } from '../routes/shots-bulk.js'
 import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryTimelineClipRepository } from './in-memory-timeline-repositories.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { aProject } from './fixtures.js'
 import type { ErrorBody, Ok } from './shot-test-support.js'
@@ -40,6 +43,7 @@ type Scene = {
   readonly project: Project
   readonly shots: ReturnType<typeof createInMemoryShotRepository>
   readonly editBatches: ReturnType<typeof createInMemoryEditBatchRepository>
+  readonly clips: ReturnType<typeof createInMemoryTimelineClipRepository>
   /**
    * `selectTake` / `updateStatus` を呼んだ回数。
    * **最終状態ではなく呼び出しそのものを見る**（lessons L-022）。
@@ -58,6 +62,7 @@ const scene = (options: {
   const project = options.project ?? aProject()
   const shots = createInMemoryShotRepository(options.shots ?? [])
   const editBatches = createInMemoryEditBatchRepository()
+  const clips = createInMemoryTimelineClipRepository()
   let selectTakeCalls = 0
   let updateStatusCalls = 0
   const app = new OpenAPIHono({ defaultHook: validationHook })
@@ -79,6 +84,7 @@ const scene = (options: {
         },
       },
       editBatches,
+      timelineClips: clips,
     }),
   )
   return {
@@ -86,6 +92,7 @@ const scene = (options: {
     project,
     shots,
     editBatches,
+    clips,
     selectTakeCalls: () => selectTakeCalls,
     updateStatusCalls: () => updateStatusCalls,
   }
@@ -402,5 +409,76 @@ describe('shotBeforePatch', () => {
 
     expect(before).toEqual({ mood: '元の雰囲気' })
     expect('lockedAt' in before).toBe(false)
+  })
+})
+
+/**
+ * テロップの見た目のまとめ変更の取り消し（制作者 2026-10-02「テロップをまとめて、サイズやスタイルや位置を変えられるようにしたい」）。
+ * 変える前の見た目と styleId を書き戻す。文字は触らない。消えたテロップは理由つきで返し、残りは戻す。
+ */
+describe('テロップの記録の取り消し', () => {
+  const textClip = (projectId: Project['id'], params: Record<string, unknown>): TimelineClip =>
+    TimelineClip.parse({
+      id: newId(TimelineClipId),
+      projectId,
+      track: 'TEXT',
+      startSec: 0,
+      durationSec: 2,
+      layer: 1,
+      content: { type: 'text', templateKey: 'plain', params },
+      opacity: 1,
+      createdAt: new Date(),
+    })
+
+  it('見た目と styleId を変える前へ戻し、文字は残す。前に見た目が無かったなら外す', async () => {
+    const s = scene()
+    // 置き場は作るときに ID を振り直すので、作った後の値を使う。
+    const styled = await s.clips.create(
+      textClip(s.project.id, { text: '一行目', style: { color: '#FF0000', size: 0.08 }, styleId: 'style-a', lyricLine: 0 }),
+    )
+    const bare = await s.clips.create(textClip(s.project.id, { text: '二行目', style: { size: 0.08 }, styleId: null }))
+    const batch = await seed(s, {
+      kind: 'text_style',
+      summary: 'テロップ 2 件の大きさを変えました',
+      entries: [],
+      clipEntries: [
+        { clipId: styled.id, style: { color: '#FF0000' }, styleId: 'style-a' },
+        { clipId: bare.id, style: null, styleId: null },
+      ],
+    })
+
+    const result = await undoOk(s, batch.id)
+
+    expect(result.restoredClips).toEqual([styled.id, bare.id])
+    expect(result.failedClips).toEqual([])
+    const [first, second] = s.clips.snapshot()
+    expect(first?.content).toEqual({
+      type: 'text',
+      templateKey: 'plain',
+      params: { text: '一行目', style: { color: '#FF0000' }, styleId: 'style-a', lyricLine: 0 },
+    })
+    expect(second?.content).toEqual({ type: 'text', templateKey: 'plain', params: { text: '二行目', styleId: null } })
+  })
+
+  it('消えたテロップは理由つきで返し、残りは戻す。履歴にはテロップの件数を出す', async () => {
+    const s = scene()
+    const live = await s.clips.create(textClip(s.project.id, { text: '一行目', style: { size: 0.08 } }))
+    const gone = newId(TimelineClipId)
+    const batch = await seed(s, {
+      kind: 'text_style',
+      summary: 'テロップ 2 件の大きさを変えました',
+      entries: [],
+      clipEntries: [
+        { clipId: live.id, style: {}, styleId: null },
+        { clipId: gone, style: {}, styleId: null },
+      ],
+    })
+
+    expect((await list(s))[0]).toMatchObject({ clipCount: 2, shotCount: 0, canUndo: true })
+    const result = await undoOk(s, batch.id)
+
+    expect(result.restoredClips).toEqual([live.id])
+    expect(result.failedClips.map((failure) => failure.clipId)).toEqual([gone])
+    expect(result.failedClips[0]?.reason).toMatch(/見つかりません/)
   })
 })

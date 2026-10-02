@@ -12,6 +12,7 @@ import {
   createInMemoryTimelineClipRepository,
   type InMemoryTimelineClipRepository,
 } from './in-memory-timeline-repositories.js'
+import { createInMemoryEditBatchRepository, type InMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
 
 /** テロップのスタイル（ADR-0028）。名前を付けて保存し、まとめて当てる。 */
 
@@ -25,6 +26,7 @@ const other = aProject({ name: '別の Project' })
 
 let textStyles: InMemoryTextStyleRepository
 let clips: InMemoryTimelineClipRepository
+let editBatches: InMemoryEditBatchRepository
 let app: OpenAPIHono
 
 const send = (method: string, path: string, payload?: unknown) =>
@@ -53,10 +55,11 @@ const lyric = (text: string, startSec = 0) =>
 beforeEach(() => {
   textStyles = createInMemoryTextStyleRepository()
   clips = createInMemoryTimelineClipRepository()
+  editBatches = createInMemoryEditBatchRepository()
   const projects = createInMemoryProjectRepository([project, other])
   app = new OpenAPIHono({ defaultHook: validationHook })
   app.route('/', textStyleRoutes({ textStyles, projects }))
-  app.route('/', clipTextStyleRoutes({ textStyles, projects, timelineClips: clips }))
+  app.route('/', clipTextStyleRoutes({ textStyles, projects, timelineClips: clips, editBatches }))
   registerErrorHandlers(app, createLogger('silent'))
 })
 
@@ -171,5 +174,90 @@ describe('まとめて当てる', () => {
     const many = Array.from({ length: MAX_TEXT_STYLE_CLIPS + 1 }, () => newId(TimelineClipId))
     expect((await send('POST', path, { clipIds: many, style: {}, styleId: null })).status).toBe(422)
     expect((await send('POST', path, { clipIds: [newId(TimelineClipId)], style: { color: 'red' }, styleId: null })).status).toBe(422)
+  })
+})
+
+/**
+ * 変えた項目だけをまとめて変える（制作者 2026-10-02「テロップをまとめて、サイズやスタイルや位置を変えられるようにしたい」）。
+ * 大きさだけ変えれば、色や位置・文字・どのスタイルからか（styleId）はテロップごとに今のまま。
+ * 変える前の見た目を変更の履歴に残す（取り消せる）。丸ごと当てたときも同じ。
+ */
+describe('まとめて項目だけ変える', () => {
+  const styled = (text: string, style: Record<string, unknown>, styleId: string | null, startSec = 0) =>
+    aClip(project.id, { type: 'text', templateKey: 'plain', params: { text, style, styleId } }, startSec)
+
+  it('指定した項目だけ変え、ほかの項目・文字・styleId は残す。外した項目は既定に戻す', async () => {
+    await clips.create(styled('一行目', { color: '#FF0000', anchor: 'top-left' }, 'style-a', 0))
+    await clips.create(styled('二行目', { color: '#00FF00' }, null, 2))
+    const ids = clips.snapshot().map((clip) => clip.id)
+
+    const res = await send('POST', `/projects/${project.id}/clips/text-style`, {
+      clipIds: ids,
+      set: { size: 0.08 },
+      unset: ['anchor'],
+    })
+
+    expect(res.status).toBe(200)
+    expect((await json<Ok<Clip[]>>(res)).data.map((clip) => clip.content.params)).toEqual([
+      { text: '一行目', style: { color: '#FF0000', size: 0.08 }, styleId: 'style-a' },
+      { text: '二行目', style: { color: '#00FF00', size: 0.08 }, styleId: null },
+    ])
+  })
+
+  it('変える前の見た目を変更の履歴に残す（テロップの件数と変えた項目を見出しに）', async () => {
+    await clips.create(styled('一行目', { color: '#FF0000' }, 'style-a', 0))
+    await clips.create(aClip(project.id, { type: 'text', templateKey: 'plain', params: { text: '二行目' } }, 2))
+    const ids = clips.snapshot().map((clip) => clip.id)
+
+    await send('POST', `/projects/${project.id}/clips/text-style`, { clipIds: ids, set: { size: 0.08 }, unset: [] })
+
+    const [batch] = editBatches.snapshot()
+    expect(batch?.kind).toBe('text_style')
+    expect(batch?.summary).toBe('テロップ 2 件の大きさを変えました')
+    expect(batch?.entries).toEqual([])
+    expect(batch?.clipEntries).toEqual([
+      { clipId: ids[0], style: { color: '#FF0000' }, styleId: 'style-a' },
+      { clipId: ids[1], style: null, styleId: null },
+    ])
+  })
+
+  it('丸ごと当てたときも履歴に残す', async () => {
+    await clips.create(styled('一行目', { color: '#FF0000' }, null))
+    const ids = clips.snapshot().map((clip) => clip.id)
+
+    await send('POST', `/projects/${project.id}/clips/text-style`, { clipIds: ids, style: { size: 0.05 }, styleId: null })
+
+    expect(editBatches.snapshot()[0]?.clipEntries).toEqual([{ clipId: ids[0], style: { color: '#FF0000' }, styleId: null }])
+    expect(editBatches.snapshot()[0]?.summary).toBe('テロップ 1 件に見た目を当てました')
+  })
+
+  it('丸ごとと項目だけを混ぜた・片方だけの本文は 422 で、どう送るかを言う', async () => {
+    await clips.create(styled('一行目', {}, null))
+    const ids = clips.snapshot().map((clip) => clip.id)
+    const path = `/projects/${project.id}/clips/text-style`
+
+    for (const payload of [
+      { clipIds: ids, style: {}, styleId: null, set: { size: 0.05 }, unset: [] },
+      { clipIds: ids, set: { size: 0.05 } },
+      { clipIds: ids, style: {} },
+    ]) {
+      const res = await send('POST', path, payload)
+      expect(res.status).toBe(422)
+      expect(JSON.stringify(await json<Err>(res))).toMatch(/set と unset/)
+    }
+    expect(editBatches.snapshot()).toEqual([])
+  })
+
+  it('範囲の外の値・知らない項目・テロップ以外は 422 で、何も変えず記録もしない', async () => {
+    await clips.create(styled('一行目', { color: '#FF0000' }, null))
+    await clips.create(aClip(project.id, { type: 'media', mediaAssetId: MediaAssetId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAV'), inSec: 0, outSec: 2, volume: 1 }))
+    const [text, media] = clips.snapshot()
+    const path = `/projects/${project.id}/clips/text-style`
+
+    expect((await send('POST', path, { clipIds: [text?.id], set: { size: 0.9 }, unset: [] })).status).toBe(422)
+    expect((await send('POST', path, { clipIds: [text?.id], set: {}, unset: ['sise'] })).status).toBe(422)
+    expect((await send('POST', path, { clipIds: [text?.id, media?.id], set: { size: 0.05 }, unset: [] })).status).toBe(422)
+    expect(clips.snapshot()[0]?.content).toEqual({ type: 'text', templateKey: 'plain', params: { text: '一行目', style: { color: '#FF0000' }, styleId: null } })
+    expect(editBatches.snapshot()).toEqual([])
   })
 })

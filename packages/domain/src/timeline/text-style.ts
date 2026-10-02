@@ -85,6 +85,42 @@ export type TextStyle = z.infer<typeof TextStyle>
 export const TextStyleKey = TextStyle.keyof()
 export type TextStyleKey = z.infer<typeof TextStyleKey>
 
+/** 見た目の項目の呼び名（まとめて変えたときの知らせ・変更の履歴の見出し）。 */
+export const TEXT_STYLE_KEY_LABELS: Readonly<Record<TextStyleKey, string>> = Object.freeze({
+  font: '書体',
+  size: '大きさ',
+  weight: '太さ',
+  color: '色',
+  stroke: '縁取り',
+  shadow: '影',
+  background: '帯',
+  align: '揃え',
+  anchor: '位置',
+  offset: 'ずらし',
+  fadeInSec: 'フェードイン',
+  fadeOutSec: 'フェードアウト',
+})
+
+/**
+ * まとめて変えたことの一文（「テロップ 58 件の大きさを変えました」）。画面の知らせと変更の履歴の見出しで同じ文にする。
+ * `change` が null なら丸ごと当てた（「見た目を当てました」）。全部の項目を外しただけなら「型の既定に戻しました」。
+ * 項目は決まった並びで出す。
+ */
+export const textStyleChangeSummary = (
+  count: number,
+  change: { readonly set: readonly TextStyleKey[]; readonly unset: readonly TextStyleKey[] } | null,
+): string => {
+  const subject = `テロップ ${String(count)} 件`
+  if (change === null) return `${subject}に見た目を当てました`
+  const unset = new Set(change.unset)
+  if (change.set.length === 0 && TextStyleKey.options.every((key) => unset.has(key))) {
+    return `${subject}の見た目を型の既定に戻しました`
+  }
+  const changed = new Set([...change.set, ...change.unset])
+  const labels = TextStyleKey.options.filter((key) => changed.has(key)).map((key) => TEXT_STYLE_KEY_LABELS[key])
+  return `${subject}の${labels.join('・')}を変えました`
+}
+
 /**
  * 見た目に、変えた項目だけを重ねる（制作者 2026-10-02「テロップをまとめて、サイズやスタイルや位置を変えられるようにしたい」）。
  * `set` の項目を上書きし、`unset` の項目は外す（型の既定に戻す）。ほかの項目はそのまま残す。

@@ -47,6 +47,8 @@ export const createInMemoryEditBatchRepository = (
         kind: parsed.kind,
         summary: parsed.summary,
         entries: parsed.entries,
+        // 本物（db のリポジトリ）は入力を丸ごと書く。テロップの記録も落とさない。
+        clipEntries: parsed.clipEntries,
         undoneAt: null,
         createdAt: new Date(),
       })

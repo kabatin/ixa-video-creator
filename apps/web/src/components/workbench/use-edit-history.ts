@@ -139,7 +139,7 @@ export const useEditHistory = (projectId: ProjectId, epoch: number): EditHistory
     try {
       const result = await api.undoEditBatch(projectId, target.id)
       setReloads((count) => count + 1)
-      const failed = result.failed.length
+      const failed = result.failed.length + result.failedClips.length
       return failed === 0
         ? `「${target.summary}」を戻しました。`
         : `「${target.summary}」を戻しました（${String(failed)} 件は戻せませんでした。変更履歴で理由を確認できます）。`

@@ -2,6 +2,7 @@ import {
   EditBatchId,
   EditBatchKind,
   ShotId,
+  TimelineClipId,
   type EditBatchId as EditBatchIdType,
   type ProjectId,
 } from '@ixa/domain'
@@ -30,6 +31,8 @@ export const WireEditBatch = z.object({
   summary: z.string().min(1),
   /** 変える前を記録した Shot の件数。 */
   shotCount: z.number().int().nonnegative(),
+  /** 変える前を記録したテロップの件数（テロップの見た目のまとめ変更）。 */
+  clipCount: z.number().int().nonnegative(),
   /** **`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
   undoneAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
@@ -44,6 +47,9 @@ export const WireUndoResult = z.object({
   batch: WireEditBatch,
   restored: z.array(ShotId),
   failed: z.array(z.object({ shotId: ShotId, reason: z.string().min(1) })),
+  /** 戻したテロップ。Shot の記録なら空。 */
+  restoredClips: z.array(TimelineClipId),
+  failedClips: z.array(z.object({ clipId: TimelineClipId, reason: z.string().min(1) })),
 })
 export type WireUndoResult = z.infer<typeof WireUndoResult>
 

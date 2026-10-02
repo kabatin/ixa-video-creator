@@ -2,6 +2,7 @@ import {
   CreateTextStylePresetInput,
   TextStyle,
   TextStyleId,
+  TextStyleKey,
   TextStylePreset,
   TimelineClipId,
   UpdateTextStylePresetPatch,
@@ -21,12 +22,27 @@ export const WireTextStylePreset = TextStylePreset.extend({
 })
 export type WireTextStylePreset = z.infer<typeof WireTextStylePreset>
 
-export const ApplyTextStyleBody = z.object({
-  clipIds: z.array(TimelineClipId).min(1),
-  style: TextStyle,
-  /** どの保存済みスタイルから当てたか。見た目だけ当てるなら null。 */
-  styleId: TextStyleId.nullable(),
-})
+/**
+ * まとめて当てる本文。丸ごと（`style`・`styleId`）か、項目だけ（`set`・`unset`。2026-10-02）か。
+ * 項目だけは、変えた項目を上書き・外し、ほかの項目と styleId はテロップごとに残す。どちらも変更の履歴に残る。
+ */
+export const ApplyTextStyleBody = z.union([
+  z
+    .object({
+      clipIds: z.array(TimelineClipId).min(1),
+      style: TextStyle,
+      /** どの保存済みスタイルから当てたか。見た目だけ当てるなら null。 */
+      styleId: TextStyleId.nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      clipIds: z.array(TimelineClipId).min(1),
+      set: TextStyle,
+      unset: z.array(TextStyleKey),
+    })
+    .strict(),
+])
 export type ApplyTextStyleBody = z.input<typeof ApplyTextStyleBody>
 
 export type TextStyleApi = {

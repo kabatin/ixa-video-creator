@@ -102,7 +102,7 @@ export const EditHistoryPanel = ({
           setBatches((current) =>
             current.map((batch) => (batch.id === result.batch.id ? result.batch : batch)),
           )
-          if (result.restored.length > 0) onUndone?.()
+          if (result.restored.length > 0 || result.restoredClips.length > 0) onUndone?.()
         })
         .catch((cause: unknown) => {
           setError(describeError(cause))
@@ -190,6 +190,15 @@ export const EditHistoryPanel = ({
               {undoView.failed.map((entry) => (
                 <li key={entry.key} className="text-xs text-muted">
                   <span className="text-text">{label(entry.shotId)}</span> — {entry.reason}
+                </li>
+              ))}
+            </ul>
+          )}
+          {undoView.failedClips.length === 0 ? null : (
+            <ul className="mt-1 space-y-1">
+              {undoView.failedClips.map((entry) => (
+                <li key={entry.key} className="text-xs text-muted">
+                  <span className="text-text">テロップ</span> — {entry.reason}
                 </li>
               ))}
             </ul>

@@ -6,6 +6,7 @@ import {
   isTextStyleUnreadable,
   mergeTextStyle,
   resolveTextStyle,
+  textStyleChangeSummary,
 } from '../timeline/text-style.js'
 import { parseTextClipParams } from '../timeline/text-template.js'
 
@@ -153,5 +154,24 @@ describe('mergeTextStyle', () => {
     const before = structuredClone(current)
     mergeTextStyle(current, { size: 0.08 }, ['color'])
     expect(current).toEqual(before)
+  })
+})
+
+/** まとめて変えたことの一文。画面の知らせと変更の履歴の見出しで同じ文にする。 */
+describe('textStyleChangeSummary', () => {
+  it('変えた項目を決まった並びで言う（上書きも外すも「変えた」）', () => {
+    expect(textStyleChangeSummary(58, { set: ['anchor', 'size'], unset: ['font'] })).toBe(
+      'テロップ 58 件の書体・大きさ・位置を変えました',
+    )
+  })
+
+  it('丸ごと当てたら「見た目を当てました」、全部外しただけなら「型の既定に戻しました」', () => {
+    expect(textStyleChangeSummary(3, null)).toBe('テロップ 3 件に見た目を当てました')
+    expect(
+      textStyleChangeSummary(3, {
+        set: [],
+        unset: ['font', 'size', 'weight', 'color', 'stroke', 'shadow', 'background', 'align', 'anchor', 'offset', 'fadeInSec', 'fadeOutSec'],
+      }),
+    ).toBe('テロップ 3 件の見た目を型の既定に戻しました')
   })
 })

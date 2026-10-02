@@ -34,6 +34,7 @@ const aBatch = (overrides: Partial<WireEditBatch> = {}): WireEditBatch => ({
   kind: 'rough_cut',
   summary: SUMMARY,
   shotCount: 49,
+  clipCount: 0,
   undoneAt: null,
   createdAt: '2026-09-18T01:00:00.000Z',
   canUndo: true,
@@ -55,6 +56,8 @@ vi.mock('@/lib/api-client', () => ({
         batch: { ...batch, undoneAt: '2026-09-18T02:00:00.000Z' },
         restored: [],
         failed: [],
+        restoredClips: [],
+        failedClips: [],
       })
     },
   }),

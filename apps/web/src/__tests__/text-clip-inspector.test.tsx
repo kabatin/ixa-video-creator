@@ -1,11 +1,16 @@
 import { MediaAssetId, TextStyleId, TimelineClip, TimelineClipId, type MusicTrack } from '@ixa/domain'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TextClipInspector } from '@/components/workbench/inspector/text-clip-inspector'
 import type { WireMusicAnalysis } from '@/lib/music-api'
 import { DEFAULT_PREFERENCES, PREFERENCES_STORAGE_KEY } from '@/lib/preferences'
-import { aProject, renderInWorkbench } from './workbench-fixture'
+import { PreferencesRoot } from '@/components/preferences-root'
+import { InspectorPanel } from '@/components/workbench/panels/inspector-panel'
+import { ContextMenuHost } from '@/components/workbench/ui/context-menu'
+import { WorkbenchContext } from '@/components/workbench/workbench-context'
+import { WorkbenchTransportProvider } from '@/components/workbench/workbench-transport-provider'
+import { STOPPED, aProject, renderInWorkbench, workbenchValue } from './workbench-fixture'
 
 /**
  * テロップのインスペクター（ADR-0028）。欄を変えると、その項目だけを重ねた params を送る。
@@ -288,5 +293,113 @@ describe('TextClipInspector の時間と削除', () => {
       expect(fake.deleteClip).toHaveBeenCalledWith(CLIP_ID)
     })
     expect(value.inspect).toHaveBeenCalledWith(null)
+  })
+})
+
+/**
+ * テロップをまとめて変える（制作者 2026-10-02「テロップをまとめて、サイズやスタイルや位置を変えられるようにしたい」）。
+ * 「変える範囲」を選ぶと、欄を 1 つ変えたとき**その項目だけ**が範囲の全部に当たる。変更の履歴から戻せる。
+ */
+describe('TextClipInspector の変える範囲', () => {
+  const LYRIC_A = TimelineClipId.parse('01ARZ3NDEKTSV4RRFFQ69G5FC0')
+  const LYRIC_B = TimelineClipId.parse('01ARZ3NDEKTSV4RRFFQ69G5FC1')
+  const MANUAL = TimelineClipId.parse('01ARZ3NDEKTSV4RRFFQ69G5FC2')
+
+  const lyricClips = () => [
+    clip(LYRIC_A, { type: 'text', templateKey: 'plain', params: { text: 'ぼくは', style: { size: 0.05 }, lyricLine: 0 } }),
+    clip(LYRIC_B, { type: 'text', templateKey: 'plain', params: { text: 'はると', lyricLine: 1 } }, { startSec: 4, durationSec: 2 }),
+    clip(MANUAL, { type: 'text', templateKey: 'plain', params: { text: 'タイトル' } }, { startSec: 8, durationSec: 2 }),
+  ]
+
+  const openLyric = async () => {
+    fake.listClips.mockResolvedValue(lyricClips())
+    const { value } = renderInWorkbench(<TextClipInspector id={LYRIC_A} />)
+    await screen.findByText('ぼくは')
+    return value
+  }
+
+  it('このテロップだけ・歌詞のテロップすべて・テロップすべてを件数つきで出し、既定はこのテロップだけ', async () => {
+    await openLyric()
+
+    const scope = screen.getByRole('radiogroup', { name: '変える範囲' })
+    expect(within(scope).getByRole('radio', { name: 'このテロップだけ' })).toBeChecked()
+    expect(within(scope).getByRole('radio', { name: '歌詞のテロップすべて（2）' })).toBeTruthy()
+    expect(within(scope).getByRole('radio', { name: 'テロップすべて（3）' })).toBeTruthy()
+  })
+
+  it('歌詞のテロップすべてで欄を変えると、歌詞のテロップに項目だけをまとめて送り、件数と「戻せます」を知らせる', async () => {
+    fake.applyTextStyle.mockImplementation(() => Promise.resolve(lyricClips()))
+    const value = await openLyric()
+
+    await userEvent.click(screen.getByRole('radio', { name: '歌詞のテロップすべて（2）' }))
+    await userEvent.selectOptions(screen.getByLabelText('書体'), 'mincho')
+
+    await waitFor(() => {
+      expect(fake.applyTextStyle).toHaveBeenCalledWith(aProject.id, {
+        clipIds: [LYRIC_A, LYRIC_B],
+        set: { font: 'mincho' },
+        unset: [],
+      })
+    })
+    expect(fake.updateClip).not.toHaveBeenCalled()
+    expect(value.notify).toHaveBeenCalledWith('テロップ 2 件の書体を変えました（変更の履歴から戻せます）')
+  })
+
+  it('範囲が「このテロップだけ」以外なら、範囲の行を目立たせる', async () => {
+    await openLyric()
+    const scope = screen.getByRole('radiogroup', { name: '変える範囲' })
+    expect(scope.className).not.toContain('bg-warn')
+
+    await userEvent.click(screen.getByRole('radio', { name: 'テロップすべて（3）' }))
+
+    expect(scope.className).toContain('bg-warn')
+  })
+
+  it('「型の既定に戻す」も範囲の全部に当てる（見た目の項目を全部外す）', async () => {
+    fake.applyTextStyle.mockImplementation(() => Promise.resolve(lyricClips()))
+    await openLyric()
+
+    await userEvent.click(screen.getByRole('radio', { name: 'テロップすべて（3）' }))
+    await userEvent.click(screen.getByRole('button', { name: '型の既定に戻す' }))
+
+    await waitFor(() => {
+      expect(fake.applyTextStyle).toHaveBeenCalledWith(
+        aProject.id,
+        expect.objectContaining({ clipIds: [LYRIC_A, LYRIC_B, MANUAL], set: {} }),
+      )
+    })
+    const body = fake.applyTextStyle.mock.calls.at(-1)?.[1] as { unset: string[] }
+    expect(body.unset).toContain('size')
+    expect(body.unset).toContain('anchor')
+  })
+
+  it('別のテロップを開いても、選んだ範囲は残る（歌詞のテロップを続けて直せる）', async () => {
+    fake.listClips.mockResolvedValue(lyricClips())
+    const tree = (id: TimelineClipId) => (
+      <PreferencesRoot>
+        <WorkbenchContext.Provider value={workbenchValue({ inspected: { kind: 'text-clip', id } })}>
+          <WorkbenchTransportProvider transport={STOPPED}>
+            <ContextMenuHost>
+              <InspectorPanel />
+            </ContextMenuHost>
+          </WorkbenchTransportProvider>
+        </WorkbenchContext.Provider>
+      </PreferencesRoot>
+    )
+    const { rerender } = render(tree(LYRIC_A))
+    await screen.findByText('ぼくは')
+    await userEvent.click(screen.getByRole('radio', { name: '歌詞のテロップすべて（2）' }))
+
+    rerender(tree(LYRIC_B))
+    await screen.findByText('はると')
+
+    expect(screen.getByRole('radio', { name: '歌詞のテロップすべて（2）' })).toBeChecked()
+  })
+
+  it('歌詞のテロップが無ければ、その選択肢は出さない', async () => {
+    await open()
+
+    expect(screen.queryByRole('radio', { name: /歌詞のテロップすべて/ })).toBeNull()
+    expect(screen.getByRole('radio', { name: 'テロップすべて（2）' })).toBeTruthy()
   })
 })

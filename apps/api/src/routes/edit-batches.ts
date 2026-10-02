@@ -4,16 +4,20 @@ import {
   EditBatchKind as EditBatchKindSchema,
   ProjectId as ProjectIdSchema,
   ShotId as ShotIdSchema,
+  TimelineClipId as TimelineClipIdSchema,
   canUndo,
   isUndone,
   undoTouchesSelectedTake,
   undoTouchesStatus,
   type EditBatch,
+  type EditBatchClipEntry,
   type EditBatchEntry,
   type ProjectId,
   type ShotId,
+  type TimelineClip,
+  type TimelineClipId,
 } from '@ixa/domain'
-import type { EditBatchRepository, ProjectRepository, ShotRepository } from '@ixa/db'
+import type { EditBatchRepository, ProjectRepository, ShotRepository, TimelineClipRepository } from '@ixa/db'
 import { roughCutLockedReason } from '@ixa/timeline'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, okList, successResponse, listResponse } from '../response.js'
@@ -63,6 +67,8 @@ export const EditBatchSummaryResponse = z
     summary: z.string().min(1),
     /** 変える前を記録した Shot の件数。 */
     shotCount: z.number().int().nonnegative(),
+    /** 変える前を記録したテロップの件数（テロップの見た目のまとめ変更）。 */
+    clipCount: z.number().int().nonnegative(),
     /** **`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
     undoneAt: z.string().datetime().nullable(),
     createdAt: z.string().datetime(),
@@ -76,12 +82,19 @@ const UndoFailure = z
   .object({ shotId: ShotIdSchema, reason: z.string().min(1) })
   .openapi('EditBatchUndoFailure')
 
+const UndoClipFailure = z
+  .object({ clipId: TimelineClipIdSchema, reason: z.string().min(1) })
+  .openapi('EditBatchUndoClipFailure')
+
 /** **戻せた分と戻せなかった分を両方返す。** 件数だけでは何が残ったか分からない。 */
 export const UndoEditBatchResponse = z
   .object({
     batch: EditBatchSummaryResponse,
     restored: z.array(ShotIdSchema),
     failed: z.array(UndoFailure),
+    /** 戻したテロップ。Shot の記録だけなら空。 */
+    restoredClips: z.array(TimelineClipIdSchema),
+    failedClips: z.array(UndoClipFailure),
   })
   .openapi('UndoEditBatchResult')
 export type UndoEditBatchResponse = z.infer<typeof UndoEditBatchResponse>
@@ -91,6 +104,7 @@ export const toEditBatchSummary = (batch: EditBatch): EditBatchSummaryResponse =
   kind: batch.kind,
   summary: batch.summary,
   shotCount: batch.entries.length,
+  clipCount: batch.clipEntries.length,
   undoneAt: batch.undoneAt === null ? null : batch.undoneAt.toISOString(),
   createdAt: batch.createdAt.toISOString(),
   canUndo: canUndo(batch),
@@ -138,6 +152,38 @@ export type EditBatchRoutesDeps = {
    */
   shots: Pick<ShotRepository, 'findById' | 'selectTake' | 'update' | 'updateStatus'>
   editBatches: Pick<EditBatchRepository, 'findByProject' | 'findById' | 'markUndone'>
+  /** テロップの見た目を戻す（`clipEntries`）。文字・時間には触らない。 */
+  timelineClips: Pick<TimelineClipRepository, 'findByProject' | 'update'>
+}
+
+/** 戻すテロップが無い（消された）。 */
+export const CLIP_NOT_FOUND_REASON = 'テロップが見つかりません（消された可能性があります）'
+export const NOT_TEXT_CLIP_REASON = 'テロップではなくなっています'
+
+/**
+ * テロップ 1 件の見た目を変える前へ戻す。**見た目と styleId だけ**を書き戻し、文字・印（歌詞の行）は残す。
+ * 前に見た目が無かった（`null`）なら外す。戻せなければ理由を返す（握り潰さない）。
+ */
+const restoreClipEntry = async (
+  deps: Pick<EditBatchRoutesDeps, 'timelineClips'>,
+  clips: ReadonlyMap<TimelineClipId, TimelineClip>,
+  entry: EditBatchClipEntry,
+): Promise<string | null> => {
+  const clip = clips.get(entry.clipId)
+  if (clip === undefined) return CLIP_NOT_FOUND_REASON
+  if (clip.content.type !== 'text') return NOT_TEXT_CLIP_REASON
+  try {
+    // いまの見た目を外してから、変える前を書く（無かったなら外したまま）。
+    const rest = Object.fromEntries(Object.entries(clip.content.params).filter(([key]) => key !== 'style'))
+    const params =
+      entry.style === null
+        ? { ...rest, styleId: entry.styleId }
+        : { ...rest, style: entry.style, styleId: entry.styleId }
+    await deps.timelineClips.update(clip.id, { content: { ...clip.content, params } })
+    return null
+  } catch (cause) {
+    return `戻せませんでした: ${cause instanceof Error ? cause.message : String(cause)}`
+  }
 }
 
 /**
@@ -231,5 +277,21 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
         else failed.push({ shotId: entry.shotId, reason })
       }
 
-      return c.json(ok({ batch: toEditBatchSummary(undone), restored, failed }), 200)
+      // テロップの記録（見た目のまとめ変更）。プロジェクトのテロップを 1 回で読み、1 件ずつ戻す。
+      const clips =
+        undone.clipEntries.length === 0
+          ? new Map<TimelineClipId, TimelineClip>()
+          : new Map((await deps.timelineClips.findByProject(projectId)).map((clip) => [clip.id, clip] as const))
+      const restoredClips: TimelineClipId[] = []
+      const failedClips: { clipId: TimelineClipId; reason: string }[] = []
+      for (const entry of undone.clipEntries) {
+        const reason = await restoreClipEntry(deps, clips, entry)
+        if (reason === null) restoredClips.push(entry.clipId)
+        else failedClips.push({ clipId: entry.clipId, reason })
+      }
+
+      return c.json(
+        ok({ batch: toEditBatchSummary(undone), restored, failed, restoredClips, failedClips }),
+        200,
+      )
     })
