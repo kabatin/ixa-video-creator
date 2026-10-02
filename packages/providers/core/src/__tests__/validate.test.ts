@@ -19,10 +19,10 @@ describe('validateAgainstCapabilities', () => {
     expect(validateAgainstCapabilities(makeSpec({ durationSec: 4 }), veo)).toEqual([])
     // 切り上げれば出せるので違反にしない
     expect(validateAgainstCapabilities(makeSpec({ durationSec: 3.75 }), veo)).toEqual([])
-    // 最長を超えても、最長で作ってゆっくり再生すれば埋まる（0.5 倍速まで。ADR-0011 追記）
-    expect(validateAgainstCapabilities(makeSpec({ durationSec: 9 }), veo)).toEqual([])
-    // 最長の 2 倍を超えるものは弾く
-    expect(validateAgainstCapabilities(makeSpec({ durationSec: 16.01 }), veo)).toHaveLength(1)
+    // 最長を超えても、最長で作ってゆっくり再生すれば埋まる（最長の 1.5 倍まで。ADR-0011 追記）
+    expect(validateAgainstCapabilities(makeSpec({ durationSec: 12 }), veo)).toEqual([])
+    // 最長の 1.5 倍を超えるものは弾く
+    expect(validateAgainstCapabilities(makeSpec({ durationSec: 12.01 }), veo)).toHaveLength(1)
   })
 
   it('参照画像の枚数超過を弾く', () => {

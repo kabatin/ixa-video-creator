@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  DurationNotSupportedError, canProduceDuration, defaultSourceInSec, quantizeDuration,
-  stretchesToFit,
+  DurationNotSupportedError, MAX_GENERATION_STRETCH, canProduceDuration, defaultSourceInSec,
+  quantizeDuration, stretchesToFit,
 } from '../generation/duration.js'
 
 const VEO = { mode: 'enum', values: [4, 6, 8] } as const
@@ -45,11 +45,15 @@ describe('quantizeDuration', () => {
     expect(quantizeDuration(16, SEEDANCE)).toBe(15)
   })
 
-  it('ゆっくり再生して埋められるのは 2 倍の長さまで（0.5 倍速）', () => {
-    expect(quantizeDuration(16, VEO)).toBe(8)
-    expect(quantizeDuration(20.25, H3)).toBe(10.125)
-    expect(() => quantizeDuration(16.01, VEO)).toThrow(DurationNotSupportedError)
-    expect(() => quantizeDuration(30.01, SEEDANCE)).toThrow(DurationNotSupportedError)
+  /** 制作者 2026-10-02「Shot 分け判定は 2 倍ではなく 1.5 倍にしましょう」。再生の「尺に合わせる」の幅（0.5 倍まで）とは別。 */
+  it('最長で作って伸ばすのは 1.5 倍の長さまで', () => {
+    expect(MAX_GENERATION_STRETCH).toBe(1.5)
+    expect(quantizeDuration(12, VEO)).toBe(8)
+    expect(quantizeDuration(15.1875, H3)).toBe(10.125)
+    expect(quantizeDuration(22.5, SEEDANCE)).toBe(15)
+    expect(() => quantizeDuration(12.01, VEO)).toThrow(DurationNotSupportedError)
+    expect(() => quantizeDuration(15.19, H3)).toThrow(DurationNotSupportedError)
+    expect(() => quantizeDuration(22.51, SEEDANCE)).toThrow(DurationNotSupportedError)
   })
 
   it('step の切り上げが最長を超えるときは、出せる最長で作る', () => {
@@ -72,13 +76,14 @@ describe('quantizeDuration', () => {
     expect(message).not.toMatch(/[{}[\]]/)
     expect(message).toContain('10.125')
     expect(message).toContain('21')
+    expect(message).toContain('1.5 倍')
     expect(message).toContain('分けて')
   })
 
   it('canProduceDuration は例外を投げずに可否を返す', () => {
     expect(canProduceDuration(3.75, VEO)).toBe(true)
     expect(canProduceDuration(9, VEO)).toBe(true)
-    expect(canProduceDuration(16.01, VEO)).toBe(false)
+    expect(canProduceDuration(12.01, VEO)).toBe(false)
   })
 })
 

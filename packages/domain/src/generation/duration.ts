@@ -1,5 +1,4 @@
 import type { Seconds } from '../common/time.js'
-import { MIN_PLAYBACK_RATE } from '../shot/shot.js'
 
 /**
  * モデルが出せる尺の表現。
@@ -8,6 +7,13 @@ import { MIN_PLAYBACK_RATE } from '../shot/shot.js'
 export type DurationSupport =
   | { mode: 'enum'; values: readonly number[] }
   | { mode: 'range'; min: number; max: number; step?: number }
+
+/**
+ * 最長より長い Shot を、最長で作ってゆっくり再生で埋めるのはこの倍率まで（制作者 2026-10-02「Shot 分け判定は
+ * 2 倍ではなく 1.5 倍にしましょう」）。それより長い Shot は分けてもらう。
+ * 再生の「Take を尺に合わせる」の幅（`MIN_PLAYBACK_RATE` = 0.5 倍まで。ADR-0026）とは別の値で、こちらの方が狭い。
+ */
+export const MAX_GENERATION_STRETCH = 1.5
 
 /** 画面と同じ書き方（`3.75`・`10.125`）。末尾の 0 は付けない。 */
 const secondsText = (value: number): string => String(Number(value.toFixed(3)))
@@ -24,7 +30,7 @@ export class DurationNotSupportedError extends Error {
     const longest = longestDuration(support)
     super(
       `Shot の尺 ${secondsText(requested)} 秒は、このモデルの最長 ${secondsText(longest)} 秒の ` +
-        `${String(1 / MIN_PLAYBACK_RATE)} 倍を超えます（ゆっくり再生して埋められるのは ${String(MIN_PLAYBACK_RATE)} 倍速まで）。` +
+        `${String(MAX_GENERATION_STRETCH)} 倍を超えます（最長で作ってゆっくり再生で埋めるのは ${String(MAX_GENERATION_STRETCH)} 倍の長さまで）。` +
         `Shot を分けてください。`,
     )
     this.name = 'DurationNotSupportedError'
@@ -37,7 +43,7 @@ export class DurationNotSupportedError extends Error {
  *
  * **最長より長い Shot は最長で作る**（制作者 2026-10-01「ミリ秒まで一致しないと作れないのは不便すぎる」）。
  * 足りない分は「Take を尺に合わせる」（`Shot.timing = 'fit'`）でゆっくり再生して埋める。
- * 埋められるのは `MIN_PLAYBACK_RATE` 倍速まで（最長の 2 倍の尺まで）。それより長ければ断る。
+ * 伸ばすのは最長の `MAX_GENERATION_STRETCH` 倍（1.5 倍）の尺まで。それより長ければ断る。
  */
 export const quantizeDuration = (
   requestedSec: Seconds,
@@ -45,7 +51,7 @@ export const quantizeDuration = (
 ): Seconds => {
   const longest = longestDuration(support)
   if (requestedSec > longest) {
-    if (requestedSec * MIN_PLAYBACK_RATE > longest) {
+    if (requestedSec > longest * MAX_GENERATION_STRETCH) {
       throw new DurationNotSupportedError(requestedSec, support)
     }
     return longest

@@ -145,11 +145,11 @@ describe('submit', () => {
     expect(body.codec).toBe('H264')
   })
 
-  // 最長（30 秒）を超えても、最長で作ってゆっくり再生すれば埋まる。弾くのは 2 倍を超えたとき（ADR-0011 追記）
-  it('最長の 2 倍を超える尺は投入前に弾く（2.5 の上限は 30 秒）', async () => {
+  // 最長（30 秒）を超えても、最長で作ってゆっくり再生すれば埋まる。弾くのは 1.5 倍（45 秒）を超えたとき（ADR-0011 追記）
+  it('最長の 1.5 倍を超える尺は投入前に弾く（2.5 の上限は 30 秒）', async () => {
     const { fetch, calls } = createFetch(() => jsonResponse(200, SUBMIT_BODY))
     await expect(
-      makeProvider(fetch).submit(submitRequest(makeSpec({ durationSec: 61 }))),
+      makeProvider(fetch).submit(submitRequest(makeSpec({ durationSec: 45.01 }))),
     ).rejects.toBeInstanceOf(CapabilityViolationError)
     expect(calls).toHaveLength(0)
   })
