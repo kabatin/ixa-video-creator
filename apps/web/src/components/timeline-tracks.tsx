@@ -1,10 +1,11 @@
 'use client'
 
 import type { Shot, ShotId, TimelineClip, TimelineClipId, TimelineTrack } from '@ixa/domain'
-import { useRef, type KeyboardEvent, type ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { TimelineFollowPlayhead, type TimelineFollow } from '@/components/timeline-follow'
-import { ShotPoster } from '@/components/shot-poster'
 import { TimelineClipLane } from '@/components/timeline-clip-lane'
+import { TimelineShotLane } from '@/components/timeline-shot-lane'
+import type { ShotEdgeDragProps } from '@/components/use-shot-edge-drag'
 import { TimelineTransitionRow } from '@/components/timeline-transition-row'
 import {
   hiddenTracks,
@@ -12,25 +13,21 @@ import {
   visibleTracks,
   VIDEO1_ROW,
   formatClock,
-  formatTimeSpan,
   lanesForTrack,
   rulerTicks,
   secondsToPx,
-  timeSpanToRect,
   timelineRowLabel,
+  type TimeSpan,
 } from '@/lib/timeline-display'
 import type { ClipDragContext, ClipDragOutcome } from '@/lib/timeline-drag'
 import type { InlineFormAnchor } from '@/components/timeline-inline-form'
 import type { TransitionInsertionPoint } from '@/lib/timeline-insert'
 import type { ShotPosterMap } from '@/lib/shot-posters'
-import { posterViewFor } from '@/lib/shot-posters'
 import { usePlayheadSec } from '@/lib/playhead-sec'
 import { playheadLeftPx, seekSecAtClientX } from '@/lib/timeline-playhead'
 import {
   alignmentByShotId,
   beatAlignmentToneClass,
-  chipRingClass,
-  describeDrift,
   summarizeBeatAlignment,
   type BeatAlignmentSource,
   type ShotBeatAlignmentView,
@@ -68,8 +65,8 @@ export type TimelineTracksProps = {
   readonly busy: boolean
   /** いま開いている境目の時刻。開いている印を付けるため。 */
   readonly openTransitionAtSec: number | null
-  readonly previewClipId: TimelineClipId | null
-  readonly previewSpan: { readonly startSec: number; readonly durationSec: number } | null
+  /** 動かしている最中のクリップの仮の位置（掴んだものと、付いてきた隣）。 */
+  readonly clipPreviews: ReadonlyMap<string, TimeSpan>
   readonly onSelectClip: (id: TimelineClipId) => void
   readonly onOpenTransition: (
     point: TransitionInsertionPoint,
@@ -127,6 +124,8 @@ export type TimelineTracksProps = {
    * **このタイムラインの尺度（px/秒）で**並べる。渡さなければ出さない。
    */
   readonly audioLane?: { readonly durationSec: number; readonly node: ReactNode }
+  /** カットの端をつまんで長さを変える口（制作者 2026-10-02）。渡さなければ端は掴めない。 */
+  readonly shotEdges?: ShotEdgeDragProps
 }
 
 type RowProps = {
@@ -167,8 +166,7 @@ export const TimelineTracks = ({
   selectedClipId,
   busy,
   openTransitionAtSec,
-  previewClipId,
-  previewSpan,
+  clipPreviews,
   onSelectClip,
   onOpenTransition,
   onOpenClip,
@@ -187,6 +185,7 @@ export const TimelineTracks = ({
   shotContextMenu,
   onClipContextMenu,
   audioLane,
+  shotEdges,
 }: TimelineTracksProps) => {
   /** 横スクロールの箱。再生位置を追うときに送る。 */
   const scrollBoxRef = useRef<HTMLDivElement>(null)
@@ -226,8 +225,7 @@ export const TimelineTracks = ({
         pxPerSec={pxPerSec}
         selectedClipId={selectedClipId}
         busy={busy}
-        previewId={previewClipId}
-        previewSpan={previewSpan}
+        previews={clipPreviews}
         onSelect={onSelectClip}
         onOpen={(clip, clientX, clientY) => {
           // 帯の上のクリップはボタンではないので、戻す先は無い（マウスで開く）。
@@ -293,71 +291,17 @@ export const TimelineTracks = ({
           {shots.length === 0 ? (
             <EmptyLane message="Shot がありません" />
           ) : (
-            <div className="relative" style={{ height: LANE_HEIGHT_PX }}>
-              {shots.map((shot) => {
-                const rect = timeSpanToRect(shot, pxPerSec)
-                const rendered = renderedShotIds.has(shot.id)
-                const poster = posters === undefined ? null : posterViewFor(posters, shot.id)
-                const alignment = alignments?.get(shot.id) ?? null
-                const selected = shot.id === selectedShotId
-                const menu = shotContextMenu?.(shot)
-                return (
-                  <div
-                    key={shot.id}
-                    {...menu}
-                    {...(onSelectShot === undefined
-                      ? {}
-                      : {
-                          role: 'button',
-                          tabIndex: 0,
-                          'aria-pressed': selected,
-                          onClick: () => {
-                            onSelectShot(shot.id)
-                          },
-                          onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
-                            // Shift+F10・メニューキーはメニューへ（それ以外はこれまでどおり）。
-                            menu?.onKeyDown(event)
-                            if (event.defaultPrevented) return
-                            if (event.key !== 'Enter' && event.key !== ' ') return
-                            event.preventDefault()
-                            // 帯の上の Space を再生に流さない（L-018）。
-                            event.stopPropagation()
-                            onSelectShot(shot.id)
-                          },
-                        })}
-                    title={
-                      alignment === null
-                        ? `${shot.code} ${formatTimeSpan(shot)}`
-                        : `${shot.code} ${formatTimeSpan(shot)} / ${describeDrift(alignment)}`
-                    }
-                    className={`absolute top-2 overflow-hidden rounded px-1 text-xs ${
-                      rendered ? 'bg-line text-text' : 'border border-dashed bg-warn/10 text-warn'
-                    } ${chipRingClass({ rendered, alignment: alignment?.alignment ?? null })} ${
-                      // 拍の色は ring。選択は outline にして両方を同時に見せる。
-                      selected ? 'outline outline-2 outline-offset-1 outline-accent' : ''
-                    } ${onSelectShot === undefined ? '' : 'cursor-pointer'}`}
-                    style={{ ...menu?.style, left: rect.leftPx, width: rect.widthPx, height: LANE_HEIGHT_PX - 16 }}
-                  >
-                    {poster !== null && (
-                      <>
-                        <ShotPoster
-                          url={poster.url}
-                          reason={poster.reason}
-                          alt={`${shot.code} のサムネイル`}
-                          size="chip"
-                          pending={poster.pending}
-                        />
-                        {/* 絵の上に字は読めない。地の色を薄く被せてから字を乗せる。 */}
-                        <span aria-hidden className="absolute inset-0 bg-bg/50" />
-                      </>
-                    )}
-                    <span className="relative">
-                      {rendered ? shot.code : `${shot.code}（Take 無し）`}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
+            <TimelineShotLane
+              shots={shots}
+              pxPerSec={pxPerSec}
+              renderedShotIds={renderedShotIds}
+              {...(posters === undefined ? {} : { posters })}
+              alignments={alignments}
+              selectedShotId={selectedShotId}
+              {...(onSelectShot === undefined ? {} : { onSelectShot })}
+              {...(shotContextMenu === undefined ? {} : { shotContextMenu })}
+              {...(shotEdges === undefined ? {} : { edges: shotEdges })}
+            />
           )}
         </Row>
 

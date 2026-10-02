@@ -14,7 +14,7 @@ import {
   type ClipDragOutcome,
   type ClipDragStart,
 } from '@/lib/timeline-drag'
-import { clipChipLabel, describeClipContent, formatTimeSpan, timeSpanToRect } from '@/lib/timeline-display'
+import { clipChipLabel, describeClipContent, formatTimeSpan, timeSpanToRect, type TimeSpan } from '@/lib/timeline-display'
 import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX, type MenuPoint } from '@/components/workbench/use-context-menu'
 
 /**
@@ -36,9 +36,8 @@ export type TimelineClipLaneProps = {
   readonly pxPerSec: number
   readonly selectedClipId: TimelineClipId | null
   readonly busy: boolean
-  /** 動かしている最中の見た目。確定前の位置を映す。 */
-  readonly previewId: TimelineClipId | null
-  readonly previewSpan: { readonly startSec: number; readonly durationSec: number } | null
+  /** 動かしている最中の見た目。確定前の位置を映す（掴んだものと、付いてきた隣）。 */
+  readonly previews: ReadonlyMap<string, TimeSpan>
   readonly onSelect: (id: TimelineClipId) => void
   /** クリップを押した。`clientX` / `clientY` は入力を出す場所（画面の座標。入力は画面全体に出す）。 */
   readonly onOpen: (clip: TimelineClip, clientX: number, clientY: number) => void
@@ -72,8 +71,7 @@ export const TimelineClipLane = ({
   pxPerSec,
   selectedClipId,
   busy,
-  previewId,
-  previewSpan,
+  previews,
   onSelect,
   onOpen,
   onDragBegin,
@@ -159,13 +157,10 @@ export const TimelineClipLane = ({
     if (press !== null && Math.hypot(event.clientX - press.x, event.clientY - press.y) > LONG_PRESS_SLOP_PX) cancelPress()
     const drag = dragRef.current
     if (drag === null || drag.pointerId !== event.pointerId) return
-    const outcome = applyClipDrag(
-      drag.start,
-      event.clientX,
-      boundsOf(),
-      pxPerSec,
-      drag.context,
-    )
+    // Option（Alt）なら隣は動かさない（隙間を空けたいとき）。
+    const outcome = applyClipDrag(drag.start, event.clientX, boundsOf(), pxPerSec, drag.context, {
+      detach: event.altKey,
+    })
     if (outcome.moved) movedRef.current = true
     onDragMove(drag.clip, outcome)
   }
@@ -183,7 +178,9 @@ export const TimelineClipLane = ({
       // 捕捉していなければ解く物も無い。後始末は続ける。
     }
 
-    const outcome = applyClipDrag(drag.start, event.clientX, boundsOf(), pxPerSec, drag.context)
+    const outcome = applyClipDrag(drag.start, event.clientX, boundsOf(), pxPerSec, drag.context, {
+      detach: event.altKey,
+    })
     // 長押しでメニューを開いたなら、離したのは「押した」ではない。
     if (longPressedRef.current) {
       longPressedRef.current = false
@@ -223,7 +220,7 @@ export const TimelineClipLane = ({
       </span>
 
       {clips.map((clip) => {
-        const span = clip.id === previewId && previewSpan !== null ? previewSpan : clip
+        const span = previews.get(clip.id) ?? clip
         const rect = timeSpanToRect(span, pxPerSec)
         const selected = clip.id === selectedClipId
         const grabPx = grabWidthFor(clip, pxPerSec)
@@ -240,7 +237,7 @@ export const TimelineClipLane = ({
               selected
                 ? 'bg-info/25 text-text ring-info/60'
                 : 'bg-info/10 text-text ring-info/60 hover:bg-info/25'
-            } ${clip.id === previewId ? 'opacity-80 ring-2 ring-info/60' : ''}`}
+            } ${previews.has(clip.id) ? 'opacity-80 ring-2 ring-info/60' : ''}`}
             style={{ left: rect.leftPx, width: rect.widthPx, height: CLIP_HEIGHT_PX }}
           >
             {/* 端の掴みしろ。幅は本体を食いつぶさないよう `timeline-drag` が決める。 */}

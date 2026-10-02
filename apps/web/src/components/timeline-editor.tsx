@@ -39,12 +39,15 @@ import {
   zoomLabel,
   formatClock,
   programEndSec,
+  type TimeSpan,
 } from '@/lib/timeline-display'
 import {
   candidatesForClipDrag,
+  MIN_CLIP_DURATION_SEC,
   type ClipDragContext,
   type ClipDragOutcome,
 } from '@/lib/timeline-drag'
+import { adjacentIds, edgeNeighbors, previewSpans, shrinkFirst } from '@/lib/timeline-rolling'
 import { INSERTABLE_TRANSITION_TYPES } from '@/lib/timeline-insert'
 import { openFormCaption } from '@/lib/timeline-open-form'
 import {
@@ -69,6 +72,9 @@ import { useTimelineInlineForms } from '@/components/use-timeline-inline-forms'
  * **画面に吸着の規則を書き写さない**（正は 1 箇所、lessons L-016）。
  * 許容距離はズーム率から出すので、拡大すると細かく置ける。
  */
+
+/** 動かしていないときの仮の位置（空）。描くたびに作り直さない。 */
+const NO_PREVIEW: ReadonlyMap<string, TimeSpan> = new Map()
 
 export type TimelineEditorProps = {
   readonly projectId: ProjectId
@@ -204,11 +210,8 @@ export const TimelineEditor = ({
   const [actionError, setActionError] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
 
-  /** 掴んでいる最中の見た目。確定するまで本体は書き換えない。 */
-  const [preview, setPreview] = useState<{
-    readonly id: TimelineClipId
-    readonly span: { readonly startSec: number; readonly durationSec: number }
-  } | null>(null)
+  /** 掴んでいる最中の見た目（掴んだものと、付いてきた隣）。確定するまで本体は書き換えない。 */
+  const [preview, setPreview] = useState<ReadonlyMap<string, TimeSpan>>(NO_PREVIEW)
   /** 掴んで止まった理由・吸着した先。**黙って丸めない。** */
   const [dragNotes, setDragNotes] = useState<readonly string[]>([])
 
@@ -361,35 +364,73 @@ export const TimelineEditor = ({
 
   const beginDrag = (clip: TimelineClip): ClipDragContext => {
     setDragNotes([])
+    // 端を動かすと、同じ帯・同じ段で接している隣の端が付いてくる（制作者 2026-10-02「テロップも同じですね」）。
+    const lane = (clips ?? []).filter((each) => each.track === clip.track && each.layer === clip.layer)
+    const neighbors = edgeNeighbors(
+      lane.map((each) => ({ id: each.id, span: each })),
+      { id: clip.id, span: clip },
+    )
+    const touching = new Set(adjacentIds(neighbors))
     return {
-      // **当人を候補から外す。** 外し忘れると自分の端に吸着して動かせない。
-      candidates: candidatesForClipDrag(snapSource, clip.id),
+      // **当人と、付いてくる隣を候補から外す。** 外し忘れると、その端（距離 0）に吸着して動かせない。
+      candidates: candidatesForClipDrag(
+        { ...snapSource, clips: snapSource.clips.filter((each) => !touching.has(each.id)) },
+        clip.id,
+      ),
       toleranceSec,
       snapEnabled,
       timelineEndSec: durationSec,
+      neighbors,
+      minNeighborSec: MIN_CLIP_DURATION_SEC,
+      neighborNoun: clip.content.type === 'text' ? 'テロップ' : 'クリップ',
     }
   }
 
   const dragMove = (clip: TimelineClip, outcome: ClipDragOutcome): void => {
-    setPreview({ id: clip.id, span: outcome.span })
+    setPreview(previewSpans(clip.id, outcome))
   }
 
   const dragEnd = (clip: TimelineClip, outcome: ClipDragOutcome): void => {
-    setPreview(null)
+    setPreview(NO_PREVIEW)
     setDragNotes([
       ...outcome.limits.map((limit) => limit.message),
       ...outcome.snapNotices.filter((n) => n.state === 'snapped').map((n) => n.message),
     ])
     if (!outcome.moved) return
-    void run('クリップの位置と尺を更新', async () => {
-      const updated = await api.updateClip(clip.id, {
-        startSec: outcome.span.startSec,
-        durationSec: outcome.span.durationSec,
-      })
-      setClips((current) =>
-        current === null ? current : current.map((c) => (c.id === clip.id ? updated : c)),
-      )
+    const { neighbor } = outcome
+    const neighborClip = neighbor === null ? undefined : (clips ?? []).find((each) => each.id === neighbor.id)
+    const writes = shrinkFirst([
+      { id: clip.id, from: clip, to: outcome.span },
+      ...(neighbor === null || neighborClip === undefined
+        ? []
+        : [{ id: neighborClip.id, from: neighborClip, to: neighbor.span }]),
+    ])
+    void run(writes.length > 1 ? 'クリップの境目を更新' : 'クリップの位置と尺を更新', async () => {
+      // 1 件ずつ順に書く（縮む側が先。同時に送ると順が保てない）。
+      for (const write of writes) {
+        const updated = await api.updateClip(write.id, {
+          startSec: write.to.startSec,
+          durationSec: write.to.durationSec,
+        })
+        setClips((current) =>
+          current === null ? current : current.map((each) => (each.id === updated.id ? updated : each)),
+        )
+      }
     })
+  }
+
+  /** カットの端をつまんだ。自分と付いてくる隣の端を除いた吸着の候補（テロップと同じ規則）。 */
+  const beginShotDrag = (excludeShotIds: ReadonlySet<string>): ClipDragContext => {
+    setDragNotes([])
+    return {
+      candidates: buildSnapCandidates(
+        { ...snapSource, shots: snapSource.shots.filter((shot) => !excludeShotIds.has(shot.id)) },
+        { clipId: null },
+      ),
+      toleranceSec,
+      snapEnabled,
+      timelineEndSec: durationSec,
+    }
   }
 
   const updateClip = (id: TimelineClipId, patch: ClipPatch): void => {
@@ -562,8 +603,7 @@ export const TimelineEditor = ({
           selectedClipId={selectedClipId}
           busy={busy}
           openTransitionAtSec={open?.kind === 'transition' ? open.point.atSec : null}
-          previewClipId={preview?.id ?? null}
-          previewSpan={preview?.span ?? null}
+          clipPreviews={preview}
           onSelectClip={setSelectedClipId}
           onOpenTransition={openTransition}
           onOpenClip={openClip}
@@ -571,6 +611,15 @@ export const TimelineEditor = ({
           onClipDragBegin={beginDrag}
           onClipDragMove={dragMove}
           onClipDragEnd={dragEnd}
+          shotEdges={{
+            projectId,
+            busy,
+            begin: beginShotDrag,
+            notify: setDragNotes,
+            onApplied: () => {
+              router.refresh()
+            },
+          }}
           showPlayhead={document !== null}
           follow={{ enabled: followPlayhead, moving: playheadMoving ?? playing, onUserScroll: stopFollowing }}
           {...(posters === undefined ? {} : { posters })}

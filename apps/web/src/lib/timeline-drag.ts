@@ -13,6 +13,7 @@ import {
   type SnapNotice,
   type SnapSource,
 } from '@/lib/timeline-snap'
+import { rollEdge, type EdgeNeighbors, type RollingItem } from '@/lib/timeline-rolling'
 
 /**
  * タイムラインのクリップを掴んで動かす計算。**React も DOM も含まない純粋関数だけ。**
@@ -151,6 +152,8 @@ export type ClipDragLimit =
   | { readonly kind: 'origin'; readonly message: string }
   | { readonly kind: 'min_duration'; readonly message: string }
   | { readonly kind: 'past_end'; readonly message: string }
+  /** 隣が最小の尺になる・隣にぶつかる所で止めた（端を動かして隣が付いてくるとき。2026-10-02）。 */
+  | { readonly kind: 'neighbor'; readonly message: string }
 
 const originLimit = (requestedSec: number): ClipDragLimit => ({
   kind: 'origin',
@@ -183,6 +186,15 @@ export type ClipDragContext = {
   readonly snapEnabled: boolean
   readonly timelineEndSec: number
   readonly minDurationSec?: number
+  /**
+   * 掴んだクリップの前後の隣（同じ帯・同じ段）。渡すと、端を動かしたとき接している隣の端が付いてきて、
+   * 接していなければ隣にぶつかって止まる（`timeline-rolling.ts`。制作者 2026-10-02）。渡さなければ今まで通り。
+   */
+  readonly neighbors?: EdgeNeighbors
+  /** 隣を縮められる下限（秒）。既定は `minDurationSec`。 */
+  readonly minNeighborSec?: number
+  /** 知らせに使う呼び名（テロップ・カット）。 */
+  readonly neighborNoun?: string
 }
 
 type EdgeSnap = {
@@ -324,6 +336,8 @@ export type ClipDragOutcome = {
   readonly moved: boolean
   readonly snapNotices: readonly SnapNotice[]
   readonly limits: readonly ClipDragLimit[]
+  /** 端を動かして付いてきた隣の新しい区間。動かさないなら null。 */
+  readonly neighbor: RollingItem | null
 }
 
 /**
@@ -336,23 +350,43 @@ export const applyClipDrag = (
   bounds: TimelineBounds,
   pxPerSec: number,
   context: ClipDragContext,
+  /** `detach`: Option（Alt）を押している。隣は動かさない（隙間を空けたいとき）。 */
+  options: { readonly detach?: boolean } = {},
 ): ClipDragOutcome => {
   const minDurationSec = context.minDurationSec ?? MIN_CLIP_DURATION_SEC
   const deltaSec = timelineSecAtClientX(clientX, bounds, pxPerSec) - drag.grabSec
   const requested = requestedSpanOf(drag, deltaSec)
   const resolved = resolveBySpan(drag, requested, snapBothEdges(requested, context))
   const clamped = clampSpan(drag.handle, resolved.span, minDurationSec)
+  // 引いた先 → 吸着 → 制限 → 隣（付いてくる・ぶつかる）。隣を最後にしないと、吸着が隣を越えて押し戻せない。
+  const rolled =
+    context.neighbors === undefined
+      ? { span: clamped.span, neighbor: null, limit: null }
+      : rollEdge({
+          handle: drag.handle,
+          span: clamped.span,
+          neighbors: context.neighbors,
+          minNeighborSec: context.minNeighborSec ?? minDurationSec,
+          minSelfSec: minDurationSec,
+          detach: options.detach ?? false,
+          noun: context.neighborNoun ?? 'クリップ',
+        })
 
   return {
     handle: drag.handle,
     origin: drag.origin,
     requested,
-    span: clamped.span,
+    span: rolled.span,
     moved:
-      Math.abs(clamped.span.startSec - drag.origin.startSec) > DRAG_EPSILON_SEC ||
-      Math.abs(clamped.span.durationSec - drag.origin.durationSec) > DRAG_EPSILON_SEC,
+      Math.abs(rolled.span.startSec - drag.origin.startSec) > DRAG_EPSILON_SEC ||
+      Math.abs(rolled.span.durationSec - drag.origin.durationSec) > DRAG_EPSILON_SEC,
     snapNotices: resolved.notices,
-    limits: [...clamped.limits, ...pastEndLimit(endOf(clamped.span), context.timelineEndSec)],
+    limits: [
+      ...clamped.limits,
+      ...(rolled.limit === null ? [] : [{ kind: 'neighbor' as const, message: rolled.limit }]),
+      ...pastEndLimit(endOf(rolled.span), context.timelineEndSec),
+    ],
+    neighbor: rolled.neighbor,
   }
 }
 
