@@ -13,6 +13,7 @@ const bundle = (opts: { fourView?: boolean; canonical?: boolean } = {}): Charact
   character: {
     id: CharacterId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAV'),
     workspaceId: MediaAssetId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAW') as never,
+    projectId: MediaAssetId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAY') as never,
     name: 'takepi', displayName: 'takepi', description: '',
     identityAnchors: ['細身'], styleTokens: [], colorPalette: [], createdAt: new Date(),
   },

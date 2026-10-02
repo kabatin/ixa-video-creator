@@ -62,11 +62,13 @@ export const createTestContextSource = (parts: ContextParts): GenerationContextS
 })
 
 /** 参照画像を 3 枚持つキャラクター束（canonical frame / 顔正面 / 衣装）。 */
-export const aCharacterBundle = (): CharacterBundle => {
+/** `projectId` は持ち主のプロジェクト（ADR-0034）。省略すると、どのプロジェクトとも違う ID。 */
+export const aCharacterBundle = (projectId = newId(ProjectIdSchema)): CharacterBundle => {
   const workspaceId = newId(WorkspaceIdSchema)
   const character = CharacterSchema.parse({
     id: newId(CharacterIdSchema),
     workspaceId,
+    projectId,
     name: 'MIKU',
     displayName: '初号ボーカル',
     description: '',

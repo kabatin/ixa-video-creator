@@ -408,6 +408,7 @@ export const aCharacterBundle = (): CharacterBundle => {
   const character = CharacterSchema.parse({
     id: newId(CharacterIdSchema),
     workspaceId,
+    projectId: newId(ProjectIdSchema),
     name: 'MIKU',
     displayName: '初号ボーカル',
     description: '',

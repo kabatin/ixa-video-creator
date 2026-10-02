@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import type {
-  CreateLocationInput, Location, LocationId, UpdateLocationPatch, WorkspaceId,
+  CreateLocationInput, Location, LocationId, UpdateLocationPatch, ProjectId,
 } from '@ixa/domain'
 import {
   CreateLocationInput as CreateLocationInputSchema,
@@ -20,7 +20,7 @@ export type LocationRow = typeof locations.$inferSelect
 export type LocationRepository = {
   findById(id: LocationId): Promise<Location | null>
   /** 作成順（ULID 昇順）。ソフトデリート済みは含まない。 */
-  findByWorkspace(workspaceId: WorkspaceId): Promise<Location[]>
+  findByProject(projectId: ProjectId): Promise<Location[]>
   create(input: CreateLocationInput): Promise<Location>
   update(id: LocationId, patch: UpdateLocationPatch): Promise<Location>
   softDelete(id: LocationId): Promise<void>
@@ -31,6 +31,7 @@ export const locationRowToDomain = (row: LocationRow): Location =>
   LocationSchema.parse({
     id: row.id,
     workspaceId: row.workspaceId,
+    projectId: row.projectId,
     name: row.name,
     description: row.description,
     referenceAssetIds: row.referenceAssetIds,
@@ -45,11 +46,11 @@ export const createLocationRepository = (db: DbClient): LocationRepository => ({
     return row ? locationRowToDomain(row) : null
   },
 
-  async findByWorkspace(workspaceId) {
+  async findByProject(projectId) {
     const rows = await db
       .select()
       .from(locations)
-      .where(and(eq(locations.workspaceId, workspaceId), isNull(locations.deletedAt)))
+      .where(and(eq(locations.projectId, projectId), isNull(locations.deletedAt)))
       .orderBy(asc(locations.id))
     return rows.map(locationRowToDomain)
   },

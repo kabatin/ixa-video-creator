@@ -54,8 +54,8 @@ export const createInMemoryCharacterRepository = (
 
     findById: (id) => Promise.resolve(find(id) ?? null),
 
-    findByWorkspace: (workspaceId) =>
-      Promise.resolve(store.filter((c) => c.workspaceId === workspaceId)),
+    findByProject: (projectId) =>
+      Promise.resolve(store.filter((c) => c.projectId === projectId)),
 
     create: (input) => {
       const validated = CreateCharacterInputSchema.parse(input)

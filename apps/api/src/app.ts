@@ -43,6 +43,7 @@ import { beatAlignmentRoutes, roughCutRoutes, timelineRoutes } from './routes/ti
 import { renderRoutes, type RenderQueue } from './routes/renders.js'
 import { characterRoutes, shotCharacterRoutes } from './routes/characters.js'
 import { assetRoutes } from './routes/assets.js'
+import { libraryImportRoutes } from './routes/library-imports.js'
 import { scriptRoutes } from './routes/scripts.js'
 import { sequenceRoutes } from './routes/sequences.js'
 import { musicRoutes, type AnalysisQueue } from './routes/music.js'
@@ -219,6 +220,7 @@ export const createApp = (deps: AppDeps) => {
   const shotDeps = {
     shots: deps.shots,
     projects,
+    locations: deps.locations,
     takes: deps.takes,
     generationJobs: deps.generationJobs,
     registry: deps.registry,
@@ -318,7 +320,10 @@ export const createApp = (deps: AppDeps) => {
     storage,
   }
 
-  app.route('/', characterRoutes({ characters: deps.characters, looks: deps.looks, mediaAssets }))
+  app.route(
+    '/',
+    characterRoutes({ characters: deps.characters, looks: deps.looks, mediaAssets, projects: deps.projects }),
+  )
   app.route(
     '/',
     shotCharacterRoutes({
@@ -330,7 +335,23 @@ export const createApp = (deps: AppDeps) => {
   )
   app.route(
     '/',
-    assetRoutes({ brandAssets: deps.brandAssets, locations: deps.locations, mediaAssets }),
+    assetRoutes({
+      brandAssets: deps.brandAssets,
+      locations: deps.locations,
+      mediaAssets,
+      projects: deps.projects,
+    }),
+  )
+  // ほかのプロジェクトから取り込む（複製。ADR-0034）。
+  app.route(
+    '/',
+    libraryImportRoutes({
+      projects: deps.projects,
+      characters: deps.characters,
+      looks: deps.looks,
+      locations: deps.locations,
+      brandAssets: deps.brandAssets,
+    }),
   )
 
   app.route(

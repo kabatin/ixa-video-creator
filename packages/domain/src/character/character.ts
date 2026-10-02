@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import {
   CharacterId, CharacterIdentityImageId, CharacterLookId,
-  CharacterLookImageId, MediaAssetId, WorkspaceId,
+  CharacterLookImageId, MediaAssetId, ProjectId, WorkspaceId,
 } from '../common/ids.js'
 
 /**
@@ -24,6 +24,8 @@ export type LookImageRole = z.infer<typeof LookImageRole>
 export const Character = z.object({
   id: CharacterId,
   workspaceId: WorkspaceId,
+  /** 持ち主のプロジェクト（ADR-0034）。別のプロジェクトで使うときは取り込み（複製）。 */
+  projectId: ProjectId,
   name: z.string().min(1).max(100),
   displayName: z.string().min(1).max(200),
   description: z.string().default(''),
@@ -85,7 +87,7 @@ export type CharacterLookImage = z.infer<typeof CharacterLookImage>
 export const CreateCharacterInput = Character.omit({ id: true, createdAt: true })
 export type CreateCharacterInput = z.input<typeof CreateCharacterInput>
 
-/** workspaceId は変更できない。キャラクターを別ワークスペースへ移す操作は想定しない。 */
+/** workspaceId・projectId は変更できない。別のプロジェクトで使うときは取り込み（複製）にする（ADR-0034）。 */
 export const UpdateCharacterPatch = Character.pick({
   name: true, displayName: true, description: true,
   identityAnchors: true, styleTokens: true, colorPalette: true,

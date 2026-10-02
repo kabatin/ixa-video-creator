@@ -1,17 +1,18 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type {
-  CharacterLookRepository, CharacterRepository, MediaAssetRepository,
+  CharacterLookRepository, CharacterRepository, MediaAssetRepository, ProjectRepository,
   ShotCharacterRepository, ShotRepository,
 } from '@ixa/db'
 import {
   Character as CharacterSchema,
   CharacterId as CharacterIdSchema,
   CreateCharacterInput as CreateCharacterInputSchema,
+  ProjectId as ProjectIdSchema,
   ShotCharacter as ShotCharacterSchema,
   ShotId as ShotIdSchema,
   UpdateCharacterPatch as UpdateCharacterPatchSchema,
-  WorkspaceId as WorkspaceIdSchema,
   type Character,
+  type Shot,
   type ShotId,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
@@ -20,6 +21,7 @@ import {
 } from '../response.js'
 import { identityImageRoutes } from './character-identity-images.js'
 import { lookRoutes } from './character-looks.js'
+import { FOREIGN_CHARACTER_MESSAGE } from './library-ownership.js'
 
 /**
  * Character の CRUD（DOMAIN.md §5 / ARCHITECTURE.md §8）と、
@@ -41,15 +43,21 @@ export const toCharacterResponse = (character: Character): CharacterResponse => 
 export { IdentityImageResponse } from './character-identity-images.js'
 export { LookImageResponse, LookResponse } from './character-looks.js'
 
-const CreateCharacterBody = CreateCharacterInputSchema.openapi('CreateCharacterInput')
+/**
+ * プロジェクトとワークスペースは本文に入れない。プロジェクトは経路が持ち、ワークスペースはそのプロジェクトから引く
+ * （キャラクターはプロジェクトごと。ADR-0034）。正が 2 つになるのを避ける。
+ */
+const CreateCharacterBody = CreateCharacterInputSchema.omit({ workspaceId: true, projectId: true }).openapi(
+  'CreateCharacterInput',
+)
 const UpdateCharacterBody = UpdateCharacterPatchSchema.openapi('UpdateCharacterPatch')
 
 const pathId = <T extends z.ZodTypeAny>(schema: T) =>
   z.object({ id: schema.openapi({ param: { name: 'id', in: 'path' } }) })
 
 const CharacterParams = pathId(CharacterIdSchema)
-const ListQuery = z.object({
-  workspaceId: WorkspaceIdSchema.openapi({ param: { name: 'workspaceId', in: 'query' } }),
+const ProjectParams = z.object({
+  projectId: ProjectIdSchema.openapi({ param: { name: 'projectId', in: 'path' } }),
 })
 
 const jsonContent = <T extends z.ZodTypeAny>(description: string, schema: T) => ({
@@ -69,16 +77,16 @@ const body = <T extends z.ZodTypeAny>(schema: T) => ({
 })
 
 const listCharactersRoute = createRoute({
-  method: 'get', path: '/characters', tags: ['characters'],
-  summary: 'ワークスペース内の Character 一覧',
-  request: { query: ListQuery },
+  method: 'get', path: '/projects/{projectId}/characters', tags: ['characters'],
+  summary: 'プロジェクトの Character 一覧',
+  request: { params: ProjectParams },
   responses: { 200: jsonContent('Character 一覧', listResponse(CharacterResponse)), ...commonErrors },
 })
 
 const createCharacterRoute = createRoute({
-  method: 'post', path: '/characters', tags: ['characters'],
-  summary: 'Character を作成する',
-  request: { body: body(CreateCharacterBody) },
+  method: 'post', path: '/projects/{projectId}/characters', tags: ['characters'],
+  summary: 'プロジェクトに Character を作成する',
+  request: { params: ProjectParams, body: body(CreateCharacterBody) },
   responses: { 201: jsonContent('作成された Character', successResponse(CharacterResponse)), ...commonErrors },
 })
 
@@ -108,16 +116,26 @@ export type CharacterRoutesDeps = {
   looks: CharacterLookRepository
   /** 参照する MediaAsset の実在確認だけに使う。 */
   mediaAssets: MediaAssetRepository
+  /** 一覧・作成の持ち主の確認と、ワークスペースを引くために使う。 */
+  projects: Pick<ProjectRepository, 'findById'>
 }
 
 export const characterRoutes = (deps: CharacterRoutesDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })
     .openapi(listCharactersRoute, async (c) => {
-      const found = await deps.characters.findByWorkspace(c.req.valid('query').workspaceId)
+      const { projectId } = c.req.valid('param')
+      if ((await deps.projects.findById(projectId)) === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      const found = await deps.characters.findByProject(projectId)
       return c.json(okList(found.map(toCharacterResponse)), 200)
     })
     .openapi(createCharacterRoute, async (c) => {
-      const created = await deps.characters.create(c.req.valid('json'))
+      const project = await deps.projects.findById(c.req.valid('param').projectId)
+      if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      const created = await deps.characters.create({
+        ...c.req.valid('json'),
+        workspaceId: project.workspaceId,
+        projectId: project.id,
+      })
       return c.json(ok(toCharacterResponse(created)), 201)
     })
     .openapi(getCharacterRoute, async (c) => {
@@ -207,6 +225,7 @@ export const shotCharacterRoutes = (deps: ShotCharacterRoutesDeps) => {
    * 1 回の Promise.all にまとめ、段数を一定に保つ。
    */
   const invalidEntries = async (
+    shot: Shot,
     entries: readonly z.infer<typeof ShotCharacterEntryBody>[],
   ): Promise<FieldErrors | null> => {
     const ids = entries.map((entry) => entry.characterId)
@@ -226,6 +245,9 @@ export const shotCharacterRoutes = (deps: ShotCharacterRoutesDeps) => {
 
     if (resolved.some((r) => r.character === null)) {
       return { characterId: [MISSING_CHARACTER_MESSAGE] }
+    }
+    if (resolved.some((r) => r.character !== null && r.character.projectId !== shot.projectId)) {
+      return { characterId: [FOREIGN_CHARACTER_MESSAGE] }
     }
     if (resolved.some((r) => r.look === null)) {
       return { lookId: [MISSING_LOOK_MESSAGE] }
@@ -248,10 +270,11 @@ export const shotCharacterRoutes = (deps: ShotCharacterRoutesDeps) => {
     })
     .openapi(replaceShotCharactersRoute, async (c) => {
       const { shotId } = c.req.valid('param')
-      if (await shotMissing(shotId)) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      const shot = await deps.shots.findById(shotId)
+      if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
 
       const { entries } = c.req.valid('json')
-      const fields = await invalidEntries(entries)
+      const fields = await invalidEntries(shot, entries)
       if (fields !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, fields), 422)
 
       return c.json(okList(await deps.shotCharacters.replaceAll(shotId, entries)), 200)

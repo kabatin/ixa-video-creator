@@ -25,6 +25,8 @@ import {
   type InMemoryCharacterLookRepository,
   type InMemoryCharacterRepository,
 } from '@ixa/generation/testing'
+import { aProject } from './fixtures.js'
+import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 
 type SuccessBody<T> = { success: true; data: T }
 type ListBody<T> = { success: true; data: T[]; meta: { total: number } }
@@ -61,6 +63,9 @@ const anImageAsset = (workspaceId: WorkspaceId): MediaAsset =>
   })
 
 const workspaceId = WorkspaceIdSchema.parse(newId(WorkspaceIdSchema))
+/** キャラクターはプロジェクトごと（ADR-0034）。同じワークスペースにプロジェクトを 2 つ置く。 */
+const project = aProject({ workspaceId })
+const otherProject = aProject({ workspaceId, name: 'LUNA BREW 30秒CM' })
 
 let characters: InMemoryCharacterRepository
 let looks: InMemoryCharacterLookRepository
@@ -86,8 +91,7 @@ const json = async <T>(res: Response): Promise<T> => (await res.json()) as T
 
 /** Character を 1 体作り、その ID を返す。 */
 const createCharacter = async (): Promise<string> => {
-  const res = await send('POST', '/characters', {
-    workspaceId,
+  const res = await send('POST', `/projects/${project.id}/characters`, {
     name: 'takepi',
     displayName: '藤本タケピ',
     identityAnchors: ['切れ長の目'],
@@ -112,6 +116,37 @@ beforeEach(() => {
     characters,
     looks,
     mediaAssets: createInMemoryMediaAssetRepository(assets),
+    projects: createInMemoryProjectRepository([project, otherProject]),
+  })
+})
+
+/**
+ * キャラクターはプロジェクトごと（制作者 2026-10-03「全プロジェクトで共有になっている。プロジェクト単位にしないと
+ * 大変なことになる」）。一覧と作成はプロジェクトの経路で、ワークスペースで引く口は無い。
+ */
+describe('Character はプロジェクトごと', () => {
+  it('作るとパスのプロジェクトに入り、ワークスペースはプロジェクトから入る', async () => {
+    const id = await createCharacter()
+
+    const one = await json<SuccessBody<CharacterResponse>>(await send('GET', `/characters/${id}`))
+    expect(one.data.projectId).toBe(project.id)
+    expect(one.data.workspaceId).toBe(workspaceId)
+  })
+
+  it('一覧はそのプロジェクトのものだけ。同じワークスペースのほかのプロジェクトには出ない', async () => {
+    await createCharacter()
+
+    const own = await json<ListBody<CharacterResponse>>(await send('GET', `/projects/${project.id}/characters`))
+    const other = await json<ListBody<CharacterResponse>>(await send('GET', `/projects/${otherProject.id}/characters`))
+    expect(own.meta.total).toBe(1)
+    expect(other.meta.total).toBe(0)
+  })
+
+  it('無いプロジェクトは 404。ワークスペースで引く口は無い', async () => {
+    const missing = aProject()
+    expect((await send('GET', `/projects/${missing.id}/characters`)).status).toBe(404)
+    expect((await send('POST', `/projects/${missing.id}/characters`, { name: 'x', displayName: 'x' })).status).toBe(404)
+    expect((await send('GET', `/characters?workspaceId=${workspaceId}`)).status).toBe(404)
   })
 })
 
@@ -120,7 +155,7 @@ describe('Character の CRUD', () => {
     const id = await createCharacter()
 
     const list = await json<ListBody<CharacterResponse>>(
-      await send('GET', `/characters?workspaceId=${workspaceId}`),
+      await send('GET', `/projects/${project.id}/characters`),
     )
     expect(list.meta.total).toBe(1)
     expect(list.data[0]?.displayName).toBe('藤本タケピ')

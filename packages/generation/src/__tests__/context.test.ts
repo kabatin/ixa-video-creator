@@ -69,7 +69,7 @@ const registerCharacter = async (
   name: string,
   options: RegisterOptions = {},
 ): Promise<{ character: Character; look: CharacterLook }> => {
-  const character = await characters.create({ workspaceId, name, displayName: name })
+  const character = await characters.create({ workspaceId, projectId, name, displayName: name })
   const look = await looks.create({
     characterId: character.id,
     key: 'STAGE_A',
@@ -199,7 +199,7 @@ describe('N+1 を作らないこと', () => {
 
     for (let index = 0; index < characterCount; index += 1) {
       const character = await freshCharacters.create({
-        workspaceId, name: `c${index}`, displayName: `c${index}`,
+        workspaceId, projectId, name: `c${index}`, displayName: `c${index}`,
       })
       const look = await freshLooks.create({
         characterId: character.id, key: 'STAGE_A', name: 'look',
@@ -276,6 +276,7 @@ describe('locationsForShot', () => {
     const locations = createInMemoryLocationRepository()
     const location = await locations.create({
       workspaceId,
+      projectId,
       name: 'iXA CUP 会場',
       description: '決勝の舞台',
       referenceAssetIds: [newId(MediaAssetIdSchema)],

@@ -21,6 +21,7 @@ import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../
 import type { Logger } from '../logger.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 import { assistContext, type AssistMaterials } from './assist-context.js'
+import { FOREIGN_CHARACTER_MESSAGE, FOREIGN_LOCATION_MESSAGE } from './library-ownership.js'
 
 /**
  * 入力を AI が手伝う（ADR-0032 の 3 段目。制作者 2026-09-30「コンセプトとか世界観とかを入力するところで、
@@ -96,14 +97,19 @@ const conceptOf = async (deps: AssistRoutesDeps, projectId: ProjectId): Promise<
   return (await deps.scripts.findVersionById(script.currentVersionId))?.content ?? null
 }
 
-/** 材料を読む。指定した対象が無ければ null（404）。 */
+/** 材料を読めなかった理由。`missing` は 404、`foreign` はほかのプロジェクトのもの（422。ADR-0034）。 */
+type MaterialsProblem =
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'foreign'; readonly field: 'characterId' | 'locationId'; readonly message: string }
+
+/** 材料を読む。指定した対象が無い・ほかのプロジェクトのものなら、その理由を返す。 */
 const loadMaterials = async (
   deps: AssistRoutesDeps,
   projectId: ProjectId,
   body: Body,
-): Promise<AssistMaterials | null> => {
+): Promise<AssistMaterials | MaterialsProblem> => {
   const project = await deps.projects.findById(projectId)
-  if (project === null) return null
+  if (project === null) return { kind: 'missing' }
   const [concept, shots] = await Promise.all([conceptOf(deps, projectId), deps.shots.findByProject(projectId)])
   const shot = body.shotId === undefined ? null : (shots.find((candidate) => candidate.id === body.shotId) ?? null)
   const look = body.lookId === undefined ? null : await deps.looks.findById(body.lookId)
@@ -115,7 +121,15 @@ const loadMaterials = async (
     (body.lookId !== undefined && look === null) ||
     (body.characterId !== undefined && character === null) ||
     (body.locationId !== undefined && location === null)
-  return missing ? null : { project, concept, shots, shot, character, look, location }
+  if (missing) return { kind: 'missing' }
+  // キャラクターとロケーションはプロジェクトごと（ADR-0034）。ほかのプロジェクトのものを材料にしない。
+  if (character !== null && character.projectId !== projectId) {
+    return { kind: 'foreign', field: 'characterId', message: FOREIGN_CHARACTER_MESSAGE }
+  }
+  if (location !== null && location.projectId !== projectId) {
+    return { kind: 'foreign', field: 'locationId', message: FOREIGN_LOCATION_MESSAGE }
+  }
+  return { project, concept, shots, shot, character, look, location }
 }
 
 export const assistRoutes = (deps: AssistRoutesDeps) =>
@@ -127,7 +141,11 @@ export const assistRoutes = (deps: AssistRoutesDeps) =>
       return c.json(fail(VALIDATION_ERROR_MESSAGE, { [target]: ['この欄の案には対象が要ります'] }), 422)
     }
     const materials = await loadMaterials(deps, projectId, body)
-    if (materials === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+    if ('kind' in materials) {
+      return materials.kind === 'missing'
+        ? c.json(fail(NOT_FOUND_MESSAGE), 404)
+        : c.json(fail(VALIDATION_ERROR_MESSAGE, { [materials.field]: [materials.message] }), 422)
+    }
 
     const assistant = await deps.textAssistant()
     const outcome = await assistant.suggest({

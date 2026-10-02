@@ -148,6 +148,13 @@
       "when": 1790927863778,
       "tag": "0020_edit_batch_clip_entries",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790953726727,
+      "tag": "0021_library_project_scope",
+      "breakpoints": true
     }
   ]
 }
