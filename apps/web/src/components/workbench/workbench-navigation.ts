@@ -28,3 +28,11 @@ export const goToProjectConcept = (workbench: Navigable): void => {
   workbench.inspect({ kind: 'project', id: workbench.projectId })
   workbench.focusPanel('inspector')
 }
+
+/**
+ * 歌詞に時刻を付ける（聴きながら切るの「歌詞を合わせる」）。時刻が付いたらそこでテロップにする
+ * （制作者 2026-10-02「歌詞の自動テロップってどこからやるんだっけ」）。
+ */
+export const goToLyricSync = (workbench: Pick<WorkbenchContextValue, 'openCutter'>): void => {
+  workbench.openCutter('lyrics')
+}

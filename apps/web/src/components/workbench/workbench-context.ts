@@ -123,6 +123,13 @@ export type WorkbenchContextValue = {
   readonly notify: (message: string | null) => void
   /** 中央上の素材ビューアを前に出す（PHASE 8.2）。 */
   readonly openViewer: () => void
+  /** 聴きながら切るで、いま何をしているか（区切る・歌詞を合わせる。ADR-0033）。 */
+  readonly cutterMode: CutterMode
+  /**
+   * 聴きながら切るをそのモードで前に出す。作品の方針の「聴きながら時刻を付ける」から歌詞のモードで開くため
+   * （制作者 2026-10-02「歌詞の自動テロップってどこからやるんだっけ」）。
+   */
+  readonly openCutter: (mode: CutterMode) => void
   /**
    * 動いている生成（Shot ごと。作成中を先に）。どのモデルで・いつから・目安は何秒か。
    * 生成中の Shot があるあいだだけ追う（`use-active-generations.ts`）。
@@ -137,6 +144,9 @@ export type WorkbenchContextValue = {
 }
 
 export type ShotPatch = UpdateShotBody
+
+/** 聴きながら切るのモード。区切りを置く か、歌詞の歌い出しに時刻を付ける か。 */
+export type CutterMode = 'cut' | 'lyrics'
 
 export const INSPECTOR_TABS = ['settings', 'generate', 'review'] as const
 export type InspectorTab = (typeof INSPECTOR_TABS)[number]

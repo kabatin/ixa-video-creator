@@ -14,6 +14,7 @@ import {
 import { AudioTransport } from '@/components/audio-transport'
 import { CutMarkList } from '@/components/cut-mark-list'
 import { CutWaveformOverlay } from '@/components/cut-waveform-overlay'
+import { LyricCueOverlay } from '@/components/lyric-cue-overlay'
 import { SelectField } from '@/components/form/select-field'
 import { Button } from '@/components/ui/button'
 import { WaveformCanvas } from '@/components/waveform-canvas'
@@ -106,6 +107,13 @@ export type CutEditorProps = {
   readonly playButton?: ReactNode
   /** 操作の行に足すもの（「セクションから割る…」など。PHASE 8.4）。 */
   readonly toolbarExtra?: ReactNode
+  /**
+   * 何のために聴くか。`lyrics`（歌詞を合わせる）では再生と波形だけを出し、区切りの道具は出さない
+   * （制作者 2026-10-02「この画面すっごいわかりづらいなー」。歌詞のときも区切りの画面が丸ごと付いてきた）。
+   */
+  readonly purpose?: 'cut' | 'lyrics'
+  /** 歌詞の歌い出しの時刻。`lyrics` のとき波形に印を出す（見るだけ）。 */
+  readonly lyricCues?: readonly number[]
 }
 
 /** 再生位置の共有（UI-WORKBENCH §7.2）。形と規則は `use-cut-editor-sync.ts`。 */
@@ -127,8 +135,11 @@ export const CutEditor = ({
   showPlay = true,
   playButton,
   toolbarExtra,
+  purpose = 'cut',
+  lyricCues = [],
 }: CutEditorProps) => {
   const router = useRouter()
+  const cutting = purpose === 'cut'
 
   /**
    * キーの持ち主を決める入れ物。
@@ -523,39 +534,43 @@ export const CutEditor = ({
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          tone="primary"
-          size="sm"
-          onClick={() => {
-            placeMarkAt(playback.currentSec)
-          }}
-          disabled={saving}
-        >
-          {/**
-            * 秒が変わるたびにボタンの幅が動くと、置こうとしている的が揺れる。
-            * 数字は等幅（`tabular-nums`）にし、桁が増えても動かないよう幅を決め打つ。
-            */}
-          <span className="inline-block w-[13.5rem] text-center tabular-nums">
-            {`ここに区切りを置く（${formatClock(playback.currentSec)}）`}
-          </span>
-        </Button>
-        <label className="flex items-center gap-1.5 text-sm text-text">
-          <input
-            type="checkbox"
-            checked={snapEnabled}
-            disabled={saving}
-            onChange={(event) => {
-              setSnapEnabled(event.target.checked)
-              setSnapNotice(null)
-            }}
-            className="h-3.5 w-3.5"
-          />
-          拍に吸着
-        </label>
-        <Button size="sm" disabled={saving} onClick={placeSectionMarks}>
-          セクションの境目に区切りを置く
-        </Button>
-        {toolbarExtra}
+        {cutting && (
+          <>
+            <Button
+              tone="primary"
+              size="sm"
+              onClick={() => {
+                placeMarkAt(playback.currentSec)
+              }}
+              disabled={saving}
+            >
+              {/**
+                * 秒が変わるたびにボタンの幅が動くと、置こうとしている的が揺れる。
+                * 数字は等幅（`tabular-nums`）にし、桁が増えても動かないよう幅を決め打つ。
+                */}
+              <span className="inline-block w-[13.5rem] text-center tabular-nums">
+                {`ここに区切りを置く（${formatClock(playback.currentSec)}）`}
+              </span>
+            </Button>
+            <label className="flex items-center gap-1.5 text-sm text-text">
+              <input
+                type="checkbox"
+                checked={snapEnabled}
+                disabled={saving}
+                onChange={(event) => {
+                  setSnapEnabled(event.target.checked)
+                  setSnapNotice(null)
+                }}
+                className="h-3.5 w-3.5"
+              />
+              拍に吸着
+            </label>
+            <Button size="sm" disabled={saving} onClick={placeSectionMarks}>
+              セクションの境目に区切りを置く
+            </Button>
+            {toolbarExtra}
+          </>
+        )}
         <span className="ml-auto flex items-center gap-2 text-xs text-muted">
           <span className="tabular-nums">
             {`BPM ${analysis.bpm.toFixed(1)}・表示 ${formatClock(view.startSec)}〜${formatClock(view.endSec)}`}
@@ -609,7 +624,8 @@ export const CutEditor = ({
           >
             <CutWaveformOverlay
               {...(openMarkMenu === undefined ? {} : { onMarkContextMenu: openMarkMenu })}
-              marks={marks}
+              // 歌詞のときは区切りの印を出さない（押す・ずらす・拡大はそのまま使う）。
+              marks={cutting ? marks : []}
               selectedIndex={selectedIndex}
               currentSec={playback.currentSec}
               durationSec={durationSec}
@@ -635,116 +651,122 @@ export const CutEditor = ({
                 panBy(ratio)
               }}
             />
+            {!cutting && <LyricCueOverlay cues={lyricCues} view={view} />}
           </WaveformCanvas>
         )}
       </div>
 
-      {snapNotice !== null && (
-        <p role="status" className={`text-sm ${snapNoticeClassName(snapNotice.state)}`}>
-          {snapNotice.message}
-        </p>
-      )}
-
-      {/**
-       * **キーの一覧はこの画面に 1 つだけ置く**（`describeCutEditorKeys` が実際の行き先から作る）。
-       * 既定では畳む。拡大 / 縮小は ⌘・Ctrl + ホイール、横送りは Shift + ホイール。
-       */}
-      <HelpDisclosure label="キーとホイールの割り当て">
-        <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-          {keyHelp.map((entry) => (
-            <div key={entry.keys} className="flex justify-between gap-3">
-              <dt className="font-mono text-text">{entry.keys}</dt>
-              <dd className="text-right text-muted">{entry.action}</dd>
-            </div>
-          ))}
-          <div className="flex justify-between gap-3">
-            <dt className="font-mono text-text">⌘ / Ctrl + ホイール</dt>
-            <dd className="text-right text-muted">拡大 / 縮小</dd>
-          </div>
-          <div className="flex justify-between gap-3">
-            <dt className="font-mono text-text">Shift + ホイール</dt>
-            <dd className="text-right text-muted">横に送る</dd>
-          </div>
-        </dl>
-        <p className="mt-2 text-xs text-muted">文字を打っている間はこれらのキーは効きません。</p>
-      </HelpDisclosure>
-
-      <CutMarkList
-        {...(openMarkMenu === undefined ? {} : { onMarkContextMenu: openMarkMenu })}
-        marks={marks}
-        songDurationSec={durationSec}
-        busy={saving}
-        selectedIndex={selectedIndex}
-        onSelect={selectAndSeek}
-        onRemove={removeAt}
-        onMove={(index, atSec) => {
-          moveMarkTo(index, atSec, false)
-        }}
-        rejection={rejection}
-      />
-
-      <section className="border-t border-line pt-2">
-        <h3 className="text-xs font-semibold text-muted">Shot にする</h3>
-
-        <div className="mt-2 max-w-sm">
-          <SelectField
-            id="cutSequenceId"
-            label="Sequence"
-            value={sequenceId}
-            disabled={saving}
-            options={[
-              { value: NO_SEQUENCE_VALUE, label: '（Sequence に入れない）' },
-              ...sequences.map((sequence) => ({ value: sequence.id, label: sequence.name })),
-            ]}
-            onChange={setSequenceId}
-          />
-        </div>
-
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <Button
-            // 主の操作は「区切りを置く」。こちらは区切りが揃ってから押す 2 番目の操作（P6）。
-            tone="secondary"
-            size="sm"
-            disabled={saving || cuts.state !== 'cuts'}
-            onClick={() => {
-              void save()
-            }}
-          >
-            {saving
-              ? '作成中…'
-              : cuts.state === 'cuts'
-                ? `${String(cuts.cuts.length)} カットを Shot にする`
-                : 'Shot にする'}
-          </Button>
-
-          {cuts.state !== 'cuts' && (
-            <p className="text-sm text-muted">
-              区切りがまだありません。
+      {/* ここから下は区切りの道具。歌詞を合わせている間は出さない。 */}
+      {cutting && (
+        <>
+          {snapNotice !== null && (
+            <p role="status" className={`text-sm ${snapNoticeClassName(snapNotice.state)}`}>
+              {snapNotice.message}
             </p>
           )}
-        </div>
 
-        {saveError !== null && (
-          <p role="alert" className="mt-3 text-sm text-danger">
-            {saveError}
-          </p>
-        )}
+          {/**
+           * **キーの一覧はこの画面に 1 つだけ置く**（`describeCutEditorKeys` が実際の行き先から作る）。
+           * 既定では畳む。拡大 / 縮小は ⌘・Ctrl + ホイール、横送りは Shift + ホイール。
+           */}
+          <HelpDisclosure label="キーとホイールの割り当て">
+            <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+              {keyHelp.map((entry) => (
+                <div key={entry.keys} className="flex justify-between gap-3">
+                  <dt className="font-mono text-text">{entry.keys}</dt>
+                  <dd className="text-right text-muted">{entry.action}</dd>
+                </div>
+              ))}
+              <div className="flex justify-between gap-3">
+                <dt className="font-mono text-text">⌘ / Ctrl + ホイール</dt>
+                <dd className="text-right text-muted">拡大 / 縮小</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="font-mono text-text">Shift + ホイール</dt>
+                <dd className="text-right text-muted">横に送る</dd>
+              </div>
+            </dl>
+            <p className="mt-2 text-xs text-muted">文字を打っている間はこれらのキーは効きません。</p>
+          </HelpDisclosure>
 
-        {outcome !== null && (
-          <div className="mt-3">
-            <p role="status" className="text-sm text-text">
-              {`${String(outcome.createdCount)} 個の Shot を作りました。`}
-            </p>
-            {outcome.warnings.length > 0 && (
-              <ul role="alert" className="mt-2 list-disc space-y-1 pl-5 text-sm text-warn">
-                {outcome.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
+          <CutMarkList
+            {...(openMarkMenu === undefined ? {} : { onMarkContextMenu: openMarkMenu })}
+            marks={marks}
+            songDurationSec={durationSec}
+            busy={saving}
+            selectedIndex={selectedIndex}
+            onSelect={selectAndSeek}
+            onRemove={removeAt}
+            onMove={(index, atSec) => {
+              moveMarkTo(index, atSec, false)
+            }}
+            rejection={rejection}
+          />
+
+          <section className="border-t border-line pt-2">
+            <h3 className="text-xs font-semibold text-muted">Shot にする</h3>
+
+            <div className="mt-2 max-w-sm">
+              <SelectField
+                id="cutSequenceId"
+                label="Sequence"
+                value={sequenceId}
+                disabled={saving}
+                options={[
+                  { value: NO_SEQUENCE_VALUE, label: '（Sequence に入れない）' },
+                  ...sequences.map((sequence) => ({ value: sequence.id, label: sequence.name })),
+                ]}
+                onChange={setSequenceId}
+              />
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <Button
+                // 主の操作は「区切りを置く」。こちらは区切りが揃ってから押す 2 番目の操作（P6）。
+                tone="secondary"
+                size="sm"
+                disabled={saving || cuts.state !== 'cuts'}
+                onClick={() => {
+                  void save()
+                }}
+              >
+                {saving
+                  ? '作成中…'
+                  : cuts.state === 'cuts'
+                    ? `${String(cuts.cuts.length)} カットを Shot にする`
+                    : 'Shot にする'}
+              </Button>
+
+              {cuts.state !== 'cuts' && (
+                <p className="text-sm text-muted">
+                  区切りがまだありません。
+                </p>
+              )}
+            </div>
+
+            {saveError !== null && (
+              <p role="alert" className="mt-3 text-sm text-danger">
+                {saveError}
+              </p>
             )}
-          </div>
-        )}
-      </section>
+
+            {outcome !== null && (
+              <div className="mt-3">
+                <p role="status" className="text-sm text-text">
+                  {`${String(outcome.createdCount)} 個の Shot を作りました。`}
+                </p>
+                {outcome.warnings.length > 0 && (
+                  <ul role="alert" className="mt-2 list-disc space-y-1 pl-5 text-sm text-warn">
+                    {outcome.warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </section>
+        </>
+      )}
     </div>
   )
 }

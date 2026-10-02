@@ -1,8 +1,8 @@
 'use client'
 
 import type { MusicTrack } from '@ixa/domain'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { LyricSync } from '@/components/lyric-sync'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { LyricCueList, LyricSync } from '@/components/lyric-sync'
 import { usePreferences } from '@/components/preferences-root'
 import { useContextMenuHost } from '@/components/workbench/ui/context-menu'
 import { useTransport, useWorkbench } from '@/components/workbench/workbench-context'
@@ -26,15 +26,24 @@ const sameCues = (a: readonly number[], b: readonly number[]): boolean =>
  * - 押した時刻は拍へ寄せる（区切りと同じ候補・環境設定の入切。規則は `timeline-snap`）
  * - 打つたびに作品へ保存する（前の保存を待ってから次を送る。順が入れ替わらない）
  * - 離れるときにサーバを読み直す（作品の方針の「時刻は n フレーズまで」と帯が追いつく）
+ * - 並びは 案内とボタン → 再生と波形（`children`。打った時刻を印に出す）→ フレーズの一覧
+ * - **区切っている間も外さない**（`active` が false なら波形だけ描く）。波形の部品が同じ場所に居続けるので、
+ *   モードを替えても、まだ Shot にしていない区切りと再生の状態が消えない
  */
 export const LyricSyncSection = ({
   track,
   analysis,
   keyboard,
+  active,
+  children,
 }: {
   readonly track: MusicTrack
   readonly analysis: WireMusicAnalysis
   readonly keyboard: boolean
+  /** 歌詞を合わせているか。false なら案内・ボタン・一覧を出さず、打鍵も受けない。 */
+  readonly active: boolean
+  /** 再生と波形。いまの時刻（保存を待たない手元の値）を受けて印を出す。 */
+  readonly children: (cues: readonly number[]) => ReactNode
 }) => {
   const workbench = useWorkbench()
   const transport = useTransport()
@@ -54,8 +63,13 @@ export const LyricSyncSection = ({
   const saving = useRef<Promise<void>>(Promise.resolve())
   const dirty = useRef(false)
 
-  // 離れるときに読み直す（保存は済んでいる。手元に古い作品が残らないように）。
+  // 離れるとき（区切るへ替えた・パネルを閉じた）に読み直す（保存は済んでいる。手元に古い作品が残らないように）。
   const { refresh } = workbench
+  useEffect(() => {
+    if (active || !dirty.current) return
+    dirty.current = false
+    refresh()
+  }, [active, refresh])
   useEffect(
     () => () => {
       if (dirty.current) refresh()
@@ -102,32 +116,44 @@ export const LyricSyncSection = ({
     })
   }
 
+  // 波形（children）は常に同じ場所に描く。前後の案内と一覧だけを出し入れする。
   return (
     <>
-      <LyricSync
-        lyrics={project.lyrics}
-        cues={cues}
-        onCuesChange={change}
-        currentSec={transport.currentSec}
-        playing={transport.playing && transport.owner === 'cutter'}
-        onTogglePlay={() => {
-          if (transport.playing && transport.owner === 'cutter') transportControls.pause()
-          else transportControls.play('cutter')
-        }}
-        onSeek={transportControls.seekTo}
-        snapAt={(sec) =>
-          snapPoint('歌い出し', sec, candidates, toleranceSec, preferences.playback.snapToBeat).atSec
-        }
-        onPlaceTelops={placeTelops}
-        onOpenConcept={() => {
-          goToProjectConcept(workbench)
-        }}
-        keyboard={keyboard}
-      />
-      {error !== null && (
-        <p role="alert" className="px-3 py-1 text-xs text-danger">
-          {error}
-        </p>
+      {active && (
+        <>
+          <LyricSync
+            lyrics={project.lyrics}
+            cues={cues}
+            onCuesChange={change}
+            currentSec={transport.currentSec}
+            onTogglePlay={() => {
+              if (transport.playing && transport.owner === 'cutter') transportControls.pause()
+              else transportControls.play('cutter')
+            }}
+            snapAt={(sec) =>
+              snapPoint('歌い出し', sec, candidates, toleranceSec, preferences.playback.snapToBeat).atSec
+            }
+            onPlaceTelops={placeTelops}
+            onOpenConcept={() => {
+              goToProjectConcept(workbench)
+            }}
+            keyboard={keyboard}
+          />
+          {error !== null && (
+            <p role="alert" className="px-3 py-1 text-xs text-danger">
+              {error}
+            </p>
+          )}
+        </>
+      )}
+      {children(cues)}
+      {active && (
+        <LyricCueList
+          lyrics={project.lyrics}
+          cues={cues}
+          currentSec={transport.currentSec}
+          onSeek={transportControls.seekTo}
+        />
       )}
     </>
   )

@@ -2,7 +2,7 @@
 
 import { useAssist } from '@/components/workbench/use-assist'
 import { lyricsSummary } from '@/lib/lyric-sync'
-import { MAX_STYLE_REFERENCES, type MediaAssetId, type Project, type ProjectId, type UpdateProjectPatch } from '@ixa/domain'
+import { MAX_STYLE_REFERENCES, lyricLines, type MediaAssetId, type Project, type ProjectId, type UpdateProjectPatch } from '@ixa/domain'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ImageUploader } from '@/components/image-uploader'
 import { MediaImage } from '@/components/media-image'
@@ -11,6 +11,7 @@ import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { ObjectHeader } from '@/components/workbench/ui/object-header'
 import { Section } from '@/components/workbench/ui/section'
 import { useWorkbench } from '@/components/workbench/workbench-context'
+import { goToLyricSync } from '@/components/workbench/workbench-navigation'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import type { ProjectConceptApi } from '@/lib/project-concept-api'
@@ -127,8 +128,21 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
             onSave={(next) => save({ lyrics: next })}
           />
           <Hint>{lyricsSummary(project.lyrics, project.lyricCues)}</Hint>
+          {/* 入口を歌詞を入れる場所にも置く（制作者 2026-10-02「歌詞の自動テロップってどこからやるんだっけ」）。 */}
+          <div className="flex justify-start">
+            <Button
+              size="sm"
+              disabled={lyricLines(project.lyrics).length === 0}
+              title={lyricLines(project.lyrics).length === 0 ? '先に歌詞を入れてください' : undefined}
+              onClick={() => {
+                goToLyricSync(workbench)
+              }}
+            >
+              聴きながら時刻を付ける
+            </Button>
+          </div>
           <Hint>
-            「聴きながら切る」の「歌詞を合わせる」で、曲を流してフレーズの歌い出しに Enter を押すと時刻が付きます。時刻が付いたフレーズはテロップにでき、AI の説明の下書き（絵コンテの案）にも、その Shot で歌われる歌詞として入ります。
+            曲を流してフレーズの歌い出しに Enter を押すと時刻が付きます。時刻が付いたフレーズはテロップにでき、AI の説明の下書き（絵コンテの案）にも、その Shot で歌われる歌詞として入ります。
           </Hint>
         </Section>
 

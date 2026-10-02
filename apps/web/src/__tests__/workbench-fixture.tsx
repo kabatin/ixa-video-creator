@@ -102,6 +102,8 @@ export const workbenchValue = (
   notify: vi.fn(),
   inspect: vi.fn(),
   openViewer: vi.fn(),
+  cutterMode: 'cut',
+  openCutter: vi.fn(),
   ...patch,
 })
 

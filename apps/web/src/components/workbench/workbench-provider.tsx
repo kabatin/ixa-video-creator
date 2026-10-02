@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   WorkbenchContext,
+  type CutterMode,
   type InspectorTab,
   type ShotPatch,
   type WorkbenchContextValue,
@@ -90,6 +91,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
   const [dialog, setDialog] = useState<WorkbenchDialog | null>(props.initialDialog)
   const [dialogShotIds, setDialogShotIds] = useState<readonly ShotId[] | null>(null)
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('settings')
+  const [cutterMode, setCutterMode] = useState<CutterMode>('cut')
   const [inspectorRequest, setInspectorRequest] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
   const { transport, controls } = useWorkbenchTransport()
@@ -320,6 +322,11 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       openViewer: () => {
         props.focusPanel('viewer')
       },
+      cutterMode,
+      openCutter: (mode) => {
+        setCutterMode(mode)
+        props.focusPanel('cutter')
+      },
       activeGenerations,
       concept,
       conceptSaved,
@@ -350,6 +357,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       notice,
       concept,
       conceptSaved,
+      cutterMode,
     ],
   )
 

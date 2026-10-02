@@ -14,9 +14,8 @@ export type LyricSyncProps = {
   /** 時刻が変わった（打った・戻した）。保存は呼び出し側。 */
   readonly onCuesChange: (cues: readonly number[]) => void
   readonly currentSec: number
-  readonly playing: boolean
+  /** Space で鳴らす・止める。ボタンは置かない（再生の口は下の操作列ひとつ）。 */
   readonly onTogglePlay: () => void
-  readonly onSeek: (sec: number) => void
   /** 押した時刻を寄せる（拍へ。切ってあればそのまま）。規則は呼び出し側（`timeline-snap`）。 */
   readonly snapAt: (sec: number) => number
   /** 「歌詞をテロップにする」。確認と実行は呼び出し側。 */
@@ -36,7 +35,8 @@ const isTyping = (target: EventTarget | null): boolean =>
  * 歌詞を合わせる（ADR-0033。制作者 2026-10-01「聴きながら打つ」）。
  *
  * 曲を流し、フレーズの歌い出しで Enter（または「ここで歌い出す」）。次に押すフレーズを大きく出す。
- * Backspace で 1 つ戻す。Space で鳴らす・止める。打った行を押すとその時刻へ飛ぶ。
+ * Backspace で 1 つ戻す。Space で鳴らす・止める（ボタンは置かない。再生の口は下の操作列ひとつ）。
+ * 一覧は `LyricCueList` に分け、波形の下に置く。
  * 打つ・戻すの規則は `lib/lyric-sync.ts`。
  */
 export const LyricSync = (props: LyricSyncProps) => {
@@ -88,50 +88,87 @@ export const LyricSync = (props: LyricSyncProps) => {
 
   const nowIndex = currentLyricIndex(cues, currentSec)
   const next = lines[cues.length]
+  const after = lines[cues.length + 1]
   return (
     <section aria-label="歌詞を合わせる" className="space-y-3 border-b border-line p-3">
+      {/* 何をする画面かを 1 行で（制作者 2026-10-02「この画面すっごいわかりづらいなー」）。 */}
+      <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-muted">
+        <p>① 下の ▶ か Space で曲を流す → ② フレーズの歌い出しで Enter → ③ 歌詞をテロップにする</p>
+        <span className="tabular-nums">{`${String(Math.min(cues.length, lines.length))} / ${String(lines.length)} フレーズ`}</span>
+      </div>
+      <dl aria-live="polite" className="grid grid-cols-[4.5rem_1fr] items-baseline gap-x-3 gap-y-1">
+        <dt className="text-xs text-muted">いま</dt>
+        <dd className="text-sm text-text">{nowIndex < 0 ? '（まだ歌い出していません）' : (lines[nowIndex] ?? '')}</dd>
+        <dt className="text-xs text-muted">次に押す</dt>
+        <dd data-testid="next-lyric" className="text-2xl font-semibold text-text">
+          {next ?? '（最後まで合わせました）'}
+        </dd>
+        {after !== undefined && (
+          <>
+            <dt className="text-xs text-muted">その次</dt>
+            <dd className="text-sm text-muted">{after}</dd>
+          </>
+        )}
+      </dl>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs tabular-nums text-muted">{`${String(Math.min(cues.length, lines.length))}/${String(lines.length)} フレーズ`}</span>
         <Button size="sm" tone="primary" onClick={tap} disabled={next === undefined}>
           ここで歌い出す（Enter）
         </Button>
         <Button size="sm" onClick={undo} disabled={cues.length === 0}>
           1 つ戻す（Backspace）
         </Button>
-        <Button size="sm" onClick={onTogglePlay}>
-          {props.playing ? '止める（Space）' : '鳴らす（Space）'}
-        </Button>
         <span className="flex-1" />
+        {/* 押せない理由を出す。黙って押せないボタンを置かない。 */}
+        {cues.length === 0 && <span className="text-xs text-muted">時刻を 1 つ付けると押せます</span>}
         <Button size="sm" onClick={props.onPlaceTelops} disabled={cues.length === 0}>
           歌詞をテロップにする…
         </Button>
-      </div>
-      <div aria-live="polite" className="space-y-1">
-        <p className="text-xs text-muted">{`いま: ${nowIndex < 0 ? '（まだ歌い出していません）' : (lines[nowIndex] ?? '')}`}</p>
-        <p className="text-xs text-muted">次に押すフレーズ</p>
-        <p data-testid="next-lyric" className="text-2xl font-semibold text-text">
-          {next ?? '（最後まで合わせました）'}
-        </p>
-        {lines[cues.length + 1] !== undefined && <p className="text-sm text-muted">{lines[cues.length + 1]}</p>}
       </div>
       {rejection !== null && (
         <p role="status" className="text-xs text-warn">
           {rejection}
         </p>
       )}
-      <ol className="relative max-h-48 space-y-0.5 overflow-auto text-xs">
+    </section>
+  )
+}
+
+/**
+ * フレーズの一覧（打った時刻へ飛ぶ）。**畳んでおく。** 頭に置くと 58 行が案内とボタンを押し下げた。
+ * まだの行は薄く出すだけ（「— まだ」を並べない）。
+ */
+export const LyricCueList = ({
+  lyrics,
+  cues,
+  currentSec,
+  onSeek,
+}: {
+  readonly lyrics: string
+  readonly cues: readonly number[]
+  readonly currentSec: number
+  readonly onSeek: (sec: number) => void
+}) => {
+  const lines = lyricLines(lyrics)
+  if (lines.length === 0) return null
+  const nowIndex = currentLyricIndex(cues, currentSec)
+  return (
+    <details className="border-t border-line px-3 py-2 text-xs">
+      <summary className="cursor-pointer text-muted hover:text-text">
+        {`フレーズの一覧（${String(Math.min(cues.length, lines.length))} / ${String(lines.length)}。押すとその時刻へ）`}
+      </summary>
+      <ol className="relative mt-2 max-h-48 space-y-0.5 overflow-auto">
         {lines.map((line, index) => {
           const cue = cues[index]
           return (
             <li key={`${String(index)}:${line}`} className={index === nowIndex ? 'text-accent' : 'text-muted'}>
               {cue === undefined ? (
-                <span>{`${String(index + 1)}. ${line} — まだ`}</span>
+                <span className="px-1 opacity-60">{`${String(index + 1)}. ${line}`}</span>
               ) : (
                 <button
                   type="button"
                   aria-label={`${line} の歌い出し ${formatClock(cue)} へ飛ぶ`}
                   onClick={() => {
-                    props.onSeek(cue)
+                    onSeek(cue)
                   }}
                   className="rounded px-1 text-left hover:bg-surface-2 hover:text-text"
                 >
@@ -142,6 +179,6 @@ export const LyricSync = (props: LyricSyncProps) => {
           )
         })}
       </ol>
-    </section>
+    </details>
   )
 }
