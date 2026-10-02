@@ -19,6 +19,7 @@ import {
   TIMELINE_ROWS,
   VIDEO1_ROW,
   adjacentShotPairs,
+  clipChipLabel,
   describeClipContent,
   formatClock,
   formatLongDuration,
@@ -387,5 +388,23 @@ describe('ズームの呼び名（PHASE 8.4）', () => {
       expect(zoomLabel(level)).not.toContain('px')
     })
     expect(zoomLabel(10)).toBe('全体')
+  })
+})
+
+/**
+ * タイムラインの帯の札（制作者 2026-10-02「テロップすべてに テロップ「＊＊＊＊」 ってなってるの文字数の無駄だよね」）。
+ * TEXT 帯の札は文字そのものだけにする（帯の名前が「TEXT（テロップ）」なので種類は分かる）。
+ * 知らせ・一覧・ツールチップの一文は、種類が混ざるので今までどおり「テロップ「…」」。
+ */
+describe('clipChipLabel', () => {
+  it('テロップは文字だけ。読めなければそう言う', () => {
+    expect(clipChipLabel({ type: 'text', templateKey: 'plain', params: { text: 'ぼくは はると' } })).toBe('ぼくは はると')
+    expect(clipChipLabel({ type: 'text', templateKey: 'plain', params: {} })).toBe('（文字が読めません）')
+  })
+
+  it('テロップ以外は一行要約のまま', () => {
+    expect(clipChipLabel({ type: 'motion_graphics', templateKey: 'title_card', params: {} })).toBe(
+      'モーショングラフィックス title_card',
+    )
   })
 })

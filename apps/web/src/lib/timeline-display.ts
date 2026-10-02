@@ -244,6 +244,17 @@ export const describeClipContent = (content: TimelineClip['content']): string =>
   }
 }
 
+/**
+ * タイムラインの帯の札に出す文字（制作者 2026-10-02「テロップすべてに テロップ「＊＊＊＊」 ってなってるの文字数の無駄だよね」）。
+ * テロップは文字そのものだけにする（帯の名前「TEXT（テロップ）」で種類は分かる。札は幅が狭く、前置きで本文が切れていた）。
+ * それ以外は一行要約のまま。知らせ・一覧・ツールチップでは種類が混ざるので `describeClipContent` を使う。
+ */
+export const clipChipLabel = (content: TimelineClip['content']): string => {
+  if (content.type !== 'text') return describeClipContent(content)
+  const params = parseTextClipParams(content.params)
+  return params === null ? '（文字が読めません）' : params.text
+}
+
 // --- 検証結果の表示整形 ---
 
 const SEVERITY_LABELS: Readonly<Record<TimelineIssueSeverity, string>> = {

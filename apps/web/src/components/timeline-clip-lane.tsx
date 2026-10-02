@@ -14,7 +14,7 @@ import {
   type ClipDragOutcome,
   type ClipDragStart,
 } from '@/lib/timeline-drag'
-import { describeClipContent, formatTimeSpan, timeSpanToRect } from '@/lib/timeline-display'
+import { clipChipLabel, describeClipContent, formatTimeSpan, timeSpanToRect } from '@/lib/timeline-display'
 import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX, type MenuPoint } from '@/components/workbench/use-context-menu'
 
 /**
@@ -257,7 +257,7 @@ export const TimelineClipLane = ({
               style={{ width: grabPx }}
             />
             <span className="pointer-events-none block cursor-grab truncate px-1 leading-6">
-              {describeClipContent(clip.content)}
+              {clipChipLabel(clip.content)}
             </span>
           </div>
         )
