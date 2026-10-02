@@ -112,7 +112,11 @@ export const buildFfmpegArgs = (
     '-i',
     `color=c=black:s=${settings.width}x${settings.height}:r=${doc.fps}:d=${duration}`,
   ]
-  const shotInputs = doc.video1.flatMap((shot) => ['-i', shot.mediaUrl])
+  // 絵（Take が無い Shot の絵コンテの画像）は 1 コマしか無い。繰り返さないと 1 コマ出て後は黒になる。
+  // 尺は下の trim が Shot の尺で切る（Remotion の合成の `<Img>` と同じ見え方）。
+  const shotInputs = doc.video1.flatMap((shot) =>
+    shot.kind === 'image' ? ['-loop', '1', '-i', shot.mediaUrl] : ['-i', shot.mediaUrl],
+  )
   const audioInputs = doc.audio.flatMap((track) => ['-i', track.mediaUrl])
 
   const video = videoFilters(doc, settings.width, settings.height)

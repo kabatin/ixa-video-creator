@@ -50,6 +50,8 @@ export type ShotPlan = {
   readonly zIndex: number
   /** 再生速度（ADR-0026）。尺に合わせる Shot だけ 1 以外。 */
   readonly playbackRate: number
+  /** 映すもの。`image` は Take が無い Shot の絵コンテの画像（止めて映す。速度・切り出し位置は効かない）。 */
+  readonly kind: 'video' | 'image'
 }
 
 /** dip_to_black / dip_to_white で挟む単色。 */
@@ -139,6 +141,8 @@ const buildShots = (doc: TimelineDocument): readonly ShotPlan[] =>
       fadeOutFrames,
       zIndex: shotZIndex(index, doc.video1.length),
       playbackRate: shot.playbackRate ?? 1,
+      // 種類が無い文書（これまでの書き出しの記録）は動画。
+      kind: shot.kind ?? 'video',
     }
   })
 

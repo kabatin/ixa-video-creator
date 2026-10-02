@@ -8,7 +8,9 @@ import {
 } from '../routes/renders.js'
 import { timelineRoutes } from '../routes/timeline.js'
 import { aProject } from './fixtures.js'
+import { aShot } from '@ixa/generation/testing'
 import { aShotWithTake, renderDeps, type RenderFixtureDeps } from './timeline-deps.js'
+import { aMediaAsset } from './in-memory-timeline-repositories.js'
 
 type Ok<T> = { success: true; data: T }
 type ErrorBody = { success: false; error: string; fields?: Record<string, string[]> }
@@ -67,6 +69,29 @@ describe('POST /projects/:projectId/render', () => {
     expect(snapshot?.video1[0]?.shotId).toBe(withTake.shot.id)
     expect(snapshot?.video1[0]?.durationSec).toBe(4)
     expect(snapshot?.fps).toBe(project.fps)
+  })
+
+  /** プレビューと同じく、書き出しにも絵コンテの画像を入れる（制作者 2026-10-02 の選択「プレビューも書き出しも絵を出す」）。 */
+  it('採用 Take が無く絵コンテの画像がある Shot は、書き出しにも絵を入れる', async () => {
+    const project = aProject()
+    const withTake = aShotWithTake(project, { startSec: 0, durationSec: 4 })
+    const withFrame = aShot(project.id, { startSec: 4, durationSec: 4 })
+    const frame = aMediaAsset({ kind: 'image', storageKey: 'media/ws/frame/original.png', mimeType: 'image/png' })
+    const deps = renderDeps({
+      project,
+      shots: [withTake.shot, withFrame],
+      takes: [withTake.take],
+      mediaAssets: [withTake.asset, frame],
+      startFrames: [{ shotId: withFrame.id, mediaAssetId: frame.id }],
+    })
+
+    expect((await postRender(deps, project)).status).toBe(202)
+
+    const snapshot = deps.renderJobs.snapshot()[0]?.timelineSnapshot
+    expect(snapshot?.video1.map((entry) => [entry.shotId, entry.kind ?? 'video'])).toEqual([
+      [withTake.shot.id, 'video'],
+      [withFrame.id, 'image'],
+    ])
   })
 
   it('投入後に Shot を変更しても、保存済みスナップショットは変わらない', async () => {

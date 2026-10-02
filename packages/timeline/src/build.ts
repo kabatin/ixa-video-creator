@@ -38,6 +38,11 @@ export type TimelineSource = {
    */
   readonly resolveShotMediaDurationSec?: (shot: Shot) => number | null
   /**
+   * 採用 Take が無い Shot の絵コンテの画像（最初のフレーム）の URL。無ければ undefined。
+   * **Take があれば使わない**（Take が勝つ）。省略すれば絵は出さない（A/B 比較など、Take だけを映す口）。
+   */
+  readonly resolveShotStill?: (shot: Shot) => string | undefined
+  /**
    * クリップのメディアを URL と種別に解決する。解決できなければ undefined を返してよい。
    * レンダラは ID を URL に解決できないため、ここで解決しておく（video1 と同じ扱い）。
    */
@@ -110,13 +115,28 @@ export const timelineDurationSec = (source: TimelineSource): Seconds => {
  * VIDEO1 トラック。**Shot 列の投影であり独立実体を持たない**（ADR-0002）。
  *
  * - `startSec` 昇順に並べる
- * - 採用 Take が無い Shot は含めない（未生成の Shot が黒画面として出ないようにする）
- * - `inSec` は `shot.sourceInSec`（生成尺から編集尺を切り出す位置。ADR-0011）
+ * - 採用 Take が無い Shot は、絵コンテの画像があればそれを Shot の尺だけ映す（`kind: 'image'`）。
+ *   絵も無ければ含めない（未生成の Shot が黒画面として出ないようにする）
+ * - `inSec` は `shot.sourceInSec`（生成尺から編集尺を切り出す位置。ADR-0011）。絵は 0
  */
 const buildVideo1 = (source: TimelineSource): TimelineDocument['video1'] =>
-  sortShotsByStart(source.shots).flatMap((shot) => {
+  sortShotsByStart(source.shots).flatMap((shot): TimelineDocument['video1'] => {
     const mediaUrl = source.resolveShotMedia(shot)
-    if (mediaUrl === undefined) return []
+    if (mediaUrl === undefined) {
+      const still = source.resolveShotStill?.(shot)
+      if (still === undefined) return []
+      // 止めた絵なので、速度（尺に合わせる）も切り出し位置も効かない。
+      return [
+        {
+          shotId: shot.id,
+          startSec: shot.startSec,
+          durationSec: shot.durationSec,
+          mediaUrl: still,
+          inSec: 0,
+          kind: 'image',
+        },
+      ]
+    }
     const playbackRate = shotPlaybackRate(shot, source.resolveShotMediaDurationSec?.(shot) ?? null)
     return [
       {

@@ -117,6 +117,11 @@ export const TimelineDocument = z.object({
        * 省略可能にして version は 1 のまま（過去の書き出し記録もそのまま読める）。
        */
       playbackRate: z.number().positive().optional(),
+      /**
+       * 映すものの種類。**無ければ video**（採用 Take）。`image` は Take が無い Shot の絵コンテの画像（最初のフレーム）で、
+       * Shot の尺だけ止めて映す（制作者 2026-10-02。プレビューにも書き出しにも出す）。省略可能にして version は 1 のまま。
+       */
+      kind: z.enum(['video', 'image']).optional(),
     }),
   ),
   transitions: z.array(Transition),

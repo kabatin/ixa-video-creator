@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import { OffthreadVideo } from 'remotion'
+import { Img, OffthreadVideo } from 'remotion'
 import { describe, expect, it, vi } from 'vitest'
 import { PreviewShotVideo, ShotVideo, copyFrameTo } from '../compositions/shot-video.js'
 
@@ -8,7 +8,7 @@ import { PreviewShotVideo, ShotVideo, copyFrameTo } from '../compositions/shot-v
  * 直近に描いたコマを写した canvas を敷く（Safari が切り替わりの瞬間に動画を描かず、黒が見えたため）。
  */
 const box = { position: 'absolute' as const, left: 0, top: 0, width: 1920, height: 1080 }
-const shot = { mediaUrl: 'https://media.test/S1.mp4', startFrom: 12, playbackRate: 0.8 }
+const shot = { mediaUrl: 'https://media.test/S1.mp4', startFrom: 12, playbackRate: 0.8, kind: 'video' as const }
 
 type Element = ReactElement<Record<string, unknown>>
 const call = (element: Element): Element =>
@@ -34,6 +34,21 @@ describe('ShotVideo', () => {
 
     expect(element.type).toBe(PreviewShotVideo)
     expect(element.props).toEqual({ shot, box })
+  })
+})
+
+/**
+ * Take が無い Shot の絵コンテの画像（制作者 2026-10-02「画像しかない場合、プレビューでは画像が出るんじゃなかったっけ？」）。
+ * 書き出しもプレビューも同じ `<Img>`（読み込みを待ってからコマを出すので、書き出しで空のコマにならない）。
+ */
+describe('ShotVideo の絵', () => {
+  const still = { mediaUrl: 'https://media.test/S2.png', startFrom: 0, playbackRate: 1, kind: 'image' as const }
+
+  it.each([true, false])('書き出し=%s でも、絵を同じ枠に収めて出す', (rendering) => {
+    const element = ShotVideo({ shot: still, box, rendering }) as Element
+
+    expect(element.type).toBe(Img)
+    expect(element.props).toMatchObject({ src: still.mediaUrl, style: { ...box, objectFit: 'contain' } })
   })
 })
 

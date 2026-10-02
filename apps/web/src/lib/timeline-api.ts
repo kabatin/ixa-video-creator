@@ -80,7 +80,7 @@ export type TimelineApi = {
   /**
    * プレビューとレンダリングの共通入力。
    * **画面ではこれを「サーバが実際に組み立てられた結果」として使う。**
-   * 採用 Take のメディアを解決できなかった Shot は `video1` に載らない。
+   * 採用 Take のメディアを解決できなかった Shot は、絵コンテの画像があればそれが `kind: 'image'` で載り、無ければ載らない。
    */
   getTimelineDocument: (projectId: ProjectId) => Promise<WireTimelineDocument>
   /** レンダリング前の検査と同じ結果。画面で判定し直さない。 */

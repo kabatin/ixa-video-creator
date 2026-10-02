@@ -90,11 +90,14 @@ export const loadTimelineMaterials = async (projectId: ProjectId): Promise<Timel
   return { transitions, clips, document, issues, beatSource, beatAlignment }
 }
 
-/** 採用 Take を解決できた Shot。サーバの組み立て結果が唯一の正。 */
+/**
+ * 採用 Take を解決できた Shot。サーバの組み立て結果が唯一の正。
+ * 絵コンテの画像を映している Shot（`kind: 'image'`。制作者 2026-10-02）は Take がまだ無いので入れない。
+ */
 export const renderedShotIdsOf = (materials: TimelineMaterials): readonly ShotId[] | null =>
   materials.document.value === null
     ? null
-    : materials.document.value.video1.map((entry) => entry.shotId)
+    : materials.document.value.video1.filter((entry) => entry.kind !== 'image').map((entry) => entry.shotId)
 
 /** 読めなかった部分の理由。**黙って色なし・指摘なしに畳まない**（L-015）。 */
 export const timelineLoadErrors = (materials: TimelineMaterials): readonly string[] =>

@@ -1,4 +1,4 @@
-import type { MediaAsset, Project, Shot, Take, TimelineClip } from '@ixa/domain'
+import type { MediaAsset, MediaAssetId, Project, Shot, ShotId, Take, TimelineClip } from '@ixa/domain'
 import { createMemoryStorage } from '@ixa/storage'
 import type { RenderQueue, RenderRoutesDeps } from '../routes/renders.js'
 import type { TimelineRoutesDeps } from '../routes/timeline.js'
@@ -6,6 +6,7 @@ import {
   aShot,
   aTake,
   createInMemoryMediaAssetRepository,
+  createInMemoryShotReferenceRepository,
   createInMemoryShotRepository,
   createInMemoryTakeRepository,
 } from '@ixa/generation/testing'
@@ -31,6 +32,17 @@ export type TimelineFixture = {
   readonly mediaAssets?: readonly MediaAsset[]
   readonly clips?: readonly TimelineClip[]
   readonly transitions?: readonly import('@ixa/domain').Transition[]
+  /** 絵コンテの画像（最初のフレーム）。Take が無い Shot はこれを映す。 */
+  readonly startFrames?: readonly { readonly shotId: ShotId; readonly mediaAssetId: MediaAssetId }[]
+}
+
+/** 最初のフレームを付けた参照の置き場。in-memory の create は呼んだ時点で積まれる。 */
+const startFrameReferences = (frames: TimelineFixture['startFrames']) => {
+  const references = createInMemoryShotReferenceRepository()
+  for (const frame of frames ?? []) {
+    void references.create({ ...frame, role: 'start_frame', weight: 1, order: 0, sourceKind: 'manual' })
+  }
+  return references
 }
 
 export const timelineDeps = (fixture: TimelineFixture): TimelineRoutesDeps => ({
@@ -41,6 +53,7 @@ export const timelineDeps = (fixture: TimelineFixture): TimelineRoutesDeps => ({
   timelineClips: createInMemoryTimelineClipRepository(fixture.clips ?? []),
   musicTracks: createInMemoryMusicTrackRepository(),
   mediaAssets: createInMemoryMediaAssetRepository(fixture.mediaAssets ?? []),
+  shotReferences: startFrameReferences(fixture.startFrames),
   storage: createMemoryStorage(),
 })
 

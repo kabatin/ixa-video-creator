@@ -18,6 +18,19 @@ const filterGraph = (args: readonly string[]): string => {
 }
 
 describe('buildFfmpegArgs', () => {
+  /**
+   * Take が無い Shot の絵コンテの画像（制作者 2026-10-02）。絵は 1 コマしか無いので、繰り返して Shot の尺だけ出す。
+   * 繰り返さないと 1 コマ出て後は黒になる。
+   */
+  it('絵の Shot は繰り返す入力にし、動画の Shot はそのまま', () => {
+    const still = { ...makeVideo1Shot(2, 4, 4), mediaUrl: 'https://media.test/S2.png', kind: 'image' as const }
+    const args = buildFfmpegArgs(makeDocument({ video1: [makeVideo1Shot(1, 0, 4), still] }), 'master_1080p', 'out.mp4')
+
+    const inputAt = (url: string): number => args.indexOf(url)
+    expect(args.slice(inputAt(still.mediaUrl) - 3, inputAt(still.mediaUrl) + 1)).toEqual(['-loop', '1', '-i', still.mediaUrl])
+    expect(args[inputAt('https://media.test/S1.mp4') - 2]).not.toBe('1')
+  })
+
   it('黒キャンバスをタイムライン全体の尺で作る', () => {
     const args = buildFfmpegArgs(makeDocument({ durationSec: 4 }), 'preview_720p', OUT)
     expect(args).toContain('color=c=black:s=1280x720:r=30:d=4.000000')

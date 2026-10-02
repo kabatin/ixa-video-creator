@@ -28,6 +28,17 @@ describe('TRANSITION_SUPPORT', () => {
 })
 
 describe('buildTimelinePlan — VIDEO1', () => {
+  /** Take が無い Shot の絵コンテの画像（制作者 2026-10-02）。種類が無い文書（これまでの記録）は動画。 */
+  it('映すものの種類を運ぶ（無ければ動画）', () => {
+    const document = makeDocument({
+      video1: [makeVideo1Shot(1, 0, 4), { ...makeVideo1Shot(2, 4, 4), mediaUrl: 'https://media.test/S2.png', kind: 'image' }],
+    })
+
+    const plan = buildTimelinePlan(document, document.resolution)
+
+    expect(plan.shots.map((shot) => shot.kind)).toEqual(['video', 'image'])
+  })
+
   it('Shot を startSec から配置し、inSec を素材のシーク位置にする', () => {
     const doc = makeDocument({ video1: [makeVideo1Shot(1, 1.5, 2, 0.5)], durationSec: 4 })
     const [shot] = buildTimelinePlan(doc, CANVAS).shots

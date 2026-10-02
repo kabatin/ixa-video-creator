@@ -1,6 +1,6 @@
 import type React from 'react'
 import { useCallback, useRef } from 'react'
-import { OffthreadVideo, type OnVideoFrame } from 'remotion'
+import { Img, OffthreadVideo, type OnVideoFrame } from 'remotion'
 import type { ShotPlan } from '../plan.js'
 
 /**
@@ -18,7 +18,7 @@ import type { ShotPlan } from '../plan.js'
  * 別オリジンの動画を写した canvas は読み出せなくなるが、表示には差し支えない。
  */
 export type ShotVideoProps = {
-  readonly shot: Pick<ShotPlan, 'mediaUrl' | 'startFrom' | 'playbackRate'>
+  readonly shot: Pick<ShotPlan, 'mediaUrl' | 'startFrom' | 'playbackRate' | 'kind'>
   /** 描く枠（位置と大きさ）。contain で収める。 */
   readonly box: React.CSSProperties
   /** 書き出し中か（`useRemotionEnvironment().isRendering`）。 */
@@ -111,6 +111,13 @@ export const PreviewShotVideo = ({ shot, box }: Omit<ShotVideoProps, 'rendering'
   )
 }
 
-/** 自身はフックを持たないので、テストから素の関数として呼べる。 */
-export const ShotVideo = ({ shot, box, rendering }: ShotVideoProps) =>
-  rendering ? <Body shot={shot} box={box} /> : <PreviewShotVideo shot={shot} box={box} />
+/**
+ * 自身はフックを持たないので、テストから素の関数として呼べる。
+ *
+ * 絵（Take が無い Shot の絵コンテの画像。制作者 2026-10-02）は書き出しもプレビューも `<Img>` だけ。
+ * `<Img>` は読み込みを待ってからコマを出すので、書き出しで空のコマにならない。止まった絵なので下敷きも要らない。
+ */
+export const ShotVideo = ({ shot, box, rendering }: ShotVideoProps) => {
+  if (shot.kind === 'image') return <Img src={shot.mediaUrl} style={{ ...box, objectFit: 'contain' }} />
+  return rendering ? <Body shot={shot} box={box} /> : <PreviewShotVideo shot={shot} box={box} />
+}

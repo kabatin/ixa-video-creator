@@ -72,6 +72,30 @@ describe('StartFrameField', () => {
 })
 
 /**
+ * 付け外ししたら知らせる（制作者 2026-10-02。Take が無い Shot はプレビューに絵を映すので、サムネとプレビューを読み直させる）。
+ * 読み込んだだけでは知らせない（開くたびに全部読み直さない）。
+ */
+describe('StartFrameField の付け外しを知らせる', () => {
+  it('付けたら・外したら onSaved を呼び、開いただけでは呼ばない', async () => {
+    const fake = api('asset-old')
+    const onSaved = vi.fn()
+    render(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} onSaved={onSaved} />)
+    await screen.findByAltText('最初のフレーム')
+    expect(onSaved).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: '外す' }))
+    await waitFor(() => {
+      expect(onSaved).toHaveBeenCalledTimes(1)
+    })
+
+    await userEvent.click(await screen.findByRole('button', { name: '画像を付ける' }))
+    await waitFor(() => {
+      expect(onSaved).toHaveBeenCalledTimes(2)
+    })
+  })
+})
+
+/**
  * 絵コンテの画像を AI で作る（ADR-0029）。押すと作り始め、できたら最初のフレームが差し替わる
  * （worker が出来事で知らせ、`version` が変わって読み直す）。作っている間と失敗は直近のジョブで言う。
  */

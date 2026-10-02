@@ -164,6 +164,8 @@ export const ShotInspector = ({
               workspaceId={workbench.project.workspaceId}
               disabled={generating}
               onChange={setHasStartFrame}
+              // 付け外ししたら、サムネとプレビュー（Take が無い Shot は絵を映す）を読み直す。ドロップで付けたときと同じ。
+              onSaved={workbench.refresh}
               // 絵ができたとき（出来事で posterEpoch が進む）にも読み直す。どちらも増えるだけなので和で足りる。
               version={workbench.serverEpoch + workbench.posterEpoch}
             />

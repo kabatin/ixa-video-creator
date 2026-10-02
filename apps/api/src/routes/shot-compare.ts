@@ -182,6 +182,8 @@ const compareSource = (
   resolveShotMedia: () => media?.url,
   // A と B は長さが違いうるので、速度は Take ごとに決める。
   resolveShotMediaDurationSec: () => media?.durationSec ?? null,
+  // 比べるのは Take だけ。絵コンテの画像は映さない。
+  resolveShotStill: () => undefined,
 })
 
 /** A の Take として受け付けられるか。別の Shot の Take は「この Shot の Take」ではない。 */

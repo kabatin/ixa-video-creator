@@ -24,6 +24,46 @@ describe('buildTimelineDocument', () => {
     expect(document.video1.map((entry) => entry.shotId)).toEqual([shotId(1), shotId(3)])
   })
 
+  /**
+   * Take が無く絵コンテの画像（最初のフレーム）がある Shot は、その絵を Shot の尺だけ映す
+   * （制作者 2026-10-02「画像しかない場合、プレビューでは画像が出るんじゃなかったっけ？」。書き出しにも入れる）。
+   */
+  it('採用 Take が無く絵がある Shot は、絵を VIDEO1 に載せる（速度・切り出し位置は持たない）', () => {
+    const shots = [makeShot(1, 0, 4), makeShot(2, 4, 4, { sourceInSec: 0.3, timing: 'fit' }), makeShot(3, 8, 4)]
+    const document = buildTimelineDocument(
+      makeSource({
+        shots,
+        resolveShotMedia: (shot) => (shot.id === shotId(2) ? undefined : `https://media.test/${shot.code}.mp4`),
+        resolveShotMediaDurationSec: () => 3,
+        resolveShotStill: (shot) => `https://media.test/${shot.code}.png`,
+      }),
+    )
+
+    expect(document.video1.map((entry) => entry.shotId)).toEqual([shotId(1), shotId(2), shotId(3)])
+    expect(document.video1[1]).toEqual({
+      shotId: shotId(2),
+      startSec: 4,
+      durationSec: 4,
+      mediaUrl: 'https://media.test/S2.png',
+      inSec: 0,
+      kind: 'image',
+    })
+    // 動画の Shot は今までと同じ形（kind を書かない）。
+    expect(document.video1[0]).not.toHaveProperty('kind')
+  })
+
+  it('採用 Take があれば、絵があっても Take を映す', () => {
+    const document = buildTimelineDocument(
+      makeSource({
+        shots: [makeShot(1, 0, 4)],
+        resolveShotStill: (shot) => `https://media.test/${shot.code}.png`,
+      }),
+    )
+
+    expect(document.video1[0]?.mediaUrl).toBe('https://media.test/S1.mp4')
+    expect(document.video1[0]).not.toHaveProperty('kind')
+  })
+
   it('sourceInSec が inSec に入る（ADR-0011 のトリム位置）', () => {
     const shots = [makeShot(1, 0, 3.75, { sourceInSec: 0.15 })]
     const document = buildTimelineDocument(makeSource({ shots }))

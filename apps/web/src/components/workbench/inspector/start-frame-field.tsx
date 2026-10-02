@@ -37,6 +37,11 @@ export type StartFrameFieldProps = {
   readonly onChange?: (hasStartFrame: boolean) => void
   /** 変わったら読み直す（ドロップで付けたとき・絵ができたときに追いつく）。 */
   readonly version?: number
+  /**
+   * 付けた・外したあと（読み込んだだけでは呼ばない）。サムネとプレビューを読み直させる
+   * （Take が無い Shot はプレビューに絵コンテの画像を映す。制作者 2026-10-02）。
+   */
+  readonly onSaved?: () => void
   readonly api?: ShotStartFrameApi
 }
 
@@ -46,6 +51,7 @@ export const StartFrameField = ({
   disabled = false,
   onChange,
   version = 0,
+  onSaved,
   api,
 }: StartFrameFieldProps) => {
   const client = useMemo<ShotStartFrameApi>(() => api ?? createApiClient(), [api])
@@ -80,6 +86,7 @@ export const StartFrameField = ({
     setError(null)
     const saved = await client.setStartFrame(shot.id, mediaAssetId)
     setState({ kind: 'ready', mediaAssetId: saved.mediaAssetId, job })
+    onSaved?.()
   }
 
   const detach = async (): Promise<void> => {
@@ -88,6 +95,7 @@ export const StartFrameField = ({
     try {
       await client.clearStartFrame(shot.id)
       setState({ kind: 'ready', mediaAssetId: null, job })
+      onSaved?.()
     } catch (cause) {
       setError(`外せませんでした: ${describeForPerson(cause)}`)
     } finally {

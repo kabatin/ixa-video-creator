@@ -52,6 +52,34 @@ describe('GET /projects/:projectId/timeline', () => {
     expect(body.data.video1[0]?.mediaUrl).toContain(withTake.asset.storageKey)
   })
 
+  /**
+   * Take が無く絵コンテの画像がある Shot は、その絵を映す（制作者 2026-10-02「画像しかない場合、プレビューでは画像が出るんじゃなかったっけ？」）。
+   * 絵も無ければ今までどおり載せない。
+   */
+  it('採用 Take が無く絵コンテの画像がある Shot は、絵を VIDEO1 に載せる', async () => {
+    const project = aProject()
+    const withTake = aShotWithTake(project, { code: 'shot_001', startSec: 0, durationSec: 4 })
+    const withFrame = aShot(project.id, { code: 'shot_002', startSec: 4, durationSec: 4 })
+    const bare = aShot(project.id, { code: 'shot_003', startSec: 8, durationSec: 4 })
+    const frame = aMediaAsset({ kind: 'image', storageKey: 'media/ws/frame/original.png', mimeType: 'image/png' })
+
+    const deps = timelineDeps({
+      project,
+      shots: [withTake.shot, withFrame, bare],
+      takes: [withTake.take],
+      mediaAssets: [withTake.asset, frame],
+      startFrames: [{ shotId: withFrame.id, mediaAssetId: frame.id }],
+    })
+
+    const { body } = await getTimeline(deps, project)
+
+    expect(body.data.video1.map((entry) => [entry.shotId, entry.kind ?? 'video'])).toEqual([
+      [withTake.shot.id, 'video'],
+      [withFrame.id, 'image'],
+    ])
+    expect(body.data.video1[1]?.mediaUrl).toBe(`memory://${frame.storageKey}?op=get&expires=3600`)
+  })
+
   it('メディア URL は署名付き URL を都度発行する（DB には保存しない）', async () => {
     const project = aProject()
     const withTake = aShotWithTake(project)

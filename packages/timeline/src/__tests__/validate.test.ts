@@ -181,6 +181,27 @@ describe('validateTimeline / warning', () => {
     expect(issues[0]?.shotId).toBe(shotId(2))
   })
 
+  it('採用 Take が無くても絵があれば、warning のまま「絵を映す」と言う（黒になるとは言わない）', () => {
+    const shots = [makeShot(1, 0, 4), makeShot(2, 4, 4)]
+    const issues = find(
+      validateTimeline(
+        makeSource({
+          shots,
+          resolveShotMedia: () => undefined,
+          resolveShotStill: (shot) => (shot.id === shotId(1) ? 'https://media.test/S1.png' : undefined),
+        }),
+      ),
+      TIMELINE_ISSUE_CODES.shotMissingTake,
+    )
+
+    expect(issues.map((issue) => [issue.shotId, issue.severity])).toEqual([
+      [shotId(1), 'warning'],
+      [shotId(2), 'warning'],
+    ])
+    expect(issues[0]?.message).toMatch(/絵コンテの画像を映す/)
+    expect(issues[1]?.message).toMatch(/VIDEO1 に出ない/)
+  })
+
   it('タイムラインの尺をはみ出したクリップは warning', () => {
     const shots = [makeShot(1, 0, 4)]
     const clips = [makeClip(21, 'TEXT', 0, 2), makeClip(22, 'VFX', 3, 5)]

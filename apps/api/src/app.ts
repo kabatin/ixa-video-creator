@@ -314,6 +314,7 @@ export const createApp = (deps: AppDeps) => {
     timelineClips: deps.timelineClips,
     musicTracks: deps.musicTracks,
     mediaAssets,
+    shotReferences: deps.shotReferences,
     storage,
   }
 

@@ -144,17 +144,23 @@ const checkEdgeGaps = (source: TimelineSource, sorted: readonly Shot[]): Timelin
   return issues
 }
 
-/** 採用 Take が無い Shot（warning）。VIDEO1 から除外されるので映像が欠ける。 */
+/**
+ * 採用 Take が無い Shot（warning）。絵コンテの画像があれば絵を止めて映し、無ければ VIDEO1 から除外されて映像が欠ける。
+ * どちらも Take はまだ無いので warning のまま。文だけ、何が映るかに合わせる。
+ */
 const checkMissingTakes = (
   shots: readonly Shot[],
-  resolveShotMedia: TimelineSource['resolveShotMedia'],
+  source: Pick<TimelineSource, 'resolveShotMedia' | 'resolveShotStill'>,
 ): TimelineIssue[] =>
   shots
-    .filter((shot) => resolveShotMedia(shot) === undefined)
+    .filter((shot) => source.resolveShotMedia(shot) === undefined)
     .map((shot) => ({
       severity: 'warning' as const,
       code: TIMELINE_ISSUE_CODES.shotMissingTake,
-      message: `Shot ${shot.code} に採用 Take が無いため VIDEO1 に出ない`,
+      message:
+        source.resolveShotStill?.(shot) === undefined
+          ? `Shot ${shot.code} に採用 Take が無いため VIDEO1 に出ない`
+          : `Shot ${shot.code} に採用 Take が無いため、絵コンテの画像を映す`,
       shotId: shot.id,
     }))
 
@@ -337,7 +343,7 @@ export const validateTimeline = (source: TimelineSource): TimelineIssue[] => {
     ...checkTransitions(sorted, source.transitions),
     ...checkEdgeGaps(source, sorted),
     ...checkGaps(sorted),
-    ...checkMissingTakes(sorted, source.resolveShotMedia),
+    ...checkMissingTakes(sorted, source),
     ...checkTakeShort(source, sorted),
     ...checkClips(source),
     ...checkTextClips(source),

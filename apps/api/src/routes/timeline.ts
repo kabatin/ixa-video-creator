@@ -35,6 +35,7 @@ import {
   type TimelineMusicTrack,
   type TimelineSource,
 } from '@ixa/timeline'
+import { manualStartFrameOf, type StartFrameReferences } from '@ixa/generation'
 import type { ObjectStorage } from '@ixa/storage'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
@@ -73,6 +74,8 @@ export type TimelineRoutesDeps = {
   timelineClips: TimelineClipRepository
   musicTracks: MusicTrackRepository
   mediaAssets: MediaAssetRepository
+  /** 絵コンテの画像（最初のフレーム）。Take が無い Shot はこれを映す（サムネと同じ引き方）。 */
+  shotReferences: Pick<StartFrameReferences, 'findByShot'>
   storage: ObjectStorage
 }
 
@@ -118,6 +121,23 @@ const resolveMediaAssets = async (
   ))
 }
 
+/**
+ * 採用 Take が無い Shot の絵コンテの画像（最初のフレーム）。無い Shot は載せない
+ * （制作者 2026-10-02「画像しかない場合、プレビューでは画像が出るんじゃなかったっけ？」。書き出しにも出す）。
+ */
+const resolveShotStills = async (
+  references: TimelineRoutesDeps['shotReferences'],
+  shots: readonly Shot[],
+  withTake: ReadonlyMap<ShotId, MediaAssetId>,
+): Promise<ReadonlyMap<ShotId, MediaAssetId>> => {
+  const entries = await Promise.all(
+    shots
+      .filter((shot) => !withTake.has(shot.id))
+      .map(async (shot) => [shot.id, await manualStartFrameOf(references, shot.id)] as const),
+  )
+  return new Map(entries.flatMap(([shotId, assetId]) => (assetId === null ? [] : [[shotId, assetId] as const])))
+}
+
 /** Shot の採用 Take から `mediaAssetId` を引く。未採用・Take 欠落は載せない。 */
 const resolveShotAssets = async (
   takes: TakeRepository,
@@ -161,8 +181,10 @@ export const loadTimelineSource = async (
   ])
 
   const shotAssetIds = await resolveShotAssets(deps.takes, shots)
+  const stillAssetIds = await resolveShotStills(deps.shotReferences, shots, shotAssetIds)
   const media = await resolveMediaAssets(deps, [
     ...shotAssetIds.values(),
+    ...stillAssetIds.values(),
     ...clipMediaAssetIds(clips),
     ...tracks.map((track) => track.mediaAssetId),
   ])
@@ -195,6 +217,12 @@ export const loadTimelineSource = async (
     resolveShotMediaDurationSec: (shot) => {
       const assetId = shotAssetIds.get(shot.id)
       return assetId === undefined ? null : (media.get(assetId)?.probedSec ?? null)
+    },
+    // 画像でない素材（動画を最初のフレームにした等）は絵として映さない。
+    resolveShotStill: (shot) => {
+      const assetId = stillAssetIds.get(shot.id)
+      const resolved = assetId === undefined ? undefined : media.get(assetId)
+      return resolved?.kind === 'image' ? resolved.url : undefined
     },
     resolveClipMedia: (mediaAssetId) => {
       const resolved = media.get(mediaAssetId)
