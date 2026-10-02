@@ -1,12 +1,14 @@
 'use client'
 
 import type { Shot } from '@ixa/domain'
+import { useMemo } from 'react'
 import {
   splitAtPlayhead,
   splitBlockerOf,
   unselectAdoptedTake,
 } from '@/components/workbench/shot-edit-actions'
 import { useContextMenuHost, type ContextMenuItem } from '@/components/workbench/ui/context-menu'
+import { useCancelGeneration } from '@/components/workbench/use-cancel-generation'
 import type { MenuPoint } from '@/components/workbench/use-context-menu'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { createApiClient } from '@/lib/api-client'
@@ -29,6 +31,7 @@ export const toMenuItems = <A extends string>(
           run: run[entry.action],
           ...(entry.shortcut === undefined ? {} : { shortcut: entry.shortcut }),
           ...(entry.confirm === undefined ? {} : { confirm: entry.confirm }),
+          ...(entry.keepLabel === undefined ? {} : { keepLabel: entry.keepLabel }),
         },
   )
 
@@ -42,21 +45,24 @@ export type ShotMenuCheck = { readonly checked: boolean; readonly toggle: () => 
 export const useShotMenu = () => {
   const workbench = useWorkbench()
   const host = useContextMenuHost()
+  const client = useMemo(() => createApiClient(), [])
+  const generation = useCancelGeneration(client)
 
   /** その Shot のメニューの行。再生位置は**作る瞬間に**描き直さずに読む（再生中にパネルを毎コマ描き直さない）。 */
   const itemsFor = (shot: Shot, check?: ShotMenuCheck): readonly ContextMenuItem[] => {
     const atSec = workbench.transportControls.getTransport().currentSec
-    const run: Record<ShotMenuAction, () => void> = {
+    const run: Record<ShotMenuAction, () => void | Promise<void>> = {
       'make-take': () => {
         workbench.selectShot(shot.id)
         workbench.openInspector('generate')
       },
+      'cancel-generation': () => generation.cancel(shot),
       'open-compare': () => {
         workbench.selectShot(shot.id)
         workbench.focusPanel('compare')
       },
       'draw-start-frame': () => {
-        createApiClient()
+        client
           .generateStartFrame(shot.id)
           .then(() => {
             workbench.notify(`${shot.code} の絵コンテの画像を作り始めました（「使う AI」の画像の AI で）。`)
@@ -92,5 +98,6 @@ export const useShotMenu = () => {
     host.open({ label: `Shot ${shot.code} の操作`, items: itemsFor(shot, check), at, origin })
   }
 
-  return { itemsFor, open }
+  /** カードのボタンから生成をやめる（右クリックと同じ確認）。置き場の外では null。 */
+  return { itemsFor, open, askCancelGeneration: generation.ask }
 }

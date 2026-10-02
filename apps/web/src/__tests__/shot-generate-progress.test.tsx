@@ -61,6 +61,7 @@ const fakeApi = (overrides: ApiOverrides = {}): ShotGenerateApi => ({
   getCostMeter: vi.fn(() => Promise.resolve(meter(0))),
   requestReview: vi.fn((takeId: TakeId) => Promise.resolve({ takeId, queued: true })),
   listModels: vi.fn(() => Promise.resolve([])),
+  cancelGenerations: vi.fn(),
   ...overrides,
 })
 

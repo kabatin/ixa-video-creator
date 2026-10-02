@@ -18,6 +18,8 @@ export type ContextMenuEntry<A extends string> =
       readonly disabledReason: string | null
       /** 取り消せない操作の確認の文。あれば押したあとに確認を挟む。 */
       readonly confirm?: string
+      /** 確認で「しない」側の言葉。既定は「やめる」。操作の名前に「やめる」が入るときに替える。 */
+      readonly keepLabel?: string
     }
   | { readonly kind: 'separator' }
 
@@ -28,6 +30,7 @@ const item = <A extends string>(
     readonly shortcut?: string
     readonly disabledReason?: string | null
     readonly confirm?: string
+    readonly keepLabel?: string
   } = {},
 ): ContextMenuEntry<A> => ({
   kind: 'item',
@@ -36,18 +39,31 @@ const item = <A extends string>(
   disabledReason: options.disabledReason ?? null,
   ...(options.shortcut === undefined ? {} : { shortcut: options.shortcut }),
   ...(options.confirm === undefined ? {} : { confirm: options.confirm }),
+  ...(options.keepLabel === undefined ? {} : { keepLabel: options.keepLabel }),
 })
 
 const SEPARATOR = { kind: 'separator' } as const
 
 export type ShotMenuAction =
   | 'make-take'
+  | 'cancel-generation'
   | 'open-compare'
   | 'draw-start-frame'
   | 'split'
   | 'unselect-take'
   | 'toggle-check'
   | 'delete'
+
+/**
+ * 生成をやめる（制作者 2026-10-01「動画生成をキャンセル出来るようにしたい」）。
+ * 右クリックのメニュー・生成中の行・ストーリーボードのカードが同じ名前と確認を使う。
+ */
+export const CANCEL_GENERATION_LABEL = '生成をやめる'
+export const CANCEL_GENERATION_CONFIRM =
+  'この Shot で動いている生成をやめます。生成先によっては、途中まで費用が掛かります。止めた後に届いた結果は Take になりません。'
+/** 確認の「しない」側。「やめる」だと「生成をやめる」と並んで逆の意味に読める。 */
+export const KEEP_GENERATING_LABEL = '続ける'
+export const NOT_GENERATING_REASON = '生成中ではありません'
 
 /**
  * Shot のメニュー（タイムライン・ストーリーボード・Shot 一覧）。**対象は右クリックした 1 つ**（チェックした複数とは混ぜない）。
@@ -60,6 +76,11 @@ export const shotMenuEntries = (input: {
   readonly checked?: boolean
 }): readonly ContextMenuEntry<ShotMenuAction>[] => [
   item('make-take', 'Take を作る…'),
+  item('cancel-generation', CANCEL_GENERATION_LABEL, {
+    disabledReason: input.shot.status === 'generating' ? null : NOT_GENERATING_REASON,
+    confirm: CANCEL_GENERATION_CONFIRM,
+    keepLabel: KEEP_GENERATING_LABEL,
+  }),
   item('open-compare', 'Take 比較で見る'),
   item('draw-start-frame', '絵コンテの画像を AI で作る'),
   SEPARATOR,

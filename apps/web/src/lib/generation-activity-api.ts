@@ -1,5 +1,6 @@
-import type { ProjectId } from '@ixa/domain'
+import type { ProjectId, Shot, ShotId } from '@ixa/domain'
 import { z } from 'zod'
+import { WireShot } from '@/lib/api-schemas'
 import type { Requester } from '@/lib/requester'
 
 /**
@@ -19,8 +20,20 @@ export const WireActiveGeneration = z.object({
 })
 export type WireActiveGeneration = z.infer<typeof WireActiveGeneration>
 
+const WireCancelledGenerations = z.object({
+  cancelledJobIds: z.array(z.string()),
+  shot: WireShot,
+})
+
 export type GenerationActivityApi = {
   listActiveGenerations: (projectId: ProjectId) => Promise<readonly WireActiveGeneration[]>
+  /**
+   * その Shot で動いている生成をすべてやめる（制作者 2026-10-01）。生成先に届かなくても取り消しは確定する。
+   * 決め直した Shot（Take が無ければ下書き）を返す。動いている生成が無ければ空で返る。
+   */
+  cancelGenerations: (
+    shotId: ShotId,
+  ) => Promise<{ readonly cancelledJobIds: readonly string[]; readonly shot: Shot }>
 }
 
 export const createGenerationActivityApi = (requester: Requester): GenerationActivityApi => ({
@@ -28,5 +41,11 @@ export const createGenerationActivityApi = (requester: Requester): GenerationAct
     requester.get(
       `/projects/${encodeURIComponent(projectId)}/generations/active`,
       z.array(WireActiveGeneration),
+    ),
+  cancelGenerations: (shotId) =>
+    requester.post(
+      `/shots/${encodeURIComponent(shotId)}/generations/cancel`,
+      {},
+      WireCancelledGenerations,
     ),
 })

@@ -60,11 +60,15 @@ export type TestProviderBehaviour = {
   readonly statuses?: readonly ProviderJobStatus[]
   /** submit が必ず失敗する場合のエラー。 */
   readonly submitError?: Error
+  /** cancel が必ず失敗する場合のエラー（生成先に届かない）。 */
+  readonly cancelError?: Error
 }
 
 export type TestVideoProvider = VideoProvider & {
   readonly submitted: () => readonly VideoGenerationRequest[]
   readonly pollCount: () => number
+  /** 止めてと頼まれた providerJobRef。頼まれた順。 */
+  readonly cancelled: () => readonly string[]
 }
 
 export const createTestVideoProvider = (
@@ -72,6 +76,7 @@ export const createTestVideoProvider = (
   behaviour: TestProviderBehaviour = {},
 ): TestVideoProvider => {
   const submitted: VideoGenerationRequest[] = []
+  const cancelled: string[] = []
   let polls = 0
 
   return {
@@ -79,6 +84,7 @@ export const createTestVideoProvider = (
     models,
     submitted: () => submitted,
     pollCount: () => polls,
+    cancelled: () => cancelled,
 
     submit: (request) => {
       if (behaviour.submitError) return Promise.reject(behaviour.submitError)
@@ -102,6 +108,9 @@ export const createTestVideoProvider = (
       return Promise.resolve(status)
     },
 
-    cancel: () => Promise.resolve(),
+    cancel: (handle) => {
+      cancelled.push(handle.ref)
+      return behaviour.cancelError ? Promise.reject(behaviour.cancelError) : Promise.resolve()
+    },
   }
 }

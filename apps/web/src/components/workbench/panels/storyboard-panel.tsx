@@ -30,6 +30,7 @@ export const StoryboardPanel = () => {
   const workbench = useWorkbench()
   // Shot の右クリック（長押し・Shift+F10）のメニュー。
   const shotMenuActions = useShotMenu()
+  const cancelGeneration = shotMenuActions.askCancelGeneration
   const shotMenu = useContextMenuTrigger<Shot>((shot, at, origin) => {
     shotMenuActions.open(shot, at, origin)
   })
@@ -135,6 +136,7 @@ export const StoryboardPanel = () => {
           workbench.openInspector('generate')
         }}
         activityOf={activityOf}
+        {...(cancelGeneration === null ? {} : { onCancelGeneration: cancelGeneration })}
         contextMenu={shotMenu}
         locationName={(shot) =>
           shot.locationId === null

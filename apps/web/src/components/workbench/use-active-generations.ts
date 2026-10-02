@@ -29,7 +29,7 @@ const groupByShot = (entries: readonly WireActiveGeneration[]): ActiveGeneration
  * （表示が「生成中」に戻るだけで、作業は止めない）。
  */
 export const useActiveGenerations = (
-  api: GenerationActivityApi,
+  api: Pick<GenerationActivityApi, 'listActiveGenerations'>,
   projectId: ProjectId,
   anyGenerating: boolean,
 ): ActiveGenerations => {

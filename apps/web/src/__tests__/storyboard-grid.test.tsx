@@ -161,5 +161,24 @@ describe('StoryboardGrid', () => {
     expect(screen.getByText('作成中 2:31 / 約 4 分')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /Take を作る/ })).toHaveLength(1)
   })
-})
 
+  /** 制作者 2026-10-01「動画生成をキャンセル出来るようにしたい、もし出来るならUIが分かりづらい」。 */
+  it('生成中の Shot にだけ「生成をやめる」を出し、押すとその Shot で知らせる', () => {
+    const cards = [aWorkbenchShot(1, { status: 'generating' }), aWorkbenchShot(2, { status: 'draft' })]
+    const onCancelGeneration = vi.fn()
+    render(
+      <StoryboardGrid
+        shots={cards}
+        posters={new Map()}
+        selectedShotId={null}
+        onSelect={vi.fn()}
+        onCancelGeneration={onCancelGeneration}
+      />,
+    )
+
+    const buttons = screen.getAllByRole('button', { name: /生成をやめる/ })
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual(['CUT-01 の生成をやめる'])
+    buttons[0]?.click()
+    expect(onCancelGeneration).toHaveBeenCalledWith(cards[0])
+  })
+})

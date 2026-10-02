@@ -37,6 +37,7 @@ import { pollDelayMs, pollPolicyForJob, pollPolicyOf } from './poll-policy.js'
 import { checkLineage, lineageFailureOf, lineageFieldsOf, type LineageCheck } from './lineage.js'
 import { shotStatusAfterFailure } from './shot-status-after-failure.js'
 import { rebuildSpec } from './spec.js'
+import { cancelledSince, stopAtProvider } from './stop.js'
 
 /**
  * generation キューのジョブ処理（docs/ARCHITECTURE.md §11 / §20）。
@@ -211,6 +212,14 @@ const submit = async (
     })
   if (handle instanceof ProviderBusyError) return waitForProviderSlot(deps, ctx, handle)
 
+  // 送っている間に制作者がやめた。生成先にも止めてと頼み、作成中にしない（送った先は記録に残す）。
+  if (await cancelledSince(deps.generationJobs, job.id)) {
+    await deps.generationJobs.update(job.id, { providerJobRef: handle.ref })
+    await stopAtProvider(deps, handle, job.id)
+    deps.logger.info({ jobId: job.id, ref: handle.ref }, '送っている間に生成をやめたので、生成先にも止めてと頼みました')
+    return { state: 'skipped', reason: 'cancelled' }
+  }
+
   await deps.generationJobs.update(job.id, {
     status: 'running',
     providerJobRef: handle.ref,
@@ -266,6 +275,13 @@ const complete = async (
   status: Extract<ProviderJobStatus, { state: 'succeeded' }>,
 ): Promise<GenerationOutcome> => {
   const { job, shot, project, model, now } = ctx
+
+  // 作っている間に制作者がやめた。届いた結果は Take にしない（ジョブの行は取り消しのまま残る）。
+  if (await cancelledSince(deps.generationJobs, job.id)) {
+    deps.logger.info({ jobId: job.id }, '生成をやめた後に結果が届いたので、Take にしません')
+    return { state: 'skipped', reason: 'cancelled' }
+  }
+
   const { spec, specHash } = await rebuildSpec(deps.context, shot, project, model)
   const startedAt = job.startedAt ?? job.queuedAt
 
@@ -454,6 +470,9 @@ export const processGenerationJob = async (
      *
      * 実 Provider をつなぐまでは無料なので誰も気づけない。つなぐ前にここを直す。
      */
+    // 問い合わせの間に制作者がやめた。取り消しを失敗で上書きしない（Shot は API が決め直している）。
+    if (await cancelledDuringFailure(deps, job.id)) return { state: 'skipped', reason: 'cancelled' }
+
     const retried = await reschedulePollAfterTransient(deps, job, error, now)
     if (retried !== null) return retried
 
@@ -538,6 +557,22 @@ const releaseShotAfterFailure = async (
       { jobId: failedJobId, shotId: shot.id, err: error },
       'Shot を生成中から戻せませんでした。生成中のまま残っている可能性がある',
     )
+  }
+}
+
+/**
+ * 失敗を書く前に、制作者がやめていないか読み直す。**読めなければ false**（失敗を書く）。
+ * ここで投げると失敗の理由が誰にも届かなくなるので、読めなかったことを残して進む。
+ */
+const cancelledDuringFailure = async (
+  deps: GenerationProcessorDeps,
+  jobId: GenerationJobId,
+): Promise<boolean> => {
+  try {
+    return await cancelledSince(deps.generationJobs, jobId)
+  } catch (error) {
+    deps.logger.warn({ jobId, err: error }, '取り消されたかを読み直せませんでした。失敗として記録します')
+    return false
   }
 }
 

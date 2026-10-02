@@ -31,6 +31,7 @@ const api = (): ShotGenerateApi => ({
   getCostMeter: vi.fn(() => Promise.reject(new Error('unused'))),
   requestReview: vi.fn((takeId: TakeId) => Promise.resolve({ takeId, queued: true })),
   listModels: vi.fn(() => Promise.resolve([local])),
+  cancelGenerations: vi.fn(),
 })
 
 const renderSection = (hasStartFrame: boolean) => {

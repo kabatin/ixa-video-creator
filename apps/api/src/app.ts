@@ -20,6 +20,7 @@ import { registerErrorHandlers, validationHook } from './errors.js'
 import { environmentRoutes, type EnvironmentDeps } from './routes/environment.js'
 import { aiRoutes, type AiRoutesDeps } from './routes/ai.js'
 import { generationActivityRoutes, type GenerationActivityDeps } from './routes/generation-activity.js'
+import { generationCancelRoutes } from './routes/generation-cancel.js'
 import { modelRoutes } from './routes/models.js'
 import type { Logger } from './logger.js'
 import { registerOpenApiDocument } from './openapi.js'
@@ -218,6 +219,7 @@ export const createApp = (deps: AppDeps) => {
     logger,
   }
   app.route('/', shotRoutes(shotDeps))
+  app.route('/', generationCancelRoutes(shotDeps))
   // 一括変更だけが記録を作る。1 件ずつの変更は戻す対象にしない（横断 ROADMAP）。
   app.route('/', shotBulkRoutes({ ...shotDeps, editBatches: deps.editBatches }))
   app.route(

@@ -21,6 +21,8 @@ import { POLL_TIMEOUT_MS, startAsyncPolling } from '@/lib/poller'
 import { isGeneratingStatus } from '@/lib/shot-display'
 import { offerReviewAfterGeneration } from '@/lib/offer-review'
 import { useNow } from '@/components/workbench/use-active-generations'
+import { useCancelGeneration } from '@/components/workbench/use-cancel-generation'
+import { CANCEL_GENERATION_LABEL } from '@/lib/context-menus'
 import { describeActiveGeneration } from '@/lib/generation-progress'
 
 /**
@@ -41,7 +43,7 @@ import { describeActiveGeneration } from '@/lib/generation-progress'
 /** この画面が使う口だけ。**テストから差し替えるための注入口。** */
 export type ShotGenerateApi = Pick<
   ApiClient,
-  'generateTakes' | 'listTakes' | 'getCostMeter' | 'requestReview' | 'listModels'
+  'generateTakes' | 'listTakes' | 'getCostMeter' | 'requestReview' | 'listModels' | 'cancelGenerations'
 >
 
 /** 上限まで待って諦めるまでの分数。数字を書き写さない（lessons L-016）。 */
@@ -117,6 +119,7 @@ export const ShotGenerateSection = ({
   const [submissions, setSubmissions] = useState(0)
 
   const generating = isGeneratingStatus(shot.status)
+  const cancelGeneration = useCancelGeneration(client).ask
   // 前の Shot の見守りは「持っていない」として扱う。
   const watched = watch !== null && watch.shotId === shot.id ? watch : null
   const progress = useGenerateProgress(client, watched, generating)
@@ -228,6 +231,16 @@ export const ShotGenerateSection = ({
         <p role="status" className="text-xs text-text">
           {generatingLine(watched, progress, activity === null ? null : describeActiveGeneration(activity, now).long)}
         </p>
+      )}
+      {generating && cancelGeneration !== null && (
+        <Button
+          size="sm"
+          onClick={() => {
+            cancelGeneration(shot)
+          }}
+        >
+          {CANCEL_GENERATION_LABEL}
+        </Button>
       )}
       {result !== null && (
         <p className="text-xs text-muted">

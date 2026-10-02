@@ -31,12 +31,29 @@ describe('shotMenuEntries', () => {
 
     expect(items(entries).map((entry) => entry.label)).toEqual([
       'Take を作る…',
+      '生成をやめる',
       'Take 比較で見る',
       '絵コンテの画像を AI で作る',
       '再生位置で分割',
       '採用を外す',
       '削除…',
     ])
+  })
+
+  /** 制作者 2026-10-01「動画生成をキャンセル出来るようにしたい、もし出来るならUIが分かりづらい」。 */
+  it('生成中だけ「生成をやめる」を押せ、費用が掛かりうることを確認してから止める', () => {
+    const idle = shotMenuEntries({ shot: aWorkbenchShot(1, { status: 'draft' }), splitBlocker: null })
+    const generating = shotMenuEntries({
+      shot: aWorkbenchShot(1, { status: 'generating' }),
+      splitBlocker: null,
+    })
+
+    expect(byAction(idle, 'cancel-generation')?.disabledReason).toBe('生成中ではありません')
+    const cancel = byAction(generating, 'cancel-generation')
+    expect(cancel?.disabledReason).toBeNull()
+    expect(cancel?.confirm).toContain('費用')
+    // 確認の「閉じる」側が「やめる」だと、「生成をやめる」と並んで逆の意味に読める
+    expect(cancel?.keepLabel).toBe('続ける')
   })
 
   it('採用している Take が無ければ「採用を外す」は押せず、メニューバーと同じ理由を言う', () => {

@@ -23,3 +23,12 @@ export const settledShotStatus = ({ hasSelectedTake, hasTakes }: SettledShotCont
   if (hasSelectedTake) return 'approved'
   return hasTakes ? 'review' : 'blocked'
 }
+
+/**
+ * 制作者が生成をやめたあとの Shot の状態（制作者 2026-10-01「動画生成をキャンセル出来るようにしたい」）。
+ *
+ * Take があれば `settledShotStatus` と同じ。**Take が 1 本も無ければ `draft`**（生成する前に戻す）。
+ * やめたのは人の判断で失敗ではないので、`blocked`（要判断）にして痕跡を残す理由が無い。
+ */
+export const shotStatusAfterCancel = (ctx: SettledShotContext): ShotStatus =>
+  ctx.hasSelectedTake || ctx.hasTakes ? settledShotStatus(ctx) : 'draft'

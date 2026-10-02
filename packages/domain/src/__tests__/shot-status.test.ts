@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { settledShotStatus } from '../shot/status.js'
+import { settledShotStatus, shotStatusAfterCancel } from '../shot/status.js'
 
 /**
  * 生成や採用が落ち着いたあとの Shot の状態（ADR-0023）。
@@ -19,5 +19,17 @@ describe('settledShotStatus', () => {
 
   it('Take が 1 本も無ければ要判断（失敗の痕跡を残す）', () => {
     expect(settledShotStatus({ hasSelectedTake: false, hasTakes: false })).toBe('blocked')
+  })
+})
+
+/** 制作者 2026-10-01「動画生成をキャンセル出来るようにしたい」。やめたのは失敗ではない。 */
+describe('shotStatusAfterCancel', () => {
+  it('Take が 1 本も無ければ下書きに戻す（要判断にしない）', () => {
+    expect(shotStatusAfterCancel({ hasSelectedTake: false, hasTakes: false })).toBe('draft')
+  })
+
+  it('Take があれば、生成が落ち着いたときと同じ', () => {
+    expect(shotStatusAfterCancel({ hasSelectedTake: false, hasTakes: true })).toBe('review')
+    expect(shotStatusAfterCancel({ hasSelectedTake: true, hasTakes: true })).toBe('approved')
   })
 })

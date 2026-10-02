@@ -24,7 +24,7 @@ const entry = (shotId: string, status: 'queued' | 'running' = 'running'): WireAc
 
 const apiWith = (
   entries: readonly WireActiveGeneration[],
-): GenerationActivityApi & { calls: () => number } => {
+): Pick<GenerationActivityApi, 'listActiveGenerations'> & { calls: () => number } => {
   let count = 0
   return {
     listActiveGenerations: () => {

@@ -6,7 +6,13 @@ import type { DragEvent } from 'react'
 import type { AssetDropState } from '@/components/workbench/use-asset-drop'
 import { ShotPoster } from '@/components/shot-poster'
 import { formatSpan } from '@/lib/format-time'
-import { shotStatusDotClassName, shotStatusLabel, hasNoTakeYet } from '@/lib/shot-display'
+import {
+  shotStatusDotClassName,
+  shotStatusLabel,
+  hasNoTakeYet,
+  isGeneratingStatus,
+} from '@/lib/shot-display'
+import { CANCEL_GENERATION_LABEL } from '@/lib/context-menus'
 import { posterViewFor, type ShotPosterMap } from '@/lib/shot-posters'
 import {
   alignmentByShotId,
@@ -33,6 +39,8 @@ export type StoryboardGridProps = {
   readonly onMakeTake?: (shotId: ShotId) => void
   /** 生成中の Shot の様子（`作成中 2:31 / 約 4 分`）。分からなければ null（状態の点だけ）。 */
   readonly activityOf?: (shotId: ShotId) => string | null
+  /** 「生成をやめる」を押した（生成中の Shot だけに出す。確認は呼び出し側）。渡さなければ出さない。 */
+  readonly onCancelGeneration?: (shot: Shot) => void
   /** 右クリック・長押し・Shift+F10 でその Shot のメニューを開く口。 */
   readonly contextMenu?: (shot: Shot) => ContextMenuTriggerProps
   /** ロケーションの名前（素材の共有状態から引く）。無ければ出さない。 */
@@ -83,6 +91,7 @@ export const StoryboardGrid = ({
   onOpen,
   onMakeTake,
   activityOf,
+  onCancelGeneration,
   contextMenu,
   locationName,
   dropHandlers,
@@ -173,6 +182,18 @@ export const StoryboardGrid = ({
                 <p role="status" className="mt-1 truncate px-1 text-xs tabular-nums text-info">
                   {activityOf(shot.id)}
                 </p>
+              )}
+              {onCancelGeneration !== undefined && isGeneratingStatus(shot.status) && (
+                <button
+                  type="button"
+                  aria-label={`${shot.code} の${CANCEL_GENERATION_LABEL}`}
+                  onClick={() => {
+                    onCancelGeneration(shot)
+                  }}
+                  className="mt-1 w-full rounded border border-line px-2 py-0.5 text-xs text-muted hover:border-danger hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+                >
+                  {CANCEL_GENERATION_LABEL}
+                </button>
               )}
               {onMakeTake !== undefined && hasNoTakeYet(shot.status) && (
                 <button

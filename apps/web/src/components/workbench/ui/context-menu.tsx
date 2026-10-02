@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -28,6 +29,8 @@ export type ContextMenuItem =
       readonly disabledReason: string | null
       /** 取り消せない操作。確認の文を渡すと、押したあとに確認を挟む（`window.confirm` を使わない）。 */
       readonly confirm?: string
+      /** 確認で「しない」側の言葉。既定は「やめる」（`context-menus.ts` の同名の項目）。 */
+      readonly keepLabel?: string
       readonly run: () => void | Promise<void>
     }
   | { readonly kind: 'separator' }
@@ -42,7 +45,14 @@ export type ContextMenuRequest = {
   readonly origin: HTMLElement | null
 }
 
-type Host = { readonly open: (request: ContextMenuRequest) => void }
+type Host = {
+  readonly open: (request: ContextMenuRequest) => void
+  /**
+   * メニューを開かずに 1 つの操作を実行する（カードや欄のボタンから）。
+   * 確認・失敗の理由の出し方を右クリックのメニューと同じにする。
+   */
+  readonly perform: (item: Extract<ContextMenuItem, { kind: 'item' }>) => void
+}
 
 const ContextMenuContext = createContext<Host | null>(null)
 
@@ -236,7 +246,6 @@ export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) 
   const [pending, setPending] = useState<Enabled | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const host = useMemo<Host>(() => ({ open: setRequest }), [])
   const close = useMemo(
     () => () => {
       setRequest(null)
@@ -244,7 +253,8 @@ export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) 
     [],
   )
 
-  const run = async (item: Enabled): Promise<void> => {
+  /** 使うのは状態の setter だけなので、一度作れば足りる（`host` を描き直さない）。 */
+  const run = useCallback(async (item: Enabled): Promise<void> => {
     setBusy(true)
     setError(null)
     try {
@@ -257,12 +267,17 @@ export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) 
     } finally {
       setBusy(false)
     }
-  }
+  }, [])
 
-  const choose = (item: Enabled): void => {
-    if (item.confirm === undefined) void run(item)
-    else setPending(item)
-  }
+  const choose = useCallback(
+    (item: Enabled): void => {
+      if (item.confirm === undefined) void run(item)
+      else setPending(item)
+    },
+    [run],
+  )
+
+  const host = useMemo<Host>(() => ({ open: setRequest, perform: choose }), [choose])
 
   const dismiss = (): void => {
     setPending(null)
@@ -289,7 +304,7 @@ export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) 
         )}
         <div className="mt-4 flex justify-end gap-2">
           <Button size="sm" onClick={dismiss}>
-            {pending?.confirm === undefined ? '閉じる' : 'やめる'}
+            {pending?.confirm === undefined ? '閉じる' : (pending.keepLabel ?? 'やめる')}
           </Button>
           {pending?.confirm !== undefined && (
             <Button

@@ -61,7 +61,7 @@ describe('ShotInspector の Take を作る', () => {
 
     // 行の名前だけ（押せない理由は名前の下に添えてある）。
     const labels = screen.getAllByRole('menuitem').map((item) => item.firstChild?.firstChild?.textContent)
-    expect(labels).toEqual(['Take を作る…', 'Take 比較で見る', '絵コンテの画像を AI で作る', '再生位置で分割', '採用を外す', '削除…'])
+    expect(labels).toEqual(['Take を作る…', '生成をやめる', 'Take 比較で見る', '絵コンテの画像を AI で作る', '再生位置で分割', '採用を外す', '削除…'])
   })
 })
 
