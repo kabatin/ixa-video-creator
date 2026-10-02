@@ -11,6 +11,7 @@ import {
   type WorkbenchContextValue,
 } from '@/components/workbench/workbench-context'
 import { useActiveGenerations } from '@/components/workbench/use-active-generations'
+import { useProjectConcept } from '@/components/workbench/use-project-concept'
 import { isGeneratingStatus } from '@/lib/shot-display'
 import { useWorkbenchTransport } from '@/components/workbench/use-workbench-transport'
 import { WorkbenchTransportProvider } from '@/components/workbench/workbench-transport-provider'
@@ -101,6 +102,8 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
 
   const [serverEpoch, setServerEpoch] = useState(0)
   const lastServerShots = useRef(props.initialShots)
+  // 帯の ② の材料。`saved` は setState なので変わらない（値の作り直しを招かない）。
+  const { concept, saved: conceptSaved } = useProjectConcept(api, projectId, serverEpoch)
 
   /**
    * サーバから新しい一覧が届いた（`router.refresh()` のあと）。手元を差し替える。
@@ -318,6 +321,8 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
         props.focusPanel('viewer')
       },
       activeGenerations,
+      concept,
+      conceptSaved,
     }),
     [
       props,
@@ -343,6 +348,8 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       activeGenerations,
       inspected,
       notice,
+      concept,
+      conceptSaved,
     ],
   )
 

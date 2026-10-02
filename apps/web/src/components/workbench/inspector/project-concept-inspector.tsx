@@ -103,6 +103,8 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
               onSave={async (next) => {
                 await client.saveConcept(project.id, next)
                 setConcept({ kind: 'ready', content: next })
+                // 流れの帯（② 作品の方針）へ、読み直しを待たずに映す。
+                workbench.conceptSaved(next)
               }}
             />
           )}

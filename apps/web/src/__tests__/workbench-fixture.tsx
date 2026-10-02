@@ -94,6 +94,8 @@ export const workbenchValue = (
   inspectorTab: 'settings',
   inspectorRequest: 0,
   activeGenerations: new Map(),
+  concept: '',
+  conceptSaved: vi.fn(),
   openInspector: vi.fn(),
   inspected: null,
   notice: null,

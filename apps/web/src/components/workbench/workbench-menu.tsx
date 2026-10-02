@@ -1,5 +1,6 @@
 'use client'
 
+import { goToMasterTrack, goToProjectConcept } from '@/components/workbench/workbench-navigation'
 import type { DockviewApi } from 'dockview-react'
 import { useRouter } from 'next/navigation'
 import { MenuBar } from '@/components/workbench/menu-bar'
@@ -122,19 +123,10 @@ export const WorkbenchMenu = ({
     },
     'import-files': onImportFiles,
     'inspect-master-track': () => {
-      if (workbench.track === null) {
-        onNotice(
-          '楽曲がまだありません。音声ファイルを画面に落とすか、素材ツリーの「＋」から登録します。',
-        )
-        workbench.focusPanel('assets')
-        return
-      }
-      workbench.inspect({ kind: 'track', id: workbench.track.id })
-      workbench.openViewer()
+      goToMasterTrack(workbench, onNotice)
     },
     'inspect-project': () => {
-      workbench.inspect({ kind: 'project', id: workbench.projectId })
-      workbench.focusPanel('inspector')
+      goToProjectConcept(workbench)
     },
     // 一括の操作バーは Shot 一覧の下にある。チェックした行と同じ場所で決めさせる。
     'bulk-edit': () => {

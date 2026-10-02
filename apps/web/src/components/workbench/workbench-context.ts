@@ -128,6 +128,12 @@ export type WorkbenchContextValue = {
    * 生成中の Shot があるあいだだけ追う（`use-active-generations.ts`）。
    */
   readonly activeGenerations: ActiveGenerations
+  /**
+   * 作品の方針のコンセプト・あらすじ（流れの帯 ②）。**読めていなければ null**（空文字は「まだ書いていない」）。
+   */
+  readonly concept: string | null
+  /** 作品の方針で保存したら呼ぶ。読み直しを待たずに帯へ映す。 */
+  readonly conceptSaved: (content: string) => void
 }
 
 export type ShotPatch = UpdateShotBody

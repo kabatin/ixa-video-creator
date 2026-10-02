@@ -1,5 +1,6 @@
 'use client'
 
+import { WorkflowBar } from '@/components/workbench/workflow-bar'
 import type { Location, MusicTrack, Project, Sequence, Shot } from '@ixa/domain'
 import type { DockviewApi } from 'dockview-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -181,6 +182,8 @@ const WorkbenchShell = ({
           fileOpener.current?.()
         }}
       />
+      {/* 制作の流れ（制作者 2026-10-01）。次にやる所を目立たせ、押すとその作業の画面へ。 */}
+      <WorkflowBar />
       {notice !== null && (
         <p
           role="status"
