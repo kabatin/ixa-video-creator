@@ -67,8 +67,29 @@ describe('compileStartFramePrompt', () => {
     expect(prompt).not.toContain('subtle')
   })
 
-  it('最初の 1 コマであることを言う', () => {
-    expect(compileStartFramePrompt(input())).toMatch(/最初の 1 コマ/)
+  /**
+   * 動画の 1 フレーム目（制作者 2026-10-02「生成する画像は動画生成の 1 フレーム目の画像なので、プロンプトでそこを強く伝える必要がありそう」）。
+   * 説明は Shot の間に起きること（例「立ち上がったはるとが…歩き出す」）なので、絵がその途中や頂点を描いて、
+   * そこから動画を始めると動く先が無かった。**動きが始まる直前**を描かせる。
+   */
+  it('N 秒の動画の 1 フレーム目（開始画像）で、説明の動きが始まる直前を描く、と先に言う', () => {
+    const prompt = compileStartFramePrompt(input())
+    const head = prompt.slice(0, prompt.indexOf('暗いガレージ'))
+
+    expect(head).toMatch(/3\.75 秒の動画/)
+    expect(head).toMatch(/1 フレーム目/)
+    expect(head).toMatch(/開始画像/)
+    expect(head).toMatch(/始まる直前/)
+  })
+
+  it('映画の 1 コマとして描かせ、コマ割り・枠・下描き風・ブレを禁じる。「絵コンテ」とは言わない', () => {
+    const prompt = compileStartFramePrompt(input())
+
+    expect(prompt).toMatch(/映画の 1 コマ/)
+    expect(prompt).toMatch(/コマ割り/)
+    expect(prompt).toMatch(/下描き/)
+    expect(prompt).toMatch(/ブレ/)
+    expect(prompt).not.toContain('絵コンテ')
   })
 
   it('説明が空でも組み立てられる（画角とスタイルだけでも絵にはなる）', () => {
@@ -81,9 +102,10 @@ describe('compileStartFramePrompt', () => {
  * 絵の指示文に「避けること」として入れる（Codex は指示文をよく守る）。
  */
 describe('compileStartFramePrompt — 避けたいもの', () => {
-  it('書いてあれば「避けること」として入れる', () => {
+  it('書いてあれば「避けること」として末尾に入れる', () => {
     const prompt = compileStartFramePrompt(input({ project: { ...input().project, avoid: '文字、透かし、アニメ調' } }))
     expect(prompt).toContain('避けること: 文字、透かし、アニメ調')
+    expect(prompt.trimEnd().endsWith('避けること: 文字、透かし、アニメ調')).toBe(true)
   })
 
   it('空なら入れない', () => {

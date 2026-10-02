@@ -152,7 +152,7 @@ describe('processImageJob', () => {
 
     const request = provider.requests[0]
     expect(request?.prompt).toContain('暗いガレージ')
-    expect(request?.prompt).toMatch(/最初の 1 コマ/)
+    expect(request?.prompt).toMatch(/1 フレーム目（動画の開始画像）/)
     expect(request).toMatchObject({ aspectRatio: '16:9', resolution: { width: 1536, height: 1024 }, count: 1 })
   })
 
