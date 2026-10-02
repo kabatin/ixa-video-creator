@@ -215,6 +215,9 @@ export const ShotListPanel = () => {
           onDelete={() => {
             workbench.openDialog('delete-shots')
           }}
+          onRender={() => {
+            workbench.openDialog('render')
+          }}
           onClearSelection={() => {
             workbench.setChecked(clearSelection())
             bulk.clearOutcome()

@@ -35,10 +35,8 @@ export const WireRenderAccepted = z.object({
 export type WireRenderAccepted = z.infer<typeof WireRenderAccepted>
 
 /**
- * **`scope.type` は `full` のみ対応。**
- * range / shot は型としては受け付けられるが、サーバが 422 で拒否する
- * （`apps/api/src/routes/renders.ts` の `SUPPORTED_RENDER_SCOPE`）。
- * 出せないものを選ばせないため、画面からは常に全体を送る。
+ * 既定は全体。一部だけなら `range`（制作者 2026-10-02「選択した Shot だけを動画として出力」）。
+ * `shot` は型としては受け付けられるが、サーバが 422 で拒否する（範囲で指定する）。
  */
 export const FULL_SCOPE: RenderScope = Object.freeze({ type: 'full' })
 
@@ -91,7 +89,7 @@ export type RenderApi = {
    * 書き出しをキューへ積む。完了は待たない。
    * タイムラインに error があると受理されず、`rejected` が返る（例外にはしない）。
    */
-  startRender: (projectId: ProjectId, preset: RenderPreset) => Promise<StartRenderOutcome>
+  startRender: (projectId: ProjectId, preset: RenderPreset, scope?: RenderScope) => Promise<StartRenderOutcome>
   getRenderJob: (id: RenderJobId) => Promise<WireRenderJob>
   listRenderJobs: (projectId: ProjectId) => Promise<WireRenderJob[]>
 }
@@ -100,8 +98,8 @@ const projectPath = (projectId: ProjectId, suffix: string): string =>
   `/projects/${encodeURIComponent(projectId)}${suffix}`
 
 export const createRenderApi = (requester: Requester): RenderApi => ({
-  startRender: async (projectId, preset) => {
-    const body = CreateRenderBody.parse({ preset, scope: FULL_SCOPE })
+  startRender: async (projectId, preset, scope = FULL_SCOPE) => {
+    const body = CreateRenderBody.parse({ preset, scope })
     try {
       const accepted = await requester.post(
         projectPath(projectId, '/render'),

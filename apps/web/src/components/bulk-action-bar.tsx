@@ -91,6 +91,8 @@ export type BulkActionBarProps = {
   readonly onDelete: () => void
   /** 結合の確認を開く（ADR-0024）。まとめられない組み合わせなら、開いた先が理由を言う。 */
   readonly onMerge: () => void
+  /** 書き出しの画面を開く。チェックした Shot だけを書き出せる（制作者 2026-10-02）。 */
+  readonly onRender: () => void
   /** 絵コンテの画像をまとめて作る（ADR-0029）。既定は絵の無い Shot だけ。 */
   readonly onDrawStartFrames: (input: { readonly onlyMissing: boolean }) => void
 }
@@ -113,6 +115,7 @@ export const BulkActionBar = ({
   onClearSelection,
   onDelete,
   onMerge,
+  onRender,
   onDrawStartFrames,
 }: BulkActionBarProps) => {
   const idPrefix = useId()
@@ -171,6 +174,9 @@ export const BulkActionBar = ({
           </Button>
           <Button size="sm" tone="secondary" disabled={busy || selectedCount < 2} onClick={onMerge}>
             結合…
+          </Button>
+          <Button size="sm" tone="secondary" disabled={busy} onClick={onRender}>
+            書き出す…
           </Button>
           <Button size="sm" tone="danger" disabled={busy} onClick={onDelete}>
             削除…

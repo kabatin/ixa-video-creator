@@ -44,6 +44,18 @@ afterEach(() => {
 })
 
 describe('書き出しの投入', () => {
+  /** 一部だけを書き出す（制作者 2026-10-02「選択した Shot だけを動画として出力」）。 */
+  it('範囲を渡せば scope=range で POST する', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: { renderJobId: RENDER_JOB_ID, warnings: [] } }, 202))
+
+    await api().startRender(projectId, 'preview_720p', { type: 'range', start: 4, end: 12 })
+
+    expect(requestBodyOf(fetchMock.mock.calls[0]?.[1])).toEqual({
+      preset: 'preview_720p',
+      scope: { type: 'range', start: 4, end: 12 },
+    })
+  })
+
   it('プリセットと scope=full を POST し、受理された ID と警告を返す', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse(

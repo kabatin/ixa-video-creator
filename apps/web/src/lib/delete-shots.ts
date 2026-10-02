@@ -1,4 +1,4 @@
-import type { Shot, ShotId } from '@ixa/domain'
+import type { Shot } from '@ixa/domain'
 import { formatSpan } from '@/lib/format-time'
 import { deleteConfirmMessage } from '@/lib/wording'
 
@@ -13,19 +13,6 @@ import { deleteConfirmMessage } from '@/lib/wording'
 
 /** 確認の文に並べるコードの上限。多いと文が画面を埋める。 */
 const MAX_LISTED_CODES = 5
-
-export const resolveDeleteTargets = (
-  shots: readonly Shot[],
-  checked: ReadonlySet<ShotId>,
-  selectedShotId: ShotId | null,
-  /** 右クリックのメニューから来たときの対象（右クリックした Shot だけ。チェックとは混ぜない）。 */
-  explicit: readonly ShotId[] | null = null,
-): readonly Shot[] =>
-  explicit !== null
-    ? shots.filter((shot) => explicit.includes(shot.id))
-    : checked.size > 0
-      ? shots.filter((shot) => checked.has(shot.id))
-      : shots.filter((shot) => shot.id === selectedShotId)
 
 export const deleteMenuLabel = (checkedCount: number): string =>
   checkedCount > 0 ? `チェックした ${String(checkedCount)} 件を削除…` : 'この Shot を削除…'

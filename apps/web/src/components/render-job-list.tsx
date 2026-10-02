@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { formatClock } from '@/lib/format-time'
 import type { WireRenderJob } from '@/lib/render-api'
+import { renderScopeLabel } from '@/lib/render-range'
 import {
   describeRenderJob,
   formatJobTime,
@@ -68,6 +69,10 @@ const JobRow = ({
           {view.statusLabel}
         </span>
         <span className="text-sm font-medium text-text">{renderPresetLabel(job.preset)}</span>
+        {/* 一部だけを書き出したものは範囲を添える（全体は今までどおり何も添えない）。 */}
+        {renderScopeLabel(job.scope) !== null && (
+          <span className="text-xs tabular-nums text-text">{renderScopeLabel(job.scope)}</span>
+        )}
         <span className="text-xs text-muted">{formatJobTime(job.createdAt)}</span>
         {nowMs !== null && (
           <span className="text-xs text-muted">

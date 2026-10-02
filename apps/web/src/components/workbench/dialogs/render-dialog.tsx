@@ -10,6 +10,7 @@ import { useWorkbench } from '@/components/workbench/workbench-context'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { createRenderApi, type WireRenderJob } from '@/lib/render-api'
+import { renderRangeChoice } from '@/lib/render-range'
 import { createRequester } from '@/lib/requester'
 import { createTimelineApi } from '@/lib/timeline-api'
 import type { TimelineIssueView } from '@/lib/timeline-issues'
@@ -82,6 +83,13 @@ export const RenderDialogBody = ({ watch }: { readonly watch: RenderWatch }) => 
             : issues.value.filter((issue) => issue.severity === 'error').length
         }
         timelineDurationSec={durationSec}
+        // 選んだ Shot だけを書き出す範囲（チェックがあればチェックした Shot、無ければ選んでいる 1 件）。
+        range={renderRangeChoice({
+          shots: workbench.shots ?? [],
+          checked: workbench.checked,
+          selectedShotId: workbench.selectedShotId,
+          issues: issues.value,
+        })}
       />
       <section className="flex flex-col gap-3">
         <h3 className="text-base font-semibold text-text">投入前の検査</h3>

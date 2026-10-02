@@ -56,6 +56,7 @@ const baseProps = (overrides: Partial<BulkActionBarProps> = {}): BulkActionBarPr
   onClearSelection: vi.fn(),
   onDelete: vi.fn(),
   onMerge: vi.fn(),
+  onRender: vi.fn(),
   onDrawStartFrames: vi.fn(),
   ...overrides,
 })
@@ -165,6 +166,15 @@ describe('BulkActionBar — 出る / 出ない', () => {
     await user.click(screen.getByRole('button', { name: '結合…' }))
 
     expect(props.onMerge).toHaveBeenCalledTimes(1)
+  })
+
+  /** チェックした Shot だけを書き出す（制作者 2026-10-02「途中までを誰かに見せたい時のために選択した Shot だけを動画として出力」）。 */
+  it('書き出すは書き出しの画面を開く', async () => {
+    const { props, user } = setup()
+
+    await user.click(screen.getByRole('button', { name: '書き出す…' }))
+
+    expect(props.onRender).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -517,6 +527,7 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
           onClearSelection={vi.fn()}
           onDelete={vi.fn()}
           onMerge={vi.fn()}
+          onRender={vi.fn()}
           onDrawStartFrames={vi.fn()}
         />
       </div>,

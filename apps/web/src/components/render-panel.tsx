@@ -8,6 +8,7 @@ import { useRenderWatch, type RenderWatch } from '@/components/workbench/use-ren
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import { formatDuration } from '@/lib/format-time'
+import type { RenderRangeChoice } from '@/lib/render-range'
 import { createRenderApi, type RenderApi, type RenderRejection } from '@/lib/render-api'
 import type { WireRenderJob } from '@/lib/render-api'
 import {
@@ -53,6 +54,11 @@ export type RenderPanelProps = {
    * 省略するとこのパネルが自分で作る＝閉じると追跡が止まる。
    */
   readonly watch?: RenderWatch
+  /**
+   * 選んだ Shot だけを書き出す範囲（制作者 2026-10-02「選択した Shot だけを動画として出力」）。
+   * null / 省略なら Shot を選んでいないので、全体だけ。
+   */
+  readonly range?: RenderRangeChoice | null
   /** テストや Storybook から差し替えるための注入口。 */
   readonly api?: RenderApi
   readonly resolveOutputUrl?: (assetId: MediaAssetId) => Promise<string>
@@ -133,6 +139,7 @@ const RenderPanelView = ({
   blockingIssueCount,
   timelineDurationSec,
   watch,
+  range = null,
   api,
   resolveOutputUrl,
 }: RenderPanelViewProps) => {
@@ -147,14 +154,19 @@ const RenderPanelView = ({
   const [outputs, setOutputs] = useState<Readonly<Record<string, string>>>({})
   const [pendingOutputId, setPendingOutputId] = useState<string | null>(null)
 
-  const blocked = blockingIssueCount !== null && blockingIssueCount > 0
+  // チェックして開いたら、最初から「選んだ Shot だけ」。
+  const [onlyRange, setOnlyRange] = useState(range?.preferred ?? false)
+  const chosenRange = onlyRange ? range : null
+  // 範囲だけなら、範囲で数えた件数で止める（範囲の外の指摘では止めない）。
+  const blockingCount = chosenRange === null ? blockingIssueCount : chosenRange.blockingIssueCount
+  const blocked = blockingCount !== null && blockingCount > 0
 
   const submit = async (): Promise<void> => {
     setSubmitting(true)
     setRejection(null)
     setFeedback(null)
     try {
-      const outcome = await client.startRender(projectId, preset)
+      const outcome = await client.startRender(projectId, preset, chosenRange?.scope)
       if (outcome.kind === 'rejected') {
         setRejection(outcome.rejection)
         return
@@ -207,12 +219,43 @@ const RenderPanelView = ({
       <section className="rounded-lg border border-line bg-surface p-6 shadow-sm">
         <h2 className="text-base font-semibold text-text">書き出す</h2>
         <p className="mt-1 text-sm text-muted">
-          {'タイムライン全体を 1 本の動画にします。'}
+          {'タイムラインを 1 本の動画にします。'}
           {timelineDurationSec === null
             ? '長さを読み込めませんでした。'
             : `いまの長さは ${formatDuration(timelineDurationSec)} です。`}
-          {'範囲や Shot 単位の部分書き出しはまだ出せないため、選べません。'}
+          {range === null && 'Shot を選んでから開くと、その Shot だけを書き出せます。'}
         </p>
+
+        {range !== null && (
+          <fieldset className="mt-4 flex flex-col gap-2" disabled={submitting}>
+            <legend className="text-sm font-medium text-text">範囲</legend>
+            <label className="flex items-center gap-2 text-sm text-text">
+              <input
+                type="radio"
+                name="render-range"
+                checked={!onlyRange}
+                onChange={() => {
+                  setOnlyRange(false)
+                }}
+              />
+              全体
+            </label>
+            <label className="flex flex-wrap items-center gap-x-2 text-sm text-text">
+              <input
+                type="radio"
+                name="render-range"
+                checked={onlyRange}
+                onChange={() => {
+                  setOnlyRange(true)
+                }}
+              />
+              選んだ Shot だけ
+              <span className="font-medium">{range.label}</span>
+              <span className="tabular-nums text-muted">{range.span}</span>
+            </label>
+            {range.extraNote !== null && <p className="pl-6 text-xs text-muted">{range.extraNote}</p>}
+          </fieldset>
+        )}
 
         <div className="mt-4 flex flex-col gap-2">
           <label htmlFor="render-preset" className="text-sm font-medium text-text">
@@ -257,10 +300,10 @@ const RenderPanelView = ({
 
           {blocked && (
             <p role="status" className="text-sm text-danger">
-              {`レンダリング不可の指摘が ${String(blockingIssueCount ?? 0)} 件あるため、まだ書き出せません。`}
+              {`レンダリング不可の指摘が ${String(blockingCount ?? 0)} 件あるため、まだ書き出せません。`}
             </p>
           )}
-          {blockingIssueCount === null && (
+          {blockingCount === null && (
             <p role="status" className="text-sm text-warn">
               投入前の検査ができていません。サーバ側の検査で拒否される可能性があります。
             </p>

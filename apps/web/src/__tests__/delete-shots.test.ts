@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest'
 import {
   deleteMenuLabel,
   describeDeleteTargets,
-  resolveDeleteTargets,
   summarizeDeleteResults,
 } from '@/lib/delete-shots'
+import { resolveShotTargets } from '@/lib/shot-targets'
 
 /**
  * Shot の削除（制作者の要望 2026-09-26）。
@@ -23,33 +23,33 @@ const shot = (code: string, startSec: number): Shot =>
 const SHOTS = [shot('CUT-01', 0), shot('CUT-02', 2), shot('CUT-03', 4)]
 const ids = (...codes: string[]): ReadonlySet<ShotId> => new Set(codes.map((c) => `id-${c}` as ShotId))
 
-describe('resolveDeleteTargets', () => {
+describe('resolveShotTargets', () => {
   it('チェックがあれば、選んでいる Shot ではなくチェックした Shot を対象にする', () => {
-    const targets = resolveDeleteTargets(SHOTS, ids('CUT-03', 'CUT-01'), 'id-CUT-02' as ShotId)
+    const targets = resolveShotTargets(SHOTS, ids('CUT-03', 'CUT-01'), 'id-CUT-02' as ShotId)
 
     // 並びは一覧の順。チェックした順ではない。
     expect(targets.map((s) => s.code)).toEqual(['CUT-01', 'CUT-03'])
   })
 
   it('チェックが無ければ、選んでいる 1 件', () => {
-    expect(resolveDeleteTargets(SHOTS, new Set(), 'id-CUT-02' as ShotId).map((s) => s.code)).toEqual([
+    expect(resolveShotTargets(SHOTS, new Set(), 'id-CUT-02' as ShotId).map((s) => s.code)).toEqual([
       'CUT-02',
     ])
   })
 
   it('どちらも無ければ空', () => {
-    expect(resolveDeleteTargets(SHOTS, new Set(), null)).toEqual([])
+    expect(resolveShotTargets(SHOTS, new Set(), null)).toEqual([])
   })
 })
 
 
 /** 右クリックのメニューの「削除…」は、右クリックした Shot だけ（チェックとは混ぜない。2026-09-30）。 */
-describe('resolveDeleteTargets（右クリックした Shot）', () => {
+describe('resolveShotTargets（右クリックした Shot）', () => {
   it('対象を渡されたら、チェックや選択より優先して、それだけを消す', () => {
     const shots = [aWorkbenchShot(1), aWorkbenchShot(2), aWorkbenchShot(3)]
     const checked = new Set([shots[0]!.id, shots[1]!.id])
 
-    expect(resolveDeleteTargets(shots, checked, shots[0]!.id, [shots[2]!.id]).map((shot) => shot.id)).toEqual([
+    expect(resolveShotTargets(shots, checked, shots[0]!.id, [shots[2]!.id]).map((shot) => shot.id)).toEqual([
       shots[2]!.id,
     ])
   })

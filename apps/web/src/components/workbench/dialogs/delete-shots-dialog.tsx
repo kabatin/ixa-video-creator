@@ -5,20 +5,21 @@ import { Button } from '@/components/ui/button'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
-import { describeDeleteTargets, resolveDeleteTargets, summarizeDeleteResults } from '@/lib/delete-shots'
+import { describeDeleteTargets, summarizeDeleteResults } from '@/lib/delete-shots'
+import { resolveShotTargets } from '@/lib/shot-targets'
 import { EMPTY_SELECTION } from '@/lib/shot-bulk'
 
 /**
  * Shot の削除の確認（制作者の要望 2026-09-26）。メニュー・Delete キー・一括操作バーが開く。
  *
- * 対象は `resolveDeleteTargets` が決める（チェックがあればチェックした Shot、無ければ
+ * 対象は `resolveShotTargets` が決める（チェックがあればチェックした Shot、無ければ
  * 選んでいる Shot）。**取り消しは無い**ので、何を消すかをここで必ず言う。
  */
 export const DeleteShotsDialogBody = () => {
   const workbench = useWorkbench()
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const targets = resolveDeleteTargets(
+  const targets = resolveShotTargets(
     workbench.shots ?? [],
     workbench.checked,
     workbench.selectedShotId,
