@@ -9,7 +9,24 @@ const c = aWorkbenchShot(3, { durationSec: 2, status: 'review' })
 
 describe('sortShots', () => {
   it('番号順', () => {
-    expect(sortShots([c, a, b], 'order', 'asc').map((s) => s.code)).toEqual(['CUT-01', 'CUT-02', 'CUT-03'])
+    expect(sortShots([c, a, b], 'start', 'asc').map((s) => s.code)).toEqual(['CUT-01', 'CUT-02', 'CUT-03'])
+  })
+
+  /**
+   * 番号（#）は**動画の並び**（制作者 2026-10-02「分割したり削除、新規作成などを繰り返していると順番がおかしくなる。
+   * 開始位置を基にソートされてくれると嬉しい」）。後から作った・分けた Shot は order が後ろに付く。
+   */
+  it('番号順は開始位置の順。同じ位置なら作った順（order）', () => {
+    const inserted = aWorkbenchShot(9, { code: 'CUT-09', startSec: 2, order: 9000 })
+    const sameStart = aWorkbenchShot(8, { code: 'CUT-08', startSec: 2, order: 8000 })
+
+    expect(sortShots([c, inserted, a, sameStart, b], 'start', 'asc').map((s) => s.code)).toEqual([
+      'CUT-08',
+      'CUT-09',
+      'CUT-01',
+      'CUT-02',
+      'CUT-03',
+    ])
   })
 
   it('尺の長い順', () => {
@@ -22,7 +39,7 @@ describe('sortShots', () => {
 
   it('入力を変えない', () => {
     const input = [c, a, b]
-    sortShots(input, 'order', 'asc')
+    sortShots(input, 'start', 'asc')
     expect(input.map((s) => s.code)).toEqual(['CUT-03', 'CUT-01', 'CUT-02'])
   })
 })

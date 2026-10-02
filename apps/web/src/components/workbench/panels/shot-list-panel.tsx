@@ -74,7 +74,7 @@ export const ShotListPanel = () => {
   /** 状態のほかに「拍以外に合わせているもの」でも絞れる。集計の 1 行から中身へ行けるように。 */
   const [filter, setFilter] = useState<ShotFilter>(null)
   const [sort, setSort] = useState<{ key: ShotSortKey; direction: SortDirection }>({
-    key: 'order',
+    key: 'start',
     direction: 'asc',
   })
   const [anchor, setAnchor] = useState<ShotId | null>(null)
@@ -83,7 +83,7 @@ export const ShotListPanel = () => {
   const numbers = useMemo(
     () =>
       new Map(
-        sortShots(shots ?? [], 'order', 'asc').map((shot, index) => [shot.id, index + 1] as const),
+        sortShots(shots ?? [], 'start', 'asc').map((shot, index) => [shot.id, index + 1] as const),
       ),
     [shots],
   )

@@ -57,7 +57,7 @@ export type ShotListCompactProps = {
 const CELL = 'px-1.5 align-middle'
 
 const SORT_LABELS: Readonly<Record<ShotSortKey, string>> = {
-  order: '#',
+  start: '#',
   duration: '尺',
   status: '状態',
 }
@@ -145,7 +145,7 @@ export const ShotListCompact = ({
               className="h-3.5 w-3.5"
             />
           </th>
-          {sortHeader('order')}
+          {sortHeader('start')}
           <th scope="col" className={CELL}>
             <span className="sr-only">サムネイル</span>
           </th>

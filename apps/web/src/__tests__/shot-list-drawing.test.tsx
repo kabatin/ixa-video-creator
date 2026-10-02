@@ -45,7 +45,7 @@ describe('Shot 一覧のサムネ', () => {
         checked={EMPTY_SELECTION}
         headerState={headerCheckboxState(EMPTY_SELECTION, SHOTS.map((shot) => shot.id))}
         busy={false}
-        sort={{ key: 'order', direction: 'asc' }}
+        sort={{ key: 'start', direction: 'asc' }}
         onSort={() => undefined}
         onSelect={() => undefined}
         onToggle={() => undefined}

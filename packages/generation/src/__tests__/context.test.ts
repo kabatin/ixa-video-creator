@@ -371,6 +371,42 @@ describe('previousShotLastFrame', () => {
     await expect(context.previousShotLastFrame(first.id)).resolves.toBeNull()
   })
 
+  /**
+   * 前の Shot は**タイムラインで直前の Shot**（制作者 2026-10-02「基本的には動画と同じ並びになっていないとわかりづらい」）。
+   * 途中に新しく作った・分けた Shot は order が後ろに付くので、order で選ぶと画面と違う Shot から続けていた。
+   */
+  it('order ではなく開始位置で直前の Shot を選ぶ（途中に後から作った Shot）', async () => {
+    const lastFrame = await mediaAssets.create({
+      workspaceId, projectId: null, kind: 'image', storageKey: 'inserted-last.png',
+      mimeType: 'image/png', bytes: 1024, checksumSha256: 'e'.repeat(64),
+      origin: { type: 'upload', uploadedBy: 'tester' },
+    })
+    const video = await mediaAssets.create({
+      workspaceId, projectId: null, kind: 'video', storageKey: 'inserted.mp4',
+      mimeType: 'video/mp4', bytes: 4096, checksumSha256: 'f'.repeat(64),
+      origin: { type: 'upload', uploadedBy: 'tester' },
+      lastFrameAssetId: lastFrame.id,
+    })
+    const head = aShot(projectId, { order: 1000, code: 'CUT-01', startSec: 0, durationSec: 4 })
+    const headTake = aTake(head, '1'.repeat(64))
+    // 後から作って 4 秒に置いた（order は末尾）。
+    const inserted = aShot(projectId, { order: 3000, code: 'CUT-03', startSec: 4, durationSec: 4 })
+    const insertedTake = aTake(inserted, '2'.repeat(64), { mediaAssetId: video.id })
+    const tail = aShot(projectId, {
+      order: 2000, code: 'CUT-02', startSec: 8, durationSec: 4, continuityMode: 'previous_shot',
+    })
+    const context = buildContext({
+      shots: createInMemoryShotRepository([
+        { ...head, selectedTakeId: headTake.id },
+        { ...inserted, selectedTakeId: insertedTake.id },
+        tail,
+      ]),
+      takes: createInMemoryTakeRepository([headTake, insertedTake]),
+    })
+
+    await expect(context.previousShotLastFrame(tail.id)).resolves.toBe(lastFrame.id)
+  })
+
   it('前 Shot に採用 Take が無ければ null を返す', async () => {
     const first = aShot(projectId, { order: 1000, code: 'shot_001' })
     const second = aShot(projectId, { order: 2000, code: 'shot_002' })

@@ -23,6 +23,7 @@ import type { WireMusicAnalysis } from '@/lib/music-api'
 import { applyProjectEvent } from '@/lib/project-events'
 import { EMPTY_SELECTION, pruneSelection, type ShotSelection } from '@/lib/shot-bulk'
 import { PosterRenewalContext } from '@/lib/poster-renewal'
+import { sortShotsByStart } from '@/lib/timeline-display'
 import { posterByShotId, postersStale, posterRetryDelayMs, type ShotPosterMap } from '@/lib/shot-posters'
 import { useProjectEvents } from '@/lib/use-project-events'
 import type { PanelId } from '@/lib/workbench-layout'
@@ -59,7 +60,7 @@ const replaceById = (shots: readonly Shot[], updated: readonly Shot[]): readonly
 const initialSelection = (shots: readonly Shot[] | null, wanted: ShotId | null): ShotId | null => {
   if (shots === null) return null
   if (wanted !== null && shots.some((shot) => shot.id === wanted)) return wanted
-  return shots[0]?.id ?? null
+  return sortShotsByStart(shots)[0]?.id ?? null
 }
 
 /**
@@ -76,6 +77,12 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
   const projectId = props.project.id
 
   const [shots, setShots] = useState<readonly Shot[] | null>(props.initialShots)
+  /**
+   * 画面に配る並びは**動画の並び**（開始位置。同じ位置なら order）。ストーリーボード・Shot 一覧・インスペクターの
+   * 「先頭の Shot」が同じ並びを見る。サーバの一覧は order（作った順）で、途中に作った・分けた Shot が末尾に来ていた
+   * （制作者 2026-10-02「基本的には動画と同じ並びになっていないとわかりづらい」）。
+   */
+  const orderedShots = useMemo(() => (shots === null ? null : sortShotsByStart(shots)), [shots])
   const [selectedShotId, setSelectedShotId] = useState<ShotId | null>(() =>
     initialSelection(props.initialShots, props.initialShotId),
   )
@@ -131,8 +138,8 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
    * 素材（キャラクター・楽曲など）を見ているときは触らない。Shot の増減とは無関係。
    */
   useEffect(() => {
-    if (shots === null) return
-    const ids = shots.map((shot) => shot.id)
+    if (orderedShots === null) return
+    const ids = orderedShots.map((shot) => shot.id)
     const nextShotId = (current: ShotId | null): ShotId | null =>
       current !== null && ids.includes(current) ? current : (ids[0] ?? null)
 
@@ -144,7 +151,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       const fallback = ids[0] ?? null
       return fallback === null ? null : { kind: 'shot', id: fallback }
     })
-  }, [shots])
+  }, [orderedShots])
 
   const live = useProjectEvents({
     projectId,
@@ -292,7 +299,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       sequences: props.sequences,
       locations: props.locations,
       loadErrors: props.loadErrors,
-      shots,
+      shots: orderedShots,
       posters,
       posterError,
       posterEpoch,
@@ -352,7 +359,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
     [
       props,
       projectId,
-      shots,
+      orderedShots,
       posters,
       posterError,
       posterEpoch,

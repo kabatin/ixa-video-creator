@@ -39,7 +39,7 @@ const List = ({ onRange }: { readonly onRange?: (shotId: ShotIdType, range: bool
         SHOTS.map((shot) => shot.id),
       )}
       busy={false}
-      sort={{ key: 'order', direction: 'asc' }}
+      sort={{ key: 'start', direction: 'asc' }}
       onSort={() => undefined}
       onSelect={() => undefined}
       onToggle={(shotId, range) => {
@@ -103,7 +103,7 @@ describe('Shot 一覧のチェック', () => {
         checked={new Set()}
         headerState="none"
         busy={false}
-        sort={{ key: 'order', direction: 'asc' }}
+        sort={{ key: 'start', direction: 'asc' }}
         onSort={() => undefined}
         onSelect={() => undefined}
         onToggle={() => undefined}

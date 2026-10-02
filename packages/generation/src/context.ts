@@ -52,6 +52,9 @@ export class GenerationContextError extends Error {
  * 参照枠の切り詰めで主役が先に残るよう、prominence の強い順に並べる。
  * `resolveReferences` は渡された順を保って候補を積むため、ここでの並びが結果を決める。
  */
+/** タイムラインの並び（開始位置。同じ位置なら order）。 */
+const compareTimelineOrder = (a: Shot, b: Shot): number => a.startSec - b.startSec || a.order - b.order
+
 const PROMINENCE_RANK: Readonly<Record<ShotCharacter['prominence'], number>> = Object.freeze({
   primary: 0,
   secondary: 1,
@@ -93,12 +96,16 @@ export const createGenerationContextSource = (
     return { character, look, identityImages, lookImages }
   }
 
-  /** 前 Shot = 対象より小さい order のうち最大のもの。order は 1000 刻みで連番ではない。 */
+  /**
+   * 前 Shot = **タイムラインで直前の Shot**（開始位置の順。同じ位置なら order の順）。
+   * order で選ぶと、途中に後から作った・分けた Shot（order は末尾に付く）を飛ばし、画面と違う Shot から続けていた
+   * （制作者 2026-10-02「基本的には動画と同じ並びになっていないとわかりづらい」）。
+   */
   const previousShot = async (shot: Shot): Promise<Shot | null> => {
     const siblings = await deps.shots.findByProject(shot.projectId)
     const earlier = siblings
-      .filter((candidate) => candidate.order < shot.order)
-      .sort((a, b) => a.order - b.order)
+      .filter((candidate) => candidate.id !== shot.id && compareTimelineOrder(candidate, shot) < 0)
+      .sort(compareTimelineOrder)
     return earlier[earlier.length - 1] ?? null
   }
 
