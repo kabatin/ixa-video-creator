@@ -7,6 +7,7 @@ import { PanelFrame, PanelNotice } from '@/components/workbench/panels/panel-fra
 import { TransportBar } from '@/components/workbench/transport-bar'
 import { loadTimelineDocument, type Part } from '@/lib/timeline-loader'
 import type { WireTimelineDocument } from '@/lib/timeline-api'
+import { timelineShotsKey } from '@/lib/timeline-shots-key'
 
 /**
  * プレビュー（中央上）。Program Monitor 1 枚（D7）。
@@ -27,7 +28,8 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
   const [document, setDocument] = useState<Part<WireTimelineDocument> | null>(null)
   const [monitorError, setMonitorError] = useState<string | null>(null)
 
-  // Take ができた・サーバから読み直したときに組み立て直す。
+  // Take ができた・サーバから読み直した・Shot の尺や採用を変えたときに組み立て直す。
+  const shotsKey = timelineShotsKey(workbench.shots)
   useEffect(() => {
     let cancelled = false
     void loadTimelineDocument(workbench.projectId).then((loaded) => {
@@ -36,7 +38,7 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
     return () => {
       cancelled = true
     }
-  }, [workbench.projectId, workbench.posterEpoch, workbench.serverEpoch])
+  }, [workbench.projectId, workbench.posterEpoch, workbench.serverEpoch, shotsKey])
 
   /**
    * 選んだ Shot の頭へ移る。

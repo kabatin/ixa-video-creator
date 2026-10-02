@@ -15,6 +15,7 @@ import {
   timelineLoadErrors,
   type TimelineMaterials,
 } from '@/lib/timeline-loader'
+import { timelineShotsKey } from '@/lib/timeline-shots-key'
 import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
 import { useShotMenu } from '@/components/workbench/use-shot-menu'
 import { useTextClipMenu } from '@/components/workbench/use-text-clip-menu'
@@ -39,7 +40,8 @@ export const TimelinePanel = () => {
   const [materials, setMaterials] = useState<TimelineMaterials | null>(null)
   const peaks = useTrackPeaks(workbench.analysis?.waveformPeaksUrl ?? null)
 
-  // 開いたとき・サーバから読み直したとき・Take ができたときに取り直す。
+  // 開いたとき・サーバから読み直したとき・Take ができたとき・Shot の尺や採用を変えたときに取り直す。
+  const shotsKey = timelineShotsKey(workbench.shots)
   useEffect(() => {
     let cancelled = false
     void loadTimelineMaterials(workbench.projectId).then((loaded) => {
@@ -48,7 +50,7 @@ export const TimelinePanel = () => {
     return () => {
       cancelled = true
     }
-  }, [workbench.projectId, workbench.serverEpoch, workbench.posterEpoch])
+  }, [workbench.projectId, workbench.serverEpoch, workbench.posterEpoch, shotsKey])
 
   if (materials === null) {
     return (
