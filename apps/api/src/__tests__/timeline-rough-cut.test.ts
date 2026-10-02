@@ -12,7 +12,7 @@ import {
   type Shot,
   type Take,
 } from '@ixa/domain'
-import type { RoughCutChange } from '@ixa/timeline'
+import { lyricBoundaryChanges, type RoughCutChange } from '@ixa/timeline'
 import {
   aShot,
   aTake,
@@ -460,6 +460,31 @@ describe('粗編集の適用は「変える前」を記録する', () => {
     const [batch] = s.editBatches.snapshot()
     expect(batch?.entries).toEqual([
       { shotId: b.shot.id, patch: { startSec: 4.3, durationSec: 4 } },
+    ])
+  })
+
+  /**
+   * Shot の境目を歌い出しに揃える（制作者 2026-10-02）。`lyricBoundaryChanges` の変更を粗編集として当てる。
+   * 端数の残った境目（手で伸ばした 10.89 と 10.89015873…）を動かすと、前の Shot の尺と後ろの Shot の位置・尺が変わる。
+   * **戻すのに要る「変える前」が両方の Shot 分そろって記録される**（取り消しは記録の欄を書き戻す）。
+   */
+  it('境目を歌い出しに揃える変更を当てると、前後の Shot の変える前の値を記録する', async () => {
+    const project = aProject()
+    const a = shotWithTake(project, { code: 'CUT-01', order: 1, startSec: 0, durationSec: 10.89 })
+    const b = shotWithTake(project, { code: 'CUT-02', order: 2, startSec: 10.89015873, durationSec: 6.34 })
+    const s = scene({ project, shots: [a.shot, b.shot], takes: [a.take, b.take], mediaAssets: [a.asset, b.asset] })
+    const { changes, problem } = lyricBoundaryChanges([a.shot, b.shot], new Map([[b.shot.id, 13.33]]))
+    expect(problem).toBeNull()
+
+    const result = await apply(s, changes)
+
+    expect(result.skipped).toEqual([])
+    expect((await s.shots.findById(a.shot.id))?.durationSec).toBeCloseTo(13.33)
+    expect((await s.shots.findById(b.shot.id))?.startSec).toBeCloseTo(13.33)
+    const [batch] = s.editBatches.snapshot()
+    expect(batch?.entries).toEqual([
+      { shotId: a.shot.id, patch: { durationSec: 10.89 } },
+      { shotId: b.shot.id, patch: { startSec: 10.89015873, durationSec: 6.34 } },
     ])
   })
 

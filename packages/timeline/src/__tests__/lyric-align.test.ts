@@ -59,6 +59,17 @@ describe('proposeLyricBoundaries', () => {
     expect(boundary?.suggested?.atSec).toBe(13)
   })
 
+  /** 生成中に尺を変えると、古い尺の Take が返ってくる。インスペクターも生成中は開始・尺を触らせない。 */
+  it('前後どちらかが生成中なら動かさず、理由を出す', () => {
+    const [boundary] = proposeLyricBoundaries(
+      [makeShot(1, 0, 10, { status: 'generating' }), makeShot(2, 10, 10)],
+      [12],
+    )
+
+    expect(boundary?.choices).toEqual([])
+    expect(boundary?.blockedReason).toMatch(/S1 は生成中/)
+  })
+
   it('隙間・重なり・ロックのある境目は動かさず、理由を出す', () => {
     const gap = proposeLyricBoundaries([makeShot(1, 0, 9), makeShot(2, 10, 10)], [12])
     const overlap = proposeLyricBoundaries([makeShot(1, 0, 11), makeShot(2, 10, 10)], [12])

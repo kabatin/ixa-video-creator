@@ -39,10 +39,15 @@ export type LyricBoundary = {
   readonly blockedReason: string | null
 }
 
-/** 動かせない理由。前後どちらかがロックなら動かさない（尺が変わる）。 */
+/**
+ * 動かせない理由。前後どちらかがロック・生成中なら動かさない（尺が変わる）。
+ * 生成中に尺を変えると、古い尺の Take が返ってくる（インスペクターも生成中は開始・尺を触らせない）。
+ */
 const blockedReasonOf = (previous: Shot, shot: Shot): string | null => {
   if (previous.lockedAt !== null) return roughCutLockedReason(previous.code)
   if (shot.lockedAt !== null) return roughCutLockedReason(shot.code)
+  const generating = [previous, shot].find((candidate) => candidate.status === 'generating')
+  if (generating !== undefined) return `${generating.code} は生成中なので動かしません（終わってから揃えてください）`
   const gap = shot.startSec - shotEndSec(previous)
   if (gap > LYRIC_ALIGN_JOIN_TOLERANCE_SEC) return `${previous.code} と ${shot.code} の間に隙間があるので動かしません`
   if (gap < -LYRIC_ALIGN_JOIN_TOLERANCE_SEC) return `${previous.code} と ${shot.code} が重なっているので動かしません`
