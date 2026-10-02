@@ -31,10 +31,13 @@ export const LyricCueOverlay = ({
             <span
               key={`${String(index)}:${String(sec)}`}
               data-testid="lyric-cue-mark"
-              className="absolute top-0 bottom-0 w-px bg-info"
+              // 点線にする。セクションの境目（青の実線）・区切り（白の実線）・再生位置（赤）と見分ける。
+              className="absolute top-0 bottom-0 border-l border-dashed border-text/70"
               style={{ left: `${String(left)}%` }}
             >
-              <span className="absolute top-0 left-0.5 text-xs leading-none text-info">{String(index + 1)}</span>
+              <span className="absolute top-3 left-0.5 rounded bg-surface/80 px-0.5 text-xs leading-none text-text">
+                {String(index + 1)}
+              </span>
             </span>,
           ]
     })}

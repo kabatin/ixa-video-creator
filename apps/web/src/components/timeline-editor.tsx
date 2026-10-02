@@ -87,6 +87,8 @@ export type TimelineEditorProps = {
    * どちらもビートには吸着しないが、利用者が取るべき行動が違う（lessons L-015）。
    */
   readonly beatSource: BeatSource
+  /** 歌詞の歌い出し。テロップなどを歌い出しに寄せる（制作者 2026-10-02）。省略なら寄せない。 */
+  readonly lyricCues?: readonly number[]
   /**
    * 拍とのズレ。**null は「読めていない」**（「ズレが無い」ではない）。
    * 判定・しきい値・「解析が無い」の扱いはすべてサーバ側の 1 箇所が持つ。
@@ -150,6 +152,7 @@ export const TimelineEditor = ({
   documentDurationSec,
   initialDocument,
   beatSource,
+  lyricCues,
   beatAlignment,
   loadErrors,
   playback,
@@ -262,8 +265,9 @@ export const TimelineEditor = ({
       clips: clips ?? [],
       beatSource,
       timelineEndSec: durationSec,
+      ...(lyricCues === undefined ? {} : { lyricCues }),
     }),
-    [shots, clips, beatSource, durationSec],
+    [shots, clips, beatSource, durationSec, lyricCues],
   )
 
   /** 許容距離はズーム率から。px で一定にするのは `snapToleranceSecForZoom` の判断。 */

@@ -131,6 +131,15 @@ describe('buildSnapCandidates', () => {
     expect(kinds).toContain('end')
   })
 
+  /** 歌い出し（制作者 2026-10-02）。渡したときだけ候補にし、名前は「歌い出し」。 */
+  it('歌詞の歌い出しを渡せば候補にし、内訳で「歌い出し」と呼ぶ', () => {
+    const candidates = buildSnapCandidates(makeSource({ lyricCues: [5.25, 9.75] }), {})
+
+    expect(candidates.filter((entry) => entry.kind === 'lyric').map((entry) => entry.atSec)).toEqual([5.25, 9.75])
+    expect(countSnapCandidates(candidates).find((entry) => entry.kind === 'lyric')?.label).toBe('歌い出し')
+    expect(buildSnapCandidates(makeSource(), {}).some((entry) => entry.kind === 'lyric')).toBe(false)
+  })
+
   it('除外したクリップの端は候補から消える（自分の端へ吸着して動かせなくなるのを防ぐ）', () => {
     const source = makeSource({ clips: [makeClip('FB0', 3.3, 0.4)] })
     const withSelf = buildSnapCandidates(source, {})

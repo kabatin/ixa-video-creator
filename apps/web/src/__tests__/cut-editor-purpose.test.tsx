@@ -1,5 +1,5 @@
 import { MusicTrack, MusicTrackId } from '@ixa/domain'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { CutEditor } from '@/components/cut-editor'
 import type { WireMusicAnalysis } from '@/lib/music-api'
@@ -78,7 +78,7 @@ const track = MusicTrack.parse({
   volume: 1,
 })
 
-const renderEditor = async (purpose?: 'cut' | 'lyrics') => {
+const renderEditor = async (purpose?: 'cut' | 'lyrics', lyricCues?: readonly number[]) => {
   render(
     <CutEditor
       projectId={PROJECT_ID as never}
@@ -86,6 +86,7 @@ const renderEditor = async (purpose?: 'cut' | 'lyrics') => {
       analysis={analysis}
       sequences={[]}
       {...(purpose === undefined ? {} : { purpose })}
+      {...(lyricCues === undefined ? {} : { lyricCues })}
     />,
   )
   await waitFor(() => {
@@ -112,5 +113,27 @@ describe('CutEditor の使いみち', () => {
     expect(screen.queryByText('区切りがまだありません。')).toBeNull()
     expect(screen.queryByText('キーとホイールの割り当て')).toBeNull()
     expect(screen.getByRole('button', { name: '全体' })).toBeInTheDocument()
+  })
+})
+
+/**
+ * 歌い出しに区切りを置く（制作者 2026-10-02「テロップを置いたってことは時間が割とはっきりするので、区切りもつけやすくなる」）。
+ */
+describe('歌い出しに区切りを置く', () => {
+  it('歌詞の時刻があれば、全部の歌い出しに区切りを置いて本数を言う', async () => {
+    await renderEditor('cut', [3.5, 7])
+
+    fireEvent.click(screen.getByRole('button', { name: '歌い出しに区切りを置く' }))
+
+    expect(screen.getByText('歌い出しに区切りを 2 本置きました。')).toBeInTheDocument()
+    expect(screen.queryByText('区切りがまだありません。')).toBeNull()
+  })
+
+  it('歌詞の時刻が無ければ押せない（理由は title に出す）', async () => {
+    await renderEditor('cut')
+
+    const button = screen.getByRole('button', { name: '歌い出しに区切りを置く' })
+    expect(button).toHaveProperty('disabled', true)
+    expect(button.getAttribute('title')).toMatch(/歌詞を合わせる/)
   })
 })

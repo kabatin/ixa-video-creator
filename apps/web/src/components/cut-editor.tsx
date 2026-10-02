@@ -29,8 +29,10 @@ import {
   addMark,
   buildCutMarkCandidates,
   cutMarkToleranceSec,
+  addLyricMarks,
   addSectionMarks,
   cutBoundaries,
+  describeLyricMarks,
   describeSectionMarks,
   describeCuts,
   moveMark,
@@ -124,6 +126,9 @@ type SaveOutcome = {
   readonly warnings: readonly string[]
 }
 
+/** 歌詞の時刻が無いとき。描くたびに新しい配列を作ると、吸着の候補が毎回作り直される。 */
+const NO_LYRIC_CUES: readonly number[] = []
+
 export const CutEditor = ({
   projectId,
   track,
@@ -136,7 +141,7 @@ export const CutEditor = ({
   playButton,
   toolbarExtra,
   purpose = 'cut',
-  lyricCues = [],
+  lyricCues = NO_LYRIC_CUES,
 }: CutEditorProps) => {
   const router = useRouter()
   const cutting = purpose === 'cut'
@@ -284,9 +289,10 @@ export const CutEditor = ({
     [analysis.beats, analysis.sections, analysis.drops, track.title],
   )
 
+  // 歌い出しにも寄せる（制作者 2026-10-02。歌詞の時刻を区切る前に付けておけば、区切りが歌い出しに揃う）。
   const candidates = useMemo(
-    () => buildCutMarkCandidates(beatSource, durationSec),
-    [beatSource, durationSec],
+    () => buildCutMarkCandidates(beatSource, durationSec, lyricCues),
+    [beatSource, durationSec, lyricCues],
   )
 
   /** 許容距離は画面上の距離で一定にする。寄るほど秒では厳しくなる。 */
@@ -505,6 +511,15 @@ export const CutEditor = ({
     setSnapNotice({ state: 'none', label: '区切り', message: describeSectionMarks(result) })
   }
 
+  /** 歌い出しすべてに区切りを置く（制作者 2026-10-02）。置いたあとは普通の区切りなので消せる。 */
+  const placeLyricMarks = (): void => {
+    const result = addLyricMarks(marks, lyricCues, durationSec)
+    setMarks(result.marks)
+    setRejection(null)
+    setOutcome(null)
+    setSnapNotice({ state: 'none', label: '区切り', message: describeLyricMarks(result) })
+  }
+
   return (
     <div
       ref={containerRef}
@@ -567,6 +582,18 @@ export const CutEditor = ({
             </label>
             <Button size="sm" disabled={saving} onClick={placeSectionMarks}>
               セクションの境目に区切りを置く
+            </Button>
+            <Button
+              size="sm"
+              disabled={saving || lyricCues.length === 0}
+              title={
+                lyricCues.length === 0
+                  ? '先に「歌詞を合わせる」で歌い出しに時刻を付けると使えます'
+                  : '波形の番号付きの線（歌い出し）すべてに区切りを置きます'
+              }
+              onClick={placeLyricMarks}
+            >
+              歌い出しに区切りを置く
             </Button>
             {toolbarExtra}
           </>
@@ -651,7 +678,8 @@ export const CutEditor = ({
                 panBy(ratio)
               }}
             />
-            {!cutting && <LyricCueOverlay cues={lyricCues} view={view} />}
+            {/* 歌い出しの印は区切るときも出す。区切りを歌い出しに合わせやすくする（制作者 2026-10-02）。 */}
+            {lyricCues.length > 0 && <LyricCueOverlay cues={lyricCues} view={view} />}
           </WaveformCanvas>
         )}
       </div>

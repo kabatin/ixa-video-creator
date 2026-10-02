@@ -93,6 +93,7 @@ export const TimelinePanel = () => {
         initialDocument={materials.document.value}
         initialIssues={materials.issues.value}
         beatSource={materials.beatSource}
+        lyricCues={workbench.project.lyricCues}
         beatAlignment={materials.beatAlignment.value}
         loadErrors={timelineLoadErrors(materials)}
         showMonitor={false}

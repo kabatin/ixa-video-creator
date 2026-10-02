@@ -16,6 +16,8 @@ const shot = (overrides: Partial<WorkflowInput['shots'][number]> = {}): Workflow
 const input = (overrides: Partial<WorkflowInput> = {}): WorkflowInput => ({
   hasTrack: true,
   concept: '夜明けの屋上で二人が出会う',
+  lyricLineCount: 0,
+  lyricCueCount: 0,
   shots: [],
   ...overrides,
 })
@@ -24,10 +26,11 @@ const stateOf = (result: ReturnType<typeof workflowSteps>, id: string) =>
   result.steps.find((step) => step.id === id)?.state
 
 describe('workflowSteps', () => {
-  it('7 段を順に並べる', () => {
+  it('8 段を順に並べる（歌詞の時刻は区切る前）', () => {
     expect(workflowSteps(input()).steps.map((step) => step.label)).toEqual([
       '音楽',
       '作品の方針・歌詞',
+      '歌詞の時刻',
       '区切る',
       'Shot',
       '絵コンテ',
@@ -54,7 +57,33 @@ describe('workflowSteps', () => {
     expect(result.nextId).toBe('cut')
   })
 
-  it('Shot が無ければ、次は ③ 区切る（区切りは Shot にするまで保存されないので Shot の有無で見る）', () => {
+  /**
+   * 歌詞の時刻（制作者 2026-10-02「テロップみたいな、やり直しが容易にできるものを、ステップの前に持ってった方が効率的」）。
+   * 区切ってから時刻を付けると、境目が歌い出しとずれた（中央値 1.95 秒）。区切る前に済ませる。
+   */
+  it('歌詞があって時刻が足りなければ、区切るより先に ③ 歌詞の時刻（件数を出す）', () => {
+    const result = workflowSteps(input({ lyricLineCount: 58, lyricCueCount: 12 }))
+    const lyrics = result.steps.find((step) => step.id === 'lyrics')
+    expect(lyrics?.state).toBe('partial')
+    expect(lyrics?.progress).toEqual({ done: 12, total: 58 })
+    expect(result.nextId).toBe('lyrics')
+
+    expect(workflowSteps(input({ lyricLineCount: 3, lyricCueCount: 0 })).nextId).toBe('lyrics')
+  })
+
+  it('全部の行に時刻が付けば済み', () => {
+    const result = workflowSteps(input({ lyricLineCount: 3, lyricCueCount: 3 }))
+    expect(stateOf(result, 'lyrics')).toBe('done')
+    expect(result.nextId).toBe('cut')
+  })
+
+  it('歌詞が無い作品では飛ばす（次に選ばない）', () => {
+    const result = workflowSteps(input({ lyricLineCount: 0 }))
+    expect(stateOf(result, 'lyrics')).toBe('skipped')
+    expect(result.nextId).toBe('cut')
+  })
+
+  it('Shot が無ければ、次は ④ 区切る（区切りは Shot にするまで保存されないので Shot の有無で見る）', () => {
     const result = workflowSteps(input())
     expect(stateOf(result, 'cut')).toBe('todo')
     expect(stateOf(result, 'shots')).toBe('todo')
@@ -97,9 +126,19 @@ describe('workflowSteps', () => {
 
   it('全部済めば次は無い', () => {
     const result = workflowSteps(
-      input({ shots: [shot({ description: 'a', hasStartFrame: true, adopted: true })] }),
+      input({
+        lyricLineCount: 2,
+        lyricCueCount: 2,
+        shots: [shot({ description: 'a', hasStartFrame: true, adopted: true })],
+      }),
     )
     expect(result.steps.every((step) => step.state === 'done')).toBe(true)
     expect(result.nextId).toBeNull()
+    // 歌詞の無い作品は、歌詞の段だけ飛ばして済み。
+    const instrumental = workflowSteps(
+      input({ shots: [shot({ description: 'a', hasStartFrame: true, adopted: true })] }),
+    )
+    expect(instrumental.steps.every((step) => step.state === 'done' || step.id === 'lyrics')).toBe(true)
+    expect(instrumental.nextId).toBeNull()
   })
 })

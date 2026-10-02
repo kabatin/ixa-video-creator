@@ -165,6 +165,20 @@ describe('collectSnapCandidates', () => {
   })
 })
 
+describe('collectSnapCandidates の歌い出し', () => {
+  it('歌い出しを候補にし、同じ時刻のセクションの境目・拍より歌い出しを残す', () => {
+    const sections: MusicSection[] = [{ start: 0, end: 4, label: 'intro', energy: 0.3 }]
+    const candidates = collectSnapCandidates({ beats: [4], sections, lyricCues: [4, 6.5], timelineEndSec: 10 })
+
+    expect(candidates.find((entry) => entry.atSec === 4)?.kind).toBe('lyric')
+    expect(candidates.find((entry) => entry.atSec === 6.5)?.kind).toBe('lyric')
+  })
+
+  it('渡さなければ歌い出しは候補に無い', () => {
+    expect(collectSnapCandidates({ beats: [1, 2], timelineEndSec: 10 }).some((entry) => entry.kind === 'lyric')).toBe(false)
+  })
+})
+
 describe('snapTime', () => {
   const candidates = [candidate(0, 'origin'), candidate(2, 'shot_edge'), candidate(5, 'beat')]
 
@@ -272,6 +286,16 @@ describe('snapTime の同距離の優先順位', () => {
     expect(winnerBetween('section', 'clip_edge')).toBe('clip_edge')
     expect(winnerBetween('drop', 'section')).toBe('section')
     expect(winnerBetween('beat', 'drop')).toBe('drop')
+  })
+
+  /**
+   * 歌い出し（制作者 2026-10-02「テロップを置いたってことは時間が割とはっきりするので、区切りもつけやすくなる」）。
+   * 絵と歌詞を合わせるのが目的なので、曲の構造（セクション）・拍より強く、クリップの端より弱い。
+   */
+  it('クリップ端 > 歌い出し > セクション > ビート の順になる', () => {
+    expect(winnerBetween('lyric', 'clip_edge')).toBe('clip_edge')
+    expect(winnerBetween('section', 'lyric')).toBe('lyric')
+    expect(winnerBetween('lyric', 'beat')).toBe('lyric')
   })
 
   it('候補の並び順を入れ替えても結果が変わらない', () => {

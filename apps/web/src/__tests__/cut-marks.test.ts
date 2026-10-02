@@ -8,6 +8,8 @@ import {
   MIN_CUT_DURATION_SEC,
   addMark,
   addSectionMarks,
+  addLyricMarks,
+  describeLyricMarks,
   describeSectionMarks,
   buildCutMarkCandidates,
   buildCuts,
@@ -643,6 +645,39 @@ describe('addSectionMarks', () => {
     addSectionMarks(before, [8.5], SONG)
 
     expect(before.map((m) => m.atSec)).toEqual([4])
+  })
+})
+
+/**
+ * 歌い出しに区切りを置く（制作者 2026-10-02「テロップを置いたってことは時間が割とはっきりするので、区切りもつけやすくなる」）。
+ * セクションの境目と同じ置き方で、吸着先は歌い出し。要らない区切りは普通に消せる。
+ */
+describe('addLyricMarks', () => {
+  it('歌い出しすべてに区切りを置き、吸着先は歌い出し。近すぎるものは置かずに数える', () => {
+    const result = addLyricMarks(marksAt(8.4), [0, 8.5, 12.25, 20], 30)
+
+    expect(result.marks.map((m) => m.atSec)).toEqual([8.4, 12.25, 20])
+    expect(result.marks.filter((m) => m.atSec !== 8.4).every((m) => m.snappedTo === 'lyric')).toBe(true)
+    expect(result.added).toBe(2)
+    expect(result.skipped).toBe(1)
+  })
+})
+
+describe('describeLyricMarks', () => {
+  it('置いた本数と置かなかった本数を言い、時刻が無ければそう言う', () => {
+    expect(describeLyricMarks({ marks: [], added: 2, skipped: 1 })).toBe(
+      '歌い出しに区切りを 2 本置きました（1 本は近くに区切りがあるので置きませんでした）。',
+    )
+    expect(describeLyricMarks({ marks: [], added: 0, skipped: 0 })).toMatch(/歌詞の時刻がまだありません/)
+    expect(describeLyricMarks({ marks: [], added: 0, skipped: 3 })).toBe('歌い出しには、すでに区切りがあります。')
+  })
+})
+
+describe('buildCutMarkCandidates の歌い出し', () => {
+  it('歌い出しを渡せば候補にする', () => {
+    const candidates = buildCutMarkCandidates(beatSource([0, 0.5, 1]), 8, [3.25])
+
+    expect(candidates.find((entry) => entry.atSec === 3.25)?.kind).toBe('lyric')
   })
 })
 

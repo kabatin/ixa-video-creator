@@ -27,6 +27,7 @@ export type SnapTargetKind =
   | 'origin'
   | 'end'
   | 'clip_edge'
+  | 'lyric'
   | 'section'
   | 'drop'
   | 'beat'
@@ -61,6 +62,11 @@ export type SnapContext = {
   readonly clips?: readonly TimelineClip[]
   readonly sections?: readonly MusicSection[]
   readonly drops?: readonly Seconds[]
+  /**
+   * 歌詞の歌い出し（`Project.lyricCues`）。区切り・Shot の境目を歌い出しに揃えるため
+   * （制作者 2026-10-02「テロップを置いたってことは時間が割とはっきりするので、区切りもつけやすくなる」）。
+   */
+  readonly lyricCues?: readonly Seconds[]
   /** タイムライン終端。楽曲の尺で決まる。0 のときは原点と重なるので原点が残る。 */
   readonly timelineEndSec?: Seconds
   readonly excludeShotId?: ShotId | null
@@ -77,6 +83,7 @@ export type SnapContext = {
  *   `shot_edge` に次いで強い。ただし Shot 同士を繋ぐほうが優先度は高い。
  * - `clip_edge` は TEXT / SFX / VFX の端。揃っていないと見た目が悪いが、
  *   黒画面ほど致命的ではないので構造的な境界の次。
+ * - `lyric` は歌い出し。絵と歌詞を合わせる目的に直結するので、曲の構造より強い。
  * - `section` は楽曲の構造。編集意図としては強いが、絵の連続性より後。
  * - `drop` はセクション内の単発のアクセント。構造ほど強くない。
  * - `beat` が最後。候補数が圧倒的に多く常に近くにあるため、同距離で優先すると
@@ -87,6 +94,7 @@ const SNAP_PRIORITY: readonly SnapTargetKind[] = [
   'origin',
   'end',
   'clip_edge',
+  'lyric',
   'section',
   'drop',
   'beat',
@@ -164,6 +172,7 @@ export const collectSnapCandidates = (context: SnapContext): readonly SnapCandid
     clips = [],
     sections = [],
     drops = [],
+    lyricCues = [],
     timelineEndSec = 0,
     excludeShotId = null,
     excludeClipId = null,
@@ -192,6 +201,8 @@ export const collectSnapCandidates = (context: SnapContext): readonly SnapCandid
   }
 
   for (const drop of drops) candidates.push({ atSec: drop, kind: 'drop' })
+
+  for (const cue of lyricCues) candidates.push({ atSec: cue, kind: 'lyric' })
 
   for (const beat of expandBeatGrid(beats, subdivision)) {
     candidates.push({ atSec: beat, kind: 'beat' })

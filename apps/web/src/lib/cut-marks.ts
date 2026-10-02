@@ -167,6 +167,25 @@ export type SectionMarksResult = {
   readonly skipped: number
 }
 
+/** 時刻の並びに区切りを置く（セクションの境目・歌い出し）。曲の頭と終わりには置かない。 */
+const addMarksAt = (
+  marks: readonly CutMark[],
+  timesSec: readonly number[],
+  snappedTo: 'section' | 'lyric',
+  songDurationSec: number,
+): SectionMarksResult =>
+  timesSec
+    .filter((atSec) => atSec >= MIN_CUT_DURATION_SEC && atSec <= songDurationSec - MIN_CUT_DURATION_SEC)
+    .reduce<SectionMarksResult>(
+      (current, atSec) => {
+        const result = addMark(current.marks, { atSec, snappedTo })
+        return result.ok
+          ? { marks: result.marks, added: current.added + 1, skipped: current.skipped }
+          : { ...current, skipped: current.skipped + 1 }
+      },
+      { marks, added: 0, skipped: 0 },
+    )
+
 /**
  * セクションの境目すべてに区切りを置く（制作者の要望 2026-09-26）。
  *
@@ -180,21 +199,31 @@ export const addSectionMarks = (
   marks: readonly CutMark[],
   boundariesSec: readonly number[],
   songDurationSec: number,
-): SectionMarksResult =>
-  boundariesSec
-    .filter(
-      (atSec) =>
-        atSec >= MIN_CUT_DURATION_SEC && atSec <= songDurationSec - MIN_CUT_DURATION_SEC,
-    )
-    .reduce<SectionMarksResult>(
-      (current, atSec) => {
-        const result = addMark(current.marks, { atSec, snappedTo: 'section' })
-        return result.ok
-          ? { marks: result.marks, added: current.added + 1, skipped: current.skipped }
-          : { ...current, skipped: current.skipped + 1 }
-      },
-      { marks, added: 0, skipped: 0 },
-    )
+): SectionMarksResult => addMarksAt(marks, boundariesSec, 'section', songDurationSec)
+
+/**
+ * 歌い出しすべてに区切りを置く（制作者 2026-10-02「テロップを置いたってことは時間が割とはっきりするので、
+ * 区切りもつけやすくなる」）。セクションの境目と同じ置き方。要らない区切りは普通に消せる。
+ */
+export const addLyricMarks = (
+  marks: readonly CutMark[],
+  cuesSec: readonly number[],
+  songDurationSec: number,
+): SectionMarksResult => addMarksAt(marks, cuesSec, 'lyric', songDurationSec)
+
+/** 歌い出しにまとめて置いた結果の知らせ。**何も起きなかったときも理由を言う。** */
+export const describeLyricMarks = (result: SectionMarksResult): string => {
+  if (result.added === 0) {
+    return result.skipped === 0
+      ? '歌詞の時刻がまだありません。「歌詞を合わせる」で歌い出しに時刻を付けると使えます。'
+      : '歌い出しには、すでに区切りがあります。'
+  }
+  const skipped =
+    result.skipped === 0
+      ? ''
+      : `（${String(result.skipped)} 本は近くに区切りがあるので置きませんでした）`
+  return `歌い出しに区切りを ${String(result.added)} 本置きました${skipped}。`
+}
 
 /** まとめて置いた結果の知らせ。**何も起きなかったときも理由を言う。** */
 export const describeSectionMarks = (result: SectionMarksResult): string => {
@@ -349,8 +378,10 @@ export const describeCuts = (
 export const buildCutMarkCandidates = (
   beatSource: BeatSource,
   timelineEndSec: number,
+  /** 歌詞の歌い出し。区切りを歌い出しに寄せる（制作者 2026-10-02）。 */
+  lyricCues: readonly number[] = [],
 ): readonly SnapCandidate[] =>
-  buildSnapCandidates({ shots: [], clips: [], beatSource, timelineEndSec }, {})
+  buildSnapCandidates({ shots: [], clips: [], beatSource, timelineEndSec, lyricCues }, {})
 
 /** ズーム率から吸着の許容距離を出す。規則は `packages/timeline` 側にある。 */
 export const cutMarkToleranceSec = (pixelsPerSecond: number): number =>
