@@ -34,6 +34,13 @@ export type ShotContinuityMode = z.infer<typeof ShotContinuityMode>
 export const ShotTiming = z.enum(['trim', 'fit'])
 export type ShotTiming = z.infer<typeof ShotTiming>
 
+/**
+ * `fit` の速度の幅。元の MV（手作業の Remotion）と同じ 0.5〜2.5 倍。これより遅いと滲み、速いと落ち着かない。
+ * 再生（`@ixa/timeline`）と、最長より長い Shot をどこまで作れるか（`generation/duration.ts`）が同じ値を読む。
+ */
+export const MIN_PLAYBACK_RATE = 0.5
+export const MAX_PLAYBACK_RATE = 2.5
+
 export const Shot = z.object({
   id: ShotId,
   projectId: ProjectId,

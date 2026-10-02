@@ -1,14 +1,13 @@
-import type { Shot } from '@ixa/domain'
+import { MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE, type Shot } from '@ixa/domain'
 
 /**
  * 尺に合わせた速度（ADR-0026）。
  *
  * `fit` の Shot は、採用 Take の切り出し位置（`sourceInSec`）から後ろ全体を Shot の尺に収める。
- * 幅は元の MV（手作業の Remotion）と同じ 0.5〜2.5 倍。これより遅いと滲み、速いと落ち着かない。
+ * 幅（0.5〜2.5 倍）は domain が持つ。最長より長い Shot をどこまで作れるかも同じ値で決まる。
  * **プレビューと書き出しは同じ文書を読む**ので、ここで決めた値が両方に効く。
  */
-export const MIN_PLAYBACK_RATE = 0.5
-export const MAX_PLAYBACK_RATE = 2.5
+export { MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE }
 
 /** これより短い不足は数えない（フレームの端数・probe の丸め）。検査と画面が同じ値を使う。 */
 export const TAKE_SHORT_TOLERANCE_SEC = 0.05

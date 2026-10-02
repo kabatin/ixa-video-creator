@@ -91,6 +91,7 @@ export const generateResultJson = {
   specHash: SPEC_HASH,
   resolvedModel: 'kling-v2',
   duplicateOfTakeId: null,
+  stretchedToFit: false,
 }
 
 // --- Character / Look（docs/ARCHITECTURE.md §8） ---

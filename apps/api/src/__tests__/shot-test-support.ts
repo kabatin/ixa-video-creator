@@ -17,6 +17,7 @@ export type GenerateData = {
   specHash: string
   resolvedModel: string
   duplicateOfTakeId: string | null
+  stretchedToFit: boolean
 }
 
 export const CHEAP_MODEL = testModel({ id: 'test/cheap', costPerSecondUsd: 0.01, characterConsistency: 0.1 })

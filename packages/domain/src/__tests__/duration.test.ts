@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   DurationNotSupportedError, canProduceDuration, defaultSourceInSec, quantizeDuration,
+  stretchesToFit,
 } from '../generation/duration.js'
 
 const VEO = { mode: 'enum', values: [4, 6, 8] } as const
 const KLING = { mode: 'enum', values: [5, 10] } as const
 const SEEDANCE = { mode: 'range', min: 4, max: 15 } as const
+/** vpipe の MiniMax H3（17n+5 コマ / 24fps。n = 3..14）。 */
+const H3 = {
+  mode: 'enum',
+  values: Array.from({ length: 12 }, (_, i) => (17 * (i + 3) + 5) / 24),
+} as const
 
 describe('quantizeDuration', () => {
   it('列挙モデルでは要求尺以上で最小の値へ切り上げる', () => {
@@ -28,14 +34,59 @@ describe('quantizeDuration', () => {
     expect(quantizeDuration(6, stepped)).toBe(6)
   })
 
-  it('上限を超える尺は例外にする（無言で切り捨てない）', () => {
-    expect(() => quantizeDuration(9, VEO)).toThrow(DurationNotSupportedError)
-    expect(() => quantizeDuration(16, SEEDANCE)).toThrow(DurationNotSupportedError)
+  /**
+   * 制作者 2026-10-01「ミリ秒まで一致しないと生成できないのは不便すぎる」。
+   * 最長より長い Shot は最長で作り、「Take を尺に合わせる」でゆっくり再生して埋める（0.5 倍まで）。
+   */
+  it('最長を少し超える尺は最長で作る（MiniMax H3 の 10.125 秒に CUT-01 の 10.13 秒）', () => {
+    expect(quantizeDuration(10.125, H3)).toBe(10.125)
+    expect(quantizeDuration(10.13, H3)).toBe(10.125)
+    expect(quantizeDuration(9, VEO)).toBe(8)
+    expect(quantizeDuration(16, SEEDANCE)).toBe(15)
+  })
+
+  it('ゆっくり再生して埋められるのは 2 倍の長さまで（0.5 倍速）', () => {
+    expect(quantizeDuration(16, VEO)).toBe(8)
+    expect(quantizeDuration(20.25, H3)).toBe(10.125)
+    expect(() => quantizeDuration(16.01, VEO)).toThrow(DurationNotSupportedError)
+    expect(() => quantizeDuration(30.01, SEEDANCE)).toThrow(DurationNotSupportedError)
+  })
+
+  it('step の切り上げが最長を超えるときは、出せる最長で作る', () => {
+    const stepped = { mode: 'range', min: 1, max: 10, step: 2 } as const
+    expect(quantizeDuration(9.5, stepped)).toBe(9)
+    expect(quantizeDuration(12, stepped)).toBe(9)
+  })
+
+  it('断るときは人の言葉で言う（尺の一覧を JSON で出さない）', () => {
+    const error = (() => {
+      try {
+        quantizeDuration(21, H3)
+      } catch (caught) {
+        return caught
+      }
+      return null
+    })()
+    expect(error).toBeInstanceOf(DurationNotSupportedError)
+    const message = (error as DurationNotSupportedError).message
+    expect(message).not.toMatch(/[{}[\]]/)
+    expect(message).toContain('10.125')
+    expect(message).toContain('21')
+    expect(message).toContain('分けて')
   })
 
   it('canProduceDuration は例外を投げずに可否を返す', () => {
     expect(canProduceDuration(3.75, VEO)).toBe(true)
-    expect(canProduceDuration(9, VEO)).toBe(false)
+    expect(canProduceDuration(9, VEO)).toBe(true)
+    expect(canProduceDuration(16.01, VEO)).toBe(false)
+  })
+})
+
+describe('stretchesToFit', () => {
+  it('生成尺が編集尺より短いときだけ、ゆっくり再生して埋める', () => {
+    expect(stretchesToFit(10.13, 10.125)).toBe(true)
+    expect(stretchesToFit(10.125, 10.125)).toBe(false)
+    expect(stretchesToFit(3.75, 4)).toBe(false)
   })
 })
 

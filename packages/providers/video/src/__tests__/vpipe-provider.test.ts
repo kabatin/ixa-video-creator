@@ -242,7 +242,8 @@ describe('submit — 能力の外の要求は投入前に弾く（HTTP を 1 回
     { name: '21:9', overrides: { aspectRatio: '21:9', resolution: { width: 2560, height: 1080 } } },
     { name: '30fps', overrides: { fps: 30 } },
     { name: '4K', overrides: { resolution: { width: 3840, height: 2160 } } },
-    { name: '11 秒', overrides: { durationSec: 11 } },
+    // 最長 10.125 秒の 2 倍を超える（ADR-0011 追記。2 倍までは最長で作って伸ばす）
+    { name: '21 秒', overrides: { durationSec: 21 } },
     { name: 'negative prompt', overrides: { negativePrompt: 'blurry' } },
     {
       name: '最後のフレーム',

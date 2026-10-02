@@ -33,6 +33,7 @@ import {
   DurationNotSupportedError,
   Corrections as CorrectionsSchema,
   settledShotStatus,
+  stretchesToFit,
 } from '@ixa/domain'
 import {
   GenerationContextError,
@@ -130,6 +131,11 @@ const GenerateData = z
      * （ARCHITECTURE.md §11 のコストガード）。
      */
     duplicateOfTakeId: TakeIdSchema.nullable(),
+    /**
+     * モデルの最長より長い Shot を最長で作り、Shot を「Take を尺に合わせる」にした。
+     * 画面はこれを見て「少しゆっくり再生して埋めます」と言う。
+     */
+    stretchedToFit: z.boolean(),
   })
   .openapi('GenerateShotResult')
 
@@ -387,6 +393,21 @@ export const costLimitsFor = (project: Pick<Project, 'budgetUsd'>): CostLimits =
         : Math.min(DEFAULT_COST_LIMITS.maxCostPerRequestUsd, project.budgetUsd),
   })
 
+/**
+ * モデルの最長より短く作るなら、Shot を「Take を尺に合わせる」にする（ゆっくり再生して埋める。ADR-0026）。
+ * 制作者 2026-10-01「ミリ秒まで一致しないと作れないのは不便すぎる」。
+ * `timing` は仕様（specHash）に入らないので、worker の組み立てと食い違わない。伸ばすなら true。
+ */
+export const fitTimingWhenStretched = async (
+  deps: Pick<ShotRoutesDeps, 'shots'>,
+  shot: Shot,
+  compiled: CompiledGeneration<VideoModelDescriptor>,
+): Promise<boolean> => {
+  if (!stretchesToFit(shot.durationSec, compiled.spec.durationSec)) return false
+  if (shot.timing !== 'fit') await deps.shots.update(shot.id, { timing: 'fit' })
+  return true
+}
+
 /** GenerationJob 行を作りつつキューへ入れる。DB が真実、キューは実行手段（ADR-0008）。 */
 export const enqueueJobs = async (
   deps: Pick<ShotRoutesDeps, 'generationJobs' | 'queue'>,
@@ -637,6 +658,7 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
       const existing = await deps.takes.findByShot(shot.id)
       const duplicate = existing.find((t) => t.specHash === compiled.specHash) ?? null
 
+      const stretchedToFit = await fitTimingWhenStretched(deps, shot, compiled)
       const jobIds = await enqueueJobs(deps, shot, compiled, model, count, corrections)
       const generating = await deps.shots.updateStatus(shot.id, 'generating')
       await publishShotStatus(deps, generating)
@@ -647,6 +669,7 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
           specHash: compiled.specHash,
           resolvedModel: compiled.model.id,
           duplicateOfTakeId: duplicate === null ? null : duplicate.id,
+          stretchedToFit,
         }),
         202,
       )

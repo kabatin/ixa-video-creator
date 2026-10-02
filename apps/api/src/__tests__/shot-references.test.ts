@@ -162,10 +162,10 @@ describe('参照がある場合の生成（Phase 2 への備え）', () => {
   it('AUTO でどのモデルも要求を満たせなければ 422', async () => {
     const project = aProject()
     const shot = aShot(project.id)
-    // 対応値が 2 秒だけ。編集尺 3.75 秒は切り上げ先が無い（ADR-0011）。
+    // 対応値が 1.5 秒だけ。編集尺 3.75 秒は切り上げ先が無く、0.5 倍速で伸ばしても 3 秒にしかならない（ADR-0011 追記）。
     const tooShort = testModel({
       id: 'test/too-short',
-      capabilities: { durations: { mode: 'enum', values: [2] } },
+      capabilities: { durations: { mode: 'enum', values: [1.5] } },
     })
 
     const jobs = createInMemoryGenerationJobRepository()

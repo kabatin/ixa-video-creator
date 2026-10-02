@@ -74,7 +74,10 @@ describe('尺とコマ数（H3 は 17n+5 コマ・24fps だけ）', () => {
     expect(quantizeDuration(3.75, durations)).toBe(3.75)
     expect(quantizeDuration(1, durations)).toBe(2.333)
     expect(canProduceDuration(10.125, durations)).toBe(true)
-    expect(canProduceDuration(10.2, durations)).toBe(false)
+    // 最長を超えたら最長で作り、ゆっくり再生して埋める（2 倍まで。ADR-0011 追記）
+    expect(quantizeDuration(10.13, durations)).toBe(10.125)
+    expect(canProduceDuration(20.25, durations)).toBe(true)
+    expect(canProduceDuration(20.26, durations)).toBe(false)
   })
 })
 

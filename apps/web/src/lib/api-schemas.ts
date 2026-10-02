@@ -84,6 +84,8 @@ export const WireGenerateResult = z.object({
   specHash: z.string().length(64),
   resolvedModel: ModelId,
   duplicateOfTakeId: TakeId.nullable(),
+  /** モデルの最長より長い Shot を最長で作り、Shot を「Take を尺に合わせる」にした。 */
+  stretchedToFit: z.boolean(),
 })
 export type WireGenerateResult = z.infer<typeof WireGenerateResult>
 

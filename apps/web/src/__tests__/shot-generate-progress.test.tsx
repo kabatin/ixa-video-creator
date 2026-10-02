@@ -40,6 +40,7 @@ const generateResult = (jobCount: number): WireGenerateResult =>
     specHash: 'a'.repeat(64),
     resolvedModel: 'kling-v2',
     duplicateOfTakeId: null,
+    stretchedToFit: false,
   })
 
 const meter = (totalUsd: number): WireCostMeter => ({
@@ -242,5 +243,28 @@ describe('累計費用の取り直し（F3b）', () => {
 
     expect(screen.getByText(/予算を読めませんでした/)).toBeInTheDocument()
     expect(screen.queryByText(/予算を読み込んでいます/)).toBeNull()
+  })
+})
+
+/** 制作者 2026-10-01「ミリ秒まで一致しないと作れないのは不便すぎる」。最長で作って伸ばしたことを言う。 */
+describe('最長より長い Shot', () => {
+  it('最長で作って伸ばしたら、ゆっくり再生して合わせると言う', async () => {
+    const generateTakes = vi.fn(() =>
+      Promise.resolve({ ...generateResult(1), stretchedToFit: true }),
+    )
+
+    render(<Harness api={fakeApi({ generateTakes })} />)
+    await tick()
+    await pressGenerate()
+
+    expect(screen.getByText(/最長で作って少しゆっくり再生して合わせます/)).toBeInTheDocument()
+  })
+
+  it('伸ばさないなら何も言わない', async () => {
+    render(<Harness api={fakeApi()} />)
+    await tick()
+    await pressGenerate()
+
+    expect(screen.queryByText(/ゆっくり再生して合わせます/)).toBeNull()
   })
 })

@@ -366,6 +366,24 @@ describe('POST /projects/:projectId/shots/bulk/generate', () => {
     expect(json.data.enqueuedCount).toBe(1)
   })
 
+  it('モデルの最長より長い Shot は最長で作り、その Shot だけ「尺に合わせる」にする', async () => {
+    const project = aProject()
+    const fits = aShot(project.id, { code: 'shot_001', order: 1000 })
+    // 対応値は 4/6/8 秒。9 秒は 8 秒で作り、ゆっくり再生して埋める
+    const long = aShot(project.id, { code: 'shot_002', order: 2000, durationSec: 9 })
+    const f = buildBulkFixture({ project, shots: [fits, long] })
+
+    const res = await postJson(f.app, `/projects/${project.id}/shots/bulk/generate`, {
+      shotIds: [fits.id, long.id],
+      model: 'test/cheap',
+    })
+
+    expect(res.status).toBe(202)
+    const json = (await res.json()) as Ok<BulkGenerateData>
+    expect(json.data.enqueuedCount).toBe(2)
+    expect(f.shots.snapshot().map((s) => s.timing)).toEqual(['trim', 'fit'])
+  })
+
   it('同じ Shot を 2 回指定したら 422', async () => {
     const project = aProject()
     const shots = threeShots(project)

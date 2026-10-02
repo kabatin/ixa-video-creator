@@ -1,4 +1,5 @@
 import type { Seconds } from '../common/time.js'
+import { MIN_PLAYBACK_RATE } from '../shot/shot.js'
 
 /**
  * モデルが出せる尺の表現。
@@ -8,10 +9,23 @@ export type DurationSupport =
   | { mode: 'enum'; values: readonly number[] }
   | { mode: 'range'; min: number; max: number; step?: number }
 
+/** 画面と同じ書き方（`3.75`・`10.125`）。末尾の 0 は付けない。 */
+const secondsText = (value: number): string => String(Number(value.toFixed(3)))
+
+/** そのモデルが出せる最も長い尺。step 付きの範囲では、step に載る最後の値。 */
+export const longestDuration = (support: DurationSupport): Seconds => {
+  if (support.mode === 'enum') return Math.max(...support.values)
+  if (support.step === undefined) return support.max
+  return support.min + Math.floor((support.max - support.min) / support.step) * support.step
+}
+
 export class DurationNotSupportedError extends Error {
   constructor(readonly requested: Seconds, readonly support: DurationSupport) {
+    const longest = longestDuration(support)
     super(
-      `要求された尺 ${requested}s はこのモデルで出せません: ${JSON.stringify(support)}`,
+      `Shot の尺 ${secondsText(requested)} 秒は、このモデルの最長 ${secondsText(longest)} 秒の ` +
+        `${String(1 / MIN_PLAYBACK_RATE)} 倍を超えます（ゆっくり再生して埋められるのは ${String(MIN_PLAYBACK_RATE)} 倍速まで）。` +
+        `Shot を分けてください。`,
     )
     this.name = 'DurationNotSupportedError'
   }
@@ -20,25 +34,32 @@ export class DurationNotSupportedError extends Error {
 /**
  * 編集尺をモデルが出せる生成尺へ「切り上げる」。
  * 余りは Shot.sourceInSec でトリムし、トランジションののりしろにも使う。
+ *
+ * **最長より長い Shot は最長で作る**（制作者 2026-10-01「ミリ秒まで一致しないと作れないのは不便すぎる」）。
+ * 足りない分は「Take を尺に合わせる」（`Shot.timing = 'fit'`）でゆっくり再生して埋める。
+ * 埋められるのは `MIN_PLAYBACK_RATE` 倍速まで（最長の 2 倍の尺まで）。それより長ければ断る。
  */
 export const quantizeDuration = (
   requestedSec: Seconds,
   support: DurationSupport,
 ): Seconds => {
-  if (support.mode === 'enum') {
-    const candidates = [...support.values].sort((a, b) => a - b)
-    const found = candidates.find((v) => v >= requestedSec)
-    if (found === undefined) throw new DurationNotSupportedError(requestedSec, support)
-    return found
+  const longest = longestDuration(support)
+  if (requestedSec > longest) {
+    if (requestedSec * MIN_PLAYBACK_RATE > longest) {
+      throw new DurationNotSupportedError(requestedSec, support)
+    }
+    return longest
   }
 
-  if (requestedSec > support.max) throw new DurationNotSupportedError(requestedSec, support)
+  if (support.mode === 'enum') {
+    const candidates = [...support.values].sort((a, b) => a - b)
+    return candidates.find((v) => v >= requestedSec) ?? longest
+  }
+
   const floor = Math.max(requestedSec, support.min)
   if (support.step === undefined) return floor
   const steps = Math.ceil((floor - support.min) / support.step)
-  const value = support.min + steps * support.step
-  if (value > support.max) throw new DurationNotSupportedError(requestedSec, support)
-  return value
+  return Math.min(support.min + steps * support.step, longest)
 }
 
 export const canProduceDuration = (
@@ -52,6 +73,10 @@ export const canProduceDuration = (
     return false
   }
 }
+
+/** 生成尺が編集尺に足りず、ゆっくり再生して埋めるか（`Shot.timing` を `fit` にする）。 */
+export const stretchesToFit = (editDurationSec: Seconds, generationDurationSec: Seconds): boolean =>
+  generationDurationSec < editDurationSec
 
 /**
  * 生成尺が編集尺を上回るとき、どこからトリムするか。

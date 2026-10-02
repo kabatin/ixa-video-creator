@@ -119,6 +119,7 @@ const apiDouble = (): { api: RegenerateApi; generateTakes: ReturnType<typeof vi.
       specHash: 'a'.repeat(64),
       resolvedModel: 'test/cheap',
       duplicateOfTakeId: null,
+      stretchedToFit: false,
     }),
   )
   return { api: { generateTakes } as unknown as RegenerateApi, generateTakes }

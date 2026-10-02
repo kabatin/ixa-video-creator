@@ -36,6 +36,7 @@ import {
   applySelectedTake,
   costLimitsFor,
   enqueueJobs,
+  fitTimingWhenStretched,
   generationFailureFields,
   generationPorts,
   publishShotStatus,
@@ -401,6 +402,7 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
 
       const jobIdsByShot = new Map<ShotId, GenerationJobId[]>()
       for (const { shot, compiled } of planned) {
+        await fitTimingWhenStretched(deps, shot, compiled)
         jobIdsByShot.set(shot.id, await enqueueJobs(deps, shot, compiled, model, count))
         const generating = await deps.shots.updateStatus(shot.id, 'generating')
         // 投入した Shot ごとに流す。1 通にまとめると、どの Shot が動いたか画面に出せない。

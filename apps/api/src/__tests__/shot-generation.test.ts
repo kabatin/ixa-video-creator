@@ -197,6 +197,56 @@ describe('POST /shots/:id/generate', () => {
     expect(f.generationJobs.snapshot()).toHaveLength(0)
   })
 
+  /** 制作者 2026-10-01「ミリ秒まで一致しないと作れないのは不便すぎる」。 */
+  it('モデルの最長より長い Shot は最長で作り、Shot を「尺に合わせる」にする', async () => {
+    const project = aProject()
+    // 対応値は 4/6/8 秒。9 秒は 8 秒で作り、ゆっくり再生して埋める
+    const long = aShot(project.id, { durationSec: 9, code: 'shot_998', order: 8000 })
+    const f = buildFixture({ project, extraShots: [long] })
+
+    const res = await postJson(f.app, `/shots/${long.id}/generate`, { model: 'test/cheap' })
+
+    expect(res.status).toBe(202)
+    const json = (await res.json()) as Ok<GenerateData>
+    expect(json.data.stretchedToFit).toBe(true)
+    const expected = await computeSpecHash(
+      compileSpec({
+        project,
+        shot: long,
+        characters: [],
+        references: [],
+        generationDurationSec: 8,
+        seed: null,
+        negativePrompt: null,
+      }),
+    )
+    expect(json.data.specHash).toBe(expected)
+    expect(f.shots.snapshot().find((s) => s.id === long.id)?.timing).toBe('fit')
+  })
+
+  it('最長に収まる Shot の扱い（速度を変えない）はそのまま', async () => {
+    const f = buildFixture()
+
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/cheap' })
+
+    const json = (await res.json()) as Ok<GenerateData>
+    expect(json.data.stretchedToFit).toBe(false)
+    expect(f.shots.snapshot().find((s) => s.id === f.shot.id)?.timing).toBe('trim')
+  })
+
+  it('作れない尺の断りは人の言葉で、分け方を言う（尺の一覧を JSON で出さない）', async () => {
+    const project = aProject()
+    const tooLong = aShot(project.id, { durationSec: 30, code: 'shot_999', order: 9000 })
+    const f = buildFixture({ project, extraShots: [tooLong] })
+
+    const res = await postJson(f.app, `/shots/${tooLong.id}/generate`, { model: 'test/cheap' })
+
+    const body = (await res.json()) as ErrorBody
+    const message = body.fields?.['model']?.[0] ?? ''
+    expect(message).toContain('分けて')
+    expect(message).not.toMatch(/[{}]/)
+  })
+
   it('存在しない Shot は 404', async () => {
     const f = buildFixture()
     const res = await postJson(f.app, `/shots/${aShot(f.project.id).id}/generate`, {

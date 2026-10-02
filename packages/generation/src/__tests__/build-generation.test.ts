@@ -227,8 +227,8 @@ describe('buildGeneration — モデルを明示したとき', () => {
   })
 
   it('モデルが出せない尺なら DurationNotSupportedError を握り潰さない', async () => {
-    // 4/6/8 秒しか出せないモデルに 9 秒を要求する。
-    const shot = aShot(projectId, { durationSec: 9 })
+    // 4/6/8 秒しか出せないモデルに 17 秒を要求する。8 秒で作って 0.5 倍速でも埋まらない（ADR-0011 追記）。
+    const shot = aShot(projectId, { durationSec: 17 })
     const { deps } = depsOf([modelA])
 
     await expect(buildGeneration(deps, shot, aProject(), modelA.id)).rejects.toBeInstanceOf(

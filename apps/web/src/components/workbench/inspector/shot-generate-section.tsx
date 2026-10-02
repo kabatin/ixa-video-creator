@@ -169,7 +169,10 @@ export const ShotGenerateSection = ({
       })
       setSubmissions((current) => current + 1)
       // サーバと同じ遷移を先回りして映す。完了は SSE が届ける。
-      workbench.replaceShots([{ ...shot, status: 'generating' }])
+      // 最長で作って伸ばすときは、サーバが Shot を「Take を尺に合わせる」にしている。
+      workbench.replaceShots([
+        { ...shot, status: 'generating', ...(started.stretchedToFit ? { timing: 'fit' as const } : {}) },
+      ])
     } catch (cause) {
       setError(`生成を開始できませんでした: ${describeForPerson(cause)}`)
     } finally {
@@ -231,6 +234,12 @@ export const ShotGenerateSection = ({
           {`${result.resolvedModel} で ${String(result.jobIds.length)} 件を投入しました。`}
           {result.duplicateOfTakeId !== null && (
             <span className="text-warn"> 同じ仕様の Take が既にあります。</span>
+          )}
+          {result.stretchedToFit && (
+            <span>
+              {' '}
+              Shot がこのモデルの最長より長いので、最長で作って少しゆっくり再生して合わせます（「Take を尺に合わせる」にしました）。
+            </span>
           )}
         </p>
       )}
