@@ -295,6 +295,10 @@ export const ProgramMonitorPlayer = ({
       inFrame={inFrame}
       outFrame={outFrame}
       loop={loop}
+      // 終わっても先頭へ戻らない（制作者 2026-10-02「最後まで再生させたらラストと先頭で進捗バーがジッターおこした」）。
+      // 既定は先頭のコマへ戻って 0 秒を配り、最後へ付いていく聴きながら切るの報告と取り合って、位置が 最後 ⇄ 0 を
+      // 行き来し続けた。もう一度鳴らせば Player が自分で先頭から鳴らす（最後のコマでの play() は頭へ飛ぶ）。
+      moveToBeginningWhenEnded={false}
       style={{ width: '100%', height: '100%' }}
       // 個人利用のため会社規模によるライセンス契約は不要（制作者に確認、2026-09-18）。
       // 商用として販売する段になったら remotion.dev/license を見直すこと。

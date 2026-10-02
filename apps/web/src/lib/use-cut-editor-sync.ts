@@ -103,7 +103,13 @@ export const useCutEditorSync = (
     if (Math.abs(control.current.currentSec - followSec) < FOLLOW_TOLERANCE_SEC) return
     control.current.seekTo(followSec)
   }, [followSec, othersPlaying])
-  const shownSec = othersPlaying && followSec !== null ? followSec : playback.currentSec
+  /**
+   * 見せる位置。他が鳴っている間に加えて、**自分が止まっている間も共有の位置**を見せる。
+   * 他が止まった瞬間は再生器の頭出しが遅れて終わるので、再生器の古い位置（鳴らし始めた所）を見せると
+   * バーが一瞬戻って見えた（制作者 2026-10-02「進捗バーがジッターおこした」）。自分が鳴らすときは `followSec` が null。
+   */
+  const shownSec =
+    followSec !== null && (othersPlaying || !playback.isPlaying) ? followSec : playback.currentSec
   const shown = useRef(shownSec)
   shown.current = shownSec
 

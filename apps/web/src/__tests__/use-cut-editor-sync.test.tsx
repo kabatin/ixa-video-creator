@@ -109,6 +109,22 @@ describe('他が鳴っている間の付いていき方', () => {
     expect(playback.seekTo).toHaveBeenCalledWith(30)
   })
 
+  /**
+   * 他が止まった瞬間（制作者 2026-10-02「最後まで再生させたらラストと先頭で進捗バーがジッターおこした」）。
+   * 再生器の頭出しは遅れて終わるので、その間に再生器の古い位置（鳴らし始めた所）を見せると、バーが一瞬戻って見えた。
+   */
+  it('他が止まった直後、頭出しが終わるまでも共有の位置を見せる（古い位置へ一瞬戻らない）', () => {
+    const playback = fakePlayback({ currentSec: 10 })
+    const sync = port({ followSec: 30 })
+    const { result, rerender } = renderHook(({ s }) => useCutEditorSync(playback, s), {
+      initialProps: { s: sync },
+    })
+
+    rerender({ s: { ...sync, othersPlaying: false } })
+
+    expect(result.current.currentSec).toBe(30)
+  })
+
   it('矢印キーの 1 歩は、見えている位置から動かす', () => {
     const playback = fakePlayback({ currentSec: 10 })
     const sync = port({ followSec: 98 })
