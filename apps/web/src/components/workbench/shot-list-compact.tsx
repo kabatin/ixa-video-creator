@@ -210,6 +210,7 @@ export const ShotListCompact = ({
                     reason={poster.reason}
                     alt={`${shot.code} のサムネイル`}
                     size="chip"
+                    pending={poster.pending}
                   />
                 </span>
               </td>

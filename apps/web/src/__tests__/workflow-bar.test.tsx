@@ -17,7 +17,7 @@ const postersFor = (ids: readonly string[], withFrame: readonly boolean[]): Shot
   new Map(
     ids.map((id, index) => [
       ShotId.parse(id),
-      { url: null, reason: 'まだ Take がありません', hasStartFrame: withFrame[index] ?? false },
+      { url: null, reason: 'まだ Take がありません', hasStartFrame: withFrame[index] ?? false, pending: false },
     ]),
   )
 

@@ -144,6 +144,7 @@ export const StoryboardGrid = ({
                     reason={poster.reason}
                     alt={`${shot.code} のサムネイル`}
                     size="card"
+                    pending={poster.pending}
                   />
                   {/* 状態の点。色だけに頼らず、読み上げと title に名前を渡す。 */}
                   <span

@@ -21,6 +21,8 @@ export type ShotPosterProps = {
   /** 何の絵かを言う文。空枠のときは理由と組にして読み上げへ渡す。 */
   readonly alt: string
   readonly size: ShotPosterSize
+  /** 作っている最中（待てば出る）。絵がまだ無ければ回る印を出す。 */
+  readonly pending?: boolean
 }
 
 /** 読み込みに失敗したときの文。期限切れの署名がいちばん多い。 */
@@ -43,7 +45,26 @@ const NOTE_CLASS: Readonly<Record<ShotPosterSize, string>> = {
   chip: 'sr-only',
 }
 
-export const ShotPoster = ({ url, reason, alt, size }: ShotPosterProps) => {
+/** 回る印の大きさ。チップは高さ 20px ほどしか無い。 */
+const SPINNER_CLASS: Readonly<Record<ShotPosterSize, string>> = {
+  row: 'h-3 w-3',
+  card: 'h-5 w-5',
+  chip: 'h-3 w-3',
+}
+
+/**
+ * 作っている最中の印（制作者 2026-10-02「生成中なのが分かるようにローディングマーク」）。
+ * Shot 一覧のチップは字が置けず、作っている最中も空の灰色の枠にしか見えなかった。動きを減らす設定では回さない。
+ */
+const Spinner = ({ size }: { readonly size: ShotPosterSize }) => (
+  <span
+    data-testid="poster-spinner"
+    aria-hidden="true"
+    className={`${SPINNER_CLASS[size]} shrink-0 rounded-full border-2 border-line-strong border-t-accent motion-safe:animate-spin`}
+  />
+)
+
+export const ShotPoster = ({ url, reason, alt, size, pending = false }: ShotPosterProps) => {
   const [failed, setFailed] = useState(false)
   const frame = `overflow-hidden rounded border border-line bg-surface-2 ${FRAME_CLASS[size]}`
 
@@ -66,13 +87,18 @@ export const ShotPoster = ({ url, reason, alt, size }: ShotPosterProps) => {
   // 「URL が無い」と「URL はあったが読めなかった」を書き分ける。対処が違う。
   const note = url === null ? describeMissingPoster(reason) : POSTER_LOAD_FAILED_TEXT
 
+  // 読めなかった絵は作っている最中ではない（URL はあった）。
+  const working = pending && url === null
+
   return (
     <span
       role="img"
       aria-label={`${alt}: ${note}`}
+      {...(working ? { 'aria-busy': true } : {})}
       title={note}
-      className={`${frame} flex items-center justify-center text-muted`}
+      className={`${frame} flex flex-col items-center justify-center gap-1 text-muted`}
     >
+      {working && <Spinner size={size} />}
       <span className={NOTE_CLASS[size]}>{note}</span>
     </span>
   )

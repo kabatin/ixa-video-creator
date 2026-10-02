@@ -14,8 +14,14 @@ export type PosterView = {
   readonly reason: string | null
 }
 
+/**
+ * Shot の 1 枚。作っている最中か（待てば出るか。サムネに回る印を出す。制作者 2026-10-02）を添える。
+ * 何を作っているかの文は `reason`（API の文）が言う。ここで理由の文を見て判定しない（書き写すとズレる）。
+ */
+export type ShotPosterCell = PosterView & { readonly pending: boolean }
+
 /** Shot の 1 枠。絵に加えて、最初のフレームが付いているか（流れの帯・説明も絵も無い Shot の確認）。 */
-export type ShotPosterView = PosterView & { readonly hasStartFrame: boolean }
+export type ShotPosterView = ShotPosterCell & { readonly hasStartFrame: boolean }
 
 export type ShotPosterMap = ReadonlyMap<ShotId, ShotPosterView>
 
@@ -30,7 +36,7 @@ export const NOT_FETCHED_REASON = 'not_fetched'
 /** Shot が一覧に 1 件も無いとき。プロジェクトカードの表紙を選べない理由。 */
 export const NO_SHOTS_REASON = 'no_shots'
 
-const PENDING_POSTER: PosterView = { url: null, reason: NOT_FETCHED_REASON }
+const PENDING_POSTER: ShotPosterCell = { url: null, reason: NOT_FETCHED_REASON, pending: false }
 
 /**
  * **画面が自分で作った理由だけ**をここで言い換える。
@@ -69,7 +75,7 @@ export const posterByShotId = (list: readonly WireShotPoster[]): ShotPosterMap =
   new Map(
     list.map((entry) => [
       entry.shotId,
-      { url: entry.thumbnailUrl, reason: entry.reason, hasStartFrame: entry.hasStartFrame },
+      { url: entry.thumbnailUrl, reason: entry.reason, hasStartFrame: entry.hasStartFrame, pending: entry.pending },
     ]),
   )
 
@@ -83,7 +89,7 @@ export const startFrameKnownFor = (posters: ShotPosterMap, shotId: ShotId): bool
  * まだ引けていない Shot の分。
  * Map に無いことを「絵が無い」と読み替えない。SSE で増えた直後の Shot がこれに当たる。
  */
-export const posterViewFor = (posters: ShotPosterMap, shotId: ShotId): PosterView =>
+export const posterViewFor = (posters: ShotPosterMap, shotId: ShotId): ShotPosterCell =>
   posters.get(shotId) ?? PENDING_POSTER
 
 /**

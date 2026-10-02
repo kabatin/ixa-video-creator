@@ -354,6 +354,7 @@ export const TimelineTracks = ({
                           reason={poster.reason}
                           alt={`${shot.code} のサムネイル`}
                           size="chip"
+                          pending={poster.pending}
                         />
                         {/* 絵の上に字は読めない。地の色を薄く被せてから字を乗せる。 */}
                         <span aria-hidden className="absolute inset-0 bg-bg/50" />

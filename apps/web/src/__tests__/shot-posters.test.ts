@@ -50,8 +50,15 @@ describe('posterByShotId', () => {
       url: 'https://example.invalid/a.jpg',
       reason: null,
       hasStartFrame: false,
+      pending: false,
     })
-    expect(map.get(otherShotId)).toEqual({ url: null, reason: 'no_take', hasStartFrame: false })
+    expect(map.get(otherShotId)).toEqual({ url: null, reason: 'no_take', hasStartFrame: false, pending: false })
+  })
+
+  it('作っている最中か（待てば出るか）を運ぶ。サムネに回る印を出すのに使う', () => {
+    const map = posterByShotId([{ ...withoutPoster(SHOT_ID, '絵コンテの画像を作っています'), pending: true }])
+
+    expect(map.get(shotId)?.pending).toBe(true)
   })
 })
 
@@ -69,7 +76,7 @@ describe('posterViewFor', () => {
     const map = posterByShotId([withPoster(SHOT_ID, 'https://example.invalid/a.jpg')])
 
     // 取得前の行に「Take がありません」と出すと、生成をやり直させてしまう（L-021）。
-    expect(posterViewFor(map, otherShotId)).toEqual({ url: null, reason: NOT_FETCHED_REASON })
+    expect(posterViewFor(map, otherShotId)).toEqual({ url: null, reason: NOT_FETCHED_REASON, pending: false })
   })
 })
 

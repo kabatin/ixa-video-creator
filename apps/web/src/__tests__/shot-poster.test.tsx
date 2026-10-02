@@ -76,3 +76,35 @@ describe('絵が無いとき', () => {
     ).toBeInTheDocument()
   })
 })
+
+/**
+ * 作っている最中（制作者 2026-10-02「画像生成中のところはサムネのところに生成中なのが分かるようにローディングマーク」）。
+ * Shot 一覧のチップは字が置けず、作っている最中も空の灰色の枠にしか見えなかった。
+ */
+describe('作っている最中', () => {
+  it.each(['chip', 'row', 'card'] as const)('%s でも回る印を出し、読み上げには理由を残す', (size) => {
+    render(
+      <ShotPoster url={null} reason="絵コンテの画像を作っています" alt="CUT-06 のサムネイル" size={size} pending />,
+    )
+
+    const frame = screen.getByRole('img', { name: 'CUT-06 のサムネイル: 絵コンテの画像を作っています' })
+    expect(frame).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByTestId('poster-spinner')).toBeInTheDocument()
+  })
+
+  it('作っていなければ印を出さない', () => {
+    render(<ShotPoster url={null} reason="まだ Take がありません" alt="CUT-07 のサムネイル" size="chip" />)
+
+    expect(screen.getByRole('img', { name: 'CUT-07 のサムネイル: まだ Take がありません' })).not.toHaveAttribute('aria-busy')
+    expect(screen.queryByTestId('poster-spinner')).toBeNull()
+  })
+
+  it('絵が出ていれば、作っていても絵を出す（前の絵の上に印を重ねない）', () => {
+    render(
+      <ShotPoster url="https://example.invalid/thumb.jpg?sig=x" reason={null} alt="CUT-08 のサムネイル" size="chip" pending />,
+    )
+
+    expect(screen.getByAltText('CUT-08 のサムネイル')).toBeInTheDocument()
+    expect(screen.queryByTestId('poster-spinner')).toBeNull()
+  })
+})
