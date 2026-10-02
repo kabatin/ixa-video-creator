@@ -20,11 +20,13 @@ const SCHEMA_DIR = join(import.meta.dirname, '..', 'schema')
  *
  * 本体が式のもの（`=> Schema.parse({...})`）と、検査を挟んでから返すもの
  * （`=> { ...; return Schema.parse({...}) }`）の両方を拾う。
+ * 名前は `shotRowToDomain` も `rowToDomain` も拾う。小文字始まりを拾えず、変更の履歴のリポジトリが
+ * 黙って読み飛ばされていた（2026-10-02、列 `clip_entries` を足したのに落ちなかった）。
  * 片方しか拾えないと、本体の書き方を変えただけで**検査が黙ってスキップされる**。
  */
 const mappedColumns = (source: string): Set<string> | null => {
   const match =
-    /RowToDomain = \(row: \w+\): \w+ =>[\s\S]*?\w+\.parse\(\{(.*?)\n\s*\}\)/s.exec(source)
+    /[Rr]owToDomain = \(row: \w+\): \w+ =>[\s\S]*?\w+\.parse\(\{(.*?)\n\s*\}\)/s.exec(source)
   if (!match?.[1]) return null
   return new Set([...match[1].matchAll(/(\w+):\s*row\./g)].map((m) => m[1] as string))
 }
@@ -39,6 +41,11 @@ const tableColumns = (schemaSource: string, tableName: string): Set<string> | nu
   if (!match?.[1]) return null
   return new Set([...match[1].matchAll(/^\s*(\w+):\s*\w+\(/gm)].map((m) => m[1] as string))
 }
+
+/** スキーマのファイルの中身すべて。テーブルの定義を名前から探す。 */
+const SCHEMA_SOURCES = readdirSync(SCHEMA_DIR)
+  .filter((name) => name.endsWith('.ts'))
+  .map((name) => readFileSync(join(SCHEMA_DIR, name), 'utf8'))
 
 /** ドメインに存在しない、DB 内部だけの列。写さないのが正しい。 */
 const INTERNAL_COLUMNS = new Set(['deletedAt'])
@@ -56,6 +63,7 @@ const MUST_BE_INSPECTED = [
   'media-asset-repository.ts',
   'shot-repository.ts',
   'project-repository.ts',
+  'edit-batch-repository.ts',
 ] as const
 
 describe('row → domain 変換が列を落としていない', () => {
@@ -76,12 +84,23 @@ describe('row → domain 変換が列を落としていない', () => {
       const mapped = mappedColumns(source)
       if (mapped === null) return // 変換関数を持たないリポジトリ
 
-      const schemaMatch = /from '\.\.\/schema\/(\w+)\.js'/.exec(source)
       const tableMatch = /\.from\((\w+)\)/.exec(source)
-      if (!schemaMatch?.[1] || !tableMatch?.[1]) return
+      // 変換関数があるのにテーブルを突き止められないなら、**黙って通さず落とす**（L-015）。
+      expect(tableMatch?.[1], `${file} のテーブルを見つけられません`).toBeDefined()
+      if (!tableMatch?.[1]) return
 
-      const schemaSource = readFileSync(join(SCHEMA_DIR, `${schemaMatch[1]}.ts`), 'utf8')
+      /**
+       * テーブルを定義しているスキーマのファイルを、名前から探す。以前は最初の import を読んでいて、
+       * 別のテーブル（review は generation）を読んだり、ハイフン入りの名前（edit-batch）を拾えなかったりして、
+       * 黙って読み飛ばしていた（2026-10-02、列 `clip_entries` を足したのに落ちなかった）。
+       */
+      const schemaSource = SCHEMA_SOURCES.find((candidate) =>
+        candidate.includes(`export const ${tableMatch[1] ?? ''} = pgTable`),
+      )
+      expect(schemaSource, `${file} のテーブル ${tableMatch[1]} を定義したスキーマが見つかりません`).toBeDefined()
+      if (schemaSource === undefined) return
       const columns = tableColumns(schemaSource, tableMatch[1])
+      expect(columns, `${file} のテーブル ${tableMatch[1]} の列を読めません`).not.toBeNull()
       if (columns === null) return
 
       const missing = [...columns].filter((c) => !mapped.has(c) && !INTERNAL_COLUMNS.has(c))

@@ -4,6 +4,7 @@ import {
   TEXT_TEMPLATE_STYLE_DEFAULTS,
   TextStyle,
   isTextStyleUnreadable,
+  mergeTextStyle,
   resolveTextStyle,
 } from '../timeline/text-style.js'
 import { parseTextClipParams } from '../timeline/text-template.js'
@@ -122,5 +123,35 @@ describe('保存するスタイル', () => {
 
   it('中身は TextStyle と同じ検査を通す', () => {
     expect(CreateTextStylePresetInput.safeParse({ name: '歌詞', style: { color: 'red' } }).success).toBe(false)
+  })
+})
+
+/**
+ * テロップをまとめて変える（制作者 2026-10-02「テロップをまとめて、サイズやスタイルや位置を変えられるようにしたい」）。
+ * **変えた項目だけ**を重ねる。大きさだけ変えれば、色や位置はテロップごとに今のまま。
+ */
+describe('mergeTextStyle', () => {
+  const current: TextStyle = { size: 0.05, color: '#FF0000', anchor: 'top-left', offset: { x: 0.1, y: 0 } }
+
+  it('指定した項目だけを上書きし、ほかの項目は残す', () => {
+    expect(mergeTextStyle(current, { size: 0.08 }, [])).toEqual({ ...current, size: 0.08 })
+  })
+
+  it('消す項目は型の既定へ戻す（上書きを外す）', () => {
+    expect(mergeTextStyle(current, {}, ['color', 'offset'])).toEqual({ size: 0.05, anchor: 'top-left' })
+  })
+
+  it('いまの見た目が読めなければ、無しから重ねる', () => {
+    expect(mergeTextStyle({ size: 99 }, { anchor: 'bottom-center' }, [])).toEqual({ anchor: 'bottom-center' })
+  })
+
+  it('範囲の外の値は弾く', () => {
+    expect(() => mergeTextStyle(current, { size: 0.9 }, [])).toThrow()
+  })
+
+  it('元の見た目を書き換えない', () => {
+    const before = structuredClone(current)
+    mergeTextStyle(current, { size: 0.08 }, ['color'])
+    expect(current).toEqual(before)
   })
 })

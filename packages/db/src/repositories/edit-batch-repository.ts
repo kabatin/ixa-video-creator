@@ -40,6 +40,7 @@ const rowToDomain = (row: EditBatchRow): EditBatch =>
     kind: row.kind,
     summary: row.summary,
     entries: row.entries,
+    clipEntries: row.clipEntries,
     undoneAt: row.undoneAt,
     createdAt: row.createdAt,
   })

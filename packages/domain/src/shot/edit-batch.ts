@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { EditBatchId, ProjectId, ShotId, TakeId } from '../common/ids.js'
+import { EditBatchId, ProjectId, ShotId, TakeId, TimelineClipId } from '../common/ids.js'
 import { ShotStatus, UpdateShotPatch } from './shot.js'
 
 /**
@@ -14,7 +14,8 @@ import { ShotStatus, UpdateShotPatch } from './shot.js'
  * （Take・絵コンテの案と同じ考え方・ADR-0003）。
  */
 
-export const EditBatchKind = z.enum(['rough_cut', 'draft_adopt', 'bulk_update'])
+/** `text_style` はテロップの見た目のまとめ変更（2026-10-02）。Shot ではなくテロップを記録する（`clipEntries`）。 */
+export const EditBatchKind = z.enum(['rough_cut', 'draft_adopt', 'bulk_update', 'text_style'])
 export type EditBatchKind = z.infer<typeof EditBatchKind>
 
 /**
@@ -61,6 +62,18 @@ export const EditBatchEntry = z.object({
 })
 export type EditBatchEntry = z.infer<typeof EditBatchEntry>
 
+/**
+ * テロップ 1 件ぶんの「変える前」（制作者 2026-10-02「テロップをまとめて、サイズやスタイルや位置を変えられるようにしたい」）。
+ * まとめて変えるのは見た目（`params.style`）とどのスタイルからか（`params.styleId`）だけなので、その 2 つを持つ。
+ * **見た目は書いてあったそのまま**を持つ（読めない見た目も、そのまま戻す。読み替えない）。
+ */
+export const EditBatchClipEntry = z.object({
+  clipId: TimelineClipId,
+  style: z.unknown(),
+  styleId: z.string().nullable(),
+})
+export type EditBatchClipEntry = z.infer<typeof EditBatchClipEntry>
+
 export const MAX_EDIT_BATCH_SUMMARY_LENGTH = 200
 
 export const EditBatch = z.object({
@@ -70,6 +83,8 @@ export const EditBatch = z.object({
   /** 人が読む見出し。「粗編集を 49 件適用しました」など。履歴に並べる。 */
   summary: z.string().trim().min(1).max(MAX_EDIT_BATCH_SUMMARY_LENGTH),
   entries: z.array(EditBatchEntry),
+  /** テロップの記録。これまでの記録（Shot だけ）は空として読む。 */
+  clipEntries: z.array(EditBatchClipEntry).default([]),
   /** 取り消した時刻。**`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
   undoneAt: z.date().nullable(),
   createdAt: z.date(),
@@ -94,7 +109,8 @@ export const isUndone = (batch: EditBatch): boolean => batch.undoneAt !== null
  * **一度取り消した記録は二度取り消さない。** もう一度当てると、その後に人が
  * 直した内容を古い値で塗り潰す。戻したものをやり直したいなら、新しく操作する。
  */
-export const canUndo = (batch: EditBatch): boolean => !isUndone(batch) && batch.entries.length > 0
+export const canUndo = (batch: EditBatch): boolean =>
+  !isUndone(batch) && (batch.entries.length > 0 || batch.clipEntries.length > 0)
 
 /**
  * 1 件ぶんの取り消しで、採用 Take を戻す必要があるか。

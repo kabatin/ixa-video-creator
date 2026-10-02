@@ -20,6 +20,7 @@ const KIND_LABELS: Readonly<Record<EditBatchKind, string>> = Object.freeze({
   rough_cut: '粗編集の適用',
   draft_adopt: '絵コンテの採用',
   bulk_update: 'Shot の一括変更',
+  text_style: 'テロップの見た目の一括変更',
 })
 
 export const editBatchKindLabel = (kind: EditBatchKind): string => KIND_LABELS[kind]

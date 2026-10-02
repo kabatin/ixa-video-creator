@@ -1,5 +1,5 @@
 import { index, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
-import type { EditBatch, EditBatchEntry } from '@ixa/domain'
+import type { EditBatch, EditBatchClipEntry, EditBatchEntry } from '@ixa/domain'
 import { EditBatchKind as EditBatchKindSchema } from '@ixa/domain'
 import { createdAt, timestampTz, ulidPk, ulidRef } from './columns.js'
 import { projects } from './workspace.js'
@@ -27,6 +27,11 @@ export const shotEditBatches = pgTable(
     /** 人が読む見出し。履歴に並べる。 */
     summary: text('summary').notNull(),
     entries: jsonb('entries').$type<readonly EditBatchEntry[]>().notNull(),
+    /**
+     * テロップの「変える前」（見た目と、どのスタイルからか）。テロップの見た目のまとめ変更（`text_style`）で使う。
+     * これまでの記録は空。テーブル名は Shot のままだが、取り消しの仕組みを 1 つにするためここに足す（2026-10-02）。
+     */
+    clipEntries: jsonb('clip_entries').$type<readonly EditBatchClipEntry[]>().notNull().default([]),
     /** 取り消した時刻。**NULL は「まだ取り消していない」**（「取り消せない」ではない）。 */
     undoneAt: timestampTz('undone_at'),
     createdAt: createdAt(),

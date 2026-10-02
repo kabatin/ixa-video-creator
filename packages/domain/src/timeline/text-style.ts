@@ -81,6 +81,27 @@ export const TextStyle = z
   .strict()
 export type TextStyle = z.infer<typeof TextStyle>
 
+/** 見た目の項目名。まとめて変えるとき「この項目を外す（型の既定に戻す）」の指定に使う。 */
+export const TextStyleKey = TextStyle.keyof()
+export type TextStyleKey = z.infer<typeof TextStyleKey>
+
+/**
+ * 見た目に、変えた項目だけを重ねる（制作者 2026-10-02「テロップをまとめて、サイズやスタイルや位置を変えられるようにしたい」）。
+ * `set` の項目を上書きし、`unset` の項目は外す（型の既定に戻す）。ほかの項目はそのまま残す。
+ * いまの見た目が読めなければ無しから重ねる（描くときも読めない見た目は既定で描く）。結果は `TextStyle` で確かめ、範囲の外は投げる。
+ * 元の見た目は変えない。
+ */
+export const mergeTextStyle = (
+  current: unknown,
+  set: TextStyle,
+  unset: readonly TextStyleKey[],
+): TextStyle => {
+  const readable = TextStyle.safeParse(current)
+  const merged: Record<string, unknown> = { ...(readable.success ? readable.data : {}), ...set }
+  const removed = new Set<string>(unset)
+  return TextStyle.parse(Object.fromEntries(Object.entries(merged).filter(([key]) => !removed.has(key))))
+}
+
 /** 型の既定値と重ねた、最終の見た目。すべての項目が決まっている。 */
 export type ResolvedTextStyle = {
   readonly font: TextFont
