@@ -78,6 +78,11 @@ describe('buildFfmpegArgs', () => {
     expect(graph).toContain('amix=inputs=2:normalize=0')
   })
 
+  it('音声の切り出し位置から鳴らす（一部だけの書き出し）', () => {
+    const doc = makeDocument({ audio: [{ mediaUrl: 'a.wav', startSec: 0, durationSec: 2, volume: 1, inSec: 4.5 }] })
+    expect(filterGraph(buildFfmpegArgs(doc, 'preview_720p', OUT))).toContain('atrim=start=4.500000:duration=2.000000')
+  })
+
   it('音声が無ければ -an', () => {
     expect(buildFfmpegArgs(makeDocument(), 'preview_720p', OUT)).toContain('-an')
   })

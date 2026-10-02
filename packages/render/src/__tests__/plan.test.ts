@@ -192,6 +192,16 @@ describe('buildTimelinePlan — clips と audio', () => {
     const [track] = buildTimelinePlan(doc, CANVAS).audio
     expect(track?.range).toEqual({ from: 30, durationInFrames: 90 })
     expect(track?.volume).toBe(0.8)
+    // 切り出し位置が無ければ頭から（これまでの書き出しの記録）。
+    expect(track?.startFrom).toBe(0)
+  })
+
+  /** 一部だけを書き出すとき、区間の頭に当たる音から鳴らす（制作者 2026-10-02）。 */
+  it('audio の切り出し位置をコマにする', () => {
+    const doc = makeDocument({
+      audio: [{ mediaUrl: 'https://media.test/mv.mp3', startSec: 0, durationSec: 3, volume: 1, inSec: 4 }],
+    })
+    expect(buildTimelinePlan(doc, CANVAS).audio[0]?.startFrom).toBe(120)
   })
 })
 

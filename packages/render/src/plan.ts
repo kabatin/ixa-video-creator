@@ -74,6 +74,8 @@ export type ClipPlan = {
 export type AudioPlan = {
   readonly mediaUrl: string
   readonly range: FrameRange
+  /** 音源内のシーク位置（`inSec` 由来。無ければ 0）。一部だけを書き出すとき、区間の頭に当たる音から鳴らす。 */
+  readonly startFrom: number
   readonly volume: number
 }
 
@@ -183,6 +185,7 @@ const buildAudio = (doc: TimelineDocument): readonly AudioPlan[] =>
   doc.audio.map((track) => ({
     mediaUrl: track.mediaUrl,
     range: frameRange(track.startSec, track.durationSec, doc.fps),
+    startFrom: sourceOffsetFrames(track.inSec ?? 0, doc.fps),
     volume: track.volume,
   }))
 

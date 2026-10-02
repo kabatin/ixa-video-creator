@@ -10,7 +10,14 @@ import {
   type RenderJob,
   type RenderJobId,
 } from '@ixa/domain'
-import { validateTimeline, type TimelineIssue } from '@ixa/timeline'
+import {
+  overlapsRange,
+  sliceTimelineDocument,
+  timelineRangeProblem,
+  validateTimeline,
+  type TimelineIssue,
+  type TimelineRange,
+} from '@ixa/timeline'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
 import { loadTimelineDocument, type TimelineRoutesDeps } from './timeline.js'
@@ -23,11 +30,11 @@ import { loadTimelineDocument, type TimelineRoutesDeps } from './timeline.js'
 /** BullMQ のキュー名（docs/ARCHITECTURE.md §20）。apps 同士を import しないため定数で持つ。 */
 export const RENDER_QUEUE_NAME = 'render'
 
-/** Phase 1 で実装済みの scope。range / shot は型として受けるが、まだ出せない。 */
+/** 既定の scope。range（一部だけ）も出せる。shot は型として受けるが出さない（range で足りる）。 */
 export const SUPPORTED_RENDER_SCOPE = 'full'
 
 export const UNSUPPORTED_SCOPE_MESSAGE =
-  'Phase 1 では scope.type=full のみ対応しています（range / shot は未対応）'
+  'Shot 単位の書き出しは scope.type=range（区間）で指定してください'
 
 /** レンダリングジョブをキューへ投入する Port。Redis への依存を main.ts に閉じ込める。 */
 export type RenderQueue = {
@@ -176,17 +183,32 @@ export const renderRoutes = (deps: RenderRoutesDeps) =>
       const { projectId } = c.req.valid('param')
       const { preset, scope } = c.req.valid('json')
 
-      // 部分レンダリングは未実装。**黙って full に落とさない。**
+      // Shot 単位は range で指定する。**黙って full に落とさない。**
       // 「10 秒だけのつもりが全体をレンダリングしていた」は課金と時間の事故になる。
-      if (scope.type !== SUPPORTED_RENDER_SCOPE) {
+      if (scope.type === 'shot') {
         return c.json(fail(VALIDATION_ERROR_MESSAGE, { scope: [UNSUPPORTED_SCOPE_MESSAGE] }), 422)
       }
 
       const loaded = await loadTimelineDocument(deps, projectId)
       if (loaded === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
 
+      // 一部だけを書き出す（制作者 2026-10-02「選択した Shot だけを動画として出力」）。区間の規則は @ixa/timeline の 1 か所。
+      const range: TimelineRange | null =
+        scope.type === 'range' ? { startSec: scope.start, endSec: scope.end } : null
+      const rangeProblem = range === null ? null : timelineRangeProblem(loaded.document.durationSec, range)
+      if (rangeProblem !== null) {
+        return c.json(fail(VALIDATION_ERROR_MESSAGE, { scope: [rangeProblem] }), 422)
+      }
+
       // レンダリング前に必ず通す（@ixa/timeline）。ここで再実装しない。
-      const issues = validateTimeline(loaded.source)
+      // 一部だけなら、区間の外の Shot の指摘では止めない（Shot に紐づかない指摘は止める）。
+      const inRange =
+        range === null
+          ? null
+          : new Set(loaded.source.shots.filter((shot) => overlapsRange(shot, range)).map((shot) => shot.id))
+      const issues = validateTimeline(loaded.source).filter(
+        (issue) => inRange === null || issue.shotId === undefined || inRange.has(issue.shotId),
+      )
       const errors = issues.filter((issue) => issue.severity === 'error')
       if (errors.length > 0) {
         return c.json(
@@ -196,12 +218,12 @@ export const renderRoutes = (deps: RenderRoutesDeps) =>
       }
 
       // 何をレンダリングしたかが常に分かるよう、投入時点の TimelineDocument を保存する
-      // （ARCHITECTURE.md §16）。worker はこのスナップショットだけを使う。
+      // （ARCHITECTURE.md §16）。worker はこのスナップショットだけを使う。一部だけなら切った後のもの。
       const job = await deps.renderJobs.create({
         projectId,
         scope,
         preset,
-        timelineSnapshot: loaded.document,
+        timelineSnapshot: range === null ? loaded.document : sliceTimelineDocument(loaded.document, range),
       })
       await deps.queue.enqueue(job.id)
 

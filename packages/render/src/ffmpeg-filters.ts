@@ -76,7 +76,7 @@ const audioFilters = (
     const input = firstAudioInput + index
     const delay = ms(track.startSec)
     return (
-      `[${input}:a]atrim=start=0:duration=${sec(track.durationSec)},asetpts=PTS-STARTPTS,` +
+      `[${input}:a]atrim=start=${sec(track.inSec ?? 0)}:duration=${sec(track.durationSec)},asetpts=PTS-STARTPTS,` +
       `volume=${track.volume.toFixed(4)},adelay=${delay}:all=1[a${index}]`
     )
   })

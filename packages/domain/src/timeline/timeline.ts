@@ -136,6 +136,11 @@ export const TimelineDocument = z.object({
        */
       durationSec: Seconds,
       volume: z.number().min(0).max(2),
+      /**
+       * 音源のどこから鳴らすか（秒）。**無ければ 0**（頭から）。一部だけを書き出すとき、区間の頭に当たる音から鳴らす
+       * （制作者 2026-10-02「選択した Shot だけを動画として出力」）。省略可能にして version は 1 のまま。
+       */
+      inSec: Seconds.optional(),
     }),
   ),
 })

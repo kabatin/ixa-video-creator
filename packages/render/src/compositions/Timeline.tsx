@@ -207,7 +207,7 @@ export const ClipBody: React.FC<{ clip: ClipPlan; fps: number; video: FitRect }>
 
 const AudioTrack: React.FC<{ track: AudioPlan }> = ({ track }) => (
   <Sequence from={track.range.from} durationInFrames={track.range.durationInFrames} layout="none">
-    <Audio src={track.mediaUrl} volume={track.volume} />
+    <Audio src={track.mediaUrl} volume={track.volume} startFrom={track.startFrom} />
   </Sequence>
 )
 

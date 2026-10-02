@@ -194,7 +194,7 @@ describe('POST /projects/:projectId/render', () => {
     expect((body.fields?.timeline ?? []).length).toBeGreaterThan(1)
   })
 
-  it('scope.type が full 以外なら 422 で未対応と返す（黙って full にしない）', async () => {
+  it('scope.type が shot なら 422 で未対応と返す（範囲で指定する。黙って full にしない）', async () => {
     const project = aProject()
     const withTake = aShotWithTake(project, { startSec: 0, durationSec: 4 })
     const deps = renderDeps({
@@ -206,7 +206,7 @@ describe('POST /projects/:projectId/render', () => {
 
     const response = await postRender(deps, project, {
       preset: 'preview_720p',
-      scope: { type: 'range', start: 0, end: 2 },
+      scope: { type: 'shot', shotId: withTake.shot.id },
     })
     const body = (await response.json()) as ErrorBody
 
@@ -214,6 +214,80 @@ describe('POST /projects/:projectId/render', () => {
     expect(body.fields?.scope).toEqual([UNSUPPORTED_SCOPE_MESSAGE])
     expect(deps.renderJobs.snapshot()).toHaveLength(0)
     expect(deps.queue.enqueued()).toHaveLength(0)
+  })
+
+  /** 一部だけを書き出す（制作者 2026-10-02「途中までを誰かに見せたい時のために選択した Shot だけを動画として出力」）。 */
+  describe('範囲（range）', () => {
+    const threeShots = (project: Project) => {
+      const shots = [
+        aShotWithTake(project, { code: 'CUT-01', startSec: 0, durationSec: 4 }),
+        aShotWithTake(project, { code: 'CUT-02', startSec: 4, durationSec: 4 }),
+        aShotWithTake(project, { code: 'CUT-03', startSec: 8, durationSec: 4 }),
+      ]
+      return renderDeps({
+        project,
+        shots: shots.map((entry) => entry.shot),
+        takes: shots.map((entry) => entry.take),
+        mediaAssets: shots.map((entry) => entry.asset),
+      })
+    }
+
+    it('区間だけを切ったタイムラインを保存して投入する', async () => {
+      const project = aProject()
+      const deps = threeShots(project)
+
+      const response = await postRender(deps, project, {
+        preset: 'preview_720p',
+        scope: { type: 'range', start: 4, end: 8 },
+      })
+
+      expect(response.status).toBe(202)
+      const [job] = deps.renderJobs.snapshot()
+      expect(job?.scope).toEqual({ type: 'range', start: 4, end: 8 })
+      expect(job?.timelineSnapshot.durationSec).toBe(4)
+      expect(job?.timelineSnapshot.video1.map((shot) => [shot.startSec, shot.durationSec])).toEqual([[0, 4]])
+      expect(deps.queue.enqueued()).toHaveLength(1)
+    })
+
+    it('区間が逆・空・尺の外なら 422（ジョブを作らない）', async () => {
+      const project = aProject()
+      const deps = threeShots(project)
+
+      for (const scope of [
+        { type: 'range', start: 8, end: 4 },
+        { type: 'range', start: 4, end: 4 },
+        { type: 'range', start: 4, end: 30 },
+      ]) {
+        const response = await postRender(deps, project, { preset: 'preview_720p', scope })
+        const body = (await response.json()) as ErrorBody
+        expect(response.status).toBe(422)
+        expect(body.fields?.scope?.[0]).toMatch(/区間/)
+      }
+      expect(deps.renderJobs.snapshot()).toHaveLength(0)
+    })
+
+    it('区間の外の Shot の error では止めず、区間の中の error では止める', async () => {
+      const project = aProject()
+      // 0–4 と 2–6 が重なっている。8–12 は離れている。
+      const overlapping = [
+        aShotWithTake(project, { code: 'shot_001', startSec: 0, durationSec: 4 }),
+        aShotWithTake(project, { code: 'shot_002', startSec: 2, durationSec: 4 }),
+        aShotWithTake(project, { code: 'shot_003', startSec: 8, durationSec: 4 }),
+      ]
+      const deps = renderDeps({
+        project,
+        shots: overlapping.map((entry) => entry.shot),
+        takes: overlapping.map((entry) => entry.take),
+        mediaAssets: overlapping.map((entry) => entry.asset),
+      })
+
+      const outside = await postRender(deps, project, { preset: 'preview_720p', scope: { type: 'range', start: 8, end: 12 } })
+      const inside = await postRender(deps, project, { preset: 'preview_720p', scope: { type: 'range', start: 0, end: 6 } })
+
+      expect(outside.status).toBe(202)
+      expect(inside.status).toBe(422)
+      expect(deps.renderJobs.snapshot()).toHaveLength(1)
+    })
   })
 
   it('未知の preset は 422', async () => {
