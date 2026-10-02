@@ -7,6 +7,7 @@ import {
   describeMissingPoster,
   pickProjectCover,
   posterByShotId,
+  startFrameKnownFor,
   posterRetryDelayMs,
   posterViewFor,
   MAX_POSTER_RETRIES,
@@ -26,6 +27,7 @@ const withPoster = (id: string, url: string): WireShotPoster => ({
   thumbnailUrl: url,
   reason: null,
   pending: false,
+  hasStartFrame: false,
 })
 
 const withoutPoster = (id: string, reason: string): WireShotPoster => ({
@@ -34,6 +36,7 @@ const withoutPoster = (id: string, reason: string): WireShotPoster => ({
   thumbnailUrl: null,
   reason,
   pending: false,
+  hasStartFrame: false,
 })
 
 describe('posterByShotId', () => {
@@ -43,8 +46,21 @@ describe('posterByShotId', () => {
       withoutPoster(OTHER_SHOT_ID, 'no_take'),
     ])
 
-    expect(map.get(shotId)).toEqual({ url: 'https://example.invalid/a.jpg', reason: null })
-    expect(map.get(otherShotId)).toEqual({ url: null, reason: 'no_take' })
+    expect(map.get(shotId)).toEqual({
+      url: 'https://example.invalid/a.jpg',
+      reason: null,
+      hasStartFrame: false,
+    })
+    expect(map.get(otherShotId)).toEqual({ url: null, reason: 'no_take', hasStartFrame: false })
+  })
+})
+
+describe('startFrameKnownFor', () => {
+  it('最初のフレームがあるかを返し、まだ引いていない Shot は「無い」ではなく null', () => {
+    const map = posterByShotId([{ ...withPoster(SHOT_ID, 'https://example.invalid/a.jpg'), hasStartFrame: true }])
+
+    expect(startFrameKnownFor(map, shotId)).toBe(true)
+    expect(startFrameKnownFor(map, otherShotId)).toBeNull()
   })
 })
 

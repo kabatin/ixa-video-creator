@@ -83,6 +83,10 @@ export const ShotPosterResponse = z
     pending: z.boolean().openapi({
       description: '待てば出る（サムネイルを作っている）。画面はこれが true の間だけ取り直す',
     }),
+    hasStartFrame: z.boolean().openapi({
+      description:
+        '最初のフレーム（絵コンテの画像）が付いているか。採用 Take があっても見る（流れの帯・説明も絵も無い Shot の確認）',
+    }),
   })
   .refine((entry) => (entry.thumbnailUrl === null) !== (entry.reason === null), {
     message: URL_AND_REASON_PAIR_MESSAGE,
@@ -103,8 +107,11 @@ export type ShotPoster =
  * 以前は生成が終わった瞬間に 1 回取るだけで、サムネイルがその後にできても画面が
  * 取り直さず、読み直すまで出なかった。画面はこれが true の間だけ取り直す。
  */
-/** 応答の 1 行。待てば出るかの印を添える。 */
-export type ShotPosterEntry = ShotPoster & { readonly pending: boolean }
+/** 応答の 1 行。待てば出るかの印と、最初のフレームがあるかを添える。 */
+export type ShotPosterEntry = ShotPoster & {
+  readonly pending: boolean
+  readonly hasStartFrame: boolean
+}
 
 const isPending = (poster: ShotPoster): boolean =>
   poster.reason === SHOT_POSTER_REASON.thumbnailNotReady || poster.reason === SHOT_POSTER_REASON.drawing
@@ -248,19 +255,25 @@ export const buildShotPosters = async (
   const drawing = new Set(
     projectId === undefined ? [] : (await deps.imageJobs.findActiveByProject(projectId)).map((job) => job.shotId),
   )
-  const startFrames = new Map<ShotId, StartFrameState>(
+  // 最初のフレームは**全 Shot で引く**（あるかどうかを返すため）。絵に使うのは採用 Take が無い Shot だけ。
+  const frameOf = new Map<ShotId, MediaAssetId | null>(
     await Promise.all(
-      shots.map(async (shot): Promise<readonly [ShotId, StartFrameState]> => {
-        const needsFrame = shot.selectedTakeId === null && !drawing.has(shot.id)
-        return [
-          shot.id,
-          {
-            drawing: drawing.has(shot.id),
-            assetId: needsFrame ? await manualStartFrameOf(deps.shotReferences, shot.id) : null,
-          },
-        ]
-      }),
+      shots.map(
+        async (shot) => [shot.id, await manualStartFrameOf(deps.shotReferences, shot.id)] as const,
+      ),
     ),
+  )
+  const startFrames = new Map<ShotId, StartFrameState>(
+    shots.map((shot): readonly [ShotId, StartFrameState] => {
+      const needsFrame = shot.selectedTakeId === null && !drawing.has(shot.id)
+      return [
+        shot.id,
+        {
+          drawing: drawing.has(shot.id),
+          assetId: needsFrame ? (frameOf.get(shot.id) ?? null) : null,
+        },
+      ]
+    }),
   )
 
   const assetIds = [
@@ -292,7 +305,11 @@ export const buildShotPosters = async (
       assetsById,
       urlByKey,
     )
-    return { ...poster, pending: isPending(poster) }
+    return {
+      ...poster,
+      pending: isPending(poster),
+      hasStartFrame: (frameOf.get(shot.id) ?? null) !== null,
+    }
   })
 }
 

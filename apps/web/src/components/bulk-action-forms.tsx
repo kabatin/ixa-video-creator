@@ -8,6 +8,7 @@ import { TextField } from '@/components/form/text-field'
 import { Button } from '@/components/ui/button'
 import { ConfirmButton } from '@/components/ui/confirm-button'
 import { TAKE_COUNT_OPTIONS } from '@/lib/generation-options'
+import { unguidedBulkLine } from '@/lib/unguided-take'
 
 /**
  * 操作バーの中で開く 3 つの小さな入力（P58-4）。
@@ -123,6 +124,8 @@ export type BulkGenerateFormProps = {
   /** 実際に投入される件数（選択 − ロック）。 */
   readonly targetCount: number
   readonly lockedCount: number
+  /** 説明も最初のフレームも無い Shot の数。止めはせず、押す前に言う。 */
+  readonly unguidedCount: number
   readonly modelOptions: readonly BulkModelOption[]
   /**
    * 合計の見積（USD）。**`null` は「事前には見積もれない」。**
@@ -138,11 +141,13 @@ export const BulkGenerateForm = ({
   idPrefix,
   targetCount,
   lockedCount,
+  unguidedCount,
   modelOptions,
   estimatedTotalUsd,
   busy,
   onGenerate,
 }: BulkGenerateFormProps) => {
+  const unguided = unguidedBulkLine(unguidedCount)
   // 既定は AUTO。渡されていなければ先頭を使う（空の select を出さない）。
   const [model, setModel] = useState<BulkModelValue>(
     () => modelOptions.find((option) => option.value === 'AUTO')?.value ?? modelOptions[0]?.value ?? 'AUTO',
@@ -175,7 +180,7 @@ export const BulkGenerateForm = ({
           label={`${countLabel(targetCount)}に生成を依頼`}
           confirmLabel="依頼する"
           // 金額（か、金額が出せないこと）は**押す直前**に出す。フォームの隅では見ずに押される。
-          message={`${countLabel(targetCount)}の Shot に ${count} 本ずつ生成を依頼します。${estimateLine(estimatedTotalUsd)} 投入した生成は取り消せません（費用が発生します）。`}
+          message={`${countLabel(targetCount)}の Shot に ${count} 本ずつ生成を依頼します。${unguided}${estimateLine(estimatedTotalUsd)} 投入した生成は「生成をやめる」で止められますが、生成先によっては途中まで費用が掛かります。`}
           disabled={busy || targetCount === 0}
           size="sm"
           onConfirm={() => {
@@ -189,6 +194,7 @@ export const BulkGenerateForm = ({
             {countLabel(lockedCount)}はロックされているため、生成されません。
           </p>
         )}
+        {unguided !== '' && <p className={FIELD_HINT_CLASS}>{unguided}</p>}
         {targetCount === 0 && (
           <p className={FIELD_HINT_CLASS}>生成できる Shot が選ばれていません。</p>
         )}

@@ -237,6 +237,7 @@ describe('GET /projects/:projectId/shot-posters', () => {
       shotId: newId(ShotIdSchema),
       takeId: null,
       pending: false,
+      hasStartFrame: false,
     }
 
     expect(
@@ -418,7 +419,13 @@ describe('GET /projects/:projectId/shot-posters', () => {
  * 以前は採用 Take のサムネイルしか見ず、絵コンテの画像を作ってもストーリーボードに絵が出なかった。
  */
 describe('最初のフレームを絵に使う', () => {
-  const setup = async (options: { thumbnail: boolean; adopted?: boolean; drawing?: boolean }) => {
+  const setup = async (options: {
+    thumbnail: boolean
+    adopted?: boolean
+    drawing?: boolean
+    /** 最初のフレームを付けない。 */
+    noFrame?: boolean
+  }) => {
     const project = aProject()
     const storage = createMemoryStorage()
     const mediaAssets = createInMemoryMediaAssetRepository()
@@ -440,7 +447,7 @@ describe('最初のフレームを絵に使う', () => {
     const base = aShot(project.id, { order: 1000, code: 'shot_001' })
     const take = aTake(base, '3'.repeat(64), { mediaAssetId: video.id })
     const shot = options.adopted === true ? { ...base, selectedTakeId: take.id } : base
-    await replaceManualStartFrame(shotReferences, shot.id, frame.id)
+    if (options.noFrame !== true) await replaceManualStartFrame(shotReferences, shot.id, frame.id)
     if (options.drawing === true) {
       await imageJobs.create({
         projectId: project.id,
@@ -480,5 +487,14 @@ describe('最初のフレームを絵に使う', () => {
   it('採用 Take があれば、そちらを出す（最初のフレームより優先）', async () => {
     const poster = await setup({ thumbnail: true, adopted: true })
     expect(poster?.thumbnailUrl).toContain('take/thumb.jpg')
+  })
+
+  /** 流れの帯（絵 n/39）と「説明も絵も無い」の確認に使う（制作者 2026-10-01）。 */
+  it('最初のフレームがあるかを返す（採用 Take があっても・作っている間も）', async () => {
+    expect((await setup({ thumbnail: true }))?.hasStartFrame).toBe(true)
+    expect((await setup({ thumbnail: true, adopted: true }))?.hasStartFrame).toBe(true)
+    expect((await setup({ thumbnail: true, drawing: true }))?.hasStartFrame).toBe(true)
+    expect((await setup({ thumbnail: true, noFrame: true }))?.hasStartFrame).toBe(false)
+    expect((await setup({ thumbnail: true, adopted: true, noFrame: true }))?.hasStartFrame).toBe(false)
   })
 })

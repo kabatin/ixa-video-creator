@@ -25,6 +25,8 @@ export const WireShotPoster = z
     reason: z.string().nullable(),
     /** 待てば出る（サムネイルを作っている）。true の間だけ取り直す。 */
     pending: z.boolean(),
+    /** 最初のフレーム（絵コンテの画像）が付いているか。採用 Take があっても見る。 */
+    hasStartFrame: z.boolean(),
   })
   .refine((entry) => (entry.thumbnailUrl === null) !== (entry.reason === null), {
     message:

@@ -14,7 +14,10 @@ export type PosterView = {
   readonly reason: string | null
 }
 
-export type ShotPosterMap = ReadonlyMap<ShotId, PosterView>
+/** Shot の 1 枠。絵に加えて、最初のフレームが付いているか（流れの帯・説明も絵も無い Shot の確認）。 */
+export type ShotPosterView = PosterView & { readonly hasStartFrame: boolean }
+
+export type ShotPosterMap = ReadonlyMap<ShotId, ShotPosterView>
 
 /**
  * 「まだ取ってきていない」を表す理由。
@@ -63,7 +66,18 @@ export const posterRetryDelayMs = (
 
 /** 行から Shot ごとに引ける形へ直す。同じ Shot が 2 度来たら後勝ち（API は 1 件ずつ返す）。 */
 export const posterByShotId = (list: readonly WireShotPoster[]): ShotPosterMap =>
-  new Map(list.map((entry) => [entry.shotId, { url: entry.thumbnailUrl, reason: entry.reason }]))
+  new Map(
+    list.map((entry) => [
+      entry.shotId,
+      { url: entry.thumbnailUrl, reason: entry.reason, hasStartFrame: entry.hasStartFrame },
+    ]),
+  )
+
+/**
+ * 最初のフレームが付いているか。**まだ引けていなければ null**（「無い」と読み替えない。L-021）。
+ */
+export const startFrameKnownFor = (posters: ShotPosterMap, shotId: ShotId): boolean | null =>
+  posters.get(shotId)?.hasStartFrame ?? null
 
 /**
  * まだ引けていない Shot の分。

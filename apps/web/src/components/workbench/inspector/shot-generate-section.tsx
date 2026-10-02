@@ -1,6 +1,6 @@
 'use client'
 
-import type { ProjectId, Shot, ShotId } from '@ixa/domain'
+import { lacksStoryboard, type ProjectId, type Shot, type ShotId } from '@ixa/domain'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { FieldRow, INPUT_CLASS } from '@/components/workbench/ui/section'
@@ -22,6 +22,13 @@ import { isGeneratingStatus } from '@/lib/shot-display'
 import { offerReviewAfterGeneration } from '@/lib/offer-review'
 import { useNow } from '@/components/workbench/use-active-generations'
 import { useCancelGeneration } from '@/components/workbench/use-cancel-generation'
+import { useOptionalContextMenuHost } from '@/components/workbench/ui/context-menu'
+import { startFrameKnownFor } from '@/lib/shot-posters'
+import {
+  BACK_TO_STORYBOARD_LABEL,
+  UNGUIDED_TAKE_CONFIRM,
+  UNGUIDED_TAKE_LABEL,
+} from '@/lib/unguided-take'
 import { CANCEL_GENERATION_LABEL } from '@/lib/context-menus'
 import { describeActiveGeneration } from '@/lib/generation-progress'
 
@@ -120,6 +127,15 @@ export const ShotGenerateSection = ({
 
   const generating = isGeneratingStatus(shot.status)
   const cancelGeneration = useCancelGeneration(client).ask
+  const host = useOptionalContextMenuHost()
+  /**
+   * 説明も最初のフレームも無いか（domain の `lacksStoryboard`）。最初のフレームが**分からない**ときは
+   * 「ある」に倒す（読み込み前に確かめを出して、作業を止めない）。
+   */
+  const unguided = lacksStoryboard({
+    description: shot.description,
+    hasStartFrame: hasStartFrame || startFrameKnownFor(workbench.posters, shot.id) !== false,
+  })
   // 前の Shot の見守りは「持っていない」として扱う。
   const watched = watch !== null && watch.shotId === shot.id ? watch : null
   const progress = useGenerateProgress(client, watched, generating)
@@ -183,6 +199,22 @@ export const ShotGenerateSection = ({
     }
   }
 
+  const requestGenerate = (): void => {
+    if (!unguided || host === null) {
+      void generate()
+      return
+    }
+    host.perform({
+      kind: 'item',
+      id: 'generate-unguided',
+      label: UNGUIDED_TAKE_LABEL,
+      disabledReason: null,
+      confirm: UNGUIDED_TAKE_CONFIRM,
+      keepLabel: BACK_TO_STORYBOARD_LABEL,
+      run: generate,
+    })
+  }
+
   return (
     <div className="space-y-2">
       <FieldRow label="モデル" htmlFor={modelId}>
@@ -223,7 +255,7 @@ export const ShotGenerateSection = ({
       <Button
         tone="primary"
         disabled={busy || generating || blocker !== null}
-        onClick={() => void generate()}
+        onClick={requestGenerate}
       >
         {generating ? '生成中…' : busy ? '送っています…' : 'Take を生成'}
       </Button>

@@ -41,6 +41,7 @@ const baseProps = (overrides: Partial<BulkActionBarProps> = {}): BulkActionBarPr
   selectedCount: 12,
   alreadySelectedCount: 0,
   lockedCount: 0,
+  unguidedCount: 0,
   modelOptions: MODEL_OPTIONS,
   cameraSizeOptions: CAMERA_SIZE_OPTIONS,
   locationOptions: LOCATION_OPTIONS,
@@ -175,7 +176,7 @@ describe('BulkActionBar — 一括生成は 2 段階', () => {
     await user.click(screen.getByRole('button', { name: '12 件に生成を依頼' }))
 
     expect(props.onGenerate).not.toHaveBeenCalled()
-    expect(screen.getByRole('alertdialog')).toHaveTextContent('取り消せません')
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('費用が掛かります')
 
     await user.click(screen.getByRole('button', { name: '依頼する' }))
 
@@ -217,6 +218,25 @@ describe('BulkActionBar — 一括生成は 2 段階', () => {
 
     expect(screen.getByRole('button', { name: '7 件に生成を依頼' })).toBeEnabled()
     expect(screen.getByText('3 件はロックされているため、生成されません。')).toBeInTheDocument()
+  })
+
+  /** 制作者 2026-10-01「全然関係ない動画が生成されてしまう」。止めはせず、押す前に件数を言う。 */
+  it('説明も最初のフレームも無い Shot が混ざっていれば、件数を出して確認でも言う', async () => {
+    const { user } = setup({ selectedCount: 12, unguidedCount: 4 })
+
+    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    expect(screen.getByText(/うち 4 件は説明も最初のフレームも無く/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '12 件に生成を依頼' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('うち 4 件は説明も最初のフレームも無く')
+  })
+
+  it('全部に説明か最初のフレームがあれば、何も言わない', async () => {
+    const { user } = setup({ selectedCount: 12, unguidedCount: 0 })
+
+    await user.click(screen.getByRole('button', { name: '一括生成' }))
+
+    expect(screen.queryByText(/説明も最初のフレームも無く/)).toBeNull()
   })
 
   it('全件ロックなら依頼できない', async () => {
@@ -483,6 +503,7 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
           selectedCount={3}
           alreadySelectedCount={0}
           lockedCount={0}
+          unguidedCount={0}
           progress={null}
           modelOptions={MODEL_OPTIONS}
           cameraSizeOptions={CAMERA_SIZE_OPTIONS}
@@ -541,7 +562,7 @@ describe('BulkActionBar — 合計の見積（F3a）', () => {
 
     const asking = screen.getByRole('alertdialog')
     expect(asking).toHaveTextContent('いまは投入する前に出せません')
-    expect(asking).toHaveTextContent('取り消せません')
+    expect(asking).toHaveTextContent('費用が掛かります')
   })
 
   it('見積が取れていれば確認の文に金額を出す', async () => {

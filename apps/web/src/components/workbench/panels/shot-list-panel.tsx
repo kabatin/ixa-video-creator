@@ -1,6 +1,6 @@
 'use client'
 
-import type { Shot, ShotId, ShotStatus } from '@ixa/domain'
+import { lacksStoryboard, type Shot, type ShotId, type ShotStatus } from '@ixa/domain'
 import { useMemo, useState } from 'react'
 import {
   BulkActionBar,
@@ -24,6 +24,7 @@ import {
 import { toLocationOptions } from '@/lib/location-options'
 import { clearSelection, headerCheckboxState, selectAllVisible, toggleShot } from '@/lib/shot-bulk'
 import { shotStatusLabel } from '@/lib/shot-display'
+import { startFrameKnownFor } from '@/lib/shot-posters'
 import {
   rangeBetween,
   sortShots,
@@ -179,6 +180,17 @@ export const ShotListPanel = () => {
           selectedCount={chosen.length}
           alreadySelectedCount={chosen.filter((shot) => shot.selectedTakeId !== null).length}
           lockedCount={chosen.filter((shot) => shot.lockedAt !== null).length}
+          // 生成される（ロックされていない）うち、説明も最初のフレームも無い数。分からない絵は「ある」に倒す。
+          unguidedCount={
+            chosen.filter(
+              (shot) =>
+                shot.lockedAt === null &&
+                lacksStoryboard({
+                  description: shot.description,
+                  hasStartFrame: startFrameKnownFor(workbench.posters, shot.id) !== false,
+                }),
+            ).length
+          }
           modelOptions={MODEL_CHOICES}
           cameraSizeOptions={SHOT_SIZE_OPTIONS}
           locationOptions={locationOptions}
