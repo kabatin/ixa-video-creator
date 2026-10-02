@@ -114,6 +114,8 @@ export const TimelinePanel = () => {
         }}
         {...(audioLane === null ? {} : { audioLane })}
         initialSnapEnabled={preferences.playback.snapToBeat}
+        // 聴きながら切るで鳴らしていても位置は動く。「再生位置を追う」は、どこかが鳴っていれば帯を流す。
+        playheadMoving={transport.playing}
         playback={{
           playing: transport.playing && mine,
           seek: transport.seek,

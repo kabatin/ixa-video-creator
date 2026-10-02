@@ -11,7 +11,7 @@ import type {
   Transition,
   TransitionId,
 } from '@ixa/domain'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { TimelineClipList, type ClipPatch } from '@/components/timeline-clip-list'
 import { TimelineInlineForm, inlineFormErrors } from '@/components/timeline-inline-form'
 import { TimelineIssuePanel } from '@/components/timeline-issue-panel'
@@ -103,6 +103,11 @@ export type TimelineEditorProps = {
   readonly playback?: TimelinePlayback
   /** モニターを出すか。ワークベンチではプレビューのパネルに任せるので出さない。既定は出す。 */
   readonly showMonitor?: boolean
+  /**
+   * 再生位置が動いているか（どのパネルが鳴らしていても）。「再生位置を追う」が、動いている間は真ん中に保つのに使う。
+   * 省略なら、このタイムラインが鳴らしているか（`playback.playing`）で見る。
+   */
+  readonly playheadMoving?: boolean
   /** 「拍に吸着」の初期値。環境設定の既定を渡す（UI-WORKBENCH §3.4）。 */
   readonly initialSnapEnabled?: boolean
   /**
@@ -157,6 +162,7 @@ export const TimelineEditor = ({
   loadErrors,
   playback,
   showMonitor = true,
+  playheadMoving,
   initialSnapEnabled = true,
   collapseAuxiliary = false,
   posters,
@@ -184,6 +190,14 @@ export const TimelineEditor = ({
     setClips(initialClips)
   }, [initialClips])
   const [pxPerSec, setPxPerSec] = useState(DEFAULT_PX_PER_SEC)
+  /**
+   * 再生位置を追う（制作者 2026-10-02「タイムラインも現在位置に合わせて追従するようにしたい。他画面に合わせチェックで追従ON/OFF」）。
+   * 聴きながら切ると同じく既定で入れ、自分で横に送ったら切る。
+   */
+  const [followPlayhead, setFollowPlayhead] = useState(true)
+  const stopFollowing = useCallback(() => {
+    setFollowPlayhead(false)
+  }, [])
   const [snapEnabled, setSnapEnabled] = useState(initialSnapEnabled)
   const [selectedClipId, setSelectedClipId] = useState<TimelineClipId | null>(null)
   const [busy, setBusy] = useState(false)
@@ -483,6 +497,20 @@ export const TimelineEditor = ({
             {zoomLabel(level)}
           </button>
         ))}
+        <label
+          className="ml-auto flex items-center gap-1 text-sm text-text"
+          title="鳴っている間は帯が流れ、止めている間は再生位置が画面から出たときだけ追いかけます"
+        >
+          <input
+            type="checkbox"
+            checked={followPlayhead}
+            onChange={(event) => {
+              setFollowPlayhead(event.target.checked)
+            }}
+            className="h-3.5 w-3.5"
+          />
+          再生位置を追う
+        </label>
       </div>
 
       {actionError !== null && (
@@ -544,6 +572,7 @@ export const TimelineEditor = ({
           onClipDragMove={dragMove}
           onClipDragEnd={dragEnd}
           showPlayhead={document !== null}
+          follow={{ enabled: followPlayhead, moving: playheadMoving ?? playing, onUserScroll: stopFollowing }}
           {...(posters === undefined ? {} : { posters })}
           selectedShotId={selectedShotId ?? null}
           {...(onSelectShot === undefined ? {} : { onSelectShot })}

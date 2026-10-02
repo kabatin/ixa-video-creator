@@ -50,3 +50,33 @@ export const resolveTimelineKey = (event: TimelineKeyEvent): TimelineKeyCommand 
 export const TIMELINE_KEY_HELP: readonly { readonly keys: string; readonly action: string }[] = [
   { keys: 'Space', action: '再生 / 一時停止' },
 ]
+
+/**
+ * 再生位置を追うときの横スクロールの位置（制作者 2026-10-02「タイムラインも現在位置に合わせて追従するようにしたい」）。
+ * 動かさないなら null。聴きながら切ると同じ決まりにする。
+ *
+ * - 鳴っている間: 再生位置を、見えている帯の真ん中に保つ
+ * - 止めている間: 見えているうちは触らない（自分で送った窓を引き戻さない）。画面から出たときだけ真ん中へ連れ戻す
+ *
+ * 左の見出しの列（`labelPx`）は横に流れないので、見えている帯は箱の幅から見出しを引いた分。
+ * 位置はすべて px（画面の上の距離。秒を px にするのは呼ぶ側）。
+ */
+export const followScrollLeft = (input: {
+  /** 帯の 0 秒からの再生位置（px）。 */
+  readonly playheadPx: number
+  readonly scrollLeft: number
+  /** 横スクロールの箱の見えている幅（px）。 */
+  readonly viewportPx: number
+  /** 左の見出しの列の幅（px）。 */
+  readonly labelPx: number
+  /** 帯の長さ（px）。 */
+  readonly contentPx: number
+  readonly playing: boolean
+}): number | null => {
+  const bandPx = Math.max(input.viewportPx - input.labelPx, 0)
+  const visible = input.playheadPx >= input.scrollLeft && input.playheadPx <= input.scrollLeft + bandPx
+  if (!input.playing && visible) return null
+  const maxScroll = Math.max(input.labelPx + input.contentPx - input.viewportPx, 0)
+  const target = Math.min(Math.max(input.playheadPx - bandPx / 2, 0), maxScroll)
+  return Math.abs(target - input.scrollLeft) < 1 ? null : target
+}

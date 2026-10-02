@@ -1,7 +1,8 @@
 'use client'
 
 import type { Shot, ShotId, TimelineClip, TimelineClipId, TimelineTrack } from '@ixa/domain'
-import type { KeyboardEvent, ReactNode } from 'react'
+import { useRef, type KeyboardEvent, type ReactNode } from 'react'
+import { TimelineFollowPlayhead, type TimelineFollow } from '@/components/timeline-follow'
 import { ShotPoster } from '@/components/shot-poster'
 import { TimelineClipLane } from '@/components/timeline-clip-lane'
 import { TimelineTransitionRow } from '@/components/timeline-transition-row'
@@ -96,6 +97,8 @@ export type TimelineTracksProps = {
   readonly posters?: ShotPosterMap
   /** 再生ヘッドを引くか。位置は `PlayheadSecContext` から読む（持ち主の内側で使う）。 */
   readonly showPlayhead?: boolean
+  /** 横スクロールを再生位置へ付いていかせる（「再生位置を追う」。再生ヘッドを引くときだけ効く）。 */
+  readonly follow?: TimelineFollow
   /** 目盛りの帯を押した。その秒へ飛ぶ。 */
   readonly onSeek?: (sec: number) => void
   /** 帯の上に重ねるもの（その場で出る入力）。位置は呼び出し側が持つ。 */
@@ -175,6 +178,7 @@ export const TimelineTracks = ({
   onClipDragEnd,
   posters,
   showPlayhead = false,
+  follow,
   onSeek,
   overlay,
   beatAlignment,
@@ -184,6 +188,8 @@ export const TimelineTracks = ({
   onClipContextMenu,
   audioLane,
 }: TimelineTracksProps) => {
+  /** 横スクロールの箱。再生位置を追うときに送る。 */
+  const scrollBoxRef = useRef<HTMLDivElement>(null)
   const alignments = beatAlignment === undefined ? null : alignmentByShotId(beatAlignment.views)
   const contentWidthPx = Math.max(secondsToPx(durationSec, pxPerSec), MIN_CONTENT_WIDTH_PX)
   const ticks = rulerTicks(durationSec, pxPerSec)
@@ -250,7 +256,10 @@ export const TimelineTracks = ({
         })
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+    <div ref={scrollBoxRef} data-timeline-scroll="" className="overflow-x-auto rounded-lg border border-line bg-surface">
+      {showPlayhead && follow !== undefined && (
+        <TimelineFollowPlayhead boxRef={scrollBoxRef} follow={follow} durationSec={durationSec} pxPerSec={pxPerSec} />
+      )}
       <div className="relative" style={{ minWidth: contentWidthPx }}>
         <Row label={`尺 ${formatClock(durationSec)}`} contentWidthPx={contentWidthPx}>
           {/* 目盛りを押したらその秒へ。判定は `timeline-playhead` が持つ。 */}

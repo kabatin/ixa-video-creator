@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   TIMELINE_KEY_HELP,
+  followScrollLeft,
   playheadLeftPx,
   resolveTimelineKey,
   seekSecAtClientX,
@@ -64,5 +65,36 @@ describe('キー', () => {
 
   it('画面に出す一覧は判定と同じキーだけを持つ', () => {
     expect(TIMELINE_KEY_HELP.map((h) => h.keys)).toEqual(['Space'])
+  })
+})
+
+/**
+ * 再生位置を追う（制作者 2026-10-02「タイムラインも現在位置に合わせて追従するようにしたい。他画面に合わせチェックで追従ON/OFF」）。
+ * 聴きながら切ると同じ決まり: 鳴っている間は再生位置を見えている帯の真ん中に保つ。止めている間は、見えているうちは触らず、
+ * 画面から出たときだけ連れ戻す。左の見出しの列（横に流れない）の分は、見えている帯から外す。
+ */
+describe('followScrollLeft', () => {
+  // 箱の幅 600px、見出し 176px → 見えている帯は 424px。中身（見出し＋帯）は 2176px。
+  const base = { viewportPx: 600, labelPx: 176, contentPx: 2000, scrollLeft: 0 }
+
+  it('鳴っている間は、再生位置を見えている帯の真ん中に置く', () => {
+    expect(followScrollLeft({ ...base, playheadPx: 1000, playing: true })).toBe(1000 - 212)
+  })
+
+  it('端では寄せすぎない（左は 0、右は中身の終わりまで）', () => {
+    expect(followScrollLeft({ ...base, playheadPx: 50, playing: true, scrollLeft: 300 })).toBe(0)
+    expect(followScrollLeft({ ...base, playheadPx: 1990, playing: true })).toBe(2176 - 600)
+  })
+
+  it('止めている間は、見えているうちは動かさない（自分で送った窓を引き戻さない）', () => {
+    expect(followScrollLeft({ ...base, playheadPx: 300, playing: false, scrollLeft: 100 })).toBeNull()
+  })
+
+  it('止めている間でも、画面から出ていれば真ん中へ連れ戻す', () => {
+    expect(followScrollLeft({ ...base, playheadPx: 1500, playing: false, scrollLeft: 0 })).toBe(1500 - 212)
+  })
+
+  it('もう真ん中にあれば動かさない（同じ値を書き続けない）', () => {
+    expect(followScrollLeft({ ...base, playheadPx: 1000, playing: true, scrollLeft: 788 })).toBeNull()
   })
 })
