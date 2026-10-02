@@ -7,6 +7,7 @@ import { TakeGrid } from '@/components/take-grid'
 import { useShotTakes } from '@/components/workbench/use-shot-takes'
 import { useSelectedShot, useTransportState, useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty, PanelFrame, PanelNotice } from '@/components/workbench/panels/panel-frame'
+import { TakeEmpty } from '@/components/workbench/panels/take-empty'
 import { ShotStatusBadge } from '@/components/shot-status-badge'
 import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
@@ -102,6 +103,8 @@ export const ComparePanel = () => {
       {adoptError !== null && <PanelNotice tone="danger">{adoptError}</PanelNotice>}
       {takes === null ? (
         error === null && <p className="text-sm text-muted">Take を読み込んでいます…</p>
+      ) : takes.length === 0 ? (
+        <TakeEmpty shot={shot} />
       ) : (
         <div
           /*
