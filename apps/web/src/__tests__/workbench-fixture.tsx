@@ -1,4 +1,5 @@
 import { Project, Shot, ShotId } from '@ixa/domain'
+import { PreferencesRoot } from '@/components/preferences-root'
 import { render } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { vi } from 'vitest'
@@ -141,13 +142,15 @@ export const renderInWorkbench = (
   return {
     value,
     ...render(
-      <AssetStoreContext.Provider value={assetStoreValue(assets)}>
-        <WorkbenchContext.Provider value={value}>
-          <WorkbenchTransportProvider transport={transport}>
-            <ContextMenuHost>{ui}</ContextMenuHost>
-          </WorkbenchTransportProvider>
-        </WorkbenchContext.Provider>
-      </AssetStoreContext.Provider>,
+      <PreferencesRoot>
+        <AssetStoreContext.Provider value={assetStoreValue(assets)}>
+          <WorkbenchContext.Provider value={value}>
+            <WorkbenchTransportProvider transport={transport}>
+              <ContextMenuHost>{ui}</ContextMenuHost>
+            </WorkbenchTransportProvider>
+          </WorkbenchContext.Provider>
+        </AssetStoreContext.Provider>
+      </PreferencesRoot>,
     ),
   }
 }

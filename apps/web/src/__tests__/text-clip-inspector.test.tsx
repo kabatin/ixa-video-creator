@@ -1,8 +1,10 @@
-import { MediaAssetId, TextStyleId, TimelineClip, TimelineClipId } from '@ixa/domain'
+import { MediaAssetId, TextStyleId, TimelineClip, TimelineClipId, type MusicTrack } from '@ixa/domain'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TextClipInspector } from '@/components/workbench/inspector/text-clip-inspector'
+import type { WireMusicAnalysis } from '@/lib/music-api'
+import { DEFAULT_PREFERENCES, PREFERENCES_STORAGE_KEY } from '@/lib/preferences'
 import { aProject, renderInWorkbench } from './workbench-fixture'
 
 /**
@@ -207,6 +209,61 @@ describe('TextClipInspector の時間と削除', () => {
 
     await waitFor(() => {
       expect(fake.updateClip).toHaveBeenCalledWith(CLIP_ID, { durationSec: 3.25 })
+    })
+  })
+
+  /** 制作者 2026-10-01「テロップ吸着繋ぎ」。引きずり・数値の一覧と同じ規則（拍・Shot の端・ほかのクリップの端）。 */
+  describe('拍への吸着', () => {
+    const withBeats = {
+      track: { title: 'iXA CUP' } as unknown as MusicTrack,
+      analysis: {
+        beats: Array.from({ length: 21 }, (_unused, i) => i * 0.5),
+        sections: [],
+        drops: [],
+      } as unknown as WireMusicAnalysis,
+    }
+
+    it('開始は近い拍へ寄せて送り、寄せたと言う', async () => {
+      renderInWorkbench(<TextClipInspector id={CLIP_ID} />, withBeats)
+      await screen.findByText('一行目')
+
+      await retype('開始', '0:02.58')
+
+      await waitFor(() => {
+        expect(fake.updateClip).toHaveBeenCalledWith(CLIP_ID, { startSec: 2.5 })
+      })
+      expect(await screen.findByText(/ビートに吸着しました/)).toBeTruthy()
+    })
+
+    it('尺は開始を動かさず、終わりを近い拍へ寄せる', async () => {
+      renderInWorkbench(<TextClipInspector id={CLIP_ID} />, withBeats)
+      await screen.findByText('一行目')
+
+      // 開始 1 + 尺 2.43 = 終わり 3.43 → 3.5 へ寄せて尺 2.5
+      await retype('尺', '2.43s')
+
+      await waitFor(() => {
+        expect(fake.updateClip).toHaveBeenCalledWith(CLIP_ID, { durationSec: 2.5 })
+      })
+    })
+
+    it('環境設定で吸着を切っていれば、入れた値のまま送る', async () => {
+      localStorage.setItem(
+        PREFERENCES_STORAGE_KEY,
+        JSON.stringify({ ...DEFAULT_PREFERENCES, playback: { ...DEFAULT_PREFERENCES.playback, snapToBeat: false } }),
+      )
+      try {
+        renderInWorkbench(<TextClipInspector id={CLIP_ID} />, withBeats)
+        await screen.findByText('一行目')
+
+        await retype('開始', '0:02.58')
+
+        await waitFor(() => {
+          expect(fake.updateClip).toHaveBeenCalledWith(CLIP_ID, { startSec: 2.58 })
+        })
+      } finally {
+        localStorage.removeItem(PREFERENCES_STORAGE_KEY)
+      }
     })
   })
 

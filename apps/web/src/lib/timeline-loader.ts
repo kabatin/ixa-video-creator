@@ -15,7 +15,7 @@ import {
   type WireTimelineDocument,
   type WireTimelineIssue,
 } from '@/lib/timeline-api'
-import type { BeatSource } from '@/lib/timeline-snap'
+import { beatSourceOf, type BeatSource } from '@/lib/timeline-snap'
 
 /**
  * タイムラインのパネルが自分で取る材料（UI-WORKBENCH §7.3）。旧タイムライン画面の読み込みを移した。
@@ -60,17 +60,7 @@ export const loadBeatSource = async (projectId: ProjectId): Promise<BeatSource> 
     const track = pickMasterTrack(tracks)
     if (track === null) return { state: 'no_track' }
 
-    const analysis = await api.getAnalysis(track.id)
-    if (analysis === null) return { state: 'no_analysis', trackTitle: track.title }
-    if (analysis.beats.length === 0) return { state: 'no_beats', trackTitle: track.title }
-
-    return {
-      state: 'available',
-      trackTitle: track.title,
-      beats: analysis.beats,
-      sections: analysis.sections,
-      drops: analysis.drops,
-    }
+    return beatSourceOf(track, await api.getAnalysis(track.id))
   } catch (error) {
     return { state: 'unreadable', reason: describeError(error) }
   }

@@ -11,11 +11,14 @@ import type { SnapCandidate, SnapResult } from '@ixa/timeline'
 import { describe, expect, it } from 'vitest'
 import { PROJECT_ID, cameraJson } from '@/__tests__/fixtures'
 import {
+  beatSourceOf,
   buildSnapCandidates,
   countSnapCandidates,
   describeBeatSource,
   describeSnapResult,
   snapNoticeClassName,
+  snapEnd,
+  snapPoint,
   snapSpan,
   snapTargetLabel,
   snapToleranceSec,
@@ -350,3 +353,69 @@ describe('snapNoticeClassName', () => {
     expect(new Set(classes).size).toBe(4)
   })
 })
+
+/** インスペクターで開始か尺の一方を直したとき（制作者 2026-10-01「テロップ吸着繋ぎ」）。規則は `snapTime` のまま。 */
+describe('snapPoint', () => {
+  const candidates: readonly SnapCandidate[] = [candidate(1, 'beat'), candidate(2, 'beat')]
+
+  it('近い候補へ寄せ、寄せたことを出す', () => {
+    const point = snapPoint('開始', 1.05, candidates, 0.2, true)
+    expect(point.atSec).toBeCloseTo(1, 10)
+    expect(point.notice.state).toBe('snapped')
+  })
+
+  it('切ってあれば入れた値のまま', () => {
+    const point = snapPoint('開始', 1.05, candidates, 0.2, false)
+    expect(point.atSec).toBe(1.05)
+    expect(point.notice.state).toBe('off')
+  })
+
+  it('遠ければ寄らない', () => {
+    expect(snapPoint('開始', 1.5, candidates, 0.2, true).notice.state).toBe('none')
+  })
+})
+
+/** ワークベンチが持っている楽曲と解析から、拍の材料を作る（読み込みの `loadBeatSource` と同じ言い分け）。 */
+describe('beatSourceOf', () => {
+  const track = { title: 'iXA CUP' }
+
+  it('楽曲・解析・拍の有無を言い分ける', () => {
+    expect(beatSourceOf(null, null)).toEqual({ state: 'no_track' })
+    expect(beatSourceOf(track, null)).toEqual({ state: 'no_analysis', trackTitle: 'iXA CUP' })
+    expect(beatSourceOf(track, { beats: [], sections: [], drops: [] })).toEqual({
+      state: 'no_beats',
+      trackTitle: 'iXA CUP',
+    })
+    expect(beatSourceOf(track, { beats: [0.5, 1], sections: [], drops: [12] })).toEqual({
+      state: 'available',
+      trackTitle: 'iXA CUP',
+      beats: [0.5, 1],
+      sections: [],
+      drops: [12],
+    })
+  })
+})
+
+/** 尺だけ直したとき。開始は動かさず、終わりだけ寄せる。 */
+describe('snapEnd', () => {
+  const candidates: readonly SnapCandidate[] = [candidate(1, 'beat'), candidate(3, 'beat')]
+
+  it('終わりを近い候補へ寄せ、尺を組み直す', () => {
+    const outcome = snapEnd({ startSec: 1, durationSec: 1.9 }, candidates, 0.2, true)
+    expect(outcome.durationSec).toBeCloseTo(2, 10)
+    expect(outcome.notice.state).toBe('snapped')
+  })
+
+  it('寄せると尺が 0 以下になるなら見送り、見送ったと言う', () => {
+    const outcome = snapEnd({ startSec: 1, durationSec: 0.1 }, candidates, 0.2, true)
+    expect(outcome.durationSec).toBeCloseTo(0.1, 10)
+    expect(outcome.notice.state).toBe('rejected')
+  })
+
+  it('切ってあれば入れた尺のまま', () => {
+    const outcome = snapEnd({ startSec: 1, durationSec: 1.9 }, candidates, 0.2, false)
+    expect(outcome.durationSec).toBe(1.9)
+    expect(outcome.notice.state).toBe('off')
+  })
+})
+

@@ -18,7 +18,17 @@ import { formatClock, formatDuration, formatSpan } from '@/lib/format-time'
 import { textClipSpanIssue } from '@/lib/text-clip-span'
 import { TEXT_TEMPLATE_LABELS, readTextClipParams, withStyle } from '@/lib/text-style-form'
 import type { TimelineApi, WireTimelineClip } from '@/lib/timeline-api'
-import { programEndSec } from '@/lib/timeline-display'
+import { DEFAULT_PX_PER_SEC, programEndSec } from '@/lib/timeline-display'
+import {
+  beatSourceOf,
+  buildSnapCandidates,
+  snapEnd,
+  snapNoticeClassName,
+  snapPoint,
+  snapToleranceSec,
+  type SnapNotice,
+} from '@/lib/timeline-snap'
+import { usePreferences } from '@/components/preferences-root'
 import { parseClockInput, parseDurationInput } from '@/lib/time-input'
 
 type Loaded =
@@ -40,6 +50,11 @@ export const TextClipInspector = ({ id, api }: { readonly id: TimelineClipId; re
   const textClipMenu = useTextClipMenu()
   const client = useMemo<TimelineApi>(() => api ?? createApiClient(), [api])
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' })
+  const { preferences } = usePreferences()
+  /** 開始・尺を拍へ寄せた結果。どのテロップのものかを持つ（別のテロップを開いたら出さない）。 */
+  const [snapped, setSnapped] = useState<{ readonly clipId: TimelineClipId; readonly notice: SnapNotice } | null>(
+    null,
+  )
 
   useEffect(() => {
     let alive = true
@@ -91,6 +106,46 @@ export const TextClipInspector = ({ id, api }: { readonly id: TimelineClipId; re
           durationSec,
         })
 
+  /**
+   * 開始・尺の拍への吸着（制作者 2026-10-01「テロップ吸着繋ぎ」）。**規則は引きずり・数値の一覧と同じ**
+   * （`timeline-snap` → `@ixa/timeline`）。入切は環境設定、許容距離はタイムラインの既定の拡大率のもの。
+   * 自分の端は候補から外す（外さないと自分へ寄って動かせない）。
+   */
+  const shots = workbench.shots ?? []
+  const snapCandidates = buildSnapCandidates(
+    {
+      shots,
+      clips: loaded.clips,
+      beatSource: beatSourceOf(workbench.track, workbench.analysis),
+      timelineEndSec: programEndSec(shots),
+    },
+    { clipId: clip.id },
+  )
+  const snapTolerance = snapToleranceSec(DEFAULT_PX_PER_SEC)
+  const snapEnabled = preferences.playback.snapToBeat
+  const saveStart = (requestedSec: number): Promise<void> => {
+    const point = snapPoint('開始', requestedSec, snapCandidates, snapTolerance, snapEnabled)
+    setSnapped({ clipId: clip.id, notice: point.notice })
+    return saveSpan({ startSec: point.atSec })
+  }
+  const saveDuration = (requestedSec: number): Promise<void> => {
+    const end = snapEnd(
+      { startSec: clip.startSec, durationSec: requestedSec },
+      snapCandidates,
+      snapTolerance,
+      snapEnabled,
+    )
+    setSnapped({ clipId: clip.id, notice: end.notice })
+    return saveSpan({ durationSec: end.durationSec })
+  }
+  // 寄せた・見送ったときだけ言う（寄らなかった・切ってあるは、入れた値のままなので黙る）。
+  const snapNotice =
+    snapped !== null &&
+    snapped.clipId === clip.id &&
+    (snapped.notice.state === 'snapped' || snapped.notice.state === 'rejected')
+      ? snapped.notice
+      : null
+
   const textClips = loaded.clips
     .filter((candidate) => candidate.content.type === 'text')
     .map((candidate) => ({
@@ -140,7 +195,7 @@ export const TextClipInspector = ({ id, api }: { readonly id: TimelineClipId; re
             validate={(next) =>
               spanIssue(parseClockInput(next), clip.durationSec, '0:12.34 か 12.34 の形で入れてください')
             }
-            onSave={(next) => saveSpan({ startSec: parseClockInput(next) ?? clip.startSec })}
+            onSave={(next) => saveStart(parseClockInput(next) ?? clip.startSec)}
           />
           <AutoSaveField
             label="尺"
@@ -148,8 +203,13 @@ export const TextClipInspector = ({ id, api }: { readonly id: TimelineClipId; re
             validate={(next) =>
               spanIssue(clip.startSec, parseDurationInput(next), '1.50s のように 0 より大きい秒で入れてください')
             }
-            onSave={(next) => saveSpan({ durationSec: parseDurationInput(next) ?? clip.durationSec })}
+            onSave={(next) => saveDuration(parseDurationInput(next) ?? clip.durationSec)}
           />
+          {snapNotice !== null && (
+            <p role="status" className={`text-xs ${snapNoticeClassName(snapNotice.state)}`}>
+              {`${snapNotice.label}: ${snapNotice.message}`}
+            </p>
+          )}
         </Section>
         {template.success && params !== null && (
           <>

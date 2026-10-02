@@ -131,6 +131,30 @@ export const describeBeatSource = (source: BeatSource): BeatSourceNotice => {
   }
 }
 
+/**
+ * 手元にある楽曲と解析から拍の材料を作る（ワークベンチが読み込んだ値・API から読んだ値のどちらでも）。
+ * 「楽曲が無い」「解析がまだ」「拍が 0 件」を畳まない。
+ */
+export const beatSourceOf = (
+  track: { readonly title: string } | null,
+  analysis: {
+    readonly beats: readonly number[]
+    readonly sections: readonly MusicSection[]
+    readonly drops: readonly number[]
+  } | null,
+): BeatSource => {
+  if (track === null) return { state: 'no_track' }
+  if (analysis === null) return { state: 'no_analysis', trackTitle: track.title }
+  if (analysis.beats.length === 0) return { state: 'no_beats', trackTitle: track.title }
+  return {
+    state: 'available',
+    trackTitle: track.title,
+    beats: analysis.beats,
+    sections: analysis.sections,
+    drops: analysis.drops,
+  }
+}
+
 /** 解析から取れたビート。取れていないときは空（`describeBeatSource` が理由を持つ）。 */
 const beatsOf = (source: BeatSource): readonly number[] =>
   source.state === 'available' ? source.beats : []
@@ -242,6 +266,50 @@ const snapOffNotice = (label: string, requestedSec: number): SnapNotice => ({
   label,
   message: `吸着は切ってあります。入力した ${formatClock(requestedSec)} をそのまま使いました`,
 })
+
+// --- 1 点の吸着 ---
+
+/**
+ * 1 点だけ寄せる（インスペクターで開始か尺の一方を直したとき）。規則は `snapTime` のまま。
+ * 切ってあれば入れた値のまま、切ってあることを言う。
+ */
+export const snapPoint = (
+  label: string,
+  requestedSec: number,
+  candidates: readonly SnapCandidate[],
+  toleranceSec: number,
+  enabled: boolean,
+): { readonly atSec: number; readonly notice: SnapNotice } => {
+  if (!enabled) return { atSec: requestedSec, notice: snapOffNotice(label, requestedSec) }
+  const result = snapTime(requestedSec, candidates, toleranceSec)
+  return { atSec: result.atSec, notice: describeSnapResult(label, requestedSec, result) }
+}
+
+/**
+ * 尺だけ直したとき。**開始は動かさず、終わりだけ寄せる。**
+ * 寄せると尺が 0 以下になるなら見送り、見送ったことを言う（`snapSpan` と同じ扱い）。
+ */
+export const snapEnd = (
+  span: { readonly startSec: number; readonly durationSec: number },
+  candidates: readonly SnapCandidate[],
+  toleranceSec: number,
+  enabled: boolean,
+): { readonly durationSec: number; readonly notice: SnapNotice } => {
+  const requestedEndSec = span.startSec + span.durationSec
+  const end = snapPoint('終了', requestedEndSec, candidates, toleranceSec, enabled)
+  const durationSec = end.atSec - span.startSec
+  if (end.notice.state === 'snapped' && durationSec <= 0) {
+    return {
+      durationSec: span.durationSec,
+      notice: {
+        state: 'rejected',
+        label: '終了',
+        message: `${formatClock(end.atSec)} へ寄せると尺が 0 以下になるため、終了の吸着は見送りました`,
+      },
+    }
+  }
+  return { durationSec: end.notice.state === 'snapped' ? durationSec : span.durationSec, notice: end.notice }
+}
 
 // --- 区間の吸着 ---
 

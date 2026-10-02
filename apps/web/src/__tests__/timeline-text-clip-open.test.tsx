@@ -5,6 +5,7 @@ import type { ReactElement } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TimelineEditor } from '@/components/timeline-editor'
 import { DEFAULT_PX_PER_SEC } from '@/lib/timeline-display'
+import type { BeatSource } from '@/lib/timeline-snap'
 import { PROJECT_ID } from './fixtures'
 
 /**
@@ -40,7 +41,11 @@ const textClip = (id: TimelineClipId, text: string, startSec: number) =>
     createdAt: new Date(),
   })
 
-const editor = (clips: readonly TimelineClip[], onOpenTextClip?: (id: TimelineClipId) => void): ReactElement => (
+const editor = (
+  clips: readonly TimelineClip[],
+  onOpenTextClip?: (id: TimelineClipId) => void,
+  snap: { readonly beatSource?: BeatSource; readonly enabled?: boolean } = {},
+): ReactElement => (
   <TimelineEditor
     projectId={projectId}
     shots={[]}
@@ -50,10 +55,11 @@ const editor = (clips: readonly TimelineClip[], onOpenTextClip?: (id: TimelineCl
     initialIssues={[]}
     documentDurationSec={30}
     initialDocument={null}
-    beatSource={{ state: 'no_track' }}
+    beatSource={snap.beatSource ?? { state: 'no_track' }}
     beatAlignment={null}
     loadErrors={[]}
     showMonitor={false}
+    initialSnapEnabled={snap.enabled ?? true}
     {...(onOpenTextClip === undefined ? {} : { onOpenTextClip })}
   />
 )
@@ -162,3 +168,44 @@ it('空きを押して開くときは、焦点をパネルへ移す既定の動�
   expect(screen.getByRole('dialog')).toBeTruthy()
   expect(notPrevented).toBe(false)
 })
+
+/** 制作者 2026-10-01「テロップ吸着繋ぎ」。押した所の近くの拍へ寄せて置く（引きずりと同じ規則）。 */
+describe('新しく置くテロップの拍への吸着', () => {
+  const beats: BeatSource = {
+    state: 'available',
+    trackTitle: 'iXA CUP',
+    beats: Array.from({ length: 61 }, (_unused, i) => i * 0.5),
+    sections: [],
+    drops: [],
+  }
+
+  const placeAt = async (sec: number): Promise<void> => {
+    fake.createClip.mockResolvedValue(textClip(NEW_ID, '歌詞', sec))
+    pressLaneAt(sec)
+    await userEvent.type(screen.getByLabelText('文字'), '歌詞')
+    await userEvent.click(screen.getByRole('button', { name: /置く|追加/ }))
+  }
+
+  it('押した所の近くの拍へ寄せて置く', async () => {
+    render(editor([], vi.fn(), { beatSource: beats }))
+
+    await placeAt(10.1)
+
+    await waitFor(() => {
+      expect(fake.createClip).toHaveBeenCalled()
+    })
+    expect((fake.createClip.mock.calls[0]?.[1] as { startSec: number }).startSec).toBeCloseTo(10, 6)
+  })
+
+  it('吸着を切っていれば押した所に置く', async () => {
+    render(editor([], vi.fn(), { beatSource: beats, enabled: false }))
+
+    await placeAt(10.1)
+
+    await waitFor(() => {
+      expect(fake.createClip).toHaveBeenCalled()
+    })
+    expect((fake.createClip.mock.calls[0]?.[1] as { startSec: number }).startSec).toBeCloseTo(10.1, 6)
+  })
+})
+

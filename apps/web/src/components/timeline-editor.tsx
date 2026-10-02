@@ -8,22 +8,16 @@ import type {
   ShotId,
   TimelineClip,
   TimelineClipId,
-  TimelineTrack,
   Transition,
   TransitionId,
 } from '@ixa/domain'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { TimelineClipList, type ClipPatch } from '@/components/timeline-clip-list'
-import {
-  TimelineInlineForm,
-  inlineFormErrors,
-  type InlineFormAnchor,
-  type InlineFormDraft,
-} from '@/components/timeline-inline-form'
+import { TimelineInlineForm, inlineFormErrors } from '@/components/timeline-inline-form'
 import { TimelineIssuePanel } from '@/components/timeline-issue-panel'
 import { TimelineSnapPanel } from '@/components/timeline-snap-panel'
 import { ProgramMonitor, type ProgramMonitorProps } from '@/components/program-monitor'
-import { TEXT_INSERT_LAYER, TimelineTracks } from '@/components/timeline-tracks'
+import { TimelineTracks } from '@/components/timeline-tracks'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import type { WireTimelineBeatAlignment } from '@/lib/beat-alignment-view'
@@ -52,25 +46,11 @@ import {
   type ClipDragContext,
   type ClipDragOutcome,
 } from '@/lib/timeline-drag'
-import {
-  INSERTABLE_TRANSITION_TYPES,
-  probeTextInsertion,
-  transitionInsertionPoints,
-  validateTextClipInsert,
-  validateTransitionInsert,
-  type InsertIssue,
-  type TransitionInsertionPoint,
-} from '@/lib/timeline-insert'
-import { keepTextParams } from '@/lib/text-style-form'
-import {
-  openFormCaption,
-  textEditDraft,
-  textInsertDraft,
-  transitionDraft,
-  type OpenInlineForm,
-} from '@/lib/timeline-open-form'
+import { INSERTABLE_TRANSITION_TYPES } from '@/lib/timeline-insert'
+import { openFormCaption } from '@/lib/timeline-open-form'
 import {
   buildSnapCandidates,
+  snapPoint,
   snapSpan,
   snapToleranceSec,
   type BeatSource,
@@ -78,6 +58,7 @@ import {
   type SnapSpanOutcome,
 } from '@/lib/timeline-snap'
 import type { ContextMenuTriggerProps, MenuPoint } from '@/components/workbench/use-context-menu'
+import { useTimelineInlineForms } from '@/components/use-timeline-inline-forms'
 
 /**
  * タイムライン編集画面の操作盤（P5-4）。
@@ -207,10 +188,6 @@ export const TimelineEditor = ({
   const [actionError, setActionError] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
 
-  /** 帯の上で開いている入力。開く場所が変わったら下書きも作り直す。 */
-  const [open, setOpen] = useState<OpenInlineForm | null>(null)
-  const [draft, setDraft] = useState<InlineFormDraft | null>(null)
-  const [formIssues, setFormIssues] = useState<readonly InsertIssue[]>([])
   /** 掴んでいる最中の見た目。確定するまで本体は書き換えない。 */
   const [preview, setPreview] = useState<{
     readonly id: TimelineClipId
@@ -218,12 +195,6 @@ export const TimelineEditor = ({
   } | null>(null)
   /** 掴んで止まった理由・吸着した先。**黙って丸めない。** */
   const [dragNotes, setDragNotes] = useState<readonly string[]>([])
-  /**
-   * 入力を開いた元のボタン。**閉じたら焦点をここへ戻す。**
-   * 戻さないと、キーボードだけで操作している人が現在地を失って帯の先頭へ飛ばされる。
-   * 戻すのは入力部品の仕事なので、こちらは受け口を渡すだけ。
-   */
-  const openerRef = useRef<HTMLElement | null>(null)
 
   /** 再生ヘッド（PHASE 6.0）。モニターと帯が同じ値を見る。 */
   const [ownCurrentSec, setOwnCurrentSec] = useState(0)
@@ -338,164 +309,36 @@ export const TimelineEditor = ({
     })
   }
 
-  // --- 帯の上の入力 ---
+  // --- 帯の上の入力（`use-timeline-inline-forms.ts`） ---
 
-  const points = useMemo(
-    () => transitionInsertionPoints(shots ?? [], transitions ?? []),
-    [shots, transitions],
-  )
-
-  const closeForm = (): void => {
-    setOpen(null)
-    setDraft(null)
-    setFormIssues([])
-  }
-
-  const openTransition = (
-    point: TransitionInsertionPoint,
-    anchor: InlineFormAnchor,
-    opener: HTMLElement | null,
-  ): void => {
-    openerRef.current = opener
-    setOpen({ kind: 'transition', point, anchor })
-    setDraft(transitionDraft(point))
-    setFormIssues([])
-  }
-
-  const openTextInsert = (
-    track: TimelineTrack,
-    atSec: number,
-    anchor: InlineFormAnchor,
-    opener: HTMLElement | null,
-  ): void => {
-    openerRef.current = opener
-    const probe = probeTextInsertion({
-      clips: clips ?? [],
-      track,
-      layer: TEXT_INSERT_LAYER,
-      atSec,
-      programEndSec: durationSec,
-    })
-    if (!probe.ok) {
-      // **置けない理由を必ず出す。** 押しても何も出ないと、押せる場所が分からない。
-      closeForm()
-      setActionError(probe.message)
-      return
-    }
-    setActionError(null)
-    setOpen({ kind: 'text_insert', track, layer: TEXT_INSERT_LAYER, anchor })
-    setDraft(textInsertDraft(probe))
-    setFormIssues([])
-  }
-
-  const openClip = (
-    clip: TimelineClip,
-    anchor: InlineFormAnchor,
-    opener: HTMLElement | null,
-  ): void => {
-    if (onOpenTextClip !== undefined && clip.content.type === 'text') {
-      closeForm()
-      onOpenTextClip(clip.id)
-      return
-    }
-    openerRef.current = opener
-    setOpen({ kind: 'text_edit', clip, anchor })
-    // 読めなかった値は `null` のまま渡す。断りは入力部品が出す。
-    setDraft(textEditDraft(clip))
-    setFormIssues([])
-  }
-
-  /**
-   * トランジションは差し替えの口が無いので、**消してから作り直す**。
-   * 2 つの Shot の間に 1 本、という不変条件を保ちやすいため（`timeline-api.ts`）。
-   */
-  const submitTransition = (point: TransitionInsertionPoint, next: InlineFormDraft): void => {
-    if (next.kind !== 'transition') return
-    const result = validateTransitionInsert(point, {
-      type: next.type,
-      durationSec: next.durationSec,
-    })
-    if (!result.ok) {
-      setFormIssues(result.issues)
-      return
-    }
-    const existing = point.existing
-    void run(existing === null ? 'Transition を追加' : 'Transition を差し替え', async () => {
-      if (existing !== null) {
-        await api.deleteTransition(existing.id)
-        setTransitions((current) =>
-          current === null ? current : current.filter((t) => t.id !== existing.id),
-        )
-      }
-      const created = await api.createTransition(projectId, result.value)
-      setTransitions((current) => (current === null ? [created] : [...current, created]))
-      closeForm()
-    })
-  }
-
-  const submitTextClip = (next: InlineFormDraft, existing: TimelineClip | null): void => {
-    if (next.kind !== 'text') return
-    const track: TimelineTrack = existing?.track ?? 'TEXT'
-    const layer = existing?.layer ?? TEXT_INSERT_LAYER
-    const result = validateTextClipInsert({
-      // 自分自身は重なりの相手にしない。直しているのだから当然ぶつかる。
-      clips: (clips ?? []).filter((clip) => clip.id !== existing?.id),
-      track,
-      layer,
-      programEndSec: durationSec,
-      draft: {
-        // 読めなかった値は `null` で来る。**検証へ渡す直前にだけ畳む。**
-        // 早く畳むと「読めない」と「空」の区別が消える。
-        templateKey: next.templateKey ?? '',
-        text: next.text ?? '',
-        startSec: next.startSec,
-        durationSec: next.durationSec,
-      },
-    })
-    if (!result.ok) {
-      setFormIssues(result.issues)
-      return
-    }
-
-    const value = result.value
-    if (existing === null) {
-      void run('テロップを追加', async () => {
-        const created = await api.createClip(projectId, {
-          track: value.track,
-          startSec: value.startSec,
-          durationSec: value.durationSec,
-          layer: value.layer,
-          content: {
-            type: 'text',
-            templateKey: value.templateKey,
-            params: { ...value.params },
-          },
-        })
-        setClips((current) => (current === null ? [created] : [...current, created]))
-        closeForm()
-        // 置いたらすぐ見た目・時間を直せるように、インスペクターで開く。
-        onOpenTextClip?.(created.id)
-      })
-      return
-    }
-
-    void run('テロップを更新', async () => {
-      const updated = await api.updateClip(existing.id, {
-        startSec: value.startSec,
-        durationSec: value.durationSec,
-        content: {
-          type: 'text',
-          templateKey: value.templateKey,
-          // 文字だけ新しくし、インスペクターで付けた見た目とスタイルは残す（ADR-0028）。
-          params: keepTextParams(existing.content, value.params),
-        },
-      })
-      setClips((current) =>
-        current === null ? current : current.map((c) => (c.id === existing.id ? updated : c)),
-      )
-      closeForm()
-    })
-  }
+  const forms = useTimelineInlineForms({
+    api,
+    projectId,
+    shots,
+    transitions,
+    clips,
+    setTransitions,
+    setClips,
+    durationSec,
+    run,
+    setActionError,
+    onOpenTextClip,
+    snapInsertAt: (atSec) =>
+      snapPoint('開始', atSec, overviewCandidates, toleranceSec, snapEnabled).atSec,
+  })
+  const {
+    open,
+    draft,
+    formIssues,
+    openerRef,
+    points,
+    closeForm,
+    openTransition,
+    openTextInsert,
+    openClip,
+    submitTransition,
+    submitTextClip,
+  } = forms
 
   // --- 掴んで動かす ---
 
