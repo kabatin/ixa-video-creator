@@ -450,6 +450,7 @@ describe('最初のフレームを絵に使う', () => {
     if (options.noFrame !== true) await replaceManualStartFrame(shotReferences, shot.id, frame.id)
     if (options.drawing === true) {
       await imageJobs.create({
+        kind: 'start_frame',
         projectId: project.id,
         shotId: shot.id,
         providerId: 'codex-cli' as never,

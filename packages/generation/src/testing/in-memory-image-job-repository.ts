@@ -7,7 +7,7 @@ import {
   type ImageGenerationJob,
 } from '@ixa/domain'
 
-/** 絵コンテの画像ジョブのインメモリ版。書くたびに状態と中身の食い違いを確かめる（実物と同じ）。 */
+/** 絵のジョブ（最初のフレーム・キャラクターシート）のインメモリ版。書くたびに状態と中身の食い違いを確かめる（実物と同じ）。 */
 export type InMemoryImageJobRepository = ImageJobRepository & { readonly snapshot: () => readonly ImageGenerationJob[] }
 
 export const createInMemoryImageJobRepository = (
@@ -33,10 +33,15 @@ export const createInMemoryImageJobRepository = (
       Promise.resolve(
         save(
           ImageGenerationJobSchema.parse({
-            ...input,
             id: newId(ImageGenerationJobIdSchema),
+            projectId: input.projectId,
+            kind: input.kind,
+            shotId: input.kind === 'start_frame' ? input.shotId : null,
+            characterId: input.kind === 'character_sheet' ? input.characterId : null,
+            providerId: input.providerId,
+            modelId: input.modelId,
             status: 'queued',
-            referenceAssetIds: [],
+            referenceAssetIds: input.kind === 'character_sheet' ? [...input.referenceAssetIds] : [],
             mediaAssetId: null,
             error: null,
             providerRecord: null,
@@ -50,6 +55,10 @@ export const createInMemoryImageJobRepository = (
     findActiveByShot: (shotId) =>
       Promise.resolve(newestFirst(store.filter((job) => job.shotId === shotId && active(job)))[0] ?? null),
     findLatestByShot: (shotId) => Promise.resolve(newestFirst(store.filter((job) => job.shotId === shotId))[0] ?? null),
+    findActiveByCharacter: (characterId) =>
+      Promise.resolve(newestFirst(store.filter((job) => job.characterId === characterId && active(job)))[0] ?? null),
+    findLatestByCharacter: (characterId) =>
+      Promise.resolve(newestFirst(store.filter((job) => job.characterId === characterId))[0] ?? null),
     findActiveByProject: (projectId) =>
       Promise.resolve(newestFirst(store.filter((job) => job.projectId === projectId && active(job)))),
     markRunning: (id, referenceAssetIds) =>

@@ -42,6 +42,7 @@ import { shotCompareRoutes } from './routes/shot-compare.js'
 import { beatAlignmentRoutes, roughCutRoutes, timelineRoutes } from './routes/timeline.js'
 import { renderRoutes, type RenderQueue } from './routes/renders.js'
 import { characterRoutes, shotCharacterRoutes } from './routes/characters.js'
+import { characterSheetRoutes } from './routes/character-sheet.js'
 import { assetRoutes } from './routes/assets.js'
 import { libraryImportRoutes } from './routes/library-imports.js'
 import { scriptRoutes } from './routes/scripts.js'
@@ -274,6 +275,18 @@ export const createApp = (deps: AppDeps) => {
       shots: deps.shots,
       projects,
       shotReferences: deps.shotReferences,
+      imageJobs: deps.imageJobs,
+      imageQueue: deps.imageQueue,
+      imageModel: deps.imageModel,
+      events: deps.events,
+      logger,
+    }),
+  )
+  // 1 枚の画像からキャラクターシート（四面図）を作る（ADR-0035）。絵コンテの画像と同じ順番待ち。
+  app.route(
+    '/',
+    characterSheetRoutes({
+      characters: deps.characters,
       imageJobs: deps.imageJobs,
       imageQueue: deps.imageQueue,
       imageModel: deps.imageModel,

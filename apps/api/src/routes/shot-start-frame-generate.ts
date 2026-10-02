@@ -15,6 +15,7 @@ import { manualStartFrameOf } from '@ixa/generation'
 import type { Logger } from 'pino'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
+import { startImageJob, type ImageJobQueue } from './image-job-start.js'
 
 /**
  * 絵コンテの画像を作る口（ADR-0029）。**ジョブを 1 行作って image キューへ入れるだけ。** 作るのは worker。
@@ -24,7 +25,8 @@ import { errorContent, fail, ok, successResponse } from '../response.js'
 /** キュー名は apps/worker/src/queues.ts の QUEUE_NAMES と一致させること（apps 同士は import できない）。 */
 export const IMAGE_QUEUE_NAME = 'image'
 
-export type ImageJobQueue = { readonly enqueue: (imageJobId: ImageGenerationJobId) => Promise<void> }
+/** キューの口は `image-job-start.ts` が持つ（キャラクターシートと共有）。 */
+export type { ImageJobQueue } from './image-job-start.js'
 
 export type StartFrameGenerateRoutesDeps = {
   readonly shots: Pick<ShotRepository, 'findById' | 'findByProject'>
@@ -97,43 +99,9 @@ const bulkRoute = createRoute({
   },
 })
 
-const publish = async (deps: StartFrameGenerateRoutesDeps, job: ImageGenerationJob): Promise<void> => {
-  try {
-    await deps.events.publish({
-      type: 'image_job.status',
-      projectId: job.projectId,
-      at: new Date().toISOString(),
-      shotId: job.shotId,
-      jobId: job.id,
-      status: job.status,
-      error: job.error?.message ?? null,
-    })
-  } catch (error) {
-    // 通知は上乗せ。落ちても頼んだことは取り消さない（ProjectEventPublisher の約束）。
-    deps.logger.warn({ imageJobId: job.id, err: error }, '出来事を流せませんでした')
-  }
-}
-
-/**
- * ジョブを作ってキューへ入れる。**入れ損ねたら失敗にしてから投げる。** 待っているまま残すと、
- * その Shot は「作っています」のまま二度と頼めなくなる。
- */
-const start = async (deps: StartFrameGenerateRoutesDeps, shot: Shot): Promise<ImageGenerationJob> => {
-  const job = await deps.imageJobs.create({ projectId: shot.projectId, shotId: shot.id, ...(await deps.imageModel()) })
-  try {
-    await deps.imageQueue.enqueue(job.id)
-  } catch (error) {
-    const failed = await deps.imageJobs.markFailed(
-      job.id,
-      { code: 'enqueue_failed', message: '絵を作る順番に入れられませんでした。もう一度押してください。', retryable: true },
-      null,
-    )
-    await publish(deps, failed)
-    throw new Error('image キューへ入れられませんでした', { cause: error })
-  }
-  await publish(deps, job)
-  return job
-}
+/** 最初のフレームのジョブを始める（キャラクターシートと同じ道。`image-job-start.ts`）。 */
+const start = async (deps: StartFrameGenerateRoutesDeps, shot: Shot): Promise<ImageGenerationJob> =>
+  startImageJob(deps, { kind: 'start_frame', projectId: shot.projectId, shotId: shot.id, ...(await deps.imageModel()) })
 
 export const shotStartFrameGenerateRoutes = (deps: StartFrameGenerateRoutesDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })

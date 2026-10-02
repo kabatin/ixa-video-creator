@@ -253,7 +253,10 @@ export const buildShotPosters = async (
 
   const projectId = shots[0]?.projectId
   const drawing = new Set(
-    projectId === undefined ? [] : (await deps.imageJobs.findActiveByProject(projectId)).map((job) => job.shotId),
+    projectId === undefined
+      ? []
+      : // キャラクターシートのジョブ（Shot を持たない）は数えない（ADR-0035）。
+        (await deps.imageJobs.findActiveByProject(projectId)).flatMap((job) => (job.shotId === null ? [] : [job.shotId])),
   )
   // 最初のフレームは**全 Shot で引く**（あるかどうかを返すため）。絵に使うのは採用 Take が無い Shot だけ。
   const frameOf = new Map<ShotId, MediaAssetId | null>(

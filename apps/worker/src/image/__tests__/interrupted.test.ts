@@ -22,7 +22,9 @@ const shot = aShot(project)
 const jobIn = (status: ImageGenerationJob['status']): ImageGenerationJob => ({
   id: newId(ImageGenerationJobIdSchema),
   projectId: project.id,
+  kind: 'start_frame',
   shotId: shot.id,
+  characterId: null,
   status,
   providerId: ProviderId.parse('codex-cli'),
   modelId: ModelId.parse('codex-cli/image-gen'),

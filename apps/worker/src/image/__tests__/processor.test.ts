@@ -13,7 +13,11 @@ import {
   type ShotReference,
 } from '@ixa/domain'
 import { manualStartFrameOf, replaceManualStartFrame } from '@ixa/generation'
-import { createInMemoryImageJobRepository, createInMemoryShotReferenceRepository } from '@ixa/generation/testing'
+import {
+  createInMemoryCharacterRepository,
+  createInMemoryImageJobRepository,
+  createInMemoryShotReferenceRepository,
+} from '@ixa/generation/testing'
 import { codexCliImageModel } from '@ixa/provider-image'
 import { createMemoryStorage } from '@ixa/storage'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -49,7 +53,9 @@ const shot = aShot(project, { description: '暗いガレージ。作業台にマ
 const queuedJob = (): ImageGenerationJob => ({
   id: newId(ImageGenerationJobIdSchema),
   projectId: project.id,
+  kind: 'start_frame',
   shotId: shot.id,
+  characterId: null,
   status: 'queued',
   providerId: ProviderId.parse('codex-cli'),
   modelId: ModelId.parse('codex-cli/image-gen'),
@@ -87,6 +93,7 @@ const setup = (options: { outcome?: Parameters<typeof fakeImageProvider>[1]; con
     imageJobs: createInMemoryImageJobRepository([job]),
     shots: inMemoryShots([shot]),
     projects: inMemoryProjects([project]),
+    characters: createInMemoryCharacterRepository(),
     mediaAssets: inMemoryMediaAssets(),
     shotReferences: createInMemoryShotReferenceRepository(),
     storage: createMemoryStorage(),
