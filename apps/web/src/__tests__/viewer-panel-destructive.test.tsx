@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ViewerPanel } from '@/components/workbench/panels/viewer-panel'
 import { ApiError } from '@/lib/api-error'
-import { WORKSPACE_ID } from './fixtures'
+import { PROJECT_ID, WORKSPACE_ID } from './fixtures'
 import { assetStoreValue, renderInWorkbench } from './workbench-fixture'
 
 /**
@@ -62,6 +62,7 @@ const wardrobe = {
 const aLocation = Location.parse({
   id: LOCATION_ID,
   workspaceId: WORKSPACE_ID,
+  projectId: PROJECT_ID,
   name: '体育館',
   description: '',
   referenceAssetIds: [ASSET_A, ASSET_B],

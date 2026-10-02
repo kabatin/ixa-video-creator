@@ -1,4 +1,4 @@
-import { Location, type WorkspaceId } from '@ixa/domain'
+import { Location, type ProjectId } from '@ixa/domain'
 import { z } from 'zod'
 import type { Requester } from '@/lib/requester'
 
@@ -14,12 +14,11 @@ export type WireLocation = z.infer<typeof WireLocation>
 export const WireLocationList = z.array(WireLocation)
 
 export type LocationApi = {
-  listLocations: (workspaceId: WorkspaceId) => Promise<Location[]>
+  /** プロジェクトのロケーション（ADR-0034）。 */
+  listLocations: (projectId: ProjectId) => Promise<Location[]>
 }
 
 export const createLocationApi = (requester: Requester): LocationApi => ({
-  listLocations: async (workspaceId) => {
-    const query = new URLSearchParams({ workspaceId })
-    return requester.get(`/locations?${query.toString()}`, WireLocationList)
-  },
+  listLocations: async (projectId) =>
+    requester.get(`/projects/${encodeURIComponent(projectId)}/locations`, WireLocationList),
 })

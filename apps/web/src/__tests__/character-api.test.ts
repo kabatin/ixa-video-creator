@@ -1,11 +1,11 @@
-import { CharacterId, CharacterIdentityImageId, MediaAssetId, WorkspaceId } from '@ixa/domain'
+import { CharacterId, CharacterIdentityImageId, MediaAssetId, ProjectId } from '@ixa/domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '@/lib/api-client'
 import {
   CHARACTER_ID,
   IDENTITY_IMAGE_ID,
   MEDIA_ID,
-  WORKSPACE_ID,
+  PROJECT_ID,
   characterJson,
   identityImageJson,
 } from '@/__tests__/fixtures'
@@ -14,7 +14,7 @@ const BASE_URL = 'http://127.0.0.1:3001'
 
 const characterId = CharacterId.parse(CHARACTER_ID)
 const identityImageId = CharacterIdentityImageId.parse(IDENTITY_IMAGE_ID)
-const workspaceId = WorkspaceId.parse(WORKSPACE_ID)
+const projectId = ProjectId.parse(PROJECT_ID)
 
 const jsonResponse = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), {
@@ -37,31 +37,33 @@ afterEach(() => {
 })
 
 describe('character API', () => {
-  it('listCharacters は workspaceId で絞り、封筒を剥がしてパースする', async () => {
+  /** キャラクターはプロジェクトごと（ADR-0034）。 */
+  it('listCharacters はプロジェクトの経路で引き、封筒を剥がしてパースする', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [characterJson] }))
 
-    const characters = await createApiClient(BASE_URL).listCharacters(workspaceId)
+    const characters = await createApiClient(BASE_URL).listCharacters(projectId)
 
     expect(characters).toHaveLength(1)
     expect(characters[0]?.identityAnchors).toEqual(['20代日本人男性', '細身'])
     expect(characters[0]?.createdAt).toBeInstanceOf(Date)
 
     const [url] = fetchMock.mock.calls[0] ?? []
-    expect(url).toBe(`${BASE_URL}/characters?workspaceId=${WORKSPACE_ID}`)
+    expect(url).toBe(`${BASE_URL}/projects/${PROJECT_ID}/characters`)
   })
 
-  it('createCharacter は既定値を埋めた本文を POST する', async () => {
+  it('createCharacter はプロジェクトの経路へ、既定値を埋めた本文を POST する（ワークスペースは送らない）', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: characterJson }, 201))
 
-    const created = await createApiClient(BASE_URL).createCharacter({
-      workspaceId,
+    const created = await createApiClient(BASE_URL).createCharacter(projectId, {
       name: 'takepi',
       displayName: 'タケピ',
     })
 
     expect(created.id).toBe(CHARACTER_ID)
-    const [, init] = fetchMock.mock.calls[0] ?? []
+    const [url, init] = fetchMock.mock.calls[0] ?? []
+    expect(url).toBe(`${BASE_URL}/projects/${PROJECT_ID}/characters`)
     expect(init?.method).toBe('POST')
+    expect(JSON.parse(requestBodyOf(init)) as unknown).not.toHaveProperty('workspaceId')
     expect(JSON.parse(requestBodyOf(init)) as unknown).toMatchObject({
       name: 'takepi',
       description: '',

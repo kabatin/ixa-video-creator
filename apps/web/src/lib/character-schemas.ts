@@ -34,11 +34,14 @@ export const WireLookList = z.array(WireLook)
 export const WireLookImage = CharacterLookImage
 export const WireLookImageList = z.array(WireLookImage)
 
-/** `POST /characters` の本文。 */
-export const CreateCharacterBody = CreateCharacterInput
+/**
+ * `POST /projects/{projectId}/characters` の本文。キャラクターはプロジェクトごと（ADR-0034）で、
+ * プロジェクトは経路が持ち、ワークスペースはサーバがそのプロジェクトから引く。
+ */
+export const CreateCharacterBody = CreateCharacterInput.omit({ workspaceId: true, projectId: true })
 export type CreateCharacterBody = z.input<typeof CreateCharacterBody>
 
-/** `PATCH /characters/{id}` の本文。workspaceId は変更できない。 */
+/** `PATCH /characters/{id}` の本文。workspaceId・projectId は変更できない。 */
 export const UpdateCharacterBody = UpdateCharacterPatch
 export type UpdateCharacterBody = z.input<typeof UpdateCharacterBody>
 

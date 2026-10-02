@@ -26,6 +26,10 @@ const ITEM =
  */
 export const AssetTree = () => {
   const workbench = useWorkbench()
+  // キャラクター・ロケーション・ブランド資産はプロジェクトごと。ほかのプロジェクトのものは取り込んで使う（ADR-0034）。
+  const openImport = (): void => {
+    workbench.openDialog('library-import')
+  }
   const { characters, looks, locations, brandAssets, tracks, actions } = useAssets()
   const [query, setQuery] = useState('')
   const audioInput = useRef<HTMLInputElement>(null)
@@ -111,6 +115,7 @@ export const AssetTree = () => {
           label="キャラクター"
           count={characters}
           addLabel="キャラクターを追加"
+          onImport={openImport}
           create={async (name) => {
             const created = await actions.createCharacter(name)
             select({ kind: 'character', id: created.id })
@@ -160,6 +165,7 @@ export const AssetTree = () => {
           label="ロケーション"
           count={locations}
           addLabel="ロケーションを追加"
+          onImport={openImport}
           create={async (name) => {
             const created = await actions.createLocation(name)
             select({ kind: 'location', id: created.id })
@@ -189,6 +195,7 @@ export const AssetTree = () => {
           label="ブランド資産"
           count={brandAssets}
           addLabel="ブランド資産を追加"
+          onImport={openImport}
           create={async (name) => {
             // 名前が色の値（#RRGGBB）なら色として作る。それ以外はロゴとして作り、種類は右で直す。
             const isColor = /^#[0-9a-f]{6}$/i.test(name.trim())
@@ -266,11 +273,14 @@ const Group = ({
   addLabel,
   onAdd,
   create,
+  onImport,
   children,
 }: {
   readonly label: string
   readonly count: Loaded<readonly unknown[]>
   readonly addLabel: string
+  /** ほかのプロジェクトから取り込む（複製。ADR-0034）。渡したときだけ出す。 */
+  readonly onImport?: () => void
   /** 押したらすぐ何かを始める（ファイル選択など）。 */
   readonly onAdd?: () => void
   /** 名前の欄を出して作る。 */
@@ -309,12 +319,33 @@ const Group = ({
         >
           ＋
         </button>
+        {onImport !== undefined && (
+          <button
+            type="button"
+            aria-label={`${label}をほかのプロジェクトから取り込む`}
+            title="ほかのプロジェクトから取り込む…"
+            onClick={onImport}
+            className="inline-flex h-6 min-w-6 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text"
+          >
+            ⇣
+          </button>
+        )}
       </div>
       {open && (
         <div className="pl-3">
           {count.state === 'error' && <Note tone="danger">{count.message}</Note>}
           {count.state === 'ready' && count.value.length === 0 && !adding && (
-            <Note>まだありません</Note>
+            <Note>
+              まだありません
+              {onImport !== undefined && (
+                <>
+                  {'。'}
+                  <button type="button" onClick={onImport} className="underline hover:text-text">
+                    ほかのプロジェクトから取り込む…
+                  </button>
+                </>
+              )}
+            </Note>
           )}
           {children}
           {adding && create !== undefined && (

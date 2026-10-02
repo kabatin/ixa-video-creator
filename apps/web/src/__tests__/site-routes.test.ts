@@ -84,8 +84,9 @@ describe('入口のリンク', () => {
 
   const targets = [...SITE_NAV_ENTRIES.map((entry) => entry.href), NEW_PROJECT_HREF, ...menuHrefs]
 
+  /** キャラクター・素材ライブラリの入口は外した（プロジェクトごとになった。ADR-0034）。残りはプロジェクト一覧と新規。 */
   it('検査する行き先がある（空振りで合格にしない）', () => {
-    expect(targets.length).toBeGreaterThanOrEqual(7)
+    expect(targets.length).toBeGreaterThanOrEqual(4)
   })
 
   it.each([...new Set(targets)])('%s に対応するページがある', (href) => {

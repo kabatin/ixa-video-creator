@@ -1,13 +1,7 @@
-import { BrandAsset, BrandAssetId, LocationId, ProjectId, WorkspaceId } from '@ixa/domain'
+import { BrandAssetId, LocationId, ProjectId } from '@ixa/domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LOCATION_ID, MEDIA_ID, PROJECT_ID, WORKSPACE_ID, locationJson } from '@/__tests__/fixtures'
-import {
-  EMPTY_BRAND_ASSET_VALUES,
-  brandAssetValuesOf,
-  createLibraryClient,
-  fieldErrorsOf,
-  toBrandAssetInput,
-} from '@/lib/library-api'
+import { createLibraryClient, fieldErrorsOf } from '@/lib/library-api'
 
 const BASE_URL = 'http://127.0.0.1:3001'
 
@@ -17,6 +11,7 @@ const BRAND_ASSET_ID = '01ARZ3NDEKTSV4RRFFQ69G5FE0'
 const brandColorJson = {
   id: BRAND_ASSET_ID,
   workspaceId: WORKSPACE_ID,
+  projectId: PROJECT_ID,
   category: 'color',
   name: 'iXA Yellow',
   mediaAssetId: null,
@@ -24,7 +19,6 @@ const brandColorJson = {
   usageRule: '見出しの下線に使う',
 }
 
-const workspaceId = WorkspaceId.parse(WORKSPACE_ID)
 const brandAssetId = BrandAssetId.parse(BRAND_ASSET_ID)
 const locationId = LocationId.parse(LOCATION_ID)
 const projectId = ProjectId.parse(PROJECT_ID)
@@ -49,23 +43,23 @@ afterEach(() => {
 })
 
 describe('BrandAsset の呼び出し口', () => {
-  it('一覧は workspaceId で絞り、封筒を剥がしてパースする', async () => {
+  /** ブランド資産とロケーションはプロジェクトごと（ADR-0034）。 */
+  it('一覧はプロジェクトの経路で引き、封筒を剥がしてパースする', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [brandColorJson] }))
 
-    const assets = await client().listBrandAssets(workspaceId)
+    const assets = await client().listBrandAssets(projectId)
 
     expect(assets).toHaveLength(1)
     expect(assets[0]?.value).toBe('#FFD200')
 
     const [url] = fetchMock.mock.calls[0] ?? []
-    expect(url).toBe(`${BASE_URL}/brand-assets?workspaceId=${WORKSPACE_ID}`)
+    expect(url).toBe(`${BASE_URL}/projects/${PROJECT_ID}/brand-assets`)
   })
 
-  it('作成は POST /brand-assets。省略した列は既定値を補って送る', async () => {
+  it('作成はプロジェクトの経路へ POST。省略した列は既定値を補って送る（ワークスペースは送らない）', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: brandColorJson }, 201))
 
-    const created = await client().createBrandAsset({
-      workspaceId,
+    const created = await client().createBrandAsset(projectId, {
       category: 'color',
       name: 'iXA Yellow',
       value: '#FFD200',
@@ -74,10 +68,9 @@ describe('BrandAsset の呼び出し口', () => {
     expect(created.id).toBe(BRAND_ASSET_ID)
 
     const [url, init] = fetchMock.mock.calls[0] ?? []
-    expect(url).toBe(`${BASE_URL}/brand-assets`)
+    expect(url).toBe(`${BASE_URL}/projects/${PROJECT_ID}/brand-assets`)
     expect(init?.method).toBe('POST')
     expect(requestBodyOf(init)).toEqual({
-      workspaceId: WORKSPACE_ID,
       category: 'color',
       name: 'iXA Yellow',
       mediaAssetId: null,
@@ -128,8 +121,7 @@ describe('BrandAsset の呼び出し口', () => {
     )
 
     await expect(
-      client().createBrandAsset({
-        workspaceId,
+      client().createBrandAsset(projectId, {
         category: 'color',
         name: 'iXA Yellow',
         value: 'きいろ',
@@ -142,11 +134,10 @@ describe('BrandAsset の呼び出し口', () => {
 })
 
 describe('Location の呼び出し口', () => {
-  it('作成は POST /locations。参照画像は配列のまま送る', async () => {
+  it('作成はプロジェクトの経路へ POST。参照画像は配列のまま送る', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: locationJson }, 201))
 
-    const created = await client().createLocation({
-      workspaceId,
+    const created = await client().createLocation(projectId, {
       name: '夜のスタジアム',
       description: 'ナイター照明',
       referenceAssetIds: [MEDIA_ID],
@@ -155,10 +146,9 @@ describe('Location の呼び出し口', () => {
     expect(created.referenceAssetIds).toEqual([MEDIA_ID])
 
     const [url, init] = fetchMock.mock.calls[0] ?? []
-    expect(url).toBe(`${BASE_URL}/locations`)
+    expect(url).toBe(`${BASE_URL}/projects/${PROJECT_ID}/locations`)
     expect(init?.method).toBe('POST')
     expect(requestBodyOf(init)).toEqual({
-      workspaceId: WORKSPACE_ID,
       name: '夜のスタジアム',
       description: 'ナイター照明',
       referenceAssetIds: [MEDIA_ID],
@@ -193,7 +183,7 @@ describe('Location の呼び出し口', () => {
   it('一覧は location-api の実装をそのまま束ねている', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [locationJson] }))
 
-    await expect(client().listLocations(workspaceId)).resolves.toHaveLength(1)
+    await expect(client().listLocations(projectId)).resolves.toHaveLength(1)
   })
 })
 
@@ -241,62 +231,11 @@ describe('Project 設定の呼び出し口', () => {
   })
 })
 
-describe('BrandAsset のフォーム値の写し替え', () => {
-  it('保存済みの値を入力欄へ写す。未設定の value は空欄にする', () => {
-    const asset = BrandAsset.parse({ ...brandColorJson, value: null })
-
-    expect(brandAssetValuesOf(asset)).toEqual({
-      category: 'color',
-      name: 'iXA Yellow',
-      value: '',
-      mediaAssetId: null,
-      usageRule: '見出しの下線に使う',
-    })
-  })
-
-  it('空欄の value は null（指定なし）にする。空文字を送らない', () => {
-    const input = toBrandAssetInput({
-      category: 'logo',
-      name: '  iXA ロゴ  ',
-      value: '   ',
-      mediaAssetId: null,
-      usageRule: '',
-    })
-
-    expect(input).toEqual({
-      category: 'logo',
-      name: 'iXA ロゴ',
-      value: null,
-      mediaAssetId: null,
-      usageRule: '',
-    })
-  })
-
-  /** 形式の判定はサーバ。ここは前後の空白を落とすだけで、中身を検査しない。 */
-  it('色として読めない値でも落とさず、前後の空白だけ落として渡す', () => {
-    const input = toBrandAssetInput({ ...EMPTY_BRAND_ASSET_VALUES, name: 'x', value: ' きいろ ' })
-
-    expect(input.value).toBe('きいろ')
-  })
-
-  it('保存済み → 入力欄 → 送信本文で内容が変わらない', () => {
-    const asset = BrandAsset.parse(brandColorJson)
-
-    expect(toBrandAssetInput(brandAssetValuesOf(asset))).toEqual({
-      category: asset.category,
-      name: asset.name,
-      value: asset.value,
-      mediaAssetId: asset.mediaAssetId,
-      usageRule: asset.usageRule,
-    })
-  })
-})
-
 describe('fieldErrorsOf', () => {
   const failing = async (body: unknown, status: number): Promise<unknown> => {
     fetchMock.mockResolvedValue(jsonResponse(body, status))
     try {
-      await client().listBrandAssets(workspaceId)
+      await client().listBrandAssets(projectId)
       return null
     } catch (error) {
       return error
@@ -334,7 +273,7 @@ describe('fieldErrorsOf', () => {
   it('本文が JSON でなければ null', async () => {
     fetchMock.mockResolvedValue(new Response('<html>502</html>', { status: 502 }))
     const error = await client()
-      .listBrandAssets(workspaceId)
+      .listBrandAssets(projectId)
       .then(() => null)
       .catch((cause: unknown) => cause)
 

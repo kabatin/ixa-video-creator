@@ -1,9 +1,7 @@
 import type { CharacterId } from '@ixa/domain'
 
-/** キャラクターライブラリ内のリンク生成をここへ集約する。 */
-export const CHARACTER_LIST_HREF = '/characters'
-
-export const NEW_CHARACTER_HREF = '/characters/new'
-
-export const characterDetailHref = (id: CharacterId): string =>
-  `${CHARACTER_LIST_HREF}/${encodeURIComponent(id)}`
+/**
+ * キャラクターの詳しい編集画面（同一性・識別画像・Look）へのリンク。
+ * 一覧と新規作成の画面は無い（キャラクターはプロジェクトごとで、素材ツリーで作る。ADR-0034）。
+ */
+export const characterDetailHref = (id: CharacterId): string => `/characters/${encodeURIComponent(id)}`

@@ -1,4 +1,3 @@
-import { WorkspaceId } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import {
   initialCharacterFormValues,
@@ -6,9 +5,6 @@ import {
   type CharacterFormValues,
 } from '@/lib/character-form'
 import { initialLookFormValues, validateLookForm, type LookFormValues } from '@/lib/look-form'
-import { WORKSPACE_ID } from '@/__tests__/fixtures'
-
-const workspaceId = WorkspaceId.parse(WORKSPACE_ID)
 
 const characterValues = (overrides: Partial<CharacterFormValues> = {}): CharacterFormValues => ({
   ...initialCharacterFormValues(),
@@ -32,24 +28,21 @@ describe('validateCharacterForm', () => {
         styleTokens: ['硬質な光'],
         colorPalette: ['#1A1A1A', '#FFD200'],
       }),
-      workspaceId,
     )
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.input.identityAnchors).toEqual(['20代日本人男性', '細身', '切れ長の鋭い目'])
     expect(result.input.colorPalette).toEqual(['#1A1A1A', '#FFD200'])
-    expect(result.input.workspaceId).toBe(WORKSPACE_ID)
   })
 
   it('名前と表示名の未入力をフィールド単位で報告する', () => {
-    const noName = validateCharacterForm(characterValues({ name: '   ' }), workspaceId)
+    const noName = validateCharacterForm(characterValues({ name: '   ' }))
     expect(noName.ok).toBe(false)
     expect(noName.ok ? {} : noName.errors).toHaveProperty('name')
 
     const noDisplayName = validateCharacterForm(
       characterValues({ displayName: '' }),
-      workspaceId,
     )
     expect(noDisplayName.ok).toBe(false)
     expect(noDisplayName.ok ? {} : noDisplayName.errors).toHaveProperty('displayName')
@@ -58,7 +51,6 @@ describe('validateCharacterForm', () => {
   it('長すぎる名前はドメインの制約で弾かれる', () => {
     const result = validateCharacterForm(
       characterValues({ name: 'a'.repeat(101) }),
-      workspaceId,
     )
 
     expect(result.ok).toBe(false)
@@ -68,7 +60,6 @@ describe('validateCharacterForm', () => {
   it('説明の前後の空白を落とす', () => {
     const result = validateCharacterForm(
       characterValues({ description: '  主人公  ' }),
-      workspaceId,
     )
 
     expect(result.ok && result.input.description).toBe('主人公')

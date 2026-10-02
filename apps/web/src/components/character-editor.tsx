@@ -35,7 +35,7 @@ export const CharacterEditor = ({ character }: CharacterEditorProps) => {
   const [savedAt, setSavedAt] = useState<string | null>(null)
 
   const submit = async (): Promise<void> => {
-    const validation = validateCharacterForm(values, character.workspaceId)
+    const validation = validateCharacterForm(values)
     if (!validation.ok) {
       setErrors(validation.errors)
       return

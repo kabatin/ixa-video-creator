@@ -10,7 +10,6 @@ import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
-import { CHARACTER_LIST_HREF } from '@/lib/character-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,7 +63,7 @@ const CharacterDetailPage = async ({ params }: CharacterPageProps) => {
         <ErrorPanel
           title="キャラクター ID が不正です"
           message={`URL の ID が ULID ではありません: ${id}`}
-          hint="キャラクター一覧から辿り直してください。"
+          hint="プロジェクトの素材ツリーから辿り直してください。"
         />
       </main>
     )
@@ -78,11 +77,12 @@ const CharacterDetailPage = async ({ params }: CharacterPageProps) => {
         title={result.ok ? result.character.displayName : 'キャラクター'}
         description="識別画像と Look を揃えるほど、生成した人物が Shot 間でぶれなくなります。"
         action={
+          // キャラクターはプロジェクトごと（ADR-0034）。戻る先は持ち主のプロジェクト。
           <Link
-            href={CHARACTER_LIST_HREF}
+            href={result.ok ? `/projects/${encodeURIComponent(result.character.projectId)}` : '/'}
             className="text-sm text-muted underline hover:text-text"
           >
-            一覧へ戻る
+            {result.ok ? 'プロジェクトへ戻る' : 'プロジェクト一覧へ'}
           </Link>
         }
       />

@@ -1,5 +1,3 @@
-import { CHARACTER_LIST_HREF } from '@/lib/character-links'
-
 /**
  * ワークベンチの外の入口（`SiteHeader` と、ワークベンチの「iXA」メニュー）。
  *
@@ -14,10 +12,12 @@ export type SiteNavEntry = {
   readonly label: string
 }
 
+/**
+ * キャラクター・素材ライブラリの一覧は外した。キャラクター・ロケーション・ブランド資産はプロジェクトごとで、
+ * プロジェクトの素材ツリーで扱う（ADR-0034）。
+ */
 export const SITE_NAV_ENTRIES: readonly SiteNavEntry[] = Object.freeze([
   { id: 'projects', href: '/', label: 'プロジェクト一覧' },
-  { id: 'characters', href: CHARACTER_LIST_HREF, label: 'キャラクター' },
-  { id: 'library', href: '/library', label: '素材ライブラリ' },
 ])
 
 /** 新規プロジェクトの入口。ここだけが URL を知っている。 */

@@ -132,6 +132,7 @@ export const assetStoreValue = (patch: Partial<AssetStoreValue> = {}): AssetStor
     setMasterTrack: vi.fn(),
     deleteTrack: vi.fn(),
     analyzeTrack: vi.fn(),
+    importLibrary: vi.fn(),
   },
   ...patch,
 })

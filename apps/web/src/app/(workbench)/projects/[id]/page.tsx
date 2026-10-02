@@ -65,7 +65,7 @@ const loadMusic = async (projectId: ProjectId): Promise<Music> => {
 }
 
 const loadLocations = async (project: Project): Promise<readonly Location[]> =>
-  createApiClient().listLocations(project.workspaceId)
+  createApiClient().listLocations(project.id)
 
 const WorkbenchPage = async ({ params, searchParams }: WorkbenchPageProps) => {
   const [{ id }, rawQuery] = await Promise.all([params, searchParams])

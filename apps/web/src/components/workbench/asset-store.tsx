@@ -26,6 +26,7 @@ import type { ReactNode } from 'react'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import { lookKeyFromName } from '@/lib/asset-actions'
+import type { LibraryImportRequest, WireLibraryImportResult } from '@/lib/library-import-api'
 import { deriveTrackTitle } from '@/lib/music-upload'
 
 /**
@@ -68,6 +69,11 @@ export type AssetActions = {
   readonly setMasterTrack: (id: MusicTrackId) => Promise<void>
   readonly deleteTrack: (id: MusicTrackId) => Promise<void>
   readonly analyzeTrack: (id: MusicTrackId) => Promise<void>
+  /**
+   * ほかのプロジェクトのものを複製して、このプロジェクトへ取り込む（ADR-0034）。取り込んだ分を一覧に足して返す。
+   * Look は足したキャラクターの分を読み直す（キャラクターの並びが変わると読む）。
+   */
+  readonly importLibrary: (request: LibraryImportRequest) => Promise<WireLibraryImportResult>
 }
 
 export type AssetStoreValue = {
@@ -146,20 +152,21 @@ export const AssetStoreProvider = ({
 }: AssetStoreProviderProps) => {
   const router = useRouter()
   const api = useMemo(() => createApiClient(), [])
+  // キャラクター・ロケーション・ブランド資産はプロジェクトごと（ADR-0034。楽曲と同じ）。
   const [characters, setCharacters] = useLoadedList(
     'キャラクター',
-    () => api.listCharacters(workspaceId),
-    workspaceId,
+    () => api.listCharacters(projectId),
+    projectId,
   )
   const [locations, setLocations] = useLoadedList(
     'ロケーション',
-    () => api.listLocations(workspaceId),
-    workspaceId,
+    () => api.listLocations(projectId),
+    projectId,
   )
   const [brandAssets, setBrandAssets] = useLoadedList(
     'ブランド資産',
-    () => api.listBrandAssets(workspaceId),
-    workspaceId,
+    () => api.listBrandAssets(projectId),
+    projectId,
   )
   const [tracks, setTracks] = useLoadedList('楽曲', () => api.listMusicTracks(projectId), projectId)
   const [looks, setLooks] = useState<ReadonlyMap<CharacterId, readonly CharacterLook[]>>(new Map())
@@ -203,7 +210,7 @@ export const AssetStoreProvider = ({
   const actions = useMemo<AssetActions>(
     () => ({
       createCharacter: async (displayName) => {
-        const created = await api.createCharacter({ workspaceId, name: displayName, displayName })
+        const created = await api.createCharacter(projectId, { name: displayName, displayName })
         setCharacters((current) => mapReady(current, (items) => [...items, created]))
         return created
       },
@@ -240,8 +247,7 @@ export const AssetStoreProvider = ({
         setLooksOf(look.characterId, (items) => items.filter((item) => item.id !== look.id))
       },
       createLocation: async (name) => {
-        const created = await api.createLocation({
-          workspaceId,
+        const created = await api.createLocation(projectId, {
           name,
           description: '',
           referenceAssetIds: [],
@@ -262,8 +268,7 @@ export const AssetStoreProvider = ({
       },
       createBrandAsset: async (name, category, value = null) => {
         // 色は値が必須（API が 422 を返す）。作るときに一緒に送る。
-        const created = await api.createBrandAsset({
-          workspaceId,
+        const created = await api.createBrandAsset(projectId, {
           name,
           category,
           value,
@@ -316,6 +321,13 @@ export const AssetStoreProvider = ({
         const fresh = await api.listMusicTracks(projectId)
         setTracks({ state: 'ready', value: fresh })
         router.refresh()
+      },
+      importLibrary: async (request) => {
+        const imported = await api.importLibrary(projectId, request)
+        setCharacters((current) => mapReady(current, (items) => [...items, ...imported.characters]))
+        setLocations((current) => mapReady(current, (items) => [...items, ...imported.locations]))
+        setBrandAssets((current) => mapReady(current, (items) => [...items, ...imported.brandAssets]))
+        return imported
       },
       analyzeTrack: async (id) => {
         await api.requestAnalysis(id)

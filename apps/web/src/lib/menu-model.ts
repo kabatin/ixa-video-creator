@@ -24,6 +24,7 @@ export type WorkbenchDialog =
   | 'merge-shots'
   | 'ai-setup'
   | 'align-lyrics'
+  | 'library-import'
 
 export type MenuAction =
   | { readonly kind: 'href'; readonly href: string }
@@ -206,6 +207,8 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
         item('new-project', '新規プロジェクト', href(NEW_PROJECT_HREF)),
         // 作品全体のコンセプト・ルック（ADR-0030）。ダイアログではなくインスペクターに出す。
         item('concept', '作品の方針…', command('inspect-project')),
+        // キャラクター・ロケーション・ブランド資産はプロジェクトごと。ほかのプロジェクトのものは複製して使う（ADR-0034）。
+        item('library-import', 'ほかのプロジェクトから取り込む…', dialog('library-import')),
         item('settings', '設定…', dialog('settings')),
         item('render', '書き出し…', dialog('render')),
       ],

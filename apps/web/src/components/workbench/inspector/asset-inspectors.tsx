@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useAssist } from '@/components/workbench/use-assist'
 import {
   BrandCategory,
@@ -17,6 +18,7 @@ import { MenuButton } from '@/components/workbench/ui/more-menu'
 import { useAssetMenu } from '@/components/workbench/use-asset-menu'
 import { ObjectHeader } from '@/components/workbench/ui/object-header'
 import { Section } from '@/components/workbench/ui/section'
+import { characterDetailHref } from '@/lib/character-links'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty } from '@/components/workbench/panels/panel-frame'
 import { Button } from '@/components/ui/button'
@@ -116,6 +118,10 @@ export const CharacterInspector = ({ id }: { readonly id: CharacterId }) => {
         <p className="text-xs text-muted">
           Look で変わらない特徴だけを入れる。衣装や髪色は Look へ。
         </p>
+        {/* 識別画像と Look をまとめて直す画面（キャラクターの一覧は無くなったので、ここから行く。ADR-0034）。 */}
+        <Link href={characterDetailHref(id)} className="text-xs text-muted underline hover:text-text">
+          識別画像と Look を詳しく編集…
+        </Link>
       </Section>
       <Section title={`Look（${String((looks.get(id) ?? []).length)}）`}>
         {(looks.get(id) ?? []).map((look) => (
