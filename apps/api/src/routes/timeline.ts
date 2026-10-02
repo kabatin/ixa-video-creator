@@ -5,6 +5,7 @@ import type {
 } from '@ixa/db'
 import {
   BeatAlignment as BeatAlignmentSchema,
+  MAX_EDIT_BATCH_SUMMARY_LENGTH,
   ProjectId as ProjectIdSchema,
   Seconds as SecondsSchema,
   TimelineDocument as TimelineDocumentSchema,
@@ -523,7 +524,14 @@ export type RoughCutPlanResponse = z.infer<typeof RoughCutPlanResponse>
 
 /** 適用の本文。**案をそのまま送り返してもらう。** `unresolved` は適用に要らない。 */
 export const RoughCutApplyBody = z
-  .object({ changes: z.array(RoughCutChangeSchema) })
+  .object({
+    changes: z.array(RoughCutChangeSchema),
+    /**
+     * 変更の履歴の見出し（任意。2026-10-02）。タイムラインの端のドラッグ・歌い出しへの揃えが、
+     * 何をしたかを言う（「CUT-04 と CUT-05 の境目を動かしました」）。無ければ「粗編集を N 件の Shot へ適用しました」。
+     */
+    summary: z.string().trim().min(1).max(MAX_EDIT_BATCH_SUMMARY_LENGTH).optional(),
+  })
   .openapi('RoughCutApplyBody')
 export type RoughCutApplyBody = z.infer<typeof RoughCutApplyBody>
 
@@ -744,7 +752,8 @@ export const roughCutRoutes = (deps: RoughCutRoutesDeps) =>
 
       /** **先に全件を調べる。** 1 件も書かないまま、当てる分と当てない分を決める。 */
       const steps: ChangeStep[] = []
-      for (const change of c.req.valid('json').changes) {
+      const body = c.req.valid('json')
+      for (const change of body.changes) {
         const prepared = await prepareChange(deps, projectId, change)
         steps.push(
           typeof prepared === 'string' ? { change, reason: prepared } : { change, prepared },
@@ -758,7 +767,7 @@ export const roughCutRoutes = (deps: RoughCutRoutesDeps) =>
       await recordEditBatch(deps.editBatches, {
         projectId,
         kind: 'rough_cut',
-        summarize: (count) => `粗編集を ${count.toString()} 件の Shot へ適用しました`,
+        summarize: (count) => body.summary ?? `粗編集を ${count.toString()} 件の Shot へ適用しました`,
         entries: toEditBatchEntries(steps),
       })
 

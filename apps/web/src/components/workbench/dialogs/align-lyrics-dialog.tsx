@@ -1,7 +1,7 @@
 'use client'
 
 import { lyricLines, type Shot, type ShotId } from '@ixa/domain'
-import { lyricBoundaryChanges, proposeLyricBoundaries, type LyricBoundary, type LyricCueRef } from '@ixa/timeline'
+import { proposeLyricBoundaries, shotBoundaryChanges, type LyricBoundary, type LyricCueRef } from '@ixa/timeline'
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useWorkbench } from '@/components/workbench/workbench-context'
@@ -69,7 +69,7 @@ export const AlignLyricsDialogBody = ({ api }: { readonly api?: Pick<RoughCutApi
   }
 
   const shotById = new Map<ShotId, Shot>(shots.map((shot) => [shot.id, shot]))
-  const outcome = lyricBoundaryChanges(shots, chosen)
+  const outcome = shotBoundaryChanges(shots, chosen)
   const moving = chosen.size
 
   const choose = (shotId: ShotId, value: string): void => {
@@ -83,7 +83,11 @@ export const AlignLyricsDialogBody = ({ api }: { readonly api?: Pick<RoughCutApi
     setBusy(true)
     setError(null)
     try {
-      const result = await client.applyRoughCut(workbench.projectId, outcome.changes)
+      const result = await client.applyRoughCut(
+        workbench.projectId,
+        outcome.changes,
+        `Shot の境目を ${String(moving)} か所、歌い出しに揃えました`,
+      )
       workbench.refresh()
       if (result.skipped.length > 0) {
         setSkipped(result.skipped.map((entry) => entry.reason))

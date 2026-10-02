@@ -43,6 +43,8 @@ export type RoughCutApi = {
   readonly applyRoughCut: (
     projectId: ProjectId,
     changes: readonly RoughCutChange[],
+    /** 変更の履歴の見出し（任意）。無ければ「粗編集を N 件の Shot へ適用しました」。 */
+    summary?: string,
   ) => Promise<WireRoughCutApplyResult>
 }
 
@@ -53,6 +55,10 @@ export const createRoughCutApi = (requester: Requester): RoughCutApi => ({
   planRoughCut: async (projectId) =>
     requester.post(`${basePath(projectId)}/plan`, undefined, WireRoughCutPlan),
 
-  applyRoughCut: async (projectId, changes) =>
-    requester.post(`${basePath(projectId)}/apply`, { changes }, WireRoughCutApplyResult),
+  applyRoughCut: async (projectId, changes, summary) =>
+    requester.post(
+      `${basePath(projectId)}/apply`,
+      summary === undefined ? { changes } : { changes, summary },
+      WireRoughCutApplyResult,
+    ),
 })

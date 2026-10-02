@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  LYRIC_ALIGN_MAX_SHIFT_SEC,
-  lyricBoundaryChanges,
-  proposeLyricBoundaries,
-} from '../lyric-align.js'
+import { LYRIC_ALIGN_MAX_SHIFT_SEC, proposeLyricBoundaries } from '../lyric-align.js'
 import { makeShot, shotId } from './fixtures.js'
 
 /**
@@ -86,61 +82,5 @@ describe('proposeLyricBoundaries', () => {
     expect(gap[0]?.blockedReason).toMatch(/隙間/)
     expect(overlap[0]?.blockedReason).toMatch(/重な/)
     expect(locked[0]?.blockedReason).toMatch(/ロック/)
-  })
-})
-
-describe('lyricBoundaryChanges', () => {
-  it('選んだ通りに、後ろの Shot を動かし、前後の Shot の尺を変える（全体の尺は変わらない）', () => {
-    const outcome = lyricBoundaryChanges(
-      shots,
-      new Map([
-        [shotId(2), 12.5],
-        [shotId(3), 19],
-      ]),
-    )
-
-    expect(outcome.problem).toBeNull()
-    expect(outcome.changes).toEqual([
-      expect.objectContaining({ kind: 'trim', shotId: shotId(1), fromDurationSec: 10, toDurationSec: 12.5 }),
-      expect.objectContaining({ kind: 'move', shotId: shotId(2), fromSec: 10, toSec: 12.5 }),
-      expect.objectContaining({ kind: 'trim', shotId: shotId(2), fromDurationSec: 10, toDurationSec: 6.5 }),
-      expect.objectContaining({ kind: 'move', shotId: shotId(3), fromSec: 20, toSec: 19 }),
-      expect.objectContaining({ kind: 'trim', shotId: shotId(3), fromDurationSec: 10, toDurationSec: 11 }),
-    ])
-    const total = outcome.changes.reduce(
-      (sum, change) => (change.kind === 'trim' ? sum + change.toDurationSec - change.fromDurationSec : sum),
-      0,
-    )
-    expect(total).toBeCloseTo(0)
-  })
-
-  it('1 コマに満たない隙間は、動かすときに閉じ、動かさなければ触らない', () => {
-    const tiny = [makeShot(1, 0, 10.89), makeShot(2, 10.89015873, 10)]
-
-    expect(lyricBoundaryChanges(tiny, new Map()).changes).toEqual([])
-    const moved = lyricBoundaryChanges(tiny, new Map([[shotId(2), 13]]))
-    expect(moved.changes).toEqual([
-      expect.objectContaining({ kind: 'trim', shotId: shotId(1), toDurationSec: 13 }),
-      expect.objectContaining({ kind: 'move', shotId: shotId(2), toSec: 13 }),
-      expect.objectContaining({ kind: 'trim', shotId: shotId(2) }),
-    ])
-  })
-
-  it('動かさない（選んでいない・同じ秒）なら何も出さない', () => {
-    expect(lyricBoundaryChanges(shots, new Map()).changes).toEqual([])
-    expect(lyricBoundaryChanges(shots, new Map([[shotId(2), 10]])).changes).toEqual([])
-  })
-
-  it('選び方で Shot がつぶれる（逆転・短すぎる）なら当てず、理由を出す', () => {
-    const outcome = lyricBoundaryChanges(
-      shots,
-      new Map([
-        [shotId(2), 19.8],
-        [shotId(3), 19.9],
-      ]),
-    )
-
-    expect(outcome.changes).toEqual([])
-    expect(outcome.problem).toMatch(/S2/)
   })
 })

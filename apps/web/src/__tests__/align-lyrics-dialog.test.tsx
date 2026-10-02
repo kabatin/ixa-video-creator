@@ -60,11 +60,16 @@ describe('AlignLyricsDialogBody', () => {
     await waitFor(() => {
       expect(api.applyRoughCut).toHaveBeenCalledTimes(1)
     })
-    expect(api.applyRoughCut).toHaveBeenCalledWith(project.id, [
-      expect.objectContaining({ kind: 'trim', shotId: shots[0]!.id, toDurationSec: 6.25 }),
-      expect.objectContaining({ kind: 'move', shotId: shots[1]!.id, toSec: 6.25 }),
-      expect.objectContaining({ kind: 'trim', shotId: shots[1]!.id, toDurationSec: 1.75 }),
-    ])
+    expect(api.applyRoughCut).toHaveBeenCalledWith(
+      project.id,
+      [
+        expect.objectContaining({ kind: 'trim', shotId: shots[0]!.id, toDurationSec: 6.25 }),
+        expect.objectContaining({ kind: 'move', shotId: shots[1]!.id, toSec: 6.25 }),
+        expect.objectContaining({ kind: 'trim', shotId: shots[1]!.id, toDurationSec: 1.75 }),
+      ],
+      // 履歴の見出し（「粗編集を N 件の Shot へ適用しました」では何をしたか分からない）。
+      'Shot の境目を 1 か所、歌い出しに揃えました',
+    )
     expect(value.notify).toHaveBeenCalledWith(expect.stringMatching(/変更の履歴から戻せます/))
     expect(value.refresh).toHaveBeenCalled()
     expect(value.closeDialog).toHaveBeenCalled()
