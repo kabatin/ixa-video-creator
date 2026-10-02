@@ -38,7 +38,6 @@ import {
   ZOOM_LEVELS,
   zoomLabel,
   formatClock,
-  formatLongDuration,
   programEndSec,
 } from '@/lib/timeline-display'
 import {
@@ -433,7 +432,8 @@ export const TimelineEditor = ({
   )
 
   const body = (
-    <div className="space-y-6">
+    // 行の間は詰める。帯（本体）をできるだけ上に出す（制作者 2026-10-02）。
+    <div className="space-y-3">
       {loadErrors.length > 0 && (
         <ul role="alert" className="space-y-1 rounded-lg border border-danger/40 bg-danger/10 p-4">
           {loadErrors.map((message) => (
@@ -446,8 +446,21 @@ export const TimelineEditor = ({
 
       {!collapseAuxiliary && auxiliary}
 
+      {/*
+        再生の状態と位置はズームの行に寄せる（制作者 2026-10-02「停止中と時間の表示が縦幅を占有してしまう」）。
+        全体の尺は帯の左上（「尺 …」）にあるので出さない（同「冗長のため削除」）。
+      */}
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm text-text">{`全体の尺 ${formatLongDuration(durationSec)}`}</span>
+        {document !== null && (
+          <span role="status" className="min-w-32 text-sm tabular-nums text-muted">
+            {/*
+              Space の説明を常設しない。キーの持ち主はフォーカスの場所で決まるようになり
+              （`resolveKeyOwner`）、「Space で再生」と無条件に書くと嘘になる。
+              割り当ては ヘルプ > キーボードショートカット が持つ。
+            */}
+            <PlaybackClock playing={playing} />
+          </span>
+        )}
         <span className="text-sm text-muted">ズーム</span>
         {ZOOM_LEVELS.map((level) => (
           <button
@@ -497,17 +510,6 @@ export const TimelineEditor = ({
             }}
           />
         </div>
-      )}
-
-      {document !== null && (
-        <p role="status" className="text-sm text-muted">
-          {/*
-            Space の説明を常設しない。キーの持ち主はフォーカスの場所で決まるようになり
-            （`resolveKeyOwner`）、「Space で再生」と無条件に書くと嘘になる。
-            割り当ては ヘルプ > キーボードショートカット が持つ。
-          */}
-          <PlaybackClock playing={playing} />
-        </p>
       )}
 
       {shots === null ? (

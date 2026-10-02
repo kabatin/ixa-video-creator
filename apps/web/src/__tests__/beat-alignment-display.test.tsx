@@ -93,6 +93,19 @@ describe('TimelineTracks の拍の色', () => {
     expect(screen.getByText(/拍以外に合わせている/).className).toContain('sticky')
   })
 
+  /**
+   * 拍の要約・隠した帯の案内は帯の下（制作者 2026-10-02「サブ的な情報はタイムラインの下側に移動しメインのタイムラインができるだけ上に来るように」）。
+   */
+  it('要約と隠した帯の案内は、帯（目盛り）より後ろに置く', () => {
+    renderTracks([onDownbeatShot.id, offBeatShot.id], true)
+    const ruler = screen.getByText(/^尺 /)
+    const after = (element: HTMLElement): boolean =>
+      (ruler.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+
+    expect(after(screen.getByText(/拍以外に合わせている/))).toBe(true)
+    expect(after(screen.getByText(/まだ置けない帯は隠しています/))).toBe(true)
+  })
+
   it('ズレを渡さなければ従来どおり（色も 1 行も出ない）', () => {
     renderTracks([onDownbeatShot.id, offBeatShot.id], false)
     expect(chipFor('S01-002').className).not.toContain('ring-danger')

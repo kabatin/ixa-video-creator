@@ -251,24 +251,6 @@ export const TimelineTracks = ({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-      {summary !== null && (
-        /* **色だけでは全体像が掴めない。** 何件が外れているかを必ず文でも出す。 */
-        /* 帯は横に流れる。**要約は流して消さない**ので左に貼り付ける。 */
-        <p
-          className={`sticky left-0 border-b border-line px-3 py-2 text-xs ${beatAlignmentToneClass(summary.tone)}`}
-        >
-          {summary.text}
-        </p>
-      )}
-      {hidden.length > 0 && (
-        /**
-         * **隠した事実を出す。** 帯が消えたのを不具合と読ませない。
-         * 置く口ができたら `INSERTABLE_TRACKS` に足すだけで帯も戻る。
-         */
-        <p className="sticky left-0 border-b border-line px-3 py-2 text-xs text-muted">
-          {`まだ置けない帯は隠しています: ${hidden.join(' / ')}`}
-        </p>
-      )}
       <div className="relative" style={{ minWidth: contentWidthPx }}>
         <Row label={`尺 ${formatClock(durationSec)}`} contentWidthPx={contentWidthPx}>
           {/* 目盛りを押したらその秒へ。判定は `timeline-playhead` が持つ。 */}
@@ -397,6 +379,27 @@ export const TimelineTracks = ({
         {showPlayhead && <PlayheadLine durationSec={durationSec} pxPerSec={pxPerSec} />}
         {overlay}
       </div>
+      {/*
+        補足は帯の下（制作者 2026-10-02「サブ的な情報はタイムラインの下側に移動しメインのタイムラインができるだけ上に来るように」）。
+      */}
+      {summary !== null && (
+        /* **色だけでは全体像が掴めない。** 何件が外れているかを必ず文でも出す。 */
+        /* 帯は横に流れる。**要約は流して消さない**ので左に貼り付ける。 */
+        <p
+          className={`sticky left-0 border-t border-line px-3 py-1.5 text-xs ${beatAlignmentToneClass(summary.tone)}`}
+        >
+          {summary.text}
+        </p>
+      )}
+      {hidden.length > 0 && (
+        /**
+         * **隠した事実を出す。** 帯が消えたのを不具合と読ませない。
+         * 置く口ができたら `INSERTABLE_TRACKS` に足すだけで帯も戻る。
+         */
+        <p className="sticky left-0 border-t border-line px-3 py-1.5 text-xs text-muted">
+          {`まだ置けない帯は隠しています: ${hidden.join(' / ')}`}
+        </p>
+      )}
     </div>
   )
 }
