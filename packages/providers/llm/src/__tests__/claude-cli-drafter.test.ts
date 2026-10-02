@@ -115,6 +115,25 @@ describe('Claude CLI 下書きが組み立てるプロンプト', () => {
     expect(buildDraftPrompt(aDraftRequest({ script: null }))).toContain('まだ書かれていません')
   })
 
+  /** 制作者 2026-10-01「絵コンテ生成時にもこの情報（歌詞）は必要になる」（ADR-0033）。 */
+  it('歌詞の全文と、その Shot の間に歌われるフレーズを渡す（文字を画面に出させない）', () => {
+    const sung = aDraftShot({ code: 'CHORUS-01', lyrics: ['夜明けの屋上で', '君を待ってた'] })
+    const built = buildDraftPrompt(
+      aDraftRequest({ shots: [sung], lyrics: '夜明けの屋上で\n君を待ってた\n風が吹いた' }),
+    )
+
+    expect(built).toContain('## 歌詞')
+    expect(built).toContain('風が吹いた')
+    expect(built).toContain('歌詞: 「夜明けの屋上で」「君を待ってた」')
+    expect(built).toContain('テロップ')
+  })
+
+  it('歌詞が無ければ「なし」と書き、Shot の行に歌詞を付けない', () => {
+    const built = buildDraftPrompt(aDraftRequest({ lyrics: '' }))
+    expect(built).toContain('(歌詞なし)')
+    expect(built).not.toContain('歌詞: 「')
+  })
+
   it('解析が無ければ「未解析」と書く', () => {
     expect(buildDraftPrompt(aDraftRequest({ sections: [] }))).toContain('未解析')
   })

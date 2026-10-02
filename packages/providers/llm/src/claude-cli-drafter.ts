@@ -39,7 +39,8 @@ const shotLines = (request: StoryboardDraftRequest): readonly string[] =>
     (shot) =>
       `- shotId=${shot.id} / code=${shot.code} / ${shot.startSec.toFixed(2)}s から ${shot.durationSec.toFixed(2)}s` +
       ` / いまの説明: ${shot.description.trim() === '' ? '(未記入)' : shot.description}` +
-      ` / いまの雰囲気: ${shot.mood ?? '(未設定)'}`,
+      ` / いまの雰囲気: ${shot.mood ?? '(未設定)'}` +
+      (shot.lyrics.length === 0 ? '' : ` / 歌詞: ${shot.lyrics.map((line) => `「${line}」`).join('')}`),
   )
 
 const sectionLines = (request: StoryboardDraftRequest): readonly string[] =>
@@ -75,6 +76,12 @@ export const buildDraftPrompt = (request: StoryboardDraftRequest): string =>
     '',
     '## 避けたいもの',
     orUnspecified(request.avoid),
+    '',
+    '## 歌詞',
+    request.lyrics.trim() === '' ? '(歌詞なし)' : request.lyrics.trim(),
+    '',
+    'Shot の行に「歌詞」があれば、その間に歌われるフレーズです。歌詞の情景や気持ちに合う絵にしてください。',
+    '**歌詞の文字を画面に出す指示は書かないでください**（テロップは別に置きます）。',
     '',
     '## 曲の構成',
     ...sectionLines(request),

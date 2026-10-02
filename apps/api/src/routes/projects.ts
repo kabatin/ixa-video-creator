@@ -8,10 +8,13 @@ import {
   UpdateProjectPatch as UpdateProjectPatchSchema,
   WorkspaceId as WorkspaceIdSchema,
   buildCostMeter,
+  lyricCuesProblem,
+  lyricLines,
   type CostMeter,
   type MediaAssetId,
   type Project,
   type ProjectId,
+  type UpdateProjectPatch,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
@@ -279,6 +282,35 @@ const styleReferenceProblem = async (
   return null
 }
 
+/**
+ * 歌詞と時刻を決める（ADR-0033）。時刻は行の順に後ろへ進む 0 以上の秒だけで、行より多くは付けられない。
+ * **歌詞の行が減ったら、時刻もそこまでに切り詰める**（消えた行の時刻は意味が無い）。
+ * どちらも送られていなければ何もしない。
+ */
+const settleLyrics = async (
+  projects: ProjectRepository,
+  id: ProjectId,
+  patch: UpdateProjectPatch,
+): Promise<
+  | { readonly kind: 'ok'; readonly patch: UpdateProjectPatch }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'invalid'; readonly message: string }
+> => {
+  if (patch.lyrics === undefined && patch.lyricCues === undefined) return { kind: 'ok', patch }
+  const project = await projects.findById(id)
+  if (project === null) return { kind: 'missing' }
+  const lines = lyricLines(patch.lyrics ?? project.lyrics)
+  if (patch.lyricCues !== undefined) {
+    const problem = lyricCuesProblem(patch.lyricCues)
+    if (problem !== null) return { kind: 'invalid', message: problem }
+    if (patch.lyricCues.length > lines.length) {
+      return { kind: 'invalid', message: `歌詞は ${String(lines.length)} 行なので、時刻はそれより多く付けられません` }
+    }
+    return { kind: 'ok', patch }
+  }
+  return { kind: 'ok', patch: { ...patch, lyricCues: project.lyricCues.slice(0, lines.length) } }
+}
+
 export const projectRoutes = ({
   projects,
   mediaAssets,
@@ -316,7 +348,12 @@ export const projectRoutes = ({
           return c.json(fail(VALIDATION_ERROR_MESSAGE, { styleReferenceAssetIds: [problem] }), 422)
         }
       }
-      const updated = await projects.update(id, patch)
+      const lyrics = await settleLyrics(projects, id, patch)
+      if (lyrics.kind === 'missing') return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      if (lyrics.kind === 'invalid') {
+        return c.json(fail(VALIDATION_ERROR_MESSAGE, { lyricCues: [lyrics.message] }), 422)
+      }
+      const updated = await projects.update(id, lyrics.patch)
       return c.json(ok(toProjectResponse(updated)), 200)
     })
     .openapi(deleteProjectRoute, async (c) => {

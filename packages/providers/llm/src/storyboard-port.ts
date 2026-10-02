@@ -31,6 +31,8 @@ export const StoryboardDraftShot = z.object({
   /** いまの説明。空文字は「まだ書いていない」。 */
   description: z.string(),
   mood: z.string().nullable(),
+  /** その Shot の間に歌い出す歌詞のフレーズ（ADR-0033）。無い・まだ合わせていなければ空。 */
+  lyrics: z.array(z.string()).default([]),
 })
 export type StoryboardDraftShot = z.infer<typeof StoryboardDraftShot>
 
@@ -51,6 +53,8 @@ export const StoryboardDraftRequest = z.object({
   look: z.string(),
   /** 作品の避けたいもの（`Project.avoid`、ADR-0030）。書いていなければ空文字。 */
   avoid: z.string(),
+  /** 歌詞の全文（`Project.lyrics`、ADR-0033）。時刻をまだ合わせていない行も含む。無ければ空文字。 */
+  lyrics: z.string().default(''),
 })
 export type StoryboardDraftRequest = z.infer<typeof StoryboardDraftRequest>
 

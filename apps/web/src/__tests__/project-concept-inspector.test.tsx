@@ -65,6 +65,18 @@ describe('ProjectConceptInspector', () => {
     })
   })
 
+  /** 歌詞（ADR-0033。制作者 2026-10-01「歌詞は明確に入力するところを設けたい」）。1 行 = 1 フレーズ。 */
+  it('歌詞を作品に保存し、フレーズの数と時刻の付き具合を言う', async () => {
+    const { api } = await open({ lyrics: '夜明けの屋上で\n君を待ってた', lyricCues: [1.5] })
+    expect(screen.getByText('2 フレーズ。時刻は 1 フレーズまで付いています。')).toBeTruthy()
+
+    await retype('歌詞', '一行目\n二行目\n三行目')
+
+    await waitFor(() => {
+      expect(api.updateProject).toHaveBeenCalledWith(aProject.id, { lyrics: '一行目\n二行目\n三行目' })
+    })
+  })
+
   it('ルックと避けたいものは作品に保存し、画面を読み直す', async () => {
     const { api, value } = await open()
 

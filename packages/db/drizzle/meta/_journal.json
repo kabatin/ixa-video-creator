@@ -134,6 +134,13 @@
       "when": 1790904086798,
       "tag": "0018_take_deleted_at",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790906634602,
+      "tag": "0019_project_lyrics",
+      "breakpoints": true
     }
   ]
 }

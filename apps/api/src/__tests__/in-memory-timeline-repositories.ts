@@ -122,6 +122,21 @@ export const createInMemoryTimelineClipRepository = (
       store = store.filter((clip) => clip.id !== id)
       return Promise.resolve()
     },
+
+    // 本物と同じく、消す相手が 1 件でも無ければ何も変えずに投げる（まとめて差し替える）。
+    replace: (removeIds, inputs) => {
+      const missing = removeIds.find((id) => store.find((clip) => clip.id === id) === undefined)
+      if (missing !== undefined) return Promise.reject(new DbNotFoundError('TimelineClip', missing))
+      const created = inputs.map((input) =>
+        TimelineClipSchema.parse({
+          ...CreateTimelineClipInputSchema.parse(input),
+          id: newId(TimelineClipIdSchema),
+          createdAt: new Date(),
+        }),
+      )
+      store = [...store.filter((clip) => !removeIds.includes(clip.id)), ...created]
+      return Promise.resolve(created)
+    },
   }
 }
 

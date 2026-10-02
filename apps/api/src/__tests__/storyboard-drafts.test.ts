@@ -322,6 +322,27 @@ describe('POST /projects/{id}/storyboard/drafts', () => {
     expect(request).toMatchObject({ look: '35mm フィルム、夜の雨', avoid: '文字' })
   })
 
+  /** 歌詞（ADR-0033）。全文と、Shot ごとにその間に歌い出すフレーズを渡す。 */
+  it('歌詞の全文と、Shot ごとにその間に歌われるフレーズを下書きに渡す', async () => {
+    const project = {
+      ...aProject(),
+      lyrics: '一行目\n二行目\n三行目',
+      lyricCues: [0.5, 2.5, 4.5],
+    }
+    const shots = [
+      aShot(project.id, { code: 'shot_001', order: 1000, startSec: 0, durationSec: 3 }),
+      aShot(project.id, { code: 'shot_002', order: 2000, startSec: 3, durationSec: 3 }),
+    ]
+    const drafter = drafterFor(shots)
+    const { app } = await buildRoutes({ project, shots, drafter })
+
+    await postDraft(app, project.id)
+    const [request] = drafter.seen() as { lyrics: string; shots: { lyrics: string[] }[] }[]
+
+    expect(request?.lyrics).toBe('一行目\n二行目\n三行目')
+    expect(request?.shots.map((shot) => shot.lyrics)).toEqual([['一行目', '二行目'], ['三行目']])
+  })
+
   it('脚本も解析も無くても下書きできる（null と空で渡す）', async () => {
     const project = aProject()
     const shots = [aShot(project.id)]

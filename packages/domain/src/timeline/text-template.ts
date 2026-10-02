@@ -50,6 +50,11 @@ const TextClipText = z
   .min(1, 'テロップの文字を入れてください')
   .max(MAX_TEXT_CLIP_LENGTH)
 
+/**
+ * テロップの最短の尺。これより短いと読めない。帯に置く・直すとき（画面）と、歌詞から置くとき（`lyrics`）が同じ値を読む。
+ */
+export const MIN_TEXT_CLIP_DURATION_SEC = 0.5
+
 export const TextClipParams = z.object({
   /** 出す文字。空のテロップは置けない。 */
   text: TextClipText,
@@ -57,8 +62,21 @@ export const TextClipParams = z.object({
   style: TextStyle.optional(),
   /** どの保存済みスタイルから当てたか。スタイルを直したとき「使っているテロップ」を探すのに使う。 */
   styleId: TextStyleId.nullable().optional(),
+  /**
+   * 歌詞から置いたテロップの印（何行目か。ADR-0033）。置き直すとき差し替える相手を探すのに使う。
+   * 手で置いたテロップには付けない（置き直しで消さない）。
+   */
+  lyricLine: z.number().int().nonnegative().optional(),
 })
 export type TextClipParams = z.infer<typeof TextClipParams>
+
+const LyricLineMark = z.object({ lyricLine: z.number().int().nonnegative() })
+
+/** 歌詞から置いたテロップなら何行目か。手で置いたテロップ・読めない印は null。 */
+export const lyricLineOf = (params: unknown): number | null => {
+  const parsed = LyricLineMark.safeParse(params)
+  return parsed.success ? parsed.data.lyricLine : null
+}
 
 /** 文字だけ。見た目が読めないときの控え。 */
 const TextOnly = z.object({ text: TextClipText })
@@ -81,9 +99,11 @@ export const parseTextClipParams = (params: unknown): TextClipParams | null => {
   const raw = params as { readonly style?: unknown; readonly styleId?: unknown }
   const style = raw.style === undefined ? null : TextStyle.safeParse(raw.style)
   const styleId = raw.styleId === undefined ? null : TextStyleId.nullable().safeParse(raw.styleId)
+  const lyricLine = lyricLineOf(params)
   return {
     text: textOnly.data.text,
     ...(style?.success === true ? { style: style.data } : {}),
     ...(styleId?.success === true ? { styleId: styleId.data } : {}),
+    ...(lyricLine === null ? {} : { lyricLine }),
   }
 }

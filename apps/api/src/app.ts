@@ -22,6 +22,7 @@ import { aiRoutes, type AiRoutesDeps } from './routes/ai.js'
 import { generationActivityRoutes, type GenerationActivityDeps } from './routes/generation-activity.js'
 import { generationCancelRoutes } from './routes/generation-cancel.js'
 import { takeHideRoutes } from './routes/take-hide.js'
+import { lyricClipRoutes } from './routes/lyric-clips.js'
 import { modelRoutes } from './routes/models.js'
 import type { Logger } from './logger.js'
 import { registerOpenApiDocument } from './openapi.js'
@@ -359,6 +360,16 @@ export const createApp = (deps: AppDeps) => {
   app.route('/', clipRoutes({ timelineClips: deps.timelineClips, projects, mediaAssets }))
   // テロップの見た目: 名前を付けて保存し、まとめて当てる（ADR-0028）。
   app.route('/', textStyleRoutes({ textStyles: deps.textStyles, projects }))
+  // 歌詞をフレーズごとのテロップにする（ADR-0033）。
+  app.route(
+    '/',
+    lyricClipRoutes({
+      projects,
+      shots: deps.shots,
+      timelineClips: deps.timelineClips,
+      textStyles: deps.textStyles,
+    }),
+  )
   app.route(
     '/',
     clipTextStyleRoutes({ textStyles: deps.textStyles, projects, timelineClips: deps.timelineClips }),

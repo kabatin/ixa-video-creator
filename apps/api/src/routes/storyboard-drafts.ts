@@ -13,7 +13,10 @@ import {
   StoryboardDraftItem as StoryboardDraftItemSchema,
   StoryboardDraftRun as StoryboardDraftRunSchema,
   StoryboardDraftRunId as StoryboardDraftRunIdSchema,
+  lyricLines,
+  lyricsDuring,
   type MusicSection,
+  type Project,
   type ProjectId,
   type Shot,
   type StoryboardDraftItem,
@@ -263,15 +266,19 @@ const projectSections = async (
 }
 
 /** Shot を下書きの入力へ写す。**並びは変えない**（既に決まっているため）。 */
-const toDraftShot = (shot: Shot): StoryboardDraftShot => ({
-  id: shot.id,
-  code: shot.code,
-  order: shot.order,
-  startSec: shot.startSec,
-  durationSec: shot.durationSec,
-  description: shot.description,
-  mood: shot.mood,
-})
+/** 下書きに渡す Shot。その Shot の間に歌い出す歌詞も添える（ADR-0033。規則は domain の `lyricsDuring`）。 */
+const toDraftShot =
+  (project: Pick<Project, 'lyrics' | 'lyricCues'>) =>
+  (shot: Shot): StoryboardDraftShot => ({
+    id: shot.id,
+    code: shot.code,
+    order: shot.order,
+    startSec: shot.startSec,
+    durationSec: shot.durationSec,
+    description: shot.description,
+    mood: shot.mood,
+    lyrics: [...lyricsDuring(lyricLines(project.lyrics), project.lyricCues, shot)],
+  })
 
 /** 例外を `StoryboardDraftRun.error` の形へ載せ替える。**握り潰さず必ず保存する。** */
 const toRunError = (error: unknown, code: string): { code: string; message: string } => ({
@@ -355,10 +362,12 @@ export const storyboardDraftRoutes = (deps: StoryboardDraftRoutesDeps) =>
         outcome = await drafter.draft({
           script,
           sections: [...sections],
-          shots: shots.map(toDraftShot),
+          shots: shots.map(toDraftShot(project)),
           // 作品の方針（ADR-0030）。案が作品のルックに合い、避けたいものを描かないように。
           look: project.styleGuide,
           avoid: project.avoid,
+          // 歌詞（ADR-0033）。時刻をまだ合わせていない行も、全文で渡す。
+          lyrics: project.lyrics,
         })
       } catch (error) {
         // 握り潰さない。理由を run に書き残してから返す（CLAUDE.md 規約 5）。

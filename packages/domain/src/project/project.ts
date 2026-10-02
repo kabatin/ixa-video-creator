@@ -36,6 +36,13 @@ export const Project = z.object({
   avoid: z.string().default(''),
   styleReferenceAssetIds: z.array(MediaAssetId).max(MAX_STYLE_REFERENCES).default([]),
 
+  /**
+   * 歌詞（ADR-0033）。1 行 = 1 フレーズ。`lyricCues` は行ごとの歌い出しの秒（float、規約 3）で、前から順に付ける。
+   * 規則（行の切り方・時刻の並び・テロップの区間）は `lyrics/lyric-cues.ts`。
+   */
+  lyrics: z.string().default(''),
+  lyricCues: z.array(Seconds).default([]),
+
   status: ProjectStatus,
   createdAt: z.date(),
   updatedAt: z.date(),

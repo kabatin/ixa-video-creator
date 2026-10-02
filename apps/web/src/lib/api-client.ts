@@ -39,6 +39,7 @@ import { createTextStyleApi, type TextStyleApi } from '@/lib/text-style-api'
 import { createShotCastApi, type ShotCastApi } from '@/lib/shot-cast-api'
 import { createCostMeterApi, type CostMeterApi } from '@/lib/cost-meter-api'
 import { createRoughCutApi, type RoughCutApi } from '@/lib/rough-cut-api'
+import { createLyricClipsApi, type LyricClipsApi } from '@/lib/lyric-clips-api'
 import { createEditHistoryApi, type EditHistoryApi } from '@/lib/edit-history-api'
 import { createStoryboardDraftApi, type StoryboardDraftApi } from '@/lib/storyboard-draft-api'
 import { createShotCompareApi, type ShotCompareApi } from '@/lib/shot-compare-api'
@@ -114,6 +115,7 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
   ShotCompareApi &
   CostMeterApi &
   RoughCutApi &
+  LyricClipsApi &
   StoryboardDraftApi &
   EditHistoryApi &
   TimelineApi &
@@ -210,6 +212,7 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
     ...createShotCompareApi(requester),
     ...createCostMeterApi(requester),
     ...createRoughCutApi(requester),
+    ...createLyricClipsApi(requester),
     ...createStoryboardDraftApi(requester),
     ...createEditHistoryApi(requester),
     ...createLibraryApi(requester),

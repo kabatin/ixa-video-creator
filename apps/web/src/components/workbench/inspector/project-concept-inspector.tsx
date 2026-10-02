@@ -1,5 +1,6 @@
 'use client'
 
+import { lyricsSummary } from '@/lib/lyric-sync'
 import { MAX_STYLE_REFERENCES, type MediaAssetId, type Project, type ProjectId, type UpdateProjectPatch } from '@ixa/domain'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ImageUploader } from '@/components/image-uploader'
@@ -110,6 +111,21 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
           )}
           <Hint>
             AI が各 Shot の説明を書くとき（絵コンテの案）の材料になります。長い文章なので、映像や絵の生成指示には直接は入りません。
+          </Hint>
+        </Section>
+
+        <Section title="歌詞">
+          <AutoSaveField
+            label="歌詞"
+            hideLabel
+            multiline
+            value={project.lyrics}
+            placeholder={'1 行に 1 フレーズ。空行は歌の区切り（数えません）。\n例:\n夜明けの屋上で\n君を待ってた'}
+            onSave={(next) => save({ lyrics: next })}
+          />
+          <Hint>{lyricsSummary(project.lyrics, project.lyricCues)}</Hint>
+          <Hint>
+            「聴きながら切る」の「歌詞を合わせる」で、曲を流してフレーズの歌い出しに Enter を押すと時刻が付きます。時刻が付いたフレーズはテロップにでき、AI の説明の下書き（絵コンテの案）にも、その Shot で歌われる歌詞として入ります。
           </Hint>
         </Section>
 

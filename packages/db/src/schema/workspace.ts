@@ -37,6 +37,9 @@ export const projects = pgTable(
     // 作品の方針（ADR-0030）。避けたいものと、手本画像（ムードボード、3 枚まで）。
     avoid: text('avoid').notNull().default(''),
     styleReferenceAssetIds: text('style_reference_asset_ids').array().notNull().default([]),
+    // 歌詞（ADR-0033）。1 行 = 1 フレーズと、行ごとの歌い出しの秒。
+    lyrics: text('lyrics').notNull().default(''),
+    lyricCues: doublePrecision('lyric_cues').array().notNull().default([]),
 
     status: text('status', { enum: ProjectStatusSchema.options }).$type<ProjectStatus>().notNull(),
     createdAt: createdAt(),

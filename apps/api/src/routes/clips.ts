@@ -85,7 +85,7 @@ export const TimelineClipResponse = TimelineClipSchema.omit({ createdAt: true })
   .openapi('TimelineClip')
 export type TimelineClipResponse = z.infer<typeof TimelineClipResponse>
 
-const toClipResponse = (clip: TimelineClip): TimelineClipResponse => ({
+export const toClipResponse = (clip: TimelineClip): TimelineClipResponse => ({
   ...clip,
   createdAt: clip.createdAt.toISOString(),
 })

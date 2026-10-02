@@ -1,4 +1,5 @@
 import {
+  MIN_TEXT_CLIP_DURATION_SEC,
   TRANSITION_SUPPORT,
   TEXT_TEMPLATE_SUPPORT,
   TextClipParams,
@@ -298,10 +299,10 @@ export const textTemplateOptions = (): readonly TextTemplateOption[] =>
 export const DEFAULT_TEXT_CLIP_DURATION_SEC = 3
 
 /**
- * これ以上は縮めない下限 0.5 秒。これより短いテロップは点滅にしか見えず読めない。
- * 読めないものを黙って置くより、断って別の場所を指してもらうほうがよい。
+ * これ以上は縮めない下限（domain の `MIN_TEXT_CLIP_DURATION_SEC`）。これより短いテロップは点滅にしか見えず読めない。
+ * 読めないものを黙って置くより、断って別の場所を指してもらうほうがよい。歌詞から置くときも同じ値を読む。
  */
-export const MIN_TEXT_CLIP_DURATION_SEC = 0.5
+export { MIN_TEXT_CLIP_DURATION_SEC }
 
 /**
  * その層で空いている区間。`programEndSec` までを対象にする。

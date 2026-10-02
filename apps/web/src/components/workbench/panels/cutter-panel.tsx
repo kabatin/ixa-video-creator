@@ -1,12 +1,21 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { CutEditor } from '@/components/cut-editor'
 import { usePreferences } from '@/components/preferences-root'
 import { useTransport, useWorkbench } from '@/components/workbench/workbench-context'
 import { MusicGate } from '@/components/workbench/panels/music-gate'
 import { PanelFrame } from '@/components/workbench/panels/panel-frame'
 import { TransportButtons } from '@/components/workbench/transport-buttons'
+import { LyricSyncSection } from '@/components/workbench/panels/lyric-sync-section'
+
+/** 区切る か、歌詞を合わせる（ADR-0033）。どちらも同じ波形と再生を使う。 */
+type CutterMode = 'cut' | 'lyrics'
+
+const MODES: readonly { readonly mode: CutterMode; readonly label: string }[] = [
+  { mode: 'cut', label: '区切る' },
+  { mode: 'lyrics', label: '歌詞を合わせる' },
+]
 
 /**
  * 聴きながら切る（中央下）。中身は既存の `cut-editor`。
@@ -19,22 +28,48 @@ export const CutterPanel = ({ visible }: { readonly visible: boolean }) => {
   const { preferences } = usePreferences()
   const { transportControls } = workbench
   const transport = useTransport()
+  const [mode, setMode] = useState<CutterMode>('cut')
+  /** 打鍵を受けるのは見えていて、ダイアログが無い間だけ。どちらが受けるかは選んでいる方。 */
+  const keys = visible && workbench.dialog === null
 
   // 操作列に名乗る。**依存は registerPlayer だけ**（preview-panel に理由を書いた）。
   const { registerPlayer } = transportControls
   useEffect(() => (visible ? registerPlayer('cutter') : undefined), [registerPlayer, visible])
 
   return (
-    <PanelFrame>
+    <PanelFrame
+      toolbar={
+        <div role="group" aria-label="聴きながら何をするか" className="flex gap-1">
+          {MODES.map((entry) => (
+            <button
+              key={entry.mode}
+              type="button"
+              aria-pressed={mode === entry.mode}
+              onClick={() => {
+                setMode(entry.mode)
+              }}
+              className={`h-6 rounded px-2 text-xs ${
+                mode === entry.mode ? 'bg-surface-2 font-semibold text-text' : 'text-muted hover:text-text'
+              }`}
+            >
+              {entry.label}
+            </button>
+          ))}
+        </div>
+      }
+    >
       <MusicGate>
         {({ track, analysis }) => (
+          <>
+          {mode === 'lyrics' && <LyricSyncSection track={track} analysis={analysis} keyboard={keys} />}
           <CutEditor
             projectId={workbench.projectId}
             track={track}
             analysis={analysis}
             sequences={workbench.sequences}
             initialSnapEnabled={preferences.playback.snapToBeat}
-            keyboardShortcuts={visible && workbench.dialog === null}
+            // 歌詞を合わせている間は Enter・Backspace を歌詞が受ける（区切りを置かない）。
+            keyboardShortcuts={keys && mode === 'cut'}
             // プレビューの下と同じ操作列。波形の直下に置くので、押せばこのパネルが鳴るのは場所で分かる
             // （2026-09-28、制作者の提案で両方に置く）。見た目も「いま何か鳴っているか」の読み方も揃える。
             playButton={<TransportButtons owner="cutter" durationSec={analysis.durationSec} />}
@@ -58,6 +93,7 @@ export const CutterPanel = ({ visible }: { readonly visible: boolean }) => {
               followSec: transport.owner === 'cutter' ? null : transport.currentSec,
             }}
           />
+          </>
         )}
       </MusicGate>
     </PanelFrame>

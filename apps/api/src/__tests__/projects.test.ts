@@ -310,3 +310,58 @@ describe('PATCH /projects/:id — 作品の方針', () => {
     expect(res.status).toBe(422)
   })
 })
+
+/**
+ * 歌詞（ADR-0033）。1 行 = 1 フレーズと、行ごとの歌い出しの秒（前から順に付ける）。
+ * 時刻は行の順に後ろへ進む 0 以上の秒だけ。歌詞の行が減ったら、時刻もそこまでに切り詰める。
+ */
+describe('PATCH /projects/:id — 歌詞', () => {
+  const setup = async () => {
+    const app = createApp({
+      ...baseAppDeps(),
+      projects: createInMemoryProjectRepository(),
+      logger: createLogger('silent'),
+    })
+    const created = (await (await postJson(app, '/projects', validBody())).json()) as SuccessBody
+    return { app, id: created.data.id }
+  }
+  const read = async (app: ReturnType<typeof createApp>, id: string) =>
+    ((await (await app.request(`/projects/${id}`)).json()) as SuccessBody).data as unknown as {
+      lyrics: string
+      lyricCues: number[]
+    }
+
+  it('歌詞と時刻を保存する', async () => {
+    const { app, id } = await setup()
+
+    const res = await patchJson(app, `/projects/${id}`, { lyrics: '一行目\n二行目', lyricCues: [1.5, 3.25] })
+
+    expect(res.status).toBe(200)
+    expect(await read(app, id)).toMatchObject({ lyrics: '一行目\n二行目', lyricCues: [1.5, 3.25] })
+  })
+
+  it.each([
+    ['戻る', [3, 1]],
+    ['負', [-1]],
+    ['行より多い', [1, 2, 3]],
+  ])('時刻が%sなら 422（何も変えない）', async (_label, cues) => {
+    const { app, id } = await setup()
+
+    const res = await patchJson(app, `/projects/${id}`, { lyrics: '一行目\n二行目', lyricCues: cues })
+
+    expect(res.status).toBe(422)
+    // 負の秒はスキーマが弾く（欄の名前は lyricCues.0）。並びと数はこの口が弾く。
+    const fields = Object.keys(((await res.json()) as ErrorBody).fields ?? {})
+    expect(fields.some((field) => field.startsWith('lyricCues'))).toBe(true)
+    expect((await read(app, id)).lyrics).toBe('')
+  })
+
+  it('歌詞の行が減ったら、時刻もそこまでに切り詰める', async () => {
+    const { app, id } = await setup()
+    await patchJson(app, `/projects/${id}`, { lyrics: '一\n二\n三', lyricCues: [1, 2, 3] })
+
+    await patchJson(app, `/projects/${id}`, { lyrics: '一\n二' })
+
+    expect((await read(app, id)).lyricCues).toEqual([1, 2])
+  })
+})
