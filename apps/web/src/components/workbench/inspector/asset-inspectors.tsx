@@ -1,5 +1,6 @@
 'use client'
 
+import { useAssist } from '@/components/workbench/use-assist'
 import {
   BrandCategory,
   type BrandAssetId,
@@ -64,6 +65,7 @@ const Missing = ({ what }: { readonly what: string }) => (
 
 export const CharacterInspector = ({ id }: { readonly id: CharacterId }) => {
   const assetMenu = useAssetMenu()
+  const assistFor = useAssist()
   const workbench = useWorkbench()
   const { characters, looks, actions } = useAssets()
   const character = readyOr(characters).find((item) => item.id === id)
@@ -109,6 +111,7 @@ export const CharacterInspector = ({ id }: { readonly id: CharacterId }) => {
           value={joinTags(character.identityAnchors)}
           placeholder="細身, 切れ長の鋭い目"
           onSave={(next) => save({ identityAnchors: splitTags(next) })}
+          assist={assistFor('identity_anchors', { characterId: id })}
         />
         <p className="text-xs text-muted">
           Look で変わらない特徴だけを入れる。衣装や髪色は Look へ。
@@ -146,6 +149,7 @@ export const LookInspector = ({
   readonly characterId: CharacterId
 }) => {
   const assetMenu = useAssetMenu()
+  const assistFor = useAssist()
   const { looks, actions } = useAssets()
   const look = (looks.get(characterId) ?? []).find((item) => item.id === id)
   if (look === undefined) return <Missing what="Look" />
@@ -190,6 +194,7 @@ export const LookInspector = ({
           label="衣装"
           value={joinTags(look.wardrobeTokens)}
           onSave={(next) => save({ wardrobeTokens: splitTags(next) })}
+          assist={assistFor('wardrobe', { lookId: id })}
         />
         <AutoSaveCheckbox
           label="このキャラクターの既定の Look にする"
@@ -207,6 +212,7 @@ export const LookInspector = ({
 
 export const LocationInspector = ({ id }: { readonly id: LocationId }) => {
   const assetMenu = useAssetMenu()
+  const assistFor = useAssist()
   const { locations, actions } = useAssets()
   const location = readyOr(locations).find((item) => item.id === id)
   if (location === undefined) return <Missing what="ロケーション" />
@@ -242,6 +248,7 @@ export const LocationInspector = ({ id }: { readonly id: LocationId }) => {
           onSave={async (next) => {
             await actions.updateLocation(id, { description: next })
           }}
+          assist={assistFor('location_description', { locationId: id })}
         />
         <p className="text-xs text-muted">
           参照画像は中央の素材ビューアへ落とすと足せます。Shot の生成に渡ります。

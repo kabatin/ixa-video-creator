@@ -245,6 +245,7 @@ export const main = (): void => {
     editBatches: createEditBatchRepository(db),
     // 絵コンテの案の口は「使う AI」のテキストで決まる（ADR-0032。未選択なら STORYBOARD_DRAFTER）。
     storyboardDrafter: ai.storyboardDrafter,
+    textAssistant: ai.textAssistant,
     sequences: createSequenceRepository(db),
     musicAnalyses: createMusicAnalysisRepository(db),
     musicAnalysisFailures: createMusicAnalysisFailureRepository(db),

@@ -89,6 +89,8 @@ export const STORYBOARD_DRAFTER_ERROR_CODES = [
   'cli_spawn_failed',
   'cli_timeout',
   'cli_exit_failed',
+  /** CLI にサインインしていない（Grok など。ADR-0032）。 */
+  'cli_not_signed_in',
   'response_not_json',
   'response_schema_violation',
   /** 依頼していない Shot の案が混ざっていた。 */

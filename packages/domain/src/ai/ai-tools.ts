@@ -67,19 +67,22 @@ export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
     id: 'codex_cli',
     label: 'Codex',
     detect: { kind: 'cli', command: 'codex' },
-    purposes: ['image'],
+    // テキストは 2 段目（2026-10-02）。絵コンテの案と入力の手伝い（`text-cli.ts`）。
+    purposes: ['text', 'image'],
   }),
   gemini_cli: tool({
     id: 'gemini_cli',
     label: 'Gemini CLI',
     detect: { kind: 'cli', command: 'gemini' },
+    // Gemini CLI は廃止されたので対応しない（制作者 2026-10-02）。入っていても「使えない」と出す。
     purposes: [],
   }),
   grok_cli: tool({
     id: 'grok_cli',
     label: 'Grok',
     detect: { kind: 'cli', command: 'grok' },
-    purposes: [],
+    // テキストは 4 段目（2026-10-02）。サインインしていないと、使ったときに理由を言う。
+    purposes: ['text'],
   }),
   local: tool({
     id: 'local',
@@ -128,7 +131,7 @@ export const aiChoiceProblem = (
 
 /** 勧める順。**お金が掛かるもの（fal）は入れない**（キーがあっても、使うかは人が選ぶ）。 */
 const RECOMMENDATION_ORDER: Readonly<Record<AiPurpose, readonly AiToolId[]>> = Object.freeze({
-  text: ['claude_cli', 'codex_cli', 'gemini_cli', 'grok_cli'],
+  text: ['claude_cli', 'codex_cli', 'grok_cli'],
   image: ['codex_cli'],
   video: ['vpipe', 'local'],
 })

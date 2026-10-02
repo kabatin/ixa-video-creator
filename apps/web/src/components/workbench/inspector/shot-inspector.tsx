@@ -1,5 +1,6 @@
 'use client'
 
+import { useAssist } from '@/components/workbench/use-assist'
 import { LocationId, ShotCamera, type Shot } from '@ixa/domain'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ReviewPanel } from '@/components/review-panel'
@@ -46,6 +47,7 @@ export const ShotInspector = ({
 }) => {
   const workbench = useWorkbench()
   const shotMenu = useShotMenu()
+  const assistFor = useAssist()
   const save = async (patch: Parameters<typeof workbench.saveShot>[1]): Promise<void> => {
     await workbench.saveShot(shot.id, patch)
   }
@@ -141,6 +143,7 @@ export const ShotInspector = ({
               value={shot.description}
               placeholder="夜のスタジアム。主人公がボールを追う。"
               onSave={(next) => save({ description: next })}
+              assist={assistFor('shot_description', { shotId: shot.id })}
             />
             <AutoSaveField
               label="mood"
@@ -148,6 +151,7 @@ export const ShotInspector = ({
               placeholder="tense, cinematic"
               // 空欄は「未設定」。空文字を保存すると「空という指定」と区別できなくなる。
               onSave={(next) => save({ mood: next.trim() === '' ? null : next })}
+              assist={assistFor('shot_mood', { shotId: shot.id })}
             />
             <CameraFields shot={shot} disabled={generating} onSave={save} />
           </Section>

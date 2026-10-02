@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { describeForPerson } from '@/lib/api-error'
 import { FieldRow, INPUT_CLASS, TEXTAREA_CLASS } from '@/components/workbench/ui/section'
+import { AssistPanel, type AssistRequest } from '@/components/workbench/ui/assist-panel'
 
 /** 直前の値へ戻すボタンを出しておく時間（ms）。 */
 export const REVERT_WINDOW_MS = 10_000
@@ -26,6 +27,11 @@ export type AutoSaveFieldProps = {
   readonly multiline?: boolean
   readonly placeholder?: string
   readonly disabled?: boolean
+  /**
+   * 「✦ AI」で案を出す口（ADR-0032 の 3 段目）。渡せば欄の下にボタンを出す。
+   * 「使う」で欄に入れていつもどおり保存する（↺ で戻せる）。
+   */
+  readonly assist?: AssistRequest
 }
 
 /**
@@ -44,6 +50,7 @@ export const AutoSaveField = ({
   multiline = false,
   placeholder,
   disabled = false,
+  assist,
 }: AutoSaveFieldProps) => {
   const id = useId()
   const [draft, setDraft] = useState(value)
@@ -123,6 +130,17 @@ export const AutoSaveField = ({
         <textarea {...common} rows={3} className={TEXTAREA_CLASS} />
       ) : (
         <input {...common} type="text" className={INPUT_CLASS} />
+      )}
+      {assist !== undefined && !disabled && (
+        <AssistPanel
+          label={label}
+          current={draft}
+          request={assist}
+          onUse={(text) => {
+            setDraft(text)
+            void save(text, value)
+          }}
+        />
       )}
       <p
         id={`${id}-status`}

@@ -1,5 +1,6 @@
 'use client'
 
+import { useAssist } from '@/components/workbench/use-assist'
 import { lyricsSummary } from '@/lib/lyric-sync'
 import { MAX_STYLE_REFERENCES, type MediaAssetId, type Project, type ProjectId, type UpdateProjectPatch } from '@ixa/domain'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
@@ -37,6 +38,7 @@ const Hint = ({ children }: { readonly children: ReactNode }) => <p className="t
  */
 export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConceptInspectorApi }) => {
   const workbench = useWorkbench()
+  const assistFor = useAssist()
   const client = useMemo<ProjectConceptInspectorApi>(() => api ?? createApiClient(), [api])
   const [project, setProject] = useState<Project>(workbench.project)
   const [concept, setConcept] = useState<Concept>({ kind: 'loading' })
@@ -101,6 +103,7 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
               multiline
               value={concept.content}
               placeholder="例: 雨の夜、街の小さなコーヒースタンドで働くバリスタと、配達員の青年の話。夜明けに二人で屋上へ。"
+              assist={assistFor('concept')}
               onSave={async (next) => {
                 await client.saveConcept(project.id, next)
                 setConcept({ kind: 'ready', content: next })
@@ -137,6 +140,7 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
             value={project.styleGuide}
             placeholder="例: 35mm フィルム、夜の雨、琥珀色の街灯、浅い被写界深度"
             onSave={(next) => save({ styleGuide: next })}
+            assist={assistFor('look')}
           />
           <Hint>全 Shot の映像と、Shot の絵（最初のフレーム）の生成指示の最後に入ります。</Hint>
         </Section>
@@ -185,6 +189,7 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
             value={project.avoid}
             placeholder="例: 文字・透かし・アニメ調"
             onSave={(next) => save({ avoid: next })}
+            assist={assistFor('avoid')}
           />
           <Hint>
             Shot の絵の生成と、AI の説明の下書きに入ります。映像の生成モデルは今どれも「避ける」指定に対応していないので、映像には入りません。

@@ -13,8 +13,13 @@ import { execFileCliRunner } from '@ixa/provider-core'
 import { codexCliImageModel, stubGeminiLikeImageModel } from '@ixa/provider-image'
 import {
   createClaudeCliStoryboardDrafter,
+  createStubAssistant,
   createStubStoryboardDrafter,
+  createTextCli,
+  createTextCliAssistant,
+  createTextCliStoryboardDrafter,
   type StoryboardDrafter,
+  type TextAssistant,
 } from '@ixa/provider-llm'
 import { checkVpipeHealth } from '@ixa/provider-video'
 import type { AiRoutesDeps } from '../routes/ai.js'
@@ -27,6 +32,8 @@ export type AiWiring = AiRoutesDeps & {
   readonly current: () => Promise<AiSettings>
   /** いま選んでいるテキストの AI の、絵コンテの案の口。 */
   readonly storyboardDrafter: () => Promise<StoryboardDrafter>
+  /** いま選んでいるテキストの AI の、入力を手伝う口（欄の「✦ AI」。ADR-0032 の 3 段目）。 */
+  readonly textAssistant: () => Promise<TextAssistant>
   /** いま選んでいる画像の AI（ジョブに記し、worker がその口で作る）。 */
   readonly imageModel: () => Promise<ImageModelRef>
   /** いま選んでいる動画の AI。AUTO はこの Provider のモデルの中から選ぶ（Provider の id は AI の id と同じ）。 */
@@ -53,9 +60,19 @@ export const createAiWiring = (config: AppConfig, db: DbClient): AiWiring => {
    * 用途ごとの口。**`AI_TOOLS` の purposes と揃える**（選べるのに口が無い、を作らない）。
    * 生成 API のような従量課金ではないが、CLI は制作者の契約の利用枠を使う。
    */
+  const codex = createTextCli('codex')
+  const grok = createTextCli('grok')
   const drafters: Partial<Record<AiToolId, StoryboardDrafter>> = {
     stub: createStubStoryboardDrafter(),
     claude_cli: createClaudeCliStoryboardDrafter(),
+    codex_cli: createTextCliStoryboardDrafter(codex),
+    grok_cli: createTextCliStoryboardDrafter(grok),
+  }
+  const assistants: Partial<Record<AiToolId, TextAssistant>> = {
+    stub: createStubAssistant(),
+    claude_cli: createTextCliAssistant(createTextCli('claude')),
+    codex_cli: createTextCliAssistant(codex),
+    grok_cli: createTextCliAssistant(grok),
   }
   const imageModels: Partial<Record<AiToolId, ImageModelRef>> = {
     stub: { providerId: stubGeminiLikeImageModel.providerId, modelId: stubGeminiLikeImageModel.id },
@@ -83,6 +100,7 @@ export const createAiWiring = (config: AppConfig, db: DbClient): AiWiring => {
     current,
     storyboardDrafter: async () =>
       adapterFor(drafters, (await current()).text, 'テキスト（絵コンテの案）'),
+    textAssistant: async () => adapterFor(assistants, (await current()).text, 'テキスト（入力の手伝い）'),
     imageModel: async () => adapterFor(imageModels, (await current()).image, '画像'),
     videoProvider: async () => ProviderIdSchema.parse((await current()).video),
   }

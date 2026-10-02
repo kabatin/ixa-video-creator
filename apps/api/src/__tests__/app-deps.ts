@@ -39,7 +39,7 @@ import type { RenderQueue } from '../routes/renders.js'
 import type { RenderJobId } from '@ixa/domain'
 import { createInMemoryProjectEvents } from './in-memory-project-events.js'
 import { createInMemoryStoryboardDraftRepository } from './in-memory-storyboard-draft-repository.js'
-import { createStubStoryboardDrafter } from '@ixa/provider-llm'
+import { createStubAssistant, createStubStoryboardDrafter } from '@ixa/provider-llm'
 import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
 import { createInMemoryMusicAnalysisFailureRepository } from './in-memory-music-analysis-failure-repository.js'
 
@@ -143,6 +143,7 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   editBatches: createInMemoryEditBatchRepository(),
   // テストは必ずスタブ。実 CLI が CI で走ることはない。
   storyboardDrafter: () => Promise.resolve(createStubStoryboardDrafter()),
+  textAssistant: () => Promise.resolve(createStubAssistant()),
   sequences: createInMemorySequenceRepository(),
   musicAnalyses: createInMemoryMusicAnalysisRepository(),
   musicAnalysisFailures: createInMemoryMusicAnalysisFailureRepository(),

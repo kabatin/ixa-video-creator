@@ -23,6 +23,7 @@ import { generationActivityRoutes, type GenerationActivityDeps } from './routes/
 import { generationCancelRoutes } from './routes/generation-cancel.js'
 import { takeHideRoutes } from './routes/take-hide.js'
 import { lyricClipRoutes } from './routes/lyric-clips.js'
+import { assistRoutes } from './routes/assist.js'
 import { modelRoutes } from './routes/models.js'
 import type { Logger } from './logger.js'
 import { registerOpenApiDocument } from './openapi.js'
@@ -54,7 +55,7 @@ import { clipRoutes } from './routes/clips.js'
 import { clipTextStyleRoutes } from './routes/clip-text-style.js'
 import { textStyleRoutes } from './routes/text-styles.js'
 import { eventRoutes } from './routes/events.js'
-import type { StoryboardDrafter } from '@ixa/provider-llm'
+import type { StoryboardDrafter, TextAssistant } from '@ixa/provider-llm'
 import { STUB_PROVIDER_IDS } from '@ixa/provider-video'
 import type {
   BrandAssetRepository,
@@ -120,6 +121,8 @@ export type AppDeps = {
    * テストはスタブを渡すので、実 CLI が CI で走ることはない。
    */
   storyboardDrafter: () => Promise<StoryboardDrafter>
+  /** 入力を手伝う口（欄の「✦ AI」。ADR-0032 の 3 段目）。使うたびに「使う AI」のテキストで選ぶ。 */
+  textAssistant: () => Promise<TextAssistant>
   sequences: SequenceRepository
   musicAnalyses: MusicAnalysisRepository
   /** 解析の失敗（worker が書く）。画面が「まだ」と「失敗」を分けるために読む。 */
@@ -223,6 +226,19 @@ export const createApp = (deps: AppDeps) => {
   app.route('/', shotRoutes(shotDeps))
   app.route('/', generationCancelRoutes(shotDeps))
   app.route('/', takeHideRoutes(shotDeps))
+  app.route(
+    '/',
+    assistRoutes({
+      projects,
+      shots: deps.shots,
+      scripts: deps.scripts,
+      characters: deps.characters,
+      looks: deps.looks,
+      locations: deps.locations,
+      textAssistant: deps.textAssistant,
+      logger,
+    }),
+  )
   // 一括変更だけが記録を作る。1 件ずつの変更は戻す対象にしない（横断 ROADMAP）。
   app.route('/', shotBulkRoutes({ ...shotDeps, editBatches: deps.editBatches }))
   app.route(

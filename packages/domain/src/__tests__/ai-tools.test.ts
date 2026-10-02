@@ -82,6 +82,19 @@ describe('recommendAiSettings', () => {
     expect(recommendAiSettings(statuses).video).not.toBe('fal')
   })
 
+  /** ADR-0032 の 2・4 段目。Gemini CLI は廃止されたので対応しない（制作者 2026-10-02）。 */
+  it('テキストは Claude・Codex・Grok で選べ、Gemini は選べない', () => {
+    expect(aiChoiceProblem('text', 'codex_cli', ready())).toBeNull()
+    expect(aiChoiceProblem('text', 'grok_cli', ready())).toBeNull()
+    expect(aiChoiceProblem('text', 'gemini_cli', ready())).not.toBeNull()
+  })
+
+  it('Claude が無ければ、テキストは Codex を勧める（Gemini は勧めない）', () => {
+    const statuses = { ...allMissing(), codex_cli: ready(), gemini_cli: ready() }
+    expect(recommendAiSettings(statuses).text).toBe('codex_cli')
+    expect(recommendAiSettings({ ...allMissing(), gemini_cli: ready(), grok_cli: ready() }).text).toBe('grok_cli')
+  })
+
   it('勧めた組み合わせは必ず選べる', () => {
     const statuses: Record<AiToolId, AiToolStatus> = {
       ...allMissing(),
