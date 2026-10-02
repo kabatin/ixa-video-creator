@@ -186,7 +186,7 @@ describe('生成の進み具合（F1）', () => {
       status: 'running',
       modelId: 'vpipe/minimax-h3-turbo-draft',
       modelLabel: 'MiniMax H3 Turbo 下書き',
-      typicalLatencySec: 210,
+      estimatedLatencySec: 210,
       queuedAt: '2026-09-30T10:00:00.000Z',
       startedAt: '2026-09-30T10:00:05.000Z',
       attempt: 1,

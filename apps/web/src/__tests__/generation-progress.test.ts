@@ -16,7 +16,7 @@ const running = (patch: Partial<WireActiveGeneration> = {}): WireActiveGeneratio
   status: 'running',
   modelId: 'vpipe/minimax-h3-turbo-draft',
   modelLabel: 'MiniMax H3 Turbo 下書き（ローカル・無料）',
-  typicalLatencySec: 210,
+  estimatedLatencySec: 210,
   queuedAt: '2026-09-30T10:00:00.000Z',
   startedAt: '2026-09-30T10:00:05.000Z',
   attempt: 1,
@@ -69,7 +69,7 @@ describe('describeActiveGeneration', () => {
 
   it('モデルや目安が分からないときは、分からないと書かずに言える分だけ言う', () => {
     const view = describeActiveGeneration(
-      running({ modelLabel: null, typicalLatencySec: null }),
+      running({ modelLabel: null, estimatedLatencySec: null }),
       at('2026-09-30T10:01:05Z'),
     )
 

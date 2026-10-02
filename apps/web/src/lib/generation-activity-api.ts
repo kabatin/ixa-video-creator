@@ -13,7 +13,8 @@ export const WireActiveGeneration = z.object({
   status: z.enum(['queued', 'running']),
   modelId: z.string().nullable(),
   modelLabel: z.string().nullable(),
-  typicalLatencySec: z.number().nonnegative().nullable(),
+  /** この 1 本の目安（秒）。尺で伸びるモデルは作る尺から（サーバが出す。画面で計算しない）。 */
+  estimatedLatencySec: z.number().nonnegative().nullable(),
   queuedAt: z.string(),
   startedAt: z.string().nullable(),
   attempt: z.number().int().positive(),

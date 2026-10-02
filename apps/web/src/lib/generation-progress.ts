@@ -38,16 +38,16 @@ export const describeActiveGeneration = (
 
   const elapsedSec = secondsSince(generation.startedAt ?? generation.queuedAt, nowMs)
   const elapsed = formatElapsed(elapsedSec)
-  const typical = generation.typicalLatencySec
-  const overdue = typical !== null && typical > 0 && elapsedSec > typical * OVERDUE_FACTOR
+  const estimate = generation.estimatedLatencySec
+  const overdue = estimate !== null && estimate > 0 && elapsedSec > estimate * OVERDUE_FACTOR
   const who = generation.modelLabel === null ? '作成中です' : `${generation.modelLabel}で作成中です`
   const detail =
-    typical === null ? `経過 ${elapsed}` : `経過 ${elapsed} / 目安 ${formatApproxDuration(typical)}`
+    estimate === null ? `経過 ${elapsed}` : `経過 ${elapsed} / 目安 ${formatApproxDuration(estimate)}`
   return {
     short:
-      typical === null
+      estimate === null
         ? `作成中 ${elapsed}`
-        : `作成中 ${elapsed} / ${formatApproxDuration(typical)}`,
+        : `作成中 ${elapsed} / ${formatApproxDuration(estimate)}`,
     long: `${who}（${detail}）。${attempt}${overdue ? '目安を大きく過ぎています。生成先が止まっていないか確かめてください。' : ''}`,
     overdue,
   }

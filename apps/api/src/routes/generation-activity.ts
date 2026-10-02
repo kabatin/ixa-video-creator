@@ -1,7 +1,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { ProjectRepository } from '@ixa/db'
-import { ProjectId, type GenerationJob, type ModelId } from '@ixa/domain'
-import type { ProviderRegistry, VideoModelDescriptor } from '@ixa/provider-core'
+import type { ProjectRepository, ShotRepository } from '@ixa/db'
+import { ProjectId, quantizeDuration, type GenerationJob, type ModelId, type Shot } from '@ixa/domain'
+import { estimateLatencySec, type ProviderRegistry, type VideoModelDescriptor } from '@ixa/provider-core'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 
@@ -20,8 +20,11 @@ const ActiveGeneration = z
     status: z.enum(['queued', 'running']),
     modelId: z.string().nullable(),
     modelLabel: z.string().nullable(),
-    /** モデルが宣言する 1 本あたりの目安（秒）。 */
-    typicalLatencySec: z.number().nonnegative().nullable(),
+    /**
+     * この 1 本の目安（秒）。尺 1 秒あたりの時間を持つモデルは作る尺から、持たないモデルは一律の目安
+     * （制作者 2026-10-02「5秒ぐらいの動画で7分だからそれから計算する必要がありそう」）。
+     */
+    estimatedLatencySec: z.number().nonnegative().nullable(),
     queuedAt: z.string(),
     startedAt: z.string().nullable(),
     attempt: z.number().int().positive(),
@@ -47,6 +50,8 @@ export type GenerationActivityDeps = {
   readonly projects: Pick<ProjectRepository, 'findById'>
   /** 生きている Shot の、状態が queued / running のジョブ。 */
   readonly activeJobs: (projectId: ProjectId) => Promise<readonly GenerationJob[]>
+  /** 目安を作る尺から出すために、Shot の尺を引く。 */
+  readonly shots: Pick<ShotRepository, 'findByProject'>
   readonly registry: ProviderRegistry
 }
 
@@ -58,12 +63,26 @@ const modelOf = (
   return registry.allModels().find((model) => model.id === modelId) ?? null
 }
 
+/**
+ * 作る尺（worker と同じ決め方: モデルが出せる長さへ寄せる。1.5 倍まで伸ばす）。
+ * Shot が無い・その尺では作れないときは null（目安はモデルの一律の値に戻す）。**目安のせいで一覧を落とさない。**
+ */
+const outputSecOf = (shot: Shot | undefined, model: VideoModelDescriptor): number | null => {
+  if (shot === undefined) return null
+  try {
+    return quantizeDuration(shot.durationSec, model.capabilities.durations)
+  } catch {
+    return null
+  }
+}
+
 export const generationActivityRoutes = (deps: GenerationActivityDeps) =>
   new OpenAPIHono({ defaultHook: validationHook }).openapi(activeRoute, async (c) => {
     const { projectId } = c.req.valid('param')
     if ((await deps.projects.findById(projectId)) === null)
       return c.json(fail(NOT_FOUND_MESSAGE), 404)
-    const jobs = await deps.activeJobs(projectId)
+    const [jobs, shots] = await Promise.all([deps.activeJobs(projectId), deps.shots.findByProject(projectId)])
+    const shotById = new Map(shots.map((shot) => [shot.id, shot]))
     const entries = jobs.flatMap((job) => {
       if (job.status !== 'queued' && job.status !== 'running') return []
       const model = modelOf(deps.registry, job.resolvedModel)
@@ -74,7 +93,10 @@ export const generationActivityRoutes = (deps: GenerationActivityDeps) =>
           status: job.status,
           modelId: job.resolvedModel,
           modelLabel: model?.label ?? null,
-          typicalLatencySec: model?.economics.typicalLatencySec ?? null,
+          estimatedLatencySec:
+            model === null
+              ? null
+              : estimateLatencySec(model.economics, outputSecOf(shotById.get(job.shotId), model)),
           queuedAt: job.queuedAt.toISOString(),
           startedAt: job.startedAt?.toISOString() ?? null,
           attempt: job.attempt,

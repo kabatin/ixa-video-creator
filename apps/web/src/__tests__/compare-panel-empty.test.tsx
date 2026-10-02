@@ -31,7 +31,7 @@ const generatingFor = (shot: typeof blank): ActiveGenerations =>
           status: 'running' as const,
           modelId: 'stub',
           modelLabel: 'お試し',
-          typicalLatencySec: null,
+          estimatedLatencySec: null,
           queuedAt: '2026-10-02T00:00:00.000Z',
           startedAt: '2026-10-02T00:00:01.000Z',
           attempt: 1,

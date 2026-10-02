@@ -148,17 +148,33 @@ export const VPIPE_H3_TURBO_MODEL_ID: ModelId = ModelId.parse('vpipe/minimax-h3-
 /**
  * 所要時間の見込み（秒）。124 コマ（5.167 秒）の実測値。
  * draft ≈ 7 分、standard ≈ 10.6 分。243 コマの standard は ≈ 24 分かかる。
+ * ルーターがモデル同士を比べる一律の数。生成中の目安は下の尺 1 秒あたりから出す。
  */
 export const VPIPE_DRAFT_TYPICAL_LATENCY_SEC = 420
 export const VPIPE_STANDARD_TYPICAL_LATENCY_SEC = 640
 
 /**
+ * 尺 1 秒を作るのにかかる時間（秒）。生成時間は尺にほぼ比例する（制作者 2026-10-02「5秒ぐらいの動画で7分だから
+ * それから計算する必要がありそう」。一律 7 分だったので、10 秒の Shot も「約 7 分」と出ていた）。
+ *
+ * draft の実測: 5.167 秒 → 420 秒（ADR-0031 の計測）、6.583 秒 → 549 秒（2026-09-30）、
+ * 10.125 秒 → 911 秒（2026-09-30）・949 秒（2026-10-02）。原点を通る直線で合わせると 89.5 秒/秒。
+ * standard の実測: 5.167 秒 → 640 秒、10.125 秒 → 約 1440 秒。同じく合わせると 138 秒/秒。
+ */
+export const VPIPE_DRAFT_LATENCY_SEC_PER_OUTPUT_SEC = 90
+export const VPIPE_STANDARD_LATENCY_SEC_PER_OUTPUT_SEC = 140
+
+/**
  * 費用は 0。手元の GPU で動くので実際にかかった額そのもの（ADR-0025 の `local` と同じ）。
  * **スタブ扱いにしない**（`STUB_PROVIDER_IDS` に入れない）。本物の Take を作る。
  */
-const economics = (typicalLatencySec: number): VideoModelDescriptor['economics'] => ({
+const economics = (
+  typicalLatencySec: number,
+  latencySecPerOutputSec: number,
+): VideoModelDescriptor['economics'] => ({
   costPerSecondUsd: 0,
   typicalLatencySec,
+  latencySecPerOutputSec,
 })
 
 export const vpipeH3TurboDraftModel: VideoModelDescriptor = {
@@ -167,7 +183,7 @@ export const vpipeH3TurboDraftModel: VideoModelDescriptor = {
   label: 'MiniMax H3 Turbo 下書き（ローカル・無料）',
   capabilities,
   qualities,
-  economics: economics(VPIPE_DRAFT_TYPICAL_LATENCY_SEC),
+  economics: economics(VPIPE_DRAFT_TYPICAL_LATENCY_SEC, VPIPE_DRAFT_LATENCY_SEC_PER_OUTPUT_SEC),
   routable: false,
 }
 
@@ -177,7 +193,7 @@ export const vpipeH3TurboModel: VideoModelDescriptor = {
   label: 'MiniMax H3 Turbo（ローカル・無料）',
   capabilities,
   qualities,
-  economics: economics(VPIPE_STANDARD_TYPICAL_LATENCY_SEC),
+  economics: economics(VPIPE_STANDARD_TYPICAL_LATENCY_SEC, VPIPE_STANDARD_LATENCY_SEC_PER_OUTPUT_SEC),
   routable: false,
 }
 

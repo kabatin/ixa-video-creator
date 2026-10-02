@@ -186,7 +186,12 @@ export const createApp = (deps: AppDeps) => {
   if (deps.activeGenerations !== undefined) {
     app.route(
       '/',
-      generationActivityRoutes({ projects: deps.projects, activeJobs: deps.activeGenerations, registry: deps.registry }),
+      generationActivityRoutes({
+        projects: deps.projects,
+        activeJobs: deps.activeGenerations,
+        shots: deps.shots,
+        registry: deps.registry,
+      }),
     )
   }
   // 画面がモデルの性質（fps・尺・参照の上限）を書き写さないための口。

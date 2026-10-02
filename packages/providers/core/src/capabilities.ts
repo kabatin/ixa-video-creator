@@ -59,6 +59,12 @@ export type ModelQualities = z.infer<typeof ModelQualities>
 
 export const ModelEconomics = z.object({
   costPerSecondUsd: z.number().nonnegative(),
+  /** 1 本あたりの一律の目安（秒）。ルーターがモデル同士を比べるのに使う。 */
   typicalLatencySec: z.number().nonnegative(),
+  /**
+   * 尺 1 秒を作るのにかかる時間（秒）。生成時間が尺にほぼ比例するモデルだけが持つ。
+   * 持つモデルは、生成中の目安を作る尺から出す（`estimateLatencySec`）。
+   */
+  latencySecPerOutputSec: z.number().positive().optional(),
 })
 export type ModelEconomics = z.infer<typeof ModelEconomics>
