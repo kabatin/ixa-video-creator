@@ -8,6 +8,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import type { ObjectHead, ObjectStorage, PutOptions, StorageKey } from './port.js'
 import { ObjectNotFoundError, StorageError } from './port.js'
+import { signingWindow } from './signing-window.js'
 
 export type S3StorageConfig = {
   endpoint: string
@@ -117,7 +118,9 @@ export const createS3Storage = (config: S3StorageConfig): ObjectStorage => {
   const signedGetUrl = async (key: StorageKey, expiresInSec: number): Promise<string> => {
     try {
       const command = new GetObjectCommand({ Bucket: config.bucket, Key: key })
-      return await getSignedUrl(client, command, { expiresIn: expiresInSec })
+      // 署名の時刻を窓の頭に揃え、同じ物にはしばらく同じ URL を返す（読み直すたびに絵と動画を読み直させない）。
+      const stable = signingWindow(Date.now(), expiresInSec)
+      return await getSignedUrl(client, command, { expiresIn: stable.expiresInSec, signingDate: stable.signingDate })
     } catch (error) {
       throw new StorageError('signedGetUrl に失敗しました', 'signedGetUrl', key, { cause: error })
     }
