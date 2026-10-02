@@ -3,8 +3,10 @@
 import type { ProjectId, ShotId } from '@ixa/domain'
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { useNow } from '@/components/workbench/use-active-generations'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import { formatElapsed } from '@/lib/format-time'
 import { createRequester } from '@/lib/requester'
 import {
   adoptableShotIds,
@@ -76,11 +78,14 @@ const DECISION_CLASSES = {
 const DraftRowView = ({
   row,
   checked,
+  locked,
   onToggle,
   onSelectShot,
 }: {
   readonly row: DraftRow
   readonly checked: boolean
+  /** 作り直している間。案が入れ替わるので選ばせない。 */
+  readonly locked: boolean
   readonly onToggle: (shotId: ShotId) => void
   readonly onSelectShot?: (shotId: ShotId) => void
 }) => (
@@ -92,7 +97,7 @@ const DraftRowView = ({
         type="checkbox"
         className="mt-0.5 h-3.5 w-3.5"
         checked={checked}
-        disabled={!row.selectable}
+        disabled={!row.selectable || locked}
         onChange={() => {
           onToggle(row.shotId)
         }}
@@ -149,6 +154,16 @@ export const StoryboardDraftPanel = ({
   // **空から始まる。** 既定で 1 件も選ばれていない。
   const [selected, setSelected] = useState<ReadonlySet<ShotId>>(clearSelection())
   const [busy, setBusy] = useState(false)
+  /**
+   * 作り直し始めた時刻（ms）。作っていなければ null。**作っていることを画面に出す**
+   * （制作者 2026-10-02「ボタン押せなくなってなんでだろ」「案が変わってたけど気付きづらかった」）。
+   */
+  const [drafting, setDrafting] = useState<number | null>(null)
+  /** 届いた案の件数。次に作り直すか採用するまで「新しい案が届きました」と出す。 */
+  const [arrived, setArrived] = useState<number | null>(null)
+  const now = useNow(drafting !== null)
+  /** 作っている間も、採用している間も、ほかの操作は止める。 */
+  const working = busy || drafting !== null
   const [error, setError] = useState<string | null>(null)
   /** 開いたときの読み込みが終わっていない間。**「案なし」と見分ける。** */
   const [loading, setLoading] = useState(!preloaded && initialRun === null)
@@ -191,7 +206,8 @@ export const StoryboardDraftPanel = ({
   })
 
   const onDraft = () => {
-    setBusy(true)
+    setDrafting(Date.now())
+    setArrived(null)
     setError(null)
     client
       .createDraft(projectId)
@@ -200,13 +216,14 @@ export const StoryboardDraftPanel = ({
         setItems(result.items)
         // 新しい案が来たら選択はやり直す。前の選択を引き継がない。
         setSelected(clearSelection())
+        setArrived(result.items.length)
       })
       .catch((cause: unknown) => {
         // 握り潰さない。読めなかったことを画面に出す（規約 5 / lessons L-015）。
         setError(describeError(cause))
       })
       .finally(() => {
-        setBusy(false)
+        setDrafting(null)
       })
   }
 
@@ -216,6 +233,7 @@ export const StoryboardDraftPanel = ({
     if (shotIds.length === 0) return
 
     setBusy(true)
+    setArrived(null)
     setError(null)
     client
       .adopt(projectId, run.id, shotIds)
@@ -256,15 +274,15 @@ export const StoryboardDraftPanel = ({
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={onDraft} disabled={busy || loading}>
-          {run === null ? '下書きする' : '作り直す'}
+        <Button size="sm" onClick={onDraft} disabled={working || loading}>
+          {drafting !== null ? '作っています…' : run === null ? '下書きする' : '作り直す'}
         </Button>
         <Button
           size="sm"
           onClick={() => {
             setSelected(selectAllSelectable(rows))
           }}
-          disabled={busy || rows.length === 0}
+          disabled={working || rows.length === 0}
         >
           まだ決めていない案をすべて選ぶ
         </Button>
@@ -273,14 +291,36 @@ export const StoryboardDraftPanel = ({
           onClick={() => {
             setSelected(clearSelection())
           }}
-          disabled={busy || selected.size === 0}
+          disabled={working || selected.size === 0}
         >
           選択を外す
         </Button>
-        <Button size="sm" tone="primary" onClick={onAdopt} disabled={busy || !summary.canAdopt}>
+        <Button size="sm" tone="primary" onClick={onAdopt} disabled={working || !summary.canAdopt}>
           {summary.adoptLabel}
         </Button>
       </div>
+
+      {drafting !== null && (
+        <p
+          role="status"
+          aria-label="絵コンテの案を作っています"
+          className="mt-2 rounded border border-info/40 bg-info/10 px-2 py-1 text-sm text-text"
+        >
+          <span aria-hidden="true" className="mr-1 inline-block animate-pulse text-info">
+            ●
+          </span>
+          AI が絵コンテの案を作っています
+          {/* 毎秒読み上げない（経過は目で見るためのもの）。 */}
+          <span aria-hidden="true" className="tabular-nums">{`（${formatElapsed((now - drafting) / 1000)} 経過。数分かかることがあります）`}</span>
+          。終わると下の案が入れ替わります。
+        </p>
+      )}
+
+      {arrived !== null && drafting === null && (
+        <p role="status" className="mt-2 text-sm text-ok">
+          {`新しい案が届きました（${String(arrived)} 件）。前に選んでいたものは外しました。`}
+        </p>
+      )}
 
       {summary.notice === null ? null : (
         <p role="alert" className="mt-2 text-sm text-warn">
@@ -300,7 +340,10 @@ export const StoryboardDraftPanel = ({
       ) : rows.length === 0 ? (
         <p className="mt-3 text-sm text-muted">まだ案がありません</p>
       ) : (
-        <table className="mt-2 w-full border-collapse text-left">
+        <table
+          aria-busy={drafting !== null}
+          className={`mt-2 w-full border-collapse text-left ${drafting !== null ? 'opacity-50' : ''}`}
+        >
           <caption className="sr-only">絵コンテの案</caption>
           <thead className="sticky top-0 bg-surface-2 text-xs text-muted">
             <tr className="h-6">
@@ -327,6 +370,7 @@ export const StoryboardDraftPanel = ({
                 key={row.shotId}
                 row={row}
                 checked={selected.has(row.shotId)}
+                locked={drafting !== null}
                 onToggle={(shotId) => {
                   setSelected((previous) => toggleSelection(previous, shotId))
                 }}

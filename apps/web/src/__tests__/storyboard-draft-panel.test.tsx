@@ -327,3 +327,48 @@ describe('StoryboardDraftPanel', () => {
     expect(screen.getByText('雰囲気: （未設定）')).toBeInTheDocument()
   })
 })
+
+/**
+ * 作り直している間（制作者 2026-10-02「作り直す押したら、ボタン押せなくなってなんでだろってなってて」
+ * 「しばらくしたら画面が更新されて案が変わってたけど、気付きづらかった」）。
+ */
+describe('StoryboardDraftPanel — 作り直している間', () => {
+  type Drafted = Awaited<ReturnType<StoryboardDraftApi['createDraft']>>
+  const pendingDraft = () => {
+    let resolve: (value: Drafted) => void = () => undefined
+    const createDraft = vi.fn(
+      () =>
+        new Promise<Drafted>((done) => {
+          resolve = done
+        }),
+    )
+    return { createDraft, finish: (value: Drafted) => resolve(value) }
+  }
+
+  it('作っていると分かる 1 行と経過を出し、選択の操作を止める（終わると案が入れ替わると言う）', async () => {
+    const draft = pendingDraft()
+    panel({ api: apiSpy({ createDraft: draft.createDraft }) })
+
+    await userEvent.click(screen.getByRole('button', { name: '作り直す' }))
+
+    const status = screen.getByRole('status', { name: '絵コンテの案を作っています' })
+    expect(status).toHaveTextContent('AI が絵コンテの案を作っています')
+    expect(status).toHaveTextContent('0:00 経過')
+    expect(status).toHaveTextContent('終わると下の案が入れ替わります')
+    expect(screen.getByRole('button', { name: '作っています…' })).toBeDisabled()
+    expect(screen.getByRole('checkbox', { name: 'A の案を採用する' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'まだ決めていない案をすべて選ぶ' })).toBeDisabled()
+  })
+
+  it('届いたら「新しい案が届いた」と言い、作っている 1 行を消す', async () => {
+    const draft = pendingDraft()
+    panel({ api: apiSpy({ createDraft: draft.createDraft }) })
+    await userEvent.click(screen.getByRole('button', { name: '作り直す' }))
+
+    draft.finish({ run, items: [itemFor(shotA.id, { description: 'A の新しい案' }), itemFor(shotB.id)] })
+
+    expect(await screen.findByText(/新しい案が届きました（2 件）/)).toBeInTheDocument()
+    expect(screen.queryByRole('status', { name: '絵コンテの案を作っています' })).toBeNull()
+    expect(screen.getByRole('checkbox', { name: 'A の案を採用する' })).toBeEnabled()
+  })
+})
