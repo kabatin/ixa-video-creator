@@ -581,7 +581,8 @@ type VideoModelDescriptor = {
     cameraControl: number
     promptAdherence: number
   }
-  economics: { costPerSecondUsd: number; typicalLatencySec: number }
+  // latencySecPerOutputSec: 尺 1 秒を作るのにかかる秒。持つモデルは生成中の目安を作る尺から出す（estimateLatencySec）
+  economics: { costPerSecondUsd: number; typicalLatencySec: number; latencySecPerOutputSec?: number }
 }
 ```
 
