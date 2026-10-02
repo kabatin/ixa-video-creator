@@ -134,6 +134,13 @@ export const LyricSyncSection = ({
               snapPoint('歌い出し', sec, candidates, toleranceSec, preferences.playback.snapToBeat).atSec
             }
             onPlaceTelops={placeTelops}
+        {...((workbench.shots ?? []).length > 0
+          ? {
+              onAlignShots: () => {
+                workbench.openDialog('align-lyrics')
+              },
+            }
+          : {})}
             onOpenConcept={() => {
               goToProjectConcept(workbench)
             }}

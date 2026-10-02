@@ -23,6 +23,7 @@ export type WorkbenchDialog =
   | 'delete-shots'
   | 'merge-shots'
   | 'ai-setup'
+  | 'align-lyrics'
 
 export type MenuAction =
   | { readonly kind: 'href'; readonly href: string }
@@ -273,6 +274,8 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
         item('merge-shots', 'チェックした Shot を結合…', dialog('merge-shots'), {
           disabledReason: state.mergeBlocker,
         }),
+        // 区切りが歌い出しとずれた作品を直す（制作者 2026-10-02）。歌詞の時刻が無いときはダイアログが理由を言う。
+        item('align-lyrics', 'Shot の境目を歌い出しに揃える…', dialog('align-lyrics')),
         // チェックがあればチェックした Shot、無ければ選んでいる Shot。何を消すかは項目名で言う。
         item('delete-shot', deleteMenuLabel(state.checkedCount), dialog('delete-shots'), {
           shortcut: DELETE_SHORTCUT,

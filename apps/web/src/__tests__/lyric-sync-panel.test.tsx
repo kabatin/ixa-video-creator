@@ -25,6 +25,7 @@ const Harness = (props: Partial<LyricSyncProps> & { readonly at: number }) => {
       onTogglePlay={props.onTogglePlay ?? vi.fn()}
       snapAt={props.snapAt ?? ((sec) => sec)}
       onPlaceTelops={props.onPlaceTelops ?? vi.fn()}
+      {...(props.onAlignShots === undefined ? {} : { onAlignShots: props.onAlignShots })}
       onOpenConcept={vi.fn()}
       keyboard
     />
@@ -133,6 +134,20 @@ describe('LyricSync の案内', () => {
     render(<Harness at={5} cues={[1, 3]} />)
 
     expect(screen.queryByRole('button', { name: /二行目 の歌い出し/ })).toBeNull()
+  })
+})
+
+describe('LyricSync の「Shot の境目を揃える」', () => {
+  it('渡されたときだけ出し、時刻が付いていれば押せる', async () => {
+    const onAlignShots = vi.fn()
+    const { unmount } = render(<Harness at={0} cues={[1]} onAlignShots={onAlignShots} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Shot の境目を揃える…' }))
+    expect(onAlignShots).toHaveBeenCalledTimes(1)
+    unmount()
+
+    render(<Harness at={0} />)
+    expect(screen.queryByRole('button', { name: 'Shot の境目を揃える…' })).toBeNull()
   })
 })
 

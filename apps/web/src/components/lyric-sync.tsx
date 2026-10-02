@@ -20,6 +20,11 @@ export type LyricSyncProps = {
   readonly snapAt: (sec: number) => number
   /** 「歌詞をテロップにする」。確認と実行は呼び出し側。 */
   readonly onPlaceTelops: () => void
+  /**
+   * 「Shot の境目を揃える」。区切った後に時刻を付けた作品で、境目を歌い出しへ揃える（制作者 2026-10-02）。
+   * 省略なら出さない（Shot がまだ無いとき）。
+   */
+  readonly onAlignShots?: () => void
   /** 歌詞がまだ無いとき、作品の方針を開く。 */
   readonly onOpenConcept: () => void
   /** 打鍵を受けるか（見えている間・ダイアログが無い間だけ）。 */
@@ -123,6 +128,11 @@ export const LyricSync = (props: LyricSyncProps) => {
         <Button size="sm" onClick={props.onPlaceTelops} disabled={cues.length === 0}>
           歌詞をテロップにする…
         </Button>
+        {props.onAlignShots !== undefined && (
+          <Button size="sm" onClick={props.onAlignShots} disabled={cues.length === 0}>
+            Shot の境目を揃える…
+          </Button>
+        )}
       </div>
       {rejection !== null && (
         <p role="status" className="text-xs text-warn">
