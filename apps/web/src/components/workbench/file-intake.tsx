@@ -21,7 +21,7 @@ import { ASSET_DRAG_TYPE, groupDroppedFiles } from '@/lib/asset-actions'
  * - 音声 → 楽曲として登録し、解析を始める
  * - 画像 → 行き先を 1 回だけ聞く（選んでいる素材 / 新しいロケーション / 新しいブランド資産）
  * - 動画 → 選んでいる Shot の Take にする（ADR-0026）。Shot を選んでいなければ、そう伝える
- * - 素材ビューアや Shot のカードの上に落とした場合は、そちらが先に受けて止める（ここへ来ない）
+ * - 素材ビューアの区画に落とした場合は、そちらが受けて伝わりを止める（ここへ来ない）
  *
  * 「ファイルを取り込む…」（メニュー）はここのファイル選択を開く。
  */
@@ -88,7 +88,10 @@ export const FileIntake = ({
     }
     const onDrop = (event: DragEvent): void => {
       setDragging(false)
-      if (!hasFiles(event) || event.defaultPrevented) return
+      // 受けたかどうかを `defaultPrevented` で見ない。パネルの配置の仕組み（dockview）がパネルの上のドロップに
+      // 印を付けるので、パネルの上に落とすと何も起きなかった（制作者 2026-10-03「登録先を選ぶ画面が出てこない」）。
+      // 自分で受ける区画（素材ビューア）は stopPropagation して、ここへ流さない。
+      if (!hasFiles(event)) return
       event.preventDefault()
       void intake([...(event.dataTransfer?.files ?? [])])
     }

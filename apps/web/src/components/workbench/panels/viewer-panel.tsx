@@ -74,8 +74,10 @@ const ImageDrop = ({
     setOver(false)
     const images = [...event.dataTransfer.files].filter((file) => droppedFileKind(file) === 'image')
     if (images.length === 0 || !acceptsImages(inspected)) return
-    // ここで受けたら、画面全体の取り込み（行き先を聞く）へは流さない。
+    // ここで受けたら、画面全体の取り込み（行き先を聞く）へは流さない。印（preventDefault）だけでは
+    // パネルの配置の仕組みと見分けが付かないので、伝わりを止める（file-intake.tsx）。
     event.preventDefault()
+    event.stopPropagation()
     setStatus(`${String(images.length)} 枚を取り込んでいます…`)
     attach(inspected, images)
       .then(() => {
