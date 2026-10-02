@@ -9,7 +9,7 @@ import {
   type Transition,
 } from '@ixa/domain'
 import { timelineDurationSec, type TimelineSource } from './build.js'
-import { TIME_EPSILON, shotsEndSec, sortShotsByStart } from './ordering.js'
+import { SHOT_JOIN_TOLERANCE_SEC, TIME_EPSILON, shotsEndSec, sortShotsByStart } from './ordering.js'
 import { TAKE_SHORT_TOLERANCE_SEC, takeShortfallSec } from './speed.js'
 
 export type TimelineIssue = {
@@ -55,7 +55,8 @@ const checkOverlaps = (sorted: readonly Shot[]): TimelineIssue[] => {
     for (let j = i + 1; j < sorted.length; j += 1) {
       const next = sorted[j]
       if (next === undefined) continue
-      if (next.startSec >= end - TIME_EPSILON) break
+      // 1 コマに満たない重なりは接しているとみなす（端のドラッグ・歌い出しに揃えると同じ幅）。
+      if (next.startSec >= end - SHOT_JOIN_TOLERANCE_SEC) break
       issues.push({
         severity: 'error',
         code: TIMELINE_ISSUE_CODES.shotOverlap,
@@ -89,7 +90,7 @@ const checkGaps = (sorted: readonly Shot[]): TimelineIssue[] => {
     if (current === undefined || next === undefined) continue
     const end = shotEndSec(current)
     const gap = next.startSec - end
-    if (gap > TIME_EPSILON) {
+    if (gap > SHOT_JOIN_TOLERANCE_SEC) {
       issues.push({
         severity: 'warning',
         code: TIMELINE_ISSUE_CODES.shotGap,

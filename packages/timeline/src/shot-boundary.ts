@@ -1,6 +1,6 @@
 import { shotEndSec, type Seconds, type Shot, type ShotId } from '@ixa/domain'
 import { roughCutLockedReason, type RoughCutChange } from './assemble.js'
-import { sortShotsByStart, TIME_EPSILON } from './ordering.js'
+import { SHOT_JOIN_TOLERANCE_SEC, sortShotsByStart, TIME_EPSILON } from './ordering.js'
 
 /**
  * Shot の境目・端を動かす変更を作る。**純粋な関数のみ。**
@@ -13,11 +13,8 @@ import { sortShotsByStart, TIME_EPSILON } from './ordering.js'
 /** 動かしたあとの Shot の短さの下限。区切りの下限（web の `MIN_CUT_DURATION_SEC`）と同じ。 */
 export const SHOT_MIN_DURATION_SEC = 0.5
 
-/**
- * 隣り合っているとみなす差。**1 コマ（60fps で 0.0167 秒）に満たない差**は端数として扱う。
- * 手で尺を伸ばすと端数が残った（ぼくははると: CUT-01 の終わりと CUT-02 の頭の差 0.00016 秒）。動かすときに閉じる。
- */
-export const SHOT_JOIN_TOLERANCE_SEC = 0.01
+/** 隣り合っているとみなす差（`ordering.ts`。書き出し前の検査と同じ幅）。動かすときに閉じる。 */
+export { SHOT_JOIN_TOLERANCE_SEC }
 
 /**
  * 1 つの Shot の長さを変えられない理由。ロック中・生成中なら変えない。

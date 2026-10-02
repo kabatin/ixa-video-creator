@@ -25,6 +25,27 @@ describe('validateTimeline / error', () => {
     expect(codes(validateTimeline(makeSource({ shots })))).toEqual([])
   })
 
+  /**
+   * 1 コマに満たない差は「接している」（制作者 2026-10-02「書き出ししようとするとレンダリング不可表示になって、Shot 重なりが指摘される」）。
+   * ぼくははると: CUT-02 の頭を 0:13.33（画面の 2 桁）にしたら、終わりが CUT-03 の頭へ 0.0017 秒はみ出して書き出せなかった。
+   * 端のドラッグ・歌い出しに揃える・結合はこの差を「接している」と扱うので、検査も同じ幅にする。
+   */
+  it('1 コマに満たない重なり・隙間は接しているとみなす（指摘しない）', () => {
+    const overlap = [makeShot(1, 0, 13.33), makeShot(2, 13.33, 7.801904761904762), makeShot(3, 21.13015873015873, 7.8)]
+    const gap = [makeShot(1, 0, 10.89), makeShot(2, 10.89015873, 4)]
+
+    expect(codes(validateTimeline(makeSource({ shots: overlap })))).toEqual([])
+    expect(codes(validateTimeline(makeSource({ shots: gap })))).toEqual([])
+  })
+
+  it('1 コマを越える重なりは error・隙間は warning のまま', () => {
+    const overlap = [makeShot(1, 0, 5.02), makeShot(2, 5, 5)]
+    const gap = [makeShot(1, 0, 5), makeShot(2, 5.02, 5)]
+
+    expect(find(validateTimeline(makeSource({ shots: overlap })), TIMELINE_ISSUE_CODES.shotOverlap)).toHaveLength(1)
+    expect(find(validateTimeline(makeSource({ shots: gap })), TIMELINE_ISSUE_CODES.shotGap)).toHaveLength(1)
+  })
+
   it('1 つの Shot が複数の Shot をまたぐ重なりもすべて挙げる', () => {
     const shots = [makeShot(1, 0, 10), makeShot(2, 1, 1), makeShot(3, 3, 1)]
     const overlaps = find(validateTimeline(makeSource({ shots })), TIMELINE_ISSUE_CODES.shotOverlap)
