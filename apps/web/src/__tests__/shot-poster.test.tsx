@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { POSTER_LOAD_FAILED_TEXT, ShotPoster } from '@/components/shot-poster'
+import { PosterRenewalContext } from '@/lib/poster-renewal'
 import { NOT_FETCHED_REASON } from '@/lib/shot-posters'
 
 /**
@@ -106,5 +107,27 @@ describe('作っている最中', () => {
 
     expect(screen.getByAltText('CUT-08 のサムネイル')).toBeInTheDocument()
     expect(screen.queryByTestId('poster-spinner')).toBeNull()
+  })
+})
+
+/**
+ * 署名付き URL は 5 分で切れる。切れた URL のまま「読み込めません」に留めない（制作者 2026-10-02
+ * 「VIDEO1 の調整をしばらく続けていると…サムネが表示されなくなった」）。
+ */
+describe('期限が切れたとき', () => {
+  it('引き直しを頼み、新しい URL が届いたら絵に戻す', () => {
+    const renew = vi.fn()
+    const poster = (url: string) => (
+      <PosterRenewalContext.Provider value={renew}>
+        <ShotPoster url={url} reason={null} alt="CUT-01 のサムネイル" size="chip" />
+      </PosterRenewalContext.Provider>
+    )
+    const view = render(poster('https://example.invalid/thumb.jpg?sig=old'))
+
+    fireEvent.error(screen.getByAltText('CUT-01 のサムネイル'))
+    expect(renew).toHaveBeenCalledTimes(1)
+
+    view.rerender(poster('https://example.invalid/thumb.jpg?sig=new'))
+    expect(screen.getByAltText('CUT-01 のサムネイル')).toHaveAttribute('src', 'https://example.invalid/thumb.jpg?sig=new')
   })
 })

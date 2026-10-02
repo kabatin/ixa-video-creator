@@ -22,7 +22,8 @@ import type { WorkbenchDialog } from '@/lib/menu-model'
 import type { WireMusicAnalysis } from '@/lib/music-api'
 import { applyProjectEvent } from '@/lib/project-events'
 import { EMPTY_SELECTION, pruneSelection, type ShotSelection } from '@/lib/shot-bulk'
-import { posterByShotId, posterRetryDelayMs, type ShotPosterMap } from '@/lib/shot-posters'
+import { PosterRenewalContext } from '@/lib/poster-renewal'
+import { posterByShotId, postersStale, posterRetryDelayMs, type ShotPosterMap } from '@/lib/shot-posters'
 import { useProjectEvents } from '@/lib/use-project-events'
 import type { PanelId } from '@/lib/workbench-layout'
 import type { Inspected } from '@/lib/workbench-selection'
@@ -179,6 +180,19 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
 
   /** 続けて取り直した回数。作っている行が無くなったら 0 に戻す。 */
   const posterAttempt = useRef(0)
+  /**
+   * 絵が読めなかったときの引き直し（署名付き URL は 5 分で切れる。制作者 2026-10-02「サムネが表示されなくなった」）。
+   * `posterEpoch` とは分ける。あちらはタイムラインとプレビューも読み直させる。
+   */
+  const [posterRenewal, setPosterRenewal] = useState(0)
+  /** 最後に一覧を取り終えた時刻（取れても取れなくても）。取りにいっている間は null。 */
+  const postersSettledAt = useRef<number | null>(null)
+  const renewPosters = useCallback((): void => {
+    if (!postersStale(postersSettledAt.current, Date.now())) return
+    // 同じ描画で何枚も読めなくても 1 回だけ頼む（取り終わるまで次は受けない）。
+    postersSettledAt.current = null
+    setPosterRenewal((count) => count + 1)
+  }, [])
   useEffect(() => {
     let cancelled = false
     let retry: ReturnType<typeof setTimeout> | null = null
@@ -186,6 +200,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       .listShotPosters(projectId)
       .then((list) => {
         if (cancelled) return
+        postersSettledAt.current = Date.now()
         setPosters(posterByShotId(list))
         setPosterError(null)
         // サムネイルを作っている行があれば、少し待って取り直す（できたら自動で出る）。
@@ -199,13 +214,16 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       })
       .catch((error: unknown) => {
         // 取れなかったことを黙らせない。空の Map のままだと「絵が無い」に化ける（L-015）。
-        if (!cancelled) setPosterError(`サムネイルを取得できませんでした: ${describeError(error)}`)
+        if (cancelled) return
+        // 失敗しても、間を置けばまた頼めるようにする（null のままだと引き直しが二度と効かない）。
+        postersSettledAt.current = Date.now()
+        setPosterError(`サムネイルを取得できませんでした: ${describeError(error)}`)
       })
     return () => {
       cancelled = true
       if (retry !== null) clearTimeout(retry)
     }
-  }, [api, projectId, posterEpoch])
+  }, [api, projectId, posterEpoch, posterRenewal])
 
   /**
    * Shot が増えたらサムネイルを引き直す。
@@ -363,7 +381,9 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
 
   return (
     <WorkbenchContext.Provider value={value}>
-      <WorkbenchTransportProvider transport={transport}>{props.children}</WorkbenchTransportProvider>
+      <WorkbenchTransportProvider transport={transport}>
+        <PosterRenewalContext.Provider value={renewPosters}>{props.children}</PosterRenewalContext.Provider>
+      </WorkbenchTransportProvider>
     </WorkbenchContext.Provider>
   )
 }

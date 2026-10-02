@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useContext, useState } from 'react'
+import { PosterRenewalContext } from '@/lib/poster-renewal'
 import { describeMissingPoster } from '@/lib/shot-posters'
 
 /**
@@ -11,6 +12,7 @@ import { describeMissingPoster } from '@/lib/shot-posters'
  *
  * 署名付き URL は期限が切れる。切れた URL は 403 で返ってくるので、
  * `onError` で「読み込めません」に切り替える。**壊れた画像アイコンのまま放置しない。**
+ * あわせて一覧の引き直しを頼み、新しい URL が届いたら絵に戻す（読めなかったのはその URL だけ）。
  */
 
 export type ShotPosterSize = 'row' | 'card' | 'chip'
@@ -65,7 +67,10 @@ const Spinner = ({ size }: { readonly size: ShotPosterSize }) => (
 )
 
 export const ShotPoster = ({ url, reason, alt, size, pending = false }: ShotPosterProps) => {
-  const [failed, setFailed] = useState(false)
+  // 読めなかった URL。**URL ごとに覚える**（新しい URL が届いても「読み込めません」に留まっていた）。
+  const [failedUrl, setFailedUrl] = useState<string | null>(null)
+  const failed = url !== null && url === failedUrl
+  const renew = useContext(PosterRenewalContext)
   const frame = `overflow-hidden rounded border border-line bg-surface-2 ${FRAME_CLASS[size]}`
 
   if (url !== null && !failed) {
@@ -77,7 +82,8 @@ export const ShotPoster = ({ url, reason, alt, size, pending = false }: ShotPost
           loading="lazy"
           className="h-full w-full object-cover"
           onError={() => {
-            setFailed(true)
+            setFailedUrl(url)
+            renew?.()
           }}
         />
       </span>

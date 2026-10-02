@@ -70,6 +70,16 @@ export const posterRetryDelayMs = (
 ): number | null =>
   attempt < MAX_POSTER_RETRIES && list.some((entry) => entry.pending) ? POSTER_RETRY_MS : null
 
+/**
+ * 読めなかった絵があったときに一覧を引き直すまでの間（ミリ秒）。署名付き URL の期限（5 分）より十分短い。
+ * 取ったばかりの一覧で読めないなら、期限ではなく絵そのものが無い。引き直しても直らないので頼まない（回り続けない）。
+ */
+export const POSTER_RENEW_AFTER_MS = 60_000
+
+/** 一覧を引き直すか。`fetchedAtMs` は最後に取れた時刻。まだ取れていなければ null（取りにいっている最中）。 */
+export const postersStale = (fetchedAtMs: number | null, nowMs: number): boolean =>
+  fetchedAtMs !== null && nowMs - fetchedAtMs > POSTER_RENEW_AFTER_MS
+
 /** 行から Shot ごとに引ける形へ直す。同じ Shot が 2 度来たら後勝ち（API は 1 件ずつ返す）。 */
 export const posterByShotId = (list: readonly WireShotPoster[]): ShotPosterMap =>
   new Map(

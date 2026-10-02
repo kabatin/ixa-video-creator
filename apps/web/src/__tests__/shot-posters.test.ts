@@ -12,6 +12,8 @@ import {
   posterViewFor,
   MAX_POSTER_RETRIES,
   POSTER_RETRY_MS,
+  POSTER_RENEW_AFTER_MS,
+  postersStale,
 } from '@/lib/shot-posters'
 import type { WireShotPoster } from '@/lib/shot-posters-api'
 
@@ -154,5 +156,20 @@ describe('posterRetryDelayMs', () => {
 
   it('上限まで取り直したら止める（出ないまま回り続けない）', () => {
     expect(posterRetryDelayMs([making(SHOT_ID)], MAX_POSTER_RETRIES)).toBeNull()
+  })
+})
+
+/**
+ * 読めなかった絵の引き直し（制作者 2026-10-02「サムネが表示されなくなった」）。
+ * 取ったばかりの一覧で読めないなら、URL の期限ではなく絵そのものが無い。引き直しても直らないので頼まない（回り続けない）。
+ */
+describe('postersStale', () => {
+  it('取ってから一定の時間が経った一覧だけを引き直す', () => {
+    expect(postersStale(1_000, 1_000 + POSTER_RENEW_AFTER_MS + 1)).toBe(true)
+    expect(postersStale(1_000, 1_000 + POSTER_RENEW_AFTER_MS - 1)).toBe(false)
+  })
+
+  it('まだ一度も取れていなければ頼まない（取りにいっている最中）', () => {
+    expect(postersStale(null, 10 * POSTER_RENEW_AFTER_MS)).toBe(false)
   })
 })
