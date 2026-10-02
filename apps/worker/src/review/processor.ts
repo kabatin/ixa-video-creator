@@ -258,6 +258,7 @@ export const processReviewJob = async (
           reviewers: deps.visionReviewers,
           storage: deps.storage,
           logger: deps.logger,
+          workDir: deps.workDir,
         })
 
     const findings = [...deterministicFindings, ...vision.findings]

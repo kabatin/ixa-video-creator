@@ -22,13 +22,14 @@ describe('スタブ vision レビュアの決定性', () => {
     expect(first).toEqual(second)
   })
 
-  it('URL が変わっても結果は変わらない（署名付き URL は都度発行されるため）', async () => {
+  it('画像の置き場が変わっても結果は変わらない（判定のたびに作り直すため）', async () => {
     const base = makeReviewRequest()
     const reissued = makeReviewRequest({
-      subjects: [{ label: 'frame@1.5s', url: 'https://example.test/frames/a.png?sig=ZZZ&expires=9' }],
+      subjects: [{ label: 'frame@1.5s', path: '/tmp/ixa-review-work/other/frame-0.jpg' }],
       references: [
-        { label: 'reference:face_front', url: 'https://example.test/refs/face.png?sig=YYY&expires=9' },
+        { label: 'reference:face_front', path: '/tmp/ixa-review-work/other/reference-0.png' },
       ],
+      imageDir: '/tmp/ixa-review-work/other',
     })
 
     const reviewer = createStubVisionReviewer()
@@ -45,7 +46,7 @@ describe('スタブ vision レビュアの決定性', () => {
       digestReviewRequest(base),
       digestReviewRequest(makeReviewRequest({ reviewer: 'composition' })),
       digestReviewRequest(makeReviewRequest({ criteria: '別の基準' })),
-      digestReviewRequest(makeReviewRequest({ subjects: [{ label: 'frame@9s', url: 'u' }] })),
+      digestReviewRequest(makeReviewRequest({ subjects: [{ label: 'frame@9s', path: 'p' }] })),
     ]
 
     expect(new Set(digests).size).toBe(4)
@@ -124,7 +125,7 @@ describe('スタブ vision レビュアの判定内容', () => {
     expect(frameSecFromLabel('reference:face_front')).toBeNull()
     expect(stubReviewResult(makeReviewRequest()).frameSec).toBe(1.5)
     expect(
-      stubReviewResult(makeReviewRequest({ subjects: [{ label: 'poster', url: 'u' }] })).frameSec,
+      stubReviewResult(makeReviewRequest({ subjects: [{ label: 'poster', path: 'p' }] })).frameSec,
     ).toBeNull()
   })
 })

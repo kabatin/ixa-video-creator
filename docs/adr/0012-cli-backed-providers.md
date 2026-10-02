@@ -119,3 +119,12 @@ providerParams: {
       できない場合、AI Review は Anthropic API の HTTP アダプタに切り替える。
 - [ ] `codex exec` で `image_gen` を非対話に駆動し、出力パスを確実に取得できるかを検証する。
       できない場合、`scripts/image_gen.py`（要 `OPENAI_API_KEY`）へ切り替える。
+
+## 追記（2026-10-02）: vision 判定の画像は手元のファイルを Read で開く
+
+判定の画像を署名付き URL にしてプロンプトへ書き、WebFetch で読ませていた。手元の保管庫（MinIO）は外から読めず、
+署名付き URL を外の AI へ出すことにもなっていた（CLAUDE.md 規約 7）。
+
+- worker が判定のたびにフレームを手元の置き場（`REVIEW_WORK_DIR` の中）へ落とし、終わったら片付ける
+- `VisionReviewRequest` は画像の**ファイルの場所**と置き場（`imageDir`）を持つ。URL は持たない
+- Claude CLI は置き場を作業場所にして、`--allowedTools Read` だけで呼ぶ（リポジトリの設定も読み込まない）

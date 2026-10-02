@@ -61,10 +61,10 @@ export const ClaudeCliEnvelope = z.object({
 export type ClaudeCliEnvelope = z.infer<typeof ClaudeCliEnvelope>
 
 
-const imageLines = (title: string, images: readonly { label: string; url: string }[]): string =>
+const imageLines = (title: string, images: readonly { label: string; path: string }[]): string =>
   images.length === 0
     ? `${title}: なし`
-    : [`${title}:`, ...images.map((image) => `- ${image.label}: ${image.url}`)].join('\n')
+    : [`${title}:`, ...images.map((image) => `- ${image.label}: ${image.path}`)].join('\n')
 
 /**
  * 判定依頼をプロンプトへ組み立てる。**自由文を返させない**ため、
@@ -73,6 +73,7 @@ const imageLines = (title: string, images: readonly { label: string; url: string
 export const buildReviewPrompt = (request: VisionReviewRequest): string =>
   [
     `あなたは映像の ${request.reviewer} レビュアです。以下の画像を判定してください。`,
+    '画像は手元のファイルです。Read で開いて見てください（ほかのファイルは開かないでください）。',
     '',
     imageLines('判定対象', request.subjects),
     '',
@@ -154,8 +155,8 @@ const ClaudeCliOptionsSchema = z.object({
   supports: z.array(ReviewerType).min(1).default([...LLM_REVIEWERS]),
   timeoutMs: z.number().int().positive().default(DEFAULT_CLI_TIMEOUT_MS),
   model: z.string().min(1).nullable().default(null),
-  /** 画像 URL を読むために既定で WebFetch のみ許す。広げるのは運用側の判断。 */
-  allowedTools: z.array(z.string().min(1)).default(['WebFetch']),
+  /** 手元の画像ファイルを開くために既定で Read のみ許す。広げるのは運用側の判断。 */
+  allowedTools: z.array(z.string().min(1)).default(['Read']),
   /**
    * 無人実行でプロンプトを抑止したい場合に指定する（ADR-0012）。
    * どこまで緩めるかは運用上の判断なので、既定では渡さない。
@@ -229,8 +230,9 @@ export const createClaudeCliVisionReviewer = (
       throw new UnsupportedReviewerError(frozenSupports, context)
     }
 
+    // 画像の置き場を作業場所にする（Read が届く範囲をそこに絞る。リポジトリの設定も読み込まない）。
     const run = await runSafely(
-      { command: config.binary, args, timeoutMs: config.timeoutMs },
+      { command: config.binary, args, timeoutMs: config.timeoutMs, cwd: parsed.imageDir },
       context,
     )
     const stdout = toStdout(run, context)

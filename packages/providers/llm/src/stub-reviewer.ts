@@ -19,8 +19,8 @@ import {
  *
  * ## 決定性
  * 乱数も時刻も使わない。結果は **reviewer 種別 / criteria / 画像ラベル**だけから決まる。
- * `ReviewImage.url` は**意図的に無視する**。署名付き URL は都度発行され実行ごとに変わるため
- * （CLAUDE.md 規約 7）、これを混ぜると同じ判定依頼でも結果がぶれて決定性が壊れる。
+ * `ReviewImage.path` と `imageDir` は**意図的に無視する**。画像を落とす置き場は判定のたびに作り直すため、
+ * これを混ぜると同じ判定依頼でも結果がぶれて決定性が壊れる。
  */
 
 export const STUB_VISION_REVIEWER_NAME = 'stub-vision-reviewer'

@@ -18,7 +18,14 @@ import {
   CliTimeoutError,
   UnsupportedReviewerError,
 } from '../errors.js'
-import { completedWith, envelope, makeReviewRequest, recordingRunner, validResult } from './fixtures.js'
+import {
+  completedWith,
+  envelope,
+  IMAGE_DIR,
+  makeReviewRequest,
+  recordingRunner,
+  validResult,
+} from './fixtures.js'
 
 /**
  * **実 CLI を CI で叩かない**（ADR-0004 / ADR-0012）。
@@ -66,14 +73,35 @@ describe('Claude CLI vision レビュアの正常系', () => {
 })
 
 describe('Claude CLI vision レビュアのプロンプトと引数', () => {
-  it('プロンプトに判定基準・ラベル・URL・出力契約を載せる', () => {
+  it('プロンプトに判定基準・ラベル・画像のファイル・出力契約を載せる', () => {
     const prompt = buildReviewPrompt(makeReviewRequest())
 
     expect(prompt).toContain('identity')
     expect(prompt).toContain('主役の顔が参照画像と一致していること')
-    expect(prompt).toContain('frame@1.5s')
+    expect(prompt).toContain(`frame@1.5s: ${IMAGE_DIR}/frame-0.jpg`)
     expect(prompt).toContain('reference:face_front')
+    expect(prompt).toContain('Read')
     expect(prompt).toContain('"suggestedPromptDelta"')
+  })
+
+  /**
+   * 画像は手元のファイルを Read で開く（2026-10-02）。以前は署名付き URL を WebFetch で読ませていたが、
+   * 手元の保管庫（MinIO）は外から読めず、署名付き URL を外の AI へ出すことにもなっていた（規約 7）。
+   */
+  it('画像の置き場を作業場所にして、Read だけを許して呼ぶ', async () => {
+    const { calls, runner } = recordingRunner({
+      kind: 'completed',
+      exitCode: 0,
+      stdout: envelope(JSON.stringify(validResult)),
+      stderr: '',
+    })
+
+    await reviewerWith(runner).review(makeReviewRequest())
+
+    expect(calls[0]?.cwd).toBe(IMAGE_DIR)
+    const args = calls[0]?.args ?? []
+    expect(args[args.indexOf('--allowedTools') + 1]).toBe('Read')
+    expect(args.join(' ')).not.toContain('WebFetch')
   })
 
   it('比較対象が無ければ「なし」と明示する', () => {
@@ -99,14 +127,14 @@ describe('Claude CLI vision レビュアのプロンプトと引数', () => {
     ])
   })
 
-  it('エラーに載せるコマンドは署名付き URL を含まない', async () => {
+  it('エラーに載せるコマンドはプロンプト本文を含まない', async () => {
     const runner: CliRunner = () => Promise.resolve({ kind: 'timeout', timeoutMs: 1000 })
     const error = await reviewerWith(runner)
       .review(makeReviewRequest())
       .catch((caught: unknown) => caught)
 
     expect(error).toBeInstanceOf(CliTimeoutError)
-    expect((error as Error).message).not.toContain('sig=')
+    expect((error as Error).message).not.toContain('frame-0.jpg')
     expect((error as Error).message).toContain('<prompt:')
   })
 

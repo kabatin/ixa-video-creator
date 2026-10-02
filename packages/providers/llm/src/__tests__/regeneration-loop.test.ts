@@ -40,7 +40,7 @@ const runRegenerationLoop = async (
     // Take ごとに新しいフレームを抜く想定で、判定対象のラベルも試行ごとに変える。
     const request = makeReviewRequest({
       criteria,
-      subjects: [{ label: `frame@1.5s`, url: `https://example.test/take-${attempt}.png?sig=x` }],
+      subjects: [{ label: `frame@1.5s`, path: `/tmp/ixa-review-work/take-${attempt}.png` }],
     })
     const outcome = await reviewerFor(attempt).review(request)
     const nextHistory: readonly Attempt[] = [

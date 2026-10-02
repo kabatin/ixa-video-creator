@@ -29,6 +29,7 @@ import {
 } from '@ixa/db'
 import {
   ProviderId as ProviderIdSchema,
+  type AiToolId,
   aiDefaultsFromEnv,
   resolveAiSettings,
   type ProjectEventPublisher,
@@ -85,14 +86,25 @@ export type GenerationWiring = {
  * 気付くのは書き出しを見たときになる。**設定と実態が食い違ったまま動かさない。**
  */
 /**
- * いま選んでいる動画の AI（ADR-0032）。**読むたびに DB を見る**（画面で選び直したら次の 1 回から効く）。
+ * いま選んでいる AI（ADR-0032）。**読むたびに DB を見る**（画面で選び直したら次の 1 回から効く）。
  * まだ選んでいなければ、API と同じ初期値（`aiDefaultsFromEnv`）。
  */
-const chosenVideoProvider = (config: AppConfig, db: DbClient) => {
+const chosenAi = (config: AppConfig, db: DbClient) => {
   const settings = createAiSettingsRepository(db)
   const defaults = aiDefaultsFromEnv({ storyboardDrafter: config.storyboardDrafter, imageProvider: config.imageProvider })
-  return async (): Promise<ProviderId> =>
-    ProviderIdSchema.parse(resolveAiSettings(await settings.get(), defaults).settings.video)
+  return async () => resolveAiSettings(await settings.get(), defaults).settings
+}
+
+/** いま選んでいる動画の AI。AUTO はこの中から選ぶ。 */
+const chosenVideoProvider = (config: AppConfig, db: DbClient) => {
+  const chosen = chosenAi(config, db)
+  return async (): Promise<ProviderId> => ProviderIdSchema.parse((await chosen()).video)
+}
+
+/** いま選んでいるテキストの AI。自動レビューの vision 判定に使う（Claude なら画像を見る Claude）。 */
+const chosenTextTool = (config: AppConfig, db: DbClient) => {
+  const chosen = chosenAi(config, db)
+  return async (): Promise<AiToolId> => (await chosen()).text
 }
 
 const requireFalApiKey = (config: AppConfig): string => {
@@ -266,7 +278,7 @@ export const createGenerationWiring = (
    * 再生成が通ったら generation キューへ戻る。**判定はしない。積むだけ。**
    */
   const regenerationQueue = new Queue(QUEUE_NAMES.regeneration, { connection })
-  const reviewWiring = createReviewWiring(db, storage, logger, {
+  const reviewWiring = createReviewWiring(db, storage, logger, chosenTextTool(config, db), {
     regeneration: {
       enqueue: async (takeId) => {
         await regenerationQueue.add('regenerate', { takeId })

@@ -9,11 +9,12 @@ import {
   createTakeRepository,
   type DbClient,
 } from '@ixa/db'
-import type { MusicAnalysis, ProjectId } from '@ixa/domain'
+import type { AiToolId, MusicAnalysis, ProjectId } from '@ixa/domain'
 import { brandReviewer, musicReviewer, technicalReviewer } from '@ixa/review'
 import type { DeterministicReviewer } from '@ixa/review'
-import { createStubVisionReviewer } from '@ixa/provider-llm'
+import { createClaudeCliVisionReviewer, createStubVisionReviewer } from '@ixa/provider-llm'
 import type { VisionReviewer } from '@ixa/provider-llm'
+import { createChosenVisionReviewer } from './review/chosen-reviewer.js'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import type {
@@ -103,6 +104,8 @@ export const createReviewWiring = (
   db: DbClient,
   storage: ObjectStorage,
   logger: Logger,
+  /** いま選んでいるテキストの AI（ADR-0032）。判定するたびに読む。 */
+  textTool: () => Promise<AiToolId>,
   queues: {
     /** review が fail した Take を回す先。積むだけで可否は判定しない。 */
     readonly regeneration: RegenerationJobQueue
@@ -117,10 +120,16 @@ export const createReviewWiring = (
   const brandAssets = createBrandAssetRepository(db)
 
   /**
-   * Phase 4 はスタブのみ。実 LLM（Claude CLI）は運用設定が要るため、
-   * 配線を差し替えるだけで移れる形にしてここでは繋がない（ADR-0014 と同じ考え方）。
+   * vision 判定は「使う AI」のテキストで選ぶ（制作者 2026-10-01「自動レビューの繋ぎ」）。
+   * Claude なら画像を見る Claude のレビュー（手元に落としたフレームを Read で開く）、それ以外はお試し。
    */
-  const visionReviewers: readonly VisionReviewer[] = [createStubVisionReviewer()]
+  const visionReviewers: readonly VisionReviewer[] = [
+    createChosenVisionReviewer({
+      textTool,
+      claude: createClaudeCliVisionReviewer(),
+      stub: createStubVisionReviewer(),
+    }),
+  ]
 
   return {
     review: {

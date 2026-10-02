@@ -10,12 +10,16 @@ import type { ReviewerType, Seconds } from '@ixa/domain'
  * 形の崩れた応答を「とりあえず通す」ことをしない。
  */
 
-/** 判定に渡す画像 1 枚。実体は呼び出し側が用意し、ここでは参照だけを持つ。 */
+/** 判定に渡す画像 1 枚。実体は呼び出し側が手元に用意し、ここではファイルの場所だけを持つ。 */
 export const ReviewImage = z.object({
   /** 何を写した画像かを LLM に伝えるラベル。'frame@1.5s' / 'reference:face_front' など。 */
   label: z.string().min(1),
-  /** 都度発行した署名付き URL。**保存しない**（CLAUDE.md 規約 7）。 */
-  url: z.string().min(1),
+  /**
+   * 手元に落とした画像ファイルの絶対パス（2026-10-02）。**URL を渡さない。**
+   * 以前は署名付き URL を渡して WebFetch で読ませていたが、手元の保管庫（MinIO）は外から読めず、
+   * 署名付き URL を外の AI へ出すことにもなっていた（CLAUDE.md 規約 7）。
+   */
+  path: z.string().min(1),
 })
 export type ReviewImage = z.infer<typeof ReviewImage>
 
@@ -28,6 +32,8 @@ export const VisionReviewRequest = z.object({
   references: z.array(ReviewImage),
   /** 判定基準。Shot の description や camera 指示を文にしたもの。 */
   criteria: z.string().min(1),
+  /** 画像を置いた手元の場所。CLI のレビュアはここを作業場所にして画像を開く。 */
+  imageDir: z.string().min(1),
 })
 export type VisionReviewRequest = z.infer<typeof VisionReviewRequest>
 

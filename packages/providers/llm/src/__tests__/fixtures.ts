@@ -7,18 +7,20 @@ type RequestOverrides = {
   readonly subjects?: VisionReviewRequest['subjects']
   readonly references?: VisionReviewRequest['references']
   readonly criteria?: string
+  readonly imageDir?: string
 }
 
-/** 署名付き URL は都度発行される想定なので、既定値も「いかにも期限付き」の形にしてある。 */
+/** 画像は手元に落としたファイル（2026-10-02）。URL は渡さない。 */
+export const IMAGE_DIR = '/tmp/ixa-review-work/vision-abc'
+
 export const makeReviewRequest = (overrides: RequestOverrides = {}): VisionReviewRequest => ({
   reviewer: overrides.reviewer ?? 'identity',
-  subjects: overrides.subjects ?? [
-    { label: 'frame@1.5s', url: 'https://example.test/frames/a.png?sig=aaa&expires=1' },
-  ],
+  subjects: overrides.subjects ?? [{ label: 'frame@1.5s', path: `${IMAGE_DIR}/frame-0.jpg` }],
   references: overrides.references ?? [
-    { label: 'reference:face_front', url: 'https://example.test/refs/face.png?sig=bbb&expires=1' },
+    { label: 'reference:face_front', path: `${IMAGE_DIR}/reference-0.png` },
   ],
   criteria: overrides.criteria ?? '主役の顔が参照画像と一致していること',
+  imageDir: overrides.imageDir ?? IMAGE_DIR,
 })
 
 export const validResult: VisionReviewResult = {
@@ -38,13 +40,17 @@ export const envelope = (
 /** 常に同じ結果を返す runner。呼び出し引数を記録して検証できるようにする。 */
 export const recordingRunner = (
   outcome: CliRunResult,
-): { runner: CliRunner; calls: { command: string; args: readonly string[]; timeoutMs: number }[] } => {
-  const calls: { command: string; args: readonly string[]; timeoutMs: number }[] = []
+): {
+  runner: CliRunner
+  calls: { command: string; args: readonly string[]; timeoutMs: number; cwd?: string }[]
+} => {
+  const calls: { command: string; args: readonly string[]; timeoutMs: number; cwd?: string }[] = []
   const runner: CliRunner = (invocation) => {
     calls.push({
       command: invocation.command,
       args: [...invocation.args],
       timeoutMs: invocation.timeoutMs,
+      ...(invocation.cwd === undefined ? {} : { cwd: invocation.cwd }),
     })
     return Promise.resolve(outcome)
   }

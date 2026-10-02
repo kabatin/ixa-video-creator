@@ -1,4 +1,8 @@
-import { createMemoryStorage } from '@ixa/storage'
+import { existsSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import type { VisionReviewer } from '@ixa/provider-llm'
+import { createMemoryStorage, type ObjectStorage } from '@ixa/storage'
 import { describe, expect, it } from 'vitest'
 import { aggregateVerdict } from '@ixa/domain'
 import {
@@ -32,19 +36,54 @@ describe('buildCriteria', () => {
   })
 })
 
+/** どの鍵でも同じ小さな画像を返す保管庫（判定用のフレームを手元に落とせることを見る）。 */
+const FRAME_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xd9])
+const framesStorage = (): ObjectStorage => ({
+  ...createMemoryStorage(),
+  get: () => Promise.resolve(FRAME_BYTES),
+})
+
 describe('runVisionStage', () => {
-  const base = { shot, storage: createMemoryStorage(), logger: silentLogger }
+  const base = {
+    shot,
+    storage: framesStorage(),
+    logger: silentLogger,
+    workDir: join(tmpdir(), 'ixa-review-vision-test'),
+  }
 
-  it('ポスターフレームを署名付き URL にして渡す', async () => {
+  /**
+   * 画像は手元のファイルにして渡す（2026-10-02）。手元の保管庫（MinIO）は外の AI から読めず、
+   * 署名付き URL を外へ出すことにもなるため、URL は渡さない。
+   */
+  it('ポスターフレームを手元のファイルにして渡し、終わったら片付ける', async () => {
+    const seen: { readonly dir: string; readonly bytes: readonly number[] }[] = []
+    const reviewer: VisionReviewer = {
+      name: 'peek',
+      supports: ['identity'],
+      review: (request) => {
+        const first = request.subjects[0]
+        if (first === undefined) throw new Error('判定対象が無い')
+        seen.push({ dir: request.imageDir, bytes: [...readFileSync(first.path)] })
+        return fakeVisionReviewer().review(request)
+      },
+    }
+
+    await runVisionStage({ ...base, asset: aVideoAsset(project), reviewers: [reviewer] })
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0]?.bytes).toEqual([...FRAME_BYTES])
+    expect(existsSync(seen[0]?.dir ?? '')).toBe(false)
+  })
+
+  it('判定対象はフレームの数とラベルを保つ', async () => {
     const reviewer = fakeVisionReviewer()
-    const asset = aVideoAsset(project)
 
-    await runVisionStage({ ...base, asset, reviewers: [reviewer] })
+    await runVisionStage({ ...base, asset: aVideoAsset(project), reviewers: [reviewer] })
 
     const request = reviewer.calls()[0]
     expect(request?.subjects).toHaveLength(MAX_SUBJECT_FRAMES)
-    expect(request?.subjects[0]?.url).toContain('op=get')
     expect(request?.subjects[0]?.label).toMatch(/^frame@/)
+    expect(JSON.stringify(request)).not.toContain('op=get')
   })
 
   it('supports に挙げた種別ごとに 1 回ずつ呼ぶ', async () => {
@@ -113,6 +152,7 @@ describe('判定できるフレームが無いとき', () => {
       asset: frameless(),
       reviewers: [reviewer],
       storage: createMemoryStorage(),
+      workDir: join(tmpdir(), 'ixa-review-vision-test'),
       logger: silentLogger,
     })
 
@@ -129,6 +169,7 @@ describe('判定できるフレームが無いとき', () => {
       asset: frameless(),
       reviewers: [fakeVisionReviewer()],
       storage: createMemoryStorage(),
+      workDir: join(tmpdir(), 'ixa-review-vision-test'),
       logger: silentLogger,
     })
 
@@ -144,6 +185,7 @@ describe('判定できるフレームが無いとき', () => {
         fakeVisionReviewer({ supports: ['composition', 'prompt_adherence'] }),
       ],
       storage: createMemoryStorage(),
+      workDir: join(tmpdir(), 'ixa-review-vision-test'),
       logger: silentLogger,
     })
 
@@ -159,6 +201,7 @@ describe('判定できるフレームが無いとき', () => {
       asset: frameless(),
       reviewers: [fakeVisionReviewer()],
       storage: createMemoryStorage(),
+      workDir: join(tmpdir(), 'ixa-review-vision-test'),
       logger: silentLogger,
     })
 

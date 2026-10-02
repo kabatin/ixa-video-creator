@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { newId, TakeId as TakeIdSchema, type CreateReviewFindingInput } from '@ixa/domain'
 import type { DeterministicReviewer } from '@ixa/review'
 import { createMemoryStorage } from '@ixa/storage'
@@ -87,11 +89,12 @@ const harness = (options: HarnessOptions = {}): Harness => {
     mediaAssets: inMemoryMediaAssets(options.withAsset === false ? [] : [asset]),
     musicAnalyses: noMusicAnalysis(),
     reviews,
-    storage: createMemoryStorage(),
+    // 判定用のフレームを手元に落とせる保管庫（どの鍵でも小さな画像を返す）。
+    storage: { ...createMemoryStorage(), get: () => Promise.resolve(new Uint8Array([0xff, 0xd8])) },
     regenerationQueue: regeneration,
     deterministicReviewers: options.deterministic ?? [reviewerReturning([])],
     visionReviewers: options.visionReviewers ?? [vision],
-    workDir: '/unused-because-the-measurer-is-injected',
+    workDir: join(tmpdir(), 'ixa-review-processor-test'),
     logger: silentLogger,
     measurer: options.measurer ?? (() => Promise.resolve(measurements(take, shot))),
   }

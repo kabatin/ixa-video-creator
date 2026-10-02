@@ -1,3 +1,5 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { extname, join } from 'node:path'
 import { cameraToPromptFragment, type CreateReviewFindingInput, type MediaAsset, type Shot } from '@ixa/domain'
 import { posterFramePositions } from '@ixa/media'
 import type { ReviewImage, VisionReviewResult, VisionReviewer } from '@ixa/provider-llm'
@@ -10,9 +12,6 @@ import type { Logger } from 'pino'
  * **Stage 1 が fail したときにここを呼ばない**のは processor の責任。
  * このモジュールは呼ばれたら必ず課金の発生する処理を行う。
  */
-
-/** 署名付き URL の有効期限。DB には保存せず、ジョブごとに発行して捨てる（CLAUDE.md 規約 7）。 */
-export const SIGNED_URL_TTL_SEC = 15 * 60
 
 /**
  * 1 レビュアへ渡すフレームの上限。
@@ -27,6 +26,8 @@ export type VisionStageInput = {
   readonly reviewers: readonly VisionReviewer[]
   readonly storage: ObjectStorage
   readonly logger: Logger
+  /** 判定用のフレームを落とす場所の親。判定のたびに中に置き場を作って片付ける。 */
+  readonly workDir: string
 }
 
 export type VisionStageResult = {
@@ -78,17 +79,23 @@ const frameLabels = (asset: MediaAsset, count: number): readonly string[] => {
   )
 }
 
+/**
+ * 判定用のフレームを手元のファイルに落とす（2026-10-02）。**URL を渡さない。**
+ * 手元の保管庫（MinIO）は外の AI から読めず、署名付き URL を外へ出すことにもなる（規約 7）。
+ */
 const toImages = async (
   storage: ObjectStorage,
   asset: MediaAsset,
+  dir: string,
 ): Promise<readonly ReviewImage[]> => {
   const keys = subjectKeys(asset)
   const labels = frameLabels(asset, keys.length)
   return Promise.all(
-    keys.map(async (key, index) => ({
-      label: labels[index] ?? `frame#${index}`,
-      url: await storage.signedGetUrl(key, SIGNED_URL_TTL_SEC),
-    })),
+    keys.map(async (key, index) => {
+      const path = join(dir, `frame-${String(index)}${extname(key) === '' ? '.jpg' : extname(key)}`)
+      await writeFile(path, await storage.get(key))
+      return { label: labels[index] ?? `frame#${String(index)}`, path }
+    }),
   )
 }
 
@@ -161,8 +168,7 @@ const skippedFindings = (
  * ただし黙って空を返すのではなく、判定していないことを warn として残す。
  */
 export const runVisionStage = async (input: VisionStageInput): Promise<VisionStageResult> => {
-  const subjects = await toImages(input.storage, input.asset)
-  if (subjects.length === 0) {
+  if (subjectKeys(input.asset).length === 0) {
     input.logger.warn(
       { mediaAssetId: input.asset.id, shotId: input.shot.id },
       '判定できるフレームが無いため vision レビューを実行しません',
@@ -170,6 +176,25 @@ export const runVisionStage = async (input: VisionStageInput): Promise<VisionSta
     return { findings: skippedFindings(input.reviewers), costUsd: 0 }
   }
 
+  // 判定のたびに置き場を作り、終わったら必ず片付ける（失敗しても）。
+  await mkdir(input.workDir, { recursive: true })
+  const imageDir = await mkdtemp(join(input.workDir, 'vision-'))
+  try {
+    const subjects = await toImages(input.storage, input.asset, imageDir)
+    return await reviewAll(input, subjects, imageDir)
+  } finally {
+    await rm(imageDir, { recursive: true, force: true }).catch((error: unknown) => {
+      input.logger.warn({ err: error, imageDir }, '判定用に落としたフレームを片付けられませんでした')
+    })
+  }
+}
+
+/** 注入された vision レビュアを順に走らせる。失敗したらそこまでのコストを持って投げる。 */
+const reviewAll = async (
+  input: VisionStageInput,
+  subjects: readonly ReviewImage[],
+  imageDir: string,
+): Promise<VisionStageResult> => {
   const criteria = buildCriteria(input.shot)
   const findings: CreateReviewFindingInput[] = []
   let costUsd = 0
@@ -183,6 +208,7 @@ export const runVisionStage = async (input: VisionStageInput): Promise<VisionSta
           // 参照画像（人物 / 前 Shot の最終フレーム）の解決はアダプタ側の責務。
           references: [],
           criteria,
+          imageDir,
         })
         costUsd += outcome.costUsd
         findings.push(toFinding(reviewerType, outcome.result))
