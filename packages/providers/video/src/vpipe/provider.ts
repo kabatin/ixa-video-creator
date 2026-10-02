@@ -37,7 +37,10 @@ import {
 import { decodeVpipeJobRef, encodeVpipeJobRef } from './job-ref.js'
 import {
   hasSavedOutput,
+  IGNORE_VPIPE_WARNING,
   pruneVpipeOutputs,
+  VPIPE_OUTPUT_RETENTION_MS,
+  type VpipeWarn,
   saveOutputAtomically,
   vpipeOutputPath,
 } from './output.js'
@@ -48,7 +51,13 @@ import {
   VPIPE_STEPS,
   type VpipeJobBody,
 } from './request.js'
-import { ensureCapacity, idempotencyKeyOf, postJob } from './submit.js'
+import {
+  ensureCapacity,
+  idempotencyKeyOf,
+  postJob,
+  VPIPE_HEALTH_TIMEOUT_MS,
+  VPIPE_SERVER_ERROR_RETRY_MS,
+} from './submit.js'
 import { readSubmitNote, writeSubmitNote, type VpipeSubmitNote } from './submit-note.js'
 
 export type { VpipeFetch } from './http.js'
@@ -72,6 +81,10 @@ export const VpipeVideoProviderSettings = z.object({
     .int()
     .positive()
     .default(60 * 1000),
+  /** 投入前の空きの確認に掛ける上限。答えない vpipe で同じキューの生成を待たせない。 */
+  healthTimeoutMs: z.number().int().positive().default(VPIPE_HEALTH_TIMEOUT_MS),
+  /** サーバのエラー（5xx）で投げ直すまでの間（回を重ねるごとに伸ばす）。 */
+  serverErrorRetryDelayMs: z.number().int().nonnegative().default(VPIPE_SERVER_ERROR_RETRY_MS),
 })
 
 export type VpipeVideoProviderOptions = {
@@ -79,8 +92,12 @@ export type VpipeVideoProviderOptions = {
   token?: string
   outputDir: string
   timeoutMs?: number
+  healthTimeoutMs?: number
+  serverErrorRetryDelayMs?: number
   /** テストから差し替える口。既定はグローバルの `fetch`。 */
   fetch?: VpipeFetch
+  /** 生成は止めないが黙って捨てない失敗（掃除・控え）を知らせる口。配線は logger の warn を渡す。 */
+  warn?: VpipeWarn
 }
 
 const defaultFetch: VpipeFetch = (url, init) => fetch(url, init)
@@ -131,8 +148,13 @@ export const createVpipeVideoProvider = (options: VpipeVideoProviderOptions): Vi
     ...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
     ...(options.token === undefined ? {} : { token: options.token }),
     ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+    ...(options.healthTimeoutMs === undefined ? {} : { healthTimeoutMs: options.healthTimeoutMs }),
+    ...(options.serverErrorRetryDelayMs === undefined
+      ? {}
+      : { serverErrorRetryDelayMs: options.serverErrorRetryDelayMs }),
   })
   const { outputDir, timeoutMs } = settings
+  const warn = options.warn ?? IGNORE_VPIPE_WARNING
 
   const http: VpipeHttp = {
     fetch: options.fetch ?? defaultFetch,
@@ -148,7 +170,7 @@ export const createVpipeVideoProvider = (options: VpipeVideoProviderOptions): Vi
     const idempotencyKey = idempotencyKeyOf(request.idempotencyKey)
 
     // 古い出力の掃除。**投げない**ので、掃除の失敗で投入を止めることはない。
-    await pruneVpipeOutputs(outputDir)
+    await pruneVpipeOutputs(outputDir, Date.now(), VPIPE_OUTPUT_RETENTION_MS, warn)
 
     const frames = framesForDuration(
       quantizeDuration(request.spec.durationSec, model.capabilities.durations),
@@ -163,7 +185,7 @@ export const createVpipeVideoProvider = (options: VpipeVideoProviderOptions): Vi
     const { chosen, ignored } = selectStartReference(request.spec.references)
 
     // 満杯なら、開始画像を取り寄せる前に断る（`ProviderBusyError`）。
-    await ensureCapacity(http)
+    await ensureCapacity(http, settings.healthTimeoutMs)
 
     const startImage =
       chosen === null
@@ -174,7 +196,7 @@ export const createVpipeVideoProvider = (options: VpipeVideoProviderOptions): Vi
             timeoutMs,
           )
     const body: VpipeJobBody = { ...bodyWithoutImage, start_image: startImage }
-    const jobId = await postJob(http, body, idempotencyKey)
+    const jobId = await postJob(http, body, idempotencyKey, settings.serverErrorRetryDelayMs)
 
     const ref = encodeVpipeJobRef(jobId)
     const note: VpipeSubmitNote = {
@@ -191,7 +213,7 @@ export const createVpipeVideoProvider = (options: VpipeVideoProviderOptions): Vi
         mediaAssetId: reference.mediaAssetId,
       })),
     }
-    await writeSubmitNote(outputDir, ref, note)
+    await writeSubmitNote(outputDir, ref, note, warn)
 
     return { providerId: VPIPE_PROVIDER_ID, modelId: model.id, ref, submittedAt: new Date() }
   }

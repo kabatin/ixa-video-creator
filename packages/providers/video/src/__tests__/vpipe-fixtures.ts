@@ -161,6 +161,8 @@ export const makeVpipeProvider = (
     baseUrl: BASE_URL,
     outputDir,
     fetch,
+    // サーバのエラーで投げ直すまで待たない（テストを遅くしない）。
+    serverErrorRetryDelayMs: 0,
     ...(token === undefined ? {} : { token }),
   })
 
@@ -212,6 +214,16 @@ export const connectionRefused = (): Promise<Response> =>
     new TypeError('fetch failed', {
       cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8765'), {
         code: 'ECONNREFUSED',
+      }),
+    }),
+  )
+
+/** 接続が時間内に張れなかった形（undici の `ConnectTimeoutError`）。何も送っていない。 */
+export const connectTimeout = (): Promise<Response> =>
+  Promise.reject(
+    new TypeError('fetch failed', {
+      cause: Object.assign(new Error('Connect Timeout Error (attempted address: 192.168.0.10:8765)'), {
+        code: 'UND_ERR_CONNECT_TIMEOUT',
       }),
     }),
   )

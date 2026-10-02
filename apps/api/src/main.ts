@@ -272,6 +272,9 @@ export const main = (): void => {
               baseUrl: config.providers.vpipeApiUrl,
               ...(config.providers.vpipeApiToken === null ? {} : { token: config.providers.vpipeApiToken }),
               outputDir: join(process.env.STUB_OUTPUT_DIR ?? '/tmp/ixa-stub-output', 'vpipe'),
+              warn: (detail, message) => {
+                logger.warn(detail, message)
+              },
             }),
           ]
         : []),

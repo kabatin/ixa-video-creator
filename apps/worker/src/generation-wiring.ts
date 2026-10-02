@@ -175,6 +175,10 @@ export const createGenerationWiring = (
             baseUrl: config.providers.vpipeApiUrl,
             ...(config.providers.vpipeApiToken === null ? {} : { token: config.providers.vpipeApiToken }),
             outputDir: join(stubOutputDir, 'vpipe'),
+            // 掃除・控えの失敗は生成を止めないが、黙って捨てない（PR #4 レビュー #5）。
+            warn: (detail, message) => {
+              logger.warn(detail, message)
+            },
           }),
         ]
       : []),

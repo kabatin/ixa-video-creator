@@ -53,6 +53,22 @@ const busy = (message: string, retryAfterMs: number | null, cause?: unknown): Pr
 
 const FULL_MESSAGE = `${VPIPE_LABEL}が混んでいます（1 本ずつ作っています）`
 
+/**
+ * 空きの確認に掛ける上限（PR #4 レビュー #3）。答えない vpipe に 1 回の HTTP の上限（60 秒）まで付き合うと、
+ * 同じキューの fal やスタブの生成まで分単位で待たされる。確認は節約のためでしかないので短く切る。
+ */
+export const VPIPE_HEALTH_TIMEOUT_MS = 5_000
+
+/**
+ * サーバのエラー（5xx）で投げ直す回数と間（PR #4 レビュー #1）。**満杯ではない**ので待ち行列には回さない。
+ * 続けば向こうの不調なので、サーバの理由を付けて失敗にする（12 時間回して「順番が来なかった」と言わない）。
+ */
+export const VPIPE_SERVER_ERROR_ATTEMPTS = 3
+export const VPIPE_SERVER_ERROR_RETRY_MS = 2_000
+
+const sleep = (ms: number): Promise<void> =>
+  ms <= 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms))
+
 /** 走っている 1 本と待ちの枠がすべて埋まっているか。 */
 export const isFull = (health: VpipeHealth): boolean =>
   health.running + health.waiting >= 1 + health.max_waiting
@@ -66,8 +82,12 @@ export const isFull = (health: VpipeHealth): boolean =>
  * だから確認の応答が読めないときは確かめずに進む。ただしサーバが止まっている（接続できない）なら
  * そのまま投げる（押した人にすぐ知らせる）。
  */
-export const ensureCapacity = async (http: VpipeHttp): Promise<void> => {
-  const response = await vpipeRequest(http, 'GET', '/v1/health').catch((error: unknown) => {
+export const ensureCapacity = async (
+  http: VpipeHttp,
+  timeoutMs: number = VPIPE_HEALTH_TIMEOUT_MS,
+): Promise<void> => {
+  const quick: VpipeHttp = { ...http, timeoutMs: Math.min(http.timeoutMs, timeoutMs) }
+  const response = await vpipeRequest(quick, 'GET', '/v1/health').catch((error: unknown) => {
     // 応答が返らなかっただけなら、何も積んでいないので後で試せばよい。
     if (error instanceof VpipeRequestError && error.code === VPIPE_NO_RESPONSE) {
       throw busy(error.message, null, error)
@@ -84,11 +104,36 @@ export const ensureCapacity = async (http: VpipeHttp): Promise<void> => {
  *
  * - 202（新しいジョブ）と 200（同じ冪等キーの既存ジョブ）は同じ形で受ける
  * - 429（満杯）は `ProviderBusyError`。何も積まれていない
- * - **冪等キーがあるときだけ**、送ったのに応答が失われた・やり直せる失敗（5xx）も `ProviderBusyError` にする。
- *   サーバが受け付けたかは分からないが、同じキーで投げ直せば同じジョブが返る（二重に生成しない）。
- *   キーが無ければ投げ直しで二重に生成しうるので、そのまま失敗として投げる
+ * - **冪等キーがあるときだけ**、送ったのに応答が失われた・同じキーの投入がまだ処理中も `ProviderBusyError` にする。
+ *   サーバが受け付けたかは分からないが、同じキーで投げ直せば同じジョブが返る（二重に生成しない）
+ * - **やり直せるサーバのエラー（5xx）は満杯ではない。** キーがあればその場で数回投げ直し、続けば失敗にする
+ * - キーが無ければ投げ直しで二重に生成しうるので、どれもそのまま失敗として投げる
  */
 export const postJob = async (
+  http: VpipeHttp,
+  body: VpipeJobBody,
+  idempotencyKey: string | null,
+  retryDelayMs: number = VPIPE_SERVER_ERROR_RETRY_MS,
+): Promise<VpipeJobId> => {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await postJobOnce(http, body, idempotencyKey)
+    } catch (error) {
+      const again =
+        idempotencyKey !== null &&
+        attempt < VPIPE_SERVER_ERROR_ATTEMPTS &&
+        error instanceof VpipeRequestError &&
+        error.retryable &&
+        error.status !== null &&
+        error.status >= 500
+      if (!again) throw error
+      await sleep(retryDelayMs * attempt)
+    }
+  }
+}
+
+/** 1 回だけ投げる。満杯・処理中・応答なしは `ProviderBusyError`、それ以外の失敗はそのまま投げる。 */
+const postJobOnce = async (
   http: VpipeHttp,
   body: VpipeJobBody,
   idempotencyKey: string | null,
@@ -122,10 +167,10 @@ export const postJob = async (
   }
   if (!response.ok) {
     const error = vpipeErrorFor(response.status, response.body, '投入')
-    // サーバが「やり直せる」と言う失敗は、キーがあれば同じ投入を後で投げ直す。
-    // 5xx と、409 idempotency_in_flight（同じキーの投入がまだ処理中）がこれに当たる。
+    // 同じキーの投入がまだ処理中（409 idempotency_in_flight）は、キーがあれば同じ投入を後で投げ直す。
     // 409 idempotency_conflict（同じキーで中身が違う）はやり直せないので、ここを通らず終端になる。
-    if (idempotencyKey !== null && error.retryable) {
+    // 5xx は満杯ではない。`postJob` がその場で数回だけ投げ直す。
+    if (idempotencyKey !== null && error.retryable && response.status < 500) {
       throw busy(error.message, retryAfterMsFrom(response.headers), error)
     }
     throw error

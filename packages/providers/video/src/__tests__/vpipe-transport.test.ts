@@ -127,8 +127,8 @@ describe('届いたかどうかの見分け', () => {
   const refused = (code: string) =>
     new TypeError('fetch failed', { cause: Object.assign(new Error(code), { code }) })
 
-  it('接続拒否・名前が引けない・経路が無いは「届いていない」', () => {
-    for (const code of ['ECONNREFUSED', 'ENOTFOUND', 'EHOSTUNREACH']) {
+  it('接続拒否・名前が引けない・経路が無い・接続の時間切れは「届いていない」', () => {
+    for (const code of ['ECONNREFUSED', 'ENOTFOUND', 'EHOSTUNREACH', 'UND_ERR_CONNECT_TIMEOUT']) {
       expect(wasNeverSent(refused(code))).toBe(true)
     }
   })

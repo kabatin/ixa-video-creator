@@ -1,4 +1,4 @@
-import { createPhase1EmptyContextSource } from '@ixa/domain'
+import { createPhase1EmptyContextSource, ModelId } from '@ixa/domain'
 import {
   createProviderRegistry,
   type ProviderJobStatus,
@@ -6,7 +6,11 @@ import {
 } from '@ixa/provider-core'
 import { createMemoryStorage } from '@ixa/storage'
 import { describe, expect, it } from 'vitest'
-import { processGenerationJob, type GenerationProcessorDeps } from '../processor.js'
+import {
+  MAX_POLL_ATTEMPTS,
+  processGenerationJob,
+  type GenerationProcessorDeps,
+} from '../processor.js'
 import { rebuildSpec } from '../spec.js'
 import {
   aProject,
@@ -110,7 +114,11 @@ const build = async (pollStatus: ProviderJobStatus) => {
   }
   const run = () => processGenerationJob(deps, { generationJobId: job.id })
   const current = async () => (await jobs.findById(job.id))?.status
-  return { state, stopped, run, current, takes, shots, scheduler, shot }
+  /** 次の問い合わせで上限を超える。 */
+  const exhaustPolls = () => jobs.update(job.id, { attempt: MAX_POLL_ATTEMPTS })
+  /** 登録の無いモデルを指す（送る前に落ちる）。 */
+  const breakModel = () => jobs.update(job.id, { resolvedModel: ModelId.parse('test/unknown') })
+  return { state, stopped, run, current, takes, shots, scheduler, shot, exhaustPolls, breakModel }
 }
 
 describe('生成をやめたあとの worker', () => {
@@ -163,3 +171,31 @@ describe('生成をやめたあとの worker', () => {
     expect(await f.takes.findByShot(f.shot.id)).toHaveLength(1)
   })
 })
+
+/**
+ * 失敗で終えたジョブは、生成先にも止めてと頼む（PR #4 レビュー #4）。
+ * 問い合わせの上限で諦めても、vpipe は作り続けて唯一の GPU を占める。
+ */
+describe('失敗で終えたジョブ', () => {
+  it('問い合わせの上限で諦めたら、生成先にも止めてと頼む', async () => {
+    const f = await build({ state: 'pending', progress: null })
+    await f.run() // 送る
+    await f.exhaustPolls()
+
+    const outcome = await f.run()
+
+    expect(outcome).toMatchObject({ state: 'failed', code: 'poll_timeout' })
+    expect(f.stopped).toEqual(['provider-job-1'])
+  })
+
+  it('生成先へ送る前の失敗では、止めてと頼む相手が無い', async () => {
+    const f = await build(SUCCEEDED)
+    await f.breakModel()
+
+    const outcome = await f.run()
+
+    expect(outcome.state).toBe('failed')
+    expect(f.stopped).toEqual([])
+  })
+})
+

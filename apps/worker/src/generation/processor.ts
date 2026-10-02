@@ -37,7 +37,7 @@ import { pollDelayMs, pollPolicyForJob, pollPolicyOf } from './poll-policy.js'
 import { checkLineage, lineageFailureOf, lineageFieldsOf, type LineageCheck } from './lineage.js'
 import { shotStatusAfterFailure } from './shot-status-after-failure.js'
 import { rebuildSpec } from './spec.js'
-import { cancelledSince, stopAtProvider } from './stop.js'
+import { cancelledSince, stopAbandonedJob, stopAtProvider } from './stop.js'
 
 /**
  * generation キューのジョブ処理（docs/ARCHITECTURE.md §11 / §20）。
@@ -261,9 +261,16 @@ const waitForProviderSlot = async (
 
   const delayMs = submitBusyDelayMs(busy.retryAfterMs)
   await deps.scheduler.reschedule(ctx.data, delayMs)
-  deps.logger.info(
-    { jobId: job.id, providerId: busy.providerId, delayMs, queuedAt: job.queuedAt.toISOString() },
-    'Provider が満杯のため、投入を待って予約し直しました',
+  // 断った理由（満杯・応答なし・同じ投入が処理中）を残す。捨てると、諦めたときに何が起きていたか分からない。
+  deps.logger.warn(
+    {
+      jobId: job.id,
+      providerId: busy.providerId,
+      delayMs,
+      queuedAt: job.queuedAt.toISOString(),
+      err: busy,
+    },
+    `生成先が投入を断ったため、待って予約し直しました: ${busy.message}`,
   )
   return { state: 'busy', delayMs }
 }
@@ -494,6 +501,8 @@ export const processGenerationJob = async (
       error: { code: failure.code, message, retryable: failure.retryable },
     })
     deps.logger.error({ jobId: job.id, code: failure.code, err: error }, '生成ジョブが失敗しました')
+    // 生成先で作り続けて GPU を占めないよう、止めてと頼む（届かなくても失敗の記録は変えない）。
+    await stopAbandonedJob(deps, job)
 
     if (loadedShot === null) {
       // 流さなかったことを残す。黙って省くと、届かない理由がどこにも無くなる（lessons L-015）。

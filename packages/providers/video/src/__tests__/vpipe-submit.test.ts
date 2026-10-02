@@ -1,12 +1,15 @@
 import type { MediaAssetId, ShotGenerationSpec } from '@ixa/domain'
 import { ProviderBusyError, ProviderError, type VideoGenerationRequest } from '@ixa/provider-core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { createVpipeVideoProvider } from '../vpipe/provider.js'
 import { VPIPE_FULL_RETRY_AFTER_MS } from '../vpipe/submit.js'
 import { createTempDir, makeSpec, removeTempDir } from './fixtures.js'
 import {
+  BASE_URL,
   bytesResponse,
   connectionRefused,
   connectionReset,
+  connectTimeout,
   createFetch,
   errorEnvelope,
   healthBody,
@@ -16,6 +19,7 @@ import {
   makeVpipeProvider,
   serverRoutes,
   SIGNED_URL_PREFIX,
+  stallingResponse,
   submitCallOf,
   SUBMIT_BODY,
   SUBMIT_URL,
@@ -139,7 +143,6 @@ describe('冪等キー（応答が失われた投入を二重に生成しない�
   const ambiguous: readonly { name: string; submit: () => Response | Promise<Response> }[] = [
     { name: '送ったあとで接続が切れた', submit: () => connectionReset() },
     { name: '応答の本文が途中で切れた（サーバの再起動）', submit: () => truncatedResponse(202) },
-    { name: '5xx', submit: () => jsonResponse(500, errorEnvelope('internal', true)) },
   ]
   for (const { name, submit } of ambiguous) {
     it(`${name}: キーがあれば失敗と決めつけず ProviderBusyError（同じキーで投げ直す）`, async () => {
@@ -184,7 +187,7 @@ describe('冪等キー（応答が失われた投入を二重に生成しない�
     expect(withoutKey.result).toMatchObject({ code: 'vpipe_idempotency_in_flight' })
   })
 
-  it('5xx でもサーバがやり直せないと言うなら終端にする', async () => {
+  it('5xx でもサーバがやり直せないと言うなら、投げ直さず終端にする', async () => {
     const { result } = await submitWith(
       serverRoutes({ submit: () => jsonResponse(500, errorEnvelope('internal', false)) }),
     )
@@ -252,3 +255,91 @@ describe('投入の URL', () => {
     expect(submitCallOf(calls)?.url).toBe(SUBMIT_URL)
   })
 })
+
+/**
+ * サーバのエラー（5xx）は満杯ではない（PR #4 レビュー #1）。
+ * 以前は満杯と同じ扱いで、60 秒ごとに 27MB を送り直しながら最大 12 時間回り、
+ * 最後に「順番が回ってこなかった」と誤った理由を出していた。
+ */
+describe('サーバのエラー（5xx）', () => {
+  const failing = (count: number) => {
+    let seen = 0
+    return serverRoutes({
+      submit: () => {
+        seen += 1
+        return seen <= count
+          ? jsonResponse(500, errorEnvelope('internal', true, 'GPU の初期化に失敗しました'))
+          : jsonResponse(202, SUBMIT_BODY)
+      },
+    })
+  }
+
+  it('鍵があれば 3 回まで投げ直し、続けばサーバの理由で失敗にする（満杯として待たない）', async () => {
+    const { calls, result } = await submitWith(failing(Number.POSITIVE_INFINITY))
+    expect(result).toBeInstanceOf(ProviderError)
+    expect(result).not.toBeInstanceOf(ProviderBusyError)
+    expect((result as ProviderError).message).toContain('GPU の初期化に失敗しました')
+    expect(calls.filter((call) => call.url === SUBMIT_URL)).toHaveLength(3)
+  })
+
+  it('1 回だけなら、すぐ投げ直して通る', async () => {
+    const { calls, result } = await submitWith(failing(1))
+    expect(result).toMatchObject({ ref: JOB_ID })
+    expect(calls.filter((call) => call.url === SUBMIT_URL)).toHaveLength(2)
+  })
+
+  it('鍵が無ければ投げ直さない（二重に生成しうる）', async () => {
+    const { calls, result } = await submitWith(failing(Number.POSITIVE_INFINITY), keyed(null))
+    expect(result).not.toBeInstanceOf(ProviderBusyError)
+    expect(calls.filter((call) => call.url === SUBMIT_URL)).toHaveLength(1)
+  })
+})
+
+/** 別の Mac が眠っているとき（PR #4 レビュー #2・#3）。 */
+describe('vpipe へ届かない・答えない', () => {
+  it('接続の時間切れは「届いていない」。待たずにすぐ失敗にする', async () => {
+    const { result } = await submitWith(
+      serverRoutes({
+        health: () => connectTimeout(),
+        submit: () => jsonResponse(202, SUBMIT_BODY),
+      }),
+    )
+    expect(result).toMatchObject({ code: 'vpipe_unreachable' })
+    expect(result).not.toBeInstanceOf(ProviderBusyError)
+  })
+
+  it('空きの確認は短い時間で切り上げる（止まった vpipe で他の生成を待たせない）', async () => {
+    const { fetch } = createFetch(
+      serverRoutes({
+        health: (_url, init) => stallingResponse(init, 'application/json'),
+        submit: () => jsonResponse(202, SUBMIT_BODY),
+      }),
+    )
+    const provider = createVpipeVideoProvider({
+      baseUrl: BASE_URL,
+      outputDir,
+      fetch,
+      // 1 回の HTTP の上限は長いまま。確認だけが短く切れることを見る。
+      timeoutMs: 60_000,
+      healthTimeoutMs: 20,
+    })
+    const result = await provider.submit(keyed()).catch((error: unknown) => error)
+    expect(result).toBeInstanceOf(ProviderBusyError)
+  })
+})
+
+/** PR #4 レビュー #6。合言葉が S3 / MinIO へ漏れないこと。 */
+describe('合言葉（Bearer）', () => {
+  it('vpipe にだけ送り、開始画像（署名付き URL）の取得には載せない', async () => {
+    const { calls, fetch } = createFetch(
+      serverRoutes({ submit: () => jsonResponse(202, SUBMIT_BODY) }),
+    )
+    await makeVpipeProvider(fetch, outputDir, 'vpipe-secret').submit(keyed())
+
+    const image = calls.find((call) => call.url.startsWith(SIGNED_URL_PREFIX))
+    expect(image).toBeDefined()
+    expect(JSON.stringify(image?.headers ?? {})).not.toContain('vpipe-secret')
+    expect(submitCallOf(calls)?.headers['Authorization']).toBe('Bearer vpipe-secret')
+  })
+})
+

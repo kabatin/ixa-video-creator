@@ -12,6 +12,18 @@ import { pumpWithLimit } from './stream.js'
  * （`ProviderOutput` を型で分けている理由そのもの）。
  */
 
+/**
+ * 生成は止めないが黙って捨てない失敗を知らせる口（PR #4 レビュー #5、規約 5）。pino の `warn` と同じ形。
+ * Provider は logger を持たないので、配線が渡す。
+ */
+export type VpipeWarn = (detail: Readonly<Record<string, unknown>>, message: string) => void
+
+/** 配線が口を渡さないとき（テストなど）。 */
+export const IGNORE_VPIPE_WARNING: VpipeWarn = () => undefined
+
+const isMissing = (error: unknown): boolean =>
+  typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT'
+
 /** 書きかけのファイルを置く場所。最終の名前と同じファイルシステムに置く（rename を原子的にするため）。 */
 export const VPIPE_TMP_DIR = '.tmp'
 /** 投入時の記録（`submit-note.ts`）を置く場所。 */
@@ -97,8 +109,12 @@ export const saveOutputAtomically = async (
 /** 消してよいのは自分が作った形のファイルだけ。同じ場所に置かれた別のものに触れない。 */
 const OWN_FILE = /\.(?:mp4|part|json)$/
 
-const pruneDir = async (dir: string, cutoffMs: number): Promise<number> => {
-  const names = await readdir(dir).catch(() => [] as string[])
+const pruneDir = async (dir: string, cutoffMs: number, warn: VpipeWarn): Promise<number> => {
+  const names = await readdir(dir).catch((error: unknown) => {
+    // まだ作っていない置き場は失敗ではない。
+    if (!isMissing(error)) warn({ err: error, dir }, 'vpipe の出力の置き場を読めず、古いファイルを消せませんでした')
+    return [] as string[]
+  })
   const removed = await Promise.all(
     names
       .filter((name) => OWN_FILE.test(name))
@@ -109,8 +125,11 @@ const pruneDir = async (dir: string, cutoffMs: number): Promise<number> => {
           if (!info.isFile() || info.mtimeMs >= cutoffMs) return 0
           await unlink(path)
           return 1
-        } catch {
-          // 消せなかったものは次の回に回す。掃除のせいで投入を止めない。
+        } catch (error) {
+          // 消せなかったものは次の回に回す。掃除のせいで投入を止めない。ほかの回が先に消したなら失敗ではない。
+          if (!isMissing(error)) {
+            warn({ err: error, file: name }, 'vpipe の古い出力を消せませんでした。続くとディスクが増え続けます')
+          }
           return 0
         }
       }),
@@ -126,11 +145,12 @@ export const pruneVpipeOutputs = async (
   outputDir: string,
   now: number = Date.now(),
   retentionMs: number = VPIPE_OUTPUT_RETENTION_MS,
+  warn: VpipeWarn = IGNORE_VPIPE_WARNING,
 ): Promise<number> => {
   const cutoffMs = now - retentionMs
   const counts = await Promise.all(
     [outputDir, join(outputDir, VPIPE_TMP_DIR), join(outputDir, VPIPE_NOTES_DIR)].map((dir) =>
-      pruneDir(dir, cutoffMs).catch(() => 0),
+      pruneDir(dir, cutoffMs, warn),
     ),
   )
   return counts.reduce((sum, n) => sum + n, 0)

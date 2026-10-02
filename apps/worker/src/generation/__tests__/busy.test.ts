@@ -27,6 +27,7 @@ import { rebuildSpec } from '../spec.js'
 import {
   aProject,
   aShot,
+  createCapturingLogger,
   createRecordingEvents,
   createRecordingMediaQueue,
   createRecordingScheduler,
@@ -149,6 +150,16 @@ describe('processGenerationJob — Provider が満杯のとき', () => {
     expect(f.scheduler.scheduled()).toEqual([
       { data: { generationJobId: f.job.id }, delayMs: 45_000 },
     ])
+  })
+
+  /** PR #4 レビュー #1。待つ理由（満杯・応答なし・処理中）を捨てると、12 時間後に何が起きていたか分からない。 */
+  it('待つときに、生成先が断った理由を記録する', async () => {
+    const f = await buildBusyFixture(['busy'])
+    const capture = createCapturingLogger()
+
+    await processGenerationJob({ ...f.deps, logger: capture.logger }, { generationJobId: f.job.id })
+
+    expect(JSON.stringify(capture.lines())).toContain('満杯です')
   })
 
   it('待ち時間が示されなければ 60 秒後に試す', async () => {

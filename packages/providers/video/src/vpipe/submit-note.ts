@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ReferenceRole } from '@ixa/domain'
 import { z } from 'zod'
-import { VPIPE_NOTES_DIR } from './output.js'
+import { VPIPE_NOTES_DIR, type VpipeWarn } from './output.js'
 
 /**
  * 投入したときにしか分からないことの控え（ADR-0031）。
@@ -31,18 +31,23 @@ const notePath = (outputDir: string, jobId: string): string =>
 /**
  * 控えを書く。**投げない。** ここに来た時点でサーバは生成を受け付けている。
  * 控えが書けないことを理由に投入を失敗にすると、サーバで走っている生成が宙に浮く。
- * 書けなかったら false を返し、完了時の raw では「分からない（null）」になる。
+ * 書けなかったら記録して false を返し、完了時の raw では「分からない（null）」になる。
  */
 export const writeSubmitNote = async (
   outputDir: string,
   jobId: string,
   note: VpipeSubmitNote,
+  warn: VpipeWarn,
 ): Promise<boolean> => {
   try {
     await mkdir(join(outputDir, VPIPE_NOTES_DIR), { recursive: true })
     await writeFile(notePath(outputDir, jobId), JSON.stringify(note), 'utf8')
     return true
-  } catch {
+  } catch (error) {
+    warn(
+      { err: error, jobId },
+      'vpipe の投入の控えを書けませんでした。Take の記録で、使った開始画像が分からなくなります',
+    )
     return false
   }
 }

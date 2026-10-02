@@ -124,6 +124,8 @@ export const VPIPE_UNREACHABLE = 'vpipe_unreachable'
 export const VPIPE_NO_RESPONSE = 'vpipe_no_response'
 
 const NOT_SENT_CODES: ReadonlySet<string> = new Set([
+  // 接続が時間内に張れなかった（別の Mac が眠っている・LAN の向こうで落ちている）。張れていないので何も送っていない。
+  'UND_ERR_CONNECT_TIMEOUT',
   'ECONNREFUSED',
   'ENOTFOUND',
   'EAI_AGAIN',

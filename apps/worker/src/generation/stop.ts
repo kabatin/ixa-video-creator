@@ -1,5 +1,5 @@
 import type { GenerationJobRepository } from '@ixa/db'
-import type { GenerationJobId } from '@ixa/domain'
+import type { GenerationJob, GenerationJobId } from '@ixa/domain'
 import type { ProviderJobHandle, ProviderRegistry } from '@ixa/provider-core'
 import type { Logger } from 'pino'
 
@@ -33,4 +33,42 @@ export const stopAtProvider = async (
       '生成先へ止めてと頼めませんでした。生成先で動き続けているかもしれません',
     )
   }
+}
+
+/**
+ * 失敗で終えたジョブを、生成先でも止める（PR #4 レビュー #4）。問い合わせの上限で諦めても、
+ * vpipe は作り続けて唯一の GPU を占める。生成先へ送っていなければ頼む相手が無い。
+ *
+ * **応答が失われた投入**（送ったが ID が返らなかった）のあとで諦めたときは、生成先の ID が分からず止められない
+ * （vpipe-api に冪等キーで引く口が無い）。
+ */
+export const stopAbandonedJob = async (
+  deps: { readonly registry: ProviderRegistry; readonly logger: Logger },
+  job: GenerationJob,
+): Promise<void> => {
+  if (job.providerJobRef === null || job.resolvedModel === null) return
+  const model = (() => {
+    try {
+      return job.resolvedModel === null ? null : deps.registry.findModel(job.resolvedModel)
+    } catch {
+      return null
+    }
+  })()
+  if (model === null) {
+    deps.logger.warn(
+      { jobId: job.id, modelId: job.resolvedModel },
+      '登録の無いモデルなので、生成先へ止めてと頼めませんでした',
+    )
+    return
+  }
+  await stopAtProvider(
+    deps,
+    {
+      providerId: model.providerId,
+      modelId: model.id,
+      ref: job.providerJobRef,
+      submittedAt: job.startedAt ?? job.queuedAt,
+    },
+    job.id,
+  )
 }
