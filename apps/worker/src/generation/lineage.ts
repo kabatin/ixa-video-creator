@@ -93,7 +93,8 @@ export const checkLineage = async (
   if (regenerationReason === null) return { state: 'reason_missing', parentTakeId }
 
   const lineage: TakeLineage = { parentTakeId, regenerationReason }
-  const parent = await takes.findById(parentTakeId)
+  // 見えなくした親（「Take を消す」）も記録としては辿れる。
+  const parent = await takes.findById(parentTakeId, { includeHidden: true })
   if (parent === null) return { state: 'parent_missing', lineage }
   if (parent.shotId !== shotId) {
     return { state: 'shot_mismatch', lineage, parentShotId: parent.shotId }

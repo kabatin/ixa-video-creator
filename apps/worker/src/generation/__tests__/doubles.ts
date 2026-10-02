@@ -270,6 +270,8 @@ export type InMemoryTakes = TakeRepository & { readonly snapshot: () => readonly
 
 export const inMemoryTakes = (): InMemoryTakes => {
   let store: readonly Take[] = []
+  /** 見えなくした Take（「Take を消す」）。 */
+  let hidden: ReadonlySet<string> = new Set()
   return {
     snapshot: () => store,
     // 偽物なので projectId は見ず全 Take を合算する。テストは 1 プロジェクトしか作らない。
@@ -278,9 +280,23 @@ export const inMemoryTakes = (): InMemoryTakes => {
       Promise.resolve(
         store.filter((t) => t.shotId === shotId).reduce((sum, t) => sum + t.costUsd, 0),
       ),
-    findById: (id) => Promise.resolve(store.find((t) => t.id === id) ?? null),
-    findByShot: (shotId) =>
-      Promise.resolve(store.filter((t) => t.shotId === shotId).sort((a, b) => a.index - b.index)),
+    findById: (id, visibility) =>
+      Promise.resolve(
+        store.find((t) => t.id === id && (visibility?.includeHidden === true || !hidden.has(t.id))) ??
+          null,
+      ),
+    findByShot: (shotId, visibility) =>
+      Promise.resolve(
+        store
+          .filter(
+            (t) => t.shotId === shotId && (visibility?.includeHidden === true || !hidden.has(t.id)),
+          )
+          .sort((a, b) => a.index - b.index),
+      ),
+    hide: (takeId) => {
+      hidden = new Set([...hidden, takeId])
+      return Promise.resolve()
+    },
     // 偽物なので projectId は見ず、全 Take を返す。
     // 本物は論理削除済み Shot の Take も含めるので、ここでも取りこぼしを作らない。
     findByProject: () => Promise.resolve([...store].sort((a, b) => (a.id < b.id ? -1 : 1))),

@@ -79,7 +79,8 @@ export type RegenerationOutcome =
 const countAttempts = async (
   deps: RegenerationProcessorDeps,
   shotId: ShotId,
-): Promise<number> => (await deps.takes.findByShot(shotId)).length
+  // 見えなくした Take も数える（お金を使った回数。消すたびに上限が戻ると止まらなくなる）。
+): Promise<number> => (await deps.takes.findByShot(shotId, { includeHidden: true })).length
 
 const loadState = async (
   deps: RegenerationProcessorDeps,

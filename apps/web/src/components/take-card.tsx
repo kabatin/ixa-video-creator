@@ -7,6 +7,8 @@ import { describeError } from '@/lib/api-error'
 import { reviewStatusClassName, reviewStatusLabel } from '@/lib/shot-display'
 import { takeCostLabel, takeModelLabel, takeTimeLabel } from '@/lib/take-display'
 import type { ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
+import type { ContextMenuItem } from '@/components/workbench/ui/context-menu'
+import { MenuButton } from '@/components/workbench/ui/more-menu'
 
 export type TakeCardProps = {
   readonly take: Take
@@ -15,6 +17,8 @@ export type TakeCardProps = {
   readonly onSelect: (takeId: TakeId) => void
   /** 右クリック・長押し・Shift+F10 でこの Take のメニューを開く口。 */
   readonly contextMenu?: ContextMenuTriggerProps
+  /** 「…」で開くメニューの行（右クリックと同じ中身）。渡さなければ「…」を出さない。 */
+  readonly menuItems?: () => readonly ContextMenuItem[]
 }
 
 type UrlState =
@@ -84,7 +88,14 @@ const TakePreview = ({ state }: { readonly state: UrlState }) => {
   )
 }
 
-export const TakeCard = ({ take, selected, busy, onSelect, contextMenu }: TakeCardProps) => {
+export const TakeCard = ({
+  take,
+  selected,
+  busy,
+  onSelect,
+  contextMenu,
+  menuItems,
+}: TakeCardProps) => {
   const urlState = useSignedUrl(take.mediaAssetId)
 
   return (
@@ -97,11 +108,16 @@ export const TakeCard = ({ take, selected, busy, onSelect, contextMenu }: TakeCa
     >
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-text">Take {take.index}</h3>
-        {selected && (
-          <span className="rounded-full bg-ok px-2.5 py-0.5 text-xs font-semibold text-bg">
-            採用中
-          </span>
-        )}
+        <span className="flex items-center gap-1">
+          {selected && (
+            <span className="rounded-full bg-ok px-2.5 py-0.5 text-xs font-semibold text-bg">
+              採用中
+            </span>
+          )}
+          {menuItems !== undefined && (
+            <MenuButton label={`Take ${String(take.index)} のその他の操作`} items={menuItems} />
+          )}
+        </span>
       </div>
 
       <TakePreview state={urlState} />

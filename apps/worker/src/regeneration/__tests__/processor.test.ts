@@ -13,6 +13,7 @@ import {
   createInMemoryShotRepository,
   createInMemoryTakeRepository,
   type InMemoryShotRepository,
+  type InMemoryTakeRepository,
 } from '@ixa/generation/testing'
 import { describe, expect, it } from 'vitest'
 import {
@@ -51,6 +52,8 @@ type Harness = {
   readonly shot: Shot
   readonly take: Take
   readonly shots: InMemoryShotRepository
+  /** 見えなくする（「Take を消す」）ために偽物そのものも渡す。 */
+  readonly takes: InMemoryTakeRepository
   readonly queue: RecordingQueue
 }
 
@@ -81,14 +84,16 @@ const harness = (options: HarnessOptions = {}): Harness => {
   const run = aReviewRun(take.id, { verdict })
   const queue = recordingQueue(enqueueFails)
   const shots = createInMemoryShotRepository([shot, otherShot])
+  const takeRepository = createInMemoryTakeRepository(takes)
 
   return {
     shot,
     take,
     shots,
+    takes: takeRepository,
     queue,
     deps: {
-      takes: createInMemoryTakeRepository(takes),
+      takes: takeRepository,
       shots,
       projects: inMemoryProjects([project]),
       reviews: withoutRun
@@ -143,6 +148,20 @@ describe('processRegenerationJob', () => {
     expect(outcome.reason).toContain('再生成の上限')
     expect(h.queue.requests()).toHaveLength(0)
     expect(statusOf(h)).toBe('blocked')
+  })
+
+  /** 「Take を消す」は見えなくするだけ。お金を使った回数は減らない（消すたびに上限が戻ると止まらなくなる）。 */
+  it('見えなくした Take も回数に数える', async () => {
+    const h = harness({ takeCosts: [0.1, 0.1, 0.1] })
+    const [first, second] = await h.takes.findByShot(h.shot.id)
+    if (first === undefined || second === undefined) throw new Error('Take が 3 本ある前提')
+    await h.takes.hide(first.id, new Date())
+    await h.takes.hide(second.id, new Date())
+
+    const outcome = await processRegenerationJob(h.deps, { takeId: h.take.id })
+
+    expect(outcome.state).toBe('blocked')
+    expect(outcome.reason).toContain('再生成の上限')
   })
 
   it('Shot のコスト上限に達したら blocked にして積まない', async () => {

@@ -157,7 +157,8 @@ export const recordTake = async (deps: RecordTakeDeps, input: RecordTakeInput): 
   // 同じ内容を既に取り込んでいないか。中断した取り込みの再開もここで拾う。
   const duplicate = await deps.mediaAssets.findByChecksum(downloaded.checksumSha256)
   if (duplicate !== null && duplicate.origin.type === 'generated') {
-    const previous = await deps.takes.findById(duplicate.origin.takeId)
+    // 見えなくした Take でも行はある。無いとみなして同じ ID で作り直すと主キーがぶつかる。
+    const previous = await deps.takes.findById(duplicate.origin.takeId, { includeHidden: true })
     if (previous !== null) return previous
     return deps.takes.create({
       ...takeFields,

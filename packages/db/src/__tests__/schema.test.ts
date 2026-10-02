@@ -84,8 +84,11 @@ describe('schema', () => {
     }
   })
 
-  it('takes は追記のみ: deleted_at を持たない', () => {
-    expect('deletedAt' in getTableColumns(schema.takes)).toBe(false)
+  /** ADR-0003 追記（2026-10-02）: 消すのは見えなくする印だけ。中身を書き換える時刻（updatedAt）は持たない。 */
+  it('takes は追記のみ: 更新時刻を持たず、消すのは見えなくする印（deleted_at）だけ', () => {
+    const columns = getTableColumns(schema.takes)
+    expect('updatedAt' in columns).toBe(false)
+    expect(columns.deletedAt.notNull).toBe(false)
   })
 
   it('JSONB 列が jsonb 型で定義されている', () => {

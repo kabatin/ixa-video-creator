@@ -76,6 +76,11 @@ export type ProjectApi = {
   /** 採用を外す（PHASE 8 / ADR-0022）。Take は消えない。更新後の Shot を返す。 */
   unselectTake: (shotId: ShotId) => Promise<Shot>
   /**
+   * Take を消す（見えなくする。ADR-0003 追記）。行も中身も残る。採用中は断られる。
+   * 決め直した Shot を返す。
+   */
+  hideTake: (take: Pick<Take, 'id' | 'shotId'>) => Promise<Shot>
+  /**
    * 実体を取りに行くための署名付き URL を**都度発行**する（規約 7。DB には保存しない）。
    *
    * `expiresInSec` は API 側の既定が 300 秒、上限が 3600 秒。
@@ -165,6 +170,12 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
     unselectTake: async (shotId: ShotId): Promise<Shot> => {
       await requester.remove(shotPath(shotId, '/selected-take'))
       return requester.get(shotPath(shotId), WireShot)
+    },
+
+    // 採用を外すと同じく、DELETE の封筒を剥がす口が無いので Shot を取り直す。
+    hideTake: async (take): Promise<Shot> => {
+      await requester.remove(`/takes/${encodeURIComponent(take.id)}`)
+      return requester.get(shotPath(take.shotId), WireShot)
     },
 
     mediaUrl: async (mediaAssetId: MediaAssetId, expiresInSec?: number): Promise<WireSignedUrl> => {

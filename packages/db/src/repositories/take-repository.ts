@@ -1,4 +1,4 @@
-import { asc, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
 import type { CreateTakeInput, ProjectId, ShotId, Take, TakeId, TakeUpdate } from '@ixa/domain'
 import {
   CreateTakeInput as CreateTakeInputSchema,
@@ -16,14 +16,26 @@ import { shots } from '../schema/shot.js'
 export type TakeRow = typeof takes.$inferSelect
 
 /**
+ * 見えなくした Take（「Take を消す」。ADR-0003 追記）も含めるか。**既定は含めない。**
+ * 一覧・比較・採用・Shot の状態の判断は、見えている Take だけで行う。
+ * 含めるのは、記録を辿るとき（系譜・取り込みのやり直し）と、お金を使った回数を数えるときだけ。
+ */
+export type TakeVisibility = { readonly includeHidden?: boolean }
+
+/**
  * Take は追記のみ（ADR-0003）。
- * UPDATE してよいのは `reviewStatus` と `humanVerdict` の 2 列だけで、
+ * UPDATE してよいのは `reviewStatus` と `humanVerdict` の 2 列と、見えなくする印（`hide`）だけで、
  * それ以外の列を更新するメソッドをこのリポジトリに追加してはならない。
  */
 export type TakeRepository = {
-  findById(id: TakeId): Promise<Take | null>
+  findById(id: TakeId, visibility?: TakeVisibility): Promise<Take | null>
   /** index 昇順。 */
-  findByShot(shotId: ShotId): Promise<Take[]>
+  findByShot(shotId: ShotId, visibility?: TakeVisibility): Promise<Take[]>
+  /**
+   * 見えなくする（「Take を消す」）。**行も中身も消さない**（記録・素材・費用は残る）。
+   * 見えている Take が無ければ `DbNotFoundError`。採用中かどうかは呼び出し側が確かめる。
+   */
+  hide(takeId: TakeId, at: Date): Promise<void>
   /**
    * Take を 1 行追記する。index は Shot 内の最大値 + 1 をリポジトリが採番する。
    * `input.id` は相互参照を解くために呼び出し側が採番できる（DOMAIN.md）。
@@ -69,6 +81,10 @@ export const takeRowToDomain = (row: TakeRow): Take =>
     createdAt: row.createdAt,
   })
 
+/** 見えなくした Take を外す条件。含めるなら条件なし（`and` は undefined を無視する）。 */
+const visibleUnless = (visibility: TakeVisibility | undefined) =>
+  visibility?.includeHidden === true ? undefined : isNull(takes.deletedAt)
+
 export const createTakeRepository = (db: DbClient): TakeRepository => {
   /** Shot 内の次の連番。takes は 1 始まりで (shot_id, index) が UNIQUE。 */
   const nextIndex = async (shotId: ShotId): Promise<number> => {
@@ -83,19 +99,32 @@ export const createTakeRepository = (db: DbClient): TakeRepository => {
   }
 
   return {
-    async findById(id) {
-      const rows = await db.select().from(takes).where(eq(takes.id, id)).limit(1)
+    async findById(id, visibility) {
+      const rows = await db
+        .select()
+        .from(takes)
+        .where(and(eq(takes.id, id), visibleUnless(visibility)))
+        .limit(1)
       const row = rows[0]
       return row ? takeRowToDomain(row) : null
     },
 
-    async findByShot(shotId) {
+    async findByShot(shotId, visibility) {
       const rows = await db
         .select()
         .from(takes)
-        .where(eq(takes.shotId, shotId))
+        .where(and(eq(takes.shotId, shotId), visibleUnless(visibility)))
         .orderBy(asc(takes.index))
       return rows.map(takeRowToDomain)
+    },
+
+    async hide(takeId, at) {
+      const rows = await db
+        .update(takes)
+        .set({ deletedAt: at })
+        .where(and(eq(takes.id, takeId), isNull(takes.deletedAt)))
+        .returning({ id: takes.id })
+      if (rows.length === 0) throw new DbNotFoundError('Take', takeId)
     },
 
     async create(input) {

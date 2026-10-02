@@ -195,17 +195,29 @@ describe('takeMenuEntries', () => {
     entries.find((entry): entry is TakeItem => entry.kind === 'item' && entry.action === action)
 
   it('採用していない Take は採用でき、外せない', () => {
-    const entries = takeMenuEntries({ adopted: false })
+    const entries = takeMenuEntries({ adopted: false, index: 2 })
 
     expect(find(entries, 'adopt')?.disabledReason).toBeNull()
     expect(find(entries, 'unadopt')?.disabledReason).toBe('この Take は採用していません')
   })
 
   it('採用している Take は外せ、採用し直せない', () => {
-    const entries = takeMenuEntries({ adopted: true })
+    const entries = takeMenuEntries({ adopted: true, index: 2 })
 
     expect(find(entries, 'adopt')?.disabledReason).toBe('この Take を採用しています')
     expect(find(entries, 'unadopt')?.disabledReason).toBeNull()
+  })
+
+  /** 制作者 2026-10-01「Takeを消す口」。行も中身も残る（ADR-0003 追記）ことを確認の文で言う。 */
+  it('消すときは確かめ、記録と費用が残ると言う。採用中は消せない', () => {
+    const free = find(takeMenuEntries({ adopted: false, index: 2 }), 'hide')
+    const adopted = find(takeMenuEntries({ adopted: true, index: 2 }), 'hide')
+
+    expect(free?.label).toBe('Take を消す')
+    expect(free?.disabledReason).toBeNull()
+    expect(free?.confirm).toContain('Take 2')
+    expect(free?.confirm).toContain('費用')
+    expect(adopted?.disabledReason).toBe('採用中の Take は消せません（先に採用を外す）')
   })
 })
 

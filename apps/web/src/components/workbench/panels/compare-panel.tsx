@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { unselectAdoptedTake } from '@/components/workbench/shot-edit-actions'
-import { useContextMenuHost } from '@/components/workbench/ui/context-menu'
+import { useContextMenuHost, type ContextMenuItem } from '@/components/workbench/ui/context-menu'
 import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
 import { toMenuItems } from '@/components/workbench/use-shot-menu'
 import { takeMenuEntries, type TakeMenuAction } from '@/lib/context-menus'
@@ -30,24 +30,32 @@ export const ComparePanel = () => {
   const { takes, error, reload } = useShotTakes(shot, workbench.posterEpoch)
   const [adopting, setAdopting] = useState(false)
   const [adoptError, setAdoptError] = useState<string | null>(null)
-  // Take の右クリック（長押し・Shift+F10）のメニュー: 採用する / 採用を外す（2026-09-30）。
+  // Take の右クリック（長押し・Shift+F10）とカードの「…」のメニュー: 採用する / 採用を外す / 消す。
   const host = useContextMenuHost()
-  const takeMenu = useContextMenuTrigger<Take>((take, at, origin) => {
-    if (shot === null) return
-    const run: Record<TakeMenuAction, () => void> = {
+  const takeMenuItems = (take: Take): readonly ContextMenuItem[] => {
+    if (shot === null) return []
+    const run: Record<TakeMenuAction, () => void | Promise<void>> = {
       adopt: () => {
         void adopt(take.id)
       },
       unadopt: () => {
         unselectAdoptedTake(workbench, shot, workbench.notify)
       },
+      // 失敗は投げる（確認の殻が理由を出す）。消したら一覧を読み直し、Shot の状態を映す。
+      hide: async () => {
+        const updated = await createApiClient().hideTake(take)
+        workbench.replaceShots([updated])
+        reload()
+        workbench.notify(`${shot.code} の Take ${String(take.index)} を消しました。`)
+      },
     }
-    host.open({
-      label: `Take ${String(take.index)} の操作`,
-      items: toMenuItems(takeMenuEntries({ adopted: shot.selectedTakeId === take.id }), run),
-      at,
-      origin,
-    })
+    return toMenuItems(
+      takeMenuEntries({ adopted: shot.selectedTakeId === take.id, index: take.index }),
+      run,
+    )
+  }
+  const takeMenu = useContextMenuTrigger<Take>((take, at, origin) => {
+    host.open({ label: `Take ${String(take.index)} の操作`, items: takeMenuItems(take), at, origin })
   })
 
   if (shot === null) {
@@ -139,6 +147,7 @@ export const ComparePanel = () => {
                 void adopt(takeId)
               }}
               takeContextMenu={takeMenu}
+              takeMenuItems={takeMenuItems}
             />
           </section>
         </div>

@@ -1,4 +1,4 @@
-import { DbNotFoundError, type TakeRepository } from '@ixa/db'
+import { DbNotFoundError, type TakeRepository, type TakeVisibility } from '@ixa/db'
 import {
   CreateTakeInput as CreateTakeInputSchema,
   Take as TakeSchema,
@@ -16,6 +16,8 @@ import {
  */
 export type InMemoryTakeRepository = TakeRepository & {
   readonly snapshot: () => readonly Take[]
+  /** 見えなくした Take の ID（「Take を消す」）。 */
+  readonly hiddenIds: () => ReadonlySet<TakeId>
 }
 
 export const createInMemoryTakeRepository = (
@@ -23,7 +25,10 @@ export const createInMemoryTakeRepository = (
 ): InMemoryTakeRepository => {
   let store: readonly Take[] = seed.map((take) => TakeSchema.parse(take))
 
+  let hidden: ReadonlySet<TakeId> = new Set()
   const find = (id: TakeId): Take | undefined => store.find((t) => t.id === id)
+  const visible = (take: Take, visibility?: TakeVisibility): boolean =>
+    visibility?.includeHidden === true || !hidden.has(take.id)
 
   const nextIndex = (shotId: ShotId): number =>
     store.filter((t) => t.shotId === shotId).reduce((max, t) => Math.max(max, t.index), 0) + 1
@@ -38,13 +43,28 @@ export const createInMemoryTakeRepository = (
         store.filter((t) => t.shotId === shotId).reduce((total, take) => total + take.costUsd, 0),
       ),
     snapshot: () => store,
+    hiddenIds: () => hidden,
 
-    findById: (id) => Promise.resolve(find(id) ?? null),
+    findById: (id, visibility) => {
+      const take = find(id)
+      return Promise.resolve(take !== undefined && visible(take, visibility) ? take : null)
+    },
 
-    findByShot: (shotId) =>
+    findByShot: (shotId, visibility) =>
       Promise.resolve(
-        store.filter((take) => take.shotId === shotId).sort((a, b) => a.index - b.index),
+        store
+          .filter((take) => take.shotId === shotId && visible(take, visibility))
+          .sort((a, b) => a.index - b.index),
       ),
+
+    hide: (takeId) => {
+      const take = find(takeId)
+      if (take === undefined || hidden.has(takeId)) {
+        return Promise.reject(new DbNotFoundError('Take', takeId))
+      }
+      hidden = new Set([...hidden, takeId])
+      return Promise.resolve()
+    },
 
     // 偽物なので projectId は見ず、全 Take を返す（`sumCostByProject` と同じ割り切り）。
     // 本物は論理削除済み Shot の Take も含めるので、ここでも取りこぼしを作らない。

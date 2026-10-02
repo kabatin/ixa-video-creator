@@ -9,7 +9,7 @@ import {
   HumanVerdict as HumanVerdictSchema,
   ReviewStatus as ReviewStatusSchema,
 } from '@ixa/domain'
-import { createdAt, timestampTz, ulidPk, ulidRef } from './columns.js'
+import { createdAt, deletedAt, timestampTz, ulidPk, ulidRef } from './columns.js'
 import { mediaAssets } from './media.js'
 import { shots } from './shot.js'
 
@@ -126,6 +126,11 @@ export const takes = pgTable(
       .notNull()
       .default('unreviewed'),
     createdAt: createdAt(),
+    /**
+     * 制作者が「Take を消す」で見えなくした時刻（ADR-0003 追記）。**行も中身も消さない**（記録と費用は残る）。
+     * 作成後に変えてよいのは上の 2 列とこの印だけ。
+     */
+    deletedAt: deletedAt(),
   },
   (t) => [
     uniqueIndex('takes_shot_id_index_uidx').on(t.shotId, t.index),

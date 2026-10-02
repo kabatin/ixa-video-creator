@@ -1,7 +1,9 @@
 import { Take } from '@ixa/domain'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { TakeCard } from '@/components/take-card'
+import { ContextMenuHost } from '@/components/workbench/ui/context-menu'
 import { takeJson } from './fixtures'
 
 /** 持ち込んだ Take はモデル名の代わりに出自を出す（ADR-0026）。 */
@@ -37,5 +39,36 @@ describe('TakeCard', () => {
     renderCard(take)
 
     expect(screen.getByText(take.modelId)).toBeTruthy()
+  })
+})
+
+/** 制作者 2026-10-01「Takeを消す口」。右クリック（長押し）に加え、カードの「…」からも同じメニューを開く。 */
+describe('TakeCard の「…」', () => {
+  it('渡したメニューを開く（右クリックと同じ中身）', async () => {
+    const take = aTake({ index: 2 })
+    const run = vi.fn()
+    render(
+      <ContextMenuHost>
+        <TakeCard
+          take={take}
+          selected={false}
+          busy={false}
+          onSelect={() => undefined}
+          menuItems={() => [
+            { kind: 'item', id: 'hide', label: 'Take を消す', disabledReason: null, run },
+          ]}
+        />
+      </ContextMenuHost>,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Take 2 のその他の操作' }))
+
+    expect(screen.getByRole('menuitem', { name: /Take を消す/ })).toBeTruthy()
+  })
+
+  it('渡さなければ出さない（見るだけの画面）', () => {
+    renderCard(aTake({ index: 2 }))
+
+    expect(screen.queryByRole('button', { name: 'Take 2 のその他の操作' })).toBeNull()
   })
 })

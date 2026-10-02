@@ -173,17 +173,27 @@ export const assetMenuEntries = (input: {
   ]
 }
 
-export type TakeMenuAction = 'adopt' | 'unadopt'
+export type TakeMenuAction = 'adopt' | 'unadopt' | 'hide'
 
-/** Take のメニュー（Take 比較のカード）。採用するか、採用を外すか。 */
+/**
+ * Take のメニュー（Take 比較のカードの右クリックと「…」）。採用する・外す・消す。
+ * 消すのは**見えなくするだけ**（ADR-0003 追記）。行も中身も残り、払った額は費用に残る。
+ */
 export const takeMenuEntries = (input: {
   readonly adopted: boolean
+  /** 画面の Take の番号（確認の文に入れる）。 */
+  readonly index: number
 }): readonly ContextMenuEntry<TakeMenuAction>[] => [
   item('adopt', '採用する', {
     disabledReason: input.adopted ? 'この Take を採用しています' : null,
   }),
   item('unadopt', '採用を外す', {
     disabledReason: input.adopted ? null : 'この Take は採用していません',
+  }),
+  SEPARATOR,
+  item('hide', 'Take を消す', {
+    disabledReason: input.adopted ? '採用中の Take は消せません（先に採用を外す）' : null,
+    confirm: `Take ${String(input.index)} を消します。一覧と比較から見えなくなります（記録と使った費用は残ります）。`,
   }),
 ]
 
