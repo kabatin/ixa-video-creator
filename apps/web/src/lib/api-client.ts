@@ -21,6 +21,7 @@ import {
   WireTakeList,
 } from '@/lib/api-schemas'
 import { createCharacterApi, type CharacterApi } from '@/lib/character-api'
+import { createCharacterSheetApi, type CharacterSheetApi } from '@/lib/character-sheet-api'
 import { createLibraryImportApi, type LibraryImportApi } from '@/lib/library-import-api'
 import { createLocationApi, type LocationApi } from '@/lib/location-api'
 import { createMusicApi, type MusicApi } from '@/lib/music-api'
@@ -100,6 +101,7 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
   MusicApi &
   LibraryApi &
   LibraryImportApi &
+  CharacterSheetApi &
   ProjectSettingsApi &
   RenderApi &
   ReviewApi &
@@ -222,6 +224,7 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
     ...createEditHistoryApi(requester),
     ...createLibraryApi(requester),
     ...createLibraryImportApi(requester),
+    ...createCharacterSheetApi(requester),
     ...createProjectSettingsApi(requester),
     ...createSequenceApi(requester),
     ...createUploadApi(requester),

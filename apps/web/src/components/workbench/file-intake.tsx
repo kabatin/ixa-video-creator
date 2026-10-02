@@ -111,7 +111,11 @@ export const FileIntake = ({
       const placed = await attach(target, pendingImages)
       workbench.inspect(placed)
       workbench.openViewer()
-      onNotice(`画像 ${String(pendingImages.length)} 枚を取り込みました。`)
+      onNotice(
+        target.kind === 'new-character-sheet'
+          ? 'キャラクターを作り、キャラクターシートを作り始めました（1 枚 1 分ほど）。名前はあとで直せます。'
+          : `画像 ${String(pendingImages.length)} 枚を取り込みました。`,
+      )
       setPendingImages([])
     } catch (cause) {
       onNotice(`画像を取り込めませんでした: ${describeForPerson(cause)}`)

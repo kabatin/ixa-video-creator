@@ -12,6 +12,8 @@ export type ImageTarget =
   | Extract<Inspected, { kind: 'character' | 'look' | 'location' | 'brand-asset' }>
   /** Shot の最初のフレーム（ADR-0025）。画像から動画で Take にするため。 */
   | Extract<Inspected, { kind: 'shot' }>
+  /** 新しいキャラクターにし、その画像を手本にキャラクターシートを作り始める（ADR-0035）。 */
+  | { readonly kind: 'new-character-sheet' }
   | { readonly kind: 'new-location' }
   | { readonly kind: 'new-brand-asset' }
 
@@ -38,6 +40,7 @@ export const imageChoicesFor = (current: Inspected | null): readonly ImageChoice
     : acceptsImages(current)
       ? [{ label: `いま選んでいる${INSPECTED_LABELS[current.kind]}に入れる`, target: current }]
       : []),
+  { label: '新しいキャラクターにする（キャラクターシートも作る）', target: { kind: 'new-character-sheet' } },
   { label: '新しいロケーションの参照画像にする', target: { kind: 'new-location' } },
   { label: '新しいブランド資産（ロゴ）にする', target: { kind: 'new-brand-asset' } },
 ]
@@ -77,6 +80,21 @@ export const useImageAttach = () => {
             })
           }
           return target
+        }
+        case 'new-character-sheet': {
+          // 制作者 2026-10-03「キャラクターアップする時の機能に取り入れられるといい」。名前はファイル名（あとで直せる）。
+          const character = await actions.createCharacter(fileBaseName(files[0]?.name ?? 'キャラクター'))
+          for (const [index, file] of files.entries()) {
+            await api.addIdentityImage(character.id, {
+              mediaAssetId: await upload(file),
+              role: 'full_body',
+              isPrimary: index === 0,
+              order: index,
+            })
+          }
+          // 手本は主の画像（1 枚目）。できあがりは出来事で知らせ、素材ビューアの区画が「作っています」を出す。
+          await api.startCharacterSheet(character.id)
+          return { kind: 'character', id: character.id }
         }
         case 'look': {
           const existing = await api.listLookImages(target.id)

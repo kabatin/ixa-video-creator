@@ -29,6 +29,9 @@ const api = vi.hoisted(() => ({
   removeLookImage: vi.fn(),
   setPrimaryIdentityImage: vi.fn(),
   uploadMedia: vi.fn(),
+  // キャラクターシートの区画（ADR-0035）が状態を読む。ここでは作らない。
+  getCharacterSheet: vi.fn(() => Promise.resolve({ job: null })),
+  startCharacterSheet: vi.fn(),
 }))
 
 vi.mock('@/lib/api-client', () => ({ createApiClient: () => api }))

@@ -1,5 +1,6 @@
 'use client'
 
+import { CharacterSheetField } from '@/components/workbench/character-sheet-field'
 import type {
   BrandAsset,
   CharacterId,
@@ -227,6 +228,7 @@ const CharacterView = ({ characterId }: { readonly characterId: CharacterId }) =
   )
   const images = useReloadable(() => api.listIdentityImages(characterId), characterId)
   const action = useActionStatus()
+  const { posterEpoch } = useWorkbench()
 
   return (
     <div className="space-y-4">
@@ -234,7 +236,14 @@ const CharacterView = ({ characterId }: { readonly characterId: CharacterId }) =
         {character?.displayName ?? 'キャラクター'}
       </h2>
       <ImageDrop onAdded={images.reload}>
-        <h3 className="mb-1 text-xs font-semibold text-muted">識別画像（同一性）</h3>
+        {/* 手本の画像 1 枚からキャラクターシート（四面図）を作る（ADR-0035）。出来事が届くと posterEpoch が進む。 */}
+        <CharacterSheetField
+          characterId={characterId}
+          images={images.data}
+          version={posterEpoch}
+          onSheetAdded={images.reload}
+        />
+        <h3 className="mb-1 mt-3 text-xs font-semibold text-muted">識別画像（同一性）</h3>
         {images.error !== null && (
           <PanelNotice tone="danger">{`識別画像を読めません: ${images.error}`}</PanelNotice>
         )}

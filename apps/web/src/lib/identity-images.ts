@@ -18,7 +18,8 @@ export type Option = {
 export const FOUR_VIEW_ROLE = IdentityImageRole.enum.four_view
 
 const ROLE_LABELS: Readonly<Record<IdentityImageRole, string>> = {
-  four_view: '四面図',
+  // 画面では「キャラクターシート」（1 枚の画像から作れる。ADR-0035）。中身は四面図。
+  four_view: 'キャラクターシート',
   face_front: '顔（正面）',
   face_side: '顔（側面）',
   face_three_quarter: '顔（斜め）',
@@ -27,7 +28,7 @@ const ROLE_LABELS: Readonly<Record<IdentityImageRole, string>> = {
 }
 
 const ROLE_HINTS: Readonly<Record<IdentityImageRole, string>> = {
-  four_view: '正面・側面・背面・斜めを 1 枚に集約。参照枠 1 つで同一性を渡せる',
+  four_view: '正面・横・背面・斜めの全身を 1 枚に並べた四面図。参照枠 1 つで同一性を渡せる。手本の画像から作れる',
   face_front: '顔の正面。四面図が無いときの基本参照',
   face_side: '顔の側面。単体では参照枠を 1 つ消費する',
   face_three_quarter: '顔の斜め。単体では参照枠を 1 つ消費する',

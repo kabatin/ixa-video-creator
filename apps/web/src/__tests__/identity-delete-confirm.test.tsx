@@ -53,7 +53,7 @@ describe('識別画像の削除', () => {
   it('1 回押しただけでは削除しない', async () => {
     const { onRemove, user } = setup()
 
-    await user.click(screen.getByRole('button', { name: '削除（四面図）' }))
+    await user.click(screen.getByRole('button', { name: '削除（キャラクターシート）' }))
 
     expect(onRemove).not.toHaveBeenCalled()
   })
@@ -61,10 +61,10 @@ describe('識別画像の削除', () => {
   it('主画像なら、確認文で主画像だと分かる', async () => {
     const { user } = setup()
 
-    await user.click(screen.getByRole('button', { name: '削除（四面図）' }))
+    await user.click(screen.getByRole('button', { name: '削除（キャラクターシート）' }))
 
     const dialog = screen.getByRole('alertdialog')
-    expect(dialog).toHaveTextContent('四面図 の主画像を削除します')
+    expect(dialog).toHaveTextContent('キャラクターシート の主画像を削除します')
     expect(dialog).toHaveTextContent('元に戻せません')
   })
 
@@ -91,7 +91,7 @@ describe('識別画像の削除', () => {
   it('やめると削除しない', async () => {
     const { onRemove, user } = setup()
 
-    await user.click(screen.getByRole('button', { name: '削除（四面図）' }))
+    await user.click(screen.getByRole('button', { name: '削除（キャラクターシート）' }))
     await user.click(screen.getByRole('button', { name: 'やめる' }))
 
     expect(onRemove).not.toHaveBeenCalled()

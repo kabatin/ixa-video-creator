@@ -189,6 +189,7 @@ describe('applyProjectEvent', () => {
       projectId,
       at: AT,
       shotId: shotA,
+      characterId: null,
       jobId: ImageGenerationJobId.parse(JOB_ID),
       status: 'running',
       error: null,
