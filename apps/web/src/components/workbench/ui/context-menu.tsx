@@ -38,6 +38,8 @@ export type ContextMenuItem =
       readonly confirmTone?: 'danger' | 'primary'
       /** 確認の「する」側の言葉。既定は項目の名前（「このまま作る」のように替える）。 */
       readonly confirmLabel?: string
+      /** 確認を「しない」で閉じたとき（`ask` が false を返すのに使う）。 */
+      readonly onDismiss?: () => void
       readonly run: () => void | Promise<void>
     }
   | { readonly kind: 'separator' }
@@ -59,6 +61,18 @@ type Host = {
    * 確認・失敗の理由の出し方を右クリックのメニューと同じにする。
    */
   readonly perform: (item: Extract<ContextMenuItem, { kind: 'item' }>) => void
+  /**
+   * 確かめて答えを返す（`window.confirm` の置き換え。画面全体を止めるブラウザの確認を使わない）。
+   * 「する」を押せば true、閉じれば false。取り消せない操作ではないので、ボタンは危険色にしない。
+   */
+  readonly ask: (question: AskQuestion) => Promise<boolean>
+}
+
+export type AskQuestion = {
+  readonly title: string
+  readonly message: string
+  readonly confirmLabel: string
+  readonly keepLabel?: string
 }
 
 const ContextMenuContext = createContext<Host | null>(null)
@@ -284,9 +298,33 @@ export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) 
     [run],
   )
 
-  const host = useMemo<Host>(() => ({ open: setRequest, perform: choose }), [choose])
+  const ask = useCallback(
+    (question: AskQuestion): Promise<boolean> =>
+      new Promise((resolve) => {
+        choose({
+          kind: 'item',
+          id: 'ask',
+          label: question.title,
+          disabledReason: null,
+          confirm: question.message,
+          confirmTone: 'primary',
+          confirmLabel: question.confirmLabel,
+          ...(question.keepLabel === undefined ? {} : { keepLabel: question.keepLabel }),
+          onDismiss: () => {
+            resolve(false)
+          },
+          run: () => {
+            resolve(true)
+          },
+        })
+      }),
+    [choose],
+  )
+
+  const host = useMemo<Host>(() => ({ open: setRequest, perform: choose, ask }), [choose, ask])
 
   const dismiss = (): void => {
+    pending?.onDismiss?.()
     setPending(null)
     setError(null)
   }

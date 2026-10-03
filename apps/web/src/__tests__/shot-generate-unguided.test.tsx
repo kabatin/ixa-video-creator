@@ -50,7 +50,7 @@ const fakeApi = (): ShotGenerateApi => ({
 })
 
 const postersWith = (hasStartFrame: boolean): ShotPosterMap =>
-  new Map([[ShotId.parse(SHOT_ID), { url: null, reason: 'まだ Take がありません', hasStartFrame, pending: false }]])
+  new Map([[ShotId.parse(SHOT_ID), { url: null, reason: 'まだ Take がありません', hasStartFrame, pending: false, drawing: false }]])
 
 const Harness = ({
   api,

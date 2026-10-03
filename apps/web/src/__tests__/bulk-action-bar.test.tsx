@@ -1,5 +1,5 @@
 import { ModelId } from '@ixa/domain'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ContextMenuHost } from '@/components/workbench/ui/context-menu'
@@ -78,6 +78,18 @@ const setup = (
   return { props, user: userEvent.setup() }
 }
 
+/** あまり使わない操作は「その他」の中にある（制作者 2026-10-03「メニューが混みあっていて改行してしまう」）。 */
+const MORE = 'その他'
+const pick = async (user: ReturnType<typeof userEvent.setup>, name: string): Promise<void> => {
+  const direct = screen.queryByRole('button', { name })
+  if (direct !== null) {
+    await user.click(direct)
+    return
+  }
+  await user.click(screen.getByRole('button', { name: MORE }))
+  await user.click(screen.getByRole('menuitem', { name }))
+}
+
 /** 最後に `onUpdate` へ渡された patch。**キーの有無まで見たいので型を落とさない。** */
 const lastPatch = (onUpdate: BulkActionBarProps['onUpdate']): BulkUpdatePatch => {
   const spy = vi.mocked(onUpdate)
@@ -97,52 +109,86 @@ describe('BulkActionBar — 出る / 出ない', () => {
   it('選択が 0 件のときは、チェックすればまとめて Take を作れると 1 行で言う', () => {
     setup({ selectedCount: 0 })
 
-    expect(screen.getByText(/チェックを付けると、まとめて Take を作れます/)).toBeInTheDocument()
+    expect(screen.getByText(/チェックを付けると、まとめて絵や Take を作れます/)).toBeInTheDocument()
   })
 
-  it('選ばれていれば件数と 3 つの操作が出る', () => {
+  /**
+   * 1 行にまとめ、よく使う 2 つ（絵・Take）だけを出す。残りは「その他」（制作者 2026-10-03「「1 件を選択中」「選択を解除」
+   * 「結合…」「書き出す…」「削除…」が混みあっていて、すべて改行してしまっている」）。文字は折り返さない。
+   */
+  it('選ばれていれば、件数・解除・絵を作る・Take を作る・その他を 1 行に出す（折り返さない）', () => {
     setup({ selectedCount: 12 })
 
-    expect(screen.getByText('12 件を選択中')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '一括生成' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '一括採用' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '一括で変える' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '選択を解除' })).toBeInTheDocument()
+    const bar = screen.getByRole('region', { name: '一括操作' })
+    expect(within(bar).getByText('12 件')).toBeInTheDocument()
+    for (const name of ['選択を解除', '絵を作る', 'Take を作る', 'その他']) {
+      const button = within(bar).getByRole('button', { name })
+      expect(button.className).toContain('whitespace-nowrap')
+    }
+    expect(screen.queryByRole('button', { name: '結合…' })).toBeNull()
+  })
+
+  it('「その他」に、一括採用・一括で変える・結合・書き出す・削除がある', async () => {
+    const { user } = setup()
+
+    await user.click(screen.getByRole('button', { name: 'その他' }))
+
+    const more = screen.getByRole('menu', { name: 'その他' })
+    expect(within(more).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      '一括採用…',
+      '一括で変える…',
+      '結合…',
+      '書き出す…',
+      '削除…',
+    ])
+  })
+
+  /** 一覧の下端に貼り付けて重ねる（制作者 2026-10-03「リストの縦位置が下がってずれて地味に不便」）。 */
+  it('一覧の下端に貼り付く', () => {
+    setup()
+    expect(screen.getByRole('region', { name: '一括操作' }).className).toContain('bottom-0')
   })
 
   it('開くのは 1 つだけ。別を開くと前が閉じる', async () => {
     const { user } = setup()
 
-    await user.click(screen.getByRole('button', { name: '一括生成' }))
-    expect(screen.getByRole('group', { name: '一括生成' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
+    expect(screen.getByRole('group', { name: 'Take を作る' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '一括で変える' }))
+    await pick(user, '一括で変える…')
 
-    expect(screen.queryByRole('group', { name: '一括生成' })).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Take を作る' })).toBeNull()
     expect(screen.getByRole('group', { name: '一括で変える' })).toBeInTheDocument()
   })
 
   /**
-   * 実行中は**進捗ダイアログが手を止める**。
-   * 以前はバーの中に 1 行出すだけで、密なパネルの下のほうだと気づけなかった。
+   * 実行中も**画面を止めない**（制作者 2026-10-03「動画生成中、長時間ダイアログ表示で動けなくなるのはなんとかしたい」）。
+   * 進み具合はバーの中に数えて出す。生成は worker が続けるので、ほかの作業をしてよい。
    */
-  it('実行中は進捗ダイアログが出て、バー全体が止まる', () => {
+  it('実行中は進み具合をバーに出し、画面全体を止めるダイアログは出さない', () => {
     setup({ busy: true })
 
+    expect(screen.queryByRole('dialog')).toBeNull()
     expect(screen.getByRole('progressbar')).toBeTruthy()
     expect(screen.getByRole('status')).toHaveTextContent('依頼を送っています')
-    expect(screen.getByRole('button', { name: '一括生成' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '選択を解除' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Take を作る' })).toBeDisabled()
   })
 
-  it('投入したあとも、終わった件数を数えて見せる', () => {
+  it('投入したあとも、終わった件数を数えて見せる。閉じても作り続けると言う', () => {
     setup({ busy: false, progress: { done: 3, total: 8 } })
 
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '38')
     expect(screen.getByRole('status')).toHaveTextContent('3 / 8 件 終わりました')
+    expect(screen.getByRole('status')).toHaveTextContent('ほかの作業をしていて構いません')
   })
 
-  it('走っていなければ進捗ダイアログは出ない', () => {
+  it('選択を外しても、進み具合は出し続ける', () => {
+    setup({ selectedCount: 0, busy: false, progress: { done: 1, total: 4 } })
+
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '25')
+  })
+
+  it('走っていなければ進み具合は出ない', () => {
     setup({ busy: false })
 
     expect(screen.queryByRole('progressbar')).toBeNull()
@@ -160,7 +206,7 @@ describe('BulkActionBar — 出る / 出ない', () => {
   it('削除はそのまま呼ぶ（すぐには消さない）', async () => {
     const { props, user } = setup()
 
-    await user.click(screen.getByRole('button', { name: /削除/ }))
+    await pick(user, '削除…')
 
     expect(props.onDelete).toHaveBeenCalledTimes(1)
   })
@@ -169,7 +215,7 @@ describe('BulkActionBar — 出る / 出ない', () => {
   it('結合はそのまま呼ぶ（すぐにはまとめない）', async () => {
     const { props, user } = setup()
 
-    await user.click(screen.getByRole('button', { name: '結合…' }))
+    await pick(user, '結合…')
 
     expect(props.onMerge).toHaveBeenCalledTimes(1)
   })
@@ -178,7 +224,7 @@ describe('BulkActionBar — 出る / 出ない', () => {
   it('書き出すは書き出しの画面を開く', async () => {
     const { props, user } = setup()
 
-    await user.click(screen.getByRole('button', { name: '書き出す…' }))
+    await pick(user, '書き出す…')
 
     expect(props.onRender).toHaveBeenCalledTimes(1)
   })
@@ -188,7 +234,7 @@ describe('BulkActionBar — 一括生成は 2 段階', () => {
   it('1 回押しただけでは依頼しない。確認してから呼ぶ', async () => {
     const { props, user } = setup({ selectedCount: 12 })
 
-    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
     await user.click(screen.getByRole('button', { name: '12 件に生成を依頼' }))
 
     expect(props.onGenerate).not.toHaveBeenCalled()
@@ -207,18 +253,18 @@ describe('BulkActionBar — 一括生成は 2 段階', () => {
   it('依頼したらフォームを閉じ、依頼ボタンを残さない', async () => {
     const { user } = setup({ selectedCount: 12 })
 
-    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
     await user.click(screen.getByRole('button', { name: '12 件に生成を依頼' }))
     await user.click(screen.getByRole('button', { name: '依頼する' }))
 
     expect(screen.queryByRole('button', { name: '12 件に生成を依頼' })).toBeNull()
-    expect(screen.getByRole('button', { name: '一括生成' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: 'Take を作る' })).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('選んだモデルと本数がそのまま渡る', async () => {
     const { props, user } = setup()
 
-    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
     await user.selectOptions(screen.getByLabelText('モデル'), 'veo-3')
     await user.selectOptions(screen.getByLabelText('本数'), '3')
     await user.click(screen.getByRole('button', { name: '12 件に生成を依頼' }))
@@ -230,7 +276,7 @@ describe('BulkActionBar — 一括生成は 2 段階', () => {
   it('ロックされた件は数に入れず、理由を出す', async () => {
     const { user } = setup({ selectedCount: 10, lockedCount: 3 })
 
-    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
 
     expect(screen.getByRole('button', { name: '7 件に生成を依頼' })).toBeEnabled()
     expect(screen.getByText('3 件はロックされているため、生成されません。')).toBeInTheDocument()
@@ -240,7 +286,7 @@ describe('BulkActionBar — 一括生成は 2 段階', () => {
   it('説明も最初のフレームも無い Shot が混ざっていれば、件数を出して確認でも言う', async () => {
     const { user } = setup({ selectedCount: 12, unguidedCount: 4 })
 
-    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
     expect(screen.getByText(/うち 4 件は説明も最初のフレームも無く/)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '12 件に生成を依頼' }))
@@ -250,7 +296,7 @@ describe('BulkActionBar — 一括生成は 2 段階', () => {
   it('全部に説明か最初のフレームがあれば、何も言わない', async () => {
     const { user } = setup({ selectedCount: 12, unguidedCount: 0 })
 
-    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
 
     expect(screen.queryByText(/説明も最初のフレームも無く/)).toBeNull()
   })
@@ -258,7 +304,7 @@ describe('BulkActionBar — 一括生成は 2 段階', () => {
   it('全件ロックなら依頼できない', async () => {
     const { user } = setup({ selectedCount: 3, lockedCount: 3 })
 
-    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
 
     expect(screen.getByRole('button', { name: '0 件に生成を依頼' })).toBeDisabled()
     expect(screen.getByText('生成できる Shot が選ばれていません。')).toBeInTheDocument()
@@ -272,7 +318,7 @@ describe('BulkActionBar — 一括生成は 2 段階', () => {
   it('見積が取れないときは、取れないと書く', async () => {
     const { user } = setup({ estimatedTotalUsd: null })
 
-    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
 
     expect(screen.getByText(/合計の見積: いまは投入する前に出せません/)).toBeInTheDocument()
   })
@@ -280,7 +326,7 @@ describe('BulkActionBar — 一括生成は 2 段階', () => {
   it('見積 0 は「未取得」と混ぜず、0 として出す', async () => {
     const { user } = setup({ estimatedTotalUsd: 0 })
 
-    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
 
     expect(screen.getByText('合計の見積: $0.00')).toBeInTheDocument()
   })
@@ -290,7 +336,7 @@ describe('BulkActionBar — 一括採用', () => {
   it('既定は「Take が 1 件だけ」。確認は挟まない', async () => {
     const { props, user } = setup()
 
-    await user.click(screen.getByRole('button', { name: '一括採用' }))
+    await pick(user, '一括採用…')
     await user.click(screen.getByRole('button', { name: '12 件を採用' }))
 
     expect(props.onSelectTakes).toHaveBeenCalledWith('only')
@@ -299,7 +345,7 @@ describe('BulkActionBar — 一括採用', () => {
   it('最新の Take を選べる', async () => {
     const { props, user } = setup()
 
-    await user.click(screen.getByRole('button', { name: '一括採用' }))
+    await pick(user, '一括採用…')
     await user.selectOptions(screen.getByLabelText('規則'), 'latest')
     await user.click(screen.getByRole('button', { name: '12 件を採用' }))
 
@@ -309,7 +355,7 @@ describe('BulkActionBar — 一括採用', () => {
   it('採用済みが混ざっていれば上書きになると断る', async () => {
     const { user } = setup({ alreadySelectedCount: 4 })
 
-    await user.click(screen.getByRole('button', { name: '一括採用' }))
+    await pick(user, '一括採用…')
 
     expect(screen.getByText('4 件は採用済みで、上書きになります。')).toBeInTheDocument()
   })
@@ -320,7 +366,7 @@ describe('BulkActionBar — 一括で変えるのは触った項目だけ', () =
     overrides: Partial<BulkActionBarProps> = {},
   ): Promise<ReturnType<typeof setup>> => {
     const view = setup(overrides)
-    await view.user.click(screen.getByRole('button', { name: '一括で変える' }))
+    await pick(view.user, '一括で変える…')
     return view
   }
 
@@ -411,7 +457,7 @@ describe('BulkActionBar — mood の空欄は送らせない', () => {
   it('「この値にする」のまま空欄なら適用できず、理由が出る', async () => {
     const { props, user } = setup()
 
-    await user.click(screen.getByRole('button', { name: '一括で変える' }))
+    await pick(user, '一括で変える…')
     await user.selectOptions(screen.getByLabelText('mood'), 'set')
 
     expect(screen.getByRole('button', { name: '12 件に適用' })).toBeDisabled()
@@ -470,8 +516,12 @@ describe('BulkActionBar — Escape で閉じて、開いたボタンへ戻る', 
     return { focusSpy, user }
   }
 
-  it('Escape で展開が閉じ、開いたボタンへ焦点が戻る', async () => {
-    const { focusSpy, user } = await openWithSpy('一括採用')
+  it('Escape で展開が閉じ、開いたボタンへ焦点が戻る（その他から開いたものは「その他」へ）', async () => {
+    const { user } = setup()
+    const more = screen.getByRole('button', { name: 'その他' })
+    const focusSpy = vi.spyOn(more, 'focus')
+    await pick(user, '一括採用…')
+    focusSpy.mockClear()
     expect(screen.getByRole('group', { name: '一括採用' })).toBeInTheDocument()
 
     await user.keyboard('{Escape}')
@@ -481,27 +531,27 @@ describe('BulkActionBar — Escape で閉じて、開いたボタンへ戻る', 
   })
 
   it('欄の中にいても Escape で閉じ、焦点が戻る', async () => {
-    const { focusSpy, user } = await openWithSpy('一括で変える')
+    const { focusSpy, user } = await openWithSpy('Take を作る')
 
     await user.tab()
     await user.keyboard('{Escape}')
 
-    expect(screen.queryByRole('group', { name: '一括で変える' })).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Take を作る' })).toBeNull()
     expect(focusSpy).toHaveBeenCalledTimes(1)
   })
 
   it('もう一度押して閉じたときも焦点は残る', async () => {
-    const { focusSpy, user } = await openWithSpy('一括生成')
+    const { focusSpy, user } = await openWithSpy('Take を作る')
 
-    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
 
-    expect(screen.queryByRole('group', { name: '一括生成' })).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Take を作る' })).toBeNull()
     expect(focusSpy).toHaveBeenCalled()
   })
 
   it('開いていないときの Escape では焦点を動かさない', async () => {
     setup()
-    const toggle = screen.getByRole('button', { name: '一括生成' })
+    const toggle = screen.getByRole('button', { name: 'Take を作る' })
     const focusSpy = vi.spyOn(toggle, 'focus')
 
     await userEvent.setup().keyboard('{Escape}')
@@ -541,7 +591,7 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
     )
     const user = userEvent.setup()
 
-    await user.click(screen.getByRole('button', { name: '一括で変える' }))
+    await pick(user, '一括で変える…')
     await user.selectOptions(screen.getByLabelText('mood'), 'set')
     await user.type(screen.getByLabelText('mood の値'), 'a')
     await user.keyboard('{Escape}')
@@ -575,7 +625,7 @@ describe('BulkActionBar — 合計の見積（F3a）', () => {
   it('事前見積が取れないことを確認の文に書く', async () => {
     const { user } = setup({ estimatedTotalUsd: null })
 
-    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
     await user.click(screen.getByRole('button', { name: '12 件に生成を依頼' }))
 
     const asking = screen.getByRole('alertdialog')
@@ -586,7 +636,7 @@ describe('BulkActionBar — 合計の見積（F3a）', () => {
   it('見積が取れていれば確認の文に金額を出す', async () => {
     const { user } = setup({ estimatedTotalUsd: 12.5 })
 
-    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
     await user.click(screen.getByRole('button', { name: '12 件に生成を依頼' }))
 
     expect(screen.getByRole('alertdialog')).toHaveTextContent('$12.50')
@@ -595,9 +645,9 @@ describe('BulkActionBar — 合計の見積（F3a）', () => {
   it('見積が取れていれば一括生成の中に出す', async () => {
     const { user } = setup({ estimatedTotalUsd: 12.5 })
 
-    await user.click(screen.getByRole('button', { name: '一括生成' }))
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
 
-    expect(screen.getByRole('group', { name: '一括生成' })).toHaveTextContent('$12.50')
+    expect(screen.getByRole('group', { name: 'Take を作る' })).toHaveTextContent('$12.50')
   })
 })
 
@@ -609,7 +659,7 @@ describe('BulkActionBar — 絵コンテの画像', () => {
   it('開くと、枚数とかかる時間の目安を言う', async () => {
     const { user } = setup({ selectedCount: 12 })
 
-    await user.click(screen.getByRole('button', { name: '絵コンテの画像' }))
+    await user.click(screen.getByRole('button', { name: '絵を作る' }))
 
     expect(screen.getByText(/チェックした 12 件の絵コンテの画像/)).toBeTruthy()
     expect(screen.getByText(/1 枚 1 分ほど/)).toBeTruthy()
@@ -618,7 +668,7 @@ describe('BulkActionBar — 絵コンテの画像', () => {
   it('既定は絵の無い Shot だけを作る', async () => {
     const { props, user } = setup()
 
-    await user.click(screen.getByRole('button', { name: '絵コンテの画像' }))
+    await user.click(screen.getByRole('button', { name: '絵を作る' }))
     await user.click(screen.getByRole('button', { name: '作る' }))
 
     expect(props.onDrawStartFrames).toHaveBeenCalledWith({ onlyMissing: true })
@@ -627,7 +677,7 @@ describe('BulkActionBar — 絵コンテの画像', () => {
   it('選べば、絵がある Shot も作り直す', async () => {
     const { props, user } = setup()
 
-    await user.click(screen.getByRole('button', { name: '絵コンテの画像' }))
+    await user.click(screen.getByRole('button', { name: '絵を作る' }))
     await user.click(screen.getByRole('checkbox', { name: /絵がある Shot も作り直す/ }))
     await user.click(screen.getByRole('button', { name: '作る' }))
 
@@ -638,7 +688,7 @@ describe('BulkActionBar — 絵コンテの画像', () => {
   it('絵コンテが空の Shot があれば確認を出し、「このまま作る」を押したときだけ作る', async () => {
     const { props, user } = setup({ drawWarning: 'チェックした 12 件のうち 3 件は絵コンテ（説明）がまだ空です。' })
 
-    await user.click(screen.getByRole('button', { name: '絵コンテの画像' }))
+    await user.click(screen.getByRole('button', { name: '絵を作る' }))
     await user.click(screen.getByRole('button', { name: '作る' }))
     expect(props.onDrawStartFrames).not.toHaveBeenCalled()
     expect(screen.getByText(/3 件は絵コンテ（説明）がまだ空/)).toBeTruthy()

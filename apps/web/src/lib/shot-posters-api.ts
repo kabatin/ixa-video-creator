@@ -27,6 +27,8 @@ export const WireShotPoster = z
     pending: z.boolean(),
     /** 最初のフレーム（絵コンテの画像）が付いているか。採用 Take があっても見る。 */
     hasStartFrame: z.boolean(),
+    /** 絵コンテの画像を作っているか（採用 Take があっても）。一覧で絵と動画の作業中を分けて出す。 */
+    drawing: z.boolean(),
   })
   .refine((entry) => (entry.thumbnailUrl === null) !== (entry.reason === null), {
     message:

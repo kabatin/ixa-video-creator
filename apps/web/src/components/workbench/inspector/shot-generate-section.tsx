@@ -31,6 +31,7 @@ import {
 } from '@/lib/unguided-take'
 import { CANCEL_GENERATION_LABEL } from '@/lib/context-menus'
 import { describeActiveGeneration } from '@/lib/generation-progress'
+import { useAskReview } from '@/components/workbench/use-ask-review'
 
 /**
  * 生成（UI-WORKBENCH-2 §5.2）。**このパネルの主ボタン**はここ。
@@ -155,6 +156,7 @@ export const ShotGenerateSection = ({
    */
   const offeredForRef = useRef<number | null>(null)
   const { notify } = workbench
+  const askReview = useAskReview()
   useEffect(() => {
     if (watched === null || generating) return
     if (offeredForRef.current === watched.startedAtMs) return
@@ -162,10 +164,10 @@ export const ShotGenerateSection = ({
     void offerReviewAfterGeneration({
       shotIds: [watched.shotId],
       api: client,
-      confirm: (message) => window.confirm(message),
+      confirm: (message) => askReview(message),
       notify,
     })
-  }, [watched, generating, client, notify])
+  }, [watched, generating, client, notify, askReview])
   const cost = useCost(client, workbench.projectId, costEpoch)
 
   const generate = async (): Promise<void> => {

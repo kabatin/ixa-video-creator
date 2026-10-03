@@ -25,8 +25,8 @@ export type OfferReviewDeps = {
     readonly listTakes: (shotId: ShotId) => Promise<readonly Take[]>
     readonly requestReview: (takeId: TakeId) => Promise<unknown>
   }
-  /** はい / いいえ を聞く。ワークベンチでは `window.confirm`。 */
-  readonly confirm: (message: string) => boolean
+  /** はい / いいえ を聞く。ワークベンチでは確認の画面（`ContextMenuHost.ask`。画面全体を止める `window.confirm` は使わない）。 */
+  readonly confirm: (message: string) => boolean | Promise<boolean>
   /** 結果を伝える。ワークベンチでは上端の知らせ。 */
   readonly notify: (message: string) => void
 }
@@ -54,7 +54,7 @@ export const offerReviewAfterGeneration = async ({
   const pending = lists.flat().filter((take) => take.reviewStatus === 'pending')
   if (pending.length === 0) return
 
-  if (!confirm(askMessage(pending.length))) {
+  if (!(await confirm(askMessage(pending.length)))) {
     notify(REVIEW_LATER_GUIDANCE)
     return
   }

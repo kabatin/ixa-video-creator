@@ -225,3 +225,48 @@ describe('ContextMenuHost.perform の確認の見た目', () => {
     expect(run).toHaveBeenCalledTimes(1)
   })
 })
+
+/**
+ * 確かめて答えを返す口（`window.confirm` の置き換え）。押せば true、閉じれば false。
+ * 画面全体を止めるブラウザの確認ではなく、ワークベンチの確認の見た目で聞く。
+ */
+describe('ContextMenuHost.ask', () => {
+  const Asker = ({ onAnswer }: { readonly onAnswer: (answer: boolean) => void }) => {
+    const host = useContextMenuHost()
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          void host.ask({ title: '自動レビュー', message: '2 本をレビューしますか？', confirmLabel: 'レビューする', keepLabel: 'あとで' }).then(onAnswer)
+        }}
+      >
+        聞く
+      </button>
+    )
+  }
+
+  it('「する」を押せば true', async () => {
+    const onAnswer = vi.fn()
+    render(
+      <ContextMenuHost>
+        <Asker onAnswer={onAnswer} />
+      </ContextMenuHost>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: '聞く' }))
+    expect(screen.getByText('2 本をレビューしますか？')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'レビューする' }))
+    expect(onAnswer).toHaveBeenCalledWith(true)
+  })
+
+  it('「しない」を押せば false', async () => {
+    const onAnswer = vi.fn()
+    render(
+      <ContextMenuHost>
+        <Asker onAnswer={onAnswer} />
+      </ContextMenuHost>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: '聞く' }))
+    await userEvent.click(screen.getByRole('button', { name: 'あとで' }))
+    expect(onAnswer).toHaveBeenCalledWith(false)
+  })
+})

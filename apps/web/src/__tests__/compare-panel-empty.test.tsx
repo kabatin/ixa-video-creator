@@ -18,7 +18,7 @@ const described = aWorkbenchShot(1, { description: '夜の街を走る' })
 const blank = aWorkbenchShot(1, { description: '' })
 
 const postersWith = (shot: typeof blank, hasStartFrame: boolean): ShotPosterMap =>
-  new Map([[shot.id, { url: null, reason: 'まだ Take がありません', hasStartFrame, pending: false }]])
+  new Map([[shot.id, { url: null, reason: 'まだ Take がありません', hasStartFrame, pending: false, drawing: false }]])
 
 const generatingFor = (shot: typeof blank): ActiveGenerations =>
   new Map([

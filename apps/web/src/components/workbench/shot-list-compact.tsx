@@ -17,6 +17,7 @@ import type { HeaderCheckboxState, ShotSelection } from '@/lib/shot-bulk'
 import type { ShotSortKey, SortDirection } from '@/lib/shot-list-view'
 import { posterViewFor, type ShotPosterMap } from '@/lib/shot-posters'
 import type { ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
+import { ShotActivityBadges } from '@/components/workbench/shot-activity-badge'
 
 export type ShotListCompactProps = {
   readonly shots: readonly Shot[]
@@ -248,9 +249,11 @@ export const ShotListCompact = ({
                 >
                   {shotStatusLabel(shot.status)}
                 </span>
-                {activityOf?.(shot.id) != null && (
-                  <span className="ml-1 whitespace-nowrap text-xs tabular-nums text-muted">{activityOf(shot.id)}</span>
-                )}
+                {/* 作っているもの（絵・動画）を形で分けて出す。 */}
+                <ShotActivityBadges
+                  drawing={posters.get(shot.id)?.drawing ?? false}
+                  video={activityOf?.(shot.id) ?? null}
+                />
               </td>
             </tr>
           )

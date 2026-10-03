@@ -238,6 +238,7 @@ describe('GET /projects/:projectId/shot-posters', () => {
       takeId: null,
       pending: false,
       hasStartFrame: false,
+      drawing: false,
     }
 
     expect(
@@ -497,5 +498,15 @@ describe('最初のフレームを絵に使う', () => {
     expect((await setup({ thumbnail: true, drawing: true }))?.hasStartFrame).toBe(true)
     expect((await setup({ thumbnail: true, noFrame: true }))?.hasStartFrame).toBe(false)
     expect((await setup({ thumbnail: true, adopted: true, noFrame: true }))?.hasStartFrame).toBe(false)
+  })
+
+  /**
+   * 絵を作っているかを、採用 Take があっても返す（制作者 2026-10-03「Shot 一覧もぐるぐる表示したほうがいいが、
+   * 画像と動画で見た目は切り替えたほうがよさそう」）。以前は採用 Take があると、絵を作っていることが一覧に出なかった。
+   */
+  it('絵を作っているかを返す（採用 Take があっても）', async () => {
+    expect((await setup({ thumbnail: true, drawing: true }))?.drawing).toBe(true)
+    expect((await setup({ thumbnail: true, adopted: true, drawing: true }))?.drawing).toBe(true)
+    expect((await setup({ thumbnail: true }))?.drawing).toBe(false)
   })
 })
