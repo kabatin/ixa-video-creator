@@ -432,6 +432,8 @@ export const WaveformCanvas = ({
   const dpr = useDevicePixelRatio()
   const palette = useWaveformPalette()
   const [drawError, setDrawError] = useState<string | null>(null)
+  /** 最後に出した描画の失敗。**変わったときだけ state を更新する**（窓が動く再生中は毎フレーム描くため）。 */
+  const shownDrawError = useRef<string | null>(null)
 
   const safeView = useMemo(
     () => clampView(view ?? fullView(durationSec), durationSec),
@@ -449,7 +451,9 @@ export const WaveformCanvas = ({
     ]
   }, [widthPx, safeView, beats, downbeats, drops, sectionBoundarySec])
 
-  const points = peaksOf(peaks)
+  // **毎回作り直さない。** 点の無い波形では `peaksOf` が新しい空配列を返し、親が描き直すたびに
+  // 下の描画が走っていた（再生中は毎フレーム。制作者 2026-10-04）。
+  const points = useMemo(() => peaksOf(peaks), [peaks])
   // ブラウザのキャンバスは一辺およそ 32k px が上限。タイムラインを「細かく」にすると
   // 1 曲で超えるので、画素だけ間引いて CSS 幅はそのまま伸ばす（位置はずれない）。
   const widthDev = Math.max(0, Math.min(MAX_CANVAS_WIDTH_PX, Math.round(widthPx * dpr)))
@@ -495,9 +499,10 @@ export const WaveformCanvas = ({
       dpr,
       palette,
     })
-    setDrawError(
-      ok ? null : 'この端末では波形を描画できませんでした（canvas を初期化できません）。',
-    )
+    const next = ok ? null : 'この端末では波形を描画できませんでした（canvas を初期化できません）。'
+    if (shownDrawError.current === next) return
+    shownDrawError.current = next
+    setDrawError(next)
   }, [stretched, stripes, safeView, durationSec, picks, widthDev, heightDev, dpr, palette])
 
   if (peaks.status === 'failed') {

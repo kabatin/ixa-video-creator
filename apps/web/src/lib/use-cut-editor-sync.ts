@@ -63,12 +63,31 @@ export const useCutEditorSync = (
     port.current?.onPlayingChange(playback.isPlaying)
   }, [playback.isPlaying])
 
+  /** 外した後に届いた位置の報告を捨てる。 */
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
   const lastSec = useRef(playback.currentSec)
   useEffect(() => {
     if (lastSec.current === playback.currentSec) return
     lastSec.current = playback.currentSec
-    // 他が鳴っている間は位置を返さない。両方が返すと位置が往復する（L-023）。
-    if (port.current?.othersPlaying !== true) port.current?.onPosition(playback.currentSec)
+    const sec = playback.currentSec
+    /**
+     * **位置の報告は effect の flush の外で渡す**（`program-monitor-player.tsx` と同じ）。
+     * ここで共有の位置を同期的に更新すると、React は毎フレーム「effect の flush 中の更新」と数え、
+     * 描画が遅いと途切れずに積もって、開発時に `Maximum update depth exceeded` が出た
+     * （制作者 2026-10-04。CPU を 6 倍絞って 25 秒鳴らすと 4 件）。マイクロタスクなら位置は同じ順番で、ほぼ遅れずに届く。
+     */
+    queueMicrotask(() => {
+      if (!mounted.current) return
+      // 他が鳴っている間は位置を返さない。両方が返すと位置が往復する（L-023）。
+      if (port.current?.othersPlaying !== true) port.current?.onPosition(sec)
+    })
   }, [playback.currentSec])
 
   const othersPlaying = sync?.othersPlaying ?? false

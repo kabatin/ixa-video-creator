@@ -331,16 +331,28 @@ export const CutEditor = ({
   /**
    * **`view` を依存に入れないこと。** 入れると、窓を動かす→再実行→また動かす、で回り続ける。
    * 引き金は再生位置の変化だけでよく、いまの窓は `setView` の引数として受け取る。
+   *
+   * **窓は effect の flush の外で動かす**（`use-cut-editor-sync.ts` の位置の報告と同じ）。鳴っている間は毎フレーム動くので、
+   * flush の中で更新すると描画が遅いときに積もり、開発時に `Maximum update depth exceeded` が出た（制作者 2026-10-04）。
    */
   useEffect(() => {
-    if (!followPlayhead || dragging) return
-    setView((current) =>
-      // 止めている間は、見えているうちは触らない。窓を自分で送った直後に
-      // 引き戻されないようにするため。外へ出たときだけ連れ戻す。
-      !playback.isPlaying && isTimeInView(playback.currentSec, current, durationSec)
-        ? current
-        : centerView(current, playback.currentSec, durationSec),
-    )
+    if (!followPlayhead || dragging) return undefined
+    const isPlaying = playback.isPlaying
+    const currentSec = playback.currentSec
+    let active = true
+    queueMicrotask(() => {
+      if (!active) return
+      setView((current) =>
+        // 止めている間は、見えているうちは触らない。窓を自分で送った直後に
+        // 引き戻されないようにするため。外へ出たときだけ連れ戻す。
+        !isPlaying && isTimeInView(currentSec, current, durationSec)
+          ? current
+          : centerView(current, currentSec, durationSec),
+      )
+    })
+    return () => {
+      active = false
+    }
   }, [followPlayhead, playback.isPlaying, playback.currentSec, dragging, durationSec])
 
   /** 自分で窓を送ったら追従は切る。切らないと、送った先から即座に引き戻される。 */
