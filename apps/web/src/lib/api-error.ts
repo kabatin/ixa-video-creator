@@ -38,10 +38,48 @@ export const describeErrorForLog = (error: unknown): string => {
 const UNREACHABLE =
   'サーバに繋がりません。ネットワークを確認して、少し待ってからやり直してください。'
 
-/** 理由を読み取れなかったときの文。**「失敗した」ことは必ず伝える。** */
-const genericFailure = (status: number): string =>
-  `サーバがエラーを返しました（${String(status)}）。少し待ってからやり直してください。` +
+/**
+ * 理由を読み取れなかったときの文。**「失敗した」ことは必ず伝える。** HTTP の番号は出さない（画面に出さないもの）。
+ * 番号はログの文（`describeErrorForLog`）に残っている。
+ */
+const GENERIC_FAILURE =
+  'サーバでエラーが起きました。少し待ってからやり直してください。' +
   '直らないときは、この画面を開いた時刻を控えて知らせてください。'
+
+/**
+ * 項目の名前（サーバの列名）の言い換え。**知らない名前は出さない**（理由の文だけ出す）。
+ * 英字の列名は利用者に読めない（制作者 2026-10-03 の UI 指摘の続き。画面に実装の言葉を出さない）。
+ */
+const FIELD_LABELS: Readonly<Record<string, string>> = {
+  name: '名前',
+  displayName: '表示名',
+  title: '題名',
+  code: 'コード',
+  description: '説明',
+  mood: '雰囲気',
+  startSec: '開始',
+  durationSec: '尺',
+  offsetSec: '開始位置',
+  volume: '音量',
+  fps: 'fps',
+  resolution: '大きさ',
+  aspectRatio: '画面の形',
+  budgetUsd: '予算',
+  status: '状態',
+  lyrics: '歌詞',
+  lyricCues: '歌詞の時刻',
+  styleGuide: 'ルック',
+  avoid: '避けたいもの',
+  boundariesSec: '区切り',
+  category: '種類',
+  value: '値',
+  text: '文字',
+  preset: '画質',
+  scope: '範囲',
+  renderJobId: '書き出し',
+  referenceIdentityImageId: '手本の画像',
+  content: '内容',
+}
 
 /** `{ error, fields }` の本文から人向けの 1 文を組む。読めなければ null。 */
 const fromBody = (error: ApiError): string | null => {
@@ -62,7 +100,9 @@ const fromBody = (error: ApiError): string | null => {
       ? Object.entries(record.fields as Record<string, unknown>)
           .flatMap(([name, messages]) =>
             Array.isArray(messages)
-              ? messages.filter((m): m is string => typeof m === 'string').map((m) => `${name}: ${m}`)
+              ? messages
+                  .filter((m): m is string => typeof m === 'string')
+                  .map((m) => (FIELD_LABELS[name] === undefined ? m : `${FIELD_LABELS[name]}: ${m}`))
               : [],
           )
           .join(' / ')
@@ -80,7 +120,7 @@ const fromBody = (error: ApiError): string | null => {
 export const describeForPerson = (error: unknown): string => {
   if (!(error instanceof ApiError)) return describeErrorForLog(error)
   if (error.isTransportError) return UNREACHABLE
-  return fromBody(error) ?? genericFailure(error.status)
+  return fromBody(error) ?? GENERIC_FAILURE
 }
 
 /**

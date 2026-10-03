@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { ASPECT_CHOICES, FPS_CHOICES, resolutionChoicesFor, videoFpsFor } from '@/lib/project-spec-choices'
+import {
+  ASPECT_CHOICES,
+  FPS_CHOICES,
+  describeProjectSpec,
+  resolutionChoicesFor,
+  videoFpsFor,
+} from '@/lib/project-spec-choices'
 
 /**
  * 新規作成・設定で選ぶ「形・大きさ・fps」（制作者 2026-10-03「アスペクト比は数字「16:9」を見ても、これって縦だっけ？
@@ -53,5 +59,20 @@ describe('videoFpsFor', () => {
 
   it('その AI のモデルが無ければ null（分からない。合わせる案内を出さない）', () => {
     expect(videoFpsFor([model('fal', [24])], 'vpipe')).toBeNull()
+  })
+})
+
+/** プロジェクト一覧のカードに出す 1 行（「1920×1080」「16:9」「30」を別々に並べていたのを、読める形にまとめる）。 */
+describe('describeProjectSpec', () => {
+  it('形の名前・大きさの名前・fps を 1 行で言う', () => {
+    expect(describeProjectSpec({ aspectRatio: '16:9', resolution: { width: 1920, height: 1080 }, fps: 30 })).toBe(
+      '横長 16:9 ・ FHD ・ 30 fps',
+    )
+  })
+
+  it('選択肢に無い大きさは、縦横の数で言う', () => {
+    expect(describeProjectSpec({ aspectRatio: '16:9', resolution: { width: 1600, height: 900 }, fps: 24 })).toBe(
+      '横長 16:9 ・ 1600×900 ・ 24 fps',
+    )
   })
 })

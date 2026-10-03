@@ -62,7 +62,8 @@ const CharacterDetailPage = async ({ params }: CharacterPageProps) => {
         <PageHeader title="キャラクター" />
         <ErrorPanel
           title="キャラクター ID が不正です"
-          message={`URL の ID が ULID ではありません: ${id}`}
+          message="このページのアドレスが正しくありません。"
+          detail={`アドレスの ID: ${id}`}
           hint="プロジェクトの素材ツリーから辿り直してください。"
         />
       </main>
@@ -96,7 +97,8 @@ const CharacterDetailPage = async ({ params }: CharacterPageProps) => {
         <ErrorPanel
           title={result.title}
           message={result.message}
-          hint={`API (${resolveApiBaseUrl()}) が起動しているか確認してください。`}
+          hint="サーバが動いているか確かめてください。"
+          detail={`サーバの場所: ${resolveApiBaseUrl()}`}
         />
       )}
     </main>

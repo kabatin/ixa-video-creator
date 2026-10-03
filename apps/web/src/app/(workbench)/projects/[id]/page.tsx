@@ -45,9 +45,19 @@ const attempt = async <T,>(label: string, run: () => Promise<T>): Promise<Part<T
 
 const BACK = Object.freeze([Object.freeze({ href: '/', label: 'プロジェクト一覧へ' })])
 
-const Blocked = ({ title, message, hint }: { title: string; message: string; hint: string }) => (
+const Blocked = ({
+  title,
+  message,
+  hint,
+  detail,
+}: {
+  title: string
+  message: string
+  hint: string
+  detail?: string
+}) => (
   <main className="relative h-full overflow-auto p-6">
-    <ErrorPanel title={title} message={message} hint={hint} actions={BACK} />
+    <ErrorPanel title={title} message={message} hint={hint} actions={BACK} {...(detail === undefined ? {} : { detail })} />
   </main>
 )
 
@@ -74,9 +84,10 @@ const WorkbenchPage = async ({ params, searchParams }: WorkbenchPageProps) => {
   if (!projectId.success) {
     return (
       <Blocked
-        title="プロジェクト ID が不正です"
-        message={`URL の ID が ULID ではありません: ${id}`}
+        title="このページのアドレスが正しくありません"
+        message="プロジェクトを開けませんでした。"
         hint="プロジェクト一覧から辿り直してください。"
+        detail={`アドレスの ID: ${id}`}
       />
     )
   }
@@ -87,7 +98,8 @@ const WorkbenchPage = async ({ params, searchParams }: WorkbenchPageProps) => {
       <Blocked
         title="プロジェクトを読み込めませんでした"
         message={project.error}
-        hint={`API (${resolveApiBaseUrl()}) が起動しているか確認してください。`}
+        hint="サーバが動いているか確かめてください。"
+        detail={`サーバの場所: ${resolveApiBaseUrl()}`}
       />
     )
   }
@@ -96,8 +108,9 @@ const WorkbenchPage = async ({ params, searchParams }: WorkbenchPageProps) => {
     return (
       <Blocked
         title="プロジェクトが見つかりません"
-        message={`ID ${projectId.data} のプロジェクトはありません。`}
-        hint="URL が古いか、すでに削除された可能性があります。"
+        message="このプロジェクトはありません。"
+        hint="アドレスが古いか、すでに削除された可能性があります。"
+        detail={`アドレスの ID: ${projectId.data}`}
       />
     )
   }

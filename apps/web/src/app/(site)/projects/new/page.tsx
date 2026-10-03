@@ -28,7 +28,8 @@ const NewProjectPage = () => {
         <ErrorPanel
           title="設定が不足しています"
           message={workspace.reason}
-          hint="apps/web/.env.local に NEXT_PUBLIC_WORKSPACE_ID を設定してください。"
+          hint="作業場所の設定が読めていません。開発の手順書（README）の「はじめに」に沿って設定してください。"
+          detail="apps/web/.env.local の NEXT_PUBLIC_WORKSPACE_ID"
         />
       )}
     </main>

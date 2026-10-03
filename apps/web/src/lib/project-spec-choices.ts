@@ -92,3 +92,21 @@ export const videoFpsFor = (
   if (mine.length === 0) return null
   return [...new Set(mine.flatMap((model) => model.fps))].sort((a, b) => a - b)
 }
+
+/** `横長 16:9 ・ FHD ・ 30 fps`。プロジェクト一覧のカードに出す。選択肢に無い大きさは縦横の数で言う。 */
+export const describeProjectSpec = (project: {
+  readonly aspectRatio: AspectRatio
+  readonly resolution: Resolution
+  readonly fps: number
+}): string => {
+  const aspect = ASPECT_CHOICES.find((choice) => choice.value === project.aspectRatio)
+  const size = resolutionChoicesFor(project.aspectRatio).find(
+    (choice) =>
+      choice.resolution.width === project.resolution.width && choice.resolution.height === project.resolution.height,
+  )
+  return [
+    aspect === undefined ? project.aspectRatio : `${aspect.name} ${aspect.value}`,
+    size?.name ?? `${String(project.resolution.width)}×${String(project.resolution.height)}`,
+    `${String(project.fps)} fps`,
+  ].join(' ・ ')
+}

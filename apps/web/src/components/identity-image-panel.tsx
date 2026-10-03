@@ -94,7 +94,7 @@ export const IdentityImagePanel = ({
         <div>
           <SelectField
             id="identity-image-role"
-            label="役割（role）"
+            label="種類"
             value={role}
             options={IDENTITY_ROLE_OPTIONS}
             disabled={busy}

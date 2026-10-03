@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import { PageHeader } from '@/components/page-header'
+import { LinkButton } from '@/components/ui/button'
 
 /**
  * キャラクター・ロケーション・ブランド資産は**プロジェクトごと**になった（ADR-0034。制作者 2026-10-03
@@ -17,12 +17,9 @@ export const LibraryMovedNotice = ({ title }: { readonly title: string }) => (
         プロジェクトを開き、左の素材ツリーで作成・編集してください。ほかのプロジェクトのものを使うときは、
         素材ツリーの「ほかのプロジェクトから取り込む…」で複製できます。
       </p>
-      <Link
-        href="/"
-        className="inline-block rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90"
-      >
+      <LinkButton href="/" tone="primary">
         プロジェクト一覧へ
-      </Link>
+      </LinkButton>
     </section>
   </main>
 )

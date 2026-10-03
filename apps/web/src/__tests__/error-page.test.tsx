@@ -23,3 +23,14 @@ describe('ErrorPage', () => {
     expect(screen.getByText(/知らせてください/)).toBeTruthy()
   })
 })
+
+/** 画面の本文に例外の生の文を出さない。直す手がかりは「詳しい情報」に畳む（制作者 2026-10-03 の UI 指摘の続き）。 */
+describe('ErrorPage: 生の文', () => {
+  it('例外の文と識別子は「詳しい情報」の中', () => {
+    render(<ErrorPage error={Object.assign(new Error('TypeError: x is undefined'), { digest: 'abc123' })} reset={vi.fn()} />)
+
+    const detail = screen.getByText(/TypeError: x is undefined/)
+    expect(detail.closest('details')).not.toBeNull()
+    expect(detail.textContent).toContain('abc123')
+  })
+})

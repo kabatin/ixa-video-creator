@@ -11,10 +11,10 @@ const NotFound = () => {
 
   return (
     <main>
-      <PageHeader title="404" />
+      <PageHeader title="ページが見つかりません" />
       <ErrorPanel
         title={state.title}
-        message="この URL に対応する画面はありません。"
+        message="このアドレスに対応する画面はありません。"
         hint={state.hint}
         actions={[{ href: '/', label: 'プロジェクト一覧へ' }]}
       />

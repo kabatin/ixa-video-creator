@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 
 /**
@@ -67,4 +68,24 @@ export const Button = ({ tone = 'secondary', size = 'md', nowrap = false, childr
   >
     {children}
   </button>
+)
+
+/**
+ * ボタンの見た目のリンク（ページを移るとき）。見た目は `Button` と同じ表から作る。
+ * 以前は 3 か所（一覧の「新規プロジェクト」・空の表示・移動の案内）が主ボタンの見た目を手で書き写していた。
+ */
+export const LinkButton = ({
+  href,
+  tone = 'secondary',
+  size = 'md',
+  children,
+}: {
+  readonly href: string
+  readonly tone?: ButtonTone
+  readonly size?: ButtonSize
+  readonly children: ReactNode
+}) => (
+  <Link href={href} className={`${BASE} ${SIZES[size]} ${TONES[tone]}`}>
+    {children}
+  </Link>
 )

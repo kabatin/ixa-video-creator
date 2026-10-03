@@ -1,7 +1,7 @@
 import type { Project } from '@ixa/domain'
 import Link from 'next/link'
 import { ShotPoster } from '@/components/shot-poster'
-import { formatResolution } from '@/lib/resolution-presets'
+import { describeProjectSpec } from '@/lib/project-spec-choices'
 import { formatCreatedAt, statusClassName, statusLabel } from '@/lib/project-display'
 import { workbenchHref } from '@/lib/workbench-url'
 
@@ -48,24 +48,9 @@ export const ProjectCard = ({ project, coverUrl, coverReason }: ProjectCardProps
           {statusLabel(project.status)}
         </span>
       </div>
-      <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm text-muted">
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-muted">解像度</dt>
-          <dd>{formatResolution(project.resolution)}</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-muted">アスペクト比</dt>
-          <dd>{project.aspectRatio}</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-muted">fps</dt>
-          <dd>{project.fps}</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-muted">作成日</dt>
-          <dd>{formatCreatedAt(project)}</dd>
-        </div>
-      </dl>
+      {/* 形・大きさ・fps を読める 1 行に（以前は「1920×1080」「16:9」「30」を別々の欄に並べていた）。 */}
+      <p className="mt-3 text-sm text-text">{describeProjectSpec(project)}</p>
+      <p className="mt-1 text-xs text-muted">{`作成 ${formatCreatedAt(project)}`}</p>
     </Link>
   </li>
 )
