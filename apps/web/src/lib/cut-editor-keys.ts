@@ -212,18 +212,35 @@ export const NUDGE_STEPS = {
   coarseSec: COARSE_NUDGE_SEC,
 } as const
 
+/** 打鍵を受けた場所。どの画面の中か（DOM の `closest` は呼び出し側が引いて、真偽値だけを渡す）。 */
+export type PlainKeyPlace = {
+  /** 「聴きながら切る」のパネルの中か（`[data-cutter-panel]`）。 */
+  readonly insideCutterPanel: boolean
+  /** 開いている確認・ダイアログの中か（`dialog[open]`）。 */
+  readonly insideOpenDialog: boolean
+}
+
 /**
- * 区切るモードが見えている間、**フォーカスが波形の外でも**区切りを置く打鍵か（制作者 2026-10-03「「ここに区切りを置く」
- * ボタンもテロップのように Enter とかで置けるようにしたい」）。歌詞の Enter と同じく、文字を打っている間だけは取らない。
- * ボタンの上でも取る（取った打鍵は既定の動きを止めるので、ボタンは押されない）。
+ * 「聴きながら切る」が、フォーカスの場所に関わらず飾りの無いキー（Enter・Space・Backspace）を受けてよいか。
+ * 区切りの Enter と、歌詞を合わせるの Enter / Space / Backspace が使う（制作者 2026-10-03「テロップのように Enter で
+ * 置けるように」）。**1 回の打鍵で 2 つの操作を起こさない**（レビューで見つけた）:
+ * - 文字を打っている間・開いている確認の中は取らない
+ * - メニュー項目・タブなど役割を持つ部品の上は、その部品を優先する
+ * - 普通のボタンの上で取るのは「聴きながら切る」のパネルの中だけ（▶ を押した直後に Enter で置けるように）。
+ *   ほかのパネルのボタン（素材ツリーの行・一括操作）の Enter は、そのボタンが受ける
  */
-export const isPlaceKeyAnywhere = (event: Omit<CutEditorKeyEvent, 'insideCutEditor'>): boolean => {
+export const cutterTakesPlainKey = (target: CutEditorKeyEvent['target'], place: PlainKeyPlace): boolean => {
+  if (place.insideOpenDialog) return false
+  const owner = resolveKeyOwner(target, false)
+  if (owner === 'workbench' || owner === 'cut-editor') return true
+  if (owner !== 'widget' || !place.insideCutterPanel) return false
+  const role = target?.role ?? null
+  return target?.tagName.toUpperCase() === 'BUTTON' && (role === null || role === 'button')
+}
+
+/** 区切るモードで、フォーカスが波形の外でも区切りを置く打鍵か（Enter / S。修飾キーなし）。 */
+export const isPlaceKeyAnywhere = (event: Omit<CutEditorKeyEvent, 'insideCutEditor'> & PlainKeyPlace): boolean => {
   if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false
   if (event.key !== 'Enter' && event.key !== 's') return false
-  const owner = resolveKeyOwner(event.target, false)
-  if (owner === 'workbench' || owner === 'cut-editor') return true
-  // 普通のボタンの上でも取る（区切るモードの切り替えを押した直後に Enter で置けるように）。
-  // メニュー項目・タブなど役割を持つ部品は、その部品の Enter を優先する。
-  const role = event.target?.role ?? null
-  return owner === 'widget' && event.target?.tagName.toUpperCase() === 'BUTTON' && (role === null || role === 'button')
+  return cutterTakesPlainKey(event.target, event)
 }

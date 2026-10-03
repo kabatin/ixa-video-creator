@@ -67,18 +67,31 @@ export const ShotInspector = ({
   useEffect(() => {
     const target = sections.current[workbench.inspectorTab]
     target?.scrollIntoView({ block: 'start' })
-    const content = body.current?.firstElementChild
-    if (target === null || target === undefined || content === null || content === undefined) return undefined
-    if (typeof ResizeObserver === 'undefined') return undefined
+    const scroller = body.current
+    const content = scroller?.firstElementChild
+    // 一番上（絵コンテ）は伸びても位置が変わらないので追わない。
+    if (workbench.inspectorTab === 'settings' || typeof ResizeObserver === 'undefined') return undefined
+    if (target === null || target === undefined || scroller === null || content === null || content === undefined) {
+      return undefined
+    }
     const observer = new ResizeObserver(() => {
       target.scrollIntoView({ block: 'start' })
     })
     observer.observe(content)
-    const stop = window.setTimeout(() => {
+    // **利用者が自分で動かしたら追わない**（欄が読み込まれて伸びるたびに引き戻されていた。レビューで見つけた）。
+    const stop = (): void => {
       observer.disconnect()
-    }, FOLLOW_SCROLL_MS)
+    }
+    const userMoves = ['wheel', 'pointerdown', 'keydown', 'touchstart'] as const
+    userMoves.forEach((type) => {
+      scroller.addEventListener(type, stop, { once: true, passive: true })
+    })
+    const timer = window.setTimeout(stop, FOLLOW_SCROLL_MS)
     return () => {
-      window.clearTimeout(stop)
+      window.clearTimeout(timer)
+      userMoves.forEach((type) => {
+        scroller.removeEventListener(type, stop)
+      })
       observer.disconnect()
     }
   }, [workbench.inspectorTab, workbench.inspectorRequest, shot.id])

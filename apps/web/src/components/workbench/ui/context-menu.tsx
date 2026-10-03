@@ -263,8 +263,13 @@ const ContextMenu = ({
  */
 export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) => {
   const [request, setRequest] = useState<ContextMenuRequest | null>(null)
-  /** 確認を待っている項目（失敗したときは理由を出すためにも使う）。 */
-  const [pending, setPending] = useState<Enabled | null>(null)
+  /**
+   * 確認を待っている項目の列（先頭を出す。失敗したときは理由を出すためにも使う）。
+   * **重なっても前の確認を黙って消さない**（レビューで見つけた。Shot を消す確認の間に「自動レビュー」が来ると入れ替わり、
+   * 前の確認の答え（`ask` の Promise）が返らなくなっていた）。順に聞く。
+   */
+  const [queue, setQueue] = useState<readonly Enabled[]>([])
+  const pending = queue[0] ?? null
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const close = useMemo(
@@ -280,10 +285,10 @@ export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) 
     setError(null)
     try {
       await item.run()
-      setPending(null)
+      setQueue((current) => (current[0] === item ? current.slice(1) : current))
     } catch (cause) {
       // 握り潰さない。確認の中なら確認の中に、そうでなければ同じ殻で理由を出す。
-      setPending(item)
+      setQueue((current) => (current[0] === item ? current : [item, ...current]))
       setError(describeForPerson(cause))
     } finally {
       setBusy(false)
@@ -293,7 +298,7 @@ export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) 
   const choose = useCallback(
     (item: Enabled): void => {
       if (item.confirm === undefined) void run(item)
-      else setPending(item)
+      else setQueue((current) => [...current, item])
     },
     [run],
   )
@@ -325,7 +330,7 @@ export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) 
 
   const dismiss = (): void => {
     pending?.onDismiss?.()
-    setPending(null)
+    setQueue((current) => current.slice(1))
     setError(null)
   }
 

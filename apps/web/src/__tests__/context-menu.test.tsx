@@ -270,3 +270,46 @@ describe('ContextMenuHost.ask', () => {
     expect(onAnswer).toHaveBeenCalledWith(false)
   })
 })
+
+/**
+ * 確認が開いている間に次の確認が来ても、前の確認を黙って消さない（レビューで見つけた）。順に聞き、どの答えも返す。
+ * 例: Shot を消す確認を開いている間に一括生成が終わり、「自動レビュー」を聞く。
+ */
+describe('ContextMenuHost: 確認が重なったとき', () => {
+  const TwoAsks = ({ onAnswer }: { readonly onAnswer: (label: string, answer: boolean) => void }) => {
+    const host = useContextMenuHost()
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          void host.ask({ title: '1 つ目', message: '1 つ目の確認', confirmLabel: 'はい（1）' }).then((a) => {
+            onAnswer('1', a)
+          })
+          void host.ask({ title: '2 つ目', message: '2 つ目の確認', confirmLabel: 'はい（2）' }).then((a) => {
+            onAnswer('2', a)
+          })
+        }}
+      >
+        2 つ聞く
+      </button>
+    )
+  }
+
+  it('先の確認を出したままにし、答えたら次を出す。どちらの答えも返る', async () => {
+    const onAnswer = vi.fn()
+    render(
+      <ContextMenuHost>
+        <TwoAsks onAnswer={onAnswer} />
+      </ContextMenuHost>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: '2 つ聞く' }))
+
+    expect(screen.getByText('1 つ目の確認')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'はい（1）' }))
+    expect(onAnswer).toHaveBeenCalledWith('1', true)
+
+    expect(await screen.findByText('2 つ目の確認')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'やめる' }))
+    expect(onAnswer).toHaveBeenCalledWith('2', false)
+  })
+})

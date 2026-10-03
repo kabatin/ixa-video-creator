@@ -31,9 +31,12 @@ type Draft = { readonly run: WireStoryboardDraftRun; readonly item: WireStoryboa
 
 const defaultApi = (): StoryboardDraftApi => createStoryboardDraftApi(createRequester(resolveApiBaseUrl()))
 
-/** この Shot の最新の案。読み直したら（`epoch`）引き直す。案が無ければ null。 */
+/**
+ * この Shot の最新の案。読み直したら（`epoch`）引き直す。案が無ければ null。
+ * **どの Shot の案かを一緒に持つ。** Shot を替えた直後に前の Shot の案を出すと、「この案にする」が別の Shot で走る。
+ */
 const useShotDraft = (api: StoryboardDraftApi, projectId: ProjectId, shot: Shot, epoch: number): Draft | null => {
-  const [draft, setDraft] = useState<Draft | null>(null)
+  const [loaded, setLoaded] = useState<{ readonly shotId: Shot['id']; readonly draft: Draft | null } | null>(null)
   useEffect(() => {
     let alive = true
     api
@@ -41,17 +44,17 @@ const useShotDraft = (api: StoryboardDraftApi, projectId: ProjectId, shot: Shot,
       .then((latest) => {
         if (!alive) return
         const item = latest.items.find((candidate) => candidate.shotId === shot.id)
-        setDraft(latest.run === null || item === undefined ? null : { run: latest.run, item })
+        setLoaded({ shotId: shot.id, draft: latest.run === null || item === undefined ? null : { run: latest.run, item } })
       })
       .catch(() => {
-        // 案は手がかりで、無くても書ける。読めなければ出さない（絵コンテの案の画面は理由を出す）。
-        if (alive) setDraft(null)
+        // 案は手がかりで、無くても書ける。読めなければ出さない（理由は「絵コンテの案」の画面が出す）。
+        if (alive) setLoaded({ shotId: shot.id, draft: null })
       })
     return () => {
       alive = false
     }
   }, [api, projectId, shot.id, epoch])
-  return draft
+  return loaded?.shotId === shot.id ? loaded.draft : null
 }
 
 export const ShotStoryboardSection = ({
@@ -145,7 +148,10 @@ export const ShotStoryboardSection = ({
           size="sm"
           disabled={disabled}
           onConfirm={() => {
-            void save({ description: '', mood: null })
+            setError(null)
+            save({ description: '', mood: null }).catch((cause: unknown) => {
+              setError(`絵コンテを消せませんでした: ${describeForPerson(cause)}`)
+            })
           }}
         />
       )}

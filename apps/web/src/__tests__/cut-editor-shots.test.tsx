@@ -190,3 +190,52 @@ describe('歌い出しに区切りを置く（歌詞の時刻が無いとき）'
     expect(onNeedLyrics).toHaveBeenCalledTimes(1)
   })
 })
+
+/**
+ * 1 回の Enter で 2 つの操作を起こさない（レビューで見つけた）。ほかの部品が受けた Enter・ほかのパネルのボタン・
+ * 開いている確認の中の Enter では区切りを置かない。
+ */
+describe('区切りを置かない Enter', () => {
+  it('ほかのパネルのボタンの上の Enter では置かない（そのボタンが受ける）', () => {
+    render(
+      <>
+        <button type="button">素材の行</button>
+        <CutEditor projectId={PROJECT_ID as never} track={track} analysis={analysis} initialSnapEnabled={false} placeKeyAnywhere />
+      </>,
+    )
+    const other = screen.getByRole('button', { name: '素材の行' })
+    other.focus()
+    fireEvent.keyDown(other, { key: 'Enter' })
+    expect(saveButton()).toBeDisabled()
+  })
+
+  it('先に受けた部品が既定の動きを止めた Enter では置かない', () => {
+    render(
+      <>
+        <div tabIndex={0} data-testid="row" onKeyDown={(event) => event.preventDefault()}>
+          行
+        </div>
+        <CutEditor projectId={PROJECT_ID as never} track={track} analysis={analysis} initialSnapEnabled={false} placeKeyAnywhere />
+      </>,
+    )
+    const row = screen.getByTestId('row')
+    row.focus()
+    fireEvent.keyDown(row, { key: 'Enter' })
+    expect(saveButton()).toBeDisabled()
+  })
+
+  it('開いている確認の中の Enter では置かない', () => {
+    render(
+      <>
+        <dialog open>
+          <button type="button">このまま作る</button>
+        </dialog>
+        <CutEditor projectId={PROJECT_ID as never} track={track} analysis={analysis} initialSnapEnabled={false} placeKeyAnywhere />
+      </>,
+    )
+    const inDialog = screen.getByRole('button', { name: 'このまま作る' })
+    inDialog.focus()
+    fireEvent.keyDown(inDialog, { key: 'Enter' })
+    expect(saveButton()).toBeDisabled()
+  })
+})

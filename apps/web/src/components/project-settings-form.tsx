@@ -146,7 +146,8 @@ export const ProjectSettingsForm = ({ project }: ProjectSettingsFormProps) => {
           <ResolutionField
             aspectRatio={AspectRatio.parse(values.aspectRatio)}
             value={values.resolutionKey}
-            savedKey={resolutionKeyOf(saved.resolution)}
+            // 保存済みの大きさを残すのは同じ形のときだけ（形を変えたら、その形の選択肢から選ぶ）。
+            {...(values.aspectRatio === saved.aspectRatio ? { savedKey: resolutionKeyOf(saved.resolution) } : {})}
             disabled={busy}
             error={errors.resolutionKey}
             onChange={(resolutionKey) => {

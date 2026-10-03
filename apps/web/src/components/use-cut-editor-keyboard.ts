@@ -1,7 +1,12 @@
 'use client'
 
 import { useEffect, useRef, type RefObject } from 'react'
-import { isPlaceKeyAnywhere, resolveCutEditorCommand, type CutEditorKeyEvent } from '@/lib/cut-editor-keys'
+import {
+  isPlaceKeyAnywhere,
+  resolveCutEditorCommand,
+  type CutEditorKeyEvent,
+  type PlainKeyPlace,
+} from '@/lib/cut-editor-keys'
 
 /** 打鍵が呼ぶ先。中身は `cut-editor.tsx` が持つ（区切りの状態はそこにある）。 */
 export type CutEditorKeyHandlers = {
@@ -17,10 +22,16 @@ export type CutEditorKeyHandlers = {
   readonly seekEdge: (edge: 'start' | 'end') => void
 }
 
-const targetOf = (node: HTMLElement | null): CutEditorKeyEvent['target'] =>
+export const targetOf = (node: HTMLElement | null): CutEditorKeyEvent['target'] =>
   node === null
     ? null
     : { tagName: node.tagName, isContentEditable: node.isContentEditable, role: node.getAttribute('role') }
+
+/** 打鍵を受けた場所（聴きながら切るのパネルの中か・開いている確認の中か）。判定は `cutterTakesPlainKey`。 */
+export const plainKeyPlaceOf = (node: HTMLElement | null): PlainKeyPlace => ({
+  insideCutterPanel: node?.closest('[data-cutter-panel]') != null,
+  insideOpenDialog: node?.closest('dialog[open]') != null,
+})
 
 /**
  * 聴きながら切るの打鍵（`cut-editor.tsx` から分けた）。行き先の判定は `cut-editor-keys.ts`（純粋な関数）。
@@ -46,6 +57,8 @@ export const useCutEditorKeyboard = ({
   useEffect(() => {
     if (!enabled) return undefined
     const onKeyDown = (event: KeyboardEvent): void => {
+      // 先に受けた部品（素材ツリーの行の Enter など）があれば譲る。1 回の打鍵で 2 つの操作を起こさない。
+      if (event.defaultPrevented) return
       const node = event.target instanceof HTMLElement ? event.target : null
       const keys = {
         key: event.key,
@@ -62,7 +75,7 @@ export const useCutEditorKeyboard = ({
         insideCutEditor: node !== null && containerRef.current?.contains(node) === true,
       })
       if (resolved === null) {
-        if (placeAnywhere && isPlaceKeyAnywhere(keys)) {
+        if (placeAnywhere && isPlaceKeyAnywhere({ ...keys, ...plainKeyPlaceOf(node) })) {
           event.preventDefault()
           run.placeMark()
         }

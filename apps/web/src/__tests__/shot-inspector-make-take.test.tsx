@@ -67,3 +67,44 @@ describe('ShotInspector の Take を作る', () => {
   })
 })
 
+/**
+ * 上の欄が遅れて伸びる間は送り直すが、**利用者が自分で動かしたら追わない**（レビューで見つけた。Shot を選んですぐ
+ * スクロールすると、欄が読み込まれて伸びるたびに引き戻されていた）。一番上（絵コンテ）を頼まれたときは追わない。
+ */
+describe('ShotInspector: 送り直し', () => {
+  it('伸びたら送り直し、ホイールで動かしたらやめる', () => {
+    const callbacks: (() => void)[] = []
+    const original = globalThis.ResizeObserver
+    // 本物と同じく、disconnect したら呼ばない。
+    globalThis.ResizeObserver = class {
+      private active = true
+      constructor(callback: () => void) {
+        callbacks.push(() => {
+          if (this.active) callback()
+        })
+      }
+      observe(): void {}
+      disconnect(): void {
+        this.active = false
+      }
+      unobserve(): void {}
+    } as unknown as typeof ResizeObserver
+    try {
+      const shot = aWorkbenchShot(1)
+      renderInWorkbench(<ShotInspector shot={shot} isFirst />, { shots: [shot], inspectorTab: 'generate' })
+      scrollIntoView.mockClear()
+
+      callbacks.forEach((callback) => callback())
+      expect(scrollIntoView).toHaveBeenCalledTimes(1)
+
+      const body = screen.getByRole('heading', { name: 'Take を作る' }).closest('.workbench-panel-body')
+      body?.dispatchEvent(new Event('wheel', { bubbles: true }))
+      scrollIntoView.mockClear()
+      callbacks.forEach((callback) => callback())
+      expect(scrollIntoView).not.toHaveBeenCalled()
+    } finally {
+      globalThis.ResizeObserver = original
+    }
+  })
+})
+

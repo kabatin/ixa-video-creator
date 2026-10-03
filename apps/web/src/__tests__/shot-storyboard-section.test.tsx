@@ -6,6 +6,7 @@ import {
 } from '@ixa/domain'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { ShotStoryboardSection } from '@/components/workbench/inspector/shot-storyboard-section'
 import type { StoryboardDraftApi, WireStoryboardDraftItem, WireStoryboardDraftRun } from '@/lib/storyboard-draft-api'
@@ -97,5 +98,49 @@ describe('ShotStoryboardSection', () => {
 
     expect(await screen.findByText(/なぜこの絵か: 曲の入りで世界を見せるため/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'この案にする' })).toBeNull()
+  })
+})
+
+/** レビューで見つけた 2 点。Shot を替えたら前の Shot の案を出さない。消すのに失敗したら理由を出す。 */
+describe('ShotStoryboardSection: Shot を替えたとき・失敗したとき', () => {
+  it('Shot を替えたら、読み直しが終わるまで前の Shot の案を出さない（違う Shot で採用しない）', async () => {
+    const other = aWorkbenchShot(2, { description: '' })
+    const api: StoryboardDraftApi = {
+      getLatestDraft: vi
+        .fn<StoryboardDraftApi['getLatestDraft']>()
+        .mockResolvedValueOnce({ run, items: [itemOf()] })
+        .mockReturnValue(new Promise(() => undefined)),
+      createDraft: vi.fn(),
+      adopt: vi.fn(),
+    }
+    const Switch = () => {
+      const [current, setCurrent] = useState(shot)
+      return (
+        <>
+          <button type="button" onClick={() => setCurrent(other)}>
+            替える
+          </button>
+          <ShotStoryboardSection shot={current} disabled={false} api={api} />
+        </>
+      )
+    }
+    renderInWorkbench(<Switch />, { shots: [shot, other], projectId })
+    expect(await screen.findByText('夜明けの屋上、二人の背中')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: '替える' }))
+
+    expect(screen.queryByText('夜明けの屋上、二人の背中')).toBeNull()
+  })
+
+  it('「消す」に失敗したら理由を出す', async () => {
+    renderInWorkbench(<ShotStoryboardSection shot={shot} disabled={false} api={apiWith(null)} />, {
+      shots: [shot],
+      saveShot: vi.fn(() => Promise.reject(new Error('保存できません'))),
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: '絵コンテを消す' }))
+    await userEvent.click(screen.getByRole('button', { name: '消す' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('保存できません')
   })
 })
