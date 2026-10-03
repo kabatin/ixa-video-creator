@@ -3,43 +3,15 @@ import type { ReactNode } from 'react'
 import { formatLongDuration } from '@/lib/format-time'
 import { RENDER_PRESET_OPTIONS } from '@/lib/render-display'
 import type { RenderRangeChoice } from '@/lib/render-range'
+import { ChoiceCard } from '@/components/ui/choice-card'
 
 /**
  * 書き出しの設定（範囲と画質）。どちらも**カードの形の選択**にする（制作者 2026-10-03「UI/UX が雑な印象」）。
  * 中身は本物のラジオボタンなので、キーボードと読み上げはそのまま使える。
  */
 
-const CARD =
-  'flex cursor-pointer items-start gap-3 rounded-md border border-line bg-surface px-3 py-2 ' +
-  'hover:bg-surface-2 has-[:checked]:border-accent has-[:checked]:bg-accent-soft/15 ' +
-  'has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-focus ' +
-  'has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60'
-
-const Choice = ({
-  name,
-  checked,
-  disabled,
-  onSelect,
-  children,
-}: {
-  readonly name: string
-  readonly checked: boolean
-  readonly disabled: boolean
-  readonly onSelect: () => void
-  readonly children: ReactNode
-}) => (
-  <label className={CARD}>
-    <input
-      type="radio"
-      name={name}
-      checked={checked}
-      disabled={disabled}
-      onChange={onSelect}
-      className="mt-1 accent-[rgb(var(--accent))]"
-    />
-    <span className="flex min-w-0 flex-col gap-0.5">{children}</span>
-  </label>
-)
+/** カードの形の選択（`ui/choice-card.tsx`。新規作成・設定と共有）。 */
+const Choice = ChoiceCard
 
 const Heading = ({ children }: { readonly children: ReactNode }) => (
   <legend className="mb-2 text-xs font-semibold text-muted">{children}</legend>

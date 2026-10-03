@@ -19,7 +19,7 @@ const NewProjectPage = () => {
     <main className="mx-auto w-full max-w-3xl">
       <PageHeader
         title="新規プロジェクト"
-        description="出力仕様はレンダリングと Provider 選択の制約になります。"
+        description="画面の形・大きさ・なめらかさは、書き出す動画と AI で作る動画の形になります。あとからプロジェクトの設定で変えられます。"
         action={<BackLink />}
       />
       {workspace.ok ? (
