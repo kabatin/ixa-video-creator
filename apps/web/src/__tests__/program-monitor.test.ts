@@ -139,3 +139,32 @@ describe('monitorMediaErrorMessage', () => {
     expect(monitorMediaErrorMessage.length).toBe(0)
   })
 })
+
+/**
+ * 絵が無くても、音とテロップは流す（制作者 2026-10-03「テロップがあるだけではプレビューが再生できず、音楽とテロップが
+ * あっているかの確認が出来ないのでこの時点でも再生出来るようにしておきたい（黒画面で問題ない）」）。
+ * **プレビューだけ**に効かせる（Take の比較などは、絵が無ければ流さない）。
+ */
+describe('describeMonitorState: 絵が無いとき', () => {
+  const song = { mediaUrl: 'https://example.invalid/song.wav', startSec: 0, durationSec: 60, volume: 1 }
+
+  it('音があれば、黒い画面で流す（そう言う）', () => {
+    const state = describeMonitorState(makeDocument({ video1: [], audio: [song], durationSec: 60 }), false, null, {
+      withoutPictures: true,
+    })
+    expect(state.canRender).toBe(true)
+    expect(state.status).toBe('paused')
+    expect(state.message).toMatch(/音とテロップだけ/)
+  })
+
+  it('許していなければ、今までどおり流さない', () => {
+    const state = describeMonitorState(makeDocument({ video1: [], audio: [song], durationSec: 60 }), false, null)
+    expect(state.canRender).toBe(false)
+  })
+
+  it('音もテロップも無ければ流さない。文は「Shot が無い」と決めつけない（Shot があっても絵が無いことがある）', () => {
+    const state = describeMonitorState(makeDocument({ video1: [] }), false, null, { withoutPictures: true })
+    expect(state.canRender).toBe(false)
+    expect(state.message).not.toMatch(/Shot がまだ 1 つもありません/)
+  })
+})

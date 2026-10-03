@@ -7,8 +7,8 @@ import { readyOr, useAssets } from '@/components/workbench/asset-store'
 import { useAssetDrop } from '@/components/workbench/use-asset-drop'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty, PanelFrame, PanelNotice } from '@/components/workbench/panels/panel-frame'
+import { StoryboardEmpty } from '@/components/workbench/panels/storyboard-empty'
 import { Button } from '@/components/ui/button'
-import { AddTrackButton } from '@/components/workbench/ui/add-track-button'
 import { createApiClient } from '@/lib/api-client'
 import {
   beatAlignmentToneClass,
@@ -151,47 +151,6 @@ export const StoryboardPanel = () => {
         比較。素材ツリーのキャラクターやロケーションをカードへ落とすと割り当てます。
       </p>
     </PanelFrame>
-  )
-}
-
-/** Shot が 0 件。楽曲の有無で次の一手が変わる。 */
-const StoryboardEmpty = () => {
-  const workbench = useWorkbench()
-  if (workbench.musicLoaded && workbench.track === null) {
-    return (
-      <PanelEmpty
-        title="楽曲が登録されていません"
-        hint="曲を登録して解析すると、波形の上で区切りを置いて Shot にできます。"
-      >
-        <AddTrackButton />
-      </PanelEmpty>
-    )
-  }
-  return (
-    <PanelEmpty
-      title="Shot はまだありません"
-      hint="下の「聴きながら切る」で区切りを置いて Shot にするのが本筋です。1 件だけ作ることもできます。"
-    >
-      <div className="flex gap-2">
-        <Button
-          tone="primary"
-          size="sm"
-          onClick={() => {
-            workbench.focusPanel('cutter')
-          }}
-        >
-          聴きながら切る
-        </Button>
-        <Button
-          size="sm"
-          onClick={() => {
-            workbench.openDialog('new-shot')
-          }}
-        >
-          Shot を 1 件だけ作る
-        </Button>
-      </div>
-    </PanelEmpty>
   )
 }
 

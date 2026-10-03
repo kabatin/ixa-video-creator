@@ -99,6 +99,8 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
             followSec={mine ? null : transport.currentSec}
             // パネルを縦に縮めても絵が全部見えるよう、幅と高さの両方に収める。
             fit="contain"
+            // 絵がまだ無くても、音とテロップは黒い画面で流す（制作者 2026-10-03「テロップだけ確認は必須かも」）。
+            withoutPictures
             // 位置を返すのは自分が鳴らしている間だけ。両方が返すと位置が往復する（L-023）。
             onFrame={(sec) => {
               if (mine) transportControls.setCurrentSec(sec)

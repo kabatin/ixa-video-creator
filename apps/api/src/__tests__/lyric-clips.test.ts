@@ -2,13 +2,15 @@ import { OpenAPIHono } from '@hono/zod-openapi'
 import {
   LYRIC_STYLE_NAME,
   LYRIC_TELOP_LAYER,
+  MusicTrack,
+  MusicTrackId,
   TextStyleId,
   TimelineClip,
   TimelineClipId,
   newId,
   type Project,
 } from '@ixa/domain'
-import { aShot, createInMemoryShotRepository } from '@ixa/generation/testing'
+import { aShot, createInMemoryMediaAssetRepository, createInMemoryShotRepository } from '@ixa/generation/testing'
 import { describe, expect, it } from 'vitest'
 import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
@@ -16,7 +18,11 @@ import { lyricClipRoutes } from '../routes/lyric-clips.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { createInMemoryTextStyleRepository } from './in-memory-text-style-repository.js'
-import { createInMemoryTimelineClipRepository } from './in-memory-timeline-repositories.js'
+import {
+  aMediaAsset,
+  createInMemoryMusicTrackRepository,
+  createInMemoryTimelineClipRepository,
+} from './in-memory-timeline-repositories.js'
 
 /**
  * 歌詞をテロップにする（ADR-0033。制作者 2026-10-01「1 フレーズごとにテロップを自動生成」）。
@@ -32,10 +38,33 @@ const build = (options: {
   readonly withShots?: boolean
   readonly clips?: (projectId: Project['id']) => readonly TimelineClip[]
   readonly lyricStyle?: boolean
+  /** 曲の長さ（秒）。null なら曲を置かない。 */
+  readonly songSec?: number | null
 } = {}) => {
   const project = { ...aProject(), lyrics: '一行目\n二行目\n三行目', lyricCues: [1, 3], ...options.project }
   const shots = createInMemoryShotRepository(
     options.withShots === false ? [] : [aShot(project.id, { startSec: 0, durationSec: 10 })],
+  )
+  const songSec = options.songSec === undefined ? null : options.songSec
+  const song = aMediaAsset({
+    kind: 'audio',
+    mimeType: 'audio/wav',
+    probe: songSec === null ? null : { durationSec: songSec, width: null, height: null, fps: null, hasAudio: true, codec: 'pcm' },
+  })
+  const tracks = createInMemoryMusicTrackRepository(
+    songSec === null
+      ? []
+      : [
+          MusicTrack.parse({
+            id: newId(MusicTrackId),
+            projectId: project.id,
+            mediaAssetId: song.id,
+            title: '曲',
+            isMaster: true,
+            offsetSec: 0,
+            volume: 1,
+          }),
+        ],
   )
   const timelineClips = createInMemoryTimelineClipRepository(options.clips?.(project.id) ?? [])
   const textStyles = createInMemoryTextStyleRepository(
@@ -60,6 +89,8 @@ const build = (options: {
       shots,
       timelineClips,
       textStyles,
+      musicTracks: tracks,
+      mediaAssets: createInMemoryMediaAssetRepository([song]),
     }),
   )
   registerErrorHandlers(app, createLogger('silent'))
@@ -134,9 +165,33 @@ describe('POST /projects/:id/clips/lyrics', () => {
     expect(((await res.json()) as Err).error).toContain('合わせ')
   })
 
-  it('Shot が無ければ 422（置く場所が無い）', async () => {
-    const f = build({ withShots: false })
+  /**
+   * Shot が無くても置ける（制作者 2026-10-03「テロップがあるだけではプレビューが再生できず、音楽とテロップがあっているかの
+   * 確認が出来ない」「まずはテロップのタイミングをセット」）。終わりは曲の終わり。区切る前に黒い画面で確かめられる。
+   */
+  it('Shot が無くても、曲の長さまで置ける', async () => {
+    const f = build({ withShots: false, songSec: 60 })
 
-    expect((await f.place()).status).toBe(422)
+    const res = await f.place()
+
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as Ok<Placed>).data.clips.map((clip) => clip.startSec)).toEqual([1, 3])
+  })
+
+  it('最後の Shot より曲が長ければ、曲の終わりまで置く（最後の Shot で切らない）', async () => {
+    const f = build({ songSec: 60, project: { lyricCues: [1, 30] } })
+
+    const data = ((await (await f.place()).json()) as Ok<Placed>).data
+
+    expect(data.clips.map((clip) => clip.startSec)).toEqual([1, 30])
+  })
+
+  it('曲の長さも Shot も無ければ 422（置く場所が分からない）', async () => {
+    const f = build({ withShots: false, songSec: null })
+
+    const res = await f.place()
+
+    expect(res.status).toBe(422)
+    expect(((await res.json()) as Err).error).toContain('曲の長さ')
   })
 })

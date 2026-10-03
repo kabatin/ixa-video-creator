@@ -37,6 +37,8 @@ import { WORDING } from '@/lib/wording'
 
 export type AnalysisStarterProps = {
   readonly track: MusicTrack
+  /** 解析が終わった（結果が出た）。次の作業へ案内するのに使う（制作者 2026-10-03「次何したらいいんだ？」）。 */
+  readonly onAnalyzed?: () => void
 }
 
 type Phase =
@@ -55,8 +57,11 @@ type Outcome = { readonly kind: 'done' } | { readonly kind: 'failed'; readonly m
 
 const timeoutMinutes = (): string => String(Math.round(POLL_TIMEOUT_MS / 60_000))
 
-export const AnalysisStarter = ({ track }: AnalysisStarterProps) => {
+export const AnalysisStarter = ({ track, onAnalyzed }: AnalysisStarterProps) => {
   const router = useRouter()
+  // 待っている間に親が描き直しても、終わったときは最新の口を呼ぶ。
+  const analyzed = useRef(onAnalyzed)
+  analyzed.current = onAnalyzed
   const [phase, setPhase] = useState<Phase>(IDLE)
   const pollRef = useRef<PollHandle | null>(null)
 
@@ -99,6 +104,7 @@ export const AnalysisStarter = ({ track }: AnalysisStarterProps) => {
         setPhase({ kind: 'done' })
         // 解析結果が要るのはサーバ側で組み立てる画面なので、取り直させる。
         router.refresh()
+        analyzed.current?.()
       },
       onTimeout: () => {
         setPhase({ kind: 'timeout' })

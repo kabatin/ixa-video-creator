@@ -2,6 +2,7 @@ import { ModelId } from '@ixa/domain'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { ContextMenuHost } from '@/components/workbench/ui/context-menu'
 import {
   BulkActionBar,
   type BulkActionBarProps,
@@ -58,6 +59,7 @@ const baseProps = (overrides: Partial<BulkActionBarProps> = {}): BulkActionBarPr
   onMerge: vi.fn(),
   onRender: vi.fn(),
   onDrawStartFrames: vi.fn(),
+  drawWarning: null,
   ...overrides,
 })
 
@@ -68,7 +70,11 @@ const setup = (
   readonly user: ReturnType<typeof userEvent.setup>
 } => {
   const props = baseProps(overrides)
-  render(<BulkActionBar {...props} />)
+  render(
+    <ContextMenuHost>
+      <BulkActionBar {...props} />
+    </ContextMenuHost>,
+  )
   return { props, user: userEvent.setup() }
 }
 
@@ -514,6 +520,7 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
           alreadySelectedCount={0}
           lockedCount={0}
           unguidedCount={0}
+          drawWarning={null}
           progress={null}
           modelOptions={MODEL_OPTIONS}
           cameraSizeOptions={CAMERA_SIZE_OPTIONS}
@@ -625,5 +632,18 @@ describe('BulkActionBar — 絵コンテの画像', () => {
     await user.click(screen.getByRole('button', { name: '作る' }))
 
     expect(props.onDrawStartFrames).toHaveBeenCalledWith({ onlyMissing: false })
+  })
+
+  /** 絵コンテ（説明）が空の Shot が混じっていたら確かめる（制作者 2026-10-03「警告ダイアログを出して、任意の上で実行」）。 */
+  it('絵コンテが空の Shot があれば確認を出し、「このまま作る」を押したときだけ作る', async () => {
+    const { props, user } = setup({ drawWarning: 'チェックした 12 件のうち 3 件は絵コンテ（説明）がまだ空です。' })
+
+    await user.click(screen.getByRole('button', { name: '絵コンテの画像' }))
+    await user.click(screen.getByRole('button', { name: '作る' }))
+    expect(props.onDrawStartFrames).not.toHaveBeenCalled()
+    expect(screen.getByText(/3 件は絵コンテ（説明）がまだ空/)).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: 'このまま作る' }))
+    expect(props.onDrawStartFrames).toHaveBeenCalledWith({ onlyMissing: true })
   })
 })

@@ -184,3 +184,44 @@ describe('ContextMenu', () => {
   })
 })
 
+
+/**
+ * 手順を飛ばしたときの確認（制作者 2026-10-03）は、取り消せない操作ではない。確認のボタンを危険色にせず、
+ * 「このまま作る」のような言葉にする。
+ */
+describe('ContextMenuHost.perform の確認の見た目', () => {
+  const Performer = ({ item }: { readonly item: Extract<ContextMenuItem, { kind: 'item' }> }) => {
+    const host = useContextMenuHost()
+    return (
+      <button type="button" onClick={() => host.perform(item)}>
+        実行
+      </button>
+    )
+  }
+
+  it('confirmTone と confirmLabel を渡すと、その色と言葉の確認ボタンになり、押せば実行する', async () => {
+    const run = vi.fn()
+    render(
+      <ContextMenuHost>
+        <Performer
+          item={{
+            kind: 'item',
+            id: 'draw',
+            label: '絵を作る',
+            disabledReason: null,
+            confirm: '絵コンテがまだ空です。',
+            confirmTone: 'primary',
+            confirmLabel: 'このまま作る',
+            run,
+          }}
+        />
+      </ContextMenuHost>,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: '実行' }))
+    const go = screen.getByRole('button', { name: 'このまま作る' })
+    expect(go.className).not.toContain('bg-danger')
+    await userEvent.click(go)
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+})

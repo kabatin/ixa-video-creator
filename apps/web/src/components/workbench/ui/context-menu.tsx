@@ -31,6 +31,13 @@ export type ContextMenuItem =
       readonly confirm?: string
       /** 確認で「しない」側の言葉。既定は「やめる」（`context-menus.ts` の同名の項目）。 */
       readonly keepLabel?: string
+      /**
+       * 確認の「する」側の色。既定は danger（取り消せない操作）。手順を飛ばしたときの確認のように、
+       * 取り消せなくはない操作では primary にする（制作者 2026-10-03「警告ダイアログを出して、任意の上で実行」）。
+       */
+      readonly confirmTone?: 'danger' | 'primary'
+      /** 確認の「する」側の言葉。既定は項目の名前（「このまま作る」のように替える）。 */
+      readonly confirmLabel?: string
       readonly run: () => void | Promise<void>
     }
   | { readonly kind: 'separator' }
@@ -309,13 +316,13 @@ export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) 
           {pending?.confirm !== undefined && (
             <Button
               size="sm"
-              tone="danger"
+              tone={pending.confirmTone ?? 'danger'}
               disabled={busy}
               onClick={() => {
                 void run(pending)
               }}
             >
-              {busy ? '実行中…' : pending.label}
+              {busy ? '実行中…' : (pending.confirmLabel ?? pending.label)}
             </Button>
           )}
         </div>

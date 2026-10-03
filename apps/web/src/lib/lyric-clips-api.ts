@@ -31,6 +31,9 @@ export const createLyricClipsApi = (requester: Requester): LyricClipsApi => ({
 })
 
 /** 置いた結果を 1 文で言う。時刻の無いフレーズ・置けなかったフレーズがあれば、それも言う。 */
+/** 置いたら、次はプレビューで確かめる（制作者 2026-10-03「テロップだけ確認は必須かも」）。 */
+const CHECK_IN_PREVIEW = 'プレビューで音と合っているか確かめられます（絵が無くても黒い画面で流れます）。'
+
 export const describePlacedLyrics = (placed: PlacedLyricClips): string => {
   const head = `歌詞を ${String(placed.placedCount)} 件のテロップにしました`
   const replaced = placed.replacedCount > 0 ? `（前に置いた ${String(placed.replacedCount)} 件を置き直し）` : ''
@@ -40,5 +43,5 @@ export const describePlacedLyrics = (placed: PlacedLyricClips): string => {
     untimed > 0 ? `${String(untimed)} フレーズはまだ時刻がありません` : null,
     skipped > 0 ? `${String(skipped)} フレーズは短すぎるか曲の終わりより後なので置いていません` : null,
   ].filter((note): note is string => note !== null)
-  return `${head}${replaced}。${notes.length === 0 ? '' : `${notes.join('。')}。`}`
+  return `${head}${replaced}。${notes.length === 0 ? '' : `${notes.join('。')}。`}${CHECK_IN_PREVIEW}`
 }

@@ -433,6 +433,8 @@ export const createApp = (deps: AppDeps) => {
       shots: deps.shots,
       timelineClips: deps.timelineClips,
       textStyles: deps.textStyles,
+      musicTracks: deps.musicTracks,
+      mediaAssets,
     }),
   )
   app.route(

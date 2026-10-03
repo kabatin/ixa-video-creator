@@ -98,7 +98,7 @@ export const LyricSync = (props: LyricSyncProps) => {
     <section aria-label="歌詞を合わせる" className="space-y-3 border-b border-line p-3">
       {/* 何をする画面かを 1 行で（制作者 2026-10-02「この画面すっごいわかりづらいなー」）。 */}
       <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-muted">
-        <p>① 下の ▶ か Space で曲を流す → ② フレーズの歌い出しで Enter → ③ 歌詞をテロップにする</p>
+        <p>① 下の ▶ か Space で曲を流す → ② フレーズの歌い出しで Enter → ③ 歌詞をテロップにする → ④ プレビューで確かめる</p>
         <span className="tabular-nums">{`${String(Math.min(cues.length, lines.length))} / ${String(lines.length)} フレーズ`}</span>
       </div>
       <dl aria-live="polite" className="grid grid-cols-[4.5rem_1fr] items-baseline gap-x-3 gap-y-1">

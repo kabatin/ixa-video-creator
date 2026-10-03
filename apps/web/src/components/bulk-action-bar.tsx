@@ -95,6 +95,8 @@ export type BulkActionBarProps = {
   readonly onRender: () => void
   /** 絵コンテの画像をまとめて作る（ADR-0029）。既定は絵の無い Shot だけ。 */
   readonly onDrawStartFrames: (input: { readonly onlyMissing: boolean }) => void
+  /** 絵コンテ（説明）が空の Shot が混じっているときの確認の文。無ければ null（`drawWithoutStoryboardWarning`）。 */
+  readonly drawWarning: string | null
 }
 
 export const BulkActionBar = ({
@@ -117,6 +119,7 @@ export const BulkActionBar = ({
   onMerge,
   onRender,
   onDrawStartFrames,
+  drawWarning,
 }: BulkActionBarProps) => {
   const idPrefix = useId()
   const [open, setOpen] = useState<PanelKey | null>(null)
@@ -253,6 +256,7 @@ export const BulkActionBar = ({
               idPrefix={`${idPrefix}-draw`}
               targetCount={selectedCount}
               busy={busy}
+              warning={drawWarning}
               onDraw={(input) => {
                 // 頼んだら閉じる。開いたままだと同じ件数に二重に頼める。
                 close('draw')

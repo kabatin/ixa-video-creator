@@ -348,6 +348,9 @@ export const TrackInspector = ({ id }: { readonly id: MusicTrackId }) => {
   const [analysis, setAnalysis] = useState<WireMusicAnalysis | null | 'loading'>('loading')
   const [status, setStatus] = useState<string | null>(null)
   const [epoch, setEpoch] = useState(0)
+  // サーバを読み直したら（解析が終わって画面が取り直された後など）読み直す。開いたときの 1 回だけだと、
+  // 解析が終わっても「まだ解析されていません」のままだった。
+  const { serverEpoch, analysis: masterAnalysis } = useWorkbench()
 
   useEffect(() => {
     let cancelled = false
@@ -365,7 +368,7 @@ export const TrackInspector = ({ id }: { readonly id: MusicTrackId }) => {
     return () => {
       cancelled = true
     }
-  }, [api, id, epoch])
+  }, [api, id, epoch, serverEpoch])
 
   if (track === undefined) return <Missing what="楽曲" />
   const summary = analysis === null || analysis === 'loading' ? null : summarizeAnalysis(analysis)
@@ -453,9 +456,13 @@ export const TrackInspector = ({ id }: { readonly id: MusicTrackId }) => {
         }
       >
         {analysis === 'loading' && <p className="text-sm text-muted">読み込んでいます…</p>}
-        {analysis === null && (
-          <p className="text-sm text-muted">まだ解析されていません。「再解析」で始めます。</p>
-        )}
+        {analysis === null &&
+          (track.isMaster && masterAnalysis === null ? (
+            // マスターの曲は、登録した直後から解析が自動で走る（聴きながら切るのパネルが待っている）。
+            <p className="text-sm text-muted">解析しています（数十秒）。終わるとここに出ます。</p>
+          ) : (
+            <p className="text-sm text-muted">まだ解析されていません。「再解析」で始めます。</p>
+          ))}
         {summary !== null && analysis !== null && analysis !== 'loading' && (
           <dl className="grid grid-cols-[6rem_1fr] gap-y-1 text-sm">
             <dt className="text-muted">解析器</dt>

@@ -12,6 +12,8 @@ import { ObjectHeader } from '@/components/workbench/ui/object-header'
 import { Section } from '@/components/workbench/ui/section'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { goToLyricSync } from '@/components/workbench/workbench-navigation'
+import { useWorkflow } from '@/components/workbench/workflow-context'
+import { WORKFLOW_ACTIONS } from '@/lib/workflow-steps'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import type { ProjectConceptApi } from '@/lib/project-concept-api'
@@ -39,6 +41,8 @@ const Hint = ({ children }: { readonly children: ReactNode }) => <p className="t
  */
 export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConceptInspectorApi }) => {
   const workbench = useWorkbench()
+  const workflow = useWorkflow()
+  const conceptDone = workflow.steps.find((step) => step.id === 'concept')?.state === 'done'
   const assistFor = useAssist()
   const client = useMemo<ProjectConceptInspectorApi>(() => api ?? createApiClient(), [api])
   const [project, setProject] = useState<Project>(workbench.project)
@@ -88,7 +92,9 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
     <div className="flex h-full flex-col">
       <ObjectHeader kind="作品の方針" title={project.name} />
       <div className="workbench-panel-body relative min-h-0 flex-1 space-y-1 overflow-auto">
-        <Hint>ここで決めた方針は、全 Shot の生成に自動で入ります。あとから直しても、次に作る分から効きます。</Hint>
+        <Hint>
+          まず「コンセプト・あらすじ」「歌詞」「ルック」の 3 つを書きます。ここで決めた方針は、全 Shot の生成に自動で入ります（あとから直しても、次に作る分から効きます）。
+        </Hint>
 
         <Section title="コンセプト・あらすじ">
           {concept.kind === 'loading' && <Hint>読み込んでいます…</Hint>}
@@ -159,7 +165,7 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
           <Hint>全 Shot の映像と、Shot の絵（最初のフレーム）の生成指示の最後に入ります。</Hint>
         </Section>
 
-        <Section title="手本画像">
+        <Section title="手本画像（任意）">
           {references.length > 0 && (
             <ul className="grid grid-cols-3 gap-2">
               {references.map((id, index) => (
@@ -195,7 +201,7 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
           </Hint>
         </Section>
 
-        <Section title="避けたいもの">
+        <Section title="避けたいもの（任意）">
           <AutoSaveField
             label="避けたいもの"
             hideLabel
@@ -209,6 +215,21 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
             Shot の絵の生成と、AI の説明の下書きに入ります。映像の生成モデルは今どれも「避ける」指定に対応していないので、映像には入りません。
           </Hint>
         </Section>
+
+        {/* 3 つが済んだら次の作業へ（制作者 2026-10-03「次何したらいいんだ？」）。判定は流れの帯と同じ。 */}
+        {conceptDone && workflow.nextId !== null && (
+          <div className="flex justify-end px-1 py-2">
+            <Button
+              tone="primary"
+              size="sm"
+              onClick={() => {
+                if (workflow.nextId !== null) workflow.go(workflow.nextId)
+              }}
+            >
+              {`次へ: ${WORKFLOW_ACTIONS[workflow.nextId]}`}
+            </Button>
+          </div>
+        )}
 
         {error !== null && (
           <p role="alert" className="text-xs text-danger">

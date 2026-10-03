@@ -36,6 +36,7 @@ import { useNow } from '@/components/workbench/use-active-generations'
 import { describeActiveGeneration } from '@/lib/generation-progress'
 import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
 import { useShotMenu } from '@/components/workbench/use-shot-menu'
+import { drawWithoutStoryboardWarning } from '@/lib/step-guards'
 
 /** 選べるモデル。いまは AUTO だけだが、選択肢の正は `generation-options` に置いたまま。 */
 const MODEL_CHOICES: readonly BulkModelOption[] = MODEL_OPTIONS.flatMap((option) =>
@@ -191,6 +192,8 @@ export const ShotListPanel = () => {
                 }),
             ).length
           }
+          // 絵コンテ（説明）が空の Shot が混じっていたら、絵を作る前に確かめる（制作者 2026-10-03）。
+          drawWarning={drawWithoutStoryboardWarning(chosen)}
           modelOptions={MODEL_CHOICES}
           cameraSizeOptions={SHOT_SIZE_OPTIONS}
           locationOptions={locationOptions}

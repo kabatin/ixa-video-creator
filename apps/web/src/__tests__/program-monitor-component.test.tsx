@@ -53,8 +53,37 @@ describe('ProgramMonitor', () => {
     )
 
     const status = screen.getByRole('status')
-    expect(status).toHaveTextContent('Shot がまだ 1 つもありません')
+    expect(status).toHaveTextContent('まだ映すものがありません')
     expect(status).not.toHaveTextContent('まだ読めていません')
+  })
+
+  /** 制作者 2026-10-03「テロップがあるだけではプレビューが再生できず…黒画面で問題ない」。プレビューだけが許す。 */
+  it('絵が無くても音があり、黒い画面で流すと言われていれば、そう添えて流す', () => {
+    const audio = [{ mediaUrl: 'https://example.invalid/song.wav', startSec: 0, durationSec: 60, volume: 1 }]
+    const { rerender } = render(
+      <ProgramMonitor
+        document={makeDocument({ video1: [], audio, durationSec: 60 })}
+        currentSec={0}
+        seek={null}
+        playing={false}
+        onFrame={noop}
+        onPlayingChange={noop}
+        withoutPictures
+      />,
+    )
+    expect(screen.getByText(/音とテロップだけを流しています/)).toBeTruthy()
+
+    rerender(
+      <ProgramMonitor
+        document={makeDocument({ video1: [], audio, durationSec: 60 })}
+        currentSec={0}
+        seek={null}
+        playing={false}
+        onFrame={noop}
+        onPlayingChange={noop}
+      />,
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('まだ映すものがありません')
   })
 
   it('比は document の解像度に従う（縦のプロジェクトを 16:9 に押し込めない）', () => {

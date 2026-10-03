@@ -1,8 +1,10 @@
 import type { ImageGenerationJobId, MediaAssetId, Shot, WorkspaceId } from '@ixa/domain'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { StartFrameField } from '@/components/workbench/inspector/start-frame-field'
+import { ContextMenuHost } from '@/components/workbench/ui/context-menu'
 import type { ShotStartFrameApi, WireStartFrameState } from '@/lib/shot-start-frame-api'
 import { SHOT_ID } from './fixtures'
 import { aWorkbenchShot } from './workbench-fixture'
@@ -33,12 +35,15 @@ const api = (current: string | null, job: WireStartFrameState['job'] = null): Sh
 
 const JOB = '01ARZ3NDEKTSV4RRFFQ69G5FJ0' as ImageGenerationJobId
 
-const shot: Shot = aWorkbenchShot(1, { id: SHOT_ID })
+const shot: Shot = aWorkbenchShot(1, { id: SHOT_ID, description: '屋上で二人が出会う' })
+
+/** 確認（絵コンテが空のとき）を出す置き場ごと描く。 */
+const show = (ui: ReactElement) => render(<ContextMenuHost>{ui}</ContextMenuHost>)
 const WORKSPACE = 'ws' as WorkspaceId
 
 describe('StartFrameField', () => {
   it('付いていなければ、付けると何ができるかを言う', async () => {
-    render(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={api(null)} />)
+    show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={api(null)} />)
 
     expect(await screen.findByText(/画像を付けると/)).toBeTruthy()
   })
@@ -46,7 +51,7 @@ describe('StartFrameField', () => {
   it('画像を選ぶと付き、サムネイルが出る', async () => {
     const fake = api(null)
     const onChange = vi.fn()
-    render(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} onChange={onChange} />)
+    show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} onChange={onChange} />)
 
     await userEvent.click(await screen.findByRole('button', { name: '画像を付ける' }))
 
@@ -58,7 +63,7 @@ describe('StartFrameField', () => {
   it('外すと消える', async () => {
     const fake = api('asset-old')
     const onChange = vi.fn()
-    render(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} onChange={onChange} />)
+    show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} onChange={onChange} />)
     await screen.findByAltText('最初のフレーム')
 
     await userEvent.click(screen.getByRole('button', { name: '外す' }))
@@ -79,7 +84,7 @@ describe('StartFrameField の付け外しを知らせる', () => {
   it('付けたら・外したら onSaved を呼び、開いただけでは呼ばない', async () => {
     const fake = api('asset-old')
     const onSaved = vi.fn()
-    render(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} onSaved={onSaved} />)
+    show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} onSaved={onSaved} />)
     await screen.findByAltText('最初のフレーム')
     expect(onSaved).not.toHaveBeenCalled()
 
@@ -102,7 +107,7 @@ describe('StartFrameField の付け外しを知らせる', () => {
 describe('StartFrameField の AI で作る', () => {
   it('絵が無ければ「AI で絵を作る」。押すと作り始め、作っていると言う', async () => {
     const fake = api(null)
-    render(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} />)
+    show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} />)
 
     await userEvent.click(await screen.findByRole('button', { name: 'AI で絵を作る' }))
 
@@ -112,13 +117,13 @@ describe('StartFrameField の AI で作る', () => {
   })
 
   it('絵があれば「AI で作り直す」', async () => {
-    render(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={api('asset-old')} />)
+    show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={api('asset-old')} />)
 
     expect(await screen.findByRole('button', { name: 'AI で作り直す' })).toBeTruthy()
   })
 
   it('開き直しても、作っている間はそう言って押せない', async () => {
-    render(
+    show(
       <StartFrameField shot={shot} workspaceId={WORKSPACE} api={api(null, { id: JOB, status: 'running', error: null })} />,
     )
 
@@ -127,7 +132,7 @@ describe('StartFrameField の AI で作る', () => {
   })
 
   it('失敗したら理由をそのまま出す（もう一度押せる）', async () => {
-    render(
+    show(
       <StartFrameField
         shot={shot}
         workspaceId={WORKSPACE}
@@ -141,10 +146,28 @@ describe('StartFrameField の AI で作る', () => {
 
   it('頼めなかったら理由を出す（作っている表示にしない）', async () => {
     const fake = { ...api(null), generateStartFrame: vi.fn(() => Promise.reject(new Error('この Shot の絵コンテの画像を作っています。'))) }
-    render(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} />)
+    show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} />)
 
     await userEvent.click(await screen.findByRole('button', { name: 'AI で絵を作る' }))
 
     expect((await screen.findByRole('alert')).textContent).toContain('頼めませんでした')
+  })
+})
+
+/**
+ * 絵コンテ（説明）が空のまま作ろうとしたら確かめる（制作者 2026-10-03「絵コンテがないと想定した画像が出て来ない可能性が
+ * 高いのだが、これも結構忘れてしまいがち」「警告ダイアログを出して、任意の上で実行」）。
+ */
+describe('StartFrameField: 絵コンテが空のとき', () => {
+  it('確認を出し、「このまま作る」を押したときだけ作る', async () => {
+    const fake = api(null)
+    show(<StartFrameField shot={{ ...shot, description: '' }} workspaceId={WORKSPACE} api={fake} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'AI で絵を作る' }))
+    expect(fake.generateStartFrame).not.toHaveBeenCalled()
+    expect(screen.getByText(/絵コンテ（説明）がまだ空/)).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('button', { name: 'このまま作る' }))
+    expect(fake.generateStartFrame).toHaveBeenCalledWith(SHOT_ID)
   })
 })

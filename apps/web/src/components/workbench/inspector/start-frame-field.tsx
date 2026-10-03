@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import type { ShotStartFrameApi, WireStartFrameState } from '@/lib/shot-start-frame-api'
+import { DRAW_ANYWAY_LABEL, drawWithoutStoryboardWarning } from '@/lib/step-guards'
+import { useContextMenuHost } from '@/components/workbench/ui/context-menu'
 
 /**
  * Shot の最初のフレーム（ADR-0025）。
@@ -54,6 +56,7 @@ export const StartFrameField = ({
   onSaved,
   api,
 }: StartFrameFieldProps) => {
+  const host = useContextMenuHost()
   const client = useMemo<ShotStartFrameApi>(() => api ?? createApiClient(), [api])
   const [state, setState] = useState<State>({ kind: 'loading' })
   const [busy, setBusy] = useState(false)
@@ -103,6 +106,28 @@ export const StartFrameField = ({
     }
   }
 
+  /**
+   * 絵コンテ（説明）が空なら、作る前に確かめる（制作者 2026-10-03「絵コンテがないと想定した画像が出て来ない可能性が高い」）。
+   * 止めはしない。「このまま作る」を選べば作る。
+   */
+  const askToDraw = (): void => {
+    const warning = drawWithoutStoryboardWarning([shot])
+    if (warning === null) {
+      void draw()
+      return
+    }
+    host.perform({
+      kind: 'item',
+      id: 'draw-start-frame',
+      label: '絵を作る',
+      disabledReason: null,
+      confirm: warning,
+      confirmTone: 'primary',
+      confirmLabel: DRAW_ANYWAY_LABEL,
+      run: draw,
+    })
+  }
+
   /** AI で作る。頼めたら「作っています」にし、できあがりは出来事で読み直す。 */
   const draw = async (): Promise<void> => {
     setBusy(true)
@@ -146,7 +171,7 @@ export const StartFrameField = ({
         </div>
       )}
       {state.kind === 'ready' && (
-        <Button size="sm" disabled={disabled || busy || drawing} onClick={() => void draw()}>
+        <Button size="sm" disabled={disabled || busy || drawing} onClick={askToDraw}>
           {current === null ? 'AI で絵を作る' : 'AI で作り直す'}
         </Button>
       )}
