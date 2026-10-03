@@ -92,3 +92,27 @@ export const useWorkflow = (): WorkflowValue => {
   if (value === null) throw new Error('useWorkflow は WorkflowProvider の中で使ってください')
   return value
 }
+
+/** 楽曲を登録した・解析が終わったときに言うこと。 */
+export const GUIDE_TO_CONCEPT_NOTICES = {
+  registered: (title: string) =>
+    `「${title}」を楽曲として登録し、解析を始めました。次は作品の方針（コンセプト・あらすじ、歌詞、ルック）を書きます。`,
+  analyzed: '曲の解析が終わりました。次は作品の方針（コンセプト・あらすじ、歌詞、ルック）を書きます。',
+} as const
+
+/**
+ * 楽曲のあとの次の一手（制作者 2026-10-03「楽曲を登録すると次何したらいいんだ？ってなる」）。
+ * 作品の方針が済んでいなければ方針を開いて知らせ、true を返す。済んでいれば何もせず false（呼び出し側が楽曲を見せる）。
+ * 登録した時点（落とす・＋・ボタン）と、解析が終わった時点の両方から呼ぶ（解析が先に終わると待ち画面が出ないため）。
+ */
+export const useGuideToConcept = (): ((notice: string) => boolean) => {
+  const workbench = useWorkbench()
+  const { steps } = useWorkflow()
+  const conceptDone = steps.find((step) => step.id === 'concept')?.state === 'done'
+  return (notice) => {
+    if (conceptDone) return false
+    goToProjectConcept(workbench)
+    workbench.notify(notice)
+    return true
+  }
+}

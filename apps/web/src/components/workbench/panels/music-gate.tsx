@@ -4,14 +4,10 @@ import type { MusicTrack } from '@ixa/domain'
 import type { ReactNode } from 'react'
 import { AnalysisStarter } from '@/components/analysis-starter'
 import { useWorkbench } from '@/components/workbench/workbench-context'
-import { goToProjectConcept } from '@/components/workbench/workbench-navigation'
-import { useWorkflow } from '@/components/workbench/workflow-context'
+import { GUIDE_TO_CONCEPT_NOTICES, useGuideToConcept } from '@/components/workbench/workflow-context'
 import { PanelEmpty } from '@/components/workbench/panels/panel-frame'
 import { AddTrackButton } from '@/components/workbench/ui/add-track-button'
 import type { WireMusicAnalysis } from '@/lib/music-api'
-
-const ANALYZED_NOTICE =
-  '曲の解析が終わりました。次は作品の方針（コンセプト・あらすじ、歌詞、ルック）を書きます。'
 
 /**
  * 楽曲と解析が揃うまでの案内（UI-WORKBENCH 7.4）。揃ったら中身を出す。
@@ -28,8 +24,7 @@ export const MusicGate = ({
   }) => ReactNode
 }) => {
   const workbench = useWorkbench()
-  const { steps } = useWorkflow()
-  const conceptDone = steps.find((step) => step.id === 'concept')?.state === 'done'
+  const guideToConcept = useGuideToConcept()
 
   if (!workbench.musicLoaded) {
     return (
@@ -55,9 +50,7 @@ export const MusicGate = ({
         track={workbench.track}
         onAnalyzed={() => {
           // 解析が終わったら、次の作業（作品の方針）へ案内する（制作者 2026-10-03「次何したらいいんだ？」）。
-          if (conceptDone) return
-          goToProjectConcept(workbench)
-          workbench.notify(ANALYZED_NOTICE)
+          guideToConcept(GUIDE_TO_CONCEPT_NOTICES.analyzed)
         }}
       />
     )

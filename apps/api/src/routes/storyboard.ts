@@ -16,9 +16,15 @@ import {
   type ProjectId,
   type ShotSlot,
 } from '@ixa/domain'
+import { overlapsRange } from '@ixa/timeline'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 import { ShotResponse, toShotResponse } from './shots.js'
+
+/** 重なる Shot の名前を 3 つまで挙げる。 */
+const overlapMessage = (codes: readonly string[]): string =>
+  `${codes.slice(0, 3).join('・')}${codes.length > 3 ? ` ほか ${String(codes.length - 3)} 件` : ''} と重なります。` +
+  '重なりがあると書き出せないので、空いている区間だけ区切るか、先にその Shot を消してください。'
 
 /**
  * 音楽セクションから Shot の時間枠を一括で作る（ADR-0017 / P3-4）。
@@ -370,6 +376,19 @@ export const storyboardRoutes = (deps: StoryboardRoutesDeps) =>
       // 既存の Shot の後ろに積む。order は Project 内で連続させる。
       const slots = toSlots(input.boundariesSec)
       const existing = await deps.shots.findByProject(projectId)
+      // 今ある Shot と重なる区間は断る（端で触れるだけは通す）。重なった Shot は書き出しを止める。
+      // 区切りを残したまま「Shot にする」を 2 回押して、同じ区間に Shot がもう 1 組できていた（制作者 2026-10-03）。
+      const range = {
+        startSec: input.boundariesSec[0] ?? 0,
+        endSec: input.boundariesSec[input.boundariesSec.length - 1] ?? 0,
+      }
+      const overlapping = existing.filter((shot) => overlapsRange(shot, range))
+      if (overlapping.length > 0) {
+        return c.json(
+          fail(VALIDATION_ERROR_MESSAGE, { boundariesSec: [overlapMessage(overlapping.map((shot) => shot.code))] }),
+          422,
+        )
+      }
       const nextOrder = existing.reduce((max, shot) => Math.max(max, shot.order + 1), 0)
       // 採番は一括作成と同じ仕組み。`(project_id, code)` は UNIQUE なので使用済みを避ける。
       const codes = assignShotCodes(

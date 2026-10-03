@@ -10,6 +10,7 @@ import {
   type ImageTarget,
 } from '@/components/workbench/use-image-attach'
 import { useWorkbench } from '@/components/workbench/workbench-context'
+import { GUIDE_TO_CONCEPT_NOTICES, useGuideToConcept } from '@/components/workbench/workflow-context'
 import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
 import { Button } from '@/components/ui/button'
 import { describeForPerson } from '@/lib/api-error'
@@ -33,6 +34,7 @@ export const FileIntake = ({
   readonly registerOpener: (open: () => void) => void
 }) => {
   const workbench = useWorkbench()
+  const guideToConcept = useGuideToConcept()
   const { actions } = useAssets()
   const attach = useImageAttach()
   const input = useRef<HTMLInputElement>(null)
@@ -58,8 +60,11 @@ export const FileIntake = ({
     for (const file of audio) {
       try {
         const track = await actions.addTrackFromFile(file)
-        workbench.inspect({ kind: 'track', id: track.id })
-        onNotice(`「${track.title}」を楽曲として登録し、解析を始めました。`)
+        // 作品の方針がまだなら方針を開く（次にやること）。済んでいれば登録した楽曲を見せる。
+        if (!guideToConcept(GUIDE_TO_CONCEPT_NOTICES.registered(track.title))) {
+          workbench.inspect({ kind: 'track', id: track.id })
+          onNotice(`「${track.title}」を楽曲として登録し、解析を始めました。`)
+        }
       } catch (cause) {
         onNotice(`${file.name} を登録できませんでした: ${describeForPerson(cause)}`)
       }

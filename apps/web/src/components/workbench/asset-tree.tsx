@@ -5,6 +5,7 @@ import { useRef, useState } from 'react'
 import type { DragEvent, ReactNode } from 'react'
 import { useAssets, type Loaded } from '@/components/workbench/asset-store'
 import { useWorkbench } from '@/components/workbench/workbench-context'
+import { GUIDE_TO_CONCEPT_NOTICES, useGuideToConcept } from '@/components/workbench/workflow-context'
 import { describeForPerson } from '@/lib/api-error'
 import { ASSET_DRAG_TYPE, encodeAssetDrag, type AssetDragPayload } from '@/lib/asset-actions'
 import { matchesAssetQuery } from '@/lib/asset-tree'
@@ -26,6 +27,7 @@ const ITEM =
  */
 export const AssetTree = () => {
   const workbench = useWorkbench()
+  const guideToConcept = useGuideToConcept()
   // キャラクター・ロケーション・ブランド資産はプロジェクトごと。ほかのプロジェクトのものは取り込んで使う（ADR-0034）。
   const openImport = (): void => {
     workbench.openDialog('library-import')
@@ -248,7 +250,10 @@ export const AssetTree = () => {
           actions
             .addTrackFromFile(file)
             .then((track) => {
-              select({ kind: 'track', id: track.id })
+              // 作品の方針がまだなら方針を開く（次にやること）。済んでいれば登録した楽曲を選ぶ。
+              if (!guideToConcept(GUIDE_TO_CONCEPT_NOTICES.registered(track.title))) {
+                select({ kind: 'track', id: track.id })
+              }
             })
             .catch((cause: unknown) => {
               setTrackError(`楽曲を登録できませんでした: ${describeForPerson(cause)}`)

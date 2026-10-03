@@ -74,9 +74,10 @@ export const LyricSync = (props: LyricSyncProps) => {
       event.preventDefault()
       run()
     }
-    window.addEventListener('keydown', onKeyDown)
+    // ワークベンチの打鍵（Space で再生・Backspace で Shot を削除）より先に受け、既定の動きを止めて譲らせる。
+    window.addEventListener('keydown', onKeyDown, { capture: true })
     return () => {
-      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keydown', onKeyDown, { capture: true })
     }
   })
 

@@ -1,7 +1,7 @@
 import { act, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { FileIntake } from '@/components/workbench/file-intake'
-import { renderInWorkbench } from './workbench-fixture'
+import { assetStoreValue, renderInWorkbench } from './workbench-fixture'
 
 /**
  * 画像を落としたら行き先を聞く（制作者 2026-10-03「画像をドロップしても登録先を選ぶ画面が出てこない」）。
@@ -45,5 +45,32 @@ describe('FileIntake', () => {
 
     expect(screen.queryByText('画像 1 枚をどこに入れますか')).toBeNull()
     area.remove()
+  })
+})
+
+/**
+ * 楽曲を落としたら、作品の方針を開く（制作者 2026-10-03「次何したらいいんだ？ってなるので、作品の方針・歌詞を入力する
+ * インスペクターをアクティブにしたほうがよさそう」）。解析が先に終わると解析の待ち画面が出ないので、登録した時点でも開く。
+ */
+describe('FileIntake: 楽曲を落としたとき', () => {
+  const track = { id: 'track-1', title: '検証の曲' }
+
+  it('作品の方針が済んでいなければ、作品の方針を開いて次にやることを言う', async () => {
+    const addTrackFromFile = vi.fn(() => Promise.resolve(track))
+    const { value } = renderInWorkbench(
+      <FileIntake onNotice={vi.fn()} registerOpener={vi.fn()} />,
+      { concept: '' },
+      { actions: { ...assetStoreValue().actions, addTrackFromFile } as never },
+    )
+
+    await act(async () => {
+      window.dispatchEvent(dropEvent([new File(['x'], 'song.wav', { type: 'audio/wav' })]))
+      await Promise.resolve()
+    })
+
+    expect(addTrackFromFile).toHaveBeenCalledTimes(1)
+    expect(value.inspect).toHaveBeenCalledWith({ kind: 'project', id: value.projectId })
+    expect(value.focusPanel).toHaveBeenCalledWith('inspector')
+    expect(value.notify).toHaveBeenCalledWith(expect.stringContaining('作品の方針'))
   })
 })

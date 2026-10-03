@@ -211,3 +211,19 @@ export const NUDGE_STEPS = {
   fineSec: FINE_NUDGE_SEC,
   coarseSec: COARSE_NUDGE_SEC,
 } as const
+
+/**
+ * 区切るモードが見えている間、**フォーカスが波形の外でも**区切りを置く打鍵か（制作者 2026-10-03「「ここに区切りを置く」
+ * ボタンもテロップのように Enter とかで置けるようにしたい」）。歌詞の Enter と同じく、文字を打っている間だけは取らない。
+ * ボタンの上でも取る（取った打鍵は既定の動きを止めるので、ボタンは押されない）。
+ */
+export const isPlaceKeyAnywhere = (event: Omit<CutEditorKeyEvent, 'insideCutEditor'>): boolean => {
+  if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false
+  if (event.key !== 'Enter' && event.key !== 's') return false
+  const owner = resolveKeyOwner(event.target, false)
+  if (owner === 'workbench' || owner === 'cut-editor') return true
+  // 普通のボタンの上でも取る（区切るモードの切り替えを押した直後に Enter で置けるように）。
+  // メニュー項目・タブなど役割を持つ部品は、その部品の Enter を優先する。
+  const role = event.target?.role ?? null
+  return owner === 'widget' && event.target?.tagName.toUpperCase() === 'BUTTON' && (role === null || role === 'button')
+}

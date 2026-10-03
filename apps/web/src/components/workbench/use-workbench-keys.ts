@@ -28,6 +28,9 @@ export const useWorkbenchKeys = (options: WorkbenchKeysOptions): void => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const { workbench: current, options: opts } = latest.current
       if (current.dialog !== null) return
+      // 先に受けた画面（歌詞を合わせる。capture で受けて既定の動きを止める）があれば譲る。
+      // 譲らないと Space で再生が 2 回切り替わり、Backspace で Shot の削除の確認まで開いた。
+      if (event.defaultPrevented) return
       const target = event.target instanceof HTMLElement ? event.target : null
       const command = resolveWorkbenchKey({
         key: event.key,

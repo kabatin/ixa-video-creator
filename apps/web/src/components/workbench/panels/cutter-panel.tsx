@@ -66,10 +66,14 @@ export const CutterPanel = ({ visible }: { readonly visible: boolean }) => {
               projectId={workbench.projectId}
               track={track}
               analysis={analysis}
-              sequences={workbench.sequences}
               initialSnapEnabled={preferences.playback.snapToBeat}
               // 歌詞を合わせている間は Enter・Backspace を歌詞が受ける（区切りを置かない）。
               keyboardShortcuts={keys && purpose === 'cut'}
+              // 区切るモードが見えている間は、波形の外を押していても Enter で区切りを置く（制作者 2026-10-03）。
+              placeKeyAnywhere={keys && purpose === 'cut'}
+              onNeedLyrics={() => {
+                workbench.openCutter('lyrics')
+              }}
               purpose={purpose}
               lyricCues={lyricCues}
               // プレビューの下と同じ操作列。波形の直下に置くので、押せばこのパネルが鳴るのは場所で分かる
