@@ -372,3 +372,30 @@ describe('StoryboardDraftPanel — 作り直している間', () => {
     expect(screen.getByRole('checkbox', { name: 'A の案を採用する' })).toBeEnabled()
   })
 })
+
+/**
+ * 採用したら、案は「いまの説明」へ移ったと見せる（制作者 2026-10-03「採用ボタン押すと、「いまの説明」と「案」に同じ内容が
+ * 並ぶから、採用したら案がいまの説明に移るようにしたほうが分かりやすい。案側は「採用されています」的な文言と
+ * 「なぜこの絵か？」を引き続き表示する感じになると縦幅も減っていい」）。
+ */
+describe('StoryboardDraftPanel: 採用した行', () => {
+  it('案の欄は「採用しました」と「なぜこの絵か」だけ（同じ文を 2 度出さない）', () => {
+    panel({
+      shots: [{ ...shotA, description: 'A の案', mood: '静かな緊張' }, shotB],
+      initialItems: [itemFor(shotA.id, { adoptedAt: '2026-09-18T01:00:00.000Z' }), itemFor(shotB.id)],
+    })
+
+    expect(screen.getAllByText('A の案')).toHaveLength(1)
+    expect(screen.getByText('採用しました（いまの説明に入っています）')).toBeInTheDocument()
+    expect(screen.getByText(/A は導入だから/)).toBeInTheDocument()
+  })
+
+  it('CUT を押すと、その Shot を選んでインスペクターの絵コンテを開く（手で直す入口）', async () => {
+    const onSelectShot = vi.fn()
+    panel({ onSelectShot })
+
+    await userEvent.click(screen.getByRole('button', { name: 'A' }))
+
+    expect(onSelectShot).toHaveBeenCalledWith(shotA.id)
+  })
+})

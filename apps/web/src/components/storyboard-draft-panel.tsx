@@ -117,13 +117,21 @@ const DraftRowView = ({
       {describeCurrent(row.currentDescription)}
       <span className="block text-xs text-muted">雰囲気: {describeMood(row.currentMood)}</span>
     </td>
-    <td className={`px-1.5 py-1 text-sm ${row.unchanged ? 'text-text' : 'text-text'}`}>
-      <span className={row.unchanged ? '' : 'rounded bg-accent/10 px-0.5'}>
-        {row.proposedDescription}
-      </span>
-      <span className="block text-xs text-muted">雰囲気: {describeMood(row.proposedMood)}</span>
+    <td className="px-1.5 py-1 text-sm text-text">
+      {/*
+        採用したら案は「いまの説明」へ移ったので、同じ文を 2 度出さない（制作者 2026-10-03「採用したら案がいまの説明に
+        移るようにしたほうが分かりやすい。案側は「採用されています」的な文言と「なぜこの絵か？」を」）。
+      */}
+      {row.decision === 'adopted' ? (
+        <span className="block text-xs font-semibold text-ok">採用しました（いまの説明に入っています）</span>
+      ) : (
+        <>
+          <span className={row.unchanged ? '' : 'rounded bg-accent/10 px-0.5'}>{row.proposedDescription}</span>
+          <span className="block text-xs text-muted">雰囲気: {describeMood(row.proposedMood)}</span>
+        </>
+      )}
       <span className="mt-0.5 block text-xs text-muted">なぜこの絵か: {row.reason}</span>
-      {row.unchanged ? (
+      {row.decision !== 'adopted' && row.unchanged ? (
         <span className="block text-xs text-muted">いまの説明と同じ内容です</span>
       ) : null}
     </td>

@@ -28,7 +28,12 @@ export const DraftPanel = () => {
           mood: shot.mood,
         }))}
         onAdopted={workbench.applyAdoptedShots}
-        onSelectShot={workbench.selectShot}
+        // CUT を押したら、その Shot のインスペクターの「絵コンテ」を開く（手で直す入口。制作者 2026-10-03「絵コンテ自分で
+        // 入力、編集することできない？」）。
+        onSelectShot={(shotId) => {
+          workbench.selectShot(shotId)
+          workbench.openInspector('settings')
+        }}
       />
     </PanelFrame>
   )

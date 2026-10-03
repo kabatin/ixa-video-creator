@@ -24,6 +24,30 @@ export const Section = ({
 )
 
 /**
+ * 畳める区切り。普段触らないもの（カメラの細かい設定・レビュー）を下に畳んでおく
+ * （制作者 2026-10-03「普段触らないような詳細設定は下のほうで」）。見出しは押すと開く。
+ */
+export const CollapsibleSection = ({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  readonly title: string
+  readonly defaultOpen?: boolean
+  readonly children: ReactNode
+}) => (
+  <details open={defaultOpen} className="group border-t border-line py-2">
+    <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-semibold text-muted hover:text-text">
+      <span aria-hidden="true" className="inline-block transition-transform group-open:rotate-90">
+        ▸
+      </span>
+      <span>{title}</span>
+    </summary>
+    <div className="mt-1.5 space-y-1.5">{children}</div>
+  </details>
+)
+
+/**
  * 欄の並び。ラベルは左（狭ければ上）。
  * `hideLabel` は見出しが同じ名前を言っている欄だけ。ラベルは読み上げに残し、欄を横いっぱいに使う。
  */

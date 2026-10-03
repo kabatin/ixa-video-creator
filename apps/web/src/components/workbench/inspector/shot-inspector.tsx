@@ -1,6 +1,5 @@
 'use client'
 
-import { useAssist } from '@/components/workbench/use-assist'
 import { LocationId, ShotCamera, type Shot } from '@ixa/domain'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ReviewPanel } from '@/components/review-panel'
@@ -16,7 +15,8 @@ import { AutoSaveCheckbox, AutoSaveSelect } from '@/components/workbench/ui/auto
 import { MenuButton } from '@/components/workbench/ui/more-menu'
 import { useShotMenu } from '@/components/workbench/use-shot-menu'
 import { ObjectHeader } from '@/components/workbench/ui/object-header'
-import { Section } from '@/components/workbench/ui/section'
+import { CollapsibleSection, Section } from '@/components/workbench/ui/section'
+import { ShotStoryboardSection } from '@/components/workbench/inspector/shot-storyboard-section'
 import { useShotTakes } from '@/components/workbench/use-shot-takes'
 import { useWorkbench, type InspectorTab } from '@/components/workbench/workbench-context'
 import { Button } from '@/components/ui/button'
@@ -34,6 +34,9 @@ import { formatClock, formatDuration, formatSpan } from '@/lib/format-time'
 import { isGeneratingStatus } from '@/lib/shot-display'
 import { parseClockInput, parseDurationInput } from '@/lib/time-input'
 
+/** 上の欄が読み込まれて背が伸びる間、頼まれた区切りへ送り直す時間。 */
+const FOLLOW_SCROLL_MS = 2_000
+
 /**
  * Shot のインスペクター（UI-WORKBENCH-2 §5.2）。**1 本のスクロール**（タブをやめた。生成とレビューが隠れて見つからなかった）。
  * 欄は確定で自動保存する。取り消せない削除は `⋯` の中。
@@ -47,7 +50,6 @@ export const ShotInspector = ({
 }) => {
   const workbench = useWorkbench()
   const shotMenu = useShotMenu()
-  const assistFor = useAssist()
   const save = async (patch: Parameters<typeof workbench.saveShot>[1]): Promise<void> => {
     await workbench.saveShot(shot.id, patch)
   }
@@ -56,9 +58,29 @@ export const ShotInspector = ({
   const [hasStartFrame, setHasStartFrame] = useState(false)
   const sections = useRef<Partial<Record<InspectorTab, HTMLDivElement | null>>>({})
 
-  // メニュー「生成」や「Take を作る」から来たら、その区切りまで送る（同じタブをもう一度頼まれても送り直す）。
+  /**
+   * メニュー「生成」や「Take を作る」から来たら、その区切りまで送る（同じタブをもう一度頼まれても送り直す）。
+   * 上の欄（案・絵・登場人物）は遅れて読み込まれて背が伸びるので、少しの間は伸びるたびに送り直す
+   * （「Take を作る」を一番上に置いていた頃の理由。並びを作業の順に戻したので、ここで追いかける）。
+   */
+  const body = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
-    sections.current[workbench.inspectorTab]?.scrollIntoView({ block: 'start' })
+    const target = sections.current[workbench.inspectorTab]
+    target?.scrollIntoView({ block: 'start' })
+    const content = body.current?.firstElementChild
+    if (target === null || target === undefined || content === null || content === undefined) return undefined
+    if (typeof ResizeObserver === 'undefined') return undefined
+    const observer = new ResizeObserver(() => {
+      target.scrollIntoView({ block: 'start' })
+    })
+    observer.observe(content)
+    const stop = window.setTimeout(() => {
+      observer.disconnect()
+    }, FOLLOW_SCROLL_MS)
+    return () => {
+      window.clearTimeout(stop)
+      observer.disconnect()
+    }
   }, [workbench.inspectorTab, workbench.inspectorRequest, shot.id])
 
   return (
@@ -76,25 +98,58 @@ export const ShotInspector = ({
           />
         }
       />
-      <div className="workbench-panel-body relative min-h-0 flex-1 overflow-auto">
+      <div ref={body} className="workbench-panel-body relative min-h-0 flex-1 overflow-auto">
         {/*
-          Take を作る欄は一番上（制作者 2026-09-30「Take を作るところでどうやって作るか迷った」）。
-          下に置いて送る形では、上の欄（Take の一覧・最初のフレーム）が遅れて読み込まれて押し下げられ、欄が画面の下で切れた。
+          作業の順に並べる（制作者 2026-10-03「Take 作成より先にやるべき画像生成を上のほうに持ってくるとか、順序に応じて
+          並び替えたり整理したほうがいい」）: 絵コンテ → 参照 → 絵 → Take を作る → Take → 時間。普段触らないものは下に畳む。
         */}
-        <div
-          ref={(element) => {
-            sections.current.generate = element
-          }}
-        >
-          <Section title="Take を作る">
-            <ShotGenerateSection shot={shot} hasStartFrame={hasStartFrame} />
+        <div>
+          <div
+            ref={(element) => {
+              sections.current.settings = element
+            }}
+          >
+            <Section title="絵コンテ">
+              <ShotStoryboardSection shot={shot} disabled={generating} />
+            </Section>
+          </div>
+
+          <Section title="参照">
+            <LocationField shot={shot} disabled={generating} onSave={save} />
+            <ShotCastSection shot={shot} version={workbench.serverEpoch} />
           </Section>
-        </div>
-        <div
-          ref={(element) => {
-            sections.current.settings = element
-          }}
-        >
+
+          <Section title="絵">
+            <StartFrameField
+              shot={shot}
+              workspaceId={workbench.project.workspaceId}
+              disabled={generating}
+              onChange={setHasStartFrame}
+              // 付け外ししたら、サムネとプレビュー（Take が無い Shot は絵を映す）を読み直す。ドロップで付けたときと同じ。
+              onSaved={workbench.refresh}
+              // 絵ができたとき（出来事で posterEpoch が進む）にも読み直す。どちらも増えるだけなので和で足りる。
+              version={workbench.serverEpoch + workbench.posterEpoch}
+            />
+          </Section>
+
+          <div
+            ref={(element) => {
+              sections.current.generate = element
+            }}
+          >
+            <Section title="Take を作る">
+              <ShotGenerateSection shot={shot} hasStartFrame={hasStartFrame} />
+            </Section>
+          </div>
+
+          <div
+            ref={(element) => {
+              sections.current.review = element
+            }}
+          >
+            <TakeSection shot={shot} />
+          </div>
+
           <Section title="時間">
             <AutoSaveField
               label="コード"
@@ -123,6 +178,10 @@ export const ShotInspector = ({
               }
               onSave={(next) => save({ durationSec: parseDurationInput(next) ?? shot.durationSec })}
             />
+          </Section>
+
+          <CollapsibleSection title="詳しい設定">
+            <CameraFields shot={shot} disabled={generating} onSave={save} />
             <AutoSaveCheckbox
               label="前の Shot から画を繋ぐ"
               checked={!isFirst && shot.continuityMode === 'previous_shot'}
@@ -134,54 +193,10 @@ export const ShotInspector = ({
               }
               onSave={(next) => save({ continuityMode: next ? 'previous_shot' : 'independent' })}
             />
-          </Section>
+          </CollapsibleSection>
 
-          <Section title="画">
-            <AutoSaveField
-              label="説明"
-              multiline
-              value={shot.description}
-              placeholder="夜のスタジアム。主人公がボールを追う。"
-              onSave={(next) => save({ description: next })}
-              assist={assistFor('shot_description', { shotId: shot.id })}
-            />
-            <AutoSaveField
-              label="mood"
-              value={shot.mood ?? ''}
-              placeholder="tense, cinematic"
-              // 空欄は「未設定」。空文字を保存すると「空という指定」と区別できなくなる。
-              onSave={(next) => save({ mood: next.trim() === '' ? null : next })}
-              assist={assistFor('shot_mood', { shotId: shot.id })}
-            />
-            <CameraFields shot={shot} disabled={generating} onSave={save} />
-          </Section>
-
-          <Section title="参照">
-            <LocationField shot={shot} disabled={generating} onSave={save} />
-            <ShotCastSection shot={shot} version={workbench.serverEpoch} />
-            <StartFrameField
-              shot={shot}
-              workspaceId={workbench.project.workspaceId}
-              disabled={generating}
-              onChange={setHasStartFrame}
-              // 付け外ししたら、サムネとプレビュー（Take が無い Shot は絵を映す）を読み直す。ドロップで付けたときと同じ。
-              onSaved={workbench.refresh}
-              // 絵ができたとき（出来事で posterEpoch が進む）にも読み直す。どちらも増えるだけなので和で足りる。
-              version={workbench.serverEpoch + workbench.posterEpoch}
-            />
-          </Section>
+          <ReviewSection shot={shot} />
         </div>
-
-        <div
-          ref={(element) => {
-            sections.current.review = element
-          }}
-        >
-          <TakeSection shot={shot} />
-        </div>
-
-
-        <ReviewSection shot={shot} />
       </div>
     </div>
   )
@@ -349,14 +364,6 @@ const TakeSection = ({ shot }: { readonly shot: Shot }) => {
           ? '読み込んでいます…'
           : `${String(takes.length)} 本 / 採用: ${adopted === null ? 'なし' : `Take ${String(adopted.index)}`}`}
       </p>
-      <TakeTimingField
-        shot={shot}
-        adopted={adopted}
-        disabled={isGeneratingStatus(shot.status)}
-        onSave={async (timing) => {
-          await workbench.saveShot(shot.id, { timing })
-        }}
-      />
       {adopted !== null && (
         <Button size="sm" disabled={busy} onClick={() => void unselect()}>
           {busy ? '外しています…' : '採用を外す'}
@@ -367,15 +374,29 @@ const TakeSection = ({ shot }: { readonly shot: Shot }) => {
           {message}
         </p>
       )}
-      <FootageImportForm
-        shot={shot}
-        workspaceId={workbench.project.workspaceId}
-        projectId={workbench.projectId}
-        disabled={isGeneratingStatus(shot.status)}
-        onImported={() => {
-          workbench.refresh()
-        }}
-      />
+      {/* 普段触らない操作（尺に合わせる・手持ちの動画を取り込む）は畳んでおく。 */}
+      <details className="text-sm">
+        <summary className="cursor-pointer text-xs text-muted hover:text-text">尺に合わせる・動画を取り込む</summary>
+        <div className="mt-1.5 space-y-1.5">
+          <TakeTimingField
+            shot={shot}
+            adopted={adopted}
+            disabled={isGeneratingStatus(shot.status)}
+            onSave={async (timing) => {
+              await workbench.saveShot(shot.id, { timing })
+            }}
+          />
+          <FootageImportForm
+            shot={shot}
+            workspaceId={workbench.project.workspaceId}
+            projectId={workbench.projectId}
+            disabled={isGeneratingStatus(shot.status)}
+            onImported={() => {
+              workbench.refresh()
+            }}
+          />
+        </div>
+      </details>
     </Section>
   )
 }
@@ -386,7 +407,7 @@ const ReviewSection = ({ shot }: { readonly shot: Shot }) => {
   const { takes } = useShotTakes(shot, workbench.posterEpoch)
   const selected = takes?.find((take) => take.id === shot.selectedTakeId) ?? null
   return (
-    <Section title="レビュー">
+    <CollapsibleSection title="レビュー">
       {selected === null ? (
         <p className="text-sm text-muted">
           採用している Take がありません。Take 比較で採用するとレビューできます。
@@ -397,6 +418,6 @@ const ReviewSection = ({ shot }: { readonly shot: Shot }) => {
           takeId={selected.id}
         />
       )}
-    </Section>
+    </CollapsibleSection>
   )
 }
