@@ -43,6 +43,8 @@ export type WorkflowInput = {
   readonly concept: string | null
   /** ルック（画風・光・質感）を書いたか。 */
   readonly hasLook: boolean
+  /** 歌詞なしの作品か（作品の方針でチェックする）。歌詞の時刻とテロップの段を飛ばし、方針は方針・ルックで数える。 */
+  readonly instrumental: boolean
   /** 歌詞の行数（`lyricLines`）。0 なら歌詞の時刻とテロップの段は飛ばす。 */
   readonly lyricLineCount: number
   /** 時刻を付けた行の数（`lyricCues` の長さ。前から順に付く）。 */
@@ -98,24 +100,32 @@ const counted = (id: WorkflowStepId, marks: readonly (boolean | null)[]): Workfl
   return tally(id, marks.filter((mark) => mark === true).length, marks.length)
 }
 
-/** 歌詞の時刻。歌詞が無ければ飛ばす。行ごとに数える（前から順に付く）。 */
-const lyricsStep = (lineCount: number, cueCount: number): WorkflowStep =>
-  lineCount === 0 ? skipped('lyrics') : tally('lyrics', Math.min(cueCount, lineCount), lineCount)
+/** 歌詞を使わない作品か（歌詞なしにした・歌詞がまだ 1 行も無い）。 */
+const withoutLyrics = (input: WorkflowInput): boolean => input.instrumental || input.lyricLineCount === 0
+
+/** 歌詞の時刻。歌詞を使わなければ飛ばす。行ごとに数える（前から順に付く）。 */
+const lyricsStep = (input: WorkflowInput): WorkflowStep =>
+  withoutLyrics(input)
+    ? skipped('lyrics')
+    : tally('lyrics', Math.min(input.lyricCueCount, input.lyricLineCount), input.lyricLineCount)
 
 /**
  * 作品の方針。方針（コンセプト・あらすじ）・歌詞・ルックの 3 つを数える
  * （制作者 2026-10-03「コンセプト・あらすじの入力、歌詞の入力、ルックの設定をさせたい」）。
- * 歌詞の無い曲では「歌詞」が埋まらない。歌詞の無い動画の流れは別に決める（制作者が別にフィードバックする）。
+ * 歌詞なしの作品は方針・ルックの 2 つ（制作者 2026-10-04「歌詞がない動画の場合、作品の方針が 2/3 でとまってしまう。
+ * 歌詞なしのチェックボックスとかあるといいかも」）。
  */
 const conceptStep = (input: WorkflowInput): WorkflowStep => {
   if (input.concept === null) return flag('concept', null)
-  const parts = [input.concept.trim() !== '', input.lyricLineCount > 0, input.hasLook]
+  const parts = input.instrumental
+    ? [input.concept.trim() !== '', input.hasLook]
+    : [input.concept.trim() !== '', input.lyricLineCount > 0, input.hasLook]
   return tally('concept', parts.filter(Boolean).length, parts.length)
 }
 
-/** テロップ。歌詞が無ければ飛ばす。歌詞から置いたテロップが 1 つでもあれば済み。 */
+/** テロップ。歌詞を使わなければ飛ばす。歌詞から置いたテロップが 1 つでもあれば済み。 */
 const telopsStep = (input: WorkflowInput): WorkflowStep =>
-  input.lyricLineCount === 0
+  withoutLyrics(input)
     ? skipped('telops')
     : flag('telops', input.lyricTelopCount === null ? null : input.lyricTelopCount > 0)
 
@@ -125,7 +135,7 @@ export const workflowSteps = (
   const steps: readonly WorkflowStep[] = [
     flag('music', input.hasTrack),
     conceptStep(input),
-    lyricsStep(input.lyricLineCount, input.lyricCueCount),
+    lyricsStep(input),
     telopsStep(input),
     flag('shots', input.shots.length > 0),
     counted(

@@ -151,3 +151,35 @@ describe('ProjectConceptInspector: 次へ', () => {
     expect(value.openCutter).toHaveBeenCalledWith('lyrics')
   })
 })
+
+/**
+ * 歌詞なし（制作者 2026-10-04「歌詞がない動画の場合、歌詞を入力しないので、作品の方針が 2/3 でとまってしまいます。
+ * 歌詞なしのチェックボックスとかあるといいかもしれません」）。
+ */
+describe('ProjectConceptInspector: 歌詞なし', () => {
+  it('「歌詞なし」をチェックすると保存する', async () => {
+    const { api } = await open()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /歌詞なし/ }))
+
+    expect(api.updateProject).toHaveBeenCalledWith(aProject.id, { instrumental: true })
+  })
+
+  it('歌詞なしの作品では歌詞の欄を出さず、まず書くのは方針とルックの 2 つと言う', async () => {
+    await open({ instrumental: true })
+
+    expect(screen.queryByLabelText('歌詞')).toBeNull()
+    expect(screen.getByText(/まず「コンセプト・あらすじ」「ルック」の 2 つ/)).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: /歌詞なし/ })).toBeChecked()
+  })
+
+  it('歌詞なしで方針とルックが済んだら「次へ: 区切って Shot にする」', async () => {
+    const project = { ...aProject, instrumental: true, lyrics: '', styleGuide: '水彩' }
+    renderInWorkbench(<ProjectConceptInspector api={fakeApi(project, '夜明け')} />, {
+      project,
+      concept: '夜明け',
+      track: { id: 'track-1', title: 'iXA CUP' } as unknown as MusicTrack,
+    })
+    expect(await screen.findByRole('button', { name: '次へ: 区切って Shot にする' })).toBeTruthy()
+  })
+})

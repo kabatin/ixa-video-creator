@@ -21,6 +21,7 @@ const input = (overrides: Partial<WorkflowInput> = {}): WorkflowInput => ({
   hasTrack: true,
   concept: '夜明けの屋上で二人が出会う',
   hasLook: true,
+  instrumental: false,
   lyricLineCount: 3,
   lyricCueCount: 3,
   lyricTelopCount: 3,
@@ -91,6 +92,24 @@ describe('workflowSteps', () => {
   it('テロップの数が読めていなければ「分からない」として次に選ばない', () => {
     const result = workflowSteps(input({ lyricTelopCount: null }))
     expect(stateOf(result, 'telops')).toBe('unknown')
+    expect(result.nextId).toBe('shots')
+  })
+
+  /**
+   * 「歌詞なし」にした作品（制作者 2026-10-04「歌詞がない動画の場合、歌詞を入力しないので、作品の方針が 2/3 でとまって
+   * しまいます。歌詞なしのチェックボックスとかあるといいかも」）。方針は方針・ルックの 2 つで済み、歌詞の段は飛ばす。
+   */
+  it('歌詞なしの作品は、作品の方針を方針・ルックの 2 つで数え、歌詞の時刻とテロップを飛ばす', () => {
+    const result = workflowSteps(input({ instrumental: true, lyricLineCount: 0, lyricCueCount: 0, lyricTelopCount: 0 }))
+    expect(stepOf(result, 'concept')).toMatchObject({ state: 'done', progress: { done: 2, total: 2 } })
+    expect(stateOf(result, 'lyrics')).toBe('skipped')
+    expect(stateOf(result, 'telops')).toBe('skipped')
+    expect(result.nextId).toBe('shots')
+  })
+
+  it('歌詞なしにしたら、歌詞が書いてあっても歌詞の段は飛ばす', () => {
+    const result = workflowSteps(input({ instrumental: true, lyricCueCount: 0, lyricTelopCount: 0 }))
+    expect(stateOf(result, 'lyrics')).toBe('skipped')
     expect(result.nextId).toBe('shots')
   })
 

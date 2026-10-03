@@ -48,7 +48,11 @@ export const StoryboardEmpty = () => {
   return (
     <PanelEmpty
       title="Shot はまだありません"
-      hint="作品の方針・歌詞の時刻・テロップを済ませてから区切ると、絵と歌詞が合います。"
+      hint={
+        workbench.project.instrumental
+          ? '作品の方針を済ませてから区切ると、絵が作品に合います。'
+          : '作品の方針・歌詞の時刻・テロップを済ませてから区切ると、絵と歌詞が合います。'
+      }
     >
       <ol aria-label="Shot を作るまで" className="flex flex-col gap-1 text-left text-sm">
         {before.map((step, index) => {

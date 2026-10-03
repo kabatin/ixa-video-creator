@@ -40,6 +40,7 @@ export const WorkflowProvider = ({
     hasTrack: workbench.track !== null,
     concept: workbench.concept,
     hasLook: workbench.project.styleGuide.trim() !== '',
+    instrumental: workbench.project.instrumental,
     lyricLineCount: lyricLines(workbench.project.lyrics).length,
     lyricCueCount: workbench.project.lyricCues.length,
     lyricTelopCount,

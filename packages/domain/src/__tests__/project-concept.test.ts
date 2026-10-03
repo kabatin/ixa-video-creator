@@ -40,3 +40,15 @@ describe('作品の方針', () => {
     expect('styleReferenceAssetIds' in patch).toBe(false)
   })
 })
+
+/**
+ * 歌詞なし（制作者 2026-10-04「歌詞がない動画の場合、歌詞を入力しないので、作品の方針が 2/3 でとまってしまいます。
+ * 歌詞なしのチェックボックスとかあるといいかも」）。既定は歌詞あり。直して保存できる。
+ */
+describe('歌詞なし', () => {
+  it('既定は歌詞あり（false）。真偽値だけを受ける', () => {
+    expect(Project.parse(base).instrumental).toBe(false)
+    expect(UpdateProjectPatch.parse({ instrumental: true })).toEqual({ instrumental: true })
+    expect(() => UpdateProjectPatch.parse({ instrumental: 'yes' })).toThrow()
+  })
+})

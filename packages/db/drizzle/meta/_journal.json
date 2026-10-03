@@ -162,6 +162,13 @@
       "when": 1790957439285,
       "tag": "0022_image_job_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791045555508,
+      "tag": "0023_project_instrumental",
+      "breakpoints": true
     }
   ]
 }
