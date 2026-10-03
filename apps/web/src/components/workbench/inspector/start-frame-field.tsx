@@ -106,6 +106,21 @@ export const StartFrameField = ({
     }
   }
 
+  /** 作っている絵を止め、状態を読み直す（止めた後は「止めました」と出す）。 */
+  const stopDrawing = async (): Promise<void> => {
+    setBusy(true)
+    setError(null)
+    try {
+      await client.cancelImages(shot.projectId, [shot.id])
+      const latest = await client.getStartFrame(shot.id)
+      setState({ kind: 'ready', mediaAssetId: latest.mediaAssetId, job: latest.job })
+    } catch (cause) {
+      setError(`止められませんでした: ${describeForPerson(cause)}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   /**
    * 絵コンテ（説明）が空なら、作る前に確かめる（制作者 2026-10-03「絵コンテがないと想定した画像が出て来ない可能性が高い」）。
    * 止めはしない。「このまま作る」を選べば作る。
@@ -176,10 +191,15 @@ export const StartFrameField = ({
         </Button>
       )}
       {drawing && (
-        <p role="status" className="text-xs text-muted">
-          絵コンテの画像を作っています（1 枚 1 分ほど）。できたら、ここに出ます。
+        <p role="status" className="flex flex-wrap items-center gap-2 text-xs text-muted">
+          <span>絵コンテの画像を作っています（1 枚 1 分ほど）。できたら、ここに出ます。</span>
+          {/* 止める（制作者 2026-10-04「画像生成も停められるようにしよう」）。この Shot の絵だけ。 */}
+          <Button size="sm" nowrap disabled={busy} onClick={() => void stopDrawing()} aria-label="絵を作るのをやめる">
+            やめる
+          </Button>
         </p>
       )}
+      {job?.status === 'cancelled' && <p className="text-xs text-muted">絵を作るのを止めました。</p>}
       {job?.status === 'failed' && (
         <p role="alert" className="text-xs text-danger">
           {`絵を作れませんでした: ${job.error ?? '理由が届きませんでした。'}`}

@@ -101,6 +101,10 @@ export const posterByShotId = (list: readonly WireShotPoster[]): ShotPosterMap =
 /**
  * 最初のフレームが付いているか。**まだ引けていなければ null**（「無い」と読み替えない。L-021）。
  */
+/** 絵（最初のフレーム）を作っている Shot の数。順番を待っている絵も含む（制作者 2026-10-04）。 */
+export const countDrawing = (posters: ShotPosterMap): number =>
+  [...posters.values()].filter((poster) => poster.drawing).length
+
 export const startFrameKnownFor = (posters: ShotPosterMap, shotId: ShotId): boolean | null =>
   posters.get(shotId)?.hasStartFrame ?? null
 

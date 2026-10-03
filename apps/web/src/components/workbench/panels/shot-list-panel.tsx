@@ -8,6 +8,7 @@ import {
   type BulkSelectOption,
 } from '@/components/bulk-action-bar'
 import { useAssets } from '@/components/workbench/asset-store'
+import { ImageActivityStrip } from '@/components/workbench/image-activity-strip'
 import { ShotListCompact } from '@/components/workbench/shot-list-compact'
 import { useAssetDrop } from '@/components/workbench/use-asset-drop'
 import { useBulkActions } from '@/components/workbench/use-bulk-actions'
@@ -24,7 +25,9 @@ import {
 import { toLocationOptions } from '@/lib/location-options'
 import { clearSelection, headerCheckboxState, selectAllVisible, toggleShot } from '@/lib/shot-bulk'
 import { shotStatusLabel } from '@/lib/shot-display'
-import { startFrameKnownFor } from '@/lib/shot-posters'
+import { countDrawing, startFrameKnownFor } from '@/lib/shot-posters'
+import { createApiClient } from '@/lib/api-client'
+import { describeForPerson } from '@/lib/api-error'
 import {
   rangeBetween,
   sortShots,
@@ -182,6 +185,18 @@ export const ShotListPanel = () => {
             {`開いてから ${String(workbench.live.newTakeCount)} 本の Take ができました。`}
           </p>
         )}
+        {/* 絵を作っている数と、まとめて止める口（制作者 2026-10-04）。止めた印は出来事で消える。 */}
+        <ImageActivityStrip
+          drawingCount={countDrawing(workbench.posters)}
+          onStopAll={async () => {
+            try {
+              const { cancelledJobIds } = await createApiClient().cancelImages(workbench.projectId)
+              workbench.notify(`${String(cancelledJobIds.length)} 件の絵を止めました。`)
+            } catch (cause) {
+              workbench.notify(`絵を止められませんでした: ${describeForPerson(cause)}`)
+            }
+          }}
+        />
         {workbench.posterError !== null && (
           <div className="px-2 pt-2">
             <PanelNotice tone="warn">{workbench.posterError}</PanelNotice>

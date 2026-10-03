@@ -31,6 +31,7 @@ const api = (current: string | null, job: WireStartFrameState['job'] = null): Sh
   clearStartFrame: vi.fn(() => Promise.resolve()),
   generateStartFrame: vi.fn(() => Promise.resolve({ jobId: JOB })),
   generateStartFrames: vi.fn(() => Promise.resolve({ jobIds: [], skipped: { drawing: 0, hasFrame: 0 } })),
+  cancelImages: vi.fn(() => Promise.resolve({ cancelledJobIds: [JOB] })),
 })
 
 const JOB = '01ARZ3NDEKTSV4RRFFQ69G5FJ0' as ImageGenerationJobId
@@ -169,5 +170,30 @@ describe('StartFrameField: 絵コンテが空のとき', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'このまま作る' }))
     expect(fake.generateStartFrame).toHaveBeenCalledWith(SHOT_ID)
+  })
+})
+
+/** 作っている絵を止める（制作者 2026-10-04「画像生成も停められるようにしよう」）。 */
+describe('StartFrameField: 止める', () => {
+  it('作っている間は「やめる」を出し、押すとこの Shot の絵だけ止める', async () => {
+    const fake = api(null, { id: JOB, status: 'queued', error: null })
+    // 止めたら、読み直した状態は「止めた」になる（実物と同じ）。
+    vi.mocked(fake.cancelImages).mockImplementation(() => {
+      vi.mocked(fake.getStartFrame).mockResolvedValue({ mediaAssetId: null, job: { id: JOB, status: 'cancelled', error: null } })
+      return Promise.resolve({ cancelledJobIds: [JOB] })
+    })
+    show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: '絵を作るのをやめる' }))
+
+    expect(fake.cancelImages).toHaveBeenCalledWith(shot.projectId, [SHOT_ID])
+    expect(await screen.findByText('絵を作るのを止めました。')).toBeTruthy()
+  })
+
+  it('止めたジョブは「止めました」と出す（失敗とは言わない）', async () => {
+    show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={api(null, { id: JOB, status: 'cancelled', error: null })} />)
+
+    expect(await screen.findByText('絵を作るのを止めました。')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
