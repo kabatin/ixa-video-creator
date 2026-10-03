@@ -10,7 +10,6 @@ import { describeForPerson } from '@/lib/api-error'
 import {
   ASSET_DRAG_TYPE,
   castWithCharacter,
-  defaultLook,
   parseAssetDrag,
 } from '@/lib/asset-actions'
 
@@ -23,7 +22,7 @@ export type AssetDropState = 'idle' | 'over' | 'saving'
  */
 export const useAssetDrop = (onMessage: (message: string) => void) => {
   const workbench = useWorkbench()
-  const { looks, characters, locations } = useAssets()
+  const { characters, locations, actions } = useAssets()
   const api = useMemo(() => createApiClient(), [])
   const [target, setTarget] = useState<{
     readonly shotId: Shot['id']
@@ -43,15 +42,11 @@ export const useAssetDrop = (onMessage: (message: string) => void) => {
         onMessage(`${shot.code} のロケーションを「${name}」にしました。`)
       } else {
         const characterId = CharacterId.parse(payload.id)
-        const characterLooks = looks.get(characterId) ?? []
-        const look = defaultLook(characterLooks)
+        // 既定の Look で入れる。Look が無い（画像だけで作った古い）キャラクターは「基本」を作ってから（制作者 2026-10-04）。
+        const look = await actions.ensureDefaultLook(characterId)
         const name =
           (characters.state === 'ready' ? characters.value : []).find((c) => c.id === characterId)
             ?.displayName ?? ''
-        if (look === null) {
-          onMessage(`${name} には Look がありません。ツリーで Look を足してから落としてください。`)
-          return
-        }
         const current = (await api.listShotCast(shot.id)).map((entry) => ({
           characterId: entry.characterId,
           lookId: entry.lookId,

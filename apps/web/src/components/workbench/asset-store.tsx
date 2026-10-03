@@ -20,12 +20,13 @@ import type {
   UpdateMusicTrackPatch,
   WorkspaceId,
 } from '@ixa/domain'
+import { DEFAULT_LOOK } from '@ixa/domain'
 import { useRouter } from 'next/navigation'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
-import { lookKeyFromName } from '@/lib/asset-actions'
+import { defaultLook, lookKeyFromName } from '@/lib/asset-actions'
 import type { LibraryImportRequest, WireLibraryImportResult } from '@/lib/library-import-api'
 import { deriveTrackTitle } from '@/lib/music-upload'
 
@@ -48,6 +49,11 @@ export type AssetActions = {
   readonly updateCharacter: (id: CharacterId, patch: UpdateCharacterPatch) => Promise<Character>
   readonly deleteCharacter: (id: CharacterId) => Promise<void>
   readonly createLook: (characterId: CharacterId, name: string) => Promise<CharacterLook>
+  /**
+   * 登場人物に入れるときの Look。既定の Look を返し、**1 つも無ければ「基本」を作って返す**。
+   * 以前に画像だけで作ったキャラクターは Look を持たず、Shot に入れられなかった（制作者 2026-10-04）。
+   */
+  readonly ensureDefaultLook: (characterId: CharacterId) => Promise<CharacterLook>
   readonly updateLook: (
     id: CharacterLookId,
     patch: UpdateCharacterLookPatch,
@@ -232,6 +238,15 @@ export const AssetStoreProvider = ({
           name,
           isDefault: existing.length === 0,
         })
+        setLooksOf(characterId, (items) => [...items, created])
+        return created
+      },
+      ensureDefaultLook: async (characterId) => {
+        // 読み込み前なら空と見なさない（Look があるのに「基本」を重ねて作ってしまう）。
+        const known = looks.get(characterId) ?? (await api.listLooks(characterId))
+        const found = defaultLook(known)
+        if (found !== null) return found
+        const created = await api.createLook(characterId, { ...DEFAULT_LOOK, isDefault: true })
         setLooksOf(characterId, (items) => [...items, created])
         return created
       },

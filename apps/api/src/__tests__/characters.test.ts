@@ -150,6 +150,21 @@ describe('Character はプロジェクトごと', () => {
   })
 })
 
+/**
+ * 作ると既定の Look「基本」も一緒にできる（DOMAIN.md §5「Character は最低 1 つの isDefault な Look を持つ」）。
+ * 以前は Look の無いキャラクターができ、Shot の登場人物に入れられなかった（Look は必須）。画像だけで登録した戦子が
+ * どの Shot にも入らず、最初のフレームが参照画像なしで作られて資料と違う見た目になった（制作者 2026-10-04）。
+ */
+describe('作ったキャラクターの既定の Look', () => {
+  it('作ると既定の Look「基本」が 1 つできる', async () => {
+    const characterId = await createCharacter()
+
+    const list = await json<ListBody<LookBody & { name: string }>>(await send('GET', `/characters/${characterId}/looks`))
+    expect(list.data).toHaveLength(1)
+    expect(list.data[0]).toMatchObject({ name: '基本', key: 'BASE', isDefault: true })
+  })
+})
+
 describe('Character の CRUD', () => {
   it('201 で作成し、一覧と 1 件取得で読み戻せる', async () => {
     const id = await createCharacter()
@@ -187,13 +202,15 @@ describe('Character の CRUD', () => {
 })
 
 describe('CharacterLook の不変条件（DOMAIN.md §5）', () => {
-  it('最初の Look は isDefault を渡さなくても既定になる', async () => {
+  it('足した Look は isDefault を渡さなければ既定にならない（既定は作ったときの「基本」のまま）', async () => {
     const characterId = await createCharacter()
     const res = await createLook(characterId)
 
     expect(res.status).toBe(201)
     const created = await json<SuccessBody<LookBody>>(res)
-    expect(created.data.isDefault).toBe(true)
+    expect(created.data.isDefault).toBe(false)
+    const list = await json<ListBody<LookBody>>(await send('GET', `/characters/${characterId}/looks`))
+    expect(list.data.filter((l) => l.isDefault).map((l) => l.key)).toEqual(['BASE'])
   })
 
   it('2 つ目を isDefault: true で作ると 1 つ目が false になる', async () => {
@@ -214,9 +231,9 @@ describe('CharacterLook の不変条件（DOMAIN.md §5）', () => {
 
   it('最後の Look を削除しようとすると 422 で理由を返す', async () => {
     const characterId = await createCharacter()
-    const only = await json<SuccessBody<LookBody>>(await createLook(characterId))
+    const [only] = (await json<ListBody<LookBody>>(await send('GET', `/characters/${characterId}/looks`))).data
 
-    const res = await send('DELETE', `/looks/${only.data.id}`)
+    const res = await send('DELETE', `/looks/${only?.id ?? ''}`)
     expect(res.status).toBe(422)
     const error = await json<ErrorBody>(res)
     expect(error.error).toContain('最後の Look は削除できません')
@@ -225,10 +242,10 @@ describe('CharacterLook の不変条件（DOMAIN.md §5）', () => {
 
   it('2 つあれば削除でき、既定が消えたら残りが既定に昇格する', async () => {
     const characterId = await createCharacter()
-    const first = await json<SuccessBody<LookBody>>(await createLook(characterId))
+    const [base] = (await json<ListBody<LookBody>>(await send('GET', `/characters/${characterId}/looks`))).data
     await createLook(characterId, { key: 'SFL_CURRENT', name: 'SFL 現在' })
 
-    expect((await send('DELETE', `/looks/${first.data.id}`)).status).toBe(204)
+    expect((await send('DELETE', `/looks/${base?.id ?? ''}`)).status).toBe(204)
 
     const list = await json<ListBody<LookBody>>(
       await send('GET', `/characters/${characterId}/looks`),

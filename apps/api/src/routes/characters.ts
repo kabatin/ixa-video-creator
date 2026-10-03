@@ -7,6 +7,7 @@ import {
   Character as CharacterSchema,
   CharacterId as CharacterIdSchema,
   CreateCharacterInput as CreateCharacterInputSchema,
+  DEFAULT_LOOK,
   ProjectId as ProjectIdSchema,
   ShotCharacter as ShotCharacterSchema,
   ShotId as ShotIdSchema,
@@ -136,6 +137,8 @@ export const characterRoutes = (deps: CharacterRoutesDeps) =>
         workspaceId: project.workspaceId,
         projectId: project.id,
       })
+      // 既定の Look も作る（DOMAIN.md §5）。無いと Shot の登場人物に入れられない（Look は必須）。
+      await deps.looks.create({ characterId: created.id, ...DEFAULT_LOOK, isDefault: true })
       return c.json(ok(toCharacterResponse(created)), 201)
     })
     .openapi(getCharacterRoute, async (c) => {

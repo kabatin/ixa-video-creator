@@ -120,6 +120,7 @@ export const assetStoreValue = (patch: Partial<AssetStoreValue> = {}): AssetStor
     updateCharacter: vi.fn(),
     deleteCharacter: vi.fn(),
     createLook: vi.fn(),
+    ensureDefaultLook: vi.fn(),
     updateLook: vi.fn(),
     deleteLook: vi.fn(),
     createLocation: vi.fn(),

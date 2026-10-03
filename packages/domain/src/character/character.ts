@@ -70,6 +70,12 @@ export const CharacterLook = z.object({
 })
 export type CharacterLook = z.infer<typeof CharacterLook>
 
+/**
+ * キャラクターを作ると一緒にできる既定の Look（DOMAIN.md §5「Character は最低 1 つの isDefault な Look を持つ」）。
+ * Shot の登場人物は Look が必須なので、Look が無いと Shot に入れられない（制作者 2026-10-04）。
+ */
+export const DEFAULT_LOOK = Object.freeze({ key: 'BASE', name: '基本' })
+
 export const CharacterLookImage = z.object({
   id: CharacterLookImageId,
   lookId: CharacterLookId,
