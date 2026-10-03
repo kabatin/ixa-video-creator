@@ -396,6 +396,10 @@ export const createApp = (deps: AppDeps) => {
     storyboardDraftRoutes({
       projects,
       shots: deps.shots,
+      characters: deps.characters,
+      looks: deps.looks,
+      locations: deps.locations,
+      shotCharacters: deps.shotCharacters,
       scripts: deps.scripts,
       musicTracks: deps.musicTracks,
       musicAnalyses: deps.musicAnalyses,

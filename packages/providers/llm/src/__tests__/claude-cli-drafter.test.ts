@@ -156,6 +156,78 @@ describe('Claude CLI 下書きが組み立てるプロンプト', () => {
   })
 })
 
+/**
+ * 登場人物とロケーション（制作者 2026-10-04「絵コンテをAIに考えさせる時に、キャラクターの情報とかが入ってないのか、
+ * 登場人物の指示が全然違う見た目を指示しているように感じる」）。以前は 1 人も渡しておらず、画像だけで登録した人物に
+ * 設定に無い髪の色や服装を書いていた。**見た目は参照画像が決める**ので、書いてある外見だけを使わせる。
+ */
+describe('Claude CLI 下書き: 登場人物とロケーション', () => {
+  const haru = {
+    name: 'はると',
+    description: '小学 1 年生の男の子。元気でよく笑う',
+    identityAnchors: ['短い黒髪', '青いパジャマ'],
+    looks: [
+      { name: '登校', description: '黒いランドセルを背負う', wardrobeTokens: ['黄色い帽子'] },
+      // 文字の無い Look（画像だけで登録したときの既定）は渡さない。名前だけでは何も伝わらない。
+      { name: 'キャラクターシート', description: '', wardrobeTokens: [] },
+    ],
+  }
+
+  it('登場人物の名前・説明・見た目の要点・Look を渡す', () => {
+    const prompt = buildDraftPrompt(aDraftRequest({ characters: [haru] }))
+
+    expect(prompt).toContain('## 登場人物')
+    expect(prompt).toContain('- はると: 小学 1 年生の男の子。元気でよく笑う')
+    expect(prompt).toContain('見た目の要点: 短い黒髪、青いパジャマ')
+    expect(prompt).toContain('Look「登校」（黒いランドセルを背負う。衣装: 黄色い帽子）')
+    expect(prompt).not.toContain('キャラクターシート')
+  })
+
+  it('書いていない外見を足さないよう言う（見た目は参照画像が決める）', () => {
+    const prompt = buildDraftPrompt(aDraftRequest({ characters: [haru] }))
+
+    expect(prompt).toContain('書いていない外見を足さないでください')
+    expect(prompt).toContain('名前で指し')
+  })
+
+  /** 画像だけで登録した人物。名前しか分からないので、外見を書かせない。 */
+  it('文字の設定が無い登場人物は、外見を書かず名前で指すよう言う', () => {
+    const imageOnly = { name: '戦子', description: '', identityAnchors: [], looks: [haru.looks[1]!] }
+    const prompt = buildDraftPrompt(aDraftRequest({ characters: [imageOnly] }))
+
+    expect(prompt).toContain('- 戦子: 文字の設定はありません（見た目は画像で決まります。髪・顔・服・色を書かず、名前で指してください）')
+  })
+
+  it('登場人物がいなければ「登録なし」と書く', () => {
+    expect(buildDraftPrompt(aDraftRequest({ characters: [] }))).toContain('(登録なし)')
+  })
+
+  it('ロケーションを渡す', () => {
+    const prompt = buildDraftPrompt(
+      aDraftRequest({ locations: [{ name: '子ども部屋', description: '畳に布団、朝の光' }, { name: '玄関', description: '' }] }),
+    )
+
+    expect(prompt).toContain('## ロケーション')
+    expect(prompt).toContain('- 子ども部屋: 畳に布団、朝の光')
+    expect(prompt).toContain('- 玄関')
+  })
+
+  it('Shot の行に、その Shot に出る登場人物とロケーションを付ける', () => {
+    const shot = aDraftShot({ code: 'CUT-01', cast: ['はると'], location: '子ども部屋' })
+    const prompt = buildDraftPrompt(aDraftRequest({ shots: [shot], characters: [haru] }))
+
+    expect(prompt).toContain('登場人物: はると')
+    expect(prompt).toContain('ロケーション: 子ども部屋')
+  })
+
+  it('Shot に登場人物が決まっていなければ、行に付けない', () => {
+    const prompt = buildDraftPrompt(aDraftRequest({ shots: [aDraftShot()] }))
+
+    expect(prompt).not.toContain('/ 登場人物:')
+    expect(prompt).not.toContain('/ ロケーション:')
+  })
+})
+
 describe('Claude CLI 下書きの異常系', () => {
   const failsWith = async (runner: CliRunner) => {
     const outcome = await drafterWith(runner).draft(request)

@@ -22,6 +22,8 @@ export const aDraftShot = (overrides: Partial<StoryboardDraftShot> = {}): Storyb
   description: overrides.description ?? '',
   mood: overrides.mood === undefined ? null : overrides.mood,
   lyrics: overrides.lyrics ?? [],
+  cast: overrides.cast ?? [],
+  location: overrides.location === undefined ? null : overrides.location,
 })
 
 export const aDraftRequest = (
@@ -34,6 +36,8 @@ export const aDraftRequest = (
   look: overrides.look ?? '',
   avoid: overrides.avoid ?? '',
   lyrics: overrides.lyrics ?? '',
+  characters: overrides.characters ?? [],
+  locations: overrides.locations ?? [],
 })
 
 export const aDraftedItem = (

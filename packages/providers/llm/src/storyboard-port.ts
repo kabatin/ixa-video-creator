@@ -33,8 +33,39 @@ export const StoryboardDraftShot = z.object({
   mood: z.string().nullable(),
   /** その Shot の間に歌い出す歌詞のフレーズ（ADR-0033）。無い・まだ合わせていなければ空。 */
   lyrics: z.array(z.string()).default([]),
+  /** その Shot に出る登場人物の名前（Shot の参照で決めたもの）。まだ決めていなければ空。 */
+  cast: z.array(z.string().min(1)).default([]),
+  /** その Shot のロケーションの名前。決めていなければ null。 */
+  location: z.string().min(1).nullable().default(null),
 })
 export type StoryboardDraftShot = z.infer<typeof StoryboardDraftShot>
+
+/** 登場人物の Look（衣装・時期ごとの見た目）。**文字で書かれていることだけ**を渡す。 */
+export const StoryboardDraftLook = z.object({
+  name: z.string().min(1),
+  description: z.string(),
+  wardrobeTokens: z.array(z.string()).default([]),
+})
+export type StoryboardDraftLook = z.infer<typeof StoryboardDraftLook>
+
+/**
+ * 作品の登場人物（制作者 2026-10-04「登場人物の指示が全然違う見た目を指示しているように感じる」）。
+ * **見た目は参照画像が決める。** 文字の設定が無い人物（画像だけで登録した人物）もそのまま渡し、
+ * 外見を作らせないための材料にする。
+ */
+export const StoryboardDraftCharacter = z.object({
+  name: z.string().min(1),
+  description: z.string(),
+  identityAnchors: z.array(z.string()).default([]),
+  looks: z.array(StoryboardDraftLook).default([]),
+})
+export type StoryboardDraftCharacter = z.infer<typeof StoryboardDraftCharacter>
+
+export const StoryboardDraftLocation = z.object({
+  name: z.string().min(1),
+  description: z.string(),
+})
+export type StoryboardDraftLocation = z.infer<typeof StoryboardDraftLocation>
 
 /**
  * 下書きの依頼。
@@ -55,6 +86,10 @@ export const StoryboardDraftRequest = z.object({
   avoid: z.string(),
   /** 歌詞の全文（`Project.lyrics`、ADR-0033）。時刻をまだ合わせていない行も含む。無ければ空文字。 */
   lyrics: z.string().default(''),
+  /** 作品の登場人物。登録が無ければ空。 */
+  characters: z.array(StoryboardDraftCharacter).default([]),
+  /** 作品のロケーション。登録が無ければ空。 */
+  locations: z.array(StoryboardDraftLocation).default([]),
 })
 export type StoryboardDraftRequest = z.infer<typeof StoryboardDraftRequest>
 

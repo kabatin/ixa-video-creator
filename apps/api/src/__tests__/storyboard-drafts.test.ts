@@ -12,7 +12,14 @@ import {
   type Project,
   type Shot,
 } from '@ixa/domain'
-import { aShot, createInMemoryShotRepository } from '@ixa/generation/testing'
+import {
+  aShot,
+  createInMemoryCharacterLookRepository,
+  createInMemoryCharacterRepository,
+  createInMemoryLocationRepository,
+  createInMemoryShotCharacterRepository,
+  createInMemoryShotRepository,
+} from '@ixa/generation/testing'
 import { describe, expect, it } from 'vitest'
 import type { StoryboardDraftOutcome, StoryboardDrafter } from '@ixa/provider-llm'
 import {
@@ -113,6 +120,14 @@ const anAnalysis = (musicTrackId: MusicTrack['id']): MusicAnalysis =>
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
   })
 
+const emptyCast = () => ({
+  characters: createInMemoryCharacterRepository(),
+  looks: createInMemoryCharacterLookRepository(),
+  locations: createInMemoryLocationRepository(),
+  shotCharacters: createInMemoryShotCharacterRepository(),
+})
+type CastRepositories = ReturnType<typeof emptyCast>
+
 const buildRoutes = async (options: {
   project?: Project | null
   /** 経路の Project 以外にも実在させたい Project。他 Project の run を試すのに要る。 */
@@ -124,6 +139,8 @@ const buildRoutes = async (options: {
   drafter?: StoryboardDrafter | (() => StoryboardDrafter)
   /** 記録の口を差し替える（作れないときの振る舞いを見るため）。 */
   editBatches?: EditBatchRecorder
+  /** 登場人物・Look・ロケーション・Shot の登場人物。先に入れておいて渡す（Shot がその id を指すため）。 */
+  cast?: CastRepositories
 }) => {
   const project = options.project === undefined ? aProject() : options.project
   const shots = options.shots ?? []
@@ -178,6 +195,7 @@ const buildRoutes = async (options: {
       drafts,
       drafter: pickDrafter,
       editBatches: options.editBatches ?? editBatches,
+      ...(options.cast ?? emptyCast()),
     }),
   }
 }
@@ -341,6 +359,77 @@ describe('POST /projects/{id}/storyboard/drafts', () => {
 
     expect(request?.lyrics).toBe('一行目\n二行目\n三行目')
     expect(request?.shots.map((shot) => shot.lyrics)).toEqual([['一行目', '二行目'], ['三行目']])
+  })
+
+  /**
+   * 登場人物とロケーション（制作者 2026-10-04「絵コンテをAIに考えさせる時に、キャラクターの情報とかが入ってないのか、
+   * 登場人物の指示が全然違う見た目を指示しているように感じる」）。以前は 1 人も渡していなかった。
+   */
+  it('作品の登場人物・Look・ロケーションと、Shot ごとの登場人物とロケーションを下書きに渡す', async () => {
+    const project = aProject()
+    const cast = emptyCast()
+    const haru = await cast.characters.create({
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+      name: 'haru',
+      displayName: 'はると',
+      description: '小学 1 年生',
+      identityAnchors: ['短い黒髪'],
+    })
+    const look = await cast.looks.create({
+      characterId: haru.id,
+      key: 'SCHOOL',
+      name: '登校',
+      description: 'ランドセル',
+      wardrobeTokens: ['黄色い帽子'],
+    })
+    // ほかの作品の人物は渡さない。
+    await cast.characters.create({
+      workspaceId: project.workspaceId,
+      projectId: newId(ProjectIdSchema),
+      name: 'other',
+      displayName: 'ほかの作品の人',
+    })
+    const room = await cast.locations.create({
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+      name: '子ども部屋',
+      description: '畳と布団',
+    })
+    const shots = [
+      aShot(project.id, { code: 'shot_001', order: 1000, locationId: room.id }),
+      aShot(project.id, { code: 'shot_002', order: 2000 }),
+    ]
+    await cast.shotCharacters.add({
+      shotId: shots[0]!.id,
+      characterId: haru.id,
+      lookId: look.id,
+      prominence: 'primary',
+      order: 0,
+    })
+    const drafter = drafterFor(shots)
+    const { app } = await buildRoutes({ project, shots, drafter, cast })
+
+    await postDraft(app, project.id)
+    const [request] = drafter.seen() as {
+      characters: unknown[]
+      locations: unknown[]
+      shots: { cast: string[]; location: string | null }[]
+    }[]
+
+    expect(request?.characters).toEqual([
+      {
+        name: 'はると',
+        description: '小学 1 年生',
+        identityAnchors: ['短い黒髪'],
+        looks: [{ name: '登校', description: 'ランドセル', wardrobeTokens: ['黄色い帽子'] }],
+      },
+    ])
+    expect(request?.locations).toEqual([{ name: '子ども部屋', description: '畳と布団' }])
+    expect(request?.shots.map((shot) => [shot.cast, shot.location])).toEqual([
+      [['はると'], '子ども部屋'],
+      [[], null],
+    ])
   })
 
   it('脚本も解析も無くても下書きできる（null と空で渡す）', async () => {

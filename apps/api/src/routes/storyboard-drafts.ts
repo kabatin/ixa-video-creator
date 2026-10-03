@@ -36,6 +36,12 @@ import {
   type EditBatchRecorder,
 } from './edit-batch-recording.js'
 import { ShotResponse, toShotResponse } from './shots.js'
+import {
+  castOf,
+  loadStoryboardDraftCast,
+  type StoryboardDraftCast,
+  type StoryboardDraftCastDeps,
+} from './storyboard-draft-cast.js'
 
 /**
  * 絵コンテの一括下書きと、その採否（PHASE 6.3 / P63-4）。
@@ -212,7 +218,7 @@ const adoptDraftRoute = createRoute({
   },
 })
 
-export type StoryboardDraftRoutesDeps = {
+export type StoryboardDraftRoutesDeps = StoryboardDraftCastDeps & {
   projects: Pick<ProjectRepository, 'findById'>
   /** 採用のときだけ `update` を使う。**下書きの作成では書かない。** */
   shots: Pick<ShotRepository, 'findByProject' | 'update'>
@@ -265,20 +271,27 @@ const projectSections = async (
   return []
 }
 
-/** Shot を下書きの入力へ写す。**並びは変えない**（既に決まっているため）。 */
-/** 下書きに渡す Shot。その Shot の間に歌い出す歌詞も添える（ADR-0033。規則は domain の `lyricsDuring`）。 */
+/**
+ * Shot を下書きの入力へ写す。**並びは変えない**（既に決まっているため）。
+ * その Shot の間に歌い出す歌詞（ADR-0033。規則は domain の `lyricsDuring`）と、出る登場人物・ロケーションも添える。
+ */
 const toDraftShot =
-  (project: Pick<Project, 'lyrics' | 'lyricCues'>) =>
-  (shot: Shot): StoryboardDraftShot => ({
-    id: shot.id,
-    code: shot.code,
-    order: shot.order,
-    startSec: shot.startSec,
-    durationSec: shot.durationSec,
-    description: shot.description,
-    mood: shot.mood,
-    lyrics: [...lyricsDuring(lyricLines(project.lyrics), project.lyricCues, shot)],
-  })
+  (project: Pick<Project, 'lyrics' | 'lyricCues'>, cast: StoryboardDraftCast) =>
+  (shot: Shot): StoryboardDraftShot => {
+    const shotCast = castOf(cast, shot.id)
+    return {
+      id: shot.id,
+      code: shot.code,
+      order: shot.order,
+      startSec: shot.startSec,
+      durationSec: shot.durationSec,
+      description: shot.description,
+      mood: shot.mood,
+      lyrics: [...lyricsDuring(lyricLines(project.lyrics), project.lyricCues, shot)],
+      cast: [...shotCast.cast],
+      location: shotCast.location,
+    }
+  }
 
 /** 例外を `StoryboardDraftRun.error` の形へ載せ替える。**握り潰さず必ず保存する。** */
 const toRunError = (error: unknown, code: string): { code: string; message: string } => ({
@@ -328,9 +341,10 @@ export const storyboardDraftRoutes = (deps: StoryboardDraftRoutesDeps) =>
         return c.json(fail(VALIDATION_ERROR_MESSAGE, { shots: [NO_SHOTS_MESSAGE] }), 422)
       }
 
-      const [script, sections] = await Promise.all([
+      const [script, sections, cast] = await Promise.all([
         currentScriptContent(deps, projectId),
         projectSections(deps, projectId),
+        loadStoryboardDraftCast(deps, projectId, shots),
       ])
 
       /**
@@ -362,12 +376,15 @@ export const storyboardDraftRoutes = (deps: StoryboardDraftRoutesDeps) =>
         outcome = await drafter.draft({
           script,
           sections: [...sections],
-          shots: shots.map(toDraftShot(project)),
+          shots: shots.map(toDraftShot(project, cast)),
           // 作品の方針（ADR-0030）。案が作品のルックに合い、避けたいものを描かないように。
           look: project.styleGuide,
           avoid: project.avoid,
           // 歌詞（ADR-0033）。時刻をまだ合わせていない行も、全文で渡す。
           lyrics: project.lyrics,
+          // 登場人物とロケーション。見た目を作らせないため、書いてあることだけを渡す（storyboard-draft-cast.ts）。
+          characters: [...cast.characters],
+          locations: [...cast.locations],
         })
       } catch (error) {
         // 握り潰さない。理由を run に書き残してから返す（CLAUDE.md 規約 5）。
