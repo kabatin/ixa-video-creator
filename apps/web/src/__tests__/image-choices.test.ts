@@ -19,11 +19,18 @@ describe('imageChoicesFor', () => {
   /**
    * 1 枚の画像からキャラクターシートを作る（ADR-0035。制作者 2026-10-03「キャラクターアップする時の機能に取り入れられると
    * いい」）。新しいキャラクターにして、その画像を手本にシートを作り始める。
+   * シートを作らずに入れる選択肢も残す（制作者 2026-10-03「キャラクターシートを作成せずにキャラクター画像を入れる選択肢がない」）。
    */
-  it('何も見ていなければ、新しいキャラクター（シートも作る）・ロケーション・ブランド資産', () => {
+  it('何も見ていなければ、新しいキャラクター（画像だけ・シートも作る）・ロケーション・ブランド資産', () => {
     const choices = imageChoicesFor(null)
-    expect(choices.map((c) => c.target.kind)).toEqual(['new-character-sheet', 'new-location', 'new-brand-asset'])
-    expect(choices[0]?.label).toBe('新しいキャラクターにする（キャラクターシートも作る）')
+    expect(choices.map((c) => c.target.kind)).toEqual([
+      'new-character',
+      'new-character-sheet',
+      'new-location',
+      'new-brand-asset',
+    ])
+    expect(choices[0]?.label).toBe('新しいキャラクターにする')
+    expect(choices[1]?.label).toBe('新しいキャラクターにする（キャラクターシートも作る）')
   })
 
   it('キャラクターを見ているときは、そのキャラクターに入れる', () => {

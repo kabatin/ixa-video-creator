@@ -114,7 +114,9 @@ export const FileIntake = ({
       onNotice(
         target.kind === 'new-character-sheet'
           ? 'キャラクターを作り、キャラクターシートを作り始めました（1 枚 1 分ほど）。名前はあとで直せます。'
-          : `画像 ${String(pendingImages.length)} 枚を取り込みました。`,
+          : target.kind === 'new-character'
+            ? `キャラクターを作り、画像 ${String(pendingImages.length)} 枚を入れました。名前はあとで直せます。`
+            : `画像 ${String(pendingImages.length)} 枚を取り込みました。`,
       )
       setPendingImages([])
     } catch (cause) {
