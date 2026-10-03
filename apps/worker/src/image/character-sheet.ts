@@ -3,7 +3,16 @@ import { join } from 'node:path'
 import { compileCharacterSheetPrompt, type ImageGenerationJob } from '@ixa/domain'
 import { publishImageJobStatus } from './events.js'
 import { requestShapeFor } from './shape.js'
-import { ImageJobFailure, ingest, localPathOf, localReferenceResolver, waitForResult, type JobDeps } from './steps.js'
+import {
+  ImageJobCancelled,
+  ImageJobFailure,
+  ingest,
+  localPathOf,
+  localReferenceResolver,
+  throwIfCancelled,
+  waitForResult,
+  type JobDeps,
+} from './steps.js'
 
 /**
  * 手本の画像 1 枚からキャラクターシート（四面図）を作る（ADR-0035。制作者 2026-10-03「動画生成に役立つ形式の
@@ -29,6 +38,7 @@ export const generateCharacterSheet = async (deps: JobDeps, job: ImageGeneration
   }
 
   const running = await deps.imageJobs.markRunning(job.id, job.referenceAssetIds)
+  if (running.status === 'cancelled') throw new ImageJobCancelled(job.id)
   await publishImageJobStatus(deps, running)
 
   const shape = requestShapeFor(deps.model, SHEET_ASPECT)
@@ -48,7 +58,7 @@ export const generateCharacterSheet = async (deps: JobDeps, job: ImageGeneration
   const sheetPath = join(dir, 'character-sheet.png')
   const raw = await (async () => {
     try {
-      const result = await waitForResult(deps, handle)
+      const result = await waitForResult(deps, handle, job.id)
       const output = result.outputs[0]
       if (output === undefined) {
         throw new ImageJobFailure({ code: 'no_image', message: '絵が返ってきませんでした。', retryable: true }, result.raw)
@@ -60,6 +70,8 @@ export const generateCharacterSheet = async (deps: JobDeps, job: ImageGeneration
       await deps.provider.release?.(handle)
     }
   })()
+  // 届いた後に止められたら、識別画像に足さない。
+  await throwIfCancelled(deps, job.id)
   const mediaAssetId = await ingest(deps, project, job, sheetPath)
   const images = await deps.characters.listIdentityImages(character.id)
   await deps.characters.addIdentityImage({

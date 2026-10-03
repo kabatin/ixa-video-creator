@@ -29,10 +29,12 @@ import { publishImageJobStatus } from './events.js'
 import { ImageJobData } from './job-data.js'
 import { requestShapeFor } from './shape.js'
 import {
+  ImageJobCancelled,
   ImageJobFailure,
   ingest,
   localPathOf,
   localReferenceResolver,
+  throwIfCancelled,
   waitForResult,
   type ImageAdapter,
   type ImageJobResult,
@@ -105,6 +107,8 @@ const generateStartFrame = async (deps: JobDeps, job: ImageGenerationJob, dir: s
     supportedRoles: caps.referenceImages.roles,
   })
   const running = await deps.imageJobs.markRunning(job.id, references.map((reference) => reference.mediaAssetId))
+  // 拾ってから作り始めるまでの間に止められた（止めた行は上書きされずに返ってくる）。
+  if (running.status === 'cancelled') throw new ImageJobCancelled(job.id)
   await publishImageJobStatus(deps, running)
 
   const shape = requestShapeFor(deps.model, project.aspectRatio)
@@ -122,7 +126,7 @@ const generateStartFrame = async (deps: JobDeps, job: ImageGenerationJob, dir: s
   const cropped = join(dir, 'start-frame.png')
   const raw = await (async () => {
     try {
-      const result = await waitForResult(deps, handle)
+      const result = await waitForResult(deps, handle, job.id)
       const output = result.outputs[0]
       if (output === undefined) {
         throw new ImageJobFailure({ code: 'no_image', message: '絵が返ってきませんでした。', retryable: true }, result.raw)
@@ -134,6 +138,8 @@ const generateStartFrame = async (deps: JobDeps, job: ImageGenerationJob, dir: s
       await deps.provider.release?.(handle)
     }
   })()
+  // 絵が届いた後に止められたら、取り込まず差し替えない（止めたのに絵が変わらないように）。
+  await throwIfCancelled(deps, job.id)
   const mediaAssetId = await ingest(deps, project, job, cropped)
   await replaceManualStartFrame(deps.shotReferences, shot.id, mediaAssetId)
   const succeeded = await deps.imageJobs.markSucceeded(job.id, mediaAssetId, raw)
@@ -154,7 +160,8 @@ export const processImageJob = async (deps: ImageProcessorDeps, data: unknown): 
     deps.logger.warn({ imageJobId }, '絵のジョブが見つかりません')
     return { state: 'missing' }
   }
-  if (job.status === 'succeeded' || job.status === 'failed') return { state: 'skipped' }
+  // 終わったジョブと、人が止めたジョブは作らない。
+  if (job.status === 'succeeded' || job.status === 'failed' || job.status === 'cancelled') return { state: 'skipped' }
 
   try {
     const adapter = deps.adapters.find(
@@ -171,6 +178,11 @@ export const processImageJob = async (deps: ImageProcessorDeps, data: unknown): 
     await withTempDir(deps.workDir, 'image-', (dir) => generate({ ...deps, ...adapter }, job, dir))
     return { state: 'succeeded' }
   } catch (error) {
+    // 人が止めた。失敗ではないので理由を書かずに手を引く（止めた行はそのまま。画面へは止めた側が知らせている）。
+    if (error instanceof ImageJobCancelled) {
+      deps.logger.info({ imageJobId, kind: job.kind, shotId: job.shotId }, '止められた絵のジョブから手を引きました')
+      return { state: 'skipped' }
+    }
     // **握り潰さない。** 理由をジョブに残して画面へ出し、ログにも残す。最初のフレームは変えない。
     const failure = error instanceof ImageJobFailure ? error.failure : describeUnexpected(error)
     deps.logger.error(

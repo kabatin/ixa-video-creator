@@ -26,6 +26,11 @@ export const createInMemoryImageJobRepository = (
     return job
   }
   const active = (job: ImageGenerationJob) => job.status === 'queued' || job.status === 'running'
+  /** 止めた行は上書きしない（実物と同じ）。止めた行をそのまま返す。 */
+  const transition = (id: ImageGenerationJob['id'], patch: Partial<ImageGenerationJob>): ImageGenerationJob => {
+    const current = get(id)
+    return current.status === 'cancelled' ? current : save({ ...current, ...patch })
+  }
   const newestFirst = (jobs: readonly ImageGenerationJob[]) => [...jobs].sort((a, b) => b.id.localeCompare(a.id))
   return {
     snapshot: () => store,
@@ -61,11 +66,20 @@ export const createInMemoryImageJobRepository = (
       Promise.resolve(newestFirst(store.filter((job) => job.characterId === characterId))[0] ?? null),
     findActiveByProject: (projectId) =>
       Promise.resolve(newestFirst(store.filter((job) => job.projectId === projectId && active(job)))),
+    cancelActive: ({ projectId, shotIds }) => {
+      const targets = store.filter(
+        (job) =>
+          job.projectId === projectId &&
+          active(job) &&
+          (shotIds === undefined || (job.shotId !== null && shotIds.includes(job.shotId))),
+      )
+      return Promise.resolve(targets.map((job) => save({ ...job, status: 'cancelled', finishedAt: new Date() })))
+    },
     markRunning: (id, referenceAssetIds) =>
-      Promise.resolve(save({ ...get(id), status: 'running', referenceAssetIds: [...referenceAssetIds], startedAt: new Date() })),
+      Promise.resolve(transition(id, { status: 'running', referenceAssetIds: [...referenceAssetIds], startedAt: new Date() })),
     markSucceeded: (id, mediaAssetId, providerRecord) =>
-      Promise.resolve(save({ ...get(id), status: 'succeeded', mediaAssetId, providerRecord, finishedAt: new Date() })),
+      Promise.resolve(transition(id, { status: 'succeeded', mediaAssetId, providerRecord, finishedAt: new Date() })),
     markFailed: (id, error, providerRecord) =>
-      Promise.resolve(save({ ...get(id), status: 'failed', error, providerRecord, finishedAt: new Date() })),
+      Promise.resolve(transition(id, { status: 'failed', error, providerRecord, finishedAt: new Date() })),
   }
 }

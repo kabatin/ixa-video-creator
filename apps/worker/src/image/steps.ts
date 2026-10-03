@@ -6,6 +6,7 @@ import {
   newId,
   type ImageGenerationJob,
   type ImageGenerationJobError,
+  type ImageGenerationJobId,
   type MediaAssetId,
   type Project,
 } from '@ixa/domain'
@@ -53,15 +54,43 @@ export const localReferenceResolver =
 
 type Handle = Parameters<ImageProvider['poll']>[0]
 
+/**
+ * 人が止めたジョブ（制作者 2026-10-04「画像生成も停められるようにしよう」）。失敗ではないので理由を残さず手を引く。
+ * 止めた行はリポジトリが上書きさせないので、ここで投げて先へ進めない（最初のフレームを差し替えない）。
+ */
+export class ImageJobCancelled extends Error {
+  constructor(readonly imageJobId: ImageGenerationJobId) {
+    super(`絵のジョブ ${imageJobId} は止められました`)
+  }
+}
+
+/** 止められていたら投げる。作り終えた絵を取り込む前・差し替える前に見る。 */
+export const throwIfCancelled = async (deps: JobDeps, imageJobId: ImageGenerationJobId): Promise<void> => {
+  const current = await deps.imageJobs.findById(imageJobId)
+  if (current?.status === 'cancelled') throw new ImageJobCancelled(imageJobId)
+}
+
+/**
+ * 出来上がりを待つ。**待っている間に止められたら、生成先へ止めてと頼んで手を引く。**
+ * 頼めなくても止めたことは確定している（届いた絵は使わない）ので、ログに残して進む。
+ */
 export const waitForResult = async (
   deps: JobDeps,
   handle: Handle,
+  imageJobId: ImageGenerationJobId,
 ): Promise<Extract<ImageJobStatus, { state: 'succeeded' }>> => {
   const deadline = Date.now() + MAX_WAIT_MS
   for (;;) {
     const status = await deps.provider.poll(handle)
     if (status.state === 'succeeded') return status
     if (status.state === 'failed') throw new ImageJobFailure(status.error)
+    const current = await deps.imageJobs.findById(imageJobId)
+    if (current?.status === 'cancelled') {
+      await deps.provider.cancel(handle).catch((error: unknown) => {
+        deps.logger.warn({ imageJobId, err: error }, '生成先へ止めてと頼めませんでした。止めたことは確定しています')
+      })
+      throw new ImageJobCancelled(imageJobId)
+    }
     if (Date.now() > deadline) {
       throw new ImageJobFailure({ code: 'timeout', message: '絵が 10 分で仕上がりませんでした。', retryable: true })
     }

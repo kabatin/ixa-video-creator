@@ -55,6 +55,7 @@ import { sequenceRoutes } from './routes/sequences.js'
 import { musicRoutes, type AnalysisQueue } from './routes/music.js'
 import { editBatchRoutes } from './routes/edit-batches.js'
 import { storyboardDraftRoutes } from './routes/storyboard-drafts.js'
+import { imageJobCancelRoutes } from './routes/image-job-cancel.js'
 import { storyboardRoutes } from './routes/storyboard.js'
 import { reviewRoutes, type ReviewQueue } from './routes/reviews.js'
 import { transitionRoutes } from './routes/transitions.js'
@@ -291,6 +292,8 @@ export const createApp = (deps: AppDeps) => {
       logger,
     }),
   )
+  // 絵を作るのを止める（制作者 2026-10-04）。待っている・作っている絵（最初のフレーム・キャラクターシート）。
+  app.route('/', imageJobCancelRoutes({ projects, imageJobs: deps.imageJobs, events: deps.events, logger }))
   // 1 枚の画像からキャラクターシート（四面図）を作る（ADR-0035）。絵コンテの画像と同じ順番待ち。
   app.route(
     '/',

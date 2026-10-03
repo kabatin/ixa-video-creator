@@ -254,3 +254,58 @@ describe('processImageJob', () => {
     expect(provider.requests).toHaveLength(1)
   })
 })
+
+/**
+ * 止める（制作者 2026-10-04「いま30個ぐらいキューに入ってる画像生成とめたい」「画像生成も停められるようにしよう」）。
+ * **止めた絵は最初のフレームを差し替えない。** 止めた後に届いた絵で差し替えると、止めたのに絵が変わる。
+ */
+describe('processImageJob: 止めたジョブ', () => {
+  it('順番待ちの間に止めたジョブは作らない', async () => {
+    const { job, deps, provider } = setup()
+    await deps.imageJobs.cancelActive({ projectId: project.id })
+
+    const result = await processImageJob(deps, { imageJobId: job.id })
+
+    expect(result).toEqual({ state: 'skipped' })
+    expect(provider.requests).toHaveLength(0)
+    expect((await deps.imageJobs.findById(job.id))?.status).toBe('cancelled')
+  })
+
+  it('作っている途中で止めたら、生成先へ止めてと頼み、最初のフレームは変えない', async () => {
+    const { job, deps, provider } = setup({ outcome: 'running' })
+    // 生成先が作っている間（見に行ったとき）に止める。
+    const poll = provider.poll.bind(provider)
+    const stopping = { ...provider, poll: async (handle: Parameters<typeof poll>[0]) => {
+      await deps.imageJobs.cancelActive({ projectId: project.id, shotIds: [shot.id] })
+      return poll(handle)
+    } }
+
+    const result = await processImageJob({ ...deps, adapters: [{ provider: stopping, model: codexCliImageModel }] }, { imageJobId: job.id })
+
+    expect(result).toEqual({ state: 'skipped' })
+    expect(provider.cancelled).toEqual(['job-1'])
+    expect(provider.released).toEqual(['job-1'])
+    expect(await manualStartFrameOf(deps.shotReferences, shot.id)).toBeNull()
+    expect((await deps.imageJobs.findById(job.id))?.status).toBe('cancelled')
+  })
+
+  it('絵が届いた後、差し替える前に止めたら、差し替えない', async () => {
+    const { job, deps } = setup()
+    const crop = deps.crop
+    const result = await processImageJob(
+      {
+        ...deps,
+        crop: async (input: string, output: string) => {
+          await deps.imageJobs.cancelActive({ projectId: project.id })
+          return crop(input, output)
+        },
+      },
+      { imageJobId: job.id },
+    )
+
+    expect(result).toEqual({ state: 'skipped' })
+    expect(await manualStartFrameOf(deps.shotReferences, shot.id)).toBeNull()
+    expect(deps.mediaAssets.snapshot()).toHaveLength(0)
+    expect((await deps.imageJobs.findById(job.id))?.status).toBe('cancelled')
+  })
+})

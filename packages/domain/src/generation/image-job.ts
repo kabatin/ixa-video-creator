@@ -17,7 +17,11 @@ import { ModelId, ProviderId } from './take.js'
 export const ImageJobKind = z.enum(['start_frame', 'character_sheet'])
 export type ImageJobKind = z.infer<typeof ImageJobKind>
 
-export const ImageGenerationJobStatus = z.enum(['queued', 'running', 'succeeded', 'failed'])
+/**
+ * `cancelled` は人が止めた（制作者 2026-10-04「画像生成も停められるようにしよう」）。失敗ではないので理由を持たない。
+ * **止めた行は、作っている側の書き込み（作成中・成功・失敗）で上書きしない**（リポジトリが守る）。
+ */
+export const ImageGenerationJobStatus = z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled'])
 export type ImageGenerationJobStatus = z.infer<typeof ImageGenerationJobStatus>
 
 export const ImageGenerationJobError = z.object({

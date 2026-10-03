@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, ne } from 'drizzle-orm'
 import {
   ImageGenerationJob as ImageGenerationJobSchema,
   ImageGenerationJobId as ImageGenerationJobIdSchema,
@@ -36,6 +36,12 @@ export type CreateImageJobInput = {
     }
 )
 
+/** 止める範囲。`shotIds` が無ければ Project の全部。 */
+export type ImageJobCancelTarget = {
+  readonly projectId: ProjectId
+  readonly shotIds?: readonly ShotId[]
+}
+
 /** 絵を作るジョブの読み書き（ADR-0029）。戻り値は必ず `@ixa/domain` の型。 */
 export type ImageJobRepository = {
   create(input: CreateImageJobInput): Promise<ImageGenerationJob>
@@ -50,6 +56,11 @@ export type ImageJobRepository = {
   findLatestByCharacter(characterId: CharacterId): Promise<ImageGenerationJob | null>
   /** Project の中で待っている・動いているジョブ。 */
   findActiveByProject(projectId: ProjectId): Promise<ImageGenerationJob[]>
+  /**
+   * 待っている・動いているジョブを止める（制作者 2026-10-04）。`shotIds` を渡せばその Shot の絵だけ、
+   * 渡さなければ Project の全部（キャラクターシートも）。止めたジョブを返す。
+   */
+  cancelActive(target: ImageJobCancelTarget): Promise<ImageGenerationJob[]>
   markRunning(id: ImageGenerationJobId, referenceAssetIds: readonly MediaAssetId[]): Promise<ImageGenerationJob>
   markSucceeded(
     id: ImageGenerationJobId,
@@ -82,15 +93,24 @@ const first = async (rows: Promise<ImageJobRow[]>): Promise<ImageGenerationJob |
 }
 
 export const createImageJobRepository = (db: DbClient): ImageJobRepository => {
-  /** 状態を 1 つ進める。書く前に食い違いを確かめる（読み直しと同じ規則）。 */
+  /**
+   * 状態を 1 つ進める。書く前に食い違いを確かめる（読み直しと同じ規則）。
+   * **止めた行は上書きしない。** そのときは止めた行をそのまま返す（呼び出し側が `cancelled` を見て手を引く）。
+   */
   const transition = async (
     id: ImageGenerationJobId,
     patch: Partial<typeof imageGenerationJobs.$inferInsert>,
   ): Promise<ImageGenerationJob> => {
-    const rows = await db.update(imageGenerationJobs).set(patch).where(eq(imageGenerationJobs.id, id)).returning()
+    const rows = await db
+      .update(imageGenerationJobs)
+      .set(patch)
+      .where(and(eq(imageGenerationJobs.id, id), ne(imageGenerationJobs.status, 'cancelled')))
+      .returning()
     const row = rows[0]
-    if (row === undefined) throw new DbNotFoundError('image_generation_jobs', id)
-    return imageJobRowToDomain(row)
+    if (row !== undefined) return imageJobRowToDomain(row)
+    const current = await first(db.select().from(imageGenerationJobs).where(eq(imageGenerationJobs.id, id)))
+    if (current === null) throw new DbNotFoundError('image_generation_jobs', id)
+    return current
   }
 
   return {
@@ -165,6 +185,22 @@ export const createImageJobRepository = (db: DbClient): ImageJobRepository => {
         .from(imageGenerationJobs)
         .where(and(eq(imageGenerationJobs.projectId, projectId), ACTIVE))
         .orderBy(desc(imageGenerationJobs.id))
+      return rows.map(imageJobRowToDomain)
+    },
+
+    async cancelActive({ projectId, shotIds }) {
+      if (shotIds !== undefined && shotIds.length === 0) return []
+      const rows = await db
+        .update(imageGenerationJobs)
+        .set({ status: 'cancelled', finishedAt: new Date() })
+        .where(
+          and(
+            eq(imageGenerationJobs.projectId, projectId),
+            ACTIVE,
+            ...(shotIds === undefined ? [] : [inArray(imageGenerationJobs.shotId, [...shotIds])]),
+          ),
+        )
+        .returning()
       return rows.map(imageJobRowToDomain)
     },
 
