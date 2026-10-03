@@ -2,27 +2,32 @@
 
 import type { MediaAssetId, ProjectId, RenderPreset } from '@ixa/domain'
 import { useMemo, useState } from 'react'
+import { RenderCheckSummary, type RenderCheck } from '@/components/render-check-summary'
+import {
+  RenderFolderButton,
+  RenderFolderLocation,
+  RenderFolderNotice,
+  useRenderFolder,
+} from '@/components/render-folder'
 import { RenderJobList } from '@/components/render-job-list'
+import { RenderRejected } from '@/components/render-rejected'
+import { RenderPresetField, RenderRangeField } from '@/components/render-settings'
+import { TimelineIssuePanel } from '@/components/timeline-issue-panel'
 import { Button } from '@/components/ui/button'
 import { useRenderWatch, type RenderWatch } from '@/components/workbench/use-render-watch'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
-import { formatDuration } from '@/lib/format-time'
+import { createRenderApi, type RenderApi, type RenderRejection, type WireRenderJob } from '@/lib/render-api'
+import { DEFAULT_RENDER_PRESET } from '@/lib/render-display'
+import type { RenderFolderApi } from '@/lib/render-folder-api'
 import type { RenderRangeChoice } from '@/lib/render-range'
-import { createRenderApi, type RenderApi, type RenderRejection } from '@/lib/render-api'
-import type { WireRenderJob } from '@/lib/render-api'
-import {
-  DEFAULT_RENDER_PRESET,
-  describeRenderJob,
-  latestRenderJob,
-  RENDER_PRESET_OPTIONS,
-  summarizeReasons,
-} from '@/lib/render-display'
 import { createRequester } from '@/lib/requester'
+import type { TimelineIssueView } from '@/lib/timeline-issues'
 import { WORDING } from '@/lib/wording'
 
 /**
- * 書き出し（レンダリング）の投入と見守り（P55-3）。
+ * 書き出し（レンダリング）の投入と見守り（P55-3）。**左で書き出し、右でこれまでの書き出し**
+ * （制作者 2026-10-03「書き出し画面で生成された動画があるフォルダを開く導線が欲しい。UI/UX が雑な印象」）。
  *
  * レンダリングは**数分かかる**。押したあと放置して戻ってきた人が、
  * 動いているのか・終わったのか・失敗したのかを一目で分かるようにする。
@@ -31,10 +36,9 @@ import { WORDING } from '@/lib/wording'
  *
  * **追いかける仕事はこのパネルが持たない。** `use-render-watch.ts` が持つ。
  * ダイアログを閉じるとこのパネルは unmount されるので、ここに置くと追跡が消える。
- * `watch` を渡せば外の見守りに相乗りし、省略すれば自分で 1 つ作る（従来どおり）。
+ * `watch` を渡せば外の見守りに相乗りし、省略すれば自分で 1 つ作る。
  *
- * 投入前の検査結果の表示は**ページ側（サーバ）が担当する**。
- * ここが使うのは「error が何件あるか」だけで、判定規則は持たない。
+ * 検査の判定は**サーバ**（`validateTimeline`）が正。ここは件数を数えて出すだけ。
  */
 
 export type RenderPanelProps = {
@@ -42,11 +46,10 @@ export type RenderPanelProps = {
   /** null は「読めていない」。0 件と混ぜない。 */
   readonly initialJobs: readonly WireRenderJob[] | null
   readonly jobsError: string | null
-  /**
-   * 投入前の検査で見つかった「レンダリング不可」の件数。
-   * **null は「検査できていない」**であって 0 件ではない。
-   */
-  readonly blockingIssueCount: number | null
+  /** 投入前の検査の結果。**null は「検査できていない」**であって指摘 0 件ではない。 */
+  readonly issues: readonly TimelineIssueView[] | null
+  /** 検査を読めなかった理由。 */
+  readonly issuesError?: string | null
   /** 書き出される長さ。読めなければ null。 */
   readonly timelineDurationSec: number | null
   /**
@@ -59,8 +62,11 @@ export type RenderPanelProps = {
    * null / 省略なら Shot を選んでいないので、全体だけ。
    */
   readonly range?: RenderRangeChoice | null
+  /** 「タイムラインで直す」。無ければボタンを出さない。 */
+  readonly onFixTimeline?: () => void
   /** テストや Storybook から差し替えるための注入口。 */
   readonly api?: RenderApi
+  readonly folderApi?: RenderFolderApi
   readonly resolveOutputUrl?: (assetId: MediaAssetId) => Promise<string>
 }
 
@@ -73,41 +79,11 @@ const defaultResolveOutputUrl = async (assetId: MediaAssetId): Promise<string> =
 
 const acceptedMessage = (warningCount: number): string =>
   warningCount === 0
-    ? '書き出しを受け付けました。数分かかります。この画面は自動で更新されます。'
+    ? '書き出しを受け付けました。数分かかります。右の一覧が自動で更新されます。'
     : `警告 ${String(warningCount)} 件つきで受け付けました。絵が欠ける可能性があります。`
 
-/** 拒否理由はフィールドごとに件数を残したまま、先頭だけ出す。72 件を全部並べても読めない。 */
-const Rejected = ({ rejection }: { readonly rejection: RenderRejection }) => {
-  const entries = Object.entries(rejection.fields)
-  return (
-    <section role="alert" className="rounded-lg border border-danger/40 bg-danger/10 p-4">
-      <h3 className="text-sm font-semibold text-danger">{`書き出しを受け付けられませんでした: ${rejection.message}`}</h3>
-      {entries.length === 0 && (
-        <p className="mt-1 text-sm text-danger">
-          理由が分かりませんでした。もう一度書き出すと直ることがあります。
-        </p>
-      )}
-      {entries.map(([field, reasons]) => {
-        const summary = summarizeReasons(reasons)
-        return (
-          <div key={field} className="mt-2">
-            <p className="text-sm font-medium text-danger">{`${field}: ${String(summary.total)} 件`}</p>
-            <ul className="mt-1 flex flex-col gap-0.5 pl-4 text-xs text-danger">
-              {summary.shown.map((reason) => (
-                <li key={reason} className="list-disc break-words">
-                  {reason}
-                </li>
-              ))}
-              {summary.hiddenCount > 0 && (
-                <li className="list-none">{`ほか ${String(summary.hiddenCount)} 件`}</li>
-              )}
-            </ul>
-          </div>
-        )
-      })}
-    </section>
-  )
-}
+const countOf = (issues: readonly TimelineIssueView[] | null, severity: TimelineIssueView['severity']) =>
+  issues === null ? null : issues.filter((issue) => issue.severity === severity).length
 
 /**
  * 見守りを外から渡されなかったときだけ、このパネルが 1 つ作る。
@@ -125,41 +101,42 @@ const SelfWatchedRenderPanel = (props: RenderPanelProps) => {
 
 export const RenderPanel = (props: RenderPanelProps) => {
   const { watch } = props
-  return watch === undefined ? (
-    <SelfWatchedRenderPanel {...props} />
-  ) : (
-    <RenderPanelView {...props} watch={watch} />
-  )
+  return watch === undefined ? <SelfWatchedRenderPanel {...props} /> : <RenderPanelView {...props} watch={watch} />
 }
 
 type RenderPanelViewProps = RenderPanelProps & { readonly watch: RenderWatch }
 
 const RenderPanelView = ({
   projectId,
-  blockingIssueCount,
+  issues,
+  issuesError = null,
   timelineDurationSec,
   watch,
   range = null,
+  onFixTimeline,
   api,
+  folderApi,
   resolveOutputUrl,
 }: RenderPanelViewProps) => {
   const client = useMemo<RenderApi>(() => api ?? defaultApi(), [api])
   const toOutputUrl = useMemo(() => resolveOutputUrl ?? defaultResolveOutputUrl, [resolveOutputUrl])
+  const folder = useRenderFolder(projectId, folderApi)
 
   const [preset, setPreset] = useState<RenderPreset>(DEFAULT_RENDER_PRESET)
   const [submitting, setSubmitting] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [rejection, setRejection] = useState<RenderRejection | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
-  const [outputs, setOutputs] = useState<Readonly<Record<string, string>>>({})
-  const [pendingOutputId, setPendingOutputId] = useState<string | null>(null)
 
   // チェックして開いたら、最初から「選んだ Shot だけ」。
   const [onlyRange, setOnlyRange] = useState(range?.preferred ?? false)
   const chosenRange = onlyRange ? range : null
   // 範囲だけなら、範囲で数えた件数で止める（範囲の外の指摘では止めない）。
-  const blockingCount = chosenRange === null ? blockingIssueCount : chosenRange.blockingIssueCount
-  const blocked = blockingCount !== null && blockingCount > 0
+  const check: RenderCheck =
+    chosenRange === null
+      ? { errors: countOf(issues, 'error'), warnings: countOf(issues, 'warning') }
+      : { errors: chosenRange.blockingIssueCount, warnings: chosenRange.warningIssueCount }
+  const blocked = check.errors !== null && check.errors > 0
 
   const submit = async (): Promise<void> => {
     setSubmitting(true)
@@ -188,126 +165,34 @@ const RenderPanelView = ({
     setRefreshing(false)
   }
 
-  const openOutput = (job: WireRenderJob): void => {
-    if (job.outputAssetId === null) return
-    const assetId = job.outputAssetId
-    setPendingOutputId(job.id)
-    setFeedback(null)
-    void (async () => {
-      try {
-        const url = await toOutputUrl(assetId)
-        setOutputs((current) => ({ ...current, [job.id]: url }))
-      } catch (caught) {
-        setFeedback({
-          tone: 'error',
-          message: `出力の URL を取得できませんでした: ${describeForPerson(caught)}`,
-        })
-      } finally {
-        setPendingOutputId(null)
-      }
-    })()
-  }
-
-  const jobs = watch.jobs
-  const watched = jobs === null ? null : (jobs.find((job) => job.id === watch.watchedJobId) ?? null)
-  const shown = watched ?? (jobs === null ? null : latestRenderJob(jobs))
-  const shownView = shown === null ? null : describeRenderJob(shown)
-  const presetHint = RENDER_PRESET_OPTIONS.find((option) => option.value === preset)?.hint ?? ''
-
   return (
-    <div className="flex flex-col gap-6">
-      <section className="rounded-lg border border-line bg-surface p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-text">書き出す</h2>
-        <p className="mt-1 text-sm text-muted">
-          {'タイムラインを 1 本の動画にします。'}
-          {timelineDurationSec === null
-            ? '長さを読み込めませんでした。'
-            : `いまの長さは ${formatDuration(timelineDurationSec)} です。`}
-          {range === null && 'Shot を選んでから開くと、その Shot だけを書き出せます。'}
-        </p>
-
-        {range !== null && (
-          <fieldset className="mt-4 flex flex-col gap-2" disabled={submitting}>
-            <legend className="text-sm font-medium text-text">範囲</legend>
-            <label className="flex items-center gap-2 text-sm text-text">
-              <input
-                type="radio"
-                name="render-range"
-                checked={!onlyRange}
-                onChange={() => {
-                  setOnlyRange(false)
-                }}
-              />
-              全体
-            </label>
-            <label className="flex flex-wrap items-center gap-x-2 text-sm text-text">
-              <input
-                type="radio"
-                name="render-range"
-                checked={onlyRange}
-                onChange={() => {
-                  setOnlyRange(true)
-                }}
-              />
-              選んだ Shot だけ
-              <span className="font-medium">{range.label}</span>
-              <span className="tabular-nums text-muted">{range.span}</span>
-            </label>
-            {range.extraNote !== null && <p className="pl-6 text-xs text-muted">{range.extraNote}</p>}
-          </fieldset>
+    <div className="grid gap-6 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(320px,400px)_minmax(0,1fr)]">
+      <section aria-label="書き出す" className="flex flex-col gap-5 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+        <RenderRangeField
+          range={range}
+          onlyRange={onlyRange}
+          onChange={setOnlyRange}
+          timelineDurationSec={timelineDurationSec}
+          disabled={submitting}
+        />
+        <RenderPresetField preset={preset} onChange={setPreset} disabled={submitting} />
+        <RenderCheckSummary
+          check={check}
+          details={<TimelineIssuePanel issues={issues} projectId={projectId} />}
+          {...(onFixTimeline === undefined ? {} : { onFixTimeline })}
+        />
+        {issuesError !== null && (
+          <p role="alert" className="text-xs text-danger">
+            {issuesError}
+          </p>
         )}
 
-        <div className="mt-4 flex flex-col gap-2">
-          <label htmlFor="render-preset" className="text-sm font-medium text-text">
-            プリセット
-          </label>
-          <select
-            id="render-preset"
-            value={preset}
-            disabled={submitting}
-            onChange={(event) => {
-              setPreset(event.target.value as RenderPreset)
-            }}
-            className="w-full max-w-sm rounded-md border border-line-strong px-3 py-2 text-sm"
-          >
-            {RENDER_PRESET_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-muted">{presetHint}</p>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button
-            tone="primary"
-            disabled={submitting || blocked}
-            onClick={() => {
-              void submit()
-            }}
-          >
-            {submitting ? '送信中…' : `書き出しを${WORDING.start}`}
-          </Button>
-          <Button
-            disabled={refreshing || submitting}
-            onClick={() => {
-              void reload()
-            }}
-          >
-            {refreshing ? '確認中…' : WORDING.refresh}
-          </Button>
-
-          {blocked && (
-            <p role="status" className="text-sm text-danger">
-              {`レンダリング不可の指摘が ${String(blockingCount ?? 0)} 件あるため、まだ書き出せません。`}
-            </p>
-          )}
-          {blockingCount === null && (
-            <p role="status" className="text-sm text-warn">
-              投入前の検査ができていません。サーバ側の検査で拒否される可能性があります。
-            </p>
-          )}
+        <div className="flex flex-col gap-2">
+          <div className="grid">
+            <Button tone="primary" disabled={submitting || blocked} onClick={() => void submit()}>
+              {submitting ? '送信中…' : '書き出す'}
+            </Button>
+          </div>
           {feedback !== null && (
             <p
               role={feedback.tone === 'error' ? 'alert' : 'status'}
@@ -316,52 +201,49 @@ const RenderPanelView = ({
               {feedback.message}
             </p>
           )}
+          {/* **閉じても追跡は続く。** 言っておかないと、消えたのか動いているのか分からないまま閉じることになる。 */}
+          {watch.active.length > 0 && (
+            <p role="status" className="text-xs text-muted">
+              {`${String(watch.active.length)} 件の書き出しが動いています。この画面を閉じても続きます。`}
+            </p>
+          )}
         </div>
+        {rejection !== null && <RenderRejected rejection={rejection} />}
+      </section>
 
-        {/*
-          **閉じても追跡は続く。** それを押した人に言っておかないと、
-          消えたのか動いているのか分からないまま閉じることになる。
-        */}
-        {watch.active.length > 0 && (
-          <p role="status" className="mt-4 text-sm text-text">
-            {`${String(watch.active.length)} 件の書き出しが動いています。この画面を閉じても続きます。`}
-          </p>
-        )}
-
-        {shownView !== null && (
-          <p
-            role={shownView.phase === 'failed' ? 'alert' : 'status'}
-            className="mt-4 rounded-md border border-line bg-surface-2 p-3 text-sm text-text"
-          >
-            {`最後の書き出し（${shownView.statusLabel}）: ${shownView.detail}`}
-          </p>
-        )}
-
+      <section
+        aria-label="これまでの書き出しの一覧"
+        className="flex flex-col gap-3 lg:min-h-0 lg:overflow-y-auto lg:border-l lg:border-line lg:pl-6"
+      >
+        <div className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-text">これまでの書き出し</h3>
+            <div className="flex items-center gap-2">
+              <Button size="sm" disabled={refreshing || submitting} onClick={() => void reload()}>
+                {refreshing ? '確認中…' : WORDING.refresh}
+              </Button>
+              <RenderFolderButton folder={folder} />
+            </div>
+          </div>
+          <RenderFolderLocation folder={folder} />
+        </div>
+        <RenderFolderNotice folder={folder} />
         {watch.note !== null && (
-          <p role="status" className="mt-2 text-sm text-warn">
+          <p role="status" className="text-xs text-warn">
             {watch.note === 'timeout'
               ? `${String(Math.round(watch.timeoutMs / 60_000))} 分待っても終わらないため自動更新を止めました。終わったかどうかは分かっていません。`
               : '状態を引き直せなくなったため自動更新を止めました。'}
             {`「${WORDING.refresh}」を押してください。`}
           </p>
         )}
-      </section>
-
-      {rejection !== null && <Rejected rejection={rejection} />}
-
-      <section>
-        <h2 className="text-base font-semibold text-text">これまでの書き出し</h2>
-        <div className="mt-3">
-          <RenderJobList
-            jobs={jobs}
-            error={watch.error}
-            nowMs={watch.nowMs}
-            outputs={outputs}
-            pendingOutputId={pendingOutputId}
-            onOpenOutput={openOutput}
-            highlightJobId={watch.watchedJobId}
-          />
-        </div>
+        <RenderJobList
+          jobs={watch.jobs}
+          error={watch.error}
+          nowMs={watch.nowMs}
+          resolveOutputUrl={toOutputUrl}
+          folder={folder}
+          highlightJobId={watch.watchedJobId}
+        />
       </section>
     </div>
   )

@@ -45,6 +45,7 @@ const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
       videoProvider: 'stub',
       ...VPIPE_OFF,
     },
+    renderExportDir: null,
     ...overrides,
   })
 

@@ -1,5 +1,5 @@
 import type { RenderJob, RenderPreset } from '@ixa/domain'
-import { RenderPreset as RenderPresetSchema } from '@ixa/domain'
+import { RENDER_PRESET_LABELS, RenderPreset as RenderPresetSchema } from '@ixa/domain'
 
 /**
  * 書き出し画面の表示用ラベルと判定。React を含まない純粋関数だけを置く。
@@ -34,21 +34,22 @@ export type RenderPresetInfo = {
  * 正は `packages/render` の `PRESET_SETTINGS` で、ここに数値を写すと必ずズレる
  * （lessons L-016）。名前が持っている情報（720p / 4K / 縦）だけを言い換える。
  */
+/** 名前は domain の `RENDER_PRESET_LABELS` が正（フォルダに置くファイル名と同じにする。ADR-0036）。 */
 const PRESET_INFO: Readonly<Record<RenderPreset, RenderPresetInfo>> = {
   preview_720p: {
-    label: 'プレビュー（720p）',
+    label: RENDER_PRESET_LABELS.preview_720p,
     hint: '確認用。いちばん速く終わり、ファイルも小さい',
   },
   master_1080p: {
-    label: 'マスター（1080p）',
+    label: RENDER_PRESET_LABELS.master_1080p,
     hint: '納品用。まずはこれを選ぶ',
   },
   master_4k: {
-    label: 'マスター（4K）',
+    label: RENDER_PRESET_LABELS.master_4k,
     hint: '納品用。いちばん時間がかかる',
   },
   social_vertical: {
-    label: 'SNS 縦型',
+    label: RENDER_PRESET_LABELS.social_vertical,
     hint: '縦長の画面向け。横長の素材は上下に黒帯が入る',
   },
 }
@@ -204,14 +205,24 @@ export const sortRenderJobsByNewest = <T extends { readonly createdAt: Date }>(
 ): readonly T[] => [...jobs].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 
 /**
- * 日時の表示。**UTC 固定にする。**
- * サーバとブラウザでタイムゾーンが違うと同じ値が別の文字列になり、
- * hydration がずれる。ここは「いつ書き出したか」が分かれば足りる。
+ * 日時の表示（`2026-10-02 22:52`）。**この Mac の時刻で出す**（制作者 2026-10-03。UTC だと読み替えが要った）。
+ *
+ * 以前は hydration のずれを避けて UTC 固定にしていた。書き出し画面はブラウザで読み込んでから描く
+ * （サーバで描かない）ので、ブラウザの時刻で書いてもずれない。サーバで描く画面に使うときは `timeZone` を渡すこと。
  */
-export const formatJobTime = (date: Date): string => {
-  const ms = date.getTime()
-  if (!Number.isFinite(ms)) return '日時不明'
-  return `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC`
+export const formatJobTime = (date: Date, timeZone?: string): string => {
+  if (!Number.isFinite(date.getTime())) return '日時不明'
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    ...(timeZone === undefined ? {} : { timeZone }),
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes): string => parts.find((p) => p.type === type)?.value ?? '00'
+  return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}`
 }
 
 // --- 拒否理由のまとめ方 ---

@@ -144,8 +144,13 @@ describe('経過時間と日時', () => {
     expect(renderElapsedSec(job(), Date.parse('2026-09-17T01:00:00.000Z'))).toBe(0)
   })
 
-  it('日時は UTC 固定。サーバとブラウザで文字列が変わらない', () => {
-    expect(formatJobTime(CREATED_AT)).toBe('2026-09-17 02:00 UTC')
+  /**
+   * 日時はこの Mac の時刻で出す（UTC だと「13:52 UTC」と出て、いつのことか読み替えが要った）。
+   * 書き出し画面はブラウザで読み込んでから描くので、サーバの描画とずれない。
+   */
+  it('日時は指定した地域の時刻（既定はブラウザの時刻）', () => {
+    expect(formatJobTime(CREATED_AT, 'Asia/Tokyo')).toBe('2026-09-17 11:00')
+    expect(formatJobTime(CREATED_AT, 'UTC')).toBe('2026-09-17 02:00')
     expect(formatJobTime(new Date(Number.NaN))).toBe('日時不明')
   })
 })

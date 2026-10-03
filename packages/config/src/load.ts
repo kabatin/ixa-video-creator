@@ -94,6 +94,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       vpipeApiUrl: parsed.VPIPE_API_URL,
       vpipeApiToken: parsed.VPIPE_API_TOKEN ?? null,
     },
+    renderExportDir: parsed.RENDER_EXPORT_DIR ?? null,
   }
 }
 

@@ -1,3 +1,4 @@
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { serve, type ServerType } from '@hono/node-server'
 import { describeEnvironment, getConfig } from '@ixa/config'
@@ -49,6 +50,7 @@ import IORedis from 'ioredis'
 import { createRedisProjectEvents } from '@ixa/events'
 import { createAiWiring } from './ai/ai-wiring.js'
 import { createApp } from './app.js'
+import { createFinderOpener } from './render-folder/finder-opener.js'
 import { createLogger, type Logger } from './logger.js'
 import { GENERATION_QUEUE_NAME, type GenerationQueue } from './routes/shots.js'
 import { IMAGE_QUEUE_NAME, type ImageJobQueue } from './routes/shot-start-frame-generate.js'
@@ -234,6 +236,13 @@ export const main = (): void => {
     musicTracks: createMusicTrackRepository(db),
     renderJobs: createRenderJobRepository(db),
     renderQueue: renderQueuePort,
+    // 書き出した動画を置くフォルダ（ADR-0036）。既定はホームの「ムービー」の下。日時はこの Mac の時刻で名前に書く。
+    renderFolder: {
+      rootDir: config.renderExportDir ?? join(homedir(), 'Movies', 'ixa-video-creator'),
+      homeDir: homedir(),
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      opener: createFinderOpener(),
+    },
     characters,
     looks,
     shotCharacters,

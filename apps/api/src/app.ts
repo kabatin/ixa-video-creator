@@ -41,6 +41,11 @@ import { uploadRoutes, type MediaIngestDeps } from './routes/uploads.js'
 import { shotCompareRoutes } from './routes/shot-compare.js'
 import { beatAlignmentRoutes, roughCutRoutes, timelineRoutes } from './routes/timeline.js'
 import { renderRoutes, type RenderQueue } from './routes/renders.js'
+import { renderFolderRoutes } from './routes/render-folder.js'
+import type { RenderFolderDeps } from './render-folder/render-folder.js'
+
+/** 書き出しフォルダの場所と開く口。リポジトリ・ストレージは app が持っているものを使う。 */
+export type RenderFolderPlace = Pick<RenderFolderDeps, 'rootDir' | 'homeDir' | 'timeZone' | 'opener'>
 import { characterRoutes, shotCharacterRoutes } from './routes/characters.js'
 import { characterSheetRoutes } from './routes/character-sheet.js'
 import { assetRoutes } from './routes/assets.js'
@@ -101,6 +106,10 @@ export type AppDeps = {
   musicTracks: MusicTrackRepository
   renderJobs: RenderJobRepository
   renderQueue: RenderQueue
+  /**
+   * 書き出した動画を置くフォルダと Finder を開く口（ADR-0036）。無ければ口を置かない（テストの多くは要らない）。
+   */
+  renderFolder?: RenderFolderPlace
   characters: CharacterRepository
   looks: CharacterLookRepository
   shotCharacters: ShotCharacterRepository
@@ -463,6 +472,19 @@ export const createApp = (deps: AppDeps) => {
     '/',
     renderRoutes({ ...timelineDeps, renderJobs: deps.renderJobs, queue: deps.renderQueue }),
   )
+  if (deps.renderFolder !== undefined) {
+    app.route(
+      '/',
+      renderFolderRoutes({
+        ...deps.renderFolder,
+        projects,
+        renderJobs: deps.renderJobs,
+        mediaAssets,
+        storage,
+        logger,
+      }),
+    )
+  }
 
   registerOpenApiDocument(app)
   registerErrorHandlers(app, logger)

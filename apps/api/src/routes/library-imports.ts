@@ -20,6 +20,7 @@ import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../
 import { errorContent, fail, ok, successResponse, type FieldErrors } from '../response.js'
 import { BrandAssetResponse, LocationResponse } from './assets.js'
 import { CharacterResponse, toCharacterResponse } from './characters.js'
+import { sequentially } from '../sequentially.js'
 
 /**
  * ほかのプロジェクトから取り込む（ADR-0034。制作者 2026-10-03「全プロジェクトで共有になっている。プロジェクト単位に
@@ -94,10 +95,6 @@ const resolveAll = async <Id, T extends { readonly workspaceId: string }>(
   const usable = found.filter((item): item is T => item !== null && item.workspaceId === workspaceId)
   return usable.length === ids.length ? usable : null
 }
-
-/** 順に 1 件ずつ待つ（並べて投げない）。 */
-const sequentially = <T, R>(items: readonly T[], run: (item: T) => Promise<R>): Promise<R[]> =>
-  items.reduce<Promise<R[]>>(async (done, item) => [...(await done), await run(item)], Promise.resolve([]))
 
 export const libraryImportRoutes = (deps: LibraryImportRoutesDeps) => {
   const copyCharacter = async (source: Character, project: Project): Promise<Character> => {

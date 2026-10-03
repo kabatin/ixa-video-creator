@@ -240,3 +240,22 @@ describe('ローカルの動画生成（vpipe）', () => {
     expect(() => loadConfig({ ...requiredEnv, VPIPE_API_URL: 'http://192.168.1.20:8765' })).not.toThrow()
   })
 })
+
+/** 書き出した動画を置くフォルダ（ADR-0036）。省略すれば null（API がホームの「ムービー」に決める）。 */
+describe('書き出しフォルダ（RENDER_EXPORT_DIR）', () => {
+  it('省略・空なら null', () => {
+    expect(loadConfig(requiredEnv).renderExportDir).toBeNull()
+    expect(loadConfig({ ...requiredEnv, RENDER_EXPORT_DIR: '  ' }).renderExportDir).toBeNull()
+  })
+
+  it('絶対パスならそのまま使う', () => {
+    expect(loadConfig({ ...requiredEnv, RENDER_EXPORT_DIR: '/Volumes/外付け/書き出し' }).renderExportDir).toBe(
+      '/Volumes/外付け/書き出し',
+    )
+  })
+
+  it('相対パス・~ 始まりは起動時に止める（どこに書くかが動かし方で変わるため）', () => {
+    expect(() => loadConfig({ ...requiredEnv, RENDER_EXPORT_DIR: 'exports' })).toThrow(/RENDER_EXPORT_DIR/)
+    expect(() => loadConfig({ ...requiredEnv, RENDER_EXPORT_DIR: '~/Movies' })).toThrow(/RENDER_EXPORT_DIR/)
+  })
+})
