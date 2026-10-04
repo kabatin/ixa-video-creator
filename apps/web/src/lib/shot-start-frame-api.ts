@@ -34,6 +34,9 @@ export const WireStartFramesGenerated = z.object({
 })
 export type WireStartFramesGenerated = z.infer<typeof WireStartFramesGenerated>
 
+export const WireImagesCancelled = z.object({ cancelledJobIds: z.array(ImageGenerationJobId) })
+export type WireImagesCancelled = z.infer<typeof WireImagesCancelled>
+
 export type ShotStartFrameApi = {
   getStartFrame: (shotId: ShotId) => Promise<WireStartFrameState>
   setStartFrame: (shotId: ShotId, mediaAssetId: MediaAssetId) => Promise<WireStartFrame>
@@ -45,6 +48,11 @@ export type ShotStartFrameApi = {
     projectId: ProjectId,
     input: { readonly shotIds: readonly ShotId[]; readonly onlyMissing?: boolean },
   ) => Promise<WireStartFramesGenerated>
+  /**
+   * 待っている・作っている絵を止める（制作者 2026-10-04）。`shotIds` を渡せばその Shot だけ、
+   * 渡さなければ作品の全部（キャラクターシートも）。
+   */
+  cancelImages: (projectId: ProjectId, shotIds?: readonly ShotId[]) => Promise<WireImagesCancelled>
 }
 
 const path = (shotId: ShotId): string => `/shots/${encodeURIComponent(shotId)}/start-frame`
@@ -60,5 +68,11 @@ export const createShotStartFrameApi = (requester: Requester): ShotStartFrameApi
       `/projects/${encodeURIComponent(projectId)}/start-frames/generate`,
       { shotIds: [...input.shotIds], onlyMissing: input.onlyMissing ?? true },
       WireStartFramesGenerated,
+    ),
+  cancelImages: async (projectId, shotIds) =>
+    requester.post(
+      `/projects/${encodeURIComponent(projectId)}/images/cancel`,
+      shotIds === undefined ? {} : { shotIds: [...shotIds] },
+      WireImagesCancelled,
     ),
 })

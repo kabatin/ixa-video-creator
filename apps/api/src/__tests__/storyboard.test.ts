@@ -522,11 +522,42 @@ describe('時間を直接指定して Shot を作る', () => {
   it('code は既定で CUT-01 から振られ、order は既存の後ろに続く', async () => {
     await deps.shots.create(aShotInput({ code: 'S01-010', order: 0 }))
 
-    const res = await createCuts({ boundariesSec: [0, 1, 2, 3] })
+    // 既存の Shot（0〜4 秒）の後ろに作る（重なる区間は断る。下のテスト）。
+    const res = await createCuts({ boundariesSec: [4, 5, 6, 7] })
     const { shots } = (await json<SuccessBody<CutsBody>>(res)).data
 
     expect(shots.map((shot) => shot.code)).toEqual(['CUT-01', 'CUT-02', 'CUT-03'])
     expect(shots.map((shot) => shot.order)).toEqual([1, 2, 3])
+  })
+
+  /**
+   * 今ある Shot と重なる区間は作らない（制作者 2026-10-03「書き出しようとすると…Shot 重なりが指摘される」の一因）。
+   * 区切りを残したまま「Shot にする」を 2 回押すと、同じ区間に Shot がもう 1 組でき、書き出しが止まった。
+   * 画面は曲の頭から終わりまでの区切りを送る（`cutBoundaries`）ので、**重なる区間だけを飛ばし**、空いた区間は作る。
+   */
+  it('全部が今ある Shot と重なるなら 422 で断り、何も作らない', async () => {
+    expect((await createCuts({ boundariesSec: [0, 1, 2] })).status).toBe(201)
+
+    const res = await createCuts({ boundariesSec: [0, 1, 2] })
+
+    expect(res.status).toBe(422)
+    const body = await json<{ success: false; fields?: Record<string, string[]> }>(res)
+    expect(body.fields?.['boundariesSec']?.[0]).toMatch(/重なり/)
+    expect(await deps.shots.findByProject(project.id)).toHaveLength(2)
+  })
+
+  it('画面が送る形（曲の頭から終わりまで）で、空いた区間だけ作り、飛ばした区間を知らせる', async () => {
+    await deps.shots.create({ ...aShotInput({ code: 'S01-010', order: 0 }), startSec: 3, durationSec: 3 })
+
+    const res = await createCuts({ boundariesSec: [0, 3, 6, 12] })
+
+    expect(res.status).toBe(201)
+    const { shots, warnings } = (await json<SuccessBody<CutsBody & { warnings: string[] }>>(res)).data
+    expect(shots.map((shot) => [shot.startSec, shot.durationSec])).toEqual([
+      [0, 3],
+      [6, 6],
+    ])
+    expect(warnings[0]).toMatch(/1 カット.*重なる/)
   })
 
   it('codePrefix を指定するとその接頭辞になり、小文字は大文字に揃う', async () => {

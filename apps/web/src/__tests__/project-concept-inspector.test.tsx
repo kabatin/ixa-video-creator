@@ -1,4 +1,4 @@
-import type { MediaAssetId, Project } from '@ixa/domain'
+import type { MediaAssetId, MusicTrack, Project } from '@ixa/domain'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
@@ -120,5 +120,66 @@ describe('ProjectConceptInspector', () => {
     await userEvent.click(screen.getByRole('button', { name: '手本画像を追加' }))
 
     expect((await screen.findByRole('alert')).textContent).toContain('手本には画像を指定してください')
+  })
+})
+
+/**
+ * 何を書けば次へ進めるかを言う（制作者 2026-10-03「このタイミングでやるのは、コンセプト・あらすじの入力、歌詞の入力、
+ * ルックの設定」）。3 つが済んだら、次の作業へのボタンを出す。
+ */
+describe('ProjectConceptInspector: 次へ', () => {
+  it('まず書く 3 つを言い、手本画像と避けたいものは任意と書く', async () => {
+    await open()
+    expect(screen.getByText(/まず「コンセプト・あらすじ」「歌詞」「ルック」の 3 つ/)).toBeTruthy()
+    expect(screen.getByText('手本画像（任意）')).toBeTruthy()
+    expect(screen.getByText('避けたいもの（任意）')).toBeTruthy()
+  })
+
+  it('3 つが済んでいなければ「次へ」は出さない', async () => {
+    await open({ lyrics: '', styleGuide: '' })
+    expect(screen.queryByRole('button', { name: /^次へ/ })).toBeNull()
+  })
+
+  it('3 つが済んだら「次へ: 歌詞の時刻を合わせる」。押すと歌詞のモードを開く', async () => {
+    const project = { ...aProject, lyrics: '一行目\n二行目', lyricCues: [], styleGuide: '水彩' }
+    const { value } = renderInWorkbench(<ProjectConceptInspector api={fakeApi(project, '夜明け')} />, {
+      project,
+      concept: '夜明け',
+      track: { id: 'track-1', title: 'iXA CUP' } as unknown as MusicTrack,
+    })
+    await userEvent.click(await screen.findByRole('button', { name: '次へ: 歌詞の時刻を合わせる' }))
+    expect(value.openCutter).toHaveBeenCalledWith('lyrics')
+  })
+})
+
+/**
+ * 歌詞なし（制作者 2026-10-04「歌詞がない動画の場合、歌詞を入力しないので、作品の方針が 2/3 でとまってしまいます。
+ * 歌詞なしのチェックボックスとかあるといいかもしれません」）。
+ */
+describe('ProjectConceptInspector: 歌詞なし', () => {
+  it('「歌詞なし」をチェックすると保存する', async () => {
+    const { api } = await open()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /歌詞なし/ }))
+
+    expect(api.updateProject).toHaveBeenCalledWith(aProject.id, { instrumental: true })
+  })
+
+  it('歌詞なしの作品では歌詞の欄を出さず、まず書くのは方針とルックの 2 つと言う', async () => {
+    await open({ instrumental: true })
+
+    expect(screen.queryByLabelText('歌詞')).toBeNull()
+    expect(screen.getByText(/まず「コンセプト・あらすじ」「ルック」の 2 つ/)).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: /歌詞なし/ })).toBeChecked()
+  })
+
+  it('歌詞なしで方針とルックが済んだら「次へ: 区切って Shot にする」', async () => {
+    const project = { ...aProject, instrumental: true, lyrics: '', styleGuide: '水彩' }
+    renderInWorkbench(<ProjectConceptInspector api={fakeApi(project, '夜明け')} />, {
+      project,
+      concept: '夜明け',
+      track: { id: 'track-1', title: 'iXA CUP' } as unknown as MusicTrack,
+    })
+    expect(await screen.findByRole('button', { name: '次へ: 区切って Shot にする' })).toBeTruthy()
   })
 })

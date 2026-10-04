@@ -1,11 +1,11 @@
-import { LocationId, ShotId, WorkspaceId } from '@ixa/domain'
+import { LocationId, ProjectId, ShotId } from '@ixa/domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LOCATION_ID, SHOT_ID, WORKSPACE_ID, locationJson, shotJson } from '@/__tests__/fixtures'
+import { LOCATION_ID, PROJECT_ID, SHOT_ID, locationJson, shotJson } from '@/__tests__/fixtures'
 import { createApiClient } from '@/lib/api-client'
 
 const BASE_URL = 'http://127.0.0.1:3001'
 
-const workspaceId = WorkspaceId.parse(WORKSPACE_ID)
+const projectId = ProjectId.parse(PROJECT_ID)
 const locationId = LocationId.parse(LOCATION_ID)
 const shotId = ShotId.parse(SHOT_ID)
 
@@ -30,23 +30,23 @@ afterEach(() => {
 })
 
 describe('location API', () => {
-  it('listLocations は workspaceId で絞り、封筒を剥がしてパースする', async () => {
+  it('listLocations はプロジェクトの経路で引き、封筒を剥がしてパースする（ADR-0034）', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [locationJson] }))
 
-    const locations = await createApiClient(BASE_URL).listLocations(workspaceId)
+    const locations = await createApiClient(BASE_URL).listLocations(projectId)
 
     expect(locations).toHaveLength(1)
     expect(locations[0]?.name).toBe('夜のスタジアム')
     expect(locations[0]?.referenceAssetIds).toHaveLength(1)
 
     const [url] = fetchMock.mock.calls[0] ?? []
-    expect(url).toBe(`${BASE_URL}/locations?workspaceId=${WORKSPACE_ID}`)
+    expect(url).toBe(`${BASE_URL}/projects/${PROJECT_ID}/locations`)
   })
 
   it('一覧が空でもそのまま空配列で返す', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [] }))
 
-    await expect(createApiClient(BASE_URL).listLocations(workspaceId)).resolves.toEqual([])
+    await expect(createApiClient(BASE_URL).listLocations(projectId)).resolves.toEqual([])
   })
 })
 

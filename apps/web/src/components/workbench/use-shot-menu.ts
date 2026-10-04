@@ -32,6 +32,8 @@ export const toMenuItems = <A extends string>(
           ...(entry.shortcut === undefined ? {} : { shortcut: entry.shortcut }),
           ...(entry.confirm === undefined ? {} : { confirm: entry.confirm }),
           ...(entry.keepLabel === undefined ? {} : { keepLabel: entry.keepLabel }),
+          ...(entry.confirmTone === undefined ? {} : { confirmTone: entry.confirmTone }),
+          ...(entry.confirmLabel === undefined ? {} : { confirmLabel: entry.confirmLabel }),
         },
   )
 

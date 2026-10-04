@@ -20,12 +20,14 @@ import type {
   UpdateMusicTrackPatch,
   WorkspaceId,
 } from '@ixa/domain'
+import { DEFAULT_LOOK } from '@ixa/domain'
 import { useRouter } from 'next/navigation'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
-import { lookKeyFromName } from '@/lib/asset-actions'
+import { defaultLook, lookKeyFromName } from '@/lib/asset-actions'
+import type { LibraryImportRequest, WireLibraryImportResult } from '@/lib/library-import-api'
 import { deriveTrackTitle } from '@/lib/music-upload'
 
 /**
@@ -47,6 +49,11 @@ export type AssetActions = {
   readonly updateCharacter: (id: CharacterId, patch: UpdateCharacterPatch) => Promise<Character>
   readonly deleteCharacter: (id: CharacterId) => Promise<void>
   readonly createLook: (characterId: CharacterId, name: string) => Promise<CharacterLook>
+  /**
+   * 登場人物に入れるときの Look。既定の Look を返し、**1 つも無ければ「基本」を作って返す**。
+   * 以前に画像だけで作ったキャラクターは Look を持たず、Shot に入れられなかった（制作者 2026-10-04）。
+   */
+  readonly ensureDefaultLook: (characterId: CharacterId) => Promise<CharacterLook>
   readonly updateLook: (
     id: CharacterLookId,
     patch: UpdateCharacterLookPatch,
@@ -68,6 +75,11 @@ export type AssetActions = {
   readonly setMasterTrack: (id: MusicTrackId) => Promise<void>
   readonly deleteTrack: (id: MusicTrackId) => Promise<void>
   readonly analyzeTrack: (id: MusicTrackId) => Promise<void>
+  /**
+   * ほかのプロジェクトのものを複製して、このプロジェクトへ取り込む（ADR-0034）。取り込んだ分を一覧に足して返す。
+   * Look は足したキャラクターの分を読み直す（キャラクターの並びが変わると読む）。
+   */
+  readonly importLibrary: (request: LibraryImportRequest) => Promise<WireLibraryImportResult>
 }
 
 export type AssetStoreValue = {
@@ -146,20 +158,21 @@ export const AssetStoreProvider = ({
 }: AssetStoreProviderProps) => {
   const router = useRouter()
   const api = useMemo(() => createApiClient(), [])
+  // キャラクター・ロケーション・ブランド資産はプロジェクトごと（ADR-0034。楽曲と同じ）。
   const [characters, setCharacters] = useLoadedList(
     'キャラクター',
-    () => api.listCharacters(workspaceId),
-    workspaceId,
+    () => api.listCharacters(projectId),
+    projectId,
   )
   const [locations, setLocations] = useLoadedList(
     'ロケーション',
-    () => api.listLocations(workspaceId),
-    workspaceId,
+    () => api.listLocations(projectId),
+    projectId,
   )
   const [brandAssets, setBrandAssets] = useLoadedList(
     'ブランド資産',
-    () => api.listBrandAssets(workspaceId),
-    workspaceId,
+    () => api.listBrandAssets(projectId),
+    projectId,
   )
   const [tracks, setTracks] = useLoadedList('楽曲', () => api.listMusicTracks(projectId), projectId)
   const [looks, setLooks] = useState<ReadonlyMap<CharacterId, readonly CharacterLook[]>>(new Map())
@@ -203,7 +216,7 @@ export const AssetStoreProvider = ({
   const actions = useMemo<AssetActions>(
     () => ({
       createCharacter: async (displayName) => {
-        const created = await api.createCharacter({ workspaceId, name: displayName, displayName })
+        const created = await api.createCharacter(projectId, { name: displayName, displayName })
         setCharacters((current) => mapReady(current, (items) => [...items, created]))
         return created
       },
@@ -228,6 +241,15 @@ export const AssetStoreProvider = ({
         setLooksOf(characterId, (items) => [...items, created])
         return created
       },
+      ensureDefaultLook: async (characterId) => {
+        // 読み込み前なら空と見なさない（Look があるのに「基本」を重ねて作ってしまう）。
+        const known = looks.get(characterId) ?? (await api.listLooks(characterId))
+        const found = defaultLook(known)
+        if (found !== null) return found
+        const created = await api.createLook(characterId, { ...DEFAULT_LOOK, isDefault: true })
+        setLooksOf(characterId, (items) => [...items, created])
+        return created
+      },
       updateLook: async (id, patch) => {
         const updated = await api.updateLook(id, patch)
         // 既定の Look は 1 つだけ。サーバが他を降格するので、同じキャラクターの Look を読み直す。
@@ -240,8 +262,7 @@ export const AssetStoreProvider = ({
         setLooksOf(look.characterId, (items) => items.filter((item) => item.id !== look.id))
       },
       createLocation: async (name) => {
-        const created = await api.createLocation({
-          workspaceId,
+        const created = await api.createLocation(projectId, {
           name,
           description: '',
           referenceAssetIds: [],
@@ -262,8 +283,7 @@ export const AssetStoreProvider = ({
       },
       createBrandAsset: async (name, category, value = null) => {
         // 色は値が必須（API が 422 を返す）。作るときに一緒に送る。
-        const created = await api.createBrandAsset({
-          workspaceId,
+        const created = await api.createBrandAsset(projectId, {
           name,
           category,
           value,
@@ -316,6 +336,13 @@ export const AssetStoreProvider = ({
         const fresh = await api.listMusicTracks(projectId)
         setTracks({ state: 'ready', value: fresh })
         router.refresh()
+      },
+      importLibrary: async (request) => {
+        const imported = await api.importLibrary(projectId, request)
+        setCharacters((current) => mapReady(current, (items) => [...items, ...imported.characters]))
+        setLocations((current) => mapReady(current, (items) => [...items, ...imported.locations]))
+        setBrandAssets((current) => mapReady(current, (items) => [...items, ...imported.brandAssets]))
+        return imported
       },
       analyzeTrack: async (id) => {
         await api.requestAnalysis(id)

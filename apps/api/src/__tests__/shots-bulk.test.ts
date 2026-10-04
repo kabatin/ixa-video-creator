@@ -1,6 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import {
-  LocationId as LocationIdSchema,
   ShotId as ShotIdSchema,
   createPhase1EmptyContextSource,
   newId,
@@ -10,6 +9,7 @@ import {
   ProviderId,
 } from '@ixa/domain'
 import {
+  createInMemoryLocationRepository,
   aShot,
   aTake,
   createInMemoryShotRepository,
@@ -104,9 +104,11 @@ const buildBulkFixture = (options: BulkFixtureOptions = {}) => {
   const queue = createRecordingQueue()
   const events = createInMemoryProjectEvents()
 
+  const locations = createInMemoryLocationRepository()
   const deps: ShotRoutesDeps = {
     shots,
     projects: createInMemoryProjectRepository([project, ...(options.otherProjects ?? [])]),
+    locations,
     takes,
     generationJobs,
     registry: createProviderRegistry([
@@ -125,7 +127,7 @@ const buildBulkFixture = (options: BulkFixtureOptions = {}) => {
   registerErrorHandlers(app, createLogger('silent'))
   app.route('/', shotBulkRoutes({ ...deps, editBatches: options.editBatches ?? editBatches }))
 
-  return { app, project, shots, takes, generationJobs, queue, events, editBatches }
+  return { app, project, shots, takes, generationJobs, queue, events, editBatches, locations }
 }
 
 const threeShots = (project: Project): readonly Shot[] => [
@@ -538,8 +540,12 @@ describe('PATCH /projects/:projectId/shots/bulk', () => {
   it('共通の項目をまとめて変え、1 件ずつの結果を返す', async () => {
     const project = aProject()
     const shots = threeShots(project)
-    const locationId = newId(LocationIdSchema)
     const f = buildBulkFixture({ project, shots })
+    const { id: locationId } = await f.locations.create({
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+      name: 'iXA CUP 会場',
+    })
 
     const res = await patchJson(f.app, `/projects/${project.id}/shots/bulk`, {
         shotIds: shots.map((s) => s.id),
@@ -552,6 +558,26 @@ describe('PATCH /projects/:projectId/shots/bulk', () => {
     expect(json.data.results.every((r) => r.ok)).toBe(true)
     expect(f.shots.snapshot().map((s) => s.mood)).toEqual(['calm', 'calm', 'calm'])
     expect(f.shots.snapshot().every((s) => s.locationId === locationId)).toBe(true)
+  })
+
+  /** ロケーションはプロジェクトごと（ADR-0034）。ほかのプロジェクトのものはまとめても付けない。 */
+  it('ほかのプロジェクトのロケーションは 422 で、1 件も変えない', async () => {
+    const project = aProject()
+    const shots = threeShots(project)
+    const f = buildBulkFixture({ project, shots })
+    const foreign = await f.locations.create({
+      workspaceId: project.workspaceId,
+      projectId: aProject().id,
+      name: '雨の夜の店先',
+    })
+
+    const res = await patchJson(f.app, `/projects/${project.id}/shots/bulk`, {
+      shotIds: shots.map((s) => s.id),
+      patch: { locationId: foreign.id },
+    })
+
+    expect(res.status).toBe(422)
+    expect(f.shots.snapshot().every((s) => s.locationId === null)).toBe(true)
   })
 
   /**

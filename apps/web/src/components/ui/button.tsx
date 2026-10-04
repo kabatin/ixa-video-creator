@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 
 /**
@@ -51,11 +52,40 @@ const TONES: Readonly<Record<ButtonTone, string>> = Object.freeze({
 export type ButtonProps = {
   readonly tone?: ButtonTone
   readonly size?: ButtonSize
+  /**
+   * 文字を折り返さない。狭い列に並べると、日本語はどの字の間でも折れ、ボタンの中で 1 字ずつ縦に崩れた
+   * （制作者 2026-10-03「Shot 一覧の選択メニューがすべて改行してしまっている」）。並べる側が幅を受け持つときに付ける。
+   */
+  readonly nowrap?: boolean
   readonly children: ReactNode
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className'>
 
-export const Button = ({ tone = 'secondary', size = 'md', children, ...rest }: ButtonProps) => (
-  <button {...rest} type={rest.type ?? 'button'} className={`${BASE} ${SIZES[size]} ${TONES[tone]}`}>
+export const Button = ({ tone = 'secondary', size = 'md', nowrap = false, children, ...rest }: ButtonProps) => (
+  <button
+    {...rest}
+    type={rest.type ?? 'button'}
+    className={`${BASE} ${SIZES[size]} ${TONES[tone]}${nowrap ? ' whitespace-nowrap' : ''}`}
+  >
     {children}
   </button>
+)
+
+/**
+ * ボタンの見た目のリンク（ページを移るとき）。見た目は `Button` と同じ表から作る。
+ * 以前は 3 か所（一覧の「新規プロジェクト」・空の表示・移動の案内）が主ボタンの見た目を手で書き写していた。
+ */
+export const LinkButton = ({
+  href,
+  tone = 'secondary',
+  size = 'md',
+  children,
+}: {
+  readonly href: string
+  readonly tone?: ButtonTone
+  readonly size?: ButtonSize
+  readonly children: ReactNode
+}) => (
+  <Link href={href} className={`${BASE} ${SIZES[size]} ${TONES[tone]}`}>
+    {children}
+  </Link>
 )

@@ -7,7 +7,7 @@ import {
   type ImageGenerationJob,
 } from '@ixa/domain'
 
-/** 絵コンテの画像ジョブのインメモリ版。書くたびに状態と中身の食い違いを確かめる（実物と同じ）。 */
+/** 絵のジョブ（最初のフレーム・キャラクターシート）のインメモリ版。書くたびに状態と中身の食い違いを確かめる（実物と同じ）。 */
 export type InMemoryImageJobRepository = ImageJobRepository & { readonly snapshot: () => readonly ImageGenerationJob[] }
 
 export const createInMemoryImageJobRepository = (
@@ -26,6 +26,11 @@ export const createInMemoryImageJobRepository = (
     return job
   }
   const active = (job: ImageGenerationJob) => job.status === 'queued' || job.status === 'running'
+  /** 止めた行は上書きしない（実物と同じ）。止めた行をそのまま返す。 */
+  const transition = (id: ImageGenerationJob['id'], patch: Partial<ImageGenerationJob>): ImageGenerationJob => {
+    const current = get(id)
+    return current.status === 'cancelled' ? current : save({ ...current, ...patch })
+  }
   const newestFirst = (jobs: readonly ImageGenerationJob[]) => [...jobs].sort((a, b) => b.id.localeCompare(a.id))
   return {
     snapshot: () => store,
@@ -33,10 +38,15 @@ export const createInMemoryImageJobRepository = (
       Promise.resolve(
         save(
           ImageGenerationJobSchema.parse({
-            ...input,
             id: newId(ImageGenerationJobIdSchema),
+            projectId: input.projectId,
+            kind: input.kind,
+            shotId: input.kind === 'start_frame' ? input.shotId : null,
+            characterId: input.kind === 'character_sheet' ? input.characterId : null,
+            providerId: input.providerId,
+            modelId: input.modelId,
             status: 'queued',
-            referenceAssetIds: [],
+            referenceAssetIds: input.kind === 'character_sheet' ? [...input.referenceAssetIds] : [],
             mediaAssetId: null,
             error: null,
             providerRecord: null,
@@ -50,13 +60,26 @@ export const createInMemoryImageJobRepository = (
     findActiveByShot: (shotId) =>
       Promise.resolve(newestFirst(store.filter((job) => job.shotId === shotId && active(job)))[0] ?? null),
     findLatestByShot: (shotId) => Promise.resolve(newestFirst(store.filter((job) => job.shotId === shotId))[0] ?? null),
+    findActiveByCharacter: (characterId) =>
+      Promise.resolve(newestFirst(store.filter((job) => job.characterId === characterId && active(job)))[0] ?? null),
+    findLatestByCharacter: (characterId) =>
+      Promise.resolve(newestFirst(store.filter((job) => job.characterId === characterId))[0] ?? null),
     findActiveByProject: (projectId) =>
       Promise.resolve(newestFirst(store.filter((job) => job.projectId === projectId && active(job)))),
+    cancelActive: ({ projectId, shotIds }) => {
+      const targets = store.filter(
+        (job) =>
+          job.projectId === projectId &&
+          active(job) &&
+          (shotIds === undefined || (job.shotId !== null && shotIds.includes(job.shotId))),
+      )
+      return Promise.resolve(targets.map((job) => save({ ...job, status: 'cancelled', finishedAt: new Date() })))
+    },
     markRunning: (id, referenceAssetIds) =>
-      Promise.resolve(save({ ...get(id), status: 'running', referenceAssetIds: [...referenceAssetIds], startedAt: new Date() })),
+      Promise.resolve(transition(id, { status: 'running', referenceAssetIds: [...referenceAssetIds], startedAt: new Date() })),
     markSucceeded: (id, mediaAssetId, providerRecord) =>
-      Promise.resolve(save({ ...get(id), status: 'succeeded', mediaAssetId, providerRecord, finishedAt: new Date() })),
+      Promise.resolve(transition(id, { status: 'succeeded', mediaAssetId, providerRecord, finishedAt: new Date() })),
     markFailed: (id, error, providerRecord) =>
-      Promise.resolve(save({ ...get(id), status: 'failed', error, providerRecord, finishedAt: new Date() })),
+      Promise.resolve(transition(id, { status: 'failed', error, providerRecord, finishedAt: new Date() })),
   }
 }

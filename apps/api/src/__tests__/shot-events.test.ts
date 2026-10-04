@@ -9,6 +9,7 @@ import {
   ProviderId,
 } from '@ixa/domain'
 import {
+  createInMemoryLocationRepository,
   aShot,
   aTake,
   createInMemoryShotRepository,
@@ -52,9 +53,11 @@ const buildFixture = (options: FixtureOptions = {}) => {
   const project = options.project ?? aProject()
   const events = createInMemoryProjectEvents()
   const shots = createInMemoryShotRepository(options.shots ?? [aShot(project.id)])
+  const locations = createInMemoryLocationRepository()
   const deps: ShotRoutesDeps = {
     shots,
     projects: createInMemoryProjectRepository([project]),
+    locations,
     takes: createInMemoryTakeRepository(options.takes ?? []),
     generationJobs: createInMemoryGenerationJobRepository(),
     registry: createProviderRegistry([createTestVideoProvider([CHEAP_MODEL, GOOD_MODEL])]),

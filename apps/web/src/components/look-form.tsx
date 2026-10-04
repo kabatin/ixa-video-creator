@@ -48,7 +48,7 @@ export const LookForm = ({ busy, onSubmit }: LookFormProps) => {
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField
           id="look-key"
-          label="key（大文字英数とアンダースコア／変更不可）"
+          label="識別名（英大文字・数字・_。あとで変えられません）"
           value={values.key}
           placeholder="IXA_CUP_PAST"
           disabled={busy}
@@ -72,7 +72,7 @@ export const LookForm = ({ busy, onSubmit }: LookFormProps) => {
 
       <TextField
         id="look-era"
-        label="時代（era）"
+        label="時代"
         value={values.era}
         placeholder="2019"
         disabled={busy}

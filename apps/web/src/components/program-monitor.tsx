@@ -90,6 +90,11 @@ export type ProgramMonitorProps = {
    *   高さの決まった入れ物（ドックのパネル）でのみ使う。
    */
   readonly fit?: 'width' | 'contain'
+  /**
+   * 絵が無くても、音かテロップがあれば黒い画面で流す（制作者 2026-10-03「テロップだけ確認は必須かも」）。
+   * **プレビューだけ**が付ける。Take の比較では付けない（絵の無い枠で音だけ鳴ると、何を比べているのか分からない）。
+   */
+  readonly withoutPictures?: boolean
 }
 
 export const ProgramMonitor = ({
@@ -105,6 +110,7 @@ export const ProgramMonitor = ({
   onPlayingChange,
   onError,
   fit = 'width',
+  withoutPictures = false,
 }: ProgramMonitorProps) => {
   const [failure, setFailure] = useState<string | null>(null)
   /** 素材 1 本の失敗。絵は出したまま、下に理由を添える。 */
@@ -140,7 +146,7 @@ export const ProgramMonitor = ({
     [onError],
   )
 
-  const state = describeMonitorState(document, playing, failure)
+  const state = describeMonitorState(document, playing, failure, { withoutPictures })
   const ratio = monitorAspectRatio(document)
 
   /**

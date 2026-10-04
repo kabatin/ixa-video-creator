@@ -247,3 +247,20 @@ describe('textClipMenuEntries', () => {
     ).toEqual(['テロップを削除'])
   })
 })
+
+/** 絵コンテが空のまま絵を作る前に確かめる（制作者 2026-10-03「絵コンテがないと想定した画像が出て来ない…忘れてしまいがち」）。 */
+describe('shotMenuEntries: 絵コンテの画像', () => {
+  const drawOf = (description: string) =>
+    shotMenuEntries({ shot: aWorkbenchShot(1, { description }), splitBlocker: null }).find(
+      (entry) => entry.kind === 'item' && entry.action === 'draw-start-frame',
+    )
+
+  it('説明が空なら確認を挟む（危険色にせず「このまま作る」）', () => {
+    expect(drawOf('')).toMatchObject({ confirmTone: 'primary', confirmLabel: 'このまま作る' })
+    expect(drawOf('')).toHaveProperty('confirm', expect.stringContaining('絵コンテ（説明）がまだ空'))
+  })
+
+  it('説明があれば確認しない', () => {
+    expect(drawOf('屋上で二人')).not.toHaveProperty('confirm')
+  })
+})

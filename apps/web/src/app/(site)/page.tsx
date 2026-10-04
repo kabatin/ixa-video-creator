@@ -1,5 +1,4 @@
 import type { Project, ProjectId, WorkspaceId } from '@ixa/domain'
-import Link from 'next/link'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
@@ -9,6 +8,7 @@ import { describeError } from '@/lib/api-error'
 import { pickProjectCover, type PosterView } from '@/lib/shot-posters'
 import { NEW_PROJECT_HREF } from '@/lib/site-nav'
 import { resolveWorkspaceId } from '@/lib/workspace'
+import { LinkButton } from '@/components/ui/button'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,12 +49,9 @@ const loadCovers = async (
 }
 
 const NewProjectLink = () => (
-  <Link
-    href={NEW_PROJECT_HREF}
-    className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90"
-  >
+  <LinkButton href={NEW_PROJECT_HREF} tone="primary">
     新規プロジェクト
-  </Link>
+  </LinkButton>
 )
 
 const ProjectsPage = async () => {
@@ -67,7 +64,8 @@ const ProjectsPage = async () => {
         <ErrorPanel
           title="設定が不足しています"
           message={workspace.reason}
-          hint="apps/web/.env.local に NEXT_PUBLIC_WORKSPACE_ID を設定してください。"
+          hint="作業場所の設定が読めていません。開発の手順書（README）の「はじめに」に沿って設定してください。"
+          detail="apps/web/.env.local の NEXT_PUBLIC_WORKSPACE_ID"
         />
       </main>
     )
@@ -87,7 +85,8 @@ const ProjectsPage = async () => {
         <ErrorPanel
           title="プロジェクトを読み込めませんでした"
           message={result.message}
-          hint={`API (${resolveApiBaseUrl()}) が起動しているか確認してください。`}
+          hint="サーバが動いているか確かめてください。"
+          detail={`サーバの場所: ${resolveApiBaseUrl()}`}
         />
       ) : result.projects.length === 0 ? (
         <EmptyState

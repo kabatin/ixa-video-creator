@@ -18,6 +18,7 @@ const baseRow = (): ProjectRow => ({
   styleReferenceAssetIds: ['01ARZ3NDEKTSV4RRFFQ69G5FAV'],
   lyrics: '夜明けの屋上で\n君を待ってた',
   lyricCues: [12.5],
+  instrumental: true,
   status: 'planning',
   createdAt: new Date('2026-09-16T00:00:00Z'),
   updatedAt: new Date('2026-09-16T00:00:00Z'),
@@ -44,6 +45,8 @@ describe('projectRowToDomain', () => {
       // 歌詞（ADR-0033）。
       lyrics: '夜明けの屋上で\n君を待ってた',
       lyricCues: [12.5],
+      // 歌詞なし（制作者 2026-10-04）。既定値ではなく行の値を写す。
+      instrumental: true,
       status: 'planning',
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,

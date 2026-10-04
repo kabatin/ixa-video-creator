@@ -165,7 +165,9 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       if (event.type === 'image_job.status') {
         setPosterEpoch((epoch) => epoch + 1)
         if (event.status === 'failed') {
-          setNotice(`絵コンテの画像を作れませんでした: ${event.error ?? '理由が届きませんでした。'}`)
+          // キャラクターシート（ADR-0035）と絵コンテの画像は同じジョブ。何を作れなかったかを言い分ける。
+          const what = event.characterId !== null ? 'キャラクターシート' : '絵コンテの画像'
+          setNotice(`${what}を作れませんでした: ${event.error ?? '理由が届きませんでした。'}`)
         }
       }
       if (

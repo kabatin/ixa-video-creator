@@ -21,21 +21,27 @@ export type CurrentShot = {
 /** 採否の状態。**`undecided` は「不採用」ではない**（lessons L-021）。 */
 export type DraftDecision = 'adopted' | 'undecided'
 
+/** Shot 1 件ぶんの案。 */
+export type DraftProposal = {
+  readonly description: string
+  readonly mood: string | null
+  /** なぜこの絵か。**必ず出す。** これが無いと採否を決められない。 */
+  readonly reason: string
+  readonly decision: DraftDecision
+  /** いまの説明と案が同じなら、採用しても何も変わらない。 */
+  readonly unchanged: boolean
+}
+
 export type DraftRow = {
   readonly shotId: ShotId
   readonly code: string
   /** いまの説明。空なら「（未記入）」と出す。空欄のままにしない。 */
   readonly currentDescription: string
   readonly currentMood: string | null
-  readonly proposedDescription: string
-  readonly proposedMood: string | null
-  /** なぜこの絵か。**必ず出す。** これが無いと採否を決められない。 */
-  readonly reason: string
-  readonly decision: DraftDecision
-  /** 採用済みの行は選び直せない（案は追記のみで、採用は取り消せない）。 */
+  /** 案。**まだ無い Shot は null**（まだ下書きしていない・下書きの後に作った Shot）。 */
+  readonly proposal: DraftProposal | null
+  /** 選べるのは、案があってまだ決めていない行だけ（採用は取り消せない）。 */
   readonly selectable: boolean
-  /** いまの説明と案が同じなら、採用しても何も変わらない。 */
-  readonly unchanged: boolean
 }
 
 export const EMPTY_DESCRIPTION_LABEL = '（未記入）'
@@ -51,8 +57,8 @@ export const describeMood = (mood: string | null): string =>
  * 案と「いまの Shot」を突き合わせて行を作る。
  *
  * **Shot の並びを正とする。** 案の順番ではなく Shot の順番で並べないと、
- * 人が絵コンテとして読み下せない。案の無い Shot は行にしない
- * （案が無いことは採否の対象が無いということで、空の行を出す意味は無い）。
+ * 人が絵コンテとして読み下せない。**案の無い Shot も行にする**（案は null）。
+ * Shot を作ったあとに開いて空の画面を見せると、何をする画面か分からない（制作者 2026-10-04）。
  */
 export const buildDraftRows = (
   items: readonly WireStoryboardDraftItem[],
@@ -60,27 +66,32 @@ export const buildDraftRows = (
 ): readonly DraftRow[] => {
   const byShot = new Map(items.map((item) => [item.shotId, item] as const))
 
-  return shots.flatMap((shot) => {
+  return shots.map((shot) => {
     const item = byShot.get(shot.id)
-    if (item === undefined) return []
-
-    const adopted = item.adoptedAt !== null
-    return [
-      {
-        shotId: shot.id,
-        code: shot.code,
-        currentDescription: shot.description,
-        currentMood: shot.mood,
-        proposedDescription: item.description,
-        proposedMood: item.mood,
-        reason: item.reason,
-        decision: adopted ? ('adopted' as const) : ('undecided' as const),
-        selectable: !adopted,
-        unchanged: shot.description === item.description && shot.mood === item.mood,
-      },
-    ]
+    const adopted = item !== undefined && item.adoptedAt !== null
+    return {
+      shotId: shot.id,
+      code: shot.code,
+      currentDescription: shot.description,
+      currentMood: shot.mood,
+      proposal:
+        item === undefined
+          ? null
+          : {
+              description: item.description,
+              mood: item.mood,
+              reason: item.reason,
+              decision: adopted ? 'adopted' : 'undecided',
+              unchanged: shot.description === item.description && shot.mood === item.mood,
+            },
+      selectable: item !== undefined && !adopted,
+    }
   })
 }
+
+/** 案のある行の数。**行の数ではない**（行は Shot の数だけある）。 */
+export const countProposals = (rows: readonly DraftRow[]): number =>
+  rows.filter((row) => row.proposal !== null).length
 
 /**
  * 案が用意されているのに、画面が知らない Shot を指している数。
@@ -206,10 +217,14 @@ export const buildDraftSummary = (input: {
   }
 
   const adoptable = adoptableShotIds(rows, selected)
-  const adoptedCount = rows.filter((row) => row.decision === 'adopted').length
+  const adoptedCount = rows.filter((row) => row.proposal?.decision === 'adopted').length
+  const proposed = countProposals(rows)
+  const missing = rows.length - proposed
 
   return {
-    headline: `${String(rows.length)} 件の案のうち ${String(adoptedCount)} 件を採用済み`,
+    headline:
+      `${String(proposed)} 件の案のうち ${String(adoptedCount)} 件を採用済み` +
+      (missing === 0 ? '' : `（案の無い Shot が ${String(missing)} 件。作り直すと入ります）`),
     notice:
       unmatchedCount === 0
         ? null

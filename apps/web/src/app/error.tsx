@@ -39,12 +39,13 @@ const ErrorPage = ({ error, reset }: ErrorPageProps) => {
       <PageHeader title="エラーが発生しました" />
       <ErrorPanel
         title={state.title}
-        message={error.message.length > 0 ? error.message : '原因を特定できませんでした。'}
-        hint={
-          error.digest === undefined
-            ? BOUNDARY_HINT
-            : `${BOUNDARY_HINT}（問い合わせ用の識別子: ${error.digest}）`
-        }
+        message="画面を表示できませんでした。"
+        hint={BOUNDARY_HINT}
+        // 例外の文と識別子は直す手がかり。本文には出さず「詳しい情報」に畳む。
+        detail={[
+          error.message.length > 0 ? error.message : '原因を特定できませんでした。',
+          ...(error.digest === undefined ? [] : [`問い合わせ用の識別子: ${error.digest}`]),
+        ].join(' / ')}
         actions={[{ href: '/', label: 'プロジェクト一覧へ' }]}
       >
         <Button tone="primary" onClick={reset}>

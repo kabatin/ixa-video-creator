@@ -88,7 +88,9 @@ const IssueGroupBlock = ({
   const { rows, hiddenCount } = rowsForGroup(group)
 
   return (
-    <details className="rounded-md border border-danger/40 bg-surface">
+    <details
+      className={`rounded-md border bg-surface ${group.severity === 'error' ? 'border-danger/40' : 'border-warn/40'}`}
+    >
       <summary className="flex cursor-pointer flex-wrap items-center gap-2 p-3 text-sm">
         <span
           className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${issueSeverityClassName(group.severity)}`}
@@ -157,22 +159,25 @@ export const TimelineIssuePanel = ({ issues, projectId }: TimelineIssuePanelProp
   }
 
   const groups = groupTimelineIssues(issues ?? [])
+  // 警告だけなら書き出せる。赤で出すと書き出せないように見える（制作者 2026-10-03「UI/UX が雑な印象」）。
+  const blocking = summary.errorCount > 0
+  const tone = blocking
+    ? { box: 'border-danger/40 bg-danger/10', text: 'text-danger' }
+    : { box: 'border-warn/40 bg-warn/10', text: 'text-warn' }
 
   return (
-    <section className="rounded-lg border border-danger/40 bg-danger/10 p-4" aria-label={PANEL_LABEL}>
+    <section className={`rounded-lg border p-4 ${tone.box}`} aria-label={PANEL_LABEL}>
       {/* 読み上げるのはここだけ。明細を alert に入れると全件が一度に流れる。 */}
-      <div role="alert">
-        <h2 className="text-sm font-semibold text-danger">
-          {`タイムラインに指摘があります（${summary.message}・${String(groups.length)} 種類）`}
+      <div role={blocking ? 'alert' : 'status'}>
+        <h2 className={`text-sm font-semibold ${tone.text}`}>
+          {`${blocking ? 'タイムラインに指摘があります' : '警告があります（書き出せます）'}（${summary.message}・${String(groups.length)} 種類）`}
         </h2>
-        {summary.errorCount > 0 && (
-          <p className="mt-1 text-sm text-danger">
-            「レンダリング不可」が残っている間は書き出しが 422 で拒否されます。
-          </p>
+        {blocking && (
+          <p className={`mt-1 text-sm ${tone.text}`}>「レンダリング不可」が残っている間は書き出せません。</p>
         )}
       </div>
 
-      <p className="mt-1 text-sm text-danger">
+      <p className={`mt-1 text-sm ${tone.text}`}>
         種類ごとに畳んであります。見出しを開くと、その種類の指摘と対象の Shot が出ます。
       </p>
 

@@ -27,6 +27,8 @@ export type RenderRangeChoice = {
   readonly extraNote: string | null
   /** 範囲で数えた「書き出しを止める指摘」の件数。**null は検査を読めていない**（0 件と混ぜない）。 */
   readonly blockingIssueCount: number | null
+  /** 範囲で数えた警告（書き出せるが絵が欠けるかもしれない）。**null は検査を読めていない。** */
+  readonly warningIssueCount: number | null
   /** 最初から選んでおくか（チェックして開いたとき）。 */
   readonly preferred: boolean
 }
@@ -53,18 +55,20 @@ export const renderRangeChoice = (input: {
   const chosen = new Set(targets.map((shot) => shot.id))
   const extra = included.filter((shot) => !chosen.has(shot.id))
   const inRange = new Set<string>(included.map((shot) => shot.id))
+  const countInRange = (severity: WireTimelineIssue['severity']): number | null =>
+    input.issues === null
+      ? null
+      : input.issues.filter(
+          (issue) => issue.severity === severity && (issue.shotId === undefined || inRange.has(issue.shotId)),
+        ).length
 
   return {
     scope: { type: 'range', start: range.startSec, end: range.endSec },
     label: first.id === last.id ? first.code : `${first.code}〜${last.code}`,
     span: formatSpan(range.startSec, range.endSec - range.startSec),
     extraNote: extra.length === 0 ? null : `間の ${listCodes(extra)} も入ります`,
-    blockingIssueCount:
-      input.issues === null
-        ? null
-        : input.issues.filter(
-            (issue) => issue.severity === 'error' && (issue.shotId === undefined || inRange.has(issue.shotId)),
-          ).length,
+    blockingIssueCount: countInRange('error'),
+    warningIssueCount: countInRange('warning'),
     preferred: input.checked.size > 0,
   }
 }

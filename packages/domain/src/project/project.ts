@@ -42,6 +42,11 @@ export const Project = z.object({
    */
   lyrics: z.string().default(''),
   lyricCues: z.array(Seconds).default([]),
+  /**
+   * 歌詞なしの作品か（制作者 2026-10-04「歌詞がない動画の場合、作品の方針が 2/3 でとまってしまう。歌詞なしの
+   * チェックボックスとかあるといいかも」）。true なら作業の流れで歌詞の時刻とテロップの段を飛ばす。既定は歌詞あり。
+   */
+  instrumental: z.boolean().default(false),
 
   status: ProjectStatus,
   createdAt: z.date(),

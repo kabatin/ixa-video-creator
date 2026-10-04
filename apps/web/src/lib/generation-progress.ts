@@ -36,7 +36,19 @@ export const describeActiveGeneration = (
     }
   }
 
-  const elapsedSec = secondsSince(generation.startedAt ?? generation.queuedAt, nowMs)
+  // 送ったが、生成先がまだ作り始めていない（生成先の中で順番待ち。vpipe は 1 本ずつ作る。制作者 2026-10-04）。
+  if (generation.providerStartedAt === null && generation.startedAt !== null) {
+    const waited = formatElapsed(secondsSince(generation.startedAt, nowMs))
+    const where = generation.modelLabel ?? '生成先'
+    return {
+      short: `生成先で順番待ち ${waited}`,
+      long: `${where}に送り、順番を待っています（${waited}）。前の 1 本が終わると作り始めます。${attempt}`,
+      overdue: false,
+    }
+  }
+
+  // 経過は生成先が作り始めてから（待っていた時間で「目安を大きく過ぎた」と言わない）。
+  const elapsedSec = secondsSince(generation.providerStartedAt ?? generation.startedAt ?? generation.queuedAt, nowMs)
   const elapsed = formatElapsed(elapsedSec)
   const estimate = generation.estimatedLatencySec
   const overdue = estimate !== null && estimate > 0 && elapsedSec > estimate * OVERDUE_FACTOR

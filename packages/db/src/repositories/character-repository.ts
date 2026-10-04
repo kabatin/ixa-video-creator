@@ -2,7 +2,7 @@ import { and, asc, eq, isNull } from 'drizzle-orm'
 import type {
   Character, CharacterId, CharacterIdentityImage, CharacterIdentityImageId,
   CreateCharacterIdentityImageInput, CreateCharacterInput, IdentityImageRole,
-  UpdateCharacterPatch, WorkspaceId,
+  UpdateCharacterPatch, ProjectId,
 } from '@ixa/domain'
 import {
   Character as CharacterSchema,
@@ -32,7 +32,7 @@ export type CharacterIdentityImageRow = typeof characterIdentityImages.$inferSel
 export type CharacterRepository = {
   findById(id: CharacterId): Promise<Character | null>
   /** 作成順（ULID 昇順）。ソフトデリート済みは含まない。 */
-  findByWorkspace(workspaceId: WorkspaceId): Promise<Character[]>
+  findByProject(projectId: ProjectId): Promise<Character[]>
   create(input: CreateCharacterInput): Promise<Character>
   update(id: CharacterId, patch: UpdateCharacterPatch): Promise<Character>
   softDelete(id: CharacterId): Promise<void>
@@ -59,6 +59,7 @@ export const characterRowToDomain = (row: CharacterRow): Character =>
   CharacterSchema.parse({
     id: row.id,
     workspaceId: row.workspaceId,
+    projectId: row.projectId,
     name: row.name,
     displayName: row.displayName,
     description: row.description,
@@ -87,11 +88,11 @@ export const createCharacterRepository = (db: DbClient): CharacterRepository => 
     return row ? characterRowToDomain(row) : null
   },
 
-  async findByWorkspace(workspaceId) {
+  async findByProject(projectId) {
     const rows = await db
       .select()
       .from(characters)
-      .where(and(eq(characters.workspaceId, workspaceId), isNull(characters.deletedAt)))
+      .where(and(eq(characters.projectId, projectId), isNull(characters.deletedAt)))
       .orderBy(asc(characters.id))
     return rows.map(characterRowToDomain)
   },

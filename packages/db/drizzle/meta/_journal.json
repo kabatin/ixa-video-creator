@@ -148,6 +148,34 @@
       "when": 1790927863778,
       "tag": "0020_edit_batch_clip_entries",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790953726727,
+      "tag": "0021_library_project_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790957439285,
+      "tag": "0022_image_job_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791045555508,
+      "tag": "0023_project_instrumental",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791092118122,
+      "tag": "0024_generation_provider_started_at",
+      "breakpoints": true
     }
   ]
 }

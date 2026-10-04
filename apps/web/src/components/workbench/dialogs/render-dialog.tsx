@@ -2,8 +2,6 @@
 
 import type { ProjectId } from '@ixa/domain'
 import { RenderPanel } from '@/components/render-panel'
-import { TimelineIssuePanel } from '@/components/timeline-issue-panel'
-import { Button } from '@/components/ui/button'
 import { useLoaded } from '@/components/workbench/use-loaded'
 import type { RenderWatch } from '@/components/workbench/use-render-watch'
 import { useWorkbench } from '@/components/workbench/workbench-context'
@@ -49,7 +47,7 @@ const loadRenderMaterials = async (projectId: ProjectId): Promise<RenderMaterial
 }
 
 /**
- * 書き出し（ダイアログ。UI-WORKBENCH §3.3）。設定と実行・投入前の検査・履歴。
+ * 書き出し（ダイアログ。UI-WORKBENCH §3.3）。左で設定・書き出す前の確認・実行、右で履歴とフォルダ（ADR-0036）。
  * 開いたまま書き出しが終わっても、閉じればワークベンチの選択はそのまま残る。
  */
 export const RenderDialogBody = ({ watch }: { readonly watch: RenderWatch }) => {
@@ -71,46 +69,25 @@ export const RenderDialogBody = ({ watch }: { readonly watch: RenderWatch }) => 
   const { jobs, issues, durationSec } = loaded.value
 
   return (
-    <div className="flex flex-col gap-6">
-      <RenderPanel
-        projectId={workbench.projectId}
-        initialJobs={jobs.value}
-        jobsError={jobs.error}
-        watch={watch}
-        blockingIssueCount={
-          issues.value === null
-            ? null
-            : issues.value.filter((issue) => issue.severity === 'error').length
-        }
-        timelineDurationSec={durationSec}
-        // 選んだ Shot だけを書き出す範囲（チェックがあればチェックした Shot、無ければ選んでいる 1 件）。
-        range={renderRangeChoice({
-          shots: workbench.shots ?? [],
-          checked: workbench.checked,
-          selectedShotId: workbench.selectedShotId,
-          issues: issues.value,
-        })}
-      />
-      <section className="flex flex-col gap-3">
-        <h3 className="text-base font-semibold text-text">投入前の検査</h3>
-        <TimelineIssuePanel issues={issues.value} projectId={workbench.projectId} />
-        {issues.error !== null && (
-          <p role="alert" className="text-sm text-danger">
-            {issues.error}
-          </p>
-        )}
-        <div>
-          <Button
-            size="sm"
-            onClick={() => {
-              workbench.closeDialog()
-              workbench.focusPanel('timeline')
-            }}
-          >
-            タイムラインで直す
-          </Button>
-        </div>
-      </section>
-    </div>
+    <RenderPanel
+      projectId={workbench.projectId}
+      initialJobs={jobs.value}
+      jobsError={jobs.error}
+      watch={watch}
+      issues={issues.value}
+      issuesError={issues.error}
+      timelineDurationSec={durationSec}
+      // 選んだ Shot だけを書き出す範囲（チェックがあればチェックした Shot、無ければ選んでいる 1 件）。
+      range={renderRangeChoice({
+        shots: workbench.shots ?? [],
+        checked: workbench.checked,
+        selectedShotId: workbench.selectedShotId,
+        issues: issues.value,
+      })}
+      onFixTimeline={() => {
+        workbench.closeDialog()
+        workbench.focusPanel('timeline')
+      }}
+    />
   )
 }

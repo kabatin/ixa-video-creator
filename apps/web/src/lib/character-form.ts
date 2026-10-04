@@ -1,4 +1,3 @@
-import type { WorkspaceId } from '@ixa/domain'
 import { CreateCharacterBody } from '@/lib/character-schemas'
 
 /**
@@ -59,10 +58,7 @@ const collectErrors = (
  * フォームの値をドメインの `CreateCharacterInput` へ変換する。
  * 空白だけの入力は空として扱い、残りの制約は zod に委ねる。
  */
-export const validateCharacterForm = (
-  values: CharacterFormValues,
-  workspaceId: WorkspaceId,
-): CharacterFormValidation => {
+export const validateCharacterForm = (values: CharacterFormValues): CharacterFormValidation => {
   const name = values.name.trim()
   if (name === '') {
     return { ok: false, errors: { name: 'キャラクター名を入力してください。' } }
@@ -74,7 +70,6 @@ export const validateCharacterForm = (
   }
 
   const parsed = CreateCharacterBody.safeParse({
-    workspaceId,
     name,
     displayName,
     description: values.description.trim(),

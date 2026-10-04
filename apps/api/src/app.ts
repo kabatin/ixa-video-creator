@@ -41,13 +41,21 @@ import { uploadRoutes, type MediaIngestDeps } from './routes/uploads.js'
 import { shotCompareRoutes } from './routes/shot-compare.js'
 import { beatAlignmentRoutes, roughCutRoutes, timelineRoutes } from './routes/timeline.js'
 import { renderRoutes, type RenderQueue } from './routes/renders.js'
+import { renderFolderRoutes } from './routes/render-folder.js'
+import type { RenderFolderDeps } from './render-folder/render-folder.js'
+
+/** 書き出しフォルダの場所と開く口。リポジトリ・ストレージは app が持っているものを使う。 */
+export type RenderFolderPlace = Pick<RenderFolderDeps, 'rootDir' | 'homeDir' | 'timeZone' | 'opener'>
 import { characterRoutes, shotCharacterRoutes } from './routes/characters.js'
+import { characterSheetRoutes } from './routes/character-sheet.js'
 import { assetRoutes } from './routes/assets.js'
+import { libraryImportRoutes } from './routes/library-imports.js'
 import { scriptRoutes } from './routes/scripts.js'
 import { sequenceRoutes } from './routes/sequences.js'
 import { musicRoutes, type AnalysisQueue } from './routes/music.js'
 import { editBatchRoutes } from './routes/edit-batches.js'
 import { storyboardDraftRoutes } from './routes/storyboard-drafts.js'
+import { imageJobCancelRoutes } from './routes/image-job-cancel.js'
 import { storyboardRoutes } from './routes/storyboard.js'
 import { reviewRoutes, type ReviewQueue } from './routes/reviews.js'
 import { transitionRoutes } from './routes/transitions.js'
@@ -99,6 +107,10 @@ export type AppDeps = {
   musicTracks: MusicTrackRepository
   renderJobs: RenderJobRepository
   renderQueue: RenderQueue
+  /**
+   * 書き出した動画を置くフォルダと Finder を開く口（ADR-0036）。無ければ口を置かない（テストの多くは要らない）。
+   */
+  renderFolder?: RenderFolderPlace
   characters: CharacterRepository
   looks: CharacterLookRepository
   shotCharacters: ShotCharacterRepository
@@ -219,6 +231,7 @@ export const createApp = (deps: AppDeps) => {
   const shotDeps = {
     shots: deps.shots,
     projects,
+    locations: deps.locations,
     takes: deps.takes,
     generationJobs: deps.generationJobs,
     registry: deps.registry,
@@ -279,6 +292,20 @@ export const createApp = (deps: AppDeps) => {
       logger,
     }),
   )
+  // 絵を作るのを止める（制作者 2026-10-04）。待っている・作っている絵（最初のフレーム・キャラクターシート）。
+  app.route('/', imageJobCancelRoutes({ projects, imageJobs: deps.imageJobs, events: deps.events, logger }))
+  // 1 枚の画像からキャラクターシート（四面図）を作る（ADR-0035）。絵コンテの画像と同じ順番待ち。
+  app.route(
+    '/',
+    characterSheetRoutes({
+      characters: deps.characters,
+      imageJobs: deps.imageJobs,
+      imageQueue: deps.imageQueue,
+      imageModel: deps.imageModel,
+      events: deps.events,
+      logger,
+    }),
+  )
   // 手持ちの動画を Take にする（ADR-0026）。
   app.route(
     '/',
@@ -318,7 +345,10 @@ export const createApp = (deps: AppDeps) => {
     storage,
   }
 
-  app.route('/', characterRoutes({ characters: deps.characters, looks: deps.looks, mediaAssets }))
+  app.route(
+    '/',
+    characterRoutes({ characters: deps.characters, looks: deps.looks, mediaAssets, projects: deps.projects }),
+  )
   app.route(
     '/',
     shotCharacterRoutes({
@@ -330,7 +360,23 @@ export const createApp = (deps: AppDeps) => {
   )
   app.route(
     '/',
-    assetRoutes({ brandAssets: deps.brandAssets, locations: deps.locations, mediaAssets }),
+    assetRoutes({
+      brandAssets: deps.brandAssets,
+      locations: deps.locations,
+      mediaAssets,
+      projects: deps.projects,
+    }),
+  )
+  // ほかのプロジェクトから取り込む（複製。ADR-0034）。
+  app.route(
+    '/',
+    libraryImportRoutes({
+      projects: deps.projects,
+      characters: deps.characters,
+      looks: deps.looks,
+      locations: deps.locations,
+      brandAssets: deps.brandAssets,
+    }),
   )
 
   app.route(
@@ -353,6 +399,10 @@ export const createApp = (deps: AppDeps) => {
     storyboardDraftRoutes({
       projects,
       shots: deps.shots,
+      characters: deps.characters,
+      looks: deps.looks,
+      locations: deps.locations,
+      shotCharacters: deps.shotCharacters,
       scripts: deps.scripts,
       musicTracks: deps.musicTracks,
       musicAnalyses: deps.musicAnalyses,
@@ -390,6 +440,8 @@ export const createApp = (deps: AppDeps) => {
       shots: deps.shots,
       timelineClips: deps.timelineClips,
       textStyles: deps.textStyles,
+      musicTracks: deps.musicTracks,
+      mediaAssets,
     }),
   )
   app.route(
@@ -429,6 +481,19 @@ export const createApp = (deps: AppDeps) => {
     '/',
     renderRoutes({ ...timelineDeps, renderJobs: deps.renderJobs, queue: deps.renderQueue }),
   )
+  if (deps.renderFolder !== undefined) {
+    app.route(
+      '/',
+      renderFolderRoutes({
+        ...deps.renderFolder,
+        projects,
+        renderJobs: deps.renderJobs,
+        mediaAssets,
+        storage,
+        logger,
+      }),
+    )
+  }
 
   registerOpenApiDocument(app)
   registerErrorHandlers(app, logger)

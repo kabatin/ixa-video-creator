@@ -5,6 +5,7 @@ import { RenderPanel } from '@/components/render-panel'
 import type { RenderWatch } from '@/components/workbench/use-render-watch'
 import type { RenderApi } from '@/lib/render-api'
 import type { RenderRangeChoice } from '@/lib/render-range'
+import type { TimelineIssueView } from '@/lib/timeline-issues'
 import { PROJECT_ID } from './fixtures'
 
 /**
@@ -33,9 +34,12 @@ const range = (patch: Partial<RenderRangeChoice> = {}): RenderRangeChoice => ({
   span: '0:08.00 – 0:16.00（8.00s）',
   extraNote: null,
   blockingIssueCount: 0,
+  warningIssueCount: 0,
   preferred: true,
   ...patch,
 })
+
+const anError: TimelineIssueView = { severity: 'error', code: 'shot_overlap', message: '重なり' }
 
 const panel = (choice: RenderRangeChoice | null, blockingIssueCount = 0) => {
   const startRender = vi.fn<RenderApi['startRender']>().mockResolvedValue({ kind: 'accepted', renderJobId: JOB_ID, warnings: [] })
@@ -45,17 +49,21 @@ const panel = (choice: RenderRangeChoice | null, blockingIssueCount = 0) => {
       projectId={projectId}
       initialJobs={[]}
       jobsError={null}
-      blockingIssueCount={blockingIssueCount}
+      issues={Array.from({ length: blockingIssueCount }, () => anError)}
       timelineDurationSec={60}
       watch={watch}
       api={api}
       range={choice}
+      folderApi={{
+        getRenderFolder: () => Promise.resolve({ location: '~/Movies/ixa-video-creator/x', canOpen: true }),
+        openRenderFolder: vi.fn(),
+      }}
     />,
   )
   return startRender
 }
 
-const start = () => screen.getByRole('button', { name: /書き出しを/ })
+const start = () => screen.getByRole('button', { name: /^書き出す/ })
 
 describe('書き出す範囲', () => {
   it('Shot をチェックして開いたら、選んだ Shot だけが選ばれていて、範囲付きで送る', async () => {
@@ -96,9 +104,10 @@ describe('書き出す範囲', () => {
     expect(start()).toBeDisabled()
   })
 
-  it('Shot を選んでいなければ範囲の選択は出さない', () => {
+  it('Shot を選んでいなければ「全体」だけ（選んだ Shot の選択肢は出さない）', () => {
     panel(null)
 
-    expect(screen.queryByRole('radio')).toBeNull()
+    expect(screen.getByRole('radio', { name: /全体/ })).toBeChecked()
+    expect(screen.queryByRole('radio', { name: /選んだ Shot だけ/ })).toBeNull()
   })
 })

@@ -54,6 +54,19 @@ describe('renderRangeChoice', () => {
     expect(renderRangeChoice({ shots, checked: checked(1, 2), selectedShotId: null, issues })?.blockingIssueCount).toBe(2)
     expect(renderRangeChoice({ shots, checked: checked(1, 2), selectedShotId: null, issues: null })?.blockingIssueCount).toBeNull()
   })
+
+  /** 書き出す前の確認で「警告 N 件（書き出せます）」を出すため。範囲の外の警告は数えない。 */
+  it('警告も範囲で数える。読めていなければ null', () => {
+    const issues = [
+      { severity: 'warning' as const, code: 'shot_gap', message: '隙間', shotId: idOf(2) },
+      { severity: 'warning' as const, code: 'shot_gap', message: '隙間', shotId: idOf(4) },
+      { severity: 'warning' as const, code: 'take_not_selected', message: '全体' },
+      { severity: 'error' as const, code: 'shot_overlap', message: '重なり', shotId: idOf(2) },
+    ]
+
+    expect(renderRangeChoice({ shots, checked: checked(1, 2), selectedShotId: null, issues })?.warningIssueCount).toBe(2)
+    expect(renderRangeChoice({ shots, checked: checked(1, 2), selectedShotId: null, issues: null })?.warningIssueCount).toBeNull()
+  })
 })
 
 describe('renderScopeLabel', () => {

@@ -24,7 +24,7 @@ export const LookDetail = ({ look, busy, onMakeDefault, onDelete }: LookDetailPr
       <div>
         <h3 className="text-sm font-semibold text-text">{look.name}</h3>
         <p className="mt-1 text-xs text-muted">
-          key {look.key}
+          識別名 {look.key}
           {look.era === null ? '' : ` / 時代 ${look.era}`}
         </p>
       </div>

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ViewerPanel } from '@/components/workbench/panels/viewer-panel'
 import { ApiError } from '@/lib/api-error'
-import { WORKSPACE_ID } from './fixtures'
+import { PROJECT_ID, WORKSPACE_ID } from './fixtures'
 import { assetStoreValue, renderInWorkbench } from './workbench-fixture'
 
 /**
@@ -29,6 +29,9 @@ const api = vi.hoisted(() => ({
   removeLookImage: vi.fn(),
   setPrimaryIdentityImage: vi.fn(),
   uploadMedia: vi.fn(),
+  // キャラクターシートの区画（ADR-0035）が状態を読む。ここでは作らない。
+  getCharacterSheet: vi.fn(() => Promise.resolve({ job: null })),
+  startCharacterSheet: vi.fn(),
 }))
 
 vi.mock('@/lib/api-client', () => ({ createApiClient: () => api }))
@@ -62,6 +65,7 @@ const wardrobe = {
 const aLocation = Location.parse({
   id: LOCATION_ID,
   workspaceId: WORKSPACE_ID,
+  projectId: PROJECT_ID,
   name: '体育館',
   description: '',
   referenceAssetIds: [ASSET_A, ASSET_B],

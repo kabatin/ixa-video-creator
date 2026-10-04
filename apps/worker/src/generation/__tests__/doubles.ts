@@ -341,6 +341,7 @@ export const inMemoryJobs = (seed: readonly GenerationJob[] = []): InMemoryJobs 
         id: newId(GenerationJobIdSchema),
         queuedAt: new Date(),
         startedAt: null,
+        providerStartedAt: null,
         finishedAt: null,
       })
       store = [...store, created]
@@ -408,6 +409,7 @@ export const aCharacterBundle = (): CharacterBundle => {
   const character = CharacterSchema.parse({
     id: newId(CharacterIdSchema),
     workspaceId,
+    projectId: newId(ProjectIdSchema),
     name: 'MIKU',
     displayName: '初号ボーカル',
     description: '',

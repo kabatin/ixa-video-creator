@@ -1,4 +1,4 @@
-import { doublePrecision, index, integer, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
+import { boolean, doublePrecision, index, integer, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
 import type { AspectRatio, Fps, ProjectStatus, Resolution } from '@ixa/domain'
 import { AspectRatio as AspectRatioSchema, ProjectStatus as ProjectStatusSchema } from '@ixa/domain'
 import { createdAt, deletedAt, seconds, ulidPk, ulidRef, updatedAt } from './columns.js'
@@ -40,6 +40,8 @@ export const projects = pgTable(
     // 歌詞（ADR-0033）。1 行 = 1 フレーズと、行ごとの歌い出しの秒。
     lyrics: text('lyrics').notNull().default(''),
     lyricCues: doublePrecision('lyric_cues').array().notNull().default([]),
+    // 歌詞なしの作品か（制作者 2026-10-04）。作業の流れで歌詞の段を飛ばす。
+    instrumental: boolean('instrumental').notNull().default(false),
 
     status: text('status', { enum: ProjectStatusSchema.options }).$type<ProjectStatus>().notNull(),
     createdAt: createdAt(),

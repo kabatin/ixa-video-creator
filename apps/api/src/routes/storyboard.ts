@@ -16,9 +16,15 @@ import {
   type ProjectId,
   type ShotSlot,
 } from '@ixa/domain'
+import { overlapsRange } from '@ixa/timeline'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 import { ShotResponse, toShotResponse } from './shots.js'
+
+/** 重なる Shot の名前を 3 つまで挙げる。 */
+const overlapMessage = (codes: readonly string[]): string =>
+  `${codes.slice(0, 3).join('・')}${codes.length > 3 ? ` ほか ${String(codes.length - 3)} 件` : ''} と重なります。` +
+  '重なりがあると書き出せないので、空いている区間だけ区切るか、先にその Shot を消してください。'
 
 /**
  * 音楽セクションから Shot の時間枠を一括で作る（ADR-0017 / P3-4）。
@@ -368,8 +374,19 @@ export const storyboardRoutes = (deps: StoryboardRoutesDeps) =>
       }
 
       // 既存の Shot の後ろに積む。order は Project 内で連続させる。
-      const slots = toSlots(input.boundariesSec)
       const existing = await deps.shots.findByProject(projectId)
+      // 今ある Shot と重なる区間は作らない（端で触れるだけは通す）。重なった Shot は書き出しを止める。
+      // 区切りを残したまま「Shot にする」を 2 回押して、同じ区間に Shot がもう 1 組できていた（制作者 2026-10-03）。
+      // 画面は曲の頭から終わりまでの区切りを送る（`cutBoundaries`）ので、区間ごとに見て、重なるものだけ飛ばす。
+      const all = toSlots(input.boundariesSec)
+      const clashes = (slot: ShotSlot) =>
+        existing.filter((shot) => overlapsRange(shot, { startSec: slot.startSec, endSec: slot.startSec + slot.durationSec }))
+      const slots = all.filter((slot) => clashes(slot).length === 0)
+      const skipped = all.filter((slot) => clashes(slot).length > 0)
+      if (slots.length === 0) {
+        const codes = [...new Set(skipped.flatMap((slot) => clashes(slot).map((shot) => shot.code)))]
+        return c.json(fail(VALIDATION_ERROR_MESSAGE, { boundariesSec: [overlapMessage(codes)] }), 422)
+      }
       const nextOrder = existing.reduce((max, shot) => Math.max(max, shot.order + 1), 0)
       // 採番は一括作成と同じ仕組み。`(project_id, code)` は UNIQUE なので使用済みを避ける。
       const codes = assignShotCodes(
@@ -390,7 +407,13 @@ export const storyboardRoutes = (deps: StoryboardRoutesDeps) =>
         ),
       )
 
-      const warnings: string[] = []
+      const warnings =
+        skipped.length === 0
+          ? []
+          : [
+              `${String(skipped.length)} カットは今ある Shot と重なるので作りませんでした。` +
+                '作り直すときは、先にその Shot を消してください。',
+            ]
       return c.json(
         ok({ shots: created.map(toShotResponse), createdCount: created.length, warnings }),
         201,

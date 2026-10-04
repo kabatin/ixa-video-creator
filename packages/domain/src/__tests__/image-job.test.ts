@@ -11,6 +11,7 @@ import {
   ProviderId,
   SHOT_LIST_EVENT_TYPES,
   ShotId,
+  CharacterId,
 } from '../index.js'
 
 /**
@@ -24,7 +25,9 @@ const aJob = (patch: Partial<ImageGenerationJob> = {}): ImageGenerationJob =>
   ImageGenerationJob.parse({
     id: jobId,
     projectId: ProjectId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAX'),
+    kind: 'start_frame',
     shotId: ShotId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAY'),
+    characterId: null,
     status: 'queued',
     providerId: ProviderId.parse('codex-cli'),
     modelId: ModelId.parse('codex-cli/image-gen'),
@@ -37,6 +40,38 @@ const aJob = (patch: Partial<ImageGenerationJob> = {}): ImageGenerationJob =>
     finishedAt: null,
     ...patch,
   })
+
+/**
+ * キャラクターシート（制作者 2026-10-03「動画生成に役立つ形式のキャラクターシートを 1 枚の画像から作れるといい」）。
+ * Codex は 1 度に 1 枚なので、絵コンテの画像と同じジョブ（同じ順番待ち）に種類を足す。
+ */
+describe('ジョブの種類', () => {
+  const characterId = CharacterId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAZ')
+
+  it('最初のフレームは Shot、キャラクターシートはキャラクターを持つ（もう片方は持たない）', () => {
+    expect(imageJobViolation(aJob())).toBeNull()
+    expect(imageJobViolation(aJob({ kind: 'character_sheet', shotId: null, characterId }))).toBeNull()
+
+    expect(imageJobViolation(aJob({ shotId: null }))).toMatch(/Shot/)
+    expect(imageJobViolation(aJob({ characterId }))).toMatch(/キャラクター/)
+    expect(imageJobViolation(aJob({ kind: 'character_sheet', characterId: null, shotId: null }))).toMatch(/キャラクター/)
+    expect(imageJobViolation(aJob({ kind: 'character_sheet', characterId }))).toMatch(/Shot/)
+  })
+
+  it('出来事はキャラクターシートのジョブも運べる（Shot は無い）', () => {
+    const event = ProjectEvent.parse({
+      type: 'image_job.status',
+      projectId: '01ARZ3NDEKTSV4RRFFQ69G5FAX',
+      shotId: null,
+      characterId,
+      jobId,
+      status: 'running',
+      error: null,
+      at: new Date().toISOString(),
+    })
+    expect(event.type === 'image_job.status' && event.characterId).toBe(characterId)
+  })
+})
 
 describe('ImageGenerationJob', () => {
   it('待っているジョブを読める', () => {

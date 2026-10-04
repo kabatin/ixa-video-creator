@@ -5,6 +5,7 @@ import { useRef, useState } from 'react'
 import type { DragEvent, ReactNode } from 'react'
 import { useAssets, type Loaded } from '@/components/workbench/asset-store'
 import { useWorkbench } from '@/components/workbench/workbench-context'
+import { GUIDE_TO_CONCEPT_NOTICES, useGuideToConcept } from '@/components/workbench/workflow-context'
 import { describeForPerson } from '@/lib/api-error'
 import { ASSET_DRAG_TYPE, encodeAssetDrag, type AssetDragPayload } from '@/lib/asset-actions'
 import { matchesAssetQuery } from '@/lib/asset-tree'
@@ -26,6 +27,11 @@ const ITEM =
  */
 export const AssetTree = () => {
   const workbench = useWorkbench()
+  const guideToConcept = useGuideToConcept()
+  // キャラクター・ロケーション・ブランド資産はプロジェクトごと。ほかのプロジェクトのものは取り込んで使う（ADR-0034）。
+  const openImport = (): void => {
+    workbench.openDialog('library-import')
+  }
   const { characters, looks, locations, brandAssets, tracks, actions } = useAssets()
   const [query, setQuery] = useState('')
   const audioInput = useRef<HTMLInputElement>(null)
@@ -111,6 +117,7 @@ export const AssetTree = () => {
           label="キャラクター"
           count={characters}
           addLabel="キャラクターを追加"
+          onImport={openImport}
           create={async (name) => {
             const created = await actions.createCharacter(name)
             select({ kind: 'character', id: created.id })
@@ -160,6 +167,7 @@ export const AssetTree = () => {
           label="ロケーション"
           count={locations}
           addLabel="ロケーションを追加"
+          onImport={openImport}
           create={async (name) => {
             const created = await actions.createLocation(name)
             select({ kind: 'location', id: created.id })
@@ -189,6 +197,7 @@ export const AssetTree = () => {
           label="ブランド資産"
           count={brandAssets}
           addLabel="ブランド資産を追加"
+          onImport={openImport}
           create={async (name) => {
             // 名前が色の値（#RRGGBB）なら色として作る。それ以外はロゴとして作り、種類は右で直す。
             const isColor = /^#[0-9a-f]{6}$/i.test(name.trim())
@@ -241,7 +250,10 @@ export const AssetTree = () => {
           actions
             .addTrackFromFile(file)
             .then((track) => {
-              select({ kind: 'track', id: track.id })
+              // 作品の方針がまだなら方針を開く（次にやること）。済んでいれば登録した楽曲を選ぶ。
+              if (!guideToConcept(GUIDE_TO_CONCEPT_NOTICES.registered(track.title))) {
+                select({ kind: 'track', id: track.id })
+              }
             })
             .catch((cause: unknown) => {
               setTrackError(`楽曲を登録できませんでした: ${describeForPerson(cause)}`)
@@ -266,11 +278,14 @@ const Group = ({
   addLabel,
   onAdd,
   create,
+  onImport,
   children,
 }: {
   readonly label: string
   readonly count: Loaded<readonly unknown[]>
   readonly addLabel: string
+  /** ほかのプロジェクトから取り込む（複製。ADR-0034）。渡したときだけ出す。 */
+  readonly onImport?: () => void
   /** 押したらすぐ何かを始める（ファイル選択など）。 */
   readonly onAdd?: () => void
   /** 名前の欄を出して作る。 */
@@ -309,12 +324,33 @@ const Group = ({
         >
           ＋
         </button>
+        {onImport !== undefined && (
+          <button
+            type="button"
+            aria-label={`${label}をほかのプロジェクトから取り込む`}
+            title="ほかのプロジェクトから取り込む…"
+            onClick={onImport}
+            className="inline-flex h-6 min-w-6 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text"
+          >
+            ⇣
+          </button>
+        )}
       </div>
       {open && (
         <div className="pl-3">
           {count.state === 'error' && <Note tone="danger">{count.message}</Note>}
           {count.state === 'ready' && count.value.length === 0 && !adding && (
-            <Note>まだありません</Note>
+            <Note>
+              まだありません
+              {onImport !== undefined && (
+                <>
+                  {'。'}
+                  <button type="button" onClick={onImport} className="underline hover:text-text">
+                    ほかのプロジェクトから取り込む…
+                  </button>
+                </>
+              )}
+            </Note>
           )}
           {children}
           {adding && create !== undefined && (

@@ -159,6 +159,7 @@ export const createCodexCliImageProvider = (options: CodexCliImageProviderOption
       prompt: request.prompt,
       frame: codexFrameFor(request.aspectRatio),
       referenceRoles: request.references.map((reference) => reference.role),
+      ...(request.composition === undefined ? {} : { composition: request.composition }),
     })
     const args = [
       'exec',

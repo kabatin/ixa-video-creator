@@ -31,6 +31,15 @@ export type ContextMenuItem =
       readonly confirm?: string
       /** 確認で「しない」側の言葉。既定は「やめる」（`context-menus.ts` の同名の項目）。 */
       readonly keepLabel?: string
+      /**
+       * 確認の「する」側の色。既定は danger（取り消せない操作）。手順を飛ばしたときの確認のように、
+       * 取り消せなくはない操作では primary にする（制作者 2026-10-03「警告ダイアログを出して、任意の上で実行」）。
+       */
+      readonly confirmTone?: 'danger' | 'primary'
+      /** 確認の「する」側の言葉。既定は項目の名前（「このまま作る」のように替える）。 */
+      readonly confirmLabel?: string
+      /** 確認を「しない」で閉じたとき（`ask` が false を返すのに使う）。 */
+      readonly onDismiss?: () => void
       readonly run: () => void | Promise<void>
     }
   | { readonly kind: 'separator' }
@@ -52,6 +61,18 @@ type Host = {
    * 確認・失敗の理由の出し方を右クリックのメニューと同じにする。
    */
   readonly perform: (item: Extract<ContextMenuItem, { kind: 'item' }>) => void
+  /**
+   * 確かめて答えを返す（`window.confirm` の置き換え。画面全体を止めるブラウザの確認を使わない）。
+   * 「する」を押せば true、閉じれば false。取り消せない操作ではないので、ボタンは危険色にしない。
+   */
+  readonly ask: (question: AskQuestion) => Promise<boolean>
+}
+
+export type AskQuestion = {
+  readonly title: string
+  readonly message: string
+  readonly confirmLabel: string
+  readonly keepLabel?: string
 }
 
 const ContextMenuContext = createContext<Host | null>(null)
@@ -242,8 +263,13 @@ const ContextMenu = ({
  */
 export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) => {
   const [request, setRequest] = useState<ContextMenuRequest | null>(null)
-  /** 確認を待っている項目（失敗したときは理由を出すためにも使う）。 */
-  const [pending, setPending] = useState<Enabled | null>(null)
+  /**
+   * 確認を待っている項目の列（先頭を出す。失敗したときは理由を出すためにも使う）。
+   * **重なっても前の確認を黙って消さない**（レビューで見つけた。Shot を消す確認の間に「自動レビュー」が来ると入れ替わり、
+   * 前の確認の答え（`ask` の Promise）が返らなくなっていた）。順に聞く。
+   */
+  const [queue, setQueue] = useState<readonly Enabled[]>([])
+  const pending = queue[0] ?? null
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const close = useMemo(
@@ -259,10 +285,10 @@ export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) 
     setError(null)
     try {
       await item.run()
-      setPending(null)
+      setQueue((current) => (current[0] === item ? current.slice(1) : current))
     } catch (cause) {
       // 握り潰さない。確認の中なら確認の中に、そうでなければ同じ殻で理由を出す。
-      setPending(item)
+      setQueue((current) => (current[0] === item ? current : [item, ...current]))
       setError(describeForPerson(cause))
     } finally {
       setBusy(false)
@@ -272,15 +298,39 @@ export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) 
   const choose = useCallback(
     (item: Enabled): void => {
       if (item.confirm === undefined) void run(item)
-      else setPending(item)
+      else setQueue((current) => [...current, item])
     },
     [run],
   )
 
-  const host = useMemo<Host>(() => ({ open: setRequest, perform: choose }), [choose])
+  const ask = useCallback(
+    (question: AskQuestion): Promise<boolean> =>
+      new Promise((resolve) => {
+        choose({
+          kind: 'item',
+          id: 'ask',
+          label: question.title,
+          disabledReason: null,
+          confirm: question.message,
+          confirmTone: 'primary',
+          confirmLabel: question.confirmLabel,
+          ...(question.keepLabel === undefined ? {} : { keepLabel: question.keepLabel }),
+          onDismiss: () => {
+            resolve(false)
+          },
+          run: () => {
+            resolve(true)
+          },
+        })
+      }),
+    [choose],
+  )
+
+  const host = useMemo<Host>(() => ({ open: setRequest, perform: choose, ask }), [choose, ask])
 
   const dismiss = (): void => {
-    setPending(null)
+    pending?.onDismiss?.()
+    setQueue((current) => current.slice(1))
     setError(null)
   }
 
@@ -309,13 +359,13 @@ export const ContextMenuHost = ({ children }: { readonly children: ReactNode }) 
           {pending?.confirm !== undefined && (
             <Button
               size="sm"
-              tone="danger"
+              tone={pending.confirmTone ?? 'danger'}
               disabled={busy}
               onClick={() => {
                 void run(pending)
               }}
             >
-              {busy ? '実行中…' : pending.label}
+              {busy ? '実行中…' : (pending.confirmLabel ?? pending.label)}
             </Button>
           )}
         </div>

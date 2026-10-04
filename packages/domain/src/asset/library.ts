@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import {
-  BrandAssetId, LocationId, MediaAssetId, MotionTemplateId, WorkspaceId,
+  BrandAssetId, LocationId, MediaAssetId, MotionTemplateId, ProjectId, WorkspaceId,
 } from '../common/ids.js'
 
 export const BrandCategory = z.enum([
@@ -8,9 +8,16 @@ export const BrandCategory = z.enum([
 ])
 export type BrandCategory = z.infer<typeof BrandCategory>
 
+/**
+ * ブランド資産・ロケーション・キャラクターは**プロジェクトごと**（ADR-0034。制作者 2026-10-03
+ * 「全プロジェクトで共有になっている。プロジェクト単位にしないと大変なことになる」）。
+ * `workspaceId` は残す（画像のアップロードと素材ファイルはワークスペース単位で、そこが読む）。
+ * 別のプロジェクトのものを使うときは取り込み（複製）にする。
+ */
 export const BrandAsset = z.object({
   id: BrandAssetId,
   workspaceId: WorkspaceId,
+  projectId: ProjectId,
   category: BrandCategory,
   name: z.string().min(1),
   mediaAssetId: MediaAssetId.nullable(),
@@ -24,6 +31,8 @@ export type BrandAsset = z.infer<typeof BrandAsset>
 export const Location = z.object({
   id: LocationId,
   workspaceId: WorkspaceId,
+  /** 持ち主のプロジェクト（ADR-0034）。 */
+  projectId: ProjectId,
   name: z.string().min(1),
   description: z.string().default(''),
   referenceAssetIds: z.array(MediaAssetId).default([]),

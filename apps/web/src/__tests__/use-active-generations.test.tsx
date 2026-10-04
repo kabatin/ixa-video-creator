@@ -19,6 +19,7 @@ const entry = (shotId: string, status: 'queued' | 'running' = 'running'): WireAc
   estimatedLatencySec: 60,
   queuedAt: '2026-09-30T10:00:00.000Z',
   startedAt: status === 'running' ? '2026-09-30T10:00:05.000Z' : null,
+  providerStartedAt: status === 'running' ? '2026-09-30T10:00:05.000Z' : null,
   attempt: 1,
 })
 

@@ -18,7 +18,7 @@ const described = aWorkbenchShot(1, { description: '夜の街を走る' })
 const blank = aWorkbenchShot(1, { description: '' })
 
 const postersWith = (shot: typeof blank, hasStartFrame: boolean): ShotPosterMap =>
-  new Map([[shot.id, { url: null, reason: 'まだ Take がありません', hasStartFrame, pending: false }]])
+  new Map([[shot.id, { url: null, reason: 'まだ Take がありません', hasStartFrame, pending: false, drawing: false }]])
 
 const generatingFor = (shot: typeof blank): ActiveGenerations =>
   new Map([
@@ -34,6 +34,7 @@ const generatingFor = (shot: typeof blank): ActiveGenerations =>
           estimatedLatencySec: null,
           queuedAt: '2026-10-02T00:00:00.000Z',
           startedAt: '2026-10-02T00:00:01.000Z',
+          providerStartedAt: '2026-10-02T00:00:01.000Z',
           attempt: 1,
         },
       ],

@@ -53,9 +53,11 @@ export const ProjectDeleteSection = ({ project }: { readonly project: Project })
             <li>ストーリーボード・タイムライン・トランジション</li>
             <li>登録した楽曲と解析結果</li>
             <li>レンダリング結果</li>
+            <li>このプロジェクトのキャラクター・ロケーション・ブランド資産</li>
           </ul>
           <p className="mt-2 text-sm text-danger">
-            キャラクター・ロケーション・ブランド資産はワークスペースのものなので残ります。
+            キャラクター・ロケーション・ブランド資産も見えなくなります（プロジェクトごとのものなので）。
+            ほかのプロジェクトで使うなら、先にそちらで「ほかのプロジェクトから取り込む」をしておいてください。
           </p>
         </ConfirmButton>
       </div>

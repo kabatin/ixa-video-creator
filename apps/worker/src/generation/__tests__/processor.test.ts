@@ -975,3 +975,41 @@ describe('問い合わせが一時的に失敗したとき', () => {
     expect(second.state).toBe('failed')
   })
 })
+
+/**
+ * 生成先が作り始めた時刻（制作者 2026-10-04「まとめて動画生成依頼出したら、なんかカット２，３が作成中になってる」）。
+ * vpipe は 1 本ずつ作り、送った 2 本目は向こうで順番待ちになる。送った時刻を「作り始めた」とすると、待っている 1 本も
+ * 作成中に見え、経過も長く出る。**問い合わせで初めて「作成中」が返った時刻**を 1 度だけ残す。
+ */
+describe('processGenerationJob（生成先が作り始めた時刻）', () => {
+  const PENDING: ProviderJobStatus = { state: 'pending', progress: null }
+  const RUNNING: ProviderJobStatus = { state: 'running', progress: null }
+  const at = (minutes: number): Date => new Date(Date.UTC(2026, 9, 4, 2, minutes, 0))
+  const step = (f: Fixture, minutes: number) =>
+    processGenerationJob({ ...f.deps, now: () => at(minutes) }, { generationJobId: f.job.id })
+  const jobOf = (f: Fixture) => f.jobs.snapshot().find((job) => job.id === f.job.id)
+
+  it('「待ち」の間は残さず、初めて「作成中」が返った時刻を 1 度だけ残す', async () => {
+    const f = await buildFixture([PENDING, RUNNING, RUNNING])
+
+    await step(f, 0) // 送る
+    expect(jobOf(f)?.startedAt).toEqual(at(0))
+    await step(f, 4) // 生成先で順番待ち
+    expect(jobOf(f)?.providerStartedAt).toBeNull()
+    await step(f, 8) // 作り始めた
+    expect(jobOf(f)?.providerStartedAt).toEqual(at(8))
+    await step(f, 9) // 作っている（書き換えない）
+    expect(jobOf(f)?.providerStartedAt).toEqual(at(8))
+  })
+
+  it('Take の生成時間は、生成先が作り始めてから数える（順番待ちを含めない）', async () => {
+    const f = await buildFixture([PENDING, RUNNING, SUCCEEDED])
+
+    await step(f, 0)
+    await step(f, 4)
+    await step(f, 8)
+    await step(f, 12)
+
+    expect(f.takes.snapshot()[0]?.generationTimeSec).toBe(240)
+  })
+})

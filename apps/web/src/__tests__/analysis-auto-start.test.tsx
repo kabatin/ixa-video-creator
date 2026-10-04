@@ -110,3 +110,21 @@ describe('解析が失敗したとき', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 })
+
+/**
+ * 解析が終わったら次の作業へ案内する（制作者 2026-10-03「進捗ダイアログが出て波形が出るところまでは問題なし。
+ * ここでまず次何したらいいんだ？ってなる」）。終わったことを呼び出し側へ知らせる（作品の方針を開くのは呼び出し側）。
+ */
+describe('解析が終わったら知らせる', () => {
+  it('結果が出たら onAnalyzed を 1 回呼ぶ', async () => {
+    getAnalysis.mockResolvedValue({ bpm: 120 })
+    const onAnalyzed = vi.fn()
+    render(<AnalysisStarter track={aTrack()} onAnalyzed={onAnalyzed} />)
+    await waitFor(
+      () => {
+        expect(onAnalyzed).toHaveBeenCalledTimes(1)
+      },
+      { timeout: POLL_INTERVAL_MS * 3 },
+    )
+  })
+})

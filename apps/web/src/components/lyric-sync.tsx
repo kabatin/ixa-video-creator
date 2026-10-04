@@ -3,6 +3,8 @@
 import { lyricLines } from '@ixa/domain'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { plainKeyPlaceOf, targetOf } from '@/components/use-cut-editor-keyboard'
+import { cutterTakesPlainKey } from '@/lib/cut-editor-keys'
 import { formatClock } from '@/lib/format-time'
 import { currentLyricIndex, tapCue, undoCue, type CueChange } from '@/lib/lyric-sync'
 
@@ -30,11 +32,6 @@ export type LyricSyncProps = {
   /** 打鍵を受けるか（見えている間・ダイアログが無い間だけ）。 */
   readonly keyboard: boolean
 }
-
-/** 欄に打っている間は打鍵を横取りしない。 */
-const isTyping = (target: EventTarget | null): boolean =>
-  target instanceof HTMLElement &&
-  (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)
 
 /**
  * 歌詞を合わせる（ADR-0033。制作者 2026-10-01「聴きながら打つ」）。
@@ -68,15 +65,20 @@ export const LyricSync = (props: LyricSyncProps) => {
   useEffect(() => {
     if (!keyboard) return undefined
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      // 取ってよい場所か（文字の入力中・確認の中・メニュー・ほかのパネルのボタンは、その部品を優先する）。
+      // capture で先に受けるので、ここで外さないと部品の打鍵と 2 重に動く（レビューで見つけた）。
+      const node = event.target instanceof HTMLElement ? event.target : null
+      if (!cutterTakesPlainKey(targetOf(node), plainKeyPlaceOf(node))) return
       const run = { Enter: tap, Backspace: undo, ' ': onTogglePlay }[event.key]
       if (run === undefined) return
       event.preventDefault()
       run()
     }
-    window.addEventListener('keydown', onKeyDown)
+    // ワークベンチの打鍵（Space で再生・Backspace で Shot を削除）より先に受け、既定の動きを止めて譲らせる。
+    window.addEventListener('keydown', onKeyDown, { capture: true })
     return () => {
-      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keydown', onKeyDown, { capture: true })
     }
   })
 
@@ -98,7 +100,7 @@ export const LyricSync = (props: LyricSyncProps) => {
     <section aria-label="歌詞を合わせる" className="space-y-3 border-b border-line p-3">
       {/* 何をする画面かを 1 行で（制作者 2026-10-02「この画面すっごいわかりづらいなー」）。 */}
       <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-muted">
-        <p>① 下の ▶ か Space で曲を流す → ② フレーズの歌い出しで Enter → ③ 歌詞をテロップにする</p>
+        <p>① 下の ▶ か Space で曲を流す → ② フレーズの歌い出しで Enter → ③ 歌詞をテロップにする → ④ プレビューで確かめる</p>
         <span className="tabular-nums">{`${String(Math.min(cues.length, lines.length))} / ${String(lines.length)} フレーズ`}</span>
       </div>
       <dl aria-live="polite" className="grid grid-cols-[4.5rem_1fr] items-baseline gap-x-3 gap-y-1">

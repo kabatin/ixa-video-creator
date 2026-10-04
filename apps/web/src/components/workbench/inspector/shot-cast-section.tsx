@@ -6,7 +6,7 @@ import { useAssets } from '@/components/workbench/asset-store'
 import { INPUT_CLASS } from '@/components/workbench/ui/section'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
-import { castWithCharacter, defaultLook, type CastEntry } from '@/lib/asset-actions'
+import { castWithCharacter, type CastEntry } from '@/lib/asset-actions'
 
 /** 送る形（shotId はパスで渡す）へ写す。 */
 const toEntry = (entry: CastEntry & { readonly shotId?: unknown }): CastEntry => ({
@@ -37,7 +37,7 @@ export const ShotCastSection = ({
   readonly version: number
 }) => {
   const api = useMemo(() => createApiClient(), [])
-  const { characters, looks } = useAssets()
+  const { characters, looks, actions } = useAssets()
   const [cast, setCast] = useState<readonly CastEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -156,16 +156,18 @@ export const ShotCastSection = ({
           disabled={saving}
           onChange={(event) => {
             const characterId = CharacterId.parse(event.target.value)
-            const characterLooks = looks.get(characterId) ?? []
-            const look = defaultLook(characterLooks)
-            if (look === null) {
-              setError(
-                'このキャラクターには Look がありません。ツリーで Look を足してから選んでください。',
-              )
-              return
-            }
-            const next = castWithCharacter(cast, characterId, look.id)
-            if (next !== null) void save(next)
+            // 既定の Look で入れる。Look が 1 つも無いキャラクター（画像だけで作った古いもの）は「基本」を作ってから
+            // 入れる（制作者 2026-10-04。以前は「ツリーで Look を足してから」と断り、戦子をどの Shot にも入れられなかった）。
+            void actions
+              .ensureDefaultLook(characterId)
+              .then((look) => {
+                const next = castWithCharacter(cast, characterId, look.id)
+                if (next !== null) return save(next)
+                return undefined
+              })
+              .catch((cause: unknown) => {
+                setError(`登場人物を足せませんでした: ${describeForPerson(cause)}`)
+              })
           }}
           className={INPUT_CLASS}
         >

@@ -1,6 +1,5 @@
 import {
   BrandAsset,
-  BrandCategory,
   CreateBrandAssetInput,
   CreateLocationInput,
   Location,
@@ -9,10 +8,8 @@ import {
   UpdateProjectPatch,
   type BrandAssetId,
   type LocationId,
-  type MediaAssetId,
   type Project,
   type ProjectId,
-  type WorkspaceId,
 } from '@ixa/domain'
 import { z } from 'zod'
 import { WireProject } from '@/lib/api-schemas'
@@ -39,12 +36,21 @@ export const WireBrandAssetList = z.array(WireBrandAsset)
 export const WireLocationItem = Location
 export const WireLocationItemList = z.array(WireLocationItem)
 
+/**
+ * 作成の本文。ブランド資産とロケーションはプロジェクトごと（ADR-0034）で、プロジェクトは経路が持ち、
+ * ワークスペースはサーバがそのプロジェクトから引く。
+ */
+export const CreateBrandAssetBody = CreateBrandAssetInput.omit({ workspaceId: true, projectId: true })
+export type CreateBrandAssetBody = z.input<typeof CreateBrandAssetBody>
+export const CreateLocationBody = CreateLocationInput.omit({ workspaceId: true, projectId: true })
+export type CreateLocationBody = z.input<typeof CreateLocationBody>
+
 export type LibraryApi = {
-  listBrandAssets: (workspaceId: WorkspaceId) => Promise<BrandAsset[]>
-  createBrandAsset: (input: CreateBrandAssetInput) => Promise<BrandAsset>
+  listBrandAssets: (projectId: ProjectId) => Promise<BrandAsset[]>
+  createBrandAsset: (projectId: ProjectId, input: CreateBrandAssetBody) => Promise<BrandAsset>
   updateBrandAsset: (id: BrandAssetId, patch: UpdateBrandAssetPatch) => Promise<BrandAsset>
   deleteBrandAsset: (id: BrandAssetId) => Promise<void>
-  createLocation: (input: CreateLocationInput) => Promise<Location>
+  createLocation: (projectId: ProjectId, input: CreateLocationBody) => Promise<Location>
   updateLocation: (id: LocationId, patch: UpdateLocationPatch) => Promise<Location>
   deleteLocation: (id: LocationId) => Promise<void>
 }
@@ -64,21 +70,19 @@ const locationPath = (id: LocationId): string => `/locations/${encodeURIComponen
 const projectPath = (id: ProjectId): string => `/projects/${encodeURIComponent(id)}`
 
 export const createLibraryApi = (requester: Requester): LibraryApi => ({
-  listBrandAssets: async (workspaceId) => {
-    const query = new URLSearchParams({ workspaceId })
-    return requester.get(`/brand-assets?${query.toString()}`, WireBrandAssetList)
-  },
+  listBrandAssets: async (projectId) =>
+    requester.get(`${projectPath(projectId)}/brand-assets`, WireBrandAssetList),
 
-  createBrandAsset: async (input) =>
-    requester.post('/brand-assets', CreateBrandAssetInput.parse(input), WireBrandAsset),
+  createBrandAsset: async (projectId, input) =>
+    requester.post(`${projectPath(projectId)}/brand-assets`, CreateBrandAssetBody.parse(input), WireBrandAsset),
 
   updateBrandAsset: async (id, patch) =>
     requester.patch(brandAssetPath(id), UpdateBrandAssetPatch.parse(patch), WireBrandAsset),
 
   deleteBrandAsset: async (id) => requester.remove(brandAssetPath(id)),
 
-  createLocation: async (input) =>
-    requester.post('/locations', CreateLocationInput.parse(input), WireLocationItem),
+  createLocation: async (projectId, input) =>
+    requester.post(`${projectPath(projectId)}/locations`, CreateLocationBody.parse(input), WireLocationItem),
 
   updateLocation: async (id, patch) =>
     requester.patch(locationPath(id), UpdateLocationPatch.parse(patch), WireLocationItem),
@@ -110,60 +114,6 @@ export const createLibraryClient = (baseUrl: string): LibraryClient => {
     ...createProjectSettingsApi(requester),
   }
 }
-
-// ---------------------------------------------------------------------------
-// BrandAsset のフォーム値 ↔ 送信本文
-// ---------------------------------------------------------------------------
-
-/**
- * 入力欄の生の値。`value` と `mediaAssetId` は種類によって使う側が変わるが、
- * **どちらを必須にするかはここで決めない**（判定はサーバ）。
- */
-export type BrandAssetValues = {
-  readonly category: string
-  readonly name: string
-  readonly value: string
-  readonly mediaAssetId: MediaAssetId | null
-  readonly usageRule: string
-}
-
-export const EMPTY_BRAND_ASSET_VALUES: BrandAssetValues = Object.freeze({
-  category: BrandCategory.enum.color,
-  name: '',
-  value: '',
-  mediaAssetId: null,
-  usageRule: '',
-})
-
-export const brandAssetValuesOf = (asset: BrandAsset): BrandAssetValues => ({
-  category: asset.category,
-  name: asset.name,
-  value: asset.value ?? '',
-  mediaAssetId: asset.mediaAssetId,
-  usageRule: asset.usageRule,
-})
-
-/** `workspaceId` を除いた BrandAsset の中身。作成にも更新にもそのまま渡せる形。 */
-export type BrandAssetFields = {
-  readonly category: BrandCategory
-  readonly name: string
-  readonly value: string | null
-  readonly mediaAssetId: MediaAssetId | null
-  readonly usageRule: string
-}
-
-/**
- * 入力欄の値を送信本文へ写す。
- * 空欄は「指定なし」の null にする。空文字を送ると、色として読めない値が残る。
- * 種類が候補外なら zod がここで落とす（select にしか無いので通常は起きない）。
- */
-export const toBrandAssetInput = (values: BrandAssetValues): BrandAssetFields => ({
-  category: BrandCategory.parse(values.category),
-  name: values.name.trim(),
-  value: values.value.trim() === '' ? null : values.value.trim(),
-  mediaAssetId: values.mediaAssetId,
-  usageRule: values.usageRule,
-})
 
 /** API のエラー応答。`fields` はフィールド名 → メッセージの一覧（apps/api/src/response.ts）。 */
 const WireErrorBody = z.object({

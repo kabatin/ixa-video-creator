@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { workflowSteps, type WorkflowInput } from '@/lib/workflow-steps'
+import { lyricTelopCountOf, workflowSteps, type WorkflowInput } from '@/lib/workflow-steps'
 
 /**
- * 制作の流れの帯（制作者 2026-10-01）。音楽 → 作品の方針 → 区切る → Shot → 絵コンテ → 絵 → Take。
- * 「音楽 → 区切り → Shot → Take」と飛ばして、作品と関係ない映像ができた。次にやる所を示す。
+ * 制作の流れの帯（制作者 2026-10-01）。「音楽 → 区切り → Shot → Take」と飛ばして、作品と関係ない映像ができた。
+ * 次にやる所を示す。
+ *
+ * 2026-10-03 に並べ直した（制作者「楽曲を登録すると次何したらいいんだ？ってなる」「まずはテロップのタイミングをセット」
+ * 「テロップがあるだけではプレビューが再生できず」）。楽曲 → 作品の方針（方針・歌詞・ルック）→ 歌詞の時刻 → テロップ →
+ * 区切って Shot → 絵コンテ → 絵 → Take → 書き出す。
  */
 
 const shot = (overrides: Partial<WorkflowInput['shots'][number]> = {}): WorkflowInput['shots'][number] => ({
@@ -16,78 +20,109 @@ const shot = (overrides: Partial<WorkflowInput['shots'][number]> = {}): Workflow
 const input = (overrides: Partial<WorkflowInput> = {}): WorkflowInput => ({
   hasTrack: true,
   concept: '夜明けの屋上で二人が出会う',
-  lyricLineCount: 0,
-  lyricCueCount: 0,
+  hasLook: true,
+  instrumental: false,
+  lyricLineCount: 3,
+  lyricCueCount: 3,
+  lyricTelopCount: 3,
   shots: [],
+  rendered: false,
   ...overrides,
 })
 
-const stateOf = (result: ReturnType<typeof workflowSteps>, id: string) =>
-  result.steps.find((step) => step.id === id)?.state
+const stepOf = (result: ReturnType<typeof workflowSteps>, id: string) => result.steps.find((step) => step.id === id)
+const stateOf = (result: ReturnType<typeof workflowSteps>, id: string) => stepOf(result, id)?.state
+
+const allDone = (overrides: Partial<WorkflowInput> = {}) =>
+  input({ shots: [shot({ description: 'a', hasStartFrame: true, adopted: true })], rendered: true, ...overrides })
 
 describe('workflowSteps', () => {
-  it('8 段を順に並べる（歌詞の時刻は区切る前）', () => {
+  it('9 段を作業の順に並べる（テロップは区切る前、書き出すが最後）', () => {
     expect(workflowSteps(input()).steps.map((step) => step.label)).toEqual([
-      '音楽',
-      '作品の方針・歌詞',
+      '楽曲',
+      '作品の方針',
       '歌詞の時刻',
-      '区切る',
-      'Shot',
+      'テロップ',
+      '区切って Shot',
       '絵コンテ',
       '絵',
       'Take',
+      '書き出す',
     ])
   })
 
-  it('楽曲が無ければ、次は ① 音楽', () => {
+  it('楽曲が無ければ、次は ① 楽曲', () => {
     const result = workflowSteps(input({ hasTrack: false }))
     expect(stateOf(result, 'music')).toBe('todo')
     expect(result.nextId).toBe('music')
   })
 
-  it('楽曲があって方針が空なら、次は ② 作品の方針', () => {
-    const result = workflowSteps(input({ concept: '  ' }))
-    expect(stateOf(result, 'music')).toBe('done')
-    expect(result.nextId).toBe('concept')
+  /** 制作者「コンセプト・あらすじの入力、歌詞の入力、ルックの設定をさせたい」。3 つを数える。 */
+  it('作品の方針は、方針・歌詞・ルックの 3 つを数える。どれか欠ければ途中で、次はここ', () => {
+    const none = workflowSteps(input({ concept: '  ', lyricLineCount: 0, hasLook: false }))
+    expect(stepOf(none, 'concept')).toMatchObject({ state: 'todo', progress: { done: 0, total: 3 } })
+    expect(none.nextId).toBe('concept')
+
+    const noLook = workflowSteps(input({ hasLook: false }))
+    expect(stepOf(noLook, 'concept')).toMatchObject({ state: 'partial', progress: { done: 2, total: 3 } })
+    expect(noLook.nextId).toBe('concept')
+
+    expect(stateOf(workflowSteps(input()), 'concept')).toBe('done')
   })
 
   it('方針が読めていなければ「分からない」として次に選ばない', () => {
-    const result = workflowSteps(input({ concept: null }))
+    const result = workflowSteps(input({ concept: null, lyricTelopCount: 0 }))
     expect(stateOf(result, 'concept')).toBe('unknown')
-    expect(result.nextId).toBe('cut')
+    expect(result.nextId).toBe('telops')
+  })
+
+  it('歌詞があって時刻が足りなければ、次は ③ 歌詞の時刻（件数を出す）', () => {
+    const result = workflowSteps(input({ lyricLineCount: 58, lyricCueCount: 12, lyricTelopCount: 0 }))
+    expect(stepOf(result, 'lyrics')).toMatchObject({ state: 'partial', progress: { done: 12, total: 58 } })
+    expect(result.nextId).toBe('lyrics')
+  })
+
+  /** 制作者「まずはテロップのタイミングをセット」「テロップだけ確認は必須かも」。区切る前に、黒い画面で確かめられる。 */
+  it('時刻が付いてテロップが無ければ、区切るより先に ④ テロップ', () => {
+    const result = workflowSteps(input({ lyricTelopCount: 0 }))
+    expect(stateOf(result, 'telops')).toBe('todo')
+    expect(result.nextId).toBe('telops')
+  })
+
+  it('テロップの数が読めていなければ「分からない」として次に選ばない', () => {
+    const result = workflowSteps(input({ lyricTelopCount: null }))
+    expect(stateOf(result, 'telops')).toBe('unknown')
+    expect(result.nextId).toBe('shots')
   })
 
   /**
-   * 歌詞の時刻（制作者 2026-10-02「テロップみたいな、やり直しが容易にできるものを、ステップの前に持ってった方が効率的」）。
-   * 区切ってから時刻を付けると、境目が歌い出しとずれた（中央値 1.95 秒）。区切る前に済ませる。
+   * 「歌詞なし」にした作品（制作者 2026-10-04「歌詞がない動画の場合、歌詞を入力しないので、作品の方針が 2/3 でとまって
+   * しまいます。歌詞なしのチェックボックスとかあるといいかも」）。方針は方針・ルックの 2 つで済み、歌詞の段は飛ばす。
    */
-  it('歌詞があって時刻が足りなければ、区切るより先に ③ 歌詞の時刻（件数を出す）', () => {
-    const result = workflowSteps(input({ lyricLineCount: 58, lyricCueCount: 12 }))
-    const lyrics = result.steps.find((step) => step.id === 'lyrics')
-    expect(lyrics?.state).toBe('partial')
-    expect(lyrics?.progress).toEqual({ done: 12, total: 58 })
-    expect(result.nextId).toBe('lyrics')
-
-    expect(workflowSteps(input({ lyricLineCount: 3, lyricCueCount: 0 })).nextId).toBe('lyrics')
-  })
-
-  it('全部の行に時刻が付けば済み', () => {
-    const result = workflowSteps(input({ lyricLineCount: 3, lyricCueCount: 3 }))
-    expect(stateOf(result, 'lyrics')).toBe('done')
-    expect(result.nextId).toBe('cut')
-  })
-
-  it('歌詞が無い作品では飛ばす（次に選ばない）', () => {
-    const result = workflowSteps(input({ lyricLineCount: 0 }))
+  it('歌詞なしの作品は、作品の方針を方針・ルックの 2 つで数え、歌詞の時刻とテロップを飛ばす', () => {
+    const result = workflowSteps(input({ instrumental: true, lyricLineCount: 0, lyricCueCount: 0, lyricTelopCount: 0 }))
+    expect(stepOf(result, 'concept')).toMatchObject({ state: 'done', progress: { done: 2, total: 2 } })
     expect(stateOf(result, 'lyrics')).toBe('skipped')
-    expect(result.nextId).toBe('cut')
+    expect(stateOf(result, 'telops')).toBe('skipped')
+    expect(result.nextId).toBe('shots')
   })
 
-  it('Shot が無ければ、次は ④ 区切る（区切りは Shot にするまで保存されないので Shot の有無で見る）', () => {
+  it('歌詞なしにしたら、歌詞が書いてあっても歌詞の段は飛ばす', () => {
+    const result = workflowSteps(input({ instrumental: true, lyricCueCount: 0, lyricTelopCount: 0 }))
+    expect(stateOf(result, 'lyrics')).toBe('skipped')
+    expect(result.nextId).toBe('shots')
+  })
+
+  it('歌詞が無い作品では、歌詞の時刻とテロップを飛ばす（次に選ばない）', () => {
+    const result = workflowSteps(input({ lyricLineCount: 0, lyricCueCount: 0, lyricTelopCount: 0 }))
+    expect(stateOf(result, 'lyrics')).toBe('skipped')
+    expect(stateOf(result, 'telops')).toBe('skipped')
+  })
+
+  it('Shot が無ければ、次は ⑤ 区切って Shot（区切りは Shot にするまで保存されないので Shot の有無で見る）', () => {
     const result = workflowSteps(input())
-    expect(stateOf(result, 'cut')).toBe('todo')
     expect(stateOf(result, 'shots')).toBe('todo')
-    expect(result.nextId).toBe('cut')
+    expect(result.nextId).toBe('shots')
   })
 
   it('絵コンテ・絵・Take は件数で途中を出し、次は最初に終わっていない段', () => {
@@ -100,16 +135,9 @@ describe('workflowSteps', () => {
         ],
       }),
     )
-    const storyboard = result.steps.find((step) => step.id === 'storyboard')
-    expect(storyboard).toMatchObject({ state: 'partial', progress: { done: 2, total: 3 } })
-    expect(result.steps.find((step) => step.id === 'frames')).toMatchObject({
-      state: 'partial',
-      progress: { done: 1, total: 3 },
-    })
-    expect(result.steps.find((step) => step.id === 'takes')).toMatchObject({
-      state: 'partial',
-      progress: { done: 1, total: 3 },
-    })
+    expect(stepOf(result, 'storyboard')).toMatchObject({ state: 'partial', progress: { done: 2, total: 3 } })
+    expect(stepOf(result, 'frames')).toMatchObject({ state: 'partial', progress: { done: 1, total: 3 } })
+    expect(stepOf(result, 'takes')).toMatchObject({ state: 'partial', progress: { done: 1, total: 3 } })
     expect(result.nextId).toBe('storyboard')
   })
 
@@ -117,28 +145,31 @@ describe('workflowSteps', () => {
     const result = workflowSteps(
       input({ shots: [shot({ description: 'a', hasStartFrame: null }), shot({ description: 'b' })] }),
     )
-    expect(result.steps.find((step) => step.id === 'frames')).toMatchObject({
-      state: 'unknown',
-      progress: null,
-    })
+    expect(stepOf(result, 'frames')).toMatchObject({ state: 'unknown', progress: null })
     expect(result.nextId).toBe('takes')
   })
 
+  it('Take まで済めば、次は ⑨ 書き出す。書き出しの履歴が読めていなければ「分からない」', () => {
+    const result = workflowSteps(allDone({ rendered: false }))
+    expect(result.nextId).toBe('render')
+    expect(stateOf(workflowSteps(allDone({ rendered: null })), 'render')).toBe('unknown')
+  })
+
   it('全部済めば次は無い', () => {
-    const result = workflowSteps(
-      input({
-        lyricLineCount: 2,
-        lyricCueCount: 2,
-        shots: [shot({ description: 'a', hasStartFrame: true, adopted: true })],
-      }),
-    )
+    const result = workflowSteps(allDone())
     expect(result.steps.every((step) => step.state === 'done')).toBe(true)
     expect(result.nextId).toBeNull()
-    // 歌詞の無い作品は、歌詞の段だけ飛ばして済み。
-    const instrumental = workflowSteps(
-      input({ shots: [shot({ description: 'a', hasStartFrame: true, adopted: true })] }),
-    )
-    expect(instrumental.steps.every((step) => step.state === 'done' || step.id === 'lyrics')).toBe(true)
-    expect(instrumental.nextId).toBeNull()
+  })
+})
+
+describe('lyricTelopCountOf', () => {
+  it('歌詞から置いたテロップ（行の印があるもの）だけを数える。手で置いたテロップや絵の素材は数えない', () => {
+    const clips = [
+      { content: { type: 'text' as const, params: { text: 'a', lyricLine: 0 } } },
+      { content: { type: 'text' as const, params: { text: 'b', lyricLine: 1 } } },
+      { content: { type: 'text' as const, params: { text: '手で置いた' } } },
+      { content: { type: 'media' as const } },
+    ]
+    expect(lyricTelopCountOf(clips)).toBe(2)
   })
 })

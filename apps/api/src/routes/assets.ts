@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { BrandAssetRepository, LocationRepository, MediaAssetRepository } from '@ixa/db'
+import type { BrandAssetRepository, LocationRepository, MediaAssetRepository, ProjectRepository } from '@ixa/db'
 import {
   BrandAsset as BrandAssetSchema,
   BrandAssetId as BrandAssetIdSchema,
@@ -8,11 +8,13 @@ import {
   Location as LocationSchema,
   LocationId as LocationIdSchema,
   MediaAssetId as MediaAssetIdSchema,
+  ProjectId as ProjectIdSchema,
   UpdateBrandAssetPatch as UpdateBrandAssetPatchSchema,
   UpdateLocationPatch as UpdateLocationPatchSchema,
-  WorkspaceId as WorkspaceIdSchema,
   type BrandAsset,
   type MediaAssetId,
+  type Project,
+  type ProjectId,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import {
@@ -27,13 +29,18 @@ import {
 export const BrandAssetResponse = BrandAssetSchema.openapi('BrandAsset')
 export const LocationResponse = LocationSchema.openapi('Location')
 
-/** color/font は MediaAsset を持たないことがあるので既定を与える。 */
-const CreateBrandAssetBody = CreateBrandAssetInputSchema.extend({
+/**
+ * color/font は MediaAsset を持たないことがあるので既定を与える。
+ * プロジェクトとワークスペースは本文に入れない（プロジェクトは経路、ワークスペースはそのプロジェクトから。ADR-0034）。
+ */
+const CreateBrandAssetBody = CreateBrandAssetInputSchema.omit({ workspaceId: true, projectId: true }).extend({
   mediaAssetId: MediaAssetIdSchema.nullable().default(null),
   value: z.string().nullable().default(null),
 }).openapi('CreateBrandAssetInput')
 const UpdateBrandAssetBody = UpdateBrandAssetPatchSchema.openapi('UpdateBrandAssetPatch')
-const CreateLocationBody = CreateLocationInputSchema.openapi('CreateLocationInput')
+const CreateLocationBody = CreateLocationInputSchema.omit({ workspaceId: true, projectId: true }).openapi(
+  'CreateLocationInput',
+)
 const UpdateLocationBody = UpdateLocationPatchSchema.openapi('UpdateLocationPatch')
 
 const BrandAssetParams = z.object({
@@ -42,8 +49,8 @@ const BrandAssetParams = z.object({
 const LocationParams = z.object({
   id: LocationIdSchema.openapi({ param: { name: 'id', in: 'path' } }),
 })
-const ListQuery = z.object({
-  workspaceId: WorkspaceIdSchema.openapi({ param: { name: 'workspaceId', in: 'query' } }),
+const ProjectParams = z.object({
+  projectId: ProjectIdSchema.openapi({ param: { name: 'projectId', in: 'path' } }),
 })
 
 const jsonContent = <T extends z.ZodTypeAny>(description: string, schema: T) => ({
@@ -85,16 +92,16 @@ export const brandAssetFieldErrors = (
 }
 
 const listBrandAssetsRoute = createRoute({
-  method: 'get', path: '/brand-assets', tags: ['assets'],
-  summary: 'ワークスペース内の BrandAsset 一覧',
-  request: { query: ListQuery },
+  method: 'get', path: '/projects/{projectId}/brand-assets', tags: ['assets'],
+  summary: 'プロジェクトの BrandAsset 一覧',
+  request: { params: ProjectParams },
   responses: { 200: jsonContent('BrandAsset 一覧', listResponse(BrandAssetResponse)), ...commonErrors },
 })
 
 const createBrandAssetRoute = createRoute({
-  method: 'post', path: '/brand-assets', tags: ['assets'],
-  summary: 'BrandAsset を作成する',
-  request: { body: body(CreateBrandAssetBody) },
+  method: 'post', path: '/projects/{projectId}/brand-assets', tags: ['assets'],
+  summary: 'プロジェクトに BrandAsset を作成する',
+  request: { params: ProjectParams, body: body(CreateBrandAssetBody) },
   responses: { 201: jsonContent('作成された BrandAsset', successResponse(BrandAssetResponse)), ...commonErrors },
 })
 
@@ -113,16 +120,16 @@ const deleteBrandAssetRoute = createRoute({
 })
 
 const listLocationsRoute = createRoute({
-  method: 'get', path: '/locations', tags: ['assets'],
-  summary: 'ワークスペース内の Location 一覧',
-  request: { query: ListQuery },
+  method: 'get', path: '/projects/{projectId}/locations', tags: ['assets'],
+  summary: 'プロジェクトの Location 一覧',
+  request: { params: ProjectParams },
   responses: { 200: jsonContent('Location 一覧', listResponse(LocationResponse)), ...commonErrors },
 })
 
 const createLocationRoute = createRoute({
-  method: 'post', path: '/locations', tags: ['assets'],
-  summary: 'Location を作成する',
-  request: { body: body(CreateLocationBody) },
+  method: 'post', path: '/projects/{projectId}/locations', tags: ['assets'],
+  summary: 'プロジェクトに Location を作成する',
+  request: { params: ProjectParams, body: body(CreateLocationBody) },
   responses: { 201: jsonContent('作成された Location', successResponse(LocationResponse)), ...commonErrors },
 })
 
@@ -145,9 +152,13 @@ export type AssetRoutesDeps = {
   locations: LocationRepository
   /** 参照する MediaAsset の実在確認だけに使う。 */
   mediaAssets: MediaAssetRepository
+  /** 一覧・作成の持ち主の確認と、ワークスペースを引くために使う。 */
+  projects: Pick<ProjectRepository, 'findById'>
 }
 
 export const assetRoutes = (deps: AssetRoutesDeps) => {
+  const findProject = (projectId: ProjectId): Promise<Project | null> => deps.projects.findById(projectId)
+
   /** 実在しない MediaAsset を弾く。null は「指定なし」として通す。 */
   const missingAssetIds = async (
     ids: readonly (MediaAssetId | null | undefined)[],
@@ -159,11 +170,14 @@ export const assetRoutes = (deps: AssetRoutesDeps) => {
 
   return new OpenAPIHono({ defaultHook: validationHook })
     .openapi(listBrandAssetsRoute, async (c) => {
-      const found = await deps.brandAssets.findByWorkspace(c.req.valid('query').workspaceId)
-      return c.json(okList(found), 200)
+      const { projectId } = c.req.valid('param')
+      if ((await findProject(projectId)) === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      return c.json(okList(await deps.brandAssets.findByProject(projectId)), 200)
     })
     .openapi(createBrandAssetRoute, async (c) => {
-      const input = c.req.valid('json')
+      const project = await findProject(c.req.valid('param').projectId)
+      if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      const input = { ...c.req.valid('json'), workspaceId: project.workspaceId, projectId: project.id }
       const fields = brandAssetFieldErrors(input)
       if (fields !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, fields), 422)
       if ((await missingAssetIds([input.mediaAssetId])).length > 0) {
@@ -190,11 +204,14 @@ export const assetRoutes = (deps: AssetRoutesDeps) => {
       return c.body(null, 204)
     })
     .openapi(listLocationsRoute, async (c) => {
-      const found = await deps.locations.findByWorkspace(c.req.valid('query').workspaceId)
-      return c.json(okList(found), 200)
+      const { projectId } = c.req.valid('param')
+      if ((await findProject(projectId)) === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      return c.json(okList(await deps.locations.findByProject(projectId)), 200)
     })
     .openapi(createLocationRoute, async (c) => {
-      const input = c.req.valid('json')
+      const project = await findProject(c.req.valid('param').projectId)
+      if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      const input = { ...c.req.valid('json'), workspaceId: project.workspaceId, projectId: project.id }
       const missing = await missingAssetIds(input.referenceAssetIds ?? [])
       if (missing.length > 0) {
         return c.json(

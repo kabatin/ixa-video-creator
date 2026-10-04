@@ -79,15 +79,28 @@ export type MonitorState = {
 const MONITOR_MESSAGES: Readonly<Record<MonitorStatus, string>> = {
   error: '',
   loading: 'タイムラインをまだ読めていません。',
-  empty: 'タイムラインに Shot がまだ 1 つもありません。Shot を並べると絵が出ます。',
+  empty: 'まだ映すものがありません。Shot に絵（最初のフレーム）か Take が付くと絵が出ます。',
   playing: '',
   paused: '',
+}
+
+/** 絵が無いまま音とテロップを流しているときに添える文。 */
+const WITHOUT_PICTURES_MESSAGE = '絵はまだありません。音とテロップだけを流しています（黒い画面）。'
+
+export type MonitorOptions = {
+  /**
+   * 絵（video1）が無くても、音かテロップがあれば黒い画面で流すか。**プレビューだけ**が true にする
+   * （制作者 2026-10-03「テロップがあるだけではプレビューが再生できず…黒画面で問題ない」）。
+   * Take の比較などは、絵が無いのに音だけ流すと何を見ているのか分からなくなるので false のまま。
+   */
+  readonly withoutPictures?: boolean
 }
 
 export const describeMonitorState = (
   document: TimelineDocument | null,
   playing: boolean,
   error: string | null,
+  options: MonitorOptions = {},
 ): MonitorState => {
   if (error !== null) {
     return { status: 'error', message: error, canRender: false }
@@ -95,10 +108,13 @@ export const describeMonitorState = (
   if (document === null) {
     return { status: 'loading', message: MONITOR_MESSAGES.loading, canRender: false }
   }
-  if (document.video1.length === 0) {
-    return { status: 'empty', message: MONITOR_MESSAGES.empty, canRender: false }
-  }
   const status: MonitorStatus = playing ? 'playing' : 'paused'
+  if (document.video1.length === 0) {
+    const audible = document.durationSec > 0 && (document.audio.length > 0 || document.clips.length > 0)
+    return options.withoutPictures === true && audible
+      ? { status, message: WITHOUT_PICTURES_MESSAGE, canRender: true }
+      : { status: 'empty', message: MONITOR_MESSAGES.empty, canRender: false }
+  }
   return { status, message: MONITOR_MESSAGES[status], canRender: true }
 }
 

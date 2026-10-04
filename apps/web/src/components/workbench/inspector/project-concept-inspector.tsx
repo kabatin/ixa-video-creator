@@ -2,16 +2,26 @@
 
 import { useAssist } from '@/components/workbench/use-assist'
 import { lyricsSummary } from '@/lib/lyric-sync'
-import { MAX_STYLE_REFERENCES, lyricLines, type MediaAssetId, type Project, type ProjectId, type UpdateProjectPatch } from '@ixa/domain'
+import {
+  MAX_STYLE_REFERENCES,
+  lyricLines,
+  type MediaAssetId,
+  type Project,
+  type ProjectId,
+  type UpdateProjectPatch,
+} from '@ixa/domain'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ImageUploader } from '@/components/image-uploader'
 import { MediaImage } from '@/components/media-image'
 import { Button } from '@/components/ui/button'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
+import { AutoSaveCheckbox } from '@/components/workbench/ui/auto-save-choice'
 import { ObjectHeader } from '@/components/workbench/ui/object-header'
 import { Section } from '@/components/workbench/ui/section'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { goToLyricSync } from '@/components/workbench/workbench-navigation'
+import { useWorkflow } from '@/components/workbench/workflow-context'
+import { WORKFLOW_ACTIONS } from '@/lib/workflow-steps'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import type { ProjectConceptApi } from '@/lib/project-concept-api'
@@ -26,7 +36,9 @@ type Concept =
   | { readonly kind: 'error'; readonly message: string }
 
 /** 欄がどこに効くか。**効かない所も言う**（黙っていると、書いたのに効かないと思われる）。 */
-const Hint = ({ children }: { readonly children: ReactNode }) => <p className="text-xs text-muted">{children}</p>
+const Hint = ({ children }: { readonly children: ReactNode }) => (
+  <p className="text-xs text-muted">{children}</p>
+)
 
 /**
  * 作品の方針（ADR-0030）。動画全体のコンセプト・ルック・手本画像・避けたいものを 1 か所で決め、
@@ -39,6 +51,8 @@ const Hint = ({ children }: { readonly children: ReactNode }) => <p className="t
  */
 export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConceptInspectorApi }) => {
   const workbench = useWorkbench()
+  const workflow = useWorkflow()
+  const conceptDone = workflow.steps.find((step) => step.id === 'concept')?.state === 'done'
   const assistFor = useAssist()
   const client = useMemo<ProjectConceptInspectorApi>(() => api ?? createApiClient(), [api])
   const [project, setProject] = useState<Project>(workbench.project)
@@ -88,7 +102,13 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
     <div className="flex h-full flex-col">
       <ObjectHeader kind="作品の方針" title={project.name} />
       <div className="workbench-panel-body relative min-h-0 flex-1 space-y-1 overflow-auto">
-        <Hint>ここで決めた方針は、全 Shot の生成に自動で入ります。あとから直しても、次に作る分から効きます。</Hint>
+        <Hint>
+          {project.instrumental
+            ? 'まず「コンセプト・あらすじ」「ルック」の 2 つを書きます。'
+            : 'まず「コンセプト・あらすじ」「歌詞」「ルック」の 3 つを書きます。'}
+          ここで決めた方針は、全 Shot
+          の生成に自動で入ります（あとから直しても、次に作る分から効きます）。
+        </Hint>
 
         <Section title="コンセプト・あらすじ">
           {concept.kind === 'loading' && <Hint>読み込んでいます…</Hint>}
@@ -114,36 +134,61 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
             />
           )}
           <Hint>
-            AI が各 Shot の説明を書くとき（絵コンテの案）の材料になります。長い文章なので、映像や絵の生成指示には直接は入りません。
+            AI が各 Shot
+            の説明を書くとき（絵コンテの案）の材料になります。長い文章なので、映像や絵の生成指示には直接は入りません。
           </Hint>
         </Section>
 
         <Section title="歌詞">
-          <AutoSaveField
-            label="歌詞"
-            hideLabel
-            multiline
-            value={project.lyrics}
-            placeholder={'1 行に 1 フレーズ。空行は歌の区切り（数えません）。\n例:\n夜明けの屋上で\n君を待ってた'}
-            onSave={(next) => save({ lyrics: next })}
+          {/*
+            歌詞の無い曲・歌詞を使わない動画（制作者 2026-10-04「歌詞がない動画の場合、作品の方針が 2/3 でとまってしまう。
+            歌詞なしのチェックボックスとかあるといいかも」）。チェックすると、歌詞の時刻とテロップの段を飛ばす。
+          */}
+          <AutoSaveCheckbox
+            label="歌詞なし（歌詞を使わない動画）"
+            checked={project.instrumental}
+            hint={
+              project.instrumental
+                ? '歌詞の時刻とテロップの段は飛ばします。歌詞を使うときはチェックを外します。'
+                : undefined
+            }
+            onSave={(next) => save({ instrumental: next })}
           />
-          <Hint>{lyricsSummary(project.lyrics, project.lyricCues)}</Hint>
-          {/* 入口を歌詞を入れる場所にも置く（制作者 2026-10-02「歌詞の自動テロップってどこからやるんだっけ」）。 */}
-          <div className="flex justify-start">
-            <Button
-              size="sm"
-              disabled={lyricLines(project.lyrics).length === 0}
-              title={lyricLines(project.lyrics).length === 0 ? '先に歌詞を入れてください' : undefined}
-              onClick={() => {
-                goToLyricSync(workbench)
-              }}
-            >
-              聴きながら時刻を付ける
-            </Button>
-          </div>
-          <Hint>
-            曲を流してフレーズの歌い出しに Enter を押すと時刻が付きます。時刻が付いたフレーズはテロップにでき、AI の説明の下書き（絵コンテの案）にも、その Shot で歌われる歌詞として入ります。
-          </Hint>
+          {!project.instrumental && (
+            <>
+              <AutoSaveField
+                label="歌詞"
+                hideLabel
+                multiline
+                value={project.lyrics}
+                placeholder={
+                  '1 行に 1 フレーズ。空行は歌の区切り（数えません）。\n例:\n夜明けの屋上で\n君を待ってた'
+                }
+                onSave={(next) => save({ lyrics: next })}
+              />
+              <Hint>{lyricsSummary(project.lyrics, project.lyricCues)}</Hint>
+              {/* 入口を歌詞を入れる場所にも置く（制作者 2026-10-02「歌詞の自動テロップってどこからやるんだっけ」）。 */}
+              <div className="flex justify-start">
+                <Button
+                  size="sm"
+                  disabled={lyricLines(project.lyrics).length === 0}
+                  title={
+                    lyricLines(project.lyrics).length === 0 ? '先に歌詞を入れてください' : undefined
+                  }
+                  onClick={() => {
+                    goToLyricSync(workbench)
+                  }}
+                >
+                  聴きながら時刻を付ける
+                </Button>
+              </div>
+              <Hint>
+                曲を流してフレーズの歌い出しに Enter
+                を押すと時刻が付きます。時刻が付いたフレーズはテロップにでき、AI
+                の説明の下書き（絵コンテの案）にも、その Shot で歌われる歌詞として入ります。
+              </Hint>
+            </>
+          )}
         </Section>
 
         <Section title="ルック（画風・光・質感）">
@@ -159,7 +204,7 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
           <Hint>全 Shot の映像と、Shot の絵（最初のフレーム）の生成指示の最後に入ります。</Hint>
         </Section>
 
-        <Section title="手本画像">
+        <Section title="手本画像（任意）">
           {references.length > 0 && (
             <ul className="grid grid-cols-3 gap-2">
               {references.map((id, index) => (
@@ -172,7 +217,9 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
                   <Button
                     size="sm"
                     aria-label={`手本画像 ${String(index + 1)} を外す`}
-                    onClick={() => void saveReferences(references.filter((candidate) => candidate !== id))}
+                    onClick={() =>
+                      void saveReferences(references.filter((candidate) => candidate !== id))
+                    }
                   >
                     外す
                   </Button>
@@ -195,7 +242,7 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
           </Hint>
         </Section>
 
-        <Section title="避けたいもの">
+        <Section title="避けたいもの（任意）">
           <AutoSaveField
             label="避けたいもの"
             hideLabel
@@ -206,9 +253,25 @@ export const ProjectConceptInspector = ({ api }: { readonly api?: ProjectConcept
             assist={assistFor('avoid')}
           />
           <Hint>
-            Shot の絵の生成と、AI の説明の下書きに入ります。映像の生成モデルは今どれも「避ける」指定に対応していないので、映像には入りません。
+            Shot の絵の生成と、AI
+            の説明の下書きに入ります。映像の生成モデルは今どれも「避ける」指定に対応していないので、映像には入りません。
           </Hint>
         </Section>
+
+        {/* 3 つが済んだら次の作業へ（制作者 2026-10-03「次何したらいいんだ？」）。判定は流れの帯と同じ。 */}
+        {conceptDone && workflow.nextId !== null && (
+          <div className="flex justify-end px-1 py-2">
+            <Button
+              tone="primary"
+              size="sm"
+              onClick={() => {
+                if (workflow.nextId !== null) workflow.go(workflow.nextId)
+              }}
+            >
+              {`次へ: ${WORKFLOW_ACTIONS[workflow.nextId]}`}
+            </Button>
+          </div>
+        )}
 
         {error !== null && (
           <p role="alert" className="text-xs text-danger">

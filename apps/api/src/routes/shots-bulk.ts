@@ -28,7 +28,8 @@ import {
   shotBeforePatch,
   type EditBatchRecorder,
 } from './edit-batch-recording.js'
-import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
+import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
+import { locationProblem } from './library-ownership.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 import {
   MAX_TAKES_PER_REQUEST,
@@ -504,6 +505,9 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
       }
 
       const { shotIds, patch } = c.req.valid('json')
+      // ロケーションは同じプロジェクトのものだけ（ADR-0034）。1 件も変えずに断る。
+      const problem = await locationProblem(deps.locations, projectId, patch.locationId)
+      if (problem !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, { locationId: [problem] }), 422)
 
       /**
        * **書く前に、全件ぶんの「変える前」を集める。** 書きながら集めると、

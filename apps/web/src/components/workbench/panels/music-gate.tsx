@@ -4,6 +4,7 @@ import type { MusicTrack } from '@ixa/domain'
 import type { ReactNode } from 'react'
 import { AnalysisStarter } from '@/components/analysis-starter'
 import { useWorkbench } from '@/components/workbench/workbench-context'
+import { GUIDE_TO_CONCEPT_NOTICES, useGuideToConcept } from '@/components/workbench/workflow-context'
 import { PanelEmpty } from '@/components/workbench/panels/panel-frame'
 import { AddTrackButton } from '@/components/workbench/ui/add-track-button'
 import type { WireMusicAnalysis } from '@/lib/music-api'
@@ -23,6 +24,7 @@ export const MusicGate = ({
   }) => ReactNode
 }) => {
   const workbench = useWorkbench()
+  const guideToConcept = useGuideToConcept()
 
   if (!workbench.musicLoaded) {
     return (
@@ -43,7 +45,15 @@ export const MusicGate = ({
     )
   }
   if (workbench.analysis === null) {
-    return <AnalysisStarter track={workbench.track} />
+    return (
+      <AnalysisStarter
+        track={workbench.track}
+        onAnalyzed={() => {
+          // 解析が終わったら、次の作業（作品の方針）へ案内する（制作者 2026-10-03「次何したらいいんだ？」）。
+          guideToConcept(GUIDE_TO_CONCEPT_NOTICES.analyzed)
+        }}
+      />
+    )
   }
   return <>{children({ track: workbench.track, analysis: workbench.analysis })}</>
 }

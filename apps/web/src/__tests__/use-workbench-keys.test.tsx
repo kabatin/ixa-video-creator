@@ -128,3 +128,27 @@ describe('受けない場面', () => {
     expect(undo).toHaveBeenCalledTimes(1)
   })
 })
+
+/**
+ * 先に受けた画面があれば譲る（制作者 2026-10-03 の確認で見つけた二重の動き）。歌詞を合わせている間は Space・Backspace を
+ * 歌詞が受ける。ワークベンチも受けると、Space で再生が 2 回切り替わって止まり、Backspace で時刻を戻すと同時に
+ * 選んでいる Shot の削除の確認が開いた。歌詞の側は先に（capture で）受けて既定の動きを止めるので、止まっていれば何もしない。
+ */
+describe('先に受けた打鍵', () => {
+  it('既定の動きが止められていれば、Space も Backspace も受けない', () => {
+    const { value } = setup()
+    const first = (event: KeyboardEvent): void => {
+      event.preventDefault()
+    }
+    window.addEventListener('keydown', first, { capture: true })
+    try {
+      press('outside', ' ')
+      press('outside', 'Backspace')
+    } finally {
+      window.removeEventListener('keydown', first, { capture: true })
+    }
+
+    expect(value.transportControls.togglePlayback).not.toHaveBeenCalled()
+    expect(value.openDialog).not.toHaveBeenCalled()
+  })
+})

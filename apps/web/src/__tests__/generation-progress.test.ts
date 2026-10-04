@@ -19,6 +19,7 @@ const running = (patch: Partial<WireActiveGeneration> = {}): WireActiveGeneratio
   estimatedLatencySec: 210,
   queuedAt: '2026-09-30T10:00:00.000Z',
   startedAt: '2026-09-30T10:00:05.000Z',
+  providerStartedAt: '2026-09-30T10:00:05.000Z',
   attempt: 1,
   ...patch,
 })
@@ -39,7 +40,7 @@ describe('formatElapsed / formatApproxDuration', () => {
 })
 
 describe('describeActiveGeneration', () => {
-  it('作成中は、モデル・経過・目安を言う（経過は送った時刻から）', () => {
+  it('作成中は、モデル・経過・目安を言う（経過は生成先が作り始めた時刻から）', () => {
     const view = describeActiveGeneration(running(), at('2026-09-30T10:02:36Z'))
 
     expect(view.short).toBe('作成中 2:31 / 約 4 分')
@@ -81,5 +82,32 @@ describe('describeActiveGeneration', () => {
     expect(
       describeActiveGeneration(running({ attempt: 2 }), at('2026-09-30T10:01:05Z')).long,
     ).toContain('2 回目')
+  })
+})
+
+/**
+ * 送ったが、生成先がまだ作り始めていない（制作者 2026-10-04「まとめて動画生成依頼出したら、なんかカット２，３が作成中になってる
+ * けど、シングルタスクじゃなかったっけ？」）。vpipe は 1 本ずつ作るので、送った 2 本目は向こうで順番を待っている。
+ */
+describe('describeActiveGeneration: 生成先での順番待ち', () => {
+  it('生成先がまだ作り始めていなければ「生成先で順番待ち」と言う（作成中と言わない）', () => {
+    const view = describeActiveGeneration(running({ providerStartedAt: null }), at('2026-09-30T10:02:36Z'))
+
+    expect(view.short).toBe('生成先で順番待ち 2:31')
+    expect(view.long).toBe(
+      'MiniMax H3 Turbo 下書き（ローカル・無料）に送り、順番を待っています（2:31）。前の 1 本が終わると作り始めます。',
+    )
+    expect(view.overdue).toBe(false)
+  })
+
+  it('経過は作り始めてから数える（待っていた時間で「目安を大きく過ぎた」と言わない）', () => {
+    // 送ってから 10 分 26 秒、作り始めてから 2 分 31 秒。目安 4 分の 2 倍は超えていない。
+    const view = describeActiveGeneration(
+      running({ providerStartedAt: '2026-09-30T10:08:00.000Z' }),
+      at('2026-09-30T10:10:31Z'),
+    )
+
+    expect(view.short).toBe('作成中 2:31 / 約 4 分')
+    expect(view.overdue).toBe(false)
   })
 })

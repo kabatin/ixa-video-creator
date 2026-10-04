@@ -146,3 +146,39 @@ describe('単体で使うとき', () => {
     expect(playback.seekTo).toHaveBeenCalledWith(3)
   })
 })
+
+/**
+ * 鳴らしている位置の報告（制作者 2026-10-04「setCurrentSecとsetDrawErrorでIssue出てたりする」）。
+ *
+ * effect の中で共有の位置を同期的に更新すると、React は毎フレーム「effect の flush 中の更新」と数える。
+ * 描画が遅いと途切れずに積もり、開発時に `Maximum update depth exceeded` が出た（CPU を 6 倍絞って 25 秒鳴らすと 4 件）。
+ * プレビュー（`program-monitor-player.tsx`）と同じく、flush の外（マイクロタスク）で渡す。
+ */
+describe('位置の報告', () => {
+  it('鳴らしている位置が変わったら、effect の外で共有の位置へ伝える', async () => {
+    const sync = port({ othersPlaying: false, followSec: null })
+    const { rerender } = renderHook(({ p }) => useCutEditorSync(p, sync), {
+      initialProps: { p: fakePlayback({ isPlaying: true, currentSec: 10 }) },
+    })
+
+    rerender({ p: fakePlayback({ isPlaying: true, currentSec: 10.5 }) })
+    // effect の flush の中では呼ばない。
+    expect(sync.onPosition).not.toHaveBeenCalled()
+
+    await Promise.resolve()
+    expect(sync.onPosition).toHaveBeenCalledWith(10.5)
+  })
+
+  it('外した後に届いた報告は捨てる（もう居ない再生器の位置で共有の位置を動かさない）', async () => {
+    const sync = port({ othersPlaying: false, followSec: null })
+    const { rerender, unmount } = renderHook(({ p }) => useCutEditorSync(p, sync), {
+      initialProps: { p: fakePlayback({ isPlaying: true, currentSec: 10 }) },
+    })
+
+    rerender({ p: fakePlayback({ isPlaying: true, currentSec: 10.5 }) })
+    unmount()
+    await Promise.resolve()
+
+    expect(sync.onPosition).not.toHaveBeenCalled()
+  })
+})

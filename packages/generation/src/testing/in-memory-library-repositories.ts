@@ -33,8 +33,8 @@ export const createInMemoryBrandAssetRepository = (): InMemoryBrandAssetReposito
 
     findById: (id) => Promise.resolve(find(id) ?? null),
 
-    findByWorkspace: (workspaceId) =>
-      Promise.resolve(store.filter((a) => a.workspaceId === workspaceId)),
+    findByProject: (projectId) =>
+      Promise.resolve(store.filter((a) => a.projectId === projectId)),
 
     create: (input) => {
       const created = BrandAssetSchema.parse({
@@ -77,8 +77,8 @@ export const createInMemoryLocationRepository = (): InMemoryLocationRepository =
 
     findById: (id) => Promise.resolve(find(id) ?? null),
 
-    findByWorkspace: (workspaceId) =>
-      Promise.resolve(store.filter((l) => l.workspaceId === workspaceId)),
+    findByProject: (projectId) =>
+      Promise.resolve(store.filter((l) => l.projectId === projectId)),
 
     create: (input) => {
       const created = LocationSchema.parse({

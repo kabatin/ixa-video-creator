@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { LinkButton } from '@/components/ui/button'
 
 /**
  * 「無い」「空」「読めなかった」「読み込み中」の 4 つを混ぜないための語彙。
@@ -89,12 +90,11 @@ export const EmptyState = ({
   >
     <p className="text-sm text-muted">{message}</p>
     {hint !== undefined && <p className="mt-2 text-sm text-muted">{hint}</p>}
-    <Link
-      href={actionHref}
-      className="mt-4 inline-block rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90"
-    >
-      {actionLabel}
-    </Link>
+    <div className="mt-4">
+      <LinkButton href={actionHref} tone="primary">
+        {actionLabel}
+      </LinkButton>
+    </div>
     {secondaryHref !== undefined && secondaryLabel !== undefined && (
       <p className="mt-3 text-sm">
         <Link href={secondaryHref} className="text-muted underline hover:text-text">

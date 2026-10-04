@@ -15,7 +15,9 @@ import {
   StoryboardDraftRequest,
   StoryboardDraftResponse,
   checkDraftedShotIds,
+  type StoryboardDraftCharacter,
   type StoryboardDraftError,
+  type StoryboardDraftLook,
   type StoryboardDraftOutcome,
   type StoryboardDrafter,
 } from './storyboard-port.js'
@@ -40,8 +42,52 @@ const shotLines = (request: StoryboardDraftRequest): readonly string[] =>
       `- shotId=${shot.id} / code=${shot.code} / ${shot.startSec.toFixed(2)}s から ${shot.durationSec.toFixed(2)}s` +
       ` / いまの説明: ${shot.description.trim() === '' ? '(未記入)' : shot.description}` +
       ` / いまの雰囲気: ${shot.mood ?? '(未設定)'}` +
+      (shot.cast.length === 0 ? '' : ` / 登場人物: ${shot.cast.join('、')}`) +
+      (shot.location === null ? '' : ` / ロケーション: ${shot.location}`) +
       (shot.lyrics.length === 0 ? '' : ` / 歌詞: ${shot.lyrics.map((line) => `「${line}」`).join('')}`),
   )
+
+/** Look 1 件。**文字の無い Look は渡さない**（画像だけで登録したときの既定。名前だけでは何も伝わらない）。 */
+const lookText = (look: StoryboardDraftLook): string | null => {
+  const detail = [
+    look.description.trim(),
+    look.wardrobeTokens.length === 0 ? '' : `衣装: ${look.wardrobeTokens.join('、')}`,
+  ].filter((part) => part !== '')
+  return detail.length === 0 ? null : `Look「${look.name}」（${detail.join('。')}）`
+}
+
+/**
+ * 登場人物 1 人。書いてあることだけを並べる。
+ * **文字の設定が無ければ、外見を書かせない**（画像だけで登録した人物に、設定に無い髪の色や服を書いていた）。
+ */
+const characterLine = (character: StoryboardDraftCharacter): string => {
+  const parts = [
+    character.description.trim(),
+    character.identityAnchors.length === 0 ? '' : `見た目の要点: ${character.identityAnchors.join('、')}`,
+    ...character.looks.map(lookText).filter((text): text is string => text !== null),
+  ].filter((part) => part !== '')
+  return parts.length === 0
+    ? `- ${character.name}: 文字の設定はありません（見た目は画像で決まります。髪・顔・服・色を書かず、名前で指してください）`
+    : `- ${character.name}: ${parts.join(' / ')}`
+}
+
+const characterLines = (request: StoryboardDraftRequest): readonly string[] =>
+  request.characters.length === 0
+    ? ['(登録なし)']
+    : [
+        ...request.characters.map(characterLine),
+        '',
+        '登場人物の見た目は、生成のときに登録した画像（参照）で決まります。説明では**名前で指し**、動き・表情・構図・場面を書いてください。',
+        '髪型・髪の色・顔立ち・服装・色などの外見は、上に書いてあることだけを使ってください。**書いていない外見を足さないでください**（画像と食い違います）。',
+        'Shot の行に「登場人物」があれば、その人物を映してください。',
+      ]
+
+const locationLines = (request: StoryboardDraftRequest): readonly string[] =>
+  request.locations.length === 0
+    ? ['(登録なし)']
+    : request.locations.map((location) =>
+        location.description.trim() === '' ? `- ${location.name}` : `- ${location.name}: ${location.description.trim()}`,
+      )
 
 const sectionLines = (request: StoryboardDraftRequest): readonly string[] =>
   request.sections.length === 0
@@ -76,6 +122,12 @@ export const buildDraftPrompt = (request: StoryboardDraftRequest): string =>
     '',
     '## 避けたいもの',
     orUnspecified(request.avoid),
+    '',
+    '## 登場人物',
+    ...characterLines(request),
+    '',
+    '## ロケーション',
+    ...locationLines(request),
     '',
     '## 歌詞',
     request.lyrics.trim() === '' ? '(歌詞なし)' : request.lyrics.trim(),

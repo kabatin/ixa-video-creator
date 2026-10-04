@@ -166,3 +166,48 @@ describe('LyricCueList', () => {
     expect(screen.getByText(/三行目/).textContent).not.toMatch(/まだ/)
   })
 })
+
+/**
+ * 歌詞の打鍵は先に（capture で）受けるので、部品の打鍵と 2 重に動かないよう外す場所を決める（レビューで見つけた）。
+ * メニュー項目・ほかのパネルのボタン・開いている確認の中では、その部品が受ける。
+ */
+describe('LyricSync: 打鍵を取らない場所', () => {
+  it('メニュー項目・ほかのパネルのボタン・確認の中の Enter では打たない', () => {
+    const onCuesChange = vi.fn()
+    render(
+      <>
+        <button type="button" role="menuitem">
+          メニュー項目
+        </button>
+        <button type="button">ほかのパネルのボタン</button>
+        <dialog open>
+          <button type="button">確認のボタン</button>
+        </dialog>
+        <Harness at={1} onCuesChange={onCuesChange} />
+      </>,
+    )
+
+    for (const name of ['メニュー項目', 'ほかのパネルのボタン', '確認のボタン']) {
+      const target = screen.getByRole(name === 'メニュー項目' ? 'menuitem' : 'button', { name })
+      target.focus()
+      fireEvent.keyDown(target, { key: 'Enter' })
+    }
+
+    expect(onCuesChange).not.toHaveBeenCalled()
+  })
+
+  it('聴きながら切るのパネルの中のボタン（▶ など）の上なら打つ', () => {
+    const onCuesChange = vi.fn()
+    render(
+      <div data-cutter-panel="">
+        <button type="button">▶</button>
+        <Harness at={1} onCuesChange={onCuesChange} />
+      </div>,
+    )
+    const play = screen.getByRole('button', { name: '▶' })
+    play.focus()
+    fireEvent.keyDown(play, { key: 'Enter' })
+
+    expect(onCuesChange).toHaveBeenCalledWith([1])
+  })
+})

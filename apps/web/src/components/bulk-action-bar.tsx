@@ -11,22 +11,24 @@ import {
   type BulkTakeRule,
   type BulkUpdatePatch,
 } from '@/components/bulk-action-forms'
+import { BulkOutcomeView, BulkProgressStrip, MoreMenu, type BulkOutcome } from '@/components/bulk-action-bar-parts'
 import { Button } from '@/components/ui/button'
 import { BulkDrawForm } from '@/components/bulk-draw-form'
-import { ProgressDialog } from '@/components/ui/progress-dialog'
 import type { BulkProgress } from '@/components/workbench/use-bulk-actions'
 import { WORDING } from '@/lib/wording'
 
 /**
- * 選ぶと画面の下に貼り付く操作バー（P58-4）。
+ * 選ぶと一覧の下端に貼り付く操作バー（P58-4）。
  *
  * 制作者は 27 件の Shot に対して生成の依頼を 27 回、採用を 27 回した。
  * 一覧で選んで、ここで 1 回で済ませる。
  *
- * **状態も API 呼び出しもここには無い。** 選択は一覧が持ち、送信は配線側が行う。
- * この部品は「何件選ばれているか」と「結果の文」を受け取って出すだけにする。
+ * **1 行にまとめ、一覧の下端に重ねる**（制作者 2026-10-03「選択した時に出るメニューが混みあっててすべて改行してしまってる」
+ * 「✅ で選ぶとメニューが上部に出てくるが、リストの縦位置が下がってずれて地味に不便。最下部固定でリストに被る感じで」）。
+ * よく使う 2 つ（絵を作る・Take を作る）だけを出し、残りは「その他」。開いた設定はバーの上に重ねて出す。
  *
- * 3 つの入力の中身は `bulk-action-forms.tsx`。**同時に開くのは 1 つ。**
+ * **状態も API 呼び出しもここには無い。** 選択は一覧が持ち、送信は配線側が行う。
+ * 入力の中身は `bulk-action-forms.tsx`。**同時に開くのは 1 つ。**
  */
 
 export { buildBulkPatch, bulkPatchError, hasBulkPatch } from '@/components/bulk-action-forms'
@@ -37,23 +39,19 @@ export type {
   BulkTakeRule,
   BulkUpdatePatch,
 } from '@/components/bulk-action-forms'
+export type { BulkOutcome } from '@/components/bulk-action-bar-parts'
 
 type PanelKey = 'generate' | 'selectTakes' | 'update' | 'draw'
 
 const PANEL_LABELS: Readonly<Record<PanelKey, string>> = {
-  generate: '一括生成',
+  generate: 'Take を作る',
   selectTakes: '一括採用',
   update: '一括で変える',
-  draw: '絵コンテの画像',
+  draw: '絵を作る',
 }
 
-const PANEL_ORDER: readonly PanelKey[] = ['generate', 'selectTakes', 'update', 'draw']
-
-/** 一括の結果。**1 件ずつの失敗を畳まない**（lessons L-015）。要約は呼び出し側が作る。 */
-export type BulkOutcome = {
-  readonly summary: string
-  readonly failures: readonly string[]
-}
+/** バーに直接並べる 2 つ（作業の順: 絵 → Take）。残りは「その他」の中。 */
+const MAIN_PANELS: readonly PanelKey[] = ['draw', 'generate']
 
 export type BulkActionBarProps = {
   readonly selectedCount: number
@@ -95,6 +93,8 @@ export type BulkActionBarProps = {
   readonly onRender: () => void
   /** 絵コンテの画像をまとめて作る（ADR-0029）。既定は絵の無い Shot だけ。 */
   readonly onDrawStartFrames: (input: { readonly onlyMissing: boolean }) => void
+  /** 絵コンテ（説明）が空の Shot が混じっているときの確認の文。無ければ null（`drawWithoutStoryboardWarning`）。 */
+  readonly drawWarning: string | null
 }
 
 export const BulkActionBar = ({
@@ -117,26 +117,50 @@ export const BulkActionBar = ({
   onMerge,
   onRender,
   onDrawStartFrames,
+  drawWarning,
 }: BulkActionBarProps) => {
   const idPrefix = useId()
-  const [open, setOpen] = useState<PanelKey | null>(null)
+  const [open, setOpen] = useState<PanelKey | 'more' | null>(null)
+  /** 開いた設定を閉じたとき焦点を戻すボタン（「その他」から開いたものは「その他」へ）。 */
+  const [opener, setOpener] = useState<string | null>(null)
 
   const toggleId = (key: PanelKey): string => `${idPrefix}-${key}-toggle`
-  const panelId = (key: PanelKey): string => `${idPrefix}-${key}-panel`
+  const moreId = `${idPrefix}-more-toggle`
+  const panelId = (key: PanelKey | 'more'): string => `${idPrefix}-${key}-panel`
 
   /**
    * 閉じたら開いたボタンへ焦点を戻す。**戻さないと現在地を失う。**
-   * `ref` ではなく id で引くのは、`ui/button` が ref を受けないため
-   * （`timeline-inline-form.tsx` と同じやり方）。
+   * `ref` ではなく id で引くのは、`ui/button` が ref を受けないため（`timeline-inline-form.tsx` と同じやり方）。
    */
-  const close = (key: PanelKey): void => {
+  const close = (): void => {
+    const back = open === 'more' ? moreId : opener
     setOpen(null)
-    document.getElementById(toggleId(key))?.focus()
+    setOpener(null)
+    if (back !== null) document.getElementById(back)?.focus()
   }
 
   const toggle = (key: PanelKey): void => {
-    if (open === key) close(key)
-    else setOpen(key)
+    if (open === key) {
+      close()
+      return
+    }
+    setOpen(key)
+    setOpener(toggleId(key))
+  }
+
+  /** 「その他」から設定を開く。閉じたら「その他」へ焦点を戻す。 */
+  const openFromMore = (key: PanelKey): void => {
+    setOpen(key)
+    setOpener(moreId)
+    // メニューが消えると焦点が行き場を失い、Escape がバーに届かなくなる。「その他」に置いておく。
+    document.getElementById(moreId)?.focus()
+  }
+
+  /** 「その他」から確認の画面を開く操作（結合・書き出す・削除）。メニューは閉じる。 */
+  const runFromMore = (run: () => void): void => {
+    setOpen(null)
+    setOpener(null)
+    run()
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>): void => {
@@ -144,16 +168,20 @@ export const BulkActionBar = ({
     event.stopPropagation()
     if (event.key !== 'Escape' || open === null) return
     event.preventDefault()
-    close(open)
+    close()
   }
 
   // 選択が 0 件のときは操作のバーを出さない（空のバーが画面を占め続けない）。
   // ただ、チェックしないと一括の操作があることすら見えず、Take をどこで作るか迷った（制作者 2026-09-30）。1 行だけ言う。
+  // 走っている一括の進み具合は、選択を外しても出し続ける。
   if (selectedCount <= 0) {
     return (
-      <p className="border-b border-line px-2 py-1 text-xs text-muted">
-        チェックを付けると、まとめて Take を作れます（まとめて変更・絵コンテの画像・結合・削除も）。
-      </p>
+      <div className="sticky bottom-0 z-30 border-t border-line bg-surface px-2 py-1">
+        <BulkProgressStrip busy={busy} progress={progress} />
+        <p className="text-xs text-muted">
+          チェックを付けると、まとめて絵や Take を作れます（まとめて変更・結合・書き出し・削除も）。
+        </p>
+      </div>
     )
   }
 
@@ -163,51 +191,15 @@ export const BulkActionBar = ({
     <section
       aria-label="一括操作"
       onKeyDown={handleKeyDown}
-      // 一覧の上に置く（UI-WORKBENCH-2 §7）。320px で崩れないよう、件数の行とボタンの行に分ける。
-      className="sticky top-0 z-30 border-b border-line-strong bg-surface p-2 shadow-md"
+      // 一覧の下端に貼り付けて重ねる（一覧を押し下げない）。開いた設定はこの上へ伸びる。
+      className="sticky bottom-0 z-30 border-t border-line-strong bg-surface p-2 shadow-[0_-6px_16px_rgb(0_0_0/0.25)]"
     >
-      <div className="flex items-center gap-2">
-        <p className="text-sm font-semibold text-text">{selectedCount} 件を選択中</p>
-        <div className="ml-auto flex gap-1">
-          <Button size="sm" tone="secondary" disabled={busy} onClick={onClearSelection}>
-            選択を{WORDING.unlink}
-          </Button>
-          <Button size="sm" tone="secondary" disabled={busy || selectedCount < 2} onClick={onMerge}>
-            結合…
-          </Button>
-          <Button size="sm" tone="secondary" disabled={busy} onClick={onRender}>
-            書き出す…
-          </Button>
-          <Button size="sm" tone="danger" disabled={busy} onClick={onDelete}>
-            削除…
-          </Button>
-        </div>
-      </div>
-      <div className="mt-1.5 grid grid-cols-2 gap-1">
-        {PANEL_ORDER.map((key) => (
-          <Button
-            key={key}
-            id={toggleId(key)}
-            size="sm"
-            tone="secondary"
-            disabled={busy}
-            aria-expanded={open === key}
-            aria-controls={open === key ? panelId(key) : undefined}
-            onClick={() => {
-              toggle(key)
-            }}
-          >
-            {PANEL_LABELS[key]}
-          </Button>
-        ))}
-      </div>
-
-      {open !== null && (
+      {open !== null && open !== 'more' && (
         <div
           id={panelId(open)}
           role="group"
           aria-label={PANEL_LABELS[open]}
-          className="mt-3 rounded-md border border-line bg-surface-2 p-3"
+          className="relative mb-2 max-h-[50vh] overflow-auto rounded-md border border-line bg-surface-2 p-3"
         >
           {open === 'generate' && (
             <BulkGenerateForm
@@ -220,8 +212,8 @@ export const BulkActionBar = ({
               busy={busy}
               onGenerate={(input) => {
                 // **依頼したら閉じる。** 開いたままだと同じ件数に二重に依頼できてしまう
-                // （実 Provider では二重に課金される）。進み具合は進捗ダイアログが出す。
-                close('generate')
+                // （実 Provider では二重に課金される）。進み具合はバーが数えて出す。
+                close()
                 onGenerate(input)
               }}
             />
@@ -233,7 +225,7 @@ export const BulkActionBar = ({
               alreadySelectedCount={alreadySelectedCount}
               busy={busy}
               onSelectTakes={(rule) => {
-                close('selectTakes')
+                close()
                 onSelectTakes(rule)
               }}
             />
@@ -253,9 +245,10 @@ export const BulkActionBar = ({
               idPrefix={`${idPrefix}-draw`}
               targetCount={selectedCount}
               busy={busy}
+              warning={drawWarning}
               onDraw={(input) => {
                 // 頼んだら閉じる。開いたままだと同じ件数に二重に頼める。
-                close('draw')
+                close()
                 onDrawStartFrames(input)
               }}
             />
@@ -263,59 +256,68 @@ export const BulkActionBar = ({
         </div>
       )}
 
-      {/**
-        * 投入してから終わるまで手を止める。
-        *
-        * 以前は往復が終わった時点で手が空き、そのあとは一覧の状態が少しずつ
-        * 変わるだけだった。**押したのに何も起きていないように見え**、実際に
-        * 「反応していない」と読み違えた。数えて見せる。
-        */}
-      <ProgressDialog
-        open={busy || progress !== null}
-        title={`${WORDING.start}しています`}
-        message={
-          progress === null
-            ? '依頼を送っています。'
-            : `${String(progress.done)} / ${String(progress.total)} 件 終わりました`
-        }
-        value={progress === null || progress.total === 0 ? null : progress.done / progress.total}
-      />
+      {open === 'more' && (
+        <MoreMenu
+          id={panelId('more')}
+          items={[
+            { label: `${PANEL_LABELS.selectTakes}…`, disabled: busy, run: () => { openFromMore('selectTakes') } },
+            { label: `${PANEL_LABELS.update}…`, disabled: busy, run: () => { openFromMore('update') } },
+            { label: '結合…', disabled: busy || selectedCount < 2, run: () => { runFromMore(onMerge) } },
+            { label: '書き出す…', disabled: busy, run: () => { runFromMore(onRender) } },
+            { label: '削除…', danger: true, disabled: busy, run: () => { runFromMore(onDelete) } },
+          ]}
+        />
+      )}
 
-      {/**
-        * 進捗はダイアログが出す。同じことをバーにも書くと読み上げが二重になる。
-        * **走っている間は前回の結果を出さない。** 出すと「終わった」と読み違える。
-        */}
+      <BulkProgressStrip busy={busy} progress={progress} />
+      {/* 走っている間は前回の結果を出さない。出すと「終わった」と読み違える。 */}
       {!busy && progress === null && <BulkOutcomeView outcome={outcome} />}
+
+      <div className="flex items-center gap-1">
+        <span className="whitespace-nowrap text-sm font-semibold text-text">{`${String(selectedCount)} 件`}</span>
+        <button
+          type="button"
+          aria-label={`選択を${WORDING.unlink}`}
+          title={`選択を${WORDING.unlink}`}
+          disabled={busy}
+          onClick={onClearSelection}
+          className="h-6 w-6 whitespace-nowrap rounded text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
+        >
+          ✕
+        </button>
+        <span className="ml-auto flex items-center gap-1">
+          {MAIN_PANELS.map((key) => (
+            <Button
+              key={key}
+              id={toggleId(key)}
+              size="sm"
+              tone={key === 'generate' ? 'primary' : 'secondary'}
+              nowrap
+              disabled={busy}
+              aria-expanded={open === key}
+              aria-controls={open === key ? panelId(key) : undefined}
+              onClick={() => {
+                toggle(key)
+              }}
+            >
+              {PANEL_LABELS[key]}
+            </Button>
+          ))}
+          <Button
+            id={moreId}
+            size="sm"
+            nowrap
+            aria-haspopup="menu"
+            aria-expanded={open === 'more'}
+            onClick={() => {
+              if (open === 'more') close()
+              else setOpen('more')
+            }}
+          >
+            その他
+          </Button>
+        </span>
+      </div>
     </section>
-  )
-}
-
-/**
- * 結果。**失敗が 1 件でもあれば `alert`。**
- * 成功件数だけを出して失敗を静かに落とすと、やったつもりの件が残る。
- */
-const BulkOutcomeView = ({ outcome }: { readonly outcome: BulkOutcome | null }) => {
-  if (outcome === null) return null
-
-  if (outcome.failures.length === 0) {
-    return (
-      <p role="status" className="mt-3 text-sm text-ok">
-        {outcome.summary}
-      </p>
-    )
-  }
-
-  return (
-    <div
-      role="alert"
-      className="mt-3 rounded-md border border-warn/40 bg-warn/10 p-3 text-sm text-warn"
-    >
-      <p>{outcome.summary}</p>
-      <ul className="mt-1 list-disc pl-5">
-        {outcome.failures.map((failure, index) => (
-          <li key={`${String(index)}-${failure}`}>{failure}</li>
-        ))}
-      </ul>
-    </div>
   )
 }

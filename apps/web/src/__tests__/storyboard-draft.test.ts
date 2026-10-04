@@ -87,21 +87,28 @@ describe('buildDraftRows', () => {
     const [row] = buildDraftRows([anItem(shot.id, { description: '案の説明' })], [shot])
 
     expect(row?.currentDescription).toBe('元の説明')
-    expect(row?.proposedDescription).toBe('案の説明')
+    expect(row?.proposal?.description).toBe('案の説明')
   })
 
   it('理由を必ず持つ', () => {
     const shot = aShot()
     const [row] = buildDraftRows([anItem(shot.id, { reason: '拍の頭だから' })], [shot])
-    expect(row?.reason).toBe('拍の頭だから')
+    expect(row?.proposal?.reason).toBe('拍の頭だから')
   })
 
-  it('案の無い Shot は行にしない', () => {
+  /**
+   * **Shot があれば行にする。** 案の無い Shot も並べて案の欄を空ける（制作者 2026-10-04「Shot作ったあとに表示しても空なので、
+   * Shotがあるならリストは出してもいいんじゃないかな」）。案の無い行は選べない。
+   */
+  it('案の無い Shot も行にし、案は null で選べない', () => {
     const withDraft = aShot({ code: 'A' })
-    const withoutDraft = aShot({ code: 'B' })
+    const withoutDraft = aShot({ code: 'B', description: '' })
     const rows = buildDraftRows([anItem(withDraft.id)], [withDraft, withoutDraft])
 
-    expect(rows.map((row) => row.code)).toEqual(['A'])
+    expect(rows.map((row) => row.code)).toEqual(['A', 'B'])
+    expect(rows[1]?.proposal).toBeNull()
+    expect(rows[1]?.currentDescription).toBe('')
+    expect(rows[1]?.selectable).toBe(false)
   })
 
   /** **`adoptedAt` の null は「まだ決めていない」。「不採用」ではない**（L-021）。 */
@@ -109,7 +116,7 @@ describe('buildDraftRows', () => {
     const shot = aShot()
     const [row] = buildDraftRows([anItem(shot.id, { adoptedAt: null })], [shot])
 
-    expect(row?.decision).toBe('undecided')
+    expect(row?.proposal?.decision).toBe('undecided')
     expect(row?.selectable).toBe(true)
   })
 
@@ -120,7 +127,7 @@ describe('buildDraftRows', () => {
       [shot],
     )
 
-    expect(row?.decision).toBe('adopted')
+    expect(row?.proposal?.decision).toBe('adopted')
     expect(row?.selectable).toBe(false)
   })
 
@@ -131,7 +138,7 @@ describe('buildDraftRows', () => {
       [shot],
     )
 
-    expect(row?.unchanged).toBe(true)
+    expect(row?.proposal?.unchanged).toBe(true)
   })
 })
 
@@ -169,20 +176,22 @@ describe('選択の操作', () => {
   })
 
   /** 全選択でも採用済みには触らない。**触ると採用時刻が動きうる。** */
-  it('全選択はまだ決めていない行だけを選ぶ', () => {
+  it('全選択はまだ決めていない行だけを選ぶ（案の無い行も選ばない）', () => {
     const undecided = aShot({ code: 'A' })
     const adopted = aShot({ code: 'B' })
+    const noProposal = aShot({ code: 'C' })
     const rows = buildDraftRows(
       [
         anItem(undecided.id),
         anItem(adopted.id, { adoptedAt: '2026-09-18T01:00:00.000Z' }),
       ],
-      [undecided, adopted],
+      [undecided, adopted, noProposal],
     )
 
     const selected = selectAllSelectable(rows)
     expect(selected.has(undecided.id)).toBe(true)
     expect(selected.has(adopted.id)).toBe(false)
+    expect(selected.has(noProposal.id)).toBe(false)
   })
 
   it('採用に送るのは、選ばれていてまだ決めていない行だけ', () => {
@@ -247,6 +256,20 @@ describe('buildDraftSummary', () => {
     })
 
     expect(summary.headline).toBe('2 件の案のうち 1 件を採用済み')
+  })
+
+  /** 行は Shot の数だけあるので、行の数を案の数として数えない（39 行で 0 件の案を「39 件の案」と言わない）。 */
+  it('案の無い Shot があれば、案の数とは別に数える', () => {
+    const missing = aShot({ code: 'B' })
+    const summary = buildDraftSummary({
+      run: aRun(),
+      rows: buildDraftRows([anItem(shot.id)], [shot, missing]),
+      selected: empty,
+      unmatchedCount: 0,
+      now: NOW,
+    })
+
+    expect(summary.headline).toBe('1 件の案のうち 0 件を採用済み（案の無い Shot が 1 件。作り直すと入ります）')
   })
 
   /** 失敗を握り潰さない。理由が出ないと「押したのに何も起きなかった」と読める。 */

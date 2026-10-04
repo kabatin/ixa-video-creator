@@ -3,7 +3,7 @@ import type { BrandCategory, MediaAssetId } from '@ixa/domain'
 import { BrandCategory as BrandCategorySchema } from '@ixa/domain'
 import { deletedAt, ulidPk, ulidRef } from './columns.js'
 import { mediaAssets } from './media.js'
-import { workspaces } from './workspace.js'
+import { projects, workspaces } from './workspace.js'
 
 /** DOMAIN.md §6 Asset Library: brand_assets / locations / motion_templates */
 export const brandAssets = pgTable(
@@ -13,6 +13,10 @@ export const brandAssets = pgTable(
     workspaceId: ulidRef('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
+    /** 持ち主のプロジェクト（ADR-0034）。 */
+    projectId: ulidRef('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
     category: text('category', { enum: BrandCategorySchema.options }).$type<BrandCategory>().notNull(),
     name: text('name').notNull(),
     /** color / font は NULL のことがある */
@@ -23,7 +27,10 @@ export const brandAssets = pgTable(
     usageRule: text('usage_rule').notNull().default(''),
     deletedAt: deletedAt(),
   },
-  (t) => [index('brand_assets_workspace_id_idx').on(t.workspaceId)],
+  (t) => [
+    index('brand_assets_workspace_id_idx').on(t.workspaceId),
+    index('brand_assets_project_id_idx').on(t.projectId),
+  ],
 )
 
 export const locations = pgTable(
@@ -33,13 +40,20 @@ export const locations = pgTable(
     workspaceId: ulidRef('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
+    /** 持ち主のプロジェクト（ADR-0034）。 */
+    projectId: ulidRef('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     description: text('description').notNull().default(''),
     /** 参照画像の MediaAssetId 配列。FK は張らない（配列列のため）。 */
     referenceAssetIds: text('reference_asset_ids').array().$type<MediaAssetId[]>().notNull().default([]),
     deletedAt: deletedAt(),
   },
-  (t) => [index('locations_workspace_id_idx').on(t.workspaceId)],
+  (t) => [
+    index('locations_workspace_id_idx').on(t.workspaceId),
+    index('locations_project_id_idx').on(t.projectId),
+  ],
 )
 
 export const motionTemplates = pgTable(

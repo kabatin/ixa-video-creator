@@ -84,7 +84,6 @@ const renderEditor = async (purpose?: 'cut' | 'lyrics', lyricCues?: readonly num
       projectId={PROJECT_ID as never}
       track={track}
       analysis={analysis}
-      sequences={[]}
       {...(purpose === undefined ? {} : { purpose })}
       {...(lyricCues === undefined ? {} : { lyricCues })}
     />,
@@ -99,8 +98,8 @@ describe('CutEditor の使いみち', () => {
     await renderEditor()
 
     expect(screen.getByRole('button', { name: /ここに区切りを置く/ })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Shot にする' })).toBeInTheDocument()
-    expect(screen.getByText('区切りがまだありません。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Shot にする' })).toBeInTheDocument()
+    expect(screen.getByText(/区切りがまだありません。/)).toBeInTheDocument()
   })
 
   it('歌詞のときは区切りの道具を出さず、波形と表示の切り替えは出す', async () => {
@@ -110,7 +109,7 @@ describe('CutEditor の使いみち', () => {
     expect(screen.queryByRole('button', { name: /セクションの境目に区切りを置く/ })).toBeNull()
     expect(screen.queryByText('拍に吸着')).toBeNull()
     expect(screen.queryAllByText(/Shot にする/)).toHaveLength(0)
-    expect(screen.queryByText('区切りがまだありません。')).toBeNull()
+    expect(screen.queryByText(/区切りがまだありません。/)).toBeNull()
     expect(screen.queryByText('キーとホイールの割り当て')).toBeNull()
     expect(screen.getByRole('button', { name: '全体' })).toBeInTheDocument()
   })
@@ -126,14 +125,17 @@ describe('歌い出しに区切りを置く', () => {
     fireEvent.click(screen.getByRole('button', { name: '歌い出しに区切りを置く' }))
 
     expect(screen.getByText('歌い出しに区切りを 2 本置きました。')).toBeInTheDocument()
-    expect(screen.queryByText('区切りがまだありません。')).toBeNull()
+    expect(screen.queryByText(/区切りがまだありません。/)).toBeNull()
   })
 
-  it('歌詞の時刻が無ければ押せない（理由は title に出す）', async () => {
+  /** 押せるが、先に歌詞を合わせるよう言う（制作者 2026-10-03。確かめの入口は `cut-editor-shots.test.tsx`）。 */
+  it('歌詞の時刻が無ければ、押すと先に歌詞を合わせるよう言う（区切りは置かない）', async () => {
     await renderEditor('cut')
 
     const button = screen.getByRole('button', { name: '歌い出しに区切りを置く' })
-    expect(button).toHaveProperty('disabled', true)
-    expect(button.getAttribute('title')).toMatch(/歌詞を合わせる/)
+    expect(button).toHaveProperty('disabled', false)
+    fireEvent.click(button)
+    expect(screen.getByText(/歌詞の時刻がまだありません/)).toBeInTheDocument()
+    expect(screen.getByText(/区切りがまだありません。/)).toBeInTheDocument()
   })
 })

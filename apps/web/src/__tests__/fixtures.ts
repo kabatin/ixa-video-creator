@@ -107,6 +107,7 @@ export const LOCATION_ID = '01ARZ3NDEKTSV4RRFFQ69G5FD0'
 export const characterJson = {
   id: CHARACTER_ID,
   workspaceId: WORKSPACE_ID,
+  projectId: PROJECT_ID,
   name: 'takepi',
   displayName: 'タケピ',
   description: '主人公',
@@ -175,6 +176,7 @@ export const mediaAssetJson = {
 export const locationJson = {
   id: LOCATION_ID,
   workspaceId: WORKSPACE_ID,
+  projectId: PROJECT_ID,
   name: '夜のスタジアム',
   description: 'ナイター照明',
   referenceAssetIds: [MEDIA_ID],

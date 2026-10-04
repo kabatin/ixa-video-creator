@@ -189,6 +189,7 @@ describe('生成の進み具合（F1）', () => {
       estimatedLatencySec: 210,
       queuedAt: '2026-09-30T10:00:00.000Z',
       startedAt: '2026-09-30T10:00:05.000Z',
+      providerStartedAt: '2026-09-30T10:00:05.000Z',
       attempt: 1,
     }
     render(<Harness api={fakeApi()} initialStatus="generating" activity={[running]} />)

@@ -8,7 +8,7 @@ import type {
   CharacterLookImage,
   CharacterLookImageId,
   MediaAssetId,
-  WorkspaceId,
+  ProjectId,
 } from '@ixa/domain'
 import {
   CreateCharacterBody,
@@ -41,9 +41,10 @@ const lookPath = (id: CharacterLookId, suffix = ''): string =>
   `/looks/${encodeURIComponent(id)}${suffix}`
 
 export type CharacterApi = {
-  listCharacters: (workspaceId: WorkspaceId) => Promise<Character[]>
+  /** プロジェクトのキャラクター（ADR-0034）。 */
+  listCharacters: (projectId: ProjectId) => Promise<Character[]>
   getCharacter: (id: CharacterId) => Promise<Character | null>
-  createCharacter: (input: CreateCharacterBody) => Promise<Character>
+  createCharacter: (projectId: ProjectId, input: CreateCharacterBody) => Promise<Character>
   updateCharacter: (id: CharacterId, patch: UpdateCharacterBody) => Promise<Character>
   deleteCharacter: (id: CharacterId) => Promise<void>
 
@@ -70,15 +71,17 @@ export type CharacterApi = {
 }
 
 export const createCharacterApi = (requester: Requester): CharacterApi => ({
-  listCharacters: async (workspaceId) => {
-    const query = new URLSearchParams({ workspaceId })
-    return requester.get(`/characters?${query.toString()}`, WireCharacterList)
-  },
+  listCharacters: async (projectId) =>
+    requester.get(`/projects/${encodeURIComponent(projectId)}/characters`, WireCharacterList),
 
   getCharacter: async (id) => requester.getOrNull(characterPath(id), WireCharacter),
 
-  createCharacter: async (input) =>
-    requester.post('/characters', CreateCharacterBody.parse(input), WireCharacter),
+  createCharacter: async (projectId, input) =>
+    requester.post(
+      `/projects/${encodeURIComponent(projectId)}/characters`,
+      CreateCharacterBody.parse(input),
+      WireCharacter,
+    ),
 
   updateCharacter: async (id, patch) =>
     requester.patch(characterPath(id), UpdateCharacterBody.parse(patch), WireCharacter),

@@ -1,5 +1,6 @@
 import {
   LocationId as LocationIdSchema,
+  ProjectId as ProjectIdSchema,
   ShotId as ShotIdSchema,
   TakeId as TakeIdSchema,
   newId,
@@ -193,7 +194,11 @@ describe('Shot CRUD', () => {
 
   it('PATCH でロケーションを付け外しできる（ADR-0015）', async () => {
     const f = buildFixture()
-    const locationId = newId(LocationIdSchema)
+    const { id: locationId } = await f.locations.create({
+      workspaceId: f.project.workspaceId,
+      projectId: f.project.id,
+      name: 'iXA CUP 会場',
+    })
 
     const patch = (body: unknown) =>
       f.app.request(`/shots/${f.shot.id}`, {
@@ -208,6 +213,32 @@ describe('Shot CRUD', () => {
     // null を送れば外せる。未指定との区別がつかないと場所を消せなくなる。
     const cleared = (await (await patch({ locationId: null })).json()) as Ok<ShotResponse>
     expect(cleared.data.locationId).toBeNull()
+  })
+
+  /** ロケーションはプロジェクトごと（ADR-0034）。ほかのプロジェクトのものは取り込んでから使う。 */
+  it('ほかのプロジェクトのロケーション・無いロケーションは付けられない（422）', async () => {
+    const f = buildFixture()
+    const foreign = await f.locations.create({
+      workspaceId: f.project.workspaceId,
+      projectId: newId(ProjectIdSchema),
+      name: '雨の夜の店先',
+    })
+    const patch = (body: unknown) =>
+      f.app.request(`/shots/${f.shot.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+    const foreignRes = await patch({ locationId: foreign.id })
+    const missingRes = await patch({ locationId: newId(LocationIdSchema) })
+
+    expect(foreignRes.status).toBe(422)
+    expect(((await foreignRes.json()) as { fields?: Record<string, string[]> }).fields?.locationId?.[0]).toMatch(
+      /この Project のロケーションではありません/,
+    )
+    expect(missingRes.status).toBe(422)
+    expect(f.shots.snapshot().find((shot) => shot.id === f.shot.id)?.locationId).toBeNull()
   })
 })
 

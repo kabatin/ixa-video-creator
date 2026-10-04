@@ -150,6 +150,7 @@ describe('/shots/:id/start-frame の直近のジョブ', () => {
     const { project, shot, image } = setup()
     const f = build(project, shot, [image])
     const job = await f.imageJobs.create({
+      kind: 'start_frame',
       projectId: project.id,
       shotId: shot.id,
       providerId: ProviderId.parse('codex-cli'),

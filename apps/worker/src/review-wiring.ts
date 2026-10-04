@@ -9,7 +9,7 @@ import {
   createTakeRepository,
   type DbClient,
 } from '@ixa/db'
-import type { AiToolId, MusicAnalysis, ProjectId } from '@ixa/domain'
+import type { AiToolId, MusicAnalysis, Project, ProjectId } from '@ixa/domain'
 import { brandReviewer, musicReviewer, technicalReviewer } from '@ixa/review'
 import type { DeterministicReviewer } from '@ixa/review'
 import { createClaudeCliVisionReviewer, createStubVisionReviewer } from '@ixa/provider-llm'
@@ -49,18 +49,19 @@ const BRAND_COLOR_MAX_RATIO = 1
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
 
 /**
- * Project の Workspace に登録された色のブランド資産を、判定の要求へ写す。
+ * Project に登録された色のブランド資産を、判定の要求へ写す（ブランド資産はプロジェクトごと。ADR-0034）。
  * 色が 1 つも登録されていなければ空を返し、brand レビュアは skip する。
  */
 export const resolveBrandColorTargets = async (
-  brandAssets: ReturnType<typeof createBrandAssetRepository>,
-  projects: ReturnType<typeof createProjectRepository>,
+  brandAssets: Pick<ReturnType<typeof createBrandAssetRepository>, 'findByProject'>,
+  projects: { readonly findById: (id: ProjectId) => Promise<Pick<Project, 'id'> | null> },
   projectId: ProjectId,
 ): Promise<readonly BrandColorTarget[]> => {
   const project = await projects.findById(projectId)
   if (project === null) return []
 
-  const assets = await brandAssets.findByWorkspace(project.workspaceId)
+  // ブランド資産はプロジェクトごと（ADR-0034）。ほかのプロジェクトの色で点検しない。
+  const assets = await brandAssets.findByProject(project.id)
   return assets.flatMap((asset) =>
     asset.category === 'color' && asset.value !== null && HEX_COLOR.test(asset.value)
       ? [

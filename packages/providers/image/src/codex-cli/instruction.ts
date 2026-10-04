@@ -20,12 +20,15 @@ const ROLE_LABELS: Readonly<Record<ReferenceRole, string>> = {
  * Codex へ渡す指示（stdin）。**中身の説明（`prompt`）は呼び出し側が作る。** ここで足すのは
  * Codex に画像を作らせる手順だけ: 画像生成ツールで 1 枚、形と大きさ、参照画像の意味、保存先。
  *
- * 切り抜いて使う（`codexFrameFor`）ので、主題が端に寄らないよう伝える。
+ * 場面の絵は切り抜いて使う（`codexFrameFor`）ので、主題が端に寄らないよう伝える。
+ * キャラクターシート（`composition: 'sheet'`。ADR-0035）は 1 枚の中に並べる絵で切り抜かないので、
+ * 「中央に寄せる」「候補を並べない」は言わない（4 つの向きを並べる指示とぶつかる）。
  */
 export const buildCodexImageInstruction = (input: {
   readonly prompt: string
   readonly frame: CodexFrame
   readonly referenceRoles: readonly ReferenceRole[]
+  readonly composition?: 'frame' | 'sheet'
 }): string => {
   const { frame } = input
   const references = input.referenceRoles.map(
@@ -40,8 +43,15 @@ export const buildCodexImageInstruction = (input: {
     ...(references.length === 0 ? [] : ['# 添えた参照画像', ...references, '']),
     '# 守ること',
     '- 文字・字幕・ロゴの透かしを入れない（参照画像にあるブランドのロゴは除く）',
-    '- 主題は中央寄りに置く。上下または左右が少し切り取られても成り立つ構図にする',
-    '- 1 枚だけ作る。候補を並べない',
+    ...(input.composition === 'sheet'
+      ? [
+          '- 切り抜かないので、画像の端まで使ってよい。並べ方は「描くもの」に従う',
+          '- 1 枚の画像として仕上げる（別の案の画像を何枚も作らない）',
+        ]
+      : [
+          '- 主題は中央寄りに置く。上下または左右が少し切り取られても成り立つ構図にする',
+          '- 1 枚だけ作る。候補を並べない',
+        ]),
     '',
     `できた画像は、この作業ディレクトリに ${CODEX_OUTPUT_FILE} という名前で保存してください。説明の文章は不要です。`,
   ].join('\n')

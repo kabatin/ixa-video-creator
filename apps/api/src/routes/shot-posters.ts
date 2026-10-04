@@ -87,6 +87,9 @@ export const ShotPosterResponse = z
       description:
         '最初のフレーム（絵コンテの画像）が付いているか。採用 Take があっても見る（流れの帯・説明も絵も無い Shot の確認）',
     }),
+    drawing: z.boolean().openapi({
+      description: '絵コンテの画像を作っているか。採用 Take があっても見る（一覧で絵と動画の作業中を分けて出す）',
+    }),
   })
   .refine((entry) => (entry.thumbnailUrl === null) !== (entry.reason === null), {
     message: URL_AND_REASON_PAIR_MESSAGE,
@@ -111,6 +114,8 @@ export type ShotPoster =
 export type ShotPosterEntry = ShotPoster & {
   readonly pending: boolean
   readonly hasStartFrame: boolean
+  /** 絵コンテの画像を作っているか（採用 Take があっても）。 */
+  readonly drawing: boolean
 }
 
 const isPending = (poster: ShotPoster): boolean =>
@@ -253,7 +258,10 @@ export const buildShotPosters = async (
 
   const projectId = shots[0]?.projectId
   const drawing = new Set(
-    projectId === undefined ? [] : (await deps.imageJobs.findActiveByProject(projectId)).map((job) => job.shotId),
+    projectId === undefined
+      ? []
+      : // キャラクターシートのジョブ（Shot を持たない）は数えない（ADR-0035）。
+        (await deps.imageJobs.findActiveByProject(projectId)).flatMap((job) => (job.shotId === null ? [] : [job.shotId])),
   )
   // 最初のフレームは**全 Shot で引く**（あるかどうかを返すため）。絵に使うのは採用 Take が無い Shot だけ。
   const frameOf = new Map<ShotId, MediaAssetId | null>(
@@ -309,6 +317,7 @@ export const buildShotPosters = async (
       ...poster,
       pending: isPending(poster),
       hasStartFrame: (frameOf.get(shot.id) ?? null) !== null,
+      drawing: drawing.has(shot.id),
     }
   })
 }

@@ -20,6 +20,8 @@ import {
   type InMemoryBrandAssetRepository,
   type InMemoryLocationRepository,
 } from '@ixa/generation/testing'
+import { aProject } from './fixtures.js'
+import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 
 type SuccessBody<T> = { success: true; data: T }
 type ListBody<T> = { success: true; data: T[]; meta: { total: number } }
@@ -35,6 +37,11 @@ type BrandBody = {
 type LocationBody = { id: string; name: string; referenceAssetIds: string[] }
 
 const workspaceId = WorkspaceIdSchema.parse(newId(WorkspaceIdSchema))
+/** ブランド資産とロケーションはプロジェクトごと（ADR-0034）。同じワークスペースにプロジェクトを 2 つ置く。 */
+const project = aProject({ workspaceId })
+const otherProject = aProject({ workspaceId, name: 'LUNA BREW 30秒CM' })
+const BRAND_ASSETS_PATH = `/projects/${project.id}/brand-assets`
+const LOCATIONS_PATH = `/projects/${project.id}/locations`
 
 /** テスト用のロゴ画像。参照先が実在することを示すためだけに使う。 */
 const aLogoAsset = (ws: WorkspaceId): MediaAsset =>
@@ -87,13 +94,13 @@ beforeEach(() => {
     brandAssets,
     locations,
     mediaAssets: createInMemoryMediaAssetRepository([logo]),
+    projects: createInMemoryProjectRepository([project, otherProject]),
   })
 })
 
 describe('BrandAsset の組み合わせ規則', () => {
   it('category=color は value（#RRGGBB）で作成できる', async () => {
-    const res = await send('POST', '/brand-assets', {
-      workspaceId,
+    const res = await send('POST', BRAND_ASSETS_PATH, {
       category: 'color',
       name: 'iXA Yellow',
       value: '#FFD200',
@@ -105,8 +112,7 @@ describe('BrandAsset の組み合わせ規則', () => {
   })
 
   it('category=color で value が無いと 422', async () => {
-    const res = await send('POST', '/brand-assets', {
-      workspaceId,
+    const res = await send('POST', BRAND_ASSETS_PATH, {
       category: 'color',
       name: 'iXA Yellow',
     })
@@ -115,8 +121,7 @@ describe('BrandAsset の組み合わせ規則', () => {
   })
 
   it('category=color で value が #RRGGBB 形式でないと 422', async () => {
-    const res = await send('POST', '/brand-assets', {
-      workspaceId,
+    const res = await send('POST', BRAND_ASSETS_PATH, {
       category: 'color',
       name: 'iXA Yellow',
       value: 'yellow',
@@ -126,8 +131,7 @@ describe('BrandAsset の組み合わせ規則', () => {
   })
 
   it('color 以外は mediaAssetId が必須（無ければ 422）', async () => {
-    const res = await send('POST', '/brand-assets', {
-      workspaceId,
+    const res = await send('POST', BRAND_ASSETS_PATH, {
       category: 'logo',
       name: 'iXA ロゴ',
     })
@@ -136,8 +140,7 @@ describe('BrandAsset の組み合わせ規則', () => {
   })
 
   it('color 以外で mediaAssetId があれば作成できる', async () => {
-    const res = await send('POST', '/brand-assets', {
-      workspaceId,
+    const res = await send('POST', BRAND_ASSETS_PATH, {
       category: 'logo',
       name: 'iXA ロゴ',
       mediaAssetId: logo.id,
@@ -148,8 +151,7 @@ describe('BrandAsset の組み合わせ規則', () => {
   })
 
   it('存在しない MediaAsset を参照すると 422', async () => {
-    const res = await send('POST', '/brand-assets', {
-      workspaceId,
+    const res = await send('POST', BRAND_ASSETS_PATH, {
       category: 'logo',
       name: 'iXA ロゴ',
       mediaAssetId: newId(MediaAssetIdSchema),
@@ -160,8 +162,7 @@ describe('BrandAsset の組み合わせ規則', () => {
 
   it('PATCH は更新後の姿で判定する（color へ変えて value が無ければ 422）', async () => {
     const created = await json<SuccessBody<BrandBody>>(
-      await send('POST', '/brand-assets', {
-        workspaceId,
+      await send('POST', BRAND_ASSETS_PATH, {
         category: 'logo',
         name: 'iXA ロゴ',
         mediaAssetId: logo.id,
@@ -181,10 +182,9 @@ describe('BrandAsset の組み合わせ規則', () => {
 })
 
 describe('BrandAsset の一覧と削除', () => {
-  it('ワークスペースで絞り込み、DELETE は 204', async () => {
+  it('プロジェクトで絞り込み、DELETE は 204', async () => {
     const created = await json<SuccessBody<BrandBody>>(
-      await send('POST', '/brand-assets', {
-        workspaceId,
+      await send('POST', BRAND_ASSETS_PATH, {
         category: 'color',
         name: 'iXA Yellow',
         value: '#FFD200',
@@ -192,12 +192,12 @@ describe('BrandAsset の一覧と削除', () => {
     )
 
     const list = await json<ListBody<BrandBody>>(
-      await send('GET', `/brand-assets?workspaceId=${workspaceId}`),
+      await send('GET', BRAND_ASSETS_PATH),
     )
     expect(list.meta.total).toBe(1)
 
     const other = await json<ListBody<BrandBody>>(
-      await send('GET', `/brand-assets?workspaceId=${newId(WorkspaceIdSchema)}`),
+      await send('GET', `/projects/${otherProject.id}/brand-assets`),
     )
     expect(other.meta.total).toBe(0)
 
@@ -212,11 +212,35 @@ describe('BrandAsset の一覧と削除', () => {
   })
 })
 
+/** 作るとパスのプロジェクトに入り、ワークスペースはプロジェクトから入る。ワークスペースで引く口は無い（ADR-0034）。 */
+describe('プロジェクトごと', () => {
+  it('作ったものは持ち主のプロジェクトとワークスペースを持ち、ほかのプロジェクトの一覧には出ない', async () => {
+    const brand = await json<SuccessBody<BrandBody & { projectId: string; workspaceId: string }>>(
+      await send('POST', BRAND_ASSETS_PATH, { category: 'color', name: 'iXA Yellow', value: '#FFD200' }),
+    )
+    const location = await json<SuccessBody<LocationBody & { projectId: string; workspaceId: string }>>(
+      await send('POST', LOCATIONS_PATH, { name: 'iXA CUP 会場' }),
+    )
+
+    expect([brand.data.projectId, brand.data.workspaceId]).toEqual([project.id, workspaceId])
+    expect([location.data.projectId, location.data.workspaceId]).toEqual([project.id, workspaceId])
+    const others = await json<ListBody<LocationBody>>(await send('GET', `/projects/${otherProject.id}/locations`))
+    expect(others.meta.total).toBe(0)
+  })
+
+  it('無いプロジェクトは 404。ワークスペースで引く口は無い', async () => {
+    const missing = aProject()
+    expect((await send('GET', `/projects/${missing.id}/brand-assets`)).status).toBe(404)
+    expect((await send('POST', `/projects/${missing.id}/locations`, { name: 'x' })).status).toBe(404)
+    expect((await send('GET', `/brand-assets?workspaceId=${workspaceId}`)).status).toBe(404)
+    expect((await send('GET', `/locations?workspaceId=${workspaceId}`)).status).toBe(404)
+  })
+})
+
 describe('Location', () => {
   it('作成・一覧・更新・削除ができる', async () => {
     const created = await json<SuccessBody<LocationBody>>(
-      await send('POST', '/locations', {
-        workspaceId,
+      await send('POST', LOCATIONS_PATH, {
         name: 'iXA CUP 会場',
         description: '2019 年の決勝ステージ',
         referenceAssetIds: [logo.id],
@@ -225,7 +249,7 @@ describe('Location', () => {
     expect(created.data.referenceAssetIds).toEqual([logo.id])
 
     const list = await json<ListBody<LocationBody>>(
-      await send('GET', `/locations?workspaceId=${workspaceId}`),
+      await send('GET', LOCATIONS_PATH),
     )
     expect(list.meta.total).toBe(1)
 
@@ -239,8 +263,7 @@ describe('Location', () => {
   })
 
   it('存在しない MediaAsset を参照すると 422', async () => {
-    const res = await send('POST', '/locations', {
-      workspaceId,
+    const res = await send('POST', LOCATIONS_PATH, {
       name: 'iXA CUP 会場',
       referenceAssetIds: [newId(MediaAssetIdSchema)],
     })

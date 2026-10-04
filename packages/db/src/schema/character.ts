@@ -6,7 +6,7 @@ import {
 } from '@ixa/domain'
 import { createdAt, deletedAt, ulidPk, ulidRef } from './columns.js'
 import { mediaAssets } from './media.js'
-import { workspaces } from './workspace.js'
+import { projects, workspaces } from './workspace.js'
 
 /** DOMAIN.md §5 Character — 同一性のみ。時系列で変わる外見は character_looks。 */
 export const characters = pgTable(
@@ -16,6 +16,10 @@ export const characters = pgTable(
     workspaceId: ulidRef('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
+    /** 持ち主のプロジェクト（ADR-0034）。別のプロジェクトで使うときは取り込み（複製）。 */
+    projectId: ulidRef('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     displayName: text('display_name').notNull(),
     description: text('description').notNull().default(''),
@@ -27,7 +31,10 @@ export const characters = pgTable(
     createdAt: createdAt(),
     deletedAt: deletedAt(),
   },
-  (t) => [index('characters_workspace_id_idx').on(t.workspaceId)],
+  (t) => [
+    index('characters_workspace_id_idx').on(t.workspaceId),
+    index('characters_project_id_idx').on(t.projectId),
+  ],
 )
 
 export const characterIdentityImages = pgTable(

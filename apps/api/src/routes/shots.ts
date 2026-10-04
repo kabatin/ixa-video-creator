@@ -1,6 +1,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type {
   GenerationJobRepository,
+  LocationRepository,
   ProjectRepository,
   ShotRepository,
   TakeRepository,
@@ -54,6 +55,7 @@ import {
 } from '@ixa/provider-core'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import type { Logger } from '../logger.js'
+import { locationProblem } from './library-ownership.js'
 import {
   errorContent,
   fail,
@@ -148,11 +150,13 @@ const SelectTakeBody = z.object({ takeId: TakeIdSchema }).openapi('SelectTakeInp
 export const GenerationJobResponse = GenerationJobSchema.omit({
   queuedAt: true,
   startedAt: true,
+  providerStartedAt: true,
   finishedAt: true,
 })
   .extend({
     queuedAt: z.string().datetime(),
     startedAt: z.string().datetime().nullable(),
+    providerStartedAt: z.string().datetime().nullable(),
     finishedAt: z.string().datetime().nullable(),
   })
   .openapi('GenerationJob')
@@ -162,6 +166,7 @@ export const toGenerationJobResponse = (job: GenerationJob): GenerationJobRespon
   ...job,
   queuedAt: job.queuedAt.toISOString(),
   startedAt: job.startedAt === null ? null : job.startedAt.toISOString(),
+  providerStartedAt: job.providerStartedAt === null ? null : job.providerStartedAt.toISOString(),
   finishedAt: job.finishedAt === null ? null : job.finishedAt.toISOString(),
 })
 
@@ -345,6 +350,8 @@ const unselectTakeRoute = createRoute({
 export type ShotRoutesDeps = {
   shots: ShotRepository
   projects: ProjectRepository
+  /** Shot に付けるロケーションが同じプロジェクトのものかを確かめる（ADR-0034）。 */
+  locations: Pick<LocationRepository, 'findById'>
   takes: TakeRepository
   generationJobs: GenerationJobRepository
   registry: ProviderRegistry
@@ -554,11 +561,20 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
     })
     .openapi(createShotRoute, async (c) => {
       const { projectId } = c.req.valid('param')
-      const created = await deps.shots.create({ ...c.req.valid('json'), projectId })
+      const input = c.req.valid('json')
+      const problem = await locationProblem(deps.locations, projectId, input.locationId)
+      if (problem !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, { locationId: [problem] }), 422)
+      const created = await deps.shots.create({ ...input, projectId })
       return c.json(ok(toShotResponse(created)), 201)
     })
     .openapi(updateShotRoute, async (c) => {
       const patch = c.req.valid('json')
+      if (patch.locationId !== undefined && patch.locationId !== null) {
+        const shot = await deps.shots.findById(c.req.valid('param').id)
+        if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+        const problem = await locationProblem(deps.locations, shot.projectId, patch.locationId)
+        if (problem !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, { locationId: [problem] }), 422)
+      }
 
       /**
        * コードの重複は `(project_id, code)` の UNIQUE が弾く。

@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import type { ShotStartFrameApi, WireStartFrameState } from '@/lib/shot-start-frame-api'
+import { DRAW_ANYWAY_LABEL, drawWithoutStoryboardWarning } from '@/lib/step-guards'
+import { useContextMenuHost } from '@/components/workbench/ui/context-menu'
 
 /**
  * Shot の最初のフレーム（ADR-0025）。
@@ -54,6 +56,7 @@ export const StartFrameField = ({
   onSaved,
   api,
 }: StartFrameFieldProps) => {
+  const host = useContextMenuHost()
   const client = useMemo<ShotStartFrameApi>(() => api ?? createApiClient(), [api])
   const [state, setState] = useState<State>({ kind: 'loading' })
   const [busy, setBusy] = useState(false)
@@ -103,6 +106,43 @@ export const StartFrameField = ({
     }
   }
 
+  /** 作っている絵を止め、状態を読み直す（止めた後は「止めました」と出す）。 */
+  const stopDrawing = async (): Promise<void> => {
+    setBusy(true)
+    setError(null)
+    try {
+      await client.cancelImages(shot.projectId, [shot.id])
+      const latest = await client.getStartFrame(shot.id)
+      setState({ kind: 'ready', mediaAssetId: latest.mediaAssetId, job: latest.job })
+    } catch (cause) {
+      setError(`止められませんでした: ${describeForPerson(cause)}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * 絵コンテ（説明）が空なら、作る前に確かめる（制作者 2026-10-03「絵コンテがないと想定した画像が出て来ない可能性が高い」）。
+   * 止めはしない。「このまま作る」を選べば作る。
+   */
+  const askToDraw = (): void => {
+    const warning = drawWithoutStoryboardWarning([shot])
+    if (warning === null) {
+      void draw()
+      return
+    }
+    host.perform({
+      kind: 'item',
+      id: 'draw-start-frame',
+      label: '絵を作る',
+      disabledReason: null,
+      confirm: warning,
+      confirmTone: 'primary',
+      confirmLabel: DRAW_ANYWAY_LABEL,
+      run: draw,
+    })
+  }
+
   /** AI で作る。頼めたら「作っています」にし、できあがりは出来事で読み直す。 */
   const draw = async (): Promise<void> => {
     setBusy(true)
@@ -146,15 +186,20 @@ export const StartFrameField = ({
         </div>
       )}
       {state.kind === 'ready' && (
-        <Button size="sm" disabled={disabled || busy || drawing} onClick={() => void draw()}>
+        <Button size="sm" disabled={disabled || busy || drawing} onClick={askToDraw}>
           {current === null ? 'AI で絵を作る' : 'AI で作り直す'}
         </Button>
       )}
       {drawing && (
-        <p role="status" className="text-xs text-muted">
-          絵コンテの画像を作っています（1 枚 1 分ほど）。できたら、ここに出ます。
+        <p role="status" className="flex flex-wrap items-center gap-2 text-xs text-muted">
+          <span>絵コンテの画像を作っています（1 枚 1 分ほど）。できたら、ここに出ます。</span>
+          {/* 止める（制作者 2026-10-04「画像生成も停められるようにしよう」）。この Shot の絵だけ。 */}
+          <Button size="sm" nowrap disabled={busy} onClick={() => void stopDrawing()} aria-label="絵を作るのをやめる">
+            やめる
+          </Button>
         </p>
       )}
+      {job?.status === 'cancelled' && <p className="text-xs text-muted">絵を作るのを止めました。</p>}
       {job?.status === 'failed' && (
         <p role="alert" className="text-xs text-danger">
           {`絵を作れませんでした: ${job.error ?? '理由が届きませんでした。'}`}

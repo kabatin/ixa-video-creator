@@ -184,3 +184,132 @@ describe('ContextMenu', () => {
   })
 })
 
+
+/**
+ * 手順を飛ばしたときの確認（制作者 2026-10-03）は、取り消せない操作ではない。確認のボタンを危険色にせず、
+ * 「このまま作る」のような言葉にする。
+ */
+describe('ContextMenuHost.perform の確認の見た目', () => {
+  const Performer = ({ item }: { readonly item: Extract<ContextMenuItem, { kind: 'item' }> }) => {
+    const host = useContextMenuHost()
+    return (
+      <button type="button" onClick={() => host.perform(item)}>
+        実行
+      </button>
+    )
+  }
+
+  it('confirmTone と confirmLabel を渡すと、その色と言葉の確認ボタンになり、押せば実行する', async () => {
+    const run = vi.fn()
+    render(
+      <ContextMenuHost>
+        <Performer
+          item={{
+            kind: 'item',
+            id: 'draw',
+            label: '絵を作る',
+            disabledReason: null,
+            confirm: '絵コンテがまだ空です。',
+            confirmTone: 'primary',
+            confirmLabel: 'このまま作る',
+            run,
+          }}
+        />
+      </ContextMenuHost>,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: '実行' }))
+    const go = screen.getByRole('button', { name: 'このまま作る' })
+    expect(go.className).not.toContain('bg-danger')
+    await userEvent.click(go)
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * 確かめて答えを返す口（`window.confirm` の置き換え）。押せば true、閉じれば false。
+ * 画面全体を止めるブラウザの確認ではなく、ワークベンチの確認の見た目で聞く。
+ */
+describe('ContextMenuHost.ask', () => {
+  const Asker = ({ onAnswer }: { readonly onAnswer: (answer: boolean) => void }) => {
+    const host = useContextMenuHost()
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          void host.ask({ title: '自動レビュー', message: '2 本をレビューしますか？', confirmLabel: 'レビューする', keepLabel: 'あとで' }).then(onAnswer)
+        }}
+      >
+        聞く
+      </button>
+    )
+  }
+
+  it('「する」を押せば true', async () => {
+    const onAnswer = vi.fn()
+    render(
+      <ContextMenuHost>
+        <Asker onAnswer={onAnswer} />
+      </ContextMenuHost>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: '聞く' }))
+    expect(screen.getByText('2 本をレビューしますか？')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'レビューする' }))
+    expect(onAnswer).toHaveBeenCalledWith(true)
+  })
+
+  it('「しない」を押せば false', async () => {
+    const onAnswer = vi.fn()
+    render(
+      <ContextMenuHost>
+        <Asker onAnswer={onAnswer} />
+      </ContextMenuHost>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: '聞く' }))
+    await userEvent.click(screen.getByRole('button', { name: 'あとで' }))
+    expect(onAnswer).toHaveBeenCalledWith(false)
+  })
+})
+
+/**
+ * 確認が開いている間に次の確認が来ても、前の確認を黙って消さない（レビューで見つけた）。順に聞き、どの答えも返す。
+ * 例: Shot を消す確認を開いている間に一括生成が終わり、「自動レビュー」を聞く。
+ */
+describe('ContextMenuHost: 確認が重なったとき', () => {
+  const TwoAsks = ({ onAnswer }: { readonly onAnswer: (label: string, answer: boolean) => void }) => {
+    const host = useContextMenuHost()
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          void host.ask({ title: '1 つ目', message: '1 つ目の確認', confirmLabel: 'はい（1）' }).then((a) => {
+            onAnswer('1', a)
+          })
+          void host.ask({ title: '2 つ目', message: '2 つ目の確認', confirmLabel: 'はい（2）' }).then((a) => {
+            onAnswer('2', a)
+          })
+        }}
+      >
+        2 つ聞く
+      </button>
+    )
+  }
+
+  it('先の確認を出したままにし、答えたら次を出す。どちらの答えも返る', async () => {
+    const onAnswer = vi.fn()
+    render(
+      <ContextMenuHost>
+        <TwoAsks onAnswer={onAnswer} />
+      </ContextMenuHost>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: '2 つ聞く' }))
+
+    expect(screen.getByText('1 つ目の確認')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'はい（1）' }))
+    expect(onAnswer).toHaveBeenCalledWith('1', true)
+
+    expect(await screen.findByText('2 つ目の確認')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'やめる' }))
+    expect(onAnswer).toHaveBeenCalledWith('2', false)
+  })
+})

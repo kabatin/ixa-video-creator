@@ -8,9 +8,7 @@ import {
   primaryImageOfRole,
   summarizeIdentityImages,
 } from '@/lib/identity-images'
-import { toCharacterSummary } from '@/lib/character-summary'
-import { WireCharacter, WireLook } from '@/lib/character-schemas'
-import { CHARACTER_ID, MEDIA_ID, characterJson, identityImageJson, lookJson } from '@/__tests__/fixtures'
+import { MEDIA_ID, identityImageJson } from '@/__tests__/fixtures'
 
 const image = (
   overrides: Partial<{ id: string; role: IdentityImageRole; isPrimary: boolean; order: number }>,
@@ -85,30 +83,6 @@ describe('IDENTITY_ROLE_OPTIONS', () => {
     expect(IDENTITY_ROLE_OPTIONS.map((option) => option.value)).toEqual([
       ...IdentityImageRole.options,
     ])
-  })
-})
-
-describe('toCharacterSummary', () => {
-  it('一覧行に Look 数・識別画像数・四面図の有無を畳み込む', () => {
-    const summary = toCharacterSummary(
-      WireCharacter.parse(characterJson),
-      [image({ role: 'four_view' }), image({ id: '01ARZ3NDEKTSV4RRFFQ69G5FD6', role: 'full_body' })],
-      [WireLook.parse({ ...lookJson, isDefault: true })],
-    )
-
-    expect(summary.lookCount).toBe(1)
-    expect(summary.defaultLookName).toBe('iXA CUP 2019')
-    expect(summary.identityImageCount).toBe(2)
-    expect(summary.hasFourView).toBe(true)
-    expect(summary.character.id).toBe(CHARACTER_ID)
-  })
-
-  it('識別画像が無ければ四面図なしとして畳む', () => {
-    const summary = toCharacterSummary(WireCharacter.parse(characterJson), [], [])
-
-    expect(summary.identityImageCount).toBe(0)
-    expect(summary.hasFourView).toBe(false)
-    expect(summary.defaultLookName).toBeNull()
   })
 })
 

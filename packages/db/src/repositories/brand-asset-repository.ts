@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import type {
-  BrandAsset, BrandAssetId, CreateBrandAssetInput, UpdateBrandAssetPatch, WorkspaceId,
+  BrandAsset, BrandAssetId, CreateBrandAssetInput, UpdateBrandAssetPatch, ProjectId,
 } from '@ixa/domain'
 import {
   BrandAsset as BrandAssetSchema,
@@ -25,7 +25,7 @@ export type BrandAssetRow = typeof brandAssets.$inferSelect
 export type BrandAssetRepository = {
   findById(id: BrandAssetId): Promise<BrandAsset | null>
   /** 作成順（ULID 昇順）。ソフトデリート済みは含まない。 */
-  findByWorkspace(workspaceId: WorkspaceId): Promise<BrandAsset[]>
+  findByProject(projectId: ProjectId): Promise<BrandAsset[]>
   create(input: CreateBrandAssetInput): Promise<BrandAsset>
   update(id: BrandAssetId, patch: UpdateBrandAssetPatch): Promise<BrandAsset>
   softDelete(id: BrandAssetId): Promise<void>
@@ -36,6 +36,7 @@ export const brandAssetRowToDomain = (row: BrandAssetRow): BrandAsset =>
   BrandAssetSchema.parse({
     id: row.id,
     workspaceId: row.workspaceId,
+    projectId: row.projectId,
     category: row.category,
     name: row.name,
     mediaAssetId: row.mediaAssetId,
@@ -52,11 +53,11 @@ export const createBrandAssetRepository = (db: DbClient): BrandAssetRepository =
     return row ? brandAssetRowToDomain(row) : null
   },
 
-  async findByWorkspace(workspaceId) {
+  async findByProject(projectId) {
     const rows = await db
       .select()
       .from(brandAssets)
-      .where(and(eq(brandAssets.workspaceId, workspaceId), isNull(brandAssets.deletedAt)))
+      .where(and(eq(brandAssets.projectId, projectId), isNull(brandAssets.deletedAt)))
       .orderBy(asc(brandAssets.id))
     return rows.map(brandAssetRowToDomain)
   },

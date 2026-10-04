@@ -18,6 +18,11 @@ export type ErrorPanelProps = {
   readonly actions?: readonly ErrorPanelAction[]
   /** リンクでは表せない操作（再試行ボタンなど）。 */
   readonly children?: ReactNode
+  /**
+   * 直すための技術的な手がかり（設定の名前・サーバの場所など）。**畳んで出す**（画面の本文に実装の言葉を出さない）。
+   * 制作者は開発者でもあるので、消さずに「詳しい情報」に入れる。
+   */
+  readonly detail?: string
 }
 
 /**
@@ -26,11 +31,17 @@ export type ErrorPanelProps = {
  * **ここは「存在しない」「読めなかった」専用。** 中身が 0 件なだけのときは
  * `EmptyState` を使う。混ぜると、利用者は異常を正常だと思う。
  */
-export const ErrorPanel = ({ title, message, hint, actions, children }: ErrorPanelProps) => (
+export const ErrorPanel = ({ title, message, hint, actions, children, detail }: ErrorPanelProps) => (
   <div role="alert" className="rounded-lg border border-danger/40 bg-danger/10 p-6">
     <h2 className="text-base font-semibold text-danger">{title}</h2>
     <p className="mt-2 whitespace-pre-wrap break-words text-sm text-danger">{message}</p>
     {hint !== undefined && <p className="mt-3 text-sm text-danger">{hint}</p>}
+    {detail !== undefined && (
+      <details className="mt-3 text-xs text-danger">
+        <summary className="cursor-pointer">詳しい情報</summary>
+        <p className="mt-1 break-all font-mono">{detail}</p>
+      </details>
+    )}
     {actions !== undefined && actions.length > 0 && (
       <ul className="mt-4 flex flex-wrap items-center gap-4">
         {actions.map((action) => (

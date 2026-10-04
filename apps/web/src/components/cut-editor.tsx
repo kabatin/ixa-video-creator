@@ -1,7 +1,6 @@
 'use client'
 
-import type { MusicTrack, ProjectId, Sequence, SequenceId } from '@ixa/domain'
-import { useRouter } from 'next/navigation'
+import type { MusicTrack, ProjectId } from '@ixa/domain'
 import {
   useCallback,
   useEffect,
@@ -15,15 +14,12 @@ import { AudioTransport } from '@/components/audio-transport'
 import { CutMarkList } from '@/components/cut-mark-list'
 import { CutWaveformOverlay } from '@/components/cut-waveform-overlay'
 import { LyricCueOverlay } from '@/components/lyric-cue-overlay'
-import { SelectField } from '@/components/form/select-field'
 import { Button } from '@/components/ui/button'
 import { WaveformCanvas } from '@/components/waveform-canvas'
-import { WAVEFORM_HEIGHT_PX } from '@/lib/waveform-bands'
-import { fillWaveformHeight, shouldResizeWaveform } from '@/lib/waveform-fill'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { HelpDisclosure } from '@/components/ui/help-disclosure'
-import { resolveCutEditorCommand, describeCutEditorKeys } from '@/lib/cut-editor-keys'
+import { describeCutEditorKeys } from '@/lib/cut-editor-keys'
 import { centerView, isTimeInView, panView, zoomView } from '@/lib/cut-editor-pointer'
 import {
   addMark,
@@ -31,7 +27,6 @@ import {
   cutMarkToleranceSec,
   addLyricMarks,
   addSectionMarks,
-  cutBoundaries,
   describeLyricMarks,
   describeSectionMarks,
   describeCuts,
@@ -58,6 +53,9 @@ import { useOptionalContextMenuHost } from '@/components/workbench/ui/context-me
 import type { MenuPoint } from '@/components/workbench/use-context-menu'
 import { toMenuItems } from '@/components/workbench/use-shot-menu'
 import { cutMarkMenuEntries } from '@/lib/context-menus'
+import { useCutEditorKeyboard } from '@/components/use-cut-editor-keyboard'
+import { useCutSave } from '@/components/use-cut-save'
+import { useWaveformFillHeight } from '@/components/use-waveform-fill-height'
 
 /**
  * 音を鳴らしながら、波形の上で「ここからここまでが 1 カット」を決める画面（P56）。
@@ -75,7 +73,9 @@ import { cutMarkMenuEntries } from '@/lib/context-menus'
  * 波形の高さは `waveform-bands.ts` の既定（80px。PHASE 8.1 で 160px から半分に）。
  */
 
-const NO_SEQUENCE_VALUE = 'none'
+/** 歌詞の時刻が無いのに「歌い出しに区切りを置く」を押したとき。 */
+const NEED_LYRICS_MESSAGE =
+  '歌詞の時刻がまだありません。先に「歌詞を合わせる」で歌い出しに Enter を押して時刻を付けると、全部の歌い出しに区切りを置けます。'
 
 /** 自分でフォーカスを受ける物。ここを押したときは入れ物が横取りしない。 */
 const FOCUSABLE_SELECTOR =
@@ -85,7 +85,6 @@ export type CutEditorProps = {
   readonly projectId: ProjectId
   readonly track: MusicTrack
   readonly analysis: WireMusicAnalysis
-  readonly sequences: readonly Sequence[]
   /** 「拍に吸着」の初期値。環境設定の既定を渡す（UI-WORKBENCH §3.4）。 */
   readonly initialSnapEnabled?: boolean
   /**
@@ -97,6 +96,13 @@ export type CutEditorProps = {
    * （裏のタブやダイアログを開いている間は立てない。lessons L-018）。
    */
   readonly keyboardShortcuts?: boolean
+  /**
+   * フォーカスが外にあっても Enter / S で区切りを置くか（制作者 2026-10-03「テロップのように Enter とかで置けるようにしたい」）。
+   * ワークベンチでは区切るモードが見えている間だけ true（`keyboardShortcuts` と同じ条件）。
+   */
+  readonly placeKeyAnywhere?: boolean
+  /** 歌詞の時刻が無いのに「歌い出しに区切りを置く」を押したとき、歌詞を合わせるへ行く口。 */
+  readonly onNeedLyrics?: () => void
   /** ワークベンチの再生位置と繋ぐ口（PHASE 7.2）。渡さなければ単独で動く。 */
   readonly sync?: CutEditorSync
   /**
@@ -121,11 +127,6 @@ export type CutEditorProps = {
 /** 再生位置の共有（UI-WORKBENCH §7.2）。形と規則は `use-cut-editor-sync.ts`。 */
 export type CutEditorSync = TransportSyncPort
 
-type SaveOutcome = {
-  readonly createdCount: number
-  readonly warnings: readonly string[]
-}
-
 /** 歌詞の時刻が無いとき。描くたびに新しい配列を作ると、吸着の候補が毎回作り直される。 */
 const NO_LYRIC_CUES: readonly number[] = []
 
@@ -133,9 +134,10 @@ export const CutEditor = ({
   projectId,
   track,
   analysis,
-  sequences,
   initialSnapEnabled = true,
   keyboardShortcuts = true,
+  placeKeyAnywhere = false,
+  onNeedLyrics,
   sync,
   showPlay = true,
   playButton,
@@ -143,7 +145,6 @@ export const CutEditor = ({
   purpose = 'cut',
   lyricCues = NO_LYRIC_CUES,
 }: CutEditorProps) => {
-  const router = useRouter()
   const cutting = purpose === 'cut'
 
   /**
@@ -176,55 +177,16 @@ export const CutEditor = ({
   const [dragging, setDragging] = useState(false)
   const [peaks, setPeaks] = useState<WaveformPeaksResult | null>(null)
 
-  /**
-   * 波形の高さ。**パネルの余りをもらう。**
-   *
-   * 既定の 78px 固定では、パネルを縦に広げても波形は変わらず、
-   * 増えるのは下のフォームの余白だけだった。ここがこのパネルの主役なので、
-   * 余ったぶんは波形に渡す。下限を切る狭さでは従来どおりスクロールで見せる。
-   */
-  const waveBoxRef = useRef<HTMLDivElement | null>(null)
-  const [waveHeightPx, setWaveHeightPx] = useState(WAVEFORM_HEIGHT_PX)
-  /** 波形の幅。大きさが変わったときだけ測る（描画のたびに測るとスマホ幅で止まらなくなった）。 */
+  /** 波形の高さ（パネルの余りをもらう）と幅。幅は大きさが変わったときだけ測る。 */
+  const { waveBoxRef, waveHeightPx } = useWaveformFillHeight()
   const widthPx = useElementWidth(waveBoxRef)
 
-  useEffect(() => {
-    const box = waveBoxRef.current
-    const body = box?.closest('[data-panel-body]')
-    const content = box?.closest('[data-cut-editor]')
-    if (!box || !(body instanceof HTMLElement) || !(content instanceof HTMLElement)) return undefined
-    const measure = (): void => {
-      // `clientHeight` は内側の余白を含む。中身が使えるのはそれを引いたぶん。
-      const style = window.getComputedStyle(body)
-      const padding =
-        Number.parseFloat(style.paddingTop || '0') + Number.parseFloat(style.paddingBottom || '0')
-      setWaveHeightPx((current) => {
-        const next = fillWaveformHeight({
-          bodyClientHeight: body.clientHeight - padding,
-          // 入れ物ではなく中身の高さ。余裕があると scrollHeight は入れ物と同じ値になる。
-          contentHeight: content.offsetHeight,
-          currentHeight: current,
-          // 状態ではなく画面の高さで「波形以外」を求める（Safari で 96 ↔ 416 を往復した）。
-          // 波形がまだ無い（読み込み中）なら、中身に波形の高さは含まれていない。
-          renderedHeight:
-            box.querySelector<HTMLElement>('[data-waveform-body]')?.offsetHeight ?? 0,
-        })
-        return shouldResizeWaveform(current, next) ? next : current
-      })
-    }
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(body)
-    observer.observe(content)
-    return () => {
-      observer.disconnect()
-    }
-  }, [])
-
-  const [sequenceId, setSequenceId] = useState<string>(NO_SEQUENCE_VALUE)
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [outcome, setOutcome] = useState<SaveOutcome | null>(null)
+  // Shot にしたら区切りを空にする（下書きは保存されたので。残すと 2 回押して Shot が重なる）。
+  const cutSave = useCutSave(projectId, () => {
+    setMarks([])
+    setSelectedIndex(-1)
+  })
+  const saving = cutSave.saving
 
   // --- 材料 ---
 
@@ -311,7 +273,7 @@ export const CutEditor = ({
     setMarks(result.marks)
     setSelectedIndex(result.index)
     setRejection(null)
-    setOutcome(null)
+    cutSave.clearOutcome()
     return true
   }
 
@@ -369,16 +331,28 @@ export const CutEditor = ({
   /**
    * **`view` を依存に入れないこと。** 入れると、窓を動かす→再実行→また動かす、で回り続ける。
    * 引き金は再生位置の変化だけでよく、いまの窓は `setView` の引数として受け取る。
+   *
+   * **窓は effect の flush の外で動かす**（`use-cut-editor-sync.ts` の位置の報告と同じ）。鳴っている間は毎フレーム動くので、
+   * flush の中で更新すると描画が遅いときに積もり、開発時に `Maximum update depth exceeded` が出た（制作者 2026-10-04）。
    */
   useEffect(() => {
-    if (!followPlayhead || dragging) return
-    setView((current) =>
-      // 止めている間は、見えているうちは触らない。窓を自分で送った直後に
-      // 引き戻されないようにするため。外へ出たときだけ連れ戻す。
-      !playback.isPlaying && isTimeInView(playback.currentSec, current, durationSec)
-        ? current
-        : centerView(current, playback.currentSec, durationSec),
-    )
+    if (!followPlayhead || dragging) return undefined
+    const isPlaying = playback.isPlaying
+    const currentSec = playback.currentSec
+    let active = true
+    queueMicrotask(() => {
+      if (!active) return
+      setView((current) =>
+        // 止めている間は、見えているうちは触らない。窓を自分で送った直後に
+        // 引き戻されないようにするため。外へ出たときだけ連れ戻す。
+        !isPlaying && isTimeInView(currentSec, current, durationSec)
+          ? current
+          : centerView(current, currentSec, durationSec),
+      )
+    })
+    return () => {
+      active = false
+    }
   }, [followPlayhead, playback.isPlaying, playback.currentSec, dragging, durationSec])
 
   /** 自分で窓を送ったら追従は切る。切らないと、送った先から即座に引き戻される。 */
@@ -387,102 +361,51 @@ export const CutEditor = ({
     setView((current) => panView(current, (current.endSec - current.startSec) * ratio, durationSec))
   }
 
-  // --- キーボード ---
+  // --- キーボード（行き先は `use-cut-editor-keyboard`）---
 
-  useEffect(() => {
-    if (!keyboardShortcuts) return undefined
-    const onKeyDown = (event: KeyboardEvent): void => {
-      const node = event.target instanceof HTMLElement ? event.target : null
-      const resolved = resolveCutEditorCommand({
-        key: event.key,
-        shiftKey: event.shiftKey,
-        altKey: event.altKey,
-        ctrlKey: event.ctrlKey,
-        metaKey: event.metaKey,
-        target:
-          node === null
-            ? null
-            : {
-                tagName: node.tagName,
-                isContentEditable: node.isContentEditable,
-                role: node.getAttribute('role'),
-              },
-        // **この画面の入れ物に限る。** 目印で `closest` すると、別の CutEditor の中でも
-        // 真になり、両方が同じ打鍵で動く。
-        insideCutEditor: node !== null && containerRef.current?.contains(node) === true,
-      })
-      if (resolved === null) return
-      event.preventDefault()
-
-      if (resolved.source === 'playback') {
-        const command = resolved.command
-        if (command.kind === 'toggle') playback.toggle()
-        else if (command.kind === 'nudge') playback.nudge(command.deltaSec)
-        else playback.seekTo(command.edge === 'start' ? 0 : durationSec)
-        return
-      }
-
-      const command = resolved.command
-      switch (command.type) {
-        case 'place_mark':
-          placeMarkAt(playback.currentSec)
-          return
-        case 'remove_previous_mark': {
-          const index = previousMarkIndex(marks, playback.currentSec)
-          if (index < 0) {
-            setRejection({ reason: 'missing', message: '再生位置より前に区切りがありません。' })
-            return
-          }
-          removeAt(index)
+  useCutEditorKeyboard({
+    enabled: keyboardShortcuts,
+    placeAnywhere: placeKeyAnywhere,
+    containerRef,
+    handlers: {
+      placeMark: () => {
+        placeMarkAt(playback.currentSec)
+      },
+      removePreviousMark: () => {
+        const index = previousMarkIndex(marks, playback.currentSec)
+        if (index < 0) {
+          setRejection({ reason: 'missing', message: '再生位置より前に区切りがありません。' })
           return
         }
-        case 'remove_selected_mark':
-          removeAt(selectedIndex)
-          return
-        case 'select_previous_mark':
-          selectAndSeek(previousMarkIndex(marks, playback.currentSec))
-          return
-        case 'select_next_mark':
-          selectAndSeek(nextMarkIndex(marks, playback.currentSec))
-          return
-        case 'nudge_selected_mark':
-          applyChange(nudgeMarkAt(marks, selectedIndex, command.deltaSec))
-          return
-        case 'toggle_snap':
-          setSnapEnabled((current) => !current)
-          setSnapNotice(null)
-      }
-    }
-
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-    }
+        removeAt(index)
+      },
+      removeSelectedMark: () => {
+        removeAt(selectedIndex)
+      },
+      selectPreviousMark: () => {
+        selectAndSeek(previousMarkIndex(marks, playback.currentSec))
+      },
+      selectNextMark: () => {
+        selectAndSeek(nextMarkIndex(marks, playback.currentSec))
+      },
+      nudgeSelectedMark: (deltaSec) => {
+        applyChange(nudgeMarkAt(marks, selectedIndex, deltaSec))
+      },
+      toggleSnap: () => {
+        setSnapEnabled((current) => !current)
+        setSnapNotice(null)
+      },
+      togglePlay: playback.toggle,
+      nudgePlayhead: playback.nudge,
+      seekEdge: (edge) => {
+        playback.seekTo(edge === 'start' ? 0 : durationSec)
+      },
+    },
   })
 
   // --- 保存 ---
 
   const cuts = describeCuts(marks, durationSec)
-
-  const save = async (): Promise<void> => {
-    if (cuts.state !== 'cuts') return
-    setSaving(true)
-    setSaveError(null)
-    try {
-      const result = await createApiClient().createCuts(projectId, {
-        boundariesSec: [...cutBoundaries(marks, durationSec)],
-        sequenceId: sequenceId === NO_SEQUENCE_VALUE ? null : (sequenceId as SequenceId),
-      })
-      setOutcome({ createdCount: result.createdCount, warnings: result.warnings })
-      // 他の画面の先読み内容を捨てる。作ったのに「ありません」と出るのを防ぐ。
-      router.refresh()
-    } catch (caught) {
-      setSaveError(describeError(caught))
-      setOutcome(null)
-    } finally {
-      setSaving(false)
-    }
-  }
 
   /**
    * 中を押したら入れ物がフォーカスを受け取る。
@@ -507,18 +430,45 @@ export const CutEditor = ({
     const result = addSectionMarks(marks, sectionBoundarySec, durationSec)
     setMarks(result.marks)
     setRejection(null)
-    setOutcome(null)
+    cutSave.clearOutcome()
     setSnapNotice({ state: 'none', label: '区切り', message: describeSectionMarks(result) })
   }
 
-  /** 歌い出しすべてに区切りを置く（制作者 2026-10-02）。置いたあとは普通の区切りなので消せる。 */
+  /**
+   * 歌い出しすべてに区切りを置く（制作者 2026-10-02）。置いたあとは普通の区切りなので消せる。
+   * 歌詞の時刻がまだ無ければ、先に歌詞を合わせるよう確かめる（制作者 2026-10-03「手順を飛び越えて…警告ダイアログ」）。
+   */
   const placeLyricMarks = (): void => {
+    if (lyricCues.length === 0) {
+      if (menuHost !== null && onNeedLyrics !== undefined) {
+        menuHost.perform({
+          kind: 'item',
+          id: 'need-lyrics',
+          label: '歌い出しに区切りを置く',
+          disabledReason: null,
+          confirm: NEED_LYRICS_MESSAGE,
+          confirmTone: 'primary',
+          confirmLabel: '歌詞を合わせる',
+          run: onNeedLyrics,
+        })
+      } else {
+        setSnapNotice({ state: 'none', label: '区切り', message: NEED_LYRICS_MESSAGE })
+      }
+      return
+    }
     const result = addLyricMarks(marks, lyricCues, durationSec)
     setMarks(result.marks)
     setRejection(null)
-    setOutcome(null)
+    cutSave.clearOutcome()
     setSnapNotice({ state: 'none', label: '区切り', message: describeLyricMarks(result) })
   }
+
+  /** 仕上げのボタンの言葉。区切りが揃えば件数を言う。 */
+  const saveLabel = saving
+    ? '作成中…'
+    : cuts.state === 'cuts'
+      ? `${String(cuts.cuts.length)} カットを Shot にする`
+      : 'Shot にする'
 
   return (
     <div
@@ -532,7 +482,7 @@ export const CutEditor = ({
     >
       {/**
        * ワークベンチのパネルの中（UI-WORKBENCH-2 §6）。**タブと同じ見出しを繰り返さない。箱に箱を入れない。**
-       * 1 行目 = 再生、2 行目 = このパネルの主の操作（区切りを置く）と表示の切り替え。
+       * 1 行目 = 再生、2 行目 = 区切りの道具と仕上げ（Shot にする）、3 行目 = 案内と表示の切り替え。
        */}
       <AudioTransport
         playback={playback}
@@ -548,57 +498,78 @@ export const CutEditor = ({
         layout="inline"
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        {cutting && (
-          <>
+      {cutting && (
+        <div role="toolbar" aria-label="区切りの道具" className="flex flex-wrap items-center gap-2">
+          <Button
+            tone="primary"
+            size="sm"
+            onClick={() => {
+              placeMarkAt(playback.currentSec)
+            }}
+            disabled={saving}
+          >
+            {/**
+             * 秒が変わるたびにボタンの幅が動くと、置こうとしている的が揺れる。
+             * 数字は等幅（`tabular-nums`）にし、桁が増えても動かないよう幅を決め打つ。
+             */}
+            <span className="inline-block w-[13.5rem] text-center tabular-nums">
+              {`ここに区切りを置く（${formatClock(playback.currentSec)}）`}
+            </span>
+          </Button>
+          <label className="flex items-center gap-1.5 text-sm text-text">
+            <input
+              type="checkbox"
+              checked={snapEnabled}
+              disabled={saving}
+              onChange={(event) => {
+                setSnapEnabled(event.target.checked)
+                setSnapNotice(null)
+              }}
+              className="h-3.5 w-3.5"
+            />
+            拍に吸着
+          </label>
+          <Button size="sm" disabled={saving} onClick={placeSectionMarks}>
+            セクションの境目に区切りを置く
+          </Button>
+          <Button
+            size="sm"
+            disabled={saving}
+            title={
+              lyricCues.length === 0
+                ? '先に「歌詞を合わせる」で歌い出しに時刻を付けると使えます'
+                : '波形の番号付きの線（歌い出し）すべてに区切りを置きます'
+            }
+            onClick={placeLyricMarks}
+          >
+            歌い出しに区切りを置く
+          </Button>
+          {toolbarExtra}
+          {/**
+           * 仕上げ（制作者 2026-10-03「肝心の「N カットを Shot にする」ボタンが一番下にあり、しかも黒ボタンなので
+           * 導線が分かりづらい」）。道具の列の右端に置き、区切りが揃ったら主ボタンになる（揃うまでは押せない）。
+           */}
+          <span className="ml-auto">
             <Button
               tone="primary"
               size="sm"
+              disabled={saving || cuts.state !== 'cuts'}
+              title={cuts.state === 'cuts' ? undefined : '区切りを置くと Shot にできます'}
               onClick={() => {
-                placeMarkAt(playback.currentSec)
+                if (cuts.state === 'cuts') void cutSave.save(marks, durationSec)
               }}
-              disabled={saving}
             >
-              {/**
-                * 秒が変わるたびにボタンの幅が動くと、置こうとしている的が揺れる。
-                * 数字は等幅（`tabular-nums`）にし、桁が増えても動かないよう幅を決め打つ。
-                */}
-              <span className="inline-block w-[13.5rem] text-center tabular-nums">
-                {`ここに区切りを置く（${formatClock(playback.currentSec)}）`}
-              </span>
+              {saveLabel}
             </Button>
-            <label className="flex items-center gap-1.5 text-sm text-text">
-              <input
-                type="checkbox"
-                checked={snapEnabled}
-                disabled={saving}
-                onChange={(event) => {
-                  setSnapEnabled(event.target.checked)
-                  setSnapNotice(null)
-                }}
-                className="h-3.5 w-3.5"
-              />
-              拍に吸着
-            </label>
-            <Button size="sm" disabled={saving} onClick={placeSectionMarks}>
-              セクションの境目に区切りを置く
-            </Button>
-            <Button
-              size="sm"
-              disabled={saving || lyricCues.length === 0}
-              title={
-                lyricCues.length === 0
-                  ? '先に「歌詞を合わせる」で歌い出しに時刻を付けると使えます'
-                  : '波形の番号付きの線（歌い出し）すべてに区切りを置きます'
-              }
-              onClick={placeLyricMarks}
-            >
-              歌い出しに区切りを置く
-            </Button>
-            {toolbarExtra}
-          </>
+          </span>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+        {cutting && (
+          <span>区切りは下書きです。「Shot にする」で Shot として保存されます（保存すると区切りは空に戻ります）。</span>
         )}
-        <span className="ml-auto flex items-center gap-2 text-xs text-muted">
+        <span className="ml-auto flex items-center gap-2">
           <span className="tabular-nums">
             {`BPM ${analysis.bpm.toFixed(1)}・表示 ${formatClock(view.startSec)}〜${formatClock(view.endSec)}`}
           </span>
@@ -626,6 +597,26 @@ export const CutEditor = ({
           </label>
         </span>
       </div>
+
+      {cutting && cutSave.error !== null && (
+        <p role="alert" className="text-sm text-danger">
+          {cutSave.error}
+        </p>
+      )}
+      {cutting && cutSave.outcome !== null && (
+        <div>
+          <p role="status" className="text-sm text-ok">
+            {`${String(cutSave.outcome.createdCount)} 個の Shot を作りました。次は絵コンテです（流れの帯の ⑥）。`}
+          </p>
+          {cutSave.outcome.warnings.length > 0 && (
+            <ul role="alert" className="mt-1 list-disc space-y-1 pl-5 text-sm text-warn">
+              {cutSave.outcome.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {sourceError !== null && (
         <p role="alert" className="text-sm text-danger">
@@ -693,6 +684,20 @@ export const CutEditor = ({
             </p>
           )}
 
+          <CutMarkList
+            {...(openMarkMenu === undefined ? {} : { onMarkContextMenu: openMarkMenu })}
+            marks={marks}
+            songDurationSec={durationSec}
+            busy={saving}
+            selectedIndex={selectedIndex}
+            onSelect={selectAndSeek}
+            onRemove={removeAt}
+            onMove={(index, atSec) => {
+              moveMarkTo(index, atSec, false)
+            }}
+            rejection={rejection}
+          />
+
           {/**
            * **キーの一覧はこの画面に 1 つだけ置く**（`describeCutEditorKeys` が実際の行き先から作る）。
            * 既定では畳む。拡大 / 縮小は ⌘・Ctrl + ホイール、横送りは Shift + ホイール。
@@ -714,85 +719,10 @@ export const CutEditor = ({
                 <dd className="text-right text-muted">横に送る</dd>
               </div>
             </dl>
-            <p className="mt-2 text-xs text-muted">文字を打っている間はこれらのキーは効きません。</p>
+            <p className="mt-2 text-xs text-muted">
+              Enter と S は、波形の外を押していても区切りを置きます。文字を打っている間はこれらのキーは効きません。
+            </p>
           </HelpDisclosure>
-
-          <CutMarkList
-            {...(openMarkMenu === undefined ? {} : { onMarkContextMenu: openMarkMenu })}
-            marks={marks}
-            songDurationSec={durationSec}
-            busy={saving}
-            selectedIndex={selectedIndex}
-            onSelect={selectAndSeek}
-            onRemove={removeAt}
-            onMove={(index, atSec) => {
-              moveMarkTo(index, atSec, false)
-            }}
-            rejection={rejection}
-          />
-
-          <section className="border-t border-line pt-2">
-            <h3 className="text-xs font-semibold text-muted">Shot にする</h3>
-
-            <div className="mt-2 max-w-sm">
-              <SelectField
-                id="cutSequenceId"
-                label="Sequence"
-                value={sequenceId}
-                disabled={saving}
-                options={[
-                  { value: NO_SEQUENCE_VALUE, label: '（Sequence に入れない）' },
-                  ...sequences.map((sequence) => ({ value: sequence.id, label: sequence.name })),
-                ]}
-                onChange={setSequenceId}
-              />
-            </div>
-
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <Button
-                // 主の操作は「区切りを置く」。こちらは区切りが揃ってから押す 2 番目の操作（P6）。
-                tone="secondary"
-                size="sm"
-                disabled={saving || cuts.state !== 'cuts'}
-                onClick={() => {
-                  void save()
-                }}
-              >
-                {saving
-                  ? '作成中…'
-                  : cuts.state === 'cuts'
-                    ? `${String(cuts.cuts.length)} カットを Shot にする`
-                    : 'Shot にする'}
-              </Button>
-
-              {cuts.state !== 'cuts' && (
-                <p className="text-sm text-muted">
-                  区切りがまだありません。
-                </p>
-              )}
-            </div>
-
-            {saveError !== null && (
-              <p role="alert" className="mt-3 text-sm text-danger">
-                {saveError}
-              </p>
-            )}
-
-            {outcome !== null && (
-              <div className="mt-3">
-                <p role="status" className="text-sm text-text">
-                  {`${String(outcome.createdCount)} 個の Shot を作りました。`}
-                </p>
-                {outcome.warnings.length > 0 && (
-                  <ul role="alert" className="mt-2 list-disc space-y-1 pl-5 text-sm text-warn">
-                    {outcome.warnings.map((warning) => (
-                      <li key={warning}>{warning}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-          </section>
         </>
       )}
     </div>

@@ -112,6 +112,17 @@ export const EnvSchema = z.object({
     .string()
     .transform((v) => (v.trim() === '' ? undefined : v))
     .optional(),
+  /**
+   * 書き出した動画を置くフォルダ（ADR-0036）。省略すると API がホームの「ムービー」の下に決める。
+   * **絶対パスだけ受ける。** 相対パスや `~` は、どこに書くかが起動のしかたで変わってしまう。
+   */
+  RENDER_EXPORT_DIR: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v.trim()))
+    .refine((v) => v === undefined || v.startsWith('/'), {
+      message: '絶対パス（/ で始まる）で書いてください',
+    })
+    .optional(),
 })
 
 export type Env = z.infer<typeof EnvSchema>
@@ -161,4 +172,6 @@ export interface AppConfig {
     /** vpipe-api の合言葉。未設定は null。 */
     vpipeApiToken: string | null
   }
+  /** 書き出した動画を置くフォルダ（絶対パス）。未設定は null（API が既定を決める）。 */
+  renderExportDir: string | null
 }

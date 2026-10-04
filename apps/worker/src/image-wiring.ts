@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import {
+  createCharacterRepository,
   createImageJobRepository,
   createMediaAssetRepository,
   createProjectRepository,
@@ -42,6 +43,8 @@ export const createImageWiring = (input: {
     imageJobs: createImageJobRepository(input.db),
     shots: createShotRepository(input.db),
     projects: createProjectRepository(input.db),
+    // キャラクターシート（ADR-0035）の材料と、できたシートを足す先。
+    characters: createCharacterRepository(input.db),
     mediaAssets: createMediaAssetRepository(input.db),
     shotReferences: createShotReferenceRepository(input.db),
     storage: input.storage,

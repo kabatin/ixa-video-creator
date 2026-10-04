@@ -13,6 +13,7 @@ import {
   type CharacterFormErrors,
   type CharacterFormValues,
 } from '@/lib/character-form'
+import { Button } from '@/components/ui/button'
 
 export type CharacterEditorProps = {
   readonly character: Character
@@ -35,7 +36,7 @@ export const CharacterEditor = ({ character }: CharacterEditorProps) => {
   const [savedAt, setSavedAt] = useState<string | null>(null)
 
   const submit = async (): Promise<void> => {
-    const validation = validateCharacterForm(values, character.workspaceId)
+    const validation = validateCharacterForm(values)
     if (!validation.ok) {
       setErrors(validation.errors)
       return
@@ -138,7 +139,7 @@ export const CharacterEditor = ({ character }: CharacterEditorProps) => {
         label="配色"
         values={values.colorPalette}
         hint="キャラクターに固定で効かせる色。"
-        placeholder="#1A1A1A"
+        placeholder="例: 紺色、#1A1A1A"
         disabled={saving}
         error={errors.colorPalette}
         onChange={(colorPalette) => {
@@ -149,13 +150,9 @@ export const CharacterEditor = ({ character }: CharacterEditorProps) => {
       <FieldError id="character-editor-error" message={errors.form} />
 
       <div className="flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-line-strong"
-        >
+        <Button tone="primary" type="submit" disabled={saving}>
           {saving ? '保存中…' : '保存'}
-        </button>
+        </Button>
         {savedAt !== null && (
           <span role="status" className="text-sm text-ok">
             {savedAt} に保存しました

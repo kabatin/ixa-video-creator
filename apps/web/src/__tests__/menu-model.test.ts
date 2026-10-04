@@ -219,6 +219,7 @@ describe('行き先', () => {
     expect(file?.items.map((entry) => entry.label)).toEqual([
       '新規プロジェクト',
       '作品の方針…',
+      'ほかのプロジェクトから取り込む…',
       '設定…',
       '書き出し…',
     ])

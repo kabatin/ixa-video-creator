@@ -25,6 +25,8 @@ import {
   type InMemoryCharacterLookRepository,
   type InMemoryCharacterRepository,
 } from '@ixa/generation/testing'
+import { aProject } from './fixtures.js'
+import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 
 type SuccessBody<T> = { success: true; data: T }
 type ListBody<T> = { success: true; data: T[]; meta: { total: number } }
@@ -61,6 +63,9 @@ const anImageAsset = (workspaceId: WorkspaceId): MediaAsset =>
   })
 
 const workspaceId = WorkspaceIdSchema.parse(newId(WorkspaceIdSchema))
+/** キャラクターはプロジェクトごと（ADR-0034）。同じワークスペースにプロジェクトを 2 つ置く。 */
+const project = aProject({ workspaceId })
+const otherProject = aProject({ workspaceId, name: 'LUNA BREW 30秒CM' })
 
 let characters: InMemoryCharacterRepository
 let looks: InMemoryCharacterLookRepository
@@ -86,8 +91,7 @@ const json = async <T>(res: Response): Promise<T> => (await res.json()) as T
 
 /** Character を 1 体作り、その ID を返す。 */
 const createCharacter = async (): Promise<string> => {
-  const res = await send('POST', '/characters', {
-    workspaceId,
+  const res = await send('POST', `/projects/${project.id}/characters`, {
     name: 'takepi',
     displayName: '藤本タケピ',
     identityAnchors: ['切れ長の目'],
@@ -112,6 +116,52 @@ beforeEach(() => {
     characters,
     looks,
     mediaAssets: createInMemoryMediaAssetRepository(assets),
+    projects: createInMemoryProjectRepository([project, otherProject]),
+  })
+})
+
+/**
+ * キャラクターはプロジェクトごと（制作者 2026-10-03「全プロジェクトで共有になっている。プロジェクト単位にしないと
+ * 大変なことになる」）。一覧と作成はプロジェクトの経路で、ワークスペースで引く口は無い。
+ */
+describe('Character はプロジェクトごと', () => {
+  it('作るとパスのプロジェクトに入り、ワークスペースはプロジェクトから入る', async () => {
+    const id = await createCharacter()
+
+    const one = await json<SuccessBody<CharacterResponse>>(await send('GET', `/characters/${id}`))
+    expect(one.data.projectId).toBe(project.id)
+    expect(one.data.workspaceId).toBe(workspaceId)
+  })
+
+  it('一覧はそのプロジェクトのものだけ。同じワークスペースのほかのプロジェクトには出ない', async () => {
+    await createCharacter()
+
+    const own = await json<ListBody<CharacterResponse>>(await send('GET', `/projects/${project.id}/characters`))
+    const other = await json<ListBody<CharacterResponse>>(await send('GET', `/projects/${otherProject.id}/characters`))
+    expect(own.meta.total).toBe(1)
+    expect(other.meta.total).toBe(0)
+  })
+
+  it('無いプロジェクトは 404。ワークスペースで引く口は無い', async () => {
+    const missing = aProject()
+    expect((await send('GET', `/projects/${missing.id}/characters`)).status).toBe(404)
+    expect((await send('POST', `/projects/${missing.id}/characters`, { name: 'x', displayName: 'x' })).status).toBe(404)
+    expect((await send('GET', `/characters?workspaceId=${workspaceId}`)).status).toBe(404)
+  })
+})
+
+/**
+ * 作ると既定の Look「基本」も一緒にできる（DOMAIN.md §5「Character は最低 1 つの isDefault な Look を持つ」）。
+ * 以前は Look の無いキャラクターができ、Shot の登場人物に入れられなかった（Look は必須）。画像だけで登録した戦子が
+ * どの Shot にも入らず、最初のフレームが参照画像なしで作られて資料と違う見た目になった（制作者 2026-10-04）。
+ */
+describe('作ったキャラクターの既定の Look', () => {
+  it('作ると既定の Look「基本」が 1 つできる', async () => {
+    const characterId = await createCharacter()
+
+    const list = await json<ListBody<LookBody & { name: string }>>(await send('GET', `/characters/${characterId}/looks`))
+    expect(list.data).toHaveLength(1)
+    expect(list.data[0]).toMatchObject({ name: '基本', key: 'BASE', isDefault: true })
   })
 })
 
@@ -120,7 +170,7 @@ describe('Character の CRUD', () => {
     const id = await createCharacter()
 
     const list = await json<ListBody<CharacterResponse>>(
-      await send('GET', `/characters?workspaceId=${workspaceId}`),
+      await send('GET', `/projects/${project.id}/characters`),
     )
     expect(list.meta.total).toBe(1)
     expect(list.data[0]?.displayName).toBe('藤本タケピ')
@@ -152,13 +202,15 @@ describe('Character の CRUD', () => {
 })
 
 describe('CharacterLook の不変条件（DOMAIN.md §5）', () => {
-  it('最初の Look は isDefault を渡さなくても既定になる', async () => {
+  it('足した Look は isDefault を渡さなければ既定にならない（既定は作ったときの「基本」のまま）', async () => {
     const characterId = await createCharacter()
     const res = await createLook(characterId)
 
     expect(res.status).toBe(201)
     const created = await json<SuccessBody<LookBody>>(res)
-    expect(created.data.isDefault).toBe(true)
+    expect(created.data.isDefault).toBe(false)
+    const list = await json<ListBody<LookBody>>(await send('GET', `/characters/${characterId}/looks`))
+    expect(list.data.filter((l) => l.isDefault).map((l) => l.key)).toEqual(['BASE'])
   })
 
   it('2 つ目を isDefault: true で作ると 1 つ目が false になる', async () => {
@@ -179,9 +231,9 @@ describe('CharacterLook の不変条件（DOMAIN.md §5）', () => {
 
   it('最後の Look を削除しようとすると 422 で理由を返す', async () => {
     const characterId = await createCharacter()
-    const only = await json<SuccessBody<LookBody>>(await createLook(characterId))
+    const [only] = (await json<ListBody<LookBody>>(await send('GET', `/characters/${characterId}/looks`))).data
 
-    const res = await send('DELETE', `/looks/${only.data.id}`)
+    const res = await send('DELETE', `/looks/${only?.id ?? ''}`)
     expect(res.status).toBe(422)
     const error = await json<ErrorBody>(res)
     expect(error.error).toContain('最後の Look は削除できません')
@@ -190,10 +242,10 @@ describe('CharacterLook の不変条件（DOMAIN.md §5）', () => {
 
   it('2 つあれば削除でき、既定が消えたら残りが既定に昇格する', async () => {
     const characterId = await createCharacter()
-    const first = await json<SuccessBody<LookBody>>(await createLook(characterId))
+    const [base] = (await json<ListBody<LookBody>>(await send('GET', `/characters/${characterId}/looks`))).data
     await createLook(characterId, { key: 'SFL_CURRENT', name: 'SFL 現在' })
 
-    expect((await send('DELETE', `/looks/${first.data.id}`)).status).toBe(204)
+    expect((await send('DELETE', `/looks/${base?.id ?? ''}`)).status).toBe(204)
 
     const list = await json<ListBody<LookBody>>(
       await send('GET', `/characters/${characterId}/looks`),

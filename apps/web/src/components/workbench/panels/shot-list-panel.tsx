@@ -8,6 +8,7 @@ import {
   type BulkSelectOption,
 } from '@/components/bulk-action-bar'
 import { useAssets } from '@/components/workbench/asset-store'
+import { ImageActivityStrip } from '@/components/workbench/image-activity-strip'
 import { ShotListCompact } from '@/components/workbench/shot-list-compact'
 import { useAssetDrop } from '@/components/workbench/use-asset-drop'
 import { useBulkActions } from '@/components/workbench/use-bulk-actions'
@@ -24,7 +25,9 @@ import {
 import { toLocationOptions } from '@/lib/location-options'
 import { clearSelection, headerCheckboxState, selectAllVisible, toggleShot } from '@/lib/shot-bulk'
 import { shotStatusLabel } from '@/lib/shot-display'
-import { startFrameKnownFor } from '@/lib/shot-posters'
+import { countDrawing, startFrameKnownFor } from '@/lib/shot-posters'
+import { createApiClient } from '@/lib/api-client'
+import { describeForPerson } from '@/lib/api-error'
 import {
   rangeBetween,
   sortShots,
@@ -36,6 +39,7 @@ import { useNow } from '@/components/workbench/use-active-generations'
 import { describeActiveGeneration } from '@/lib/generation-progress'
 import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
 import { useShotMenu } from '@/components/workbench/use-shot-menu'
+import { drawWithoutStoryboardWarning } from '@/lib/step-guards'
 
 /** 選べるモデル。いまは AUTO だけだが、選択肢の正は `generation-options` に置いたまま。 */
 const MODEL_CHOICES: readonly BulkModelOption[] = MODEL_OPTIONS.flatMap((option) =>
@@ -176,58 +180,23 @@ export const ShotListPanel = () => {
   return (
     <PanelFrame toolbar={toolbar} flush>
       <div className="flex min-h-full flex-col">
-        <BulkActionBar
-          selectedCount={chosen.length}
-          alreadySelectedCount={chosen.filter((shot) => shot.selectedTakeId !== null).length}
-          lockedCount={chosen.filter((shot) => shot.lockedAt !== null).length}
-          // 生成される（ロックされていない）うち、説明も最初のフレームも無い数。分からない絵は「ある」に倒す。
-          unguidedCount={
-            chosen.filter(
-              (shot) =>
-                shot.lockedAt === null &&
-                lacksStoryboard({
-                  description: shot.description,
-                  hasStartFrame: startFrameKnownFor(workbench.posters, shot.id) !== false,
-                }),
-            ).length
-          }
-          modelOptions={MODEL_CHOICES}
-          cameraSizeOptions={SHOT_SIZE_OPTIONS}
-          locationOptions={locationOptions}
-          /*
-            **押す前の金額は API から取れない。** `POST .../shots/bulk/generate` が
-            `estimatedTotalUsd` を返すのは 202（投入したあと）か 422（予算超過で 1 件も
-            投入しなかったとき）だけで、投入せずに見積だけ取る口は無い
-            （`apps/api/src/routes/shots-bulk.ts`）。だから `null` を渡し、
-            確認の文面で「事前には出せない」と断る。**黙って空欄にしない。**
-          */
-          estimatedTotalUsd={null}
-          busy={bulk.busy}
-          progress={bulk.progress}
-          outcome={bulk.outcome}
-          onGenerate={bulk.generate}
-          onSelectTakes={bulk.selectTakes}
-          onUpdate={bulk.update}
-          onDrawStartFrames={bulk.drawStartFrames}
-          onMerge={() => {
-            workbench.openDialog('merge-shots')
-          }}
-          onDelete={() => {
-            workbench.openDialog('delete-shots')
-          }}
-          onRender={() => {
-            workbench.openDialog('render')
-          }}
-          onClearSelection={() => {
-            workbench.setChecked(clearSelection())
-            bulk.clearOutcome()
-          }}
-        />
         {workbench.live.newTakeCount > 0 && (
           <p role="status" className="border-b border-line px-2 py-1 text-xs text-text">
             {`開いてから ${String(workbench.live.newTakeCount)} 本の Take ができました。`}
           </p>
         )}
+        {/* 絵を作っている数と、まとめて止める口（制作者 2026-10-04）。止めた印は出来事で消える。 */}
+        <ImageActivityStrip
+          drawingCount={countDrawing(workbench.posters)}
+          onStopAll={async () => {
+            try {
+              const { cancelledJobIds } = await createApiClient().cancelImages(workbench.projectId)
+              workbench.notify(`${String(cancelledJobIds.length)} 件の絵を止めました。`)
+            } catch (cause) {
+              workbench.notify(`絵を止められませんでした: ${describeForPerson(cause)}`)
+            }
+          }}
+        />
         {workbench.posterError !== null && (
           <div className="px-2 pt-2">
             <PanelNotice tone="warn">{workbench.posterError}</PanelNotice>
@@ -277,6 +246,57 @@ export const ShotListPanel = () => {
           dropState={drop.stateOf}
           activityOf={activityOf}
           contextMenu={shotMenu}
+        />
+        {/* 一覧が短いときも、操作のバーはパネルの下端に置く（伸びて押し下げる）。長いときは下端に貼り付いて重なる。 */}
+        <div className="flex-1" />
+        <BulkActionBar
+          selectedCount={chosen.length}
+          alreadySelectedCount={chosen.filter((shot) => shot.selectedTakeId !== null).length}
+          lockedCount={chosen.filter((shot) => shot.lockedAt !== null).length}
+          // 生成される（ロックされていない）うち、説明も最初のフレームも無い数。分からない絵は「ある」に倒す。
+          unguidedCount={
+            chosen.filter(
+              (shot) =>
+                shot.lockedAt === null &&
+                lacksStoryboard({
+                  description: shot.description,
+                  hasStartFrame: startFrameKnownFor(workbench.posters, shot.id) !== false,
+                }),
+            ).length
+          }
+          // 絵コンテ（説明）が空の Shot が混じっていたら、絵を作る前に確かめる（制作者 2026-10-03）。
+          drawWarning={drawWithoutStoryboardWarning(chosen)}
+          modelOptions={MODEL_CHOICES}
+          cameraSizeOptions={SHOT_SIZE_OPTIONS}
+          locationOptions={locationOptions}
+          /*
+            **押す前の金額は API から取れない。** `POST .../shots/bulk/generate` が
+            `estimatedTotalUsd` を返すのは 202（投入したあと）か 422（予算超過で 1 件も
+            投入しなかったとき）だけで、投入せずに見積だけ取る口は無い
+            （`apps/api/src/routes/shots-bulk.ts`）。だから `null` を渡し、
+            確認の文面で「事前には出せない」と断る。**黙って空欄にしない。**
+          */
+          estimatedTotalUsd={null}
+          busy={bulk.busy}
+          progress={bulk.progress}
+          outcome={bulk.outcome}
+          onGenerate={bulk.generate}
+          onSelectTakes={bulk.selectTakes}
+          onUpdate={bulk.update}
+          onDrawStartFrames={bulk.drawStartFrames}
+          onMerge={() => {
+            workbench.openDialog('merge-shots')
+          }}
+          onDelete={() => {
+            workbench.openDialog('delete-shots')
+          }}
+          onRender={() => {
+            workbench.openDialog('render')
+          }}
+          onClearSelection={() => {
+            workbench.setChecked(clearSelection())
+            bulk.clearOutcome()
+          }}
         />
       </div>
     </PanelFrame>

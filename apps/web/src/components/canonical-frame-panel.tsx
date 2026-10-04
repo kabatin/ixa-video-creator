@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { MediaImage } from '@/components/media-image'
 import { TextField } from '@/components/form/text-field'
 import { CANONICAL_FRAME_ABSENT_HINT, CANONICAL_FRAME_NOTICE } from '@/lib/look-images'
+import { Button } from '@/components/ui/button'
 
 export type CanonicalFramePanelProps = {
   readonly look: CharacterLook
@@ -80,14 +81,9 @@ export const CanonicalFramePanel = ({ look, busy, onSet }: CanonicalFramePanelPr
             }}
           />
         </div>
-        <button
-          type="button"
-          disabled={busy || draft.trim() === ''}
-          onClick={submit}
-          className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-line-strong"
-        >
+        <Button tone="primary" disabled={busy || draft.trim() === ''} onClick={submit}>
           昇格させる
-        </button>
+        </Button>
       </div>
     </section>
   )

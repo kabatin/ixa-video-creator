@@ -28,6 +28,7 @@ const baseRow = (): GenerationJobRow => ({
   corrections: [],
   queuedAt: new Date('2026-09-17T00:00:00Z'),
   startedAt: null,
+  providerStartedAt: null,
   finishedAt: null,
 })
 

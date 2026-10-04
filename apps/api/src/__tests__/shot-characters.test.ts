@@ -40,8 +40,9 @@ let shot: Shot
 /** Character と既定 Look を 1 組作る。 */
 const registerCharacter = async (
   name: string,
+  owner: typeof projectId = projectId,
 ): Promise<{ character: Character; look: CharacterLook }> => {
-  const character = await characters.create({ workspaceId, name, displayName: name })
+  const character = await characters.create({ workspaceId, projectId: owner, name, displayName: name })
   const look = await looks.create({
     characterId: character.id,
     key: 'STAGE_A',
@@ -116,6 +117,21 @@ describe('PUT /shots/{shotId}/characters', () => {
     )
     expect(list.meta.total).toBe(2)
     expect(list.data[0]?.characterId).toBe(lead.character.id)
+  })
+
+  /** キャラクターはプロジェクトごと（ADR-0034）。ほかのプロジェクトのものは取り込んでから使う。 */
+  it('ほかのプロジェクトの Character を指定したら 422（取り込んでから使う）', async () => {
+    const foreign = await registerCharacter('rider', newId(ProjectIdSchema))
+
+    const res = await send('PUT', `/shots/${shot.id}/characters`, {
+      entries: [
+        { characterId: foreign.character.id, lookId: foreign.look.id, prominence: 'primary', order: 0 },
+      ],
+    })
+
+    expect(res.status).toBe(422)
+    expect((await json<ErrorBody>(res)).fields?.characterId?.[0]).toMatch(/この Project のキャラクターではありません/)
+    expect(shotCharacters.snapshot()).toHaveLength(0)
   })
 
   it('他 Character の Look を指定したら 422', async () => {

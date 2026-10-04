@@ -14,17 +14,22 @@ export const SettingsDialogBody = () => {
   return (
     <div className="mx-auto w-full max-w-3xl">
       <p className="mb-4 text-sm text-muted">
-        出力仕様と制作の制約を変更します。生成済みの Take には遡って効きません。
+        画面の形・大きさ・なめらかさと、制作の制約を変えます。作り終えた Take には効きません。
       </p>
       <ProjectSettingsForm project={project} />
 
       <hr className="my-6 border-line" />
 
       <h2 className="mb-1 text-base font-semibold text-text">接続先と実行の設定</h2>
-      <p className="mb-3 text-sm text-muted">
-        この環境が何につながっていて、何にお金が掛かるか。Project ごとではなく、この環境全体の設定です。
-      </p>
-      <EnvironmentPanel />
+      {/* 設定の名前や再起動の手順など開発の言葉が多いので、既定は畳んでおく（開発者として使うときに開く）。 */}
+      <details>
+        <summary className="cursor-pointer text-sm text-muted hover:text-text">
+          この環境が何につながっていて、何にお金が掛かるか（プロジェクトごとではなく、この環境全体の設定）
+        </summary>
+        <div className="mt-3">
+          <EnvironmentPanel />
+        </div>
+      </details>
 
       <hr className="my-6 border-line" />
 

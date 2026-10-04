@@ -2,13 +2,17 @@ import type { AspectRatio, Resolution } from '@ixa/domain'
 
 export type ResolutionPreset = {
   readonly key: string
+  /** 名前（FHD・4K など）。 */
+  readonly name: string
+  /** 名前と大きさ（`FHD (1920×1080)`）。 */
   readonly label: string
   readonly resolution: Resolution
 }
 
-const preset = (width: number, height: number, label: string): ResolutionPreset => ({
+const preset = (width: number, height: number, name: string): ResolutionPreset => ({
   key: `${String(width)}x${String(height)}`,
-  label: `${label} (${String(width)}×${String(height)})`,
+  name,
+  label: `${name} (${String(width)}×${String(height)})`,
   resolution: { width, height },
 })
 

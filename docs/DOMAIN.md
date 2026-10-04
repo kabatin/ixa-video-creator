@@ -172,10 +172,14 @@ type MediaOrigin =
 
 ## 5. Character / Look（§13 の分離）
 
+キャラクター・ロケーション・ブランド資産は**プロジェクトごと**（ADR-0034）。別のプロジェクトで使うときは
+「ほかのプロジェクトから取り込む」で**複製**する（キャラクターは Look・画像ごと。画像のファイルは同じ MediaAsset を指す）。
+
 ```ts
 type Character = {
   id: CharacterId
-  workspaceId: WorkspaceId
+  workspaceId: WorkspaceId          // 画像の保管庫（MediaAsset）がワークスペース単位なので残す
+  projectId: ProjectId              // 持ち主のプロジェクト（ADR-0034）
   name: string                      // 'takepi'
   displayName: string               // '藤本タケピ'
   description: string               // 不変の身体的特徴。Look で変わらないもののみ書く
@@ -242,6 +246,7 @@ type CharacterLookImage = {
 type BrandAsset = {
   id: BrandAssetId
   workspaceId: WorkspaceId
+  projectId: ProjectId              // 持ち主のプロジェクト（ADR-0034）
   category: 'logo' | 'color' | 'font' | 'uniform' | 'typography' | 'texture' | 'other'
   name: string                      // 'iXA Yellow'
   mediaAssetId: MediaAssetId | null // color/font は null のことがある
@@ -252,6 +257,7 @@ type BrandAsset = {
 type Location = {
   id: LocationId
   workspaceId: WorkspaceId
+  projectId: ProjectId              // 持ち主のプロジェクト（ADR-0034）
   name: string                      // 'iXA CUP 会場'
   description: string
   referenceAssetIds: MediaAssetId[]
@@ -259,7 +265,7 @@ type Location = {
 
 type MotionTemplate = {
   id: MotionTemplateId
-  workspaceId: WorkspaceId
+  workspaceId: WorkspaceId          // まだ画面にも API にも出ていないので、ワークスペース単位のまま
   key: string                       // Remotion composition id と 1:1
   name: string
   paramsSchema: JsonSchema          // UI フォームと検証を自動生成する

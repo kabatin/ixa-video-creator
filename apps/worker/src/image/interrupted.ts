@@ -31,18 +31,18 @@ export const failInterruptedImageJob = async (
   try {
     const parsed = ImageJobData.safeParse(data)
     if (!parsed.success) {
-      deps.logger.error({ queueReason }, '打ち切られた絵コンテの画像ジョブのデータが読めません')
+      deps.logger.error({ queueReason }, '打ち切られた絵のジョブのデータが読めません')
       return
     }
     const job = await deps.imageJobs.findById(parsed.data.imageJobId)
     if (job === null) {
-      deps.logger.warn({ imageJobId: parsed.data.imageJobId, queueReason }, '打ち切られた絵コンテの画像ジョブが見つかりません')
+      deps.logger.warn({ imageJobId: parsed.data.imageJobId, queueReason }, '打ち切られた絵のジョブが見つかりません')
       return
     }
     if (job.status === 'succeeded' || job.status === 'failed') return
     deps.logger.error(
       { imageJobId: job.id, shotId: job.shotId, queueReason },
-      '絵コンテの画像ジョブがキューに打ち切られました。失敗にします',
+      '絵のジョブがキューに打ち切られました。失敗にします',
     )
     const failed = await deps.imageJobs.markFailed(
       job.id,
@@ -51,6 +51,6 @@ export const failInterruptedImageJob = async (
     )
     await publishImageJobStatus(deps, failed)
   } catch (error) {
-    deps.logger.error({ err: error, queueReason }, '打ち切られた絵コンテの画像ジョブを失敗にできませんでした')
+    deps.logger.error({ err: error, queueReason }, '打ち切られた絵のジョブを失敗にできませんでした')
   }
 }

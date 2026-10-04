@@ -1,6 +1,8 @@
 'use client'
 
 import { WorkflowBar } from '@/components/workbench/workflow-bar'
+import { WorkflowProvider } from '@/components/workbench/workflow-context'
+import { useLyricTelopCount } from '@/components/workbench/use-lyric-telop-count'
 import type { Location, MusicTrack, Project, Sequence, Shot } from '@ixa/domain'
 import type { DockviewApi } from 'dockview-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -163,6 +165,10 @@ const WorkbenchShell = ({
    * 「いま書き出している」がどこにも残らなかった（上限は 30 分に設定してある）。
    */
   const renderWatch = useRenderWatch({ projectId: workbench.projectId })
+  // 流れの帯とストーリーボードの空の表示が使う材料（テロップの数・書き出しの履歴）。
+  const lyricTelopCount = useLyricTelopCount(workbench.projectId, workbench.serverEpoch)
+  const rendered =
+    renderWatch.jobs === null ? null : renderWatch.jobs.some((job) => job.status === 'succeeded')
 
   useQueryNavigation(query)
 
@@ -170,73 +176,75 @@ const WorkbenchShell = ({
   useWorkbenchKeys({ undo })
 
   return (
-    <div className="flex h-full flex-col bg-bg">
-      <WorkbenchMenu
-        canUndo={history.canUndo}
-        onUndo={undo}
-        onResetLayout={resetLayout}
-        onNotice={setNotice}
-        dock={dock}
-        dockEpoch={dockEpoch}
-        onImportFiles={() => {
-          fileOpener.current?.()
-        }}
-      />
-      {/* 制作の流れ（制作者 2026-10-01）。次にやる所を目立たせ、押すとその作業の画面へ。 */}
-      <WorkflowBar />
-      {notice !== null && (
-        <p
-          role="status"
-          className="flex shrink-0 items-center gap-2 border-b border-warn/40 bg-warn/10 px-2 py-1 text-sm text-warn"
-        >
-          <span className="min-w-0 flex-1 truncate">{notice}</span>
-          <button
-            type="button"
-            onClick={() => {
-              setNotice(null)
-            }}
-            className="h-6 rounded px-2 text-xs hover:bg-warn/20"
+    <WorkflowProvider lyricTelopCount={lyricTelopCount} rendered={rendered}>
+      <div className="flex h-full flex-col bg-bg">
+        <WorkbenchMenu
+          canUndo={history.canUndo}
+          onUndo={undo}
+          onResetLayout={resetLayout}
+          onNotice={setNotice}
+          dock={dock}
+          dockEpoch={dockEpoch}
+          onImportFiles={() => {
+            fileOpener.current?.()
+          }}
+        />
+        {/* 制作の流れ（制作者 2026-10-01）。次にやる所を目立たせ、押すとその作業の画面へ。 */}
+        <WorkflowBar />
+        {notice !== null && (
+          <p
+            role="status"
+            className="flex shrink-0 items-center gap-2 border-b border-warn/40 bg-warn/10 px-2 py-1 text-sm text-warn"
           >
-            閉じる
-          </button>
-        </p>
-      )}
-      <main className="min-h-0 flex-1" aria-label={`${workbench.project.name} のワークベンチ`}>
-        {wide ? (
-          <WorkbenchDock
-            projectId={workbench.projectId}
-            query={query}
-            onReady={(api) => {
-              dock.current = api
-              const bump = (): void => {
-                setDockEpoch((epoch) => epoch + 1)
-              }
-              api.onDidActivePanelChange(bump)
-              api.onDidLayoutChange(bump)
-              bump()
-            }}
-            onNotice={setNotice}
-          />
-        ) : (
-          <WorkbenchStack />
+            <span className="min-w-0 flex-1 truncate">{notice}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setNotice(null)
+              }}
+              className="h-6 rounded px-2 text-xs hover:bg-warn/20"
+            >
+              閉じる
+            </button>
+          </p>
         )}
-      </main>
-      <StatusBar
-        project={workbench.project}
-        shotCount={workbench.shots?.length ?? null}
-        live={workbench.live}
-        loadErrors={workbench.loadErrors}
-        renderWatch={renderWatch}
-      />
-      <WorkbenchDialogs onHistoryChanged={history.reload} renderWatch={renderWatch} />
-      {/* 初めて開いたときに「使う AI」を 1 度だけ勧める（ADR-0032）。 */}
-      <AiSetupOffer />
-      <FileIntake
-        onNotice={setNotice}
-        registerOpener={(open) => {
-          fileOpener.current = open
-        }}
-      />
-    </div>
+        <main className="min-h-0 flex-1" aria-label={`${workbench.project.name} のワークベンチ`}>
+          {wide ? (
+            <WorkbenchDock
+              projectId={workbench.projectId}
+              query={query}
+              onReady={(api) => {
+                dock.current = api
+                const bump = (): void => {
+                  setDockEpoch((epoch) => epoch + 1)
+                }
+                api.onDidActivePanelChange(bump)
+                api.onDidLayoutChange(bump)
+                bump()
+              }}
+              onNotice={setNotice}
+            />
+          ) : (
+            <WorkbenchStack />
+          )}
+        </main>
+        <StatusBar
+          project={workbench.project}
+          shotCount={workbench.shots?.length ?? null}
+          live={workbench.live}
+          loadErrors={workbench.loadErrors}
+          renderWatch={renderWatch}
+        />
+        <WorkbenchDialogs onHistoryChanged={history.reload} renderWatch={renderWatch} />
+        {/* 初めて開いたときに「使う AI」を 1 度だけ勧める（ADR-0032）。 */}
+        <AiSetupOffer />
+        <FileIntake
+          onNotice={setNotice}
+          registerOpener={(open) => {
+            fileOpener.current = open
+          }}
+        />
+      </div>
+    </WorkflowProvider>
   )
 }

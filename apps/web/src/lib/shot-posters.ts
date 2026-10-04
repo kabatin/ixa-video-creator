@@ -20,8 +20,11 @@ export type PosterView = {
  */
 export type ShotPosterCell = PosterView & { readonly pending: boolean }
 
-/** Shot の 1 枠。絵に加えて、最初のフレームが付いているか（流れの帯・説明も絵も無い Shot の確認）。 */
-export type ShotPosterView = ShotPosterCell & { readonly hasStartFrame: boolean }
+/**
+ * Shot の 1 枠。絵に加えて、最初のフレームが付いているか（流れの帯・説明も絵も無い Shot の確認）と、
+ * 絵コンテの画像を作っているか（採用 Take があっても。一覧で絵と動画の作業中を分けて出す）。
+ */
+export type ShotPosterView = ShotPosterCell & { readonly hasStartFrame: boolean; readonly drawing: boolean }
 
 export type ShotPosterMap = ReadonlyMap<ShotId, ShotPosterView>
 
@@ -85,13 +88,23 @@ export const posterByShotId = (list: readonly WireShotPoster[]): ShotPosterMap =
   new Map(
     list.map((entry) => [
       entry.shotId,
-      { url: entry.thumbnailUrl, reason: entry.reason, hasStartFrame: entry.hasStartFrame, pending: entry.pending },
+      {
+        url: entry.thumbnailUrl,
+        reason: entry.reason,
+        hasStartFrame: entry.hasStartFrame,
+        pending: entry.pending,
+        drawing: entry.drawing,
+      },
     ]),
   )
 
 /**
  * 最初のフレームが付いているか。**まだ引けていなければ null**（「無い」と読み替えない。L-021）。
  */
+/** 絵（最初のフレーム）を作っている Shot の数。順番を待っている絵も含む（制作者 2026-10-04）。 */
+export const countDrawing = (posters: ShotPosterMap): number =>
+  [...posters.values()].filter((poster) => poster.drawing).length
+
 export const startFrameKnownFor = (posters: ShotPosterMap, shotId: ShotId): boolean | null =>
   posters.get(shotId)?.hasStartFrame ?? null
 

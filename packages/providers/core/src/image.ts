@@ -63,6 +63,11 @@ export type ImageGenerationRequest = {
   readonly resolveReference: (id: MediaAssetId) => Promise<string>
   /** 生成する枚数。四面図は 1 枚、Look 候補は複数。 */
   readonly count: number
+  /**
+   * 絵の作り。`frame`（既定）は 1 つの場面で、比に切り抜いて使うので主題を中央に寄せる。
+   * `sheet` はキャラクターシートのように 1 枚の中に並べる絵で、切り抜かない（ADR-0035）。
+   */
+  readonly composition?: 'frame' | 'sheet'
 }
 
 /**

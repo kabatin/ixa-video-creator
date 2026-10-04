@@ -14,13 +14,14 @@ import { statusLabel } from '@/lib/project-display'
 import {
   initialProjectSettingsValues,
   isProjectSettingsUnchanged,
+  resolutionKeyOf,
   validateProjectSettings,
   withSettingsAspectRatio,
   type ProjectSettingsErrors,
   type ProjectSettingsField,
   type ProjectSettingsValues,
 } from '@/lib/project-settings-form'
-import { ASPECT_RATIOS, FPS_OPTIONS, resolutionPresetsFor } from '@/lib/resolution-presets'
+import { AspectRatioField, FpsField, ResolutionField } from '@/components/project-spec-fields'
 import { WORDING } from '@/lib/wording'
 
 /**
@@ -36,37 +37,10 @@ export type ProjectSettingsFormProps = {
   readonly project: Project
 }
 
-const ASPECT_OPTIONS: readonly SelectOption[] = ASPECT_RATIOS.map((ratio) => ({
-  value: ratio,
-  label: ratio,
-}))
-
-const FPS_SELECT_OPTIONS: readonly SelectOption[] = FPS_OPTIONS.map((fps) => ({
-  value: String(fps),
-  label: `${String(fps)} fps`,
-}))
-
 const STATUS_OPTIONS: readonly SelectOption[] = ProjectStatus.options.map((status) => ({
   value: status,
   label: statusLabel(status),
 }))
-
-/**
- * 解像度の選択肢。
- * **保存済みの値がプリセットに無くても選択肢へ残す。** 落とすと、開いただけで
- * 別の解像度に化ける。
- */
-const resolutionOptions = (aspectRatio: string, currentKey: string): readonly SelectOption[] => {
-  const parsed = AspectRatio.safeParse(aspectRatio)
-  const presets = parsed.success
-    ? resolutionPresetsFor(parsed.data).map((preset) => ({
-        value: preset.key,
-        label: preset.label,
-      }))
-    : []
-  if (currentKey === '' || presets.some((option) => option.value === currentKey)) return presets
-  return [...presets, { value: currentKey, label: `${currentKey}（保存済みの値）` }]
-}
 
 /** サーバが返した列名を、この画面のフィールドへ写す。 */
 const FIELD_BY_COLUMN: Readonly<Record<string, ProjectSettingsField>> = Object.freeze({
@@ -159,41 +133,36 @@ export const ProjectSettingsForm = ({ project }: ProjectSettingsFormProps) => {
           }}
         />
 
-        <div className="grid gap-5 sm:grid-cols-3">
-          <SelectField
-            id="project-aspect-ratio"
-            label="アスペクト比"
-            value={values.aspectRatio}
-            options={ASPECT_OPTIONS}
-            disabled={busy}
-            error={errors.aspectRatio}
-            onChange={(aspectRatio) => {
-              setValues((current) => withSettingsAspectRatio(current, aspectRatio))
-            }}
-          />
-          <SelectField
-            id="project-resolution"
-            label="解像度"
+        {/* 形・大きさ・fps は新規作成と同じ図つきのカード（`project-spec-fields.tsx`。選択肢を書き写さない）。 */}
+        <AspectRatioField
+          value={values.aspectRatio}
+          disabled={busy}
+          error={errors.aspectRatio}
+          onChange={(aspectRatio) => {
+            setValues((current) => withSettingsAspectRatio(current, aspectRatio))
+          }}
+        />
+        {AspectRatio.safeParse(values.aspectRatio).success && (
+          <ResolutionField
+            aspectRatio={AspectRatio.parse(values.aspectRatio)}
             value={values.resolutionKey}
-            options={resolutionOptions(values.aspectRatio, values.resolutionKey)}
+            // 保存済みの大きさを残すのは同じ形のときだけ（形を変えたら、その形の選択肢から選ぶ）。
+            {...(values.aspectRatio === saved.aspectRatio ? { savedKey: resolutionKeyOf(saved.resolution) } : {})}
             disabled={busy}
             error={errors.resolutionKey}
             onChange={(resolutionKey) => {
               set({ resolutionKey })
             }}
           />
-          <SelectField
-            id="project-fps"
-            label="fps"
-            value={values.fps}
-            options={FPS_SELECT_OPTIONS}
-            disabled={busy}
-            error={errors.fps}
-            onChange={(fps) => {
-              set({ fps })
-            }}
-          />
-        </div>
+        )}
+        <FpsField
+          value={values.fps}
+          disabled={busy}
+          error={errors.fps}
+          onChange={(fps) => {
+            set({ fps })
+          }}
+        />
 
         <h2 className="pt-2 text-base font-semibold text-text">制作の制約</h2>
 

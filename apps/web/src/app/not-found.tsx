@@ -1,7 +1,6 @@
 import { describeViewState } from '@/components/empty-state'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
-import { CHARACTER_LIST_HREF } from '@/lib/character-links'
 
 /**
  * 404。**「ページが無い」は「中身が空」でも「読めなかった」でもない。**
@@ -12,15 +11,12 @@ const NotFound = () => {
 
   return (
     <main>
-      <PageHeader title="404" />
+      <PageHeader title="ページが見つかりません" />
       <ErrorPanel
         title={state.title}
-        message="この URL に対応する画面はありません。"
+        message="このアドレスに対応する画面はありません。"
         hint={state.hint}
-        actions={[
-          { href: '/', label: 'プロジェクト一覧へ' },
-          { href: CHARACTER_LIST_HREF, label: 'キャラクター一覧へ' },
-        ]}
+        actions={[{ href: '/', label: 'プロジェクト一覧へ' }]}
       />
     </main>
   )

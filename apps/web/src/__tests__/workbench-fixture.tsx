@@ -8,6 +8,7 @@ import {
   type WorkbenchContextValue,
   type WorkbenchTransport,
 } from '@/components/workbench/workbench-context'
+import { WorkflowProvider } from '@/components/workbench/workflow-context'
 import { AssetStoreContext, type AssetStoreValue } from '@/components/workbench/asset-store'
 import { WorkbenchTransportProvider } from '@/components/workbench/workbench-transport-provider'
 import { EMPTY_SELECTION } from '@/lib/shot-bulk'
@@ -119,6 +120,7 @@ export const assetStoreValue = (patch: Partial<AssetStoreValue> = {}): AssetStor
     updateCharacter: vi.fn(),
     deleteCharacter: vi.fn(),
     createLook: vi.fn(),
+    ensureDefaultLook: vi.fn(),
     updateLook: vi.fn(),
     deleteLook: vi.fn(),
     createLocation: vi.fn(),
@@ -132,6 +134,7 @@ export const assetStoreValue = (patch: Partial<AssetStoreValue> = {}): AssetStor
     setMasterTrack: vi.fn(),
     deleteTrack: vi.fn(),
     analyzeTrack: vi.fn(),
+    importLibrary: vi.fn(),
   },
   ...patch,
 })
@@ -142,19 +145,27 @@ export const renderInWorkbench = (
   assets: Partial<AssetStoreValue> = {},
   transport: WorkbenchTransport = STOPPED,
 ) => {
-  const value = workbenchValue(patch)
-  return {
-    value,
-    ...render(
-      <PreferencesRoot>
-        <AssetStoreContext.Provider value={assetStoreValue(assets)}>
-          <WorkbenchContext.Provider value={value}>
+  const tree = (value: WorkbenchContextValue): ReactElement => (
+    <PreferencesRoot>
+      <AssetStoreContext.Provider value={assetStoreValue(assets)}>
+        <WorkbenchContext.Provider value={value}>
+          <WorkflowProvider lyricTelopCount={0} rendered={false}>
             <WorkbenchTransportProvider transport={transport}>
               <ContextMenuHost>{ui}</ContextMenuHost>
             </WorkbenchTransportProvider>
-          </WorkbenchContext.Provider>
-        </AssetStoreContext.Provider>
-      </PreferencesRoot>,
-    ),
+          </WorkflowProvider>
+        </WorkbenchContext.Provider>
+      </AssetStoreContext.Provider>
+    </PreferencesRoot>
+  )
+  const value = workbenchValue(patch)
+  const result = render(tree(value))
+  return {
+    value,
+    ...result,
+    /** 共有状態の一部を差し替えて描き直す（サーバを読み直した後など）。 */
+    rerenderWith: (next: Partial<WorkbenchContextValue>) => {
+      result.rerender(tree({ ...value, ...next }))
+    },
   }
 }

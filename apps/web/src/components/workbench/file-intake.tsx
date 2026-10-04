@@ -10,6 +10,7 @@ import {
   type ImageTarget,
 } from '@/components/workbench/use-image-attach'
 import { useWorkbench } from '@/components/workbench/workbench-context'
+import { GUIDE_TO_CONCEPT_NOTICES, useGuideToConcept } from '@/components/workbench/workflow-context'
 import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
 import { Button } from '@/components/ui/button'
 import { describeForPerson } from '@/lib/api-error'
@@ -21,7 +22,7 @@ import { ASSET_DRAG_TYPE, groupDroppedFiles } from '@/lib/asset-actions'
  * - 音声 → 楽曲として登録し、解析を始める
  * - 画像 → 行き先を 1 回だけ聞く（選んでいる素材 / 新しいロケーション / 新しいブランド資産）
  * - 動画 → 選んでいる Shot の Take にする（ADR-0026）。Shot を選んでいなければ、そう伝える
- * - 素材ビューアや Shot のカードの上に落とした場合は、そちらが先に受けて止める（ここへ来ない）
+ * - 素材ビューアの区画に落とした場合は、そちらが受けて伝わりを止める（ここへ来ない）
  *
  * 「ファイルを取り込む…」（メニュー）はここのファイル選択を開く。
  */
@@ -33,6 +34,7 @@ export const FileIntake = ({
   readonly registerOpener: (open: () => void) => void
 }) => {
   const workbench = useWorkbench()
+  const guideToConcept = useGuideToConcept()
   const { actions } = useAssets()
   const attach = useImageAttach()
   const input = useRef<HTMLInputElement>(null)
@@ -58,8 +60,11 @@ export const FileIntake = ({
     for (const file of audio) {
       try {
         const track = await actions.addTrackFromFile(file)
-        workbench.inspect({ kind: 'track', id: track.id })
-        onNotice(`「${track.title}」を楽曲として登録し、解析を始めました。`)
+        // 作品の方針がまだなら方針を開く（次にやること）。済んでいれば登録した楽曲を見せる。
+        if (!guideToConcept(GUIDE_TO_CONCEPT_NOTICES.registered(track.title))) {
+          workbench.inspect({ kind: 'track', id: track.id })
+          onNotice(`「${track.title}」を楽曲として登録し、解析を始めました。`)
+        }
       } catch (cause) {
         onNotice(`${file.name} を登録できませんでした: ${describeForPerson(cause)}`)
       }
@@ -88,7 +93,10 @@ export const FileIntake = ({
     }
     const onDrop = (event: DragEvent): void => {
       setDragging(false)
-      if (!hasFiles(event) || event.defaultPrevented) return
+      // 受けたかどうかを `defaultPrevented` で見ない。パネルの配置の仕組み（dockview）がパネルの上のドロップに
+      // 印を付けるので、パネルの上に落とすと何も起きなかった（制作者 2026-10-03「登録先を選ぶ画面が出てこない」）。
+      // 自分で受ける区画（素材ビューア）は stopPropagation して、ここへ流さない。
+      if (!hasFiles(event)) return
       event.preventDefault()
       void intake([...(event.dataTransfer?.files ?? [])])
     }
@@ -108,7 +116,13 @@ export const FileIntake = ({
       const placed = await attach(target, pendingImages)
       workbench.inspect(placed)
       workbench.openViewer()
-      onNotice(`画像 ${String(pendingImages.length)} 枚を取り込みました。`)
+      onNotice(
+        target.kind === 'new-character-sheet'
+          ? 'キャラクターを作り、キャラクターシートを作り始めました（1 枚 1 分ほど）。名前はあとで直せます。'
+          : target.kind === 'new-character'
+            ? `キャラクターを作り、画像 ${String(pendingImages.length)} 枚を入れました。名前はあとで直せます。`
+            : `画像 ${String(pendingImages.length)} 枚を取り込みました。`,
+      )
       setPendingImages([])
     } catch (cause) {
       onNotice(`画像を取り込めませんでした: ${describeForPerson(cause)}`)

@@ -2,11 +2,9 @@
 
 import { AspectRatio, type WorkspaceId } from '@ixa/domain'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
-import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
+import { useState } from 'react'
+import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
-import { createModelsApi, recommendedFps, type WireVideoModel } from '@/lib/models-api'
-import { createRequester } from '@/lib/requester'
 import {
   initialProjectFormValues,
   validateProjectForm,
@@ -14,81 +12,29 @@ import {
   type FieldErrors,
   type ProjectFormValues,
 } from '@/lib/project-form'
-import {
-  ASPECT_RATIOS,
-  FPS_OPTIONS,
-  resolutionPresetsFor,
-} from '@/lib/resolution-presets'
 import { workbenchHref } from '@/lib/workbench-url'
-import { SelectField } from '@/components/form/select-field'
 import { TextField } from '@/components/form/text-field'
 import { FieldError } from '@/components/form/field-error'
+import { AspectRatioField, FpsField, ResolutionField } from '@/components/project-spec-fields'
+import { VideoAiFpsNote } from '@/components/project-video-ai-note'
+import { Button } from '@/components/ui/button'
 
 export type ProjectFormProps = {
   readonly workspaceId: WorkspaceId
 }
 
-const aspectOptions = ASPECT_RATIOS.map((ratio) => ({ value: ratio, label: ratio }))
-const fpsOptions = FPS_OPTIONS.map((fps) => ({ value: String(fps), label: `${String(fps)} fps` }))
-
-/** 「決めていない」を表す値。選ばなくても作れる（fps は手で選べる）。 */
-const NO_MODEL = ''
-
+/**
+ * 新規作成（制作者 2026-10-03「アスペクト比は実際のサイズ図を選ぶ形」「解像度もサイズ図的なもの」「使う生成 AI 欄や
+ * FPS 欄もよしなに」）。形・大きさ・fps は図つきのカードで選ぶ（`project-spec-fields.tsx`。プロジェクト設定と共有）。
+ * 動画の AI は「使う AI」で選んだものを見せ、fps を合わせる案内を出す（`project-video-ai-note.tsx`）。
+ */
 export const ProjectForm = ({ workspaceId }: ProjectFormProps) => {
-  const modelsApi = useMemo(() => createModelsApi(createRequester(resolveApiBaseUrl())), [])
-  const [models, setModels] = useState<readonly WireVideoModel[]>([])
-  const [intendedModel, setIntendedModel] = useState<string>(NO_MODEL)
-
-  /**
-   * 読めなくても作成は止めない。**モデルの一覧は fps を決める手助けであって、必須ではない。**
-   * 読めなかったことは選択肢の側に出す（空と混ぜない。L-015）。
-   */
-  const [modelsError, setModelsError] = useState<string | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    modelsApi
-      .listModels()
-      .then((list) => {
-        if (!cancelled) setModels(list)
-      })
-      .catch((cause: unknown) => {
-        if (!cancelled) setModelsError(describeError(cause))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [modelsApi])
-
-  const modelOptions = [
-    {
-      value: NO_MODEL,
-      label:
-        modelsError !== null
-          ? 'モデルの一覧を取れませんでした（fps は手で選べます）'
-          : '選ばない（fps を手で決める）',
-    },
-    ...models.map((model) => ({
-      value: model.id,
-      label: `${model.label}（${model.fps.join(' / ')} fps）`,
-    })),
-  ]
-
-  const chosenModel = models.find((model) => model.id === intendedModel) ?? null
-  const modelHint =
-    chosenModel === null
-      ? null
-      : `このモデルの素材は ${chosenModel.fps.join(' / ')} fps です。` +
-        `合わせておくと、書き出しで引き伸ばさずに済みます。参照画像は ${String(chosenModel.maxReferenceImages)} 枚まで。`
-
   const router = useRouter()
   const [values, setValues] = useState<ProjectFormValues>(initialProjectFormValues)
   const [errors, setErrors] = useState<FieldErrors>({})
   const [submitting, setSubmitting] = useState(false)
 
   const parsedAspect = AspectRatio.safeParse(values.aspectRatio)
-  const resolutionOptions = (
-    parsedAspect.success ? resolutionPresetsFor(parsedAspect.data) : []
-  ).map((preset) => ({ value: preset.key, label: preset.label }))
 
   const submit = async (): Promise<void> => {
     const validation = validateProjectForm(values, workspaceId)
@@ -132,11 +78,8 @@ export const ProjectForm = ({ workspaceId }: ProjectFormProps) => {
         }}
       />
 
-      <SelectField
-        id="aspectRatio"
-        label="アスペクト比"
+      <AspectRatioField
         value={values.aspectRatio}
-        options={aspectOptions}
         disabled={submitting}
         error={errors.aspectRatio}
         onChange={(aspectRatio) => {
@@ -144,63 +87,45 @@ export const ProjectForm = ({ workspaceId }: ProjectFormProps) => {
         }}
       />
 
-      <SelectField
-        id="resolutionKey"
-        label="解像度"
-        value={values.resolutionKey}
-        options={resolutionOptions}
-        disabled={submitting}
-        error={errors.resolutionKey}
-        onChange={(resolutionKey) => {
-          setValues((current) => ({ ...current, resolutionKey }))
-        }}
-      />
+      {parsedAspect.success && (
+        <ResolutionField
+          aspectRatio={parsedAspect.data}
+          value={values.resolutionKey}
+          disabled={submitting}
+          error={errors.resolutionKey}
+          onChange={(resolutionKey) => {
+            setValues((current) => ({ ...current, resolutionKey }))
+          }}
+        />
+      )}
 
       {/**
-        * **どの AI で作るつもりかを先に選ぶと、fps が付いてくる。**
-        * 素材が 24fps なのに Project を 30fps にすると、書き出しで引き伸ばされて
-        * 無い絵を作ることになる（`render/ffmpeg-filters.ts` が毎クリップに
-        * `fps=doc.fps` を掛ける）。性質は `GET /models` の宣言から引く。画面に書き写さない。
+        * 素材が 24fps なのに Project を 30fps にすると、書き出しで引き伸ばされて無い絵を作ることになる
+        * （`render/ffmpeg-filters.ts` が毎クリップに `fps=doc.fps` を掛ける）。動画の AI の fps に合わせる案内を出す。
         */}
-      <SelectField
-        id="intendedModel"
-        label="使う映像生成 AI"
-        value={intendedModel}
-        options={modelOptions}
-        disabled={submitting || models.length === 0}
-        onChange={(modelId) => {
-          setIntendedModel(modelId)
-          const chosen = models.find((model) => model.id === modelId)
-          const fps = chosen === undefined ? null : recommendedFps(chosen)
-          // **上書きするのは選んだ瞬間だけ。** そのあと手で変えたものを勝手に戻さない。
-          if (fps !== null) setValues((current) => ({ ...current, fps: String(fps) }))
-        }}
-      />
-
-      {modelHint !== null && <p className="-mt-2 text-xs text-muted">{modelHint}</p>}
-
-      <SelectField
-        id="fps"
-        label="fps"
+      <FpsField
         value={values.fps}
-        options={fpsOptions}
         disabled={submitting}
         error={errors.fps}
         onChange={(fps) => {
           setValues((current) => ({ ...current, fps }))
         }}
+        note={
+          <VideoAiFpsNote
+            fps={values.fps}
+            onUseFps={(fps) => {
+              setValues((current) => ({ ...current, fps }))
+            }}
+          />
+        }
       />
 
       <FieldError id="form-error" message={errors.form} />
 
       <div className="flex items-center gap-3 pt-2">
-        <button
-          type="submit"
-          disabled={submitting}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-line disabled:text-muted"
-        >
+        <Button tone="primary" type="submit" disabled={submitting}>
           {submitting ? '作成中…' : 'プロジェクトを作成'}
-        </button>
+        </Button>
         <a href="/" className="text-sm text-muted underline hover:text-text">
           やめる
         </a>

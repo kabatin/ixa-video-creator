@@ -6,8 +6,9 @@ import {
   newId,
   type ShotId,
 } from '@ixa/domain'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { StoryboardDraftPanel } from '@/components/storyboard-draft-panel'
 import type { CurrentShot } from '@/lib/storyboard-draft'
@@ -150,19 +151,38 @@ describe('StoryboardDraftPanel', () => {
     expect(screen.getByText('採用済み')).toBeInTheDocument()
   })
 
-  /** 返ってきた Shot で「いまの説明」を差し替える。**差し替えないと古い文が残り続ける。** */
+  /**
+   * 返ってきた Shot で「いまの説明」を差し替える。**差し替えないと古い文が残り続ける。**
+   * 「いまの説明」の正は親の Shot（ワークベンチ）。採用を親へ知らせ、親が渡し直した Shot で描き直す。
+   */
   it('採用した Shot の「いまの説明」を返り値で描き直す', async () => {
     const adoptedA = itemFor(shotA.id, { adoptedAt: '2026-09-18T01:00:00.000Z' })
-    panel({
-      api: apiSpy({
-        adopt: vi.fn(() =>
-          Promise.resolve({
-            adopted: [adoptedA],
-            shots: [{ id: shotA.id, code: 'A', description: 'A の案', mood: '静かな緊張' }],
-          }),
-        ),
-      }),
+    const api = apiSpy({
+      adopt: vi.fn(() =>
+        Promise.resolve({
+          adopted: [adoptedA],
+          shots: [{ id: shotA.id, code: 'A', description: 'A の案', mood: '静かな緊張' }],
+        }),
+      ),
     })
+    /** ワークベンチと同じく、採用された Shot で一覧を差し替える親。 */
+    const Parent = () => {
+      const [shots, setShots] = useState<readonly CurrentShot[]>([shotA, shotB])
+      return (
+        <StoryboardDraftPanel
+          projectId={projectId}
+          shots={shots}
+          initialRun={run}
+          initialItems={[itemFor(shotA.id), itemFor(shotB.id)]}
+          api={api}
+          onAdopted={(adopted) => {
+            const byId = new Map(adopted.map((shot) => [shot.id, shot] as const))
+            setShots((previous) => previous.map((shot) => byId.get(shot.id) ?? shot))
+          }}
+        />
+      )
+    }
+    render(<Parent />)
 
     expect(screen.getByText('Aの元の説明')).toBeInTheDocument()
 
@@ -256,7 +276,7 @@ describe('StoryboardDraftPanel', () => {
     panel({ initialRun: null, initialItems: [], api: apiSpy() })
 
     expect(await screen.findByText('まだ案がありません')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '下書きする' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'AI で下書きする' })).toBeEnabled()
   })
 
   it('読み込みに失敗したら画面に出す（黙って「案なし」にしない）', async () => {
@@ -279,7 +299,8 @@ describe('StoryboardDraftPanel', () => {
     })
 
     expect(screen.getByRole('alert')).toHaveTextContent('止まった可能性があります')
-    expect(screen.getByRole('button', { name: '採用する' })).toBeDisabled()
+    // 案が無いので採否の操作は出さない（押せないボタンを並べない）。
+    expect(screen.queryByRole('button', { name: '採用する' })).toBeNull()
   })
 
   it('下書きを押すと API を呼び、返ってきた案を並べる', async () => {
@@ -288,7 +309,7 @@ describe('StoryboardDraftPanel', () => {
     )
     panel({ initialRun: null, initialItems: [], api: apiSpy({ createDraft }) })
 
-    await userEvent.click(screen.getByRole('button', { name: '下書きする' }))
+    await userEvent.click(screen.getByRole('button', { name: 'AI で下書きする' }))
 
     await waitFor(() => {
       expect(createDraft).toHaveBeenCalledWith(projectId)
@@ -308,7 +329,7 @@ describe('StoryboardDraftPanel', () => {
     })
 
     expect(screen.getByRole('alert')).toHaveTextContent('CLI が終了しませんでした')
-    expect(screen.getByRole('button', { name: '採用する' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: '採用する' })).toBeNull()
   })
 
   it('採用が失敗したら画面に出す', async () => {
@@ -370,5 +391,119 @@ describe('StoryboardDraftPanel — 作り直している間', () => {
     expect(await screen.findByText(/新しい案が届きました（2 件）/)).toBeInTheDocument()
     expect(screen.queryByRole('status', { name: '絵コンテの案を作っています' })).toBeNull()
     expect(screen.getByRole('checkbox', { name: 'A の案を採用する' })).toBeEnabled()
+  })
+})
+
+/**
+ * 採用したら、案は「いまの説明」へ移ったと見せる（制作者 2026-10-03「採用ボタン押すと、「いまの説明」と「案」に同じ内容が
+ * 並ぶから、採用したら案がいまの説明に移るようにしたほうが分かりやすい。案側は「採用されています」的な文言と
+ * 「なぜこの絵か？」を引き続き表示する感じになると縦幅も減っていい」）。
+ */
+describe('StoryboardDraftPanel: 採用した行', () => {
+  it('案の欄は「採用しました」と「なぜこの絵か」だけ（同じ文を 2 度出さない）', () => {
+    panel({
+      shots: [{ ...shotA, description: 'A の案', mood: '静かな緊張' }, shotB],
+      initialItems: [itemFor(shotA.id, { adoptedAt: '2026-09-18T01:00:00.000Z' }), itemFor(shotB.id)],
+    })
+
+    expect(screen.getAllByText('A の案')).toHaveLength(1)
+    expect(screen.getByText('採用しました（いまの説明に入っています）')).toBeInTheDocument()
+    expect(screen.getByText(/A は導入だから/)).toBeInTheDocument()
+  })
+
+  it('CUT を押すと、その Shot を選んでインスペクターの絵コンテを開く（手で直す入口）', async () => {
+    const onSelectShot = vi.fn()
+    panel({ onSelectShot })
+
+    await userEvent.click(screen.getByRole('button', { name: 'A' }))
+
+    expect(onSelectShot).toHaveBeenCalledWith(shotA.id)
+  })
+})
+
+/**
+ * Shot はあるが案がまだ無い（制作者 2026-10-04「絵コンテの案のところ、Shot作ったあとに表示しても空なので、Shotがあるならリストは
+ * 出してもいいんじゃないかな。その上でAIで下書きを作るみたいな流れになると分かりやすそう」）。
+ */
+describe('StoryboardDraftPanel: 案がまだ無い', () => {
+  it('Shot を並べ、いまの説明を出し、案の欄で AI がまとめて下書きできると言う', () => {
+    panel({
+      shots: [shotA, { ...shotB, description: '' }],
+      initialRun: null,
+      initialItems: [],
+      preloaded: true,
+    })
+
+    const table = screen.getByRole('table', { name: '絵コンテの案' })
+    expect(within(table).getByText('Aの元の説明')).toBeInTheDocument()
+    expect(within(table).getByText('（未記入）')).toBeInTheDocument()
+    expect(within(table).getByText('まだ案がありません')).toBeInTheDocument()
+    expect(within(table).getByText(/全 Shot（2 件）の説明と雰囲気の案を、AI がまとめて作ります/)).toBeInTheDocument()
+    // 案の無い行は選べない（採用するものが無い）。
+    expect(screen.queryByRole('checkbox', { name: 'A の案を採用する' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'AI で下書きする' })).toBeEnabled()
+  })
+
+  /**
+   * **開いた後にできた Shot の案を「知らない Shot」と言わない。** 以前は開いたときの Shot を覚えたままで、
+   * 区切って Shot にしてから下書きすると「39 件の案は、この画面が知らない Shot に対するものです」と出て、
+   * 読み込み直すまで一覧が出なかった（制作者 2026-10-04）。
+   */
+  it('開いた後に渡された Shot で並べ、届いた案をその Shot に付ける', async () => {
+    const createDraft = vi.fn(() => Promise.resolve({ run, items: [itemFor(shotA.id), itemFor(shotB.id)] }))
+    const api = apiSpy({ createDraft })
+    const { rerender } = render(
+      <StoryboardDraftPanel projectId={projectId} shots={[]} initialRun={null} initialItems={[]} preloaded api={api} />,
+    )
+    rerender(
+      <StoryboardDraftPanel
+        projectId={projectId}
+        shots={[shotA, shotB]}
+        initialRun={null}
+        initialItems={[]}
+        preloaded
+        api={api}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'AI で下書きする' }))
+
+    expect(await screen.findByText('A の案')).toBeInTheDocument()
+    expect(screen.getByText('B の案')).toBeInTheDocument()
+    expect(screen.queryByText(/この画面が知らない Shot/)).toBeNull()
+  })
+
+  it('作り直しの後に作った Shot は、案の欄に「作り直すと入ります」と出して選ばせない', () => {
+    const shotC: CurrentShot = { id: newId(ShotIdSchema), code: 'C', description: '', mood: null }
+    panel({ shots: [shotA, shotB, shotC] })
+
+    expect(screen.getByText('案はまだありません（作り直すと入ります）')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'C の案を採用する' })).toBeDisabled()
+  })
+
+  it('Shot が 0 件なら下書きを押させない（下書きする相手がいない）', () => {
+    panel({ shots: [], initialRun: null, initialItems: [], preloaded: true })
+
+    expect(screen.getByRole('button', { name: 'AI で下書きする' })).toBeDisabled()
+  })
+})
+
+describe('StoryboardDraftPanel: 案が届いたとき', () => {
+  it('何も選んでいなければ「前に選んでいたものは外しました」と言わない', async () => {
+    panel({ api: apiSpy({ createDraft: vi.fn(() => Promise.resolve({ run, items: [itemFor(shotA.id), itemFor(shotB.id)] })) }) })
+
+    await userEvent.click(screen.getByRole('button', { name: '作り直す' }))
+
+    const arrived = await screen.findByText(/新しい案が届きました（2 件）/)
+    expect(arrived).not.toHaveTextContent('前に選んでいた')
+  })
+
+  it('選んでいた案があれば、外したと言う', async () => {
+    panel({ api: apiSpy({ createDraft: vi.fn(() => Promise.resolve({ run, items: [itemFor(shotA.id), itemFor(shotB.id)] })) }) })
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'A の案を採用する' }))
+    await userEvent.click(screen.getByRole('button', { name: '作り直す' }))
+
+    expect(await screen.findByText(/前に選んでいたものは外しました/)).toBeInTheDocument()
   })
 })

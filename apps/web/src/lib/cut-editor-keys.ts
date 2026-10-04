@@ -211,3 +211,36 @@ export const NUDGE_STEPS = {
   fineSec: FINE_NUDGE_SEC,
   coarseSec: COARSE_NUDGE_SEC,
 } as const
+
+/** 打鍵を受けた場所。どの画面の中か（DOM の `closest` は呼び出し側が引いて、真偽値だけを渡す）。 */
+export type PlainKeyPlace = {
+  /** 「聴きながら切る」のパネルの中か（`[data-cutter-panel]`）。 */
+  readonly insideCutterPanel: boolean
+  /** 開いている確認・ダイアログの中か（`dialog[open]`）。 */
+  readonly insideOpenDialog: boolean
+}
+
+/**
+ * 「聴きながら切る」が、フォーカスの場所に関わらず飾りの無いキー（Enter・Space・Backspace）を受けてよいか。
+ * 区切りの Enter と、歌詞を合わせるの Enter / Space / Backspace が使う（制作者 2026-10-03「テロップのように Enter で
+ * 置けるように」）。**1 回の打鍵で 2 つの操作を起こさない**（レビューで見つけた）:
+ * - 文字を打っている間・開いている確認の中は取らない
+ * - メニュー項目・タブなど役割を持つ部品の上は、その部品を優先する
+ * - 普通のボタンの上で取るのは「聴きながら切る」のパネルの中だけ（▶ を押した直後に Enter で置けるように）。
+ *   ほかのパネルのボタン（素材ツリーの行・一括操作）の Enter は、そのボタンが受ける
+ */
+export const cutterTakesPlainKey = (target: CutEditorKeyEvent['target'], place: PlainKeyPlace): boolean => {
+  if (place.insideOpenDialog) return false
+  const owner = resolveKeyOwner(target, false)
+  if (owner === 'workbench' || owner === 'cut-editor') return true
+  if (owner !== 'widget' || !place.insideCutterPanel) return false
+  const role = target?.role ?? null
+  return target?.tagName.toUpperCase() === 'BUTTON' && (role === null || role === 'button')
+}
+
+/** 区切るモードで、フォーカスが波形の外でも区切りを置く打鍵か（Enter / S。修飾キーなし）。 */
+export const isPlaceKeyAnywhere = (event: Omit<CutEditorKeyEvent, 'insideCutEditor'> & PlainKeyPlace): boolean => {
+  if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false
+  if (event.key !== 'Enter' && event.key !== 's') return false
+  return cutterTakesPlainKey(event.target, event)
+}

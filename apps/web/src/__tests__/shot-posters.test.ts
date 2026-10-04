@@ -29,7 +29,7 @@ const withPoster = (id: string, url: string): WireShotPoster => ({
   thumbnailUrl: url,
   reason: null,
   pending: false,
-  hasStartFrame: false,
+  hasStartFrame: false, drawing: false,
 })
 
 const withoutPoster = (id: string, reason: string): WireShotPoster => ({
@@ -38,7 +38,7 @@ const withoutPoster = (id: string, reason: string): WireShotPoster => ({
   thumbnailUrl: null,
   reason,
   pending: false,
-  hasStartFrame: false,
+  hasStartFrame: false, drawing: false,
 })
 
 describe('posterByShotId', () => {
@@ -51,10 +51,10 @@ describe('posterByShotId', () => {
     expect(map.get(shotId)).toEqual({
       url: 'https://example.invalid/a.jpg',
       reason: null,
-      hasStartFrame: false,
+      hasStartFrame: false, drawing: false,
       pending: false,
     })
-    expect(map.get(otherShotId)).toEqual({ url: null, reason: 'no_take', hasStartFrame: false, pending: false })
+    expect(map.get(otherShotId)).toEqual({ url: null, reason: 'no_take', hasStartFrame: false, drawing: false, pending: false })
   })
 
   it('作っている最中か（待てば出るか）を運ぶ。サムネに回る印を出すのに使う', () => {
@@ -66,7 +66,7 @@ describe('posterByShotId', () => {
 
 describe('startFrameKnownFor', () => {
   it('最初のフレームがあるかを返し、まだ引いていない Shot は「無い」ではなく null', () => {
-    const map = posterByShotId([{ ...withPoster(SHOT_ID, 'https://example.invalid/a.jpg'), hasStartFrame: true }])
+    const map = posterByShotId([{ ...withPoster(SHOT_ID, 'https://example.invalid/a.jpg'), hasStartFrame: true , drawing: false}])
 
     expect(startFrameKnownFor(map, shotId)).toBe(true)
     expect(startFrameKnownFor(map, otherShotId)).toBeNull()

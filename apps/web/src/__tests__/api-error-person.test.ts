@@ -35,8 +35,24 @@ describe('describeForPerson', () => {
       }),
     )
     const text = describeForPerson(error)
-    expect(text).toBe('入力の検証に失敗しました（value: category=color では value が必須です）')
+    expect(text).toBe('入力の検証に失敗しました（値: category=color では value が必須です）')
     expect(text).not.toContain('http')
+  })
+
+  /**
+   * 項目の名前はサーバの列名（英字）なので、日本語の名前に置き換える。知らない名前は出さない（理由の文だけ）。
+   * 画面に実装の言葉を出さない（CLAUDE.md「画面に出さない」）。
+   */
+  it('項目の名前は日本語にし、知らない名前は出さない', () => {
+    const error = new ApiError(
+      'x',
+      422,
+      JSON.stringify({
+        error: '入力の検証に失敗しました',
+        fields: { durationSec: ['0 より大きくしてください'], some_internal_key: ['形が違います'] },
+      }),
+    )
+    expect(describeForPerson(error)).toBe('入力の検証に失敗しました（尺: 0 より大きくしてください / 形が違います）')
   })
 
   it('接続できないときは次の一手まで書く', () => {
@@ -55,8 +71,9 @@ describe('describeForPerson', () => {
     expect(text).not.toContain('http')
     expect(text).not.toContain('POST')
     expect(text).not.toContain('html')
-    // 「失敗した」ことは落とさない。
-    expect(text).toContain('500')
+    // 「失敗した」ことは落とさない。HTTP の番号は出さない（CLAUDE.md「画面に出さない」）。
+    expect(text).toContain('サーバでエラーが起きました')
+    expect(text).not.toContain('500')
   })
 
   it('本文が JSON でも error が無ければ中身を出さない', () => {

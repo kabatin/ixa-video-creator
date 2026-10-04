@@ -3,7 +3,13 @@ import type { Project, Shot } from '@ixa/domain'
 import { createApp, type AppDeps } from '../app.js'
 import { baseAppDeps, createRecordingQueue, type RecordingQueue } from './app-deps.js'
 import { aProject } from './fixtures.js'
-import { aShot, aTake, createInMemoryShotRepository, createInMemoryTakeRepository } from '@ixa/generation/testing'
+import {
+  aShot,
+  aTake,
+  createInMemoryLocationRepository,
+  createInMemoryShotRepository,
+  createInMemoryTakeRepository,
+} from '@ixa/generation/testing'
 import { createInMemoryGenerationJobRepository } from './in-memory-generation-job-repository.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { createTestVideoProvider, testModel } from './test-video-provider.js'
@@ -37,10 +43,13 @@ export const buildFixture = (options: FixtureOptions = {}) => {
   const takes = createInMemoryTakeRepository(options.takes ?? [])
   const generationJobs = createInMemoryGenerationJobRepository()
   const queue: RecordingQueue = createRecordingQueue()
+  // Shot に付けるロケーションは同じプロジェクトのもの（ADR-0034）。テストが作って付ける。
+  const locations = createInMemoryLocationRepository()
 
   const deps: AppDeps = {
     ...baseAppDeps(),
     projects: createInMemoryProjectRepository([project]),
+    locations,
     shots,
     takes,
     generationJobs,
@@ -48,7 +57,7 @@ export const buildFixture = (options: FixtureOptions = {}) => {
     generationQueue: queue,
   }
 
-  return { app: createApp(deps), project, shot, shots, takes, generationJobs, queue }
+  return { app: createApp(deps), project, shot, shots, takes, generationJobs, queue, locations }
 }
 
 export const postJson = (app: ReturnType<typeof createApp>, path: string, body: unknown) =>

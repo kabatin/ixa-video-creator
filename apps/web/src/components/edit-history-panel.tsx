@@ -17,6 +17,7 @@ import {
   type EditHistoryApi,
   type WireEditBatch,
 } from '@/lib/edit-history-api'
+import { Button } from '@/components/ui/button'
 
 /**
  * 一括で変えた操作を並べ、まだ戻していないものに「元に戻す」を出す（P64-1）。
@@ -162,16 +163,17 @@ export const EditHistoryPanel = ({
                   )}
                 </div>
                 {row.canUndo ? (
-                  <button
-                    type="button"
+                  <Button
+                    tone="primary"
+                    size="sm"
+                    nowrap
                     onClick={() => {
                       runUndo(row.id)
                     }}
                     disabled={phase !== 'idle'}
-                    className="shrink-0 rounded bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg disabled:opacity-50"
                   >
                     {phase === 'undoing' ? '戻しています' : '元に戻す'}
-                  </button>
+                  </Button>
                 ) : null}
               </div>
             </li>

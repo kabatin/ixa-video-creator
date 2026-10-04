@@ -115,7 +115,8 @@ describe('Shot 一覧のチェック', () => {
       />,
     )
 
-    expect(screen.getByText('作成中 0:42')).toBeInTheDocument()
+    // 動画を作っている印に添える（絵を作っている印と形で分ける。制作者 2026-10-03）。
+    expect(screen.getByText(/作成中 0:42/)).toBeInTheDocument()
   })
 })
 

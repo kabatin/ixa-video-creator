@@ -29,17 +29,19 @@ const recordingAssistant = (reply: Awaited<ReturnType<TextAssistant['suggest']>>
 const build = (reply: Awaited<ReturnType<TextAssistant['suggest']>> = { ok: true, text: '青い外光の屋上', costUsd: 0 }) => {
   const project: Project = { ...aProject(), lyrics: '夜明けの屋上で', lyricCues: [1] }
   const shot = aShot(project.id, { code: 'CUT-01', startSec: 0, durationSec: 4 })
-  const bundle = aCharacterBundle()
+  const bundle = aCharacterBundle(project.id)
+  // ほかのプロジェクトのキャラクター（ADR-0034）。
+  const foreign = aCharacterBundle()
   const recording = recordingAssistant(reply)
   const app = createApp({
     ...baseAppDeps(),
     projects: createInMemoryProjectRepository([project]),
     shots: createInMemoryShotRepository([shot]),
-    characters: createInMemoryCharacterRepository([bundle.character]),
+    characters: createInMemoryCharacterRepository([bundle.character, foreign.character]),
     textAssistant: () => Promise.resolve(recording.assistant),
   })
   const assist = (body: Record<string, unknown>) => postJson(app, `/projects/${project.id}/assist`, body)
-  return { app, project, shot, bundle, seen: recording.seen, assist }
+  return { app, project, shot, bundle, foreign, seen: recording.seen, assist }
 }
 
 describe('POST /projects/:id/assist', () => {
@@ -61,6 +63,19 @@ describe('POST /projects/:id/assist', () => {
     await f.assist({ field: 'identity_anchors', current: '', instruction: null, characterId: f.bundle.character.id })
 
     expect(f.seen[0]?.context.find((line) => line.label === '人物')?.text).toBe(f.bundle.character.displayName)
+  })
+
+  /** キャラクターとロケーションはプロジェクトごと（ADR-0034）。ほかのプロジェクトのものを材料にしない。 */
+  it('ほかのプロジェクトのキャラクターは 422（材料にしない）', async () => {
+    const f = build()
+
+    const res = await f.assist({
+      field: 'identity_anchors', current: '', instruction: null, characterId: f.foreign.character.id,
+    })
+
+    expect(res.status).toBe(422)
+    expect(((await res.json()) as ErrorBody).fields?.characterId?.[0]).toMatch(/この Project のキャラクターではありません/)
+    expect(f.seen).toHaveLength(0)
   })
 
   it('Shot の欄なのに Shot を言わなければ 422', async () => {

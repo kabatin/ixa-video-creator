@@ -14,6 +14,7 @@ import { offerReviewAfterGeneration } from '@/lib/offer-review'
 import { describeError } from '@/lib/api-error'
 import { planBulkOperation, summarizeBulkResult, type BulkPlan } from '@/lib/shot-bulk'
 import { parseBulkGenerateRejection, type BulkGenerateRejection } from '@/lib/shot-bulk-api'
+import { useAskReview } from '@/components/workbench/use-ask-review'
 
 /**
  * 一括操作（P58）。旧 Shot 一覧画面（`shot-list-workspace`）から移した。
@@ -98,6 +99,7 @@ export const useBulkActions = (): BulkActions => {
    * 聞くのは 1 回の一括につき 1 回（件数ぶん聞かない）。結果の要約はそのまま残す。
    */
   const { notify } = workbench
+  const askReview = useAskReview()
   useEffect(() => {
     if (progress === null || watching === null || progress.done < progress.total) return
     const finished = watching
@@ -105,10 +107,10 @@ export const useBulkActions = (): BulkActions => {
     void offerReviewAfterGeneration({
       shotIds: finished,
       api,
-      confirm: (message) => window.confirm(message),
+      confirm: (message) => askReview(message),
       notify,
     })
-  }, [progress, watching, api, notify])
+  }, [progress, watching, api, notify, askReview])
 
   const run = async (plan: BulkPlan, action: () => Promise<ActionResult>): Promise<void> => {
     if (plan.targetIds.length === 0) {

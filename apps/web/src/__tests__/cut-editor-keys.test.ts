@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   SOURCE_KEY_HELP,
   describeCutEditorKeys,
+  isPlaceKeyAnywhere,
   resolveCutEditorCommand,
   shadowedPlaybackKeys,
   type CutEditorKeyEvent,
@@ -226,5 +227,57 @@ describe('画面に出す一覧', () => {
   it('一覧のすべての行が実際に操作へ繋がる', () => {
     expect(help.every((entry) => entry.action.trim().length > 0)).toBe(true)
     expect(help.length).toBeGreaterThanOrEqual(SOURCE_KEY_HELP.playback.length)
+  })
+})
+
+/**
+ * 区切るモードが見えている間は、フォーカスが波形の外でも Enter / S で区切りを置く（制作者 2026-10-03「「ここに区切りを
+ * 置く」ボタンもテロップのように Enter とかで置けるようにしたい」）。歌詞の Enter と同じく、文字を打っている間だけは取らない。
+ */
+describe('isPlaceKeyAnywhere', () => {
+  const event = (
+    key: string,
+    target: CutEditorKeyEvent['target'] = null,
+    modifiers: Partial<CutEditorKeyEvent> & { insideCutterPanel?: boolean; insideOpenDialog?: boolean } = {},
+  ) => ({
+    key,
+    shiftKey: false,
+    altKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    target,
+    insideCutterPanel: true,
+    insideOpenDialog: false,
+    ...modifiers,
+  })
+
+  it('Enter と S は、フォーカスがどこにあっても取る（ボタンの上でも）', () => {
+    expect(isPlaceKeyAnywhere(event('Enter'))).toBe(true)
+    expect(isPlaceKeyAnywhere(event('s'))).toBe(true)
+    expect(isPlaceKeyAnywhere(event('Enter', { tagName: 'BUTTON', isContentEditable: false }))).toBe(true)
+  })
+
+  it('文字を打っている間・修飾キー付き・ほかのキーは取らない', () => {
+    expect(isPlaceKeyAnywhere(event('Enter', { tagName: 'INPUT', isContentEditable: false }))).toBe(false)
+    expect(isPlaceKeyAnywhere(event('Enter', { tagName: 'DIV', isContentEditable: true }))).toBe(false)
+    expect(isPlaceKeyAnywhere(event('Enter', null, { metaKey: true }))).toBe(false)
+    expect(isPlaceKeyAnywhere(event('Backspace'))).toBe(false)
+  })
+
+  it('メニュー項目のように役割を持つ部品の上では、その部品の Enter を優先する', () => {
+    expect(isPlaceKeyAnywhere(event('Enter', { tagName: 'BUTTON', isContentEditable: false, role: 'menuitem' }))).toBe(false)
+  })
+
+  /**
+   * 1 回の Enter で 2 つの操作が起きないように（レビューで見つけた）。普通のボタンの上で取るのは「聴きながら切る」の
+   * パネルの中だけ。ほかのパネルのボタン（素材ツリーの行・一括操作）と、開いている確認の中では、その Enter を優先する。
+   */
+  it('聴きながら切るの外のボタンの上と、開いている確認の中では取らない', () => {
+    const button = { tagName: 'BUTTON', isContentEditable: false }
+    expect(isPlaceKeyAnywhere(event('Enter', button, { insideCutterPanel: false }))).toBe(false)
+    expect(isPlaceKeyAnywhere(event('Enter', button, { insideOpenDialog: true }))).toBe(false)
+    expect(isPlaceKeyAnywhere(event('Enter', null, { insideOpenDialog: true }))).toBe(false)
+    // ボタン以外（何も選んでいない所）なら、パネルの外でも取る。
+    expect(isPlaceKeyAnywhere(event('Enter', { tagName: 'DIV', isContentEditable: false }, { insideCutterPanel: false }))).toBe(true)
   })
 })

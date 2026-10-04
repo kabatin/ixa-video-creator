@@ -47,6 +47,7 @@ const aJob = (patch: Partial<GenerationJob> = {}): GenerationJob => ({
   corrections: [],
   queuedAt: new Date('2026-09-30T10:00:00Z'),
   startedAt: new Date('2026-09-30T10:00:05Z'),
+  providerStartedAt: new Date('2026-09-30T10:00:10Z'),
   finishedAt: null,
   ...patch,
 })
@@ -78,6 +79,7 @@ type Body = {
     estimatedLatencySec: number | null
     queuedAt: string
     startedAt: string | null
+    providerStartedAt: string | null
   }[]
 }
 
@@ -101,9 +103,22 @@ describe('GET /projects/:projectId/generations/active', () => {
         estimatedLatencySec: 210,
         queuedAt: '2026-09-30T10:00:00.000Z',
         startedAt: '2026-09-30T10:00:05.000Z',
+        providerStartedAt: '2026-09-30T10:00:10.000Z',
         attempt: 1,
       },
     ])
+  })
+
+  /**
+   * 送ったがまだ作り始めていない（生成先の中で順番待ち）。vpipe は 1 本ずつ作るので、送った 2 本目はこうなる
+   * （制作者 2026-10-04「カット２，３が作成中になってる」）。作り始めた時刻を null で返し、画面が「順番待ち」と出せるようにする。
+   */
+  it('生成先がまだ作り始めていなければ、作り始めた時刻を null で返す', async () => {
+    const { app } = build([aJob({ providerStartedAt: null })])
+
+    const body = (await (await app.request(`/projects/${project.id}/generations/active`)).json()) as Body
+
+    expect(body.data[0]?.providerStartedAt).toBeNull()
   })
 
   it('モデルがまだ決まっていない・この環境に無いときは、名前と目安を null にする（推し量らない）', async () => {

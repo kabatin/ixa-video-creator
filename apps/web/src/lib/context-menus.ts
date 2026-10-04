@@ -1,4 +1,5 @@
 import type { Shot } from '@ixa/domain'
+import { DRAW_ANYWAY_LABEL, drawWithoutStoryboardWarning } from '@/lib/step-guards'
 import { DELETE_SHORTCUT, NO_ADOPTED_TAKE, SPLIT_SHORTCUT } from '@/lib/menu-model'
 
 /**
@@ -20,6 +21,9 @@ export type ContextMenuEntry<A extends string> =
       readonly confirm?: string
       /** 確認で「しない」側の言葉。既定は「やめる」。操作の名前に「やめる」が入るときに替える。 */
       readonly keepLabel?: string
+      /** 確認の「する」側の色と言葉（手順を飛ばしたときの確認は primary・「このまま作る」）。 */
+      readonly confirmTone?: 'danger' | 'primary'
+      readonly confirmLabel?: string
     }
   | { readonly kind: 'separator' }
 
@@ -31,6 +35,8 @@ const item = <A extends string>(
     readonly disabledReason?: string | null
     readonly confirm?: string
     readonly keepLabel?: string
+    readonly confirmTone?: 'danger' | 'primary'
+    readonly confirmLabel?: string
   } = {},
 ): ContextMenuEntry<A> => ({
   kind: 'item',
@@ -40,6 +46,8 @@ const item = <A extends string>(
   ...(options.shortcut === undefined ? {} : { shortcut: options.shortcut }),
   ...(options.confirm === undefined ? {} : { confirm: options.confirm }),
   ...(options.keepLabel === undefined ? {} : { keepLabel: options.keepLabel }),
+  ...(options.confirmTone === undefined ? {} : { confirmTone: options.confirmTone }),
+  ...(options.confirmLabel === undefined ? {} : { confirmLabel: options.confirmLabel }),
 })
 
 const SEPARATOR = { kind: 'separator' } as const
@@ -65,6 +73,14 @@ export const CANCEL_GENERATION_CONFIRM =
 export const KEEP_GENERATING_LABEL = '続ける'
 export const NOT_GENERATING_REASON = '生成中ではありません'
 
+/** 絵コンテ（説明）が空なら、絵を作る前に確かめる（制作者 2026-10-03「手順を飛び越えて…警告ダイアログを出して、任意の上で実行」）。 */
+const drawGuardOf = (shot: Shot) => {
+  const warning = drawWithoutStoryboardWarning([shot])
+  return warning === null
+    ? {}
+    : { confirm: warning, confirmTone: 'primary' as const, confirmLabel: DRAW_ANYWAY_LABEL }
+}
+
 /**
  * Shot のメニュー（タイムライン・ストーリーボード・Shot 一覧）。**対象は右クリックした 1 つ**（チェックした複数とは混ぜない）。
  * `checked` を渡したときだけ（Shot 一覧）、チェックの付け外しを並べる。
@@ -82,7 +98,7 @@ export const shotMenuEntries = (input: {
     keepLabel: KEEP_GENERATING_LABEL,
   }),
   item('open-compare', 'Take 比較で見る'),
-  item('draw-start-frame', '絵コンテの画像を AI で作る'),
+  item('draw-start-frame', '絵コンテの画像を AI で作る', drawGuardOf(input.shot)),
   SEPARATOR,
   item('split', '再生位置で分割', { shortcut: SPLIT_SHORTCUT, disabledReason: input.splitBlocker }),
   item('unselect-take', '採用を外す', {
