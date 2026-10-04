@@ -122,6 +122,10 @@ type Project = {
 }
 ```
 
+**作品の複製（ADR-0037）**: 持っていく項目（`DUPLICATION_ITEMS`）を選んで新しい作品を作る。
+ID はすべて新しく振り、ファイル（MediaAsset）は写さず同じものを指す。項目どうしの依存（例: Take は Shot が要る）と
+写し方の規則は domain の `duplication-options.ts` / `duplication-copy.ts` が唯一の正で、画面と API が同じ判定を使う。
+
 ---
 
 ## 4. MediaAsset（すべてのファイルの唯一の実体）
@@ -589,6 +593,8 @@ type Take = {
   // 系譜
   parentTakeId: TakeId | null       // 再生成元
   regenerationReason: string | null
+  // 作品の複製で写した Take の元（ADR-0037）。印があれば費用・予算・作り直しの回数に数えない（countsAsSpend）
+  copiedFromTakeId: TakeId | null
   // 状態（Take 自体は Immutable。この 2 つのみ後から変わる）
   reviewStatus: 'pending' | 'passed' | 'warned' | 'failed' | 'skipped'
   humanVerdict: 'unreviewed' | 'approved' | 'rejected'

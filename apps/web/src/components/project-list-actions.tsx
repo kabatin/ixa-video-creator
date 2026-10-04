@@ -98,6 +98,7 @@ const Inner = ({ api, children }: { readonly api: ProjectListActionsApi; readonl
       <WorkbenchDialog
         open={duplicating !== null}
         title="プロジェクトを複製"
+        size="medium"
         onClose={() => setDuplicating(null)}
       >
         {duplicating !== null && (
@@ -127,7 +128,7 @@ export const ProjectListActions = ({ api, children }: { readonly api?: ProjectLi
 }
 
 /**
- * カードの枠。右クリック（長押し・Shift+F10）と右上の「…」でメニューを出す。
+ * カードの枠。右クリック（長押し・Shift+F10）と右下の「…」（右上は表紙の絵に重なる）でメニューを出す。
  * 中身（ワークベンチへのリンク）はそのまま受け取る。「…」はリンクの外に置く（リンクの中にボタンを入れない）。
  */
 export const ProjectCardFrame = ({ project, children }: { readonly project: ProjectCardTarget; readonly children: ReactNode }) => {
@@ -147,7 +148,7 @@ export const ProjectCardFrame = ({ project, children }: { readonly project: Proj
             const rect = event.currentTarget.getBoundingClientRect()
             actions.openMenu(project, { x: rect.left, y: rect.bottom }, event.currentTarget)
           }}
-          className="absolute right-2 top-2 z-10 rounded-md border border-line bg-surface/90 px-2 py-0.5 text-sm text-muted hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+          className="absolute bottom-3 right-3 z-10 rounded-md border border-line bg-surface/90 px-2 py-0.5 text-sm text-muted hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
         >
           …
         </button>

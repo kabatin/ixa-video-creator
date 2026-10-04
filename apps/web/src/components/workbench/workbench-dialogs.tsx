@@ -41,6 +41,7 @@ const MEDIUM: ReadonlySet<DialogKind> = new Set([
   'merge-shots',
   'ai-setup',
   'library-import',
+  'project-duplicate',
 ])
 
 /**
