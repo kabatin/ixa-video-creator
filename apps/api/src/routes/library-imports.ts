@@ -11,15 +11,12 @@ import {
   CharacterId as CharacterIdSchema,
   LocationId as LocationIdSchema,
   ProjectId as ProjectIdSchema,
-  type BrandAsset,
-  type Character,
-  type Location,
-  type Project,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse, type FieldErrors } from '../response.js'
 import { BrandAssetResponse, LocationResponse } from './assets.js'
 import { CharacterResponse, toCharacterResponse } from './characters.js'
+import { copyBrandAsset, copyCharacter, copyLocation } from '../library-copy.js'
 import { sequentially } from '../sequentially.js'
 
 /**
@@ -96,75 +93,8 @@ const resolveAll = async <Id, T extends { readonly workspaceId: string }>(
   return usable.length === ids.length ? usable : null
 }
 
-export const libraryImportRoutes = (deps: LibraryImportRoutesDeps) => {
-  const copyCharacter = async (source: Character, project: Project): Promise<Character> => {
-    const copy = await deps.characters.create({
-      workspaceId: project.workspaceId,
-      projectId: project.id,
-      name: source.name,
-      displayName: source.displayName,
-      description: source.description,
-      identityAnchors: source.identityAnchors,
-      styleTokens: source.styleTokens,
-      colorPalette: source.colorPalette,
-    })
-    // 写す列は名前で並べる（行を丸ごと広げると、ID まで写す・列が増えたとき黙って写すことになる）。
-    for (const image of await deps.characters.listIdentityImages(source.id)) {
-      await deps.characters.addIdentityImage({
-        characterId: copy.id,
-        mediaAssetId: image.mediaAssetId,
-        role: image.role,
-        isPrimary: image.isPrimary,
-        order: image.order,
-      })
-    }
-    for (const look of await deps.looks.findByCharacter(source.id)) {
-      const copiedLook = await deps.looks.create({
-        characterId: copy.id,
-        key: look.key,
-        name: look.name,
-        era: look.era,
-        description: look.description,
-        wardrobeTokens: look.wardrobeTokens,
-        styleTokens: look.styleTokens,
-        colorPalette: look.colorPalette,
-        isDefault: look.isDefault,
-        canonicalFrameAssetId: look.canonicalFrameAssetId,
-      })
-      for (const image of await deps.looks.listLookImages(look.id)) {
-        await deps.looks.addLookImage({
-          lookId: copiedLook.id,
-          mediaAssetId: image.mediaAssetId,
-          role: image.role,
-          isPrimary: image.isPrimary,
-          order: image.order,
-        })
-      }
-    }
-    return copy
-  }
-
-  const copyLocation = (source: Location, project: Project): Promise<Location> =>
-    deps.locations.create({
-      workspaceId: project.workspaceId,
-      projectId: project.id,
-      name: source.name,
-      description: source.description,
-      referenceAssetIds: source.referenceAssetIds,
-    })
-
-  const copyBrandAsset = (source: BrandAsset, project: Project): Promise<BrandAsset> =>
-    deps.brandAssets.create({
-      workspaceId: project.workspaceId,
-      projectId: project.id,
-      category: source.category,
-      name: source.name,
-      mediaAssetId: source.mediaAssetId,
-      value: source.value,
-      usageRule: source.usageRule,
-    })
-
-  return new OpenAPIHono({ defaultHook: validationHook }).openapi(importRoute, async (c) => {
+export const libraryImportRoutes = (deps: LibraryImportRoutesDeps) =>
+  new OpenAPIHono({ defaultHook: validationHook }).openapi(importRoute, async (c) => {
     const project = await deps.projects.findById(c.req.valid('param').projectId)
     if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
 
@@ -189,9 +119,11 @@ export const libraryImportRoutes = (deps: LibraryImportRoutesDeps) => {
     }
 
     // 1 件ずつ順に作る（Look の既定の付け替えは作る順に依存する）。
-    const copiedCharacters = await sequentially(characters, (character) => copyCharacter(character, project))
-    const copiedLocations = await sequentially(locations, (location) => copyLocation(location, project))
-    const copiedBrandAssets = await sequentially(brandAssets, (asset) => copyBrandAsset(asset, project))
+    const copiedCharacters = await sequentially(characters, async (character) =>
+      (await copyCharacter(deps, character, project)).character,
+    )
+    const copiedLocations = await sequentially(locations, (location) => copyLocation(deps, location, project))
+    const copiedBrandAssets = await sequentially(brandAssets, (asset) => copyBrandAsset(deps, asset, project))
 
     return c.json(
       ok({
@@ -202,4 +134,3 @@ export const libraryImportRoutes = (deps: LibraryImportRoutesDeps) => {
       201,
     )
   })
-}

@@ -50,6 +50,7 @@ import { characterRoutes, shotCharacterRoutes } from './routes/characters.js'
 import { characterSheetRoutes } from './routes/character-sheet.js'
 import { assetRoutes } from './routes/assets.js'
 import { libraryImportRoutes } from './routes/library-imports.js'
+import { projectDuplicateRoutes } from './routes/project-duplicate.js'
 import { scriptRoutes } from './routes/scripts.js'
 import { sequenceRoutes } from './routes/sequences.js'
 import { musicRoutes, type AnalysisQueue } from './routes/music.js'
@@ -376,6 +377,29 @@ export const createApp = (deps: AppDeps) => {
       looks: deps.looks,
       locations: deps.locations,
       brandAssets: deps.brandAssets,
+    }),
+  )
+  // 作品を複製する（持っていく項目を選べる。ADR-0037）。
+  app.route(
+    '/',
+    projectDuplicateRoutes({
+      projects: deps.projects,
+      scripts: deps.scripts,
+      musicTracks: deps.musicTracks,
+      musicAnalyses: deps.musicAnalyses,
+      characters: deps.characters,
+      looks: deps.looks,
+      locations: deps.locations,
+      brandAssets: deps.brandAssets,
+      textStyles: deps.textStyles,
+      timelineClips: deps.timelineClips,
+      sequences: deps.sequences,
+      shots: deps.shots,
+      shotCharacters: deps.shotCharacters,
+      shotReferences: deps.shotReferences,
+      takes: deps.takes,
+      transitions: deps.transitions,
+      logger,
     }),
   )
 
