@@ -64,6 +64,8 @@ export const generationJobs = pgTable(
 
     queuedAt: timestampTz('queued_at').notNull().defaultNow(),
     startedAt: timestampTz('started_at'),
+    /** 生成先が作り始めた時刻（送った後、生成先の中で順番を待つことがある）。 */
+    providerStartedAt: timestampTz('provider_started_at'),
     finishedAt: timestampTz('finished_at'),
   },
   (t) => [

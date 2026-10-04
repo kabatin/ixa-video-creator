@@ -341,6 +341,7 @@ export const inMemoryJobs = (seed: readonly GenerationJob[] = []): InMemoryJobs 
         id: newId(GenerationJobIdSchema),
         queuedAt: new Date(),
         startedAt: null,
+        providerStartedAt: null,
         finishedAt: null,
       })
       store = [...store, created]

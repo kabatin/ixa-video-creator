@@ -150,11 +150,13 @@ const SelectTakeBody = z.object({ takeId: TakeIdSchema }).openapi('SelectTakeInp
 export const GenerationJobResponse = GenerationJobSchema.omit({
   queuedAt: true,
   startedAt: true,
+  providerStartedAt: true,
   finishedAt: true,
 })
   .extend({
     queuedAt: z.string().datetime(),
     startedAt: z.string().datetime().nullable(),
+    providerStartedAt: z.string().datetime().nullable(),
     finishedAt: z.string().datetime().nullable(),
   })
   .openapi('GenerationJob')
@@ -164,6 +166,7 @@ export const toGenerationJobResponse = (job: GenerationJob): GenerationJobRespon
   ...job,
   queuedAt: job.queuedAt.toISOString(),
   startedAt: job.startedAt === null ? null : job.startedAt.toISOString(),
+  providerStartedAt: job.providerStartedAt === null ? null : job.providerStartedAt.toISOString(),
   finishedAt: job.finishedAt === null ? null : job.finishedAt.toISOString(),
 })
 

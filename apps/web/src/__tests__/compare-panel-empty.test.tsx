@@ -34,6 +34,7 @@ const generatingFor = (shot: typeof blank): ActiveGenerations =>
           estimatedLatencySec: null,
           queuedAt: '2026-10-02T00:00:00.000Z',
           startedAt: '2026-10-02T00:00:01.000Z',
+          providerStartedAt: '2026-10-02T00:00:01.000Z',
           attempt: 1,
         },
       ],

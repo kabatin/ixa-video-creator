@@ -26,7 +26,13 @@ const ActiveGeneration = z
      */
     estimatedLatencySec: z.number().nonnegative().nullable(),
     queuedAt: z.string(),
+    /** 生成先へ送った時刻。 */
     startedAt: z.string().nullable(),
+    /**
+     * 生成先が作り始めた時刻。**送っていても null なら、生成先の中で順番待ち**（vpipe は 1 本ずつ作る。
+     * 制作者 2026-10-04「カット２，３が作成中になってる」）。
+     */
+    providerStartedAt: z.string().nullable(),
     attempt: z.number().int().positive(),
   })
   .openapi('ActiveGeneration')
@@ -99,6 +105,7 @@ export const generationActivityRoutes = (deps: GenerationActivityDeps) =>
               : estimateLatencySec(model.economics, outputSecOf(shotById.get(job.shotId), model)),
           queuedAt: job.queuedAt.toISOString(),
           startedAt: job.startedAt?.toISOString() ?? null,
+          providerStartedAt: job.providerStartedAt?.toISOString() ?? null,
           attempt: job.attempt,
         },
       ]

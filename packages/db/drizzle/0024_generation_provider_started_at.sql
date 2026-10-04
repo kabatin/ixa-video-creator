@@ -1,0 +1,1 @@
+ALTER TABLE "generation_jobs" ADD COLUMN "provider_started_at" timestamp with time zone;

@@ -290,7 +290,8 @@ const complete = async (
   }
 
   const { spec, specHash } = await rebuildSpec(deps.context, shot, project, model)
-  const startedAt = job.startedAt ?? job.queuedAt
+  // 生成時間は生成先が作り始めてから（送った後の順番待ちを含めない。制作者 2026-10-04）。
+  const startedAt = job.providerStartedAt ?? job.startedAt ?? job.queuedAt
 
   /**
    * 投入時に通った系譜でも、完了までの間に親が消えていることはある。
@@ -388,6 +389,14 @@ const poll = async (
   }
 
   const status = await provider.poll(handle)
+
+  /**
+   * 生成先が作り始めた時刻を 1 度だけ残す（制作者 2026-10-04「カット２，３が作成中になってる」）。
+   * 送った後も生成先の中で順番を待つことがある（vpipe は 1 本ずつ）。待っている間（pending）は残さない。
+   * 「作成中」を見ないまま終わった生成には付けない（いま作り始めたことにすると、生成時間が 0 になる）。
+   */
+  const started = job.providerStartedAt === null && status.state === 'running' ? ctx.now : job.providerStartedAt
+  if (started !== job.providerStartedAt) await deps.generationJobs.update(job.id, { providerStartedAt: started })
 
   if (status.state === 'succeeded') return complete(deps, ctx, status)
 

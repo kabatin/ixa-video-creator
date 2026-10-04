@@ -199,14 +199,21 @@ export const GenerationJob = z.object({
   corrections: z.array(z.string().min(1)),
 
   queuedAt: z.date(),
+  /** 生成先へ送った時刻。 */
   startedAt: z.date().nullable(),
+  /**
+   * 生成先が**作り始めた**時刻（問い合わせで初めて「作成中」が返った時刻）。まだなら null。
+   * 送った後も生成先の中で順番を待つことがある（vpipe は 1 本ずつ作る。制作者 2026-10-04「カット２，３が作成中になってる」）。
+   * 経過と生成時間はここから数える。
+   */
+  providerStartedAt: z.date().nullable(),
   finishedAt: z.date().nullable(),
 })
 export type GenerationJob = z.infer<typeof GenerationJob>
 
 /** GenerationJob 作成時の入力。キューへ入れる時点では未解決の項目が多い。 */
 export const CreateGenerationJobInput = GenerationJob.omit({
-  id: true, queuedAt: true, startedAt: true, finishedAt: true,
+  id: true, queuedAt: true, startedAt: true, providerStartedAt: true, finishedAt: true,
 })
   .extend({
     status: GenerationJobStatus.default('queued'),
@@ -239,6 +246,6 @@ export type CreateGenerationJobInput = z.input<typeof CreateGenerationJobInput>
  */
 export const UpdateGenerationJobPatch = GenerationJob.pick({
   status: true, resolvedModel: true, routerDecision: true, attempt: true,
-  providerJobRef: true, error: true, startedAt: true, finishedAt: true,
+  providerJobRef: true, error: true, startedAt: true, providerStartedAt: true, finishedAt: true,
 }).partial()
 export type UpdateGenerationJobPatch = z.input<typeof UpdateGenerationJobPatch>
