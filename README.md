@@ -1,7 +1,7 @@
 # iXA Video Creator
 
-**Start from the song. Cut it, generate a shot for every cut, and render a music video that
-matches exactly what you previewed.**
+**Start from the song. Time the lyrics, cut it, let AI draft the storyboard, the frames and the
+takes — and render a music video that matches exactly what you previewed.**
 
 [![CI](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml/badge.svg)](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/kabatin/ixa-video-creator)](https://github.com/kabatin/ixa-video-creator/releases) [![License: MIT](https://img.shields.io/github/license/kabatin/ixa-video-creator)](./LICENSE) [![GitHub stars](https://img.shields.io/github/stars/kabatin/ixa-video-creator?style=social)](https://github.com/kabatin/ixa-video-creator/stargazers)
 
@@ -27,31 +27,65 @@ timeline:
 - a shot's duration is a consequence of where you cut, not a number typed into a form
 - that duration is what gets sent to the video model, so what comes back is the length the
   music asked for
+- if the song has lyrics, you tap the start of each line while it plays, and the lines become
+  timed captions — checked on a black screen before a single frame is generated
 
 The work is therefore *edit against the music, then fill each slot* — never *generate clips
 and hope they fit*. The first film made with it is a 1m56s music video in 27 shots.
 
 ![Cutting while listening: section boundaries placed as cuts in one click, with the cuts they make](./docs/images/cutter.jpg)
 
+## From an empty project to the exported file
+
+A bar under the menu walks you through the whole job and always highlights the next step. Each
+step shows ✓ when it is done, or how far along it is.
+
+![The production flow bar: song, direction, lyric timing, captions, cut into shots and storyboard are done; frames are at 40 of 44 and highlighted as the next step; takes at 7 of 44; export done](./docs/images/flow-bar.png)
+
+1. **Song** — drop an audio file; it is analysed for beats, downbeats and sections.
+2. **Direction** — concept and synopsis, lyrics, and the look (style, light, texture), plus
+   things to avoid and style reference images. They are added to every generation, so you write
+   them once. Tick *instrumental* and the lyric steps are skipped.
+3. **Lyric timing** — play the song and press Enter on the first syllable of each line.
+4. **Captions** — the timed lines become text clips. The preview plays the song with the
+   captions over black, so you can check timing without generating — or paying for — any
+   pictures.
+5. **Cut into shots** — place cuts while listening (Enter works anywhere, cuts snap to the
+   beat), or in one click at section boundaries or lyric starts. Cuts are a draft until you
+   press *N cuts → shots*.
+6. **Storyboard** — an AI drafts a description and a mood for every shot, each with *why this
+   picture*. It reads the lyrics sung during that shot, the characters, the locations and the
+   look. Nothing changes until you adopt a draft, shot by shot; you can always write your own.
+7. **Frames** — an AI draws each shot's start frame from its storyboard, with the cast's
+   reference images. Frames are made one at a time, and you can stop the queue at any point.
+8. **Takes** — the video for each shot, made from its start frame. While they render you see
+   which are queued, which are waiting inside the generator and which are being made, with the
+   time elapsed and an estimate; generation can be stopped at any point.
+9. **Export** — H.264, the whole film or only the shots you selected. The file is saved into
+   `~/Movies/ixa-video-creator/<project>/`, and one button opens that folder in Finder.
+
+Skipping a step is allowed, but you are asked first — for example, before drawing frames for
+shots that have no storyboard yet.
+
 ## A 30-second spot, start to finish
 
 The sample project is **LUNA BREW**, a fictional night coffee stand: a 30-second spot cut to a
-120 BPM track, nine shots, two recurring characters. Everything below is the real app running
-on that project.
+120 BPM track, nine shots, two recurring characters.
 
 ![Nine stills of the LUNA BREW spot: a rainy back street, a crescent-moon neon in a puddle, the barista pulling an espresso, latte art, the rider in the rain, the handoff at the counter, steam, and the two of them on a rooftop at dawn](./docs/images/luna-brew-stills.jpg)
 
-The stills were made with an image model outside the app and brought in as each shot's
-**start frame**. The built-in `local/still-motion` model turns a start frame into a take —
-a slow push, pull or pan that follows the shot's camera setting — for free and without an API
-key. Swap in a real image-to-video provider later and the same start frames carry over.
+These stills were made with an image model outside the app and brought in as each shot's
+**start frame** — which still works. Since v0.2 the app can also draw start frames itself. The
+built-in `local/still-motion` model turns a start frame into a take — a slow push, pull or pan
+that follows the shot's camera setting — for free and without an API key. Switch to another
+video model later and the same start frames carry over.
 
 | | |
 |---|---|
 | ![Playing the cut end to end: the preview player above the timeline](./docs/images/preview.jpg) | ![Take comparison: two takes of the same shot side by side on the same beats](./docs/images/take-compare.jpg) |
 | **Preview is the render** — the player and the export share one composition. | **Compare takes on the beat** — two takes of a shot, looped over the shot's span. |
 | ![The inspector: timing, camera, cast, location and start frame of a shot](./docs/images/inspector.jpg) | ![The library: a character's identity image and looks](./docs/images/library.jpg) |
-| **One shot, everything in one place** — camera, cast with looks, location, start frame. | **Characters, looks, locations, brand** — reusable across every shot. |
+| **One shot, everything in one place** — camera, cast with looks, location, start frame. | **Characters, looks, locations, brand** — per project, importable from other projects. |
 
 
 ## Why it might interest you
@@ -65,9 +99,21 @@ beat is a choice, and on the reference project 16 of 27 cuts are deliberately of
 `TimelineDocument` through the *same* Remotion composition. There is no separate "preview
 path" that can drift from the output — a class of bug that eats hours.
 
-**Built for keeping one character across a whole film.** Looks, locations and brand assets
-are reusable entities that resolve into each shot's reference images, rather than prompt text
-you retype 27 times and get subtly wrong.
+**You choose the AI for each job, from what is already on your machine.** Text (storyboard
+drafts and writing help) can be Claude Code, Codex or Grok; images can be Codex; video can be
+the free local models or fal. The CLIs run under your own sign-in — no API keys for them are
+stored in the app.
+
+**AI drafts never overwrite your work.** Storyboard drafts sit next to the current description
+with a reason for each, and a shot changes only when you adopt its draft. Bulk edits are
+recorded so they can be undone. Takes are append-only: generating again never replaces a
+previous result.
+
+**Built for keeping one character across a whole film.** Characters, looks, locations and
+brand assets resolve into each shot's reference images, rather than prompt text you retype 27
+times and get subtly wrong. A character sheet (four views) can be made from a single image, and
+storyboard drafts are told to describe only the appearance you actually wrote down — the rest
+comes from the reference images.
 
 **Providers are swappable, and the swap is free to test.** `VideoProvider` is a
 three-method interface (`submit` / `poll` / `cancel`). A local FFmpeg stub implements it
@@ -79,24 +125,17 @@ before a job is enqueued. The stub can be given a fake price so you can *prove* 
 guard stops a run without spending anything. Failed generations release the shot instead of
 leaving it stuck, and a transient network error never discards work you already paid for.
 
-**Takes are append-only.** Generating again never overwrites a previous result. You adopt
-one; the others stay for comparison.
-
-**Bring your own frames.** Give a shot a start frame — a still from any image tool, or a
-photo — and the free local model turns it into a take that goes through the same adopt,
-review and timeline flow as anything generated.
-
 ## How it fits together
 
 ```
 apps/
-  web       Next.js workbench — dockable panels (storyboard, cutter, timeline, compare)
+  web       Next.js workbench — dockable panels (storyboard, cutter, timeline, compare, drafts)
   api       Hono + zod-openapi
-  worker    BullMQ consumers: generation, media probing, rendering
+  worker    BullMQ consumers: video and image generation, media probing, rendering
   audio     Python service — librosa analysis (beats, downbeats, sections, waveform)
 packages/
   domain    Pure. No IO. The single source of truth for the model.
-  providers Adapters (video / image / llm). External SDKs stop here.
+  providers Adapters (video / image / llm). External SDKs and CLIs stop here.
   render    Remotion composition + FFmpeg plan
   db        Drizzle schema and repositories
 ```
@@ -113,6 +152,9 @@ milliseconds never enter the domain or the database.
 
 Requires Node 22, pnpm 9, Docker, FFmpeg, and [uv](https://docs.astral.sh/uv/) with
 Python 3.11+ for the audio service (`uv` installs its Python dependencies on first run).
+Optional: [Claude Code](https://docs.anthropic.com/en/docs/claude-code),
+[Codex](https://github.com/openai/codex) or Grok CLI, signed in on the same Mac, for AI text and
+images.
 
 ```bash
 git clone https://github.com/kabatin/ixa-video-creator.git
@@ -127,17 +169,28 @@ pnpm db:seed                  # creates a workspace and writes its id into .env
 pnpm dev                      # web :3000, api :3001, worker, audio :8100
 ```
 
-Open <http://localhost:3000>, create a project, drop an audio file onto the window, and
-start cutting. **Out of the box it runs entirely on the local stub provider — no API keys,
+Open <http://localhost:3000>, create a project, and drop an audio file onto the window — the
+flow bar takes it from there. **Out of the box everything runs on local stubs — no API keys,
 no cost.**
 
 ### Choosing which AI to use
 
-The first time you open the workbench, the *使う AI* (which AI to use) dialog appears. It looks for AI tools installed on this
-Mac (Claude Code, Codex, Gemini CLI, Grok) and a local generation server, and lets you pick one each for
-text (storyboard drafts), images (shot frames) and video. Change it later from
-*iXA Video Creator → 使う AI…*. Until you choose, the `.env` settings apply. fal (paid) and the local
-server must be enabled in `.env` below before they can be chosen — the screen alone never opens a billing path.
+![The "which AI to use" dialog: one choice each for text, images and video, listing what was found on this Mac](./docs/images/ai-chooser.jpg)
+
+The first time you open the workbench, the *使う AI* (which AI to use) dialog appears. It looks
+for the AI CLIs installed on this Mac and a local generation server, and lets you pick one for
+each job:
+
+| Purpose | Choices |
+|---|---|
+| Text — storyboard drafts, ✦ AI writing help, automatic review | Claude Code · Codex · Grok · stub |
+| Images — shot start frames, character sheets | Codex · stub |
+| Video — takes (AUTO picks among this AI's models) | local still-motion (free) · local MiniMax H3 via vpipe (free) · fal (paid) · stub |
+
+Change it later from *iXA Video Creator → 使う AI…*. Until you choose, the `.env` settings apply.
+fal and the local server must be enabled in `.env` before they can be chosen — the screen alone
+never opens a billing path. Codex image generation uses your plan's usage and takes about a
+minute per frame, so frames are made one at a time.
 
 ### Connecting a real provider
 
@@ -166,11 +219,18 @@ VPIPE_API_URL=http://127.0.0.1:8765
 VPIPE_API_TOKEN=              # required only when the URL points off this machine
 ```
 
-Two models appear in the model picker (draft and standard). They are never chosen by AUTO:
-a clip takes 7–25 minutes on an M5 Mac and clips render one at a time, so queued generations
-wait their turn instead of failing. See [ADR-0031](./docs/adr/0031-local-h3-video-via-vpipe-api.md).
+Two models appear in the model picker (draft and standard). AUTO uses the draft model only
+when vpipe is the selected video AI; otherwise it never picks them. vpipe renders one clip at a
+time: on an M5 Mac a draft clip takes about 1.5 minutes plus
+about 1.5 minutes per second of video (a 2-second cut is roughly 4–5 minutes). ixa keeps the
+next clip waiting inside vpipe so there is no gap between clips, and shows it as *waiting at the
+generator* rather than in progress. See
+[ADR-0031](./docs/adr/0031-local-h3-video-via-vpipe-api.md).
 
 ## Costs, honestly
+
+Everything except fal is free to run: the stubs, `local/still-motion` and MiniMax H3 through
+vpipe. Claude Code, Codex and Grok use whatever plan you are already signed in with.
 
 For the reference project — 27 shots, 110.9s of edited footage — Seedance 2.5 via fal.ai
 bills **140s**, because the model's minimum clip is 4 seconds and 12 of those shots are
@@ -181,11 +241,12 @@ take.
 
 ## Status
 
-Working end to end with the stub provider: analysis → cutting → shot creation → generation
-→ review → timeline → H.264 export. A real provider adapter (fal.ai / Seedance 2.5) is
-implemented and tested against mocked responses, but its capability numbers — price per
-second, output frame rate — are **from documentation, not measured**, and are marked as such
-in the source.
+Working end to end, from an empty project to an exported file: analysis → direction → lyric
+timing → captions → cutting → AI storyboard drafts → AI start frames → takes → review →
+timeline → H.264 export. The local video paths (still-motion, MiniMax H3 via vpipe) are
+measured on real hardware. The fal.ai / Seedance 2.5 adapter is implemented and tested against
+mocked responses, but its capability numbers — price per second, output frame rate — are
+**from documentation, not measured**, and are marked as such in the source.
 
 This is a personal project built in the open. Interfaces still move.
 
@@ -204,6 +265,7 @@ operator:
   license**, and headcount is aggregated across collaborating parties. MIT on this
   repository does not waive that.
 - Provider APIs (fal.ai and others) bill you directly under their own terms.
+- Claude Code, Codex and Grok run under your own accounts and their own terms.
 - **MiniMax H3** (only if you enable the optional local generator) is released under the
   MiniMax H3 Community License, which restricts where and how the weights may be used.
   ixa does not ship the weights; check the license before enabling it.
