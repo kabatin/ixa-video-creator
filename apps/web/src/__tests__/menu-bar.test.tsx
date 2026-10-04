@@ -35,7 +35,7 @@ describe('MenuBar', () => {
     fireEvent.keyDown(top('ファイル'), { key: 'ArrowDown' })
     const first = document.activeElement as HTMLElement
     fireEvent.keyDown(first, { key: 'ArrowDown' })
-    expect(document.activeElement).toHaveTextContent('作品の方針…')
+    expect(document.activeElement).toHaveTextContent('プロジェクトを複製…')
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowUp' })
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowUp' })
     expect(document.activeElement).toHaveTextContent('書き出し…')
@@ -73,7 +73,7 @@ describe('MenuBar', () => {
     fireEvent.keyDown(top('ファイル'), { key: 'ArrowDown' })
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowDown' })
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter' })
-    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'concept' }))
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'project-duplicate' }))
     expect(screen.queryByRole('menu')).toBeNull()
   })
 

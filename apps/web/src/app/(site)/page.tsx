@@ -3,6 +3,7 @@ import { EmptyState } from '@/components/empty-state'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
 import { ProjectList } from '@/components/project-list'
+import { ProjectListActions } from '@/components/project-list-actions'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { pickProjectCover, type PosterView } from '@/lib/shot-posters'
@@ -95,7 +96,10 @@ const ProjectsPage = async () => {
           actionLabel="最初のプロジェクトを作成"
         />
       ) : (
-        <ProjectList projects={result.projects} covers={covers} />
+        // 右上の「…」と右クリックで複製・削除（制作者 2026-10-04）。
+        <ProjectListActions>
+          <ProjectList projects={result.projects} covers={covers} />
+        </ProjectListActions>
       )}
     </main>
   )

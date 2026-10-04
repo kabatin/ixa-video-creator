@@ -1,5 +1,6 @@
 import type { Project } from '@ixa/domain'
 import Link from 'next/link'
+import { ProjectCardFrame } from '@/components/project-list-actions'
 import { ShotPoster } from '@/components/shot-poster'
 import { describeProjectSpec } from '@/lib/project-spec-choices'
 import { formatCreatedAt, statusClassName, statusLabel } from '@/lib/project-display'
@@ -17,15 +18,18 @@ export type ProjectCardProps = {
 }
 
 /**
- * プロジェクト 1 件。**行き先は 1 つだけ**（そのプロジェクトのワークベンチ）。
+ * プロジェクト 1 件。**押したときの行き先は 1 つだけ**（そのプロジェクトのワークベンチ）。
  *
  * 以前はここに「楽曲 / ストーリーボード / Shot 一覧 / タイムライン / 書き出し / 設定」の
  * 6 本を並べていた。ワークベンチになる前の画面割りをそのまま残したもので、
  * 実際の行き先は 6 本とも同じ 1 画面（違うのはクエリだけ）だった。
  * 入口で作業の順番を選ばせる意味が無く、中に入ってから決めればよい。
+ *
+ * 作品そのものへの操作（複製・削除）だけは、開かずにできるよう右上の「…」と右クリックに置く
+ * （制作者 2026-10-04「プロジェクト一覧でプロジェクト削除出来るようにしてほしい。複製もプロジェクト一覧からも出来るといい」）。
  */
 export const ProjectCard = ({ project, coverUrl, coverReason }: ProjectCardProps) => (
-  <li className="rounded-lg border border-line bg-surface shadow-sm transition hover:border-accent/60 hover:shadow-md">
+  <ProjectCardFrame project={{ id: project.id, name: project.name }}>
     <Link
       href={workbenchHref(project.id)}
       className="block rounded-lg p-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
@@ -52,5 +56,5 @@ export const ProjectCard = ({ project, coverUrl, coverReason }: ProjectCardProps
       <p className="mt-3 text-sm text-text">{describeProjectSpec(project)}</p>
       <p className="mt-1 text-xs text-muted">{`作成 ${formatCreatedAt(project)}`}</p>
     </Link>
-  </li>
+  </ProjectCardFrame>
 )
