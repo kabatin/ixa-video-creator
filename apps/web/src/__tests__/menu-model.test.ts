@@ -218,6 +218,7 @@ describe('行き先', () => {
     const file = menus.find((menu) => menu.id === 'file')
     expect(file?.items.map((entry) => entry.label)).toEqual([
       '新規プロジェクト',
+      'プロジェクトを複製…',
       '作品の方針…',
       'ほかのプロジェクトから取り込む…',
       '設定…',
@@ -227,6 +228,14 @@ describe('行き先', () => {
       kind: 'command',
       command: 'inspect-project',
     })
+  })
+
+  /** 制作者 2026-10-04「プロジェクトをコピーして複製出来る機能が欲しい」。持っていく項目を選ぶダイアログで開く。 */
+  it('プロジェクトの複製は、新規プロジェクトの次からダイアログで開く', () => {
+    const file = menus.find((menu) => menu.id === 'file')
+    const entry = file?.items.find((item) => item.label === 'プロジェクトを複製…')
+
+    expect(entry?.action).toEqual({ kind: 'dialog', dialog: 'project-duplicate' })
   })
 
   it('項目の id は重ならない', () => {

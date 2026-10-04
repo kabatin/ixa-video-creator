@@ -25,6 +25,7 @@ export type WorkbenchDialog =
   | 'ai-setup'
   | 'align-lyrics'
   | 'library-import'
+  | 'project-duplicate'
 
 export type MenuAction =
   | { readonly kind: 'href'; readonly href: string }
@@ -205,6 +206,8 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
       label: 'ファイル',
       items: [
         item('new-project', '新規プロジェクト', href(NEW_PROJECT_HREF)),
+        // 持っていく項目を選んで作品を複製する（制作者 2026-10-04。ADR-0037）。
+        item('project-duplicate', 'プロジェクトを複製…', dialog('project-duplicate')),
         // 作品全体のコンセプト・ルック（ADR-0030）。ダイアログではなくインスペクターに出す。
         item('concept', '作品の方針…', command('inspect-project')),
         // キャラクター・ロケーション・ブランド資産はプロジェクトごと。ほかのプロジェクトのものは複製して使う（ADR-0034）。

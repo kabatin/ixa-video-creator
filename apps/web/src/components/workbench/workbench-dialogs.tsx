@@ -6,6 +6,7 @@ import { DeleteShotsDialogBody } from '@/components/workbench/dialogs/delete-sho
 import { MergeShotsDialogBody } from '@/components/workbench/dialogs/merge-shots-dialog'
 import { HistoryDialogBody } from '@/components/workbench/dialogs/history-dialog'
 import { LibraryImportDialogBody } from '@/components/workbench/dialogs/library-import-dialog'
+import { ProjectDuplicateDialogBody } from '@/components/workbench/dialogs/project-duplicate-dialog'
 import { NewShotDialogBody } from '@/components/workbench/dialogs/new-shot-dialog'
 import { PreferencesDialogBody } from '@/components/workbench/dialogs/preferences-dialog'
 import { RenderDialogBody } from '@/components/workbench/dialogs/render-dialog'
@@ -28,6 +29,7 @@ const TITLES: Readonly<Record<DialogKind, string>> = {
   'ai-setup': '使う AI',
   'align-lyrics': 'Shot の境目を歌い出しに揃える',
   'library-import': 'ほかのプロジェクトから取り込む',
+  'project-duplicate': 'プロジェクトを複製',
 }
 
 const MEDIUM: ReadonlySet<DialogKind> = new Set([
@@ -77,6 +79,7 @@ export const WorkbenchDialogs = ({
       {dialog === 'ai-setup' && <AiSetupDialogBody />}
       {dialog === 'align-lyrics' && <AlignLyricsDialogBody />}
       {dialog === 'library-import' && <LibraryImportDialogBody />}
+      {dialog === 'project-duplicate' && <ProjectDuplicateDialogBody />}
     </WorkbenchDialog>
   )
 }

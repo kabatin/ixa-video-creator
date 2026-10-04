@@ -86,13 +86,16 @@ const spaced = (label: string): string => (/[A-Za-z0-9]$/.test(label) ? `${label
 
 const labelOf = (item: DuplicationItem): string => spaced(DUPLICATION_ITEM_LABELS[item])
 
+/** 項目の名前を「と」でつなぐ（後ろに助詞を続ける形。例: 「Shot 」「楽曲（解析・セクションも）と作品の方針」）。 */
+export const joinDuplicationLabels = (items: readonly DuplicationItem[]): string => items.map(labelOf).join('と')
+
 /** 要るものが欠けた選び方なら、何が要るかの 1 文。そろっていれば null（何も選ばなくてもよい）。 */
 export const duplicationProblem = (items: readonly DuplicationItem[]): string | null => {
   const selected = new Set(items)
   for (const item of DUPLICATION_ITEMS) {
     if (!selected.has(item)) continue
     const missing = missingRequirements(item, selected)
-    if (missing.length > 0) return `${labelOf(item)}を持っていくには、${missing.map(labelOf).join('と')}も選んでください`
+    if (missing.length > 0) return `${labelOf(item)}を持っていくには、${joinDuplicationLabels(missing)}も選んでください`
   }
   return null
 }
