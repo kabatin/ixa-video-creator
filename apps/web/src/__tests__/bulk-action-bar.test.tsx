@@ -390,7 +390,7 @@ describe('BulkActionBar — 一括で変えるのは触った項目だけ', () =
   it('mood を空にしたら mood だけが null で入る。他は入らない', async () => {
     const { props, user } = await openUpdate()
 
-    await user.selectOptions(screen.getByLabelText('mood'), 'clear')
+    await user.selectOptions(screen.getByLabelText('雰囲気'), 'clear')
     await user.click(screen.getByRole('button', { name: '12 件に適用' }))
 
     const patch = lastPatch(props.onUpdate)
@@ -401,8 +401,8 @@ describe('BulkActionBar — 一括で変えるのは触った項目だけ', () =
   it('mood に値を入れたら trim して入る', async () => {
     const { props, user } = await openUpdate()
 
-    await user.selectOptions(screen.getByLabelText('mood'), 'set')
-    await user.type(screen.getByLabelText('mood の値'), '  緊迫  ')
+    await user.selectOptions(screen.getByLabelText('雰囲気'), 'set')
+    await user.type(screen.getByLabelText('雰囲気の値'), '  緊迫  ')
     await user.click(screen.getByRole('button', { name: '12 件に適用' }))
 
     expect(lastPatch(props.onUpdate)).toEqual({ mood: '緊迫' })
@@ -434,8 +434,8 @@ describe('BulkActionBar — 一括で変えるのは触った項目だけ', () =
     const { props, user } = await openUpdate()
 
     await user.selectOptions(screen.getByLabelText('カメラの景別'), 'closeup')
-    await user.selectOptions(screen.getByLabelText('mood'), 'set')
-    await user.type(screen.getByLabelText('mood の値'), '静寂')
+    await user.selectOptions(screen.getByLabelText('雰囲気'), 'set')
+    await user.type(screen.getByLabelText('雰囲気の値'), '静寂')
     await user.selectOptions(screen.getByLabelText('ロケーション'), 'loc-1')
     await user.click(screen.getByRole('button', { name: '12 件に適用' }))
 
@@ -458,10 +458,10 @@ describe('BulkActionBar — mood の空欄は送らせない', () => {
     const { props, user } = setup()
 
     await pick(user, '一括で変える…')
-    await user.selectOptions(screen.getByLabelText('mood'), 'set')
+    await user.selectOptions(screen.getByLabelText('雰囲気'), 'set')
 
     expect(screen.getByRole('button', { name: '12 件に適用' })).toBeDisabled()
-    expect(screen.getByRole('alert')).toHaveTextContent('mood を入力してください')
+    expect(screen.getByRole('alert')).toHaveTextContent('雰囲気を入力してください')
     expect(props.onUpdate).not.toHaveBeenCalled()
   })
 })
@@ -592,8 +592,8 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
     const user = userEvent.setup()
 
     await pick(user, '一括で変える…')
-    await user.selectOptions(screen.getByLabelText('mood'), 'set')
-    await user.type(screen.getByLabelText('mood の値'), 'a')
+    await user.selectOptions(screen.getByLabelText('雰囲気'), 'set')
+    await user.type(screen.getByLabelText('雰囲気の値'), 'a')
     await user.keyboard('{Escape}')
 
     expect(onOuterKeyDown).not.toHaveBeenCalled()

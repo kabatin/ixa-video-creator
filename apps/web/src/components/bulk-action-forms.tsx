@@ -89,7 +89,7 @@ export const buildBulkPatch = (draft: BulkUpdateDraft): BulkUpdatePatch => ({
 /** 空欄のまま「この値にする」を選んだとき。**空文字を黙って送らない。** */
 export const bulkPatchError = (draft: BulkUpdateDraft): string | undefined =>
   draft.moodAction === 'set' && draft.moodText.trim() === ''
-    ? 'mood を入力してください。空にしたいときは「空にする」を選びます。'
+    ? '雰囲気を入力してください。空にしたいときは「空にする」を選びます。'
     : undefined
 
 export const hasBulkPatch = (draft: BulkUpdateDraft): boolean =>
@@ -155,7 +155,9 @@ export const BulkGenerateForm = ({
   const [count, setCount] = useState('1')
 
   return (
-    <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+    // **画面の幅（sm:）で列を決めない。** 置き場所の Shot 一覧は 340px ほどで、画面が広いと 3 列になり、
+    // 確認が開くとモデルと本数の列が潰れた（制作者 2026-10-04「UIが崩れてる」）。2 列＋下の段にする。
+    <div className="grid grid-cols-2 gap-3">
       <SelectField
         id={`${idPrefix}-model`}
         label="モデル"
@@ -175,7 +177,7 @@ export const BulkGenerateForm = ({
         disabled={busy}
         onChange={setCount}
       />
-      <div className="sm:pb-0.5">
+      <div className="col-span-2">
         <ConfirmButton
           label={`${countLabel(targetCount)}に生成を依頼`}
           confirmLabel="依頼する"
@@ -188,7 +190,7 @@ export const BulkGenerateForm = ({
           }}
         />
       </div>
-      <div className="sm:col-span-3">
+      <div className="col-span-2">
         {lockedCount > 0 && (
           <p className={FIELD_HINT_CLASS}>
             {countLabel(lockedCount)}はロックされているため、生成されません。
@@ -231,7 +233,7 @@ export const BulkSelectTakesForm = ({
   const [rule, setRule] = useState<BulkTakeRule>('only')
 
   return (
-    <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+    <div className="grid gap-3">
       <SelectField
         id={`${idPrefix}-rule`}
         label="規則"
@@ -242,7 +244,7 @@ export const BulkSelectTakesForm = ({
           if (next === 'only' || next === 'latest') setRule(next)
         }}
       />
-      <div className="sm:pb-0.5">
+      <div>
         {/* 採用は詳細から選び直せる。確認は挟まない（`components/ui/button` の注記）。 */}
         <Button
           tone="primary"
@@ -256,7 +258,7 @@ export const BulkSelectTakesForm = ({
         </Button>
       </div>
       {alreadySelectedCount > 0 && (
-        <p className={`${FIELD_HINT_CLASS} sm:col-span-2`}>
+        <p className={FIELD_HINT_CLASS}>
           {countLabel(alreadySelectedCount)}は採用済みで、上書きになります。
         </p>
       )}
@@ -301,7 +303,7 @@ export const BulkUpdateForm = ({
   ]
 
   return (
-    <div className="grid gap-3 sm:grid-cols-4 sm:items-end">
+    <div className="grid grid-cols-2 gap-3">
       <SelectField
         id={`${idPrefix}-camera-size`}
         label="カメラの景別"
@@ -315,7 +317,7 @@ export const BulkUpdateForm = ({
       <div>
         <SelectField
           id={`${idPrefix}-mood-action`}
-          label="mood"
+          label="雰囲気"
           value={draft.moodAction}
           options={MOOD_ACTION_OPTIONS}
           disabled={busy}
@@ -329,7 +331,7 @@ export const BulkUpdateForm = ({
           <div className="mt-2">
             <TextField
               id={`${idPrefix}-mood-text`}
-              label="mood の値"
+              label="雰囲気の値"
               value={draft.moodText}
               disabled={busy}
               error={error}
@@ -350,7 +352,7 @@ export const BulkUpdateForm = ({
           setDraft({ ...draft, locationId: next })
         }}
       />
-      <div className="sm:pb-0.5">
+      <div className="col-span-2">
         {/* 変えた値は詳細からも一覧からも直せる。確認は挟まない。 */}
         <Button
           tone="primary"
@@ -363,7 +365,7 @@ export const BulkUpdateForm = ({
           {countLabel(targetCount)}に適用
         </Button>
       </div>
-      <p className={`${FIELD_HINT_CLASS} sm:col-span-4`}>
+      <p className={`${FIELD_HINT_CLASS} col-span-2`}>
         「{KEEP_LABEL}」のままの項目は送りません。説明は一覧の行の中で直せます。
       </p>
     </div>
