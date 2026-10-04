@@ -10,10 +10,13 @@ export const ProjectStatus = z.enum([
 ])
 export type ProjectStatus = z.infer<typeof ProjectStatus>
 
+/** 作品の名前の上限。複製の既定の名前（「のコピー」）もこれに収める。 */
+export const PROJECT_NAME_MAX_LENGTH = 200
+
 export const Project = z.object({
   id: ProjectId,
   workspaceId: WorkspaceId,
-  name: z.string().min(1).max(200),
+  name: z.string().min(1).max(PROJECT_NAME_MAX_LENGTH),
 
   // 出力仕様。レンダリングと Provider 選択の制約になる。
   fps: Fps,

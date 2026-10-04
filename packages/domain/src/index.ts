@@ -5,6 +5,8 @@ export * from './common/time.js'
 // エンティティ
 export * from './project/workspace.js'
 export * from './project/project.js'
+export * from './project/duplication-options.js'
+export * from './project/duplication-copy.js'
 export * from './media/media-asset.js'
 export * from './character/character.js'
 export * from './character/character-sheet-prompt.js'
