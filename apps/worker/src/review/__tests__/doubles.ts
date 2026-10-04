@@ -152,6 +152,7 @@ export const aTake = (
     regenerationReason: null,
     reviewStatus: 'pending',
     humanVerdict: 'unreviewed',
+    copiedFromTakeId: null,
     createdAt: CREATED_AT,
     ...overrides,
   })

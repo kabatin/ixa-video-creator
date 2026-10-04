@@ -171,6 +171,7 @@ export const CostMeterPanel = ({
         **生成だけが金を使うわけではない。** 絵コンテ下書きやレビューの実行費も
         合計に入っている。内訳を出さないと、Take の額と合わずに原因を探すことになる。
       */}
+      {view.copiedNote === null ? null : <p className="mt-1 text-xs text-muted">{view.copiedNote}</p>}
       {view.otherRunsNote === null ? null : (
         <p className="mt-1 text-xs text-muted">{view.otherRunsNote}</p>
       )}

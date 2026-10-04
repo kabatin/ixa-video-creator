@@ -8,6 +8,7 @@ import {
   type ShotId,
   type Take,
   type TakeId,
+  countsAsSpend,
 } from '@ixa/domain'
 
 /**
@@ -36,11 +37,14 @@ export const createInMemoryTakeRepository = (
   return {
     // 偽物なので projectId は見ず、全 Take を合算する。
     // テストは 1 プロジェクトしか作らないため、これで十分。
+    // 複製で写した Take は元の作品で払っているので数えない（本物と同じ。`countsAsSpend`）。
     sumCostByProject: () =>
-      Promise.resolve(store.reduce((total, take) => total + take.costUsd, 0)),
+      Promise.resolve(store.filter(countsAsSpend).reduce((total, take) => total + take.costUsd, 0)),
     sumCostByShot: (shotId: ShotId) =>
       Promise.resolve(
-        store.filter((t) => t.shotId === shotId).reduce((total, take) => total + take.costUsd, 0),
+        store
+          .filter((t) => t.shotId === shotId && countsAsSpend(t))
+          .reduce((total, take) => total + take.costUsd, 0),
       ),
     snapshot: () => store,
     hiddenIds: () => hidden,

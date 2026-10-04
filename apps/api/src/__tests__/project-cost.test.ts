@@ -1,4 +1,4 @@
-import { ProviderId as ProviderIdSchema, newId, ProjectId as ProjectIdSchema } from '@ixa/domain'
+import { ProviderId as ProviderIdSchema, newId, ProjectId as ProjectIdSchema, TakeId as TakeIdSchema } from '@ixa/domain'
 import type { Project, Shot, Take } from '@ixa/domain'
 import {
   aShot,
@@ -293,5 +293,28 @@ describe('Take 以外で払った額', () => {
 
     expect(body.data.otherRuns).toEqual([])
     expect(body.data.totalUsd).toBe(0)
+  })
+})
+
+/**
+ * 作品の複製で写した Take（制作者 2026-10-04「プロジェクトを複製」）。払ったのは元の作品なので、
+ * **この作品の費用には入れず、件数と元の額を「複製」の欄で返す。**
+ */
+describe('GET /projects/{id}/cost: 複製した Take', () => {
+  it('複製した Take は実測・合計に入れず、「複製」の欄に件数と元の額を返す', async () => {
+    const project = aProject()
+    const shot = aShot(project.id)
+    const copied = aTake(shot, REAL_SPEC_HASH, {
+      providerId: ProviderIdSchema.parse('fal'),
+      costUsd: 3,
+      copiedFromTakeId: newId(TakeIdSchema),
+    })
+    const { app } = buildRoutes({ project, shots: [shot], takes: [copied, realTake(shot, 1)] })
+
+    const { body } = await getCost(app, project.id)
+
+    expect(body.data.copied).toEqual({ takeCount: 1, totalUsd: 3 })
+    expect(body.data.measured.takeCount).toBe(1)
+    expect(body.data.totalUsd).toBe(1)
   })
 })

@@ -70,6 +70,8 @@ export const WireCostMeter = z.object({
   unlistedShots: WireUnlistedShotCost,
   /** Take 以外で払った額（絵コンテ下書き・レビュー）。0 件の種類は並ばない。 */
   otherRuns: z.array(WireOtherRunCost),
+  /** 作品の複製で写した Take（件数と、元の作品で払った額）。この作品の費用・予算には入らない。 */
+  copied: WireCostBucket,
   /** **予算と突き合わせるのはこの額。** 実測の Take と otherRuns の合計。 */
   totalUsd: z.number().nonnegative(),
 })

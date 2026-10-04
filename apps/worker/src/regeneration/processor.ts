@@ -2,6 +2,7 @@ import type { ProjectRepository, ReviewRepository, ShotRepository, TakeRepositor
 import {
   TakeId as TakeIdSchema,
   canRegenerate,
+  countsAsSpend,
   resolveRegenerationPolicy,
   type Project,
   type ProjectId,
@@ -80,7 +81,8 @@ const countAttempts = async (
   deps: RegenerationProcessorDeps,
   shotId: ShotId,
   // 見えなくした Take も数える（お金を使った回数。消すたびに上限が戻ると止まらなくなる）。
-): Promise<number> => (await deps.takes.findByShot(shotId, { includeHidden: true })).length
+  // 作品の複製で写した Take は元の作品で作った回数なので数えない（`countsAsSpend`）。
+): Promise<number> => (await deps.takes.findByShot(shotId, { includeHidden: true })).filter(countsAsSpend).length
 
 const loadState = async (
   deps: RegenerationProcessorDeps,

@@ -49,6 +49,8 @@ export type CostMeterView = {
   readonly measuredProviders: string
   /** 消えた Shot の分。**差がある事実を黙って捨てない**（L-015）。無ければ null。 */
   readonly unlistedNote: string | null
+  /** 作品の複製で写した Take。この作品の費用に入れていないことを言う。無ければ null。 */
+  readonly copiedNote: string | null
 }
 
 const money = (usd: number): string => `$${usd.toFixed(2)}`
@@ -133,6 +135,15 @@ const describeUnlisted = (meter: WireCostMeter): string | null => {
   return `削除された Shot の分 ${money(measuredUsd)}（${takeCount.toString()} 件）を含みます`
 }
 
+/**
+ * 作品の複製で写した Take（制作者 2026-10-04「プロジェクトを複製」）。払ったのは元の作品なので、
+ * この作品の費用・予算には入っていない。件数が実測から消えた理由を黙らない。
+ */
+const describeCopied = (meter: WireCostMeter): string | null =>
+  meter.copied.takeCount === 0
+    ? null
+    : `複製した Take ${String(meter.copied.takeCount)} 件は元の作品で作ったもの（${money(meter.copied.totalUsd)}）で、この作品の費用には入れていません`
+
 /** 種類ごとの言葉。**符号は API が持ち、言葉はここが持つ。** */
 const RUN_KIND_LABELS: Readonly<Record<string, string>> = {
   storyboard_draft: '絵コンテ下書き',
@@ -179,5 +190,6 @@ export const buildCostMeterView = (meter: WireCostMeter): CostMeterView => {
     measuredProviders: describeMeasuredProviders(meter),
     unlistedNote: describeUnlisted(meter),
     otherRunsNote: describeOtherRuns(meter),
+    copiedNote: describeCopied(meter),
   }
 }

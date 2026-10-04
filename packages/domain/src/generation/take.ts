@@ -66,9 +66,17 @@ export const Take = z.object({
 
   reviewStatus: ReviewStatus,
   humanVerdict: HumanVerdict,
+  /**
+   * 作品の複製で写した Take なら、元の Take（制作者 2026-10-04「プロジェクトを複製」）。作ったときに 1 度だけ書く。
+   * **払ったのは元の作品なので、この作品の費用・予算・自動の作り直しの回数に数えない**（`countsAsSpend`）。
+   */
+  copiedFromTakeId: TakeId.nullable(),
   createdAt: z.date(),
 })
 export type Take = z.infer<typeof Take>
+
+/** この作品で払った Take か。複製した Take は元の作品で払っている。費用を数える所はすべてこれを通す。 */
+export const countsAsSpend = (take: Pick<Take, 'copiedFromTakeId'>): boolean => take.copiedFromTakeId === null
 
 /** Take で更新してよい列はこれだけ。DB リポジトリ実装はこれを守ること。 */
 export const TAKE_MUTABLE_FIELDS = Object.freeze(['reviewStatus', 'humanVerdict'] as const)
@@ -95,6 +103,8 @@ export const CreateTakeInput = Take.omit({
    * 省略時のみリポジトリが採番する（循環が無い経路のため）。
    */
   id: TakeId.optional(),
+  /** 複製で写すときだけ元の Take を入れる。生成・取り込みでは null。 */
+  copiedFromTakeId: TakeId.nullable().default(null),
 })
 export type CreateTakeInput = z.input<typeof CreateTakeInput>
 

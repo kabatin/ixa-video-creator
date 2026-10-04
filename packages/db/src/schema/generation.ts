@@ -118,6 +118,12 @@ export const takes = pgTable(
     }),
     regenerationReason: text('regeneration_reason'),
 
+    /**
+     * 作品の複製で写した Take なら元の Take（作ったときに 1 度だけ書く）。費用・予算・作り直しの回数に数えない。
+     * **外部キーは付けない。** 元を物理削除したときに null へ落ちると、複製が黙って「この作品で払った」ことになる。
+     */
+    copiedFromTakeId: ulidRef('copied_from_take_id'),
+
     // 作成後に変更してよいのはこの 2 列だけ
     reviewStatus: text('review_status', { enum: ReviewStatusSchema.options })
       .$type<ReviewStatus>()

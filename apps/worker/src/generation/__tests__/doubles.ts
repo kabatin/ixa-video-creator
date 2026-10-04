@@ -31,6 +31,7 @@ import {
   TakeUpdate as TakeUpdateSchema,
   UpdateGenerationJobPatch as UpdateGenerationJobPatchSchema,
   WorkspaceId as WorkspaceIdSchema,
+  countsAsSpend,
   newId,
   type CharacterBundle,
   type GenerationContextSource,
@@ -275,10 +276,11 @@ export const inMemoryTakes = (): InMemoryTakes => {
   return {
     snapshot: () => store,
     // 偽物なので projectId は見ず全 Take を合算する。テストは 1 プロジェクトしか作らない。
-    sumCostByProject: () => Promise.resolve(store.reduce((sum, t) => sum + t.costUsd, 0)),
+    // 複製で写した Take は元の作品で払っているので数えない（本物と同じ。`countsAsSpend`）。
+    sumCostByProject: () => Promise.resolve(store.filter(countsAsSpend).reduce((sum, t) => sum + t.costUsd, 0)),
     sumCostByShot: (shotId) =>
       Promise.resolve(
-        store.filter((t) => t.shotId === shotId).reduce((sum, t) => sum + t.costUsd, 0),
+        store.filter((t) => t.shotId === shotId && countsAsSpend(t)).reduce((sum, t) => sum + t.costUsd, 0),
       ),
     findById: (id, visibility) =>
       Promise.resolve(

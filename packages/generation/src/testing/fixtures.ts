@@ -69,6 +69,7 @@ export const aTake = (shot: Shot, specHash: string, overrides: Partial<Take> = {
     regenerationReason: null,
     reviewStatus: 'pending',
     humanVerdict: 'unreviewed',
+    copiedFromTakeId: null,
     createdAt: new Date('2026-01-02T00:00:00.000Z'),
     ...overrides,
   })

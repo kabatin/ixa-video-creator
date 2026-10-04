@@ -272,6 +272,7 @@ describe('copyTakeInput', () => {
       regenerationReason: null,
       reviewStatus: 'warned',
       humanVerdict: 'approved',
+      copiedFromTakeId: null,
       createdAt: AT,
       ...patch,
     })
@@ -291,6 +292,8 @@ describe('copyTakeInput', () => {
       costUsd: 0.25,
       generationTimeSec: 251,
       spec: { ...spec, shotId: copiedShot },
+      // 元の Take の印。この作品の費用・予算・作り直しの回数に数えないため。
+      copiedFromTakeId: take.id,
     })
     expect(input.specHash).toBe(await computeSpecHash({ ...spec, shotId: copiedShot }))
     expect(input.specHash).not.toBe(take.specHash)

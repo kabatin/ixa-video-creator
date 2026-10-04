@@ -25,6 +25,7 @@ const meter = (o: Partial<WireCostMeter> = {}): WireCostMeter => ({
   byShot: [],
   unlistedShots: { takeCount: 0, measuredUsd: 0, stubTakeCount: 0 },
   otherRuns: [],
+  copied: { takeCount: 0, totalUsd: 0 },
   ...o,
   /**
    * **既定は「実測 + Take 以外」の合計。** 個別に上書きもできる。

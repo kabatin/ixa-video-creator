@@ -8,6 +8,7 @@ import {
   UpdateProjectPatch as UpdateProjectPatchSchema,
   WorkspaceId as WorkspaceIdSchema,
   buildCostMeter,
+  countsAsSpend,
   lyricCuesProblem,
   lyricLines,
   type CostMeter,
@@ -200,6 +201,8 @@ export const CostMeterResponse = z
     unlistedShots: UnlistedShotCostResponse,
     /** Take 以外で払った額（絵コンテ下書き・レビュー）。0 件の種類は並べない。 */
     otherRuns: z.array(OtherRunCostResponse),
+    /** 作品の複製で写した Take（件数と、元の作品で払った額）。**この作品の費用・予算には入れない。** */
+    copied: CostBucketResponse,
     /** **予算と突き合わせるのはこの額。** 実測の Take と otherRuns の合計。 */
     totalUsd: z.number().nonnegative(),
   })
@@ -215,6 +218,7 @@ export const toCostMeterResponse = (meter: CostMeter): CostMeterResponse => ({
   stub: { ...meter.stub },
   byShot: [...meter.byShot].map(([shotId, cost]) => ({ shotId, ...cost })),
   unlistedShots: { ...meter.unlistedShots },
+  copied: { ...meter.copied },
 })
 
 const getProjectCostRoute = createRoute({
@@ -388,6 +392,7 @@ export const projectRoutes = ({
           shotId: take.shotId,
           costUsd: take.costUsd,
           providerId: take.providerId,
+          copied: !countsAsSpend(take),
         })),
         stubProviderIds,
         listedShotIds: liveShots.map((shot) => shot.id),

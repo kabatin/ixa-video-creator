@@ -22,6 +22,7 @@ const meter = (o: Partial<WireCostMeter> = {}): WireCostMeter => ({
   byShot: [],
   unlistedShots: { takeCount: 0, measuredUsd: 0, stubTakeCount: 0 },
   otherRuns: [],
+  copied: { takeCount: 0, totalUsd: 0 },
   ...o,
   /**
    * **既定は「実測 + Take 以外」の合計。** 個別に上書きもできる。
@@ -247,5 +248,18 @@ describe('Take 以外で払った額', () => {
 
   it('1 度も回していなければ何も言わない', () => {
     expect(buildCostMeterView(meter()).otherRunsNote).toBeNull()
+  })
+})
+
+/** 作品の複製で写した Take（制作者 2026-10-04「プロジェクトを複製」）。この作品の費用には入れず、別に言う。 */
+describe('buildCostMeterView: 複製した Take', () => {
+  it('件数と元の額を言い、この作品の費用には入れていないと添える', () => {
+    const view = buildCostMeterView(meter({ copied: { takeCount: 38, totalUsd: 0 } }))
+
+    expect(view.copiedNote).toBe('複製した Take 38 件は元の作品で作ったもの（$0.00）で、この作品の費用には入れていません')
+  })
+
+  it('複製した Take が無ければ何も言わない', () => {
+    expect(buildCostMeterView(meter()).copiedNote).toBeNull()
   })
 })

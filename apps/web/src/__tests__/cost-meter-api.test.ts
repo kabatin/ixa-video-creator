@@ -22,6 +22,7 @@ const meterJson = {
   byShot: [{ shotId: SHOT_ID, measuredUsd: 0, stubTakeCount: 2 }],
   unlistedShots: { takeCount: 0, measuredUsd: 0, stubTakeCount: 0 },
   otherRuns: [],
+  copied: { takeCount: 0, totalUsd: 0 },
   totalUsd: 0,
 }
 

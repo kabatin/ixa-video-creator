@@ -1,0 +1,1 @@
+ALTER TABLE "takes" ADD COLUMN "copied_from_take_id" text;

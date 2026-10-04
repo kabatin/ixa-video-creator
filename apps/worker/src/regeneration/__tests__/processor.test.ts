@@ -38,6 +38,8 @@ type HarnessOptions = {
   readonly takeCosts?: readonly number[]
   /** 対象 Shot 以外で使ったコスト。プロジェクト予算の判定にだけ効く。 */
   readonly otherShotCosts?: readonly number[]
+  /** 対象 Shot に、作品の複製で写した Take を足す（元の作品で払った額）。 */
+  readonly copiedCosts?: readonly number[]
   readonly budgetUsd?: number | null
   readonly verdict?: Verdict | null
   /** 既定は identity の fail 指摘 1 件（自動再生成の対象）。 */
@@ -61,6 +63,7 @@ const harness = (options: HarnessOptions = {}): Harness => {
   const {
     takeCosts = [0.4],
     otherShotCosts = [],
+    copiedCosts = [],
     budgetUsd = null,
     verdict = 'fail',
     findings = (runId) => [aFinding(runId, 'identity', 'fail')],
@@ -72,13 +75,17 @@ const harness = (options: HarnessOptions = {}): Harness => {
   const shot = aShot(project.id, { status: 'review' })
   const otherShot = aShot(project.id, { code: 'shot_002', order: 2000 })
 
+  const copied = copiedCosts.map((costUsd, i) =>
+    aTake(shot, SPEC_HASH, { index: i + 1, costUsd, copiedFromTakeId: newId(TakeIdSchema) }),
+  )
   const takes: readonly Take[] = [
-    ...takeCosts.map((costUsd, i) => aTake(shot, SPEC_HASH, { index: i + 1, costUsd })),
+    ...copied,
+    ...takeCosts.map((costUsd, i) => aTake(shot, SPEC_HASH, { index: copied.length + i + 1, costUsd })),
     ...otherShotCosts.map((costUsd, i) => aTake(otherShot, SPEC_HASH, { index: i + 1, costUsd })),
   ]
 
   // 判定の対象は「いま fail した Take」＝対象 Shot の最後の Take。
-  const take = takes[takeCosts.length - 1]
+  const take = takes[copied.length + takeCosts.length - 1]
   if (take === undefined) throw new Error('takeCosts は 1 件以上必要です')
 
   const run = aReviewRun(take.id, { verdict })
@@ -162,6 +169,18 @@ describe('processRegenerationJob', () => {
 
     expect(outcome.state).toBe('blocked')
     expect(outcome.reason).toContain('再生成の上限')
+  })
+
+  /**
+   * 作品の複製で写した Take は、元の作品で作った回数・払った額（制作者 2026-10-04「プロジェクトを複製」）。
+   * 数えると、複製した先では 1 回も作っていないのに上限に達して止まる。
+   */
+  it('複製で写した Take は、回数・Shot のコスト・プロジェクトの予算に数えない', async () => {
+    const h = harness({ copiedCosts: [5, 5, 5], takeCosts: [0.1], budgetUsd: 1 })
+
+    const outcome = await processRegenerationJob(h.deps, { takeId: h.take.id })
+
+    expect(outcome.state).toBe('queued')
   })
 
   it('Shot のコスト上限に達したら blocked にして積まない', async () => {

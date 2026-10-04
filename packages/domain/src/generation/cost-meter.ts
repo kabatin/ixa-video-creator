@@ -89,6 +89,11 @@ export type CostMeter = {
    */
   readonly otherRuns: readonly OtherRunCost[]
   /**
+   * 作品の複製で写した Take（件数と、元の作品で払った額）。**この作品の費用・予算には入れない。**
+   * 0 円にして数えると件数が実測やスタブに紛れるので、別の欄にする。
+   */
+  readonly copied: CostBucket
+  /**
    * **予算と突き合わせるのはこの額。** 実測の Take と `otherRuns` の合計。
    * スタブの分は入らない（額が 0 なので入れても変わらないが、意味が違う）。
    */
@@ -114,6 +119,8 @@ export type CostMeterTake = {
   readonly shotId: ShotId
   readonly costUsd: number
   readonly providerId: string
+  /** 作品の複製で写した Take か（`countsAsSpend` の逆）。元の作品で払った分なので、この作品の費用に入れない。 */
+  readonly copied: boolean
 }
 
 export type CostMeterInput = {
@@ -163,9 +170,15 @@ export const buildCostMeter = (input: CostMeterInput): CostMeter => {
 
   let measured = EMPTY_BUCKET
   let stub = EMPTY_BUCKET
+  let copied = EMPTY_BUCKET
   let unlisted: UnlistedShotCost = { takeCount: 0, measuredUsd: 0, stubTakeCount: 0 }
 
   for (const take of input.takes) {
+    // 複製した Take は元の作品で払った分。この作品のどの欄にも入れず、件数と元の額だけ別に数える。
+    if (take.copied) {
+      copied = addToBucket(copied, take.costUsd)
+      continue
+    }
     const isStub = stubIds.has(take.providerId)
 
     if (isStub) {
@@ -208,6 +221,7 @@ export const buildCostMeter = (input: CostMeterInput): CostMeter => {
     byShot,
     unlistedShots: unlisted,
     otherRuns,
+    copied,
     // 予算と突き合わせるのはここ。スタブの分は入れない（額 0 だが意味が違う）。
     totalUsd: measured.totalUsd + otherUsd,
   }

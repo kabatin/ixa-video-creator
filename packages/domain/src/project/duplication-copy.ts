@@ -197,6 +197,8 @@ export const copyTakeInput = async (
     generationTimeSec: take.generationTimeSec,
     parentTakeId: remapOrNull(take.parentTakeId, maps.takes),
     regenerationReason: take.regenerationReason,
+    // 元の Take の印。この作品の費用・予算・作り直しの回数に数えない（`countsAsSpend`）。
+    copiedFromTakeId: take.id,
   }
 }
 

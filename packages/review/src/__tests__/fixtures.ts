@@ -80,6 +80,7 @@ export const makeTake = (overrides: Partial<Take> = {}): Take => ({
   regenerationReason: null,
   reviewStatus: 'pending',
   humanVerdict: 'unreviewed',
+  copiedFromTakeId: null,
   createdAt: EPOCH,
   ...overrides,
 })

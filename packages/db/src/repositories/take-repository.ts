@@ -78,6 +78,7 @@ export const takeRowToDomain = (row: TakeRow): Take =>
     regenerationReason: row.regenerationReason,
     reviewStatus: row.reviewStatus,
     humanVerdict: row.humanVerdict,
+    copiedFromTakeId: row.copiedFromTakeId,
     createdAt: row.createdAt,
   })
 
@@ -168,12 +169,12 @@ export const createTakeRepository = (db: DbClient): TakeRepository => {
     },
 
     async sumCostByProject(projectId) {
-      // takes は shot_id しか持たないので shots を経由する。
+      // takes は shot_id しか持たないので shots を経由する。複製した Take は元の作品で払っているので数えない（`countsAsSpend`）。
       const rows = await db
         .select({ total: sql<string>`coalesce(sum(${takes.costUsd}), 0)` })
         .from(takes)
         .innerJoin(shots, eq(shots.id, takes.shotId))
-        .where(eq(shots.projectId, projectId))
+        .where(and(eq(shots.projectId, projectId), isNull(takes.copiedFromTakeId)))
       return Number(rows[0]?.total ?? 0)
     },
 
@@ -181,7 +182,7 @@ export const createTakeRepository = (db: DbClient): TakeRepository => {
       const rows = await db
         .select({ total: sql<string>`coalesce(sum(${takes.costUsd}), 0)` })
         .from(takes)
-        .where(eq(takes.shotId, shotId))
+        .where(and(eq(takes.shotId, shotId), isNull(takes.copiedFromTakeId)))
       return Number(rows[0]?.total ?? 0)
     },
   }

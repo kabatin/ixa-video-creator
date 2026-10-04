@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { ShotId, newId } from '../common/ids.js'
+import { ShotId, TakeId, newId } from '../common/ids.js'
 import { buildCostMeter, type CostMeterTake } from '../generation/cost-meter.js'
+import { countsAsSpend } from '../generation/take.js'
 
 const shotA = newId(ShotId)
 const shotB = newId(ShotId)
@@ -9,6 +10,7 @@ const take = (o: Partial<CostMeterTake> = {}): CostMeterTake => ({
   shotId: shotA,
   costUsd: 1.5,
   providerId: 'fal',
+  copied: false,
   ...o,
 })
 
@@ -310,5 +312,43 @@ describe('溢れた分の単位', () => {
 
     expect(meter.unlistedShots.stubTakeCount).toBe(1)
     expect(meter.stub.totalUsd).toBe(7)
+  })
+})
+
+/**
+ * 複製した Take（制作者 2026-10-04「プロジェクトを複製」）。払ったのは元の作品なので、**この作品の費用・予算には数えない。**
+ * 0 円にして数えると、件数が実測やスタブに紛れ、自動の作り直しの回数にも数えられる。件数と元の額は別の欄に出す。
+ */
+describe('buildCostMeter: 複製した Take', () => {
+  it('件数と元の額を「複製」の欄に数え、実測・スタブ・Shot ごと・合計には入れない', () => {
+    const meter = buildCostMeter({
+      budgetUsd: 300,
+      takes: [
+        take({ providerId: 'fal', costUsd: 2, copied: true }),
+        take({ providerId: 'stub', costUsd: 0, copied: true, shotId: shotB }),
+        take({ providerId: 'fal', costUsd: 1.5 }),
+      ],
+      stubProviderIds: ['stub'],
+      listedShotIds: null,
+    })
+
+    expect(meter.copied).toEqual({ takeCount: 2, totalUsd: 2 })
+    expect(meter.measured).toEqual({ takeCount: 1, totalUsd: 1.5, byProvider: [{ providerId: 'fal', takeCount: 1, totalUsd: 1.5 }] })
+    expect(meter.stub).toEqual({ takeCount: 0, totalUsd: 0 })
+    expect(meter.byShot.get(shotB)).toBeUndefined()
+    expect(meter.totalUsd).toBe(1.5)
+  })
+
+  it('複製でなければ「複製」の欄は空', () => {
+    const meter = buildCostMeter({ budgetUsd: null, takes: [take()], stubProviderIds: [], listedShotIds: null })
+
+    expect(meter.copied).toEqual({ takeCount: 0, totalUsd: 0 })
+  })
+})
+
+describe('countsAsSpend', () => {
+  it('複製した Take は、この作品の費用に数えない', () => {
+    expect(countsAsSpend({ copiedFromTakeId: null })).toBe(true)
+    expect(countsAsSpend({ copiedFromTakeId: newId(TakeId) })).toBe(false)
   })
 })

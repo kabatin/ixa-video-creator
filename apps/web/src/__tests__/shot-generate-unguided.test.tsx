@@ -27,6 +27,7 @@ const meter: WireCostMeter = {
   byShot: [],
   unlistedShots: { takeCount: 0, measuredUsd: 0, stubTakeCount: 0 },
   otherRuns: [],
+  copied: { takeCount: 0, totalUsd: 0 },
   totalUsd: 0,
 }
 

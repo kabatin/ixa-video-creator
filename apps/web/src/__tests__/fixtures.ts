@@ -83,6 +83,7 @@ export const takeJson = {
   regenerationReason: null,
   reviewStatus: 'pending',
   humanVerdict: 'unreviewed',
+  copiedFromTakeId: null,
   createdAt: '2026-09-16T01:05:00.000Z',
 }
 
