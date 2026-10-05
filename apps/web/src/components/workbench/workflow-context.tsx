@@ -26,11 +26,14 @@ const WorkflowContext = createContext<WorkflowValue | null>(null)
 
 export const WorkflowProvider = ({
   lyricTelopCount,
+  narration = null,
   rendered,
   children,
 }: {
   /** 歌詞から置いたテロップの数。読めていなければ null。 */
   readonly lyricTelopCount: number | null
+  /** ナレーションの行の数と、声を作って置いた行の数（ADR-0038）。読めていなければ null。 */
+  readonly narration?: { readonly lines: number; readonly ready: number } | null
   /** 書き出しが 1 度でも終わったか。読めていなければ null。 */
   readonly rendered: boolean | null
   readonly children: ReactNode
@@ -44,6 +47,7 @@ export const WorkflowProvider = ({
     lyricLineCount: lyricLines(workbench.project.lyrics).length,
     lyricCueCount: workbench.project.lyricCues.length,
     lyricTelopCount,
+    narration,
     shots: (workbench.shots ?? []).map((shot) => ({
       description: shot.description,
       hasStartFrame: startFrameKnownFor(workbench.posters, shot.id),
@@ -64,6 +68,10 @@ export const WorkflowProvider = ({
       case 'lyrics':
       case 'telops':
         goToLyricSync(workbench)
+        return
+      // 原稿を書いて声にし、並べる（テロップは自動で付く）。
+      case 'narration':
+        workbench.focusPanel('narration')
         return
       // 区切りから「Shot にする」までは、聴きながら切るの区切るモードでする。
       case 'shots':

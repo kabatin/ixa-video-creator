@@ -25,6 +25,7 @@ const input = (overrides: Partial<WorkflowInput> = {}): WorkflowInput => ({
   lyricLineCount: 3,
   lyricCueCount: 3,
   lyricTelopCount: 3,
+  narration: { lines: 0, ready: 0 },
   shots: [],
   rendered: false,
   ...overrides,
@@ -34,21 +35,57 @@ const stepOf = (result: ReturnType<typeof workflowSteps>, id: string) => result.
 const stateOf = (result: ReturnType<typeof workflowSteps>, id: string) => stepOf(result, id)?.state
 
 const allDone = (overrides: Partial<WorkflowInput> = {}) =>
-  input({ shots: [shot({ description: 'a', hasStartFrame: true, adopted: true })], rendered: true, ...overrides })
+  input({
+    shots: [shot({ description: 'a', hasStartFrame: true, adopted: true })],
+    narration: { lines: 1, ready: 1 },
+    rendered: true,
+    ...overrides,
+  })
 
 describe('workflowSteps', () => {
-  it('9 段を作業の順に並べる（テロップは区切る前、書き出すが最後）', () => {
+  it('10 段を作業の順に並べる（テロップとナレーションは区切る前、書き出すが最後）', () => {
     expect(workflowSteps(input()).steps.map((step) => step.label)).toEqual([
       '楽曲',
       '作品の方針',
       '歌詞の時刻',
       'テロップ',
+      'ナレーション',
       '区切って Shot',
       '絵コンテ',
       '絵',
       'Take',
       '書き出す',
     ])
+  })
+
+  /** ナレーション（ADR-0038）。曲のある作品では入れなくてよい。曲が無ければ、ナレーションが作品の芯になる。 */
+  describe('ナレーション', () => {
+    it('曲があってナレーションが無ければ、要らない段として飛ばす', () => {
+      expect(stateOf(workflowSteps(input()), 'narration')).toBe('skipped')
+    })
+
+    it('曲もナレーションも無ければ、楽曲とナレーションのどちらもまだ（次は楽曲）', () => {
+      const result = workflowSteps(input({ hasTrack: false }))
+      expect(stateOf(result, 'narration')).toBe('todo')
+      expect(result.nextId).toBe('music')
+    })
+
+    it('曲が無くてナレーションがあれば、楽曲は飛ばし、声を作って置いた行を数える', () => {
+      const result = workflowSteps(
+        input({ hasTrack: false, instrumental: true, lyricLineCount: 0, lyricCueCount: 0, narration: { lines: 3, ready: 1 } }),
+      )
+      expect(stateOf(result, 'music')).toBe('skipped')
+      expect(stepOf(result, 'narration')).toMatchObject({ state: 'partial', progress: { done: 1, total: 3 } })
+      expect(result.nextId).toBe('narration')
+    })
+
+    it('曲のある作品でもナレーションを入れていれば数える', () => {
+      expect(stepOf(workflowSteps(input({ narration: { lines: 2, ready: 2 } })), 'narration')?.state).toBe('done')
+    })
+
+    it('読めていなければ「分からない」（次の段に選ばない）', () => {
+      expect(stateOf(workflowSteps(input({ narration: null })), 'narration')).toBe('unknown')
+    })
   })
 
   it('楽曲が無ければ、次は ① 楽曲', () => {

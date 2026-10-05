@@ -27,10 +27,10 @@ const postersFor = (ids: readonly string[], withFrame: readonly boolean[]): Shot
 
 const show = (
   patch: Partial<WorkbenchContextValue>,
-  flow: { lyricTelopCount?: number | null; rendered?: boolean | null } = {},
+  flow: { lyricTelopCount?: number | null; rendered?: boolean | null; narration?: { lines: number; ready: number } | null } = {},
 ): ReturnType<typeof renderInWorkbench> => {
   const ui: ReactElement = (
-    <WorkflowProvider lyricTelopCount={flow.lyricTelopCount ?? 0} rendered={flow.rendered ?? false}>
+    <WorkflowProvider lyricTelopCount={flow.lyricTelopCount ?? 0} narration={flow.narration ?? null} rendered={flow.rendered ?? false}>
       <WorkflowBar />
     </WorkflowProvider>
   )
@@ -86,10 +86,19 @@ describe('WorkflowBar', () => {
     expect(value.openCutter).toHaveBeenCalledWith('lyrics')
   })
 
-  it('テロップまで済んで Shot が無ければ ⑤ 区切って Shot が次。押すと区切るモードで開く', async () => {
+  it('⑤ ナレーションは、声を作って置いた行を数え、押すとナレーションのパネルを開く（ADR-0038）', async () => {
+    const { value } = show(ready(), { lyricTelopCount: 3, narration: { lines: 3, ready: 1 } })
+    const narration = screen.getByRole('button', { name: /⑤ ナレーション/ })
+
+    expect(narration).toHaveTextContent('1/3')
+    await userEvent.click(narration)
+    expect(value.focusPanel).toHaveBeenCalledWith('narration')
+  })
+
+  it('テロップまで済んで Shot が無ければ ⑥ 区切って Shot が次。押すと区切るモードで開く', async () => {
     const { value } = show(ready({ shots: [] }), { lyricTelopCount: 3 })
 
-    const shots = screen.getByRole('button', { name: /⑤ 区切って Shot/ })
+    const shots = screen.getByRole('button', { name: /⑥ 区切って Shot/ })
     expect(shots).toHaveAttribute('aria-current', 'step')
     await userEvent.click(shots)
     expect(value.openCutter).toHaveBeenCalledWith('cut')
@@ -102,7 +111,7 @@ describe('WorkflowBar', () => {
     expect(screen.getByRole('button', { name: /④ テロップ/ })).toHaveTextContent('—')
   })
 
-  it('絵コンテ・絵・Take は件数を出し、押すとその作業の画面へ。⑨ 書き出すは書き出しの画面を開く', async () => {
+  it('絵コンテ・絵・Take は件数を出し、押すとその作業の画面へ。⑩ 書き出すは書き出しの画面を開く', async () => {
     const shots = [
       aWorkbenchShot(1, { description: '屋上', selectedTakeId: null }),
       aWorkbenchShot(2, { description: '', selectedTakeId: null }),
@@ -118,16 +127,16 @@ describe('WorkflowBar', () => {
       { lyricTelopCount: 3 },
     )
 
-    expect(screen.getByRole('button', { name: /⑥ 絵コンテ/ })).toHaveTextContent('1/2')
-    expect(screen.getByRole('button', { name: /⑦ 絵/ })).toHaveTextContent('1/2')
-    expect(screen.getByRole('button', { name: /⑧ Take/ })).toHaveTextContent('0/2')
-    expect(screen.getByRole('button', { name: /⑥ 絵コンテ/ })).toHaveAttribute('aria-current', 'step')
+    expect(screen.getByRole('button', { name: /⑦ 絵コンテ/ })).toHaveTextContent('1/2')
+    expect(screen.getByRole('button', { name: /⑧ 絵/ })).toHaveTextContent('1/2')
+    expect(screen.getByRole('button', { name: /⑨ Take/ })).toHaveTextContent('0/2')
+    expect(screen.getByRole('button', { name: /⑦ 絵コンテ/ })).toHaveAttribute('aria-current', 'step')
 
-    await userEvent.click(screen.getByRole('button', { name: /⑥ 絵コンテ/ }))
+    await userEvent.click(screen.getByRole('button', { name: /⑦ 絵コンテ/ }))
     expect(value.focusPanel).toHaveBeenCalledWith('draft')
-    await userEvent.click(screen.getByRole('button', { name: /⑧ Take/ }))
+    await userEvent.click(screen.getByRole('button', { name: /⑨ Take/ }))
     expect(value.focusPanel).toHaveBeenCalledWith('shots')
-    await userEvent.click(screen.getByRole('button', { name: /⑨ 書き出す/ }))
+    await userEvent.click(screen.getByRole('button', { name: /⑩ 書き出す/ }))
     expect(value.openDialog).toHaveBeenCalledWith('render')
   })
 })

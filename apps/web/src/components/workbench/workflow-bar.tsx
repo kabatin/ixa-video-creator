@@ -5,7 +5,7 @@ import { useWorkflow } from '@/components/workbench/workflow-context'
 import type { WorkflowStep } from '@/lib/workflow-steps'
 
 /** 段の番号。帯の幅を取らないよう丸数字にする。 */
-const NUMBERS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'] as const
+const NUMBERS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'] as const
 
 /** 済み・途中・分からないの印。まだの段は何も付けない。 */
 const markOf = (step: WorkflowStep): string => {

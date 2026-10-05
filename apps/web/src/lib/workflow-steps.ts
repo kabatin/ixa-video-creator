@@ -3,7 +3,7 @@ import { lyricLineOf } from '@ixa/domain'
 /**
  * 制作の流れの帯（制作者 2026-10-01）。**React を含まない純粋な関数。**
  *
- * 楽曲 → 作品の方針（方針・歌詞・ルック）→ 歌詞の時刻 → テロップ → 区切って Shot → 絵コンテ（説明）→
+ * 楽曲 → 作品の方針（方針・歌詞・ルック）→ 歌詞の時刻 → テロップ → ナレーション → 区切って Shot → 絵コンテ（説明）→
  * 絵（最初のフレーム）→ Take → 書き出す（2026-10-03 に並べ直した）。
  * - 歌詞の時刻とテロップは区切る前（制作者 2026-10-02「テロップみたいな、やり直しが容易にできるものを、ステップの前に
  *   持ってった方が効率的」、2026-10-03「まずはテロップのタイミングをセット」）。テロップは黒い画面で、絵を作らずに確かめられる
@@ -19,6 +19,7 @@ export type WorkflowStepId =
   | 'concept'
   | 'lyrics'
   | 'telops'
+  | 'narration'
   | 'shots'
   | 'storyboard'
   | 'frames'
@@ -51,6 +52,11 @@ export type WorkflowInput = {
   readonly lyricCueCount: number
   /** 歌詞から置いたテロップの数。**読めていなければ null**。 */
   readonly lyricTelopCount: number | null
+  /**
+   * ナレーション（ADR-0038）の行の数と、声を作って置いた行の数。**読めていなければ null**。
+   * 曲のある作品では入れなくてよい。曲が無ければ、ナレーションが作品の芯になる。
+   */
+  readonly narration: { readonly lines: number; readonly ready: number } | null
   readonly shots: readonly {
     readonly description: string
     /** 最初のフレームが付いているか。**分からなければ null**（絵の一覧をまだ読めていない）。 */
@@ -67,6 +73,7 @@ const LABELS: Readonly<Record<WorkflowStepId, string>> = {
   concept: '作品の方針',
   lyrics: '歌詞の時刻',
   telops: 'テロップ',
+  narration: 'ナレーション',
   shots: '区切って Shot',
   storyboard: '絵コンテ',
   frames: '絵',
@@ -129,14 +136,29 @@ const telopsStep = (input: WorkflowInput): WorkflowStep =>
     ? skipped('telops')
     : flag('telops', input.lyricTelopCount === null ? null : input.lyricTelopCount > 0)
 
+/**
+ * ナレーション。行があれば、声を作って置いた行を数える。行が無ければ、曲のある作品では要らない段（飛ばす）、
+ * 曲の無い作品ではまだ（ナレーションが芯になる）。
+ */
+const narrationStep = (input: WorkflowInput): WorkflowStep => {
+  if (input.narration === null) return flag('narration', null)
+  if (input.narration.lines > 0) return tally('narration', input.narration.ready, input.narration.lines)
+  return input.hasTrack ? skipped('narration') : flag('narration', false)
+}
+
+/** 楽曲。曲が無くてもナレーションがあれば飛ばしてよい（予告・宣伝の動画。制作者 2026-10-05）。 */
+const musicStep = (input: WorkflowInput): WorkflowStep =>
+  !input.hasTrack && (input.narration?.lines ?? 0) > 0 ? skipped('music') : flag('music', input.hasTrack)
+
 export const workflowSteps = (
   input: WorkflowInput,
 ): { readonly steps: readonly WorkflowStep[]; readonly nextId: WorkflowStepId | null } => {
   const steps: readonly WorkflowStep[] = [
-    flag('music', input.hasTrack),
+    musicStep(input),
     conceptStep(input),
     lyricsStep(input),
     telopsStep(input),
+    narrationStep(input),
     flag('shots', input.shots.length > 0),
     counted(
       'storyboard',
@@ -167,6 +189,7 @@ export const WORKFLOW_ACTIONS: Readonly<Record<WorkflowStepId, string>> = {
   concept: '作品の方針を書く',
   lyrics: '歌詞の時刻を合わせる',
   telops: '歌詞をテロップにする',
+  narration: 'ナレーションを入れる',
   shots: '区切って Shot にする',
   storyboard: '絵コンテを書く',
   frames: '絵を作る',

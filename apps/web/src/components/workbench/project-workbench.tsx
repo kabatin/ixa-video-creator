@@ -3,6 +3,7 @@
 import { WorkflowBar } from '@/components/workbench/workflow-bar'
 import { WorkflowProvider } from '@/components/workbench/workflow-context'
 import { useLyricTelopCount } from '@/components/workbench/use-lyric-telop-count'
+import { useNarrationProgress } from '@/components/workbench/use-narration-progress'
 import type { Location, MusicTrack, Project, Sequence, Shot } from '@ixa/domain'
 import type { DockviewApi } from 'dockview-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -167,6 +168,8 @@ const WorkbenchShell = ({
   const renderWatch = useRenderWatch({ projectId: workbench.projectId })
   // 流れの帯とストーリーボードの空の表示が使う材料（テロップの数・書き出しの履歴）。
   const lyricTelopCount = useLyricTelopCount(workbench.projectId, workbench.serverEpoch)
+  // ナレーションの行と、声を作って置いた行（ADR-0038）。声のジョブが動くか、サーバを読み直したら取り直す。
+  const narration = useNarrationProgress(workbench.projectId, workbench.narrationEpoch + workbench.serverEpoch)
   const rendered =
     renderWatch.jobs === null ? null : renderWatch.jobs.some((job) => job.status === 'succeeded')
 
@@ -176,7 +179,7 @@ const WorkbenchShell = ({
   useWorkbenchKeys({ undo })
 
   return (
-    <WorkflowProvider lyricTelopCount={lyricTelopCount} rendered={rendered}>
+    <WorkflowProvider lyricTelopCount={lyricTelopCount} narration={narration} rendered={rendered}>
       <div className="flex h-full flex-col bg-bg">
         <WorkbenchMenu
           canUndo={history.canUndo}
