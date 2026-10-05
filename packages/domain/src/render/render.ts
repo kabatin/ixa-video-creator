@@ -26,6 +26,10 @@ export const RenderJob = z.object({
   progress: z.number().min(0).max(1).default(0),
   outputAssetId: MediaAssetId.nullable(),
   error: z.string().nullable(),
+  /** 書き出しの音量を YouTube・SNS の基準（-14 LUFS）に揃えるか（ADR-0039）。既定は揃える。 */
+  normalizeLoudness: z.boolean().default(true),
+  /** 揃えた後に測った大きさ（LUFS）。揃えていない・音が無ければ null。 */
+  loudnessLufs: z.number().nullable().default(null),
   createdAt: z.date(),
   finishedAt: z.date().nullable(),
 })
@@ -36,7 +40,7 @@ export type RenderJob = z.infer<typeof RenderJob>
  * timelineSnapshot は作成時に確定させる。何をレンダリングしたかを後から辿れるようにするため。
  */
 export const CreateRenderJobInput = RenderJob.omit({
-  id: true, createdAt: true, finishedAt: true, outputAssetId: true, error: true,
+  id: true, createdAt: true, finishedAt: true, outputAssetId: true, error: true, loudnessLufs: true,
 }).extend({
   status: RenderJob.shape.status.default('queued'),
   progress: z.number().min(0).max(1).default(0),
@@ -49,7 +53,7 @@ export type CreateRenderJobInput = z.input<typeof CreateRenderJobInput>
  * 「何をレンダリングしたか」が信用できなくなるため。
  */
 export const UpdateRenderJobPatch = RenderJob.pick({
-  status: true, progress: true, outputAssetId: true, error: true, finishedAt: true,
+  status: true, progress: true, outputAssetId: true, error: true, finishedAt: true, loudnessLufs: true,
 }).partial()
 export type UpdateRenderJobPatch = z.input<typeof UpdateRenderJobPatch>
 

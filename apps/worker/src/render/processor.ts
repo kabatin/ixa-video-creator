@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import type { MediaAssetRepository, ProjectRepository, RenderJobRepository } from '@ixa/db'
 import {
   MediaAssetId as MediaAssetIdSchema,
@@ -11,6 +11,8 @@ import {
   type RenderResult,
   type TimelineRenderer,
 } from '@ixa/domain'
+import type { LoudnessMeasurement } from '@ixa/media'
+import { PRESET_SETTINGS } from '@ixa/render'
 import { renderKey, type ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import { z } from 'zod'
@@ -59,6 +61,11 @@ export type RenderProcessorDeps = {
   readonly renderer: TimelineRenderer
   readonly mediaQueue: RenderMediaJobQueue
   readonly logger: Logger
+  /**
+   * 書き出しの音量を揃える（ADR-0039。`@ixa/media` の normalizeProgramLoudness）。揃えた後の大きさを返す。
+   * 音が無ければ書かずに null。テストで ffmpeg を使わないための差し込み口。
+   */
+  readonly normalizeLoudness: (input: string, output: string, audioBitrate: string) => Promise<LoudnessMeasurement | null>
 }
 
 export type RenderOutcome =
@@ -176,6 +183,31 @@ const enqueueIngest = async (
   }
 }
 
+/**
+ * 書き出しの音量を揃える（ADR-0039）。揃えないと選んだ書き出し・音が無い書き出しは、そのまま使う。
+ * **揃えられなければ、黙って揃えないまま出さず失敗にする**（作り直すときに「揃えない」を選べる）。
+ */
+const normalizeOutput = async (
+  deps: RenderProcessorDeps,
+  job: RenderJob,
+  result: RenderResult,
+): Promise<{ readonly output: RenderResult; readonly loudnessLufs: number | null }> => {
+  if (!job.normalizeLoudness) return { output: result, loudnessLufs: null }
+  const normalizedPath = `${result.storageKey}.loudnorm.mp4`
+  let measured: LoudnessMeasurement | null
+  try {
+    measured = await deps.normalizeLoudness(result.storageKey, normalizedPath, PRESET_SETTINGS[job.preset].audioBitrate)
+  } catch (error) {
+    throw new RenderFailure(`音量を揃えられませんでした（${error instanceof Error ? error.message : String(error)}）。「音量を揃える」を外して書き出し直せます`)
+  }
+  if (measured === null) return { output: result, loudnessLufs: null }
+  const bytes = (await stat(normalizedPath)).size
+  return {
+    output: { ...result, storageKey: normalizedPath, bytes },
+    loudnessLufs: Number.isFinite(measured.integratedLufs) ? Math.round(measured.integratedLufs * 10) / 10 : null,
+  }
+}
+
 /** レンダリング本体。スナップショットをそのままレンダラへ渡す。 */
 const render = async (
   deps: RenderProcessorDeps,
@@ -196,7 +228,8 @@ const render = async (
     await progress.drain()
   }
 
-  const outputAssetId = await storeOutput(deps, job, project, result)
+  const { output, loudnessLufs } = await normalizeOutput(deps, job, result)
+  const outputAssetId = await storeOutput(deps, job, project, output)
 
   // probe / サムネイル / ポスターフレームはこの経路でしか作られない。
   await enqueueIngest(deps, job, outputAssetId)
@@ -206,6 +239,7 @@ const render = async (
     progress: 1,
     outputAssetId,
     error: null,
+    loudnessLufs,
     finishedAt: new Date(),
   })
 

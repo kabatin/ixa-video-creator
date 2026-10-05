@@ -43,7 +43,13 @@ type FixtureOptions = {
   readonly renderer?: Partial<TestRendererOptions>
   /** media キューへの投入を失敗させる。 */
   readonly mediaQueueFailWith?: Error
+  /** 書き出しの音量を揃えるか（無ければ既定の「揃える」）。 */
+  readonly normalizeLoudness?: boolean
+  /** 揃える口の結果。既定は「音が無い」（偽のレンダラの出力は音を持たない）。 */
+  readonly loudness?: 'normalized' | 'no_audio' | Error
 }
+
+const NORMALIZED_BYTES = Buffer.from('normalized-mp4-bytes')
 
 const buildFixture = async (options: FixtureOptions = {}) => {
   const project = options.project ?? aProject()
@@ -59,8 +65,10 @@ const buildFixture = async (options: FixtureOptions = {}) => {
     preset: 'master_1080p',
     timelineSnapshot: options.snapshot ?? aTimelineDocument(),
     ...(options.status === undefined ? {} : { status: options.status }),
+    ...(options.normalizeLoudness === undefined ? {} : { normalizeLoudness: options.normalizeLoudness }),
   })
 
+  const loudnessCalls: { input: string; output: string; audioBitrate: string }[] = []
   const deps: RenderProcessorDeps = {
     renderJobs,
     mediaAssets,
@@ -69,9 +77,17 @@ const buildFixture = async (options: FixtureOptions = {}) => {
     renderer,
     mediaQueue,
     logger: silentLogger,
+    normalizeLoudness: async (input, output, audioBitrate) => {
+      loudnessCalls.push({ input, output, audioBitrate })
+      const outcome = options.loudness ?? 'no_audio'
+      if (outcome instanceof Error) throw outcome
+      if (outcome === 'no_audio') return null
+      await writeFile(output, NORMALIZED_BYTES)
+      return { integratedLufs: -14.1, truePeakDb: -1.6 }
+    },
   }
 
-  return { deps, job, project, projects, renderJobs, mediaAssets, renderer, mediaQueue }
+  return { deps, job, project, projects, renderJobs, mediaAssets, renderer, mediaQueue, loudnessCalls }
 }
 
 describe('processRenderJob', () => {
@@ -377,5 +393,44 @@ describe('出力を media キューへ回す', () => {
     await processRenderJob(deps, { renderJobId: job.id })
 
     expect(mediaQueue.enqueued()).toHaveLength(1)
+  })
+})
+
+/** 書き出しの音量を揃える（ADR-0039）。YouTube・SNS の基準（-14 LUFS）に合わせ、測った大きさを記録する。 */
+describe('processRenderJob（音量を揃える）', () => {
+  it('既定では揃えてから保存し、揃えた後の大きさをジョブに残す（その画質の音のビットレートで）', async () => {
+    const { deps, job, project, loudnessCalls, renderJobs } = await buildFixture({ loudness: 'normalized' })
+
+    expect((await processRenderJob(deps, { renderJobId: job.id })).state).toBe('succeeded')
+
+    expect(loudnessCalls).toHaveLength(1)
+    expect(loudnessCalls[0]?.input).toBe(outputPath)
+    expect(loudnessCalls[0]?.audioBitrate).toMatch(/k$/)
+    expect(Buffer.from(await deps.storage.get(renderKey(project.id, job.id, 'mp4')))).toEqual(NORMALIZED_BYTES)
+    expect(renderJobs.snapshot()[0]?.loudnessLufs).toBe(-14.1)
+  })
+
+  it('揃えないと選んだ書き出しは、そのまま保存する', async () => {
+    const { deps, job, project, loudnessCalls, renderJobs } = await buildFixture({ normalizeLoudness: false, loudness: 'normalized' })
+
+    await processRenderJob(deps, { renderJobId: job.id })
+
+    expect(loudnessCalls).toHaveLength(0)
+    expect(Buffer.from(await deps.storage.get(renderKey(project.id, job.id, 'mp4')))).toEqual(OUTPUT_BYTES)
+    expect(renderJobs.snapshot()[0]?.loudnessLufs).toBeNull()
+  })
+
+  it('音が無い（揃える音が無い）書き出しは、そのまま保存する', async () => {
+    const { deps, job, project } = await buildFixture({ loudness: 'no_audio' })
+
+    expect((await processRenderJob(deps, { renderJobId: job.id })).state).toBe('succeeded')
+    expect(Buffer.from(await deps.storage.get(renderKey(project.id, job.id, 'mp4')))).toEqual(OUTPUT_BYTES)
+  })
+
+  it('揃えられなければ、黙って揃えないまま出さず、理由を残して失敗にする', async () => {
+    const { deps, job, renderJobs } = await buildFixture({ loudness: new Error('loudnorm が失敗しました') })
+
+    expect((await processRenderJob(deps, { renderJobId: job.id })).state).toBe('failed')
+    expect(renderJobs.snapshot()[0]?.error).toMatch(/音量を揃えられませんでした/)
   })
 })

@@ -1,3 +1,4 @@
+import { normalizeProgramLoudness } from '@ixa/media'
 import { join } from 'node:path'
 import { createProviderRegistry } from '@ixa/provider-core'
 import { createGenerationContextSource } from '@ixa/generation'
@@ -259,6 +260,8 @@ export const createGenerationWiring = (
       },
     },
     logger,
+    // 書き出しの音量を -14 LUFS に揃える（ADR-0039）。
+    normalizeLoudness: normalizeProgramLoudness,
   }
 
   /**

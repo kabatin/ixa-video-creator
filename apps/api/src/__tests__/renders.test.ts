@@ -358,3 +358,34 @@ describe('GET /renders/:id と GET /projects/:projectId/renders', () => {
     expect(body.data.map((job) => job.id)).toEqual([renderJobId])
   })
 })
+
+/** 書き出しの音量を揃える（ADR-0039）。既定は揃える。揃えた後の大きさを一覧で返す。 */
+describe('POST /projects/:projectId/render（音量を揃える）', () => {
+  const ready = () => {
+    const project = aProject()
+    const withTake = aShotWithTake(project, { startSec: 0, durationSec: 4 })
+    return { project, deps: renderDeps({ project, shots: [withTake.shot], takes: [withTake.take], mediaAssets: [withTake.asset] }) }
+  }
+
+  it('既定では揃える。揃えないと選べる', async () => {
+    const { project, deps } = ready()
+
+    await postRender(deps, project)
+    await postRender(deps, project, { preset: 'master_1080p', normalizeLoudness: false })
+
+    expect(deps.renderJobs.snapshot().map((job) => job.normalizeLoudness)).toEqual([true, false])
+  })
+
+  it('一覧に、揃えたか・揃えた後の大きさを返す', async () => {
+    const { project, deps } = ready()
+    await postRender(deps, project)
+    const [job] = deps.renderJobs.snapshot()
+    if (job === undefined) throw new Error('ジョブがありません')
+    await deps.renderJobs.update(job.id, { status: 'succeeded', loudnessLufs: -14.1 })
+
+    const response = await renderRoutes(deps).request(`/projects/${project.id}/renders`)
+    const body = (await response.json()) as Ok<RenderJobResponse[]>
+
+    expect(body.data[0]).toMatchObject({ normalizeLoudness: true, loudnessLufs: -14.1 })
+  })
+})

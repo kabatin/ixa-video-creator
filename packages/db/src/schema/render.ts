@@ -1,4 +1,4 @@
-import { doublePrecision, index, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
+import { boolean, doublePrecision, index, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
 import type { RenderJob, RenderPreset, RenderScope, TimelineDocument } from '@ixa/domain'
 import { RenderPreset as RenderPresetSchema } from '@ixa/domain'
 import { createdAt, timestampTz, ulidPk, ulidRef } from './columns.js'
@@ -30,6 +30,10 @@ export const renderJobs = pgTable(
       onDelete: 'set null',
     }),
     error: text('error'),
+    /** 書き出しの音量を揃えるか（ADR-0039）。 */
+    normalizeLoudness: boolean('normalize_loudness').notNull().default(true),
+    /** 揃えた後に測った大きさ（LUFS）。 */
+    loudnessLufs: doublePrecision('loudness_lufs'),
     createdAt: createdAt(),
     finishedAt: timestampTz('finished_at'),
   },

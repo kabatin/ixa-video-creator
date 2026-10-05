@@ -43,6 +43,8 @@ export const renderJobRowToDomain = (row: RenderJobRow): RenderJob =>
     progress: row.progress,
     outputAssetId: row.outputAssetId,
     error: row.error,
+    normalizeLoudness: row.normalizeLoudness,
+    loudnessLufs: row.loudnessLufs,
     createdAt: row.createdAt,
     finishedAt: row.finishedAt,
   })

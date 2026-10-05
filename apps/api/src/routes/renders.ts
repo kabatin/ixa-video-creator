@@ -89,6 +89,8 @@ export const toRenderJobResponse = (job: RenderJob): RenderJobResponse => ({
   progress: job.progress,
   outputAssetId: job.outputAssetId,
   error: job.error,
+  normalizeLoudness: job.normalizeLoudness,
+  loudnessLufs: job.loudnessLufs,
   createdAt: job.createdAt.toISOString(),
   finishedAt: job.finishedAt === null ? null : job.finishedAt.toISOString(),
 })
@@ -97,6 +99,8 @@ const CreateRenderBody = z
   .object({
     preset: RenderPresetSchema,
     scope: RenderScopeSchema.default({ type: SUPPORTED_RENDER_SCOPE }),
+    /** 音量を YouTube・SNS の基準（-14 LUFS）に揃えるか（ADR-0039）。既定は揃える。 */
+    normalizeLoudness: z.boolean().default(true),
   })
   .openapi('CreateRenderInput')
 
@@ -181,7 +185,7 @@ export const renderRoutes = (deps: RenderRoutesDeps) =>
     })
     .openapi(createRenderRoute, async (c) => {
       const { projectId } = c.req.valid('param')
-      const { preset, scope } = c.req.valid('json')
+      const { preset, scope, normalizeLoudness } = c.req.valid('json')
 
       // Shot 単位は range で指定する。**黙って full に落とさない。**
       // 「10 秒だけのつもりが全体をレンダリングしていた」は課金と時間の事故になる。
@@ -223,6 +227,7 @@ export const renderRoutes = (deps: RenderRoutesDeps) =>
         projectId,
         scope,
         preset,
+        normalizeLoudness,
         timelineSnapshot: range === null ? loaded.document : sliceTimelineDocument(loaded.document, range),
       })
       await deps.queue.enqueue(job.id)
