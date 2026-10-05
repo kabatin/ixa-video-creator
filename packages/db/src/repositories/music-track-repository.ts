@@ -57,6 +57,8 @@ export const musicTrackRowToDomain = (row: MusicTrackRow): MusicTrack =>
     isMaster: row.isMaster,
     offsetSec: row.offsetSec,
     volume: row.volume,
+    fadeInSec: row.fadeInSec,
+    fadeOutSec: row.fadeOutSec,
   })
 
 export const createMusicTrackRepository = (db: DbClient): MusicTrackRepository => ({

@@ -236,6 +236,9 @@ export const loadTimelineSource = async (
         // 音源の尺は MediaAsset の probe が持つ。未解析なら 0（尺に効かせない）。
         durationSec: resolved.durationSec,
         volume: track.volume,
+        // 頭と終わりのフェード（ADR-0039）。
+        ...(track.fadeInSec === undefined ? {} : { fadeInSec: track.fadeInSec }),
+        ...(track.fadeOutSec === undefined ? {} : { fadeOutSec: track.fadeOutSec }),
       },
     ]
   })

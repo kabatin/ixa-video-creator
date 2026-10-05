@@ -2,6 +2,9 @@ import { z } from 'zod'
 import { MediaAssetId, MusicAnalysisId, MusicTrackId, ProjectId } from '../common/ids.js'
 import { Seconds } from '../common/time.js'
 
+/** フェードの上限（秒）。 */
+export const MUSIC_FADE_MAX_SEC = 30
+
 export const MusicTrack = z.object({
   id: MusicTrackId,
   projectId: ProjectId,
@@ -14,6 +17,12 @@ export const MusicTrack = z.object({
    * ミュージックビデオでは音楽と SFX のバランス調整が必須になるため列で持つ。
    */
   volume: z.number().min(0).max(2).default(1),
+  /**
+   * 頭と終わりのフェード（秒。ADR-0039）。**無ければ 0**（前からの曲と、テストで作る曲に無い）。
+   * 曲を途中で切ったときにぶつ切りにせず、音量をなだらかに上げ下げする。
+   */
+  fadeInSec: Seconds.max(MUSIC_FADE_MAX_SEC).optional(),
+  fadeOutSec: Seconds.max(MUSIC_FADE_MAX_SEC).optional(),
 })
 export type MusicTrack = z.infer<typeof MusicTrack>
 
@@ -29,6 +38,8 @@ export const UpdateMusicTrackPatch = z
     title: z.string().trim().min(1).optional(),
     offsetSec: Seconds.optional(),
     volume: z.number().min(0).max(2).optional(),
+    fadeInSec: Seconds.max(MUSIC_FADE_MAX_SEC).optional(),
+    fadeOutSec: Seconds.max(MUSIC_FADE_MAX_SEC).optional(),
   })
   .strict()
 export type UpdateMusicTrackPatch = z.infer<typeof UpdateMusicTrackPatch>

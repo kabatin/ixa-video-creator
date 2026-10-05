@@ -19,6 +19,9 @@ export type TimelineMusicTrack = {
   /** 音源の尺。ミュージックビデオでは音楽がタイムライン全体の尺を決める。 */
   readonly durationSec: Seconds
   readonly volume: number
+  /** 頭と終わりのフェード（秒。ADR-0039）。無ければ 0。 */
+  readonly fadeInSec?: Seconds
+  readonly fadeOutSec?: Seconds
 }
 
 /**
@@ -192,6 +195,8 @@ export const buildTimelineDocument = (source: TimelineSource): TimelineDocument 
       startSec: track.startSec,
       durationSec: track.durationSec,
       volume: track.volume,
+      ...(track.fadeInSec === undefined || track.fadeInSec <= 0 ? {} : { fadeInSec: track.fadeInSec }),
+      ...(track.fadeOutSec === undefined || track.fadeOutSec <= 0 ? {} : { fadeOutSec: track.fadeOutSec }),
     })),
     ...(source.voices ?? []).map((voice) => ({
       mediaUrl: voice.mediaUrl,

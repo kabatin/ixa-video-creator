@@ -16,6 +16,8 @@ const baseRow = (overrides: Partial<MusicTrackRow> = {}): MusicTrackRow => ({
   isMaster: true,
   offsetSec: 0,
   volume: 1,
+  fadeInSec: 0,
+  fadeOutSec: 0,
   deletedAt: null,
   ...overrides,
 })
@@ -40,5 +42,11 @@ describe('musicTrackRowToDomain', () => {
 
     expect(track.offsetSec).toBe(1.5)
     expect(track.volume).toBe(0.8)
+  })
+})
+
+describe('musicTrackRowToDomain（フェード。ADR-0039）', () => {
+  it('頭と終わりのフェードを写す', () => {
+    expect(musicTrackRowToDomain(baseRow({ fadeInSec: 2, fadeOutSec: 3.5 }))).toMatchObject({ fadeInSec: 2, fadeOutSec: 3.5 })
   })
 })

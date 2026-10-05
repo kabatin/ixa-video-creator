@@ -8,7 +8,7 @@ import {
 import { describe, expect, it } from 'vitest'
 import { timelineRoutes } from '../routes/timeline.js'
 import { aProject } from './fixtures.js'
-import { aMediaAsset } from './in-memory-timeline-repositories.js'
+import { aMediaAsset, createInMemoryMusicTrackRepository } from './in-memory-timeline-repositories.js'
 import { timelineDeps } from './timeline-deps.js'
 
 /**
@@ -71,5 +71,20 @@ describe('GET /projects/:projectId/timeline（ナレーション）', () => {
     const doc = ((await response.json()) as Ok<TimelineDocument>).data
     expect(doc.audio).toEqual([])
     expect(doc.ducking).toBeUndefined()
+  })
+})
+
+describe('GET /projects/:projectId/timeline（BGM のフェード。ADR-0039）', () => {
+  it('曲のフェードを文書に渡す', async () => {
+    const project = aProject()
+    const asset = aMediaAsset({ workspaceId: project.workspaceId, projectId: project.id, kind: 'audio', storageKey: 'media/ws/bgm/original.mp3', mimeType: 'audio/mpeg' })
+    const musicTracks = createInMemoryMusicTrackRepository()
+    await musicTracks.create({ projectId: project.id, mediaAssetId: asset.id, title: 'BGM', isMaster: true, offsetSec: 0, volume: 1, fadeInSec: 2, fadeOutSec: 3 })
+    const deps = { ...timelineDeps({ project, mediaAssets: [asset] }), musicTracks }
+
+    const response = await timelineRoutes(deps).request(`/projects/${project.id}/timeline`)
+    const doc = ((await response.json()) as Ok<TimelineDocument>).data
+
+    expect(doc.audio[0]).toMatchObject({ fadeInSec: 2, fadeOutSec: 3 })
   })
 })

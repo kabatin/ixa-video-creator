@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { MusicTrackId } from '../common/ids.js'
 import {
+  MUSIC_FADE_MAX_SEC,
   UpdateMusicTrackPatch,
   expandBeatGrid,
   nextMasterAfterRemoval,
@@ -89,5 +90,12 @@ describe('UpdateMusicTrackPatch（PHASE 8）', () => {
   it('空の題名・範囲外の音量を拒否する', () => {
     expect(UpdateMusicTrackPatch.safeParse({ title: '  ' }).success).toBe(false)
     expect(UpdateMusicTrackPatch.safeParse({ volume: 3 }).success).toBe(false)
+  })
+
+  /** BGM のフェードイン・アウト（ADR-0039）。 */
+  it(`フェードは 0〜${MUSIC_FADE_MAX_SEC} 秒`, () => {
+    expect(UpdateMusicTrackPatch.parse({ fadeInSec: 2, fadeOutSec: 0 })).toEqual({ fadeInSec: 2, fadeOutSec: 0 })
+    expect(UpdateMusicTrackPatch.safeParse({ fadeInSec: MUSIC_FADE_MAX_SEC + 1 }).success).toBe(false)
+    expect(UpdateMusicTrackPatch.safeParse({ fadeOutSec: -1 }).success).toBe(false)
   })
 })

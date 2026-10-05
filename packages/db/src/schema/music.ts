@@ -22,6 +22,9 @@ export const musicTracks = pgTable(
     offsetSec: seconds('offset_sec').notNull().default(0),
     /** 音量の倍率。1 が原音。 */
     volume: doublePrecision('volume').notNull().default(1),
+    /** 頭と終わりのフェード（秒。ADR-0039）。0 はフェードしない。 */
+    fadeInSec: seconds('fade_in_sec').notNull().default(0),
+    fadeOutSec: seconds('fade_out_sec').notNull().default(0),
     deletedAt: deletedAt(),
   },
   (t) => [index('music_tracks_project_id_idx').on(t.projectId)],

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildTimelineDocument, type TimelineVoice } from '../build.js'
+import { sliceTimelineDocument } from '../slice.js'
 import { TIMELINE_ISSUE_CODES, validateTimeline } from '../validate.js'
 import { makeShot, makeSource } from './fixtures.js'
 
@@ -55,5 +56,27 @@ describe('validateTimeline（ナレーション）', () => {
     expect(validateTimeline(makeSource({ voices: [voice(2, 2)] })).map((issue) => issue.code)).not.toContain(
       TIMELINE_ISSUE_CODES.voiceOutOfRange,
     )
+  })
+})
+
+describe('BGM のフェード（ADR-0039）', () => {
+  it('曲のフェードを文書に渡す（無ければ渡さない）', () => {
+    const doc = buildTimelineDocument(
+      makeSource({ musicTracks: [{ mediaUrl: 'bgm.mp3', startSec: 0, durationSec: 10, volume: 1, fadeInSec: 2, fadeOutSec: 3 }] }),
+    )
+    expect(doc.audio[0]).toMatchObject({ fadeInSec: 2, fadeOutSec: 3 })
+    const plain = buildTimelineDocument(makeSource({ musicTracks: [{ mediaUrl: 'bgm.mp3', startSec: 0, durationSec: 10, volume: 1 }] }))
+    expect(plain.audio[0]).not.toHaveProperty('fadeInSec')
+  })
+
+  it('一部だけを書き出すとき、切った側のフェードは切った分だけ短くする（途中からもう一度フェードしない）', () => {
+    const doc = buildTimelineDocument(
+      makeSource({
+        shots: [makeShot(1, 0, 10)],
+        musicTracks: [{ mediaUrl: 'bgm.mp3', startSec: 0, durationSec: 10, volume: 1, fadeInSec: 2, fadeOutSec: 3 }],
+      }),
+    )
+    const sliced = sliceTimelineDocument(doc, { startSec: 1, endSec: 8 })
+    expect(sliced.audio[0]).toMatchObject({ fadeInSec: 1, fadeOutSec: 1 })
   })
 })

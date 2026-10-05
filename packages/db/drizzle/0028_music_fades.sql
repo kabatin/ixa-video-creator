@@ -1,0 +1,2 @@
+ALTER TABLE "music_tracks" ADD COLUMN "fade_in_sec" double precision DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "music_tracks" ADD COLUMN "fade_out_sec" double precision DEFAULT 0 NOT NULL;

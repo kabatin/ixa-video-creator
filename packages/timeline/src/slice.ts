@@ -71,7 +71,21 @@ export const sliceTimelineDocument = (doc: TimelineDocument, range: TimelineRang
   const audio = doc.audio.flatMap((track) => {
     const piece = cut(track, range)
     if (piece === null) return []
-    return [{ ...track, ...piece.span, inSec: (track.inSec ?? 0) + piece.head }]
+    // 切った側のフェードは切った分だけ短くする（区間の頭からもう一度フェードしない。ADR-0039）。
+    const fadeInSec = Math.max(0, (track.fadeInSec ?? 0) - piece.head)
+    const fadeOutSec = Math.max(0, (track.fadeOutSec ?? 0) - piece.tail)
+    // 項目は並べて書く（フェードを 0 にした音に、元のフェードを残さない）。
+    return [
+      {
+        mediaUrl: track.mediaUrl,
+        volume: track.volume,
+        ...(track.role === undefined ? {} : { role: track.role }),
+        ...piece.span,
+        inSec: (track.inSec ?? 0) + piece.head,
+        ...(fadeInSec > 0 ? { fadeInSec } : {}),
+        ...(fadeOutSec > 0 ? { fadeOutSec } : {}),
+      },
+    ]
   })
 
   return { ...doc, durationSec: range.endSec - range.startSec, video1, transitions, clips, audio }
