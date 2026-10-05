@@ -25,14 +25,29 @@ const LIST_TIMEOUT_MS = 5_000
 const LINE = /^(.+?)\s+([a-z]{2,3}_[A-Z0-9]{2,3})\s+#\s?(.*)$/u
 
 /** `say -v ?` の一覧から、その言語（ja など）の声を取る。 */
+/**
+ * ナレーションに向く声（人の声に近い標準の声）。一覧の先に並べる（名前だけで声を作ると、一覧の最初の声になる）。
+ * 一覧の並びのままだと、Eddy などの合成音声風の声が先に来る。
+ */
+const PREFERRED_VOICES: readonly string[] = ['Kyoko', 'Otoya']
+
+const preferredRank = (id: string): number => {
+  const index = PREFERRED_VOICES.indexOf(id)
+  return index === -1 ? PREFERRED_VOICES.length : index
+}
+
 export const parseSayVoices = (stdout: string, language: string): readonly VoiceOption[] =>
-  stdout.split('\n').flatMap((line) => {
-    const match = LINE.exec(line.trim())
-    if (match === null) return []
-    const [, name, locale, sample] = match
-    if (name === undefined || locale === undefined || !locale.startsWith(`${language.slice(0, 2)}_`)) return []
-    return [{ id: name.trim(), label: name.trim(), note: sample?.trim() === '' ? null : (sample?.trim() ?? null) }]
-  })
+  stdout
+    .split('\n')
+    .flatMap((line) => {
+      const match = LINE.exec(line.trim())
+      if (match === null) return []
+      const [, name, locale, sample] = match
+      if (name === undefined || locale === undefined || !locale.startsWith(`${language.slice(0, 2)}_`)) return []
+      return [{ id: name.trim(), label: name.trim(), note: sample?.trim() === '' ? null : (sample?.trim() ?? null) }]
+    })
+    // 並べ替えは安定（同じ順位の声は一覧の並びのまま）。
+    .sort((a, b) => preferredRank(a.id) - preferredRank(b.id))
 
 const failure = (result: CliRunResult): VoiceProviderError => {
   switch (result.kind) {

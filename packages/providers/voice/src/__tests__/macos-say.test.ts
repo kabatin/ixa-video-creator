@@ -42,10 +42,10 @@ const request = (patch = {}) => ({
 })
 
 describe('parseSayVoices', () => {
-  it('言語で絞り、名前（空白・括弧ごと）と見本の文を取る', () => {
+  it('言語で絞り、名前（空白・括弧ごと）と見本の文を取る。ナレーションに向く声（Kyoko・Otoya）を先に並べる', () => {
     expect(parseSayVoices(SAY_LIST, 'ja')).toEqual([
-      { id: 'Eddy (日本語（日本）)', label: 'Eddy (日本語（日本）)', note: 'こんにちは! 私の名前はEddyです。' },
       { id: 'Kyoko', label: 'Kyoko', note: 'こんにちは! 私の名前はKyokoです。' },
+      { id: 'Eddy (日本語（日本）)', label: 'Eddy (日本語（日本）)', note: 'こんにちは! 私の名前はEddyです。' },
     ])
   })
 })
@@ -89,6 +89,6 @@ describe('createMacosSayVoice', () => {
 
   it('声の一覧は `say -v ?` から', async () => {
     const voice = createMacosSayVoice({ runCli: () => Promise.resolve(completed(0, SAY_LIST)) })
-    expect((await voice.listVoices('ja')).map((v) => v.id)).toEqual(['Eddy (日本語（日本）)', 'Kyoko'])
+    expect((await voice.listVoices('ja')).map((v) => v.id)).toEqual(['Kyoko', 'Eddy (日本語（日本）)'])
   })
 })
