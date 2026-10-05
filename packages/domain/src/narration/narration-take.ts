@@ -31,6 +31,14 @@ export const NarrationTakeSource = z.discriminatedUnion('type', [
     /** 文字起こしのジョブ。 */
     voiceJobId: VoiceJobId,
   }),
+  /**
+   * 作品の複製で写した Take（ADR-0037 / 0038）。**作ったのは元の作品**なので、こちらにはジョブが無い。
+   * 元のジョブを指すと、別の作品の記録を指したままになる。
+   */
+  z.object({
+    type: z.literal('copied'),
+    fromTakeId: NarrationTakeId,
+  }),
 ])
 export type NarrationTakeSource = z.infer<typeof NarrationTakeSource>
 

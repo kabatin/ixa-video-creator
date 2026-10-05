@@ -7,7 +7,11 @@ import type {
   ShotId,
   TakeId,
 } from '../common/ids.js'
-import { TextStyleId } from '../common/ids.js'
+import { NarrationLineId, TextStyleId } from '../common/ids.js'
+import type { VoiceProfileId } from '../common/ids.js'
+import type { CreateNarrationLineInput, NarrationLine } from '../narration/narration-line.js'
+import type { NarrationTake } from '../narration/narration-take.js'
+import type { CreateVoiceProfileInput, VoiceProfile } from '../narration/voice-profile.js'
 import { computeSpecHash } from '../generation/spec-compiler.js'
 import type { CreateTakeInput, Take } from '../generation/take.js'
 import type {
@@ -106,6 +110,8 @@ export type ClipCopyContext = {
   readonly styles: IdMap<TextStyleId>
   /** 歌詞（作品の方針）を持っていくか。持っていかなければ「何行目か」の結び付きを外す。 */
   readonly keepLyricLink: boolean
+  /** 写したナレーションの行（ADR-0038）。写していない行への印は外す（手で置いたテロップになり、作り直しで消えない）。 */
+  readonly narrationLines: IdMap<NarrationLineId>
 }
 
 /** 保存した見た目の付け替え。写していない・読めない印は null（上書きの見た目は残るので見た目は変わらない）。 */
@@ -118,13 +124,25 @@ const remapStyleId = (styleId: unknown, styles: IdMap<TextStyleId>): TextStyleId
 const copyTextParams = (
   params: Readonly<Record<string, unknown>>,
   ctx: ClipCopyContext,
-): { readonly params: Record<string, unknown>; readonly lyricLinkDropped: boolean } => {
-  const { lyricLine, styleId, ...rest } = params
+): {
+  readonly params: Record<string, unknown>
+  readonly lyricLinkDropped: boolean
+  readonly narrationLinkDropped: boolean
+} => {
+  const { lyricLine, styleId, narrationLineId, ...rest } = params
   const style = styleId === undefined ? {} : { styleId: remapStyleId(styleId, ctx.styles) }
   const keepLine = ctx.keepLyricLink && lyricLine !== undefined
+  const parsedLine = NarrationLineId.safeParse(narrationLineId)
+  const movedLine = parsedLine.success ? (ctx.narrationLines.get(parsedLine.data) ?? null) : null
   return {
-    params: { ...rest, ...style, ...(keepLine ? { lyricLine } : {}) },
+    params: {
+      ...rest,
+      ...style,
+      ...(keepLine ? { lyricLine } : {}),
+      ...(movedLine === null ? {} : { narrationLineId: movedLine }),
+    },
     lyricLinkDropped: !ctx.keepLyricLink && lyricLine !== undefined,
+    narrationLinkDropped: movedLine === null && narrationLineId !== undefined,
   }
 }
 
@@ -132,7 +150,11 @@ const copyTextParams = (
 export const copyClipInput = (
   clip: TimelineClip,
   ctx: ClipCopyContext,
-): { readonly input: CreateTimelineClipInput; readonly lyricLinkDropped: boolean } => {
+): {
+  readonly input: CreateTimelineClipInput
+  readonly lyricLinkDropped: boolean
+  readonly narrationLinkDropped: boolean
+} => {
   const text = clip.content.type === 'text' ? copyTextParams(clip.content.params, ctx) : null
   const content: TimelineClipContent =
     clip.content.type === 'text' && text !== null ? { ...clip.content, params: text.params } : clip.content
@@ -147,6 +169,74 @@ export const copyClipInput = (
       opacity: clip.opacity,
     },
     lyricLinkDropped: text?.lyricLinkDropped ?? false,
+    narrationLinkDropped: text?.narrationLinkDropped ?? false,
+  }
+}
+
+/**
+ * 声（ADR-0038）を新しい作品の声にする。中身はそのまま写し、誰の声か・テロップの見た目は写した先へ指し直す。
+ * 持っていかなかったものへの結び付きは外す（声そのものは残る）。
+ */
+export const copyVoiceInput = (
+  voice: VoiceProfile,
+  ctx: {
+    readonly projectId: ProjectId
+    readonly characters: IdMap<CharacterId>
+    readonly styles: IdMap<TextStyleId>
+  },
+): CreateVoiceProfileInput => ({
+  projectId: ctx.projectId,
+  name: voice.name,
+  tool: voice.tool,
+  model: voice.model,
+  voiceName: voice.voiceName,
+  styleNote: voice.styleNote,
+  speed: voice.speed,
+  volume: voice.volume,
+  language: voice.language,
+  tuning: voice.tuning,
+  textStyleId: remapOrNull(voice.textStyleId, ctx.styles),
+  characterId: remapOrNull(voice.characterId, ctx.characters),
+})
+
+/** 原稿の行を新しい作品の行にする。話す声は写した先へ。写していなければ「声が未定」。 */
+export const copyNarrationLineInput = (
+  line: NarrationLine,
+  ctx: { readonly projectId: ProjectId; readonly voices: IdMap<VoiceProfileId> },
+): CreateNarrationLineInput => ({
+  projectId: ctx.projectId,
+  order: line.order,
+  text: line.text,
+  reading: line.reading,
+  voiceProfileId: remapOrNull(line.voiceProfileId, ctx.voices),
+  direction: line.direction,
+  startSec: line.startSec,
+  telop: line.telop,
+})
+
+/**
+ * 声の Take を新しい行の Take にする。**音のファイルは同じものを指す**（元の作品で作ったので作り直さない）。
+ * 出どころは「写したもの」にする（元のジョブは別の作品の記録なので指さない）。
+ */
+export const copyNarrationTakeInput = (
+  take: NarrationTake,
+  lines: IdMap<NarrationLineId>,
+): Omit<NarrationTake, 'id' | 'index' | 'createdAt'> => {
+  const lineId = lines.get(take.lineId)
+  if (lineId === undefined) throw new Error('複製する声の Take の付け替え先がありません（行を写し損ねています）')
+  return {
+    lineId,
+    source: { type: 'copied', fromTakeId: take.id },
+    mediaAssetId: take.mediaAssetId,
+    inSec: take.inSec,
+    outSec: take.outSec,
+    spokenText: take.spokenText,
+    displayText: take.displayText,
+    specHash: take.specHash,
+    charTimes: take.charTimes,
+    loudnessLufs: take.loudnessLufs,
+    peaks: take.peaks,
+    costUsd: take.costUsd,
   }
 }
 
@@ -210,6 +300,10 @@ export type DuplicationDrops = {
   readonly locationDropped: number
   /** 歌詞との結び付きを外したテロップの数。 */
   readonly lyricLinksDropped: number
+  /** ナレーションとの結び付きを外したテロップの数（ADR-0038）。 */
+  readonly narrationLinksDropped: number
+  /** 声を持っていかなかったので、キャラクターから外した声の数。 */
+  readonly characterVoicesDropped: number
 }
 
 /** 外したものを、数と理由で言う（ID を出さない）。何も外していなければ空。 */
@@ -224,5 +318,13 @@ export const duplicationNotes = (drops: DuplicationDrops): readonly string[] => 
     ? [
         `作品の方針を持っていかなかったので、テロップ ${String(drops.lyricLinksDropped)} 件の歌詞との結び付きを外しました（文字は残っています）`,
       ]
+    : []),
+  ...(drops.narrationLinksDropped > 0
+    ? [
+        `ナレーションを持っていかなかったので、テロップ ${String(drops.narrationLinksDropped)} 件のナレーションとの結び付きを外しました（文字は残り、作り直しで消えません）`,
+      ]
+    : []),
+  ...(drops.characterVoicesDropped > 0
+    ? [`声を持っていかなかったので、キャラクター ${String(drops.characterVoicesDropped)} 人の声を外しました`]
     : []),
 ]

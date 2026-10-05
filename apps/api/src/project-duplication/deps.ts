@@ -2,6 +2,9 @@ import type {
   BrandAssetRepository,
   CharacterRepository,
   LocationRepository,
+  NarrationLineRepository,
+  NarrationTakeRepository,
+  VoiceProfileRepository,
   MusicAnalysisRepository,
   MusicTrackRepository,
   ProjectRepository,
@@ -38,5 +41,12 @@ export type ProjectDuplicationDeps = LibraryCopyDeps & {
   readonly shotReferences: Pick<ShotReferenceRepository, 'findByShot' | 'create'>
   readonly takes: Pick<TakeRepository, 'findByShot' | 'create' | 'updateReview' | 'hide'>
   readonly transitions: Pick<TransitionRepository, 'findByProject' | 'create'>
+  /**
+   * 声とナレーション（ADR-0038）。ナレーションを繋いでいない環境では省く。
+   * 省いた環境で「声」を選んだときは、何も写さずに知らせる（黙って飛ばさない）。
+   */
+  readonly voices?: Pick<VoiceProfileRepository, 'findByProject' | 'create'>
+  readonly narrationLines?: Pick<NarrationLineRepository, 'findByProject' | 'createMany' | 'update'>
+  readonly narrationTakes?: Pick<NarrationTakeRepository, 'findByLines' | 'create'>
   readonly logger: Logger
 }

@@ -1053,7 +1053,7 @@ voice_profiles               (声。ナレーター・キャラクターの声 /
 narration_lines              (ナレーション・セリフの原稿の行。位置（秒）を自分で持つ / ADR-0038)
 narration_takes              (行の声の Take。追記のみ。後から変わるのは char_times だけ / ADR-0038)
 voice_jobs                   (声・文字起こしのジョブ。掛かった額を持つ。追記のみ / ADR-0038)
-project_audio_settings       (作品ごとの読み辞書とダッキング。無ければ既定 / ADR-0038)
+project_audio_settings       (作品ごとの読み辞書・ダッキング・話している字の強調。無ければ既定 / ADR-0038・0039)
 ```
 
 ### 規約

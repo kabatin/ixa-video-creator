@@ -4,6 +4,8 @@ import {
   CharacterLookId,
   LocationId,
   MediaAssetId,
+  NarrationLineId,
+  NarrationTakeId,
   ProjectId,
   SequenceId,
   ShotId,
@@ -11,17 +13,25 @@ import {
   TextStyleId,
   TimelineClipId,
   TransitionId,
+  VoiceJobId,
+  VoiceProfileId,
   newId,
 } from '../common/ids.js'
 import { computeSpecHash } from '../generation/spec-compiler.js'
 import type { ShotGenerationSpec } from '../generation/spec.js'
 import { Take } from '../generation/take.js'
+import { NarrationLine } from '../narration/narration-line.js'
+import { NarrationTake } from '../narration/narration-take.js'
+import { VoiceProfile } from '../narration/voice-profile.js'
 import {
   copyCastEntries,
   copyClipInput,
+  copyNarrationLineInput,
+  copyNarrationTakeInput,
   copyShotInput,
   copyTakeInput,
   copyTransitionInputs,
+  copyVoiceInput,
   duplicationNotes,
 } from '../project/duplication-copy.js'
 import { Shot, ShotCharacter, Transition } from '../shot/shot.js'
@@ -173,6 +183,7 @@ describe('copyClipInput', () => {
       projectId: TARGET_PROJECT,
       styles: new Map([[style, copiedStyle]]),
       keepLyricLink: true,
+      narrationLines: new Map(),
     })
 
     expect(input).toMatchObject({ projectId: TARGET_PROJECT, track: 'TEXT', startSec: 3, durationSec: 2 })
@@ -185,7 +196,12 @@ describe('copyClipInput', () => {
   })
 
   it('作品の方針（歌詞）を持っていかなければ、文字は残して歌詞との結び付きだけ外す', () => {
-    const { input, lyricLinkDropped } = copyClipInput(telop, { projectId: TARGET_PROJECT, styles: new Map(), keepLyricLink: false })
+    const { input, lyricLinkDropped } = copyClipInput(telop, {
+      projectId: TARGET_PROJECT,
+      styles: new Map(),
+      keepLyricLink: false,
+      narrationLines: new Map(),
+    })
 
     expect(input.content).toEqual({
       type: 'text',
@@ -193,6 +209,30 @@ describe('copyClipInput', () => {
       params: { text: '夜明けの屋上で', styleId: null, style: { size: 64 } },
     })
     expect(lyricLinkDropped).toBe(true)
+  })
+
+  it('ナレーションのテロップの印は、写した行へ付け替える。行を写していなければ外す（手で置いたテロップになる）', () => {
+    const sourceLine = newId(NarrationLineId)
+    const targetLine = newId(NarrationLineId)
+    const narrationTelop = TimelineClip.parse({
+      id: newId(TimelineClipId),
+      projectId: SOURCE_PROJECT,
+      track: 'TEXT',
+      startSec: 3,
+      durationSec: 2,
+      layer: 2,
+      content: { type: 'text', templateKey: 'plain', params: { text: '勝負の時が来た。', narrationLineId: sourceLine } },
+      createdAt: AT,
+    })
+    const ctx = { projectId: TARGET_PROJECT, styles: new Map(), keepLyricLink: true }
+
+    const moved = copyClipInput(narrationTelop, { ...ctx, narrationLines: new Map([[sourceLine, targetLine]]) })
+    expect(moved.input.content).toMatchObject({ params: { narrationLineId: targetLine } })
+    expect(moved.narrationLinkDropped).toBe(false)
+
+    const dropped = copyClipInput(narrationTelop, { ...ctx, narrationLines: new Map() })
+    expect(dropped.input.content).toEqual({ type: 'text', templateKey: 'plain', params: { text: '勝負の時が来た。' } })
+    expect(dropped.narrationLinkDropped).toBe(true)
   })
 
   it('重ね素材（画像・動画・音）は同じファイルを指したまま写す', () => {
@@ -206,7 +246,12 @@ describe('copyClipInput', () => {
       createdAt: AT,
     })
 
-    const { input } = copyClipInput(media, { projectId: TARGET_PROJECT, styles: new Map(), keepLyricLink: false })
+    const { input } = copyClipInput(media, {
+      projectId: TARGET_PROJECT,
+      styles: new Map(),
+      keepLyricLink: false,
+      narrationLines: new Map(),
+    })
 
     expect(input.content).toEqual(media.content)
     expect(input.projectId).toBe(TARGET_PROJECT)
@@ -322,14 +367,166 @@ describe('copyTakeInput', () => {
 
 describe('duplicationNotes', () => {
   it('外したものを、数と理由で言う（ID を出さない）', () => {
-    expect(duplicationNotes({ castDropped: 12, locationDropped: 3, lyricLinksDropped: 20 })).toEqual([
+    expect(
+      duplicationNotes({
+        castDropped: 12,
+        locationDropped: 3,
+        lyricLinksDropped: 20,
+        narrationLinksDropped: 4,
+        characterVoicesDropped: 2,
+      }),
+    ).toEqual([
       'キャラクターを持っていかなかったので、Shot 12 件の登場人物を外しました',
       'ロケーションを持っていかなかったので、Shot 3 件のロケーションを外しました',
       '作品の方針を持っていかなかったので、テロップ 20 件の歌詞との結び付きを外しました（文字は残っています）',
+      'ナレーションを持っていかなかったので、テロップ 4 件のナレーションとの結び付きを外しました（文字は残り、作り直しで消えません）',
+      '声を持っていかなかったので、キャラクター 2 人の声を外しました',
     ])
   })
 
   it('何も外していなければ何も言わない', () => {
-    expect(duplicationNotes({ castDropped: 0, locationDropped: 0, lyricLinksDropped: 0 })).toEqual([])
+    expect(
+      duplicationNotes({
+        castDropped: 0,
+        locationDropped: 0,
+        lyricLinksDropped: 0,
+        narrationLinksDropped: 0,
+        characterVoicesDropped: 0,
+      }),
+    ).toEqual([])
+  })
+})
+
+/**
+ * 声とナレーション（ADR-0038）。声は作品ごとなので写す。ナレーションの行は写した声を指し直し、
+ * 声の Take は同じ音のファイルを指したまま「写したもの」として残す（元の作品で作ったので、作り直さなくてよい）。
+ */
+describe('声とナレーション', () => {
+  const SOURCE_VOICE = newId(VoiceProfileId)
+  const TARGET_VOICE = newId(VoiceProfileId)
+  const SOURCE_LINE = newId(NarrationLineId)
+  const TARGET_LINE = newId(NarrationLineId)
+  const SOURCE_CHARACTER = newId(CharacterId)
+  const TARGET_CHARACTER = newId(CharacterId)
+  const SOURCE_STYLE = newId(TextStyleId)
+  const TARGET_STYLE = newId(TextStyleId)
+
+  const aVoice = (patch: Partial<VoiceProfile> = {}): VoiceProfile =>
+    VoiceProfile.parse({
+      id: SOURCE_VOICE,
+      projectId: SOURCE_PROJECT,
+      name: 'ナレーター',
+      tool: 'macos_say',
+      model: null,
+      voiceName: 'Kyoko',
+      styleNote: '落ち着いた低めの声',
+      speed: 1.1,
+      volume: 0.9,
+      language: 'ja',
+      tuning: {},
+      textStyleId: SOURCE_STYLE,
+      characterId: SOURCE_CHARACTER,
+      createdAt: AT,
+      updatedAt: AT,
+      ...patch,
+    })
+
+  const aLine = (patch: Partial<NarrationLine> = {}): NarrationLine =>
+    NarrationLine.parse({
+      id: SOURCE_LINE,
+      projectId: SOURCE_PROJECT,
+      order: 2,
+      text: '勝負の時が来た。',
+      reading: 'しょうぶのときがきた。',
+      voiceProfileId: SOURCE_VOICE,
+      direction: '囁くように',
+      startSec: 3.5,
+      telop: true,
+      selectedTakeId: null,
+      createdAt: AT,
+      updatedAt: AT,
+      ...patch,
+    })
+
+  const maps = (
+    patch: {
+      voices?: ReadonlyMap<VoiceProfileId, VoiceProfileId>
+      characters?: ReadonlyMap<CharacterId, CharacterId>
+      styles?: ReadonlyMap<TextStyleId, TextStyleId>
+    } = {},
+  ) => ({
+    projectId: TARGET_PROJECT,
+    voices: patch.voices ?? new Map([[SOURCE_VOICE, TARGET_VOICE]]),
+    characters: patch.characters ?? new Map([[SOURCE_CHARACTER, TARGET_CHARACTER]]),
+    styles: patch.styles ?? new Map([[SOURCE_STYLE, TARGET_STYLE]]),
+  })
+
+  it('声は中身をそのまま写し、キャラクターとテロップの見た目は写した先へ指し直す', () => {
+    expect(copyVoiceInput(aVoice(), maps())).toEqual({
+      projectId: TARGET_PROJECT,
+      name: 'ナレーター',
+      tool: 'macos_say',
+      model: null,
+      voiceName: 'Kyoko',
+      styleNote: '落ち着いた低めの声',
+      speed: 1.1,
+      volume: 0.9,
+      language: 'ja',
+      tuning: {},
+      textStyleId: TARGET_STYLE,
+      characterId: TARGET_CHARACTER,
+    })
+  })
+
+  it('キャラクター・テロップの見た目を持っていかなければ、その結び付きは外す（声そのものは残す）', () => {
+    const copied = copyVoiceInput(aVoice(), maps({ characters: new Map(), styles: new Map() }))
+    expect(copied).toMatchObject({ name: 'ナレーター', characterId: null, textStyleId: null })
+  })
+
+  it('行は話す声を指し直す。声を写していなければ「声が未定」にする', () => {
+    expect(copyNarrationLineInput(aLine(), maps())).toEqual({
+      projectId: TARGET_PROJECT,
+      order: 2,
+      text: '勝負の時が来た。',
+      reading: 'しょうぶのときがきた。',
+      voiceProfileId: TARGET_VOICE,
+      direction: '囁くように',
+      startSec: 3.5,
+      telop: true,
+    })
+    expect(copyNarrationLineInput(aLine(), maps({ voices: new Map() })).voiceProfileId).toBeNull()
+  })
+
+  it('声の Take は同じ音を指したまま、「写したもの」として残す（元のジョブは指さない）', () => {
+    const take = NarrationTake.parse({
+      id: newId(NarrationTakeId),
+      lineId: SOURCE_LINE,
+      index: 2,
+      source: { type: 'generated', voiceJobId: newId(VoiceJobId), tool: 'macos_say', model: null, voiceName: 'Kyoko' },
+      mediaAssetId: newId(MediaAssetId),
+      inSec: 0,
+      outSec: 1.8,
+      spokenText: 'しょうぶのときがきた。',
+      displayText: '勝負の時が来た。',
+      specHash: 'abc',
+      charTimes: null,
+      loudnessLufs: -16,
+      peaks: [0.1, 0.9],
+      costUsd: 0.002,
+      createdAt: AT,
+    })
+
+    const copied = copyNarrationTakeInput(take, new Map([[SOURCE_LINE, TARGET_LINE]]))
+
+    expect(copied).toMatchObject({
+      lineId: TARGET_LINE,
+      mediaAssetId: take.mediaAssetId,
+      inSec: 0,
+      outSec: 1.8,
+      specHash: 'abc',
+      peaks: [0.1, 0.9],
+      costUsd: 0.002,
+      source: { type: 'copied', fromTakeId: take.id },
+    })
   })
 })

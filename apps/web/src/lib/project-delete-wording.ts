@@ -12,6 +12,7 @@ export const PROJECT_DELETE_LOSSES: readonly string[] = [
   '登録した楽曲と解析結果',
   'レンダリング結果',
   'このプロジェクトのキャラクター・ロケーション・ブランド資産',
+  '声と、ナレーションの原稿・作った声',
 ]
 
 export const PROJECT_DELETE_NOTE =

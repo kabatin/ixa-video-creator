@@ -1,7 +1,15 @@
 import { duplicationNotes, type DuplicateProjectRequest, type Project } from '@ixa/domain'
 import type { ProjectDuplicationDeps } from './deps.js'
 import { readDuplicationSource } from './read-source.js'
-import { createDuplicateProject, writeClips, writeConcept, writeLibrary, writeMusic } from './write-project.js'
+import {
+  createDuplicateProject,
+  writeClips,
+  writeConcept,
+  writeLibrary,
+  writeMusic,
+  writeNarration,
+  writeTextStyles,
+} from './write-project.js'
 import { writeShots } from './write-shots.js'
 
 /**
@@ -30,9 +38,27 @@ export const duplicateProject = async (
     await writeConcept(deps, project, snapshot.concept)
     await writeMusic(deps, project, snapshot)
     const library = await writeLibrary(deps, project, snapshot)
-    const { lyricLinksDropped } = await writeClips(deps, project, snapshot, items)
+    // 見た目 → 声 → ナレーション → テロップ の順。声はテロップの見た目を指し、テロップはナレーションの行を指す。
+    const styles = await writeTextStyles(deps, project, snapshot)
+    const { narrationLines, characterVoicesDropped } = await writeNarration(deps, project, snapshot, items, {
+      characters: library.characters,
+      styles,
+    })
+    const { lyricLinksDropped, narrationLinksDropped } = await writeClips(deps, project, snapshot, items, {
+      styles,
+      narrationLines,
+    })
     const { castDropped, locationDropped } = await writeShots(deps, project, snapshot, items, library)
-    return { project, notes: duplicationNotes({ castDropped, locationDropped, lyricLinksDropped }) }
+    return {
+      project,
+      notes: duplicationNotes({
+        castDropped,
+        locationDropped,
+        lyricLinksDropped,
+        narrationLinksDropped,
+        characterVoicesDropped,
+      }),
+    }
   } catch (error) {
     deps.logger.error(
       { err: error, sourceProjectId: source.id, projectId: project.id },

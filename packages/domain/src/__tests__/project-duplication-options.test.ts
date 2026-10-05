@@ -31,6 +31,11 @@ describe('missingRequirements', () => {
     }
   })
 
+  it('ナレーション（原稿・声の Take）には声が要る（ADR-0038）', () => {
+    expect(missingRequirements('narration', without('voices'))).toEqual(['voices'])
+    expect(missingRequirements('narration', all())).toEqual([])
+  })
+
   it('依存の無い項目は、何も要らない', () => {
     expect(missingRequirements('characters', new Set())).toEqual([])
     expect(missingRequirements('telops', new Set())).toEqual([])
@@ -42,6 +47,13 @@ describe('settleDuplicationItems', () => {
     const settled = settleDuplicationItems(without('shots'))
 
     expect([...settled].sort()).toEqual([...without('shots', 'storyboard', 'frames', 'takes')].sort())
+  })
+
+  it('声を外すと、ナレーションも外れる（ほかは残る）', () => {
+    const settled = settleDuplicationItems(without('voices'))
+
+    expect(settled.has('narration')).toBe(false)
+    expect(settled.has('telops')).toBe(true)
   })
 
   it('楽曲を外すと、歌詞の時刻も外れる（ほかは残る）', () => {

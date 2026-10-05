@@ -2,6 +2,7 @@ import { OpenAPIHono } from '@hono/zod-openapi'
 import {
   DUPLICATION_ITEMS,
   MediaAssetId,
+  VoiceJobId,
   MusicAnalysis,
   MusicAnalysisId,
   computeSpecHash,
@@ -14,9 +15,12 @@ import {
 import {
   aShot,
   aTake,
+  createInMemoryNarrationLineRepository,
+  createInMemoryNarrationTakeRepository,
   createInMemoryShotCharacterRepository,
   createInMemoryShotRepository,
   createInMemoryTakeRepository,
+  createInMemoryVoiceProfileRepository,
 } from '@ixa/generation/testing'
 import { describe, expect, it } from 'vitest'
 import { registerErrorHandlers, validationHook } from '../errors.js'
@@ -68,12 +72,19 @@ const seed = async () => {
   const takeA1: Take = aTake(shotA, 'a'.repeat(64), { index: 1, costUsd: 0.5, reviewStatus: 'warned', humanVerdict: 'rejected' })
   const takeA2: Take = aTake(shotA, 'b'.repeat(64), { index: 2, costUsd: 0.25, parentTakeId: takeA1.id, regenerationReason: '顔が崩れた' })
   const base = baseAppDeps()
+  // 声とナレーションの口は省略できる（繋いでいない環境がある）ので、テストでは実物を控えて使う。
+  const narration = {
+    voices: createInMemoryVoiceProfileRepository(),
+    narrationLines: createInMemoryNarrationLineRepository(),
+    narrationTakes: createInMemoryNarrationTakeRepository(),
+  }
   const deps: ProjectDuplicateRoutesDeps & typeof base = {
     ...base,
     projects: createInMemoryProjectRepository([source]),
     shots: createInMemoryShotRepository([{ ...shotA, selectedTakeId: takeA2.id, status: 'approved', lockedAt: new Date('2026-10-01T00:00:00.000Z') }, shotB]),
     takes: createInMemoryTakeRepository([takeA1, takeA2]),
     shotCharacters: createInMemoryShotCharacterRepository(),
+    ...narration,
     logger: createLogger('silent'),
   }
   await deps.takes.hide(takeA1.id, new Date())
@@ -105,6 +116,42 @@ const seed = async () => {
   })
   await deps.transitions.create({ projectId: source.id, fromShotId: shotA.id, toShotId: shotB.id, type: 'dissolve', durationSec: 0.5 })
 
+  // 声とナレーション（ADR-0038）。声は戦子の声で、テロップの見た目を持つ。行は 1 つで、声の Take を選んでいる。
+  const voice = await narration.voices.create({
+    projectId: source.id,
+    name: '戦子の声',
+    tool: 'macos_say',
+    voiceName: 'Kyoko',
+    characterId: character.id,
+    textStyleId: style.id,
+  })
+  const [narrationLine] = await narration.narrationLines.createMany([
+    { projectId: source.id, order: 0, text: '勝負の時が来た。', voiceProfileId: voice.id, startSec: 1.5 },
+  ])
+  const narrationTake = await narration.narrationTakes.create({
+    lineId: narrationLine!.id,
+    source: { type: 'generated', voiceJobId: newId(VoiceJobId), tool: 'macos_say', model: null, voiceName: 'Kyoko' },
+    mediaAssetId: newId(MediaAssetId),
+    inSec: 0,
+    outSec: 1.8,
+    spokenText: '勝負の時が来た。',
+    displayText: '勝負の時が来た。',
+    specHash: 'abc',
+    charTimes: null,
+    loudnessLufs: -16,
+    peaks: [0.2, 0.8],
+    costUsd: 0.002,
+  })
+  await narration.narrationLines.update(narrationLine!.id, { selectedTakeId: narrationTake.id })
+  await deps.timelineClips.create({
+    projectId: source.id,
+    track: 'TEXT',
+    startSec: 1.5,
+    durationSec: 1.8,
+    layer: 2,
+    content: { type: 'text', templateKey: 'plain', params: { text: '勝負の時が来た。', narrationLineId: narrationLine!.id } },
+  })
+
   const app = new OpenAPIHono({ defaultHook: validationHook })
   registerErrorHandlers(app, createLogger('silent'))
   app.route('/', projectDuplicateRoutes(deps))
@@ -114,7 +161,7 @@ const seed = async () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name, items }),
     })
-  return { deps, source, shotA, shotB, takeA1, takeA2, character, look, location, style, duplicate }
+  return { deps, narration, source, shotA, shotB, takeA1, takeA2, character, look, location, style, voice, narrationLine: narrationLine!, narrationTake, duplicate }
 }
 
 const shotsOf = async (deps: Awaited<ReturnType<typeof seed>>['deps'], projectId: string) =>
@@ -218,9 +265,13 @@ describe('POST /projects/:id/duplicate（一部だけ）', () => {
     const res = await f.duplicate(['telops'])
 
     const { project, notes } = ((await res.json()) as Ok<Duplicated>).data
-    expect(notes).toEqual(['作品の方針を持っていかなかったので、テロップ 1 件の歌詞との結び付きを外しました（文字は残っています）'])
+    // ナレーションも持っていかないので、ナレーションのテロップの結び付きも外れる（文字は残る）。
+    expect(notes).toEqual([
+      '作品の方針を持っていかなかったので、テロップ 1 件の歌詞との結び付きを外しました（文字は残っています）',
+      'ナレーションを持っていかなかったので、テロップ 1 件のナレーションとの結び付きを外しました（文字は残り、作り直しで消えません）',
+    ])
     const clips = await f.deps.timelineClips.findByProject(project.id as Project['id'])
-    expect(clips.map((clip) => clip.track)).toEqual(['TEXT'])
+    expect(clips.map((clip) => clip.track)).toEqual(['TEXT', 'TEXT'])
   })
 })
 
@@ -257,5 +308,62 @@ describe('POST /projects/:id/duplicate（断る）', () => {
     expect(res.status).toBe(500)
     const live = await f.deps.projects.findByWorkspace(f.source.workspaceId)
     expect(live.map((project) => project.id)).toEqual([f.source.id])
+  })
+})
+
+/**
+ * 声とナレーション（ADR-0038）。声は作品ごとなので写し、行は写した声を指す。
+ * 声の Take は同じ音を指したまま「写したもの」になり、ナレーションのテロップは写した行に付け替える。
+ */
+describe('POST /projects/:id/duplicate（声とナレーション）', () => {
+  const narrationOf = async (f: Awaited<ReturnType<typeof seed>>, projectId: string) => {
+    const lines = await f.narration.narrationLines.findByProject(projectId as Project['id'])
+    const takes = await f.narration.narrationTakes.findByLines(lines.map((line) => line.id))
+    const voices = await f.narration.voices.findByProject(projectId as Project['id'])
+    const clips = await f.deps.timelineClips.findByProject(projectId as Project['id'])
+    return { lines, takes, voices, clips }
+  }
+
+  it('声・行・声の Take を写し、キャラクター・見た目・行への結び付きを付け替える', async () => {
+    const f = await seed()
+
+    const res = await f.duplicate([...DUPLICATION_ITEMS])
+    const { project, notes } = ((await res.json()) as Ok<Duplicated>).data
+    const { lines, takes, voices, clips } = await narrationOf(f, project.id)
+
+    expect(notes).toEqual([])
+    const [voice] = voices
+    expect(voice?.id).not.toBe(f.voice.id)
+    expect(voice).toMatchObject({ name: '戦子の声', tool: 'macos_say', voiceName: 'Kyoko' })
+    expect(voice?.characterId).not.toBe(f.character.id)
+    expect(voice?.textStyleId).not.toBe(f.style.id)
+    expect(voice?.textStyleId).not.toBeNull()
+
+    const [line] = lines
+    expect(line?.id).not.toBe(f.narrationLine.id)
+    expect(line).toMatchObject({ text: '勝負の時が来た。', startSec: 1.5, voiceProfileId: voice?.id })
+
+    const [take] = takes
+    expect(take?.mediaAssetId).toBe(f.narrationTake.mediaAssetId)
+    expect(take?.source).toEqual({ type: 'copied', fromTakeId: f.narrationTake.id })
+    expect(line?.selectedTakeId).toBe(take?.id)
+
+    const telop = clips.find((clip) => clip.content.type === 'text' && clip.layer === 2)
+    expect(telop?.content.type === 'text' ? telop.content.params['narrationLineId'] : null).toBe(line?.id)
+  })
+
+  it('声を持っていかなければ、ナレーションも持っていかず、テロップの結び付きと人の声を外したと言う', async () => {
+    const f = await seed()
+
+    const res = await f.duplicate(DUPLICATION_ITEMS.filter((item) => item !== 'voices' && item !== 'narration'))
+    const { project, notes } = ((await res.json()) as Ok<Duplicated>).data
+    const { lines, voices, clips } = await narrationOf(f, project.id)
+
+    expect(voices).toEqual([])
+    expect(lines).toEqual([])
+    const telop = clips.find((clip) => clip.content.type === 'text' && clip.layer === 2)
+    expect(telop?.content.type === 'text' ? telop.content.params : null).toEqual({ text: '勝負の時が来た。' })
+    expect(notes).toContain('ナレーションを持っていかなかったので、テロップ 1 件のナレーションとの結び付きを外しました（文字は残り、作り直しで消えません）')
+    expect(notes).toContain('声を持っていかなかったので、キャラクター 1 人の声を外しました')
   })
 })

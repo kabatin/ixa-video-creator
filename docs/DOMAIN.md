@@ -40,6 +40,10 @@ Workspace
      │             │         └─ MediaAsset
      │             └─ Transition (次 Shot との間)
      ├─ TimelineClip (TEXT / VFX / SFX / OVERLAY トラック)
+     ├─ VoiceProfile (声。character_id で「誰の声か」)
+     ├─ NarrationLine ── NarrationTake ── MediaAsset (声の音)
+     ├─ VoiceJob (読む / 試しに読む / 文字起こし / 字の時刻)
+     ├─ ProjectAudioSettings (読み辞書・ダッキング・話している字の強調)
      └─ RenderJob ── MediaAsset (最終 MP4)
 
 MediaAsset は全エンティティから参照される共通の実体（すべてのファイル）。
@@ -680,6 +684,7 @@ VIDEO2   ← TimelineClip（オーバーレイ / インサート）
 VIDEO1   ← Shot の投影（TimelineClip を持たない）
 SFX      ← TimelineClip
 MUSIC    ← MusicTrack の投影
+ナレーション ← NarrationLine の投影（TimelineClip を持たない。ADR-0038）
 ```
 
 ```ts
@@ -713,9 +718,102 @@ type TimelineDocument = {
   video1: Array<{ shotId: ShotId; startSec; durationSec; mediaUrl: string; inSec: Seconds }>
   transitions: Transition[]
   clips: TimelineClip[]
-  audio: Array<{ mediaUrl: string; startSec: Seconds; volume: number }>
+  audio: Array<{
+    mediaUrl: string
+    startSec: Seconds
+    volume: number
+    role?: 'voice'              // 無ければ曲。声の区間で曲を下げる（ADR-0039）
+    fadeInSec?: Seconds         // 曲ごとのフェード。切り出しても途中からやり直さない
+    fadeOutSec?: Seconds
+  }>
+  ducking?: DuckingSettings     // ナレーションの間に曲を下げる強さ
 }
 ```
+
+---
+
+## 13.5 Narration / Voice（ADR-0038）
+
+歌詞の無い作品（予告・宣伝）で**言葉が映像の芯**になる。声は作品ごとに作り、原稿は 1 行 = 1 フレーズ。
+
+```ts
+type VoiceProfile = {
+  id: VoiceProfileId
+  projectId: ProjectId
+  name: string                      // 画面での呼び名（ナレーター・戦子の声）
+  tool: 'stub' | 'macos_say' | 'gemini_api' | 'elevenlabs'
+  model: string | null
+  voiceName: string                 // AI ごとの声の種類（Kyoko / Kore / ElevenLabs の声の ID）
+  styleNote: string                 // 声のイメージ（自然な文）
+  speed: number                     // 0.5〜2
+  volume: number
+  language: string                  // ja / en-US
+  tuning: { stability?; similarity?; style? }   // ElevenLabs だけ
+  textStyleId: TextStyleId | null   // この声のテロップの見た目
+  characterId: CharacterId | null   // 誰の声か。null はナレーター
+  createdAt: Date
+  updatedAt: Date
+}
+
+type NarrationLine = {
+  id: NarrationLineId
+  projectId: ProjectId
+  order: number                     // 原稿の並び
+  text: string                      // 表示（テロップに出す字）
+  reading: string | null            // 読み（AI に渡す字）。null は読み辞書から作る
+  voiceProfileId: VoiceProfileId | null
+  direction: string                 // この行だけの演出
+  startSec: Seconds | null          // タイムラインの位置。null はまだ置いていない
+  telop: boolean                    // 手でテロップを消した行は false（付け直さない）
+  selectedTakeId: NarrationTakeId | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+type NarrationTake = {               // 追記のみ。行が「選んだ Take」を指す
+  id: NarrationTakeId
+  lineId: NarrationLineId
+  index: number                      // 行の中の連番（1 から）
+  source:
+    | { type: 'generated'; voiceJobId: VoiceJobId; tool; model; voiceName }
+    | { type: 'recording'; voiceJobId: VoiceJobId }
+    | { type: 'copied'; fromTakeId: NarrationTakeId }   // 作品の複製（ADR-0037）
+  mediaAssetId: MediaAssetId
+  inSec: Seconds                     // 録音は 1 つのファイルの区間を行ごとに指す
+  outSec: Seconds
+  spokenText: string                 // 実際に読ませた字／聞き取った字
+  displayText: string                // 作ったときの表示（原稿を直したかを見る）
+  specHash: string | null            // 同じ生成かの印（AI の声だけ）
+  charTimes: Array<{ char; startSec; endSec }> | null
+  loudnessLufs: number | null
+  peaks: number[] | null             // 波形の点（0〜1）
+  costUsd: number
+  createdAt: Date
+}
+
+type VoiceJob = {                    // 読む / 試しに読む / 文字起こし / 字の時刻
+  id: VoiceJobId
+  projectId: ProjectId
+  kind: 'speak' | 'preview' | 'transcribe' | 'char_timing'
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  costUsd: number | null             // 費用の表示と予算に入れる
+  …
+}
+
+type ProjectAudioSettings = {
+  projectId: ProjectId
+  readingDictionary: Array<{ written: string; reading: string }>
+  ducking: DuckingSettings
+  telopHighlight: { enabled: boolean; color: string }
+}
+```
+
+**不変条件**
+
+- ナレーションのレーンは `NarrationLine.startSec` の投影。TimelineClip にしない（VIDEO1 と同じ考え）
+- ナレーションのテロップは**導かれるもの**。`params.narrationLineId` が付き、行から作り直される（`syncNarrationTelops` 1 か所）
+- 字の時刻は読みに付く。表示へ写し戻してからテロップに使う（字数が合わなければ使わない）
+- 声・文字起こしは**頼む前に予算を確かめる**。費用はジョブに持つ（Take には持たない）
 
 ---
 
@@ -732,6 +830,8 @@ type RenderJob = {
   progress: number                     // 0..1
   outputAssetId: MediaAssetId | null
   error: string | null
+  normalizeLoudness: boolean           // 書き出しの音量を -14 LUFS に揃えるか（既定 true。ADR-0039）
+  loudnessLufs: number | null          // 揃えた後に測った大きさ。揃えていない・音が無ければ null
   createdAt: Date
   finishedAt: Date | null
 }

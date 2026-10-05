@@ -13,6 +13,8 @@ export const DUPLICATION_ITEMS = [
   'music',
   'lyricTiming',
   'telops',
+  'voices',
+  'narration',
   'overlays',
   'characters',
   'locations',
@@ -32,6 +34,8 @@ export const DUPLICATION_ITEM_LABELS: Readonly<Record<DuplicationItem, string>> 
   music: '楽曲（解析・セクションも）',
   lyricTiming: '歌詞の時刻',
   telops: 'テロップ',
+  voices: '声',
+  narration: 'ナレーション（原稿・声の Take）',
   overlays: 'エフェクト・重ね素材・効果音',
   characters: 'キャラクター',
   locations: 'ロケーション',
@@ -46,12 +50,15 @@ export const DUPLICATION_ITEM_LABELS: Readonly<Record<DuplicationItem, string>> 
  * それを持っていくのに要る項目。
  * - 歌詞の時刻は、同じ曲（楽曲）と歌詞（作品の方針）が無いと意味を持たない
  * - 絵コンテ・絵・Take は Shot に付く
+ * - ナレーションの行は話す声を指すので、声が無いと「声が未定」の原稿だけになる（ADR-0038）
  */
 export const DUPLICATION_REQUIRES: Readonly<Record<DuplicationItem, readonly DuplicationItem[]>> = Object.freeze({
   concept: [],
   music: [],
   lyricTiming: ['music', 'concept'],
   telops: [],
+  voices: [],
+  narration: ['voices'],
   overlays: [],
   characters: [],
   locations: [],

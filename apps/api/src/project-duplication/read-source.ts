@@ -7,6 +7,8 @@ import {
   type Location,
   type MusicAnalysis,
   type MusicTrack,
+  type NarrationLine,
+  type NarrationTake,
   type Project,
   type Sequence,
   type Shot,
@@ -17,6 +19,7 @@ import {
   type TextStylePreset,
   type TimelineClip,
   type Transition,
+  type VoiceProfile,
 } from '@ixa/domain'
 import type { ProjectDuplicationDeps } from './deps.js'
 
@@ -54,6 +57,13 @@ export type DuplicationSource = {
   readonly sequences: readonly Sequence[]
   readonly shots: readonly SourceShot[]
   readonly transitions: readonly Transition[]
+  /**
+   * 声（ADR-0038）。**持っていかないときも読む**（キャラクターから何人分の声が落ちるかを知らせるため）。
+   * 繋いでいない環境では空。
+   */
+  readonly voices: readonly VoiceProfile[]
+  readonly narrationLines: readonly NarrationLine[]
+  readonly narrationTakes: readonly NarrationTake[]
 }
 
 const none = <T>(): Promise<readonly T[]> => Promise.resolve([])
@@ -97,6 +107,24 @@ const readShot = async (deps: ProjectDuplicationDeps, shot: Shot, items: Readonl
 const pickClips = (clips: readonly TimelineClip[], items: ReadonlySet<DuplicationItem>): readonly TimelineClip[] =>
   clips.filter((clip) => (isTelopClip(clip) ? items.has('telops') : items.has('overlays')))
 
+/** 声と原稿の行・声の Take。声を持っていかないときも、知らせのために声だけは読む。 */
+const readNarration = async (
+  deps: ProjectDuplicationDeps,
+  project: Project,
+  items: ReadonlySet<DuplicationItem>,
+): Promise<{
+  readonly voices: readonly VoiceProfile[]
+  readonly narrationLines: readonly NarrationLine[]
+  readonly narrationTakes: readonly NarrationTake[]
+}> => {
+  const wantVoices = items.has('voices') || items.has('characters')
+  const voices = wantVoices ? ((await deps.voices?.findByProject(project.id)) ?? []) : []
+  if (!items.has('narration')) return { voices, narrationLines: [], narrationTakes: [] }
+  const narrationLines = (await deps.narrationLines?.findByProject(project.id)) ?? []
+  const narrationTakes = (await deps.narrationTakes?.findByLines(narrationLines.map((line) => line.id))) ?? []
+  return { voices, narrationLines, narrationTakes }
+}
+
 export const readDuplicationSource = async (
   deps: ProjectDuplicationDeps,
   project: Project,
@@ -115,9 +143,11 @@ export const readDuplicationSource = async (
       items.has('shots') ? deps.shots.findByProject(project.id) : none<Shot>(),
       items.has('shots') ? deps.transitions.findByProject(project.id) : none<Transition>(),
     ])
+  const narration = await readNarration(deps, project, items)
   return {
     project,
     concept,
+    ...narration,
     tracks: await Promise.all(tracks.map((track) => readTrack(deps, track))),
     characters,
     locations,

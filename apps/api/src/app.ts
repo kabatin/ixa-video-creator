@@ -390,6 +390,8 @@ export const createApp = (deps: AppDeps) => {
     }),
   )
   // 作品を複製する（持っていく項目を選べる。ADR-0037）。
+  // 声とナレーション（ADR-0038）の口。繋いでいない環境では省く。
+  const narration = deps.narration
   app.route(
     '/',
     projectDuplicateRoutes({
@@ -409,6 +411,10 @@ export const createApp = (deps: AppDeps) => {
       shotReferences: deps.shotReferences,
       takes: deps.takes,
       transitions: deps.transitions,
+      // 声とナレーション（ADR-0038）。繋いでいない環境では持っていけない。
+      ...(narration === undefined
+        ? {}
+        : { voices: narration.voices, narrationLines: narration.lines, narrationTakes: narration.takes }),
       logger,
     }),
   )
@@ -466,7 +472,6 @@ export const createApp = (deps: AppDeps) => {
 
   app.route('/', transitionRoutes({ transitions: deps.transitions, shots: deps.shots, projects }))
   // ナレーションのテロップを手で消したら、その行を「テロップなし」にする（ADR-0038）。
-  const narration = deps.narration
   app.route(
     '/',
     clipRoutes({
