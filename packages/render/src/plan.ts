@@ -8,7 +8,7 @@ import type {
   Transition,
   TransitionType,
 } from '@ixa/domain'
-import { isDegradedTransition } from '@ixa/domain'
+import { duckingGainAt, fadeGainAt, isDegradedTransition, mergeVoiceSpans, type DuckingSettings, type VoiceSpan } from '@ixa/domain'
 import { letterboxFit, type FitRect } from './presets.js'
 import { frameRange, sourceOffsetFrames, totalFrames, type FrameRange } from './timing.js'
 
@@ -77,6 +77,15 @@ export type AudioPlan = {
   /** 音源内のシーク位置（`inSec` 由来。無ければ 0）。一部だけを書き出すとき、区間の頭に当たる音から鳴らす。 */
   readonly startFrom: number
   readonly volume: number
+  /** 曲か声か（ADR-0038）。声の間は曲を下げる。 */
+  readonly role: 'music' | 'voice'
+  /** タイムラインでの位置と長さ（秒）。フェードとダッキングを秒で引くのに使う。 */
+  readonly startSec: number
+  readonly durationSec: number
+  readonly fadeInSec: number
+  readonly fadeOutSec: number
+  /** 曲を下げる声の区間（まとめたもの・タイムラインの秒）と設定。下げない音は null。 */
+  readonly ducking: { readonly spans: readonly VoiceSpan[]; readonly settings: DuckingSettings } | null
 }
 
 /** 実装されておらず `cut` に縮退したトランジション。 */
@@ -181,13 +190,49 @@ const buildClips = (doc: TimelineDocument, baseZIndex: number): readonly ClipPla
     content: clip.content,
   }))
 
-const buildAudio = (doc: TimelineDocument): readonly AudioPlan[] =>
-  doc.audio.map((track) => ({
-    mediaUrl: track.mediaUrl,
-    range: frameRange(track.startSec, track.durationSec, doc.fps),
-    startFrom: sourceOffsetFrames(track.inSec ?? 0, doc.fps),
-    volume: track.volume,
-  }))
+/**
+ * 音の配置（ADR-0039）。曲には、声の区間（まとめたもの）とダッキングの設定を付ける。声は下げない。
+ * 描く側（Remotion・ffmpeg）は `audioVolumeAt` と同じ形で、1 コマごとに音量を引く。
+ */
+export const buildAudioPlans = (doc: TimelineDocument): readonly AudioPlan[] => {
+  const settings = doc.ducking?.enabled === true ? doc.ducking : null
+  const voiceSpans =
+    settings === null
+      ? []
+      : mergeVoiceSpans(
+          doc.audio.filter((track) => track.role === 'voice').map((track) => ({ startSec: track.startSec, endSec: track.startSec + track.durationSec })),
+          settings,
+        )
+  return doc.audio.map((track) => {
+    const role = track.role ?? 'music'
+    return {
+      mediaUrl: track.mediaUrl,
+      range: frameRange(track.startSec, track.durationSec, doc.fps),
+      startFrom: sourceOffsetFrames(track.inSec ?? 0, doc.fps),
+      volume: track.volume,
+      role,
+      startSec: track.startSec,
+      durationSec: track.durationSec,
+      fadeInSec: track.fadeInSec ?? 0,
+      fadeOutSec: track.fadeOutSec ?? 0,
+      ducking: role === 'music' && settings !== null && voiceSpans.length > 0 ? { spans: voiceSpans, settings } : null,
+    }
+  })
+}
+
+/** 音量が時刻で変わるか（フェードかダッキングがある）。変わらない音には一定の音量を渡す。 */
+export const hasDynamicVolume = (track: AudioPlan): boolean =>
+  track.fadeInSec > 0 || track.fadeOutSec > 0 || track.ducking !== null
+
+/** その時刻（タイムラインの秒）の音量。音量 × フェード × ダッキング。 */
+export const audioVolumeAt = (track: AudioPlan, sec: number): number => {
+  const fade =
+    track.fadeInSec > 0 || track.fadeOutSec > 0
+      ? fadeGainAt(sec, { startSec: track.startSec, durationSec: track.durationSec, fadeInSec: track.fadeInSec, fadeOutSec: track.fadeOutSec })
+      : 1
+  const duck = track.ducking === null ? 1 : duckingGainAt(sec, track.ducking.spans, track.ducking.settings)
+  return track.volume * fade * duck
+}
 
 const buildDegraded = (doc: TimelineDocument): readonly DegradedTransition[] =>
   doc.transitions
@@ -213,7 +258,7 @@ export const buildTimelinePlan = (doc: TimelineDocument, canvas: Resolution): Ti
     shots: buildShots(doc),
     dips: buildDips(doc, dipZIndex),
     clips: buildClips(doc, dipZIndex + 1),
-    audio: buildAudio(doc),
+    audio: buildAudioPlans(doc),
     degradedTransitions: buildDegraded(doc),
   }
 }

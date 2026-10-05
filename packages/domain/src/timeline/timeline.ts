@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { DuckingSettings } from '../audio/mix.js'
 import { MediaAssetId, ProjectId, ShotId, TimelineClipId } from '../common/ids.js'
 import { Resolution, Seconds } from '../common/time.js'
 import { Transition } from '../shot/shot.js'
@@ -141,7 +142,16 @@ export const TimelineDocument = z.object({
        * （制作者 2026-10-02「選択した Shot だけを動画として出力」）。省略可能にして version は 1 のまま。
        */
       inSec: Seconds.optional(),
+      /**
+       * 何の音か（ADR-0038）。**無ければ曲**（前からの書き出しの記録と同じ形）。声（ナレーション・セリフ）の間は曲を下げる。
+       */
+      role: z.enum(['music', 'voice']).optional(),
+      /** 頭と終わりのフェード（秒。ADR-0039）。無ければ 0。 */
+      fadeInSec: Seconds.optional(),
+      fadeOutSec: Seconds.optional(),
     }),
   ),
+  /** ナレーションの間に曲を下げる設定（ADR-0039）。無ければ下げない。 */
+  ducking: DuckingSettings.optional(),
 })
 export type TimelineDocument = z.infer<typeof TimelineDocument>

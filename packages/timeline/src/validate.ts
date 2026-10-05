@@ -35,6 +35,10 @@ export const TIMELINE_ISSUE_CODES = {
   textClipUnreadable: 'text_clip_unreadable',
   /** テロップの見た目（ADR-0028）が読めない。文字は既定の見た目で出る。 */
   textStyleUnreadable: 'text_style_unreadable',
+  /** ナレーション・セリフの声どうしが重なっている（ADR-0038）。掛け合いならそのままでよい。 */
+  voiceOverlap: 'voice_overlap',
+  /** 声が最後の Shot より後ろまで続く（映像が先に終わる）。 */
+  voiceOutOfRange: 'voice_out_of_range',
 } as const
 
 const sec = (value: number): string => `${value.toFixed(3)}s`
@@ -283,6 +287,38 @@ const checkClips = (source: TimelineSource): TimelineIssue[] => {
 }
 
 /**
+ * ナレーション・セリフの声（ADR-0038。warning）。声どうしの重なりと、最後の Shot より後ろまで続く声。
+ * Shot がまだ無い作品（曲なしで、声を先に置いた）では、はみ出しは言わない。
+ */
+const checkVoices = (source: TimelineSource): TimelineIssue[] => {
+  const voices = [...(source.voices ?? [])].sort((a, b) => a.startSec - b.startSec)
+  const overlaps = voices.flatMap((voice, index) => {
+    const next = voices[index + 1]
+    return next !== undefined && next.startSec < voice.startSec + voice.durationSec - TIME_EPSILON
+      ? [
+          {
+            severity: 'warning' as const,
+            code: TIMELINE_ISSUE_CODES.voiceOverlap,
+            message: `ナレーションが ${sec(next.startSec)} から重なっている（掛け合いでなければ、行の位置を直す）`,
+          },
+        ]
+      : []
+  })
+  const programEnd = shotsEndSec(source.shots)
+  const outOfRange =
+    source.shots.length === 0
+      ? []
+      : voices
+          .filter((voice) => voice.startSec + voice.durationSec > programEnd + TIME_EPSILON)
+          .map((voice) => ({
+            severity: 'warning' as const,
+            code: TIMELINE_ISSUE_CODES.voiceOutOfRange,
+            message: `ナレーションが ${sec(voice.startSec + voice.durationSec)} まで続き、Shot の終端 ${sec(programEnd)} をはみ出している`,
+          }))
+  return [...overlaps, ...outOfRange]
+}
+
+/**
  * 中身を読めないテロップ（warning）。
  *
  * **書き出すと赤いプレースホルダになる。** レンダラは読めない指定を黙って
@@ -348,5 +384,6 @@ export const validateTimeline = (source: TimelineSource): TimelineIssue[] => {
     ...checkTakeShort(source, sorted),
     ...checkClips(source),
     ...checkTextClips(source),
+    ...checkVoices(source),
   ]
 }

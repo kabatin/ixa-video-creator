@@ -11,6 +11,7 @@ import {
   TimelineDocument as TimelineDocumentSchema,
   alignBoundary,
   pickMasterTrack,
+  type DuckingSettings,
   type MediaAsset,
   type MediaAssetId,
   type Project,
@@ -39,6 +40,7 @@ import {
 import { manualStartFrameOf, type StartFrameReferences } from '@ixa/generation'
 import type { ObjectStorage } from '@ixa/storage'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
+import type { NarrationDeps } from '../narration/deps.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
 import {
   editBatchEntry,
@@ -78,6 +80,38 @@ export type TimelineRoutesDeps = {
   /** 絵コンテの画像（最初のフレーム）。Take が無い Shot はこれを映す（サムネと同じ引き方）。 */
   shotReferences: Pick<StartFrameReferences, 'findByShot'>
   storage: ObjectStorage
+  /** ナレーション・セリフ（ADR-0038）。無ければ声を載せない（テストの多くは要らない）。 */
+  narration?: Pick<NarrationDeps, 'voices' | 'lines' | 'takes' | 'audioSettings'>
+}
+
+type PlacedVoice = {
+  readonly mediaAssetId: MediaAssetId
+  readonly startSec: number
+  readonly durationSec: number
+  readonly inSec: number
+  readonly volume: number
+}
+
+/** 置いて声を選んだ行の声と、ダッキングの設定。ナレーションの口が無ければ空。 */
+const loadPlacedVoices = async (
+  narration: TimelineRoutesDeps['narration'],
+  project: Project,
+): Promise<{ readonly voices: readonly PlacedVoice[]; readonly ducking: DuckingSettings | undefined }> => {
+  if (narration === undefined) return { voices: [], ducking: undefined }
+  const [lines, profiles, settings] = await Promise.all([
+    narration.lines.findByProject(project.id),
+    narration.voices.findByProject(project.id),
+    narration.audioSettings.get(project.id),
+  ])
+  const placed = lines.filter((line) => line.startSec !== null && line.selectedTakeId !== null)
+  const takes = await narration.takes.findByLines(placed.map((line) => line.id))
+  const voices = placed.flatMap((line) => {
+    const take = takes.find((candidate) => candidate.id === line.selectedTakeId)
+    if (take === undefined || line.startSec === null) return []
+    const volume = profiles.find((profile) => profile.id === line.voiceProfileId)?.volume ?? 1
+    return [{ mediaAssetId: take.mediaAssetId, startSec: line.startSec, durationSec: take.outSec - take.inSec, inSec: take.inSec, volume }]
+  })
+  return { voices, ducking: settings.ducking }
 }
 
 /** 解決済みメディア 1 件。署名付き URL は保持するだけで DB へは書かない。 */
@@ -183,11 +217,13 @@ export const loadTimelineSource = async (
 
   const shotAssetIds = await resolveShotAssets(deps.takes, shots)
   const stillAssetIds = await resolveShotStills(deps.shotReferences, shots, shotAssetIds)
+  const placedVoices = await loadPlacedVoices(deps.narration, project)
   const media = await resolveMediaAssets(deps, [
     ...shotAssetIds.values(),
     ...stillAssetIds.values(),
     ...clipMediaAssetIds(clips),
     ...tracks.map((track) => track.mediaAssetId),
+    ...placedVoices.voices.map((voice) => voice.mediaAssetId),
   ])
 
   const musicTracks: TimelineMusicTrack[] = tracks.flatMap((track) => {
@@ -210,6 +246,13 @@ export const loadTimelineSource = async (
     transitions,
     clips,
     musicTracks,
+    voices: placedVoices.voices.flatMap((voice) => {
+      const resolved = media.get(voice.mediaAssetId)
+      return resolved === undefined
+        ? []
+        : [{ mediaUrl: resolved.url, startSec: voice.startSec, durationSec: voice.durationSec, inSec: voice.inSec, volume: voice.volume }]
+    }),
+    ...(placedVoices.ducking === undefined ? {} : { ducking: placedVoices.ducking }),
     resolveShotMedia: (shot) => {
       const assetId = shotAssetIds.get(shot.id)
       return assetId === undefined ? undefined : media.get(assetId)?.url

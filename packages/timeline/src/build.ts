@@ -1,4 +1,5 @@
 import type {
+  DuckingSettings,
   MediaAssetId,
   Project,
   RenderableClip,
@@ -21,6 +22,19 @@ export type TimelineMusicTrack = {
 }
 
 /**
+ * ナレーション・セリフの 1 行の声の投影（ADR-0038）。行の位置に、選んだ Take の音を置く。
+ * 録音の Take は 1 つの音の区間を指すので、区間の頭（`inSec`）も渡す。
+ */
+export type TimelineVoice = {
+  readonly mediaUrl: string
+  readonly startSec: Seconds
+  readonly durationSec: Seconds
+  /** 音のファイルの中の区間の頭（秒）。 */
+  readonly inSec: Seconds
+  readonly volume: number
+}
+
+/**
  * DB から読んだ素材。`TimelineDocument` を組み立てるのに必要なものだけを持つ。
  * この型は IO を持たない。メディア URL の解決は呼び出し側が関数として渡す。
  */
@@ -30,6 +44,10 @@ export type TimelineSource = {
   readonly transitions: readonly Transition[]
   readonly clips: readonly TimelineClip[]
   readonly musicTracks: readonly TimelineMusicTrack[]
+  /** ナレーション・セリフの声（ADR-0038）。置いて声を選んだ行だけ。無ければ無し。 */
+  readonly voices?: readonly TimelineVoice[]
+  /** ナレーションの間に曲を下げる設定（ADR-0039）。無ければ下げない。 */
+  readonly ducking?: DuckingSettings
   /** Shot の採用 Take のメディア URL を引く。未生成の Shot は undefined を返してよい。 */
   readonly resolveShotMedia: (shot: Shot) => string | undefined
   /**
@@ -108,7 +126,9 @@ export const timelineDurationSec = (source: TimelineSource): Seconds => {
     (latest, track) => Math.max(latest, track.startSec + track.durationSec),
     0,
   )
-  return Math.max(shotsEndSec(source.shots), clipsEndSec(source.clips), musicEnd)
+  // 声も終わりで尺に効く（曲も Shot も無い作品でも、ナレーションが最後まで鳴る）。
+  const voiceEnd = (source.voices ?? []).reduce((latest, voice) => Math.max(latest, voice.startSec + voice.durationSec), 0)
+  return Math.max(shotsEndSec(source.shots), clipsEndSec(source.clips), musicEnd, voiceEnd)
 }
 
 /**
@@ -166,10 +186,21 @@ export const buildTimelineDocument = (source: TimelineSource): TimelineDocument 
   video1: buildVideo1(source),
   transitions: [...source.transitions],
   clips: sortClips(source.clips).map((clip) => toRenderableClip(clip, source.resolveClipMedia)),
-  audio: source.musicTracks.map((track) => ({
-    mediaUrl: track.mediaUrl,
-    startSec: track.startSec,
-    durationSec: track.durationSec,
-    volume: track.volume,
-  })),
+  audio: [
+    ...source.musicTracks.map((track) => ({
+      mediaUrl: track.mediaUrl,
+      startSec: track.startSec,
+      durationSec: track.durationSec,
+      volume: track.volume,
+    })),
+    ...(source.voices ?? []).map((voice) => ({
+      mediaUrl: voice.mediaUrl,
+      startSec: voice.startSec,
+      durationSec: voice.durationSec,
+      volume: voice.volume,
+      inSec: voice.inSec,
+      role: 'voice' as const,
+    })),
+  ],
+  ...(source.ducking === undefined ? {} : { ducking: { ...source.ducking } }),
 })

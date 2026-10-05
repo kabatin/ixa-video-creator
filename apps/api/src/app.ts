@@ -349,6 +349,8 @@ export const createApp = (deps: AppDeps) => {
     mediaAssets,
     shotReferences: deps.shotReferences,
     storage,
+    // ナレーション（ADR-0038）。書き出しとプレビューに声を載せる。
+    ...(deps.narration === undefined ? {} : { narration: deps.narration }),
   }
 
   app.route(

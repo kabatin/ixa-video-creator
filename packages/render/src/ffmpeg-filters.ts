@@ -1,4 +1,6 @@
 import type { RenderPreset, TimelineDocument } from '@ixa/domain'
+import { volumeExpression } from './audio-expr.js'
+import { buildAudioPlans } from './plan.js'
 import { PRESET_SETTINGS } from './presets.js'
 
 /** ffmpeg のフィルタ式に指数表記を渡さない。秒は固定小数で書く。 */
@@ -72,12 +74,17 @@ const audioFilters = (
 ): { readonly filters: readonly string[]; readonly label: string | null } => {
   if (doc.audio.length === 0) return { filters: [], label: null }
 
+  // フェードとダッキング（ADR-0039）は Remotion と同じ配置表から、同じ形の式にする。
+  const plans = buildAudioPlans(doc)
   const filters = doc.audio.map((track, index) => {
     const input = firstAudioInput + index
     const delay = ms(track.startSec)
+    const plan = plans[index]
+    const expression = plan === undefined ? null : volumeExpression(plan)
+    const volume = expression === null ? `volume=${track.volume.toFixed(4)}` : `volume='${expression}':eval=frame`
     return (
       `[${input}:a]atrim=start=${sec(track.inSec ?? 0)}:duration=${sec(track.durationSec)},asetpts=PTS-STARTPTS,` +
-      `volume=${track.volume.toFixed(4)},adelay=${delay}:all=1[a${index}]`
+      `${volume},adelay=${delay}:all=1[a${index}]`
     )
   })
 

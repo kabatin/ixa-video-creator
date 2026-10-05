@@ -12,7 +12,9 @@ import {
   useRemotionEnvironment,
 } from 'remotion'
 import {
+  audioVolumeAt,
   buildTimelinePlan,
+  hasDynamicVolume,
   type AudioPlan,
   type ClipPlan,
   type DipPlan,
@@ -114,7 +116,8 @@ export const ClipMedia: React.FC<{ content: MediaContent; fps: number; video: Fi
     return <Img src={content.mediaUrl} style={fitStyle(video)} />
   }
   if (content.kind === 'audio') {
-    return <Audio src={content.mediaUrl} volume={content.volume} />
+    // 頭を切った効果音は、切った位置から鳴らす（以前は渡しておらず、頭から鳴っていた）。
+    return <Audio src={content.mediaUrl} volume={content.volume} startFrom={sourceOffsetFrames(content.inSec, fps)} />
   }
   return (
     <OffthreadVideo
@@ -205,9 +208,17 @@ export const ClipBody: React.FC<{ clip: ClipPlan; fps: number; video: FitRect }>
   )
 }
 
-const AudioTrack: React.FC<{ track: AudioPlan }> = ({ track }) => (
+/**
+ * 音 1 本。フェードやダッキングがあれば、1 コマごとの音量を渡す（ADR-0039。`audioVolumeAt` と同じ形で、
+ * プレビューと書き出しが同じ音になる）。Remotion はシーケンスの頭からのコマを渡すので、タイムラインの秒に直す。
+ */
+export const AudioTrack: React.FC<{ track: AudioPlan; fps: number }> = ({ track, fps }) => (
   <Sequence from={track.range.from} durationInFrames={track.range.durationInFrames} layout="none">
-    <Audio src={track.mediaUrl} volume={track.volume} startFrom={track.startFrom} />
+    <Audio
+      src={track.mediaUrl}
+      volume={hasDynamicVolume(track) ? (frame: number) => audioVolumeAt(track, (track.range.from + frame) / fps) : track.volume}
+      startFrom={track.startFrom}
+    />
   </Sequence>
 )
 
@@ -325,7 +336,7 @@ export const timelineLayers = (plan: TimelinePlan, frame: number | null): ReactN
       )}
 
       {plan.audio.map((track, index) => (
-        <AudioTrack key={`${String(index)}:${track.mediaUrl}:${track.range.from}`} track={track} />
+        <AudioTrack key={`${String(index)}:${track.mediaUrl}:${track.range.from}`} track={track} fps={plan.fps} />
       ))}
     </>
   )
