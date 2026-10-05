@@ -1049,6 +1049,11 @@ storyboard_draft_items       (Shot ごとの案。中身は追記のみ。動く
 shot_edit_batches            (一括編集の記録と取り消し。中身は追記のみ。動くのは undone_at だけ)
 render_jobs                  (JSONB: timeline_snapshot)
 ai_settings                  (使う AI。この環境に 1 行だけ。無ければ環境変数が初期値 / ADR-0032)
+voice_profiles               (声。ナレーター・キャラクターの声 / ADR-0038)
+narration_lines              (ナレーション・セリフの原稿の行。位置（秒）を自分で持つ / ADR-0038)
+narration_takes              (行の声の Take。追記のみ。後から変わるのは char_times だけ / ADR-0038)
+voice_jobs                   (声・文字起こしのジョブ。掛かった額を持つ。追記のみ / ADR-0038)
+project_audio_settings       (作品ごとの読み辞書とダッキング。無ければ既定 / ADR-0038)
 ```
 
 ### 規約

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ImageGenerationJobId, MediaAssetId, ProjectId, RenderJobId, TakeId, WorkspaceId } from '../common/ids.js'
+import { ImageGenerationJobId, MediaAssetId, ProjectId, RenderJobId, TakeId, VoiceJobId, WorkspaceId } from '../common/ids.js'
 import { Seconds } from '../common/time.js'
 
 export const MediaKind = z.enum(['image', 'video', 'audio', 'font', 'lut', 'other'])
@@ -27,6 +27,8 @@ export const MediaOrigin = z.discriminatedUnion('type', [
   z.object({ type: z.literal('generated'), takeId: TakeId }),
   /** 絵コンテの画像（ADR-0029）。Take ではないので `generated` と分ける。 */
   z.object({ type: z.literal('generated_image'), imageJobId: ImageGenerationJobId }),
+  /** AI で作った声（ADR-0038）。Take ではないので `generated` と分ける（声の Take は narration_takes が指す）。 */
+  z.object({ type: z.literal('generated_voice'), voiceJobId: VoiceJobId }),
   z.object({ type: z.literal('rendered'), renderJobId: RenderJobId }),
   z.object({ type: z.literal('derived'), sourceAssetId: MediaAssetId, operation: z.string() }),
 ])

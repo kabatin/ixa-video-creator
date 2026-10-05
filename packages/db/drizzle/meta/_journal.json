@@ -190,6 +190,13 @@
       "when": 1791182232954,
       "tag": "0026_ai_settings_voice",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1791183760985,
+      "tag": "0027_narration",
+      "breakpoints": true
     }
   ]
 }

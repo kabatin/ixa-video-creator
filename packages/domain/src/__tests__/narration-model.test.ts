@@ -198,12 +198,14 @@ describe('voiceJobViolation', () => {
     voiceProfileId: newId(VoiceProfileId),
     inputMediaAssetId: null,
     resultMediaAssetId: null,
+    placeAtSec: null,
     tool: 'macos_say',
     model: null,
     spec: voiceSpecOf(aVoice({ tool: 'macos_say', voiceName: 'Kyoko', model: null }), aLine(), 'すすめ'),
     status: 'queued',
     costUsd: null,
     error: null,
+    providerRecord: null,
     queuedAt: NOW,
     startedAt: null,
     finishedAt: null,
@@ -219,8 +221,11 @@ describe('voiceJobViolation', () => {
     expect(voiceJobViolation({ ...base, kind: 'preview', lineId: null })).toBeNull()
   })
 
-  it('文字起こし（transcribe）は入れた音が要る', () => {
-    expect(voiceJobViolation({ ...base, kind: 'transcribe', lineId: null, spec: null, voiceProfileId: null })).toMatch(/音/)
+  it('文字起こし（transcribe）は入れた音と、置く位置が要る', () => {
+    const transcribe = { ...base, kind: 'transcribe' as const, lineId: null, spec: null, voiceProfileId: null }
+    expect(voiceJobViolation(transcribe)).toMatch(/音/)
+    expect(voiceJobViolation({ ...transcribe, inputMediaAssetId: newId(MediaAssetId) })).toMatch(/位置/)
+    expect(voiceJobViolation({ ...transcribe, inputMediaAssetId: newId(MediaAssetId), placeAtSec: 0 })).toBeNull()
   })
 
   it('字の時刻を取る（char_timing）は Take が要る', () => {

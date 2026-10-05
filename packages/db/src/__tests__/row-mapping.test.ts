@@ -51,6 +51,14 @@ const SCHEMA_SOURCES = readdirSync(SCHEMA_DIR)
 const INTERNAL_COLUMNS = new Set(['deletedAt'])
 
 /**
+ * そのリポジトリだけ写さない列。全体の例外に入れると、ほかの表で写し忘れても気づけなくなるので分ける。
+ * - 作品の音の設定（ADR-0038）: 行が無い作品は既定を返すので、更新した時刻は Domain に持たない
+ */
+const INTERNAL_COLUMNS_BY_FILE: Readonly<Record<string, readonly string[]>> = {
+  'project-audio-settings-repository.ts': ['updatedAt'],
+}
+
+/**
  * 変換関数を必ず見つけられること自体を検査する対象。
  *
  * 見つからないリポジトリは黙って読み飛ばす作りなので、
@@ -64,6 +72,11 @@ const MUST_BE_INSPECTED = [
   'shot-repository.ts',
   'project-repository.ts',
   'edit-batch-repository.ts',
+  'voice-profile-repository.ts',
+  'narration-line-repository.ts',
+  'narration-take-repository.ts',
+  'voice-job-repository.ts',
+  'project-audio-settings-repository.ts',
 ] as const
 
 describe('row → domain 変換が列を落としていない', () => {
@@ -103,7 +116,8 @@ describe('row → domain 変換が列を落としていない', () => {
       expect(columns, `${file} のテーブル ${tableMatch[1]} の列を読めません`).not.toBeNull()
       if (columns === null) return
 
-      const missing = [...columns].filter((c) => !mapped.has(c) && !INTERNAL_COLUMNS.has(c))
+      const internal = new Set([...INTERNAL_COLUMNS, ...(INTERNAL_COLUMNS_BY_FILE[file] ?? [])])
+      const missing = [...columns].filter((c) => !mapped.has(c) && !internal.has(c))
       expect(missing, `${file} が写していない列: ${missing.join(', ')}`).toEqual([])
     })
   }

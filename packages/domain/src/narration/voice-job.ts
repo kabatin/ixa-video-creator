@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { MediaAssetId, NarrationLineId, NarrationTakeId, ProjectId, VoiceJobId, VoiceProfileId } from '../common/ids.js'
+import { Seconds } from '../common/time.js'
 import { VoiceSpec } from './voice-spec.js'
 
 /**
@@ -38,6 +39,8 @@ export const VoiceJob = z.object({
   inputMediaAssetId: MediaAssetId.nullable(),
   /** できた音（試しに読む）。 */
   resultMediaAssetId: MediaAssetId.nullable(),
+  /** 録音を置く位置（文字起こし。タイムラインの秒）。ほかの種類では null。 */
+  placeAtSec: Seconds.nullable(),
   /** 使う AI（声または文字起こしの AI）。 */
   tool: z.string().min(1),
   model: z.string().nullable(),
@@ -46,6 +49,8 @@ export const VoiceJob = z.object({
   /** 実際に掛かった額。終わるまで null。 */
   costUsd: z.number().nonnegative().nullable(),
   error: VoiceJobError.nullable(),
+  /** 調べるための記録（使った量・モデル）。鍵と原稿は入れない。 */
+  providerRecord: z.record(z.unknown()).nullable(),
   queuedAt: z.date(),
   startedAt: z.date().nullable(),
   finishedAt: z.date().nullable(),
@@ -63,7 +68,8 @@ export const voiceJobViolation = (job: VoiceJob): string | null => {
       if (job.voiceProfileId === null) return '声がありません'
       return job.spec === null ? '声の指定がありません' : null
     case 'transcribe':
-      return job.inputMediaAssetId === null ? '文字起こしする音がありません' : null
+      if (job.inputMediaAssetId === null) return '文字起こしする音がありません'
+      return job.placeAtSec === null ? '録音を置く位置がありません' : null
     case 'char_timing':
       if (job.takeId === null) return '字の時刻を取る Take がありません'
       return job.inputMediaAssetId === null ? '字の時刻を取る音がありません' : null
