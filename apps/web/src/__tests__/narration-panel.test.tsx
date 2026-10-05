@@ -97,7 +97,7 @@ describe('NarrationPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '使う' }))
     expect(box).toHaveValue('勝負の時が来た。\n進め、戦子ちゃん！')
-    const [, body] = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/assist')) ?? []
+    const [, body] = fetchMock.mock.calls.find(([url]) => typeof url === 'string' && url.endsWith('/assist')) ?? []
     expect(JSON.parse(typeof body?.body === 'string' ? body.body : '{}')).toMatchObject({ field: 'narration_script' })
   })
 
