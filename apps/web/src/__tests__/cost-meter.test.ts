@@ -237,6 +237,21 @@ describe('Take 以外で払った額', () => {
     expect(view.otherRunsNote).toContain('レビュー')
   })
 
+  it('声と文字起こし（ナレーション）も名前で出す', () => {
+    const view = buildCostMeterView(
+      meter({
+        otherRuns: [
+          { kind: 'voice', runCount: 4, totalUsd: 0.31 },
+          { kind: 'transcribe', runCount: 1, totalUsd: 0.05 },
+        ],
+      }),
+    )
+
+    expect(view.otherRunsNote).toContain('声')
+    expect(view.otherRunsNote).toContain('文字起こし')
+    expect(view.otherRunsNote).not.toContain('transcribe')
+  })
+
   /** 知らない種類でも黙って消さない。符号のまま出す方が、消えるよりよい。 */
   it('知らない種類は符号のまま出す', () => {
     const view = buildCostMeterView(

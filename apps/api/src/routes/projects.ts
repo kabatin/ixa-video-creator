@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { MediaAssetRepository, ProjectRepository, ShotRepository, TakeRepository } from '@ixa/db'
+import type { MediaAssetRepository, ProjectRepository, ShotRepository, TakeRepository, VoiceJobRepository } from '@ixa/db'
 import {
   CreateProjectInput as CreateProjectInputSchema,
   Project as ProjectSchema,
@@ -11,6 +11,7 @@ import {
   countsAsSpend,
   lyricCuesProblem,
   lyricLines,
+  voiceRunCosts,
   type CostMeter,
   type MediaAssetId,
   type Project,
@@ -257,6 +258,8 @@ export type ProjectRoutesDeps = {
       projectId: ProjectId,
     ): Promise<{ readonly runCount: number; readonly totalUsd: number }>
   }
+  /** 声・文字起こしの額（ナレーション。ADR-0038）。ナレーションが無い環境では省く。 */
+  voiceJobs?: Pick<VoiceJobRepository, 'costByKind'>
   /**
    * スタブ Provider の ID。**app 層が渡す。**
    *
@@ -322,6 +325,7 @@ export const projectRoutes = ({
   takes,
   storyboardDrafts,
   reviews,
+  voiceJobs,
   stubProviderIds,
 }: ProjectRoutesDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })
@@ -377,13 +381,14 @@ export const projectRoutes = ({
       //
       // 一方 Shot ごとの内訳は行として出せないので、生きている Shot だけに絞り、
       // 溢れた分は `unlistedShots` に残す（捨てない）。
-      const [projectTakes, liveShots, draftRuns, reviewCost] = await Promise.all([
+      const [projectTakes, liveShots, draftRuns, reviewCost, voiceCosts] = await Promise.all([
         takes.findByProject(projectId),
         shots.findByProject(projectId),
         // **生成だけが金を使うわけではない。** 下書きとレビューの実行費も数える。
         // 数えないと予算が実際より軽く見える（実際に下書き 1 回で $0.38 払った）。
         storyboardDrafts.findRunsByProject(projectId),
         reviews.sumCostByProject(projectId),
+        voiceJobs?.costByKind(projectId) ?? Promise.resolve([]),
       ])
 
       const meter = buildCostMeter({
@@ -403,6 +408,7 @@ export const projectRoutes = ({
             totalUsd: draftRuns.reduce((total, run) => total + run.costUsd, 0),
           },
           { kind: 'review', runCount: reviewCost.runCount, totalUsd: reviewCost.totalUsd },
+          ...voiceRunCosts(voiceCosts),
         ],
       })
 

@@ -230,6 +230,7 @@ export const createApp = (deps: AppDeps) => {
       takes: deps.takes,
       storyboardDrafts: deps.storyboardDrafts,
       reviews: deps.reviews,
+      ...(deps.narration === undefined ? {} : { voiceJobs: deps.narration.voiceJobs }),
       stubProviderIds: [...STUB_PROVIDER_IDS],
     }),
   )

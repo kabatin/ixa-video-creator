@@ -188,6 +188,16 @@ export const createInMemoryVoiceJobRepository = (): VoiceJobRepository & { reado
         ...(outcome.resultMediaAssetId === undefined ? {} : { resultMediaAssetId: outcome.resultMediaAssetId }),
       }),
     markFailed: (id, error, costUsd) => replace(id, { status: 'failed', finishedAt: new Date(), error, costUsd }),
+    costByKind: (projectId) => {
+      const done = store.filter((job) => job.projectId === projectId && job.costUsd !== null)
+      const kinds = [...new Set(done.map((job) => job.kind))]
+      return Promise.resolve(
+        kinds.map((kind) => {
+          const mine = done.filter((job) => job.kind === kind)
+          return { kind, runCount: mine.length, totalUsd: mine.reduce((total, job) => total + (job.costUsd ?? 0), 0) }
+        }),
+      )
+    },
     sumCostByProject: (projectId) =>
       Promise.resolve(store.filter((job) => job.projectId === projectId).reduce((sum, job) => sum + (job.costUsd ?? 0), 0)),
   }

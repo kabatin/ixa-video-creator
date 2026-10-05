@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, ne, sum } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, ne, sum } from 'drizzle-orm'
 import {
   VoiceJob as VoiceJobSchema,
   VoiceJobId as VoiceJobIdSchema,
@@ -11,6 +11,7 @@ import {
   type VoiceJob,
   type VoiceJobError,
   type VoiceJobId,
+  type VoiceJobKind,
   type VoiceProfileId,
   type VoiceSpec,
 } from '@ixa/domain'
@@ -72,6 +73,8 @@ export type VoiceJobRepository = {
   markFailed(id: VoiceJobId, error: VoiceJobError, costUsd: number | null): Promise<VoiceJob>
   /** 作品で声・文字起こしに掛かった額の合計（費用の表示と予算に入れる）。 */
   sumCostByProject(projectId: ProjectId): Promise<number>
+  /** 種類ごとの額と回数（費用の表示の内訳。額が付いた＝終わったジョブだけ数える）。 */
+  costByKind(projectId: ProjectId): Promise<readonly { readonly kind: VoiceJobKind; readonly runCount: number; readonly totalUsd: number }[]>
 }
 
 /** row → Domain。種類に要るものが無い行は、黙って読み替えず失敗する。 */
@@ -196,6 +199,15 @@ export const createVoiceJobRepository = (db: DbClient): VoiceJobRepository => {
       }),
 
     markFailed: (id, error, costUsd) => transition(id, { status: 'failed', finishedAt: new Date(), error, costUsd }),
+
+    async costByKind(projectId) {
+      const rows = await db
+        .select({ kind: voiceJobs.kind, runCount: count(voiceJobs.costUsd), total: sum(voiceJobs.costUsd) })
+        .from(voiceJobs)
+        .where(eq(voiceJobs.projectId, projectId))
+        .groupBy(voiceJobs.kind)
+      return rows.map((row) => ({ kind: row.kind, runCount: row.runCount, totalUsd: Number(row.total ?? 0) }))
+    },
 
     async sumCostByProject(projectId) {
       const [row] = await db

@@ -1,3 +1,6 @@
+import type { OtherRunCost } from '../generation/cost-meter.js'
+import type { VoiceJobKind } from './voice-job.js'
+
 /**
  * 声・文字起こしの費用の見積もり（ADR-0038）。頼む前に予算を確かめるのに使う。実際の額はジョブが終わってから保存する。
  *
@@ -66,3 +69,21 @@ export const voiceCostRules = (input: {
   elevenLabsTts: (chars: number): number => (chars / 1000) * input.elevenLabsUsdPer1kChars,
   transcribe: (tool: string, durationSec: number): number => estimateTranscribeCostUsd({ tool, durationSec }),
 })
+
+/** ジョブの種類 → 費用の表示の種類。読む・試しに読むは「声」、録音・字の時刻は「文字起こし」。 */
+const RUN_KIND: Readonly<Record<VoiceJobKind, 'voice' | 'transcribe'>> = {
+  speak: 'voice',
+  preview: 'voice',
+  transcribe: 'transcribe',
+  char_timing: 'transcribe',
+}
+
+/** 声のジョブの額（種類ごと）を、費用の表示の「声」「文字起こし」にまとめる。1 度も回していない種類は並べない。 */
+export const voiceRunCosts = (
+  rows: readonly { readonly kind: VoiceJobKind; readonly runCount: number; readonly totalUsd: number }[],
+): readonly OtherRunCost[] =>
+  (['voice', 'transcribe'] as const).flatMap((kind) => {
+    const mine = rows.filter((row) => RUN_KIND[row.kind] === kind)
+    const runCount = mine.reduce((total, row) => total + row.runCount, 0)
+    return runCount === 0 ? [] : [{ kind, runCount, totalUsd: mine.reduce((total, row) => total + row.totalUsd, 0) }]
+  })

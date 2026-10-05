@@ -1,5 +1,5 @@
 import { ProviderId as ProviderIdSchema, newId, ProjectId as ProjectIdSchema, TakeId as TakeIdSchema } from '@ixa/domain'
-import type { Project, Shot, Take } from '@ixa/domain'
+import type { Project, Shot, Take, VoiceJobKind } from '@ixa/domain'
 import {
   aShot,
   aTake,
@@ -40,6 +40,8 @@ const buildRoutes = (options: {
   draftRuns?: readonly { costUsd: number }[]
   /** レビューの実行費。 */
   reviewCost?: { runCount: number; totalUsd: number }
+  /** 声・文字起こしのジョブの額（種類ごと）。 */
+  voiceCosts?: readonly { kind: VoiceJobKind; runCount: number; totalUsd: number }[]
 }) => {
   const project = options.project
   const draftRuns = options.draftRuns ?? []
@@ -54,6 +56,7 @@ const buildRoutes = (options: {
         sumCostByProject: () =>
           Promise.resolve(options.reviewCost ?? { runCount: 0, totalUsd: 0 }),
       },
+      voiceJobs: { costByKind: () => Promise.resolve(options.voiceCosts ?? []) },
       stubProviderIds: [...STUB_PROVIDER_IDS],
     }),
   }
@@ -282,6 +285,25 @@ describe('Take 以外で払った額', () => {
     expect(kinds.storyboard_draft?.runCount).toBe(2)
     expect(kinds.storyboard_draft?.totalUsd).toBeCloseTo(0.5, 6)
     expect(kinds.review?.runCount).toBe(3)
+  })
+
+  it('声と文字起こしの額も合計に入れる（ナレーション。ADR-0038）', async () => {
+    const project = aProject({ budgetUsd: 300 })
+    const { app } = buildRoutes({
+      project,
+      voiceCosts: [
+        { kind: 'speak', runCount: 2, totalUsd: 0.2 },
+        { kind: 'transcribe', runCount: 1, totalUsd: 0.05 },
+      ],
+    })
+
+    const { body } = await getCost(app, project.id)
+
+    expect(body.data.totalUsd).toBeCloseTo(0.25, 6)
+    expect(body.data.otherRuns).toEqual([
+      { kind: 'voice', runCount: 2, totalUsd: 0.2 },
+      { kind: 'transcribe', runCount: 1, totalUsd: 0.05 },
+    ])
   })
 
   /** 「レビュー 0 件 $0.00」を並べても読み手には情報が無い。 */

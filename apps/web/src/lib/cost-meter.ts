@@ -148,6 +148,8 @@ const describeCopied = (meter: WireCostMeter): string | null =>
 const RUN_KIND_LABELS: Readonly<Record<string, string>> = {
   storyboard_draft: '絵コンテ下書き',
   review: 'レビュー',
+  voice: '声',
+  transcribe: '文字起こし',
 }
 
 /**

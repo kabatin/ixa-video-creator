@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { estimateSpeakCostUsd, estimateTranscribeCostUsd, geminiTtsUsdPerMillionTokens, voiceCostRules } from '../narration/voice-cost.js'
+import { estimateSpeakCostUsd, estimateTranscribeCostUsd, geminiTtsUsdPerMillionTokens, voiceCostRules, voiceRunCosts } from '../narration/voice-cost.js'
 
 /**
  * 声・文字起こしの費用の見積もり（ADR-0038）。頼む前に予算を確かめるのに使う。
@@ -58,5 +58,26 @@ describe('voiceCostRules', () => {
     expect(paid.transcribe('elevenlabs', 3600)).toBeCloseTo(0.22)
     const free = voiceCostRules({ geminiBilling: 'free', elevenLabsUsdPer1kChars: 0.08, now: () => FROM_2027 })
     expect(free.geminiTts({ model: 'gemini-3.8-flash-tts', outputTokens: 1_000_000 })).toBe(0)
+  })
+})
+
+describe('voiceRunCosts', () => {
+  it('ジョブの種類ごとの額を、費用の表示の「声」（読む・試しに読む）と「文字起こし」（録音・字の時刻）にまとめる', () => {
+    expect(
+      voiceRunCosts([
+        { kind: 'speak', runCount: 3, totalUsd: 0.3 },
+        { kind: 'preview', runCount: 1, totalUsd: 0.01 },
+        { kind: 'transcribe', runCount: 1, totalUsd: 0.05 },
+        { kind: 'char_timing', runCount: 2, totalUsd: 0 },
+      ]),
+    ).toEqual([
+      { kind: 'voice', runCount: 4, totalUsd: 0.31 },
+      { kind: 'transcribe', runCount: 3, totalUsd: 0.05 },
+    ])
+  })
+
+  it('1 度も回していない種類は並べない', () => {
+    expect(voiceRunCosts([{ kind: 'speak', runCount: 2, totalUsd: 0 }])).toEqual([{ kind: 'voice', runCount: 2, totalUsd: 0 }])
+    expect(voiceRunCosts([])).toEqual([])
   })
 })
