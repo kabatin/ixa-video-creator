@@ -66,6 +66,8 @@ export const workbenchValue = (
   posters: new Map(),
   posterError: null,
   posterEpoch: 0,
+  narrationEpoch: 0,
+  bumpNarration: vi.fn(),
   serverEpoch: 0,
   selectedShotId: null,
   selectShot: vi.fn(),

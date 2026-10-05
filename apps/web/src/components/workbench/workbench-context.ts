@@ -72,6 +72,12 @@ export type WorkbenchContextValue = {
   /** サムネイルを引き直すたびに進む。Take ができたら絵が変わる。 */
   readonly posterEpoch: number
   /**
+   * 声のジョブ（ADR-0038）が動くたびに進む。ナレーションの一覧・タイムライン（声とテロップ）の取り直しの合図。
+   * 自分で直したあと（行を動かした等）にも `bumpNarration` で進める。
+   */
+  readonly narrationEpoch: number
+  readonly bumpNarration: () => void
+  /**
    * サーバから材料を読み直すたびに進む（`router.refresh()` のあと）。
    * タイムライン文書など、パネルが自分で取る材料の取り直しの合図にする。
    */
