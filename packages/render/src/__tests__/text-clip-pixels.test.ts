@@ -34,6 +34,9 @@ const CANVAS = { width: 1280, height: 720 } as const
 /** 実際の制作で入る日本語。ASCII だけで確かめると、日本語が出ない不具合を見逃す。 */
 const JP_TEXT = 'iXA カップ 開幕'
 
+/** 強調を見るための 10 字。字ごとに時刻を振り、途中まで塗られている絵を作る。 */
+const HIGHLIGHT_TEXT = 'あいうえおかきくけこ'
+
 /** 画面中央。`plain` の文字が来る場所。 */
 const CENTER_BAND: Rect = { x: 300, y: 300, width: 680, height: 120 }
 /** 下寄せの帯。`lower_third` の文字が来る場所。 */
@@ -45,6 +48,11 @@ const BAND_ONLY: Rect = { x: 820, y: 575, width: 180, height: 60 }
  * 映像の枠は x=160〜1120。左上の定位置は枠の端から少し内側。
  */
 const TOP_LEFT_BAND: Rect = { x: 215, y: 62, width: 300, height: 70 }
+/**
+ * 話している字を強調するテロップ（ADR-0038）の行。**字の途中で色が変わる**ので、
+ * 行の全体（左の塗った字と、右のまだ白い字）が入る幅で見る。
+ */
+const NARRATION_BAND: Rect = { x: 200, y: 60, width: 900, height: 80 }
 /** テロップが一切来ない、Shot のベタ塗りだけが写る場所。 */
 const SHOT_PATCH: Rect = { x: 200, y: 60, width: 200, height: 80 }
 
@@ -93,6 +101,19 @@ const buildDocument = (media: MediaServer): TimelineDocument =>
         type: 'text',
         templateKey: 'lower_third',
         params: { text: JP_TEXT },
+      }),
+      // 話している字の強調（ADR-0038）。2.25 秒の時点で、頭の 6 字が塗られて残り 4 字は白い。
+      makeClip(4, 'TEXT', 2, 0.75, 0, {
+        type: 'text',
+        templateKey: 'plain',
+        params: {
+          text: HIGHLIGHT_TEXT,
+          style: { anchor: 'top-left', align: 'left', size: 0.1 },
+          highlight: {
+            color: '#0000FF',
+            chars: [...HIGHLIGHT_TEXT].map((char, index) => ({ char, startSec: index * 0.05, endSec: (index + 1) * 0.05 })),
+          },
+        },
       }),
       makeClip(3, 'TEXT', 1.25, 0.75, 0, {
         type: 'text',
@@ -188,6 +209,24 @@ describe('テロップのピクセル検証', () => {
 
   it('フェードインの頭ではまだ見えない（0.5 秒かけて出てくる）', async () => {
     expect(countPixels(await frameAt(16), TOP_LEFT_BAND, isGreen)).toBeLessThan(20)
+  })
+
+  const isBlue = (pixel: { r: number; g: number; b: number }): boolean =>
+    pixel.b > 150 && pixel.r < 110 && pixel.g < 110
+
+  /** ADR-0038。**ここだけが「話している字が実際に塗られている」ことを画で確かめる。** */
+  it('話している字は強調の色で塗られ、まだの字は白いまま（同じ行に両方が出る）', async () => {
+    const frame = await frameAt(27)
+
+    expect(countPixels(frame, NARRATION_BAND, isBlue)).toBeGreaterThan(100)
+    expect(countPixels(frame, NARRATION_BAND, isWhitish)).toBeGreaterThan(100)
+  })
+
+  it('強調のテロップが出る前は、その行に色も文字も無い', async () => {
+    const frame = await frameAt(21)
+
+    expect(countPixels(frame, NARRATION_BAND, isBlue)).toBeLessThan(20)
+    expect(countPixels(frame, NARRATION_BAND, isWhitish)).toBeLessThan(20)
   })
 
   it('テロップは Shot の絵を塗りつぶさない', async () => {
