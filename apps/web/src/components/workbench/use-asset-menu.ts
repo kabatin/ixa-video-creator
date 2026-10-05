@@ -24,7 +24,7 @@ type Resolved = {
 export const useAssetMenu = () => {
   const workbench = useWorkbench()
   const host = useContextMenuHost()
-  const { characters, looks, locations, brandAssets, tracks, actions } = useAssets()
+  const { characters, looks, locations, brandAssets, tracks, voices, actions } = useAssets()
 
   /** 名前と状態。見つからなければ null（消えた・まだ読めていない）。 */
   const resolve = (target: AssetTarget): Resolved | null => {
@@ -49,6 +49,10 @@ export const useAssetMenu = () => {
         const found = readyOr(tracks).find((item) => item.id === target.id)
         return found === undefined ? null : { name: found.title, isMaster: found.isMaster }
       }
+      case 'voice': {
+        const found = readyOr(voices).find((item) => item.id === target.id)
+        return found === undefined ? null : { name: found.name }
+      }
       case 'project':
         return { name: '作品の方針' }
     }
@@ -70,6 +74,11 @@ export const useAssetMenu = () => {
         break
       case 'track':
         await actions.deleteTrack(target.id)
+        break
+      case 'voice':
+        await actions.deleteVoice(target.id)
+        // その声で話していた行は「声が未定」に戻り、テロップの見た目も戻る。ナレーションを取り直す。
+        workbench.bumpNarration()
         break
       case 'project':
         return

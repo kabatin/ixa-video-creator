@@ -7,6 +7,7 @@ import type {
   ProjectId,
   ShotId,
   TimelineClipId,
+  VoiceProfileId,
 } from '@ixa/domain'
 
 /**
@@ -24,17 +25,20 @@ export type Inspected =
   | { readonly kind: 'text-clip'; readonly id: TimelineClipId }
   /** 作品の方針（ADR-0030）。作品全体のコンセプト・ルック・手本画像・避けたいもの。 */
   | { readonly kind: 'project'; readonly id: ProjectId }
+  /** 声（ADR-0038）。ナレーター・キャラクターの声。絵が無いので素材ビューアには出さない。 */
+  | { readonly kind: 'voice'; readonly id: VoiceProfileId }
 
 export type InspectedKind = Inspected['kind']
 
-/** 素材（Shot・テロップ・作品の方針以外）か。素材ビューアに出せるのはこちら。 */
+/** 素材（Shot・テロップ・作品の方針・声以外）か。素材ビューアに出せるのはこちら。 */
 export const isAssetSelection = (
   selection: Inspected | null,
-): selection is Exclude<Inspected, { kind: 'shot' | 'text-clip' | 'project' }> =>
+): selection is Exclude<Inspected, { kind: 'shot' | 'text-clip' | 'project' | 'voice' }> =>
   selection !== null &&
   selection.kind !== 'shot' &&
   selection.kind !== 'text-clip' &&
-  selection.kind !== 'project'
+  selection.kind !== 'project' &&
+  selection.kind !== 'voice'
 
 export const sameSelection = (a: Inspected | null, b: Inspected | null): boolean =>
   a !== null && b !== null && a.kind === b.kind && a.id === b.id
@@ -48,4 +52,5 @@ export const INSPECTED_LABELS: Readonly<Record<InspectedKind, string>> = Object.
   track: '楽曲',
   'text-clip': 'テロップ',
   project: '作品の方針',
+  voice: '声',
 })

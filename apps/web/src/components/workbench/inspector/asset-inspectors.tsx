@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useAssist } from '@/components/workbench/use-assist'
 import {
   BrandCategory,
+  MUSIC_FADE_MAX_SEC,
   type BrandAssetId,
   type CharacterId,
   type CharacterLookId,
@@ -16,6 +17,7 @@ import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { AutoSaveCheckbox, AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
 import { MenuButton } from '@/components/workbench/ui/more-menu'
 import { useAssetMenu } from '@/components/workbench/use-asset-menu'
+import { CharacterVoices } from '@/components/workbench/inspector/character-voices'
 import { ObjectHeader } from '@/components/workbench/ui/object-header'
 import { Section } from '@/components/workbench/ui/section'
 import { characterDetailHref } from '@/lib/character-links'
@@ -27,7 +29,7 @@ import { describeForPerson } from '@/lib/api-error'
 import { formatDuration } from '@/lib/format-time'
 import type { WireMusicAnalysis } from '@/lib/music-api'
 import { summarizeAnalysis } from '@/lib/music-upload'
-import { parseClockInput } from '@/lib/time-input'
+import { parseClockInput, parseFadeInput } from '@/lib/time-input'
 
 /**
  * 素材のインスペクター（UI-WORKBENCH-2 §5.3）。**旧ページのフォームは使わず、同じ API を新しい部品から呼ぶ。**
@@ -141,6 +143,7 @@ export const CharacterInspector = ({ id }: { readonly id: CharacterId }) => {
           Look を足すのはツリーの「＋ Look を追加」から。画像は中央の素材ビューアへ落とします。
         </p>
       </Section>
+      <CharacterVoices characterId={id} displayName={character.displayName} />
     </Frame>
   )
 }
@@ -340,6 +343,11 @@ export const BrandAssetInspector = ({ id }: { readonly id: BrandAssetId }) => {
 
 // --- 楽曲 ---
 
+const fadeProblem = (next: string): string | null => {
+  const value = parseFadeInput(next)
+  return value !== null && value <= MUSIC_FADE_MAX_SEC ? null : `0〜${String(MUSIC_FADE_MAX_SEC)} 秒で入れてください（0 はフェードなし）`
+}
+
 export const TrackInspector = ({ id }: { readonly id: MusicTrackId }) => {
   const assetMenu = useAssetMenu()
   const { tracks, actions } = useAssets()
@@ -429,6 +437,23 @@ export const TrackInspector = ({ id }: { readonly id: MusicTrackId }) => {
           }}
           onSave={async (next) => {
             await actions.updateTrack(id, { volume: Number.parseFloat(next) / 100 })
+          }}
+        />
+        {/* フェード（ADR-0039）。書き出しで一部を切っても、途中からもう一度フェードしない。 */}
+        <AutoSaveField
+          label="フェードイン"
+          value={formatDuration(track.fadeInSec ?? 0)}
+          validate={fadeProblem}
+          onSave={async (next) => {
+            await actions.updateTrack(id, { fadeInSec: parseFadeInput(next) ?? 0 })
+          }}
+        />
+        <AutoSaveField
+          label="フェードアウト"
+          value={formatDuration(track.fadeOutSec ?? 0)}
+          validate={fadeProblem}
+          onSave={async (next) => {
+            await actions.updateTrack(id, { fadeOutSec: parseFadeInput(next) ?? 0 })
           }}
         />
         {track.isMaster ? (

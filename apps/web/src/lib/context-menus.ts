@@ -116,7 +116,7 @@ export const shotMenuEntries = (input: {
 export type AssetMenuAction =
   'open-viewer' | 'inspect' | 'set-default-look' | 'set-master' | 'reanalyze' | 'delete'
 
-export type AssetMenuKind = 'character' | 'look' | 'location' | 'brand-asset' | 'track' | 'project'
+export type AssetMenuKind = 'character' | 'look' | 'location' | 'brand-asset' | 'track' | 'voice' | 'project'
 
 const ASSET_KIND_LABELS: Readonly<Record<Exclude<AssetMenuKind, 'project'>, string>> = {
   character: 'キャラクター',
@@ -124,6 +124,7 @@ const ASSET_KIND_LABELS: Readonly<Record<Exclude<AssetMenuKind, 'project'>, stri
   location: 'ロケーション',
   'brand-asset': 'ブランド資産',
   track: '楽曲',
+  voice: '声',
 }
 
 /** 削除の確認の文。何が起きるかを言う（素材ツリーとインスペクターで同じ文）。 */
@@ -145,6 +146,8 @@ const deleteConfirmOf = (
       return isMaster
         ? `マスターの「${name}」を削除します。残りの楽曲で最初に登録した曲がマスターになり、拍・尺の基準が変わります。`
         : `「${name}」を削除します。`
+    case 'voice':
+      return `声「${name}」を削除します。この声で話す行は「声が未定」に戻ります（作った声の Take は残ります）。`
   }
 }
 
@@ -178,8 +181,10 @@ export const assetMenuEntries = (input: {
             item('reanalyze', '再解析'),
           ]
         : []
+  // 声には絵が無いので、素材ビューアには出さない。
+  const viewer = kind === 'voice' ? [] : [item<AssetMenuAction>('open-viewer', '素材ビューアで見る')]
   return [
-    item('open-viewer', '素材ビューアで見る'),
+    ...viewer,
     ...inspect,
     ...(extra.length === 0 ? [] : [SEPARATOR, ...extra]),
     SEPARATOR,

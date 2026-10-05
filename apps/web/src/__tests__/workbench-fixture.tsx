@@ -117,6 +117,7 @@ export const assetStoreValue = (patch: Partial<AssetStoreValue> = {}): AssetStor
   locations: { state: 'ready', value: [] },
   brandAssets: { state: 'ready', value: [] },
   tracks: { state: 'ready', value: [] },
+  voices: { state: 'ready', value: [] },
   actions: {
     createCharacter: vi.fn(),
     updateCharacter: vi.fn(),
@@ -137,6 +138,9 @@ export const assetStoreValue = (patch: Partial<AssetStoreValue> = {}): AssetStor
     deleteTrack: vi.fn(),
     analyzeTrack: vi.fn(),
     importLibrary: vi.fn(),
+    createVoice: vi.fn(),
+    updateVoice: vi.fn(),
+    deleteVoice: vi.fn(),
   },
   ...patch,
 })

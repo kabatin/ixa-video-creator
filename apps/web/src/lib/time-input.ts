@@ -25,3 +25,14 @@ export const parseDurationInput = (raw: string): number | null => {
   const value = Number(text)
   return value > 0 ? value : null
 }
+
+/**
+ * フェードの長さ（秒）。空・0 はフェードなし（0）。`2.5` と `2.5s` のどちらでも読む。読めない値・負の値は null。
+ * 尺（`parseDurationInput`）と違い 0 を受ける。
+ */
+export const parseFadeInput = (raw: string): number | null => {
+  const text = raw.trim().replace(/s$/i, '').trim()
+  if (text === '') return 0
+  if (!/^\d+(?:\.\d+)?$/.test(text)) return null
+  return Number(text)
+}

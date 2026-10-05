@@ -9,6 +9,7 @@ import { GUIDE_TO_CONCEPT_NOTICES, useGuideToConcept } from '@/components/workbe
 import { describeForPerson } from '@/lib/api-error'
 import { ASSET_DRAG_TYPE, encodeAssetDrag, type AssetDragPayload } from '@/lib/asset-actions'
 import { matchesAssetQuery } from '@/lib/asset-tree'
+import { VOICE_TOOL_LABELS } from '@/lib/voice-defaults'
 import { sameSelection, type Inspected } from '@/lib/workbench-selection'
 import { useAssetMenu, type AssetTarget } from '@/components/workbench/use-asset-menu'
 import { useContextMenuTrigger, type ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
@@ -32,7 +33,7 @@ export const AssetTree = () => {
   const openImport = (): void => {
     workbench.openDialog('library-import')
   }
-  const { characters, looks, locations, brandAssets, tracks, actions } = useAssets()
+  const { characters, looks, locations, brandAssets, tracks, voices, actions } = useAssets()
   const [query, setQuery] = useState('')
   const audioInput = useRef<HTMLInputElement>(null)
   const [trackError, setTrackError] = useState<string | null>(null)
@@ -160,6 +161,29 @@ export const AssetTree = () => {
                   />
                 </div>
               </div>
+            ))}
+        </Group>
+
+        {/* 声（ADR-0038）。ナレーター・キャラクターの声。名前だけで作り、AI と声の種類は右で直す。 */}
+        <Group
+          label="声"
+          count={voices}
+          addLabel="声を追加"
+          create={async (name) => {
+            const created = await actions.createVoice(name)
+            select({ kind: 'voice', id: created.id })
+          }}
+        >
+          {(voices.state === 'ready' ? voices.value : [])
+            .filter((voice) => show(voice.name, voice.styleNote))
+            .map((voice) => (
+              <Row
+                key={voice.id}
+                icon="◎"
+                label={voice.name}
+                badge={VOICE_TOOL_LABELS[voice.tool]}
+                {...rowProps({ kind: 'voice', id: voice.id })}
+              />
             ))}
         </Group>
 

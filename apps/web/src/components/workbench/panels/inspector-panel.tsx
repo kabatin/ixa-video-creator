@@ -11,6 +11,7 @@ import {
 import { ProjectConceptInspector } from '@/components/workbench/inspector/project-concept-inspector'
 import { ShotInspector } from '@/components/workbench/inspector/shot-inspector'
 import { TextClipInspector } from '@/components/workbench/inspector/text-clip-inspector'
+import { VoiceInspector } from '@/components/workbench/inspector/voice-inspector'
 import type { TextClipScopeId } from '@/lib/text-clip-scope'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty, PanelFrame } from '@/components/workbench/panels/panel-frame'
@@ -59,6 +60,14 @@ export const InspectorPanel = () => {
     return (
       <PanelFrame flush>
         <ProjectConceptInspector />
+      </PanelFrame>
+    )
+  }
+
+  if (inspected.kind === 'voice') {
+    return (
+      <PanelFrame flush>
+        <VoiceInspector key={inspected.id} id={inspected.id} />
       </PanelFrame>
     )
   }

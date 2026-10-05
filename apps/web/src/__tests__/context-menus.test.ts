@@ -145,6 +145,12 @@ describe('assetMenuEntries', () => {
     ).toEqual(['素材ビューアで見る', 'ロケーションを削除'])
   })
 
+  it('声は絵が無いので素材ビューアに出さない。消すと行の声が未定に戻ることを言う', () => {
+    const entries = assetMenuEntries({ kind: 'voice', name: 'ナレーター', where: 'tree' })
+    expect(labels(entries)).toEqual(['インスペクターで直す', '声を削除'])
+    expect(find(entries, 'delete')?.confirm).toMatch(/この声で話す行は「声が未定」に戻ります/)
+  })
+
   it('削除は確認を挟み、何が起きるかを言う（インスペクターと同じ文）', () => {
     expect(
       find(assetMenuEntries({ kind: 'character', name: 'ミナ', where: 'tree' }), 'delete')?.confirm,

@@ -18,9 +18,11 @@ import type {
   UpdateCharacterLookPatch,
   UpdateLocationPatch,
   UpdateMusicTrackPatch,
+  UpdateVoiceProfilePatch,
+  VoiceProfileId,
   WorkspaceId,
 } from '@ixa/domain'
-import { DEFAULT_LOOK } from '@ixa/domain'
+import { DEFAULT_LOOK, VoiceToolId } from '@ixa/domain'
 import { useRouter } from 'next/navigation'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -29,6 +31,8 @@ import { describeForPerson } from '@/lib/api-error'
 import { defaultLook, lookKeyFromName } from '@/lib/asset-actions'
 import type { LibraryImportRequest, WireLibraryImportResult } from '@/lib/library-import-api'
 import { deriveTrackTitle } from '@/lib/music-upload'
+import type { WireVoice } from '@/lib/narration-api'
+import { newVoiceDefaults } from '@/lib/voice-defaults'
 
 /**
  * ワークベンチの素材（UI-WORKBENCH-2 §4.2 / D5 の拡張）。
@@ -75,6 +79,11 @@ export type AssetActions = {
   readonly setMasterTrack: (id: MusicTrackId) => Promise<void>
   readonly deleteTrack: (id: MusicTrackId) => Promise<void>
   readonly analyzeTrack: (id: MusicTrackId) => Promise<void>
+  /** 声を名前だけで作る（「使う AI」の声の AI と、その最初の声。ADR-0038）。 */
+  readonly createVoice: (name: string) => Promise<WireVoice>
+  readonly updateVoice: (id: VoiceProfileId, patch: UpdateVoiceProfilePatch) => Promise<WireVoice>
+  /** 消すと、その声で話す行は「声が未定」に戻る（ナレーションの一覧は呼び出し側が取り直す）。 */
+  readonly deleteVoice: (id: VoiceProfileId) => Promise<void>
   /**
    * ほかのプロジェクトのものを複製して、このプロジェクトへ取り込む（ADR-0034）。取り込んだ分を一覧に足して返す。
    * Look は足したキャラクターの分を読み直す（キャラクターの並びが変わると読む）。
@@ -89,6 +98,8 @@ export type AssetStoreValue = {
   readonly locations: Loaded<readonly Location[]>
   readonly brandAssets: Loaded<readonly BrandAsset[]>
   readonly tracks: Loaded<readonly MusicTrack[]>
+  /** 声（ADR-0038）。ナレーションの行の「話す声」とキャラクターの「声」の選択肢にもなる。 */
+  readonly voices: Loaded<readonly WireVoice[]>
   readonly actions: AssetActions
 }
 
@@ -175,6 +186,7 @@ export const AssetStoreProvider = ({
     projectId,
   )
   const [tracks, setTracks] = useLoadedList('楽曲', () => api.listMusicTracks(projectId), projectId)
+  const [voices, setVoices] = useLoadedList('声', () => api.listVoices(projectId), projectId)
   const [looks, setLooks] = useState<ReadonlyMap<CharacterId, readonly CharacterLook[]>>(new Map())
 
   /** Look はキャラクターが読めたら一緒に読む（ツリーで子として並べるため）。 */
@@ -347,6 +359,24 @@ export const AssetStoreProvider = ({
       analyzeTrack: async (id) => {
         await api.requestAnalysis(id)
       },
+      createVoice: async (name) => {
+        const { settings } = await api.getAiSettings()
+        // 一覧が取れなくても作る（お試しの声で作り、あとで直せる）。
+        const tool = VoiceToolId.safeParse(settings.voice)
+        const options = tool.success ? await api.voiceOptions(tool.data, 'ja').catch(() => null) : null
+        const created = await api.createVoice(projectId, { name, ...newVoiceDefaults(settings.voice, options) })
+        setVoices((current) => mapReady(current, (items) => [...items, created]))
+        return created
+      },
+      updateVoice: async (id, patch) => {
+        const updated = await api.updateVoice(id, patch)
+        setVoices((current) => mapReady(current, (items) => replaceIn(items, updated)))
+        return updated
+      },
+      deleteVoice: async (id) => {
+        await api.deleteVoice(id)
+        setVoices((current) => mapReady(current, (items) => items.filter((item) => item.id !== id)))
+      },
     }),
     [
       api,
@@ -358,13 +388,14 @@ export const AssetStoreProvider = ({
       setLocations,
       setLooksOf,
       setTracks,
+      setVoices,
       workspaceId,
     ],
   )
 
   const value = useMemo<AssetStoreValue>(
-    () => ({ characters, looks, locations, brandAssets, tracks, actions }),
-    [characters, looks, locations, brandAssets, tracks, actions],
+    () => ({ characters, looks, locations, brandAssets, tracks, voices, actions }),
+    [characters, looks, locations, brandAssets, tracks, voices, actions],
   )
 
   return <AssetStoreContext.Provider value={value}>{children}</AssetStoreContext.Provider>
