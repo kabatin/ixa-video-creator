@@ -43,6 +43,10 @@ export const EditBatchId = brandedId('EditBatchId')
 export const RenderJobId = brandedId('RenderJobId')
 export const TextStyleId = brandedId('TextStyleId')
 export const ImageGenerationJobId = brandedId('ImageGenerationJobId')
+export const VoiceProfileId = brandedId('VoiceProfileId')
+export const NarrationLineId = brandedId('NarrationLineId')
+export const NarrationTakeId = brandedId('NarrationTakeId')
+export const VoiceJobId = brandedId('VoiceJobId')
 
 export type WorkspaceId = z.infer<typeof WorkspaceId>
 export type ProjectId = z.infer<typeof ProjectId>
@@ -73,6 +77,10 @@ export type EditBatchId = z.infer<typeof EditBatchId>
 export type RenderJobId = z.infer<typeof RenderJobId>
 export type TextStyleId = z.infer<typeof TextStyleId>
 export type ImageGenerationJobId = z.infer<typeof ImageGenerationJobId>
+export type VoiceProfileId = z.infer<typeof VoiceProfileId>
+export type NarrationLineId = z.infer<typeof NarrationLineId>
+export type NarrationTakeId = z.infer<typeof NarrationTakeId>
+export type VoiceJobId = z.infer<typeof VoiceJobId>
 
 /**
  * ID の発行器。**同じミリ秒でも必ず増える**（`monotonicFactory`）。
