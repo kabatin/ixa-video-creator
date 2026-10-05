@@ -123,6 +123,7 @@ const RenderPanelView = ({
   const folder = useRenderFolder(projectId, folderApi)
 
   const [preset, setPreset] = useState<RenderPreset>(DEFAULT_RENDER_PRESET)
+  const [normalizeLoudness, setNormalizeLoudness] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [rejection, setRejection] = useState<RenderRejection | null>(null)
@@ -143,7 +144,7 @@ const RenderPanelView = ({
     setRejection(null)
     setFeedback(null)
     try {
-      const outcome = await client.startRender(projectId, preset, chosenRange?.scope)
+      const outcome = await client.startRender(projectId, preset, chosenRange?.scope, { normalizeLoudness })
       if (outcome.kind === 'rejected') {
         setRejection(outcome.rejection)
         return
@@ -176,6 +177,21 @@ const RenderPanelView = ({
           disabled={submitting}
         />
         <RenderPresetField preset={preset} onChange={setPreset} disabled={submitting} />
+        {/* 音の仕上げ（ADR-0039）。字幕ファイルはテロップがあれば書き出しフォルダに置く（切り替えは無い）。 */}
+        <div className="space-y-1">
+          <label className="flex items-center gap-2 text-sm text-text">
+            <input
+              type="checkbox"
+              checked={normalizeLoudness}
+              disabled={submitting}
+              onChange={(event) => {
+                setNormalizeLoudness(event.target.checked)
+              }}
+            />
+            音量を揃える（YouTube・SNS の基準 -14 LUFS）
+          </label>
+          <p className="text-xs text-muted">テロップがあれば、字幕ファイル（SRT）も動画と同じ名前で書き出しフォルダに置きます。</p>
+        </div>
         <RenderCheckSummary
           check={check}
           details={<TimelineIssuePanel issues={issues} projectId={projectId} />}

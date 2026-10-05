@@ -258,3 +258,18 @@ export const summarizeReasons = (
   const shown = reasons.slice(0, Math.max(limit, 0))
   return { total: reasons.length, shown, hiddenCount: reasons.length - shown.length }
 }
+
+/**
+ * 書き出しの音量（ADR-0039）。揃えた書き出しは揃えた後の大きさを、揃えなかった・音が無い書き出しはそう言う。
+ * 終わっていなければ null。
+ */
+export const renderLoudnessNote = (job: {
+  readonly status: RenderJobStatus
+  readonly normalizeLoudness: boolean
+  readonly loudnessLufs: number | null
+}): string | null => {
+  if (job.status !== 'succeeded') return null
+  if (!job.normalizeLoudness) return '音量は揃えていません'
+  if (job.loudnessLufs === null) return '音が無いので、音量は揃えていません'
+  return `音量 ${job.loudnessLufs.toFixed(1)} LUFS（YouTube・SNS の基準に揃えました）`
+}

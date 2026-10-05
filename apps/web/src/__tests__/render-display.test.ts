@@ -9,6 +9,7 @@ import {
   latestRenderJob,
   RENDER_PRESET_OPTIONS,
   renderElapsedSec,
+  renderLoudnessNote,
   renderPresetLabel,
   renderStatusLabel,
   sortRenderJobsByNewest,
@@ -207,5 +208,20 @@ describe('走っている書き出しだけを取り出す', () => {
     const before = [...jobs]
     expect(activeRenderJobs(jobs)).toEqual([])
     expect(jobs).toEqual(before)
+  })
+})
+
+describe('renderLoudnessNote（ADR-0039）', () => {
+  it('揃えた書き出しは、揃えた後の大きさを出す', () => {
+    expect(renderLoudnessNote({ status: 'succeeded', normalizeLoudness: true, loudnessLufs: -14.06 })).toBe('音量 -14.1 LUFS（YouTube・SNS の基準に揃えました）')
+  })
+
+  it('揃えなかった・音が無い書き出しは、そう言う', () => {
+    expect(renderLoudnessNote({ status: 'succeeded', normalizeLoudness: false, loudnessLufs: null })).toBe('音量は揃えていません')
+    expect(renderLoudnessNote({ status: 'succeeded', normalizeLoudness: true, loudnessLufs: null })).toBe('音が無いので、音量は揃えていません')
+  })
+
+  it('終わっていない書き出しには何も言わない', () => {
+    expect(renderLoudnessNote({ status: 'rendering', normalizeLoudness: true, loudnessLufs: null })).toBeNull()
   })
 })

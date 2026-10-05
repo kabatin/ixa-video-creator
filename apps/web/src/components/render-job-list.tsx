@@ -9,6 +9,7 @@ import {
   describeRenderJob,
   formatJobTime,
   renderElapsedSec,
+  renderLoudnessNote,
   renderPresetLabel,
   sortRenderJobsByNewest,
 } from '@/lib/render-display'
@@ -62,6 +63,7 @@ const JobRow = ({
   const [player, setPlayer] = useState<Player>({ state: 'closed' })
   const [playError, setPlayError] = useState<string | null>(null)
   const output = job.status === 'succeeded' ? job.outputAssetId : null
+  const loudness = renderLoudnessNote(job)
 
   const togglePlayer = (): void => {
     if (player.state !== 'closed' || output === null) {
@@ -129,6 +131,7 @@ const JobRow = ({
           )}
         </div>
       )}
+      {loudness !== null && <p className="mt-1 text-xs text-muted">{loudness}</p>}
       {playError !== null && (
         <p role="alert" className="mt-2 text-xs text-danger">
           {playError}

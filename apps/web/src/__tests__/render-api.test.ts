@@ -53,7 +53,21 @@ describe('書き出しの投入', () => {
     expect(requestBodyOf(fetchMock.mock.calls[0]?.[1])).toEqual({
       preset: 'preview_720p',
       scope: { type: 'range', start: 4, end: 12 },
+      normalizeLoudness: true,
     })
+  })
+
+  it('音量を揃えないと選べば、そう送る（ADR-0039）', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ success: true, data: { renderJobId: RENDER_JOB_ID, warnings: [] } }), {
+        status: 202,
+        headers: { 'content-type': 'application/json' },
+      }),
+    )
+
+    await api().startRender(projectId, 'preview_720p', undefined, { normalizeLoudness: false })
+
+    expect(requestBodyOf(fetchMock.mock.calls[0]?.[1])).toMatchObject({ normalizeLoudness: false })
   })
 
   it('プリセットと scope=full を POST し、受理された ID と警告を返す', async () => {
@@ -88,7 +102,7 @@ describe('書き出しの投入', () => {
     const [url, init] = fetchMock.mock.calls[0] ?? []
     expect(url).toBe(`${BASE_URL}/projects/${PROJECT_ID}/render`)
     expect(init?.method).toBe('POST')
-    expect(requestBodyOf(init)).toEqual({ preset: 'master_1080p', scope: { type: 'full' } })
+    expect(requestBodyOf(init)).toEqual({ preset: 'master_1080p', scope: { type: 'full' }, normalizeLoudness: true })
   })
 
   it('scope は常に full。部分書き出しは送らない', () => {

@@ -40,7 +40,12 @@ export type WireRenderAccepted = z.infer<typeof WireRenderAccepted>
  */
 export const FULL_SCOPE: RenderScope = Object.freeze({ type: 'full' })
 
-export const CreateRenderBody = z.object({ preset: RenderPreset, scope: RenderScope })
+export const CreateRenderBody = z.object({
+  preset: RenderPreset,
+  scope: RenderScope,
+  /** 書き出しの音量を -14 LUFS（YouTube・SNS の基準）に揃えるか（ADR-0039）。既定は揃える。 */
+  normalizeLoudness: z.boolean().default(true),
+})
 export type CreateRenderBody = z.input<typeof CreateRenderBody>
 
 /** docs/ARCHITECTURE.md §18 の失敗レスポンス。 */
@@ -89,7 +94,12 @@ export type RenderApi = {
    * 書き出しをキューへ積む。完了は待たない。
    * タイムラインに error があると受理されず、`rejected` が返る（例外にはしない）。
    */
-  startRender: (projectId: ProjectId, preset: RenderPreset, scope?: RenderScope) => Promise<StartRenderOutcome>
+  startRender: (
+    projectId: ProjectId,
+    preset: RenderPreset,
+    scope?: RenderScope,
+    options?: { readonly normalizeLoudness: boolean },
+  ) => Promise<StartRenderOutcome>
   getRenderJob: (id: RenderJobId) => Promise<WireRenderJob>
   listRenderJobs: (projectId: ProjectId) => Promise<WireRenderJob[]>
 }
@@ -98,8 +108,8 @@ const projectPath = (projectId: ProjectId, suffix: string): string =>
   `/projects/${encodeURIComponent(projectId)}${suffix}`
 
 export const createRenderApi = (requester: Requester): RenderApi => ({
-  startRender: async (projectId, preset, scope = FULL_SCOPE) => {
-    const body = CreateRenderBody.parse({ preset, scope })
+  startRender: async (projectId, preset, scope = FULL_SCOPE, options) => {
+    const body = CreateRenderBody.parse({ preset, scope, normalizeLoudness: options?.normalizeLoudness ?? true })
     try {
       const accepted = await requester.post(
         projectPath(projectId, '/render'),

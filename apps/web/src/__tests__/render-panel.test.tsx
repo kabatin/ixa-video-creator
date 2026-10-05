@@ -126,7 +126,7 @@ describe('画質', () => {
     fireEvent.click(startButton())
 
     await waitFor(() => {
-      expect(startRender).toHaveBeenCalledWith(projectId, 'master_1080p', undefined)
+      expect(startRender).toHaveBeenCalledWith(projectId, 'master_1080p', undefined, { normalizeLoudness: true })
     })
   })
 })
