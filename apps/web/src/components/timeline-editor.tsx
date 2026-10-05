@@ -135,6 +135,8 @@ export type TimelineEditorProps = {
    * （2026-09-28、制作者の指摘）。渡さなければ今までどおり小窓で直す（単独のタイムライン）。
    */
   readonly onOpenTextClip?: (clipId: TimelineClipId) => void
+  /** 帯の音のクリップ（効果音）を開く。 */
+  readonly onOpenMediaClip?: (clipId: TimelineClipId) => void
   /** 楽曲の波形の帯。`TimelineTracks` へそのまま渡す。 */
   readonly audioLane?: { readonly durationSec: number; readonly node: ReactNode }
   /** ナレーションのレーン（ADR-0038）。帯の尺度で描く。 */
@@ -181,6 +183,7 @@ export const TimelineEditor = ({
   shotContextMenu,
   onTextClipContextMenu,
   onOpenTextClip,
+  onOpenMediaClip,
   audioLane,
   narrationLane,
   onDropAudio,
@@ -349,6 +352,7 @@ export const TimelineEditor = ({
     run,
     setActionError,
     onOpenTextClip,
+    onOpenMediaClip,
     snapInsertAt: (atSec) =>
       snapPoint('開始', atSec, overviewCandidates, toleranceSec, snapEnabled).atSec,
   })

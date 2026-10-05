@@ -119,6 +119,11 @@ export const TimelinePanel = () => {
           workbench.inspect({ kind: 'text-clip', id })
           workbench.focusPanel('inspector')
         }}
+        // 効果音もインスペクターで開く（位置・音量）。
+        onOpenMediaClip={(id) => {
+          workbench.inspect({ kind: 'audio-clip', id })
+          workbench.focusPanel('inspector')
+        }}
         {...(audioLane === null ? {} : { audioLane })}
         narrationLane={narrationLane}
         onDropAudio={onDropAudio}

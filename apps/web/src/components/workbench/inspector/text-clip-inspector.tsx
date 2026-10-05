@@ -1,6 +1,6 @@
 'use client'
 
-import { TextTemplateKey, textStyleChangeSummary, type TextStyle, type TextStyleKey, type TimelineClipId } from '@ixa/domain'
+import { TextTemplateKey, narrationLineOf, textStyleChangeSummary, type TextStyle, type TextStyleKey, type TimelineClipId } from '@ixa/domain'
 import { useEffect, useMemo, useState } from 'react'
 import { TextStyleFields, type TextStylePatch } from '@/components/workbench/inspector/text-style-fields'
 import { TextStylePresets } from '@/components/workbench/inspector/text-style-presets'
@@ -254,6 +254,13 @@ export const TextClipInspector = ({
       />
       <div className="workbench-panel-body relative min-h-0 flex-1 overflow-auto">
         <Section title="文字">
+          {narrationLineOf(content.params) !== null && (
+            // ナレーションのテロップは行から導かれる（ADR-0038）。ここで直しても、行を直すと作り直される。
+            <p role="note" className="text-xs text-warn">
+              ナレーションの行から作ったテロップです。字と時刻は、ナレーションの行の「表示」と位置で直してください
+              （ここで直しても、行を直したときに作り直されます。見た目は残ります）。
+            </p>
+          )}
           <AutoSaveField
             label="文字"
             value={params?.text ?? ''}

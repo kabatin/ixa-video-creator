@@ -209,3 +209,48 @@ describe('新しく置くテロップの拍への吸着', () => {
   })
 })
 
+
+describe('帯の効果音を押したとき（ADR-0039）', () => {
+  it('開く口があれば、テロップの小窓ではなくインスペクターで開く', () => {
+    const onOpenMediaClip = vi.fn()
+    const sfx = TimelineClip.parse({
+      id: CLIP_ID,
+      projectId,
+      track: 'SFX',
+      startSec: 1,
+      durationSec: 2,
+      layer: 0,
+      content: { type: 'media', mediaAssetId: '01ARZ3NDEKTSV4RRFFQ69G5FB4', inSec: 0, outSec: 2, volume: 1 },
+      opacity: 1,
+      createdAt: new Date(),
+    })
+    render(
+      <TimelineEditor
+        projectId={projectId}
+        shots={[]}
+        initialTransitions={[]}
+        initialClips={[sfx]}
+        renderedShotIds={[]}
+        initialIssues={[]}
+        documentDurationSec={30}
+        initialDocument={null}
+        beatSource={{ state: 'no_track' }}
+        beatAlignment={null}
+        loadErrors={[]}
+        showMonitor={false}
+        initialSnapEnabled
+        onOpenMediaClip={onOpenMediaClip}
+      />,
+    )
+
+    // TEXT（空）と SFX の 2 本に layer 0 がある。下の SFX を押す。
+    const lane = screen.getAllByText('layer 0').at(-1)?.parentElement
+    if (lane === null || lane === undefined) throw new Error('SFX の帯が無い')
+    const at = { clientX: 2 * DEFAULT_PX_PER_SEC, pointerId: 1 }
+    fireEvent.pointerDown(lane, at)
+    fireEvent.pointerUp(lane, at)
+
+    expect(onOpenMediaClip).toHaveBeenCalledWith(CLIP_ID)
+    expect(screen.queryByLabelText('文字')).toBeNull()
+  })
+})

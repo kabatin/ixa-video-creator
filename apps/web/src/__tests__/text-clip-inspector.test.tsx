@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TextClipInspector } from '@/components/workbench/inspector/text-clip-inspector'
+import { AudioClipInspector } from '@/components/workbench/inspector/audio-clip-inspector'
 import type { WireMusicAnalysis } from '@/lib/music-api'
 import { DEFAULT_PREFERENCES, PREFERENCES_STORAGE_KEY } from '@/lib/preferences'
 import { PreferencesRoot } from '@/components/preferences-root'
@@ -87,6 +88,45 @@ const open = async () => {
 const sentParams = () => (fake.updateClip.mock.calls.at(-1)?.[1] as { content: { params: unknown } }).content.params
 
 describe('TextClipInspector', () => {
+  it('ナレーションの行から作ったテロップなら、字と時刻は行で直すと言う（ここで直しても作り直される）', async () => {
+    fake.listClips.mockResolvedValue([
+      clip(CLIP_ID, { type: 'text', templateKey: 'plain', params: { text: '勝負の時が来た。', narrationLineId: '01ARZ3NDEKTSV4RRFFQ69G5FB6' } }),
+    ])
+    renderInWorkbench(<TextClipInspector id={CLIP_ID} />)
+
+    expect(await screen.findByRole('note')).toHaveTextContent('ナレーションの行から作ったテロップです')
+  })
+
+  it('手で置いたテロップには、その知らせを出さない', async () => {
+    await open()
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
+
+  it('効果音（音のクリップ）はインスペクターで位置と音量を直せる', async () => {
+    fake.listClips.mockResolvedValue([
+      TimelineClip.parse({
+        id: MEDIA_CLIP,
+        projectId: aProject.id,
+        track: 'SFX',
+        startSec: 3,
+        durationSec: 1.5,
+        layer: 0,
+        content: { type: 'media', mediaAssetId: MediaAssetId.parse('01ARZ3NDEKTSV4RRFFQ69G5FB4'), inSec: 0, outSec: 1.5, volume: 1 },
+        opacity: 1,
+        createdAt: new Date(),
+      }),
+    ])
+    renderInWorkbench(<AudioClipInspector id={MEDIA_CLIP} />)
+    const volume = await screen.findByLabelText('音量')
+
+    await userEvent.clear(volume)
+    await userEvent.type(volume, '50%{Enter}')
+
+    await waitFor(() => {
+      expect(fake.updateClip.mock.calls.at(-1)).toMatchObject([MEDIA_CLIP, { content: { type: 'media', volume: 0.5 } }])
+    })
+  })
+
   it('書体を変えると、その項目だけを重ねて保存する（文字と他の見た目は残す）', async () => {
     await open()
 

@@ -9,7 +9,7 @@ import { assetMenuEntries, type AssetMenuAction } from '@/lib/context-menus'
 import type { Inspected } from '@/lib/workbench-selection'
 
 /** 素材ツリーに並ぶ物（Shot・テロップ以外）。 */
-export type AssetTarget = Exclude<Inspected, { kind: 'shot' | 'text-clip' }>
+export type AssetTarget = Exclude<Inspected, { kind: 'shot' | 'text-clip' | 'audio-clip' }>
 
 type Resolved = {
   readonly name: string

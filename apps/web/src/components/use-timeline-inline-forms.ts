@@ -41,6 +41,8 @@ export type TimelineInlineFormsDeps = {
   readonly run: (label: string, action: () => Promise<void>) => Promise<void>
   readonly setActionError: (message: string | null) => void
   readonly onOpenTextClip?: ((id: TimelineClipId) => void) | undefined
+  /** 音のクリップ（効果音）を開く。渡せば帯の上の入力ではなくこちらで開く（ADR-0039）。 */
+  readonly onOpenMediaClip?: ((id: TimelineClipId) => void) | undefined
   /** 新しいテロップを置く位置を寄せる（押した所の近くの拍・端へ。切ってあればそのまま）。 */
   readonly snapInsertAt: (atSec: number) => number
 }
@@ -61,6 +63,7 @@ export const useTimelineInlineForms = ({
   run,
   setActionError,
   onOpenTextClip,
+  onOpenMediaClip,
   snapInsertAt,
 }: TimelineInlineFormsDeps) => {
   /** 帯の上で開いている入力。開く場所が変わったら下書きも作り直す。 */
@@ -136,6 +139,11 @@ export const useTimelineInlineForms = ({
     if (onOpenTextClip !== undefined && clip.content.type === 'text') {
       closeForm()
       onOpenTextClip(clip.id)
+      return
+    }
+    if (onOpenMediaClip !== undefined && clip.content.type === 'media') {
+      closeForm()
+      onOpenMediaClip(clip.id)
       return
     }
     openerRef.current = opener
