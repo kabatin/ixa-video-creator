@@ -55,6 +55,23 @@ describe('プレビューの読み直し', () => {
     })
   })
 
+  /**
+   * 制作者 2026-10-05「ナレーションを移動しても即時反映されないですね、リロードすると反映（実際にしゃべる位置が変わる）される」。
+   * 帯の行は動いていたのに、プレビューが読む組み立て結果は声の古い位置のままだった。
+   */
+  it('ナレーションを動かしたら読み直す（声の位置は組み立て結果に入っている）', async () => {
+    const { rerender } = render(tree(workbenchValue({ shots: [shot] })))
+    await waitFor(() => {
+      expect(loader.loadTimelineDocument).toHaveBeenCalledTimes(1)
+    })
+
+    rerender(tree(workbenchValue({ shots: [shot], narrationEpoch: 1 })))
+
+    await waitFor(() => {
+      expect(loader.loadTimelineDocument).toHaveBeenCalledTimes(2)
+    })
+  })
+
   it('組み立てに効かない欄（説明）を変えただけでは読み直さない', async () => {
     const { rerender } = render(tree(workbenchValue({ shots: [shot] })))
     await waitFor(() => {

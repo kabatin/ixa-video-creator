@@ -28,7 +28,8 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
   const [document, setDocument] = useState<Part<WireTimelineDocument> | null>(null)
   const [monitorError, setMonitorError] = useState<string | null>(null)
 
-  // Take ができた・サーバから読み直した・Shot の尺や採用を変えたときに組み立て直す。
+  // Take ができた・サーバから読み直した・Shot の尺や採用を変えた・ナレーションが変わったときに組み立て直す。
+  // ナレーション（ADR-0038）は声の位置が組み立て結果の音に入る。入れ忘れると、帯では動いたのに鳴る位置が変わらない。
   const shotsKey = timelineShotsKey(workbench.shots)
   useEffect(() => {
     let cancelled = false
@@ -38,7 +39,7 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
     return () => {
       cancelled = true
     }
-  }, [workbench.projectId, workbench.posterEpoch, workbench.serverEpoch, shotsKey])
+  }, [workbench.projectId, workbench.posterEpoch, workbench.serverEpoch, workbench.narrationEpoch, shotsKey])
 
   /**
    * 選んだ Shot の頭へ移る。
