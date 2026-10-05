@@ -27,6 +27,7 @@ import {
   type VoiceTuning,
 } from '@ixa/domain'
 import { createdAt, deletedAt, seconds, timestampTz, ulidPk, ulidRef, updatedAt } from './columns.js'
+import { characters } from './character.js'
 import { mediaAssets } from './media.js'
 import { textStyles } from './text-style.js'
 import { projects } from './workspace.js'
@@ -54,6 +55,7 @@ export const voiceProfiles = pgTable(
     language: text('language').notNull().default('ja'),
     tuning: jsonb('tuning').$type<VoiceTuning>().notNull().default({}),
     textStyleId: ulidRef('text_style_id').references(() => textStyles.id, { onDelete: 'set null' }),
+    characterId: ulidRef('character_id').references(() => characters.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),

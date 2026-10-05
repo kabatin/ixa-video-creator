@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ProjectId, TextStyleId, VoiceProfileId } from '../common/ids.js'
+import { CharacterId, ProjectId, TextStyleId, VoiceProfileId } from '../common/ids.js'
 
 /**
  * 声（ADR-0038）。ナレーター・キャラクターの声を作品ごとに持つ。「声のイメージ」は自然な文で書く
@@ -47,6 +47,11 @@ const fields = {
   tuning: VoiceTuning,
   /** この声のテロップの見た目（無ければ「ナレーション」の見た目）。 */
   textStyleId: TextStyleId.nullable(),
+  /**
+   * 誰の声か（キャラクターのインスペクターの「声」）。null はナレーターなど、キャラクターではない声。
+   * 声の側に持つので、1 人に声をいくつか持てる（ふだん・叫び など）。
+   */
+  characterId: CharacterId.nullable(),
 }
 
 export const VoiceProfile = z.object({
@@ -66,6 +71,7 @@ export const CreateVoiceProfileInput = z.object({
   language: fields.language.default('ja'),
   tuning: fields.tuning.default({}),
   textStyleId: fields.textStyleId.default(null),
+  characterId: fields.characterId.default(null),
 })
 export type CreateVoiceProfileInput = z.input<typeof CreateVoiceProfileInput>
 

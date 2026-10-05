@@ -1,6 +1,7 @@
 import { VoiceProviderError, type VoiceAdapter } from '@ixa/provider-core'
 import { createStubVoice } from '@ixa/provider-voice'
 import { describe, expect, it } from 'vitest'
+import { aCharacterBundle } from './fixtures.js'
 import { json, setupNarration, type Err, type Ok } from './narration-fixture.js'
 
 /**
@@ -49,6 +50,31 @@ describe('声', () => {
     expect((await json<Ok<Voice>>(patched)).data.speed).toBe(1.2)
     expect(deleted.status).toBe(204)
     expect(deps.lines.snapshot()[0]?.voiceProfileId).toBeNull()
+  })
+
+  it('キャラクターの声にする（その作品のキャラクターだけ。外すのは null）', async () => {
+    const { send, project, other, deps } = setupNarration()
+    const own = await deps.characters.create(aCharacterBundle(project.id).character)
+    const foreign = await deps.characters.create(aCharacterBundle(other.id).character)
+    const voice = (await json<Ok<Voice>>(await send('POST', `/projects/${project.id}/voices`, aVoiceBody({ characterId: own.id })))).data
+
+    expect(voice).toMatchObject({ characterId: own.id })
+    const wrong = await send('PATCH', `/voices/${voice.id}`, { characterId: foreign.id })
+    expect(wrong.status).toBe(422)
+    expect((await json<Err>(wrong)).fields?.characterId).toEqual(['この作品のキャラクターではありません'])
+    expect((await send('POST', `/projects/${project.id}/voices`, aVoiceBody({ name: '別', characterId: foreign.id }))).status).toBe(422)
+    expect((await json<Ok<Voice>>(await send('PATCH', `/voices/${voice.id}`, { characterId: null }))).data).toMatchObject({ characterId: null })
+  })
+
+  it('テロップの見た目は、その作品の見た目だけ', async () => {
+    const { send, project, other, deps } = setupNarration()
+    const foreign = await deps.textStyles.create(other.id, { name: '別の作品の見た目', style: {} })
+    const own = await deps.textStyles.create(project.id, { name: 'ナレーション', style: {} })
+
+    const wrong = await send('POST', `/projects/${project.id}/voices`, aVoiceBody({ textStyleId: foreign.id }))
+    expect(wrong.status).toBe(422)
+    expect((await json<Err>(wrong)).fields?.textStyleId).toEqual(['この作品のテロップの見た目ではありません'])
+    expect((await send('POST', `/projects/${project.id}/voices`, aVoiceBody({ textStyleId: own.id }))).status).toBe(201)
   })
 
   it('選べるモデルと声の種類は、その AI の一覧から返す', async () => {

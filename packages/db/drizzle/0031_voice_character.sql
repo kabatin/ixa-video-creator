@@ -1,0 +1,2 @@
+ALTER TABLE "voice_profiles" ADD COLUMN "character_id" text;--> statement-breakpoint
+ALTER TABLE "voice_profiles" ADD CONSTRAINT "voice_profiles_character_id_characters_id_fk" FOREIGN KEY ("character_id") REFERENCES "public"."characters"("id") ON DELETE set null ON UPDATE no action;

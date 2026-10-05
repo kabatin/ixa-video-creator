@@ -1,4 +1,5 @@
 import {
+  CharacterId,
   MediaAssetId,
   NarrationLineId,
   NarrationTakeId,
@@ -33,6 +34,7 @@ describe('voice_profiles', () => {
     language: 'ja',
     tuning: {},
     textStyleId: null,
+    characterId: newId(CharacterId),
     createdAt: NOW,
     updatedAt: NOW,
     deletedAt: null,
@@ -40,7 +42,7 @@ describe('voice_profiles', () => {
 
   it('行を声にする（消した印は Domain に出さない）', () => {
     const voice = voiceProfileRowToDomain(row)
-    expect(voice).toMatchObject({ name: 'ナレーター', tool: 'gemini_api', voiceName: 'Kore' })
+    expect(voice).toMatchObject({ name: 'ナレーター', tool: 'gemini_api', voiceName: 'Kore', characterId: row.characterId })
     expect(voice).not.toHaveProperty('deletedAt')
   })
 

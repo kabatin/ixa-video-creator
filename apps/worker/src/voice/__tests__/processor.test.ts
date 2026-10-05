@@ -53,6 +53,7 @@ const voice: VoiceProfile = {
   language: 'ja',
   tuning: {},
   textStyleId: null,
+  characterId: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 }

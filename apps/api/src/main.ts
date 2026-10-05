@@ -261,6 +261,7 @@ export const main = (): void => {
       audioSettings: createProjectAudioSettingsRepository(db),
       textStyles,
       timelineClips,
+      characters,
       voiceAdapter,
       voiceQueue: voiceQueuePort,
       // 予算は動画の Take と声・文字起こしを足して見る（声だけで予算を食い潰さない）。

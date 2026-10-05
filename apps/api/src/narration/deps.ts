@@ -1,4 +1,5 @@
 import type {
+  CharacterRepository,
   MediaAssetRepository,
   NarrationLineRepository,
   NarrationTakeRepository,
@@ -24,6 +25,8 @@ export type NarrationDeps = {
   /** ナレーションのテロップを作り直すため（行の見た目を選ぶ・差し替える）。 */
   readonly textStyles: Pick<TextStyleRepository, 'findByProject'>
   readonly timelineClips: Pick<TimelineClipRepository, 'findByProject' | 'replace'>
+  /** 声をキャラクターの声にするとき、その作品のキャラクターかを確かめる。 */
+  readonly characters: Pick<CharacterRepository, 'findById'>
   /** 声の AI ごとの口（声の種類の一覧を出すため・使えるかを確かめるため）。口が無い AI は null。 */
   readonly voiceAdapter: (tool: VoiceToolId) => VoiceAdapter | null
   /** 声のジョブを worker の `voice` キューへ入れる。 */

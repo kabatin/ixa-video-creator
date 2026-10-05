@@ -35,6 +35,7 @@ const aVoice = (patch: Partial<VoiceProfile> = {}): VoiceProfile =>
     language: 'ja',
     tuning: {},
     textStyleId: null,
+    characterId: null,
     createdAt: NOW,
     updatedAt: NOW,
     ...patch,
@@ -58,7 +59,7 @@ const aLine = (patch: Partial<NarrationLine> = {}): NarrationLine =>
   })
 
 describe('VoiceProfile', () => {
-  it('作るときの既定: 速さ 1・音量 1・日本語・声のイメージは空・テロップの見た目は無し', () => {
+  it('作るときの既定: 速さ 1・音量 1・日本語・声のイメージは空・テロップの見た目は無し・誰の声でもない', () => {
     expect(
       CreateVoiceProfileInput.parse({ projectId: PROJECT, name: 'ナレーター', tool: 'macos_say', voiceName: 'Kyoko' }),
     ).toEqual({
@@ -73,6 +74,7 @@ describe('VoiceProfile', () => {
       language: 'ja',
       tuning: {},
       textStyleId: null,
+      characterId: null,
     })
   })
 

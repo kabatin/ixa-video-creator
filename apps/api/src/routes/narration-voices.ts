@@ -6,6 +6,9 @@ import {
   VoiceProfile,
   VoiceProfileId as VoiceProfileIdSchema,
   VoiceToolId,
+  type CharacterId,
+  type ProjectId,
+  type TextStyleId,
 } from '@ixa/domain'
 import { VoiceProviderError } from '@ixa/provider-core'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
@@ -85,6 +88,28 @@ const optionsRoute = createRoute({
 
 const duplicate = () => fail(DUPLICATE_VOICE_NAME_MESSAGE, { name: [DUPLICATE_VOICE_NAME_MESSAGE] })
 
+const CHARACTER_MISMATCH = 'この作品のキャラクターではありません'
+const TEXT_STYLE_MISMATCH = 'この作品のテロップの見た目ではありません'
+
+/** 別の作品のキャラクター・テロップの見た目を指していれば、その欄と理由（指したまま保存すると、別の作品に引きずられる）。 */
+const foreignReference = async (
+  deps: NarrationDeps,
+  projectId: ProjectId,
+  input: { readonly characterId?: CharacterId | null; readonly textStyleId?: TextStyleId | null },
+): Promise<Record<string, string[]> | null> => {
+  if (input.characterId !== undefined && input.characterId !== null) {
+    const character = await deps.characters.findById(input.characterId)
+    if (character?.projectId !== projectId) return { characterId: [CHARACTER_MISMATCH] }
+  }
+  if (input.textStyleId !== undefined && input.textStyleId !== null) {
+    const styles = await deps.textStyles.findByProject(projectId)
+    if (!styles.some((style) => style.id === input.textStyleId)) return { textStyleId: [TEXT_STYLE_MISMATCH] }
+  }
+  return null
+}
+
+const mismatch = (fields: Record<string, string[]>) => fail(Object.values(fields)[0]?.[0] ?? '', fields)
+
 export const narrationVoiceRoutes = (deps: NarrationDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })
     .openapi(listRoute, async (c) => {
@@ -97,6 +122,8 @@ export const narrationVoiceRoutes = (deps: NarrationDeps) =>
       if ((await deps.projects.findById(projectId)) === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       const input = c.req.valid('json')
       if ((await deps.voices.findByName(projectId, input.name)) !== null) return c.json(duplicate(), 409)
+      const foreign = await foreignReference(deps, projectId, input)
+      if (foreign !== null) return c.json(mismatch(foreign), 422)
       return c.json(ok(toVoiceResponse(await deps.voices.create({ ...input, projectId }))), 201)
     })
     .openapi(updateVoiceRoute, async (c) => {
@@ -108,6 +135,8 @@ export const narrationVoiceRoutes = (deps: NarrationDeps) =>
         const sameName = await deps.voices.findByName(current.projectId, patch.name)
         if (sameName !== null && sameName.id !== id) return c.json(duplicate(), 409)
       }
+      const foreign = await foreignReference(deps, current.projectId, patch)
+      if (foreign !== null) return c.json(mismatch(foreign), 422)
       const updated = await deps.voices.update(id, patch)
       // 声の見た目を変えたら、その声の行のテロップに当て直す（名前や声のイメージだけなら、テロップは変わらない）。
       if (patch.textStyleId !== undefined && patch.textStyleId !== current.textStyleId) {

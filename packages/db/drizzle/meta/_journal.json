@@ -218,6 +218,13 @@
       "when": 1791188792359,
       "tag": "0030_telop_highlight",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791190346638,
+      "tag": "0031_voice_character",
+      "breakpoints": true
     }
   ]
 }

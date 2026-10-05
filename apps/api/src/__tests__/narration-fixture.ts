@@ -9,6 +9,7 @@ import { narrationRoutes } from '../routes/narration.js'
 import { aProject } from './fixtures.js'
 import {
   createInMemoryAudioSettingsRepository,
+  createInMemoryCharacterRepository,
   createInMemoryMediaAssetRepository,
   createInMemoryNarrationLineRepository,
   createInMemoryNarrationTakeRepository,
@@ -55,6 +56,7 @@ export const setupNarration = (
     audioSettings: createInMemoryAudioSettingsRepository(),
     textStyles: createInMemoryTextStyleRepository(),
     timelineClips: createInMemoryTimelineClipRepository(),
+    characters: createInMemoryCharacterRepository(),
     voiceAdapter: (tool: VoiceToolId) => (options.adapters ?? { stub: createStubVoice() })[tool] ?? null,
     voiceQueue: {
       enqueue: (id) => {
