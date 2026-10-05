@@ -21,6 +21,7 @@ import {
   type ShotPlan,
   type TimelinePlan,
 } from '../plan.js'
+import { clipAudioVolume } from '../clip-audio.js'
 import type { FitRect } from '../presets.js'
 import { sourceOffsetFrames, type FrameRange } from '../timing.js'
 import { ShotVideo } from './shot-video.js'
@@ -107,17 +108,20 @@ const DipBody: React.FC<{ dip: DipPlan }> = ({ dip }) => {
  * 自身はフックを持たないので、テストから素の関数として呼んで
  * どの Remotion コンポーネントを選んだかを確認できる。
  */
-export const ClipMedia: React.FC<{ content: MediaContent; fps: number; video: FitRect }> = ({
+export const ClipMedia: React.FC<{ content: MediaContent; fps: number; video: FitRect; durationSec?: number }> = ({
   content,
   fps,
   video,
+  durationSec,
 }) => {
   if (content.kind === 'image') {
     return <Img src={content.mediaUrl} style={fitStyle(video)} />
   }
   if (content.kind === 'audio') {
     // 頭を切った効果音は、切った位置から鳴らす（以前は渡しておらず、頭から鳴っていた）。
-    return <Audio src={content.mediaUrl} volume={content.volume} startFrom={sourceOffsetFrames(content.inSec, fps)} />
+    // フェード（ADR-0039）があれば、クリップの頭からのコマで音量を変える。
+    const volume = clipAudioVolume({ ...content, durationSec: durationSec ?? content.outSec - content.inSec }, fps)
+    return <Audio src={content.mediaUrl} volume={volume} startFrom={sourceOffsetFrames(content.inSec, fps)} />
   }
   return (
     <OffthreadVideo
@@ -146,7 +150,7 @@ export const ClipBody: React.FC<{ clip: ClipPlan; fps: number; video: FitRect }>
   if (content.type === 'media') {
     return (
       <AbsoluteFill style={layerStyle}>
-        <ClipMedia content={content} fps={fps} video={video} />
+        <ClipMedia content={content} fps={fps} video={video} durationSec={clip.range.durationInFrames / fps} />
       </AbsoluteFill>
     )
   }

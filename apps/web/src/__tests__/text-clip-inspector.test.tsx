@@ -127,6 +127,31 @@ describe('TextClipInspector', () => {
     })
   })
 
+  it('効果音のフェードを秒で入れる（0 はフェードなし）', async () => {
+    fake.listClips.mockResolvedValue([
+      TimelineClip.parse({
+        id: MEDIA_CLIP,
+        projectId: aProject.id,
+        track: 'SFX',
+        startSec: 3,
+        durationSec: 1.5,
+        layer: 0,
+        content: { type: 'media', mediaAssetId: MediaAssetId.parse('01ARZ3NDEKTSV4RRFFQ69G5FB4'), inSec: 0, outSec: 1.5, volume: 1 },
+        opacity: 1,
+        createdAt: new Date(),
+      }),
+    ])
+    renderInWorkbench(<AudioClipInspector id={MEDIA_CLIP} />)
+    const fadeOut = await screen.findByLabelText('フェードアウト')
+
+    await userEvent.clear(fadeOut)
+    await userEvent.type(fadeOut, '0.5{Enter}')
+
+    await waitFor(() => {
+      expect(fake.updateClip.mock.calls.at(-1)).toMatchObject([MEDIA_CLIP, { content: { type: 'media', fadeOutSec: 0.5 } }])
+    })
+  })
+
   it('書体を変えると、その項目だけを重ねて保存する（文字と他の見た目は残す）', async () => {
     await open()
 

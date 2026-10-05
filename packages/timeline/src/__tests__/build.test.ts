@@ -179,6 +179,17 @@ describe('クリップのメディア解決', () => {
     }
   })
 
+  it('効果音のフェードを書き出しの材料に写す（無ければ付けない）', () => {
+    const faded = makeMediaClip(1, 'SFX', 0, 2)
+    const clips = [
+      { ...faded, content: { ...faded.content, fadeInSec: 0.2, fadeOutSec: 0.5 } } as typeof faded,
+      makeMediaClip(2, 'SFX', 2, 1),
+    ]
+    const doc = buildTimelineDocument(makeSource({ shots: [makeShot(1, 0, 4)], clips }))
+    expect(doc.clips[0]?.content).toMatchObject({ fadeInSec: 0.2, fadeOutSec: 0.5 })
+    expect(doc.clips[1]?.content).not.toHaveProperty('fadeInSec')
+  })
+
   it('解決できないクリップは消さず unresolved として残す', () => {
     const clips = [makeMediaClip(1, 'VIDEO2', 0, 2)]
     const doc = buildTimelineDocument(

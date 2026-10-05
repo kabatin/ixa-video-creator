@@ -8,6 +8,9 @@ import { Transition } from '../shot/shot.js'
 export const TimelineTrack = z.enum(['VFX', 'TEXT', 'VIDEO2', 'SFX'])
 export type TimelineTrack = z.infer<typeof TimelineTrack>
 
+/** 音のクリップ（効果音）のフェードの上限（秒。楽曲と同じ）。 */
+export const CLIP_FADE_MAX_SEC = 30
+
 export const TimelineClipContent = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('media'),
@@ -15,6 +18,9 @@ export const TimelineClipContent = z.discriminatedUnion('type', [
     inSec: Seconds,
     outSec: Seconds,
     volume: z.number().min(0).max(2).default(1),
+    /** フェード（ADR-0039。音のクリップだけが使う）。省けば付けない（前からあるクリップはそのまま読める）。 */
+    fadeInSec: Seconds.max(CLIP_FADE_MAX_SEC).optional(),
+    fadeOutSec: Seconds.max(CLIP_FADE_MAX_SEC).optional(),
   }),
   z.object({
     type: z.literal('text'),
@@ -67,6 +73,8 @@ export const RenderableClipContent = z.discriminatedUnion('type', [
     inSec: Seconds,
     outSec: Seconds,
     volume: z.number().min(0).max(2),
+    fadeInSec: Seconds.optional(),
+    fadeOutSec: Seconds.optional(),
   }),
   z.object({
     type: z.literal('text'),

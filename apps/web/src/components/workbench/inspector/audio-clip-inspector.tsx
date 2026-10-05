@@ -1,6 +1,6 @@
 'use client'
 
-import type { TimelineClipId } from '@ixa/domain'
+import { CLIP_FADE_MAX_SEC, type TimelineClipId } from '@ixa/domain'
 import { useEffect, useMemo, useState } from 'react'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { ObjectHeader } from '@/components/workbench/ui/object-header'
@@ -12,7 +12,12 @@ import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import { formatClock, formatDuration } from '@/lib/format-time'
 import type { WireTimelineClip } from '@/lib/timeline-api'
-import { parseClockInput } from '@/lib/time-input'
+import { parseClockInput, parseFadeInput } from '@/lib/time-input'
+
+const fadeProblem = (next: string): string | null => {
+  const value = parseFadeInput(next)
+  return value !== null && value <= CLIP_FADE_MAX_SEC ? null : `0〜${String(CLIP_FADE_MAX_SEC)} 秒で入れてください（0 はフェードなし）`
+}
 
 type Loaded =
   | { readonly kind: 'loading' }
@@ -20,7 +25,7 @@ type Loaded =
   | { readonly kind: 'error'; readonly message: string }
 
 /**
- * 効果音のクリップ（ADR-0039）。位置と音量を直し、消す。長さは落とした音の長さのまま。
+ * 効果音のクリップ（ADR-0039）。位置・音量・フェードを直し、消す。長さは落とした音の長さのまま。
  * 直したらサーバの材料を読み直す（プレビューとタイムラインが追いつく）。
  */
 export const AudioClipInspector = ({ id }: { readonly id: TimelineClipId }) => {
@@ -77,6 +82,18 @@ export const AudioClipInspector = ({ id }: { readonly id: TimelineClipId }) => {
               return Number.isFinite(value) && value >= 0 && value <= 200 ? null : '0〜200% で入れてください'
             }}
             onSave={(next) => save({ content: { ...content, volume: Number.parseFloat(next) / 100 } })}
+          />
+          <AutoSaveField
+            label="フェードイン"
+            value={formatDuration(content.fadeInSec ?? 0)}
+            validate={fadeProblem}
+            onSave={(next) => save({ content: { ...content, fadeInSec: parseFadeInput(next) ?? 0 } })}
+          />
+          <AutoSaveField
+            label="フェードアウト"
+            value={formatDuration(content.fadeOutSec ?? 0)}
+            validate={fadeProblem}
+            onSave={(next) => save({ content: { ...content, fadeOutSec: parseFadeInput(next) ?? 0 } })}
           />
           <p className="text-xs text-muted">長さは落とした音の長さのままです。帯の上でつかんで動かすこともできます。</p>
           <Button

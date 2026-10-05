@@ -112,6 +112,8 @@ const toRenderableClip = (
       inSec: clip.content.inSec,
       outSec: clip.content.outSec,
       volume: clip.content.volume,
+      ...(clip.content.fadeInSec === undefined ? {} : { fadeInSec: clip.content.fadeInSec }),
+      ...(clip.content.fadeOutSec === undefined ? {} : { fadeOutSec: clip.content.fadeOutSec }),
     },
   }
 }
