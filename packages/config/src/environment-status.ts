@@ -79,6 +79,18 @@ export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
       '実際の映像生成に使う。未設定のあいだはスタブだけが動き、費用は発生しない。',
     ),
     secretStatus(
+      'Gemini（声・文字起こし）',
+      'GEMINI_API_KEY',
+      config.voiceAi.geminiApiKey,
+      'ナレーションの声と録音の文字起こしに使う。AUDIO_API_PROVIDERS に gemini_api と書いたときだけ使う。',
+    ),
+    secretStatus(
+      'ElevenLabs（声・文字起こし）',
+      'ELEVENLABS_API_KEY',
+      config.voiceAi.elevenLabsApiKey,
+      'ナレーションの声と録音の文字起こしに使う（有料）。AUDIO_API_PROVIDERS に elevenlabs と書いたときだけ使う。',
+    ),
+    secretStatus(
       'ローカルの動画生成（vpipe）の合言葉',
       'VPIPE_API_TOKEN',
       config.providers.vpipeApiToken,

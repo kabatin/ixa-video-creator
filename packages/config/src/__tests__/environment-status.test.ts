@@ -46,6 +46,14 @@ const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
       ...VPIPE_OFF,
     },
     renderExportDir: null,
+    voiceAi: {
+      apiProviders: [],
+      geminiApiKey: null,
+      elevenLabsApiKey: null,
+      geminiBilling: 'free',
+      elevenLabsUsdPer1kChars: 0.08,
+      whisperCppModel: null,
+    },
     ...overrides,
   })
 

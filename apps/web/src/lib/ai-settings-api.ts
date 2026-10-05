@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { Requester } from '@/lib/requester'
 
 /**
- * 使う AI（ADR-0032）。この環境で見つかった AI と、用途（テキスト・画像・動画）ごとの選択。
+ * 使う AI（ADR-0032）。この環境で見つかった AI と、用途（テキスト・画像・動画・声・文字起こし）ごとの選択。
  * 選べるかの規則は API（domain の `aiChoiceProblem`）が決め、ここは理由をそのまま受け取る。
  */
 
@@ -20,7 +20,11 @@ const WireAiTool = z.object({
     text: z.string().nullable(),
     image: z.string().nullable(),
     video: z.string().nullable(),
+    voice: z.string().nullable(),
+    transcribe: z.string().nullable(),
   }),
+  /** 使う前に知っておくこと（無料枠の扱い・料金・商用の可否）。 */
+  notice: z.string().nullable(),
 })
 export type WireAiTool = z.infer<typeof WireAiTool>
 

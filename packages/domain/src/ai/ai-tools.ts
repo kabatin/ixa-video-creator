@@ -1,20 +1,23 @@
 import { z } from 'zod'
 
 /**
- * 使う AI（ADR-0032）。この環境で見つかった AI から、テキスト・画像・動画ごとに 1 つ選ぶ。
+ * 使う AI（ADR-0032）。この環境で見つかった AI から、テキスト・画像・動画・声・文字起こしごとに 1 つ選ぶ
+ * （声と文字起こしは ADR-0038）。
  *
  * **何に使えるかは、アダプタが実際にある用途だけを書く。** 入っていても口が無い用途は選ばせない
  * （Gemini・Grok は見つけて見せるが、テキストの口ができるまでは選べない）。
  * 選べるかの規則は `aiChoiceProblem` の 1 か所で、API の検証と画面の灰色が同じ理由を言う。
  */
 
-export const AiPurpose = z.enum(['text', 'image', 'video'])
+export const AiPurpose = z.enum(['text', 'image', 'video', 'voice', 'transcribe'])
 export type AiPurpose = z.infer<typeof AiPurpose>
 
 export const AI_PURPOSE_LABELS: Readonly<Record<AiPurpose, string>> = Object.freeze({
   text: 'テキスト',
   image: '画像',
   video: '動画',
+  voice: '声',
+  transcribe: '文字起こし',
 })
 
 export const AiToolId = z.enum([
@@ -26,6 +29,10 @@ export const AiToolId = z.enum([
   'local',
   'vpipe',
   'fal',
+  'macos_say',
+  'gemini_api',
+  'elevenlabs',
+  'whisper_cpp',
 ])
 export type AiToolId = z.infer<typeof AiToolId>
 
@@ -33,10 +40,16 @@ export type AiToolId = z.infer<typeof AiToolId>
 export type AiToolDetection =
   /** アプリに入っている。いつでも使える。 */
   | { readonly kind: 'builtin' }
-  /** この名前の CLI が入っているか（`--version`）。 */
-  | { readonly kind: 'cli'; readonly command: 'claude' | 'codex' | 'gemini' | 'grok' }
-  /** API キーが設定されているか（値は見ない）。 */
-  | { readonly kind: 'api_key'; readonly key: 'FAL_API_KEY' }
+  /** この名前の CLI が入っているか（`args` で叩く。既定は `--version`）。 */
+  | {
+      readonly kind: 'cli'
+      readonly command: 'claude' | 'codex' | 'gemini' | 'grok' | 'say' | 'whisper-cli'
+      readonly args?: readonly string[]
+    }
+  /** API キーが設定され、`.env` で使ってよいと明示されているか（値は見ない）。 */
+  | { readonly kind: 'api_key'; readonly key: 'FAL_API_KEY' | 'GEMINI_API_KEY' | 'ELEVENLABS_API_KEY' }
+  /** whisper.cpp（`whisper-cli`）が入っていて、モデルのファイル（`WHISPER_CPP_MODEL`）があるか。 */
+  | { readonly kind: 'whisper_cpp' }
   /** 手元の生成サーバが応答するか（vpipe-api の `GET /v1/health`。ADR-0031）。 */
   | { readonly kind: 'local_server' }
 
@@ -46,16 +59,19 @@ export type AiToolSpec = {
   readonly detect: AiToolDetection
   /** 今この用途の口（アダプタ）がある用途。 */
   readonly purposes: readonly AiPurpose[]
+  /** 使う前に知っておくこと（無料枠の扱い・料金・商用の可否）。選ぶ画面にそのまま出す。無ければ null。 */
+  readonly notice: string | null
 }
 
-const tool = (spec: AiToolSpec): AiToolSpec => Object.freeze(spec)
+const tool = (spec: Omit<AiToolSpec, 'notice'> & { readonly notice?: string }): AiToolSpec =>
+  Object.freeze({ ...spec, notice: spec.notice ?? null })
 
 export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
   stub: tool({
     id: 'stub',
     label: 'お試し（AI を使わない仮のもの）',
     detect: { kind: 'builtin' },
-    purposes: ['text', 'image', 'video'],
+    purposes: ['text', 'image', 'video', 'voice', 'transcribe'],
   }),
   claude_cli: tool({
     id: 'claude_cli',
@@ -102,6 +118,38 @@ export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
     detect: { kind: 'api_key', key: 'FAL_API_KEY' },
     purposes: ['video'],
   }),
+  macos_say: tool({
+    id: 'macos_say',
+    label: 'Mac の声（無料・この Mac で読む）',
+    // `say -v ?` は声の一覧を出すだけで、読み上げない。
+    detect: { kind: 'cli', command: 'say', args: ['-v', '?'] },
+    purposes: ['voice'],
+    notice: '機械的な声です。間や長さを決める仮のナレーションに向いています。',
+  }),
+  gemini_api: tool({
+    id: 'gemini_api',
+    label: 'Gemini（Google の API・無料枠あり）',
+    detect: { kind: 'api_key', key: 'GEMINI_API_KEY' },
+    purposes: ['voice', 'transcribe'],
+    notice:
+      '原稿は Google に送られます。無料枠では送った内容が製品の改善に使われ、人が見ることがあります。' +
+      '作った声には透かし（SynthID）が入ります。声の料金は 2027-01-01 から倍になります。',
+  }),
+  elevenlabs: tool({
+    id: 'elevenlabs',
+    label: 'ElevenLabs（有料）',
+    detect: { kind: 'api_key', key: 'ELEVENLABS_API_KEY' },
+    purposes: ['voice', 'transcribe'],
+    notice:
+      '原稿は ElevenLabs に送られます。Free プランは商用に使えず、公開するときはクレジット表記（elevenlabs.io）が要ります。' +
+      '有料プランは商用に使えます。',
+  }),
+  whisper_cpp: tool({
+    id: 'whisper_cpp',
+    label: 'whisper.cpp（無料・この Mac で聞き取る）',
+    detect: { kind: 'whisper_cpp' },
+    purposes: ['transcribe'],
+  }),
 })
 
 /** 見つかったか。見つからないときは理由（入っていない・起動していない・キーが無い）を持つ。 */
@@ -113,6 +161,8 @@ export const AiSettings = z.object({
   text: AiToolId,
   image: AiToolId,
   video: AiToolId,
+  voice: AiToolId,
+  transcribe: AiToolId,
 })
 export type AiSettings = z.infer<typeof AiSettings>
 
@@ -129,11 +179,16 @@ export const aiChoiceProblem = (
   return status.state === 'missing' ? `${spec.label} を使えません: ${status.reason}` : null
 }
 
-/** 勧める順。**お金が掛かるもの（fal）は入れない**（キーがあっても、使うかは人が選ぶ）。 */
+/**
+ * 勧める順。**お金が掛かるもの（fal・ElevenLabs）と、原稿が外に出るもの（Gemini）は入れない**
+ * （キーがあっても、使うかは人が選ぶ）。
+ */
 const RECOMMENDATION_ORDER: Readonly<Record<AiPurpose, readonly AiToolId[]>> = Object.freeze({
   text: ['claude_cli', 'codex_cli', 'grok_cli'],
   image: ['codex_cli'],
   video: ['vpipe', 'local'],
+  voice: ['macos_say'],
+  transcribe: ['whisper_cpp'],
 })
 
 /** 初めて選ぶときの初期の組み合わせ。見つかって使えるものから選び、無ければお試し。 */
@@ -144,7 +199,13 @@ export const recommendAiSettings = (
     RECOMMENDATION_ORDER[purpose].find(
       (id) => aiChoiceProblem(purpose, id, statuses[id]) === null,
     ) ?? 'stub'
-  return { text: pick('text'), image: pick('image'), video: pick('video') }
+  return {
+    text: pick('text'),
+    image: pick('image'),
+    video: pick('video'),
+    voice: pick('voice'),
+    transcribe: pick('transcribe'),
+  }
 }
 
 /** 選んであれば選んだもの、まだなら初期値（環境変数）。どちらかを名乗る。 */
@@ -170,4 +231,7 @@ export const aiDefaultsFromEnv = (env: AiEnvChoices): AiSettings => ({
   text: env.storyboardDrafter,
   image: env.imageProvider,
   video: 'stub',
+  // 声と文字起こしは新しい用途。選ぶまではお試し（音を作らない・外に出さない）。
+  voice: 'stub',
+  transcribe: 'stub',
 })

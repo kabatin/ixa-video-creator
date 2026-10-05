@@ -17,36 +17,48 @@ const TOOLS: readonly WireAiTool[] = [
     id: 'stub',
     label: 'お試し',
     status: { state: 'ready', version: null },
-    problems: { text: null, image: null, video: null },
+    problems: { text: null, image: null, video: null, voice: null, transcribe: null },
+    notice: null,
   },
   {
     id: 'claude_cli',
     label: 'Claude Code',
     status: { state: 'ready', version: '2.1.283' },
-    problems: { text: null, image: '画像にはまだ使えません', video: '動画にはまだ使えません' },
+    problems: { text: null, image: '画像にはまだ使えません', video: '動画にはまだ使えません', voice: 'x', transcribe: 'x' },
+    notice: null,
   },
   {
     id: 'codex_cli',
     label: 'Codex',
     status: { state: 'ready', version: '0.154.0' },
-    problems: { text: 'テキストにはまだ使えません', image: null, video: '動画にはまだ使えません' },
+    problems: { text: 'テキストにはまだ使えません', image: null, video: '動画にはまだ使えません', voice: 'x', transcribe: 'x' },
+    notice: null,
   },
   {
     id: 'local',
     label: '静止画を動かす（無料）',
     status: { state: 'ready', version: null },
-    problems: { text: 'x', image: 'x', video: null },
+    problems: { text: 'x', image: 'x', video: null, voice: 'x', transcribe: 'x' },
+    notice: null,
   },
   {
     id: 'vpipe',
     label: '手元の MiniMax H3',
     status: { state: 'missing', reason: '起動していません' },
-    problems: { text: 'x', image: 'x', video: '手元の MiniMax H3 を使えません: 起動していません' },
+    problems: { text: 'x', image: 'x', video: '手元の MiniMax H3 を使えません: 起動していません', voice: 'x', transcribe: 'x' },
+    notice: null,
+  },
+  {
+    id: 'gemini_api',
+    label: 'Gemini（Google の API・無料枠あり）',
+    status: { state: 'ready', version: null },
+    problems: { text: 'x', image: 'x', video: 'x', voice: null, transcribe: null },
+    notice: '原稿は Google に送られます。無料枠では送った内容が製品の改善に使われます。',
   },
 ]
 
-const RECOMMENDED: AiSettings = { text: 'claude_cli', image: 'codex_cli', video: 'local' }
-const CURRENT: AiSettings = { text: 'stub', image: 'stub', video: 'stub' }
+const RECOMMENDED: AiSettings = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'stub', transcribe: 'stub' }
+const CURRENT: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' }
 
 const fakeApi = (overrides: Partial<AiSettingsApi> = {}): AiSettingsApi => ({
   listAiTools: vi.fn(() => Promise.resolve({ tools: [...TOOLS], recommended: RECOMMENDED })),
@@ -119,6 +131,8 @@ describe('AiSetupDialogBody', () => {
         text: 'claude_cli',
         image: 'stub',
         video: 'local',
+        voice: 'stub',
+        transcribe: 'stub',
       })
       expect(value.closeDialog).toHaveBeenCalled()
     })
@@ -156,5 +170,22 @@ describe('AiSetupDialogBody', () => {
 
     expect(api.saveAiSettings).not.toHaveBeenCalled()
     expect(value.closeDialog).toHaveBeenCalled()
+  })
+
+  /** 声と文字起こし（ADR-0038）。原稿が外に出る・お金が掛かる AI は、選ぶ前に知っておくことを見せる。 */
+  it('声と文字起こしも選べ、使う前に知っておくことを AI の下に出す', async () => {
+    const { api, value } = await open()
+
+    const voice = screen.getByRole('radiogroup', { name: /^声/ })
+    expect(within(voice).getByText(/製品の改善に使われます/)).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: /文字起こし/ })).toBeInTheDocument()
+
+    await userEvent.click(within(voice).getByRole('radio', { name: /Gemini/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'この設定で使う' }))
+
+    await waitFor(() => {
+      expect(api.saveAiSettings).toHaveBeenCalledWith(expect.objectContaining({ voice: 'gemini_api' }))
+      expect(value.closeDialog).toHaveBeenCalled()
+    })
   })
 })

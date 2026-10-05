@@ -33,7 +33,12 @@ const probe = (patch: Partial<AiToolProbe> = {}): AiToolProbe => ({
   runCli: runnerWith(
     Object.fromEntries(Object.entries(VERSIONS).map(([name, out]) => [name, completed(out)])),
   ),
-  fal: { keyConfigured: false, enabled: false },
+  apiKeys: {
+    FAL_API_KEY: { keyConfigured: false, enabled: false },
+    GEMINI_API_KEY: { keyConfigured: false, enabled: false },
+    ELEVENLABS_API_KEY: { keyConfigured: false, enabled: false },
+  },
+  whisperModel: () => Promise.resolve('not_configured'),
   localServer: {
     enabled: true,
     check: () =>
@@ -55,13 +60,14 @@ describe('detectAiTools', () => {
     expect(found.grok_cli).toEqual({ state: 'ready', version: '0.2.102' })
   })
 
-  it('叩くのは表にある名前の --version だけ（短い時間切れで）', async () => {
+  it('叩くのは表にある名前だけ（版は --version、Mac の声は声の一覧。短い時間切れで）', async () => {
     const calls: CliInvocation[] = []
     await detectAiTools(probe({ runCli: runnerWith({}, calls) }))
 
-    expect(calls.map((call) => call.command).sort()).toEqual(['claude', 'codex', 'gemini', 'grok'])
+    expect(calls.map((call) => call.command).sort()).toEqual(['claude', 'codex', 'gemini', 'grok', 'say'])
     for (const call of calls) {
-      expect(call.args).toEqual(['--version'])
+      // `say -v ?` は声の一覧を出すだけで、読み上げない。
+      expect(call.args).toEqual(call.command === 'say' ? ['-v', '?'] : ['--version'])
       expect(call.timeoutMs).toBeLessThanOrEqual(5000)
     }
   })
@@ -144,8 +150,9 @@ describe('detectAiTools', () => {
 
   /** お金が掛かるので、キーがあるだけでは使わない（`.env` の VIDEO_PROVIDER=fal で明示する。無認証の API のため）。 */
   it('fal はキーがあっても、.env で有効にしていなければ使えない（理由に有効にし方を言う）', async () => {
-    const keyOnly = await detectAiTools(probe({ fal: { keyConfigured: true, enabled: false } }))
-    const enabled = await detectAiTools(probe({ fal: { keyConfigured: true, enabled: true } }))
+    const keys = probe().apiKeys
+    const keyOnly = await detectAiTools(probe({ apiKeys: { ...keys, FAL_API_KEY: { keyConfigured: true, enabled: false } } }))
+    const enabled = await detectAiTools(probe({ apiKeys: { ...keys, FAL_API_KEY: { keyConfigured: true, enabled: true } } }))
     const none = await detectAiTools(probe())
 
     expect(keyOnly.fal).toEqual({
@@ -157,5 +164,49 @@ describe('detectAiTools', () => {
       state: 'missing',
       reason: expect.stringMatching(/FAL_API_KEY/) as unknown,
     })
+  })
+
+  /** 声と文字起こし（ADR-0038）。原稿が外に出るので、キーがあるだけでは使わない（`.env` の AUDIO_API_PROVIDERS で明示する）。 */
+  it('Gemini・ElevenLabs はキーがあっても、AUDIO_API_PROVIDERS に書いていなければ使えない', async () => {
+    const keys = probe().apiKeys
+    const keyOnly = await detectAiTools(
+      probe({ apiKeys: { ...keys, GEMINI_API_KEY: { keyConfigured: true, enabled: false }, ELEVENLABS_API_KEY: { keyConfigured: true, enabled: false } } }),
+    )
+    const enabled = await detectAiTools(probe({ apiKeys: { ...keys, GEMINI_API_KEY: { keyConfigured: true, enabled: true } } }))
+
+    expect(keyOnly.gemini_api).toEqual({ state: 'missing', reason: expect.stringMatching(/AUDIO_API_PROVIDERS に gemini_api/) as unknown })
+    expect(keyOnly.elevenlabs).toEqual({ state: 'missing', reason: expect.stringMatching(/AUDIO_API_PROVIDERS に elevenlabs/) as unknown })
+    expect(enabled.gemini_api).toEqual({ state: 'ready', version: null })
+    expect((await detectAiTools(probe())).gemini_api).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/GEMINI_API_KEY/) as unknown,
+    })
+  })
+
+  it('Mac の声は、声の一覧が出れば使える（Mac 以外では入っていない）', async () => {
+    const found = await detectAiTools(probe({ runCli: runnerWith({ say: completed('Kyoko ja_JP # こんにちは\n') }) }))
+    expect(found.macos_say).toEqual({ state: 'ready', version: null })
+    expect((await detectAiTools(probe({ runCli: runnerWith({}) }))).macos_say).toEqual({ state: 'missing', reason: '入っていません' })
+  })
+
+  it('whisper.cpp は、モデルのファイルがあって whisper-cli が起動できれば使える', async () => {
+    const calls: CliInvocation[] = []
+    const ready = await detectAiTools(
+      probe({ whisperModel: () => Promise.resolve('ready'), runCli: runnerWith({ 'whisper-cli': completed('usage: whisper-cli') }, calls) }),
+    )
+    expect(ready.whisper_cpp).toEqual({ state: 'ready', version: null })
+    expect(calls.find((call) => call.command === 'whisper-cli')?.args).toEqual(['-h'])
+
+    expect((await detectAiTools(probe())).whisper_cpp).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/WHISPER_CPP_MODEL/) as unknown,
+    })
+    expect((await detectAiTools(probe({ whisperModel: () => Promise.resolve('file_missing') }))).whisper_cpp).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/見つかりません/) as unknown,
+    })
+    expect(
+      (await detectAiTools(probe({ whisperModel: () => Promise.resolve('ready'), runCli: runnerWith({}) }))).whisper_cpp,
+    ).toEqual({ state: 'missing', reason: '入っていません' })
   })
 })

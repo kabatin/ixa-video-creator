@@ -15,6 +15,8 @@ const PURPOSES: Readonly<Record<AiPurpose, { readonly title: string; readonly hi
   text: { title: 'テキスト', hint: '絵コンテの案（各 Shot の説明の下書き）' },
   image: { title: '画像', hint: 'Shot の絵（最初のフレーム）' },
   video: { title: '動画', hint: 'Shot の映像。AUTO はこの AI のモデルから選びます' },
+  voice: { title: '声', hint: 'ナレーション・セリフを読む' },
+  transcribe: { title: '文字起こし', hint: '録音したナレーションを聞き取って、行とテロップにする' },
 }
 
 type Loaded =
@@ -59,6 +61,8 @@ const PurposeGroup = ({
           <span className={option.problem === null ? '' : 'text-muted'}>
             {option.version === null ? option.label : `${option.label} ${option.version}`}
             {option.problem !== null && <span className="block text-xs">{option.problem}</span>}
+            {/* 原稿が外に出る・お金が掛かる AI は、選ぶ前に知っておくことを見せる（ADR-0038）。 */}
+            {option.notice !== null && <span className="block text-xs text-warn">{option.notice}</span>}
           </span>
         </label>
       ))}

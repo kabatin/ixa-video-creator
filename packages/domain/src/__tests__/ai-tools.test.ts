@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { VoiceToolId } from '../narration/voice-profile.js'
 import {
+  AI_PURPOSE_LABELS,
   AI_TOOLS,
   AiSettings,
   aiChoiceProblem,
@@ -58,6 +60,8 @@ describe('recommendAiSettings', () => {
       text: 'stub',
       image: 'stub',
       video: 'local',
+      voice: 'stub',
+      transcribe: 'stub',
     })
   })
 
@@ -72,6 +76,8 @@ describe('recommendAiSettings', () => {
       text: 'claude_cli',
       image: 'codex_cli',
       video: 'local',
+      voice: 'stub',
+      transcribe: 'stub',
     })
   })
 
@@ -104,7 +110,7 @@ describe('recommendAiSettings', () => {
     }
     const recommended = recommendAiSettings(statuses)
 
-    for (const purpose of ['text', 'image', 'video'] as const) {
+    for (const purpose of ['text', 'image', 'video', 'voice', 'transcribe'] as const) {
       const tool = recommended[purpose]
       expect(aiChoiceProblem(purpose, tool, statuses[tool])).toBeNull()
     }
@@ -112,14 +118,14 @@ describe('recommendAiSettings', () => {
 })
 
 describe('resolveAiSettings', () => {
-  const defaults = { text: 'stub', image: 'stub', video: 'stub' } as const
+  const defaults = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' } as const
 
   it('まだ選んでいなければ初期値（環境変数）を使い、そう名乗る', () => {
     expect(resolveAiSettings(null, defaults)).toEqual({ settings: defaults, source: 'default' })
   })
 
   it('選んであれば選んだものが勝つ', () => {
-    const saved = { text: 'claude_cli', image: 'codex_cli', video: 'local' } as const
+    const saved = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'macos_say', transcribe: 'whisper_cpp' } as const
 
     expect(resolveAiSettings(saved, defaults)).toEqual({ settings: saved, source: 'saved' })
   })
@@ -130,7 +136,7 @@ describe('aiDefaultsFromEnv', () => {
   const env = { storyboardDrafter: 'stub', imageProvider: 'stub' } as const
 
   it('何も指定が無ければ全部お試し', () => {
-    expect(aiDefaultsFromEnv(env)).toEqual({ text: 'stub', image: 'stub', video: 'stub' })
+    expect(aiDefaultsFromEnv(env)).toEqual({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' })
   })
 
   it('テキストと画像は、環境変数で選んだ口をそのまま初期値にする', () => {
@@ -140,6 +146,8 @@ describe('aiDefaultsFromEnv', () => {
       text: 'claude_cli',
       image: 'codex_cli',
       video: 'stub',
+      voice: 'stub',
+      transcribe: 'stub',
     })
   })
 
@@ -154,12 +162,63 @@ describe('aiDefaultsFromEnv', () => {
 
 describe('AiSettings', () => {
   it('知らない AI の名前は受けない', () => {
-    expect(AiSettings.safeParse({ text: 'chatgpt', image: 'stub', video: 'stub' }).success).toBe(
-      false,
-    )
+    expect(
+      AiSettings.safeParse({ text: 'chatgpt', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' }).success,
+    ).toBe(false)
   })
 
-  it('3 つの用途がすべて要る', () => {
-    expect(AiSettings.safeParse({ text: 'stub', image: 'stub' }).success).toBe(false)
+  it('5 つの用途がすべて要る', () => {
+    expect(AiSettings.safeParse({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub' }).success).toBe(false)
+    expect(
+      AiSettings.safeParse({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' }).success,
+    ).toBe(true)
+  })
+})
+
+/**
+ * 声と文字起こし（ADR-0038。制作者 2026-10-05「Gemini 3.8 Flash TTS もしくは有料なら ElevenLabs」）。
+ * 無料で手元で動くもの（Mac の声・whisper.cpp）だけを勧める。原稿が外に出るもの・お金が掛かるものは人が選ぶ。
+ */
+describe('声と文字起こし', () => {
+  it('用途の名前は「声」「文字起こし」', () => {
+    expect(AI_PURPOSE_LABELS.voice).toBe('声')
+    expect(AI_PURPOSE_LABELS.transcribe).toBe('文字起こし')
+  })
+
+  it('声に使えるのは スタブ・Mac の声・Gemini・ElevenLabs（声の形の VoiceToolId と同じ）', () => {
+    const voiceTools = (Object.keys(AI_TOOLS) as AiToolId[]).filter((id) => AI_TOOLS[id].purposes.includes('voice'))
+    expect([...voiceTools].sort()).toEqual([...VoiceToolId.options].sort())
+  })
+
+  it('文字起こしに使えるのは スタブ・whisper.cpp・ElevenLabs・Gemini', () => {
+    expect(aiChoiceProblem('transcribe', 'whisper_cpp', ready())).toBeNull()
+    expect(aiChoiceProblem('transcribe', 'elevenlabs', ready())).toBeNull()
+    expect(aiChoiceProblem('transcribe', 'gemini_api', ready())).toBeNull()
+    expect(aiChoiceProblem('transcribe', 'macos_say', ready())).not.toBeNull()
+  })
+
+  it('Gemini の声は API（gemini_api）。廃止した Gemini CLI は声にも使えない', () => {
+    expect(aiChoiceProblem('voice', 'gemini_cli', ready())).not.toBeNull()
+    expect(aiChoiceProblem('voice', 'gemini_api', ready())).toBeNull()
+  })
+
+  it('Mac の声と whisper.cpp が使えれば勧める', () => {
+    const recommended = recommendAiSettings({ ...allMissing(), macos_say: ready(), whisper_cpp: ready() })
+    expect(recommended.voice).toBe('macos_say')
+    expect(recommended.transcribe).toBe('whisper_cpp')
+  })
+
+  it('Gemini・ElevenLabs は使えても勧めない（原稿が外に出る・お金が掛かる）', () => {
+    const recommended = recommendAiSettings({ ...allMissing(), gemini_api: ready(), elevenlabs: ready() })
+    expect(recommended.voice).toBe('stub')
+    expect(recommended.transcribe).toBe('stub')
+  })
+
+  it('Gemini と ElevenLabs には、使う前に知っておくことを添える（無料枠の扱い・透かし・値上げ・商用）', () => {
+    expect(AI_TOOLS.gemini_api.notice).toMatch(/製品の改善に使われ/)
+    expect(AI_TOOLS.gemini_api.notice).toMatch(/SynthID/)
+    expect(AI_TOOLS.gemini_api.notice).toMatch(/2027-01-01/)
+    expect(AI_TOOLS.elevenlabs.notice).toMatch(/商用/)
+    expect(AI_TOOLS.claude_cli.notice).toBeNull()
   })
 })

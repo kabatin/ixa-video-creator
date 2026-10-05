@@ -10,7 +10,7 @@ import { renderInWorkbench } from './workbench-fixture'
  * 選ばずに閉じても次からは出さない（メニューから開ける）。
  */
 
-const SETTINGS: AiSettings = { text: 'stub', image: 'stub', video: 'stub' }
+const SETTINGS: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' }
 
 const apiWith = (source: 'saved' | 'default'): Pick<AiSettingsApi, 'getAiSettings'> => ({
   getAiSettings: vi.fn(() => Promise.resolve({ settings: SETTINGS, source })),

@@ -12,6 +12,8 @@ export type AiOption = {
   readonly version: string | null
   /** 選べない理由。選べるなら null。行の名前は繰り返さない（見つからなければその理由だけ）。 */
   readonly problem: string | null
+  /** 使う前に知っておくこと（無料枠の扱い・料金・商用の可否）。 */
+  readonly notice: string | null
 }
 
 export type AiPurposeOptions = {
@@ -19,6 +21,16 @@ export type AiPurposeOptions = {
   readonly options: readonly AiOption[]
   /** 入っているが、その用途にはまだ使えない AI（1 行で名前だけ言う。行を埋めない）。 */
   readonly installedButUnsupported: readonly AiToolId[]
+}
+
+/**
+ * この Mac に入れた AI の CLI か。「入っているが、この用途には使えない」はこれだけを言う。
+ * アプリに入っているもの（お試し・静止画を動かす）、Mac の声（OS の道具）、whisper.cpp、鍵で使う API は
+ * 「入れた AI」ではないので挙げない（ほかの用途の欄が名前で埋まる）。
+ */
+const isInstalledAiCli = (id: AiToolId): boolean => {
+  const detect = AI_TOOLS[id].detect
+  return detect.kind === 'cli' && detect.command !== 'say'
 }
 
 /** その用途の選択肢。**入っておらず、その用途にも使えない AI はどこにも出さない。** */
@@ -37,20 +49,15 @@ export const aiOptionsFor = (
         : tool.status.state === 'missing'
           ? tool.status.reason
           : tool.problems[purpose],
+    notice: tool.notice,
   }))
   return {
     options: [
       ...options.filter((option) => option.problem === null),
       ...options.filter((option) => option.problem !== null),
     ],
-    // アプリに入っているもの（お試し・静止画を動かす）は「入っている AI」ではないので挙げない。
     installedButUnsupported: tools
-      .filter(
-        (tool) =>
-          !supports(tool) &&
-          tool.status.state === 'ready' &&
-          AI_TOOLS[tool.id].detect.kind !== 'builtin',
-      )
+      .filter((tool) => !supports(tool) && tool.status.state === 'ready' && isInstalledAiCli(tool.id))
       .map((tool) => tool.id),
   }
 }

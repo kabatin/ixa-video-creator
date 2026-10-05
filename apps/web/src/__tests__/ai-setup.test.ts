@@ -19,8 +19,11 @@ const tool = (
     text: 'まだ使えません',
     image: 'まだ使えません',
     video: 'まだ使えません',
+    voice: 'まだ使えません',
+    transcribe: 'まだ使えません',
     ...problems,
   },
+  notice: null,
 })
 
 const TOOLS: readonly WireAiTool[] = [
@@ -81,9 +84,26 @@ describe('aiOptionsFor', () => {
   })
 })
 
+describe('aiOptionsFor: 入っているが使えない AI', () => {
+  /**
+   * 「入っているが、この用途には使えない」は、この Mac に入れた AI の CLI のことだけを言う（ADR-0038）。
+   * Mac の声（OS の道具）・whisper.cpp・鍵で使う API は「入れた AI」ではないので、ほかの用途の欄に挙げない。
+   */
+  it('Mac の声・whisper.cpp・Gemini の API は、動画の欄に挙げない', () => {
+    const tools = [
+      ...TOOLS,
+      tool('macos_say', { state: 'ready', version: null }, { voice: null }),
+      tool('whisper_cpp', { state: 'ready', version: null }, { transcribe: null }),
+      tool('gemini_api', { state: 'ready', version: null }, { voice: null, transcribe: null }),
+    ]
+
+    expect(aiOptionsFor('video', tools).installedButUnsupported).toEqual(['claude_cli', 'codex_cli', 'grok_cli'])
+  })
+})
+
 describe('initialAiChoice', () => {
-  const recommended: AiSettings = { text: 'claude_cli', image: 'codex_cli', video: 'local' }
-  const current: AiSettings = { text: 'stub', image: 'stub', video: 'stub' }
+  const recommended: AiSettings = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'macos_say', transcribe: 'stub' }
+  const current: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' }
 
   it('まだ選んでいなければ勧める組み合わせから始める', () => {
     expect(initialAiChoice({ settings: current, source: 'default' }, recommended)).toEqual(

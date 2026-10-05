@@ -1,3 +1,4 @@
+import { access, constants } from 'node:fs/promises'
 import type { AppConfig } from '@ixa/config'
 import { createAiSettingsRepository, type DbClient } from '@ixa/db'
 import {
@@ -23,7 +24,7 @@ import {
 } from '@ixa/provider-llm'
 import { checkVpipeHealth } from '@ixa/provider-video'
 import type { AiRoutesDeps } from '../routes/ai.js'
-import { detectAiTools } from './detect-ai-tools.js'
+import { detectAiTools, type WhisperModelState } from './detect-ai-tools.js'
 
 type ImageModelRef = { readonly providerId: ProviderId; readonly modelId: ModelId }
 
@@ -45,6 +46,17 @@ const adapterFor = <T>(table: Partial<Record<AiToolId, T>>, id: AiToolId, what: 
   if (adapter === undefined)
     throw new Error(`${what}に「${id}」の口がありません。「使う AI」で選び直してください`)
   return adapter
+}
+
+/** whisper.cpp のモデルのファイルがあるか。読めるかだけを見る（中身は開かない）。 */
+const whisperModelState = async (path: string | null): Promise<WhisperModelState> => {
+  if (path === null) return 'not_configured'
+  try {
+    await access(path, constants.R_OK)
+    return 'ready'
+  } catch {
+    return 'file_missing'
+  }
 }
 
 /** 使う AI（ADR-0032）の配線。見つけ方・保存先・初期値をここで 1 度だけ決める。 */
@@ -84,10 +96,21 @@ export const createAiWiring = (config: AppConfig, db: DbClient): AiWiring => {
     detect: () =>
       detectAiTools({
         runCli: execFileCliRunner,
-        fal: {
-          keyConfigured: config.providers.falApiKey !== null,
-          enabled: config.providers.falApiKey !== null && config.providers.videoProvider === 'fal',
+        apiKeys: {
+          FAL_API_KEY: {
+            keyConfigured: config.providers.falApiKey !== null,
+            enabled: config.providers.falApiKey !== null && config.providers.videoProvider === 'fal',
+          },
+          GEMINI_API_KEY: {
+            keyConfigured: config.voiceAi.geminiApiKey !== null,
+            enabled: config.voiceAi.geminiApiKey !== null && config.voiceAi.apiProviders.includes('gemini_api'),
+          },
+          ELEVENLABS_API_KEY: {
+            keyConfigured: config.voiceAi.elevenLabsApiKey !== null,
+            enabled: config.voiceAi.elevenLabsApiKey !== null && config.voiceAi.apiProviders.includes('elevenlabs'),
+          },
         },
+        whisperModel: () => whisperModelState(config.voiceAi.whisperCppModel),
         localServer: {
           enabled: config.providers.localVideoGenerator === 'vpipe',
           check: () =>

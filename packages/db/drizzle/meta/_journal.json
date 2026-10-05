@@ -183,6 +183,13 @@
       "when": 1791127094061,
       "tag": "0025_take_copied_from",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791182232954,
+      "tag": "0026_ai_settings_voice",
+      "breakpoints": true
     }
   ]
 }

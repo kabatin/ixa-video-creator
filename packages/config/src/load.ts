@@ -1,4 +1,5 @@
 import type { ZodIssue } from 'zod'
+import { audioApiProblem } from './audio-api.js'
 import { localVideoGeneratorProblem } from './local-video.js'
 import { EnvSchema, type AppConfig } from './schema.js'
 
@@ -54,7 +55,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
    * 形は正しくても組み合わせが成り立たない設定。**黙って動かさず起動時に止める**
    * （`VIDEO_PROVIDER=fal` で鍵が無いときと同じ考え方）。
    */
-  const problem = localVideoGeneratorProblem(parsed)
+  const problem = localVideoGeneratorProblem(parsed) ?? audioApiProblem(parsed)
   if (problem !== null) throw new Error(problem)
 
   return {
@@ -95,6 +96,14 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       vpipeApiToken: parsed.VPIPE_API_TOKEN ?? null,
     },
     renderExportDir: parsed.RENDER_EXPORT_DIR ?? null,
+    voiceAi: {
+      apiProviders: parsed.AUDIO_API_PROVIDERS,
+      geminiApiKey: parsed.GEMINI_API_KEY ?? null,
+      elevenLabsApiKey: parsed.ELEVENLABS_API_KEY ?? null,
+      geminiBilling: parsed.GEMINI_API_BILLING,
+      elevenLabsUsdPer1kChars: parsed.ELEVENLABS_USD_PER_1K_CHARS,
+      whisperCppModel: parsed.WHISPER_CPP_MODEL ?? null,
+    },
   }
 }
 

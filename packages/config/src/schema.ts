@@ -95,7 +95,46 @@ export const EnvSchema = z.object({
   VPIPE_API_URL: urlString.default('http://127.0.0.1:8765'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
+  /**
+   * 声と文字起こしで使ってよい外部の API（ADR-0038）。カンマ区切り（例: `gemini_api,elevenlabs`）。**既定は空（使わない）。**
+   *
+   * **鍵の有無で切り替えない。** 原稿が外に出て、ElevenLabs はお金が掛かる。この API は無認証で網に出ることがあるため、
+   * 画面の選択だけで外部の口を開けられないようにする（`VIDEO_PROVIDER=fal` と同じ考え方）。
+   */
+  AUDIO_API_PROVIDERS: z
+    .string()
+    .default('')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item !== ''),
+    )
+    .pipe(z.array(z.enum(['gemini_api', 'elevenlabs']))),
+  /** Gemini を無料枠で使うか（費用の見積もりに使う。無料枠なら 0）。 */
+  GEMINI_API_BILLING: z.enum(['free', 'paid']).default('free'),
+  /** ElevenLabs の 1000 字あたりの単価（USD）。プランで違う。既定は従量課金の値。 */
+  ELEVENLABS_USD_PER_1K_CHARS: z.coerce.number().min(0).default(0.08),
+
   // 任意（既定値なし・nullable）
+  /** Gemini の API キー（声・文字起こし）。空なら未設定。 */
+  GEMINI_API_KEY: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v))
+    .optional(),
+  /** ElevenLabs の API キー（声・文字起こし）。空なら未設定。 */
+  ELEVENLABS_API_KEY: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v))
+    .optional(),
+  /** whisper.cpp のモデルのファイル（絶対パス。例: ggml-large-v3-turbo.bin）。無ければ whisper.cpp を選べない。 */
+  WHISPER_CPP_MODEL: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v.trim()))
+    .refine((v) => v === undefined || v.startsWith('/'), {
+      message: '絶対パス（/ で始まる）で書いてください',
+    })
+    .optional(),
   /**
    * .env に `FAL_API_KEY=` と空で書かれた場合は「未設定」として扱う。
    * 空文字を値として受け取ると、キー未取得のまま API を叩いて分かりにくい失敗をするため。
@@ -174,4 +213,14 @@ export interface AppConfig {
   }
   /** 書き出した動画を置くフォルダ（絶対パス）。未設定は null（API が既定を決める）。 */
   renderExportDir: string | null
+  /** 声と文字起こしの AI（ADR-0038）。 */
+  voiceAi: {
+    /** 使ってよい外部の API。ここに無いものは鍵があっても選べない。 */
+    apiProviders: Env['AUDIO_API_PROVIDERS']
+    geminiApiKey: string | null
+    elevenLabsApiKey: string | null
+    geminiBilling: Env['GEMINI_API_BILLING']
+    elevenLabsUsdPer1kChars: number
+    whisperCppModel: string | null
+  }
 }

@@ -1,4 +1,4 @@
-import type { AiSettings, AiToolId, AiToolStatus } from '@ixa/domain'
+import { AiToolId, type AiSettings, type AiToolStatus } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../app.js'
 import type { AiRoutesDeps } from '../routes/ai.js'
@@ -9,22 +9,11 @@ import { baseAppDeps } from './app-deps.js'
  * **選べるかの規則は domain の `aiChoiceProblem` 1 か所**（一覧の灰色と 422 が同じ理由を言う）。
  */
 
-const DEFAULTS: AiSettings = { text: 'stub', image: 'stub', video: 'stub' }
+const DEFAULTS: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' }
 
 const statuses = (ready: readonly AiToolId[]): Record<AiToolId, AiToolStatus> =>
   Object.fromEntries(
-    (
-      [
-        'stub',
-        'claude_cli',
-        'codex_cli',
-        'gemini_cli',
-        'grok_cli',
-        'local',
-        'vpipe',
-        'fal',
-      ] as const
-    ).map((id) => [
+    AiToolId.options.map((id) => [
       id,
       ready.includes(id)
         ? { state: 'ready', version: '1.0.0' }
@@ -64,6 +53,7 @@ type ToolsBody = {
       label: string
       status: AiToolStatus
       problems: Record<string, string | null>
+      notice: string | null
     }[]
     recommended: AiSettings
   }
@@ -100,7 +90,22 @@ describe('GET /ai/tools', () => {
       text: 'claude_cli',
       image: 'codex_cli',
       video: 'local',
+      voice: 'stub',
+      transcribe: 'stub',
     })
+  })
+
+  it('声と文字起こしの理由と、使う前に知っておくことも返す（ADR-0038）', async () => {
+    const { app } = setup(['stub', 'gemini_api'])
+
+    const body = (await (await app.request('/ai/tools')).json()) as ToolsBody
+    const gemini = body.data.tools.find((tool) => tool.id === 'gemini_api')
+
+    expect(gemini?.problems.voice).toBeNull()
+    expect(gemini?.problems.transcribe).toBeNull()
+    expect(gemini?.problems.video).toMatch(/動画にはまだ使えません/)
+    expect(gemini?.notice).toMatch(/製品の改善に使われ/)
+    expect(body.data.tools.find((tool) => tool.id === 'claude_cli')?.notice).toBeNull()
   })
 })
 
@@ -115,7 +120,7 @@ describe('/ai/settings', () => {
 
   it('選んで保存すると、以後はそれを返す', async () => {
     const { app, store } = setup()
-    const chosen = { text: 'claude_cli', image: 'codex_cli', video: 'local' }
+    const chosen = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'stub', transcribe: 'stub' }
 
     const saved = await put(app, chosen)
     const body = (await (await app.request('/ai/settings')).json()) as { data: unknown }
@@ -128,19 +133,22 @@ describe('/ai/settings', () => {
   it('その用途に使えない AI・見つからない AI は 422 で、用途ごとに理由を返す（保存しない）', async () => {
     const { app, store } = setup()
 
-    const response = await put(app, { text: 'grok_cli', image: 'claude_cli', video: 'stub' })
+    const response = await put(app, { text: 'grok_cli', image: 'claude_cli', video: 'stub', voice: 'whisper_cpp', transcribe: 'stub' })
     const body = (await response.json()) as { fields: Record<string, string[]> }
 
     expect(response.status).toBe(422)
     expect(body.fields.text?.[0]).toMatch(/Grok/)
     expect(body.fields.image?.[0]).toMatch(/画像にはまだ使えません/)
     expect(body.fields.video).toBeUndefined()
+    expect(body.fields.voice?.[0]).toMatch(/声にはまだ使えません/)
     expect(store.value).toBeNull()
   })
 
   it('知らない AI の名前は 422', async () => {
     const { app } = setup()
 
-    expect((await put(app, { text: 'chatgpt', image: 'stub', video: 'stub' })).status).toBe(422)
+    expect(
+      (await put(app, { text: 'chatgpt', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' })).status,
+    ).toBe(422)
   })
 })

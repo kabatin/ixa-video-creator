@@ -16,6 +16,12 @@ export const aiSettings = pgTable(
     textTool: text('text_tool').notNull(),
     imageTool: text('image_tool').notNull(),
     videoTool: text('video_tool').notNull(),
+    /**
+     * 声と文字起こし（ADR-0038）。**既定値をお試しにする。** 既定値の無い列を足すと、
+     * 既にある 1 行が読めなくなり、保存済みの選択が全部「まだ選んでいない」に戻る。
+     */
+    voiceTool: text('voice_tool').notNull().default('stub'),
+    transcribeTool: text('transcribe_tool').notNull().default('stub'),
     updatedAt: updatedAt(),
   },
   (table) => [check('ai_settings_single_row', sql`${table.id} = 'default'`)],

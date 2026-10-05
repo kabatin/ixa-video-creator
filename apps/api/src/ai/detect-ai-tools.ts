@@ -5,13 +5,21 @@ import type { VpipeHealthCheck } from '@ixa/provider-video'
 /** 一覧を開くたびに叩くので短く。入っている CLI は 1 秒もかからない（実測）。 */
 const VERSION_TIMEOUT_MS = 5000
 
+/** 鍵で見つける AI の鍵の名前。 */
+export type ApiKeyName = Extract<AiToolSpec['detect'], { readonly kind: 'api_key' }>['key']
+
+/** whisper.cpp のモデルのファイル。 */
+export type WhisperModelState = 'not_configured' | 'file_missing' | 'ready'
+
 export type AiToolProbe = {
   readonly runCli: CliRunner
   /**
-   * fal が使える形か。**お金が掛かるので、キーがあるだけでは使わない**（`.env` の `VIDEO_PROVIDER=fal` で明示）。
-   * この API は無認証で網に出ることがあるため、画面の選択だけで有料の口を開けられないようにする。
+   * 鍵で見つける AI。**お金が掛かる・原稿が外に出るので、鍵があるだけでは使わない**（`.env` で明示）。
+   * この API は無認証で網に出ることがあるため、画面の選択だけで外部の口を開けられないようにする。
    */
-  readonly fal: { readonly keyConfigured: boolean; readonly enabled: boolean }
+  readonly apiKeys: Readonly<Record<ApiKeyName, { readonly keyConfigured: boolean; readonly enabled: boolean }>>
+  /** whisper.cpp のモデルのファイルがあるか（`WHISPER_CPP_MODEL`）。 */
+  readonly whisperModel: () => Promise<WhisperModelState>
   /**
    * 手元の生成サーバ（vpipe-api）。`.env` の `LOCAL_VIDEO_GENERATOR=vpipe` のときだけモデルが登録される
    * （ADR-0031）。有効でなければ叩かない。
@@ -20,6 +28,13 @@ export type AiToolProbe = {
     readonly enabled: boolean
     readonly check: () => Promise<VpipeHealthCheck>
   }
+}
+
+/** 鍵はあるが `.env` で有効にしていないときの、有効にし方。 */
+const ENABLE_HINTS: Readonly<Record<ApiKeyName, string>> = {
+  FAL_API_KEY: 'お金が掛かるため、.env の VIDEO_PROVIDER=fal で有効にしてから選べます',
+  GEMINI_API_KEY: '原稿が外に出るため、.env の AUDIO_API_PROVIDERS に gemini_api と書いてから選べます',
+  ELEVENLABS_API_KEY: 'お金が掛かり原稿が外に出るため、.env の AUDIO_API_PROVIDERS に elevenlabs と書いてから選べます',
 }
 
 const versionOf = (stdout: string): string | null => /\d+\.\d+\.\d+/.exec(stdout)?.[0] ?? null
@@ -50,19 +65,28 @@ const statusOf = async (spec: AiToolSpec, probe: AiToolProbe): Promise<AiToolSta
       return fromCli(
         await probe.runCli({
           command: spec.detect.command,
-          args: ['--version'],
+          args: [...(spec.detect.args ?? ['--version'])],
           timeoutMs: VERSION_TIMEOUT_MS,
         }),
       )
-    case 'api_key':
-      if (!probe.fal.keyConfigured)
-        return { state: 'missing', reason: 'FAL_API_KEY が設定されていません' }
-      return probe.fal.enabled
+    case 'api_key': {
+      const key = probe.apiKeys[spec.detect.key]
+      if (!key.keyConfigured) return { state: 'missing', reason: `${spec.detect.key} が設定されていません` }
+      return key.enabled
         ? { state: 'ready', version: null }
-        : {
-            state: 'missing',
-            reason: 'お金が掛かるため、.env の VIDEO_PROVIDER=fal で有効にしてから選べます',
-          }
+        : { state: 'missing', reason: ENABLE_HINTS[spec.detect.key] }
+    }
+    case 'whisper_cpp': {
+      const model = await probe.whisperModel()
+      if (model === 'not_configured') {
+        return { state: 'missing', reason: '.env の WHISPER_CPP_MODEL にモデルのファイル（絶対パス）を書いてから選べます' }
+      }
+      if (model === 'file_missing') return { state: 'missing', reason: 'WHISPER_CPP_MODEL のファイルが見つかりません' }
+      // 版を出す口が無いので、使い方の表示（-h）が出るかで見る。
+      const result = await probe.runCli({ command: 'whisper-cli', args: ['-h'], timeoutMs: VERSION_TIMEOUT_MS })
+      const status = fromCli(result)
+      return status.state === 'ready' ? { state: 'ready', version: null } : status
+    }
     case 'local_server': {
       if (!probe.localServer.enabled) {
         return {
