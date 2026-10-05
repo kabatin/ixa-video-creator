@@ -19,6 +19,8 @@ import type { ObjectStorage } from '@ixa/storage'
 import { registerErrorHandlers, validationHook } from './errors.js'
 import { environmentRoutes, type EnvironmentDeps } from './routes/environment.js'
 import { aiRoutes, type AiRoutesDeps } from './routes/ai.js'
+import type { NarrationDeps } from './narration/deps.js'
+import { narrationRoutes } from './routes/narration.js'
 import { generationActivityRoutes, type GenerationActivityDeps } from './routes/generation-activity.js'
 import { generationCancelRoutes } from './routes/generation-cancel.js'
 import { takeHideRoutes } from './routes/take-hide.js'
@@ -157,6 +159,8 @@ export type AppDeps = {
   environment?: EnvironmentDeps
   /** 使う AI（ADR-0032）。無ければ口を置かない（テストの多くは要らない）。 */
   ai?: AiRoutesDeps
+  /** ナレーションと声（ADR-0038）。無ければ口を置かない（テストの多くは要らない）。 */
+  narration?: NarrationDeps
   /** 動いている生成（順番待ち・作成中）の一覧。無ければ口を置かない。 */
   activeGenerations?: GenerationActivityDeps['activeJobs']
   storage: ObjectStorage
@@ -196,6 +200,7 @@ export const createApp = (deps: AppDeps) => {
   // 鍵の設定状態。**値は返さない。設定する口も置かない**（無認証で全 IF に待ち受けているため）。
   if (deps.environment !== undefined) app.route('/', environmentRoutes(deps.environment))
   if (deps.ai !== undefined) app.route('/', aiRoutes(deps.ai))
+  if (deps.narration !== undefined) app.route('/', narrationRoutes(deps.narration))
   if (deps.activeGenerations !== undefined) {
     app.route(
       '/',

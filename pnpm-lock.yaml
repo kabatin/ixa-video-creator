@@ -74,6 +74,9 @@ importers:
       '@ixa/provider-video':
         specifier: workspace:*
         version: link:../../packages/providers/video
+      '@ixa/provider-voice':
+        specifier: workspace:*
+        version: link:../../packages/providers/voice
       '@ixa/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -213,6 +216,9 @@ importers:
       '@ixa/provider-video':
         specifier: workspace:*
         version: link:../../packages/providers/video
+      '@ixa/provider-voice':
+        specifier: workspace:*
+        version: link:../../packages/providers/voice
       '@ixa/render':
         specifier: workspace:*
         version: link:../../packages/render

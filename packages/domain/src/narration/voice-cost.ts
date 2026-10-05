@@ -54,3 +54,15 @@ export const estimateTranscribeCostUsd = (input: { readonly tool: string; readon
       return 0
   }
 }
+
+/** 実際に使った量から額を出す規則（API と worker が同じものを使う）。 */
+export const voiceCostRules = (input: {
+  readonly geminiBilling: 'free' | 'paid'
+  readonly elevenLabsUsdPer1kChars: number
+  readonly now: () => Date
+}) => ({
+  geminiTts: (usage: { readonly model: string; readonly outputTokens: number }): number =>
+    input.geminiBilling === 'free' ? 0 : (usage.outputTokens * geminiTtsUsdPerMillionTokens(usage.model, input.now())) / 1_000_000,
+  elevenLabsTts: (chars: number): number => (chars / 1000) * input.elevenLabsUsdPer1kChars,
+  transcribe: (tool: string, durationSec: number): number => estimateTranscribeCostUsd({ tool, durationSec }),
+})

@@ -31,8 +31,14 @@ import {
   createMusicAnalysisFailureRepository,
   createReviewRepository,
   findActiveGenerationJobs,
+  createVoiceProfileRepository,
+  createNarrationLineRepository,
+  createNarrationTakeRepository,
+  createVoiceJobRepository,
+  createProjectAudioSettingsRepository,
 } from '@ixa/db'
-import { createProviderRegistry } from '@ixa/provider-core'
+import { createProviderRegistry, execFileCliRunner } from '@ixa/provider-core'
+import { createVoiceAdapters } from '@ixa/provider-voice'
 import { createGenerationContextSource } from '@ixa/generation'
 import { RENDER_QUEUE_NAME, type RenderQueue } from './routes/renders.js'
 import { ANALYSIS_QUEUE_NAME, type AnalysisQueue } from './routes/music.js'
@@ -218,14 +224,37 @@ export const main = (): void => {
   const mediaAssets = createMediaAssetRepository(db)
 
   const ai = createAiWiring(config, db)
+  /**
+   * ナレーションと声（ADR-0038）。API は声の種類の一覧を出すだけ（声にするのは worker）。
+   * 外部 API の口は、鍵があって AUDIO_API_PROVIDERS に書いたときだけ作る（worker と同じ表）。
+   */
+  const listOnly = { ttsCostOf: () => 0, transcribeCostOf: () => 0 }
+  const voiceAdapter = createVoiceAdapters({
+    runCli: execFileCliRunner,
+    fetch: (url, init) => fetch(url, init),
+    convertForWhisper: () => Promise.reject(new Error('API では文字起こしをしません（worker の仕事）')),
+    gemini: { apiKey: config.voiceAi.geminiApiKey, enabled: config.voiceAi.apiProviders.includes('gemini_api'), ...listOnly },
+    elevenLabs: { apiKey: config.voiceAi.elevenLabsApiKey, enabled: config.voiceAi.apiProviders.includes('elevenlabs'), ...listOnly },
+    whisperCppModel: config.voiceAi.whisperCppModel,
+  })
+  const projectRepository = createProjectRepository(db)
   const app = createApp({
+    narration: {
+      projects: projectRepository,
+      voices: createVoiceProfileRepository(db),
+      lines: createNarrationLineRepository(db),
+      takes: createNarrationTakeRepository(db),
+      voiceJobs: createVoiceJobRepository(db),
+      audioSettings: createProjectAudioSettingsRepository(db),
+      voiceAdapter,
+    },
     // 鍵の設定状態だけを返す口。**値は渡さない**（`describeEnvironment` が落とす）。
     environment: { status: () => describeEnvironment(config) },
     // 使う AI（ADR-0032）。見つかった AI と、用途ごとの選択。
     ai,
     // 生成中の Shot で、いま何が起きているか（モデル・順番待ちか作成中か・経過）。
     activeGenerations: (projectId) => findActiveGenerationJobs(db, projectId),
-    projects: createProjectRepository(db),
+    projects: projectRepository,
     mediaAssets,
     shots,
     takes,

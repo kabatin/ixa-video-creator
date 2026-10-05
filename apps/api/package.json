@@ -27,6 +27,7 @@
     "@ixa/provider-image": "workspace:*",
     "@ixa/provider-llm": "workspace:*",
     "@ixa/provider-video": "workspace:*",
+    "@ixa/provider-voice": "workspace:*",
     "@ixa/storage": "workspace:*",
     "@ixa/timeline": "workspace:*",
     "bullmq": "^6.3.6",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { estimateSpeakCostUsd, estimateTranscribeCostUsd, geminiTtsUsdPerMillionTokens } from '../narration/voice-cost.js'
+import { estimateSpeakCostUsd, estimateTranscribeCostUsd, geminiTtsUsdPerMillionTokens, voiceCostRules } from '../narration/voice-cost.js'
 
 /**
  * 声・文字起こしの費用の見積もり（ADR-0038）。頼む前に予算を確かめるのに使う。
@@ -46,5 +46,17 @@ describe('estimateTranscribeCostUsd', () => {
     expect(estimateTranscribeCostUsd({ tool: 'gemini_api', durationSec: 60 })).toBeCloseTo(0.005, 6)
     expect(estimateTranscribeCostUsd({ tool: 'whisper_cpp', durationSec: 3600 })).toBe(0)
     expect(estimateTranscribeCostUsd({ tool: 'stub', durationSec: 3600 })).toBe(0)
+  })
+})
+
+describe('voiceCostRules', () => {
+  /** 実際に使った量から額を出す（API の見積もりと worker の記録で同じ規則を使う）。 */
+  it('Gemini は出力のトークン数 × 単価（無料枠なら 0）、ElevenLabs は字数 × 単価、文字起こしは長さから', () => {
+    const paid = voiceCostRules({ geminiBilling: 'paid', elevenLabsUsdPer1kChars: 0.08, now: () => BEFORE_2027 })
+    expect(paid.geminiTts({ model: 'gemini-3.8-flash-tts', outputTokens: 1_000_000 })).toBe(9)
+    expect(paid.elevenLabsTts(1000)).toBeCloseTo(0.08)
+    expect(paid.transcribe('elevenlabs', 3600)).toBeCloseTo(0.22)
+    const free = voiceCostRules({ geminiBilling: 'free', elevenLabsUsdPer1kChars: 0.08, now: () => FROM_2027 })
+    expect(free.geminiTts({ model: 'gemini-3.8-flash-tts', outputTokens: 1_000_000 })).toBe(0)
   })
 })
