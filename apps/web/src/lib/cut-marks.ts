@@ -171,7 +171,7 @@ export type SectionMarksResult = {
 const addMarksAt = (
   marks: readonly CutMark[],
   timesSec: readonly number[],
-  snappedTo: 'section' | 'lyric',
+  snappedTo: 'section' | 'lyric' | 'narration',
   songDurationSec: number,
 ): SectionMarksResult =>
   timesSec
@@ -210,6 +210,45 @@ export const addLyricMarks = (
   cuesSec: readonly number[],
   songDurationSec: number,
 ): SectionMarksResult => addMarksAt(marks, cuesSec, 'lyric', songDurationSec)
+
+/** ナレーションの話し始めすべてに区切りを置く（ADR-0038）。歌い出しと同じ置き方。 */
+export const addNarrationMarks = (
+  marks: readonly CutMark[],
+  cuesSec: readonly number[],
+  songDurationSec: number,
+): SectionMarksResult => addMarksAt(marks, cuesSec, 'narration', songDurationSec)
+
+/** ナレーションの切れ目にまとめて置いた結果の知らせ。**何も起きなかったときも理由を言う。** */
+export const describeNarrationMarks = (result: SectionMarksResult): string => {
+  if (result.added === 0) {
+    return result.skipped === 0
+      ? '置いたナレーションの行がまだありません。ナレーションの「再生位置から並べる」で置くと使えます。'
+      : 'ナレーションの切れ目には、すでに区切りがあります。'
+  }
+  const skipped =
+    result.skipped === 0 ? '' : `（${String(result.skipped)} 本は近くに区切りがあるので置きませんでした）`
+  return `ナレーションの切れ目に区切りを ${String(result.added)} 本置きました${skipped}。`
+}
+
+/**
+ * 曲の無い作品の区切り（ADR-0038）。先頭・各行の話し始め・最後の行の終わり。API へそのまま送れる境界の列。
+ * 行の間の無音は前のカットに入れる。近すぎる境（`MIN_CUT_DURATION_SEC` 未満）は詰める。行が無ければ空。
+ */
+export const narrationCutBoundaries = (
+  lines: readonly { readonly startSec: number; readonly durationSec: number }[],
+): readonly number[] => {
+  if (lines.length === 0) return []
+  const endSec = Math.max(...lines.map((line) => line.startSec + line.durationSec))
+  const starts = lines.map((line) => line.startSec).sort((a, b) => a - b)
+  const inner = starts.reduce<readonly number[]>(
+    (kept, atSec) => (atSec - (kept[kept.length - 1] ?? 0) >= MIN_CUT_DURATION_SEC ? [...kept, atSec] : kept),
+    [0],
+  )
+  // 終わりが最後の境に近すぎれば、その境を外して前のカットに入れる。
+  const last = inner[inner.length - 1] ?? 0
+  const body = endSec - last >= MIN_CUT_DURATION_SEC || inner.length === 1 ? inner : inner.slice(0, -1)
+  return [...body, endSec]
+}
 
 /** 歌い出しにまとめて置いた結果の知らせ。**何も起きなかったときも理由を言う。** */
 export const describeLyricMarks = (result: SectionMarksResult): string => {
@@ -380,8 +419,10 @@ export const buildCutMarkCandidates = (
   timelineEndSec: number,
   /** 歌詞の歌い出し。区切りを歌い出しに寄せる（制作者 2026-10-02）。 */
   lyricCues: readonly number[] = [],
+  /** ナレーションの話し始め（ADR-0038）。区切りを言葉の切れ目に寄せる。 */
+  narrationCues: readonly number[] = [],
 ): readonly SnapCandidate[] =>
-  buildSnapCandidates({ shots: [], clips: [], beatSource, timelineEndSec, lyricCues }, {})
+  buildSnapCandidates({ shots: [], clips: [], beatSource, timelineEndSec, lyricCues, narrationCues }, {})
 
 /** ズーム率から吸着の許容距離を出す。規則は `packages/timeline` 側にある。 */
 export const cutMarkToleranceSec = (pixelsPerSecond: number): number =>

@@ -179,6 +179,16 @@ describe('collectSnapCandidates の歌い出し', () => {
   })
 })
 
+describe('collectSnapCandidates のナレーションの切れ目（ADR-0038）', () => {
+  it('話し始めを候補にし、同じ時刻の拍より残す（歌い出しが同じ時刻なら歌い出しを残す）', () => {
+    const candidates = collectSnapCandidates({ beats: [3, 5], lyricCues: [5], narrationCues: [3, 5, 7.25], timelineEndSec: 10 })
+
+    expect(candidates.find((entry) => entry.atSec === 3)?.kind).toBe('narration')
+    expect(candidates.find((entry) => entry.atSec === 5)?.kind).toBe('lyric')
+    expect(candidates.find((entry) => entry.atSec === 7.25)?.kind).toBe('narration')
+  })
+})
+
 describe('snapTime', () => {
   const candidates = [candidate(0, 'origin'), candidate(2, 'shot_edge'), candidate(5, 'beat')]
 

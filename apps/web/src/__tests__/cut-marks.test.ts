@@ -9,7 +9,10 @@ import {
   addMark,
   addSectionMarks,
   addLyricMarks,
+  addNarrationMarks,
   describeLyricMarks,
+  describeNarrationMarks,
+  narrationCutBoundaries,
   describeSectionMarks,
   buildCutMarkCandidates,
   buildCuts,
@@ -660,6 +663,33 @@ describe('addLyricMarks', () => {
     expect(result.marks.filter((m) => m.atSec !== 8.4).every((m) => m.snappedTo === 'lyric')).toBe(true)
     expect(result.added).toBe(2)
     expect(result.skipped).toBe(1)
+  })
+})
+
+describe('ナレーションの切れ目（ADR-0038）', () => {
+  it('話し始めすべてに区切りを置き、吸着先はナレーションの切れ目。近すぎるものは数える', () => {
+    const result = addNarrationMarks(marksAt(8.4), [0, 3, 8.5, 12.25], 30)
+
+    expect(result.marks.map((m) => m.atSec)).toEqual([3, 8.4, 12.25])
+    expect(result.marks.filter((m) => m.atSec !== 8.4).every((m) => m.snappedTo === 'narration')).toBe(true)
+    expect(describeNarrationMarks(result)).toBe('ナレーションの切れ目に区切りを 2 本置きました（1 本は近くに区切りがあるので置きませんでした）。')
+    expect(describeNarrationMarks({ marks: [], added: 0, skipped: 0 })).toBe(
+      '置いたナレーションの行がまだありません。ナレーションの「再生位置から並べる」で置くと使えます。',
+    )
+  })
+
+  it('曲の無い作品の区切り: 先頭・各行の話し始め・最後の行の終わり。近すぎる境は詰める', () => {
+    expect(
+      narrationCutBoundaries([
+        { startSec: 2.5, durationSec: 2 },
+        { startSec: 0.2, durationSec: 2 },
+        { startSec: 4.6, durationSec: 1.5 },
+        { startSec: 4.8, durationSec: 1 },
+      ]),
+    ).toEqual([0, 2.5, 4.6, 6.1])
+    // 終わりが最後の境に近すぎれば、その境を外して前のカットに入れる。
+    expect(narrationCutBoundaries([{ startSec: 0, durationSec: 2 }, { startSec: 2, durationSec: 0.3 }])).toEqual([0, 2.3])
+    expect(narrationCutBoundaries([])).toEqual([])
   })
 })
 

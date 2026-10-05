@@ -28,6 +28,7 @@ const TARGET_LABELS: Readonly<Record<SnapTargetKind, string>> = {
   end: 'タイムラインの終端',
   clip_edge: '隣のクリップの端',
   lyric: '歌い出し',
+  narration: 'ナレーションの切れ目',
   section: '楽曲セクションの境目',
   drop: 'ドロップ',
   beat: 'ビート',
@@ -40,6 +41,7 @@ const TARGET_ORDER: readonly SnapTargetKind[] = [
   'shot_edge',
   'clip_edge',
   'lyric',
+  'narration',
   'section',
   'drop',
   'beat',
@@ -179,6 +181,8 @@ export type SnapSource = {
    * 歌い出しそのものを打つとき（歌詞を合わせる）は渡さない。前に打った歌い出しへ吸い寄せないため。
    */
   readonly lyricCues?: readonly number[]
+  /** ナレーションの話し始め（ADR-0038）。区切り・境目を言葉の切れ目に寄せる。 */
+  readonly narrationCues?: readonly number[]
 }
 
 /**
@@ -201,6 +205,7 @@ export const buildSnapCandidates = (
     sections: sectionsOf(source.beatSource),
     drops: dropsOf(source.beatSource),
     lyricCues: source.lyricCues ?? [],
+    narrationCues: source.narrationCues ?? [],
     timelineEndSec: source.timelineEndSec,
     excludeShotId: exclude.shotId ?? null,
     excludeClipId: exclude.clipId ?? null,

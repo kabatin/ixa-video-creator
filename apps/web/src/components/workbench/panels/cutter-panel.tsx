@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { CutEditor } from '@/components/cut-editor'
 import { usePreferences } from '@/components/preferences-root'
 import {
@@ -9,6 +9,8 @@ import {
   type CutterMode,
 } from '@/components/workbench/workbench-context'
 import { MusicGate } from '@/components/workbench/panels/music-gate'
+import { NarrationCuts } from '@/components/workbench/narration/narration-cuts'
+import { useNarration } from '@/components/workbench/narration/use-narration'
 import { PanelFrame } from '@/components/workbench/panels/panel-frame'
 import { TransportButtons } from '@/components/workbench/transport-buttons'
 import { LyricSyncSection } from '@/components/workbench/panels/lyric-sync-section'
@@ -33,6 +35,18 @@ export const CutterPanel = ({ visible }: { readonly visible: boolean }) => {
   const mode = workbench.cutterMode
   /** 打鍵を受けるのは見えていて、ダイアログが無い間だけ。どちらが受けるかは選んでいる方。 */
   const keys = visible && workbench.dialog === null
+  // ナレーションの置いた行（ADR-0038）。区切りを話し始めに寄せ・まとめて置き、曲が無ければ行の切れ目で区切る。
+  const { overview } = useNarration()
+  const placed = useMemo(
+    () =>
+      overview.state === 'ready'
+        ? overview.value.lines.flatMap((line) =>
+            line.startSec !== null && line.durationSec !== null ? [{ startSec: line.startSec, durationSec: line.durationSec }] : [],
+          )
+        : [],
+    [overview],
+  )
+  const narrationCues = useMemo(() => placed.map((line) => line.startSec).sort((a, b) => a - b), [placed])
 
   // 操作列に名乗る。**依存は registerPlayer だけ**（preview-panel に理由を書いた）。
   const { registerPlayer } = transportControls
@@ -65,6 +79,7 @@ export const CutterPanel = ({ visible }: { readonly visible: boolean }) => {
           </div>
         }
       >
+        {workbench.track === null && placed.length > 0 && <NarrationCuts placed={placed} />}
         <MusicGate>
           {({ track, analysis }) => {
             const editor = (purpose: CutterMode, lyricCues: readonly number[] = []) => (
@@ -82,6 +97,7 @@ export const CutterPanel = ({ visible }: { readonly visible: boolean }) => {
                 }}
                 purpose={purpose}
                 lyricCues={lyricCues}
+                narrationCues={narrationCues}
                 // プレビューの下と同じ操作列。波形の直下に置くので、押せばこのパネルが鳴るのは場所で分かる
                 // （2026-09-28、制作者の提案で両方に置く）。見た目も「いま何か鳴っているか」の読み方も揃える。
                 playButton={<TransportButtons owner="cutter" durationSec={analysis.durationSec} />}

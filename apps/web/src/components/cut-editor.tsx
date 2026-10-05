@@ -26,8 +26,10 @@ import {
   buildCutMarkCandidates,
   cutMarkToleranceSec,
   addLyricMarks,
+  addNarrationMarks,
   addSectionMarks,
   describeLyricMarks,
+  describeNarrationMarks,
   describeSectionMarks,
   describeCuts,
   moveMark,
@@ -122,6 +124,8 @@ export type CutEditorProps = {
   readonly purpose?: 'cut' | 'lyrics'
   /** 歌詞の歌い出しの時刻。`lyrics` のとき波形に印を出す（見るだけ）。 */
   readonly lyricCues?: readonly number[]
+  /** ナレーションの話し始め（置いた行の位置。ADR-0038）。区切りを寄せ、まとめて置ける。 */
+  readonly narrationCues?: readonly number[]
 }
 
 /** 再生位置の共有（UI-WORKBENCH §7.2）。形と規則は `use-cut-editor-sync.ts`。 */
@@ -144,6 +148,7 @@ export const CutEditor = ({
   toolbarExtra,
   purpose = 'cut',
   lyricCues = NO_LYRIC_CUES,
+  narrationCues = NO_LYRIC_CUES,
 }: CutEditorProps) => {
   const cutting = purpose === 'cut'
 
@@ -253,8 +258,8 @@ export const CutEditor = ({
 
   // 歌い出しにも寄せる（制作者 2026-10-02。歌詞の時刻を区切る前に付けておけば、区切りが歌い出しに揃う）。
   const candidates = useMemo(
-    () => buildCutMarkCandidates(beatSource, durationSec, lyricCues),
-    [beatSource, durationSec, lyricCues],
+    () => buildCutMarkCandidates(beatSource, durationSec, lyricCues, narrationCues),
+    [beatSource, durationSec, lyricCues, narrationCues],
   )
 
   /** 許容距離は画面上の距離で一定にする。寄るほど秒では厳しくなる。 */
@@ -463,6 +468,15 @@ export const CutEditor = ({
     setSnapNotice({ state: 'none', label: '区切り', message: describeLyricMarks(result) })
   }
 
+  /** ナレーションの話し始めすべてに区切りを置く（ADR-0038）。置いたあとは普通の区切りなので消せる。 */
+  const placeNarrationMarks = (): void => {
+    const result = addNarrationMarks(marks, narrationCues, durationSec)
+    setMarks(result.marks)
+    setRejection(null)
+    cutSave.clearOutcome()
+    setSnapNotice({ state: 'none', label: '区切り', message: describeNarrationMarks(result) })
+  }
+
   /** 仕上げのボタンの言葉。区切りが揃えば件数を言う。 */
   const saveLabel = saving
     ? '作成中…'
@@ -544,6 +558,11 @@ export const CutEditor = ({
           >
             歌い出しに区切りを置く
           </Button>
+          {narrationCues.length > 0 && (
+            <Button size="sm" disabled={saving} onClick={placeNarrationMarks}>
+              ナレーションの切れ目に区切りを置く
+            </Button>
+          )}
           {toolbarExtra}
           {/**
            * 仕上げ（制作者 2026-10-03「肝心の「N カットを Shot にする」ボタンが一番下にあり、しかも黒ボタンなので

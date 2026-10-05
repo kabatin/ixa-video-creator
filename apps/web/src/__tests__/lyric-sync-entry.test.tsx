@@ -1,7 +1,7 @@
 import type { Project } from '@ixa/domain'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProjectConceptInspector, type ProjectConceptInspectorApi } from '@/components/workbench/inspector/project-concept-inspector'
 import { CutterPanel } from '@/components/workbench/panels/cutter-panel'
 import { goToLyricSync } from '@/components/workbench/workbench-navigation'
@@ -14,6 +14,22 @@ import { aProject, renderInWorkbench, workbenchValue } from './workbench-fixture
 
 vi.mock('@/components/image-uploader', () => ({ ImageUploader: () => null }))
 vi.mock('@/components/media-image', () => ({ MediaImage: () => null }))
+// 聴きながら切るはナレーションの行も読む（ADR-0038）。手元の API へ出ないよう、行の無い一覧を返す。
+beforeEach(() => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ success: true, data: { lines: [], totalEstimatedSec: 0, endSec: 0 } }), {
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    ),
+  )
+})
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 const fakeApi = (project: Project): ProjectConceptInspectorApi => ({
   getConcept: vi.fn(() => Promise.resolve('')),
