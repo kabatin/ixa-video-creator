@@ -1,10 +1,11 @@
-import type {
-  NarrationLineRepository,
-  NarrationTakeRepository,
-  ProjectAudioSettingsRepository,
-  TextStyleRepository,
-  TimelineClipRepository,
-  VoiceProfileRepository,
+import {
+  DbNotFoundError,
+  type NarrationLineRepository,
+  type NarrationTakeRepository,
+  type ProjectAudioSettingsRepository,
+  type TextStyleRepository,
+  type TimelineClipRepository,
+  type VoiceProfileRepository,
 } from '@ixa/db'
 import {
   DEFAULT_NARRATION_TEXT_STYLE,
@@ -69,11 +70,10 @@ const currentLook = (lineId: NarrationLineId, telops: readonly TimelineClip[]): 
   return params?.style === undefined ? null : { style: params.style, styleId: params.styleId ?? null }
 }
 
-export const syncNarrationTelops = async (
-  deps: NarrationTelopSyncDeps,
-  projectId: ProjectId,
-  options: { readonly restyle?: readonly NarrationLineId[] } = {},
-): Promise<{ readonly changed: boolean; readonly count: number }> => {
+type SyncOptions = { readonly restyle?: readonly NarrationLineId[] }
+type SyncResult = { readonly changed: boolean; readonly count: number }
+
+const syncOnce = async (deps: NarrationTelopSyncDeps, projectId: ProjectId, options: SyncOptions): Promise<SyncResult> => {
   const [lines, voices, settings, presets, clips] = await Promise.all([
     deps.lines.findByProject(projectId),
     deps.voices.findByProject(projectId),
@@ -103,4 +103,21 @@ export const syncNarrationTelops = async (
     desired,
   )
   return { changed: true, count: desired.length }
+}
+
+/**
+ * 作り直す。API（行を動かした）と worker（声ができた）が同じ作品で重なると、先に差し替えた側が相手を消しているので、
+ * 後の側は消す相手が無い（`DbNotFoundError`）。そのときは読み直して 1 度だけやり直す（後から来た内容で揃える）。
+ */
+export const syncNarrationTelops = async (
+  deps: NarrationTelopSyncDeps,
+  projectId: ProjectId,
+  options: SyncOptions = {},
+): Promise<SyncResult> => {
+  try {
+    return await syncOnce(deps, projectId, options)
+  } catch (error) {
+    if (!(error instanceof DbNotFoundError)) throw error
+    return syncOnce(deps, projectId, options)
+  }
 }

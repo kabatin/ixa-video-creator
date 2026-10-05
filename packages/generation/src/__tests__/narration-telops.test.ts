@@ -9,6 +9,7 @@ import {
   type NarrationLine,
   type TimelineClip,
 } from '@ixa/domain'
+import { DbNotFoundError } from '@ixa/db'
 import { describe, expect, it } from 'vitest'
 import { syncNarrationTelops } from '../narration-telops.js'
 import {
@@ -148,6 +149,30 @@ describe('syncNarrationTelops', () => {
     const telops = telopsOf(deps.timelineClips.snapshot())
     expect(telops.map((clip) => clip.startSec)).toEqual([30, 31.2])
     expect(telops.map((clip) => (clip.content.type === 'text' ? clip.content.params['style'] : null))).toEqual([{ anchor: 'top-left' }, { anchor: 'top-left' }])
+  })
+
+  it('ほかの作り直し（声ができた・行を動かした）と重なって消す相手が先に消えていたら、読み直して 1 度だけやり直す', async () => {
+    const { deps } = await setup()
+    await syncNarrationTelops(deps, PROJECT)
+    let first = true
+    const racing = {
+      ...deps.timelineClips,
+      replace: async (...args: Parameters<typeof deps.timelineClips.replace>) => {
+        if (first) {
+          first = false
+          // 先に別の作り直しが同じ相手を消した。
+          await deps.timelineClips.replace(args[0], [])
+          return Promise.reject(new DbNotFoundError('TimelineClip', String(args[0][0])))
+        }
+        return deps.timelineClips.replace(...args)
+      },
+    }
+    const [line] = await deps.lines.findByProject(PROJECT)
+    if (line === undefined) throw new Error('行がありません')
+    await deps.lines.update(line.id, { startSec: 20 })
+
+    expect((await syncNarrationTelops({ ...deps, timelineClips: racing }, PROJECT)).changed).toBe(true)
+    expect(telopsOf(deps.timelineClips.snapshot()).map((clip) => clip.startSec)).toEqual([20, 21.2])
   })
 
   it('話している字の強調を入れると、字の時刻がある声のテロップに色と時刻が付く', async () => {
