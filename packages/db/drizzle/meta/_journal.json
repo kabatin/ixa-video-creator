@@ -225,6 +225,13 @@
       "when": 1791190346638,
       "tag": "0031_voice_character",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791198642915,
+      "tag": "0032_edit_batch_line_entries",
+      "breakpoints": true
     }
   ]
 }

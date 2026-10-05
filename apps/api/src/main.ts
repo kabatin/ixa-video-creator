@@ -262,6 +262,8 @@ export const main = (): void => {
       textStyles,
       timelineClips,
       characters,
+      // まとめて並べた記録（戻せるようにする。ADR-0038）。
+      editBatches: createEditBatchRepository(db),
       voiceAdapter,
       voiceQueue: voiceQueuePort,
       // 予算は動画の Take と声・文字起こしを足して見る（声だけで予算を食い潰さない）。

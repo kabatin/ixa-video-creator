@@ -1,5 +1,5 @@
 import { index, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
-import type { EditBatch, EditBatchClipEntry, EditBatchEntry } from '@ixa/domain'
+import type { EditBatch, EditBatchClipEntry, EditBatchEntry, EditBatchLineEntry } from '@ixa/domain'
 import { EditBatchKind as EditBatchKindSchema } from '@ixa/domain'
 import { createdAt, timestampTz, ulidPk, ulidRef } from './columns.js'
 import { projects } from './workspace.js'
@@ -32,6 +32,8 @@ export const shotEditBatches = pgTable(
      * これまでの記録は空。テーブル名は Shot のままだが、取り消しの仕組みを 1 つにするためここに足す（2026-10-02）。
      */
     clipEntries: jsonb('clip_entries').$type<readonly EditBatchClipEntry[]>().notNull().default([]),
+    /** ナレーションの行の「変える前」（ADR-0038）。これまでの記録は空。 */
+    lineEntries: jsonb('line_entries').$type<readonly EditBatchLineEntry[]>().notNull().default([]),
     /** 取り消した時刻。**NULL は「まだ取り消していない」**（「取り消せない」ではない）。 */
     undoneAt: timestampTz('undone_at'),
     createdAt: createdAt(),

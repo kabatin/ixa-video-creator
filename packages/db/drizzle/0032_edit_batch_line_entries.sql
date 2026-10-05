@@ -1,0 +1,1 @@
+ALTER TABLE "shot_edit_batches" ADD COLUMN "line_entries" jsonb DEFAULT '[]'::jsonb NOT NULL;

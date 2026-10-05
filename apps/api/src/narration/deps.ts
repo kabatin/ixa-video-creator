@@ -1,5 +1,6 @@
 import type {
   CharacterRepository,
+  EditBatchRepository,
   MediaAssetRepository,
   NarrationLineRepository,
   NarrationTakeRepository,
@@ -27,6 +28,8 @@ export type NarrationDeps = {
   readonly timelineClips: Pick<TimelineClipRepository, 'findByProject' | 'replace'>
   /** 声をキャラクターの声にするとき、その作品のキャラクターかを確かめる。 */
   readonly characters: Pick<CharacterRepository, 'findById'>
+  /** まとめて並べた記録（戻せるようにする）。記録を作れない環境では省く。 */
+  readonly editBatches?: Pick<EditBatchRepository, 'create'>
   /** 声の AI ごとの口（声の種類の一覧を出すため・使えるかを確かめるため）。口が無い AI は null。 */
   readonly voiceAdapter: (tool: VoiceToolId) => VoiceAdapter | null
   /** 声のジョブを worker の `voice` キューへ入れる。 */

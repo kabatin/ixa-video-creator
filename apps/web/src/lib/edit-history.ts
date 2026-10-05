@@ -21,6 +21,7 @@ const KIND_LABELS: Readonly<Record<EditBatchKind, string>> = Object.freeze({
   draft_adopt: '絵コンテの採用',
   bulk_update: 'Shot の一括変更',
   text_style: 'テロップの見た目の一括変更',
+  narration_arrange: 'ナレーションをまとめて並べる',
 })
 
 export const editBatchKindLabel = (kind: EditBatchKind): string => KIND_LABELS[kind]
@@ -48,7 +49,7 @@ export type EditHistoryRow = {
   readonly summary: string
   /** いつ変えたか。 */
   readonly when: string
-  /** 何件の Shot を変えたか。 */
+  /** 何件を変えたか（Shot・テロップ・ナレーションの行のうち、その記録が持つもの）。 */
   readonly shotCountLabel: string
   /** 「元に戻す」を出すか。**判定はサーバの `canUndo` をそのまま使う。** */
   readonly canUndo: boolean
@@ -61,17 +62,24 @@ export type EditHistoryRow = {
   readonly tone: EditHistoryTone
 }
 
+/**
+ * 何件変えたか。**その記録が持つものの件数で言う。**
+ * テロップの見た目のまとめ変更（2026-10-02）はテロップ、ナレーションをまとめて並べる（ADR-0038）は行。
+ */
+const countLabelOf = (batch: WireEditBatch): string => {
+  if (batch.shotCount > 0) return `${batch.shotCount.toString()} 件の Shot`
+  if (batch.lineCount > 0) return `${batch.lineCount.toString()} 行のナレーション`
+  if (batch.clipCount > 0) return `${batch.clipCount.toString()} 件のテロップ`
+  return `${batch.shotCount.toString()} 件の Shot`
+}
+
 const toRow = (batch: WireEditBatch): EditHistoryRow => ({
   key: batch.id,
   id: batch.id,
   kindLabel: editBatchKindLabel(batch.kind),
   summary: batch.summary,
   when: formatEditBatchTime(batch.createdAt),
-  // テロップの見た目のまとめ変更（2026-10-02）はテロップの件数で言う。
-  shotCountLabel:
-    batch.clipCount > 0 && batch.shotCount === 0
-      ? `${batch.clipCount.toString()} 件のテロップ`
-      : `${batch.shotCount.toString()} 件の Shot`,
+  shotCountLabel: countLabelOf(batch),
   canUndo: batch.canUndo,
   undoneAt: batch.undoneAt === null ? null : formatEditBatchTime(batch.undoneAt),
   tone: batch.undoneAt !== null ? 'muted' : 'normal',

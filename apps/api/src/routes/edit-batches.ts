@@ -2,6 +2,7 @@ import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import {
   EditBatchId as EditBatchIdSchema,
   EditBatchKind as EditBatchKindSchema,
+  NarrationLineId as NarrationLineIdSchema,
   ProjectId as ProjectIdSchema,
   ShotId as ShotIdSchema,
   TimelineClipId as TimelineClipIdSchema,
@@ -12,12 +13,20 @@ import {
   type EditBatch,
   type EditBatchClipEntry,
   type EditBatchEntry,
+  type NarrationLineId,
   type ProjectId,
   type ShotId,
   type TimelineClip,
   type TimelineClipId,
 } from '@ixa/domain'
-import type { EditBatchRepository, ProjectRepository, ShotRepository, TimelineClipRepository } from '@ixa/db'
+import type {
+  EditBatchRepository,
+  NarrationLineRepository,
+  ProjectRepository,
+  ShotRepository,
+  TimelineClipRepository,
+} from '@ixa/db'
+import { syncNarrationTelops, type NarrationTelopSyncDeps } from '@ixa/generation'
 import { roughCutLockedReason } from '@ixa/timeline'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, okList, successResponse, listResponse } from '../response.js'
@@ -69,6 +78,8 @@ export const EditBatchSummaryResponse = z
     shotCount: z.number().int().nonnegative(),
     /** 変える前を記録したテロップの件数（テロップの見た目のまとめ変更）。 */
     clipCount: z.number().int().nonnegative(),
+    /** 変える前を記録したナレーションの行の件数（まとめて並べる。ADR-0038）。 */
+    lineCount: z.number().int().nonnegative().default(0),
     /** **`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
     undoneAt: z.string().datetime().nullable(),
     createdAt: z.string().datetime(),
@@ -86,6 +97,10 @@ const UndoClipFailure = z
   .object({ clipId: TimelineClipIdSchema, reason: z.string().min(1) })
   .openapi('EditBatchUndoClipFailure')
 
+const UndoLineFailure = z
+  .object({ lineId: NarrationLineIdSchema, reason: z.string().min(1) })
+  .openapi('EditBatchUndoLineFailure')
+
 /** **戻せた分と戻せなかった分を両方返す。** 件数だけでは何が残ったか分からない。 */
 export const UndoEditBatchResponse = z
   .object({
@@ -95,6 +110,9 @@ export const UndoEditBatchResponse = z
     /** 戻したテロップ。Shot の記録だけなら空。 */
     restoredClips: z.array(TimelineClipIdSchema),
     failedClips: z.array(UndoClipFailure),
+    /** 戻したナレーションの行（ADR-0038）。 */
+    restoredLines: z.array(NarrationLineIdSchema).default([]),
+    failedLines: z.array(UndoLineFailure).default([]),
   })
   .openapi('UndoEditBatchResult')
 export type UndoEditBatchResponse = z.infer<typeof UndoEditBatchResponse>
@@ -105,6 +123,7 @@ export const toEditBatchSummary = (batch: EditBatch): EditBatchSummaryResponse =
   summary: batch.summary,
   shotCount: batch.entries.length,
   clipCount: batch.clipEntries.length,
+  lineCount: batch.lineEntries.length,
   undoneAt: batch.undoneAt === null ? null : batch.undoneAt.toISOString(),
   createdAt: batch.createdAt.toISOString(),
   canUndo: canUndo(batch),
@@ -154,7 +173,15 @@ export type EditBatchRoutesDeps = {
   editBatches: Pick<EditBatchRepository, 'findByProject' | 'findById' | 'markUndone'>
   /** テロップの見た目を戻す（`clipEntries`）。文字・時間には触らない。 */
   timelineClips: Pick<TimelineClipRepository, 'findByProject' | 'update'>
+  /**
+   * ナレーションの行の位置を戻す（`lineEntries`。ADR-0038）。戻したあとテロップも作り直す。
+   * ナレーションを繋いでいない環境では省く（その記録は作られない）。
+   */
+  narration?: NarrationTelopSyncDeps & { readonly lines: Pick<NarrationLineRepository, 'findById' | 'update'> }
 }
+
+/** 戻す行が無い（消された）。 */
+export const LINE_NOT_FOUND_REASON = 'ナレーションの行が見つかりません（消された可能性があります）'
 
 /** 戻すテロップが無い（消された）。 */
 export const CLIP_NOT_FOUND_REASON = 'テロップが見つかりません（消された可能性があります）'
@@ -290,8 +317,24 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
         else failedClips.push({ clipId: entry.clipId, reason })
       }
 
+      // ナレーションの行の位置（ADR-0038）。戻してからテロップを作り直す（テロップは行から導かれる）。
+      const restoredLines: NarrationLineId[] = []
+      const failedLines: { lineId: NarrationLineId; reason: string }[] = []
+      for (const entry of undone.lineEntries) {
+        const line = await deps.narration?.lines.findById(entry.lineId)
+        if (line === undefined || line === null) {
+          failedLines.push({ lineId: entry.lineId, reason: LINE_NOT_FOUND_REASON })
+          continue
+        }
+        await deps.narration?.lines.update(entry.lineId, { startSec: entry.startSec })
+        restoredLines.push(entry.lineId)
+      }
+      if (restoredLines.length > 0 && deps.narration !== undefined) {
+        await syncNarrationTelops(deps.narration, projectId)
+      }
+
       return c.json(
-        ok({ batch: toEditBatchSummary(undone), restored, failed, restoredClips, failedClips }),
+        ok({ batch: toEditBatchSummary(undone), restored, failed, restoredClips, failedClips, restoredLines, failedLines }),
         200,
       )
     })

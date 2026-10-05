@@ -18,6 +18,7 @@ import {
   createInMemoryVoiceJobRepository,
   createInMemoryVoiceProfileRepository,
 } from '@ixa/generation/testing'
+import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
 import { createInMemoryProjectEvents } from './in-memory-project-events.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 
@@ -57,6 +58,7 @@ export const setupNarration = (
     textStyles: createInMemoryTextStyleRepository(),
     timelineClips: createInMemoryTimelineClipRepository(),
     characters: createInMemoryCharacterRepository(),
+    editBatches: createInMemoryEditBatchRepository(),
     voiceAdapter: (tool: VoiceToolId) => (options.adapters ?? { stub: createStubVoice() })[tool] ?? null,
     voiceQueue: {
       enqueue: (id) => {

@@ -16,7 +16,31 @@ import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
 import { turnOffLineTelop } from '../narration/telops.js'
 import { clipRoutes } from '../routes/clips.js'
+import { editBatchRoutes } from '../routes/edit-batches.js'
 import { json, setupNarration, type Ok } from './narration-fixture.js'
+
+/** 取り消しの口。ナレーションの口と同じ記録・行・テロップを見る。 */
+const undo = (setup: Setup, batchId: string) => {
+  const app = new OpenAPIHono({ defaultHook: validationHook })
+  app.route(
+    '/',
+    editBatchRoutes({
+      projects: setup.deps.projects,
+      // この検査は行だけを戻す。Shot の口は呼ばれたら落ちる（呼ばれないことも確かめたい）。
+      shots: {
+        findById: () => Promise.reject(new Error('Shot は触らない')),
+        update: () => Promise.reject(new Error('Shot は触らない')),
+        selectTake: () => Promise.reject(new Error('Shot は触らない')),
+        updateStatus: () => Promise.reject(new Error('Shot は触らない')),
+      },
+      timelineClips: setup.deps.timelineClips,
+      editBatches: setup.deps.editBatches,
+      narration: setup.deps,
+    }),
+  )
+  registerErrorHandlers(app, createLogger('silent'))
+  return app.request(`/projects/${setup.project.id}/edit-batches/${batchId}/undo`, { method: 'POST' })
+}
 
 /**
  * ナレーションのテロップは行から導かれる（ADR-0038）。行・声・設定を API で変えたら、その場で作り直す。
@@ -211,5 +235,38 @@ describe('手でテロップを消す', () => {
     expect((await withClips(setup).request(`/clips/${manual.id}`, { method: 'DELETE' })).status).toBe(204)
 
     expect(setup.deps.lines.snapshot()[0]?.telop).toBe(true)
+  })
+})
+
+/**
+ * まとめて並べた記録（ADR-0038）。1 回押すと置いた行の位置が全部変わるので、履歴に残して戻せるようにする。
+ * 取り消すと位置が戻り、テロップもそれに付いてくる。
+ */
+describe('ナレーションをまとめて並べた記録', () => {
+  it('並べると記録が残り、取り消すと位置とテロップが戻る', async () => {
+    const setup = setupNarration()
+    const line = await placedLine(setup, { startSec: 9 })
+    await setup.send('PATCH', `/narration-lines/${line.id}`, { startSec: 9 })
+    expect(telops(setup).map((clip) => clip.startSec)).toEqual([9, 10.2])
+
+    await setup.send('POST', `/projects/${setup.project.id}/narration/arrange`, { fromSec: 1, gapSec: 0.5 })
+    expect(setup.deps.lines.snapshot()[0]?.startSec).toBe(1)
+
+    const [batch] = setup.deps.editBatches.snapshot()
+    expect(batch).toMatchObject({ kind: 'narration_arrange', lineEntries: [{ lineId: line.id, startSec: 9 }] })
+    expect(batch?.summary).toBe('ナレーション 1 行を並べました')
+
+    expect((await undo(setup, batch!.id)).status).toBe(200)
+
+    expect(setup.deps.lines.snapshot()[0]?.startSec).toBe(9)
+    expect(telops(setup).map((clip) => clip.startSec)).toEqual([9, 10.2])
+  })
+
+  it('置く行が無ければ記録を作らない（空の履歴を並べない）', async () => {
+    const setup = setupNarration()
+
+    await setup.send('POST', `/projects/${setup.project.id}/narration/arrange`, { fromSec: 1, gapSec: 0.5 })
+
+    expect(setup.deps.editBatches.snapshot()).toEqual([])
   })
 })

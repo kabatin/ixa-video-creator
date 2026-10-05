@@ -37,6 +37,7 @@ const aBatch = (overrides: Partial<WireEditBatch> = {}): WireEditBatch => ({
   summary: '粗編集を 49 件の Shot へ適用しました',
   shotCount: 49,
   clipCount: 0,
+  lineCount: 0,
   undoneAt: null,
   createdAt: '2026-09-18T01:00:00.000Z',
   canUndo: true,
@@ -230,6 +231,16 @@ describe('buildUndoResultView', () => {
   it('履歴の行は、テロップの記録ならテロップの件数を出す', () => {
     const view = buildEditHistoryView([aBatch({ kind: 'text_style', shotCount: 0, clipCount: 58 })])
     expect(view.rows[0]?.shotCountLabel).toBe('58 件のテロップ')
+  })
+
+  /** ナレーションをまとめて並べた記録（ADR-0038）。行の件数で言う（Shot でもテロップでもない）。 */
+  it('履歴の行は、ナレーションの記録なら行の件数を出す', () => {
+    const view = buildEditHistoryView([
+      aBatch({ kind: 'narration_arrange', summary: 'ナレーション 3 行を並べました', shotCount: 0, clipCount: 0, lineCount: 3 }),
+    ])
+
+    expect(view.rows[0]?.kindLabel).toBe('ナレーションをまとめて並べる')
+    expect(view.rows[0]?.shotCountLabel).toBe('3 行のナレーション')
   })
 
   it('戻せなかった分があれば、その件数と理由の両方を残す', () => {

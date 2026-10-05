@@ -33,6 +33,8 @@ export const WireEditBatch = z.object({
   shotCount: z.number().int().nonnegative(),
   /** 変える前を記録したテロップの件数（テロップの見た目のまとめ変更）。 */
   clipCount: z.number().int().nonnegative(),
+  /** ナレーションをまとめて並べた記録の行の件数（ADR-0038）。 */
+  lineCount: z.number().int().nonnegative().default(0),
   /** **`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
   undoneAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),

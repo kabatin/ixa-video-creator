@@ -526,7 +526,14 @@ export const createApp = (deps: AppDeps) => {
   // 一括で変えた記録と、その取り消し（横断 ROADMAP: Undo と履歴）。
   app.route(
     '/',
-    editBatchRoutes({ projects, shots: deps.shots, editBatches: deps.editBatches, timelineClips: deps.timelineClips }),
+    editBatchRoutes({
+      projects,
+      shots: deps.shots,
+      editBatches: deps.editBatches,
+      timelineClips: deps.timelineClips,
+      // ナレーションをまとめて並べた記録を戻す（ADR-0038）。戻したらテロップも作り直す。
+      ...(narration === undefined ? {} : { narration }),
+    }),
   )
   app.route(
     '/',

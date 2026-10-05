@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { EditBatchId, NarrationLineId, ProjectId, newId } from '../common/ids.js'
 import { EditBatch, canUndo } from '../shot/edit-batch.js'
 
 /**
@@ -31,5 +32,60 @@ describe('EditBatch のテロップの記録', () => {
   it('テロップの記録だけでも取り消せる。Shot もテロップも無ければ取り消せない', () => {
     expect(canUndo(EditBatch.parse({ ...base, clipEntries: [clipEntry] }))).toBe(true)
     expect(canUndo(EditBatch.parse(base))).toBe(false)
+  })
+})
+
+/**
+ * ナレーションをまとめて並べた記録（ADR-0038）。1 回押すと置いた行の位置が全部変わるので、戻せるようにする。
+ * 行の記録（`lineEntries`）は、これまでの記録（Shot・テロップだけ）では空として読む。
+ */
+describe('ナレーションをまとめて並べた記録', () => {
+  const lineId = newId(NarrationLineId)
+
+  it('行ごとに「置く前の位置」を持つ（置いていなかった行は null）', () => {
+    const batch = EditBatch.parse({
+      id: newId(EditBatchId),
+      projectId: newId(ProjectId),
+      kind: 'narration_arrange',
+      summary: 'ナレーション 3 行を 0:01.00 から並べました',
+      entries: [],
+      lineEntries: [{ lineId, startSec: 2.5 }, { lineId: newId(NarrationLineId), startSec: null }],
+      undoneAt: null,
+      createdAt: new Date(),
+    })
+
+    expect(batch.lineEntries).toHaveLength(2)
+    expect(batch.clipEntries).toEqual([])
+  })
+
+  it('行だけを変えた記録も取り消せる（Shot もテロップも 0 件）', () => {
+    const batch = EditBatch.parse({
+      id: newId(EditBatchId),
+      projectId: newId(ProjectId),
+      kind: 'narration_arrange',
+      summary: 'ナレーション 1 行を並べました',
+      entries: [],
+      lineEntries: [{ lineId, startSec: null }],
+      undoneAt: null,
+      createdAt: new Date(),
+    })
+
+    expect(canUndo(batch)).toBe(true)
+    expect(canUndo({ ...batch, undoneAt: new Date() })).toBe(false)
+  })
+
+  it('何も変えていない記録は取り消せない', () => {
+    const empty = EditBatch.parse({
+      id: newId(EditBatchId),
+      projectId: newId(ProjectId),
+      kind: 'narration_arrange',
+      summary: '並べる行がありませんでした',
+      entries: [],
+      lineEntries: [],
+      undoneAt: null,
+      createdAt: new Date(),
+    })
+
+    expect(canUndo(empty)).toBe(false)
   })
 })

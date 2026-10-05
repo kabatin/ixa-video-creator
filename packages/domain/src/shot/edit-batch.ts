@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { EditBatchId, ProjectId, ShotId, TakeId, TimelineClipId } from '../common/ids.js'
+import { EditBatchId, NarrationLineId, ProjectId, ShotId, TakeId, TimelineClipId } from '../common/ids.js'
 import { ShotStatus, UpdateShotPatch } from './shot.js'
 
 /**
@@ -15,7 +15,7 @@ import { ShotStatus, UpdateShotPatch } from './shot.js'
  */
 
 /** `text_style` はテロップの見た目のまとめ変更（2026-10-02）。Shot ではなくテロップを記録する（`clipEntries`）。 */
-export const EditBatchKind = z.enum(['rough_cut', 'draft_adopt', 'bulk_update', 'text_style'])
+export const EditBatchKind = z.enum(['rough_cut', 'draft_adopt', 'bulk_update', 'text_style', 'narration_arrange'])
 export type EditBatchKind = z.infer<typeof EditBatchKind>
 
 /**
@@ -74,6 +74,16 @@ export const EditBatchClipEntry = z.object({
 })
 export type EditBatchClipEntry = z.infer<typeof EditBatchClipEntry>
 
+/**
+ * ナレーションの行 1 件ぶんの「変える前」（ADR-0038）。まとめて並べると置いた行の位置が全部変わるので、位置だけを持つ。
+ * **`null` は「置いていなかった」**（触っていない行は記録に入れない）。
+ */
+export const EditBatchLineEntry = z.object({
+  lineId: NarrationLineId,
+  startSec: z.number().nullable(),
+})
+export type EditBatchLineEntry = z.infer<typeof EditBatchLineEntry>
+
 export const MAX_EDIT_BATCH_SUMMARY_LENGTH = 200
 
 export const EditBatch = z.object({
@@ -85,6 +95,8 @@ export const EditBatch = z.object({
   entries: z.array(EditBatchEntry),
   /** テロップの記録。これまでの記録（Shot だけ）は空として読む。 */
   clipEntries: z.array(EditBatchClipEntry).default([]),
+  /** ナレーションの行の記録（ADR-0038）。これまでの記録は空として読む。 */
+  lineEntries: z.array(EditBatchLineEntry).default([]),
   /** 取り消した時刻。**`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
   undoneAt: z.date().nullable(),
   createdAt: z.date(),
@@ -110,7 +122,7 @@ export const isUndone = (batch: EditBatch): boolean => batch.undoneAt !== null
  * 直した内容を古い値で塗り潰す。戻したものをやり直したいなら、新しく操作する。
  */
 export const canUndo = (batch: EditBatch): boolean =>
-  !isUndone(batch) && (batch.entries.length > 0 || batch.clipEntries.length > 0)
+  !isUndone(batch) && (batch.entries.length > 0 || batch.clipEntries.length > 0 || batch.lineEntries.length > 0)
 
 /**
  * 1 件ぶんの取り消しで、採用 Take を戻す必要があるか。

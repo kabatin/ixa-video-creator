@@ -34,6 +34,7 @@ const aBatch = (overrides: Partial<WireEditBatch> = {}): WireEditBatch => ({
   kind: 'rough_cut',
   summary: SUMMARY,
   shotCount: 49,
+  lineCount: 0,
   clipCount: 0,
   undoneAt: null,
   createdAt: '2026-09-18T01:00:00.000Z',
