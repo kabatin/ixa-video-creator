@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { TextStyleId } from '../common/ids.js'
+import { NarrationLineId, TextStyleId } from '../common/ids.js'
 import { TextStyle } from './text-style.js'
 
 /**
@@ -55,6 +55,14 @@ const TextClipText = z
  */
 export const MIN_TEXT_CLIP_DURATION_SEC = 0.5
 
+/** 話している字を強調する（ADR-0038）。 */
+export const TextHighlight = z.object({
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, '色は #RRGGBB の形で指定してください'),
+  /** 字の時刻（テロップの頭からの秒）。テロップの字と 1 対 1。 */
+  chars: z.array(z.object({ char: z.string(), startSec: z.number(), endSec: z.number() })).max(MAX_TEXT_CLIP_LENGTH),
+})
+export type TextHighlight = z.infer<typeof TextHighlight>
+
 export const TextClipParams = z.object({
   /** 出す文字。空のテロップは置けない。 */
   text: TextClipText,
@@ -67,8 +75,23 @@ export const TextClipParams = z.object({
    * 手で置いたテロップには付けない（置き直しで消さない）。
    */
   lyricLine: z.number().int().nonnegative().optional(),
+  /**
+   * ナレーションから作ったテロップの印（どの行か。ADR-0038）。行が変わったら差し替える相手を探すのに使う。
+   * 手で置いたテロップには付けない。
+   */
+  narrationLineId: NarrationLineId.optional(),
+  /** 話している字を強調する（ADR-0038）。字の時刻（このテロップの頭からの秒）と色。 */
+  highlight: TextHighlight.optional(),
 })
 export type TextClipParams = z.infer<typeof TextClipParams>
+
+const NarrationLineMark = z.object({ narrationLineId: NarrationLineId })
+
+/** ナレーションから作ったテロップなら、どの行か。手で置いたテロップ・読めない印は null。 */
+export const narrationLineOf = (params: unknown): NarrationLineId | null => {
+  const parsed = NarrationLineMark.safeParse(params)
+  return parsed.success ? parsed.data.narrationLineId : null
+}
 
 const LyricLineMark = z.object({ lyricLine: z.number().int().nonnegative() })
 
@@ -100,10 +123,16 @@ export const parseTextClipParams = (params: unknown): TextClipParams | null => {
   const style = raw.style === undefined ? null : TextStyle.safeParse(raw.style)
   const styleId = raw.styleId === undefined ? null : TextStyleId.nullable().safeParse(raw.styleId)
   const lyricLine = lyricLineOf(params)
+  const narrationLineId = narrationLineOf(params)
+  const highlight = (params as { readonly highlight?: unknown }).highlight
+  const parsedHighlight = highlight === undefined ? null : TextHighlight.safeParse(highlight)
   return {
     text: textOnly.data.text,
     ...(style?.success === true ? { style: style.data } : {}),
     ...(styleId?.success === true ? { styleId: styleId.data } : {}),
     ...(lyricLine === null ? {} : { lyricLine }),
+    ...(narrationLineId === null ? {} : { narrationLineId }),
+    // 読めない強調は捨てる（文字は普通に出す）。
+    ...(parsedHighlight?.success === true ? { highlight: parsedHighlight.data } : {}),
   }
 }

@@ -6,7 +6,10 @@ import {
   createInMemoryAudioSettingsRepository,
   createInMemoryNarrationLineRepository,
   createInMemoryNarrationTakeRepository,
+  createInMemoryTextStyleRepository,
+  createInMemoryTimelineClipRepository,
   createInMemoryVoiceJobRepository,
+  createInMemoryVoiceProfileRepository,
 } from '@ixa/generation/testing'
 import type { Transcriber, TranscribeResult } from '@ixa/provider-core'
 import { createStubVoice } from '@ixa/provider-voice'
@@ -71,6 +74,9 @@ const setup = async (transcriber: Transcriber | null) => {
     lines: createInMemoryNarrationLineRepository(),
     takes: createInMemoryNarrationTakeRepository(),
     audioSettings: createInMemoryAudioSettingsRepository(),
+    voices: createInMemoryVoiceProfileRepository(),
+    textStyles: createInMemoryTextStyleRepository(),
+    timelineClips: createInMemoryTimelineClipRepository(),
     projects: inMemoryProjects([project]),
     mediaAssets,
     storage,
@@ -122,6 +128,8 @@ describe('録音を取り込む（transcribe）', () => {
     expect(takes[0]?.charTimes?.[0]).toEqual({ char: '進', startSec: 0, endSec: expect.closeTo(0.1, 5) as unknown })
     expect(lines.map((line) => line.selectedTakeId)).toEqual(takes.map((take) => take.id))
     expect(deps.voiceJobs.snapshot()[0]).toMatchObject({ status: 'succeeded', costUsd: 0.05 })
+    // 取り込んだ行には、その場でテロップが付く。
+    expect(deps.timelineClips.snapshot().map((clip) => clip.startSec)).toEqual([3, 5])
   })
 
   it('区間しか返さない文字起こしは、区間の中を拍で字に割り振る（字の時刻を付ける）', async () => {
@@ -158,8 +166,10 @@ describe('録音を取り込む（transcribe）', () => {
 describe('字の時刻を取る（char_timing）', () => {
   it('Take の音を文字起こしして、表示の字に時刻を付ける（音・読みは変えない）', async () => {
     const { deps, recording } = await setup(transcriberReturning({ text: '進め', chars: said('進め', 0.2) }))
-    const [line] = await deps.lines.createMany([{ projectId: project.id, order: 0, text: '進め' }])
+    const [line] = await deps.lines.createMany([{ projectId: project.id, order: 0, text: '進め', startSec: 4 }])
     if (line === undefined) throw new Error('行がありません')
+    const settings = await deps.audioSettings.get(project.id)
+    await deps.audioSettings.save({ ...settings, telopHighlight: { enabled: true, color: '#ff0000' } })
     const take = await deps.takes.create({
       lineId: line.id,
       source: { type: 'generated', voiceJobId: newId(VoiceJobId), tool: 'macos_say', model: null, voiceName: 'Kyoko' },
@@ -174,6 +184,7 @@ describe('字の時刻を取る（char_timing）', () => {
       peaks: null,
       costUsd: 0,
     })
+    await deps.lines.update(line.id, { selectedTakeId: take.id })
     const job = await deps.voiceJobs.create({ kind: 'char_timing', projectId: project.id, lineId: line.id, takeId: take.id, inputMediaAssetId: recording.id, tool: 'stub', model: null })
 
     expect((await processVoiceJob(deps, { voiceJobId: job.id })).state).toBe('succeeded')
@@ -184,5 +195,7 @@ describe('字の時刻を取る（char_timing）', () => {
       ['め', 0.3],
     ])
     expect(updated?.mediaAssetId).toBe(recording.id)
+    // 字の時刻が付いたので、話している字の強調がテロップに付く。
+    expect(deps.timelineClips.snapshot()[0]?.content).toMatchObject({ params: { text: '進め', highlight: { color: '#ff0000' } } })
   })
 })

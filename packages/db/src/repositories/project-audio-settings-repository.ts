@@ -24,6 +24,7 @@ export const audioSettingsRowToDomain = (row: ProjectAudioSettingsRow): ProjectA
     projectId: row.projectId,
     readingDictionary: row.readingDictionary,
     ducking: row.ducking,
+    telopHighlight: row.telopHighlight,
   })
 
 export const createProjectAudioSettingsRepository = (db: DbClient): ProjectAudioSettingsRepository => ({
@@ -35,7 +36,7 @@ export const createProjectAudioSettingsRepository = (db: DbClient): ProjectAudio
 
   async save(settings) {
     const valid = ProjectAudioSettingsSchema.parse(settings)
-    const values = { readingDictionary: [...valid.readingDictionary], ducking: valid.ducking, updatedAt: new Date() }
+    const values = { readingDictionary: [...valid.readingDictionary], ducking: valid.ducking, telopHighlight: valid.telopHighlight, updatedAt: new Date() }
     await db
       .insert(projectAudioSettings)
       .values({ projectId: valid.projectId, ...values })

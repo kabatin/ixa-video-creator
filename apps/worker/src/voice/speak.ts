@@ -13,6 +13,7 @@ import {
 import type { SpeakResult } from '@ixa/provider-core'
 import { VoiceJobCancelled, VoiceJobFailure, type VoiceProcessorDeps } from './deps.js'
 import { publishVoiceJobStatus } from './events.js'
+import { syncTelopsAfterVoice } from './telops.js'
 import { generatedVoiceOrigin, ingestVoice } from './ingest.js'
 
 /**
@@ -136,6 +137,7 @@ export const runSpeak = async (deps: VoiceProcessorDeps, job: VoiceJob, dir: str
   })
   // 作り直したら新しい声を選ぶ（前の声に戻すのは Take を選び直せばよい）。
   await deps.lines.update(line.id, { selectedTakeId: take.id })
+  await syncTelopsAfterVoice(deps, job)
   const succeeded = await deps.voiceJobs.markSucceeded(job.id, { costUsd: spoken.result.costUsd, providerRecord: { ...spoken.result.record } })
   await publishVoiceJobStatus(deps, succeeded)
 }

@@ -8,6 +8,8 @@ import {
   TimelineTrack as TimelineTrackSchema,
   UpdateTimelineClipPatch as UpdateTimelineClipPatchSchema,
   isTextStyleUnreadable,
+  narrationLineOf,
+  type NarrationLineId,
   type ProjectId,
   type TimelineClip,
   type TimelineClipContent,
@@ -218,6 +220,8 @@ export type ClipRoutesDeps = {
   projects: ProjectRepository
   /** media クリップが指す素材の実在確認だけに使う。 */
   mediaAssets: Pick<MediaAssetRepository, 'findById'>
+  /** ナレーションのテロップを手で消したとき（その行を「テロップなし」にする。ADR-0038）。ナレーションが無い環境では省く。 */
+  onNarrationTelopDeleted?: (lineId: NarrationLineId) => Promise<void>
 }
 
 export const clipRoutes = (deps: ClipRoutesDeps) => {
@@ -290,7 +294,9 @@ export const clipRoutes = (deps: ClipRoutesDeps) => {
       return c.json(ok(toClipResponse(updated)), 200)
     })
     .openapi(deleteClipRoute, async (c) => {
-      await deps.timelineClips.softDelete(c.req.valid('param').id)
+      const removed = await deps.timelineClips.softDelete(c.req.valid('param').id)
+      const lineId = removed.content.type === 'text' ? narrationLineOf(removed.content.params) : null
+      if (lineId !== null) await deps.onNarrationTelopDeleted?.(lineId)
       return c.body(null, 204)
     })
 }

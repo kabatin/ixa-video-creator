@@ -10,6 +10,7 @@ import {
 import { VoiceProviderError } from '@ixa/provider-core'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import type { NarrationDeps } from '../narration/deps.js'
+import { syncTelops } from '../narration/telops.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
 
 /**
@@ -107,18 +108,26 @@ export const narrationVoiceRoutes = (deps: NarrationDeps) =>
         const sameName = await deps.voices.findByName(current.projectId, patch.name)
         if (sameName !== null && sameName.id !== id) return c.json(duplicate(), 409)
       }
-      return c.json(ok(toVoiceResponse(await deps.voices.update(id, patch))), 200)
+      const updated = await deps.voices.update(id, patch)
+      // 声の見た目を変えたら、その声の行のテロップに当て直す（名前や声のイメージだけなら、テロップは変わらない）。
+      if (patch.textStyleId !== undefined && patch.textStyleId !== current.textStyleId) {
+        const lines = await deps.lines.findByProject(current.projectId)
+        await syncTelops(deps, current.projectId, lines.filter((line) => line.voiceProfileId === id).map((line) => line.id))
+      }
+      return c.json(ok(toVoiceResponse(updated)), 200)
     })
     .openapi(deleteVoiceRoute, async (c) => {
       const { id } = c.req.valid('param')
       const current = await deps.voices.findById(id)
       if (current === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       // その声で話す行は「声が未定」に戻す（消した声を指したままにしない）。
-      const lines = await deps.lines.findByProject(current.projectId)
-      for (const line of lines.filter((l) => l.voiceProfileId === id)) {
+      const lines = (await deps.lines.findByProject(current.projectId)).filter((l) => l.voiceProfileId === id)
+      for (const line of lines) {
         await deps.lines.update(line.id, { voiceProfileId: null })
       }
       await deps.voices.softDelete(id)
+      // 声の見た目で出していたテロップは、既定の見た目に当て直す。
+      await syncTelops(deps, current.projectId, lines.map((line) => line.id))
       return c.body(null, 204)
     })
     .openapi(optionsRoute, async (c) => {

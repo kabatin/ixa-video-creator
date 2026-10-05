@@ -4,7 +4,10 @@ import type {
   NarrationTakeRepository,
   ProjectAudioSettingsRepository,
   ProjectRepository,
+  TextStyleRepository,
+  TimelineClipRepository,
   VoiceJobRepository,
+  VoiceProfileRepository,
 } from '@ixa/db'
 import type { MediaAssetId, ProjectEventPublisher, VoiceJobError, VoiceToolId } from '@ixa/domain'
 import type { LoudnessMeasurement } from '@ixa/media'
@@ -26,6 +29,10 @@ export type VoiceProcessorDeps = {
   readonly lines: NarrationLineRepository
   readonly takes: NarrationTakeRepository
   readonly audioSettings: ProjectAudioSettingsRepository
+  /** ナレーションのテロップを作り直すため（ADR-0038。規則は `@ixa/generation` の syncNarrationTelops）。 */
+  readonly voices: Pick<VoiceProfileRepository, 'findByProject'>
+  readonly textStyles: Pick<TextStyleRepository, 'findByProject'>
+  readonly timelineClips: Pick<TimelineClipRepository, 'findByProject' | 'replace'>
   readonly projects: Pick<ProjectRepository, 'findById'>
   readonly mediaAssets: Pick<MediaAssetRepository, 'findById' | 'findByChecksum' | 'create'>
   readonly storage: ObjectStorage

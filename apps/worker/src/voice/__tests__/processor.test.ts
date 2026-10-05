@@ -1,12 +1,15 @@
 import { copyFile, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { lineReading, voiceSpecHash, voiceSpecOf, type VoiceProfile } from '@ixa/domain'
+import { lineReading, narrationLineOf, voiceSpecHash, voiceSpecOf, type VoiceProfile } from '@ixa/domain'
 import {
   createInMemoryAudioSettingsRepository,
   createInMemoryNarrationLineRepository,
   createInMemoryNarrationTakeRepository,
+  createInMemoryTextStyleRepository,
+  createInMemoryTimelineClipRepository,
   createInMemoryVoiceJobRepository,
+  createInMemoryVoiceProfileRepository,
 } from '@ixa/generation/testing'
 import { VoiceProviderError, type VoiceAdapter } from '@ixa/provider-core'
 import { createStubVoice } from '@ixa/provider-voice'
@@ -64,7 +67,9 @@ const fakeAudio = {
   peaks: () => Promise.resolve([0.2, 0.8]),
 }
 
-const setup = async (options: { readonly adapter?: VoiceAdapter | null; readonly dictionary?: boolean } = {}) => {
+const setup = async (
+  options: { readonly adapter?: VoiceAdapter | null; readonly dictionary?: boolean; readonly startSec?: number | null } = {},
+) => {
   const lines = createInMemoryNarrationLineRepository()
   const audioSettings = createInMemoryAudioSettingsRepository()
   if (options.dictionary !== false) {
@@ -72,9 +77,12 @@ const setup = async (options: { readonly adapter?: VoiceAdapter | null; readonly
       projectId: project.id,
       readingDictionary: [{ written: '戦子', reading: 'せんこ' }],
       ducking: { enabled: true, depthDb: 10, attackSec: 0.15, releaseSec: 0.4 },
+      telopHighlight: { enabled: false, color: '#ffd400' },
     })
   }
-  const [line] = await lines.createMany([{ projectId: project.id, order: 0, text: '進め戦子', voiceProfileId: voice.id }])
+  const [line] = await lines.createMany([
+    { projectId: project.id, order: 0, text: '進め戦子', voiceProfileId: voice.id, startSec: options.startSec ?? null },
+  ])
   if (line === undefined) throw new Error('行がありません')
   const voiceJobs = createInMemoryVoiceJobRepository()
   const reading = lineReading(line, (await audioSettings.get(project.id)).readingDictionary).reading
@@ -85,6 +93,9 @@ const setup = async (options: { readonly adapter?: VoiceAdapter | null; readonly
     lines,
     takes: createInMemoryNarrationTakeRepository(),
     audioSettings,
+    voices: createInMemoryVoiceProfileRepository(),
+    textStyles: createInMemoryTextStyleRepository(),
+    timelineClips: createInMemoryTimelineClipRepository(),
     projects: inMemoryProjects([project]),
     mediaAssets: inMemoryMediaAssets(),
     storage: createMemoryStorage(),
@@ -126,12 +137,39 @@ describe('processVoiceJob（読む）', () => {
     expect(deps.events.published().map((e) => (e.type === 'voice_job.status' ? e.status : e.type))).toEqual(['running', 'succeeded'])
   })
 
+  it('置いてある行なら、声ができたらテロップを作る（出来事を流す前に。画面が読み直したときに揃っている）', async () => {
+    const { deps, job, line } = await setup({ startSec: 3 })
+    const telopsWhenPublished: number[] = []
+    const events = {
+      ...deps.events,
+      publish: async (event: Parameters<typeof deps.events.publish>[0]) => {
+        telopsWhenPublished.push(deps.timelineClips.snapshot().length)
+        await deps.events.publish(event)
+      },
+    }
+
+    await processVoiceJob({ ...deps, events }, { voiceJobId: job.id })
+
+    const telops = deps.timelineClips.snapshot()
+    expect(telops.map((clip) => [clip.startSec, clip.content.type === 'text' ? narrationLineOf(clip.content.params) : null])).toEqual([[3, line.id]])
+    expect(telopsWhenPublished.at(-1)).toBe(1)
+  })
+
+  it('テロップを作れなくても、声は取り込んで成功にする（理由はログに残す。次に行を直すと作り直す）', async () => {
+    const { deps, job } = await setup({ startSec: 3 })
+    const broken = { ...deps.timelineClips, replace: () => Promise.reject(new Error('DB に繋がりません')) }
+
+    expect((await processVoiceJob({ ...deps, timelineClips: broken }, { voiceJobId: job.id })).state).toBe('succeeded')
+    expect(deps.takes.snapshot()).toHaveLength(1)
+  })
+
   it('頼んだ後に読みが変わっていたら、字の時刻は付けない（ずれた時刻で字幕を出さない）', async () => {
     const { deps, job } = await setup()
     await deps.audioSettings.save({
       projectId: project.id,
       readingDictionary: [{ written: '戦子', reading: 'いくさこ' }],
       ducking: { enabled: true, depthDb: 10, attackSec: 0.15, releaseSec: 0.4 },
+      telopHighlight: { enabled: false, color: '#ffd400' },
     })
 
     await processVoiceJob(deps, { voiceJobId: job.id })

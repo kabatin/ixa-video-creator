@@ -13,6 +13,7 @@ import {
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import type { NarrationDeps } from '../narration/deps.js'
+import { syncTelops } from '../narration/telops.js'
 import { buildNarrationOverview, lineLengthSec } from '../narration/overview.js'
 import { NarrationOverviewResponse, toOverviewResponse } from '../narration/overview-response.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
@@ -133,12 +134,17 @@ export const narrationLineRoutes = (deps: NarrationDeps) =>
         if (take?.lineId !== id) return c.json(fail('この行の声ではありません', { selectedTakeId: ['この行の声ではありません'] }), 422)
       }
       await deps.lines.update(id, patch)
+      // 話す声を変えたら、その声の見た目に当て直す（ほかは今の見た目を引き継ぐ）。
+      const voiceChanged = patch.voiceProfileId !== undefined && patch.voiceProfileId !== current.voiceProfileId
+      await syncTelops(deps, current.projectId, voiceChanged ? [id] : [])
       return c.json(await overviewJson(deps, current.projectId), 200)
     })
     .openapi(deleteRoute, async (c) => {
       const { id } = c.req.valid('param')
-      if ((await deps.lines.findById(id)) === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      const current = await deps.lines.findById(id)
+      if (current === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       await deps.lines.softDelete(id)
+      await syncTelops(deps, current.projectId)
       return c.body(null, 204)
     })
     .openapi(orderRoute, async (c) => {
@@ -171,6 +177,7 @@ export const narrationLineRoutes = (deps: NarrationDeps) =>
         await deps.lines.update(line.id, { startSec: Math.round(at * 1000) / 1000 })
         at += lineLengthSec(line) + gapSec
       }
+      await syncTelops(deps, projectId)
       return c.json(await overviewJson(deps, projectId), 200)
     })
 

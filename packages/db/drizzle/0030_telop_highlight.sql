@@ -1,0 +1,1 @@
+ALTER TABLE "project_audio_settings" ADD COLUMN "telop_highlight" jsonb DEFAULT '{"enabled":false,"color":"#ffd400"}'::jsonb NOT NULL;

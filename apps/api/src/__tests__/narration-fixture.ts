@@ -12,6 +12,8 @@ import {
   createInMemoryMediaAssetRepository,
   createInMemoryNarrationLineRepository,
   createInMemoryNarrationTakeRepository,
+  createInMemoryTextStyleRepository,
+  createInMemoryTimelineClipRepository,
   createInMemoryVoiceJobRepository,
   createInMemoryVoiceProfileRepository,
 } from '@ixa/generation/testing'
@@ -51,6 +53,8 @@ export const setupNarration = (
     takes: createInMemoryNarrationTakeRepository(),
     voiceJobs,
     audioSettings: createInMemoryAudioSettingsRepository(),
+    textStyles: createInMemoryTextStyleRepository(),
+    timelineClips: createInMemoryTimelineClipRepository(),
     voiceAdapter: (tool: VoiceToolId) => (options.adapters ?? { stub: createStubVoice() })[tool] ?? null,
     voiceQueue: {
       enqueue: (id) => {

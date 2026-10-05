@@ -4,6 +4,8 @@ import type {
   NarrationTakeRepository,
   ProjectAudioSettingsRepository,
   ProjectRepository,
+  TextStyleRepository,
+  TimelineClipRepository,
   VoiceJobRepository,
   VoiceProfileRepository,
 } from '@ixa/db'
@@ -19,6 +21,9 @@ export type NarrationDeps = {
   readonly takes: NarrationTakeRepository
   readonly voiceJobs: VoiceJobRepository
   readonly audioSettings: ProjectAudioSettingsRepository
+  /** ナレーションのテロップを作り直すため（行の見た目を選ぶ・差し替える）。 */
+  readonly textStyles: Pick<TextStyleRepository, 'findByProject'>
+  readonly timelineClips: Pick<TimelineClipRepository, 'findByProject' | 'replace'>
   /** 声の AI ごとの口（声の種類の一覧を出すため・使えるかを確かめるため）。口が無い AI は null。 */
   readonly voiceAdapter: (tool: VoiceToolId) => VoiceAdapter | null
   /** 声のジョブを worker の `voice` キューへ入れる。 */

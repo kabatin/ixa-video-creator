@@ -10,6 +10,7 @@ import type {
 } from '@ixa/db'
 import type {
   GenerationContextSource,
+  NarrationLineId,
   ProjectEventPublisher,
   ProjectEventSubscriber,
   ProviderId,
@@ -21,6 +22,7 @@ import { environmentRoutes, type EnvironmentDeps } from './routes/environment.js
 import { aiRoutes, type AiRoutesDeps } from './routes/ai.js'
 import type { NarrationDeps } from './narration/deps.js'
 import { narrationRoutes } from './routes/narration.js'
+import { turnOffLineTelop } from './narration/telops.js'
 import { generationActivityRoutes, type GenerationActivityDeps } from './routes/generation-activity.js'
 import { generationCancelRoutes } from './routes/generation-cancel.js'
 import { takeHideRoutes } from './routes/take-hide.js'
@@ -460,7 +462,17 @@ export const createApp = (deps: AppDeps) => {
   )
 
   app.route('/', transitionRoutes({ transitions: deps.transitions, shots: deps.shots, projects }))
-  app.route('/', clipRoutes({ timelineClips: deps.timelineClips, projects, mediaAssets }))
+  // ナレーションのテロップを手で消したら、その行を「テロップなし」にする（ADR-0038）。
+  const narration = deps.narration
+  app.route(
+    '/',
+    clipRoutes({
+      timelineClips: deps.timelineClips,
+      projects,
+      mediaAssets,
+      ...(narration === undefined ? {} : { onNarrationTelopDeleted: (lineId: NarrationLineId) => turnOffLineTelop(narration, lineId) }),
+    }),
+  )
   // テロップの見た目: 名前を付けて保存し、まとめて当てる（ADR-0028）。
   app.route('/', textStyleRoutes({ textStyles: deps.textStyles, projects }))
   // 歌詞をフレーズごとのテロップにする（ADR-0033）。

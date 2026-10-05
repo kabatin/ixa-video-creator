@@ -13,6 +13,7 @@ import {
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import type { NarrationDeps } from '../narration/deps.js'
+import { syncTelops } from '../narration/telops.js'
 import { budgetProblem } from '../narration/budget.js'
 import { planSpeak, speakContextFor, unavailableMessage, type SpeakPlan } from '../narration/speak-plan.js'
 import { publishVoiceJob, startVoiceJob } from '../narration/voice-job-start.js'
@@ -128,7 +129,10 @@ export const narrationSpeakRoutes = (deps: NarrationDeps) =>
           return c.json(fail('この行は声を作っている途中です'), 409)
         case 'up_to_date':
         case 'reuse':
-          if (plan.kind === 'reuse') await deps.lines.update(line.id, { selectedTakeId: plan.takeId })
+          if (plan.kind === 'reuse') {
+            await deps.lines.update(line.id, { selectedTakeId: plan.takeId })
+            await syncTelops(deps, line.projectId)
+          }
           return c.json(ok({ jobId: null, reusedTakeId: plan.takeId }), 200)
         case 'speak': {
           const problem = await budgetProblem(deps, project, await lineSpentUsd(deps, line), plan.estimateUsd)
@@ -153,6 +157,7 @@ export const narrationSpeakRoutes = (deps: NarrationDeps) =>
       if (problem !== null) return c.json(fail(problem.reason, { cost: [problem.limit] }), 422)
       const reused = plans.flatMap(({ line, plan }) => (plan.kind === 'reuse' ? [{ line, takeId: plan.takeId }] : []))
       for (const { line, takeId } of reused) await deps.lines.update(line.id, { selectedTakeId: takeId })
+      if (reused.length > 0) await syncTelops(deps, projectId)
       const jobIds: string[] = []
       for (const { line, plan } of toSpeak) jobIds.push((await startVoiceJob(deps, speakInput(line, plan))).id)
       const count = (kind: SpeakPlan['kind']) => plans.filter(({ plan }) => plan.kind === kind).length

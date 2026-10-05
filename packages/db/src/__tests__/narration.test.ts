@@ -136,12 +136,14 @@ describe('project_audio_settings', () => {
       projectId: PROJECT,
       readingDictionary: [{ written: '戦子', reading: 'せんこ' }],
       ducking: { enabled: false, depthDb: 6, attackSec: 0.1, releaseSec: 0.3 },
+      telopHighlight: { enabled: true, color: '#ff0000' },
       updatedAt: NOW,
     }
     expect(audioSettingsRowToDomain(row)).toEqual({
       projectId: PROJECT,
       readingDictionary: [{ written: '戦子', reading: 'せんこ' }],
       ducking: { enabled: false, depthDb: 6, attackSec: 0.1, releaseSec: 0.3 },
+      telopHighlight: { enabled: true, color: '#ff0000' },
     })
   })
 })

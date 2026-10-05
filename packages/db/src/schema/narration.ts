@@ -18,6 +18,7 @@ import {
   type DuckingSettings,
   type NarrationTakeSource,
   type ReadingEntry,
+  type TelopHighlightSettings,
   type VoiceJobError,
   type VoiceJobKind,
   type VoiceJobStatus,
@@ -165,5 +166,10 @@ export const projectAudioSettings = pgTable('project_audio_settings', {
     .references(() => projects.id, { onDelete: 'cascade' }),
   readingDictionary: jsonb('reading_dictionary').$type<ReadingEntry[]>().notNull().default([]),
   ducking: jsonb('ducking').$type<DuckingSettings>().notNull(),
+  /** 話している字を強調するか（ADR-0038）。前からの行は強調しない。 */
+  telopHighlight: jsonb('telop_highlight')
+    .$type<TelopHighlightSettings>()
+    .notNull()
+    .default({ enabled: false, color: '#ffd400' }),
   updatedAt: updatedAt(),
 })

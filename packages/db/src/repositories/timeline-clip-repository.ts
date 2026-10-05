@@ -25,7 +25,8 @@ export type TimelineClipRepository = {
   findByProject(projectId: ProjectId): Promise<TimelineClip[]>
   create(input: CreateTimelineClipInput): Promise<TimelineClip>
   update(id: TimelineClipId, patch: UpdateTimelineClipPatch): Promise<TimelineClip>
-  softDelete(id: TimelineClipId): Promise<void>
+  /** 消したクリップを返す（ナレーションのテロップなら、どの行のものかを見るため）。 */
+  softDelete(id: TimelineClipId): Promise<TimelineClip>
   /**
    * いくつか消して、いくつか置く（歌詞のテロップの置き直し。ADR-0033）。**1 トランザクションで**行う。
    * 途中で落ちて半分だけ差し替わると、前の歌詞と新しい歌詞が帯に混ざる。消す相手が無ければ `DbNotFoundError`。
@@ -87,8 +88,10 @@ export const createTimelineClipRepository = (db: DbClient): TimelineClipReposito
       .update(timelineClips)
       .set({ deletedAt: new Date() })
       .where(liveById(id))
-      .returning({ id: timelineClips.id })
-    if (rows.length === 0) throw new DbNotFoundError('TimelineClip', id)
+      .returning()
+    const row = rows[0]
+    if (!row) throw new DbNotFoundError('TimelineClip', id)
+    return timelineClipRowToDomain(row)
   },
 
   async replace(removeIds, inputs) {

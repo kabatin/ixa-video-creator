@@ -1,6 +1,8 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import {
+  DEFAULT_HIGHLIGHT_COLOR,
   DuckingSettings,
+  TelopHighlightSettings,
   ProjectAudioSettings,
   ProjectId as ProjectIdSchema,
   ReadingDictionary,
@@ -8,6 +10,7 @@ import {
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import type { NarrationDeps } from '../narration/deps.js'
+import { syncTelops } from '../narration/telops.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 import { narrationLineRoutes } from './narration-lines.js'
 import { narrationRecordingRoutes } from './narration-recordings.js'
@@ -20,7 +23,12 @@ import { narrationVoiceRoutes } from './narration-voices.js'
 
 const ProjectParams = z.object({ projectId: ProjectIdSchema.openapi({ param: { name: 'projectId', in: 'path' } }) })
 const SettingsBody = z
-  .object({ readingDictionary: ReadingDictionary, ducking: DuckingSettings })
+  .object({
+    readingDictionary: ReadingDictionary,
+    ducking: DuckingSettings,
+    /** 話している字を強調するか（無ければ強調しない）。 */
+    telopHighlight: TelopHighlightSettings.default({ enabled: false, color: DEFAULT_HIGHLIGHT_COLOR }),
+  })
   .superRefine((value, ctx) => {
     const problem = readingDictionaryProblem(value.readingDictionary)
     if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem, path: ['readingDictionary'] })
@@ -56,6 +64,8 @@ const audioSettingsRoutes = (deps: NarrationDeps) =>
       const { projectId } = c.req.valid('param')
       if ((await deps.projects.findById(projectId)) === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       const saved = await deps.audioSettings.save({ projectId, ...c.req.valid('json') })
+      // 読み辞書（字の時刻の按分）と強調の設定はテロップに効く。
+      await syncTelops(deps, projectId)
       return c.json(ok({ ...saved, readingDictionary: [...saved.readingDictionary] }), 200)
     })
 

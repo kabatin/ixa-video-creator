@@ -12,6 +12,7 @@ import {
 import type { TranscribeResult, TranscribeToolId, Transcriber } from '@ixa/provider-core'
 import { VoiceJobCancelled, VoiceJobFailure, type VoiceProcessorDeps } from './deps.js'
 import { publishVoiceJobStatus } from './events.js'
+import { syncTelopsAfterVoice } from './telops.js'
 import { ingestVoice } from './ingest.js'
 
 /**
@@ -130,6 +131,7 @@ export const runTranscribe = async (deps: VoiceProcessorDeps, job: VoiceJob, dir
     await deps.lines.update(line.id, { selectedTakeId: take.id })
   }
   // 文字起こしの額はジョブに残す（行ごとの Take には割らない）。
+  await syncTelopsAfterVoice(deps, job)
   const succeeded = await deps.voiceJobs.markSucceeded(job.id, { costUsd: result.costUsd, providerRecord: { ...result.record, lines: lines.length } })
   await publishVoiceJobStatus(deps, succeeded)
 }
@@ -147,6 +149,8 @@ export const runCharTiming = async (deps: VoiceProcessorDeps, job: VoiceJob, dir
     .map((char) => ({ char: char.char, startSec: char.startSec - take.inSec, endSec: char.endSec - take.inSec }))
   await throwIfCancelled(deps, job)
   await deps.takes.setCharTimes(take.id, alignTimedText(within, take.displayText))
+  // 字の時刻が付くと、テロップの分け目と強調が変わる。
+  await syncTelopsAfterVoice(deps, job)
   const succeeded = await deps.voiceJobs.markSucceeded(job.id, { costUsd: result.costUsd, providerRecord: { ...result.record } })
   await publishVoiceJobStatus(deps, succeeded)
 }

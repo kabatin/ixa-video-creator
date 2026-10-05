@@ -1,13 +1,12 @@
 import { DbNotFoundError } from '@ixa/db'
 import type {
-  MusicTrackRepository, RenderJobRepository, TimelineClipRepository, TransitionRepository,
+  MusicTrackRepository, RenderJobRepository, TransitionRepository,
 } from '@ixa/db'
 import {
   CreateMusicTrackInput as CreateMusicTrackInputSchema,
   UpdateMusicTrackPatch as UpdateMusicTrackPatchSchema,
   nextMasterAfterRemoval,
   CreateRenderJobInput as CreateRenderJobInputSchema,
-  CreateTimelineClipInput as CreateTimelineClipInputSchema,
   CreateTransitionInput as CreateTransitionInputSchema,
   MediaAsset as MediaAssetSchema,
   MediaAssetId as MediaAssetIdSchema,
@@ -15,20 +14,22 @@ import {
   MusicTrackId as MusicTrackIdSchema,
   RenderJob as RenderJobSchema,
   RenderJobId as RenderJobIdSchema,
-  TimelineClip as TimelineClipSchema,
-  TimelineClipId as TimelineClipIdSchema,
   Transition as TransitionSchema,
   TransitionId as TransitionIdSchema,
   UpdateRenderJobPatch as UpdateRenderJobPatchSchema,
-  UpdateTimelineClipPatch as UpdateTimelineClipPatchSchema,
   WorkspaceId as WorkspaceIdSchema,
   newId,
   type MediaAsset,
   type MusicTrack,
   type RenderJob,
-  type TimelineClip,
   type Transition,
 } from '@ixa/domain'
+
+// テロップを作り直す処理（`@ixa/generation`）の検査でも使うので、本体は generation の testing に置く。
+export {
+  createInMemoryTimelineClipRepository,
+  type InMemoryTimelineClipRepository,
+} from '@ixa/generation/testing'
 
 /**
  * タイムライン / レンダリング系のインメモリリポジトリとフィクスチャ。
@@ -75,67 +76,6 @@ export const createInMemoryRenderJobRepository = (
       })
       store = store.map((job) => (job.id === id ? updated : job))
       return Promise.resolve(updated)
-    },
-  }
-}
-
-export type InMemoryTimelineClipRepository = TimelineClipRepository & {
-  readonly snapshot: () => readonly TimelineClip[]
-}
-
-export const createInMemoryTimelineClipRepository = (
-  seed: readonly TimelineClip[] = [],
-): InMemoryTimelineClipRepository => {
-  let store: readonly TimelineClip[] = seed.map((clip) => TimelineClipSchema.parse(clip))
-
-  return {
-    snapshot: () => store,
-
-    findByProject: (projectId) =>
-      Promise.resolve(store.filter((clip) => clip.projectId === projectId)),
-
-    create: (input) => {
-      const created = TimelineClipSchema.parse({
-        ...CreateTimelineClipInputSchema.parse(input),
-        id: newId(TimelineClipIdSchema),
-        createdAt: new Date(),
-      })
-      store = [...store, created]
-      return Promise.resolve(created)
-    },
-
-    update: (id, patch) => {
-      const current = store.find((clip) => clip.id === id)
-      if (current === undefined) return Promise.reject(new DbNotFoundError('TimelineClip', id))
-      const updated = TimelineClipSchema.parse({
-        ...current,
-        ...UpdateTimelineClipPatchSchema.parse(patch),
-      })
-      store = store.map((clip) => (clip.id === id ? updated : clip))
-      return Promise.resolve(updated)
-    },
-
-    softDelete: (id) => {
-      if (store.find((clip) => clip.id === id) === undefined) {
-        return Promise.reject(new DbNotFoundError('TimelineClip', id))
-      }
-      store = store.filter((clip) => clip.id !== id)
-      return Promise.resolve()
-    },
-
-    // 本物と同じく、消す相手が 1 件でも無ければ何も変えずに投げる（まとめて差し替える）。
-    replace: (removeIds, inputs) => {
-      const missing = removeIds.find((id) => store.find((clip) => clip.id === id) === undefined)
-      if (missing !== undefined) return Promise.reject(new DbNotFoundError('TimelineClip', missing))
-      const created = inputs.map((input) =>
-        TimelineClipSchema.parse({
-          ...CreateTimelineClipInputSchema.parse(input),
-          id: newId(TimelineClipIdSchema),
-          createdAt: new Date(),
-        }),
-      )
-      store = [...store.filter((clip) => !removeIds.includes(clip.id)), ...created]
-      return Promise.resolve(created)
     },
   }
 }

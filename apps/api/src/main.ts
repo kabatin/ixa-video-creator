@@ -249,6 +249,8 @@ export const main = (): void => {
   })
   const projectRepository = createProjectRepository(db)
   const voiceJobs = createVoiceJobRepository(db)
+  const timelineClips = createTimelineClipRepository(db)
+  const textStyles = createTextStyleRepository(db)
   const app = createApp({
     narration: {
       projects: projectRepository,
@@ -257,6 +259,8 @@ export const main = (): void => {
       takes: createNarrationTakeRepository(db),
       voiceJobs,
       audioSettings: createProjectAudioSettingsRepository(db),
+      textStyles,
+      timelineClips,
       voiceAdapter,
       voiceQueue: voiceQueuePort,
       // 予算は動画の Take と声・文字起こしを足して見る（声だけで予算を食い潰さない）。
@@ -295,8 +299,8 @@ export const main = (): void => {
     takes,
     generationJobs: createGenerationJobRepository(db),
     transitions: createTransitionRepository(db),
-    timelineClips: createTimelineClipRepository(db),
-    textStyles: createTextStyleRepository(db),
+    timelineClips,
+    textStyles,
     musicTracks: createMusicTrackRepository(db),
     renderJobs: createRenderJobRepository(db),
     renderQueue: renderQueuePort,
