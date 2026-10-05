@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { alignTimedText, displayTimesFromReading, type CharTime } from '../narration/char-timing.js'
+import { alignTimedText, charTimesFromSegments, displayTimesFromReading, type CharTime } from '../narration/char-timing.js'
 import { applyReadings } from '../narration/reading.js'
 
 /**
@@ -82,6 +82,33 @@ describe('alignTimedText', () => {
     expect(alignTimedText([], 'はい')).toEqual([
       { char: 'は', startSec: 0, endSec: 0 },
       { char: 'い', startSec: 0, endSec: 0 },
+    ])
+  })
+})
+
+describe('charTimesFromSegments', () => {
+  /** whisper.cpp などは区間（文くらい）の時刻しか返さない。区間の中を、話す長さの重み（拍・句読点の間）で字に割り振る。 */
+  it('区間の中を拍で割り振る（読点は間の長さ、かなは 1 拍）', () => {
+    const times = charTimesFromSegments([{ text: 'はい、そう', startSec: 1, endSec: 2 }])
+
+    expect(times.map((t) => t.char)).toEqual(['は', 'い', '、', 'そ', 'う'])
+    expect(times[0]?.startSec).toBe(1)
+    expect(times.at(-1)?.endSec).toBeCloseTo(2)
+    // 読点（0.25 秒相当）は、かな（1/7 秒相当）より長く取る。
+    const span = (t: CharTime | undefined) => (t === undefined ? 0 : t.endSec - t.startSec)
+    expect(span(times[2])).toBeGreaterThan(span(times[0]))
+  })
+
+  it('区間をつなげて返す。空白だけの区間や重みの無い区間は字数で等分する', () => {
+    const times = charTimesFromSegments([
+      { text: 'あい', startSec: 0, endSec: 1 },
+      { text: '!?', startSec: 1, endSec: 1.4 },
+    ])
+    expect(times.map((t) => [t.char, Math.round(t.startSec * 100) / 100])).toEqual([
+      ['あ', 0],
+      ['い', 0.5],
+      ['!', 1],
+      ['?', 1.2],
     ])
   })
 })

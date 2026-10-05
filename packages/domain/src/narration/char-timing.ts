@@ -1,4 +1,5 @@
 import type { AppliedReading } from './reading.js'
+import { charSpeechSeconds } from './speech-estimate.js'
 
 /**
  * 字の時刻（ADR-0038）。テロップを話す速さに合わせて分ける・話している字を強調するのに使う。
@@ -113,3 +114,29 @@ export const alignTimedText = (source: readonly CharTime[], target: string): rea
   }
   return result
 }
+
+/** 文字起こしの区間（文くらいの長さ）。 */
+export type TimedSegment = {
+  readonly text: string
+  readonly startSec: number
+  readonly endSec: number
+}
+
+/**
+ * 区間の時刻しか返さない文字起こし（whisper.cpp など）の結果を、字の時刻にする。
+ * 区間の中は話す長さの重み（拍・句読点の間）で割り振る。重みが無ければ字数で等分する。
+ */
+export const charTimesFromSegments = (segments: readonly TimedSegment[]): readonly CharTime[] =>
+  segments.flatMap((segment) => {
+    const chars = [...segment.text]
+    const weights = chars.map(charSpeechSeconds)
+    const total = weights.reduce((sum, w) => sum + w, 0)
+    if (total <= 0) return spread(chars, segment.startSec, segment.endSec)
+    const length = segment.endSec - segment.startSec
+    let at = segment.startSec
+    return chars.map((char, index) => {
+      const startSec = at
+      at += (length * (weights[index] ?? 0)) / total
+      return { char, startSec, endSec: at }
+    })
+  })

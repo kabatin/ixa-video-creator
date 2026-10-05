@@ -48,7 +48,7 @@ export const estimateSpeechSec = (reading: string, speed: number): number => {
 }
 
 /** 1 字を話す長さの見積もり（秒、速さ 1）。拍と句読点の間から。 */
-const charSeconds = (char: string): number => moraOf(char) / NARRATION_MORA_PER_SEC + pauseOf(char)
+export const charSpeechSeconds = (char: string): number => moraOf(char) / NARRATION_MORA_PER_SEC + pauseOf(char)
 
 /**
  * 表示の字ごとの「話す長さの重み」。字の時刻が無い声で、テロップを按分するのに使う。
@@ -59,8 +59,8 @@ export const displaySpeechWeights = (applied: AppliedReading): readonly number[]
   const display = [...applied.display]
   return applied.spans.flatMap((span) => {
     const chars = display.slice(span.display.start, span.display.end)
-    if (!span.replaced) return chars.map(charSeconds)
-    const total = reading.slice(span.reading.start, span.reading.end).reduce((sum, char) => sum + charSeconds(char), 0)
+    if (!span.replaced) return chars.map(charSpeechSeconds)
+    const total = reading.slice(span.reading.start, span.reading.end).reduce((sum, char) => sum + charSpeechSeconds(char), 0)
     return chars.map(() => total / chars.length)
   })
 }
