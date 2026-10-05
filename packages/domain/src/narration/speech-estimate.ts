@@ -10,6 +10,16 @@ import type { AppliedReading } from './reading.js'
 /** ナレーションの速さ（拍/秒）。アナウンサーの読み（約 8）より少しゆっくりめ。 */
 export const NARRATION_MORA_PER_SEC = 7
 
+/** 日本語の文の、1 字あたりのおよその拍（かな 1・漢字 2 が混じる）。字数の目安を出すのに使う。 */
+export const NARRATION_MORA_PER_CHAR = 1.2
+
+/**
+ * その長さに収まる原稿の、目安の字数（ADR-0038）。原稿の案を AI に書かせるときに渡す。
+ * **目安なので 10 字に丸める**（細かい数を出すと、守るべき上限に見える）。とても短い作品でも 10 字は出す。
+ */
+export const narrationCharBudget = (durationSec: number): number =>
+  Math.max(10, Math.round((durationSec * NARRATION_MORA_PER_SEC) / NARRATION_MORA_PER_CHAR / 10) * 10)
+
 const SHORT_PAUSE_SEC = 0.25
 const LONG_PAUSE_SEC = 0.5
 

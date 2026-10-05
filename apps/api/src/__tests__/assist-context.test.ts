@@ -8,7 +8,14 @@ import { aProject } from './fixtures.js'
  * 空の材料はプロンプト側で落とす（ここでは空でも並べてよい）。
  */
 
-const project = { ...aProject(), styleGuide: '35mm フィルム', avoid: '文字', lyrics: '一行目\n二行目', lyricCues: [1, 5] }
+const project = {
+  ...aProject(),
+  styleGuide: '35mm フィルム',
+  avoid: '文字',
+  lyrics: '一行目\n二行目',
+  lyricCues: [1, 5],
+  durationSec: 15,
+}
 const shots = [
   aShot(project.id, { code: 'CUT-01', order: 1000, startSec: 0, durationSec: 3, description: '屋上の扉' }),
   aShot(project.id, { code: 'CUT-02', order: 2000, startSec: 3, durationSec: 4, description: '', mood: '静か' }),
@@ -30,6 +37,14 @@ const asMap = (lines: readonly { label: string; text: string }[]) =>
   Object.fromEntries(lines.map((line) => [line.label, line.text]))
 
 describe('assistContext', () => {
+  it('ナレーションの原稿は、作品の長さ（目安の字数）と、Shot の説明の流れを渡す（ADR-0038）', () => {
+    const narration = asMap(assistContext('narration_script', materials()))
+    expect(narration['作品の長さ']).toBe('15 秒（読み上げて 90 字ほど）')
+    expect(narration['Shot の流れ']).toBe('CUT-01: 屋上の扉 / CUT-03: 朝日')
+    expect(narration['コンセプト・あらすじ']).toBe('夜明けの屋上で二人が出会う')
+    expect(asMap(assistContext('narration_script', materials({ project: { ...project, durationSec: null } })))['作品の長さ']).toBe('')
+  })
+
   it('作品の欄は、作品名・方針・歌詞を渡す（自分の欄は渡さない）', () => {
     const look = asMap(assistContext('look', materials()))
     expect(look['コンセプト・あらすじ']).toBe('夜明けの屋上で二人が出会う')

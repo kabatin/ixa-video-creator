@@ -17,6 +17,7 @@ export const AssistField = z.enum([
   'identity_anchors',
   'wardrobe',
   'location_description',
+  'narration_script',
 ])
 export type AssistField = z.infer<typeof AssistField>
 
@@ -25,8 +26,11 @@ export type AssistFieldSpec = {
   readonly label: string
   /** その欄がどこに効くか。AI に書き方を伝える。 */
   readonly purpose: string
-  /** prose = 文章、short = 短い語や句、tags = 読点で区切った語の並び（欄が読点で分ける）。 */
-  readonly format: 'prose' | 'short' | 'tags'
+  /**
+   * prose = 文章、short = 短い語や句、tags = 読点で区切った語の並び（欄が読点で分ける）、
+   * lines = 1 行 1 フレーズの並び（欄が改行で分ける）。
+   */
+  readonly format: 'prose' | 'short' | 'tags' | 'lines'
   /** 目安の上限（文字）。 */
   readonly maxLength: number
 }
@@ -79,5 +83,11 @@ export const ASSIST_FIELDS: Readonly<Record<AssistField, AssistFieldSpec>> = {
     purpose: 'その場所の見た目（広さ・素材・光・時間帯の印象）。その場所が出る Shot の生成に入る',
     format: 'prose',
     maxLength: 400,
+  },
+  narration_script: {
+    label: 'ナレーションの原稿',
+    purpose: '読み上げる言葉そのもの（ADR-0038）。1 行が 1 フレーズになり、行ごとに声を作って映像に載せる',
+    format: 'lines',
+    maxLength: 2000,
   },
 }

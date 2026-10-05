@@ -64,6 +64,14 @@ describe('buildAssistPrompt', () => {
   })
 })
 
+describe('ナレーションの原稿の案（ADR-0038）', () => {
+  it('1 行に 1 フレーズで、改行で区切って書かせる（行に分けて声にするため）', () => {
+    const built = buildAssistPrompt(request({ field: 'narration_script' }))
+    expect(built).toContain('「ナレーションの原稿」')
+    expect(built).toContain('1 行に 1 フレーズ')
+  })
+})
+
 describe('createTextCliAssistant', () => {
   it('返事の JSON から欄に入れる文を取り出す（フェンス付きでも）', async () => {
     const cli = cliReturning({ ok: true, text: '```json\n{"text":"  青い外光の屋上  "}\n```', costUsd: 0.01 })

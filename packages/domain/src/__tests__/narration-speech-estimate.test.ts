@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NARRATION_MORA_PER_SEC, countMora, estimateSpeechSec } from '../narration/speech-estimate.js'
+import { NARRATION_MORA_PER_SEC, countMora, estimateSpeechSec, narrationCharBudget } from '../narration/speech-estimate.js'
 
 /**
  * 話す長さの見積もり（ADR-0038）。声にする前に「約 2.4 秒」と出し、作品の長さ（15 秒 CM など）に収まるかを見る。
@@ -44,5 +44,18 @@ describe('estimateSpeechSec', () => {
 
   it('空なら 0 秒', () => {
     expect(estimateSpeechSec('', 1)).toBe(0)
+  })
+})
+
+describe('narrationCharBudget', () => {
+  it('作品の長さに収まる原稿の目安の字数（10 字に丸める。目安なので細かい数は出さない）', () => {
+    // 15 秒 × 7 拍/秒 ÷ 1.2 拍/字 ≈ 87.5 字 → 90 字。
+    expect(narrationCharBudget(15)).toBe(90)
+    expect(narrationCharBudget(60)).toBe(350)
+  })
+
+  it('とても短い作品でも 10 字は出す（0 字と言わない）', () => {
+    expect(narrationCharBudget(1)).toBe(10)
+    expect(narrationCharBudget(0)).toBe(10)
   })
 })

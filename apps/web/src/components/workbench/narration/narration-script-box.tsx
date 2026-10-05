@@ -1,7 +1,9 @@
 'use client'
 
-import { VoiceProfileId, type ProjectId } from '@ixa/domain'
+import { ASSIST_FIELDS, VoiceProfileId, type ProjectId } from '@ixa/domain'
 import { useState } from 'react'
+import { AssistPanel } from '@/components/workbench/ui/assist-panel'
+import { useAssist } from '@/components/workbench/use-assist'
 import { Button } from '@/components/ui/button'
 import type { ApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
@@ -12,6 +14,7 @@ const UNDECIDED = ''
 /**
  * 原稿を貼り付ける（ADR-0038）。1 行 = 1 フレーズに分けて、前からある行の後ろに足す。
  * 話す声は全部の行に付ける（あとで行ごとに替えられる）。
+ * 「✦ AI」は作品の方針と長さから案を書く（ADR-0032 の 3 段目）。**「使う」を押すまで欄は変わらない。**
  */
 export const NarrationScriptBox = ({
   projectId,
@@ -28,6 +31,7 @@ export const NarrationScriptBox = ({
   const [voiceId, setVoiceId] = useState<string>(voices[0]?.id ?? UNDECIDED)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const assistFor = useAssist()
 
   const submit = (): void => {
     setBusy(true)
@@ -57,6 +61,12 @@ export const NarrationScriptBox = ({
           setText(event.target.value)
         }}
         className="w-full rounded border border-line-strong bg-bg px-2 py-1 text-sm text-text"
+      />
+      <AssistPanel
+        label={ASSIST_FIELDS.narration_script.label}
+        current={text}
+        request={assistFor('narration_script')}
+        onUse={setText}
       />
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <label className="flex items-center gap-1">

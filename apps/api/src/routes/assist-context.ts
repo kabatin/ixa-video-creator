@@ -1,6 +1,7 @@
 import {
   lyricLines,
   lyricsDuring,
+  narrationCharBudget,
   type AssistField,
   type Character,
   type CharacterLook,
@@ -16,7 +17,7 @@ import type { AssistContextLine } from '@ixa/provider-llm'
  */
 
 export type AssistMaterials = {
-  readonly project: Pick<Project, 'name' | 'styleGuide' | 'avoid' | 'lyrics' | 'lyricCues'>
+  readonly project: Pick<Project, 'name' | 'styleGuide' | 'avoid' | 'lyrics' | 'lyricCues' | 'durationSec'>
   /** コンセプト・あらすじ（脚本）。まだ無ければ null。 */
   readonly concept: string | null
   /** 作品の Shot（並び順）。前後の Shot を引くのに使う。 */
@@ -67,6 +68,26 @@ const lookLines = (m: AssistMaterials): readonly AssistContextLine[] =>
     ? []
     : [line('Look', `${m.look.name}${m.look.era === null ? '' : `（${m.look.era}）`}`), line('Look の説明', m.look.description)]
 
+/**
+ * ナレーションの原稿（ADR-0038）。作品の長さ（と、そこに収まる目安の字数）と、説明の書けている Shot の流れ。
+ * 長さを渡さないと、15 秒の CM に 1 分ぶんの原稿が返る。
+ */
+const narrationLines = (m: AssistMaterials): readonly AssistContextLine[] => [
+  line(
+    '作品の長さ',
+    m.project.durationSec === null
+      ? ''
+      : `${String(Math.round(m.project.durationSec))} 秒（読み上げて ${String(narrationCharBudget(m.project.durationSec))} 字ほど）`,
+  ),
+  line(
+    'Shot の流れ',
+    m.shots
+      .filter((shot) => shot.description.trim() !== '')
+      .map((shot) => `${shot.code}: ${shot.description.trim()}`)
+      .join(' / '),
+  ),
+]
+
 export const assistContext = (field: AssistField, m: AssistMaterials): readonly AssistContextLine[] => {
   const base = projectLines(field, m)
   switch (field) {
@@ -83,5 +104,7 @@ export const assistContext = (field: AssistField, m: AssistMaterials): readonly 
       return [...base, ...characterLines(field, m), ...lookLines(m)]
     case 'location_description':
       return [...base, line('ロケーション', m.location?.name ?? '')]
+    case 'narration_script':
+      return [...base, ...narrationLines(m)]
   }
 }

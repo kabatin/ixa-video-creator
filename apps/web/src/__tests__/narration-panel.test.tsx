@@ -57,6 +57,9 @@ const route = (lines: readonly unknown[]) => {
     if (url.endsWith('/narration/speak') && init?.method === 'POST') {
       return Promise.resolve(ok({ jobIds: ['a'], reusedTakeIds: [], skipped: { noVoice: 1, active: 0, upToDate: 0 } }, 202))
     }
+    if (url.endsWith('/assist') && init?.method === 'POST') {
+      return Promise.resolve(ok({ text: '勝負の時が来た。\n進め、戦子ちゃん！', costUsd: 0.01 }))
+    }
     if (url.endsWith('/narration')) return Promise.resolve(ok({ lines, totalEstimatedSec: 18.2, endSec: 0 }))
     if (url.endsWith('/audio-settings')) return Promise.resolve(ok(settingsJson))
     return Promise.reject(new Error(`想定していない呼び出し: ${url}`))
@@ -79,6 +82,23 @@ describe('NarrationPanel', () => {
     expect(await screen.findByRole('listitem', { name: '1 行目' })).toBeInTheDocument()
     expect(screen.getByText(/約 3 秒長いので/)).toBeInTheDocument()
     expect(screen.getByText('声はまだありません')).toBeInTheDocument()
+  })
+
+  /** 原稿の案（ADR-0038）。作品の方針と長さから書かせる。**使うまで欄は変わらない。** */
+  it('原稿の案を AI に出してもらい、「使う」を押すまで欄は変わらない', async () => {
+    route([])
+    renderInWorkbench(<NarrationPanel />)
+    const box = await screen.findByRole('textbox', { name: '原稿' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'ナレーションの原稿 の案を AI に出してもらう' }))
+    fireEvent.click(screen.getByRole('button', { name: '案を出す' }))
+    expect(await screen.findByRole('button', { name: '使う' })).toBeInTheDocument()
+    expect(box).toHaveValue('')
+
+    fireEvent.click(screen.getByRole('button', { name: '使う' }))
+    expect(box).toHaveValue('勝負の時が来た。\n進め、戦子ちゃん！')
+    const [, body] = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/assist')) ?? []
+    expect(JSON.parse(typeof body?.body === 'string' ? body.body : '{}')).toMatchObject({ field: 'narration_script' })
   })
 
   it('まとめて声にすると、頼んだ数と飛ばした理由を数で言う', async () => {

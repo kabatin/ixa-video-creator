@@ -89,6 +89,7 @@ const TARGET_OF: Readonly<Record<AssistField, keyof Body | null>> = {
   identity_anchors: 'characterId',
   wardrobe: 'lookId',
   location_description: 'locationId',
+  narration_script: null,
 }
 
 const conceptOf = async (deps: AssistRoutesDeps, projectId: ProjectId): Promise<string | null> => {
