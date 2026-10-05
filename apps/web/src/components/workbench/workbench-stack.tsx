@@ -5,6 +5,7 @@ import { AssetsPanel } from '@/components/workbench/panels/assets-panel'
 import { ComparePanel } from '@/components/workbench/panels/compare-panel'
 import { CutterPanel } from '@/components/workbench/panels/cutter-panel'
 import { DraftPanel } from '@/components/workbench/panels/draft-panel'
+import { NarrationPanel } from '@/components/workbench/panels/narration-panel'
 import { InspectorPanel } from '@/components/workbench/panels/inspector-panel'
 import { PreviewPanel } from '@/components/workbench/panels/preview-panel'
 import { ShotListPanel } from '@/components/workbench/panels/shot-list-panel'
@@ -27,6 +28,7 @@ const STACK: readonly {
 }[] = [
   { id: 'storyboard', body: <StoryboardPanel /> },
   { id: 'draft', body: <DraftPanel />, tall: true },
+  { id: 'narration', body: <NarrationPanel />, tall: true },
   { id: 'shots', body: <ShotListPanel /> },
   { id: 'inspector', body: <InspectorPanel />, tall: true },
   { id: 'compare', body: <ComparePanel />, tall: true },

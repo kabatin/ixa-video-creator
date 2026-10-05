@@ -11,7 +11,7 @@ import { z } from 'zod'
  */
 
 /** 中央上のタブ。**`PANEL_SPECS` の `area: 'main'` と同じ集合であること**（テストで検査）。 */
-export const MAIN_TABS = ['storyboard', 'preview', 'compare', 'viewer', 'draft'] as const
+export const MAIN_TABS = ['storyboard', 'preview', 'compare', 'viewer', 'draft', 'narration'] as const
 export type MainTab = (typeof MAIN_TABS)[number]
 
 export const BOTTOM_TABS = ['cutter', 'timeline'] as const

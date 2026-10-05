@@ -241,6 +241,7 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
         item('view-compare', 'Take 比較', panel('compare')),
         item('view-viewer', '素材ビューア', panel('viewer')),
         item('view-draft', '絵コンテの案', panel('draft')),
+        item('view-narration', 'ナレーション', panel('narration')),
         item('view-cutter', '聴きながら切る', panel('cutter')),
         item('view-timeline', 'タイムライン', panel('timeline')),
         item('view-shots', 'Shot 一覧', panel('shots')),

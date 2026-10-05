@@ -14,6 +14,7 @@ import { AssetsPanel } from '@/components/workbench/panels/assets-panel'
 import { ComparePanel } from '@/components/workbench/panels/compare-panel'
 import { CutterPanel } from '@/components/workbench/panels/cutter-panel'
 import { DraftPanel } from '@/components/workbench/panels/draft-panel'
+import { NarrationPanel } from '@/components/workbench/panels/narration-panel'
 import { InspectorPanel } from '@/components/workbench/panels/inspector-panel'
 import { PreviewPanel } from '@/components/workbench/panels/preview-panel'
 import { ShotListPanel } from '@/components/workbench/panels/shot-list-panel'
@@ -72,6 +73,7 @@ const COMPONENTS: Readonly<Record<PanelId, FunctionComponent<IDockviewPanelProps
     compare: () => <ComparePanel />,
     viewer: () => <ViewerPanel />,
     draft: () => <DraftPanel />,
+    narration: () => <NarrationPanel />,
     cutter: CutterDock,
     timeline: () => <TimelinePanel />,
     shots: () => <ShotListPanel />,

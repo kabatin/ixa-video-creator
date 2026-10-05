@@ -28,7 +28,7 @@ describe('メニューの項目名とパネル名', () => {
   const menus = buildMenus(state)
   const items = viewItems(menus)
 
-  it('パネルを開く項目が 10 枚ぶんある', () => {
+  it('パネルを開く項目が 11 枚ぶんある', () => {
     expect(items.map((entry) => entry.panel).sort()).toEqual([...PANEL_IDS].sort())
   })
 
