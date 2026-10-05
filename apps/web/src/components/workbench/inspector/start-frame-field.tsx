@@ -1,7 +1,7 @@
 'use client'
 
-import type { MediaAssetId, Shot, WorkspaceId } from '@ixa/domain'
-import { useEffect, useMemo, useState } from 'react'
+import type { MediaAssetId, Shot, ShotId, WorkspaceId } from '@ixa/domain'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ImageUploader } from '@/components/image-uploader'
 import { MediaImage } from '@/components/media-image'
 import { Button } from '@/components/ui/button'
@@ -61,10 +61,14 @@ export const StartFrameField = ({
   const [state, setState] = useState<State>({ kind: 'loading' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const loadedShotId = useRef<ShotId | null>(null)
 
   useEffect(() => {
     let alive = true
-    setState({ kind: 'loading' })
+    // 「読み込んでいます」にするのは別の Shot に移ったときだけ。同じ Shot の読み直し（`version`）は今の絵を出したまま差し替える。
+    // サムネイルを作っている間は 3 秒ごとに `version` が進み、そのたびに絵を外してちらついていた（制作者 2026-10-05）。
+    if (loadedShotId.current !== shot.id) setState({ kind: 'loading' })
+    loadedShotId.current = shot.id
     client
       .getStartFrame(shot.id)
       .then((current) => {

@@ -1,4 +1,4 @@
-import type { ImageGenerationJobId, MediaAssetId, Shot, WorkspaceId } from '@ixa/domain'
+import { ShotId, newId, type ImageGenerationJobId, type MediaAssetId, type Shot, type WorkspaceId } from '@ixa/domain'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
@@ -195,5 +195,61 @@ describe('StartFrameField: 止める', () => {
 
     expect(await screen.findByText('絵を作るのを止めました。')).toBeTruthy()
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+/**
+ * 読み直しで絵がちらつかない（制作者 2026-10-05「インスペクターの最初のフレーム画像がちらつく。3 秒ごとにリロード掛かってたりする？」）。
+ * サムネイルを作っている間、ワークベンチは 3 秒ごとに `version` を進める。そのたびに「読み込んでいます」にして絵を外していた。
+ */
+describe('StartFrameField: 読み直し', () => {
+  const pendingOnce = (fake: ShotStartFrameApi, mediaAssetId: string) => {
+    let resolve: (value: WireStartFrameState) => void = () => undefined
+    vi.mocked(fake.getStartFrame).mockImplementationOnce(
+      () =>
+        new Promise<WireStartFrameState>((done) => {
+          resolve = done
+        }),
+    )
+    return () => resolve({ mediaAssetId: mediaAssetId as MediaAssetId, job: null })
+  }
+
+  it('同じ Shot の読み直しでは、今の絵を出したまま差し替える（読み込み中にしない・絵を外さない）', async () => {
+    const fake = api('asset-old')
+    const { rerender } = show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} version={0} />)
+    const image = await screen.findByAltText('最初のフレーム')
+    const settle = pendingOnce(fake, 'asset-old')
+
+    rerender(
+      <ContextMenuHost>
+        <StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} version={1} />
+      </ContextMenuHost>,
+    )
+
+    expect(fake.getStartFrame).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText('読み込んでいます…')).toBeNull()
+    expect(screen.getByAltText('最初のフレーム')).toBe(image)
+    settle()
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '外す' })).toBeEnabled()
+    })
+    expect(screen.getByAltText('最初のフレーム')).toBe(image)
+  })
+
+  it('別の Shot に移ったら読み込み中にする（前の Shot の絵を出し続けない）', async () => {
+    const fake = api('asset-old')
+    const { rerender } = show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} version={0} />)
+    await screen.findByAltText('最初のフレーム')
+    pendingOnce(fake, 'asset-other')
+    const other = aWorkbenchShot(2, { id: newId(ShotId), description: '夕焼けの校庭' })
+
+    rerender(
+      <ContextMenuHost>
+        <StartFrameField shot={other} workspaceId={WORKSPACE} api={fake} version={0} />
+      </ContextMenuHost>,
+    )
+
+    expect(screen.getByText('読み込んでいます…')).toBeInTheDocument()
+    expect(screen.queryByAltText('最初のフレーム')).toBeNull()
   })
 })
