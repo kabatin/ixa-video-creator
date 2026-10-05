@@ -1,4 +1,5 @@
 import type {
+  MediaAssetRepository,
   NarrationLineRepository,
   NarrationTakeRepository,
   ProjectAudioSettingsRepository,
@@ -6,8 +7,8 @@ import type {
   VoiceJobRepository,
   VoiceProfileRepository,
 } from '@ixa/db'
-import type { ProjectEventPublisher, ProjectId, VoiceJobId, VoiceToolId } from '@ixa/domain'
-import type { VoiceAdapter } from '@ixa/provider-core'
+import type { AiToolId, ProjectEventPublisher, ProjectId, VoiceJobId, VoiceToolId } from '@ixa/domain'
+import type { TranscribeToolId, Transcriber, VoiceAdapter } from '@ixa/provider-core'
 import type { Logger } from 'pino'
 
 /** ナレーションと声（ADR-0038）の API が使うもの。 */
@@ -31,6 +32,14 @@ export type NarrationDeps = {
     readonly readingChars: number
     readonly estimatedSec: number
   }) => number
+  /** 録音（取り込む音）を確かめる。 */
+  readonly mediaAssets: Pick<MediaAssetRepository, 'findById'>
+  /** いま選んでいる文字起こしの AI（「使う AI」。使うたびに読む）。 */
+  readonly currentTranscribeTool: () => Promise<AiToolId>
+  /** 文字起こしの AI ごとの口（使えるかを確かめるため）。口が無い AI は null。 */
+  readonly transcriber: (tool: TranscribeToolId) => Transcriber | null
+  /** 文字起こし 1 回の見積もり（domain の estimateTranscribeCostUsd）。 */
+  readonly transcribeCostEstimate: (input: { readonly tool: TranscribeToolId; readonly durationSec: number }) => number
   readonly events: ProjectEventPublisher
   readonly logger: Logger
 }

@@ -5,13 +5,14 @@ import { VoiceJobCancelled, VoiceJobFailure, type VoiceProcessorDeps } from './d
 import { publishVoiceJobStatus } from './events.js'
 import { VoiceJobData } from './job-data.js'
 import { runPreview, runSpeak } from './speak.js'
+import { runCharTiming, runTranscribe } from './transcribe.js'
 
 export type { VoiceAudio, VoiceProcessorDeps } from './deps.js'
 
 export type VoiceJobResult = { readonly state: 'succeeded' | 'failed' | 'skipped' | 'missing' }
 
 /**
- * 声のジョブ（ADR-0038）。種類で分ける: 読む・試しに読む（`speak.ts`）、文字起こし・字の時刻（次の段）。
+ * 声のジョブ（ADR-0038）。種類で分ける: 読む・試しに読む（`speak.ts`）、録音の文字起こし・字の時刻（`transcribe.ts`）。
  * 失敗は理由をジョブに残して画面へ流す（握り潰さない）。止められたジョブからは理由を書かずに手を引く。
  */
 
@@ -40,8 +41,11 @@ export const processVoiceJob = async (deps: VoiceProcessorDeps, data: unknown): 
         await withTempDir(deps.workDir, 'voice-', (dir) => runPreview(deps, job, dir))
         break
       case 'transcribe':
+        await withTempDir(deps.workDir, 'voice-', (dir) => runTranscribe(deps, job, dir))
+        break
       case 'char_timing':
-        throw new VoiceJobFailure({ code: 'not_implemented', message: 'この種類の声のジョブはまだ作れません。', retryable: false })
+        await withTempDir(deps.workDir, 'voice-', (dir) => runCharTiming(deps, job, dir))
+        break
     }
     return { state: 'succeeded' }
   } catch (error) {

@@ -38,8 +38,8 @@ import {
   createProjectAudioSettingsRepository,
 } from '@ixa/db'
 import { createProviderRegistry, execFileCliRunner } from '@ixa/provider-core'
-import { createVoiceAdapters } from '@ixa/provider-voice'
-import { estimateSpeakCostUsd } from '@ixa/domain'
+import { createTranscribers, createVoiceAdapters } from '@ixa/provider-voice'
+import { estimateSpeakCostUsd, estimateTranscribeCostUsd } from '@ixa/domain'
 import { VOICE_QUEUE_NAME } from './narration/voice-queue.js'
 import { createGenerationContextSource } from '@ixa/generation'
 import { RENDER_QUEUE_NAME, type RenderQueue } from './routes/renders.js'
@@ -269,6 +269,17 @@ export const main = (): void => {
           elevenLabsUsdPer1kChars: config.voiceAi.elevenLabsUsdPer1kChars,
           geminiBilling: config.voiceAi.geminiBilling,
         }),
+      mediaAssets,
+      currentTranscribeTool: async () => (await ai.current()).transcribe,
+      transcriber: createTranscribers({
+        runCli: execFileCliRunner,
+        fetch: (url, init) => fetch(url, init),
+        convertForWhisper: () => Promise.reject(new Error('API では文字起こしをしません（worker の仕事）')),
+        gemini: { apiKey: config.voiceAi.geminiApiKey, enabled: config.voiceAi.apiProviders.includes('gemini_api'), ...listOnly },
+        elevenLabs: { apiKey: config.voiceAi.elevenLabsApiKey, enabled: config.voiceAi.apiProviders.includes('elevenlabs'), ...listOnly },
+        whisperCppModel: config.voiceAi.whisperCppModel,
+      }),
+      transcribeCostEstimate: ({ tool, durationSec }) => estimateTranscribeCostUsd({ tool, durationSec }),
       events: projectEvents.publisher,
       logger,
     },

@@ -1,7 +1,7 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
-import type { VoiceJobId, VoiceToolId } from '@ixa/domain'
-import type { VoiceAdapter } from '@ixa/provider-core'
-import { createStubVoice } from '@ixa/provider-voice'
+import type { AiToolId, MediaAsset, Project, VoiceJobId, VoiceToolId } from '@ixa/domain'
+import type { TranscribeToolId, Transcriber, VoiceAdapter } from '@ixa/provider-core'
+import { createStubTranscriber, createStubVoice } from '@ixa/provider-voice'
 import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
 import type { NarrationDeps } from '../narration/deps.js'
@@ -9,6 +9,7 @@ import { narrationRoutes } from '../routes/narration.js'
 import { aProject } from './fixtures.js'
 import {
   createInMemoryAudioSettingsRepository,
+  createInMemoryMediaAssetRepository,
   createInMemoryNarrationLineRepository,
   createInMemoryNarrationTakeRepository,
   createInMemoryVoiceJobRepository,
@@ -29,6 +30,11 @@ export const setupNarration = (
     readonly costPerSpeak?: number
     readonly budgetUsd?: number | null
     readonly enqueueFails?: boolean
+    readonly transcribeTool?: AiToolId
+    readonly transcribers?: Partial<Record<TranscribeToolId, Transcriber>>
+    readonly costPerTranscribe?: number
+    /** 素材（作品はこの中で作るので、作品を受け取って作る）。 */
+    readonly assets?: (project: Project) => readonly MediaAsset[]
   } = {},
 ) => {
   const project = aProject({ budgetUsd: options.budgetUsd === undefined ? 500 : options.budgetUsd })
@@ -55,6 +61,10 @@ export const setupNarration = (
     },
     spentByProject: (projectId) => voiceJobs.sumCostByProject(projectId),
     speakCostEstimate: () => options.costPerSpeak ?? 0,
+    mediaAssets: createInMemoryMediaAssetRepository(options.assets?.(project) ?? []),
+    currentTranscribeTool: () => Promise.resolve(options.transcribeTool ?? 'stub'),
+    transcriber: (tool) => (options.transcribers ?? { stub: createStubTranscriber() })[tool] ?? null,
+    transcribeCostEstimate: () => options.costPerTranscribe ?? 0,
     events,
     logger,
   } satisfies NarrationDeps

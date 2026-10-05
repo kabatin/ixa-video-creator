@@ -7,18 +7,16 @@ import {
   VoiceJobStatus,
   VoiceProfileId as VoiceProfileIdSchema,
   applyReadings,
-  checkCostLimits,
   estimateSpeechSec,
   voiceSpecOf,
   type NarrationLine,
-  type Project,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import type { NarrationDeps } from '../narration/deps.js'
+import { budgetProblem } from '../narration/budget.js'
 import { planSpeak, speakContextFor, unavailableMessage, type SpeakPlan } from '../narration/speak-plan.js'
 import { publishVoiceJob, startVoiceJob } from '../narration/voice-job-start.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
-import { costLimitsFor } from './shots.js'
 
 /**
  * 行を声にする（ADR-0038）。ジョブを作って worker の `voice` キューへ入れる（作るのは worker）。
@@ -99,16 +97,6 @@ const cancelRoute = createRoute({
   request: { params: ProjectParams, body: body(CancelBody) },
   responses: { 200: json('止めたジョブ', successResponse(z.object({ cancelledJobIds: z.array(z.string()) }))), ...errors },
 })
-
-/** 予算を超えるなら理由。超えなければ null。 */
-const budgetProblem = async (deps: NarrationDeps, project: Project, lineSpentUsd: number, estimateUsd: number) => {
-  const decision = checkCostLimits(
-    costLimitsFor(project),
-    { projectSpentUsd: await deps.spentByProject(project.id), shotSpentUsd: lineSpentUsd },
-    estimateUsd,
-  )
-  return decision.allowed ? null : decision
-}
 
 const lineSpentUsd = async (deps: NarrationDeps, line: NarrationLine): Promise<number> =>
   (await deps.takes.findByLines([line.id])).reduce((sum, take) => sum + take.costUsd, 0)

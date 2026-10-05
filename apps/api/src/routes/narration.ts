@@ -10,6 +10,7 @@ import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import type { NarrationDeps } from '../narration/deps.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 import { narrationLineRoutes } from './narration-lines.js'
+import { narrationRecordingRoutes } from './narration-recordings.js'
 import { narrationSpeakRoutes } from './narration-speak.js'
 import { narrationVoiceRoutes } from './narration-voices.js'
 
@@ -63,6 +64,7 @@ export const narrationRoutes = (deps: NarrationDeps) => {
   app.route('/', narrationVoiceRoutes(deps))
   app.route('/', narrationLineRoutes(deps))
   app.route('/', narrationSpeakRoutes(deps))
+  app.route('/', narrationRecordingRoutes(deps))
   app.route('/', audioSettingsRoutes(deps))
   return app
 }
