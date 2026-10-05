@@ -52,6 +52,8 @@ import type { RenderProcessorDeps } from './render/index.js'
 import { createReviewWiring, type ReviewWiring } from './review-wiring.js'
 import { createImageWiring } from './image-wiring.js'
 import type { ImageProcessorDeps } from './image/index.js'
+import type { VoiceProcessorDeps } from './voice/index.js'
+import { createVoiceWiring } from './voice-wiring.js'
 import { createRegenerationEnqueue } from './regeneration-wiring.js'
 import { QUEUE_NAMES } from './queues.js'
 
@@ -71,6 +73,8 @@ export type GenerationWiring = {
   readonly regeneration: ReviewWiring['regeneration']
   /** 絵コンテの画像（ADR-0029）。 */
   readonly image: ImageProcessorDeps
+  /** ナレーションの声と文字起こし（ADR-0038）。 */
+  readonly voice: VoiceProcessorDeps
   readonly queue: Queue
   close(): Promise<void>
 }
@@ -314,6 +318,7 @@ export const createGenerationWiring = (
       logger,
       stubOutputDir,
     }),
+    voice: createVoiceWiring({ config, db, storage, mediaQueue: deps.mediaQueue, events: deps.events, logger }),
     queue,
     close: async () => {
       await queue.close()

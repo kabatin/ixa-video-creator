@@ -39,6 +39,8 @@ import {
 } from '@ixa/db'
 import { createProviderRegistry, execFileCliRunner } from '@ixa/provider-core'
 import { createVoiceAdapters } from '@ixa/provider-voice'
+import { estimateSpeakCostUsd } from '@ixa/domain'
+import { VOICE_QUEUE_NAME } from './narration/voice-queue.js'
 import { createGenerationContextSource } from '@ixa/generation'
 import { RENDER_QUEUE_NAME, type RenderQueue } from './routes/renders.js'
 import { ANALYSIS_QUEUE_NAME, type AnalysisQueue } from './routes/music.js'
@@ -200,6 +202,14 @@ export const main = (): void => {
 
   // キュー名は apps/worker/src/queues.ts の QUEUE_NAMES と一致させること。
   // apps 同士を import できないため、文字列で合わせるしかない。
+  // ナレーションの声と文字起こし（ADR-0038）。作るのは worker（キュー voice。同時 1 つ）。
+  const voiceQueue = new Queue(VOICE_QUEUE_NAME, { connection })
+  const voiceQueuePort = {
+    enqueue: async (voiceJobId: string) => {
+      await voiceQueue.add('voice', { voiceJobId })
+    },
+  }
+
   const mediaQueue = new Queue('media', { connection })
   const mediaIngest: MediaIngestDeps = {
     queue: {
@@ -238,15 +248,29 @@ export const main = (): void => {
     whisperCppModel: config.voiceAi.whisperCppModel,
   })
   const projectRepository = createProjectRepository(db)
+  const voiceJobs = createVoiceJobRepository(db)
   const app = createApp({
     narration: {
       projects: projectRepository,
       voices: createVoiceProfileRepository(db),
       lines: createNarrationLineRepository(db),
       takes: createNarrationTakeRepository(db),
-      voiceJobs: createVoiceJobRepository(db),
+      voiceJobs,
       audioSettings: createProjectAudioSettingsRepository(db),
       voiceAdapter,
+      voiceQueue: voiceQueuePort,
+      // 予算は動画の Take と声・文字起こしを足して見る（声だけで予算を食い潰さない）。
+      spentByProject: async (projectId) =>
+        (await takes.sumCostByProject(projectId)) + (await voiceJobs.sumCostByProject(projectId)),
+      speakCostEstimate: (input) =>
+        estimateSpeakCostUsd({
+          ...input,
+          at: new Date(),
+          elevenLabsUsdPer1kChars: config.voiceAi.elevenLabsUsdPer1kChars,
+          geminiBilling: config.voiceAi.geminiBilling,
+        }),
+      events: projectEvents.publisher,
+      logger,
     },
     // 鍵の設定状態だけを返す口。**値は渡さない**（`describeEnvironment` が落とす）。
     environment: { status: () => describeEnvironment(config) },

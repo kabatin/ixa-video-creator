@@ -1080,6 +1080,8 @@ BullMQ + Redis（ADR-0008）。
 | `render` | 1〜2 | Remotion レンダリング | CPU を占有する |
 | `analysis` | 2 | 音楽解析（Python へ委譲） | |
 | `regeneration` | 4 | 再生成の可否判定と投入 | review と分ける。レビューは LLM コストを払うため、再生成の失敗でやり直させない |
+| `image` | 1 | 絵コンテの画像・キャラクターシート（ADR-0029・0035） | Codex CLI は契約の利用枠で動く |
+| `voice` | 1 | ナレーションの声・試しに読む・録音の文字起こし（ADR-0038） | 外部 API の回数の上限に配慮。whisper.cpp は手元の機械を大きく使う |
 
 ### 規約
 

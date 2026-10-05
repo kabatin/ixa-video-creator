@@ -15,6 +15,7 @@ import { processAnalysisJob } from './analysis/index.js'
 import { processReviewJob } from './review/index.js'
 import { processRegenerationJob } from './regeneration/index.js'
 import { failInterruptedImageJob, processImageJob } from './image/index.js'
+import { failInterruptedVoiceJob, processVoiceJob } from './voice/index.js'
 
 /** graceful shutdown の既定タイムアウト（ミリ秒）。超過したら強制終了する。 */
 const SHUTDOWN_TIMEOUT_MS = 30_000
@@ -54,6 +55,8 @@ const createWorkers = (
             return (await processRegenerationJob(generation.regeneration, job.data)).state
           case QUEUE_NAMES.image:
             return (await processImageJob(generation.image, job.data)).state
+          case QUEUE_NAMES.voice:
+            return (await processVoiceJob(generation.voice, job.data)).state
           default:
             return (await processNoopJob(job.data as NoopJobData)).echoed
         }
@@ -78,6 +81,9 @@ const createWorkers = (
       // 絵コンテの画像は失敗を自分で行に書く。ここに来るのはキューが打ち切ったときだけ（worker が落ちたなど）。
       if (config.name === QUEUE_NAMES.image && job !== undefined) {
         void failInterruptedImageJob(generation.image, job.data, error.message)
+      }
+      if (config.name === QUEUE_NAMES.voice && job !== undefined) {
+        void failInterruptedVoiceJob(generation.voice, job.data, error.message)
       }
     })
 

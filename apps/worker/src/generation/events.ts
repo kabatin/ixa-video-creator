@@ -37,7 +37,7 @@ const publishOrWarn = async (
     await deps.events.publish(event)
   } catch (error) {
     deps.logger.warn(
-      { jobId, eventType: event.type, shotId: event.shotId, err: error },
+      { jobId, eventType: event.type, shotId: 'shotId' in event ? event.shotId : null, err: error },
       '出来事を流せませんでした。画面の表示が古いままになることがあります',
     )
   }
@@ -108,7 +108,7 @@ export const failureMessageOf = (failure: { readonly code: string; readonly mess
 export const createUnwiredEventPublisher = (logger: Logger): ProjectEventPublisher => ({
   publish: (event) => {
     logger.warn(
-      { eventType: event.type, projectId: event.projectId, shotId: event.shotId },
+      { eventType: event.type, projectId: event.projectId, shotId: 'shotId' in event ? event.shotId : null },
       '出来事の配信先が配線されていません。画面はリアルタイムに更新されません',
     )
     return Promise.resolve()

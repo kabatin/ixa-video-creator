@@ -40,9 +40,15 @@ const pauseOf = (char: string): number => {
 export const countMora = (reading: string): number =>
   [...reading].reduce((total, char) => total + moraOf(char), 0)
 
-/** 話す長さ（秒、0.1 秒に丸める）。速さは声の設定（1 が標準）。句読点の間は速さで変えない。 */
+/** 行の終わりの句読点・閉じかっこ・空白。声はそこで終わるので、間に数えない。 */
+const TRAILING = /[\s、,，。．！？!?」』）)】〕"'”’]+$/u
+
+/**
+ * 話す長さ（秒、0.1 秒に丸める）。速さは声の設定（1 が標準）。句読点の間は速さで変えない。
+ * 行の終わりの句読点は数えない（実測で、句点の分だけ見積もりが長く出ていた）。
+ */
 export const estimateSpeechSec = (reading: string, speed: number): number => {
-  const pauses = [...reading].reduce((total, char) => total + pauseOf(char), 0)
+  const pauses = [...reading.replace(TRAILING, '')].reduce((total, char) => total + pauseOf(char), 0)
   const seconds = countMora(reading) / (NARRATION_MORA_PER_SEC * speed) + pauses
   return Math.round(seconds * 10) / 10
 }

@@ -1,7 +1,8 @@
 import { z } from 'zod'
-import { CharacterId, GenerationJobId, ImageGenerationJobId, ProjectId, ShotId, TakeId } from '../common/ids.js'
+import { CharacterId, GenerationJobId, ImageGenerationJobId, NarrationLineId, ProjectId, ShotId, TakeId, VoiceJobId } from '../common/ids.js'
 import { ImageGenerationJobStatus } from '../generation/image-job.js'
 import { GenerationJobStatus } from '../generation/take.js'
+import { VoiceJobKind, VoiceJobStatus } from '../narration/voice-job.js'
 import { ShotStatus } from '../shot/shot.js'
 
 /**
@@ -60,6 +61,16 @@ export const ProjectEvent = z.discriminatedUnion('type', [
     /** 失敗したときの理由。成功・実行中は null。 */
     error: z.string().nullable(),
   }),
+  /** 声のジョブの状態が変わった（ADR-0038）。行の声ができた・失敗した・止めた。文字起こしでは行ができる。 */
+  z.object({
+    ...base,
+    type: z.literal('voice_job.status'),
+    jobId: VoiceJobId,
+    kind: VoiceJobKind,
+    lineId: NarrationLineId.nullable(),
+    status: VoiceJobStatus,
+    error: z.string().nullable(),
+  }),
 ])
 export type ProjectEvent = z.infer<typeof ProjectEvent>
 
@@ -90,4 +101,5 @@ export const SHOT_LIST_EVENT_TYPES: readonly ProjectEventType[] = [
   'shot.status',
   'generation_job.status',
   'image_job.status',
+  'voice_job.status',
 ]

@@ -29,7 +29,12 @@ describe('countMora', () => {
 describe('estimateSpeechSec', () => {
   it(`拍を ${NARRATION_MORA_PER_SEC} 拍/秒で割り、読点は 0.25 秒・句点と！？は 0.5 秒の間を足す（0.1 秒に丸める）`, () => {
     expect(estimateSpeechSec('こんにちは', 1)).toBe(0.7)
-    expect(estimateSpeechSec('はい、そう。', 1)).toBe(1.3)
+    expect(estimateSpeechSec('はい。そう', 1)).toBe(1.1)
+  })
+
+  it('末尾の句読点は間に数えない（声はそこで終わる。実測で見積もりが長く出ていた）', () => {
+    expect(estimateSpeechSec('はい、そう。', 1)).toBe(0.8)
+    expect(estimateSpeechSec('行くぞ！」', 1)).toBe(0.6)
   })
 
   it('速さ 2 なら半分、0.5 なら倍（間は速さで変えない）', () => {

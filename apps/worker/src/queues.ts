@@ -11,6 +11,7 @@ export const QUEUE_NAMES = {
   analysis: 'analysis',
   regeneration: 'regeneration',
   image: 'image',
+  voice: 'voice',
 } as const
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES]
@@ -43,6 +44,11 @@ export const QUEUE_CONFIGS: readonly QueueConfig[] = [
    * 何本も同時に走らせると利用枠の上限に当たりやすく、手元の機械も重くなる。
    */
   { name: QUEUE_NAMES.image, concurrency: 1 },
+  /**
+   * ナレーションの声と文字起こし（ADR-0038）。**同時 1 つ。** Gemini の無料枠は 1 日・1 分の回数に上限があり、
+   * ElevenLabs はプランごとに同時の数に上限がある。whisper.cpp は手元の機械を大きく使う。
+   */
+  { name: QUEUE_NAMES.voice, concurrency: 1 },
 ]
 
 const concurrencyEnvVarName = (queueName: QueueName): string =>
