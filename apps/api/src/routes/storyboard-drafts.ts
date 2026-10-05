@@ -2,6 +2,7 @@ import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type {
   MusicAnalysisRepository,
   MusicTrackRepository,
+  NarrationLineRepository,
   ProjectRepository,
   ScriptRepository,
   ShotRepository,
@@ -15,7 +16,9 @@ import {
   StoryboardDraftRunId as StoryboardDraftRunIdSchema,
   lyricLines,
   lyricsDuring,
+  narrationDuring,
   type MusicSection,
+  type NarrationLine,
   type Project,
   type ProjectId,
   type Shot,
@@ -220,6 +223,8 @@ const adoptDraftRoute = createRoute({
 
 export type StoryboardDraftRoutesDeps = StoryboardDraftCastDeps & {
   projects: Pick<ProjectRepository, 'findById'>
+  /** ナレーションの行（ADR-0038）。Shot ごとに、その間に話される言葉を渡す。ナレーションが無い環境では省く。 */
+  narrationLines?: Pick<NarrationLineRepository, 'findByProject'>
   /** 採用のときだけ `update` を使う。**下書きの作成では書かない。** */
   shots: Pick<ShotRepository, 'findByProject' | 'update'>
   scripts: Pick<ScriptRepository, 'findByProject' | 'findVersionById'>
@@ -276,7 +281,11 @@ const projectSections = async (
  * その Shot の間に歌い出す歌詞（ADR-0033。規則は domain の `lyricsDuring`）と、出る登場人物・ロケーションも添える。
  */
 const toDraftShot =
-  (project: Pick<Project, 'lyrics' | 'lyricCues'>, cast: StoryboardDraftCast) =>
+  (
+    project: Pick<Project, 'lyrics' | 'lyricCues'>,
+    cast: StoryboardDraftCast,
+    narration: readonly Pick<NarrationLine, 'text' | 'startSec'>[],
+  ) =>
   (shot: Shot): StoryboardDraftShot => {
     const shotCast = castOf(cast, shot.id)
     return {
@@ -288,6 +297,8 @@ const toDraftShot =
       description: shot.description,
       mood: shot.mood,
       lyrics: [...lyricsDuring(lyricLines(project.lyrics), project.lyricCues, shot)],
+      // その Shot の間に話されるナレーション（ADR-0038。規則は domain の `narrationDuring`）。
+      narration: [...narrationDuring(narration, shot)],
       cast: [...shotCast.cast],
       location: shotCast.location,
     }
@@ -371,12 +382,13 @@ export const storyboardDraftRoutes = (deps: StoryboardDraftRoutesDeps) =>
         return c.json(ok({ run: toStoryboardDraftRunResponse(failed), items: [] }), 201)
       }
 
+      const narration = (await deps.narrationLines?.findByProject(project.id)) ?? []
       let outcome: StoryboardDraftOutcome
       try {
         outcome = await drafter.draft({
           script,
           sections: [...sections],
-          shots: shots.map(toDraftShot(project, cast)),
+          shots: shots.map(toDraftShot(project, cast, narration)),
           // 作品の方針（ADR-0030）。案が作品のルックに合い、避けたいものを描かないように。
           look: project.styleGuide,
           avoid: project.avoid,

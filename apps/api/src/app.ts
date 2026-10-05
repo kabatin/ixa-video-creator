@@ -443,6 +443,8 @@ export const createApp = (deps: AppDeps) => {
       drafts: deps.storyboardDrafts,
       editBatches: deps.editBatches,
       drafter: deps.storyboardDrafter,
+      // その Shot の間に話されるナレーション（ADR-0038）も渡す。
+      ...(deps.narration === undefined ? {} : { narrationLines: deps.narration.lines }),
     }),
   )
   app.route('/', sequenceRoutes({ sequences: deps.sequences, projects }))

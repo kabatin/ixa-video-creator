@@ -80,3 +80,20 @@ export const lineReading = (
     ],
   }
 }
+
+/**
+ * その区間（Shot）の間に話し始めるナレーション（位置の順）。絵コンテの案に「この Shot で話される言葉」として渡す
+ * （歌詞の `lyricsDuring` と同じ決め方: 区間の頭以上・終わり未満）。置いていない行は入れない。
+ */
+export const narrationDuring = (
+  lines: readonly Pick<NarrationLine, 'text' | 'startSec'>[],
+  span: { readonly startSec: number; readonly durationSec: number },
+): readonly string[] =>
+  lines
+    .flatMap((line) =>
+      line.startSec !== null && line.startSec >= span.startSec && line.startSec < span.startSec + span.durationSec
+        ? [{ text: line.text, startSec: line.startSec }]
+        : [],
+    )
+    .sort((a, b) => a.startSec - b.startSec)
+    .map((line) => line.text)

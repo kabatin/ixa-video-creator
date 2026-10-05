@@ -22,6 +22,7 @@ export const aDraftShot = (overrides: Partial<StoryboardDraftShot> = {}): Storyb
   description: overrides.description ?? '',
   mood: overrides.mood === undefined ? null : overrides.mood,
   lyrics: overrides.lyrics ?? [],
+  narration: overrides.narration ?? [],
   cast: overrides.cast ?? [],
   location: overrides.location === undefined ? null : overrides.location,
 })

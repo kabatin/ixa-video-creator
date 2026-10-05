@@ -128,6 +128,14 @@ describe('Claude CLI 下書きが組み立てるプロンプト', () => {
     expect(built).toContain('テロップ')
   })
 
+  it('その Shot の間に話されるナレーションを、Shot の行に添える（ADR-0038）', () => {
+    const spoken = aDraftShot({ code: 'OPEN-01', narration: ['勝負の時が来た。'] })
+    const built = buildDraftPrompt(aDraftRequest({ shots: [spoken, aDraftShot({ code: 'OPEN-02' })] }))
+
+    expect(built).toContain('ナレーション: 「勝負の時が来た。」')
+    expect(built.match(/ナレーション: 「/g)).toHaveLength(1)
+  })
+
   it('歌詞が無ければ「なし」と書き、Shot の行に歌詞を付けない', () => {
     const built = buildDraftPrompt(aDraftRequest({ lyrics: '' }))
     expect(built).toContain('(歌詞なし)')

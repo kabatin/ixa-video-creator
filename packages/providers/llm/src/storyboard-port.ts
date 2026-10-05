@@ -33,6 +33,8 @@ export const StoryboardDraftShot = z.object({
   mood: z.string().nullable(),
   /** その Shot の間に歌い出す歌詞のフレーズ（ADR-0033）。無い・まだ合わせていなければ空。 */
   lyrics: z.array(z.string()).default([]),
+  /** その Shot の間に話し始めるナレーション（ADR-0038）。無ければ空。 */
+  narration: z.array(z.string()).default([]),
   /** その Shot に出る登場人物の名前（Shot の参照で決めたもの）。まだ決めていなければ空。 */
   cast: z.array(z.string().min(1)).default([]),
   /** その Shot のロケーションの名前。決めていなければ null。 */

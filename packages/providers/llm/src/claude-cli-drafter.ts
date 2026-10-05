@@ -44,7 +44,8 @@ const shotLines = (request: StoryboardDraftRequest): readonly string[] =>
       ` / いまの雰囲気: ${shot.mood ?? '(未設定)'}` +
       (shot.cast.length === 0 ? '' : ` / 登場人物: ${shot.cast.join('、')}`) +
       (shot.location === null ? '' : ` / ロケーション: ${shot.location}`) +
-      (shot.lyrics.length === 0 ? '' : ` / 歌詞: ${shot.lyrics.map((line) => `「${line}」`).join('')}`),
+      (shot.lyrics.length === 0 ? '' : ` / 歌詞: ${shot.lyrics.map((line) => `「${line}」`).join('')}`) +
+      (shot.narration.length === 0 ? '' : ` / ナレーション: ${shot.narration.map((line) => `「${line}」`).join('')}`),
   )
 
 /** Look 1 件。**文字の無い Look は渡さない**（画像だけで登録したときの既定。名前だけでは何も伝わらない）。 */

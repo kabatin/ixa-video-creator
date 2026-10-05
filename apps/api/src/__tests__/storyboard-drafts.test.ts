@@ -19,6 +19,7 @@ import {
   createInMemoryLocationRepository,
   createInMemoryShotCharacterRepository,
   createInMemoryShotRepository,
+  createInMemoryNarrationLineRepository,
 } from '@ixa/generation/testing'
 import { describe, expect, it } from 'vitest'
 import type { StoryboardDraftOutcome, StoryboardDrafter } from '@ixa/provider-llm'
@@ -141,6 +142,8 @@ const buildRoutes = async (options: {
   editBatches?: EditBatchRecorder
   /** 登場人物・Look・ロケーション・Shot の登場人物。先に入れておいて渡す（Shot がその id を指すため）。 */
   cast?: CastRepositories
+  /** ナレーションの行（ADR-0038）。無ければナレーションの無い環境。 */
+  narrationLines?: ReturnType<typeof createInMemoryNarrationLineRepository>
 }) => {
   const project = options.project === undefined ? aProject() : options.project
   const shots = options.shots ?? []
@@ -196,6 +199,7 @@ const buildRoutes = async (options: {
       drafter: pickDrafter,
       editBatches: options.editBatches ?? editBatches,
       ...(options.cast ?? emptyCast()),
+      ...(options.narrationLines === undefined ? {} : { narrationLines: options.narrationLines }),
     }),
   }
 }
@@ -359,6 +363,28 @@ describe('POST /projects/{id}/storyboard/drafts', () => {
 
     expect(request?.lyrics).toBe('一行目\n二行目\n三行目')
     expect(request?.shots.map((shot) => shot.lyrics)).toEqual([['一行目', '二行目'], ['三行目']])
+  })
+
+  /** ナレーション（ADR-0038）。Shot ごとに、その間に話し始める行を渡す。 */
+  it('Shot ごとに、その間に話されるナレーションを下書きに渡す', async () => {
+    const project = aProject()
+    const shots = [
+      aShot(project.id, { code: 'shot_001', order: 1000, startSec: 0, durationSec: 3 }),
+      aShot(project.id, { code: 'shot_002', order: 2000, startSec: 3, durationSec: 3 }),
+    ]
+    const narrationLines = createInMemoryNarrationLineRepository()
+    await narrationLines.createMany([
+      { projectId: project.id, order: 0, text: '勝負の時が来た。', startSec: 0.2 },
+      { projectId: project.id, order: 1, text: '進め、戦子ちゃん！', startSec: 3.1 },
+      { projectId: project.id, order: 2, text: 'まだ置いていない', startSec: null },
+    ])
+    const drafter = drafterFor(shots)
+    const { app } = await buildRoutes({ project, shots, drafter, narrationLines })
+
+    await postDraft(app, project.id)
+    const [request] = drafter.seen() as { shots: { narration: string[] }[] }[]
+
+    expect(request?.shots.map((shot) => shot.narration)).toEqual([['勝負の時が来た。'], ['進め、戦子ちゃん！']])
   })
 
   /**
