@@ -6,6 +6,7 @@ import {
   ProjectId as ProjectIdSchema,
   RenderJob as RenderJobSchema,
   RenderJobId as RenderJobIdSchema,
+  TimelineClipId as TimelineClipIdSchema,
   newId,
   type MediaAsset,
   type Project,
@@ -77,6 +78,8 @@ const build = async (
     missingObject?: boolean
     deletedOutput?: boolean
     openFails?: boolean
+    /** 全体の書き出しにテロップを 1 枚入れる。 */
+    telop?: boolean
   } = {},
 ) => {
   const project = aProject({ name: options.projectName ?? 'ぼくははると' })
@@ -91,7 +94,18 @@ const build = async (
     if (listed) assets.push(asset)
     return asset
   }
-  const full = aRenderJob(project, { outputAssetId: (await outputOf('full', 'FULL-VIDEO')).id })
+  const fullJob = aRenderJob(project, { outputAssetId: (await outputOf('full', 'FULL-VIDEO')).id })
+  const telop = {
+    id: newId(TimelineClipIdSchema),
+    track: 'TEXT' as const,
+    startSec: 1.5,
+    durationSec: 2,
+    layer: 2,
+    opacity: 1,
+    content: { type: 'text' as const, templateKey: 'plain', params: { text: '勝負の時が来た' } },
+  }
+  const full =
+    options.telop === true ? { ...fullJob, timelineSnapshot: { ...fullJob.timelineSnapshot, clips: [telop] } } : fullJob
   const range = aRenderJob(project, {
     scope: { type: 'range', start: 0, end: 51.17 },
     createdAt: new Date('2026-10-02T14:00:00.000Z'),
@@ -152,6 +166,29 @@ describe('GET /projects/{id}/render-folder', () => {
 })
 
 describe('POST /projects/{id}/render-folder/open', () => {
+  it('テロップがある書き出しは、同じ名前の字幕ファイル（SRT）を横に置く（動画に出ている字と時刻）', async () => {
+    const f = await build({ telop: true })
+
+    await f.open()
+
+    const srt = FULL_NAME.replace(/\.mp4$/, '.srt')
+    expect((await readdir(f.folder)).sort()).toEqual([FULL_NAME, srt, RANGE_NAME].sort())
+    expect(await readFile(join(f.folder, srt), 'utf8')).toBe('1\n00:00:01,500 --> 00:00:03,500\n勝負の時が来た\n')
+  })
+
+  it('字幕ファイルも、もう入っていれば上書きしない（前からある書き出しには後から入る）', async () => {
+    const f = await build({ telop: true })
+    const srt = join(f.folder, FULL_NAME.replace(/\.mp4$/, '.srt'))
+    await f.open()
+    await rm(srt)
+    await f.open()
+    expect(await readFile(srt, 'utf8')).toContain('勝負の時が来た')
+
+    await writeFile(srt, 'EDITED')
+    await f.open()
+    expect(await readFile(srt, 'utf8')).toBe('EDITED')
+  })
+
   it('終わった書き出しをすべて中身の分かる名前でフォルダへ入れ、フォルダを開く', async () => {
     const f = await build()
 

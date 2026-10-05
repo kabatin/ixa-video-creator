@@ -2,7 +2,7 @@ import type { RenderableClipContent } from '@ixa/domain'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { ClipBody } from '../compositions/Timeline.js'
-import { textFadeOpacity } from '../compositions/text-clip.js'
+import { SpokenText, TextClip, spokenSplit, textFadeOpacity } from '../compositions/text-clip.js'
 import { buildTimelinePlan } from '../plan.js'
 import { letterboxFit } from '../presets.js'
 import { makeClip, makeDocument } from './fixtures.js'
@@ -117,5 +117,38 @@ describe('textFadeOpacity', () => {
     // 尺 1 秒（30 コマ）に 2 秒ずつのフェード → 15 コマずつ。
     expect(at(15, 2, 2, 30)).toBeCloseTo(1, 5)
     expect(at(0, 2, 2, 30)).toBe(0)
+  })
+})
+
+describe('話している字の強調（ADR-0038）', () => {
+  const highlight = {
+    color: '#ffd400',
+    chars: [...'あいう'].map((char, i) => ({ char, startSec: i * 0.2, endSec: (i + 1) * 0.2 })),
+  }
+
+  it('その時刻までに話し始めた字を、左から強調の色にする', () => {
+    expect(spokenSplit('あいう', highlight, 0)).toEqual({ spoken: 'あ', rest: 'いう' })
+    expect(spokenSplit('あいう', highlight, 0.25)).toEqual({ spoken: 'あい', rest: 'う' })
+    expect(spokenSplit('あいう', highlight, 5)).toEqual({ spoken: 'あいう', rest: '' })
+  })
+
+  it('話し始める前は、どの字も強調しない', () => {
+    const late = { ...highlight, chars: highlight.chars.map((c) => ({ ...c, startSec: c.startSec + 1 })) }
+    expect(spokenSplit('あいう', late, 0.5)).toEqual({ spoken: '', rest: 'あいう' })
+  })
+
+  it('字の時刻とテロップの字数が合わなければ、強調しない（ずれた字を塗らない）', () => {
+    expect(spokenSplit('あいうえ', highlight, 0.25)).toBeNull()
+  })
+
+  it('話した字は強調の色、残りは元の色のまま描く', () => {
+    const markup = renderToStaticMarkup(<SpokenText split={{ spoken: 'あい', rest: 'う' }} color="#ffd400" />)
+    expect(markup).toBe('<span style="color:#ffd400">あい</span>う')
+  })
+
+  it('字の時刻が付いたテロップでも、時刻の無い静かな描画（サムネなど）では強調しない', () => {
+    const markup = renderToStaticMarkup(<TextClip template="plain" params={{ text: 'あいう', highlight }} video={VIDEO} />)
+    expect(markup).toContain('あいう')
+    expect(markup).not.toContain('#ffd400')
   })
 })

@@ -1,8 +1,15 @@
 import { randomUUID } from 'node:crypto'
 import { access, mkdir, rename, rm, writeFile } from 'node:fs/promises'
-import { dirname, join, relative, resolve, sep } from 'node:path'
+import { dirname, extname, join, relative, resolve, sep } from 'node:path'
 import type { MediaAssetRepository, RenderJobRepository } from '@ixa/db'
-import { renderExportFileName, renderExportFolderName, type Project, type RenderJob } from '@ixa/domain'
+import {
+  renderExportFileName,
+  renderExportFolderName,
+  subtitleCuesOf,
+  toSrt,
+  type Project,
+  type RenderJob,
+} from '@ixa/domain'
 import { ObjectNotFoundError, type ObjectStorage } from '@ixa/storage'
 import type { Logger } from '../logger.js'
 import { sequentially } from '../sequentially.js'
@@ -100,19 +107,36 @@ const reasonOf = (error: unknown): string =>
 type DoneJob = RenderJob & { readonly outputAssetId: NonNullable<RenderJob['outputAssetId']> }
 
 /**
+ * 字幕ファイル（SRT。ADR-0039）を動画と同じ名前で横に置く。中身は書き出したときのスナップショットのテロップ
+ * （動画に出ている字と時刻）。テロップが無ければ置かない。動画と同じく、もう入っていれば書かない。
+ */
+const writeSubtitles = async (videoPath: string, job: DoneJob): Promise<void> => {
+  const cues = subtitleCuesOf(job.timelineSnapshot.clips)
+  if (cues.length === 0) return
+  const path = `${videoPath.slice(0, videoPath.length - extname(videoPath).length)}.srt`
+  if (await exists(path)) return
+  await writeAtomically(path, new TextEncoder().encode(toSrt(cues)))
+}
+
+/**
  * 1 本をフォルダへ入れる。
  * - **もう入っていれば書かない。** 大きさが違っても上書きしない（`~/Movies` は利用者が触る場所。手を入れたものを消さない）
  * - 出力の素材が消されていれば飛ばす（`path: null`）。消したのは利用者なので、失敗として出し続けない
+ * - テロップがあれば字幕ファイルも横に置く（前からある書き出しにも後から入る）
  */
 const copyOne = async (
   deps: RenderFolderDeps,
   path: string,
   job: DoneJob,
 ): Promise<{ readonly path: string | null; readonly copied: boolean }> => {
-  if (await exists(path)) return { path, copied: false }
+  if (await exists(path)) {
+    await writeSubtitles(path, job)
+    return { path, copied: false }
+  }
   const asset = await deps.mediaAssets.findById(job.outputAssetId)
   if (asset === null) return { path: null, copied: false }
   await writeAtomically(path, await deps.storage.get(asset.storageKey))
+  await writeSubtitles(path, job)
   return { path, copied: true }
 }
 

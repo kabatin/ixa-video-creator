@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { CharTime } from '../narration/char-timing.js'
 import { NARRATION_TELOP_HOLD_SEC, narrationTelopSpans } from '../narration/narration-telops.js'
 import { linesFromTranscript } from '../narration/transcript-lines.js'
-import { toSrt } from '../timeline/srt.js'
+import { subtitleCuesOf, toSrt } from '../timeline/srt.js'
+import type { RenderableClip } from '../timeline/timeline.js'
 
 /**
  * - ナレーションのテロップをタイムラインの秒にする（行の位置 + 枚の時刻。読み終わりに少し残す）
@@ -88,5 +89,31 @@ describe('toSrt', () => {
 
   it('何も無ければ空', () => {
     expect(toSrt([])).toBe('')
+  })
+})
+
+describe('subtitleCuesOf', () => {
+  const clip = (startSec: number, durationSec: number, content: unknown, track = 'TEXT'): RenderableClip =>
+    ({ id: `c${startSec}`, track, startSec, durationSec, layer: 0, opacity: 1, content }) as RenderableClip
+
+  it('書き出したタイムラインのテロップを、出る時刻の字幕にする（手で置いた・歌詞・ナレーションのどれも）', () => {
+    const cues = subtitleCuesOf([
+      clip(2, 1.5, { type: 'text', templateKey: 'plain', params: { text: 'ナレーション', narrationLineId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' } }),
+      clip(0, 1, { type: 'text', templateKey: 'lower_third', params: { text: '手で置いた' } }),
+    ])
+    expect(cues).toEqual([
+      { startSec: 2, endSec: 3.5, text: 'ナレーション' },
+      { startSec: 0, endSec: 1, text: '手で置いた' },
+    ])
+  })
+
+  it('テロップ以外・読めないテロップは入れない', () => {
+    expect(
+      subtitleCuesOf([
+        clip(0, 1, { type: 'media', mediaAssetId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', inSec: 0, outSec: 1, volume: 1 }, 'SFX'),
+        clip(1, 1, { type: 'text', templateKey: 'plain', params: { text: '' } }),
+        clip(2, 1, { type: 'text', templateKey: 'plain', params: null }),
+      ]),
+    ).toEqual([])
   })
 })

@@ -6,6 +6,7 @@ import {
   resolveTextStyle,
   type ResolvedTextStyle,
   type TextClipParams,
+  type TextHighlight,
 } from '@ixa/domain'
 import type React from 'react'
 import { useCurrentFrame } from 'remotion'
@@ -55,6 +56,8 @@ type TemplateDecor = {
 
 type DrawProps = {
   readonly text: string
+  /** 話している字の強調（ADR-0038）。無ければ文字をそのまま描く。 */
+  readonly spoken?: { readonly split: SpokenSplit; readonly color: string }
   readonly video: FitRect
   readonly layout: TextLayout
   readonly decor: TemplateDecor
@@ -121,6 +124,29 @@ const bandStyle = ({ video, layout, decor, style, fontSize }: DrawProps): React.
   }
 }
 
+/** 話した字（強調の色）と、まだ話していない字。 */
+export type SpokenSplit = { readonly spoken: string; readonly rest: string }
+
+/**
+ * その時刻（テロップの頭からの秒）までに話し始めた字を、左から強調の色にする（カラオケのように塗る。ADR-0038）。
+ * 日本語は語の切れ目が無く字ごとの時刻なので、「今の 1 字だけ」だとちらつく。塗り進める形にする。
+ * 字の時刻とテロップの字数が合わなければ null（ずれた字を塗らない）。
+ */
+export const spokenSplit = (text: string, highlight: TextHighlight, sec: number): SpokenSplit | null => {
+  const chars = [...text]
+  if (highlight.chars.length !== chars.length) return null
+  const count = highlight.chars.filter((char) => char.startSec <= sec).length
+  return { spoken: chars.slice(0, count).join(''), rest: chars.slice(count).join('') }
+}
+
+/** 話した字を強調の色で、残りを元の色で描く。 */
+export const SpokenText: React.FC<{ readonly split: SpokenSplit; readonly color: string }> = ({ split, color }) => (
+  <>
+    {split.spoken === '' ? null : <span style={{ color }}>{split.spoken}</span>}
+    {split.rest}
+  </>
+)
+
 /** 型の既定値に見た目を重ねた 1 つの描き方。 */
 const StyledText: React.FC<DrawProps> = (props) => (
   <div
@@ -128,7 +154,9 @@ const StyledText: React.FC<DrawProps> = (props) => (
     style={{ ...videoBoxStyle(props.video), ...anchorBoxStyle(props.style.anchor) }}
   >
     <div style={bandStyle(props)}>
-      <div style={bodyStyle(props.style, props.fontSize)}>{props.text}</div>
+      <div style={bodyStyle(props.style, props.fontSize)}>
+        {props.spoken === undefined ? props.text : <SpokenText split={props.spoken.split} color={props.spoken.color} />}
+      </div>
     </div>
   </div>
 )
@@ -276,9 +304,20 @@ const Fade: React.FC<{
   return <div style={{ position: 'absolute', inset: 0, opacity }}>{children}</div>
 }
 
+/** 強調があるときだけ使う。**フックを持つ**ので、強調の無いテロップはこれを通さない。 */
+const Spoken: React.FC<{
+  readonly timing: TextClipTiming
+  readonly highlight: TextHighlight
+  readonly draw: DrawProps
+}> = ({ timing, highlight, draw }) => {
+  const frame = useCurrentFrame()
+  const split = spokenSplit(draw.text, highlight, frame / timing.fps)
+  return <StyledText {...draw} {...(split === null ? {} : { spoken: { split, color: highlight.color } })} />
+}
+
 /**
  * 解決済みのテロップ本体。`resolveTextClip` が `renderable` を返したときだけ呼ぶ。
- * フェードが無ければフックを持たないので、テストから素の関数としても呼べる。
+ * フェードも強調も無ければフックを持たないので、テストから素の関数としても呼べる（`timing` を渡さなければ静かに描く）。
  */
 export const TextClip: React.FC<{
   readonly template: TextTemplateKey
@@ -293,17 +332,13 @@ export const TextClip: React.FC<{
     style.size === null
       ? textClipFontSize(template, params.text, video)
       : Math.max(1, Math.round(style.size * video.height))
-  const body = (
-    <StyledText
-      text={params.text}
-      video={video}
-      layout={layout}
-      decor={decor}
-      style={style}
-      fontSize={fontSize}
-      template={template}
-    />
-  )
+  const draw: DrawProps = { text: params.text, video, layout, decor, style, fontSize, template }
+  const body =
+    params.highlight !== undefined && timing !== undefined ? (
+      <Spoken timing={timing} highlight={params.highlight} draw={draw} />
+    ) : (
+      <StyledText {...draw} />
+    )
   const fades = style.fadeInSec > 0 || style.fadeOutSec > 0
   return fades && timing !== undefined ? (
     <Fade timing={timing} style={style}>

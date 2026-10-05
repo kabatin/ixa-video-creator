@@ -1,3 +1,6 @@
+import { parseTextClipParams } from './text-template.js'
+import type { RenderableClip } from './timeline.js'
+
 /**
  * 字幕ファイル（SRT）。テロップを書き出しの横に置き、YouTube などの字幕に使う（ADR-0039）。
  *
@@ -34,3 +37,14 @@ export const toSrt = (cues: readonly SubtitleCue[]): string =>
     .sort((a, b) => a.startSec - b.startSec)
     .map((cue, index) => `${index + 1}\n${timestamp(cue.startSec)} --> ${timestamp(cue.endSec)}\n${cue.text}\n`)
     .join('\n')
+
+/**
+ * 書き出したタイムライン（スナップショット）のテロップを字幕にする。手で置いた・歌詞・ナレーションのどれも入れる
+ * （動画に出ている字と同じにする）。テロップ以外と、読めないテロップは入れない。
+ */
+export const subtitleCuesOf = (clips: readonly RenderableClip[]): readonly SubtitleCue[] =>
+  clips.flatMap((clip) => {
+    if (clip.content.type !== 'text') return []
+    const params = parseTextClipParams(clip.content.params)
+    return params === null ? [] : [{ startSec: clip.startSec, endSec: clip.startSec + clip.durationSec, text: params.text }]
+  })
