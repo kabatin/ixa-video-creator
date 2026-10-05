@@ -137,6 +137,10 @@ export type TimelineEditorProps = {
   readonly onOpenTextClip?: (clipId: TimelineClipId) => void
   /** 楽曲の波形の帯。`TimelineTracks` へそのまま渡す。 */
   readonly audioLane?: { readonly durationSec: number; readonly node: ReactNode }
+  /** ナレーションのレーン（ADR-0038）。帯の尺度で描く。 */
+  readonly narrationLane?: (pxPerSec: number) => ReactNode
+  /** 効果音の帯に音のファイルを落とした。 */
+  readonly onDropAudio?: (file: File, atSec: number) => void
 }
 
 /**
@@ -178,6 +182,8 @@ export const TimelineEditor = ({
   onTextClipContextMenu,
   onOpenTextClip,
   audioLane,
+  narrationLane,
+  onDropAudio,
 }: TimelineEditorProps) => {
   const api = useMemo(() => createTimelineApi(createRequester(resolveApiBaseUrl())), [])
 
@@ -636,6 +642,8 @@ export const TimelineEditor = ({
                 },
               })}
           {...(audioLane === undefined ? {} : { audioLane })}
+          {...(narrationLane === undefined ? {} : { narrationLane })}
+          {...(onDropAudio === undefined ? {} : { onDropAudio })}
           beatAlignment={
             beatAlignment === null
               ? undefined

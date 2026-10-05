@@ -363,6 +363,11 @@ describe('出す帯を決める', () => {
     expect(visibleTracks([])).not.toContain('SFX')
   })
 
+  it('音を落として置ける帯（ワークベンチの効果音）は、空でも出して隠したことにしない', () => {
+    expect(visibleTracks([], ['SFX'])).toContain('SFX')
+    expect(hiddenTracks([], ['SFX'])).toEqual(['VFX', 'VIDEO2'])
+  })
+
   /** ここを落とすと、過去に入れたクリップが画面から消える。 */
   it('置けない帯でも中身があれば必ず出す', () => {
     expect(visibleTracks([clipOn('VFX')])).toContain('VFX')

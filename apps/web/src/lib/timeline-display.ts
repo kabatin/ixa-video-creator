@@ -52,17 +52,24 @@ export const isInsertableTrack = (track: TimelineTrack): boolean =>
  * 黙って隠すと、過去に入れたクリップが画面から消える。
  * 「置けない」と「中身が無い」は別のことなので、両方を見て決める（L-015）。
  */
-export const visibleTracks = (clips: readonly TimelineClip[]): readonly TimelineTrack[] => {
+export const visibleTracks = (
+  clips: readonly TimelineClip[],
+  /** ファイルを落として置ける帯（ワークベンチの効果音）。空でも出す。 */
+  droppable: readonly TimelineTrack[] = [],
+): readonly TimelineTrack[] => {
   const used = new Set(clips.map((clip) => clip.track))
-  return EDITABLE_TRACKS.filter((track) => isInsertableTrack(track) || used.has(track))
+  return EDITABLE_TRACKS.filter((track) => isInsertableTrack(track) || droppable.includes(track) || used.has(track))
 }
 
 /**
  * 隠した帯の名前。**1 つも隠していなければ空。**
  * 隠した事実を出さないと、帯が消えたのが不具合に見える。
  */
-export const hiddenTracks = (clips: readonly TimelineClip[]): readonly TimelineTrack[] => {
-  const shown = new Set(visibleTracks(clips))
+export const hiddenTracks = (
+  clips: readonly TimelineClip[],
+  droppable: readonly TimelineTrack[] = [],
+): readonly TimelineTrack[] => {
+  const shown = new Set(visibleTracks(clips, droppable))
   return EDITABLE_TRACKS.filter((track) => !shown.has(track))
 }
 

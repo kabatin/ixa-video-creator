@@ -19,6 +19,7 @@ import { timelineShotsKey } from '@/lib/timeline-shots-key'
 import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
 import { useShotMenu } from '@/components/workbench/use-shot-menu'
 import { useTextClipMenu } from '@/components/workbench/use-text-clip-menu'
+import { useTimelineAudio } from '@/components/workbench/narration/use-timeline-audio'
 
 /**
  * タイムライン（中央下）。中身は既存の `timeline-editor`。
@@ -39,8 +40,14 @@ export const TimelinePanel = () => {
   const transport = useTransportState()
   const [materials, setMaterials] = useState<TimelineMaterials | null>(null)
   const peaks = useTrackPeaks(workbench.analysis?.waveformPeaksUrl ?? null)
+  // 効果音を置いたら帯を取り直す。
+  const [clipsEpoch, setClipsEpoch] = useState(0)
+  const { narrationLane, onDropAudio } = useTimelineAudio(() => {
+    setClipsEpoch((epoch) => epoch + 1)
+  })
 
-  // 開いたとき・サーバから読み直したとき・Take ができたとき・Shot の尺や採用を変えたときに取り直す。
+  // 開いたとき・サーバから読み直したとき・Take ができたとき・Shot の尺や採用を変えたとき・
+  // ナレーションが変わったとき（声・位置・テロップ）・効果音を置いたときに取り直す。
   const shotsKey = timelineShotsKey(workbench.shots)
   useEffect(() => {
     let cancelled = false
@@ -50,7 +57,7 @@ export const TimelinePanel = () => {
     return () => {
       cancelled = true
     }
-  }, [workbench.projectId, workbench.serverEpoch, workbench.posterEpoch, shotsKey])
+  }, [workbench.projectId, workbench.serverEpoch, workbench.posterEpoch, workbench.narrationEpoch, clipsEpoch, shotsKey])
 
   if (materials === null) {
     return (
@@ -113,6 +120,8 @@ export const TimelinePanel = () => {
           workbench.focusPanel('inspector')
         }}
         {...(audioLane === null ? {} : { audioLane })}
+        narrationLane={narrationLane}
+        onDropAudio={onDropAudio}
         initialSnapEnabled={preferences.playback.snapToBeat}
         // 聴きながら切るで鳴らしていても位置は動く。「再生位置を追う」は、どこかが鳴っていれば帯を流す。
         playheadMoving={transport.playing}

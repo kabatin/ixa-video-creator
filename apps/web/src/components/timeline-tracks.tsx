@@ -1,7 +1,7 @@
 'use client'
 
 import type { Shot, ShotId, TimelineClip, TimelineClipId, TimelineTrack } from '@ixa/domain'
-import { useRef, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { TimelineFollowPlayhead, type TimelineFollow } from '@/components/timeline-follow'
 import { TimelineClipLane } from '@/components/timeline-clip-lane'
 import { TimelineShotLane } from '@/components/timeline-shot-lane'
@@ -126,6 +126,13 @@ export type TimelineTracksProps = {
   readonly audioLane?: { readonly durationSec: number; readonly node: ReactNode }
   /** カットの端をつまんで長さを変える口（制作者 2026-10-02）。渡さなければ端は掴めない。 */
   readonly shotEdges?: ShotEdgeDragProps
+  /**
+   * ナレーションのレーン（ADR-0038）。行の投影なのでクリップではない。尺度（px/秒）を渡して描かせる。
+   * 渡さなければ出さない。
+   */
+  readonly narrationLane?: (pxPerSec: number) => ReactNode
+  /** 効果音の帯に音のファイルを落とした（落とした秒）。渡せば効果音の帯を空でも出す。 */
+  readonly onDropAudio?: (file: File, atSec: number) => void
 }
 
 type RowProps = {
@@ -186,6 +193,8 @@ export const TimelineTracks = ({
   onClipContextMenu,
   audioLane,
   shotEdges,
+  narrationLane,
+  onDropAudio,
 }: TimelineTracksProps) => {
   /** 横スクロールの箱。再生位置を追うときに送る。 */
   const scrollBoxRef = useRef<HTMLDivElement>(null)
@@ -202,8 +211,9 @@ export const TimelineTracks = ({
     topPx: clientY,
   })
 
-  const shownTracks = visibleTracks(clips)
-  const hidden = hiddenTracks(clips)
+  const droppable: readonly TimelineTrack[] = onDropAudio === undefined ? [] : ['SFX']
+  const shownTracks = visibleTracks(clips, droppable)
+  const hidden = hiddenTracks(clips, droppable)
 
   const renderTrack = (track: TimelineTrack): ReactNode => {
     const lanes = lanesForTrack(clips, track)
@@ -212,6 +222,9 @@ export const TimelineTracks = ({
      * 置ける場所が見えていないと、そこを押せることに気づけない。
      * 素材の選択が要る他のトラックは、この画面からは置けないので従来どおり。
      */
+    if (lanes.length === 0 && track === 'SFX' && onDropAudio !== undefined) {
+      return <EmptyLane message="効果音のファイルをここへ落とすと置けます" />
+    }
     if (lanes.length === 0 && track !== 'TEXT') return <EmptyLane message="クリップなし" />
 
     const laneList =
@@ -323,9 +336,21 @@ export const TimelineTracks = ({
          * ただし**中身のある帯は、置けなくても必ず出す**（黙って隠すと過去に
          * 入れたクリップが画面から消える・L-015）。判定は `timeline-display` の 1 箇所。
          */}
+        {narrationLane !== undefined && (
+          <Row label="ナレーション" contentWidthPx={contentWidthPx}>
+            {narrationLane(pxPerSec)}
+          </Row>
+        )}
+
         {shownTracks.map((track) => (
           <Row key={track} label={timelineRowLabel(track)} contentWidthPx={contentWidthPx}>
-            {renderTrack(track)}
+            {track === 'SFX' && onDropAudio !== undefined ? (
+              <AudioDrop pxPerSec={pxPerSec} durationSec={durationSec} onDrop={onDropAudio}>
+                {renderTrack(track)}
+              </AudioDrop>
+            ) : (
+              renderTrack(track)
+            )}
           </Row>
         ))}
 
@@ -353,6 +378,50 @@ export const TimelineTracks = ({
           {`まだ置けない帯は隠しています: ${hidden.join(' / ')}`}
         </p>
       )}
+    </div>
+  )
+}
+
+/**
+ * 音のファイルを落として置く帯（効果音）。落とした位置を秒にして渡す。
+ * **ここで受けたら伝わりを止める。** 止めないと画面全体の取り込み（音は楽曲にする）にも流れる（file-intake.tsx）。
+ */
+const AudioDrop = ({
+  pxPerSec,
+  durationSec,
+  onDrop,
+  children,
+}: {
+  readonly pxPerSec: number
+  readonly durationSec: number
+  readonly onDrop: (file: File, atSec: number) => void
+  readonly children: ReactNode
+}) => {
+  const [over, setOver] = useState(false)
+  const audioOf = (files: FileList): File | undefined => [...files].find((file) => file.type.startsWith('audio/'))
+  return (
+    <div
+      className={over ? 'rounded outline outline-2 outline-focus' : ''}
+      onDragOver={(event) => {
+        if (![...event.dataTransfer.items].some((item) => item.kind === 'file')) return
+        event.preventDefault()
+        event.stopPropagation()
+        setOver(true)
+      }}
+      onDragLeave={() => {
+        setOver(false)
+      }}
+      onDrop={(event) => {
+        setOver(false)
+        const file = audioOf(event.dataTransfer.files)
+        if (file === undefined) return
+        event.preventDefault()
+        event.stopPropagation()
+        const left = event.currentTarget.getBoundingClientRect().left
+        onDrop(file, seekSecAtClientX(event.clientX, { left }, pxPerSec, durationSec))
+      }}
+    >
+      {children}
     </div>
   )
 }
