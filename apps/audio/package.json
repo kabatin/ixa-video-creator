@@ -1,6 +1,6 @@
 {
   "name": "@ixa/audio",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "音楽解析サービス（Python / librosa）。pnpm dev で web・api・worker と一緒に起動する",
   "scripts": {

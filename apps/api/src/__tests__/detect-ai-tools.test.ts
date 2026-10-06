@@ -120,14 +120,14 @@ describe('detectAiTools', () => {
       probe({
         localServers: {
           vpipe: { enabled: true, check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
-          wan: { enabled: true, check: () => Promise.resolve({ state: 'up', version: '0.2.0' }) },
+          wan: { enabled: true, check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
         },
       }),
     )
     const down = await detectAiTools(probe())
 
     expect(up.vpipe).toEqual({ state: 'ready', version: '0.1.0' })
-    expect(up.wan).toEqual({ state: 'ready', version: '0.2.0' })
+    expect(up.wan).toEqual({ state: 'ready', version: '0.1.0' })
     expect(down.vpipe).toEqual({
       state: 'missing',
       reason: expect.stringMatching(/vpipe-api serve/) as unknown,
@@ -176,7 +176,7 @@ describe('detectAiTools', () => {
             enabled: false,
             check: () => {
               checked = true
-              return Promise.resolve({ state: 'up', version: '0.2.0' })
+              return Promise.resolve({ state: 'up', version: '0.1.0' })
             },
           },
         },
