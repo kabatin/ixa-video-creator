@@ -1,4 +1,11 @@
-import type { CreateReviewFindingInput, Seconds, Severity, Shot } from '@ixa/domain'
+import {
+  TAKE_SHORT_TOLERANCE_SEC,
+  takeShortfallSec,
+  type CreateReviewFindingInput,
+  type Seconds,
+  type Severity,
+  type Shot,
+} from '@ixa/domain'
 import type { DeterministicReviewer, FrameSample, ReviewMeasurements } from './port.js'
 
 /**
@@ -81,13 +88,40 @@ const checkDuration = (m: ReviewMeasurements): readonly CreateReviewFindingInput
   const { shot, video, take } = m
   const usableSec = video.durationSec - shot.sourceInSec
 
-  if (usableSec < shot.durationSec - DURATION_TOLERANCE_SEC) {
+  /** 切り出し位置より短い素材は、速度では救えない（使えるところが 1 コマも無い）。 */
+  if (usableSec <= 0) {
+    return [
+      finding({
+        severity: 'fail',
+        message:
+          `素材が切り出し位置より短い。sourceIn ${sec(shot.sourceInSec)} に対して ` +
+          `素材は ${sec(video.durationSec)} しかない`,
+        frameSec: video.durationSec,
+      }),
+    ]
+  }
+
+  /**
+   * **速度を考えてから「足りない」と言う（ADR-0026）。**
+   *
+   * `fit` の Shot は Take 全体を Shot の尺へ収める（0.5〜2.5 倍）ので、素材が編集尺より短いこと
+   * 自体は異常ではない。**最長が短いモデルを選べば必ず起きる**（Wan 2.2 5B は 5 秒まで。ADR-0040）。
+   *
+   * 判定は domain の `takeShortfallSec` 1 か所に任せる。再生・書き出し（`@ixa/timeline`）と
+   * タイムラインの検査が同じ関数を読んでいるので、**画面で足りていないものだけが fail になる。**
+   * 以前はここだけが自前で引き算していて `timing` を見ていなかったため、ゆっくり再生で
+   * 埋まっている Shot まで fail にしていた。
+   */
+  const shortfallSec = takeShortfallSec(shot, video.durationSec)
+  if (shortfallSec > TAKE_SHORT_TOLERANCE_SEC) {
+    const speed = shot.timing === 'fit' ? '最も遅い再生にしても' : ''
     return [
       finding({
         severity: 'fail',
         message:
           `素材が編集尺に足りない。sourceIn ${sec(shot.sourceInSec)} から使えるのは ` +
-          `${sec(usableSec)} だが、編集尺は ${sec(shot.durationSec)} ある`,
+          `${sec(usableSec)} で、${speed}編集尺 ${sec(shot.durationSec)} に ` +
+          `${sec(shortfallSec)} 足りない`,
         frameSec: video.durationSec,
       }),
     ]

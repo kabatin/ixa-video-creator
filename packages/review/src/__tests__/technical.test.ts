@@ -65,6 +65,58 @@ describe('technicalReviewer', () => {
       expect(findings[0]?.message).toContain('生成尺')
     })
 
+    /**
+     * ADR-0026 / 0040。`fit` の Shot は Take 全体を Shot の尺へ収める（0.5〜2.5 倍）ので、
+     * 素材が編集尺より短いこと自体は異常ではない。**最長が短い AI を選ぶと必ず起きる**
+     * （Wan 2.2 5B は 5 秒まで）。速度を考えずに引き算していた頃は、ここが必ず fail になっていた。
+     */
+    it('fit の Shot は、ゆっくり再生で埋まる範囲なら指摘しない', () => {
+      const findings = technicalReviewer(
+        makeMeasurements({
+          shot: makeShot({ durationSec: 6, timing: 'fit' }),
+          take: makeTake({ spec: makeSpec({ durationSec: 5 }) }),
+          video: makeVideo({ durationSec: 5 }),
+        }),
+      )
+      expect(findings).toEqual([])
+    })
+
+    it('fit でも、最も遅い再生でも埋まらなければ fail', () => {
+      const findings = technicalReviewer(
+        makeMeasurements({
+          // 6 秒の Shot に 2 秒の素材。最も遅い 0.5 倍でも 4 秒しか埋まらない。
+          shot: makeShot({ durationSec: 6, timing: 'fit' }),
+          take: makeTake({ spec: makeSpec({ durationSec: 2 }) }),
+          video: makeVideo({ durationSec: 2 }),
+        }),
+      )
+      expect(severities(findings)).toEqual(['fail'])
+      expect(findings[0]?.message).toContain('足りない')
+    })
+
+    it('trim の Shot は今までどおり、短ければ fail', () => {
+      const findings = technicalReviewer(
+        makeMeasurements({
+          shot: makeShot({ durationSec: 6 }),
+          take: makeTake({ spec: makeSpec({ durationSec: 6 }) }),
+          video: makeVideo({ durationSec: 4 }),
+        }),
+      )
+      expect(severities(findings)).toEqual(['fail'])
+    })
+
+    /** 速度では救えない形。`fit` でも「使えるところが無い」ことは見落とさない。 */
+    it('切り出し位置より短い素材は fit でも fail', () => {
+      const findings = technicalReviewer(
+        makeMeasurements({
+          shot: makeShot({ durationSec: 4, sourceInSec: 2, timing: 'fit' }),
+          take: makeTake({ spec: makeSpec({ durationSec: 2 }) }),
+          video: makeVideo({ durationSec: 2 }),
+        }),
+      )
+      expect(severities(findings)).toEqual(['fail'])
+    })
+
     it('生成尺どおり長い素材は指摘しない（のりしろは正常）', () => {
       const findings = technicalReviewer(
         makeMeasurements({
