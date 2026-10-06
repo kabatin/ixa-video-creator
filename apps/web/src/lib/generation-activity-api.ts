@@ -17,7 +17,7 @@ export const WireActiveGeneration = z.object({
   estimatedLatencySec: z.number().nonnegative().nullable(),
   queuedAt: z.string(),
   startedAt: z.string().nullable(),
-  /** 生成先が作り始めた時刻。送っていても null なら、生成先の中で順番待ち（vpipe は 1 本ずつ作る）。 */
+  /** 生成先が作り始めた時刻。送っていても null なら、生成先の中で順番待ち（手元のサーバは 1 本ずつ作る）。 */
   providerStartedAt: z.string().nullable(),
   attempt: z.number().int().positive(),
 })

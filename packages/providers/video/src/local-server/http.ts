@@ -1,39 +1,37 @@
 import { ProviderError } from '@ixa/provider-core'
+import type { ProviderId } from '@ixa/domain'
 import { clipReason, redactPaths, redactUrls } from '../common/reason.js'
-import { VpipeErrorEnvelope } from './api.js'
-import { VPIPE_PROVIDER_ID } from './descriptor.js'
+import { LocalServerErrorEnvelope } from './api.js'
+import {
+  localServerCode,
+  localServerNoResponseCode,
+  localServerUnreachableCode,
+  type LocalServerIdentity,
+} from './identity.js'
 
 /**
  * 注入できる `fetch`。**実サーバを CI で叩かないため、口を引数で受ける**（CLAUDE.md テスト節）。
  * 参照画像（署名付き URL）の取得もこの口を通すので、テストは応答を差し替えるだけで完結する。
  */
-export type VpipeFetch = (url: string, init: RequestInit) => Promise<Response>
+export type LocalServerFetch = (url: string, init: RequestInit) => Promise<Response>
 
-export class VpipeRequestError extends ProviderError {
-  override readonly name = 'VpipeRequestError'
+export class LocalServerRequestError extends ProviderError {
+  override readonly name = 'LocalServerRequestError'
 
   constructor(
+    providerId: ProviderId,
     readonly code: string,
     message: string,
     retryable: boolean,
     readonly status: number | null,
     options?: { cause?: unknown },
   ) {
-    super(message, VPIPE_PROVIDER_ID, retryable, options)
+    super(message, providerId, retryable, options)
   }
 }
 
-/** 画面に出る文の頭。実装の名前（worker / API）は入れない。 */
-export const VPIPE_LABEL = 'ローカルの動画生成（vpipe）'
-
-/** サーバの `code` は機械向けの識別子。コードに使う前に記号を落とす。 */
-export const vpipeCode = (serverCode: string): string => {
-  const cleaned = serverCode.replace(/[^A-Za-z0-9_]/g, '')
-  return cleaned === '' ? 'vpipe_error' : `vpipe_${cleaned}`
-}
-
 /**
- * 封筒（`{ error: {...} }`）が読めなかったときの切り分け。契約の表（docs/api.md）に合わせる。
+ * 封筒（`{ error: {...} }`）が読めなかったときの切り分け。契約の表（vpipe-api の docs/api.md）に合わせる。
  * 再試行して意味があるのは 429（満杯）と 5xx（向こう側の不調）だけ。
  */
 const fallbackCodeFor = (status: number): string => {
@@ -60,20 +58,27 @@ export const reasonOf = (text: string): string =>
  * 非 2xx を `ProviderError` にする。**やり直せるかはサーバの `retryable` を正とする。**
  * 封筒が読めないとき（プロキシが挟まった等）だけ HTTP の状態で判断する。
  */
-export const vpipeErrorFor = (status: number, body: unknown, what: string): VpipeRequestError => {
-  const envelope = VpipeErrorEnvelope.safeParse(body)
-  const head = `${VPIPE_LABEL}の${what}が失敗しました（HTTP ${String(status)}）`
+export const localServerErrorFor = (
+  identity: LocalServerIdentity,
+  status: number,
+  body: unknown,
+  what: string,
+): LocalServerRequestError => {
+  const envelope = LocalServerErrorEnvelope.safeParse(body)
+  const head = `${identity.label}の${what}が失敗しました（HTTP ${String(status)}）`
   if (envelope.success) {
     const { code, message, retryable } = envelope.data.error
-    return new VpipeRequestError(
-      vpipeCode(code),
+    return new LocalServerRequestError(
+      identity.providerId,
+      localServerCode(identity, code),
       `${head}: ${reasonOf(message)}`,
       retryable,
       status,
     )
   }
-  return new VpipeRequestError(
-    vpipeCode(fallbackCodeFor(status)),
+  return new LocalServerRequestError(
+    identity.providerId,
+    localServerCode(identity, fallbackCodeFor(status)),
     `${head}: 理由不明`,
     isRetryableHttpStatus(status),
     status,
@@ -91,8 +96,10 @@ export const retryAfterMsFrom = (headers: Headers, now: number = Date.now()): nu
   return Number.isNaN(at) ? null : Math.max(0, at - now)
 }
 
-export type VpipeHttp = {
-  readonly fetch: VpipeFetch
+export type LocalServerHttp = {
+  /** どのサーバを相手にしているか（文と失敗の code がここから決まる）。 */
+  readonly identity: LocalServerIdentity
+  readonly fetch: LocalServerFetch
   /** 末尾の `/` を落とした基底 URL。 */
   readonly baseUrl: string
   /** 設定されていれば `Authorization: Bearer` で送る。**本文にもクエリにも載せない。** */
@@ -101,27 +108,15 @@ export type VpipeHttp = {
   readonly timeoutMs: number
 }
 
-export type VpipeHttpResult = {
+export type LocalServerHttpResult = {
   readonly status: number
   readonly ok: boolean
   readonly headers: Headers
   readonly body: unknown
 }
 
-const authHeaders = (http: VpipeHttp): Record<string, string> =>
+const authHeaders = (http: LocalServerHttp): Record<string, string> =>
   http.token === null ? {} : { Authorization: `Bearer ${http.token}` }
-
-/**
- * 要求がサーバに**届いていない**と言い切れる失敗（接続拒否・名前が引けない・経路が無い）。
- * サーバが止まっているときの形で、投入なら何も積まれていない。
- */
-export const VPIPE_UNREACHABLE = 'vpipe_unreachable'
-
-/**
- * 要求を送ったかもしれないのに応答が無い失敗（時間切れ・途中で切れた・本文が読めない）。
- * **投入ならサーバが受け付けているかもしれない。** 呼び出し側は「失敗した」と決めつけない。
- */
-export const VPIPE_NO_RESPONSE = 'vpipe_no_response'
 
 const NOT_SENT_CODES: ReadonlySet<string> = new Set([
   // 接続が時間内に張れなかった（別の Mac が眠っている・LAN の向こうで落ちている）。張れていないので何も送っていない。
@@ -154,25 +149,32 @@ export const wasNeverSent = (error: unknown): boolean => {
 }
 
 /** 通信そのものの失敗。**どちらもやり直せる**（サーバの再起動中など、待てば通ることが多い）。 */
-const transportFailure = (method: string, cause: unknown, sent: boolean): VpipeRequestError =>
+const transportFailure = (
+  identity: LocalServerIdentity,
+  method: string,
+  cause: unknown,
+  sent: boolean,
+): LocalServerRequestError =>
   !sent && wasNeverSent(cause)
-    ? new VpipeRequestError(
-        VPIPE_UNREACHABLE,
-        `${VPIPE_LABEL}のサーバへ接続できませんでした（${method}）。vpipe-api が起動しているか確かめてください`,
+    ? new LocalServerRequestError(
+        identity.providerId,
+        localServerUnreachableCode(identity),
+        `${identity.label}のサーバへ接続できませんでした（${method}）。${identity.serverName} が起動しているか確かめてください`,
         true,
         null,
         { cause },
       )
-    : new VpipeRequestError(
-        VPIPE_NO_RESPONSE,
-        `${VPIPE_LABEL}のサーバから応答が返りませんでした（${method}。時間切れか、接続が途中で切れました）`,
+    : new LocalServerRequestError(
+        identity.providerId,
+        localServerNoResponseCode(identity),
+        `${identity.label}のサーバから応答が返りませんでした（${method}。時間切れか、接続が途中で切れました）`,
         true,
         null,
         { cause },
       )
 
 const send = async (
-  http: VpipeHttp,
+  http: LocalServerHttp,
   method: 'GET' | 'POST' | 'DELETE',
   path: string,
   init: {
@@ -190,7 +192,7 @@ const send = async (
     })
   } catch (cause) {
     // **URL を載せない。** 経路の秘密ではないが、載せる習慣を作らない（fal と同じ）。
-    throw transportFailure(method, cause, false)
+    throw transportFailure(http.identity, method, cause, false)
   }
 }
 
@@ -198,14 +200,14 @@ const send = async (
  * JSON の口を 1 回叩く。**非 2xx でもここでは投げない。**
  * 取消の 409 や投入の 429 のように、失敗かどうかを呼び出し側にしか決められない応答があるため。
  */
-export const vpipeRequest = async (
-  http: VpipeHttp,
+export const localServerRequest = async (
+  http: LocalServerHttp,
   method: 'GET' | 'POST' | 'DELETE',
   path: string,
   payload?: unknown,
   /** 冪等キーなど、この要求だけに付けるヘッダ。 */
   extraHeaders: Readonly<Record<string, string>> = {},
-): Promise<VpipeHttpResult> => {
+): Promise<LocalServerHttpResult> => {
   const signal = AbortSignal.timeout(http.timeoutMs)
   const response = await send(http, method, path, {
     headers: {
@@ -227,7 +229,7 @@ export const vpipeRequest = async (
        * 形の違いとして扱うと、問い合わせでは長い生成を終端の失敗にして捨て、投入では
        * サーバが受け付けたかもしれないジョブを「失敗」と決めつけてしまう。
        */
-      throw transportFailure(method, cause, true)
+      throw transportFailure(http.identity, method, cause, true)
     }
   })()
 
@@ -248,8 +250,8 @@ export const vpipeRequest = async (
  * 本文を読まずに応答を返す（出力の mp4 を流しながら書くため）。
  * 返した応答の本文は `signal` の時間切れで打ち切られる。
  */
-export const vpipeOpen = async (
-  http: VpipeHttp,
+export const localServerOpen = async (
+  http: LocalServerHttp,
   path: string,
   accept: string,
 ): Promise<{ readonly response: Response; readonly signal: AbortSignal }> => {

@@ -614,7 +614,7 @@ ai.google.dev/gemini-api/docs/veo、docs.dev.runwayml.com/guides/pricing。
 | 種別 | 実装 | 契約 |
 |---|---|---|
 | 動画生成 | **Seedance**。Phase 1 は **fal.ai**（カード不要で即開始）、本制作で **BytePlus ModelArk** へ移行（ADR-0013） | **唯一の有料 API。ただし fal.ai は初期クレジットで開始可** |
-| 動画生成（手元・任意） | **MiniMax H3 Turbo** を手元の **vpipe-api** 経由で（ADR-0031）。`LOCAL_VIDEO_GENERATOR=vpipe` のときだけ。AUTO には選ばれない | 不要（手元の GPU。1 本 7〜25 分・1 本ずつ） |
+| 動画生成（手元・任意） | **MiniMax H3 Turbo** を **vpipe-api** 経由で（ADR-0031）、**Wan 2.2 TI2V-5B** を **wan-api** 経由で（ADR-0040）。`LOCAL_VIDEO_GENERATOR` に書いたものだけ。AUTO には選ばれない | 不要（手元の GPU。1 本 7〜25 分・**どちらも 1 本ずつ**で同時には作らない） |
 | 画像生成 | **Codex CLI**（低volume・人が承認する用途） / BytePlus Seedream（高volume のキーフレーム） | 追加契約なし |
 | LLM・Vision | **Claude Code CLI**（ADR-0012） | 追加契約なし |
 | 音楽解析 | ローカルの librosa（ADR-0009） | 不要 |

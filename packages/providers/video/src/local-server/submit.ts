@@ -1,76 +1,88 @@
-import { ProviderBusyError, ProviderError } from '@ixa/provider-core'
+import { ProviderBusyError } from '@ixa/provider-core'
 import { z } from 'zod'
 import { formatIssues } from '../common/reason.js'
-import { VpipeHealth, VpipeSubmitResponse, type VpipeJobId } from './api.js'
-import { VPIPE_PROVIDER_ID, VPIPE_WORKFLOW_ID } from './descriptor.js'
+import { LocalServerHealth, LocalServerSubmitResponse, type LocalServerJobId } from './api.js'
 import {
+  localServerInvalidResponseCode,
+  localServerNoResponseCode,
+  type LocalServerIdentity,
+} from './identity.js'
+import {
+  localServerErrorFor,
+  localServerRequest,
+  LocalServerRequestError,
   retryAfterMsFrom,
-  VPIPE_LABEL,
-  VPIPE_NO_RESPONSE,
-  vpipeErrorFor,
-  VpipeRequestError,
-  vpipeRequest,
-  type VpipeHttp,
+  type LocalServerHttp,
 } from './http.js'
-import type { VpipeJobBody } from './request.js'
 
 /**
- * 投入の口（ADR-0031）。満杯と「届いたか分からない」を、失敗ではなく `ProviderBusyError` で知らせる。
+ * 投入の口（ADR-0031 / 0040）。満杯と「届いたか分からない」を、失敗ではなく `ProviderBusyError` で知らせる。
  */
 
 /**
- * 冪等キーの形（vpipe-api の契約: 1〜128 文字の `[A-Za-z0-9._:-]`）。
+ * 冪等キーの形（契約: 1〜128 文字の `[A-Za-z0-9._:-]`）。
  * worker は GenerationJob の ID（ULID）を渡すので必ず収まる。収まらないのは配線の誤り。
  */
-export const VpipeIdempotencyKey = z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/)
+export const LocalServerIdempotencyKey = z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/)
 
-export const idempotencyKeyOf = (key: string | undefined): string | null => {
+export const idempotencyKeyOf = (
+  identity: LocalServerIdentity,
+  key: string | undefined,
+): string | null => {
   if (key === undefined) return null
-  const parsed = VpipeIdempotencyKey.safeParse(key)
+  const parsed = LocalServerIdempotencyKey.safeParse(key)
   if (!parsed.success) {
-    throw new ProviderError(
-      `${VPIPE_LABEL}の冪等キーの形が違います（1〜128 文字の英数字と . _ : -）`,
-      VPIPE_PROVIDER_ID,
+    throw new LocalServerRequestError(
+      identity.providerId,
+      `${identity.codePrefix}_invalid_idempotency_key`,
+      `${identity.label}の冪等キーの形が違います（1〜128 文字の英数字と . _ : -）`,
       false,
+      null,
     )
   }
   return parsed.data
 }
 
 /**
- * 空きが無いときに次に試すまでの目安。走っている 1 本は 7〜25 分かかるので、
+ * 空きが無いときに次に試すまでの目安。走っている 1 本は数分〜数十分かかるので、
  * 数十秒ごとに確かめても空かない。worker はこれを 30 秒〜10 分に収めて使う。
  */
-export const VPIPE_FULL_RETRY_AFTER_MS = 120_000
+export const LOCAL_SERVER_FULL_RETRY_AFTER_MS = 120_000
 
-const busy = (message: string, retryAfterMs: number | null, cause?: unknown): ProviderBusyError =>
+const busy = (
+  identity: LocalServerIdentity,
+  message: string,
+  retryAfterMs: number | null,
+  cause?: unknown,
+): ProviderBusyError =>
   new ProviderBusyError(
     message,
-    VPIPE_PROVIDER_ID,
+    identity.providerId,
     retryAfterMs,
     cause === undefined ? undefined : { cause },
   )
 
-const FULL_MESSAGE = `${VPIPE_LABEL}が混んでいます（1 本ずつ作っています）`
+const fullMessage = (identity: LocalServerIdentity): string =>
+  `${identity.label}が混んでいます（1 本ずつ作っています）`
 
 /**
- * 空きの確認に掛ける上限（PR #4 レビュー #3）。答えない vpipe に 1 回の HTTP の上限（60 秒）まで付き合うと、
+ * 空きの確認に掛ける上限（PR #4 レビュー #3）。答えないサーバに 1 回の HTTP の上限（60 秒）まで付き合うと、
  * 同じキューの fal やスタブの生成まで分単位で待たされる。確認は節約のためでしかないので短く切る。
  */
-export const VPIPE_HEALTH_TIMEOUT_MS = 5_000
+export const LOCAL_SERVER_HEALTH_TIMEOUT_MS = 5_000
 
 /**
  * サーバのエラー（5xx）で投げ直す回数と間（PR #4 レビュー #1）。**満杯ではない**ので待ち行列には回さない。
  * 続けば向こうの不調なので、サーバの理由を付けて失敗にする（12 時間回して「順番が来なかった」と言わない）。
  */
-export const VPIPE_SERVER_ERROR_ATTEMPTS = 3
-export const VPIPE_SERVER_ERROR_RETRY_MS = 2_000
+export const LOCAL_SERVER_SERVER_ERROR_ATTEMPTS = 3
+export const LOCAL_SERVER_SERVER_ERROR_RETRY_MS = 2_000
 
 const sleep = (ms: number): Promise<void> =>
   ms <= 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms))
 
 /** 走っている 1 本と待ちの枠がすべて埋まっているか。 */
-export const isFull = (health: VpipeHealth): boolean =>
+export const isFull = (health: LocalServerHealth): boolean =>
   health.running + health.waiting >= 1 + health.max_waiting
 
 /**
@@ -83,20 +95,26 @@ export const isFull = (health: VpipeHealth): boolean =>
  * そのまま投げる（押した人にすぐ知らせる）。
  */
 export const ensureCapacity = async (
-  http: VpipeHttp,
-  timeoutMs: number = VPIPE_HEALTH_TIMEOUT_MS,
+  http: LocalServerHttp,
+  timeoutMs: number = LOCAL_SERVER_HEALTH_TIMEOUT_MS,
 ): Promise<void> => {
-  const quick: VpipeHttp = { ...http, timeoutMs: Math.min(http.timeoutMs, timeoutMs) }
-  const response = await vpipeRequest(quick, 'GET', '/v1/health').catch((error: unknown) => {
+  const { identity } = http
+  const quick: LocalServerHttp = { ...http, timeoutMs: Math.min(http.timeoutMs, timeoutMs) }
+  const response = await localServerRequest(quick, 'GET', '/v1/health').catch((error: unknown) => {
     // 応答が返らなかっただけなら、何も積んでいないので後で試せばよい。
-    if (error instanceof VpipeRequestError && error.code === VPIPE_NO_RESPONSE) {
-      throw busy(error.message, null, error)
+    if (
+      error instanceof LocalServerRequestError &&
+      error.code === localServerNoResponseCode(identity)
+    ) {
+      throw busy(identity, error.message, null, error)
     }
     throw error
   })
   if (!response.ok) return
-  const health = VpipeHealth.safeParse(response.body)
-  if (health.success && isFull(health.data)) throw busy(FULL_MESSAGE, VPIPE_FULL_RETRY_AFTER_MS)
+  const health = LocalServerHealth.safeParse(response.body)
+  if (health.success && isFull(health.data)) {
+    throw busy(identity, fullMessage(identity), LOCAL_SERVER_FULL_RETRY_AFTER_MS)
+  }
 }
 
 /**
@@ -110,19 +128,19 @@ export const ensureCapacity = async (
  * - キーが無ければ投げ直しで二重に生成しうるので、どれもそのまま失敗として投げる
  */
 export const postJob = async (
-  http: VpipeHttp,
-  body: VpipeJobBody,
+  http: LocalServerHttp,
+  body: object,
   idempotencyKey: string | null,
-  retryDelayMs: number = VPIPE_SERVER_ERROR_RETRY_MS,
-): Promise<VpipeJobId> => {
+  retryDelayMs: number = LOCAL_SERVER_SERVER_ERROR_RETRY_MS,
+): Promise<LocalServerJobId> => {
   for (let attempt = 1; ; attempt += 1) {
     try {
       return await postJobOnce(http, body, idempotencyKey)
     } catch (error) {
       const again =
         idempotencyKey !== null &&
-        attempt < VPIPE_SERVER_ERROR_ATTEMPTS &&
-        error instanceof VpipeRequestError &&
+        attempt < LOCAL_SERVER_SERVER_ERROR_ATTEMPTS &&
+        error instanceof LocalServerRequestError &&
         error.retryable &&
         error.status !== null &&
         error.status >= 500
@@ -134,26 +152,28 @@ export const postJob = async (
 
 /** 1 回だけ投げる。満杯・処理中・応答なしは `ProviderBusyError`、それ以外の失敗はそのまま投げる。 */
 const postJobOnce = async (
-  http: VpipeHttp,
-  body: VpipeJobBody,
+  http: LocalServerHttp,
+  body: object,
   idempotencyKey: string | null,
-): Promise<VpipeJobId> => {
+): Promise<LocalServerJobId> => {
+  const { identity } = http
   const headers: Record<string, string> =
     idempotencyKey === null ? {} : { 'Idempotency-Key': idempotencyKey }
-  const response = await vpipeRequest(
+  const response = await localServerRequest(
     http,
     'POST',
-    `/v1/workflows/${VPIPE_WORKFLOW_ID}/jobs`,
+    `/v1/workflows/${identity.workflowId}/jobs`,
     body,
     headers,
   ).catch((error: unknown) => {
     if (
       idempotencyKey !== null &&
-      error instanceof VpipeRequestError &&
-      error.code === VPIPE_NO_RESPONSE
+      error instanceof LocalServerRequestError &&
+      error.code === localServerNoResponseCode(identity)
     ) {
       throw busy(
-        `${VPIPE_LABEL}へ投入した応答が返りませんでした。同じ投入をやり直します`,
+        identity,
+        `${identity.label}へ投入した応答が返りませんでした。同じ投入をやり直します`,
         null,
         error,
       )
@@ -163,24 +183,25 @@ const postJobOnce = async (
 
   if (response.status === 429) {
     // 何も積まれていない。失敗ではなく「後で来て」（ADR-0031）。
-    throw busy(FULL_MESSAGE, retryAfterMsFrom(response.headers))
+    throw busy(identity, fullMessage(identity), retryAfterMsFrom(response.headers))
   }
   if (!response.ok) {
-    const error = vpipeErrorFor(response.status, response.body, '投入')
+    const error = localServerErrorFor(identity, response.status, response.body, '投入')
     // 同じキーの投入がまだ処理中（409 idempotency_in_flight）は、キーがあれば同じ投入を後で投げ直す。
     // 409 idempotency_conflict（同じキーで中身が違う）はやり直せないので、ここを通らず終端になる。
     // 5xx は満杯ではない。`postJob` がその場で数回だけ投げ直す。
     if (idempotencyKey !== null && error.retryable && response.status < 500) {
-      throw busy(error.message, retryAfterMsFrom(response.headers), error)
+      throw busy(identity, error.message, retryAfterMsFrom(response.headers), error)
     }
     throw error
   }
 
-  const parsed = VpipeSubmitResponse.safeParse(response.body)
+  const parsed = LocalServerSubmitResponse.safeParse(response.body)
   if (!parsed.success) {
-    throw new VpipeRequestError(
-      'vpipe_invalid_response',
-      `${VPIPE_LABEL}の投入応答が仕様と違います: ${formatIssues(parsed.error)}`,
+    throw new LocalServerRequestError(
+      identity.providerId,
+      localServerInvalidResponseCode(identity),
+      `${identity.label}の投入応答が仕様と違います: ${formatIssues(parsed.error)}`,
       false,
       response.status,
     )

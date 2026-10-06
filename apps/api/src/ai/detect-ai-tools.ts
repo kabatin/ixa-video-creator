@@ -1,6 +1,6 @@
 import { AI_TOOLS, AiToolId, type AiToolSpec, type AiToolStatus } from '@ixa/domain'
 import type { CliRunner, CliRunResult } from '@ixa/provider-core'
-import type { VpipeHealthCheck } from '@ixa/provider-video'
+import type { LocalServerHealthCheck } from '@ixa/provider-video'
 
 /** 一覧を開くたびに叩くので短く。入っている CLI は 1 秒もかからない（実測）。 */
 const VERSION_TIMEOUT_MS = 5000
@@ -10,6 +10,18 @@ export type ApiKeyName = Extract<AiToolSpec['detect'], { readonly kind: 'api_key
 
 /** whisper.cpp のモデルのファイル。 */
 export type WhisperModelState = 'not_configured' | 'file_missing' | 'ready'
+
+/** 手元の生成サーバの名前（vpipe-api / wan-api）。`AI_TOOLS` の `local_server` が名乗る。 */
+export type LocalServerName = Extract<
+  AiToolSpec['detect'],
+  { readonly kind: 'local_server' }
+>['server']
+
+export type LocalServerProbe = {
+  /** `.env` の `LOCAL_VIDEO_GENERATOR` に書かれているか。**書いていなければ叩かない。** */
+  readonly enabled: boolean
+  readonly check: () => Promise<LocalServerHealthCheck>
+}
 
 export type AiToolProbe = {
   readonly runCli: CliRunner
@@ -21,13 +33,11 @@ export type AiToolProbe = {
   /** whisper.cpp のモデルのファイルがあるか（`WHISPER_CPP_MODEL`）。 */
   readonly whisperModel: () => Promise<WhisperModelState>
   /**
-   * 手元の生成サーバ（vpipe-api）。`.env` の `LOCAL_VIDEO_GENERATOR=vpipe` のときだけモデルが登録される
-   * （ADR-0031）。有効でなければ叩かない。
+   * 手元の生成サーバ（vpipe-api・wan-api）。`.env` の `LOCAL_VIDEO_GENERATOR` に書いたものだけ
+   * モデルが登録される（ADR-0031 / 0040）。**サーバごとに持つ**（片方の起動で両方が「使える」に
+   * ならないように）。有効でなければ叩かない。
    */
-  readonly localServer: {
-    readonly enabled: boolean
-    readonly check: () => Promise<VpipeHealthCheck>
-  }
+  readonly localServers: Readonly<Record<LocalServerName, LocalServerProbe>>
 }
 
 /** 鍵はあるが `.env` で有効にしていないときの、有効にし方。 */
@@ -88,13 +98,14 @@ const statusOf = async (spec: AiToolSpec, probe: AiToolProbe): Promise<AiToolSta
       return status.state === 'ready' ? { state: 'ready', version: null } : status
     }
     case 'local_server': {
-      if (!probe.localServer.enabled) {
+      const server = probe.localServers[spec.detect.server]
+      if (!server.enabled) {
         return {
           state: 'missing',
-          reason: '.env の LOCAL_VIDEO_GENERATOR=vpipe で有効にしてから選べます',
+          reason: `.env の LOCAL_VIDEO_GENERATOR=${spec.detect.server} で有効にしてから選べます`,
         }
       }
-      const health = await probe.localServer.check()
+      const health = await server.check()
       return health.state === 'up'
         ? { state: 'ready', version: health.version }
         : { state: 'missing', reason: health.reason }

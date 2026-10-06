@@ -36,7 +36,7 @@ export const describeActiveGeneration = (
     }
   }
 
-  // 送ったが、生成先がまだ作り始めていない（生成先の中で順番待ち。vpipe は 1 本ずつ作る。制作者 2026-10-04）。
+  // 送ったが、生成先がまだ作り始めていない（生成先の中で順番待ち。手元のサーバは 1 本ずつ作る。制作者 2026-10-04）。
   if (generation.providerStartedAt === null && generation.startedAt !== null) {
     const waited = formatElapsed(secondsSince(generation.startedAt, nowMs))
     const where = generation.modelLabel ?? '生成先'

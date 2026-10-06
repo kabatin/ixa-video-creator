@@ -167,7 +167,7 @@ pnpm dev                      # web :3000, api :3001, worker, audio :8100
 |---|---|
 | テキスト — 絵コンテの案・✦ AI（入力の手伝い）・自動レビュー | Claude Code・Codex・Grok・お試し |
 | 画像 — Shot の最初のフレーム・キャラクターシート | Codex・お試し |
-| 動画 — Take（AUTO はこの AI のモデルから選ぶ） | 静止画を動かす（無料）・手元の MiniMax H3（vpipe・無料）・fal（従量課金）・お試し |
+| 動画 — Take（AUTO はこの AI のモデルから選ぶ） | 静止画を動かす（無料）・手元の MiniMax H3（vpipe・無料）・手元の Wan 2.2 5B（wan・無料）・fal（従量課金）・お試し |
 
 あとからメニュー「iXA Video Creator > 使う AI…」で変えられる。選ぶまでは `.env` の設定のまま動く。
 お金が掛かる fal と手元の生成サーバは、下の `.env` で有効にしてから選べる（画面だけでは有料の口を開けない）。
@@ -188,26 +188,54 @@ FAL_API_KEY=...
 設定 →「接続先と実行の設定」で、どの鍵が設定済みか（**値は出さない**）と、
 課金経路が開いているかが見える。
 
-### 手元の MiniMax H3 で作る（任意）
+### この Mac で作る（任意）
 
-同じマシンで [vpipe-api](https://github.com/kabatin/vpipe-api) を動かしていれば、その MiniMax H3 Turbo を
-無料のローカル Provider として使える。
+手元の生成サーバを動かしていれば、無料のローカル Provider として使える。2 つあり、**両方同時に有効にできる**。
+
+| サーバ | モデル | 既定の場所 |
+|---|---|---|
+| [vpipe-api](https://github.com/kabatin/vpipe-api) | MiniMax H3 Turbo | `http://127.0.0.1:8765` |
+| [wan-api](https://github.com/kabatin/wan-api) | Wan 2.2 TI2V-5B | `http://127.0.0.1:8766` |
 
 ```bash
-# .env
-LOCAL_VIDEO_GENERATOR=vpipe   # 既定は none
+# .env（カンマ区切り。既定は none）
+LOCAL_VIDEO_GENERATOR=vpipe,wan
 VPIPE_API_URL=http://127.0.0.1:8765
 VPIPE_API_TOKEN=              # URL がこのマシンの外を指すときだけ要る
+WAN_API_URL=http://127.0.0.1:8766
+WAN_API_TOKEN=                # 同じ
 ```
 
-モデル選択に下書きと標準の 2 つが出る。AUTO が下書きを選ぶのは、「使う AI」の動画で vpipe を選んでいるときだけ。
-vpipe は 1 本ずつ作る。M5 の Mac で下書きは 1 本あたり約 1 分半＋尺 1 秒につき約 1 分半（2 秒のカットで 4〜5 分ほど）。
-ixa は次の 1 本を vpipe の中で待たせておくので、1 本終わるとすぐ次が始まる。待っている 1 本は「作成中」ではなく
-「生成先で順番待ち」と出す。詳細は [ADR-0031](./docs/adr/0031-local-h3-video-via-vpipe-api.md)。
+使い方は 3 つだけ。**サーバを起動 → `LOCAL_VIDEO_GENERATOR` に書く → 「使う AI」の動画で選ぶ。**
+入れ方と動かし方は各サーバの README にある。
+
+書いたサーバのモデルが、下書きと標準の 2 つずつ出る。AUTO がその中から選ぶのは、
+「使う AI」の動画でそのサーバを選んでいるときだけ。
+
+**どちらも同じ GPU とメモリを使うので、同時には作らない。** 2 本頼むと順に仕上がり、
+待っている 1 本は「作成中」ではなく「順番待ち」と出す。
+
+**Wan は 5 秒までしか作れない**（wan-api の契約）。5〜7.5 秒の Shot は 5 秒で作ってゆっくり再生で埋め、
+7.5 秒を超える Shot は「分けてください」と出る。長いカットは MiniMax H3（10.125 秒まで）を使う。
+
+実測（M5 10 コア GPU・32GB・AC 電源・出力 832x480。5 秒 1 本）:
+
+| | H3（draft） | Wan（draft） | Wan（standard） |
+|---|---|---|---|
+| 所要時間 | **7.4 分** | 11.3 分 | 19.4 分 |
+| 1 コマ目と開始画像の近さ（SSIM） | 0.695 | **0.851** | 0.852 |
+
+**H3 のほうが速く、Wan のほうが最初のフレームを保つ。** どちらを使うかは作る人が選ぶ
+（見た目の良し悪しは点を付けていない）。詳細は
+[ADR-0031](./docs/adr/0031-local-h3-video-via-vpipe-api.md) と
+[ADR-0040](./docs/adr/0040-local-wan-2-2-video-via-wan-api.md)、
+wan-api の [benchmark.md](https://github.com/kabatin/wan-api/blob/main/docs/benchmark.md)。
+
+なお wan-api の口を `drawthings` にすると最初のフレームが使えない（`mlx` の口を使う。既定は `mlx`）。
 
 ## 費用について
 
-fal 以外は無料で動く（スタブ・`local/still-motion`・vpipe 経由の MiniMax H3）。Claude Code・Codex・Grok は、
+fal 以外は無料で動く（スタブ・`local/still-motion`・手元の MiniMax H3 と Wan 2.2）。Claude Code・Codex・Grok は、
 サインインしている契約の範囲で使う。
 
 参考 Project（27 Shot・編集尺 110.9 秒）を fal.ai の Seedance 2.5 で作ると、
@@ -220,7 +248,8 @@ $0.3024/秒 なら **1 Take ずつで $42、3 Take で $127**。
 
 空の Project から書き出しまで通しで動く（解析 → 作品の方針 → 歌詞の時刻 → テロップ → 切る →
 AI の絵コンテの案 → AI の最初のフレーム → Take → レビュー → タイムライン → H.264 書き出し）。
-ローカルの動画（静止画を動かす・vpipe 経由の MiniMax H3）は実機で測ってある。fal.ai / Seedance 2.5 の
+ローカルの動画（静止画を動かす・vpipe 経由の MiniMax H3・wan-api 経由の Wan 2.2 5B）は実機で測ってある。
+ただし **Wan はまだ ixa から 1 本も作っていない**（計測は wan-api 側で取った。アダプタは契約テストまで。ADR-0040）。fal.ai / Seedance 2.5 の
 アダプタは実装済みでモック応答に対する契約テストも通っているが、**秒単価と出力 fps はドキュメント由来で未実測**であり、
 ソースにもその旨を明記してある。
 
@@ -242,6 +271,9 @@ AI の絵コンテの案 → AI の最初のフレーム → Take → レビュ�
 - Claude Code・Codex・Grok は、利用者自身のアカウントと各社の条件で動く。
 - **MiniMax H3**（手元の生成を有効にした場合だけ）の重みは MiniMax H3 Community License で、
   利用できる地域・用途に制限がある。ixa は重みを同梱しない。有効にする前に条件を確かめること。
+- **Wan 2.2**（同じく、有効にした場合だけ）の重みは Apache-2.0 で公開されている（商用可）。
+  ixa は重みを同梱しない。配布の条件（著作権表示とライセンス文の保持）は動かす人に及ぶので、
+  モデルカードを確かめること。
 
 ## 貢献
 

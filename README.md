@@ -185,7 +185,7 @@ each job:
 |---|---|
 | Text — storyboard drafts, ✦ AI writing help, automatic review | Claude Code · Codex · Grok · stub |
 | Images — shot start frames, character sheets | Codex · stub |
-| Video — takes (AUTO picks among this AI's models) | local still-motion (free) · local MiniMax H3 via vpipe (free) · fal (paid) · stub |
+| Video — takes (AUTO picks among this AI's models) | local still-motion (free) · local MiniMax H3 via vpipe (free) · local Wan 2.2 5B via wan-api (free) · fal (paid) · stub |
 
 Change it later from *iXA Video Creator → 使う AI…*. Until you choose, the `.env` settings apply.
 fal and the local server must be enabled in `.env` before they can be chosen — the screen alone
@@ -207,30 +207,56 @@ startup rather than silently falling back to the stub.
 Settings → *Connections and runtime* shows which keys are set (never their values) and
 whether the billing path is open.
 
-### Generating locally with MiniMax H3 (optional)
+### Generating on this Mac (optional)
 
-If you run [vpipe-api](https://github.com/kabatin/vpipe-api) on the same machine, ixa can use
-its MiniMax H3 Turbo workflow as a free, local video provider:
+Two local generation servers can act as free video providers, and **both can be enabled at once**:
+
+| Server | Model | Default address |
+|---|---|---|
+| [vpipe-api](https://github.com/kabatin/vpipe-api) | MiniMax H3 Turbo | `http://127.0.0.1:8765` |
+| [wan-api](https://github.com/kabatin/wan-api) | Wan 2.2 TI2V-5B | `http://127.0.0.1:8766` |
 
 ```bash
-# .env
-LOCAL_VIDEO_GENERATOR=vpipe   # default is `none`
+# .env (comma-separated; default is `none`)
+LOCAL_VIDEO_GENERATOR=vpipe,wan
 VPIPE_API_URL=http://127.0.0.1:8765
 VPIPE_API_TOKEN=              # required only when the URL points off this machine
+WAN_API_URL=http://127.0.0.1:8766
+WAN_API_TOKEN=                # same
 ```
 
-Two models appear in the model picker (draft and standard). AUTO uses the draft model only
-when vpipe is the selected video AI; otherwise it never picks them. vpipe renders one clip at a
-time: on an M5 Mac a draft clip takes about 1.5 minutes plus
-about 1.5 minutes per second of video (a 2-second cut is roughly 4–5 minutes). ixa keeps the
-next clip waiting inside vpipe so there is no gap between clips, and shows it as *waiting at the
-generator* rather than in progress. See
-[ADR-0031](./docs/adr/0031-local-h3-video-via-vpipe-api.md).
+Three steps: **start the server, list it in `LOCAL_VIDEO_GENERATOR`, pick it under *Which AI*
+for video.** Installing and running the servers is documented in their own READMEs.
+
+Each listed server contributes two models (draft and standard). AUTO chooses among them only
+when that server is the selected video AI; otherwise it never picks them.
+
+**They share one GPU, so ixa never runs two local generations at the same time.** Ask for two
+and they finish one after another; the waiting one shows as *waiting in line* rather than in
+progress.
+
+**Wan tops out at 5 seconds** (wan-api's contract). A 5–7.5s shot is generated at 5s and slowed to
+fit; beyond 7.5s ixa asks you to split the shot. Use MiniMax H3 (up to 10.125s) for longer cuts.
+
+Measured on an M5 (10-core GPU, 32 GB), on AC power, 832×480 output, one 5-second clip:
+
+| | H3 (draft) | Wan (draft) | Wan (standard) |
+|---|---|---|---|
+| time | **7.4 min** | 11.3 min | 19.4 min |
+| frame 0 vs start image (SSIM) | 0.695 | **0.851** | 0.852 |
+
+**H3 is faster; Wan holds the start frame.** Which one to use is your call — nothing here scores
+how the results look. See [ADR-0031](./docs/adr/0031-local-h3-video-via-vpipe-api.md),
+[ADR-0040](./docs/adr/0040-local-wan-2-2-video-via-wan-api.md) and wan-api's
+[benchmark.md](https://github.com/kabatin/wan-api/blob/main/docs/benchmark.md).
+
+Note: with wan-api's `drawthings` backend a start image is rejected — use the `mlx` backend
+(the default) for image-to-video.
 
 ## Costs, honestly
 
-Everything except fal is free to run: the stubs, `local/still-motion` and MiniMax H3 through
-vpipe. Claude Code, Codex and Grok use whatever plan you are already signed in with.
+Everything except fal is free to run: the stubs, `local/still-motion` and the local MiniMax H3
+and Wan 2.2 servers. Claude Code, Codex and Grok use whatever plan you are already signed in with.
 
 For the reference project — 27 shots, 110.9s of edited footage — Seedance 2.5 via fal.ai
 bills **140s**, because the model's minimum clip is 4 seconds and 12 of those shots are
@@ -243,8 +269,10 @@ take.
 
 Working end to end, from an empty project to an exported file: analysis → direction → lyric
 timing → captions → cutting → AI storyboard drafts → AI start frames → takes → review →
-timeline → H.264 export. The local video paths (still-motion, MiniMax H3 via vpipe) are
-measured on real hardware. The fal.ai / Seedance 2.5 adapter is implemented and tested against
+timeline → H.264 export. The local video paths (still-motion, MiniMax H3 via vpipe, Wan 2.2 5B via
+wan-api) are measured on real hardware — though **no clip has been generated from ixa through
+wan-api yet**: those numbers come from wan-api's own benchmarks and the adapter is covered by
+contract tests (ADR-0040). The fal.ai / Seedance 2.5 adapter is implemented and tested against
 mocked responses, but its capability numbers — price per second, output frame rate — are
 **from documentation, not measured**, and are marked as such in the source.
 
@@ -269,6 +297,9 @@ operator:
 - **MiniMax H3** (only if you enable the optional local generator) is released under the
   MiniMax H3 Community License, which restricts where and how the weights may be used.
   ixa does not ship the weights; check the license before enabling it.
+- **Wan 2.2** (likewise, only if you enable it) is published under Apache-2.0, which permits
+  commercial use. ixa does not ship the weights; the attribution and license-notice
+  obligations fall on you as the operator — check the model card.
 
 ## Contributing
 

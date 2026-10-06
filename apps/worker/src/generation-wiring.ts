@@ -5,8 +5,8 @@ import { createGenerationContextSource } from '@ixa/generation'
 import {
   createFalVideoProvider,
   createLocalImageToVideoProvider,
+  createLocalVideoProviders,
   createStubVideoProvider,
-  createVpipeVideoProvider,
 } from '@ixa/provider-video'
 import { createS3Storage } from '@ixa/storage'
 import {
@@ -44,6 +44,7 @@ import { createRemotionRenderer } from '@ixa/render'
 import { createMusicAnalyzer } from '@ixa/music'
 import type { AnalysisProcessorDeps } from './analysis/index.js'
 import {
+  createRedisLocalGpuLease,
   createUnwiredEventPublisher,
   type GenerationProcessorDeps,
   type PollScheduler,
@@ -183,22 +184,22 @@ export const createGenerationWiring = (
       ? [createFalVideoProvider({ apiKey: requireFalApiKey(config) })]
       : []),
     /**
-     * 手元の生成サーバ（vpipe-api）の MiniMax H3（ADR-0031）。`LOCAL_VIDEO_GENERATOR=vpipe` のときだけ。
-     * AUTO には選ばれない（`routable: false`）。API 側の登録と同じ条件にすること。
+     * 手元の生成サーバ（vpipe-api の MiniMax H3・wan-api の Wan 2.2。ADR-0031 / 0040）。
+     * `LOCAL_VIDEO_GENERATOR` に書いたものだけ登録する。AUTO には選ばれない（`routable: false`）。
+     *
+     * **登録の条件は Provider 側の表が持つ**（`localVideoServerWirings`）。以前はこの条件が
+     * API 側にも書き写されていて、片方だけ直すと「一覧には出るのに worker が未登録と言う」になった。
      */
-    ...(config.providers.localVideoGenerator === 'vpipe'
-      ? [
-          createVpipeVideoProvider({
-            baseUrl: config.providers.vpipeApiUrl,
-            ...(config.providers.vpipeApiToken === null ? {} : { token: config.providers.vpipeApiToken }),
-            outputDir: join(stubOutputDir, 'vpipe'),
-            // 掃除・控えの失敗は生成を止めないが、黙って捨てない（PR #4 レビュー #5）。
-            warn: (detail, message) => {
-              logger.warn(detail, message)
-            },
-          }),
-        ]
-      : []),
+    ...createLocalVideoProviders({
+      enabled: config.providers.localVideoGenerators,
+      vpipe: { baseUrl: config.providers.vpipeApiUrl, token: config.providers.vpipeApiToken },
+      wan: { baseUrl: config.providers.wanApiUrl, token: config.providers.wanApiToken },
+      outputRoot: stubOutputDir,
+      // 掃除・控えの失敗は生成を止めないが、黙って捨てない（PR #4 レビュー #5）。
+      warn: (detail, message) => {
+        logger.warn(detail, message)
+      },
+    }),
   ])
 
   const deps: GenerationProcessorDeps = {
@@ -230,6 +231,11 @@ export const createGenerationWiring = (
         await mediaQueue.add('process', { mediaAssetId })
       },
     },
+    /**
+     * この機械の GPU を 1 本ずつに揃える（ADR-0040）。**置き場はキューと同じ Redis。**
+     * プロセスの中のミューテックスでは worker を 2 つ立てた時点で効かない。
+     */
+    localGpuLease: createRedisLocalGpuLease({ connection }),
     events: events ?? createUnwiredEventPublisher(logger),
     logger,
   }

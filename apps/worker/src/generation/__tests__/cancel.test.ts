@@ -11,6 +11,7 @@ import {
   processGenerationJob,
   type GenerationProcessorDeps,
 } from '../processor.js'
+import { createInMemoryLocalGpuLease } from '../local-gpu-lease.js'
 import { rebuildSpec } from '../spec.js'
 import {
   aProject,
@@ -92,6 +93,7 @@ const build = async (pollStatus: ProviderJobStatus) => {
   const takes = inMemoryTakes()
   const scheduler = createRecordingScheduler()
   const deps: GenerationProcessorDeps = {
+    localGpuLease: createInMemoryLocalGpuLease(),
     generationJobs: jobs,
     shots,
     projects: inMemoryProjects([project]),

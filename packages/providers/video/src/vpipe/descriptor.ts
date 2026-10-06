@@ -1,6 +1,7 @@
 import { ModelId, ProviderId } from '@ixa/domain'
 import type { AspectRatio, Resolution } from '@ixa/domain'
 import { ProviderError, type PollPolicy, type VideoModelDescriptor } from '@ixa/provider-core'
+import type { LocalServerIdentity } from '../local-server/identity.js'
 
 /**
  * 手元の生成サーバ vpipe-api（https://github.com/kabatin/vpipe-api）経由の
@@ -21,6 +22,21 @@ export const VPIPE_WORKFLOW_ID = 'minimax-h3-turbo-video'
 
 /** vpipe-api の既定の待ち受け。**このマシンからだけ**届く場所を既定にする。 */
 export const VPIPE_DEFAULT_BASE_URL = 'http://127.0.0.1:8765'
+
+/**
+ * このサーバ 1 台分の身元（ADR-0040）。共通アダプタ（`local-server/`）が、画面に出す文と
+ * 失敗の code をここから作る。**ここに増やすのはサーバの名乗りだけ**で、モデルの都合は入れない。
+ */
+export const VPIPE_IDENTITY: LocalServerIdentity = Object.freeze({
+  providerId: VPIPE_PROVIDER_ID,
+  label: 'ローカルの動画生成（vpipe）',
+  codePrefix: 'vpipe',
+  workflowId: VPIPE_WORKFLOW_ID,
+  serverName: 'vpipe-api',
+  startHint: '起動していません（vpipe-api serve で起動します）',
+  urlEnvName: 'VPIPE_API_URL',
+  tokenEnvName: 'VPIPE_API_TOKEN',
+})
 
 /** H3 が出すのは 24fps だけ（実測）。 */
 export const VPIPE_FPS = 24

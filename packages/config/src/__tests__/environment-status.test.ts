@@ -12,11 +12,13 @@ import type { AppConfig } from '../schema.js'
 
 const SECRET = 'fal-live-SUPERSECRET-0123456789'
 
-/** ローカルの動画生成（ADR-0031）の既定。使わない。 */
-const VPIPE_OFF = {
-  localVideoGenerator: 'none',
+/** ローカルの動画生成（ADR-0031 / 0040）の既定。どちらのサーバも使わない。 */
+const LOCAL_VIDEO_OFF = {
+  localVideoGenerators: [],
   vpipeApiUrl: 'http://127.0.0.1:8765',
   vpipeApiToken: null,
+  wanApiUrl: 'http://127.0.0.1:8766',
+  wanApiToken: null,
 } as const
 
 const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
@@ -43,7 +45,7 @@ const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
       stubVideoFailureRate: 0,
       stubVideoCostPerSecUsd: 0,
       videoProvider: 'stub',
-      ...VPIPE_OFF,
+      ...LOCAL_VIDEO_OFF,
     },
     renderExportDir: null,
     voiceAi: {
@@ -83,7 +85,7 @@ describe('describeEnvironment', () => {
 
   it('未設定なら文字数を出さない（0 と書かない）', () => {
     const config = aConfig({
-      providers: { falApiKey: null, stubVideoFailureRate: 0, stubVideoCostPerSecUsd: 0, videoProvider: 'stub', ...VPIPE_OFF },
+      providers: { falApiKey: null, stubVideoFailureRate: 0, stubVideoCostPerSecUsd: 0, videoProvider: 'stub', ...LOCAL_VIDEO_OFF },
     })
     const fal = describeEnvironment(config).secrets.find((s) => s.envName === 'FAL_API_KEY')
     expect(fal?.configured).toBe(false)
@@ -92,7 +94,7 @@ describe('describeEnvironment', () => {
 
   it('空白だけの値は未設定として扱う', () => {
     const config = aConfig({
-      providers: { falApiKey: '   ', stubVideoFailureRate: 0, stubVideoCostPerSecUsd: 0, videoProvider: 'stub', ...VPIPE_OFF },
+      providers: { falApiKey: '   ', stubVideoFailureRate: 0, stubVideoCostPerSecUsd: 0, videoProvider: 'stub', ...LOCAL_VIDEO_OFF },
     })
     const fal = describeEnvironment(config).secrets.find((s) => s.envName === 'FAL_API_KEY')
     expect(fal?.configured).toBe(false)
@@ -121,7 +123,7 @@ describe('describeEnvironment', () => {
     it('検証用の口が開いていたら目立たせる', () => {
       const status = describeEnvironment(
         aConfig({
-          providers: { falApiKey: null, stubVideoFailureRate: 1, stubVideoCostPerSecUsd: 0.3, videoProvider: 'stub', ...VPIPE_OFF },
+          providers: { falApiKey: null, stubVideoFailureRate: 1, stubVideoCostPerSecUsd: 0.3, videoProvider: 'stub', ...LOCAL_VIDEO_OFF },
         }),
       )
       const notable = status.settings.filter((s) => s.notable).map((s) => s.envName)
@@ -153,7 +155,7 @@ describe('映像生成の切り替え', () => {
         stubVideoFailureRate: 0,
         stubVideoCostPerSecUsd: 0,
         videoProvider: 'fal',
-        ...VPIPE_OFF,
+        ...LOCAL_VIDEO_OFF,
       },
     })
     const setting = settingFor(config)
@@ -169,7 +171,7 @@ describe('映像生成の切り替え', () => {
         stubVideoFailureRate: 0,
         stubVideoCostPerSecUsd: 0,
         videoProvider: 'fal',
-        ...VPIPE_OFF,
+        ...LOCAL_VIDEO_OFF,
       },
     })
     expect(JSON.stringify(describeEnvironment(config))).not.toContain(SECRET)
@@ -185,7 +187,7 @@ describe('ローカルの動画生成', () => {
     aConfig({
       providers: {
         ...aConfig().providers,
-        localVideoGenerator: 'vpipe',
+        localVideoGenerators: ['vpipe'],
         vpipeApiToken: token,
       },
     })
@@ -204,6 +206,56 @@ describe('ローカルの動画生成', () => {
     expect(setting?.note).toContain('1 本ずつ')
   })
 
+  /** ADR-0040。両方有効なら、GPU を取り合わないことを書く（押した人が「同時に作れない」と分かる）。 */
+  it('vpipe と wan を両方有効にしたら、両方を挙げて 1 本ずつだと書く', () => {
+    const both = aConfig({
+      providers: { ...aConfig().providers, localVideoGenerators: ['vpipe', 'wan'] },
+    })
+    const setting = settingFor(both)
+    expect(setting).toMatchObject({ value: 'vpipe,wan', notable: true })
+    expect(setting?.note).toContain('MiniMax H3')
+    expect(setting?.note).toContain('Wan 2.2 5B')
+    expect(setting?.note).toContain('1 本ずつ')
+  })
+
+  it('wan だけなら wan のことだけ書く', () => {
+    const wan = aConfig({ providers: { ...aConfig().providers, localVideoGenerators: ['wan'] } })
+    const setting = settingFor(wan)
+    expect(setting).toMatchObject({ value: 'wan', notable: true })
+    expect(setting?.note).toContain('Wan 2.2 5B')
+    expect(setting?.note).not.toContain('MiniMax H3')
+  })
+
+  it('wan の合言葉も、設定されているかと文字数だけ出す', () => {
+    const wanToken = 'wan-SUPERSECRET-token-0123456789'
+    const status = describeEnvironment(
+      aConfig({
+        providers: {
+          ...aConfig().providers,
+          localVideoGenerators: ['wan'],
+          wanApiToken: wanToken,
+        },
+      }),
+    )
+    const token = status.secrets.find((s) => s.envName === 'WAN_API_TOKEN')
+    expect(token).toMatchObject({ configured: true, length: wanToken.length })
+    expect(JSON.stringify(status)).not.toContain(wanToken)
+  })
+
+  /** wan のサーバが別のマシンにあるときも、同じ注意を出す（片方だけに検査を置かない）。 */
+  it('wan が別のマシンの http なら、暗号化されないことを書く（URL は出さない）', () => {
+    const remote = aConfig({
+      providers: {
+        ...aConfig().providers,
+        localVideoGenerators: ['wan'],
+        wanApiUrl: 'http://192.168.1.21:8766',
+        wanApiToken: 'wan-SUPERSECRET-token-0123456789',
+      },
+    })
+    expect(settingFor(remote)?.note).toContain('暗号化されずに')
+    expect(JSON.stringify(describeEnvironment(remote))).not.toContain('192.168.1.21')
+  })
+
   it('合言葉は設定されているかと文字数だけ出し、値は出さない', () => {
     const status = describeEnvironment(vpipeOn(VPIPE_TOKEN))
     const token = status.secrets.find((s) => s.envName === 'VPIPE_API_TOKEN')
@@ -216,7 +268,7 @@ describe('ローカルの動画生成', () => {
     const remote = aConfig({
       providers: {
         ...aConfig().providers,
-        localVideoGenerator: 'vpipe',
+        localVideoGenerators: ['vpipe'],
         vpipeApiUrl: 'http://192.168.1.20:8765',
         vpipeApiToken: VPIPE_TOKEN,
       },

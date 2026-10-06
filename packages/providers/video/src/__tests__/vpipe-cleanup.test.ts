@@ -1,7 +1,7 @@
 import { chmod, mkdir, utimes, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { pruneVpipeOutputs } from '../vpipe/output.js'
+import { pruneLocalServerOutputs } from '../local-server/output.js'
 import { createVpipeVideoProvider } from '../vpipe/provider.js'
 import { createTempDir, makeSpec, removeTempDir } from './fixtures.js'
 import {
@@ -41,7 +41,7 @@ describe('後片付けの失敗', () => {
     await chmod(outputDir, 0o500) // 消せない（書き込めない）置き場
     const { messages, warn } = collect()
 
-    const removed = await pruneVpipeOutputs(outputDir, Date.now(), 1_000, warn)
+    const removed = await pruneLocalServerOutputs(outputDir, Date.now(), 1_000, warn)
 
     expect(removed).toBe(0)
     expect(messages).toHaveLength(1)
@@ -50,7 +50,7 @@ describe('後片付けの失敗', () => {
   it('まだ無い置き場は失敗ではない（記録しない）', async () => {
     const { messages, warn } = collect()
 
-    await pruneVpipeOutputs(join(outputDir, 'not-yet'), Date.now(), 1_000, warn)
+    await pruneLocalServerOutputs(join(outputDir, 'not-yet'), Date.now(), 1_000, warn)
 
     expect(messages).toEqual([])
   })

@@ -14,6 +14,7 @@ import {
   type ProjectEventPublisher,
   type Shot,
   type TakeId,
+  quantizeDuration,
   settledShotStatus,
 } from '@ixa/domain'
 import { ProviderBusyError, ProviderError } from '@ixa/provider-core'
@@ -30,6 +31,11 @@ import {
   submitBusyDelayMs,
   submitBusyExpired,
 } from './busy.js'
+import { generationBenchmarkOf, logGenerationBenchmark } from './benchmark.js'
+import {
+  LOCAL_GPU_RETRY_AFTER_MS,
+  type LocalGpuLease,
+} from './local-gpu-lease.js'
 import { recordTake, type RecordTakeDeps } from './complete.js'
 import { failureMessageOf, publishJobStatus, publishShotStatus } from './events.js'
 import { parseGenerationJobData, type GenerationJobData } from './job-data.js'
@@ -86,6 +92,12 @@ export type GenerationProcessorDeps = RecordTakeDeps & {
   readonly scheduler: PollScheduler
   readonly mediaQueue: MediaJobQueue
   /**
+   * この機械の GPU を 1 本ずつに揃える口（ADR-0040）。
+   * **`exclusiveResource: 'local-gpu'` を名乗る Provider のジョブだけ**がこれを借りる。
+   * 配線されていなければ順番を作らず、作らなかったことをログに残す（`createUnprotectedLocalGpuLease`）。
+   */
+  readonly localGpuLease: LocalGpuLease
+  /**
    * 状態が変わった瞬間に出来事を流す口（Phase 5.8b）。
    * **publish の失敗で本処理を止めない。** 詳細は `events.ts`。
    */
@@ -113,6 +125,90 @@ export type GenerationOutcome =
 export const SPEC_DRIFT_MESSAGE =
   '頼んだあとで、この Shot の内容か、前の Shot の採用 Take（続きの最初のフレームに使う最後のコマ）が変わりました。' +
   '古い内容のまま作らないよう取りやめたので、もう一度生成してください。'
+
+/**
+ * この機械の GPU が空くのを待っているときの理由（ADR-0040）。**ログに残る文**で、
+ * 画面には「順番待ち」として出る（`generation-progress.ts` が時間から文を作る）。
+ */
+export const LOCAL_GPU_BUSY_MESSAGE =
+  'この Mac で別の動画を作っている最中です（ローカルの動画生成は 1 本ずつ）'
+
+/**
+ * GPU の順番を返す。**ここで投げない。** 返せなかったことで生成の結果を変えない
+ * （期限（`LOCAL_GPU_LEASE_TTL_MS`）が来れば勝手に空く）。黙って捨てずログに残す。
+ */
+const releaseLocalGpu = async (
+  deps: Pick<GenerationProcessorDeps, 'localGpuLease' | 'logger'>,
+  jobId: GenerationJobId,
+): Promise<void> => {
+  try {
+    await deps.localGpuLease.release(jobId)
+  } catch (error) {
+    deps.logger.warn(
+      { jobId, err: error },
+      'この機械の GPU の順番を返せませんでした。期限が切れるまで次の生成が待たされます',
+    )
+  }
+}
+
+/**
+ * 借りている間、期限を延ばす。**ほかのジョブに取られていたら残す。**
+ * それは借りが切れている間に別の生成が始まったということで、2 本が同時に GPU を使っている。
+ * 黙って進むと「1 本ずつにしたつもりが同時に走っていた」に気付けない。
+ */
+const renewLocalGpu = async (
+  deps: Pick<GenerationProcessorDeps, 'localGpuLease' | 'logger'>,
+  jobId: GenerationJobId,
+): Promise<void> => {
+  try {
+    const lease = await deps.localGpuLease.renew(jobId)
+    if (lease.state === 'held') {
+      deps.logger.warn(
+        { jobId, heldBy: lease.by },
+        'この機械の GPU の順番が別の生成に移っていました。ローカルの生成が同時に走っている可能性があります',
+      )
+    }
+  } catch (error) {
+    deps.logger.warn({ jobId, err: error }, 'この機械の GPU の順番を延ばせませんでした')
+  }
+}
+
+/**
+ * ジョブの行から Provider を引いて、GPU を使う Provider なら順番を返す。
+ * **Provider を手元に持っていない場面**（終端の失敗・終了済みのジョブ）のための口。
+ * モデルが未登録・未解決なら何もしない（その理由は別の検査が言う）。
+ */
+const releaseLocalGpuForJob = async (
+  deps: GenerationProcessorDeps,
+  job: GenerationJob,
+): Promise<void> => {
+  if (job.resolvedModel === null) return
+  const usesLocalGpu = ((): boolean => {
+    try {
+      return deps.registry.providerFor(job.resolvedModel).exclusiveResource === 'local-gpu'
+    } catch {
+      return false
+    }
+  })()
+  if (usesLocalGpu) await releaseLocalGpu(deps, job.id)
+}
+
+/**
+ * 頼んだ生成尺（秒）。**Shot の編集尺ではなくモデルが作る尺**（ADR-0011 の切り上げ後）。
+ * 読めなければ null（出せない数字を推測で埋めない）。
+ */
+const requestedDurationSecOf = (
+  shot: Shot | null,
+  model: VideoModelDescriptor | null,
+): number | null => {
+  if (shot === null || model === null) return null
+  try {
+    return quantizeDuration(shot.durationSec, model.capabilities.durations)
+  } catch {
+    // 作れない尺（最長の 1.5 倍超）。そのジョブは別の検査で止まる。
+    return null
+  }
+}
 
 /** 作業を続けられない状態。GenerationJob.error に落として failed にする。 */
 class JobFailure extends Error {
@@ -197,6 +293,28 @@ const submit = async (
   }
 
   const provider = deps.registry.providerFor(model.id)
+
+  /**
+   * この機械の GPU を使う Provider なら、**投入の前に順番を取る**（ADR-0040）。
+   * 取れなければ何も送らずに queued のまま待つ（`waitForProviderSlot` と同じ経路）。
+   * 画像を取り寄せる前に止まるので、順番待ちが署名付き URL と 20MB の読み込みを繰り返さない。
+   */
+  const holdsLocalGpu = provider.exclusiveResource === 'local-gpu'
+  if (holdsLocalGpu) {
+    const lease = await deps.localGpuLease.acquire(job.id)
+    if (lease.state === 'held') {
+      return waitForProviderSlot(
+        deps,
+        ctx,
+        new ProviderBusyError(
+          LOCAL_GPU_BUSY_MESSAGE,
+          model.providerId,
+          LOCAL_GPU_RETRY_AFTER_MS,
+        ),
+      )
+    }
+  }
+
   const handle = await provider
     .submit({
       model,
@@ -210,12 +328,17 @@ const submit = async (
       if (error instanceof ProviderBusyError) return error
       throw error
     })
-  if (handle instanceof ProviderBusyError) return waitForProviderSlot(deps, ctx, handle)
+  if (handle instanceof ProviderBusyError) {
+    // 何も投入できていないので GPU の順番は離す（押さえたまま待つと、ほかの生成も止まる）。
+    if (holdsLocalGpu) await releaseLocalGpu(deps, job.id)
+    return waitForProviderSlot(deps, ctx, handle)
+  }
 
   // 送っている間に制作者がやめた。生成先にも止めてと頼み、作成中にしない（送った先は記録に残す）。
   if (await cancelledSince(deps.generationJobs, job.id)) {
     await deps.generationJobs.update(job.id, { providerJobRef: handle.ref })
     await stopAtProvider(deps, handle, job.id)
+    if (holdsLocalGpu) await releaseLocalGpu(deps, job.id)
     deps.logger.info({ jobId: job.id, ref: handle.ref }, '送っている間に生成をやめたので、生成先にも止めてと頼みました')
     return { state: 'skipped', reason: 'cancelled' }
   }
@@ -369,6 +492,13 @@ const complete = async (
     at: now,
   })
 
+  // H3 と Wan を後から数字で比べるための 1 行（ADR-0040）。
+  logGenerationBenchmark(
+    deps.logger,
+    job.id,
+    generationBenchmarkOf({ job, model, requestedDurationSec: spec.durationSec, now, status }),
+  )
+
   deps.logger.info({ jobId: job.id, takeId: take.id }, 'Take を確定しました')
   return { state: 'succeeded', takeId: take.id }
 }
@@ -389,6 +519,19 @@ const poll = async (
   }
 
   const status = await provider.poll(handle)
+
+  /**
+   * この機械の GPU を使う Provider なら、**終わった時点で順番を返し、作っている間は期限を延ばす**
+   * （ADR-0040）。返すのは出力を取り寄せる前でよい（生成はもう終わっていて GPU は空いている）。
+   * 問い合わせが投げたときは下の catch が返す。
+   */
+  if (provider.exclusiveResource === 'local-gpu') {
+    if (status.state === 'succeeded' || status.state === 'failed') {
+      await releaseLocalGpu(deps, job.id)
+    } else {
+      await renewLocalGpu(deps, job.id)
+    }
+  }
 
   /**
    * 生成先が作り始めた時刻を 1 度だけ残す（制作者 2026-10-04「カット２，３が作成中になってる」）。
@@ -440,6 +583,12 @@ export const processGenerationJob = async (
 
   // 冪等性の要。同じジョブが 2 回走っても Take を二重に作らない。
   if (TERMINAL_STATUSES.includes(job.status)) {
+    /**
+     * 取り消しは API がジョブの行だけを変える（生成先には API が止めてと頼む）。
+     * worker はここで初めて気付くので、**押さえていた GPU の順番はここで返す**（ADR-0040）。
+     * 期限（`LOCAL_GPU_LEASE_TTL_MS`）を待つと、次の生成が数分黙って止まる。
+     */
+    await releaseLocalGpuForJob(deps, job)
     deps.logger.debug({ jobId: job.id, status: job.status }, '終了済みのジョブなので何もしません')
     return { state: 'skipped', reason: `status=${job.status}` }
   }
@@ -450,6 +599,11 @@ export const processGenerationJob = async (
    * 読めたところで控えておく。読めていなければ流さず、流せなかったことを残す。
    */
   let loadedShot: Shot | null = null
+  /**
+   * 失敗したときも実測を 1 行残すために控える（ADR-0040）。失敗だけ記録に残らないと、
+   * 失敗の多いモデルが速く見える。モデルを引く前に落ちたら null のまま（推測で埋めない）。
+   */
+  let loadedModel: VideoModelDescriptor | null = null
 
   try {
     const shot = await deps.shots.findById(job.shotId)
@@ -462,11 +616,14 @@ export const processGenerationJob = async (
       throw new JobFailure('project_missing', `Project がありません: ${shot.projectId}`, false)
     }
 
+    const model = loadModel(deps.registry, job)
+    loadedModel = model
+
     const ctx: JobContext = {
       job,
       shot,
       project,
-      model: loadModel(deps.registry, job),
+      model,
       data: parsed,
       now,
     }
@@ -487,10 +644,20 @@ export const processGenerationJob = async (
      * 実 Provider をつなぐまでは無料なので誰も気づけない。つなぐ前にここを直す。
      */
     // 問い合わせの間に制作者がやめた。取り消しを失敗で上書きしない（Shot は API が決め直している）。
-    if (await cancelledDuringFailure(deps, job.id)) return { state: 'skipped', reason: 'cancelled' }
+    if (await cancelledDuringFailure(deps, job.id)) {
+      await releaseLocalGpuForJob(deps, job)
+      return { state: 'skipped', reason: 'cancelled' }
+    }
 
+    /**
+     * **予約し直すなら GPU の順番は離さない。** 投入済みのジョブは生成先で走り続けているので、
+     * ここで離すと別のローカル生成が始まり、2 本が同時に GPU を使う。
+     */
     const retried = await reschedulePollAfterTransient(deps, job, error, now)
     if (retried !== null) return retried
+
+    // ここから先は終端。生成はもう続かないので順番を返す。
+    await releaseLocalGpuForJob(deps, job)
 
     const failure =
       error instanceof JobFailure
@@ -510,6 +677,20 @@ export const processGenerationJob = async (
       error: { code: failure.code, message, retryable: failure.retryable },
     })
     deps.logger.error({ jobId: job.id, code: failure.code, err: error }, '生成ジョブが失敗しました')
+    // 失敗も同じ形で残す（ADR-0040）。モデルを引く前に落ちていれば残さない。
+    if (loadedModel !== null) {
+      logGenerationBenchmark(
+        deps.logger,
+        job.id,
+        generationBenchmarkOf({
+          job,
+          model: loadedModel,
+          requestedDurationSec: requestedDurationSecOf(loadedShot, loadedModel),
+          now,
+          failureType: failure.code,
+        }),
+      )
+    }
     // 生成先で作り続けて GPU を占めないよう、止めてと頼む（届かなくても失敗の記録は変えない）。
     await stopAbandonedJob(deps, job)
 

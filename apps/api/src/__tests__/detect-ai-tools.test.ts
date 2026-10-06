@@ -39,13 +39,20 @@ const probe = (patch: Partial<AiToolProbe> = {}): AiToolProbe => ({
     ELEVENLABS_API_KEY: { keyConfigured: false, enabled: false },
   },
   whisperModel: () => Promise.resolve('not_configured'),
-  localServer: {
-    enabled: true,
-    check: () =>
-      Promise.resolve({
-        state: 'down',
-        reason: '起動していません（vpipe-api serve で起動します）',
-      }),
+  localServers: {
+    vpipe: {
+      enabled: true,
+      check: () =>
+        Promise.resolve({
+          state: 'down',
+          reason: '起動していません（vpipe-api serve で起動します）',
+        }),
+    },
+    wan: {
+      enabled: true,
+      check: () =>
+        Promise.resolve({ state: 'down', reason: '起動していません（wan-api を起動してください）' }),
+    },
   },
   ...patch,
 })
@@ -111,19 +118,45 @@ describe('detectAiTools', () => {
   it('手元の生成サーバは health の結果をそのまま使う', async () => {
     const up = await detectAiTools(
       probe({
-        localServer: {
-          enabled: true,
-          check: () => Promise.resolve({ state: 'up', version: '0.1.0' }),
+        localServers: {
+          vpipe: { enabled: true, check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
+          wan: { enabled: true, check: () => Promise.resolve({ state: 'up', version: '0.2.0' }) },
         },
       }),
     )
     const down = await detectAiTools(probe())
 
     expect(up.vpipe).toEqual({ state: 'ready', version: '0.1.0' })
+    expect(up.wan).toEqual({ state: 'ready', version: '0.2.0' })
     expect(down.vpipe).toEqual({
       state: 'missing',
       reason: expect.stringMatching(/vpipe-api serve/) as unknown,
     })
+    expect(down.wan).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/wan-api/) as unknown,
+    })
+  })
+
+  /**
+   * ADR-0040。サーバは 2 台あるので、調べ方を 1 つにまとめると片方の起動でもう片方も
+   * 「使える」と出てしまう（押すと未登録のモデルで失敗する）。
+   */
+  it('片方だけ起動していても、もう片方は使えると言わない', async () => {
+    const found = await detectAiTools(
+      probe({
+        localServers: {
+          vpipe: { enabled: true, check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
+          wan: {
+            enabled: true,
+            check: () => Promise.resolve({ state: 'down', reason: '起動していません' }),
+          },
+        },
+      }),
+    )
+
+    expect(found.vpipe.state).toBe('ready')
+    expect(found.wan.state).toBe('missing')
   })
 
   /** 手元の生成サーバは .env で有効にしたときだけ一覧のモデルに出る（PR #4 / ADR-0031 のまま）。 */
@@ -131,11 +164,20 @@ describe('detectAiTools', () => {
     let checked = false
     const found = await detectAiTools(
       probe({
-        localServer: {
-          enabled: false,
-          check: () => {
-            checked = true
-            return Promise.resolve({ state: 'up', version: '0.1.0' })
+        localServers: {
+          vpipe: {
+            enabled: false,
+            check: () => {
+              checked = true
+              return Promise.resolve({ state: 'up', version: '0.1.0' })
+            },
+          },
+          wan: {
+            enabled: false,
+            check: () => {
+              checked = true
+              return Promise.resolve({ state: 'up', version: '0.2.0' })
+            },
           },
         },
       }),
@@ -145,6 +187,10 @@ describe('detectAiTools', () => {
     expect(found.vpipe).toEqual({
       state: 'missing',
       reason: expect.stringMatching(/LOCAL_VIDEO_GENERATOR=vpipe/) as unknown,
+    })
+    expect(found.wan).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/LOCAL_VIDEO_GENERATOR=wan/) as unknown,
     })
   })
 

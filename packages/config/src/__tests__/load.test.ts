@@ -178,9 +178,11 @@ describe('ローカルの動画生成（vpipe）', () => {
 
   it('既定は使わない。URL は既定でこのマシンだけ、トークンは未設定', () => {
     const config = loadConfig({ ...requiredEnv })
-    expect(config.providers.localVideoGenerator).toBe('none')
+    expect(config.providers.localVideoGenerators).toEqual([])
     expect(config.providers.vpipeApiUrl).toBe('http://127.0.0.1:8765')
     expect(config.providers.vpipeApiToken).toBeNull()
+    expect(config.providers.wanApiUrl).toBe('http://127.0.0.1:8766')
+    expect(config.providers.wanApiToken).toBeNull()
   })
 
   it('トークンや URL を置いただけでは有効にならない', () => {
@@ -188,17 +190,86 @@ describe('ローカルの動画生成（vpipe）', () => {
       ...requiredEnv,
       VPIPE_API_URL: 'http://127.0.0.1:9999',
       VPIPE_API_TOKEN: GOOD_TOKEN,
+      WAN_API_URL: 'http://127.0.0.1:9998',
+      WAN_API_TOKEN: GOOD_TOKEN,
     })
-    expect(config.providers.localVideoGenerator).toBe('none')
+    expect(config.providers.localVideoGenerators).toEqual([])
   })
 
   it('vpipe に切り替えられ、知らない値は弾く', () => {
-    expect(loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: 'vpipe' }).providers.localVideoGenerator).toBe(
-      'vpipe',
-    )
+    expect(
+      loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: 'vpipe' }).providers.localVideoGenerators,
+    ).toEqual(['vpipe'])
     expect(() => loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: 'comfy' })).toThrow(
       /LOCAL_VIDEO_GENERATOR/,
     )
+  })
+
+  /** ADR-0040。両方書けるのは、GPU の取り合いを worker が止めるという前提があるから。 */
+  it('カンマ区切りで複数のサーバを有効にできる（空白は落とし、重複は 1 つにする）', () => {
+    expect(
+      loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: 'vpipe, wan' }).providers
+        .localVideoGenerators,
+    ).toEqual(['vpipe', 'wan'])
+    expect(
+      loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: 'wan,vpipe,wan' }).providers
+        .localVideoGenerators,
+    ).toEqual(['wan', 'vpipe'])
+    expect(
+      loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: 'wan' }).providers.localVideoGenerators,
+    ).toEqual(['wan'])
+  })
+
+  it('空文字は「使わない」として扱う', () => {
+    expect(
+      loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: '' }).providers.localVideoGenerators,
+    ).toEqual([])
+    expect(
+      loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: ' , ' }).providers.localVideoGenerators,
+    ).toEqual([])
+  })
+
+  /** 「使わない」と「使う」を並べたら、どちらかを黙って採らずに止める。 */
+  it('none をほかの値と並べたら弾く', () => {
+    expect(() => loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: 'none,wan' })).toThrow(
+      /LOCAL_VIDEO_GENERATOR/,
+    )
+    expect(() => loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: 'vpipe,none' })).toThrow(
+      /LOCAL_VIDEO_GENERATOR/,
+    )
+  })
+
+  /** 片方にしか検査が無いと、同じ設定ミスが wan では 401 になるまで分からない。 */
+  it('wan も同じ規則で止める（形の違う合言葉・外のサーバでトークン無し・URL でない値）', () => {
+    expect(() => loadConfig({ ...requiredEnv, WAN_API_TOKEN: 'a'.repeat(31) })).toThrow(
+      /WAN_API_TOKEN の形が違います/,
+    )
+    expect(() => loadConfig({ ...requiredEnv, WAN_API_TOKEN: 'a'.repeat(32) })).not.toThrow()
+    expect(() => loadConfig({ ...requiredEnv, WAN_API_URL: 'not-a-url' })).toThrow(/WAN_API_URL/)
+
+    const remote = {
+      ...requiredEnv,
+      LOCAL_VIDEO_GENERATOR: 'wan',
+      WAN_API_URL: 'http://192.168.1.21:8766',
+    }
+    expect(() => loadConfig(remote)).toThrow(/WAN_API_TOKEN/)
+    try {
+      loadConfig(remote)
+    } catch (error) {
+      expect(error instanceof Error ? error.message : '').not.toContain('192.168.1.21')
+    }
+    expect(() => loadConfig({ ...remote, WAN_API_TOKEN: GOOD_TOKEN })).not.toThrow()
+  })
+
+  /** 有効にしていないサーバの URL が外を指していても止めない（使わないので 401 にならない）。 */
+  it('有効にしていないサーバの設定では止めない', () => {
+    expect(() =>
+      loadConfig({
+        ...requiredEnv,
+        LOCAL_VIDEO_GENERATOR: 'vpipe',
+        WAN_API_URL: 'http://192.168.1.21:8766',
+      }),
+    ).not.toThrow()
   })
 
   it('トークンが空なら未設定として扱う', () => {

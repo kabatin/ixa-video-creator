@@ -16,6 +16,7 @@ import {
   pollPolicyOf,
 } from '../poll-policy.js'
 import { processGenerationJob, type GenerationProcessorDeps } from '../processor.js'
+import { createInMemoryLocalGpuLease } from '../local-gpu-lease.js'
 import { rebuildSpec } from '../spec.js'
 import {
   aProject,
@@ -60,6 +61,7 @@ const buildFixture = async (policy: PollPolicy | undefined, pollError?: Error) =
     pollError === undefined ? base : { ...base, poll: () => Promise.reject(pollError) }
 
   const deps: GenerationProcessorDeps = {
+    localGpuLease: createInMemoryLocalGpuLease(),
     generationJobs: jobs,
     shots: inMemoryShots([shot]),
     projects: inMemoryProjects([project]),

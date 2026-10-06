@@ -29,7 +29,7 @@ const ActiveGeneration = z
     /** 生成先へ送った時刻。 */
     startedAt: z.string().nullable(),
     /**
-     * 生成先が作り始めた時刻。**送っていても null なら、生成先の中で順番待ち**（vpipe は 1 本ずつ作る。
+     * 生成先が作り始めた時刻。**送っていても null なら、生成先の中で順番待ち**（手元のサーバは 1 本ずつ作る。
      * 制作者 2026-10-04「カット２，３が作成中になってる」）。
      */
     providerStartedAt: z.string().nullable(),

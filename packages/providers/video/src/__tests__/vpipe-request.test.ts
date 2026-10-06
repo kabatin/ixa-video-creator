@@ -7,6 +7,7 @@ import {
   framesForDuration,
   isNativeFrameCount,
   VPIPE_DURATIONS_SEC,
+  VPIPE_IDENTITY,
   VPIPE_MODEL_QUALITIES,
   VPIPE_NATIVE_FRAME_COUNTS,
   VPIPE_POLL_POLICY,
@@ -16,15 +17,17 @@ import {
   vpipeVideoModels,
 } from '../vpipe/descriptor.js'
 import { createVpipeVideoProvider } from '../vpipe/provider.js'
-import { reasonOf, retryAfterMsFrom, vpipeErrorFor } from '../vpipe/http.js'
-import { decodeVpipeJobRef, encodeVpipeJobRef } from '../vpipe/job-ref.js'
+import { localServerErrorFor, reasonOf, retryAfterMsFrom } from '../local-server/http.js'
 import {
-  buildVpipeBody,
+  decodeLocalServerJobRef,
+  encodeLocalServerJobRef,
+} from '../local-server/job-ref.js'
+import {
   imageMediaTypeOf,
+  LOCAL_SERVER_MAX_PROMPT_CHARS,
   selectStartReference,
-  VPIPE_MAX_PROMPT_CHARS,
-  VPIPE_STEPS,
-} from '../vpipe/request.js'
+} from '../local-server/request.js'
+import { buildVpipeBody, VPIPE_STEPS } from '../vpipe/request.js'
 import { makeSpec } from './fixtures.js'
 import { errorEnvelope, JOB_ID } from './vpipe-fixtures.js'
 
@@ -229,23 +232,23 @@ describe('本文の組み立て', () => {
 
   it('空のプロンプト・長すぎるプロンプト・負の seed は投げる前に弾く', () => {
     expect(() => build({ prompt: '  ' })).toThrow(ProviderError)
-    expect(() => build({ prompt: 'あ'.repeat(VPIPE_MAX_PROMPT_CHARS + 1) })).toThrow(/上限/)
-    expect(() => build({ prompt: 'あ'.repeat(VPIPE_MAX_PROMPT_CHARS) })).not.toThrow()
+    expect(() => build({ prompt: 'あ'.repeat(LOCAL_SERVER_MAX_PROMPT_CHARS + 1) })).toThrow(/上限/)
+    expect(() => build({ prompt: 'あ'.repeat(LOCAL_SERVER_MAX_PROMPT_CHARS) })).not.toThrow()
     expect(() => build({ seed: -1 })).toThrow(ProviderError)
   })
 })
 
 describe('ジョブ参照', () => {
   it('サーバのジョブ ID をそのまま使う', () => {
-    expect(encodeVpipeJobRef(JOB_ID)).toBe(JOB_ID)
-    expect(decodeVpipeJobRef(JOB_ID)).toBe(JOB_ID)
+    expect(encodeLocalServerJobRef(VPIPE_IDENTITY, JOB_ID)).toBe(JOB_ID)
+    expect(decodeLocalServerJobRef(VPIPE_IDENTITY, JOB_ID)).toBe(JOB_ID)
   })
 
   it('パスや URL を壊す形は読まずに落とす（やり直せない失敗）', () => {
     for (const garbage of ['', '../etc/passwd', 'job 1', 'job/1', 'a'.repeat(129)]) {
       const error = ((): unknown => {
         try {
-          decodeVpipeJobRef(garbage)
+          decodeLocalServerJobRef(VPIPE_IDENTITY, garbage)
           return null
         } catch (e) {
           return e
@@ -254,13 +257,13 @@ describe('ジョブ参照', () => {
       expect(error).toBeInstanceOf(ProviderError)
       expect((error as ProviderError).retryable).toBe(false)
     }
-    expect(() => encodeVpipeJobRef('../x')).toThrow(ProviderError)
+    expect(() => encodeLocalServerJobRef(VPIPE_IDENTITY, '../x')).toThrow(ProviderError)
   })
 })
 
 describe('HTTP の失敗と待ち時間', () => {
   it('封筒の code と retryable をそのまま使う', () => {
-    const error = vpipeErrorFor(
+    const error = localServerErrorFor(VPIPE_IDENTITY, 
       422,
       errorEnvelope('invalid_params', false, 'frames must be 17n+5'),
       '投入',
@@ -272,19 +275,19 @@ describe('HTTP の失敗と待ち時間', () => {
   })
 
   it('封筒が読めなければ HTTP の状態で判断する', () => {
-    expect(vpipeErrorFor(503, undefined, '投入')).toMatchObject({
+    expect(localServerErrorFor(VPIPE_IDENTITY, 503, undefined, '投入')).toMatchObject({
       code: 'vpipe_internal',
       retryable: true,
     })
-    expect(vpipeErrorFor(401, 'Unauthorized', '投入')).toMatchObject({
+    expect(localServerErrorFor(VPIPE_IDENTITY, 401, 'Unauthorized', '投入')).toMatchObject({
       code: 'vpipe_unauthorized',
       retryable: false,
     })
-    expect(vpipeErrorFor(429, {}, '投入')).toMatchObject({ code: 'vpipe_busy', retryable: true })
+    expect(localServerErrorFor(VPIPE_IDENTITY, 429, {}, '投入')).toMatchObject({ code: 'vpipe_busy', retryable: true })
   })
 
   it('理由に URL が混ざっていても外へ出さない', () => {
-    const error = vpipeErrorFor(
+    const error = localServerErrorFor(VPIPE_IDENTITY, 
       500,
       errorEnvelope('internal', true, 'failed http://10.0.0.1/x?sig=1'),
       '投入',

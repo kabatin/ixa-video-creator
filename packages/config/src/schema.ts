@@ -83,16 +83,44 @@ export const EnvSchema = z.object({
    */
   IMAGE_PROVIDER: z.enum(['stub', 'codex_cli']).default('stub'),
   /**
-   * 手元の生成サーバ（vpipe-api）で動画を作るか（ADR-0031）。**既定は `none`（使わない）。**
+   * 手元の生成サーバで動画を作るか（ADR-0031 / 0040）。**既定は `none`（使わない）。**
+   * カンマ区切りで複数書ける（例: `vpipe,wan`）。`AUDIO_API_PROVIDERS` と同じ形。
+   *
+   * - `vpipe` … vpipe-api の MiniMax H3 Turbo（ADR-0031）
+   * - `wan` … wan-api の Wan 2.2 TI2V-5B（ADR-0040）
    *
    * **URL やトークンの有無で切り替えない**（LESSONS「鍵があることを、実行の合図にしない」）。
-   * `vpipe` にすると MiniMax H3 Turbo のモデルが選択肢に出る。費用は掛からないが、
-   * 1 本に 7〜25 分かかり 1 本ずつしか作れず、その間この機械の GPU とメモリを占める。
-   * AUTO には選ばれない（明示して選んだときだけ動く）。
+   * 書いたものだけモデルが選択肢に出る。費用は掛からないが、1 本に数分〜数十分かかり、
+   * その間この機械の GPU とメモリを占める。AUTO には選ばれない（明示して選んだときだけ動く）。
+   *
+   * **両方書いても同時には作らない。** worker が「この機械の GPU」を 1 本ずつに揃える（ADR-0040）。
    */
-  LOCAL_VIDEO_GENERATOR: z.enum(['none', 'vpipe']).default('none'),
+  LOCAL_VIDEO_GENERATOR: z
+    .string()
+    .default('none')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item !== ''),
+    )
+    .superRefine((items, ctx) => {
+      // `none` は「使わない」なので、ほかと並べると意味が決まらない。黙ってどちらかを採らない。
+      if (items.includes('none') && items.length > 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'none はほかの値と並べて書けません（使わないなら none だけにしてください）',
+        })
+      }
+    })
+    .transform((items) => items.filter((item) => item !== 'none'))
+    .pipe(z.array(z.enum(['vpipe', 'wan'])))
+    // 同じサーバを 2 回書いても 1 回として扱う（同じモデル ID を 2 度登録できない）。
+    .transform((items) => [...new Set(items)]),
   /** vpipe-api の場所。**既定はこのマシンだけ**（`127.0.0.1`）。 */
   VPIPE_API_URL: urlString.default('http://127.0.0.1:8765'),
+  /** wan-api の場所。**既定はこのマシンだけ**（`127.0.0.1`。vpipe-api とポートを分ける）。 */
+  WAN_API_URL: urlString.default('http://127.0.0.1:8766'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
   /**
@@ -152,6 +180,14 @@ export const EnvSchema = z.object({
     .transform((v) => (v.trim() === '' ? undefined : v))
     .optional(),
   /**
+   * wan-api の合言葉（`Authorization: Bearer`）。空なら未設定（`VPIPE_API_TOKEN` と同じ扱い）。
+   * このマシンのサーバ（ループバック）なら要らない。別のマシンのサーバを使うときは必須。
+   */
+  WAN_API_TOKEN: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v))
+    .optional(),
+  /**
    * 書き出した動画を置くフォルダ（ADR-0036）。省略すると API がホームの「ムービー」の下に決める。
    * **絶対パスだけ受ける。** 相対パスや `~` は、どこに書くかが起動のしかたで変わってしまう。
    */
@@ -165,6 +201,9 @@ export const EnvSchema = z.object({
 })
 
 export type Env = z.infer<typeof EnvSchema>
+
+/** 有効にできる手元の生成サーバ（`LOCAL_VIDEO_GENERATOR` に書ける値）。 */
+export type LocalVideoGeneratorId = Env['LOCAL_VIDEO_GENERATOR'][number]
 
 export interface AppConfig {
   nodeEnv: Env['NODE_ENV']
@@ -204,12 +243,19 @@ export interface AppConfig {
     stubVideoCostPerSecUsd: number
     /** 映像生成に実 Provider を使うか。既定は `stub`（無料）。 */
     videoProvider: Env['VIDEO_PROVIDER']
-    /** 手元の生成サーバで動画を作るか（ADR-0031）。既定は `none`。 */
-    localVideoGenerator: Env['LOCAL_VIDEO_GENERATOR']
+    /**
+     * 手元の生成サーバのうち、有効にしたもの（ADR-0031 / 0040）。既定は空（使わない）。
+     * 複数あっても同時には作らない（worker が 1 本ずつに揃える）。
+     */
+    localVideoGenerators: readonly LocalVideoGeneratorId[]
     /** vpipe-api の場所。 */
     vpipeApiUrl: string
     /** vpipe-api の合言葉。未設定は null。 */
     vpipeApiToken: string | null
+    /** wan-api の場所。 */
+    wanApiUrl: string
+    /** wan-api の合言葉。未設定は null。 */
+    wanApiToken: string | null
   }
   /** 書き出した動画を置くフォルダ（絶対パス）。未設定は null（API が既定を決める）。 */
   renderExportDir: string | null

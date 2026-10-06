@@ -41,6 +41,8 @@ const TOOLS: readonly WireAiTool[] = [
     { state: 'missing', reason: '起動していません' },
     { video: '手元の MiniMax H3 を使えません: 起動していません' },
   ),
+  // 手元の Wan（ADR-0040）。起動していれば動画に選べる。
+  tool('wan', { state: 'ready', version: '0.1.0' }, { video: null }),
 ]
 
 describe('aiOptionsFor', () => {
@@ -50,10 +52,23 @@ describe('aiOptionsFor', () => {
     expect(options.map((option) => [option.id, option.problem === null])).toEqual([
       ['stub', true],
       ['local', true],
+      ['wan', true],
       ['vpipe', false],
     ])
     // 行の名前を繰り返さず、理由だけを言う。
     expect(options.find((option) => option.id === 'vpipe')?.problem).toBe('起動していません')
+  })
+
+  /**
+   * ADR-0040。手元のサーバは 2 台あり、**両方が動画の選択肢に出る**（置き換えではない）。
+   * 起動していないものは理由つきで後ろに並ぶ。
+   */
+  it('手元のサーバ 2 台（MiniMax H3・Wan）がどちらも動画の選択肢に出る', () => {
+    const ids = aiOptionsFor('video', TOOLS).options.map((option) => option.id)
+    expect(ids).toContain('vpipe')
+    expect(ids).toContain('wan')
+    // 起動している方は選べる（灰色にしない）。
+    expect(aiOptionsFor('video', TOOLS).options.find((o) => o.id === 'wan')?.problem).toBeNull()
   })
 
   /** 行を埋めずに 1 行で言う（「Claude Code / Codex / Grok は動画には未対応」）。 */

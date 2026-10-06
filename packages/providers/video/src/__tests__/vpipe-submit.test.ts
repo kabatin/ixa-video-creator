@@ -2,7 +2,7 @@ import type { MediaAssetId, ShotGenerationSpec } from '@ixa/domain'
 import { ProviderBusyError, ProviderError, type VideoGenerationRequest } from '@ixa/provider-core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createVpipeVideoProvider } from '../vpipe/provider.js'
-import { VPIPE_FULL_RETRY_AFTER_MS } from '../vpipe/submit.js'
+import { LOCAL_SERVER_FULL_RETRY_AFTER_MS } from '../local-server/submit.js'
 import { createTempDir, makeSpec, removeTempDir } from './fixtures.js'
 import {
   BASE_URL,
@@ -69,7 +69,7 @@ describe('投入の前に空きを確かめる（満杯なら画像を取り寄�
       }),
     )
     expect(result).toBeInstanceOf(ProviderBusyError)
-    expect((result as ProviderBusyError).retryAfterMs).toBe(VPIPE_FULL_RETRY_AFTER_MS)
+    expect((result as ProviderBusyError).retryAfterMs).toBe(LOCAL_SERVER_FULL_RETRY_AFTER_MS)
     expect(calls.map((c) => c.url)).toEqual([HEALTH_URL])
   })
 

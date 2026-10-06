@@ -2,10 +2,10 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ReferenceRole } from '@ixa/domain'
 import { z } from 'zod'
-import { VPIPE_NOTES_DIR, type VpipeWarn } from './output.js'
+import { LOCAL_SERVER_NOTES_DIR, type LocalServerWarn } from './output.js'
 
 /**
- * 投入したときにしか分からないことの控え（ADR-0031）。
+ * 投入したときにしか分からないことの控え（ADR-0031 / 0040）。
  *
  * `poll` には仕様が渡ってこない。一方、開始画像の枠は 1 つしかなく、2 枚目以降の参照は
  * 使わずに捨てている。**捨てたことを Take の記録（raw）に残す**ため、投入時に書いて完了時に読む。
@@ -19,14 +19,14 @@ const NotedReference = z.object({
   mediaAssetId: z.string().min(1),
 })
 
-export const VpipeSubmitNote = z.object({
+export const LocalServerSubmitNote = z.object({
   startImage: NotedReference.extend({ mediaType: z.string().min(1) }).nullable(),
   ignoredReferences: z.array(NotedReference),
 })
-export type VpipeSubmitNote = z.infer<typeof VpipeSubmitNote>
+export type LocalServerSubmitNote = z.infer<typeof LocalServerSubmitNote>
 
 const notePath = (outputDir: string, jobId: string): string =>
-  join(outputDir, VPIPE_NOTES_DIR, `${jobId}.json`)
+  join(outputDir, LOCAL_SERVER_NOTES_DIR, `${jobId}.json`)
 
 /**
  * 控えを書く。**投げない。** ここに来た時点でサーバは生成を受け付けている。
@@ -36,17 +36,17 @@ const notePath = (outputDir: string, jobId: string): string =>
 export const writeSubmitNote = async (
   outputDir: string,
   jobId: string,
-  note: VpipeSubmitNote,
-  warn: VpipeWarn,
+  note: LocalServerSubmitNote,
+  warn: LocalServerWarn,
 ): Promise<boolean> => {
   try {
-    await mkdir(join(outputDir, VPIPE_NOTES_DIR), { recursive: true })
+    await mkdir(join(outputDir, LOCAL_SERVER_NOTES_DIR), { recursive: true })
     await writeFile(notePath(outputDir, jobId), JSON.stringify(note), 'utf8')
     return true
   } catch (error) {
     warn(
       { err: error, jobId },
-      'vpipe の投入の控えを書けませんでした。Take の記録で、使った開始画像が分からなくなります',
+      '手元の生成サーバの投入の控えを書けませんでした。Take の記録で、使った開始画像が分からなくなります',
     )
     return false
   }
@@ -56,10 +56,10 @@ export const writeSubmitNote = async (
 export const readSubmitNote = async (
   outputDir: string,
   jobId: string,
-): Promise<VpipeSubmitNote | null> => {
+): Promise<LocalServerSubmitNote | null> => {
   try {
     const text = await readFile(notePath(outputDir, jobId), 'utf8')
-    const parsed = VpipeSubmitNote.safeParse(JSON.parse(text))
+    const parsed = LocalServerSubmitNote.safeParse(JSON.parse(text))
     return parsed.success ? parsed.data : null
   } catch {
     return null

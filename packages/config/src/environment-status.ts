@@ -59,15 +59,32 @@ const secretStatus = (
  * 合言葉も最初のフレームの画像も暗号化されずに流れるので、信頼できる LAN の中だけで使う。
  * URL そのものは出さない（画面に URL を出さない）。
  */
+const LOCAL_VIDEO_NOTES: Readonly<Record<'vpipe' | 'wan', string>> = Object.freeze({
+  vpipe: 'このマシンの動画生成サーバ（vpipe-api）で MiniMax H3 を動かす。1 本に 7〜25 分かかる。',
+  wan: 'このマシンの動画生成サーバ（wan-api）で Wan 2.2 5B を動かす。所要時間はまだ実測していない。',
+})
+
+/** そのサーバの URL が、このマシンの外へ暗号化せずに出ているか。 */
+const plainOverNetwork = (url: string): boolean =>
+  !isLoopbackUrl(url) && url.toLowerCase().startsWith('http://')
+
 const localVideoNote = (config: AppConfig): string => {
-  if (config.providers.localVideoGenerator === 'none') return '使わない。'
-  const base =
-    'このマシンの動画生成サーバ（vpipe-api）で MiniMax H3 を動かす。費用は掛からないが、1 本に 7〜25 分かかり、1 本ずつ順に作る。'
-  const url = config.providers.vpipeApiUrl
-  const plainOverNetwork = !isLoopbackUrl(url) && url.toLowerCase().startsWith('http://')
-  return plainOverNetwork
-    ? `${base}サーバが別のマシンにあり、合言葉と画像が暗号化されずに流れる。信頼できる LAN の中だけで使うこと。`
-    : base
+  const { localVideoGenerators, vpipeApiUrl, wanApiUrl } = config.providers
+  if (localVideoGenerators.length === 0) return '使わない。'
+
+  const notes = localVideoGenerators.map((id) => LOCAL_VIDEO_NOTES[id]).join('')
+  const shared =
+    localVideoGenerators.length > 1
+      ? '両方を有効にしていても、この機械の GPU を取り合わないよう、どちらか 1 本ずつしか作らない。'
+      : ''
+  const urls = [
+    ...(localVideoGenerators.includes('vpipe') ? [vpipeApiUrl] : []),
+    ...(localVideoGenerators.includes('wan') ? [wanApiUrl] : []),
+  ]
+  const overNetwork = urls.some(plainOverNetwork)
+    ? 'サーバが別のマシンにあり、合言葉と画像が暗号化されずに流れる。信頼できる LAN の中だけで使うこと。'
+    : ''
+  return `${notes}費用は掛からないが 1 本ずつ順に作り、作っている間はこの機械の GPU とメモリを占める。${shared}${overNetwork}`
 }
 
 export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
@@ -94,6 +111,12 @@ export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
       'ローカルの動画生成（vpipe）の合言葉',
       'VPIPE_API_TOKEN',
       config.providers.vpipeApiToken,
+      '別のマシンの動画生成サーバを使うときだけ要る。このマシンのサーバなら未設定でよい。',
+    ),
+    secretStatus(
+      'ローカルの動画生成（Wan）の合言葉',
+      'WAN_API_TOKEN',
+      config.providers.wanApiToken,
       '別のマシンの動画生成サーバを使うときだけ要る。このマシンのサーバなら未設定でよい。',
     ),
     secretStatus(
@@ -124,9 +147,13 @@ export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
     {
       label: 'ローカルの動画生成',
       envName: 'LOCAL_VIDEO_GENERATOR',
-      value: config.providers.localVideoGenerator,
+      // 書いていなければ `none`（`.env` に書く値と同じ形で見せる）。
+      value:
+        config.providers.localVideoGenerators.length === 0
+          ? 'none'
+          : config.providers.localVideoGenerators.join(','),
       // 費用は掛からないが、この機械の GPU とメモリを長く占める。使っていることが見えるようにする。
-      notable: config.providers.localVideoGenerator !== 'none',
+      notable: config.providers.localVideoGenerators.length > 0,
       note: localVideoNote(config),
     },
     {

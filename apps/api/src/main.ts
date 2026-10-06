@@ -50,7 +50,7 @@ import {
   createFalVideoProvider,
   createLocalImageToVideoProvider,
   createStubVideoProvider,
-  createVpipeVideoProvider,
+  createLocalVideoProviders,
 } from '@ixa/provider-video'
 import { createS3Storage } from '@ixa/storage'
 import { Queue } from 'bullmq'
@@ -346,19 +346,20 @@ export const main = (): void => {
       ...(config.providers.videoProvider === 'fal' && config.providers.falApiKey !== null
         ? [createFalVideoProvider({ apiKey: config.providers.falApiKey })]
         : []),
-      // 手元の生成サーバの MiniMax H3（ADR-0031）。worker と同じ条件で登録する（作るだけでは通信しない）。
-      ...(config.providers.localVideoGenerator === 'vpipe'
-        ? [
-            createVpipeVideoProvider({
-              baseUrl: config.providers.vpipeApiUrl,
-              ...(config.providers.vpipeApiToken === null ? {} : { token: config.providers.vpipeApiToken }),
-              outputDir: join(process.env.STUB_OUTPUT_DIR ?? '/tmp/ixa-stub-output', 'vpipe'),
-              warn: (detail, message) => {
-                logger.warn(detail, message)
-              },
-            }),
-          ]
-        : []),
+      /**
+       * 手元の生成サーバ（vpipe-api の MiniMax H3・wan-api の Wan 2.2。ADR-0031 / 0040）。
+       * **登録の条件は Provider 側の表が持つ**ので、worker と必ず同じ組み合わせになる
+       * （作るだけでは通信しない）。
+       */
+      ...createLocalVideoProviders({
+        enabled: config.providers.localVideoGenerators,
+        vpipe: { baseUrl: config.providers.vpipeApiUrl, token: config.providers.vpipeApiToken },
+        wan: { baseUrl: config.providers.wanApiUrl, token: config.providers.wanApiToken },
+        outputRoot: process.env.STUB_OUTPUT_DIR ?? '/tmp/ixa-stub-output',
+        warn: (detail, message) => {
+          logger.warn(detail, message)
+        },
+      }),
     ]),
     /**
      * Phase 2 で空実装から差し替えた。

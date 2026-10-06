@@ -91,9 +91,11 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       stubVideoFailureRate: parsed.STUB_VIDEO_FAILURE_RATE,
       stubVideoCostPerSecUsd: parsed.STUB_VIDEO_COST_PER_SEC,
       videoProvider: parsed.VIDEO_PROVIDER,
-      localVideoGenerator: parsed.LOCAL_VIDEO_GENERATOR,
+      localVideoGenerators: parsed.LOCAL_VIDEO_GENERATOR,
       vpipeApiUrl: parsed.VPIPE_API_URL,
       vpipeApiToken: parsed.VPIPE_API_TOKEN ?? null,
+      wanApiUrl: parsed.WAN_API_URL,
+      wanApiToken: parsed.WAN_API_TOKEN ?? null,
     },
     renderExportDir: parsed.RENDER_EXPORT_DIR ?? null,
     voiceAi: {

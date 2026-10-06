@@ -223,9 +223,13 @@ export type CapturingLogger = {
   readonly lines: () => readonly { level: number; msg: string; jobId?: string }[]
 }
 
-export const createCapturingLogger = (): CapturingLogger => {
+/**
+ * 既定は warn（警告だけを見る）。**実測の 1 行（info）を見たいときは `'info'` を渡す。**
+ * 既定を info にすると、ほかのテストが拾う行が増えて「何件出たか」の検査がずれる。
+ */
+export const createCapturingLogger = (level: 'info' | 'warn' = 'warn'): CapturingLogger => {
   const lines: { level: number; msg: string; jobId?: string }[] = []
-  const logger = pino({ level: 'warn' }, {
+  const logger = pino({ level }, {
     write: (chunk: string) => {
       lines.push(JSON.parse(chunk) as { level: number; msg: string; jobId?: string })
     },

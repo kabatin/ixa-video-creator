@@ -93,11 +93,27 @@ export type PollPolicy = {
  * HTTP・CLI・ローカルのいずれの形態でもこの形に合わせる（ADR-0004 / 0012 / 0014）。
  * 同期 API しか無い Provider も「即座に完了するジョブ」として包むこと。
  */
+/**
+ * 同時に使ってはいけない資源（ADR-0040）。**省略は「制限なし」。**
+ *
+ * `local-gpu` は「この機械の GPU（Metal）で映像を作る」。手元の生成サーバ（vpipe-api の
+ * MiniMax H3・wan-api の Wan）はどちらも 32GB の Unified Memory を共有するので、
+ * 2 本が同時に作り始めるとメモリを取り合い、スワップで両方が大きく遅くなる（最悪は Metal の OOM）。
+ * サーバ同士は互いを知らないため、**止められるのは投入する側（worker）だけ**である。
+ *
+ * ここは「宣言」であって仕組みではない。実際に 1 本ずつにするのは worker
+ * （`apps/worker/src/generation/local-gpu-lease.ts`）。雲の上の Provider（fal）は宣言しないので
+ * 待たされない。
+ */
+export type ExclusiveResource = 'local-gpu'
+
 export interface VideoProvider {
   readonly id: ProviderId
   readonly models: readonly VideoModelDescriptor[]
   /** 問い合わせの間隔と回数。省略は worker の既定（`PollPolicy`）。 */
   readonly pollPolicy?: PollPolicy
+  /** 同時に使ってはいけない資源。省略は制限なし（`ExclusiveResource`）。 */
+  readonly exclusiveResource?: ExclusiveResource
   submit(request: VideoGenerationRequest): Promise<ProviderJobHandle>
   poll(handle: ProviderJobHandle): Promise<ProviderJobStatus>
   cancel(handle: ProviderJobHandle): Promise<void>

@@ -2,11 +2,12 @@ import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ProviderError, type ProviderJobHandle, type ProviderJobStatus } from '@ixa/provider-core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { vpipeH3TurboModel } from '../vpipe/descriptor.js'
-import { VPIPE_NO_RESPONSE, VPIPE_UNREACHABLE, wasNeverSent } from '../vpipe/http.js'
-import { saveOutputAtomically } from '../vpipe/output.js'
+import { VPIPE_IDENTITY, vpipeH3TurboModel } from '../vpipe/descriptor.js'
+import { wasNeverSent } from '../local-server/http.js'
+import { localServerNoResponseCode, localServerUnreachableCode } from '../local-server/identity.js'
+import { saveOutputAtomically } from '../local-server/output.js'
 import { createVpipeVideoProvider } from '../vpipe/provider.js'
-import { BodyTooLargeError, pumpWithLimit } from '../vpipe/stream.js'
+import { BodyTooLargeError, pumpWithLimit } from '../local-server/stream.js'
 import { createTempDir, removeTempDir } from './fixtures.js'
 import {
   BASE_URL,
@@ -57,12 +58,12 @@ describe('本文の途中で切れた・時間切れの応答', () => {
   it('問い合わせの本文が途中で切れたら（abort ではない）、やり直せる失敗として投げる', async () => {
     const result = await pollWith(() => truncatedResponse(200))
     expect(result).toBeInstanceOf(ProviderError)
-    expect(result).toMatchObject({ code: VPIPE_NO_RESPONSE, retryable: true })
+    expect(result).toMatchObject({ code: localServerNoResponseCode(VPIPE_IDENTITY), retryable: true })
   })
 
   it('問い合わせの本文が止まったら、時間切れでやり直せる失敗として投げる', async () => {
     const result = await pollWith((_url, init) => stallingResponse(init, 'application/json'), 50)
-    expect(result).toMatchObject({ code: VPIPE_NO_RESPONSE, retryable: true })
+    expect(result).toMatchObject({ code: localServerNoResponseCode(VPIPE_IDENTITY), retryable: true })
   })
 
   it('出力の本文が止まったら、時間切れで投げ、書きかけも最終の名前も残さない', async () => {
@@ -154,7 +155,7 @@ describe('届いたかどうかの見分け', () => {
   })
 
   it('コードの名前は 2 通り', () => {
-    expect(VPIPE_UNREACHABLE).toBe('vpipe_unreachable')
-    expect(VPIPE_NO_RESPONSE).toBe('vpipe_no_response')
+    expect(localServerUnreachableCode(VPIPE_IDENTITY)).toBe('vpipe_unreachable')
+    expect(localServerNoResponseCode(VPIPE_IDENTITY)).toBe('vpipe_no_response')
   })
 })
