@@ -53,11 +53,13 @@ step shows ✓ when it is done, or how far along it is.
 5. **Cut into shots** — place cuts while listening (Enter works anywhere, cuts snap to the
    beat), or in one click at section boundaries or lyric starts. Cuts are a draft until you
    press *N cuts → shots*.
-6. **Storyboard** — an AI drafts a description and a mood for every shot, each with *why this
-   picture*. It reads the lyrics sung during that shot, the characters, the locations and the
-   look. Nothing changes until you adopt a draft, shot by shot; you can always write your own.
+6. **Storyboard** — an AI drafts a description, a mood **and a camera** (shot size, angle,
+   movement) for every shot, each with *why this picture*. It reads the lyrics sung during that
+   shot, the characters, the locations and the look. Nothing changes until you adopt a draft,
+   shot by shot; you can always write your own.
 7. **Frames** — an AI draws each shot's start frame from its storyboard, with the cast's
-   reference images. Frames are made one at a time, and you can stop the queue at any point.
+   reference images. Three are drawn at a time (measured: 2.1× faster than one by one), and you
+   can stop the whole queue — or only the shots you selected — at any point.
 8. **Takes** — the video for each shot, made from its start frame. While they render you see
    which are queued, which are waiting inside the generator and which are being made, with the
    time elapsed and an estimate; generation can be stopped at any point.
@@ -103,6 +105,13 @@ path" that can drift from the output — a class of bug that eats hours.
 drafts and writing help) can be Claude Code, Codex or Grok; images can be Codex; video can be
 the free local models or fal. The CLIs run under your own sign-in — no API keys for them are
 stored in the app.
+
+**Your footage is just files.** Everything the app makes — frames, takes, renders — is written
+to a folder on your disk (`STORAGE_DIR`, no object store in the way), and one button copies a
+project's assets into `~/Movies/ixa-video-creator/<project>/素材/` under readable names in shot
+order, so you can use a single clip somewhere else without exporting the whole film. Nothing is
+duplicated: they are hard links to the same bytes. Signed, expiring URLs are what the browser
+gets; they are issued per request and never stored.
 
 **AI drafts never overwrite your work.** Storyboard drafts sit next to the current description
 with a reason for each, and a shot changes only when you adopt its draft. Bulk edits are
@@ -192,7 +201,7 @@ each job:
 Change it later from *iXA Video Creator → 使う AI…*. Until you choose, the `.env` settings apply.
 fal and the local server must be enabled in `.env` before they can be chosen — the screen alone
 never opens a billing path. Codex image generation uses your plan's usage and takes about a
-minute per frame, so frames are made one at a time.
+minute per frame; three are drawn at a time (`WORKER_CONCURRENCY_IMAGE`).
 
 ### Connecting a real provider
 
@@ -230,8 +239,18 @@ WAN_API_TOKEN=                # same
 Three steps: **start the server, list it in `LOCAL_VIDEO_GENERATOR`, pick it under *Which AI*
 for video.** Installing and running the servers is documented in their own READMEs.
 
-Each listed server contributes two models (draft and standard). AUTO chooses among them only
-when that server is the selected video AI; otherwise it never picks them.
+Each listed server contributes a draft and a standard model; vpipe also publishes a **final**
+one. AUTO chooses among them only when that server is the selected video AI; otherwise it never
+picks them.
+
+**Draft now, final overnight.** Shoot every shot with the draft model (832×480), adopt the take
+you like, then *remake at final quality* — one take, or every adopted shot at once from the
+bulk bar. The spec does not change: same prompt, same seed, same start frame, only the
+generation size (1344×768). The final take is appended next to the draft, never over it, and
+the screen tells you the count, how long it will take and when it will finish before you press
+it. Measured on an M5: a 2.7s shot took 5.1 min as a draft and 14.0 min as a final. Note that a
+different generation size produces a different picture — it is a re-shoot with the same
+instructions, not an upscale.
 
 **They share one GPU, so ixa never runs two local generations at the same time.** Ask for two
 and they finish one after another; the waiting one shows as *waiting in line* rather than in
