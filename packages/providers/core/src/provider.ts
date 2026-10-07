@@ -1,4 +1,10 @@
-import type { MediaAssetId, ModelId, ProviderId, ShotGenerationSpec } from '@ixa/domain'
+import type {
+  MediaAssetId,
+  ModelId,
+  ProviderId,
+  QualityTier,
+  ShotGenerationSpec,
+} from '@ixa/domain'
 import type { ModelEconomics, ModelQualities, VideoModelCapabilities } from './capabilities.js'
 
 /** モデル 1 つ分の宣言。capability はバリデーション、qualities は Router のスコアリングに使う。 */
@@ -20,8 +26,10 @@ export type VideoModelDescriptor = {
    *
    * 画面の「本番で作り直す」が、**モデル ID を書き写さずに**本番の段を見つけるために要る。
    * ID の文字列から導かない（`FAL_MODEL_PATHS` や `VPIPE_MODEL_QUALITIES` と同じ理由）。
+   *
+   * **並びは domain が持つ**（`QualityTier`）。ここに書き写すと、段を増やした日にズレる。
    */
-  readonly qualityTier?: 'draft' | 'standard' | 'final'
+  readonly qualityTier?: QualityTier
 }
 
 /** Provider 側のジョブを指す不透明なハンドル。中身の形は Provider ごとに異なる。 */

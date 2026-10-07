@@ -13,6 +13,7 @@ import { createApiClient } from '@/lib/api-client'
 import { offerReviewAfterGeneration } from '@/lib/offer-review'
 import { describeError } from '@/lib/api-error'
 import { planBulkOperation, summarizeBulkResult, type BulkPlan } from '@/lib/shot-bulk'
+import { planFromRemakeResult, type RemakeFinalPlan } from '@/lib/remake-final-plan'
 import { parseBulkGenerateRejection, type BulkGenerateRejection } from '@/lib/shot-bulk-api'
 import { useAskReview } from '@/components/workbench/use-ask-review'
 
@@ -48,6 +49,15 @@ export type BulkActions = {
   readonly drawStartFrames: (input: { readonly onlyMissing: boolean }) => void
   /** 選んだ Shot の絵を止める。作品の全部を止める口は Shot 一覧の帯にある。 */
   readonly stopImages: () => void
+  /**
+   * 本番で作り直す前の下見（ADR-0042 段 4）。**1 件も投入しない。**
+   * `null` はまだ引いていない。開いた時に引き、閉じたら捨てる。
+   */
+  readonly finalPreview: RemakeFinalPreview | null
+  readonly previewRemakeFinal: () => void
+  readonly forgetRemakeFinalPreview: () => void
+  /** 下見のとおりに積む。 */
+  readonly remakeFinal: () => void
 }
 
 const noteLine = (note: { readonly code: string; readonly message: string }): string =>
@@ -81,6 +91,15 @@ const describeRejectedAmounts = (rejection: BulkGenerateRejection): string => {
 }
 
 type ActionResult = { readonly summary: string; readonly failures: readonly string[] }
+
+/**
+ * 押す前の下見の状態。**「引いている最中」と「引けなかった」を混ぜない。**
+ * 混ぜると、通信が遅いだけなのに「本番の段が無い」と読める。
+ */
+export type RemakeFinalPreview =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'ready'; readonly plan: RemakeFinalPlan }
+  | { readonly kind: 'error'; readonly message: string }
 
 export const useBulkActions = (): BulkActions => {
   const workbench = useWorkbench()
@@ -277,6 +296,49 @@ export const useBulkActions = (): BulkActions => {
     })
   }
 
+  /**
+   * まとめて本番で作り直す（ADR-0042 段 4 / 資料 3.4「夜間の一括生成」）。
+   *
+   * **押す前に下見を引く。** 一晩かかる操作なので、本数と終わる時刻を見てから押させる。
+   * 下見は投入しない（API の `dryRun`）。
+   */
+  const [finalPreview, setFinalPreview] = useState<RemakeFinalPreview | null>(null)
+
+  const previewRemakeFinal = (): void => {
+    const plan = planBulkOperation('remake-final', workbench.checked, shots)
+    setFinalPreview({ kind: 'loading' })
+    void (async () => {
+      try {
+        const result = await api.bulkRemakeFinal(workbench.projectId, {
+          shotIds: [...plan.targetIds],
+          dryRun: true,
+        })
+        setFinalPreview({ kind: 'ready', plan: planFromRemakeResult(result, shots) })
+      } catch (error) {
+        setFinalPreview({ kind: 'error', message: `見込みを出せませんでした: ${describeError(error)}` })
+      }
+    })()
+  }
+
+  const remakeFinal = (): void => {
+    const plan = planBulkOperation('remake-final', workbench.checked, shots)
+    void run(plan, async () => {
+      const result = await api.bulkRemakeFinal(workbench.projectId, {
+        shotIds: [...plan.targetIds],
+        dryRun: false,
+      })
+      const summary = summarizeBulkResult('remake-final', result.results, shots)
+      // 投入できた Shot は生成中へ。サーバと同じ遷移を先回りして映す。
+      workbench.replaceShots(
+        shots.flatMap((shot) =>
+          summary.succeededIds.has(shot.id) ? [{ ...shot, status: 'generating' as const }] : [],
+        ),
+      )
+      setWatching(summary.succeededIds.size > 0 ? [...summary.succeededIds] : null)
+      return { summary: summary.headline, failures: summary.failures.map(noteLine) }
+    })
+  }
+
   return {
     busy,
     progress,
@@ -290,5 +352,11 @@ export const useBulkActions = (): BulkActions => {
     update,
     drawStartFrames,
     stopImages,
+    finalPreview,
+    previewRemakeFinal,
+    forgetRemakeFinalPreview: () => {
+      setFinalPreview(null)
+    },
+    remakeFinal,
   }
 }

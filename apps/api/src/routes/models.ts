@@ -1,4 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
+import { QualityTier } from '@ixa/domain'
 import type { ProviderRegistry } from '@ixa/provider-core'
 import { validationHook } from '../errors.js'
 import { ok, successResponse } from '../response.js'
@@ -52,7 +53,7 @@ const VideoModel = z
      * 同じ Provider の中での生成の段（ADR-0042）。段を持たないモデルは null。
      * 画面の「本番で作り直す」が、**モデル ID を書き写さずに**本番の段を見つけるために使う。
      */
-    qualityTier: z.enum(['draft', 'standard', 'final']).nullable(),
+    qualityTier: QualityTier.nullable(),
   })
   .openapi('VideoModel')
 

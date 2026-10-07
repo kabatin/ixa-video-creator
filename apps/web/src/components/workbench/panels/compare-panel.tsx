@@ -1,6 +1,6 @@
 'use client'
 
-import type { Take, TakeId } from '@ixa/domain'
+import { REMAKE_FINAL_REASON, type Take, type TakeId } from '@ixa/domain'
 import { useEffect, useState } from 'react'
 import { TakeComparePanel } from '@/components/take-compare-panel'
 import { TakeGrid } from '@/components/take-grid'
@@ -76,7 +76,8 @@ export const ComparePanel = () => {
             model: finalModel.id,
             count: 1,
             parentTakeId: take.id,
-            regenerationReason: '本番で作り直す',
+            // **まとめて積む経路（`shots-bulk-final.ts`）と同じ文字。** domain が持つ
+            regenerationReason: REMAKE_FINAL_REASON,
             // 0 は正当なシード。**`??` で畳まない**（畳むと「任せる」と区別できない）。
             ...(take.seedUsed === null ? {} : { seed: take.seedUsed }),
           })

@@ -1,5 +1,6 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import {
+  checkCostLimits,
   GenerationJobId as GenerationJobIdSchema,
   ModelId as ModelIdSchema,
   ProjectId as ProjectIdSchema,
@@ -8,10 +9,6 @@ import {
   ShotStatus as ShotStatusSchema,
   TakeId as TakeIdSchema,
   UpdateShotPatch as UpdateShotPatchSchema,
-  checkCostLimits,
-  type CostLimits,
-  type GenerationJobId,
-  type ProjectId,
   type Shot,
   type ShotId,
   type ShotStatus,
@@ -28,6 +25,7 @@ import {
   shotBeforePatch,
   type EditBatchRecorder,
 } from './edit-batch-recording.js'
+import { budgetRejection, enqueuePlanned, resolveShot } from './shots-bulk-plan.js'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { locationProblem } from './library-ownership.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
@@ -37,11 +35,8 @@ import {
   applySelectedTake,
   clearSelectedTake,
   costLimitsFor,
-  enqueueJobs,
-  fitTimingWhenStretched,
   generationFailureFields,
   generationPorts,
-  publishShotStatus,
   toShotResponse,
   type ShotRoutesDeps,
 } from './shots.js'
@@ -59,8 +54,8 @@ import {
 /** 1 回の一括操作で扱える Shot の上限。MV 全体（約 40 Shot）に十分な余裕がある。 */
 export const MAX_BULK_SHOT_IDS = 200
 
-export const SHOT_NOT_FOUND_REASON = 'Shot が見つかりません'
-export const FOREIGN_SHOT_REASON = 'この Project の Shot ではありません'
+/** 理由の文面と Shot の引き当ては、本番のまとめ投入と共有する（`shots-bulk-plan.ts`）。 */
+export { SHOT_NOT_FOUND_REASON, FOREIGN_SHOT_REASON } from './shots-bulk-plan.js'
 export const NO_TAKE_REASON = 'Take がまだありません'
 /** 外すものが無い。失敗ではないが、**黙って成功にしない**（何件に効いたかが画面から消える）。 */
 export const NOT_SELECTED_REASON = '採用していません'
@@ -263,18 +258,6 @@ const bulkDeleteRoute = createRoute({
   responses: { 200: jsonContent('1 件ずつの結果', successResponse(BulkDeleteData)), ...commonErrors },
 })
 
-/** 対象として使える Shot か。使えないなら理由を返し、**その 1 件だけ**落とす。 */
-type ResolvedShot = { readonly shot: Shot } | { readonly reason: string }
-
-const resolveShot = async (
-  deps: Pick<ShotRoutesDeps, 'shots'>, projectId: ProjectId, shotId: ShotId,
-): Promise<ResolvedShot> => {
-  const shot = await deps.shots.findById(shotId)
-  if (shot === null) return { reason: SHOT_NOT_FOUND_REASON }
-  if (shot.projectId !== projectId) return { reason: FOREIGN_SHOT_REASON }
-  return { shot }
-}
-
 /** 1 件ずつの経路が返す 422 の文言を、一括の結果 1 行に畳む。 */
 const reasonFromFields = (fields: Record<string, string[]>): string =>
   Object.values(fields).flat().join(' / ')
@@ -412,45 +395,14 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
       const planned = plan.flatMap((entry) => ('planned' in entry ? [entry.planned] : []))
       const estimatedTotalUsd = planned.reduce((total, p) => total + p.estimatedUsd, 0)
 
-      /**
-       * **プロジェクト予算だけは合計で見る。** 超えたら 1 件も投入しない。
-       * 要求上限と Shot 上限は上で 1 件ずつ当て済みなので、無限大に差し替えて予算の枝だけ
-       * 通す。**規則は写さず、同じ `checkCostLimits` を別の上限で呼ぶ。** 差し替えた値は
-       * `CostLimits` の不変条件（Shot 上限 ≤ 予算）に反するのでスキーマでは作れない。
-       */
-      if (planned.length > 0) {
-        const budgetOnly: CostLimits = {
-          ...limits,
-          maxCostPerRequestUsd: Number.POSITIVE_INFINITY,
-          maxCostPerShotUsd: Number.POSITIVE_INFINITY,
-        }
-        const decision = checkCostLimits(
-          budgetOnly,
-          { projectSpentUsd, shotSpentUsd: 0 },
-          estimatedTotalUsd,
-        )
-        if (!decision.allowed) {
-          // 差し替えにより当たりうるのは予算だけ。上限額はその予算を返す。
-          const limitUsd = limits.projectBudgetUsd
-          return c.json(
-            fail(decision.reason, {
-              cost: [decision.limit],
-              estimatedTotalUsd: [estimatedTotalUsd.toFixed(3)],
-              limitUsd: [limitUsd === null ? '無制限' : limitUsd.toFixed(3)],
-            }),
-            422,
-          )
-        }
-      }
+      // **予算は合計で見る。** 超えたら 1 件も投入しない（判定は本番のまとめ投入と共通）。
+      const rejection = budgetRejection(limits, projectSpentUsd, estimatedTotalUsd, planned.length)
+      if (rejection !== null) return c.json(fail(rejection.reason, rejection.fields), 422)
 
-      const jobIdsByShot = new Map<ShotId, GenerationJobId[]>()
-      for (const { shot, compiled } of planned) {
-        await fitTimingWhenStretched(deps, shot, compiled)
-        jobIdsByShot.set(shot.id, await enqueueJobs(deps, shot, compiled, model, count))
-        const generating = await deps.shots.updateStatus(shot.id, 'generating')
-        // 投入した Shot ごとに流す。1 通にまとめると、どの Shot が動いたか画面に出せない。
-        await publishShotStatus(deps, generating)
-      }
+      const jobIdsByShot = await enqueuePlanned(
+        deps,
+        planned.map(({ shot, compiled }) => ({ shot, compiled, requestedModel: model, count })),
+      )
 
       const results = plan.map((entry) =>
         'planned' in entry

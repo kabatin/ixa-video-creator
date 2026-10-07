@@ -20,6 +20,7 @@ export type BulkOperation =
   | 'update'
   | 'draw'
   | 'stop-images'
+  | 'remake-final'
 
 /** 適格性・要約に必要な列だけ。画面は `WireShot` をそのまま渡せる。 */
 export type BulkShot = Pick<WireShot, 'id' | 'code' | 'lockedAt' | 'selectedTakeId'>
@@ -146,6 +147,13 @@ const unselectTakeEligibility = (shot: BulkShot): ShotEligibility => ({
  * 絵を止める。**ロック済みでも止める。**
  * ロックは「これ以上作らない」ことで、既に走っている絵を止められない理由にはならない。
  */
+/**
+ * まとめて本番で作り直す（ADR-0042 段 4）。**画面は判定を持たない。**
+ * 採用しているか・本番の段があるか・既に作っているかは、すべて API が見る。
+ * ロック済みは生成そのものを止めるので、ここで落とす（一括生成と同じ）。
+ */
+const remakeFinalEligibility = (shot: BulkShot): ShotEligibility => generateEligibility(shot)
+
 const stopImagesEligibility = (shot: BulkShot): ShotEligibility => ({
   shotId: shot.id,
   ok: true,
@@ -169,6 +177,8 @@ export const eligibilityFor = (operation: BulkOperation, shot: BulkShot): ShotEl
       return unselectTakeEligibility(shot)
     case 'stop-images':
       return stopImagesEligibility(shot)
+    case 'remake-final':
+      return remakeFinalEligibility(shot)
     case 'update':
       return updateEligibility(shot)
     // 絵コンテの画像（ADR-0029）も生成と同じく、ロック済みには触らない。
@@ -269,6 +279,7 @@ const WORDINGS: Readonly<Record<BulkOperation, Wording>> = {
   draw: { done: '絵を作り始めました', notDone: '絵を作っていません' },
   /** 結果は件数で返る（Shot ごとではない）ので、この文言は要約には使わない。 */
   'stop-images': { done: '絵を止めました', notDone: '絵を止めていません' },
+  'remake-final': { done: '本番で作り直しに回しました', notDone: '本番で作り直していません' },
 }
 
 const codeOf = (shots: readonly ShotRef[], shotId: ShotId): string =>

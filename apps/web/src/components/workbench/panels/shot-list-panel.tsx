@@ -294,6 +294,9 @@ export const ShotListPanel = () => {
           onUpdate={bulk.update}
           onDrawStartFrames={bulk.drawStartFrames}
           onStopImages={bulk.stopImages}
+          finalPreview={bulk.finalPreview}
+          onPreviewRemakeFinal={bulk.previewRemakeFinal}
+          onRemakeFinal={bulk.remakeFinal}
           onMerge={() => {
             workbench.openDialog('merge-shots')
           }}

@@ -14,6 +14,8 @@ import {
 import { BulkOutcomeView, BulkProgressStrip, MoreMenu, type BulkOutcome } from '@/components/bulk-action-bar-parts'
 import { Button } from '@/components/ui/button'
 import { BulkDrawForm } from '@/components/bulk-draw-form'
+import { BulkRemakeFinalForm } from '@/components/bulk-remake-final-form'
+import type { RemakeFinalPreview } from '@/components/workbench/use-bulk-actions'
 import type { BulkProgress } from '@/components/workbench/use-bulk-actions'
 import { WORDING } from '@/lib/wording'
 
@@ -41,17 +43,21 @@ export type {
 } from '@/components/bulk-action-forms'
 export type { BulkOutcome } from '@/components/bulk-action-bar-parts'
 
-type PanelKey = 'generate' | 'selectTakes' | 'update' | 'draw'
+type PanelKey = 'generate' | 'selectTakes' | 'update' | 'draw' | 'remakeFinal'
 
 const PANEL_LABELS: Readonly<Record<PanelKey, string>> = {
   generate: 'Take を作る',
   selectTakes: '一括採用',
   update: '一括で変える',
   draw: '絵を作る',
+  remakeFinal: '本番で作り直す',
 }
 
-/** バーに直接並べる 2 つ（作業の順: 絵 → Take）。残りは「その他」の中。 */
-const MAIN_PANELS: readonly PanelKey[] = ['draw', 'generate']
+/**
+ * バーに直接並べる 3 つ（作業の順: 絵 → Take → 本番）。残りは「その他」の中。
+ * 本番のまとめ投入は一晩かかる操作なので、押す前に見込みを出す（`BulkRemakeFinalForm`）。
+ */
+const MAIN_PANELS: readonly PanelKey[] = ['draw', 'generate', 'remakeFinal']
 
 export type BulkActionBarProps = {
   readonly selectedCount: number
@@ -110,6 +116,13 @@ export type BulkActionBarProps = {
    * 作品の絵をすべて止める口は Shot 一覧の帯にある。ここは**選んだぶんだけ**。
    */
   readonly onStopImages: () => void
+  /**
+   * まとめて本番で作り直す（ADR-0042 段 4）。**押す前の下見はバーが持たない。**
+   * 開いたら `onPreviewRemakeFinal` が呼ばれ、結果は `finalPreview` で渡ってくる。
+   */
+  readonly finalPreview: RemakeFinalPreview | null
+  readonly onPreviewRemakeFinal: () => void
+  readonly onRemakeFinal: () => void
   /** 絵コンテ（説明）が空の Shot が混じっているときの確認の文。無ければ null（`drawWithoutStoryboardWarning`）。 */
   readonly drawWarning: string | null
 }
@@ -138,6 +151,9 @@ export const BulkActionBar = ({
   onRender,
   onDrawStartFrames,
   onStopImages,
+  finalPreview,
+  onPreviewRemakeFinal,
+  onRemakeFinal,
   drawWarning,
 }: BulkActionBarProps) => {
   const idPrefix = useId()
@@ -260,6 +276,18 @@ export const BulkActionBar = ({
               locationOptions={locationOptions}
               busy={busy}
               onUpdate={onUpdate}
+            />
+          )}
+          {open === 'remakeFinal' && (
+            <BulkRemakeFinalForm
+              preview={finalPreview}
+              busy={busy}
+              onPreview={onPreviewRemakeFinal}
+              onRemake={() => {
+                // 積んだら閉じる。開いたままだと同じ選択に二重に頼める（API も断るが、押させない）。
+                close()
+                onRemakeFinal()
+              }}
             />
           )}
           {open === 'draw' && (

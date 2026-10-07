@@ -36,6 +36,10 @@ describe('formatElapsed / formatApproxDuration', () => {
     expect(formatApproxDuration(45)).toBe('約 45 秒')
     expect(formatApproxDuration(210)).toBe('約 4 分')
     expect(formatApproxDuration(1500)).toBe('約 25 分')
+    // **一晩ぶんは分で言われても読み取れない**（ADR-0042 段 4 のまとめ投入）
+    expect(formatApproxDuration(60 * 90)).toBe('約 1 時間 30 分')
+    expect(formatApproxDuration(60 * 200)).toBe('約 3 時間 20 分')
+    expect(formatApproxDuration(60 * 120)).toBe('約 2 時間')
   })
 })
 

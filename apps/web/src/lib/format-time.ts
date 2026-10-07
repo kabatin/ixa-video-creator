@@ -52,6 +52,18 @@ export const formatElapsed = (sec: number): string => {
   return `${String(Math.floor(whole / 60))}:${String(whole % 60).padStart(2, '0')}`
 }
 
-/** 目安の長さ（`約 45 秒`・`約 4 分`）。90 秒未満は秒、それ以上は分に丸める。 */
-export const formatApproxDuration = (sec: number): string =>
-  sec < 90 ? `約 ${String(Math.round(sec))} 秒` : `約 ${String(Math.round(sec / 60))} 分`
+/**
+ * 目安の長さ（`約 45 秒`・`約 4 分`・`約 3 時間 20 分`）。
+ * 90 秒未満は秒、90 分未満は分、それ以上は時間と分。
+ *
+ * **時間に繰り上げるのは、まとめて積むときに「約 190 分」と出たため**（ADR-0042 段 4）。
+ * 一晩かけて流す本数は分で言われても読み取れない。
+ */
+export const formatApproxDuration = (sec: number): string => {
+  if (sec < 90) return `約 ${String(Math.round(sec))} 秒`
+  const minutes = Math.round(sec / 60)
+  if (minutes < 90) return `約 ${String(minutes)} 分`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes - hours * 60
+  return rest === 0 ? `約 ${String(hours)} 時間` : `約 ${String(hours)} 時間 ${String(rest)} 分`
+}

@@ -37,6 +37,7 @@ import { mediaRoutes } from './routes/media.js'
 import { projectRoutes } from './routes/projects.js'
 import { shotRoutes, type GenerationQueue } from './routes/shots.js'
 import { shotBulkRoutes } from './routes/shots-bulk.js'
+import { shotBulkFinalRoutes } from './routes/shots-bulk-final.js'
 import { shotEditRoutes } from './routes/shot-edits.js'
 import { shotStartFrameRoutes } from './routes/shot-start-frame.js'
 import { shotStartFrameGenerateRoutes, type StartFrameGenerateRoutesDeps } from './routes/shot-start-frame-generate.js'
@@ -277,6 +278,8 @@ export const createApp = (deps: AppDeps) => {
   )
   // 一括変更だけが記録を作る。1 件ずつの変更は戻す対象にしない（横断 ROADMAP）。
   app.route('/', shotBulkRoutes({ ...shotDeps, editBatches: deps.editBatches }))
+  // まとめて本番で作り直す（ADR-0042 段 4）。費用と投入は一括生成と同じ関数を通る。
+  app.route('/', shotBulkFinalRoutes(shotDeps))
   app.route(
     '/',
     shotEditRoutes({

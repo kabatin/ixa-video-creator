@@ -105,6 +105,31 @@ export type WireBulkUnselectOutcome = z.infer<typeof WireBulkUnselectOutcome>
 export const WireBulkUnselectResult = z.object({ results: z.array(WireBulkUnselectOutcome) })
 export type WireBulkUnselectResult = z.infer<typeof WireBulkUnselectResult>
 
+// --- まとめて本番で作り直す ---
+
+export const WireBulkRemakeFinalOutcome = z.discriminatedUnion('ok', [
+  z.object({
+    ...succeededShape,
+    /** 下見（`dryRun`）のときは空。投入したときだけ入る。 */
+    jobIds: z.array(GenerationJobId),
+    resolvedModel: ModelId,
+    /** この 1 本の目安（秒）。尺に比例する。 */
+    estimatedLatencySec: z.number().nonnegative(),
+  }),
+  failedOutcome,
+])
+export type WireBulkRemakeFinalOutcome = z.infer<typeof WireBulkRemakeFinalOutcome>
+
+export const WireBulkRemakeFinalResult = z.object({
+  results: z.array(WireBulkRemakeFinalOutcome),
+  enqueuedCount: z.number().int().nonnegative(),
+  estimatedTotalUsd: z.number().nonnegative(),
+  /** 全部できるまでの目安（秒）。**順番に 1 本ずつ作る前提**の足し算。 */
+  estimatedTotalLatencySec: z.number().nonnegative(),
+  dryRun: z.boolean(),
+})
+export type WireBulkRemakeFinalResult = z.infer<typeof WireBulkRemakeFinalResult>
+
 // --- 一括削除 ---
 
 export const WireBulkDeleteResult = z.object({
@@ -264,6 +289,16 @@ export type ShotBulkApi = {
     projectId: ProjectId,
     shotIds: readonly ShotId[],
   ) => Promise<WireBulkUnselectResult>
+  /**
+   * 選んだ Shot の採用 Take を、まとめて本番の画質で作り直す（ADR-0042 段 4）。
+   *
+   * **`dryRun` は押す前の下見。** 1 件も投入せず、見込みと飛ばす理由だけ返る。
+   * 本番の段が無い・採用していない・既に本番、などは `ok: false` で並ぶ。
+   */
+  bulkRemakeFinal: (
+    projectId: ProjectId,
+    input: { readonly shotIds: readonly ShotId[]; readonly dryRun: boolean },
+  ) => Promise<WireBulkRemakeFinalResult>
   /** ソフトデリート。取り消しは無い（確認は画面が取る）。 */
   bulkDeleteShots: (projectId: ProjectId, shotIds: readonly ShotId[]) => Promise<WireBulkDeleteResult>
   /** 共通の値をまとめて変える。 */
@@ -293,6 +328,13 @@ export const createShotBulkApi = (requester: Requester): ShotBulkApi => ({
       bulkPath(projectId, '/unselect-take'),
       { shotIds: [...shotIds] },
       WireBulkUnselectResult,
+    ),
+
+  bulkRemakeFinal: async (projectId, input) =>
+    requester.post(
+      bulkPath(projectId, '/remake-final'),
+      { shotIds: [...input.shotIds], dryRun: input.dryRun },
+      WireBulkRemakeFinalResult,
     ),
 
   bulkDeleteShots: async (projectId, shotIds) =>

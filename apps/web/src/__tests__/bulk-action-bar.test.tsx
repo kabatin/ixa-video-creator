@@ -63,6 +63,9 @@ const baseProps = (overrides: Partial<BulkActionBarProps> = {}): BulkActionBarPr
   onRender: vi.fn(),
   onDrawStartFrames: vi.fn(),
   onStopImages: vi.fn(),
+  finalPreview: null,
+  onPreviewRemakeFinal: vi.fn(),
+  onRemakeFinal: vi.fn(),
   drawWarning: null,
   ...overrides,
 })
@@ -125,7 +128,7 @@ describe('BulkActionBar — 出る / 出ない', () => {
 
     const bar = screen.getByRole('region', { name: '一括操作' })
     expect(within(bar).getByText('12 件')).toBeInTheDocument()
-    for (const name of ['選択を解除', '絵を作る', 'Take を作る', 'その他']) {
+    for (const name of ['選択を解除', '絵を作る', 'Take を作る', '本番で作り直す', 'その他']) {
       const button = within(bar).getByRole('button', { name })
       expect(button.className).toContain('whitespace-nowrap')
     }
@@ -172,6 +175,68 @@ describe('BulkActionBar — 出る / 出ない', () => {
       await user.click(screen.getByRole('button', { name: 'その他' }))
 
       expect(screen.getByRole('menuitem', { name: '採用を外す' })).toBeDisabled()
+    })
+  })
+
+  /**
+   * まとめて本番で作り直す（ADR-0042 段 4 / 資料 3.4）。
+   * **一晩かかる操作なので、押す前に本数と終わる時刻を出す。**
+   */
+  describe('本番で作り直す', () => {
+    const plan = {
+      targetCount: 2,
+      totalLatencySec: 5400,
+      skipped: ['CUT-39 — 採用している Take がありません'],
+      estimatedTotalUsd: 0,
+    }
+
+    it('開くと下見を引き、引いている間はそう言う', async () => {
+      const onPreviewRemakeFinal = vi.fn()
+      const { user } = setup({ onPreviewRemakeFinal, finalPreview: { kind: 'loading' } })
+
+      await pick(user, '本番で作り直す')
+
+      expect(onPreviewRemakeFinal).toHaveBeenCalledTimes(1)
+      expect(screen.getByRole('status')).toHaveTextContent('見込みを調べています')
+    })
+
+    it('本数・見込み・飛ばす理由を出し、押すと積みに行く', async () => {
+      const onRemakeFinal = vi.fn()
+      const { user } = setup({ finalPreview: { kind: 'ready', plan }, onRemakeFinal })
+
+      await pick(user, '本番で作り直す')
+
+      const panel = screen.getByRole('group', { name: '本番で作り直す' })
+      expect(panel).toHaveTextContent('2 本を本番で作り直します')
+      expect(panel).toHaveTextContent('約 1 時間 30 分')
+      // **飛ばす Shot は理由ごと出す**（件数に畳まない）
+      expect(panel).toHaveTextContent('CUT-39 — 採用している Take がありません')
+
+      await user.click(within(panel).getByRole('button', { name: '2 本を積む' }))
+      expect(onRemakeFinal).toHaveBeenCalledTimes(1)
+    })
+
+    /** 積むものが無いのに押せると、押してから「0 件でした」と知ることになる。 */
+    it('積めるものが 0 本なら押せない', async () => {
+      const { user } = setup({
+        finalPreview: { kind: 'ready', plan: { ...plan, targetCount: 0, totalLatencySec: 0 } },
+      })
+
+      await pick(user, '本番で作り直す')
+
+      expect(screen.getByRole('button', { name: '0 本を積む' })).toBeDisabled()
+    })
+
+    /** 「引いている最中」と「引けなかった」を混ぜない。 */
+    it('引けなかったらその旨を出し、積むボタンは出さない', async () => {
+      const { user } = setup({
+        finalPreview: { kind: 'error', message: '見込みを出せませんでした: つながりません' },
+      })
+
+      await pick(user, '本番で作り直す')
+
+      expect(screen.getByRole('status')).toHaveTextContent('見込みを出せませんでした')
+      expect(screen.queryByRole('button', { name: /本を積む/ })).toBeNull()
     })
   })
 
@@ -699,6 +764,9 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
           onRender={vi.fn()}
           onDrawStartFrames={vi.fn()}
           onStopImages={vi.fn()}
+          finalPreview={null}
+          onPreviewRemakeFinal={vi.fn()}
+          onRemakeFinal={vi.fn()}
         />
       </div>,
     )
