@@ -299,6 +299,45 @@ describe('一括採用', () => {
   })
 })
 
+describe('一括で採用を外す', () => {
+  it('shotIds だけを送り、外したあとの状態を返す', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        data: {
+          results: [
+            { shotId: SHOT_ID, ok: true, status: 'ready' },
+            { shotId: '01ARZ3NDEKTSV4RRFFQ69G5FA0', ok: false, reason: '採用していません' },
+          ],
+        },
+      }),
+    )
+
+    const result = await api().bulkUnselectTakes(projectId, [shotId, otherShotId])
+
+    const first = result.results[0]
+    expect(first?.ok === true && first.status).toBe('ready')
+
+    const [url, init] = fetchMock.mock.calls[0] ?? []
+    expect(url).toBe(`${BASE_URL}/projects/${PROJECT_ID}/shots/bulk/unselect-take`)
+    expect(init?.method).toBe('POST')
+    // **規則は無い。** 外すのに選びようは無いので、余計な欄を送らない
+    expect(requestBodyOf(init)).toEqual({ shotIds: [SHOT_ID, '01ARZ3NDEKTSV4RRFFQ69G5FA0'] })
+  })
+
+  /** Take は消えないので `takeId` は返らない。返ってきても受け取らない。 */
+  it('理由の無い失敗は受け取らない', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        data: { results: [{ shotId: SHOT_ID, ok: false }] },
+      }),
+    )
+
+    await expect(api().bulkUnselectTakes(projectId, [shotId])).rejects.toThrow()
+  })
+})
+
 describe('一括変更', () => {
   it('PATCH で patch を送り、変わった Shot を返す', async () => {
     fetchMock.mockResolvedValue(

@@ -147,6 +147,25 @@ describe('一括採用の適格性', () => {
   })
 })
 
+/**
+ * 採用をまとめて外す（制作者 2026-10-07）。
+ * **画面は判定を持たない。** 「採用していません」は API の結果で出す。
+ */
+describe('一括で採用を外す適格性', () => {
+  it('採用していない Shot も画面では止めない（理由はサーバが返す）', () => {
+    const verdict = eligibilityFor('unselect-take', aShot(A, 'CUT-01'))
+
+    expect(verdict.ok).toBe(true)
+    if (verdict.ok) expect(verdict.notice).toBeNull()
+  })
+
+  it('ロック済みでも止めない（採用を外すのは生成ではない）', () => {
+    expect(eligibilityFor('unselect-take', aShot(A, 'CUT-01', { lockedAt: new Date() })).ok).toBe(
+      true,
+    )
+  })
+})
+
 describe('一括変更の適格性', () => {
   it('制限なし。注意も付かない', () => {
     const verdict = eligibilityFor('update', aShot(A, 'CUT-01', { lockedAt: new Date() }))
@@ -251,6 +270,15 @@ describe('結果の要約', () => {
     const summary = summarizeBulkResult('select-take', [ng(A, 'Take がありません')], shots)
 
     expect(summary.headline).toBe('1 件すべてが失敗しました。1 件も採用していません。')
+  })
+
+  /** 「採用しました」と「採用を外しました」を同じ文にしない。何をしたか読めなくなる。 */
+  it('採用を外した件数を、採用したときと別の言葉で書く', () => {
+    const done = summarizeBulkResult('unselect-take', [ok(A), ok(B)], shots)
+    const notDone = summarizeBulkResult('unselect-take', [ng(A, '採用していません')], shots)
+
+    expect(done.headline).toBe('2 件すべてを採用を外しました。')
+    expect(notDone.headline).toBe('1 件すべてが失敗しました。1 件も採用を外していません。')
   })
 
   it('結果が空なら対象が無いと書く', () => {

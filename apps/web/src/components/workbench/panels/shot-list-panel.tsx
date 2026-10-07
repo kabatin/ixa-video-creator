@@ -286,6 +286,7 @@ export const ShotListPanel = () => {
           outcome={bulk.outcome}
           onGenerate={bulk.generate}
           onSelectTakes={bulk.selectTakes}
+          onUnselectTakes={bulk.unselectTakes}
           onUpdate={bulk.update}
           onDrawStartFrames={bulk.drawStartFrames}
           onMerge={() => {

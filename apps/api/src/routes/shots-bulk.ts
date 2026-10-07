@@ -35,6 +35,7 @@ import {
   MAX_TAKES_PER_REQUEST,
   ShotResponse,
   applySelectedTake,
+  clearSelectedTake,
   costLimitsFor,
   enqueueJobs,
   fitTimingWhenStretched,
@@ -61,6 +62,8 @@ export const MAX_BULK_SHOT_IDS = 200
 export const SHOT_NOT_FOUND_REASON = 'Shot が見つかりません'
 export const FOREIGN_SHOT_REASON = 'この Project の Shot ではありません'
 export const NO_TAKE_REASON = 'Take がまだありません'
+/** 外すものが無い。失敗ではないが、**黙って成功にしない**（何件に効いたかが画面から消える）。 */
+export const NOT_SELECTED_REASON = '採用していません'
 /** `only` は「迷いようがない」ときだけ採用する。複数あるなら人が選ぶ。 */
 export const ambiguousTakeReason = (count: number): string =>
   `Take が ${count} 件あります。採用する Take を選んでください`
@@ -197,6 +200,30 @@ const bulkSelectTakeRoute = createRoute({
   responses: { 200: jsonContent('1 件ずつの結果', successResponse(BulkSelectTakeData)), ...commonErrors },
 })
 
+const BulkUnselectTakeBody = z.object({ shotIds: BulkShotIds }).openapi('BulkUnselectTakeInput')
+
+const BulkUnselectTakeData = z
+  .object({
+    results: z.array(
+      z.discriminatedUnion('ok', [
+        /** Take は消さないので `takeId` は返さない。返るのは外したあとの状態だけ。 */
+        z.object({ shotId: ShotIdSchema, ok: z.literal(true), status: ShotStatusSchema }),
+        failedResult,
+      ]),
+    ),
+  })
+  .openapi('BulkUnselectTakeResult')
+
+const bulkUnselectTakeRoute = createRoute({
+  method: 'post', path: '/projects/{projectId}/shots/bulk/unselect-take', tags: ['shots'],
+  summary: '選んだ Shot の採用をまとめて外す（Take そのものは消さない）',
+  request: {
+    params: ProjectParams,
+    body: { required: true, content: { 'application/json': { schema: BulkUnselectTakeBody } } },
+  },
+  responses: { 200: jsonContent('1 件ずつの結果', successResponse(BulkUnselectTakeData)), ...commonErrors },
+})
+
 const bulkUpdateRoute = createRoute({
   method: 'patch', path: '/projects/{projectId}/shots/bulk', tags: ['shots'],
   summary: '選んだ Shot の共通項目をまとめて変える',
@@ -274,6 +301,21 @@ type BulkSelectStep =
       readonly shotId: ShotId
       readonly take: Take
       readonly beforeSelectedTakeId: TakeId | null
+      readonly beforeStatus: ShotStatus
+    }
+
+/**
+ * 一括で採用を外す 1 件。**採用していた Shot だけ**が対象。
+ *
+ * 一括採用と同じく、`clearSelectedTake` は採用 Take と状態の両方を動かすので **両方**を控える。
+ * 控えないと、取り消しても状態が「採用済み」のまま残る。
+ */
+type BulkUnselectStep =
+  | { readonly shotId: ShotId; readonly reason: string }
+  | {
+      readonly shotId: ShotId
+      readonly shot: Shot
+      readonly beforeSelectedTakeId: TakeId
       readonly beforeStatus: ShotStatus
     }
 
@@ -493,6 +535,64 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
           takeId: step.take.id,
           status: updated.status,
         })
+      }
+
+      return c.json(ok({ results }), 200)
+    })
+
+    .openapi(bulkUnselectTakeRoute, async (c) => {
+      const { projectId } = c.req.valid('param')
+      if ((await deps.projects.findById(projectId)) === null) {
+        return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      }
+
+      /** **書く前に全件を決める。** 一括採用と同じ順序（控える → 書く）。 */
+      const steps: BulkUnselectStep[] = []
+      for (const shotId of c.req.valid('json').shotIds) {
+        const resolved = await resolveShot(deps, projectId, shotId)
+        if (!('shot' in resolved)) {
+          steps.push({ shotId, reason: resolved.reason })
+          continue
+        }
+        const { shot } = resolved
+        if (shot.selectedTakeId === null) {
+          steps.push({ shotId, reason: NOT_SELECTED_REASON })
+          continue
+        }
+        steps.push({
+          shotId,
+          shot,
+          beforeSelectedTakeId: shot.selectedTakeId,
+          beforeStatus: shot.status,
+        })
+      }
+
+      await recordEditBatch(deps.editBatches, {
+        projectId,
+        kind: 'bulk_update',
+        summarize: (count) => `採用を ${count.toString()} 件まとめて外しました`,
+        entries: steps.flatMap((step) =>
+          'reason' in step
+            ? []
+            : [
+                editBatchEntry(
+                  step.shotId,
+                  {},
+                  { selectedTakeId: step.beforeSelectedTakeId, status: step.beforeStatus },
+                ),
+              ],
+        ),
+      })
+
+      const results = []
+      for (const step of steps) {
+        if ('reason' in step) {
+          results.push({ shotId: step.shotId, ok: false as const, reason: step.reason })
+          continue
+        }
+        // 状態遷移は 1 件ずつの「採用を外す」と同じ関数に任せる。
+        const updated = await clearSelectedTake(deps, step.shot)
+        results.push({ shotId: step.shotId, ok: true as const, status: updated.status })
       }
 
       return c.json(ok({ results }), 200)

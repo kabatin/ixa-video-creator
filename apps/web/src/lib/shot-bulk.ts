@@ -13,7 +13,7 @@ import type { WireShot } from '@/lib/api-schemas'
  */
 
 /** 一括で何をするか。判定も文言もこの 3 つで切り替える。 */
-export type BulkOperation = 'generate' | 'select-take' | 'update' | 'draw'
+export type BulkOperation = 'generate' | 'select-take' | 'unselect-take' | 'update' | 'draw'
 
 /** 適格性・要約に必要な列だけ。画面は `WireShot` をそのまま渡せる。 */
 export type BulkShot = Pick<WireShot, 'id' | 'code' | 'lockedAt' | 'selectedTakeId'>
@@ -125,6 +125,17 @@ const selectTakeEligibility = (shot: BulkShot): ShotEligibility => ({
   notice: shot.selectedTakeId === null ? null : OVERWRITE_NOTICE,
 })
 
+/**
+ * 一括で採用を外す。**画面は判定を持たない。**
+ * 「採用していない」は API の結果（`ok: false`）で出す。ここでも判定すると
+ * 2 か所に同じ規則が増え、片方だけ直る日が来る（lessons L-016）。
+ */
+const unselectTakeEligibility = (shot: BulkShot): ShotEligibility => ({
+  shotId: shot.id,
+  ok: true,
+  notice: null,
+})
+
 /** 一括変更に画面側の制限は無い。 */
 const updateEligibility = (shot: BulkShot): ShotEligibility => ({
   shotId: shot.id,
@@ -138,6 +149,8 @@ export const eligibilityFor = (operation: BulkOperation, shot: BulkShot): ShotEl
       return generateEligibility(shot)
     case 'select-take':
       return selectTakeEligibility(shot)
+    case 'unselect-take':
+      return unselectTakeEligibility(shot)
     case 'update':
       return updateEligibility(shot)
     // 絵コンテの画像（ADR-0029）も生成と同じく、ロック済みには触らない。
@@ -233,6 +246,7 @@ type Wording = {
 const WORDINGS: Readonly<Record<BulkOperation, Wording>> = {
   generate: { done: '生成に回しました', notDone: '生成に回していません' },
   'select-take': { done: '採用しました', notDone: '採用していません' },
+  'unselect-take': { done: '採用を外しました', notDone: '採用を外していません' },
   update: { done: '変更しました', notDone: '変更していません' },
   draw: { done: '絵を作り始めました', notDone: '絵を作っていません' },
 }

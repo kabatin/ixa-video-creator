@@ -41,6 +41,8 @@ export type BulkActions = {
   readonly clearOutcome: () => void
   readonly generate: (input: BulkGenerateInput) => void
   readonly selectTakes: (rule: BulkTakeRule) => void
+  /** 採用をまとめて外す（Take は残る）。確認は挟まない（Ctrl+Z で戻せる）。 */
+  readonly unselectTakes: () => void
   readonly update: (patch: BulkUpdatePatch) => void
   /** 絵コンテの画像をまとめて作る（ADR-0029）。既定は絵の無い Shot だけ。 */
   readonly drawStartFrames: (input: { readonly onlyMissing: boolean }) => void
@@ -186,6 +188,27 @@ export const useBulkActions = (): BulkActions => {
     })
   }
 
+  /**
+   * 採用をまとめて外す（制作者 2026-10-07）。**Take は消えない。**
+   * 外せたものだけ一覧へ映す。採用していなかった Shot は結果に理由つきで並ぶ。
+   */
+  const unselectTakes = (): void => {
+    const plan = planBulkOperation('unselect-take', workbench.checked, shots)
+    void run(plan, async () => {
+      const result = await api.bulkUnselectTakes(workbench.projectId, plan.targetIds)
+      const summary = summarizeBulkResult('unselect-take', result.results, shots)
+      workbench.replaceShots(
+        shots.flatMap((shot) => {
+          const hit = result.results.find((entry) => entry.ok && entry.shotId === shot.id)
+          return hit !== undefined && hit.ok
+            ? [{ ...shot, selectedTakeId: null, status: hit.status }]
+            : []
+        }),
+      )
+      return { summary: summary.headline, failures: summary.failures.map(noteLine) }
+    })
+  }
+
   const update = (patch: BulkUpdatePatch): void => {
     const plan = planBulkOperation('update', workbench.checked, shots)
     void run(plan, async () => {
@@ -241,6 +264,7 @@ export const useBulkActions = (): BulkActions => {
     },
     generate,
     selectTakes,
+    unselectTakes,
     update,
     drawStartFrames,
   }

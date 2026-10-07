@@ -85,6 +85,11 @@ export type BulkActionBarProps = {
   readonly outcome: BulkOutcome | null
   readonly onGenerate: (input: BulkGenerateInput) => void
   readonly onSelectTakes: (rule: BulkTakeRule) => void
+  /**
+   * 採用をまとめて外す（制作者 2026-10-07）。**Take は消えない。**
+   * 確認は挟まない（`components/ui/button` の注記。戻すのは Ctrl+Z）。
+   */
+  readonly onUnselectTakes: () => void
   readonly onUpdate: (patch: BulkUpdatePatch) => void
   readonly onClearSelection: () => void
   /** 確認のダイアログを開く。**ここでは消さない**（取り消しが無いため、確認は開いた先が取る）。 */
@@ -114,6 +119,7 @@ export const BulkActionBar = ({
   outcome,
   onGenerate,
   onSelectTakes,
+  onUnselectTakes,
   onUpdate,
   onClearSelection,
   onDelete,
@@ -265,6 +271,8 @@ export const BulkActionBar = ({
           id={panelId('more')}
           items={[
             { label: `${PANEL_LABELS.selectTakes}…`, disabled: busy, run: () => { openFromMore('selectTakes') } },
+            // 採用済みが 1 件も無ければ外すものが無い。押しても必ず断られる操作は出さない。
+            { label: '採用を外す', disabled: busy || alreadySelectedCount === 0, run: () => { runFromMore(onUnselectTakes) } },
             { label: `${PANEL_LABELS.update}…`, disabled: busy, run: () => { openFromMore('update') } },
             { label: '結合…', disabled: busy || selectedCount < 2, run: () => { runFromMore(onMerge) } },
             { label: '書き出す…', disabled: busy, run: () => { runFromMore(onRender) } },

@@ -90,6 +90,21 @@ export const BulkSelectBody = z.object({
 })
 export type BulkSelectBody = z.input<typeof BulkSelectBody>
 
+// --- 一括で採用を外す ---
+
+/**
+ * **Take は消えないので `takeId` は返らない。** 返るのは外したあとの状態だけ。
+ * 採用していなかった Shot は `ok: false`（`reason` に「採用していません」）で並ぶ。
+ */
+export const WireBulkUnselectOutcome = z.discriminatedUnion('ok', [
+  z.object({ ...succeededShape, status: ShotStatus }),
+  failedOutcome,
+])
+export type WireBulkUnselectOutcome = z.infer<typeof WireBulkUnselectOutcome>
+
+export const WireBulkUnselectResult = z.object({ results: z.array(WireBulkUnselectOutcome) })
+export type WireBulkUnselectResult = z.infer<typeof WireBulkUnselectResult>
+
 // --- 一括削除 ---
 
 export const WireBulkDeleteResult = z.object({
@@ -240,6 +255,15 @@ export type ShotBulkApi = {
   ) => Promise<WireBulkGenerateResult>
   /** 規則に従って Take を採用する。Take が無い Shot は `ok: false` で残る。 */
   bulkSelectTakes: (projectId: ProjectId, body: BulkSelectBody) => Promise<WireBulkSelectResult>
+  /**
+   * 採用をまとめて外す。**Take は消さない。**
+   * 採用していなかった Shot は `ok: false` で残る（黙って成功にしない）。
+   * 取り消し（Ctrl+Z）は一括採用と同じ記録に乗る。
+   */
+  bulkUnselectTakes: (
+    projectId: ProjectId,
+    shotIds: readonly ShotId[],
+  ) => Promise<WireBulkUnselectResult>
   /** ソフトデリート。取り消しは無い（確認は画面が取る）。 */
   bulkDeleteShots: (projectId: ProjectId, shotIds: readonly ShotId[]) => Promise<WireBulkDeleteResult>
   /** 共通の値をまとめて変える。 */
@@ -262,6 +286,13 @@ export const createShotBulkApi = (requester: Requester): ShotBulkApi => ({
       bulkPath(projectId, '/select-take'),
       BulkSelectBody.parse(body),
       WireBulkSelectResult,
+    ),
+
+  bulkUnselectTakes: async (projectId, shotIds) =>
+    requester.post(
+      bulkPath(projectId, '/unselect-take'),
+      { shotIds: [...shotIds] },
+      WireBulkUnselectResult,
     ),
 
   bulkDeleteShots: async (projectId, shotIds) =>

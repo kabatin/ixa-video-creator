@@ -54,6 +54,7 @@ const baseProps = (overrides: Partial<BulkActionBarProps> = {}): BulkActionBarPr
   outcome: null,
   onGenerate: vi.fn(),
   onSelectTakes: vi.fn(),
+  onUnselectTakes: vi.fn(),
   onUpdate: vi.fn(),
   onClearSelection: vi.fn(),
   onDelete: vi.fn(),
@@ -137,11 +138,38 @@ describe('BulkActionBar — 出る / 出ない', () => {
     const more = screen.getByRole('menu', { name: 'その他' })
     expect(within(more).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       '一括採用…',
+      '採用を外す',
       '一括で変える…',
       '結合…',
       '書き出す…',
       '削除…',
     ])
+  })
+
+  /**
+   * 採用をまとめて外す（制作者 2026-10-07）。**設定は無いので「…」を付けない。**
+   * 確認も挟まない（Take は消えず、Ctrl+Z で戻せる）。
+   */
+  describe('採用を外す', () => {
+    it('押すと、そのまま外しに行く（確認を挟まない）', async () => {
+      const onUnselectTakes = vi.fn()
+      const { user } = setup({ alreadySelectedCount: 3, onUnselectTakes })
+
+      await pick(user, '採用を外す')
+
+      expect(onUnselectTakes).toHaveBeenCalledTimes(1)
+      // 設定の面は開かない
+      expect(screen.queryByRole('group', { name: '採用を外す' })).toBeNull()
+    })
+
+    /** 押しても必ず「採用していません」が返る操作を、押せる形で出さない。 */
+    it('採用済みが 1 件も無ければ押せない', async () => {
+      const { user } = setup({ alreadySelectedCount: 0 })
+
+      await user.click(screen.getByRole('button', { name: 'その他' }))
+
+      expect(screen.getByRole('menuitem', { name: '採用を外す' })).toBeDisabled()
+    })
   })
 
   /** 一覧の下端に貼り付けて重ねる（制作者 2026-10-03「リストの縦位置が下がってずれて地味に不便」）。 */
@@ -636,6 +664,7 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
           outcome={null}
           onGenerate={vi.fn()}
           onSelectTakes={vi.fn()}
+          onUnselectTakes={vi.fn()}
           onUpdate={vi.fn()}
           onClearSelection={vi.fn()}
           onDelete={vi.fn()}

@@ -21,6 +21,7 @@ import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
 import {
   FOREIGN_SHOT_REASON,
+  NOT_SELECTED_REASON,
   NO_TAKE_REASON,
   SHOT_NOT_FOUND_REASON,
   shotBulkRoutes,
@@ -72,6 +73,12 @@ type BulkGenerateData = {
 type BulkSelectTakeData = {
   results: (
     | { shotId: string; ok: true; takeId: string; status: string }
+    | { shotId: string; ok: false; reason: string }
+  )[]
+}
+type BulkUnselectTakeData = {
+  results: (
+    | { shotId: string; ok: true; status: string }
     | { shotId: string; ok: false; reason: string }
   )[]
 }
@@ -533,6 +540,124 @@ describe('POST /projects/:projectId/shots/bulk/select-take', () => {
     expect(json.data.results[1]).toMatchObject({ ok: true })
     // 他 Project の Shot は触っていない
     expect(f.shots.snapshot().find((s) => s.id === foreign.id)?.selectedTakeId).toBeNull()
+  })
+})
+
+/**
+ * 採用をまとめて外す（制作者 2026-10-07「一括採用外しも欲しい」）。
+ *
+ * **Take は消えない。** 外すのは「この Shot ではこれを使う」という決定だけ。
+ * 一括採用（`select-take`）の裏返しで、取り消しの記録も同じ形で残す。
+ */
+describe('POST /projects/:projectId/shots/bulk/unselect-take', () => {
+  /** 採用済みの Shot と、採用していない Shot を 1 件ずつ。 */
+  const adoptedAndNot = () => {
+    const project = aProject()
+    const adopted = aShot(project.id, { code: 'shot_001', order: 1000, status: 'approved' })
+    const plain = aShot(project.id, { code: 'shot_002', order: 2000 })
+    const take = aTake(adopted, 'a'.repeat(64))
+    return {
+      project,
+      adopted: { ...adopted, selectedTakeId: take.id } as Shot,
+      plain,
+      take,
+    }
+  }
+
+  it('採用を外し、Take は残す', async () => {
+    const { project, adopted, take } = adoptedAndNot()
+    const f = buildBulkFixture({ project, shots: [adopted], takes: [take] })
+
+    const res = await postJson(f.app, `/projects/${project.id}/shots/bulk/unselect-take`, {
+      shotIds: [adopted.id],
+    })
+
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as Ok<BulkUnselectTakeData>
+    expect(json.data.results[0]).toMatchObject({ ok: true, shotId: adopted.id })
+    expect(f.shots.snapshot()[0]?.selectedTakeId).toBeNull()
+    // **Take は消さない。** 採用を外すのは決定を取り消すだけ。
+    expect(f.takes.snapshot().map((t) => t.id)).toEqual([take.id])
+  })
+
+  /** 採用を外したら「採用済み」のままではいられない。状態遷移は 1 件ずつの口と同じ関数が決める。 */
+  it('外したあとの状態を返す（approved のままにしない）', async () => {
+    const { project, adopted, take } = adoptedAndNot()
+    const f = buildBulkFixture({ project, shots: [adopted], takes: [take] })
+
+    const res = await postJson(f.app, `/projects/${project.id}/shots/bulk/unselect-take`, {
+      shotIds: [adopted.id],
+    })
+
+    const json = (await res.json()) as Ok<BulkUnselectTakeData>
+    const [first] = json.data.results
+    expect(first?.ok === true && first.status).not.toBe('approved')
+    expect(f.shots.snapshot()[0]?.status).not.toBe('approved')
+  })
+
+  it('採用していない Shot と他 Project の Shot は、その件だけ理由つきで落とす', async () => {
+    const { project, adopted, plain, take } = adoptedAndNot()
+    const other = aProject()
+    const foreign = aShot(other.id, { code: 'shot_777', order: 7000 })
+    const f = buildBulkFixture({
+      project,
+      otherProjects: [other],
+      shots: [adopted, plain, foreign],
+      takes: [take],
+    })
+
+    const res = await postJson(f.app, `/projects/${project.id}/shots/bulk/unselect-take`, {
+      shotIds: [plain.id, foreign.id, adopted.id],
+    })
+
+    const json = (await res.json()) as Ok<BulkUnselectTakeData>
+    expect(json.data.results[0]).toMatchObject({ ok: false, reason: NOT_SELECTED_REASON })
+    expect(json.data.results[1]).toMatchObject({ ok: false, reason: FOREIGN_SHOT_REASON })
+    expect(json.data.results[2]).toMatchObject({ ok: true })
+  })
+
+  /**
+   * **取り消せること。** 27 件の採用が一度に消える操作なので、記録が無いと戻せない。
+   * 一括採用と同じく、採用 Take と状態の**両方**を控える（片方だけでは状態が戻らない）。
+   */
+  it('外す前の採用 Take と状態を記録する', async () => {
+    const { project, adopted, plain, take } = adoptedAndNot()
+    const f = buildBulkFixture({ project, shots: [adopted, plain], takes: [take] })
+
+    await postJson(f.app, `/projects/${project.id}/shots/bulk/unselect-take`, {
+      shotIds: [adopted.id, plain.id],
+    })
+
+    const [batch] = f.editBatches.snapshot()
+    expect(batch?.kind).toBe('bulk_update')
+    // 外した 1 件だけ。採用していなかった Shot は記録にも入れない
+    expect(batch?.entries).toEqual([
+      { shotId: adopted.id, patch: {}, selectedTakeId: take.id, status: 'approved' },
+    ])
+    expect(batch?.summary).toContain('1 件')
+  })
+
+  it('1 件も外さなければ記録そのものを作らない', async () => {
+    const { project, plain } = adoptedAndNot()
+    const f = buildBulkFixture({ project, shots: [plain] })
+
+    const res = await postJson(f.app, `/projects/${project.id}/shots/bulk/unselect-take`, {
+      shotIds: [plain.id],
+    })
+
+    expect(res.status).toBe(200)
+    expect(f.editBatches.snapshot()).toEqual([])
+  })
+
+  it('無い Project は 404', async () => {
+    const { project, adopted, take } = adoptedAndNot()
+    const f = buildBulkFixture({ project, shots: [adopted], takes: [take] })
+
+    const res = await postJson(f.app, `/projects/${aProject().id}/shots/bulk/unselect-take`, {
+      shotIds: [adopted.id],
+    })
+
+    expect(res.status).toBe(404)
   })
 })
 
