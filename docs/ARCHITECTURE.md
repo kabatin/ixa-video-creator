@@ -272,8 +272,8 @@ Take / バージョン管理も無い。
                    └──┬────────┬──┘
            enqueue    │        │  署名付きURL
                    ┌──▼─────┐  │        ┌──────────────┐
-                   │ Redis  │  └───────►│  S3 互換     │
-                   │ BullMQ │           │  (MinIO/R2)  │
+                   │ Redis  │  └───────►│ 手元のファイル│
+                   │ BullMQ │           │ (または S3)  │
                    └──┬─────┘           └──────────────┘
                       │
         ┌─────────────▼─────────────────────────┐
@@ -291,6 +291,20 @@ Take / バージョン管理も無い。
                    │  librosa     │  音楽解析のみ
                    └──────────────┘
 ```
+
+### 素材の置き場（ADR-0041）
+
+素材・書き出し・波形は **この機械のただのファイル**として置く（既定。`STORAGE_DRIVER=fs`）。
+
+```
+~/ixa-video-creator/storage/media/<workspaceId>/<mediaAssetId>/original.mp4   ← 正
+~/Movies/ixa-video-creator/<作品名>/素材/CUT-01 Take 2 採用.mp4                ← 読める名前（ハードリンク）
+```
+
+- Finder で開けて Time Machine に乗る。Docker は Postgres と Redis だけ
+- 署名付き URL は API が出す（`GET /files/{key}?exp=&sig=`。`Range` 対応）。**DB には保存しない**（規約 7）
+- `STORAGE_DRIVER=s3` にすると S3 互換の置き場に戻せる（別の機械に分ける日のため）。
+  そのときは署名を置き場自身が出すので、`/files` の口は登録しない
 
 ### レイヤリング
 
@@ -423,8 +437,8 @@ draft ──(参照が揃う)──► ready ──(生成)──► generating 
 ### 取り込みパイプライン
 
 ```
-1. API が S3 署名付き PUT URL を発行（本体は API を通らない）
-2. クライアントが直接アップロード
+1. API が署名付き PUT URL を発行（`fs` なら `PUT /files/...`、`s3` なら置き場の URL）
+2. クライアントが直接アップロード（`fs` では API が受けて流し読みのまま書く。ADR-0041）
 3. クライアントが完了を API に通知
 4. media キューに投入
    ├─ ffprobe でメタデータ取得 → MediaProbe
@@ -931,7 +945,7 @@ ixa-video-creator/
 │   ├── timeline/         TimelineDocument 構築、時間計算（純粋）
 │   ├── render/           Remotion コンポジション + レンダリング実行
 │   ├── review/           決定的チェッカー + LLM レビュアー
-│   ├── storage/          S3 互換抽象（署名付き URL / put / get）
+│   ├── storage/          置き場の抽象（手元のファイル / S3 互換。署名付き URL / put / get）
 │   ├── config/           環境変数の zod スキーマ
 │   └── ui/               共有 React コンポーネント
 ├── docs/
@@ -941,7 +955,7 @@ ixa-video-creator/
 │   ├── LESSONS.md        ← 実装で踏んだ失敗と、そこで決めた規則
 │   └── CODEMAPS/         ← 自動生成のコードマップ
 ├── infra/
-│   └── docker-compose.yml    Postgres / Redis / MinIO
+│   └── docker-compose.yml    Postgres / Redis（素材は手元のファイル。ADR-0041）
 ├── CLAUDE.md             コーディング規約
 └── AGENTS.md             実装エージェント運用規約
 ```

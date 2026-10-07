@@ -146,7 +146,9 @@ cd ixa-video-creator
 pnpm install
 
 cp .env.example .env          # 既定は安全。課金は発生しない
-pnpm infra:up                 # postgres / redis / minio
+# 素材を画面へ見せる URL の署名の鍵（手元のファイルに置くときは必須。ADR-0041）
+printf 'STORAGE_SIGNING_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
+pnpm infra:up                 # postgres / redis
 pnpm db:migrate
 pnpm db:seed                  # ワークスペースを作り、その ID を .env に書く
 

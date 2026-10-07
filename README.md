@@ -162,7 +162,9 @@ cd ixa-video-creator
 pnpm install
 
 cp .env.example .env          # defaults are safe: nothing bills
-pnpm infra:up                 # postgres, redis, minio
+# signing key for the URLs that show your footage in the browser (required for local files, ADR-0041)
+printf 'STORAGE_SIGNING_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
+pnpm infra:up                 # postgres, redis
 pnpm db:migrate
 pnpm db:seed                  # creates a workspace and writes its id into .env
 
