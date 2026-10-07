@@ -48,9 +48,15 @@ const formatIssues = (issues: readonly ZodIssue[]): string =>
 const storageRoot = (env: Env): string =>
   env.STORAGE_DIR ?? path.join(os.homedir(), 'ixa-video-creator', 'storage')
 
-/** 署名付き URL の宛先。既定はこのマシンの API。 */
+/**
+ * 署名付き URL の宛先。
+ *
+ * **既定は画面が API を呼ぶ場所（`NEXT_PUBLIC_API_URL`）。** 素材の URL を読むのは画面なので、
+ * ここが画面と違う場所を指していると、その端末からは素材が 1 つも見えない。
+ * どちらも無ければこのマシンの API。
+ */
 const storagePublicBaseUrl = (env: Env): string =>
-  env.STORAGE_PUBLIC_BASE_URL ?? `http://127.0.0.1:${String(env.API_PORT)}`
+  env.STORAGE_PUBLIC_BASE_URL ?? env.NEXT_PUBLIC_API_URL ?? `http://127.0.0.1:${String(env.API_PORT)}`
 
 /**
  * `s3` の接続先。**1 つでも欠けていれば null**（半端な設定で接続して分かりにくく失敗しない）。

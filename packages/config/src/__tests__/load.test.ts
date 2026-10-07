@@ -1,6 +1,7 @@
 import { homedir } from 'node:os'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getConfig, loadConfig, resetConfigCache } from '../load.js'
+import { loopbackAssetUrlWarning } from '../storage.js'
 
 const requiredEnv: NodeJS.ProcessEnv = {
   DATABASE_URL: 'postgres://user:pass@localhost:5432/ixa',
@@ -396,6 +397,34 @@ describe('loadConfig の置き場（STORAGE_*）', () => {
     expect(config.storage.publicBaseUrl).toBe('http://127.0.0.1:4001')
   })
 
+  /**
+   * 2026-10-07: 画面を LAN の別の端末から開くと、素材が 1 つも見えなくなった。
+   * API は `macbookpro.local:3001` で呼ばれているのに、素材の URL だけ `127.0.0.1:3001` を
+   * 指していたため（その端末の中を指してしまう）。**画面が API を呼ぶ場所と同じにする。**
+   */
+  it('画面から見た API の場所があれば、素材の URL もそこを指す', () => {
+    const config = loadConfig({
+      ...requiredEnv,
+      STORAGE_DRIVER: 'fs',
+      STORAGE_SIGNING_SECRET: SIGNING_SECRET,
+      NEXT_PUBLIC_API_URL: 'http://macbookpro.local:3001',
+    })
+
+    expect(config.storage.publicBaseUrl).toBe('http://macbookpro.local:3001')
+  })
+
+  it('素材の URL の宛先を書けば、そちらが勝つ', () => {
+    const config = loadConfig({
+      ...requiredEnv,
+      STORAGE_DRIVER: 'fs',
+      STORAGE_SIGNING_SECRET: SIGNING_SECRET,
+      NEXT_PUBLIC_API_URL: 'http://macbookpro.local:3001',
+      STORAGE_PUBLIC_BASE_URL: 'http://192.168.0.42:3001',
+    })
+
+    expect(config.storage.publicBaseUrl).toBe('http://192.168.0.42:3001')
+  })
+
   /** 署名の鍵が無いまま fs で起動すると、素材を 1 つも返せない。**使う瞬間まで持ち越さない。** */
   it('fs で署名の鍵が無ければ起動しない', () => {
     const env = { ...requiredEnv }
@@ -443,5 +472,23 @@ describe('loadConfig の置き場（STORAGE_*）', () => {
     })
 
     expect(config.storage.s3).toBeNull()
+  })
+})
+
+/**
+ * 外から使える形なのに素材の URL だけ手元を指している、という形を見つける（2026-10-07 に実際に起きた）。
+ * **止めはしない。** 手元だけで使うなら正しい設定なので、言葉で残すだけにする。
+ */
+describe('loopbackAssetUrlWarning', () => {
+  it('外に出していて素材だけ手元を指していたら知らせる', () => {
+    expect(loopbackAssetUrlWarning('0.0.0.0', 'http://127.0.0.1:3001')).toContain('ほかの端末')
+  })
+
+  it.each([
+    { name: 'どちらも外向き', host: '0.0.0.0', url: 'http://macbookpro.local:3001' },
+    { name: 'どちらも手元', host: '127.0.0.1', url: 'http://127.0.0.1:3001' },
+    { name: '手元だけで使う（素材の宛先が外向きでも口が開いていない）', host: 'localhost', url: 'http://macbookpro.local:3001' },
+  ])('$name なら知らせない', ({ host, url }) => {
+    expect(loopbackAssetUrlWarning(host, url)).toBeNull()
   })
 })

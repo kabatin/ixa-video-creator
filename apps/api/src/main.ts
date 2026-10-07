@@ -1,7 +1,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { serve, type ServerType } from '@hono/node-server'
-import { describeEnvironment, getConfig } from '@ixa/config'
+import { describeEnvironment, getConfig, loopbackAssetUrlWarning } from '@ixa/config'
 import {
   closeDbClient,
   createDbClient,
@@ -418,6 +418,9 @@ export const main = (): void => {
           '認証の無い API をこのマシンの外へ公開している。検証が終わったら API_HOST を戻すこと',
         )
       }
+      // 外から使える形なのに素材の URL だけ手元を指していると、別の端末では素材が 1 つも出ない。
+      const assetUrlWarning = loopbackAssetUrlWarning(config.api.host, config.storage.publicBaseUrl)
+      if (assetUrlWarning !== null) logger.warn({ host: config.api.host }, assetUrlWarning)
     },
   )
 

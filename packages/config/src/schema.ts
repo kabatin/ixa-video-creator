@@ -53,10 +53,20 @@ export const EnvSchema = z.object({
     })
     .optional(),
   /**
-   * 署名付き URL の宛先（ブラウザと worker から見た API の場所）。
-   * 省略すると `http://127.0.0.1:<API_PORT>`。LAN から素材を見るときだけ変える。
+   * 署名付き URL の宛先（ブラウザから見た API の場所）。
+   *
+   * 省略すると **`NEXT_PUBLIC_API_URL`**、それも無ければ `http://127.0.0.1:<API_PORT>`。
+   * 素材の URL を使うのは画面なので、**画面が API を呼ぶ場所と同じでなければ届かない**。
+   * 2026-10-07 に、ここが `127.0.0.1` のままで LAN の別の端末から素材が 1 つも見えなくなった。
    */
   STORAGE_PUBLIC_BASE_URL: urlString.optional(),
+  /**
+   * 画面から見た API の場所（`apps/web` が使う変数）。**API 側はこれを既定の決定にだけ使う。**
+   *
+   * 「ブラウザが API に届く場所」はこの 1 つに書いてあるので、素材の URL の宛先も同じものを読む。
+   * 別々に持つと、片方だけ LAN 向きになって素材だけが見えなくなる。
+   */
+  NEXT_PUBLIC_API_URL: urlString.optional(),
 
   // 任意（既定値あり。`s3` のときだけ要る）
   S3_ENDPOINT: urlString.optional(),

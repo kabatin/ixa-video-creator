@@ -87,6 +87,12 @@ Decider: Claude（Architect）。制作者の問い（2026-10-07「アセット�
 - `STORAGE_SIGNING_SECRET` は env のみ。未設定なら起動しない（`packages/config` の zod）
 - 待ち受けは `127.0.0.1` のまま。LAN に出すときは API だけを出す
   （MinIO の 9000 を開ける必要がなくなり、`S3_BIND_HOST` は不要になる）
+- **素材の URL の宛先は、画面が API を呼ぶ場所（`NEXT_PUBLIC_API_URL`）と同じにする。**
+  2026-10-07、移行の直後に LAN の別の端末から素材が 1 つも見えなくなった。
+  API は `macbookpro.local:3001` で呼ばれているのに、素材だけ `127.0.0.1:3001` を返していたため
+  （その端末の中を指す）。MinIO のときは `S3_ENDPOINT` に LAN の名前が書いてあり、
+  移行でその設定だけが引き継がれていなかった。
+  既定を `NEXT_PUBLIC_API_URL` に寄せ、外に出ているのに手元を指している形は起動時に知らせる
 
 ## 前提の変化（忘れると刺される）
 

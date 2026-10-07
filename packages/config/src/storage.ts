@@ -1,3 +1,4 @@
+import { isLoopbackUrl } from './local-video.js'
 import type { Env } from './schema.js'
 
 /**
@@ -34,4 +35,22 @@ export const storageProblem = (env: Env): string | null => {
     )
   }
   return null
+}
+
+/**
+ * 外の端末から API を使える形なのに、**素材の URL だけこのマシンの中を指している**ときの知らせ。
+ *
+ * 2026-10-07 に実際に起きた形（API は `macbookpro.local:3001` で呼ばれているのに、素材だけ
+ * `127.0.0.1:3001` を返していて、別の PC では絵も動画も 1 つも出なかった）。
+ *
+ * **止めはしない。** 手元だけで使うなら正しい設定なので、起動を妨げずに言葉で残す。
+ */
+export const loopbackAssetUrlWarning = (apiHost: string, publicBaseUrl: string): string | null => {
+  if (isLoopbackUrl(`http://${apiHost}`)) return null
+  if (!isLoopbackUrl(publicBaseUrl)) return null
+  return (
+    'API はこのマシンの外からも使えるが、素材の URL はこのマシンの中（127.0.0.1 など）を指している。' +
+    'ほかの端末のブラウザでは素材が 1 つも表示されない。' +
+    'NEXT_PUBLIC_API_URL（または STORAGE_PUBLIC_BASE_URL）を、その端末から見た API の場所にすること。'
+  )
 }
