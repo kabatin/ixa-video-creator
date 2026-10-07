@@ -46,6 +46,7 @@ import { uploadRoutes, type MediaIngestDeps } from './routes/uploads.js'
 import { shotCompareRoutes } from './routes/shot-compare.js'
 import { beatAlignmentRoutes, roughCutRoutes, timelineRoutes } from './routes/timeline.js'
 import { renderRoutes, type RenderQueue } from './routes/renders.js'
+import { assetFolderRoutes } from './routes/asset-folder.js'
 import { renderFolderRoutes } from './routes/render-folder.js'
 import type { RenderFolderDeps } from './render-folder/render-folder.js'
 
@@ -559,6 +560,27 @@ export const createApp = (deps: AppDeps) => {
         logger,
       }),
     )
+    /**
+     * 作った素材のフォルダ（ADR-0041）。**手元のファイルがあるときだけ置く。**
+     * ハードリンクを張るので、置き場が `s3`（`deps.files` が無い）なら張るものが無い。
+     */
+    if (deps.files !== undefined) {
+      app.route(
+        '/',
+        assetFolderRoutes({
+          rootDir: deps.renderFolder.rootDir,
+          homeDir: deps.renderFolder.homeDir,
+          opener: deps.renderFolder.opener,
+          projects,
+          shots: deps.shots,
+          takes: deps.takes,
+          shotReferences: deps.shotReferences,
+          mediaAssets,
+          storage: deps.files.storage,
+          logger,
+        }),
+      )
+    }
   }
 
   registerOpenApiDocument(app)

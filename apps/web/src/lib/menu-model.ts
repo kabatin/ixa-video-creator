@@ -43,6 +43,7 @@ export type MenuCommand =
   | 'bulk-generate'
   | 'bulk-draw'
   | 'import-files'
+  | 'open-asset-folder'
   | 'inspect-master-track'
   | 'inspect-project'
   | 'unselect-take'
@@ -257,6 +258,8 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
       items: [
         item('import', 'ファイルを取り込む…', command('import-files')),
         item('music', '楽曲', command('inspect-master-track')),
+        // 作った素材を Finder で開く（ADR-0041）。開く前に、まだ入っていないものが入る。
+        item('asset-folder', '素材フォルダを開く', command('open-asset-folder')),
       ],
     },
     {

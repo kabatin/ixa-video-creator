@@ -58,8 +58,8 @@ export type SyncResult = {
   readonly files: ReadonlyMap<RenderJob['id'], string>
 }
 
-/** `parent` の中を指しているか。外を指していれば止める。 */
-const inside = (parent: string, child: string): string => {
+/** `parent` の中を指しているか。外を指していれば止める。**素材フォルダ（ADR-0041）も同じ門を通す。** */
+export const inside = (parent: string, child: string): string => {
   const resolved = resolve(child)
   const rel = relative(resolve(parent), resolved)
   if (rel === '' || rel.startsWith('..') || rel.startsWith(sep)) {
@@ -77,7 +77,8 @@ export const displayLocation = (path: string, homeDir: string): string => {
   return rel.startsWith('..') || rel.startsWith(sep) ? path : `~/${rel}`
 }
 
-const exists = async (path: string): Promise<boolean> => {
+/** あるかどうか。**もうあるものは触らない**という判断に使う（素材フォルダも同じ）。 */
+export const exists = async (path: string): Promise<boolean> => {
   try {
     await access(path)
     return true

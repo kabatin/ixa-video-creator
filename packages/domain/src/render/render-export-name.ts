@@ -25,16 +25,24 @@ const EDGE_SPACES_AND_DOTS = /^[\s.]+|[\s.]+$/g
 /** `v2.app` のような終わり。Finder はフォルダをアプリや書類の束と見なし、`open` はそれを起動しようとする。 */
 const EXTENSION_LIKE_END = /\.([A-Za-z0-9]+)$/
 
-/** プロジェクト名を、フォルダ・ファイルの名前に使える形にする。 */
-export const renderExportFolderName = (projectName: string): string => {
-  const cleaned = projectName.replace(UNSAFE_CHARACTERS, '_').replace(EDGE_SPACES_AND_DOTS, '')
+/**
+ * 文字列を、フォルダ・ファイルの名前に使える形にする。
+ *
+ * **ここが Finder へ出す名前の唯一の門。** 書き出し（ADR-0036）も素材（ADR-0041）も通す。
+ * 規則を書き写すと必ずズレて、片方だけがフォルダの外を指せるようになる。
+ */
+export const safeNameForFinder = (name: string, fallback: string = FALLBACK_NAME): string => {
+  const cleaned = name.replace(UNSAFE_CHARACTERS, '_').replace(EDGE_SPACES_AND_DOTS, '')
   const shortened = [...cleaned]
     .slice(0, MAX_NAME_LENGTH)
     .join('')
     .replace(EDGE_SPACES_AND_DOTS, '')
     .replace(EXTENSION_LIKE_END, '_$1')
-  return shortened === '' ? FALLBACK_NAME : shortened
+  return shortened === '' ? fallback : shortened
 }
+
+/** プロジェクト名を、フォルダ・ファイルの名前に使える形にする。 */
+export const renderExportFolderName = (projectName: string): string => safeNameForFinder(projectName)
 
 /** `2026-10-02 22.52.31`（macOS のスクリーンショットと同じ形。`:` は使えない）。 */
 const formatStamp = (date: Date, timeZone: string): string => {

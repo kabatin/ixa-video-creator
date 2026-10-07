@@ -15,7 +15,10 @@ import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
 import { useSelectedShot, useTransport, useWorkbench } from '@/components/workbench/workbench-context'
 import { VolumeControl } from '@/components/workbench/volume-control'
 import { Button } from '@/components/ui/button'
+import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import { assetFolderNotice, createAssetFolderApi } from '@/lib/asset-folder-api'
+import { createRequester } from '@/lib/requester'
 import { buildMenus, type MenuCommand, type MenuItem } from '@/lib/menu-model'
 import {
   PRESETS,
@@ -112,6 +115,22 @@ export const WorkbenchMenu = ({
     unselectAdoptedTake(workbench, current, onNotice)
   }
 
+  /**
+   * 作った素材を Finder で開く（ADR-0041）。開く前に、まだ入っていない素材が入る。
+   * 置き場が手元のファイルでないとこの口は無いので、そのときは理由をそのまま伝える。
+   */
+  const openAssetFolder = (): void => {
+    createAssetFolderApi(createRequester(resolveApiBaseUrl()))
+      .openAssetFolder(workbench.projectId)
+      .then((opened) => {
+        const notice = assetFolderNotice(opened)
+        if (notice !== null) onNotice(notice)
+      })
+      .catch((cause: unknown) => {
+        onNotice(`素材フォルダを開けませんでした（${describeError(cause)}）`)
+      })
+  }
+
   const COMMANDS: Readonly<Record<MenuCommand, () => void>> = {
     undo: onUndo,
     redo: () => undefined,
@@ -122,6 +141,7 @@ export const WorkbenchMenu = ({
       splitAtPlayhead(workbench, current, transport.currentSec)
     },
     'import-files': onImportFiles,
+    'open-asset-folder': openAssetFolder,
     'inspect-master-track': () => {
       goToMasterTrack(workbench, onNotice)
     },
