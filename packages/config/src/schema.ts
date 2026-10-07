@@ -7,6 +7,9 @@ import { z } from 'zod'
 
 const urlString = z.string().url()
 
+/** 署名の鍵の最低の長さ。`packages/storage` の `MIN_SIGNING_SECRET_LENGTH` と同じ値。 */
+export const MIN_STORAGE_SIGNING_SECRET_LENGTH = 32
+
 /** "true" / "false" の文字列を boolean へ変換する。 */
 const booleanFromString = z.enum(['true', 'false']).transform((value) => value === 'true')
 
@@ -14,13 +17,52 @@ export const EnvSchema = z.object({
   // 必須
   DATABASE_URL: urlString,
   REDIS_URL: urlString,
-  S3_ENDPOINT: urlString,
-  S3_REGION: z.string().min(1),
-  S3_BUCKET: z.string().min(1),
-  S3_ACCESS_KEY_ID: z.string().min(1),
-  S3_SECRET_ACCESS_KEY: z.string().min(1),
 
-  // 任意（既定値あり）
+  /**
+   * 素材・書き出し・波形の置き場（ADR-0041）。
+   *
+   * - `fs` … この機械のただのファイル（`STORAGE_DIR` の下）。Finder で開ける
+   * - `s3` … S3 互換のサーバ（MinIO など）。`S3_*` が必要
+   *
+   * **既定はまだ `s3`。** 配信ルート（`GET /files/...`）と移行が済んでから `fs` に替える。
+   * 先に既定を替えると、移行前の環境でプレビューが読めなくなる。
+   */
+  STORAGE_DRIVER: z.enum(['fs', 's3']).default('s3'),
+  /**
+   * `fs` のときの置き場（絶対パスだけ）。省略すると `~/ixa-video-creator/storage`。
+   * **相対パスや `~` は受けない。** どこに置くかが起動のしかたで変わってしまう（`RENDER_EXPORT_DIR` と同じ）。
+   */
+  STORAGE_DIR: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v.trim()))
+    .refine((v) => v === undefined || v.startsWith('/'), {
+      message: '絶対パス（/ で始まる）で書いてください',
+    })
+    .optional(),
+  /**
+   * `fs` のときに署名付き URL を作る鍵。**32 文字以上。** 空なら未設定。
+   *
+   * 短い鍵のまま動かすと、署名があるのに破れる。`fs` で未設定なら起動時に止める（storage.ts）。
+   */
+  STORAGE_SIGNING_SECRET: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v))
+    .refine((v) => v === undefined || v.length >= MIN_STORAGE_SIGNING_SECRET_LENGTH, {
+      message: `${String(MIN_STORAGE_SIGNING_SECRET_LENGTH)} 文字以上で書いてください`,
+    })
+    .optional(),
+  /**
+   * 署名付き URL の宛先（ブラウザと worker から見た API の場所）。
+   * 省略すると `http://127.0.0.1:<API_PORT>`。LAN から素材を見るときだけ変える。
+   */
+  STORAGE_PUBLIC_BASE_URL: urlString.optional(),
+
+  // 任意（既定値あり。`s3` のときだけ要る）
+  S3_ENDPOINT: urlString.optional(),
+  S3_REGION: z.string().min(1).optional(),
+  S3_BUCKET: z.string().min(1).optional(),
+  S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
   S3_FORCE_PATH_STYLE: booleanFromString.default('true'),
   API_PORT: z.coerce.number().int().positive().default(3001),
   /**
@@ -218,13 +260,29 @@ export interface AppConfig {
   redis: {
     url: string
   }
-  s3: {
-    endpoint: string
-    region: string
-    bucket: string
-    accessKeyId: string
-    secretAccessKey: string
-    forcePathStyle: boolean
+  /**
+   * 素材・書き出し・波形の置き場（ADR-0041）。
+   *
+   * **この形は `packages/storage` の `StorageSettings` へそのまま渡せるようにしてある。**
+   * 型を合わせておくことで、片方だけ変えたときに呼び出し側の型が落ちる（配線を 2 箇所に書き写さない）。
+   */
+  storage: {
+    driver: Env['STORAGE_DRIVER']
+    /** `fs` の根（絶対パス）。`s3` のときは使われない。 */
+    root: string
+    /** 署名付き URL の宛先。 */
+    publicBaseUrl: string
+    /** `fs` の署名の鍵。未設定は null（`fs` では起動時に止まるので、実際には `fs` なら必ず入る）。 */
+    signingSecret: string | null
+    /** `s3` の接続先。1 つでも欠けていれば null。 */
+    s3: {
+      endpoint: string
+      region: string
+      bucket: string
+      accessKeyId: string
+      secretAccessKey: string
+      forcePathStyle: boolean
+    } | null
   }
   api: {
     port: number

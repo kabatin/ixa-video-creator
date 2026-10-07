@@ -52,7 +52,7 @@ import {
   createStubVideoProvider,
   createLocalVideoProviders,
 } from '@ixa/provider-video'
-import { createS3Storage } from '@ixa/storage'
+import { createStorage } from '@ixa/storage'
 import { Queue } from 'bullmq'
 import IORedis from 'ioredis'
 import { createRedisProjectEvents } from '@ixa/events'
@@ -155,7 +155,7 @@ export const main = (): void => {
   const logger = createLogger(config.logLevel)
 
   const db = createDbClient(config.database.url)
-  const storage = createS3Storage(config.s3)
+  const storage = createStorage(config.storage)
 
   // ジョブデータは ID のみ。実データは worker が DB から読む（ADR-0008）。
   const connection = new IORedis(config.redis.url, { maxRetriesPerRequest: null })

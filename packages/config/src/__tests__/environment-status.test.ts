@@ -25,13 +25,19 @@ const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
   ({
     database: { url: 'postgres://x' },
     redis: { url: 'redis://x' },
-    s3: {
-      endpoint: 'http://s3',
-      region: 'ap-northeast-1',
-      bucket: 'ixa',
-      accessKeyId: 'AKIA-SECRET-ID',
-      secretAccessKey: 'S3-SUPERSECRET',
-      forcePathStyle: true,
+    storage: {
+      driver: 's3',
+      root: '/tmp/ixa-storage',
+      publicBaseUrl: 'http://127.0.0.1:3001',
+      signingSecret: null,
+      s3: {
+        endpoint: 'http://s3',
+        region: 'ap-northeast-1',
+        bucket: 'ixa',
+        accessKeyId: 'AKIA-SECRET-ID',
+        secretAccessKey: 'S3-SUPERSECRET',
+        forcePathStyle: true,
+      },
     },
     api: { port: 3001, host: '127.0.0.1' },
     corsOrigins: [],

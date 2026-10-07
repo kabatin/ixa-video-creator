@@ -1,3 +1,4 @@
+import { homedir } from 'node:os'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getConfig, loadConfig, resetConfigCache } from '../load.js'
 
@@ -17,7 +18,7 @@ describe('loadConfig', () => {
 
     expect(config.database.url).toBe(requiredEnv.DATABASE_URL)
     expect(config.redis.url).toBe(requiredEnv.REDIS_URL)
-    expect(config.s3).toEqual({
+    expect(config.storage.s3).toEqual({
       endpoint: 'http://localhost:9000',
       region: 'us-east-1',
       bucket: 'ixa-media',
@@ -42,12 +43,16 @@ describe('loadConfig', () => {
       const message = error instanceof Error ? error.message : String(error)
       expect(message).toContain('DATABASE_URL')
       expect(message).toContain('REDIS_URL')
-      expect(message).toContain('S3_ENDPOINT')
-      expect(message).toContain('S3_REGION')
-      expect(message).toContain('S3_BUCKET')
-      expect(message).toContain('S3_ACCESS_KEY_ID')
-      expect(message).toContain('S3_SECRET_ACCESS_KEY')
     }
+  })
+
+  /**
+   * `S3_*` は置き場が `s3` のときだけ要るので、zod の必須ではなくなった（ADR-0041）。
+   * **要るのに無い場合は別の検査が止める**（`storageProblem`。下の「置き場」の describe で確かめている）。
+   * ここでは、必須から外したことで**何も言わずに起動してしまわない**ことだけ押さえる。
+   */
+  it('S3_* が無くても、置き場が s3 なら起動しない', () => {
+    expect(() => loadConfig({ ...requiredEnv, S3_BUCKET: undefined })).toThrow(/S3_BUCKET/)
   })
 
   /**
@@ -63,14 +68,14 @@ describe('loadConfig', () => {
   it('既定値が効く: S3_FORCE_PATH_STYLE 未指定で true、LOG_LEVEL 未指定で info', () => {
     const config = loadConfig({ ...requiredEnv })
 
-    expect(config.s3.forcePathStyle).toBe(true)
+    expect(config.storage.s3?.forcePathStyle).toBe(true)
     expect(config.logLevel).toBe('info')
   })
 
   it('"false" 文字列が boolean の false になる', () => {
     const config = loadConfig({ ...requiredEnv, S3_FORCE_PATH_STYLE: 'false' })
 
-    expect(config.s3.forcePathStyle).toBe(false)
+    expect(config.storage.s3?.forcePathStyle).toBe(false)
   })
 
   it('API_PORT の "3001" が数値 3001 になる', () => {
@@ -328,5 +333,111 @@ describe('書き出しフォルダ（RENDER_EXPORT_DIR）', () => {
   it('相対パス・~ 始まりは起動時に止める（どこに書くかが動かし方で変わるため）', () => {
     expect(() => loadConfig({ ...requiredEnv, RENDER_EXPORT_DIR: 'exports' })).toThrow(/RENDER_EXPORT_DIR/)
     expect(() => loadConfig({ ...requiredEnv, RENDER_EXPORT_DIR: '~/Movies' })).toThrow(/RENDER_EXPORT_DIR/)
+  })
+})
+
+/**
+ * 置き場の設定（ADR-0041）。
+ *
+ * **既定はまだ `s3`。** 配信ルートと移行が済むまでは、既定を替えると移行前の環境で素材が読めなくなる。
+ */
+describe('loadConfig の置き場（STORAGE_*）', () => {
+  const SIGNING_SECRET = 'a'.repeat(32)
+
+  it('既定は s3（移行が済むまで）', () => {
+    expect(loadConfig({ ...requiredEnv }).storage.driver).toBe('s3')
+  })
+
+  it('fs にすると、この機械のフォルダを使う', () => {
+    const config = loadConfig({
+      ...requiredEnv,
+      STORAGE_DRIVER: 'fs',
+      STORAGE_SIGNING_SECRET: SIGNING_SECRET,
+      STORAGE_DIR: '/tmp/ixa-storage',
+    })
+
+    expect(config.storage.driver).toBe('fs')
+    expect(config.storage.root).toBe('/tmp/ixa-storage')
+    expect(config.storage.signingSecret).toBe(SIGNING_SECRET)
+  })
+
+  it('STORAGE_DIR を省くとホームの下に決まる（API と worker で同じ場所になる）', () => {
+    const config = loadConfig({
+      ...requiredEnv,
+      STORAGE_DRIVER: 'fs',
+      STORAGE_SIGNING_SECRET: SIGNING_SECRET,
+    })
+
+    expect(config.storage.root).toBe(`${homedir()}/ixa-video-creator/storage`)
+  })
+
+  it('STORAGE_DIR は絶対パスだけ受ける', () => {
+    expect(() =>
+      loadConfig({
+        ...requiredEnv,
+        STORAGE_DRIVER: 'fs',
+        STORAGE_SIGNING_SECRET: SIGNING_SECRET,
+        STORAGE_DIR: 'relative/storage',
+      }),
+    ).toThrow(/STORAGE_DIR/)
+  })
+
+  it('署名の宛先を省くと API の待ち受けポートに従う', () => {
+    const config = loadConfig({
+      ...requiredEnv,
+      STORAGE_DRIVER: 'fs',
+      STORAGE_SIGNING_SECRET: SIGNING_SECRET,
+      API_PORT: '4001',
+    })
+
+    expect(config.storage.publicBaseUrl).toBe('http://127.0.0.1:4001')
+  })
+
+  /** 署名の鍵が無いまま fs で起動すると、素材を 1 つも返せない。**使う瞬間まで持ち越さない。** */
+  it('fs で署名の鍵が無ければ起動しない', () => {
+    expect(() => loadConfig({ ...requiredEnv, STORAGE_DRIVER: 'fs' })).toThrow(
+      /STORAGE_SIGNING_SECRET/,
+    )
+  })
+
+  /** 制約を足したら、それを破る値の検査も置く（短い鍵は署名があるのに破れる）。 */
+  it('fs で署名の鍵が 32 文字未満なら起動しない', () => {
+    expect(() =>
+      loadConfig({
+        ...requiredEnv,
+        STORAGE_DRIVER: 'fs',
+        STORAGE_SIGNING_SECRET: 'a'.repeat(31),
+      }),
+    ).toThrow(/STORAGE_SIGNING_SECRET/)
+  })
+
+  it('署名の鍵はエラーの文に出ない', () => {
+    try {
+      loadConfig({ ...requiredEnv, STORAGE_DRIVER: 'fs', STORAGE_SIGNING_SECRET: 'short-secret' })
+      expect.unreachable('throw するはず')
+    } catch (error) {
+      expect(error instanceof Error ? error.message : String(error)).not.toContain('short-secret')
+    }
+  })
+
+  it.each(['S3_ENDPOINT', 'S3_REGION', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'])(
+    's3 なのに %s が無ければ起動しない',
+    (name) => {
+      const env = { ...requiredEnv }
+      delete env[name]
+
+      expect(() => loadConfig(env)).toThrow(new RegExp(name))
+    },
+  )
+
+  it('fs なら S3_* は要らない', () => {
+    const config = loadConfig({
+      DATABASE_URL: requiredEnv.DATABASE_URL,
+      REDIS_URL: requiredEnv.REDIS_URL,
+      STORAGE_DRIVER: 'fs',
+      STORAGE_SIGNING_SECRET: SIGNING_SECRET,
+    })
+
+    expect(config.storage.s3).toBeNull()
   })
 })

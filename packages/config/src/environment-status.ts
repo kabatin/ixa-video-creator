@@ -87,6 +87,35 @@ const localVideoNote = (config: AppConfig): string => {
   return `${notes}費用は掛からないが 1 本ずつ順に作り、作っている間はこの機械の GPU とメモリを占める。${shared}${overNetwork}`
 }
 
+/**
+ * 置き場によって要る秘密が変わる（ADR-0041）。
+ * **使わない方を「未設定」として並べない。** 設定し忘れに見えてしまう。
+ */
+const storageSecrets = (config: AppConfig): readonly SecretStatus[] =>
+  config.storage.driver === 'fs'
+    ? [
+        secretStatus(
+          '素材を見せる URL の署名の鍵',
+          'STORAGE_SIGNING_SECRET',
+          config.storage.signingSecret,
+          'この機械に置いた素材を画面へ見せるのに使う。未設定だと素材を 1 つも返せない。',
+        ),
+      ]
+    : [
+        secretStatus(
+          'ストレージのアクセスキー',
+          'S3_ACCESS_KEY_ID',
+          config.storage.s3?.accessKeyId ?? null,
+          '生成物と素材の置き場。未設定だと読み書きができない。',
+        ),
+        secretStatus(
+          'ストレージの秘密鍵',
+          'S3_SECRET_ACCESS_KEY',
+          config.storage.s3?.secretAccessKey ?? null,
+          '同上。',
+        ),
+      ]
+
 export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
   secrets: [
     secretStatus(
@@ -119,20 +148,20 @@ export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
       config.providers.wanApiToken,
       '別のマシンの動画生成サーバを使うときだけ要る。このマシンのサーバなら未設定でよい。',
     ),
-    secretStatus(
-      'ストレージのアクセスキー',
-      'S3_ACCESS_KEY_ID',
-      config.s3.accessKeyId,
-      '生成物と素材の置き場。未設定だと読み書きができない。',
-    ),
-    secretStatus(
-      'ストレージの秘密鍵',
-      'S3_SECRET_ACCESS_KEY',
-      config.s3.secretAccessKey,
-      '同上。',
-    ),
+    ...storageSecrets(config),
   ],
   settings: [
+    {
+      label: '素材の置き場',
+      envName: 'STORAGE_DRIVER',
+      value: config.storage.driver,
+      // 既定から外れていること自体は危なくない。どちらでも意図通りなら目立たせない。
+      notable: false,
+      note:
+        config.storage.driver === 'fs'
+          ? `この機械のフォルダにそのまま置く（${config.storage.root}）。Finder から開けて、Time Machine に乗る。`
+          : 'S3 互換の置き場（MinIO など）に置く。この機械のフォルダからは開けない。',
+    },
     {
       label: '映像生成',
       envName: 'VIDEO_PROVIDER',

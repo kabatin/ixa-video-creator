@@ -8,7 +8,7 @@ import {
   createLocalVideoProviders,
   createStubVideoProvider,
 } from '@ixa/provider-video'
-import { createS3Storage } from '@ixa/storage'
+import { createStorage } from '@ixa/storage'
 import {
   createAiSettingsRepository,
   createDbClient,
@@ -133,14 +133,8 @@ export const createGenerationWiring = (
 ): GenerationWiring => {
   const db = createDbClient(config.database.url)
 
-  const storage = createS3Storage({
-    endpoint: config.s3.endpoint,
-    region: config.s3.region,
-    bucket: config.s3.bucket,
-    accessKeyId: config.s3.accessKeyId,
-    secretAccessKey: config.s3.secretAccessKey,
-    forcePathStyle: config.s3.forcePathStyle,
-  })
+  // 置き場の選び方は API と同じ関数に任せる（片方だけ fs になる食い違いを作らない。ADR-0041）。
+  const storage = createStorage(config.storage)
 
   const queue = new Queue(QUEUE_NAMES.generation, { connection })
   /**

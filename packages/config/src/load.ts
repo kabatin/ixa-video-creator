@@ -1,7 +1,10 @@
+import os from 'node:os'
+import path from 'node:path'
 import type { ZodIssue } from 'zod'
 import { audioApiProblem } from './audio-api.js'
 import { localVideoGeneratorProblem } from './local-video.js'
-import { EnvSchema, type AppConfig } from './schema.js'
+import { storageProblem } from './storage.js'
+import { EnvSchema, type AppConfig, type Env } from './schema.js'
 
 /**
  * zod の issue を、変数名のみを含む読みやすい文へ変換する。
@@ -39,6 +42,42 @@ const formatIssues = (issues: readonly ZodIssue[]): string =>
   ].join('\n')
 
 /**
+ * `fs` の置き場。**既定はここで決める**（API と worker が別々に決めると食い違う）。
+ * ホームの下にするのは、Time Machine に乗り、Finder から開けるため（ADR-0041）。
+ */
+const storageRoot = (env: Env): string =>
+  env.STORAGE_DIR ?? path.join(os.homedir(), 'ixa-video-creator', 'storage')
+
+/** 署名付き URL の宛先。既定はこのマシンの API。 */
+const storagePublicBaseUrl = (env: Env): string =>
+  env.STORAGE_PUBLIC_BASE_URL ?? `http://127.0.0.1:${String(env.API_PORT)}`
+
+/**
+ * `s3` の接続先。**1 つでも欠けていれば null**（半端な設定で接続して分かりにくく失敗しない）。
+ * `STORAGE_DRIVER=s3` で欠けている場合は、ここへ来る前に `storageProblem` が止める。
+ */
+const s3Settings = (env: Env): AppConfig['storage']['s3'] => {
+  const { S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY } = env
+  if (
+    S3_ENDPOINT === undefined ||
+    S3_REGION === undefined ||
+    S3_BUCKET === undefined ||
+    S3_ACCESS_KEY_ID === undefined ||
+    S3_SECRET_ACCESS_KEY === undefined
+  ) {
+    return null
+  }
+  return {
+    endpoint: S3_ENDPOINT,
+    region: S3_REGION,
+    bucket: S3_BUCKET,
+    accessKeyId: S3_ACCESS_KEY_ID,
+    secretAccessKey: S3_SECRET_ACCESS_KEY,
+    forcePathStyle: env.S3_FORCE_PATH_STYLE,
+  }
+}
+
+/**
  * 環境変数を検証し、ネストされた AppConfig を返す。
  * モジュール読み込み時には実行されない（呼ばれたときだけ検証する）。
  */
@@ -55,7 +94,8 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
    * 形は正しくても組み合わせが成り立たない設定。**黙って動かさず起動時に止める**
    * （`VIDEO_PROVIDER=fal` で鍵が無いときと同じ考え方）。
    */
-  const problem = localVideoGeneratorProblem(parsed) ?? audioApiProblem(parsed)
+  const problem =
+    localVideoGeneratorProblem(parsed) ?? audioApiProblem(parsed) ?? storageProblem(parsed)
   if (problem !== null) throw new Error(problem)
 
   return {
@@ -70,13 +110,12 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     redis: {
       url: parsed.REDIS_URL,
     },
-    s3: {
-      endpoint: parsed.S3_ENDPOINT,
-      region: parsed.S3_REGION,
-      bucket: parsed.S3_BUCKET,
-      accessKeyId: parsed.S3_ACCESS_KEY_ID,
-      secretAccessKey: parsed.S3_SECRET_ACCESS_KEY,
-      forcePathStyle: parsed.S3_FORCE_PATH_STYLE,
+    storage: {
+      driver: parsed.STORAGE_DRIVER,
+      root: storageRoot(parsed),
+      publicBaseUrl: storagePublicBaseUrl(parsed),
+      signingSecret: parsed.STORAGE_SIGNING_SECRET ?? null,
+      s3: s3Settings(parsed),
     },
     api: {
       port: parsed.API_PORT,
