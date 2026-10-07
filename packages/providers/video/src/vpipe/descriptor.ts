@@ -96,8 +96,14 @@ export const framesForDuration = (durationSec: number): number => {
   return frames
 }
 
-/** 生成の段。vpipe-api が比ごとに生成する大きさを決める（draft は小さく速い）。 */
-export type VpipeQuality = 'draft' | 'standard'
+/**
+ * 生成の段。vpipe-api が比ごとに生成する大きさを決める（draft は小さく速い）。
+ *
+ * `final` は **H3 の学習時の条件（短辺 768。16:9 なら 1344x768）** で作る段（ADR-0042）。
+ * 主線・瞳・髪の細部が明確に良くなる代わりに、同じ尺で **約 3 倍**の時間がかかる。
+ * 試作（昼・速い）と本番（夜・高画質）を分けて使う。
+ */
+export type VpipeQuality = 'draft' | 'standard' | 'final'
 
 /**
  * 出力の大きさ。**vpipe-api が小さく作って、ちょうどこの大きさへ拡大する**（cover + 中央切り抜き）。
@@ -160,6 +166,7 @@ const qualities: VideoModelDescriptor['qualities'] = {
 
 export const VPIPE_H3_TURBO_DRAFT_MODEL_ID: ModelId = ModelId.parse('vpipe/minimax-h3-turbo-draft')
 export const VPIPE_H3_TURBO_MODEL_ID: ModelId = ModelId.parse('vpipe/minimax-h3-turbo')
+export const VPIPE_H3_TURBO_FINAL_MODEL_ID: ModelId = ModelId.parse('vpipe/minimax-h3-turbo-final')
 
 /**
  * 所要時間の見込み（秒）。124 コマ（5.167 秒）の実測値。
@@ -168,6 +175,8 @@ export const VPIPE_H3_TURBO_MODEL_ID: ModelId = ModelId.parse('vpipe/minimax-h3-
  */
 export const VPIPE_DRAFT_TYPICAL_LATENCY_SEC = 420
 export const VPIPE_STANDARD_TYPICAL_LATENCY_SEC = 640
+/** 本番（1344x768）の実測: 124 コマ（5.167 秒）で 1324 秒（22.1 分）。ADR-0042 の計測。 */
+export const VPIPE_FINAL_TYPICAL_LATENCY_SEC = 1324
 
 /**
  * 尺 1 秒を作るのにかかる時間（秒）。生成時間は尺にほぼ比例する（制作者 2026-10-02「5秒ぐらいの動画で7分だから
@@ -179,6 +188,11 @@ export const VPIPE_STANDARD_TYPICAL_LATENCY_SEC = 640
  */
 export const VPIPE_DRAFT_LATENCY_SEC_PER_OUTPUT_SEC = 90
 export const VPIPE_STANDARD_LATENCY_SEC_PER_OUTPUT_SEC = 140
+/**
+ * 本番の実測は 1 点だけ（5.167 秒 → 1324 秒）。原点を通る直線で 256 秒/秒。
+ * **ほかの尺はまだ測っていない。** 測ったらここを直す。
+ */
+export const VPIPE_FINAL_LATENCY_SEC_PER_OUTPUT_SEC = 256
 
 /**
  * 費用は 0。手元の GPU で動くので実際にかかった額そのもの（ADR-0025 の `local` と同じ）。
@@ -213,15 +227,33 @@ export const vpipeH3TurboModel: VideoModelDescriptor = {
   routable: false,
 }
 
+/**
+ * 本番（ADR-0042）。試作で決めた仕様のまま、学習時の解像度で作り直すための段。
+ *
+ * **vpipe-api が `quality: "final"` を受けられる版である必要がある。**
+ * 古い版へ投げると投入の瞬間に断られる（生成は始まらないので、待たされることはない）。
+ */
+export const vpipeH3TurboFinalModel: VideoModelDescriptor = {
+  id: VPIPE_H3_TURBO_FINAL_MODEL_ID,
+  label: 'MiniMax H3 Turbo 本番（ローカル・無料・高画質）',
+  providerId: VPIPE_PROVIDER_ID,
+  capabilities,
+  qualities,
+  economics: economics(VPIPE_FINAL_TYPICAL_LATENCY_SEC, VPIPE_FINAL_LATENCY_SEC_PER_OUTPUT_SEC),
+  routable: false,
+}
+
 export const vpipeVideoModels: readonly VideoModelDescriptor[] = [
   vpipeH3TurboDraftModel,
   vpipeH3TurboModel,
+  vpipeH3TurboFinalModel,
 ]
 
 /** モデル ID から生成の段を引く。ID の文字列から導かない（fal の `FAL_MODEL_PATHS` と同じ理由）。 */
 export const VPIPE_MODEL_QUALITIES: Readonly<Record<string, VpipeQuality>> = Object.freeze({
   [VPIPE_H3_TURBO_DRAFT_MODEL_ID]: 'draft',
   [VPIPE_H3_TURBO_MODEL_ID]: 'standard',
+  [VPIPE_H3_TURBO_FINAL_MODEL_ID]: 'final',
 })
 
 /**

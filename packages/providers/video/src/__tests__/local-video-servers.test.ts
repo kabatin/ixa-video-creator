@@ -6,7 +6,11 @@ import {
   type LocalVideoServersInput,
 } from '../local-video-servers.js'
 import { createStubVideoProvider } from '../stub/provider.js'
-import { VPIPE_H3_TURBO_DRAFT_MODEL_ID, VPIPE_H3_TURBO_MODEL_ID } from '../vpipe/descriptor.js'
+import {
+  VPIPE_H3_TURBO_DRAFT_MODEL_ID,
+  VPIPE_H3_TURBO_FINAL_MODEL_ID,
+  VPIPE_H3_TURBO_MODEL_ID,
+} from '../vpipe/descriptor.js'
 import { WAN_TI2V_5B_DRAFT_MODEL_ID, WAN_TI2V_5B_MODEL_ID } from '../wan/descriptor.js'
 import { createFetch, healthBody, jsonResponse } from './local-server-fixtures.js'
 
@@ -32,12 +36,13 @@ describe('有効にしたサーバだけ登録する', () => {
     expect(providersFor([])).toEqual([])
   })
 
-  it('vpipe だけなら MiniMax H3 の 2 つだけが出る', () => {
+  it('vpipe だけなら MiniMax H3 の 3 つだけが出る（試作・中間・本番）', () => {
     const providers = providersFor(['vpipe'])
     expect(providers.map((p) => p.id)).toEqual(['vpipe'])
     expect(providers.flatMap((p) => p.models.map((m) => m.id))).toEqual([
       VPIPE_H3_TURBO_DRAFT_MODEL_ID,
       VPIPE_H3_TURBO_MODEL_ID,
+      VPIPE_H3_TURBO_FINAL_MODEL_ID,
     ])
   })
 
