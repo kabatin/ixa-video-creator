@@ -210,7 +210,14 @@ describe('本文の組み立て', () => {
 
   it('契約どおりの形になる（出力は Project の解像度そのもの・最後のフレームは常に null）', () => {
     expect(build({ seed: 42 })).toEqual({
-      prompt: 'takepi が勝利する',
+      // 公式の書き方へ組み直してから送る（ADR-0042）。文面は `h3-prompt.test.ts` が版ごと凍結している。
+      prompt: [
+        'integrated_multimodal_description: [Shot 1] Framed as a medium close-up. takepi が勝利する.',
+        '',
+        'overall_soundscape: Natural ambience that matches the scene.',
+        '',
+        'non_diegetic_music: None.',
+      ].join('\n'),
       output: { width: 1920, height: 1080 },
       frames: 107,
       quality: 'standard',
@@ -235,6 +242,20 @@ describe('本文の組み立て', () => {
     expect(() => build({ prompt: 'あ'.repeat(LOCAL_SERVER_MAX_PROMPT_CHARS + 1) })).toThrow(/上限/)
     expect(() => build({ prompt: 'あ'.repeat(LOCAL_SERVER_MAX_PROMPT_CHARS) })).not.toThrow()
     expect(() => build({ seed: -1 })).toThrow(ProviderError)
+  })
+
+  /**
+   * 公式の書き方へ組み直すと文面は長くなる（ADR-0042）。
+   * **仕様の文面が上限の中でも、送るものが超えることがある。** 送る側でもう一度見ていないと、
+   * ここは素通りしてサーバの 422 で初めて分かる。
+   */
+  it('組み直した結果が上限を超えたら、投げる前に弾く', () => {
+    const longDescription = 'あ'.repeat(LOCAL_SERVER_MAX_PROMPT_CHARS - 100)
+    const spec = makeSpec()
+
+    expect(() =>
+      build({ prompt: '短い', promptParts: { ...spec.promptParts, shotDescription: longDescription } }),
+    ).toThrow(/上限/)
   })
 })
 

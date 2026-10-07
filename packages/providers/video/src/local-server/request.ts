@@ -59,18 +59,27 @@ export const localServerInputError = (
  * どのサーバでも同じ入力の検査（プロンプトの有無と長さ・seed の符号）。
  * **画像を取り寄せる前に呼ぶ。** 落ちるなら 20MB を読む前に落とす。
  */
-export const ensurePromptAndSeed = (
-  identity: LocalServerIdentity,
-  spec: ShotGenerationSpec,
-): void => {
-  const promptChars = [...spec.prompt].length
-  if (spec.prompt.trim() === '') throw localServerInputError(identity, 'プロンプトが空です')
+/**
+ * 送る文面の検査。**仕様の文面ではなく、実際に送るものを渡す。**
+ * H3 は公式の書き方へ組み直してから送る（`vpipe/h3-prompt.ts`）ので、
+ * 仕様の `prompt` だけを見ていると、組み直した結果が上限を超えても気付けない。
+ */
+export const ensurePromptLength = (identity: LocalServerIdentity, prompt: string): void => {
+  const promptChars = [...prompt].length
+  if (prompt.trim() === '') throw localServerInputError(identity, 'プロンプトが空です')
   if (promptChars > LOCAL_SERVER_MAX_PROMPT_CHARS) {
     throw localServerInputError(
       identity,
       `プロンプトが ${String(promptChars)} 文字あり、上限 ${String(LOCAL_SERVER_MAX_PROMPT_CHARS)} 文字を超えています`,
     )
   }
+}
+
+export const ensurePromptAndSeed = (
+  identity: LocalServerIdentity,
+  spec: ShotGenerationSpec,
+): void => {
+  ensurePromptLength(identity, spec.prompt)
   if (spec.seed !== null && spec.seed < 0) {
     throw localServerInputError(identity, 'seed は 0 以上にしてください')
   }

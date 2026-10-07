@@ -15,6 +15,7 @@ import {
   vpipeVideoModels,
   type VpipeQuality,
 } from './descriptor.js'
+import { H3_PROMPT_FORMAT } from './h3-prompt.js'
 import { buildVpipeBody, VPIPE_STEPS } from './request.js'
 
 /**
@@ -46,8 +47,12 @@ const binding: LocalServerBinding<VpipeQuality> = {
       frames: framesForDuration(quantizeDuration(spec.durationSec, model.capabilities.durations)),
       startImage: null,
     }),
-  // 送ったステップ数は仕様から組み直せないので記録に残す。
-  extraRecord: () => ({ steps: VPIPE_STEPS }),
+  /**
+   * 送ったステップ数と、**本文の組み立ての版**を記録に残す。
+   * 文面そのものは持たない（`poll` はジョブ ID しか受け取らない）。
+   * 版を残しておけば、仕様（`Take.spec`）と合わせて**いつでも同じ文面を組み直せる**。
+   */
+  extraRecord: () => ({ steps: VPIPE_STEPS, promptFormat: H3_PROMPT_FORMAT }),
 }
 
 export const createVpipeVideoProvider = (options: VpipeVideoProviderOptions): VideoProvider =>

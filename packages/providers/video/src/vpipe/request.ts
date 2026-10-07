@@ -1,9 +1,11 @@
 import type { Resolution, ShotGenerationSpec } from '@ixa/domain'
 import {
   ensurePromptAndSeed,
+  ensurePromptLength,
   type LocalServerImage,
 } from '../local-server/request.js'
 import { VPIPE_IDENTITY, type VpipeQuality } from './descriptor.js'
+import { buildH3Prompt } from './h3-prompt.js'
 
 /**
  * MiniMax H3（vpipe-api の `minimax-h3-turbo-video`）の投入の本文。
@@ -51,8 +53,21 @@ export const buildVpipeBody = (input: BuildVpipeBody): VpipeJobBody => {
   const { spec, quality, frames, startImage } = input
   ensurePromptAndSeed(VPIPE_IDENTITY, spec)
 
+  /**
+   * **公式の書き方へ組み直してから送る**（ADR-0042・`h3-prompt.ts`）。
+   * 組み直すと文面は長くなるので、上限はここでもう一度見る
+   * （上の検査は仕様の文面に掛かっていて、送るものには掛かっていない）。
+   */
+  const prompt = buildH3Prompt({
+    spec,
+    hasStartImage: startImage !== null,
+    // 最後の画像を付ける画面がまだ無い（`end_image` は常に null）。
+    hasEndImage: false,
+  })
+  ensurePromptLength(VPIPE_IDENTITY, prompt)
+
   return {
-    prompt: spec.prompt,
+    prompt,
     // サーバが小さく作ってこの大きさへ拡大する。Project の解像度そのものを渡す。
     output: { width: spec.resolution.width, height: spec.resolution.height },
     frames,
