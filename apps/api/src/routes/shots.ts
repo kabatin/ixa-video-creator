@@ -14,7 +14,9 @@ import {
   Shot as ShotSchema,
   ShotId as ShotIdSchema,
   Take as TakeSchema,
+  lineagePairViolation,
   TakeId as TakeIdSchema,
+  type TakeId,
   UpdateShotPatch as UpdateShotPatchSchema,
   type GenerationContextSource,
   GenerationJob as GenerationJobSchema,
@@ -120,6 +122,16 @@ const GenerateBody = z
      * 二重に書くと必ずズレて、画面では通るのに API で落ちる入力が生まれる。
      */
     corrections: CorrectionsSchema.default([]),
+    /**
+     * 作り直しの元になる Take（ADR-0042 の「本番で作り直す」）。
+     *
+     * **Take は作る瞬間にしか系譜を持てない**（`parent_take_id` を後から UPDATE できない。
+     * `apps/worker/src/generation/lineage.ts`）。だから依頼の時点で渡す。
+     * 列も worker の処理も前からあるが、**書く側がここまで無かった**。
+     */
+    parentTakeId: TakeIdSchema.optional(),
+    /** なぜ作り直すのか。**親を渡すなら必須**（domain の `lineagePairViolation` と同じ規則）。 */
+    regenerationReason: z.string().trim().min(1).max(200).optional(),
   })
   .openapi('GenerateShotInput')
 
@@ -415,6 +427,40 @@ export const fitTimingWhenStretched = async (
   return true
 }
 
+/**
+ * 作り直しの系譜を確かめる（ADR-0042 の「本番で作り直す」）。
+ *
+ * - 親を渡すなら**理由も必須**（domain の `lineagePairViolation` と同じ規則を、ここでも同じ関数で見る）
+ * - 親は**その Shot の Take**であること。別の Shot の Take を親にすると系譜が壊れる
+ * - 見えなくした Take も親にできる（作り直しの元が消されていても、記録としては正しい）
+ */
+export const resolveLineage = async (
+  deps: Pick<ShotRoutesDeps, 'takes'>,
+  shot: Shot,
+  parentTakeId: TakeId | undefined,
+  regenerationReason: string | undefined,
+): Promise<
+  | { readonly ok: true; readonly value: { parentTakeId: TakeId; regenerationReason: string } | null }
+  | { readonly ok: false; readonly fields: Record<string, string[]> }
+> => {
+  if (parentTakeId === undefined) {
+    return regenerationReason === undefined
+      ? { ok: true, value: null }
+      : { ok: false, fields: { parentTakeId: ['作り直しの理由だけでは作り直せません（元の Take も渡してください）'] } }
+  }
+  const violation = lineagePairViolation({
+    parentTakeId,
+    regenerationReason: regenerationReason ?? null,
+  })
+  if (violation !== null) return { ok: false, fields: { regenerationReason: [violation] } }
+
+  const parent = await deps.takes.findById(parentTakeId, { includeHidden: true })
+  if (parent === null || parent.shotId !== shot.id) {
+    return { ok: false, fields: { parentTakeId: ['この Shot に属する Take ではありません'] } }
+  }
+  return { ok: true, value: { parentTakeId, regenerationReason: regenerationReason as string } }
+}
+
 /** GenerationJob 行を作りつつキューへ入れる。DB が真実、キューは実行手段（ADR-0008）。 */
 export const enqueueJobs = async (
   deps: Pick<ShotRoutesDeps, 'generationJobs' | 'queue'>,
@@ -423,6 +469,11 @@ export const enqueueJobs = async (
   requestedModel: ModelId | 'AUTO',
   count: number,
   corrections: readonly string[] = [],
+  /**
+   * 作り直しの系譜。**行に積む。** Take は作る瞬間にしか親を持てないので、
+   * ここで落とすとその Take は永久に系譜を持たない（`generation/lineage.ts`）。
+   */
+  lineage: { readonly parentTakeId: TakeId; readonly regenerationReason: string } | null = null,
 ): Promise<GenerationJobId[]> => {
   const created: GenerationJobId[] = []
   for (let i = 0; i < count; i += 1) {
@@ -437,6 +488,7 @@ export const enqueueJobs = async (
        * ここで積み忘れると `specHash` が食い違って `spec_drift` で落ちる（L-012）。
        */
       corrections: [...corrections],
+      ...(lineage === null ? {} : lineage),
     })
     await deps.queue.enqueue(job.id)
     created.push(job.id)
@@ -633,7 +685,14 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
       const project = await deps.projects.findById(shot.projectId)
       if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
 
-      const { model, count, corrections } = c.req.valid('json')
+      const { model, count, corrections, parentTakeId, regenerationReason } = c.req.valid('json')
+
+      /**
+       * 作り直しの系譜（ADR-0042）。**組み立ての前に確かめる。**
+       * 親がこの Shot のものでなければ、別の Shot の Take を親に持つ Take ができる。
+       */
+      const lineage = await resolveLineage(deps, shot, parentTakeId, regenerationReason)
+      if (lineage.ok === false) return c.json(fail(VALIDATION_ERROR_MESSAGE, lineage.fields), 422)
 
       let compiled: CompiledGeneration<VideoModelDescriptor>
       try {
@@ -675,7 +734,7 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
       const duplicate = existing.find((t) => t.specHash === compiled.specHash) ?? null
 
       const stretchedToFit = await fitTimingWhenStretched(deps, shot, compiled)
-      const jobIds = await enqueueJobs(deps, shot, compiled, model, count, corrections)
+      const jobIds = await enqueueJobs(deps, shot, compiled, model, count, corrections, lineage.value)
       const generating = await deps.shots.updateStatus(shot.id, 'generating')
       await publishShotStatus(deps, generating)
 

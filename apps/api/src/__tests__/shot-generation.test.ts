@@ -26,6 +26,40 @@ import {
 } from './shot-test-support.js'
 
 describe('POST /shots/:id/generate', () => {
+  /**
+   * 作り直しの系譜（ADR-0042 の「本番で作り直す」）。
+   *
+   * **Take は作る瞬間にしか親を持てない**（作成後に `parent_take_id` を UPDATE できない）。
+   * ここで行に積み忘れると、その Take は永久に「何の作り直しか」を持たない。
+   */
+  it('作り直しなら、親と理由を GenerationJob の行に積む', async () => {
+    const f = buildFixture()
+    // この Shot に属する親（**リポジトリの口から入れる**。snapshot は読み取り用）。
+    const parentOfShot = await f.takes.create(aTake(f.shot, '0'.repeat(64)))
+
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, {
+      model: 'test/cheap',
+      parentTakeId: parentOfShot.id,
+      regenerationReason: '本番で作り直す',
+    })
+
+    expect(res.status).toBe(202)
+    const job = f.generationJobs.snapshot()[0]
+    expect(job?.parentTakeId).toBe(parentOfShot.id)
+    expect(job?.regenerationReason).toBe('本番で作り直す')
+  })
+
+  it('通常の生成では系譜を持たない（両方 null）', async () => {
+    const f = buildFixture()
+
+    await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/cheap' })
+
+    const job = f.generationJobs.snapshot()[0]
+    expect(job?.parentTakeId).toBeNull()
+    expect(job?.regenerationReason).toBeNull()
+  })
+
+
   it('仕様を組み立てて GenerationJob を作り、キューへ投入する', async () => {
     const f = buildFixture()
 
