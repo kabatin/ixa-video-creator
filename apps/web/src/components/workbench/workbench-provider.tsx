@@ -279,7 +279,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
 
   /** 採用は description / mood しか書き換えないので、残りの列は手元の値を残す。 */
   const applyAdoptedShots = useCallback(
-    (adopted: readonly Pick<Shot, 'id' | 'description' | 'mood'>[]): void => {
+    (adopted: readonly Pick<Shot, 'id' | 'description' | 'mood' | 'camera'>[]): void => {
       const patches = new Map(adopted.map((shot) => [shot.id, shot] as const))
       setShots((current) =>
         current === null
@@ -288,7 +288,8 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
               const patch = patches.get(shot.id)
               return patch === undefined
                 ? shot
-                : { ...shot, description: patch.description, mood: patch.mood }
+                : // **カメラも写す。** 落とすと、入っているのに画面だけ古いままになる（ADR-0043）。
+                  { ...shot, description: patch.description, mood: patch.mood, camera: patch.camera }
             }),
       )
     },

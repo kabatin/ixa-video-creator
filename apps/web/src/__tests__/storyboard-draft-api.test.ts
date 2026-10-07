@@ -125,7 +125,23 @@ describe('createStoryboardDraftApi', () => {
       success: true,
       data: {
         adopted: [{ ...item, adoptedAt: '2026-09-18T01:00:00.000Z' }],
-        shots: [{ id: shotId, code: 'A', description: '決勝卓を引きで捉える', mood: '静かな緊張' }],
+        shots: [
+          {
+            id: shotId,
+            code: 'A',
+            description: '決勝卓を引きで捉える',
+            mood: '静かな緊張',
+            // 採用で入ったカメラ（ADR-0043）。**受け取らないと画面に出ない。**
+            camera: {
+              size: 'medium',
+              angleH: null,
+              angle: null,
+              lensMm: null,
+              movement: 'tilt',
+              movementIntensity: 'moderate',
+            },
+          },
+        ],
       },
     })
     const result = await api().adopt(projectId, runId, [shotId])
@@ -135,6 +151,7 @@ describe('createStoryboardDraftApi', () => {
     )
     expect(JSON.parse(captured[0]?.body ?? 'null')).toEqual({ shotIds: [shotId] })
     expect(result.shots[0]?.description).toBe('決勝卓を引きで捉える')
+    expect(result.shots[0]?.camera.movement).toBe('tilt')
   })
 
   it('封筒の形が違えば例外にする（黙って通さない）', async () => {

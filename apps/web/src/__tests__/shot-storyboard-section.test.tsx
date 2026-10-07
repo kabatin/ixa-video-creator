@@ -41,11 +41,24 @@ const itemOf = (overrides: Partial<WireStoryboardDraftItem> = {}): WireStoryboar
   createdAt: '2026-10-03T00:00:00.000Z',
   ...overrides,
 })
+/** 採用で入るカメラ（ADR-0043）。**応答に含まれないと画面に出ない**ので、偽の応答にも入れる。 */
+const ADOPTED_CAMERA = {
+  size: 'medium',
+  angleH: null,
+  angle: null,
+  lensMm: null,
+  movement: 'tilt',
+  movementIntensity: 'moderate',
+} as const
+
 const apiWith = (item: WireStoryboardDraftItem | null): StoryboardDraftApi => ({
   getLatestDraft: vi.fn(() => Promise.resolve({ run: item === null ? null : run, items: item === null ? [] : [item] })),
   createDraft: vi.fn(),
   adopt: vi.fn(() =>
-    Promise.resolve({ adopted: [], shots: [{ id: shot.id, code: shot.code, description: '夜明けの屋上、二人の背中', mood: '希望' }] }),
+    Promise.resolve({
+      adopted: [],
+      shots: [{ id: shot.id, code: shot.code, description: '夜明けの屋上、二人の背中', mood: '希望', camera: ADOPTED_CAMERA }],
+    }),
   ),
 })
 
@@ -82,8 +95,9 @@ describe('ShotStoryboardSection', () => {
     await waitFor(() => {
       expect(api.adopt).toHaveBeenCalledWith(projectId, run.id, [shot.id])
     })
+    // **カメラも渡す。** 落とすと、入っているのに画面だけ古いままになる（ADR-0043）。
     expect(value.applyAdoptedShots).toHaveBeenCalledWith([
-      { id: shot.id, code: shot.code, description: '夜明けの屋上、二人の背中', mood: '希望' },
+      { id: shot.id, code: shot.code, description: '夜明けの屋上、二人の背中', mood: '希望', camera: ADOPTED_CAMERA },
     ])
   })
 

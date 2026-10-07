@@ -106,7 +106,7 @@ export type WorkbenchContextValue = {
   readonly saveShot: (shotId: ShotId, patch: ShotPatch) => Promise<Shot>
   readonly replaceShots: (updated: readonly Shot[]) => void
   readonly applyAdoptedShots: (
-    adopted: readonly Pick<Shot, 'id' | 'description' | 'mood'>[],
+    adopted: readonly Pick<Shot, 'id' | 'description' | 'mood' | 'camera'>[],
   ) => void
   /** サーバの材料を読み直す（`router.refresh()`）。一覧の正はサーバ。 */
   readonly refresh: () => void

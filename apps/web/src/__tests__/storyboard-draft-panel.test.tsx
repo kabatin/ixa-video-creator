@@ -50,6 +50,16 @@ const shotB: CurrentShot = {
   mood: null,
 }
 
+/** 採用で入るカメラ（ADR-0043）。**応答に含まれないと画面に出ない**ので、偽の応答にも入れる。 */
+const ADOPTED_CAMERA = {
+  size: 'medium',
+  angleH: null,
+  angle: null,
+  lensMm: null,
+  movement: 'tilt',
+  movementIntensity: 'moderate',
+} as const
+
 const itemFor = (
   shotId: ShotId,
   overrides: Partial<WireStoryboardDraftItem> = {},
@@ -162,7 +172,7 @@ describe('StoryboardDraftPanel', () => {
       adopt: vi.fn(() =>
         Promise.resolve({
           adopted: [adoptedA],
-          shots: [{ id: shotA.id, code: 'A', description: 'A の案', mood: '静かな緊張' }],
+          shots: [{ id: shotA.id, code: 'A', description: 'A の案', mood: '静かな緊張', camera: ADOPTED_CAMERA }],
         }),
       ),
     })
@@ -207,7 +217,7 @@ describe('StoryboardDraftPanel', () => {
         adopt: vi.fn(() =>
           Promise.resolve({
             adopted: [itemFor(shotA.id, { adoptedAt: '2026-09-18T01:00:00.000Z' })],
-            shots: [{ id: shotA.id, code: 'A', description: 'A の案', mood: '静かな緊張' }],
+            shots: [{ id: shotA.id, code: 'A', description: 'A の案', mood: '静かな緊張', camera: ADOPTED_CAMERA }],
           }),
         ),
       }),
@@ -217,8 +227,9 @@ describe('StoryboardDraftPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: '選んだ 1 件を採用する' }))
 
     await waitFor(() => {
+      // **カメラも渡す。** 落とすと、入っているのに画面だけ古いままになる（ADR-0043）。
       expect(onAdopted).toHaveBeenCalledWith([
-        { id: shotA.id, code: 'A', description: 'A の案', mood: '静かな緊張' },
+        { id: shotA.id, code: 'A', description: 'A の案', mood: '静かな緊張', camera: ADOPTED_CAMERA },
       ])
     })
   })

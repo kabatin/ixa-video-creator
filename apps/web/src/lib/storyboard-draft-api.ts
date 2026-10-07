@@ -1,4 +1,4 @@
-import { ShotId, StoryboardDraftCamera, StoryboardDraftItemId, StoryboardDraftRunId, type ProjectId } from '@ixa/domain'
+import { ShotCamera, ShotId, StoryboardDraftCamera, StoryboardDraftItemId, StoryboardDraftRunId, type ProjectId } from '@ixa/domain'
 import { z } from 'zod'
 import type { Requester } from '@/lib/requester'
 
@@ -72,6 +72,11 @@ export const WireAdoptedShot = z.object({
   code: z.string().min(1),
   description: z.string(),
   mood: z.string().nullable(),
+  /**
+   * 採用で入ったカメラ（ADR-0043）。**ここで受け取らないと画面に出ない。**
+   * 読み込み直せば出るが、押した直後に反映されないと「入っていない」と見える。
+   */
+  camera: ShotCamera,
 })
 export type WireAdoptedShot = z.infer<typeof WireAdoptedShot>
 
