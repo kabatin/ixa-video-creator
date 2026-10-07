@@ -15,6 +15,13 @@ export type VideoModelDescriptor = {
    * 無料の寄りへ切り替わると、生成を頼んだつもりが画像を動かすだけになる。明示して選ばせる。
    */
   readonly routable?: boolean
+  /**
+   * 同じ Provider の中での**生成の段**（ADR-0042）。段を持たない Provider は省く。
+   *
+   * 画面の「本番で作り直す」が、**モデル ID を書き写さずに**本番の段を見つけるために要る。
+   * ID の文字列から導かない（`FAL_MODEL_PATHS` や `VPIPE_MODEL_QUALITIES` と同じ理由）。
+   */
+  readonly qualityTier?: 'draft' | 'standard' | 'final'
 }
 
 /** Provider 側のジョブを指す不透明なハンドル。中身の形は Provider ごとに異なる。 */

@@ -49,6 +49,35 @@ describe('POST /shots/:id/generate', () => {
     expect(job?.regenerationReason).toBe('本番で作り直す')
   })
 
+  /**
+   * 使うシード（ADR-0042 の「本番で作り直す」）。試作で気に入った絵を同じシードで作り直す。
+   * **0 は正当なシード**なので「省略」と混ぜない。
+   */
+  it('渡したシードが仕様に載り、省略すれば Provider に任せる', async () => {
+    const f = buildFixture()
+
+    const withSeed = await postJson(f.app, `/shots/${f.shot.id}/generate`, {
+      model: 'test/cheap',
+      seed: 0,
+    })
+    const withoutSeed = await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/cheap' })
+
+    expect(withSeed.status).toBe(202)
+    expect(withoutSeed.status).toBe(202)
+    // 仕様が違えば specHash も違う（0 と「任せる」は別物）。
+    const a = (await withSeed.json()) as Ok<GenerateData>
+    const b = (await withoutSeed.json()) as Ok<GenerateData>
+    expect(a.data.specHash).not.toBe(b.data.specHash)
+  })
+
+  it('負のシードは断る', async () => {
+    const f = buildFixture()
+
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/cheap', seed: -1 })
+
+    expect(res.status).toBe(422)
+  })
+
   it('通常の生成では系譜を持たない（両方 null）', async () => {
     const f = buildFixture()
 

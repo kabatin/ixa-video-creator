@@ -1,7 +1,7 @@
 'use client'
 
 import type { Take, TakeId } from '@ixa/domain'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { TakeComparePanel } from '@/components/take-compare-panel'
 import { TakeGrid } from '@/components/take-grid'
 import { useShotTakes } from '@/components/workbench/use-shot-takes'
@@ -11,7 +11,9 @@ import { TakeEmpty } from '@/components/workbench/panels/take-empty'
 import { ShotStatusBadge } from '@/components/shot-status-badge'
 import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
-import { describeError } from '@/lib/api-error'
+import { describeError, describeForPerson } from '@/lib/api-error'
+import { finalModelFor } from '@/lib/generation-options'
+import type { WireVideoModel } from '@/lib/models-api'
 import { unselectAdoptedTake } from '@/components/workbench/shot-edit-actions'
 import { useContextMenuHost, type ContextMenuItem } from '@/components/workbench/ui/context-menu'
 import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
@@ -31,6 +33,26 @@ export const ComparePanel = () => {
   const { takes, error, reload } = useShotTakes(shot, workbench.posterEpoch)
   const [adopting, setAdopting] = useState(false)
   const [adoptError, setAdoptError] = useState<string | null>(null)
+  /**
+   * 登録されているモデル。**null は「読めていない」。**
+   * 「本番で作り直す」が、段が `final` のモデルをここから探す（ID を書き写さない。ADR-0042）。
+   */
+  const [models, setModels] = useState<readonly WireVideoModel[] | null>(null)
+  useEffect(() => {
+    let alive = true
+    createApiClient()
+      .listModels()
+      .then((loaded) => {
+        if (alive) setModels(loaded)
+      })
+      .catch(() => {
+        // 読めなくても比較は使える。**「本番で作り直す」が押せなくなるだけ。**
+        if (alive) setModels(null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
   // Take の右クリック（長押し・Shift+F10）とカードの「…」のメニュー: 採用する / 採用を外す / 消す。
   const host = useContextMenuHost()
   const takeMenuItems = (take: Take): readonly ContextMenuItem[] => {
@@ -42,6 +64,28 @@ export const ComparePanel = () => {
       unadopt: () => {
         unselectAdoptedTake(workbench, shot, workbench.notify)
       },
+      /**
+       * 本番の画質で作り直す（ADR-0042）。**同じ仕様・同じシード**で、段が `final` のモデルへ頼む。
+       * できた Take は元の Take と並ぶ（元は消えない。Take は追記のみ）。
+       */
+      remake_final: async () => {
+        const finalModel = finalModelFor(models, take.modelId)
+        if (finalModel === null) return
+        try {
+          await createApiClient().generateTakes(shot.id, {
+            model: finalModel.id,
+            count: 1,
+            parentTakeId: take.id,
+            regenerationReason: '本番で作り直す',
+            // 0 は正当なシード。**`??` で畳まない**（畳むと「任せる」と区別できない）。
+            ...(take.seedUsed === null ? {} : { seed: take.seedUsed }),
+          })
+          workbench.notify(`${shot.code} の Take ${String(take.index)} を ${finalModel.label} で作り直します。`)
+          reload()
+        } catch (cause: unknown) {
+          workbench.notify(`作り直しを頼めませんでした: ${describeForPerson(cause)}`)
+        }
+      },
       // 失敗は投げる（確認の殻が理由を出す）。消したら一覧を読み直し、Shot の状態を映す。
       hide: async () => {
         const updated = await createApiClient().hideTake(take)
@@ -51,7 +95,12 @@ export const ComparePanel = () => {
       },
     }
     return toMenuItems(
-      takeMenuEntries({ adopted: shot.selectedTakeId === take.id, index: take.index }),
+      takeMenuEntries({
+        adopted: shot.selectedTakeId === take.id,
+        index: take.index,
+        finalModelLabel: finalModelFor(models, take.modelId)?.label ?? null,
+        seedUsed: take.seedUsed,
+      }),
       run,
     )
   }

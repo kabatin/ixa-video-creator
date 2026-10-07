@@ -214,6 +214,7 @@ export const vpipeH3TurboDraftModel: VideoModelDescriptor = {
   capabilities,
   qualities,
   economics: economics(VPIPE_DRAFT_TYPICAL_LATENCY_SEC, VPIPE_DRAFT_LATENCY_SEC_PER_OUTPUT_SEC),
+  qualityTier: 'draft',
   routable: false,
 }
 
@@ -224,6 +225,7 @@ export const vpipeH3TurboModel: VideoModelDescriptor = {
   capabilities,
   qualities,
   economics: economics(VPIPE_STANDARD_TYPICAL_LATENCY_SEC, VPIPE_STANDARD_LATENCY_SEC_PER_OUTPUT_SEC),
+  qualityTier: 'standard',
   routable: false,
 }
 
@@ -240,6 +242,7 @@ export const vpipeH3TurboFinalModel: VideoModelDescriptor = {
   capabilities,
   qualities,
   economics: economics(VPIPE_FINAL_TYPICAL_LATENCY_SEC, VPIPE_FINAL_LATENCY_SEC_PER_OUTPUT_SEC),
+  qualityTier: 'final',
   routable: false,
 }
 

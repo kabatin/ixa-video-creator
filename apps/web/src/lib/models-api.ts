@@ -37,6 +37,11 @@ export const WireVideoModel = z.object({
   requiresStartFrame: z.boolean(),
   /** AUTO の候補になるか。false は明示して選ぶモデル。 */
   routable: z.boolean(),
+  /**
+   * 同じ Provider の中での生成の段（ADR-0042）。段を持たないモデルは null。
+   * 「本番で作り直す」が、**モデル ID を書き写さずに**本番の段を見つけるために使う。
+   */
+  qualityTier: z.enum(['draft', 'standard', 'final']).nullable().default(null),
 })
 export type WireVideoModel = z.infer<typeof WireVideoModel>
 

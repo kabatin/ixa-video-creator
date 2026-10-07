@@ -37,3 +37,23 @@ export const TAKE_COUNT_OPTIONS: readonly Option[] = Array.from(
     return { value: String(count), label: `${String(count)} 本` }
   },
 )
+
+/**
+ * その Take を「本番で作り直す」ときに使うモデル（ADR-0042）。
+ *
+ * **同じ Provider の、段が `final` のモデル**を登録されている一覧から探す。
+ * モデル ID を画面に書き写さない（一覧は `GET /models` が唯一の正）。
+ * 見つからなければ null（＝その場に本番の段が無いので、操作を出さない）。
+ */
+export const finalModelFor = (
+  models: readonly WireVideoModel[] | null,
+  takeModelId: string,
+): WireVideoModel | null => {
+  const source = (models ?? []).find((model) => model.id === takeModelId)
+  if (source === undefined) return null
+  return (
+    (models ?? []).find(
+      (model) => model.providerId === source.providerId && model.qualityTier === 'final',
+    ) ?? null
+  )
+}

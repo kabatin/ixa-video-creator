@@ -476,3 +476,34 @@ describe('buildGeneration — 指摘の直し（corrections）', () => {
     expect(compiled.spec.corrections).toEqual(['光を強く'])
   })
 })
+
+/**
+ * 使うシード（ADR-0042 の「本番で作り直す」）。
+ * 試作で気に入った絵を、同じシードのまま本番の解像度で作り直すために要る。
+ */
+describe('シード', () => {
+  /**
+   * **同じ Shot・同じ Project で比べる。** 作り直すと `shotId` が変わり、
+   * シード以外の理由で specHash が動く（lessons「ハッシュの比較は同じ fixture で」）。
+   */
+  const shot = aShot(projectId)
+  const project = aProject()
+  const build = (options?: Parameters<typeof buildGeneration>[4]) =>
+    buildGeneration(depsOf([modelA]).deps, shot, project, modelA.id, options)
+
+  it('省略すると Provider に任せる（仕様は null）', async () => {
+    expect((await build()).spec.seed).toBeNull()
+  })
+
+  it('渡したシードが仕様に載る', async () => {
+    expect((await build({ seed: 917318685 })).spec.seed).toBe(917318685)
+  })
+
+  /** シードが違えば別の仕様。同じ specHash になると、別物を「同じ」と見なしてしまう。 */
+  it('シードが違えば specHash も変わる', async () => {
+    const [a, b, again] = await Promise.all([build({ seed: 1 }), build({ seed: 2 }), build({ seed: 1 })])
+
+    expect(a.specHash).not.toBe(b.specHash)
+    expect(again.specHash).toBe(a.specHash)
+  })
+})

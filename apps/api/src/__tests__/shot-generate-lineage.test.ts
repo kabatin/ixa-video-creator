@@ -15,7 +15,7 @@ const PROJECT_ID = newId(ProjectIdSchema)
 
 const aHash = (n: number): string => String(n).repeat(64).slice(0, 64)
 
-const withParent = async () => {
+const withParent = () => {
   const shot = aShot(PROJECT_ID, { code: 'CUT-01' })
   const other = aShot(PROJECT_ID, { code: 'CUT-02' })
   const parent = aTake(shot, aHash(1), { index: 1 })
@@ -26,13 +26,13 @@ const withParent = async () => {
 
 describe('resolveLineage', () => {
   it('どちらも渡さなければ、系譜なしで通す（通常の生成）', async () => {
-    const { shot, deps } = await withParent()
+    const { shot, deps } = withParent()
 
     expect(await resolveLineage(deps, shot, undefined, undefined)).toEqual({ ok: true, value: null })
   })
 
   it('親と理由が揃っていれば、そのまま行に積む形で返す', async () => {
-    const { shot, parent, deps } = await withParent()
+    const { shot, parent, deps } = withParent()
 
     expect(await resolveLineage(deps, shot, parent.id, '本番で作り直す')).toEqual({
       ok: true,
@@ -42,7 +42,7 @@ describe('resolveLineage', () => {
 
   /** 親だけでは系譜にならない（domain の `lineagePairViolation` と同じ規則）。 */
   it('理由が無ければ断る', async () => {
-    const { shot, parent, deps } = await withParent()
+    const { shot, parent, deps } = withParent()
 
     const result = await resolveLineage(deps, shot, parent.id, undefined)
 
@@ -51,7 +51,7 @@ describe('resolveLineage', () => {
   })
 
   it('理由だけでも断る（元の Take が分からない）', async () => {
-    const { shot, deps } = await withParent()
+    const { shot, deps } = withParent()
 
     const result = await resolveLineage(deps, shot, undefined, '本番で作り直す')
 
@@ -61,7 +61,7 @@ describe('resolveLineage', () => {
 
   /** **別の Shot の Take を親にしない。** 系譜が Shot をまたぐと、何の作り直しか分からなくなる。 */
   it('ほかの Shot の Take は親にできない', async () => {
-    const { shot, foreign, deps } = await withParent()
+    const { shot, foreign, deps } = withParent()
 
     const result = await resolveLineage(deps, shot, foreign.id, '本番で作り直す')
 
@@ -70,14 +70,14 @@ describe('resolveLineage', () => {
   })
 
   it('いない Take は親にできない', async () => {
-    const { shot, deps } = await withParent()
+    const { shot, deps } = withParent()
 
     expect((await resolveLineage(deps, shot, newId(TakeIdSchema), '本番で作り直す')).ok).toBe(false)
   })
 
   /** 作り直しの元を「消し」ていても、記録としての系譜は正しい（Take は消えない）。 */
   it('見えなくした Take も親にできる', async () => {
-    const { shot, parent, deps } = await withParent()
+    const { shot, parent, deps } = withParent()
     await deps.takes.hide(parent.id, new Date())
 
     expect((await resolveLineage(deps, shot, parent.id, '本番で作り直す')).ok).toBe(true)

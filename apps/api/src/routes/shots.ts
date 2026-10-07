@@ -132,6 +132,13 @@ const GenerateBody = z
     parentTakeId: TakeIdSchema.optional(),
     /** なぜ作り直すのか。**親を渡すなら必須**（domain の `lineagePairViolation` と同じ規則）。 */
     regenerationReason: z.string().trim().min(1).max(200).optional(),
+    /**
+     * 使うシード（ADR-0042 の「本番で作り直す」）。**省略は Provider に任せる**（従来どおり）。
+     *
+     * 上限はここで決めない。Provider ごとに違う（Wan には `WAN_MAX_SEED` がある）ので、
+     * **その Provider が断る**。ここでは「負でない整数」だけを見る。
+     */
+    seed: z.number().int().nonnegative().optional(),
   })
   .openapi('GenerateShotInput')
 
@@ -685,7 +692,7 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
       const project = await deps.projects.findById(shot.projectId)
       if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
 
-      const { model, count, corrections, parentTakeId, regenerationReason } = c.req.valid('json')
+      const { model, count, corrections, parentTakeId, regenerationReason, seed } = c.req.valid('json')
 
       /**
        * 作り直しの系譜（ADR-0042）。**組み立ての前に確かめる。**
@@ -698,6 +705,8 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
       try {
         compiled = await buildGeneration(await generationPorts(deps), shot, project, model, {
           corrections,
+          // 省略は「Provider に任せる」。**0 は正当なシード**なので `?? null` で畳まない。
+          ...(seed === undefined ? {} : { seed }),
         })
       } catch (error) {
         /**

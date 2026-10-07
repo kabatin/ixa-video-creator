@@ -48,6 +48,11 @@ const VideoModel = z
     requiresStartFrame: z.boolean(),
     /** AUTO（ルーター）の候補になるか。false は明示して選ぶモデル。 */
     routable: z.boolean(),
+    /**
+     * 同じ Provider の中での生成の段（ADR-0042）。段を持たないモデルは null。
+     * 画面の「本番で作り直す」が、**モデル ID を書き写さずに**本番の段を見つけるために使う。
+     */
+    qualityTier: z.enum(['draft', 'standard', 'final']).nullable(),
   })
   .openapi('VideoModel')
 
@@ -89,6 +94,7 @@ export const modelRoutes = (deps: ModelsDeps) =>
             audioGeneration: model.capabilities.audioGeneration,
             requiresStartFrame: model.capabilities.requiresStartFrame === true,
             routable: model.routable !== false,
+            qualityTier: model.qualityTier ?? null,
           })),
         ),
       ),

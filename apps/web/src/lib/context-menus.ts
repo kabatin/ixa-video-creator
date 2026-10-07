@@ -194,7 +194,7 @@ export const assetMenuEntries = (input: {
   ]
 }
 
-export type TakeMenuAction = 'adopt' | 'unadopt' | 'hide'
+export type TakeMenuAction = 'adopt' | 'unadopt' | 'hide' | 'remake_final'
 
 /**
  * Take のメニュー（Take 比較のカードの右クリックと「…」）。採用する・外す・消す。
@@ -204,12 +204,31 @@ export const takeMenuEntries = (input: {
   readonly adopted: boolean
   /** 画面の Take の番号（確認の文に入れる）。 */
   readonly index: number
+  /**
+   * 本番の段のモデルの名前（ADR-0042）。**無ければ「本番で作り直す」を押せなくする。**
+   * 段が無い環境（手元の生成サーバを使っていない・サーバが古い）で、
+   * 押しても必ず断られる操作を出さないため。
+   */
+  readonly finalModelLabel?: string | null
+  /** 作り直しに使うシード。無ければ Provider に任せる（文言が変わる）。 */
+  readonly seedUsed?: number | null
 }): readonly ContextMenuEntry<TakeMenuAction>[] => [
   item('adopt', '採用する', {
     disabledReason: input.adopted ? 'この Take を採用しています' : null,
   }),
   item('unadopt', '採用を外す', {
     disabledReason: input.adopted ? null : 'この Take は採用していません',
+  }),
+  SEPARATOR,
+  item('remake_final', '本番で作り直す', {
+    disabledReason:
+      input.finalModelLabel === undefined || input.finalModelLabel === null
+        ? '本番の画質で作れる AI が登録されていません'
+        : null,
+    confirm:
+      `Take ${String(input.index)} と同じ仕様${input.seedUsed === null || input.seedUsed === undefined ? '' : '・同じシード'}で、` +
+      `${input.finalModelLabel ?? ''} に作り直しを頼みます。` +
+      '本番の画質は 1 本 20 分ほどかかり、できた Take は元の Take と並びます（元は消えません）。',
   }),
   SEPARATOR,
   item('hide', 'Take を消す', {

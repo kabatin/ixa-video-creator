@@ -1,4 +1,3 @@
-import type { Shot } from '@ixa/domain'
 import { act, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { useWorkbench } from '@/components/workbench/workbench-context'
@@ -36,7 +35,7 @@ const Probe = () => {
               description: '採用した説明',
               mood: null,
               camera: { ...SHOT.camera, movement: 'tilt', movementIntensity: 'moderate' },
-            } as Pick<Shot, 'id' | 'description' | 'mood' | 'camera'>,
+            },
           ])
         }}
       >

@@ -94,6 +94,16 @@ export type CompiledGeneration<M extends GenerationModel> = {
 export type BuildGenerationOptions = {
   /** レビューの指摘から人が選んだ直し（PHASE 6.1）。空なら仕様にキーを置かない。 */
   readonly corrections?: readonly string[]
+  /**
+   * 使うシード（ADR-0042 の「本番で作り直す」）。**省略は「Provider に任せる」**（従来どおり）。
+   *
+   * 試作で気に入った絵を本番の解像度で作り直すとき、同じシードから始めたい。
+   * `null` と `undefined` を区別しない（どちらも任せる）。
+   *
+   * **仕様に載るので specHash が変わる。** 変わってよい（シードが違えば別の仕様）。
+   * 同じシードで同じモデルなら、重複の警告が正しく出る。
+   */
+  readonly seed?: number | null
 }
 
 /** 仕様を組めない理由。呼び出し側が 422 へ変換する。 */
@@ -124,7 +134,7 @@ export const buildGeneration = async <M extends GenerationModel>(
   requestedModel: ModelId | 'AUTO',
   options: BuildGenerationOptions = {},
 ): Promise<CompiledGeneration<M>> => {
-  const { corrections = [] } = options
+  const { corrections = [], seed = null } = options
   const candidates =
     requestedModel === 'AUTO' ? deps.catalog.allModels() : [deps.catalog.findModel(requestedModel)]
   const first = candidates[0]
@@ -162,7 +172,7 @@ export const buildGeneration = async <M extends GenerationModel>(
       characters,
       references,
       generationDurationSec,
-      seed: null,
+      seed,
       negativePrompt: null,
       corrections,
     })

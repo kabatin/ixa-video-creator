@@ -76,6 +76,14 @@ export const GenerateTakesBody = z.object({
    * `Corrections.default([])` で受けるので、送らないことが「直し無し」を意味する。
    */
   corrections: Corrections.optional(),
+  /**
+   * 作り直しの元になる Take と、その理由（ADR-0042 の「本番で作り直す」）。
+   * **Take は作る瞬間にしか親を持てない**ので、依頼の時点で渡す。
+   */
+  parentTakeId: TakeId.optional(),
+  regenerationReason: z.string().trim().min(1).optional(),
+  /** 使うシード。**省略は Provider に任せる**（0 は正当なシードなので 0 と省略を混ぜない）。 */
+  seed: z.number().int().nonnegative().optional(),
 })
 export type GenerateTakesBody = z.input<typeof GenerateTakesBody>
 
