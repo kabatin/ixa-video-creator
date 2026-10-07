@@ -1086,7 +1086,10 @@ project_audio_settings       (作品ごとの読み辞書・ダッキング・�
 
 BullMQ + Redis（ADR-0008）。
 
-| キュー | 並列度 | ジョブ | 備考 |
+並列度は `WORKER_CONCURRENCY_<キュー名の大文字>`（例: `WORKER_CONCURRENCY_IMAGE=5`）で
+**コードを触らずに変えられる**。下の表はその既定値。
+
+| キュー | 並列度（既定） | ジョブ | 備考 |
 |---|---|---|---|
 | `media` | 8 | probe / proxy / thumbnail / frames | CPU バウンド |
 | `generation` | Provider ごとに制限 | submit / poll / download | レート制限あり |
@@ -1094,7 +1097,7 @@ BullMQ + Redis（ADR-0008）。
 | `render` | 1〜2 | Remotion レンダリング | CPU を占有する |
 | `analysis` | 2 | 音楽解析（Python へ委譲） | |
 | `regeneration` | 4 | 再生成の可否判定と投入 | review と分ける。レビューは LLM コストを払うため、再生成の失敗でやり直させない |
-| `image` | 1 | 絵コンテの画像・キャラクターシート（ADR-0029・0035） | Codex CLI は契約の利用枠で動く |
+| `image` | 3 | 絵コンテの画像・キャラクターシート（ADR-0029・0035） | Codex CLI は契約の利用枠で動く。1 枚 63〜117 秒（平均 85 秒・83 枚の実測）で、その間この機械の CPU はほぼ使わない（外の API を待つ）。3 本同時で 3 枚 109 秒（直列なら 231 秒）・失敗 0 件を実測（2026-10-07） |
 | `voice` | 1 | ナレーションの声・試しに読む・録音の文字起こし（ADR-0038） | 外部 API の回数の上限に配慮。whisper.cpp は手元の機械を大きく使う |
 
 ### 規約

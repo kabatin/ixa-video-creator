@@ -28,7 +28,7 @@ describe('QUEUE_CONFIGS', () => {
       analysis: 2,
       regeneration: 4,
       // 絵コンテの画像（ADR-0029）。Codex CLI は契約の利用枠で動くので、同時に何本も走らせない。
-      image: 1,
+      image: 3,
       // ナレーションの声と文字起こし（ADR-0038）。外部 API の回数の上限に配慮して 1 つずつ。
       voice: 1,
     })
@@ -89,7 +89,7 @@ describe('resolveQueueConfigs', () => {
       render: 1,
       analysis: 2,
       regeneration: 4,
-      image: 1,
+      image: 3,
       voice: 1,
     })
   })

@@ -40,10 +40,17 @@ export const QUEUE_CONFIGS: readonly QueueConfig[] = [
    */
   { name: QUEUE_NAMES.regeneration, concurrency: 4 },
   /**
-   * 絵コンテの画像（ADR-0029）。**同時 1 本。** Codex CLI は契約の利用枠で動き、1 枚 70 秒ほどかかる。
-   * 何本も同時に走らせると利用枠の上限に当たりやすく、手元の機械も重くなる。
+   * 絵コンテの画像（ADR-0029）。**同時 3 本**（2026-10-07 に 1 本から上げた）。
+   *
+   * 1 本にしていた理由は「利用枠の上限に当たりやすく、手元の機械も重くなる」だったが、
+   * **実測はそう言っていない**。83 枚を作った実績で 1 枚 63〜117 秒（平均 85 秒）、
+   * その間 codex のプロセスは **CPU ほぼ 0%**（外の API を待っているだけ）で、この Mac は使っていない。
+   * 失敗 1 件も上限ではなく `cli_exit_failed`（終了コード 1）だった。
+   *
+   * 残るのは Codex 側の同時実行・レート制限で、これは試さないと分からない。
+   * 上限に当たれば失敗の理由にそう出る（`retryable`）ので、出たら戻す。
    */
-  { name: QUEUE_NAMES.image, concurrency: 1 },
+  { name: QUEUE_NAMES.image, concurrency: 3 },
   /**
    * ナレーションの声と文字起こし（ADR-0038）。**同時 1 つ。** Gemini の無料枠は 1 日・1 分の回数に上限があり、
    * ElevenLabs はプランごとに同時の数に上限がある。whisper.cpp は手元の機械を大きく使う。
