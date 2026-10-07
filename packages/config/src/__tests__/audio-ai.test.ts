@@ -10,6 +10,8 @@ import { loadConfig } from '../load.js'
 const requiredEnv: NodeJS.ProcessEnv = {
   DATABASE_URL: 'postgres://user:pass@localhost:5432/ixa',
   REDIS_URL: 'redis://localhost:6379',
+  // 置き場は既定が fs なので、署名の鍵まで要る（ADR-0041）。
+  STORAGE_SIGNING_SECRET: 'a'.repeat(32),
   S3_ENDPOINT: 'http://localhost:9000',
   S3_REGION: 'us-east-1',
   S3_BUCKET: 'ixa-media',

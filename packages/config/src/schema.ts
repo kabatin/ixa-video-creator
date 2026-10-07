@@ -24,10 +24,11 @@ export const EnvSchema = z.object({
    * - `fs` … この機械のただのファイル（`STORAGE_DIR` の下）。Finder で開ける
    * - `s3` … S3 互換のサーバ（MinIO など）。`S3_*` が必要
    *
-   * **既定はまだ `s3`。** 配信ルート（`GET /files/...`）と移行が済んでから `fs` に替える。
-   * 先に既定を替えると、移行前の環境でプレビューが読めなくなる。
+   * **既定は `fs`。** 1 人が 1 台の Mac で使う道具に、S3 互換のサーバを抱える理由はもう無い
+   * （MinIO はコミュニティ版のイメージ配布が止まり、版を固定できない）。
+   * `s3` は残してある。別の機械に分ける日が来たら戻せる。
    */
-  STORAGE_DRIVER: z.enum(['fs', 's3']).default('s3'),
+  STORAGE_DRIVER: z.enum(['fs', 's3']).default('fs'),
   /**
    * `fs` のときの置き場（絶対パスだけ）。省略すると `~/ixa-video-creator/storage`。
    * **相対パスや `~` は受けない。** どこに置くかが起動のしかたで変わってしまう（`RENDER_EXPORT_DIR` と同じ）。

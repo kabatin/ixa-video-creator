@@ -5,6 +5,9 @@ import { getConfig, loadConfig, resetConfigCache } from '../load.js'
 const requiredEnv: NodeJS.ProcessEnv = {
   DATABASE_URL: 'postgres://user:pass@localhost:5432/ixa',
   REDIS_URL: 'redis://localhost:6379',
+  // 置き場は既定が fs なので、署名の鍵まで揃って初めて「揃っている」env になる（ADR-0041）。
+  STORAGE_SIGNING_SECRET: 'a'.repeat(32),
+  // s3 に切り替える検査のために残す。fs では使われない。
   S3_ENDPOINT: 'http://localhost:9000',
   S3_REGION: 'us-east-1',
   S3_BUCKET: 'ixa-media',
@@ -52,7 +55,9 @@ describe('loadConfig', () => {
    * ここでは、必須から外したことで**何も言わずに起動してしまわない**ことだけ押さえる。
    */
   it('S3_* が無くても、置き場が s3 なら起動しない', () => {
-    expect(() => loadConfig({ ...requiredEnv, S3_BUCKET: undefined })).toThrow(/S3_BUCKET/)
+    expect(() =>
+      loadConfig({ ...requiredEnv, STORAGE_DRIVER: 's3', S3_BUCKET: undefined }),
+    ).toThrow(/S3_BUCKET/)
   })
 
   /**
@@ -337,15 +342,13 @@ describe('書き出しフォルダ（RENDER_EXPORT_DIR）', () => {
 })
 
 /**
- * 置き場の設定（ADR-0041）。
- *
- * **既定はまだ `s3`。** 配信ルートと移行が済むまでは、既定を替えると移行前の環境で素材が読めなくなる。
+ * 置き場の設定（ADR-0041）。**既定は `fs`**（この機械のただのファイル）。
  */
 describe('loadConfig の置き場（STORAGE_*）', () => {
   const SIGNING_SECRET = 'a'.repeat(32)
 
-  it('既定は s3（移行が済むまで）', () => {
-    expect(loadConfig({ ...requiredEnv }).storage.driver).toBe('s3')
+  it('既定は fs（この機械のただのファイル）', () => {
+    expect(loadConfig({ ...requiredEnv }).storage.driver).toBe('fs')
   })
 
   it('fs にすると、この機械のフォルダを使う', () => {
@@ -395,9 +398,10 @@ describe('loadConfig の置き場（STORAGE_*）', () => {
 
   /** 署名の鍵が無いまま fs で起動すると、素材を 1 つも返せない。**使う瞬間まで持ち越さない。** */
   it('fs で署名の鍵が無ければ起動しない', () => {
-    expect(() => loadConfig({ ...requiredEnv, STORAGE_DRIVER: 'fs' })).toThrow(
-      /STORAGE_SIGNING_SECRET/,
-    )
+    const env = { ...requiredEnv }
+    delete env.STORAGE_SIGNING_SECRET
+
+    expect(() => loadConfig(env)).toThrow(/STORAGE_SIGNING_SECRET/)
   })
 
   /** 制約を足したら、それを破る値の検査も置く（短い鍵は署名があるのに破れる）。 */
@@ -423,7 +427,7 @@ describe('loadConfig の置き場（STORAGE_*）', () => {
   it.each(['S3_ENDPOINT', 'S3_REGION', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'])(
     's3 なのに %s が無ければ起動しない',
     (name) => {
-      const env = { ...requiredEnv }
+      const env: NodeJS.ProcessEnv = { ...requiredEnv, STORAGE_DRIVER: 's3' }
       delete env[name]
 
       expect(() => loadConfig(env)).toThrow(new RegExp(name))
