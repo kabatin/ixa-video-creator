@@ -61,6 +61,8 @@ export type BulkActionBarProps = {
   readonly lockedCount: number
   /** 選択の中で説明も最初のフレームも無い（作品と関係ない映像になりやすい）数。判定は domain の `lacksStoryboard`。 */
   readonly unguidedCount: number
+  /** カメラの動きが決まっていない数（ADR-0042）。 */
+  readonly missingCameraCount: number
   readonly modelOptions: readonly BulkModelOption[]
   readonly cameraSizeOptions: readonly BulkSelectOption[]
   readonly locationOptions: readonly BulkSelectOption[]
@@ -102,6 +104,7 @@ export const BulkActionBar = ({
   alreadySelectedCount,
   lockedCount,
   unguidedCount,
+  missingCameraCount,
   modelOptions,
   cameraSizeOptions,
   locationOptions,
@@ -207,6 +210,7 @@ export const BulkActionBar = ({
               targetCount={generatableCount}
               lockedCount={lockedCount}
               unguidedCount={unguidedCount}
+              missingCameraCount={missingCameraCount}
               modelOptions={modelOptions}
               estimatedTotalUsd={estimatedTotalUsd}
               busy={busy}

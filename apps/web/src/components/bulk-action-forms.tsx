@@ -7,7 +7,13 @@ import { SelectField } from '@/components/form/select-field'
 import { TextField } from '@/components/form/text-field'
 import { Button } from '@/components/ui/button'
 import { ConfirmButton } from '@/components/ui/confirm-button'
+import {
+  CAMERA_MOVEMENT_OPTIONS,
+  MOVEMENT_INTENSITY_OPTIONS,
+  NONE_VALUE,
+} from '@/lib/camera-options'
 import { TAKE_COUNT_OPTIONS } from '@/lib/generation-options'
+import { cameraMovementBulkLine } from '@/lib/camera-hint'
 import { unguidedBulkLine } from '@/lib/unguided-take'
 
 /**
@@ -38,7 +44,15 @@ export type BulkTakeRule = 'only' | 'latest'
 
 /** 触った項目だけを持つ。**省略と `null` は別の意味。** 省略は「変えない」。 */
 export type BulkUpdatePatch = {
-  readonly camera?: { readonly size: string }
+  /**
+   * カメラは**部分更新**（API も `camera` を部分で受ける）。触った項目だけが載る。
+   * `null` は「外す」で、省略は「変えない」。
+   */
+  readonly camera?: {
+    readonly size?: string
+    readonly movement?: string | null
+    readonly movementIntensity?: string | null
+  }
   readonly mood?: string | null
   readonly locationId?: string | null
 }
@@ -58,6 +72,9 @@ const KEEP_LABEL = '変えない'
 
 export type BulkUpdateDraft = {
   readonly cameraSize: string
+  /** 空文字は「未指定にする」（`null`）。H3 は指定が無いと被写体が画面から外れる（ADR-0042）。 */
+  readonly cameraMovement: string
+  readonly cameraMovementIntensity: string
   readonly moodAction: 'keep' | 'set' | 'clear'
   readonly moodText: string
   readonly locationId: string
@@ -65,10 +82,30 @@ export type BulkUpdateDraft = {
 
 export const EMPTY_UPDATE_DRAFT: BulkUpdateDraft = Object.freeze({
   cameraSize: KEEP_VALUE,
+  cameraMovement: KEEP_VALUE,
+  cameraMovementIntensity: KEEP_VALUE,
   moodAction: 'keep',
   moodText: '',
   locationId: KEEP_VALUE,
 })
+
+/** 「変えない」以外の欄だけを拾う。空文字は「未指定にする」（`null`）。 */
+const cameraValue = (value: string): string | null => (value === NONE_VALUE ? null : value)
+
+/**
+ * カメラの patch。**触った項目だけを 1 つの `camera` にまとめる。**
+ * 項目ごとに `camera` を作ると、あとの項目が前の項目を上書きして消す。
+ */
+const cameraPatch = (draft: BulkUpdateDraft): BulkUpdatePatch['camera'] | undefined => {
+  const camera = {
+    ...(draft.cameraSize === KEEP_VALUE ? {} : { size: draft.cameraSize }),
+    ...(draft.cameraMovement === KEEP_VALUE ? {} : { movement: cameraValue(draft.cameraMovement) }),
+    ...(draft.cameraMovementIntensity === KEEP_VALUE
+      ? {}
+      : { movementIntensity: cameraValue(draft.cameraMovementIntensity) }),
+  }
+  return Object.keys(camera).length === 0 ? undefined : camera
+}
 
 /**
  * 触った項目だけを patch にする。
@@ -77,7 +114,7 @@ export const EMPTY_UPDATE_DRAFT: BulkUpdateDraft = Object.freeze({
  * 受け側が「キーはあるが値が無い」を消去と読む余地が残る。
  */
 export const buildBulkPatch = (draft: BulkUpdateDraft): BulkUpdatePatch => ({
-  ...(draft.cameraSize === KEEP_VALUE ? {} : { camera: { size: draft.cameraSize } }),
+  ...(cameraPatch(draft) === undefined ? {} : { camera: cameraPatch(draft) }),
   ...(draft.moodAction === 'keep'
     ? {}
     : { mood: draft.moodAction === 'clear' ? null : draft.moodText.trim() }),
@@ -126,6 +163,8 @@ export type BulkGenerateFormProps = {
   readonly lockedCount: number
   /** 説明も最初のフレームも無い Shot の数。止めはせず、押す前に言う。 */
   readonly unguidedCount: number
+  /** 生成される Shot のうち、カメラの動きが決まっていない数（ADR-0042）。 */
+  readonly missingCameraCount: number
   readonly modelOptions: readonly BulkModelOption[]
   /**
    * 合計の見積（USD）。**`null` は「事前には見積もれない」。**
@@ -142,12 +181,14 @@ export const BulkGenerateForm = ({
   targetCount,
   lockedCount,
   unguidedCount,
+  missingCameraCount,
   modelOptions,
   estimatedTotalUsd,
   busy,
   onGenerate,
 }: BulkGenerateFormProps) => {
   const unguided = unguidedBulkLine(unguidedCount)
+  const missingCamera = cameraMovementBulkLine(missingCameraCount)
   // 既定は AUTO。渡されていなければ先頭を使う（空の select を出さない）。
   const [model, setModel] = useState<BulkModelValue>(
     () => modelOptions.find((option) => option.value === 'AUTO')?.value ?? modelOptions[0]?.value ?? 'AUTO',
@@ -197,6 +238,7 @@ export const BulkGenerateForm = ({
           </p>
         )}
         {unguided !== '' && <p className={FIELD_HINT_CLASS}>{unguided}</p>}
+        {missingCamera !== '' && <p className={FIELD_HINT_CLASS}>{missingCamera}</p>}
         {targetCount === 0 && (
           <p className={FIELD_HINT_CLASS}>生成できる Shot が選ばれていません。</p>
         )}
@@ -312,6 +354,30 @@ export const BulkUpdateForm = ({
         disabled={busy}
         onChange={(next) => {
           setDraft({ ...draft, cameraSize: next })
+        }}
+      />
+      {/**
+       * カメラの動きは **1 本ずつ開くと 39 回**になるのでここにも置く。
+       * 動く Shot で未指定のままだと、被写体が画面から外れる（ADR-0042 の実測）。
+       */}
+      <SelectField
+        id={`${idPrefix}-camera-movement`}
+        label="カメラの動き"
+        value={draft.cameraMovement}
+        options={withKeep(CAMERA_MOVEMENT_OPTIONS)}
+        disabled={busy}
+        onChange={(next) => {
+          setDraft({ ...draft, cameraMovement: next })
+        }}
+      />
+      <SelectField
+        id={`${idPrefix}-camera-movement-intensity`}
+        label="動きの強さ"
+        value={draft.cameraMovementIntensity}
+        options={withKeep(MOVEMENT_INTENSITY_OPTIONS)}
+        disabled={busy}
+        onChange={(next) => {
+          setDraft({ ...draft, cameraMovementIntensity: next })
         }}
       />
       <div>

@@ -43,6 +43,7 @@ const baseProps = (overrides: Partial<BulkActionBarProps> = {}): BulkActionBarPr
   alreadySelectedCount: 0,
   lockedCount: 0,
   unguidedCount: 0,
+  missingCameraCount: 0,
   modelOptions: MODEL_OPTIONS,
   cameraSizeOptions: CAMERA_SIZE_OPTIONS,
   locationOptions: LOCATION_OPTIONS,
@@ -301,6 +302,23 @@ describe('BulkActionBar — 一括生成は 2 段階', () => {
     expect(screen.queryByText(/説明も最初のフレームも無く/)).toBeNull()
   })
 
+  /** カメラの動きが未指定だと、動く Shot で顔が画面の外へ出る（ADR-0042 の実測）。止めはしない。 */
+  it('カメラの動きが決まっていない Shot が混ざっていれば、押す前に件数を言う', async () => {
+    const { user } = setup({ selectedCount: 12, missingCameraCount: 4 })
+
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
+
+    expect(screen.getByText(/うち 4 件はカメラの動きが決まっていません/)).toBeInTheDocument()
+  })
+
+  it('全部決まっていれば、カメラのことは言わない', async () => {
+    const { user } = setup({ selectedCount: 12, missingCameraCount: 0 })
+
+    await user.click(screen.getByRole('button', { name: 'Take を作る' }))
+
+    expect(screen.queryByText(/カメラの動きが決まっていません/)).toBeNull()
+  })
+
   it('全件ロックなら依頼できない', async () => {
     const { user } = setup({ selectedCount: 3, lockedCount: 3 })
 
@@ -385,6 +403,43 @@ describe('BulkActionBar — 一括で変えるのは触った項目だけ', () =
     const patch = lastPatch(props.onUpdate)
     expect(Object.keys(patch)).toEqual(['camera'])
     expect(patch.camera).toEqual({ size: 'wide' })
+  })
+
+  /**
+   * カメラの動きが未指定のままだと、動く Shot で被写体が画面から外れる（ADR-0042 の実測）。
+   * 1 本ずつ開くと 39 回になるので、ここでまとめて入れられること。
+   */
+  it('カメラの動きと強さをまとめて入れられる', async () => {
+    const { props, user } = await openUpdate()
+
+    await user.selectOptions(screen.getByLabelText('カメラの動き'), 'tilt')
+    await user.selectOptions(screen.getByLabelText('動きの強さ'), 'moderate')
+    await user.click(screen.getByRole('button', { name: '12 件に適用' }))
+
+    const patch = lastPatch(props.onUpdate)
+    expect(Object.keys(patch)).toEqual(['camera'])
+    expect(patch.camera).toEqual({ movement: 'tilt', movementIntensity: 'moderate' })
+  })
+
+  /** 景別と動きを同時に触っても、**片方がもう片方を消さない**（`camera` は 1 つにまとめる）。 */
+  it('景別と動きを同時に変えたら、両方が 1 つの camera に入る', async () => {
+    const { props, user } = await openUpdate()
+
+    await user.selectOptions(screen.getByLabelText('カメラの景別'), 'wide')
+    await user.selectOptions(screen.getByLabelText('カメラの動き'), 'pull_out')
+    await user.click(screen.getByRole('button', { name: '12 件に適用' }))
+
+    expect(lastPatch(props.onUpdate).camera).toEqual({ size: 'wide', movement: 'pull_out' })
+  })
+
+  /** 「未指定にする」は `null` で送る（省略＝変えない と別の意味）。 */
+  it('カメラの動きを未指定に戻せる', async () => {
+    const { props, user } = await openUpdate()
+
+    await user.selectOptions(screen.getByLabelText('カメラの動き'), '')
+    await user.click(screen.getByRole('button', { name: '12 件に適用' }))
+
+    expect(lastPatch(props.onUpdate).camera).toEqual({ movement: null })
   })
 
   it('mood を空にしたら mood だけが null で入る。他は入らない', async () => {
@@ -570,6 +625,7 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
           alreadySelectedCount={0}
           lockedCount={0}
           unguidedCount={0}
+          missingCameraCount={0}
           drawWarning={null}
           progress={null}
           modelOptions={MODEL_OPTIONS}

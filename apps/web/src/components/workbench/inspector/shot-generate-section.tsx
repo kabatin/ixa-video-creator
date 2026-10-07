@@ -1,6 +1,6 @@
 'use client'
 
-import { lacksStoryboard, type ProjectId, type Shot, type ShotId } from '@ixa/domain'
+import { lacksCameraMovement, lacksStoryboard, type ProjectId, type Shot, type ShotId } from '@ixa/domain'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { FieldRow, INPUT_CLASS } from '@/components/workbench/ui/section'
@@ -29,6 +29,7 @@ import {
   UNGUIDED_TAKE_CONFIRM,
   UNGUIDED_TAKE_LABEL,
 } from '@/lib/unguided-take'
+import { CAMERA_MOVEMENT_HINT } from '@/lib/camera-hint'
 import { CANCEL_GENERATION_LABEL } from '@/lib/context-menus'
 import { describeActiveGeneration } from '@/lib/generation-progress'
 import { useAskReview } from '@/components/workbench/use-ask-review'
@@ -254,6 +255,11 @@ export const ShotGenerateSection = ({
         <p className="text-xs text-warn">{`モデルの一覧を読めませんでした（AUTO だけ選べます）: ${modelsError}`}</p>
       )}
       {blocker !== null && <p className="text-xs text-warn">{blocker}</p>}
+      {/**
+       * カメラの動きが決まっていないときの一言（ADR-0042）。**止めない。**
+       * 指定が無いと、立ち上がるような動作で顔が画面の外へ出ることがある（実測）。
+       */}
+      {lacksCameraMovement(shot) && <p className="text-xs text-muted">{CAMERA_MOVEMENT_HINT}</p>}
       <Button
         tone="primary"
         disabled={busy || generating || blocker !== null}

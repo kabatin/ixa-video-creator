@@ -34,8 +34,8 @@ const api = (): ShotGenerateApi => ({
   cancelGenerations: vi.fn(),
 })
 
-const renderSection = (hasStartFrame: boolean) => {
-  const shot: Shot = aWorkbenchShot(1, { id: SHOT_ID })
+const renderSection = (hasStartFrame: boolean, shotPatch: Record<string, unknown> = {}) => {
+  const shot: Shot = aWorkbenchShot(1, { id: SHOT_ID, ...shotPatch })
   return render(
     <WorkbenchContext.Provider value={workbenchValue({ shots: [shot] })}>
       <ShotGenerateSection shot={shot} api={api()} hasStartFrame={hasStartFrame} />
@@ -69,5 +69,34 @@ describe('生成のモデル選択', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Take を生成' })).toBeEnabled()
     })
+  })
+})
+
+/**
+ * カメラの動きが決まっていない Shot への一言（ADR-0042）。
+ * **止めない。** 指定が無いと、立ち上がるような動作で顔が画面の外へ出ることがある（実測）。
+ */
+describe('カメラの動きが決まっていないとき', () => {
+  const camera = (movement: string | null) => ({
+    camera: { size: 'medium', angleH: null, angle: null, lensMm: null, movement, movementIntensity: null },
+  })
+
+  it('決まっていなければ、直し方まで言う', () => {
+    renderSection(true, camera(null))
+
+    expect(screen.getByText(/カメラの動きが決まっていません/)).toBeVisible()
+    expect(screen.getByText(/ティルト/)).toBeVisible()
+  })
+
+  it('決まっていれば言わない（フィックスも「決めた」に数える）', () => {
+    renderSection(true, camera('static'))
+
+    expect(screen.queryByText(/カメラの動きが決まっていません/)).toBeNull()
+  })
+
+  it('言うだけで、生成は止めない', () => {
+    renderSection(true, camera(null))
+
+    expect(screen.getByRole('button', { name: 'Take を生成' })).toBeEnabled()
   })
 })

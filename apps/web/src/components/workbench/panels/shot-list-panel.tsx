@@ -1,6 +1,6 @@
 'use client'
 
-import { lacksStoryboard, type Shot, type ShotId, type ShotStatus } from '@ixa/domain'
+import { lacksCameraMovement, lacksStoryboard, type Shot, type ShotId, type ShotStatus } from '@ixa/domain'
 import { useMemo, useState } from 'react'
 import {
   BulkActionBar,
@@ -263,6 +263,10 @@ export const ShotListPanel = () => {
                   hasStartFrame: startFrameKnownFor(workbench.posters, shot.id) !== false,
                 }),
             ).length
+          }
+          // 生成される Shot のうち、カメラの動きが決まっていない数（ADR-0042。未指定だと顔が切れることがある）。
+          missingCameraCount={
+            chosen.filter((shot) => shot.lockedAt === null && lacksCameraMovement(shot)).length
           }
           // 絵コンテ（説明）が空の Shot が混じっていたら、絵を作る前に確かめる（制作者 2026-10-03）。
           drawWarning={drawWithoutStoryboardWarning(chosen)}
