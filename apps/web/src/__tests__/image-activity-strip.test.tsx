@@ -3,7 +3,12 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ImageActivityStrip } from '@/components/workbench/image-activity-strip'
-import { countDrawing, type ShotPosterMap, type ShotPosterView } from '@/lib/shot-posters'
+import {
+  countDrawing,
+  countDrawingAmong,
+  type ShotPosterMap,
+  type ShotPosterView,
+} from '@/lib/shot-posters'
 
 /**
  * 絵を作っている数と、まとめて止める口（制作者 2026-10-04「いま30個ぐらいキューに入ってる画像生成とめたい」）。
@@ -29,6 +34,23 @@ describe('countDrawing', () => {
   })
 })
 
+describe('countDrawingAmong', () => {
+  it('選んだ Shot の中だけ数える（一覧の他の Shot は数えない）', () => {
+    const [chosen, alsoChosen, elsewhere] = [newId(ShotId), newId(ShotId), newId(ShotId)]
+    const posters: ShotPosterMap = new Map([
+      [chosen, poster(true)],
+      [alsoChosen, poster(false)],
+      [elsewhere, poster(true)],
+    ])
+
+    expect(countDrawingAmong(posters, [chosen, alsoChosen])).toBe(1)
+  })
+
+  it('一覧にまだ無い Shot は数えない（「分からない」を「作っている」にしない）', () => {
+    expect(countDrawingAmong(new Map(), [newId(ShotId)])).toBe(0)
+  })
+})
+
 describe('ImageActivityStrip', () => {
   it('作っていなければ何も出さない', () => {
     const { container } = render(<ImageActivityStrip drawingCount={0} onStopAll={vi.fn()} />)
@@ -40,6 +62,11 @@ describe('ImageActivityStrip', () => {
     render(<ImageActivityStrip drawingCount={31} onStopAll={onStopAll} />)
 
     expect(screen.getByRole('status')).toHaveTextContent('絵を作っています（31 件）')
+    /**
+     * **同時に何枚作るかは書かない。** worker の設定で変わる（いまは 3 枚）。
+     * 以前は「1 枚ずつ順番に作ります」と出たままになっていた。
+     */
+    expect(screen.getByRole('status').textContent).not.toContain('1 枚ずつ')
     await userEvent.click(screen.getByRole('button', { name: 'すべてやめる' }))
     expect(onStopAll).toHaveBeenCalledTimes(1)
   })

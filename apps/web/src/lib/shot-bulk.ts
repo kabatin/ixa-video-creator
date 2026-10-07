@@ -13,7 +13,13 @@ import type { WireShot } from '@/lib/api-schemas'
  */
 
 /** 一括で何をするか。判定も文言もこの 3 つで切り替える。 */
-export type BulkOperation = 'generate' | 'select-take' | 'unselect-take' | 'update' | 'draw'
+export type BulkOperation =
+  | 'generate'
+  | 'select-take'
+  | 'unselect-take'
+  | 'update'
+  | 'draw'
+  | 'stop-images'
 
 /** 適格性・要約に必要な列だけ。画面は `WireShot` をそのまま渡せる。 */
 export type BulkShot = Pick<WireShot, 'id' | 'code' | 'lockedAt' | 'selectedTakeId'>
@@ -136,6 +142,16 @@ const unselectTakeEligibility = (shot: BulkShot): ShotEligibility => ({
   notice: null,
 })
 
+/**
+ * 絵を止める。**ロック済みでも止める。**
+ * ロックは「これ以上作らない」ことで、既に走っている絵を止められない理由にはならない。
+ */
+const stopImagesEligibility = (shot: BulkShot): ShotEligibility => ({
+  shotId: shot.id,
+  ok: true,
+  notice: null,
+})
+
 /** 一括変更に画面側の制限は無い。 */
 const updateEligibility = (shot: BulkShot): ShotEligibility => ({
   shotId: shot.id,
@@ -151,6 +167,8 @@ export const eligibilityFor = (operation: BulkOperation, shot: BulkShot): ShotEl
       return selectTakeEligibility(shot)
     case 'unselect-take':
       return unselectTakeEligibility(shot)
+    case 'stop-images':
+      return stopImagesEligibility(shot)
     case 'update':
       return updateEligibility(shot)
     // 絵コンテの画像（ADR-0029）も生成と同じく、ロック済みには触らない。
@@ -249,6 +267,8 @@ const WORDINGS: Readonly<Record<BulkOperation, Wording>> = {
   'unselect-take': { done: '採用を外しました', notDone: '採用を外していません' },
   update: { done: '変更しました', notDone: '変更していません' },
   draw: { done: '絵を作り始めました', notDone: '絵を作っていません' },
+  /** 結果は件数で返る（Shot ごとではない）ので、この文言は要約には使わない。 */
+  'stop-images': { done: '絵を止めました', notDone: '絵を止めていません' },
 }
 
 const codeOf = (shots: readonly ShotRef[], shotId: ShotId): string =>

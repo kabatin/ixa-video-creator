@@ -105,6 +105,15 @@ export const posterByShotId = (list: readonly WireShotPoster[]): ShotPosterMap =
 export const countDrawing = (posters: ShotPosterMap): number =>
   [...posters.values()].filter((poster) => poster.drawing).length
 
+/**
+ * 選んだ Shot のうち、絵を作っている数（制作者 2026-10-07「一括画像生成停止」）。
+ * **一覧に無い Shot は数えない。** 止める口の出し分けに使う。
+ */
+export const countDrawingAmong = (
+  posters: ShotPosterMap,
+  shotIds: readonly ShotId[],
+): number => shotIds.filter((id) => posters.get(id)?.drawing === true).length
+
 export const startFrameKnownFor = (posters: ShotPosterMap, shotId: ShotId): boolean | null =>
   posters.get(shotId)?.hasStartFrame ?? null
 

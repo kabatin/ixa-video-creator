@@ -46,6 +46,8 @@ export type BulkActions = {
   readonly update: (patch: BulkUpdatePatch) => void
   /** 絵コンテの画像をまとめて作る（ADR-0029）。既定は絵の無い Shot だけ。 */
   readonly drawStartFrames: (input: { readonly onlyMissing: boolean }) => void
+  /** 選んだ Shot の絵を止める。作品の全部を止める口は Shot 一覧の帯にある。 */
+  readonly stopImages: () => void
 }
 
 const noteLine = (note: { readonly code: string; readonly message: string }): string =>
@@ -255,6 +257,26 @@ export const useBulkActions = (): BulkActions => {
     })
   }
 
+  /**
+   * 選んだ Shot の絵だけ止める（制作者 2026-10-07）。
+   * 作品の全部を止める口（Shot 一覧の帯）と**同じ API**で、止める範囲だけが違う。
+   * 止めたことは行を書き換えた時点で確定する（作っている途中の 1 枚は、届いても差し替えない）。
+   */
+  const stopImages = (): void => {
+    const plan = planBulkOperation('stop-images', workbench.checked, shots)
+    void run(plan, async () => {
+      const { cancelledJobIds } = await api.cancelImages(workbench.projectId, plan.targetIds)
+      const count = cancelledJobIds.length
+      return {
+        summary:
+          count === 0
+            ? '止める絵がありませんでした。'
+            : `${String(count)} 件の絵を止めました。`,
+        failures: [],
+      }
+    })
+  }
+
   return {
     busy,
     progress,
@@ -267,5 +289,6 @@ export const useBulkActions = (): BulkActions => {
     unselectTakes,
     update,
     drawStartFrames,
+    stopImages,
   }
 }

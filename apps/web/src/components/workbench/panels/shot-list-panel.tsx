@@ -25,7 +25,7 @@ import {
 import { toLocationOptions } from '@/lib/location-options'
 import { clearSelection, headerCheckboxState, selectAllVisible, toggleShot } from '@/lib/shot-bulk'
 import { shotStatusLabel } from '@/lib/shot-display'
-import { countDrawing, startFrameKnownFor } from '@/lib/shot-posters'
+import { countDrawing, countDrawingAmong, startFrameKnownFor } from '@/lib/shot-posters'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import {
@@ -253,6 +253,10 @@ export const ShotListPanel = () => {
           selectedCount={chosen.length}
           alreadySelectedCount={chosen.filter((shot) => shot.selectedTakeId !== null).length}
           lockedCount={chosen.filter((shot) => shot.lockedAt !== null).length}
+          drawingCount={countDrawingAmong(
+            workbench.posters,
+            chosen.map((shot) => shot.id),
+          )}
           // 生成される（ロックされていない）うち、説明も最初のフレームも無い数。分からない絵は「ある」に倒す。
           unguidedCount={
             chosen.filter(
@@ -289,6 +293,7 @@ export const ShotListPanel = () => {
           onUnselectTakes={bulk.unselectTakes}
           onUpdate={bulk.update}
           onDrawStartFrames={bulk.drawStartFrames}
+          onStopImages={bulk.stopImages}
           onMerge={() => {
             workbench.openDialog('merge-shots')
           }}

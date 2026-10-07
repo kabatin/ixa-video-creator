@@ -42,6 +42,7 @@ const baseProps = (overrides: Partial<BulkActionBarProps> = {}): BulkActionBarPr
   selectedCount: 12,
   alreadySelectedCount: 0,
   lockedCount: 0,
+  drawingCount: 0,
   unguidedCount: 0,
   missingCameraCount: 0,
   modelOptions: MODEL_OPTIONS,
@@ -61,6 +62,7 @@ const baseProps = (overrides: Partial<BulkActionBarProps> = {}): BulkActionBarPr
   onMerge: vi.fn(),
   onRender: vi.fn(),
   onDrawStartFrames: vi.fn(),
+  onStopImages: vi.fn(),
   drawWarning: null,
   ...overrides,
 })
@@ -140,6 +142,7 @@ describe('BulkActionBar — 出る / 出ない', () => {
       '一括採用…',
       '採用を外す',
       '一括で変える…',
+      '絵を止める',
       '結合…',
       '書き出す…',
       '削除…',
@@ -169,6 +172,29 @@ describe('BulkActionBar — 出る / 出ない', () => {
       await user.click(screen.getByRole('button', { name: 'その他' }))
 
       expect(screen.getByRole('menuitem', { name: '採用を外す' })).toBeDisabled()
+    })
+  })
+
+  /**
+   * 選んだ Shot の絵だけ止める（制作者 2026-10-07）。
+   * 作品の絵をすべて止める口は Shot 一覧の帯にある。ここは選んだぶんだけ。
+   */
+  describe('絵を止める', () => {
+    it('押すと、そのまま止めに行く（確認を挟まない）', async () => {
+      const onStopImages = vi.fn()
+      const { user } = setup({ drawingCount: 2, onStopImages })
+
+      await pick(user, '絵を止める')
+
+      expect(onStopImages).toHaveBeenCalledTimes(1)
+    })
+
+    it('選んだ中に作っている絵が無ければ押せない', async () => {
+      const { user } = setup({ drawingCount: 0 })
+
+      await user.click(screen.getByRole('button', { name: 'その他' }))
+
+      expect(screen.getByRole('menuitem', { name: '絵を止める' })).toBeDisabled()
     })
   })
 
@@ -652,6 +678,7 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
           selectedCount={3}
           alreadySelectedCount={0}
           lockedCount={0}
+          drawingCount={0}
           unguidedCount={0}
           missingCameraCount={0}
           drawWarning={null}
@@ -671,6 +698,7 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
           onMerge={vi.fn()}
           onRender={vi.fn()}
           onDrawStartFrames={vi.fn()}
+          onStopImages={vi.fn()}
         />
       </div>,
     )

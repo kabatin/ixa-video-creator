@@ -59,6 +59,11 @@ export type BulkActionBarProps = {
   readonly alreadySelectedCount: number
   /** 選択の中でロック済み（生成できない）の数。 */
   readonly lockedCount: number
+  /**
+   * 選択の中で、いま絵を作っている（順番待ちを含む）数。
+   * **0 なら「絵を止める」を押せない**（止めるものが無い操作を押せる形で出さない）。
+   */
+  readonly drawingCount: number
   /** 選択の中で説明も最初のフレームも無い（作品と関係ない映像になりやすい）数。判定は domain の `lacksStoryboard`。 */
   readonly unguidedCount: number
   /** カメラの動きが決まっていない数（ADR-0042）。 */
@@ -100,6 +105,11 @@ export type BulkActionBarProps = {
   readonly onRender: () => void
   /** 絵コンテの画像をまとめて作る（ADR-0029）。既定は絵の無い Shot だけ。 */
   readonly onDrawStartFrames: (input: { readonly onlyMissing: boolean }) => void
+  /**
+   * 選んだ Shot の絵を止める（制作者 2026-10-07）。
+   * 作品の絵をすべて止める口は Shot 一覧の帯にある。ここは**選んだぶんだけ**。
+   */
+  readonly onStopImages: () => void
   /** 絵コンテ（説明）が空の Shot が混じっているときの確認の文。無ければ null（`drawWithoutStoryboardWarning`）。 */
   readonly drawWarning: string | null
 }
@@ -108,6 +118,7 @@ export const BulkActionBar = ({
   selectedCount,
   alreadySelectedCount,
   lockedCount,
+  drawingCount,
   unguidedCount,
   missingCameraCount,
   modelOptions,
@@ -126,6 +137,7 @@ export const BulkActionBar = ({
   onMerge,
   onRender,
   onDrawStartFrames,
+  onStopImages,
   drawWarning,
 }: BulkActionBarProps) => {
   const idPrefix = useId()
@@ -274,6 +286,8 @@ export const BulkActionBar = ({
             // 採用済みが 1 件も無ければ外すものが無い。押しても必ず断られる操作は出さない。
             { label: '採用を外す', disabled: busy || alreadySelectedCount === 0, run: () => { runFromMore(onUnselectTakes) } },
             { label: `${PANEL_LABELS.update}…`, disabled: busy, run: () => { openFromMore('update') } },
+            // 選んだ Shot の絵だけ止める。作品の全部を止める口は一覧の帯（上）にある。
+            { label: '絵を止める', disabled: busy || drawingCount === 0, run: () => { runFromMore(onStopImages) } },
             { label: '結合…', disabled: busy || selectedCount < 2, run: () => { runFromMore(onMerge) } },
             { label: '書き出す…', disabled: busy, run: () => { runFromMore(onRender) } },
             { label: '削除…', danger: true, disabled: busy, run: () => { runFromMore(onDelete) } },
