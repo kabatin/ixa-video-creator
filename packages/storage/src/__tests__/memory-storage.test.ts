@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { ObjectNotFoundError } from '../port.js'
 import { createMemoryStorage } from '../memory-storage.js'
+import { itObeysObjectStorageContract } from './object-storage-contract.js'
 
 describe('createMemoryStorage', () => {
+  // fs ドライバと同じ約束を守っていること（ADR-0041 の差し替えはこの上に乗る）。
+  itObeysObjectStorageContract(() => Promise.resolve(createMemoryStorage()))
+
   it('put したオブジェクトを get できる（ラウンドトリップ）', async () => {
     const storage = createMemoryStorage()
     const body = new TextEncoder().encode('hello')
