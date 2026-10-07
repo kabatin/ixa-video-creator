@@ -128,11 +128,28 @@ describe('BulkActionBar — 出る / 出ない', () => {
 
     const bar = screen.getByRole('region', { name: '一括操作' })
     expect(within(bar).getByText('12 件')).toBeInTheDocument()
-    for (const name of ['選択を解除', '絵を作る', 'Take を作る', '本番で作り直す', 'その他']) {
+    for (const name of ['選択を解除', '絵を作る', 'Take を作る', 'その他']) {
       const button = within(bar).getByRole('button', { name })
       expect(button.className).toContain('whitespace-nowrap')
     }
     expect(screen.queryByRole('button', { name: '結合…' })).toBeNull()
+  })
+
+  /**
+   * **1 行に並ぶのはここまで。** 3 つ目の主ボタンを足したら「その他」が画面からはみ出した
+   * （制作者 2026-10-07「その他がはみ出してるけど。。。」）。折り返さない作りなので、
+   * 増やすと右端から落ちて押せなくなる。新しい操作は「その他」の中へ入れること。
+   */
+  it('1 行に出すボタンはこの 5 つだけ（増やすと右端からはみ出す）', () => {
+    setup({ selectedCount: 12 })
+
+    const bar = screen.getByRole('region', { name: '一括操作' })
+    expect(within(bar).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      '✕',
+      '絵を作る',
+      'Take を作る',
+      'その他',
+    ])
   })
 
   it('「その他」に、一括採用・一括で変える・結合・書き出す・削除がある', async () => {
@@ -145,6 +162,7 @@ describe('BulkActionBar — 出る / 出ない', () => {
       '一括採用…',
       '採用を外す',
       '一括で変える…',
+      '本番で作り直す…',
       '絵を止める',
       '結合…',
       '書き出す…',
@@ -194,7 +212,7 @@ describe('BulkActionBar — 出る / 出ない', () => {
       const onPreviewRemakeFinal = vi.fn()
       const { user } = setup({ onPreviewRemakeFinal, finalPreview: { kind: 'loading' } })
 
-      await pick(user, '本番で作り直す')
+      await pick(user, '本番で作り直す…')
 
       expect(onPreviewRemakeFinal).toHaveBeenCalledTimes(1)
       expect(screen.getByRole('status')).toHaveTextContent('見込みを調べています')
@@ -204,7 +222,7 @@ describe('BulkActionBar — 出る / 出ない', () => {
       const onRemakeFinal = vi.fn()
       const { user } = setup({ finalPreview: { kind: 'ready', plan }, onRemakeFinal })
 
-      await pick(user, '本番で作り直す')
+      await pick(user, '本番で作り直す…')
 
       const panel = screen.getByRole('group', { name: '本番で作り直す' })
       expect(panel).toHaveTextContent('2 本を本番で作り直します')
@@ -222,7 +240,7 @@ describe('BulkActionBar — 出る / 出ない', () => {
         finalPreview: { kind: 'ready', plan: { ...plan, targetCount: 0, totalLatencySec: 0 } },
       })
 
-      await pick(user, '本番で作り直す')
+      await pick(user, '本番で作り直す…')
 
       expect(screen.getByRole('button', { name: '0 本を積む' })).toBeDisabled()
     })
@@ -233,7 +251,7 @@ describe('BulkActionBar — 出る / 出ない', () => {
         finalPreview: { kind: 'error', message: '見込みを出せませんでした: つながりません' },
       })
 
-      await pick(user, '本番で作り直す')
+      await pick(user, '本番で作り直す…')
 
       expect(screen.getByRole('status')).toHaveTextContent('見込みを出せませんでした')
       expect(screen.queryByRole('button', { name: /本を積む/ })).toBeNull()

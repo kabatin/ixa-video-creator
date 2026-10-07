@@ -54,10 +54,12 @@ const PANEL_LABELS: Readonly<Record<PanelKey, string>> = {
 }
 
 /**
- * バーに直接並べる 3 つ（作業の順: 絵 → Take → 本番）。残りは「その他」の中。
- * 本番のまとめ投入は一晩かかる操作なので、押す前に見込みを出す（`BulkRemakeFinalForm`）。
+ * バーに直接並べる 2 つ（作業の順: 絵 → Take）。残りは「その他」の中。
+ *
+ * **3 つ目を足すと「その他」が画面からはみ出す**（制作者 2026-10-07）。
+ * パネルが狭いと 1 行に収まらない。ここは増やさず、新しい操作は「その他」へ入れる。
  */
-const MAIN_PANELS: readonly PanelKey[] = ['draw', 'generate', 'remakeFinal']
+const MAIN_PANELS: readonly PanelKey[] = ['draw', 'generate']
 
 export type BulkActionBarProps = {
   readonly selectedCount: number
@@ -314,6 +316,8 @@ export const BulkActionBar = ({
             // 採用済みが 1 件も無ければ外すものが無い。押しても必ず断られる操作は出さない。
             { label: '採用を外す', disabled: busy || alreadySelectedCount === 0, run: () => { runFromMore(onUnselectTakes) } },
             { label: `${PANEL_LABELS.update}…`, disabled: busy, run: () => { openFromMore('update') } },
+            // 夜にまとめて積む操作（ADR-0042 段 4）。押す前に見込みを出す。
+            { label: `${PANEL_LABELS.remakeFinal}…`, disabled: busy, run: () => { openFromMore('remakeFinal') } },
             // 選んだ Shot の絵だけ止める。作品の全部を止める口は一覧の帯（上）にある。
             { label: '絵を止める', disabled: busy || drawingCount === 0, run: () => { runFromMore(onStopImages) } },
             { label: '結合…', disabled: busy || selectedCount < 2, run: () => { runFromMore(onMerge) } },
