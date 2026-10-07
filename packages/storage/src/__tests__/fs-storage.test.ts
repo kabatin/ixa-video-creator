@@ -4,7 +4,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { verifyStorageAccess } from '../file-signature.js'
 import { createFsStorage, STORAGE_FILE_ROUTE_PREFIX, type FsStorage } from '../fs-storage.js'
-import { ObjectNotFoundError } from '../port.js'
+import { ObjectNotFoundError, ObjectTooLargeError } from '../port.js'
 import { InvalidStorageKeyError } from '../storage-path.js'
 import { itObeysObjectStorageContract } from './object-storage-contract.js'
 
@@ -82,6 +82,60 @@ describe('createFsStorage', () => {
     await storage.put(KEY, new Uint8Array([1]), { contentType: 'video/mp4' })
 
     expect(await storage.head('media/01ABC/01DEF')).toBeNull()
+  })
+})
+
+describe('createFsStorage.putStream（流し読みのまま書く）', () => {
+  /** 分かれて届く本体。**1 つにまとめてから渡さない**（流し読みのまま書けることを確かめるため）。 */
+  // eslint-disable-next-line @typescript-eslint/require-await -- 作るだけで待つものが無い
+  const chunks = async function* (...parts: readonly string[]): AsyncGenerator<Uint8Array> {
+    for (const part of parts) yield new TextEncoder().encode(part)
+  }
+
+  it('分かれて届いたものを 1 つのファイルにする', async () => {
+    const storage = await makeStorage()
+
+    const bytes = await storage.putStream('media/01ABC/01DEF/original.txt', chunks('he', 'llo'), 100)
+
+    expect(bytes).toBe(5)
+    expect(await storage.get('media/01ABC/01DEF/original.txt')).toEqual(
+      new TextEncoder().encode('hello'),
+    )
+  })
+
+  it('ちょうど上限なら書ける', async () => {
+    const storage = await makeStorage()
+
+    await expect(storage.putStream(KEY, chunks('12345'), 5)).resolves.toBe(5)
+  })
+
+  /** **受けながら数える。** 先に全部受けてから測ると、上限の意味が無くなる。 */
+  it('上限を超えたら受け取らず、書きかけも残さない', async () => {
+    const root = await makeRoot()
+    const storage = createFsStorage({ root, publicBaseUrl: BASE_URL, signingSecret: SECRET })
+
+    await expect(storage.putStream(KEY, chunks('123', '456'), 5)).rejects.toThrow(ObjectTooLargeError)
+
+    expect(await storage.exists(KEY)).toBe(false)
+    const entries = await fs.readdir(path.join(await fs.realpath(root), 'media/01ABC/01DEF'))
+    expect(entries).toEqual([])
+  })
+
+  it('根の外へ出る key は断る', async () => {
+    const storage = await makeStorage()
+
+    await expect(storage.putStream('../secret.txt', chunks('x'), 100)).rejects.toThrow(
+      InvalidStorageKeyError,
+    )
+  })
+
+  it('同じ key に書き直すと後のものが残る', async () => {
+    const storage = await makeStorage()
+    await storage.putStream(KEY, chunks('first'), 100)
+
+    await storage.putStream(KEY, chunks('second'), 100)
+
+    expect(await storage.get(KEY)).toEqual(new TextEncoder().encode('second'))
   })
 })
 

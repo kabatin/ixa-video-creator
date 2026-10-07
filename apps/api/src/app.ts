@@ -16,7 +16,7 @@ import type {
   ProviderId,
 } from '@ixa/domain'
 import type { ProviderRegistry } from '@ixa/provider-core'
-import type { ObjectStorage } from '@ixa/storage'
+import { STORAGE_FILE_ROUTE_PREFIX, type ObjectStorage } from '@ixa/storage'
 import { registerErrorHandlers, validationHook } from './errors.js'
 import { environmentRoutes, type EnvironmentDeps } from './routes/environment.js'
 import { aiRoutes, type AiRoutesDeps } from './routes/ai.js'
@@ -31,6 +31,7 @@ import { assistRoutes } from './routes/assist.js'
 import { modelRoutes } from './routes/models.js'
 import type { Logger } from './logger.js'
 import { registerOpenApiDocument } from './openapi.js'
+import { fileRoutes, type FileRoutesDeps } from './routes/files.js'
 import { healthRoutes } from './routes/health.js'
 import { mediaRoutes } from './routes/media.js'
 import { projectRoutes } from './routes/projects.js'
@@ -166,6 +167,11 @@ export type AppDeps = {
   /** 動いている生成（順番待ち・作成中）の一覧。無ければ口を置かない。 */
   activeGenerations?: GenerationActivityDeps['activeJobs']
   storage: ObjectStorage
+  /**
+   * 手元に置いた素材を返す口（ADR-0041）。**置き場が `fs` のときだけ渡す。**
+   * `s3` では署名を置き場自身が出すので、この口を置かない（置くと同じ物に 2 つの入口ができる）。
+   */
+  files?: FileRoutesDeps
   /** CORS で許可するオリジン。空なら CORS を有効にしない。 */
   corsOrigins: readonly string[]
   logger: Logger
@@ -199,6 +205,8 @@ export const createApp = (deps: AppDeps) => {
   }
 
   app.route('/', healthRoutes())
+  // 置き場が fs のときだけ。位置は @ixa/storage の定数（署名を作る側と同じものを読む）。
+  if (deps.files !== undefined) app.route(STORAGE_FILE_ROUTE_PREFIX, fileRoutes(deps.files))
   // 鍵の設定状態。**値は返さない。設定する口も置かない**（無認証で全 IF に待ち受けているため）。
   if (deps.environment !== undefined) app.route('/', environmentRoutes(deps.environment))
   if (deps.ai !== undefined) app.route('/', aiRoutes(deps.ai))

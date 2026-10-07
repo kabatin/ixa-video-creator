@@ -134,7 +134,7 @@ export const createGenerationWiring = (
   const db = createDbClient(config.database.url)
 
   // 置き場の選び方は API と同じ関数に任せる（片方だけ fs になる食い違いを作らない。ADR-0041）。
-  const storage = createStorage(config.storage)
+  const { storage } = createStorage(config.storage)
 
   const queue = new Queue(QUEUE_NAMES.generation, { connection })
   /**

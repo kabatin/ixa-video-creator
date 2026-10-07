@@ -47,6 +47,17 @@ export class StorageError extends Error {
   }
 }
 
+/**
+ * 受け取れる大きさを超えたときに throw される（流し読みで書くときだけ起きる）。
+ * 途中まで書いたものは消してから投げる。
+ */
+export class ObjectTooLargeError extends StorageError {
+  constructor(key: StorageKey, readonly maxBytes: number, options?: { cause?: unknown }) {
+    super(`大きさの上限（${String(maxBytes)} バイト）を超えました`, 'put', key, options)
+    this.name = 'ObjectTooLargeError'
+  }
+}
+
 /** 指定された key のオブジェクトが存在しないときに throw される */
 export class ObjectNotFoundError extends StorageError {
   constructor(key: StorageKey, options?: { cause?: unknown }) {

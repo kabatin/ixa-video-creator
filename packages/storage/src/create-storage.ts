@@ -1,4 +1,4 @@
-import { createFsStorage } from './fs-storage.js'
+import { createFsStorage, type FsStorage } from './fs-storage.js'
 import type { ObjectStorage } from './port.js'
 import type { S3StorageConfig } from './s3-storage.js'
 import { createS3Storage } from './s3-storage.js'
@@ -24,22 +24,35 @@ export type StorageSettings = {
   readonly s3: S3StorageConfig | null
 }
 
-export const createStorage = (settings: StorageSettings): ObjectStorage => {
+/**
+ * 作った保管庫。**どちらの置き場かを名乗る。**
+ *
+ * `fs` のときだけ API に配信ルート（`GET /files/...`）を置く。`s3` では署名を置き場自身が出すので要らない。
+ * 判断に `driver` を使うことで、呼び出し側が `as FsStorage` のような決めつけをしなくて済む。
+ */
+export type CreatedStorage =
+  | { readonly driver: 'fs'; readonly storage: FsStorage }
+  | { readonly driver: 's3'; readonly storage: ObjectStorage }
+
+export const createStorage = (settings: StorageSettings): CreatedStorage => {
   if (settings.driver === 'fs') {
     if (settings.signingSecret === null) {
       // 設定の検証（@ixa/config の storageProblem）が先に止めるので、ここへは来ない。
       // それでも黙って署名なしで動かさないために残す。
       throw new Error('STORAGE_DRIVER=fs ですが署名の鍵がありません（STORAGE_SIGNING_SECRET）')
     }
-    return createFsStorage({
-      root: settings.root,
-      publicBaseUrl: settings.publicBaseUrl,
-      signingSecret: settings.signingSecret,
-    })
+    return {
+      driver: 'fs',
+      storage: createFsStorage({
+        root: settings.root,
+        publicBaseUrl: settings.publicBaseUrl,
+        signingSecret: settings.signingSecret,
+      }),
+    }
   }
 
   if (settings.s3 === null) {
     throw new Error('STORAGE_DRIVER=s3 ですが接続先がありません（S3_ENDPOINT ほか）')
   }
-  return createS3Storage(settings.s3)
+  return { driver: 's3', storage: createS3Storage(settings.s3) }
 }

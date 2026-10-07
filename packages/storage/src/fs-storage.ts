@@ -4,7 +4,7 @@ import path from 'node:path'
 import { contentTypeForKey } from './content-type.js'
 import { signStorageAccess, type StorageAccessMethod } from './file-signature.js'
 import type { ObjectHead, ObjectStorage, StorageKey } from './port.js'
-import { ObjectNotFoundError, StorageError } from './port.js'
+import { ObjectNotFoundError, ObjectTooLargeError, StorageError } from './port.js'
 import { signingWindow } from './signing-window.js'
 import {
   assertValidStorageKey,
@@ -44,6 +44,15 @@ export type FsStorageConfig = {
  * **port（`ObjectStorage`）は広げない**。S3 ドライバのときは署名を S3 が出し、配信ルートも登録しないため。
  */
 export type FsStorage = ObjectStorage & {
+  /**
+   * 流し読みのまま書く（`put` と違い、**全体をメモリに載せない**）。
+   *
+   * 取り込みの口（`PUT /files/...`）がここを使う。素材は 1 つで数 GB になりうるので、
+   * 受けた分だけ書いて進む。`maxBytes` を超えたら書きかけを消して `ObjectTooLargeError`。
+   * 書けた大きさ（バイト）を返す。
+   */
+  putStream(key: StorageKey, body: AsyncIterable<Uint8Array>, maxBytes: number): Promise<number>
+
   /**
    * key に対応する実体の場所を返す。
    * 無ければ `ObjectNotFoundError`、形が不正なら `InvalidStorageKeyError`。
@@ -108,6 +117,38 @@ export const createFsStorage = (config: FsStorageConfig): FsStorage => {
       // 書きかけを残さない。消せなくても元のエラーを優先して伝える。
       await fs.rm(temp, { force: true }).catch(() => undefined)
       if (error instanceof InvalidStorageKeyError) throw error
+      throw new StorageError('書き込みに失敗しました', 'put', key, { cause: error })
+    }
+  }
+
+  const putStream = async (
+    key: StorageKey,
+    body: AsyncIterable<Uint8Array>,
+    maxBytes: number,
+  ): Promise<number> => {
+    const target = await pathFor(key)
+    const dir = path.dirname(target)
+    const temp = `${target}.${randomUUID()}.part`
+    try {
+      await fs.mkdir(dir, { recursive: true })
+      await realPathInsideRoot(dir, key)
+      const handle = await fs.open(temp, 'w')
+      let written = 0
+      try {
+        for await (const chunk of body) {
+          written += chunk.byteLength
+          // **受けながら数える。** 先に全部受けてから測ると、上限の意味が無くなる。
+          if (written > maxBytes) throw new ObjectTooLargeError(key, maxBytes)
+          await handle.write(chunk)
+        }
+      } finally {
+        await handle.close()
+      }
+      await fs.rename(temp, target)
+      return written
+    } catch (error) {
+      await fs.rm(temp, { force: true }).catch(() => undefined)
+      if (error instanceof InvalidStorageKeyError || error instanceof ObjectTooLargeError) throw error
       throw new StorageError('書き込みに失敗しました', 'put', key, { cause: error })
     }
   }
@@ -217,5 +258,5 @@ export const createFsStorage = (config: FsStorageConfig): FsStorage => {
     }
   }
 
-  return { put, get, head, delete: del, exists, signedPutUrl, signedGetUrl, localPath }
+  return { put, putStream, get, head, delete: del, exists, signedPutUrl, signedGetUrl, localPath }
 }

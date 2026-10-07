@@ -53,6 +53,7 @@ import {
   createLocalVideoProviders,
 } from '@ixa/provider-video'
 import { createStorage } from '@ixa/storage'
+import type { FileRoutesDeps } from './routes/files.js'
 import { Queue } from 'bullmq'
 import IORedis from 'ioredis'
 import { createRedisProjectEvents } from '@ixa/events'
@@ -155,7 +156,18 @@ export const main = (): void => {
   const logger = createLogger(config.logLevel)
 
   const db = createDbClient(config.database.url)
-  const storage = createStorage(config.storage)
+  const created = createStorage(config.storage)
+  const storage = created.storage
+  /**
+   * 手元のファイルを返す口は `fs` のときだけ置く（ADR-0041）。
+   * 鍵が無い `fs` は `createStorage` が先に止めるので、ここは到達しない。
+   */
+  const files = ((): FileRoutesDeps | undefined => {
+    if (created.driver !== 'fs') return undefined
+    const { signingSecret } = config.storage
+    if (signingSecret === null) throw new Error('STORAGE_SIGNING_SECRET がありません')
+    return { storage: created.storage, signingSecret, logger }
+  })()
 
   // ジョブデータは ID のみ。実データは worker が DB から読む（ADR-0008）。
   const connection = new IORedis(config.redis.url, { maxRetriesPerRequest: null })
@@ -383,6 +395,7 @@ export const main = (): void => {
     // 動画の AUTO は「使う AI」の動画の中から選ぶ（ADR-0032）。
     videoProvider: ai.videoProvider,
     storage,
+    files,
     corsOrigins: config.corsOrigins,
     events: {
       publish: projectEvents.publisher.publish,

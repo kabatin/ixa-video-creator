@@ -26,18 +26,27 @@ const settings = (overrides: Partial<StorageSettings> = {}): StorageSettings => 
 
 describe('createStorage', () => {
   it('fs なら API の配信ルートを指す URL を出す', async () => {
-    const storage = createStorage(settings())
+    const created = createStorage(settings())
 
-    const url = await storage.signedGetUrl('media/01ABC/01DEF/original.mp4', 60)
+    const url = await created.storage.signedGetUrl('media/01ABC/01DEF/original.mp4', 60)
 
+    expect(created.driver).toBe('fs')
     expect(url.startsWith('http://127.0.0.1:3001/files/')).toBe(true)
   })
 
+  /** `fs` のときだけ配信ルートを置く。その判断に `as FsStorage` のような決めつけを使わせない。 */
+  it('fs のときは実体の場所を聞ける口まで返す', () => {
+    const created = createStorage(settings())
+
+    expect(created.driver === 'fs' ? typeof created.storage.localPath : null).toBe('function')
+  })
+
   it('s3 なら置き場そのものを指す URL を出す', async () => {
-    const storage = createStorage(settings({ driver: 's3' }))
+    const created = createStorage(settings({ driver: 's3' }))
 
-    const url = await storage.signedGetUrl('media/01ABC/01DEF/original.mp4', 60)
+    const url = await created.storage.signedGetUrl('media/01ABC/01DEF/original.mp4', 60)
 
+    expect(created.driver).toBe('s3')
     expect(url.startsWith('http://127.0.0.1:9000/ixa-media/')).toBe(true)
     expect(url).toContain('X-Amz-Signature=')
   })
