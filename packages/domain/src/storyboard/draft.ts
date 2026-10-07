@@ -5,6 +5,13 @@ import {
   StoryboardDraftItemId,
   StoryboardDraftRunId,
 } from '../common/ids.js'
+import {
+  AngleHorizontal,
+  AngleVertical,
+  CameraMovement,
+  MovementIntensity,
+  ShotSize,
+} from '../shot/camera.js'
 
 /**
  * 絵コンテの下書き（PHASE 6.3）。
@@ -67,6 +74,34 @@ export const MAX_DRAFT_REASON_LENGTH = 400
  * 書き換えられると「人が見て採用したもの」と「後から変わったもの」の区別が消える
  * （Take と同じ考え方。ADR-0003）。
  */
+/**
+ * 案が提案するカメラ（ADR-0043。制作者 2026-10-07「絵コンテ作成した時に、内容から判断付くような
+ * ものは自動である程度設定してもらえると嬉しい」）。
+ *
+ * **決められない項目はキーごと入れない**（`null` を入れて「未指定にする提案」にしない）。
+ * 値は選択肢（enum）なので、AI が外した値はここで落ちる。自由文と違って安全に受け取れるのが、
+ * 構造化された設定を AI に提案させられる理由。
+ *
+ * **知らないキーは落とす**（`.strict()`）。AI が増やした項目を黙って通さない。
+ */
+export const StoryboardDraftCamera = z
+  .object({
+    size: ShotSize.optional(),
+    angleH: AngleHorizontal.optional(),
+    angle: AngleVertical.optional(),
+    lensMm: z.number().positive().optional(),
+    movement: CameraMovement.optional(),
+    movementIntensity: MovementIntensity.optional(),
+  })
+  .strict()
+export type StoryboardDraftCamera = z.infer<typeof StoryboardDraftCamera>
+
+/** 1 つも決められなかった案は「カメラの提案なし」にする（空の入れ物を残さない）。 */
+export const draftCameraOrNull = (
+  camera: StoryboardDraftCamera | null | undefined,
+): StoryboardDraftCamera | null =>
+  camera === null || camera === undefined || Object.keys(camera).length === 0 ? null : camera
+
 export const StoryboardDraftItem = z.object({
   id: StoryboardDraftItemId,
   runId: StoryboardDraftRunId,
@@ -74,6 +109,14 @@ export const StoryboardDraftItem = z.object({
   description: z.string().trim().min(1).max(MAX_DRAFT_DESCRIPTION_LENGTH),
   mood: z.string().trim().min(1).nullable(),
   reason: z.string().trim().min(1).max(MAX_DRAFT_REASON_LENGTH),
+  /**
+   * カメラの案（ADR-0043）。**提案が無ければ null**（採用してもカメラを触らない）。
+   * 案の中身は追記のみなので、ここも作成後に変えない。
+   *
+   * **省略できる。** AI がカメラを返さない口（スタブ・古い run）もそのまま読めるようにする。
+   * 1 つも決められなかった `{}` は `null` に畳む（空の入れ物を残さない）。
+   */
+  camera: StoryboardDraftCamera.nullable().default(null).transform(draftCameraOrNull),
   /** 採用した時刻。**`null` は「まだ決めていない」**（「不採用」ではない）。 */
   adoptedAt: z.date().nullable(),
   createdAt: z.date(),

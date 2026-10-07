@@ -2,6 +2,7 @@ import {
   MAX_DRAFT_DESCRIPTION_LENGTH,
   MAX_DRAFT_REASON_LENGTH,
   type MusicSection,
+  type StoryboardDraftCamera,
 } from '@ixa/domain'
 import {
   StoryboardDraftRequest,
@@ -72,6 +73,19 @@ const MOODS: readonly (string | null)[] = Object.freeze([
   '厳粛',
 ])
 
+/**
+ * カメラの案（ADR-0043）。**一部は意図的に「提案なし」（null）**。
+ * 提案が無い経路（カメラを触らずに採用する）も配線として通しておく。
+ */
+const CAMERAS: readonly (StoryboardDraftCamera | null)[] = Object.freeze([
+  { size: 'medium', movement: 'static' },
+  { size: 'wide', movement: 'pull_out', movementIntensity: 'subtle' },
+  { size: 'closeup', angle: 'low', movement: 'tilt', movementIntensity: 'moderate' },
+  null,
+  { size: 'medium_wide', movement: 'tracking', movementIntensity: 'moderate' },
+  { size: 'medium', angleH: 'front', movement: 'push_in', movementIntensity: 'subtle' },
+])
+
 /** その秒数を含むセクション。無ければ null（「無い」と「不明」を混ぜない）。 */
 export const sectionAt = (
   sections: readonly MusicSection[],
@@ -110,6 +124,7 @@ export const stubDraftItem = (
       `${sectionPhrase}・尺 ${shot.durationSec.toFixed(2)} 秒。${currentPhrase}。この尺なら動きを 1 つに絞れる。`,
       MAX_DRAFT_REASON_LENGTH,
     ),
+    camera: pick(CAMERAS, digest >>> 16),
   }
 }
 

@@ -22,6 +22,7 @@ import {
   createInMemoryNarrationLineRepository,
 } from '@ixa/generation/testing'
 import { describe, expect, it } from 'vitest'
+import type { StoryboardDraftCamera } from '@ixa/domain'
 import type { StoryboardDraftOutcome, StoryboardDrafter } from '@ixa/provider-llm'
 import {
   DUPLICATE_SHOT_IDS_MESSAGE,
@@ -97,6 +98,8 @@ const drafterFor = (
           description: `案: ${shot.code}`,
           mood: '静かな緊張',
           reason: `${shot.code} は導入だから`,
+          // カメラの案（ADR-0043）。既定は「提案なし」。要るテストだけが上書きする。
+          camera: null,
         })),
       })
     },
@@ -559,6 +562,115 @@ describe('POST /projects/{id}/storyboard/drafts/{runId}/adopt', () => {
     expect(byId.get(first.id)?.description).toBe('案: A')
     expect(byId.get(second.id)?.description).toBe('Bの元の説明')
     expect(byId.get(second.id)?.mood).toBe('calm')
+  })
+
+  /**
+   * カメラの案（ADR-0043。制作者 2026-10-07「内容から判断付くようなものは自動である程度
+   * 設定してもらえると嬉しい」）。**案に入っている項目だけを重ねる。**
+   */
+  describe('カメラの案', () => {
+    const withCameraDraft = async (camera: StoryboardDraftCamera | null, shot: Partial<Shot>) => {
+      const project = aProject()
+      const shots = [aShot(project.id, shot)]
+      const built = await buildRoutes({
+        project,
+        shots,
+        drafter: {
+          name: 'camera-drafter',
+          draft: () =>
+            Promise.resolve({
+              ok: true,
+              costUsd: 0,
+              items: shots.map((target) => ({
+                shotId: target.id,
+                description: `案: ${target.code}`,
+                mood: null,
+                reason: '理由',
+                camera,
+              })),
+            }),
+        },
+      })
+      const { body } = await postDraft(built.app, project.id)
+      return { ...built, project, shot: shots[0] as Shot, run: body.data.run }
+    }
+
+    it('案に入っている項目だけを重ね、触れていない項目は残す', async () => {
+      const { app, project, shot, run, shotRepo } = await withCameraDraft(
+        { movement: 'tilt', movementIntensity: 'moderate' },
+        { camera: { size: 'wide', angleH: null, angle: 'low', lensMm: 50, movement: null, movementIntensity: null } },
+      )
+
+      await postAdopt(app, project.id, run.id, [shot.id])
+
+      const after = (await shotRepo.findByProject(project.id)).find((s) => s.id === shot.id)
+      expect(after?.camera).toEqual({
+        // 案が出した項目
+        movement: 'tilt',
+        movementIntensity: 'moderate',
+        // 人が決めていた項目はそのまま
+        size: 'wide',
+        angleH: null,
+        angle: 'low',
+        lensMm: 50,
+      })
+    })
+
+    it('案がカメラを出していなければ、カメラは変わらない', async () => {
+      const before = {
+        size: 'closeup' as const,
+        angleH: null,
+        angle: null,
+        lensMm: null,
+        movement: 'pan' as const,
+        movementIntensity: null,
+      }
+      const { app, project, shot, run, shotRepo } = await withCameraDraft(null, { camera: before })
+
+      await postAdopt(app, project.id, run.id, [shot.id])
+
+      const after = (await shotRepo.findByProject(project.id)).find((s) => s.id === shot.id)
+      expect(after?.camera).toEqual(before)
+      // 説明は採用される（カメラが無いだけで採用そのものは効く）。
+      expect(after?.description).toBe(`案: ${shot.code}`)
+    })
+
+    /**
+     * 27 件が一度に変わる操作なので、戻せないと困る（P64-1）。
+     * **残すのは変える前のカメラ全体。** 一部だけ残すと、戻したときに残りが欠ける。
+     */
+    it('変える前のカメラを記録に残す', async () => {
+      const before = {
+        size: 'medium' as const,
+        angleH: null,
+        angle: null,
+        lensMm: null,
+        movement: 'static' as const,
+        movementIntensity: null,
+      }
+      const { app, project, shot, run, editBatches } = await withCameraDraft({ movement: 'tilt' }, { camera: before })
+
+      await postAdopt(app, project.id, run.id, [shot.id])
+
+      expect(editBatches.snapshot().at(-1)?.entries[0]?.patch.camera).toEqual(before)
+    })
+
+    /** 同じカメラを採用し直しただけなら、記録に入れない（戻らない行で履歴を埋めない）。 */
+    it('カメラが変わらない採用は記録に残さない', async () => {
+      const same = {
+        size: 'medium' as const,
+        angleH: null,
+        angle: null,
+        lensMm: null,
+        movement: 'tilt' as const,
+        movementIntensity: null,
+      }
+      const { app, project, shot, run, editBatches } = await withCameraDraft({ movement: 'tilt' }, { camera: same })
+
+      await postAdopt(app, project.id, run.id, [shot.id])
+
+      expect(editBatches.snapshot().at(-1)?.entries[0]?.patch.camera).toBeUndefined()
+    })
   })
 
   it('採用していない案の adoptedAt は null のまま（「不採用」ではなく「未決」）', async () => {

@@ -1,4 +1,11 @@
 import type { ShotId } from '@ixa/domain'
+import {
+  ANGLE_HORIZONTAL_OPTIONS,
+  ANGLE_VERTICAL_OPTIONS,
+  CAMERA_MOVEMENT_OPTIONS,
+  MOVEMENT_INTENSITY_OPTIONS,
+  SHOT_SIZE_OPTIONS,
+} from '@/lib/camera-options'
 import type { WireStoryboardDraftItem, WireStoryboardDraftRun } from '@/lib/storyboard-draft-api'
 
 /**
@@ -25,6 +32,8 @@ export type DraftDecision = 'adopted' | 'undecided'
 export type DraftProposal = {
   readonly description: string
   readonly mood: string | null
+  /** カメラの案を日本語 1 行にしたもの（ADR-0043）。提案が無ければ null。 */
+  readonly camera: string | null
   /** なぜこの絵か。**必ず出す。** これが無いと採否を決められない。 */
   readonly reason: string
   readonly decision: DraftDecision
@@ -53,6 +62,29 @@ export const describeCurrent = (description: string): string =>
 export const describeMood = (mood: string | null): string =>
   mood === null || mood.trim() === '' ? EMPTY_MOOD_LABEL : mood
 
+/** 選択肢の一覧から表示名を引く。**画面の言葉は 1 か所（`camera-options`）から取る。** */
+const labelOf = (options: readonly { value: string; label: string }[], value: string | undefined): string | null =>
+  value === undefined ? null : (options.find((option) => option.value === value)?.label ?? null)
+
+/**
+ * カメラの案を 1 行にする（ADR-0043）。**決められた項目だけを並べる。**
+ * 提案が無い（null）・1 つも決まっていない案は null を返し、行そのものを出さない。
+ */
+export const describeDraftCamera = (
+  camera: WireStoryboardDraftItem['camera'],
+): string | null => {
+  if (camera === null) return null
+  const parts = [
+    labelOf(SHOT_SIZE_OPTIONS, camera.size),
+    labelOf(ANGLE_HORIZONTAL_OPTIONS, camera.angleH),
+    labelOf(ANGLE_VERTICAL_OPTIONS, camera.angle),
+    camera.lensMm === undefined ? null : `${String(camera.lensMm)}mm`,
+    labelOf(CAMERA_MOVEMENT_OPTIONS, camera.movement),
+    labelOf(MOVEMENT_INTENSITY_OPTIONS, camera.movementIntensity),
+  ].filter((part): part is string => part !== null)
+  return parts.length === 0 ? null : parts.join(' / ')
+}
+
 /**
  * 案と「いまの Shot」を突き合わせて行を作る。
  *
@@ -80,6 +112,7 @@ export const buildDraftRows = (
           : {
               description: item.description,
               mood: item.mood,
+              camera: describeDraftCamera(item.camera),
               reason: item.reason,
               decision: adopted ? 'adopted' : 'undecided',
               unchanged: shot.description === item.description && shot.mood === item.mood,

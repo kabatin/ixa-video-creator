@@ -1,4 +1,4 @@
-import { ShotId, StoryboardDraftItemId, StoryboardDraftRunId, type ProjectId } from '@ixa/domain'
+import { ShotId, StoryboardDraftCamera, StoryboardDraftItemId, StoryboardDraftRunId, type ProjectId } from '@ixa/domain'
 import { z } from 'zod'
 import type { Requester } from '@/lib/requester'
 
@@ -37,6 +37,11 @@ export const WireStoryboardDraftItem = z.object({
   mood: z.string().nullable(),
   /** なぜこの絵か。**必須。** これが無いと採否を決められない。 */
   reason: z.string().min(1),
+  /**
+   * カメラの案（ADR-0043）。**null は「カメラの提案なし」**（採用してもカメラは変わらない）。
+   * 値の一覧は domain が持つので、ここで書き写さない。
+   */
+  camera: StoryboardDraftCamera.nullable().default(null),
   /** **null は「まだ決めていない」。「不採用」ではない**（lessons L-021）。 */
   adoptedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),

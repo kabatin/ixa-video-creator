@@ -1,4 +1,12 @@
-import { MAX_DRAFT_DESCRIPTION_LENGTH, MAX_DRAFT_REASON_LENGTH } from '@ixa/domain'
+import {
+  AngleHorizontal,
+  AngleVertical,
+  CameraMovement,
+  MAX_DRAFT_DESCRIPTION_LENGTH,
+  MAX_DRAFT_REASON_LENGTH,
+  MovementIntensity,
+  ShotSize,
+} from '@ixa/domain'
 import { z } from 'zod'
 import {
   ClaudeCliEnvelope,
@@ -105,12 +113,15 @@ const sectionLines = (request: StoryboardDraftRequest): readonly string[] =>
 /** 空欄は「指定なし」と書く。空のまま渡すと、書き忘れか意図的に無いのかが LLM に分からない。 */
 const orUnspecified = (text: string): string => (text.trim() === '' ? '(指定なし)' : text.trim())
 
+/** 選べる値を `a | b | c` で並べる。**一覧は domain の enum から作る**（プロンプトに書き写さない）。 */
+const choices = (values: readonly string[]): string => values.join(' | ')
+
 export const buildDraftPrompt = (request: StoryboardDraftRequest): string =>
   [
     'あなたは映像作品の絵コンテ作家です。既に決まっている Shot の並びに対して、',
-    '各 Shot の「説明」と「雰囲気」の案を書いてください。',
+    '各 Shot の「説明」「雰囲気」「カメラ」の案を書いてください。',
     '',
-    '**Shot の並び・尺・順番は変更しないでください。** 案を出すのは説明と雰囲気だけです。',
+    '**Shot の並び・尺・順番は変更しないでください。** 案を出すのは説明・雰囲気・カメラだけです。',
     '',
     '## 作品のコンセプト・あらすじ（脚本）',
     request.script === null || request.script.trim() === '' ? '(まだ書かれていません)' : request.script,
@@ -150,10 +161,31 @@ export const buildDraftPrompt = (request: StoryboardDraftRequest): string =>
     '      "shotId": 上の一覧にある shotId をそのまま,',
     `      "description": その Shot で何を映すか（${String(MAX_DRAFT_DESCRIPTION_LENGTH)} 文字以内）,`,
     '      "mood": 雰囲気を表す短い語。適切な語が無ければ null,',
-    `      "reason": なぜこの絵なのか（${String(MAX_DRAFT_REASON_LENGTH)} 文字以内）`,
+    `      "reason": なぜこの絵なのか（${String(MAX_DRAFT_REASON_LENGTH)} 文字以内）,`,
+    '      "camera": {',
+    `        "size": ${choices(ShotSize.options)},`,
+    `        "angleH": ${choices(AngleHorizontal.options)},`,
+    `        "angle": ${choices(AngleVertical.options)},`,
+    '        "lensMm": レンズの焦点距離（数値・mm）,',
+    `        "movement": ${choices(CameraMovement.options)},`,
+    `        "movementIntensity": ${choices(MovementIntensity.options)}`,
+    '      }',
     '    }',
     '  ]',
     '}',
+    '',
+    '## カメラの決め方',
+    '',
+    '**自分が書いた説明から読み取れる項目だけ**を camera に入れてください。',
+    '迷う項目はキーごと省いてください（空文字や null を入れないでください）。camera 自体を省いても構いません。',
+    '',
+    '- 被写体の大きさや位置が大きく変わる動作（立ち上がる・走り出す・画面の外へ出る）では、',
+    '  `movement` を `static` にしないでください。**被写体が画面から外れます**',
+    '  （実測: 立ち上がる Shot をカメラ固定で作ると、立った瞬間に顔が画面の外へ出ました）。',
+    '  `tilt`（上下に振る）・`pull_out`（引く）・`tracking`（追う）のいずれかを選んでください。',
+    '- ほとんど動かない Shot では `static` を選んでください。',
+    '- **説明の文章にカメラの指示を書かないでください**（「カメラは下から」などは camera に入れてください）。',
+    '  両方に書くと、生成のときに二重の指示になります。',
     '',
     `**Shot 一覧にある ${String(request.shots.length)} 件すべてに対して、過不足なく 1 件ずつ**返してください。`,
     '一覧に無い shotId を返さないでください。同じ shotId を 2 回返さないでください。',

@@ -16,12 +16,14 @@ import {
   StoryboardDraftRunId as StoryboardDraftRunIdSchema,
   lyricLines,
   lyricsDuring,
+  mergeShotCamera,
   narrationDuring,
   type MusicSection,
   type NarrationLine,
   type Project,
   type ProjectId,
   type Shot,
+  type ShotCamera,
   type StoryboardDraftItem,
   type StoryboardDraftRun,
 } from '@ixa/domain'
@@ -248,6 +250,22 @@ export type StoryboardDraftRoutesDeps = StoryboardDraftCastDeps & {
    */
   editBatches: EditBatchRecorder
 }
+
+/**
+ * 採用で Shot に当てる値。**説明・雰囲気・カメラだけ。** 尺・並び・採用 Take は触らない。
+ *
+ * カメラは**案に入っている項目だけを重ねる**（ADR-0043。`mergeShotCamera`）。
+ * 全体を置き換えると、案が触れていない項目（人が決めた高さやレンズ）が消える。
+ * 案がカメラを出していなければ、カメラの欄ごと渡さない（「触らない」をそのまま表す）。
+ */
+const adoptPatch = (
+  shot: Shot,
+  item: Pick<StoryboardDraftItem, 'description' | 'mood' | 'camera'>,
+): { description: string; mood: string | null; camera?: ShotCamera } => ({
+  description: item.description,
+  mood: item.mood,
+  ...(item.camera === null ? {} : { camera: mergeShotCamera(shot.camera, item.camera) }),
+})
 
 /** 現在の脚本本文。まだ書かれていなければ null（空文字に畳まない）。 */
 const currentScriptContent = async (
@@ -495,16 +513,15 @@ export const storyboardDraftRoutes = (deps: StoryboardDraftRoutesDeps) =>
         entries: pending.flatMap((item) => {
           const shot = liveShotById.get(item.shotId)
           if (shot === undefined) return []
-          const before = shotBeforePatch(shot, {
-            description: item.description,
-            mood: item.mood,
-          })
+          const before = shotBeforePatch(shot, adoptPatch(shot, item))
           return [editBatchEntry(item.shotId, before)]
         }),
       })
 
       for (const item of pending) {
-        await deps.shots.update(item.shotId, { description: item.description, mood: item.mood })
+        const shot = liveShotById.get(item.shotId)
+        if (shot === undefined) continue
+        await deps.shots.update(item.shotId, adoptPatch(shot, item))
       }
       const adopted = await deps.drafts.adoptItems(
         pending.map((item) => item.id),

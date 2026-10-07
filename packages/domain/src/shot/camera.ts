@@ -22,15 +22,30 @@ export const CameraMovement = z.enum([
 ])
 export type CameraMovement = z.infer<typeof CameraMovement>
 
+/** 動きの強さ。**名前を付けて出す**（絵コンテの案も画面も同じ値の一覧を読む）。 */
+export const MovementIntensity = z.enum(['subtle', 'moderate', 'strong'])
+export type MovementIntensity = z.infer<typeof MovementIntensity>
+
 export const ShotCamera = z.object({
   size: ShotSize,
   angleH: AngleHorizontal.nullable(),
   angle: AngleVertical.nullable(),
   lensMm: z.number().positive().nullable(),
   movement: CameraMovement.nullable(),
-  movementIntensity: z.enum(['subtle', 'moderate', 'strong']).nullable(),
+  movementIntensity: MovementIntensity.nullable(),
 })
 export type ShotCamera = z.infer<typeof ShotCamera>
+
+/**
+ * 一部だけ決まった値を、いまのカメラへ**重ねる**。
+ *
+ * **全体の置換にしない。** 「景別だけ変える」で置き換えると、触っていない動きや高さが消える。
+ * 一括変更（`PATCH /shots/bulk`）と絵コンテの案の採用（ADR-0043）が同じ規則を読む。
+ */
+export const mergeShotCamera = (
+  current: ShotCamera,
+  patch: Partial<ShotCamera>,
+): ShotCamera => ({ ...current, ...patch })
 
 /**
  * カメラ指定をプロンプト断片へ落とす。

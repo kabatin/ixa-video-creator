@@ -81,6 +81,8 @@ const itemRowToDomain = (row: StoryboardDraftItemRow): StoryboardDraftItem =>
     description: row.description,
     mood: row.mood,
     reason: row.reason,
+    // 前の run には列が無い（NULL）。**提案なし**として読む。
+    camera: row.camera ?? null,
     adoptedAt: row.adoptedAt,
     createdAt: row.createdAt,
   })

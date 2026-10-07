@@ -12,6 +12,7 @@ import {
   adoptableShotIds,
   buildDraftRows,
   buildDraftSummary,
+  describeDraftCamera,
   STALLED_AFTER_MS,
   clearSelection,
   countUnmatchedItems,
@@ -61,6 +62,7 @@ const anItem = (
   description: '決勝卓を引きで捉える',
   mood: '静かな緊張',
   reason: 'intro の静けさを保つため',
+  camera: null,
   adoptedAt: null,
   createdAt: '2026-09-18T00:00:00.000Z',
   ...overrides,
@@ -377,5 +379,29 @@ describe('describeRunning', () => {
 
   it('読めない時刻はそう書く（0 分に畳まない）', () => {
     expect(describeRunning('not-a-date', NOW)).toBe('開始時刻が読めません')
+  })
+})
+
+/**
+ * カメラの案（ADR-0043）。**画面の言葉は `camera-options` の 1 か所から取る**
+ * （「ティルト」「弱」などを書き写さない）。
+ */
+describe('describeDraftCamera', () => {
+  it('提案が無ければ行を出さない', () => {
+    expect(describeDraftCamera(null)).toBeNull()
+  })
+
+  it('1 つも決まっていない案も行を出さない', () => {
+    expect(describeDraftCamera({})).toBeNull()
+  })
+
+  it('決められた項目だけを日本語で並べる', () => {
+    expect(describeDraftCamera({ movement: 'tilt', movementIntensity: 'moderate' })).toBe('ティルト / 中')
+  })
+
+  it('景別・向き・高さ・レンズも並ぶ（順番は画面の並びと同じ）', () => {
+    expect(
+      describeDraftCamera({ size: 'wide', angleH: 'front', angle: 'low', lensMm: 50, movement: 'static' }),
+    ).toBe('ワイド / 正面 / ロー / 50mm / フィックス')
   })
 })

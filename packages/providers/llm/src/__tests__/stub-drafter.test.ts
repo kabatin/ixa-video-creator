@@ -1,4 +1,4 @@
-import { MAX_DRAFT_DESCRIPTION_LENGTH, MAX_DRAFT_REASON_LENGTH } from '@ixa/domain'
+import { MAX_DRAFT_DESCRIPTION_LENGTH, MAX_DRAFT_REASON_LENGTH, StoryboardDraftCamera } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import { StoryboardDraftedItem } from '../storyboard-port.js'
 import {
@@ -102,5 +102,36 @@ describe('スタブ下書きと音楽セクション', () => {
 describe('スタブ下書きの異常系', () => {
   it('Shot が 0 件の依頼は検証で落ちる（例外は reject で返す）', async () => {
     await expect(drafter.draft(aDraftRequest({ shots: [] }))).rejects.toThrow()
+  })
+})
+
+/**
+ * カメラの案（ADR-0043）。スタブは決定的なので、**同じ Shot からは必ず同じ案**が出る。
+ * 一部は「提案なし」にしてあり、カメラを触らずに採用する経路も配線として通る。
+ */
+describe('スタブのカメラの案', () => {
+  const shots = Array.from({ length: 12 }, (_unused, i) =>
+    aDraftShot({ code: `CUT-${String(i + 1).padStart(2, '0')}`, order: (i + 1) * 1000 }),
+  )
+
+  it('同じ Shot からは同じ案が出る', () => {
+    const first = shots.map((shot) => stubDraftItem(shot, []).camera)
+    const again = shots.map((shot) => stubDraftItem(shot, []).camera)
+
+    expect(again).toEqual(first)
+  })
+
+  it('提案ありと提案なしの両方が出る', () => {
+    const cameras = shots.map((shot) => stubDraftItem(shot, []).camera)
+
+    expect(cameras.some((camera) => camera === null)).toBe(true)
+    expect(cameras.some((camera) => camera !== null)).toBe(true)
+  })
+
+  it('出す値はすべて選べる値（domain の検証を通る）', () => {
+    for (const shot of shots) {
+      const { camera } = stubDraftItem(shot, [])
+      if (camera !== null) expect(StoryboardDraftCamera.safeParse(camera).success).toBe(true)
+    }
   })
 })

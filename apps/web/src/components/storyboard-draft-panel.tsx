@@ -90,6 +90,10 @@ const ProposalCells = ({ proposal }: { readonly proposal: DraftProposal }) => (
         <>
           <span className={proposal.unchanged ? '' : 'rounded bg-accent/10 px-0.5'}>{proposal.description}</span>
           <span className="block text-xs text-muted">雰囲気: {describeMood(proposal.mood)}</span>
+          {/* カメラの案（ADR-0043）。**提案が無ければ行ごと出さない。** */}
+          {proposal.camera !== null && (
+            <span className="block text-xs text-muted">カメラ: {proposal.camera}</span>
+          )}
         </>
       )}
       <span className="mt-0.5 block text-xs text-muted">なぜこの絵か: {proposal.reason}</span>

@@ -1,0 +1,1 @@
+ALTER TABLE "storyboard_draft_items" ADD COLUMN "camera" jsonb;

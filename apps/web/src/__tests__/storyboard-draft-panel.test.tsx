@@ -60,6 +60,7 @@ const itemFor = (
   description: `${shotId === shotA.id ? 'A' : 'B'} の案`,
   mood: '静かな緊張',
   reason: `${shotId === shotA.id ? 'A' : 'B'} は導入だから`,
+  camera: null,
   adoptedAt: null,
   createdAt: '2026-09-18T00:00:00.000Z',
   ...overrides,
@@ -505,5 +506,28 @@ describe('StoryboardDraftPanel: 案が届いたとき', () => {
     await userEvent.click(screen.getByRole('button', { name: '作り直す' }))
 
     expect(await screen.findByText(/前に選んでいたものは外しました/)).toBeInTheDocument()
+  })
+})
+
+/**
+ * カメラの案（ADR-0043。制作者 2026-10-07「内容から判断付くようなものは自動である程度
+ * 設定してもらえると嬉しい」）。**提案が無い行には出さない。**
+ */
+describe('カメラの案の表示', () => {
+  it('案にカメラがあれば行に出す', () => {
+    panel({
+      initialItems: [
+        itemFor(shotA.id, { camera: { movement: 'tilt', movementIntensity: 'moderate' } }),
+        itemFor(shotB.id),
+      ],
+    })
+
+    expect(screen.getByText('カメラ: ティルト / 中')).toBeVisible()
+  })
+
+  it('提案が無ければ行ごと出さない', () => {
+    panel({ initialItems: [itemFor(shotA.id), itemFor(shotB.id)] })
+
+    expect(screen.queryByText(/^カメラ:/)).toBeNull()
   })
 })

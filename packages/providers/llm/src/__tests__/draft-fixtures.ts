@@ -49,6 +49,8 @@ export const aDraftedItem = (
   description: overrides.description ?? '決勝卓を引きで捉える',
   mood: overrides.mood === undefined ? '静かな緊張' : overrides.mood,
   reason: overrides.reason ?? 'intro の静けさを保ったまま場所を示すため',
+  // カメラの案は省ける（提案なし）。既定は提案なしにして、要るテストだけが渡す。
+  camera: overrides.camera === undefined ? null : overrides.camera,
 })
 
 /** `claude -p --output-format json` の外枠。 */

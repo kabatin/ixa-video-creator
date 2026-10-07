@@ -1,7 +1,12 @@
 import {
+  AngleHorizontal,
+  AngleVertical,
+  CameraMovement,
   MAX_DRAFT_DESCRIPTION_LENGTH,
   MAX_DRAFT_REASON_LENGTH,
+  MovementIntensity,
   ShotId as ShotIdSchema,
+  ShotSize,
   newId,
 } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
@@ -109,6 +114,34 @@ describe('Claude CLI 下書きが組み立てるプロンプト', () => {
     expect(prompt).toContain(
       `"reason": なぜこの絵なのか（${String(MAX_DRAFT_REASON_LENGTH)} 文字以内）`,
     )
+  })
+
+  /**
+   * カメラの案（ADR-0043）。**選べる値は domain の enum から出す。**
+   * プロンプトに書き写すと、値を増やしたときにここだけ古い一覧が残り、
+   * AI は増えた値を知らないまま案を作り続ける。
+   */
+  it('カメラの選べる値を domain の一覧から出す（書き写さない）', () => {
+    expect(prompt).toContain(`"movement": ${CameraMovement.options.join(' | ')}`)
+    expect(prompt).toContain(`"size": ${ShotSize.options.join(' | ')}`)
+    expect(prompt).toContain(`"movementIntensity": ${MovementIntensity.options.join(' | ')}`)
+    expect(prompt).toContain(`"angleH": ${AngleHorizontal.options.join(' | ')}`)
+    expect(prompt).toContain(`"angle": ${AngleVertical.options.join(' | ')}`)
+  })
+
+  /** 実測: 立ち上がる Shot をカメラ固定で作ると、立った瞬間に顔が画面の外へ出た（ADR-0042）。 */
+  it('動く Shot で static を選ばせない', () => {
+    expect(prompt).toContain('`movement` を `static` にしないでください')
+    expect(prompt).toContain('顔が画面の外へ出ました')
+  })
+
+  /** 説明と camera の両方にカメラを書かせない（生成のときに二重の指示になる）。 */
+  it('説明の文章にカメラの指示を書かせない', () => {
+    expect(prompt).toContain('説明の文章にカメラの指示を書かないでください')
+  })
+
+  it('読み取れない項目は埋めさせない（推測で埋めさせない）', () => {
+    expect(prompt).toContain('迷う項目はキーごと省いてください')
   })
 
   it('脚本が無ければ「まだ書かれていません」と書く（空文字を渡さない）', () => {

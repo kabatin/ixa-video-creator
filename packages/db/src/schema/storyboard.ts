@@ -1,5 +1,5 @@
 import { doublePrecision, index, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core'
-import type { StoryboardDraftRun } from '@ixa/domain'
+import type { StoryboardDraftCamera, StoryboardDraftRun } from '@ixa/domain'
 import { createdAt, timestampTz, ulidPk, ulidRef } from './columns.js'
 import { projects } from './workspace.js'
 import { shots } from './shot.js'
@@ -57,6 +57,11 @@ export const storyboardDraftItems = pgTable(
     description: text('description').notNull(),
     mood: text('mood'),
     reason: text('reason').notNull(),
+    /**
+     * カメラの案（ADR-0043）。**NULL は「カメラの提案なし」**（採用してもカメラを触らない）。
+     * 決められた項目だけが入る部分的な値（`StoryboardDraftCamera`）。
+     */
+    camera: jsonb('camera').$type<StoryboardDraftCamera>(),
     /** 採用した時刻。**NULL は「まだ決めていない」**（「不採用」ではない）。 */
     adoptedAt: timestampTz('adopted_at'),
     createdAt: createdAt(),
