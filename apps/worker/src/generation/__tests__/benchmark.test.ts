@@ -40,6 +40,7 @@ const jobWith = (overrides: Partial<GenerationJob>): GenerationJob =>
     resolvedModel: MODEL.id,
     routerDecision: null,
     corrections: [],
+    seed: null,
     specHash: 'x'.repeat(64),
     providerJobRef: 'provider-job-1',
     attempt: 1,
@@ -177,6 +178,7 @@ describe('生成ジョブが実測を 1 行残す', () => {
       requestedModel: MODEL.id,
       resolvedModel: MODEL.id,
       corrections: [],
+    seed: null,
     })
     // 実測は info で残すので、拾える高さにする。
     const logger = createCapturingLogger('info')

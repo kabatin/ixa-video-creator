@@ -32,6 +32,12 @@ export const rebuildSpec = async (
   project: Project,
   model: VideoModelDescriptor,
   corrections: readonly string[] = [],
+  /**
+   * 使うシード（ADR-0042）。**行から渡す。** `corrections` と同じで、
+   * api が仕様へ織り込んだ値をここでも渡さないと `specHash` が一致せず `spec_drift` で落ちる。
+   * 既定の `null` は「Provider に任せる」。
+   */
+  seed: number | null = null,
 ): Promise<RebuiltSpec> => {
   const [characters, locations, manualReferences, previousShotLastFrameId, startFrameId] =
     await Promise.all([
@@ -62,7 +68,7 @@ export const rebuildSpec = async (
     references,
     // 編集尺をモデルの対応値へ切り上げる（ADR-0011）。
     generationDurationSec: quantizeDuration(shot.durationSec, caps.durations),
-    seed: null,
+    seed,
     negativePrompt: null,
     /**
      * **直しは GenerationJob の行から渡す。** api が仕様へ織り込んだものと

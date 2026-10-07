@@ -281,7 +281,7 @@ const submit = async (
     throw new JobFailure(lineageFailure.code, lineageFailure.message, false)
   }
 
-  const { spec, specHash } = await rebuildSpec(deps.context, shot, project, model, job.corrections)
+  const { spec, specHash } = await rebuildSpec(deps.context, shot, project, model, job.corrections, job.seed)
   if (specHash !== job.specHash) {
     // Shot が編集されて仕様が変わっている。古い仕様で課金しないよう止める。
     // ハッシュは内部の値なので画面の文には入れず、ログにだけ残す。

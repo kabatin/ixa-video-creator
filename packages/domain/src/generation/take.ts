@@ -208,6 +208,13 @@ export const GenerationJob = z.object({
    */
   corrections: z.array(z.string().min(1)),
 
+  /**
+   * 使うシード（ADR-0042）。**`null` は「Provider に任せる」。**
+   * 直しと同じく**行が正**で、worker はここから読んで仕様を組み直す。
+   * 無いと `specHash` を再現できず `spec_drift` で落ちる。0 は正当なシードなので null と混ぜない。
+   */
+  seed: z.number().int().nullable(),
+
   queuedAt: z.date(),
   /** 生成先へ送った時刻。 */
   startedAt: z.date().nullable(),
@@ -246,6 +253,7 @@ export const CreateGenerationJobInput = GenerationJob.omit({
       .default(null),
     /** 直しは添えないのが既定。上限は `spec.ts` の `Corrections` が持つ（写さない）。 */
     corrections: Corrections.default([]),
+    seed: z.number().int().nullable().default(null),
   })
   .refine(hasReasonWhenParented, lineagePairIssue())
 export type CreateGenerationJobInput = z.input<typeof CreateGenerationJobInput>

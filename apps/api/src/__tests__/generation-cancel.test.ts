@@ -48,6 +48,7 @@ const aJob = (
     parentTakeId: null,
     regenerationReason: null,
     corrections: [],
+    seed: null,
     queuedAt: new Date('2026-10-01T00:00:00.000Z'),
     startedAt: new Date('2026-10-01T00:00:05.000Z'),
     providerStartedAt: null,

@@ -126,6 +126,7 @@ const buildFixture = async (options: {
       requestedModel: model.id,
       resolvedModel: model.id,
       corrections: [],
+    seed: null,
     })
     jobIds.set(model.id, job.id)
   }

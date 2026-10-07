@@ -82,6 +82,7 @@ const buildBusyFixture = async (
     requestedModel: 'AUTO',
     resolvedModel: MODEL.id,
     corrections: [],
+    seed: null,
   })
   const shots = inMemoryShots([shot])
   const scheduler = createRecordingScheduler()

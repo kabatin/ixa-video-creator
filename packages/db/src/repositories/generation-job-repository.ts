@@ -63,6 +63,7 @@ export const generationJobRowToDomain = (row: GenerationJobRow): GenerationJob =
     parentTakeId: row.parentTakeId,
     regenerationReason: row.regenerationReason,
     corrections: row.corrections,
+    seed: row.seed,
     queuedAt: row.queuedAt,
     startedAt: row.startedAt,
     providerStartedAt: row.providerStartedAt,

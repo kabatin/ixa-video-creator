@@ -874,6 +874,7 @@ describe('失敗したときの Shot の解放', () => {
       requestedModel: 'AUTO',
       resolvedModel: MODEL.id,
       corrections: [],
+    seed: null,
     })
 
     await runToCompletion(f)

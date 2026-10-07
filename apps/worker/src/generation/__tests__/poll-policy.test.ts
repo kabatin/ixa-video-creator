@@ -54,6 +54,7 @@ const buildFixture = async (policy: PollPolicy | undefined, pollError?: Error) =
     requestedModel: 'AUTO',
     resolvedModel: MODEL.id,
     corrections: [],
+    seed: null,
   })
   const scheduler = createRecordingScheduler()
   const base = withPolicy(createTestProvider([MODEL], [PENDING]), policy)

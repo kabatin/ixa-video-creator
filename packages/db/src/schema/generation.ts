@@ -62,6 +62,15 @@ export const generationJobs = pgTable(
      */
     corrections: jsonb('corrections').$type<readonly string[]>().notNull().default([]),
 
+    /**
+     * 使うシード（ADR-0042 の「本番で作り直す」）。**直しと同じ理由でここに置く。**
+     * worker は処理時に仕様を組み直すので、シードが行に無いと同じ `specHash` を
+     * 再現できず `spec_drift` で落ちる（実際に落ちた。L-012 と同じ形）。
+     *
+     * **`NULL` は「Provider に任せる」。** 0 は正当なシードなので、0 と NULL を混ぜない。
+     */
+    seed: integer('seed'),
+
     queuedAt: timestampTz('queued_at').notNull().defaultNow(),
     startedAt: timestampTz('started_at'),
     /** 生成先が作り始めた時刻（送った後、生成先の中で順番を待つことがある）。 */

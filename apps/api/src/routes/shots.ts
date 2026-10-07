@@ -495,6 +495,11 @@ export const enqueueJobs = async (
        * ここで積み忘れると `specHash` が食い違って `spec_drift` で落ちる（L-012）。
        */
       corrections: [...corrections],
+      /**
+       * **シードも行に積む。** worker は行から読んで仕様を組み直すので、
+       * 積み忘れると `specHash` が食い違って `spec_drift` で落ちる（直しと同じ。L-012）。
+       */
+      seed: compiled.spec.seed,
       ...(lineage === null ? {} : lineage),
     })
     await deps.queue.enqueue(job.id)

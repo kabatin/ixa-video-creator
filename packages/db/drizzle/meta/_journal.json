@@ -239,6 +239,13 @@
       "when": 1791352107077,
       "tag": "0033_overrated_mandroid",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791369343105,
+      "tag": "0034_stormy_klaw",
+      "breakpoints": true
     }
   ]
 }

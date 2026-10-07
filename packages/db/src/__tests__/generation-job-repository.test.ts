@@ -26,6 +26,7 @@ const baseRow = (): GenerationJobRow => ({
   parentTakeId: null,
   regenerationReason: null,
   corrections: [],
+    seed: null,
   queuedAt: new Date('2026-09-17T00:00:00Z'),
   startedAt: null,
   providerStartedAt: null,

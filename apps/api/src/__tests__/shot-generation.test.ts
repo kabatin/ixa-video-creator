@@ -70,6 +70,24 @@ describe('POST /shots/:id/generate', () => {
     expect(a.data.specHash).not.toBe(b.data.specHash)
   })
 
+  /**
+   * シードは **行に積まないと worker 側で消える**。worker は行だけから仕様を組み直すので
+   * （L-012）、API が `specHash` にシードを混ぜたのに行に積まなければ `spec_drift` で落ちる。
+   * 実際に 1 本目の本番の作り直しがこれで落ちた（2026-10-07）。
+   * 組み直しの通し検査は worker 側（`spec-rebuild-round-trip.test.ts`）にあるが、
+   * **行に積む側はここでしか見ていない**。
+   */
+  it('使うシードを GenerationJob の行に積む（省略なら null）', async () => {
+    const f = buildFixture()
+
+    await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/cheap', seed: 0 })
+    await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/cheap' })
+
+    const [withSeed, withoutSeed] = f.generationJobs.snapshot()
+    expect(withSeed?.seed).toBe(0)
+    expect(withoutSeed?.seed).toBeNull()
+  })
+
   it('負のシードは断る', async () => {
     const f = buildFixture()
 
