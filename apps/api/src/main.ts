@@ -23,6 +23,7 @@ import {
   createShotCharacterRepository,
   createShotReferenceRepository,
   createImageJobRepository,
+  createUpscaleJobRepository,
   createScriptRepository,
   createEditBatchRepository,
   createStoryboardDraftRepository,
@@ -63,6 +64,8 @@ import { createFinderOpener } from './render-folder/finder-opener.js'
 import { createLogger, type Logger } from './logger.js'
 import { GENERATION_QUEUE_NAME, type GenerationQueue } from './routes/shots.js'
 import { IMAGE_QUEUE_NAME, type ImageJobQueue } from './routes/shot-start-frame-generate.js'
+import { UPSCALE_QUEUE_NAME, type UpscaleJobQueue } from './routes/take-upscale.js'
+import { createVpipeUpscaler, VPIPE_IDENTITY } from '@ixa/provider-video'
 
 /** graceful shutdown の上限時間（ミリ秒）。超過したら強制終了する。 */
 const SHUTDOWN_TIMEOUT_MS = 30_000
@@ -211,6 +214,32 @@ export const main = (): void => {
       await imageQueue.add('draw', { imageJobId })
     },
   }
+
+  /**
+   * 解像度を上げる（ADR-0044）。作るのは worker（キュー upscale・同時 1 つ）。
+   * **API が使うのは `available()` だけ**で、問い合わせも取り込みもしない。
+   * それでも口の作成に置き場が要るので、worker と同じ根を渡す。
+   */
+  const upscaleQueue = new Queue(UPSCALE_QUEUE_NAME, { connection })
+  const upscaleQueuePort: UpscaleJobQueue = {
+    enqueue: async (upscaleJobId) => {
+      await upscaleQueue.add('upscale', { upscaleJobId })
+    },
+  }
+  const vpipeBaseUrl = config.providers.vpipeApiUrl
+  const upscaler =
+    vpipeBaseUrl === null || vpipeBaseUrl === ''
+      ? null
+      : createVpipeUpscaler({
+          http: {
+            identity: VPIPE_IDENTITY,
+            fetch: (url, init) => fetch(url, init),
+            baseUrl: vpipeBaseUrl.replace(/\/+$/, ''),
+            token: config.providers.vpipeApiToken,
+            timeoutMs: 10_000,
+          },
+          outputDir: process.env.STUB_OUTPUT_DIR ?? '/tmp/ixa-stub-output',
+        })
 
   // キュー名は apps/worker/src/queues.ts の QUEUE_NAMES と一致させること。
   // apps 同士を import できないため、文字列で合わせるしかない。
@@ -390,6 +419,10 @@ export const main = (): void => {
     generationQueue: queuePort,
     imageJobs: createImageJobRepository(db),
     imageQueue: imageQueuePort,
+    // 解像度を上げる（ADR-0044）。口が無い機械では `upscaler` が null で、画面は押せない状態になる。
+    upscaleJobs: createUpscaleJobRepository(db),
+    upscaleQueue: upscaleQueuePort,
+    upscaler,
     // Shot の絵の口は「使う AI」の画像で決まる（ADR-0032。未選択なら IMAGE_PROVIDER）。
     imageModel: ai.imageModel,
     // 動画の AUTO は「使う AI」の動画の中から選ぶ（ADR-0032）。

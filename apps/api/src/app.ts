@@ -64,6 +64,7 @@ import { musicRoutes, type AnalysisQueue } from './routes/music.js'
 import { editBatchRoutes } from './routes/edit-batches.js'
 import { storyboardDraftRoutes } from './routes/storyboard-drafts.js'
 import { imageJobCancelRoutes } from './routes/image-job-cancel.js'
+import { takeUpscaleRoutes, type TakeUpscaleRoutesDeps } from './routes/take-upscale.js'
 import { storyboardRoutes } from './routes/storyboard.js'
 import { reviewRoutes, type ReviewQueue } from './routes/reviews.js'
 import { transitionRoutes } from './routes/transitions.js'
@@ -129,6 +130,11 @@ export type AppDeps = {
   imageQueue: StartFrameGenerateRoutesDeps['imageQueue']
   /** どの口で作るか（`IMAGE_PROVIDER` から main.ts が決める）。 */
   imageModel: StartFrameGenerateRoutesDeps['imageModel']
+  /** 解像度を上げるジョブ（ADR-0044）。 */
+  upscaleJobs: TakeUpscaleRoutesDeps['upscaleJobs']
+  upscaleQueue: TakeUpscaleRoutesDeps['upscaleQueue']
+  /** 上げる口。**この機械に無ければ null**（画面は押せない状態で理由を出す）。 */
+  upscaler: TakeUpscaleRoutesDeps['upscaler']
   brandAssets: BrandAssetRepository
   locations: LocationRepository
   scripts: ScriptRepository
@@ -315,6 +321,20 @@ export const createApp = (deps: AppDeps) => {
   )
   // 絵を作るのを止める（制作者 2026-10-04）。待っている・作っている絵（最初のフレーム・キャラクターシート）。
   app.route('/', imageJobCancelRoutes({ projects, imageJobs: deps.imageJobs, events: deps.events, logger }))
+  // 解像度を上げる（ADR-0044）。順番は生成と共有するので、worker 側が整理券で待つ。
+  app.route(
+    '/',
+    takeUpscaleRoutes({
+      shots: deps.shots,
+      takes: deps.takes,
+      projects,
+      upscaleJobs: deps.upscaleJobs,
+      upscaleQueue: deps.upscaleQueue,
+      upscaler: deps.upscaler,
+      events: deps.events,
+      logger,
+    }),
+  )
   // 1 枚の画像からキャラクターシート（四面図）を作る（ADR-0035）。絵コンテの画像と同じ順番待ち。
   app.route(
     '/',

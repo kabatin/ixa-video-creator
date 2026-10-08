@@ -1,6 +1,7 @@
 import { z } from 'zod'
-import { CharacterId, GenerationJobId, ImageGenerationJobId, NarrationLineId, ProjectId, ShotId, TakeId, VoiceJobId } from '../common/ids.js'
+import { CharacterId, GenerationJobId, ImageGenerationJobId, NarrationLineId, ProjectId, ShotId, TakeId, UpscaleJobId, VoiceJobId } from '../common/ids.js'
 import { ImageGenerationJobStatus } from '../generation/image-job.js'
+import { UpscaleJobStatus } from '../generation/upscale-job.js'
 import { GenerationJobStatus } from '../generation/take.js'
 import { VoiceJobKind, VoiceJobStatus } from '../narration/voice-job.js'
 import { ShotStatus } from '../shot/shot.js'
@@ -58,6 +59,23 @@ export const ProjectEvent = z.discriminatedUnion('type', [
     characterId: CharacterId.nullable().default(null),
     jobId: ImageGenerationJobId,
     status: ImageGenerationJobStatus,
+    /** 失敗したときの理由。成功・実行中は null。 */
+    error: z.string().nullable(),
+  }),
+  /**
+   * 解像度を上げるジョブの状態が変わった（ADR-0044）。
+   * 成功したら、元の Take の隣に上げた Take が増えている（`takeId`）。
+   */
+  z.object({
+    ...base,
+    type: z.literal('upscale_job.status'),
+    shotId: ShotId,
+    jobId: UpscaleJobId,
+    status: UpscaleJobStatus,
+    /** 出来上がった Take。成功したときだけ。 */
+    takeId: TakeId.nullable().default(null),
+    /** 走っている間の見込み（秒）。サーバが返さなければ null。 */
+    estimateSeconds: z.number().nonnegative().nullable().default(null),
     /** 失敗したときの理由。成功・実行中は null。 */
     error: z.string().nullable(),
   }),

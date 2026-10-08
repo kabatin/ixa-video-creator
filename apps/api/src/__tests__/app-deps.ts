@@ -16,6 +16,7 @@ import {
   createInMemoryImageJobRepository,
   createInMemoryShotRepository,
   createInMemoryTakeRepository,
+  createInMemoryUpscaleJobRepository,
 } from '@ixa/generation/testing'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { createInMemoryTextStyleRepository } from './in-memory-text-style-repository.js'
@@ -135,6 +136,10 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   imageJobs: createInMemoryImageJobRepository(),
   // キューへは入れるだけ（作るのは worker）。テストでは記録もしない。
   imageQueue: { enqueue: () => Promise.resolve() },
+  upscaleJobs: createInMemoryUpscaleJobRepository(),
+  upscaleQueue: { enqueue: () => Promise.resolve() },
+  /** 上げる口は既定で無し。使う試験だけが差し替える（`available()` を呼ばせるため）。 */
+  upscaler: null,
   imageModel: () => Promise.resolve({ providerId: ProviderId.parse('stub-image'), modelId: ModelId.parse('stub/gemini-like-image') }),
   brandAssets: createInMemoryBrandAssetRepository(),
   locations: createInMemoryLocationRepository(),
