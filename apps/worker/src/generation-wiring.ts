@@ -47,6 +47,7 @@ import {
   createRedisLocalGpuLease,
   createUnwiredEventPublisher,
   type GenerationProcessorDeps,
+  type MediaJobQueue,
   type PollScheduler,
 } from './generation/index.js'
 import type { MediaProcessorDeps } from './media/index.js'
@@ -204,6 +205,16 @@ export const createGenerationWiring = (
   ])
 
   /**
+   * 素材を計測する口（幅・高さ・fps・サムネイル・最後のコマ）。
+   * **生成と解像度上げで同じ 1 つを使う。** 別に作ると同じ素材が二重に計測される。
+   */
+  const mediaQueuePort: MediaJobQueue = {
+    enqueue: async (mediaAssetId) => {
+      await mediaQueue.add('process', { mediaAssetId })
+    },
+  }
+
+  /**
    * この機械の GPU の順番（整理券。ADR-0040 / 0044）。
    * **生成と解像度上げで同じ 1 つを使う。** 別々に作ると、同じ GPU を 2 つの列が取り合う。
    */
@@ -218,6 +229,7 @@ export const createGenerationWiring = (
     connection,
     storage,
     localGpuLease,
+    mediaQueue: mediaQueuePort,
     logger,
     outputRoot: stubOutputDir,
     vpipe: { baseUrl: config.providers.vpipeApiUrl, token: config.providers.vpipeApiToken },
@@ -247,11 +259,7 @@ export const createGenerationWiring = (
       mediaAssets: createMediaAssetRepository(db),
     }),
     scheduler,
-    mediaQueue: {
-      enqueue: async (mediaAssetId) => {
-        await mediaQueue.add('process', { mediaAssetId })
-      },
-    },
+    mediaQueue: mediaQueuePort,
     /**
      * この機械の GPU を 1 本ずつに揃える（ADR-0040）。**置き場はキューと同じ Redis。**
      * プロセスの中のミューテックスでは worker を 2 つ立てた時点で効かない。

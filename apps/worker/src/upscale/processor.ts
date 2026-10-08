@@ -11,6 +11,7 @@ import { ProviderBusyError, type ProviderJobHandle, type VideoUpscaler } from '@
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import { recordTake, type RecordTakeDeps } from '../generation/complete.js'
+import type { MediaJobQueue } from '../generation/processor.js'
 import { submitBusyDelayMs, submitBusyExpired, SUBMIT_BUSY_TIMEOUT_MESSAGE } from '../generation/busy.js'
 import {
   LOCAL_GPU_HEAD_RETRY_AFTER_MS,
@@ -58,6 +59,12 @@ export type UpscaleProcessorDeps = RecordTakeDeps & {
   readonly mediaAssets: MediaAssetRepository
   readonly storage: ObjectStorage
   readonly upscaler: VideoUpscaler
+  /**
+   * 出来た素材を計測する口（幅・高さ・fps・サムネイル・最後のコマ）。
+   * **生成と同じく、作ったら必ず積む。** 積み忘れると、その Take は大きさも fps も
+   * 分からないまま残り、**次に上げるときに「大きさが分からない」で止まる**。
+   */
+  readonly mediaQueue: MediaJobQueue
   readonly localGpuLease: LocalGpuLease
   readonly scheduler: UpscaleScheduler
   readonly logger: Logger
@@ -241,6 +248,20 @@ const poll = async (
     generationTimeSec: Math.max(0, (now.getTime() - (job.startedAt ?? job.queuedAt).getTime()) / 1000),
     lineage: { parentTakeId: source.id, regenerationReason: UPSCALE_REASON },
   })
+
+  /**
+   * 素材の計測を積む。**落ちても Take は確定させる**（生成と同じ扱い）。
+   * 失われるのは計測・サムネイル・最後のコマだけで、media のジョブは冪等なので流し直せる。
+   * ただし黙って落とさない。流し直す対象が分かるよう mediaAssetId ごとログに残す。
+   */
+  try {
+    await deps.mediaQueue.enqueue(take.mediaAssetId)
+  } catch (error) {
+    deps.logger.error(
+      { jobId: job.id, takeId: take.id, mediaAssetId: take.mediaAssetId, err: error },
+      'media キューへ投入できませんでした。大きさと fps が計測されていません',
+    )
+  }
 
   await deps.upscaleJobs.markSucceeded(job.id, take.id, { sourceTakeId: source.id })
   await releaseGpu(deps, job.id)

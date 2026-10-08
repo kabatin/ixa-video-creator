@@ -23,6 +23,7 @@ import {
   aProject,
   aShot,
   createCapturingLogger,
+  createRecordingMediaQueue,
   createRecordingScheduler,
   inMemoryMediaAssets,
   inMemoryProjects,
@@ -186,6 +187,7 @@ const buildFixture = async (options: {
 
   const upscaleJobs = inMemoryUpscaleJobs(job)
   const scheduler = createRecordingScheduler()
+  const mediaQueue = createRecordingMediaQueue()
   const upscaler = options.upscaler ?? stubUpscaler()
 
   const deps: UpscaleProcessorDeps = {
@@ -196,13 +198,14 @@ const buildFixture = async (options: {
     mediaAssets,
     storage,
     upscaler,
+    mediaQueue,
     localGpuLease: options.lease ?? createInMemoryLocalGpuLease(),
     scheduler: { reschedule: (data, delayMs) => scheduler.reschedule(data as never, delayMs) },
     logger: createCapturingLogger().logger,
     now: () => new Date('2026-10-09T00:05:00.000Z'),
   }
 
-  return { deps, job, source, takes, upscaleJobs, scheduler, upscaler }
+  return { deps, job, source, takes, upscaleJobs, scheduler, upscaler, mediaQueue }
 }
 
 describe('投入', () => {
@@ -287,6 +290,23 @@ describe('出来上がり', () => {
     // 種は無く、手元の GPU なので費用も 0
     expect(made?.seedUsed).toBeNull()
     expect(made?.costUsd).toBe(0)
+  })
+
+  /**
+   * **出来た素材は必ず計測に回す**（生成と同じ）。積み忘れると、その Take は大きさも fps も
+   * 分からないまま残り、サムネイルも最後のコマも作られない。
+   * さらに**次に上げるときに「大きさが分からない」で止まる**（実機で踏んだ）。
+   */
+  it('出来た素材を計測に回す', async () => {
+    const f = await buildFixture({
+      upscaler: await succeededUpscaler(),
+      jobOverrides: { status: 'running', providerJobRef: 'job_up_1', startedAt: new Date('2026-10-09T00:01:00.000Z') },
+    })
+
+    await processUpscaleJob(f.deps, { upscaleJobId: f.job.id })
+
+    const made = f.takes.snapshot().find((t) => t.id !== f.source.id)
+    expect(f.mediaQueue.enqueued()).toEqual([made?.mediaAssetId])
   })
 
   it('出来た Take を行に残す', async () => {

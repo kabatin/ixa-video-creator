@@ -12,6 +12,7 @@ import { createVpipeUpscaler, VPIPE_IDENTITY } from '@ixa/provider-video'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import type { LocalGpuLease } from './generation/local-gpu-lease.js'
+import type { MediaJobQueue } from './generation/processor.js'
 import { QUEUE_NAMES } from './queues.js'
 import type { UpscaleProcessorDeps, UpscaleScheduler } from './upscale/index.js'
 
@@ -29,6 +30,8 @@ export const createUpscaleWiring = (input: {
   readonly connection: Redis
   readonly storage: ObjectStorage
   readonly localGpuLease: LocalGpuLease
+  /** 素材を計測する口。**生成と同じものを渡す**（別に作ると二重に走る）。 */
+  readonly mediaQueue: MediaJobQueue
   readonly logger: Logger
   readonly outputRoot: string
   readonly vpipe: { readonly baseUrl: string | null; readonly token: string | null }
@@ -64,6 +67,7 @@ export const createUpscaleWiring = (input: {
       mediaAssets: createMediaAssetRepository(input.db),
       storage: input.storage,
       upscaler,
+      mediaQueue: input.mediaQueue,
       localGpuLease: input.localGpuLease,
       scheduler,
       logger: input.logger,
