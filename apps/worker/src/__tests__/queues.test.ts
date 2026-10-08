@@ -8,8 +8,8 @@ import {
 } from '../queues.js'
 
 describe('QUEUE_CONFIGS', () => {
-  it('8つのキューがすべて定義されている', () => {
-    expect(QUEUE_CONFIGS).toHaveLength(8)
+  it('9つのキューがすべて定義されている', () => {
+    expect(QUEUE_CONFIGS).toHaveLength(9)
     expect(QUEUE_CONFIGS.map((config) => config.name).sort()).toEqual(
       Object.values(QUEUE_NAMES).sort(),
     )
@@ -31,6 +31,8 @@ describe('QUEUE_CONFIGS', () => {
       image: 3,
       // ナレーションの声と文字起こし（ADR-0038）。外部 API の回数の上限に配慮して 1 つずつ。
       voice: 1,
+      // 解像度を上げる（ADR-0044）。手元の GPU を使うので 1 つずつ（生成と同じ列で待つ）。
+      upscale: 1,
     })
   })
 })
@@ -91,6 +93,7 @@ describe('resolveQueueConfigs', () => {
       regeneration: 4,
       image: 3,
       voice: 1,
+      upscale: 1,
     })
   })
 

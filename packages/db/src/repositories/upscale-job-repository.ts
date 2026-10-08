@@ -49,6 +49,7 @@ export type UpscaleJobRepository = {
    * （投入してはじめてサーバが返すため）。
    */
   markRunning(id: UpscaleJobId, input: {
+    readonly providerJobRef: string
     readonly estimateSeconds: number | null
     readonly providerRecord: Record<string, unknown> | null
   }): Promise<UpscaleJob>
@@ -164,6 +165,7 @@ export const createUpscaleJobRepository = (db: DbClient): UpscaleJobRepository =
     markRunning: (id, input) =>
       transition(id, {
         status: 'running',
+        providerJobRef: input.providerJobRef,
         estimateSeconds: input.estimateSeconds,
         providerRecord: input.providerRecord,
         startedAt: new Date(),

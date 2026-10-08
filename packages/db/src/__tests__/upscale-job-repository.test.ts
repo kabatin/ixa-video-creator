@@ -20,6 +20,7 @@ const baseRow = (): UpscaleJobRow => ({
   providerId: 'vpipe',
   modelId: 'vpipe/flashvsr-upscale',
   takeId: null,
+  providerJobRef: null,
   error: null,
   estimateSeconds: null,
   providerRecord: null,

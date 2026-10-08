@@ -12,6 +12,7 @@ export const QUEUE_NAMES = {
   regeneration: 'regeneration',
   image: 'image',
   voice: 'voice',
+  upscale: 'upscale',
 } as const
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES]
@@ -56,6 +57,11 @@ export const QUEUE_CONFIGS: readonly QueueConfig[] = [
    * ElevenLabs はプランごとに同時の数に上限がある。whisper.cpp は手元の機械を大きく使う。
    */
   { name: QUEUE_NAMES.voice, concurrency: 1 },
+  /**
+   * 解像度を上げる（ADR-0044）。**同時 1 つ。** 手元の GPU を使うので、生成と取り合わない
+   * （順番そのものは整理券（`local-gpu-lease.ts`）が揃えるが、ここを増やしても待つだけ）。
+   */
+  { name: QUEUE_NAMES.upscale, concurrency: 1 },
 ]
 
 const concurrencyEnvVarName = (queueName: QueueName): string =>

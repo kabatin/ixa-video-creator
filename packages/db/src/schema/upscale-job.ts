@@ -41,6 +41,8 @@ export const upscaleJobs = pgTable(
     modelId: text('model_id').notNull(),
     /** 出来上がった Take。成功したときだけ。**成果物は素材ではなく Take。** */
     takeId: ulidRef('take_id').references(() => takes.id),
+    /** 生成先のジョブ ID。問い合わせと取消に要る（`generation_jobs` と同じ役目）。 */
+    providerJobRef: text('provider_job_ref'),
     error: jsonb('error').$type<UpscaleJobError>(),
     /**
      * 生成先が投入時に返した見込み（秒）。**走っている間の「あと何分」はこれを正とする。**

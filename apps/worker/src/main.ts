@@ -15,6 +15,7 @@ import { processAnalysisJob } from './analysis/index.js'
 import { processReviewJob } from './review/index.js'
 import { processRegenerationJob } from './regeneration/index.js'
 import { failInterruptedImageJob, processImageJob } from './image/index.js'
+import { processUpscaleJob } from './upscale/index.js'
 import { failInterruptedVoiceJob, processVoiceJob } from './voice/index.js'
 
 /** graceful shutdown の既定タイムアウト（ミリ秒）。超過したら強制終了する。 */
@@ -57,6 +58,13 @@ const createWorkers = (
             return (await processImageJob(generation.image, job.data)).state
           case QUEUE_NAMES.voice:
             return (await processVoiceJob(generation.voice, job.data)).state
+          case QUEUE_NAMES.upscale: {
+            // 上げる口が無い機械にジョブは積まれない。積まれていたら設定の食い違いなので黙って捨てない。
+            if (generation.upscale === null) {
+              throw new Error('解像度を上げる口が配線されていません（vpipe の URL を確かめてください）')
+            }
+            return (await processUpscaleJob(generation.upscale, job.data)).state
+          }
           default:
             return (await processNoopJob(job.data as NoopJobData)).echoed
         }

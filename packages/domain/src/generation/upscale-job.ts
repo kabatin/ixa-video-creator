@@ -52,6 +52,8 @@ export const UpscaleJob = z.object({
   modelId: ModelId,
   /** 出来上がった Take。成功したときだけ。**成果物は素材ではなく Take**。 */
   takeId: TakeId.nullable(),
+  /** 生成先のジョブ ID。送ったあとだけ入る（問い合わせと取消に要る）。 */
+  providerJobRef: z.string().nullable(),
   error: UpscaleJobError.nullable(),
   /**
    * 生成先が投入時に返した見込み（秒）。**走っている間の「あと何分」はこれを正とする。**

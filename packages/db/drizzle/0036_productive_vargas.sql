@@ -1,0 +1,1 @@
+ALTER TABLE "upscale_jobs" ADD COLUMN "provider_job_ref" text;

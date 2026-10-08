@@ -1,4 +1,3 @@
-import type { GenerationJobId } from '@ixa/domain'
 import type { Redis } from 'ioredis'
 import type { Logger } from 'pino'
 
@@ -98,6 +97,12 @@ export type LocalGpuLeaseResult =
    */
   | { readonly state: 'waiting'; readonly ahead: number }
 
+/**
+ * 借りている仕事の ID。**生成でも解像度上げでも、同じ GPU を同じ列で待つ**ので、
+ * どちらの ID も入る（Redis の鍵に入る文字列であればよい）。
+ */
+export type LocalGpuHolderId = string
+
 /** 整理券の番号。**積んだ時刻（ミリ秒）**。小さいほど先。 */
 export type LocalGpuTicket = number
 
@@ -111,11 +116,11 @@ export type LocalGpuLease = {
    * - 券の番号は**最初に並んだときのものを動かさない**。呼ぶたびに今の時刻で付け直すと、
    *   待っているジョブが永遠に後ろへ送られる
    */
-  acquire(jobId: GenerationJobId, ticket: LocalGpuTicket): Promise<LocalGpuLeaseResult>
+  acquire(jobId: LocalGpuHolderId, ticket: LocalGpuTicket): Promise<LocalGpuLeaseResult>
   /** 期限を延ばす。借りが切れていれば borrow し直す（切れたまま走り続けるより良い）。 */
-  renew(jobId: GenerationJobId): Promise<LocalGpuLeaseResult>
+  renew(jobId: LocalGpuHolderId): Promise<LocalGpuLeaseResult>
   /** 返す。**自分の借りでなければ何もしない**（ほかのジョブの借りを奪わない）。券は必ず列から外す。 */
-  release(jobId: GenerationJobId): Promise<void>
+  release(jobId: LocalGpuHolderId): Promise<void>
 }
 
 /**
@@ -218,7 +223,7 @@ export const createRedisLocalGpuLease = (options: RedisLocalGpuLeaseOptions): Lo
   const now = options.now ?? ((): Date => new Date())
 
   const take = async (
-    jobId: GenerationJobId,
+    jobId: LocalGpuHolderId,
     ticket: LocalGpuTicket,
   ): Promise<LocalGpuLeaseResult> =>
     readLeaseReply(
@@ -256,7 +261,7 @@ export const createRedisLocalGpuLease = (options: RedisLocalGpuLeaseOptions): Lo
  * 「GPU を 1 本ずつにしたつもりが、両方同時に走っていた」に気付けない。
  */
 export const createUnprotectedLocalGpuLease = (logger: Logger): LocalGpuLease => {
-  const warn = (jobId: GenerationJobId): void => {
+  const warn = (jobId: LocalGpuHolderId): void => {
     logger.warn(
       { jobId },
       'この機械の GPU の順番を作る口が配線されていません。ローカルの生成が同時に走る可能性があります',
@@ -289,7 +294,7 @@ export const createInMemoryLocalGpuLease = (options: { readonly now?: () => Date
     line.delete(jobId)
   }
 
-  const take = (jobId: GenerationJobId, ticket: LocalGpuTicket): Promise<LocalGpuLeaseResult> => {
+  const take = (jobId: LocalGpuHolderId, ticket: LocalGpuTicket): Promise<LocalGpuLeaseResult> => {
     if (holder === jobId) {
       leave(jobId)
       return Promise.resolve({ state: 'acquired' })
