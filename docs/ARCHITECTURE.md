@@ -1056,6 +1056,7 @@ text_styles                  (テロップの見た目に名前を付けたも�
 generation_jobs
 takes                        (JSONB: spec / provider_params。追記のみ)
 image_generation_jobs        (絵コンテの画像を作るジョブ。Shot の最初のフレームになる / ADR-0029。追記のみ)
+upscale_jobs                 (出来た Take の解像度を上げるジョブ / ADR-0044。仕様を持たないので generation_jobs と別。追記のみ)
 review_runs
 review_findings
 storyboard_draft_runs        (絵コンテ下書きの実行 1 回分)
