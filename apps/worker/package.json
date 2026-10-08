@@ -13,7 +13,8 @@
     "start": "node --import tsx --env-file=../../.env src/main.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "check:gpu-line": "tsx src/generation/gpu-line-check/main.ts"
   },
   "dependencies": {
     "@ixa/config": "workspace:*",

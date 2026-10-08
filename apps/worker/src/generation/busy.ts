@@ -9,11 +9,15 @@
  *   待ちのためのもので、投入前の順番待ちに食わせると、長い列の後ろほど走る前に尽きる
  * - 送ったのに応答が失われた投入も同じ形で届く。GenerationJob の ID を冪等キーにしているので、
  *   投げ直しても Provider は同じジョブを返す（二重に生成しない）
- * - 断られた順に並び直すわけではない（予約の順に投げ直す）。**頼んだ順に仕上がるとは限らず、
- *   理屈の上では 1 本が期限まで取り残されうる**
- * - その代わり、ジョブを積んでから `SUBMIT_BUSY_DEADLINE_MS` を過ぎたら諦める。
+ * - **手元の GPU は積んだ順に渡す**（整理券。`local-gpu-lease.ts`）。
+ *   2026-10-08 までは早い者勝ちで、起きた瞬間に空いていたジョブが取っていた。
+ *   実際に 2 作品を積んだ夜、**先に積んだほうが 5 時間 1 本も進まなかった**
+ *   （列の長いほうが抽選に勝ち続ける）。いまは番号の小さい順にしか渡さない
+ * - 雲の上の Provider（fal）には列が無い。満杯で断られたら、従来どおり時間を置いて投げ直す
+ * - ジョブを積んでから `SUBMIT_BUSY_DEADLINE_MS` を過ぎたら諦める。
  *   1 本 7〜25 分で 1 本ずつなので、12 時間あれば 30 本前後の列でも捌ける。
- *   それを超えて空かないのはサーバが詰まっているとみなす（黙って永遠に待たせない）
+ *   それを超えて空かないのは**サーバが詰まっている**とみなす（黙って永遠に待たせない）。
+ *   整理券にしても期限は残す。順番が来ないまま 12 時間なら、待たせ続けるより理由を出して止める
  */
 
 /**
@@ -22,6 +26,14 @@
  * 言うならそれに従い、空かない枠を叩き続けない。
  */
 export const SUBMIT_BUSY_MIN_DELAY_MS = 30_000
+/**
+ * **自分が列の先頭のとき**の下限（整理券。2026-10-08）。
+ *
+ * 普段の下限（30 秒）は「満杯の生成先を叩き続けない」ためのもの。
+ * 先頭のジョブが見ているのは生成先ではなく**自分の番が来たかどうか**（Redis の鍵 1 つ）なので、
+ * 叩く相手が違う。ここを 30 秒のままにすると、GPU が空いてから動き出すまで最大 30 秒遊ぶ。
+ */
+export const SUBMIT_BUSY_HEAD_MIN_DELAY_MS = 10_000
 export const SUBMIT_BUSY_MAX_DELAY_MS = 600_000
 export const SUBMIT_BUSY_DEFAULT_DELAY_MS = 60_000
 
@@ -31,10 +43,16 @@ export const SUBMIT_BUSY_DEADLINE_MS = 12 * 60 * 60 * 1000
 /**
  * 次に投入を試すまでの待ち。示されなければ既定。
  * 短すぎる値（0 秒など）でサーバを叩き続けず、長すぎる値で空いた枠を遊ばせない。
+ *
+ * `atHead` は**自分が整理券の先頭**のとき。下限だけが変わる（上限と既定は同じ）。
  */
-export const submitBusyDelayMs = (retryAfterMs: number | null): number => {
+export const submitBusyDelayMs = (
+  retryAfterMs: number | null,
+  options: { readonly atHead?: boolean } = {},
+): number => {
   if (retryAfterMs === null || !Number.isFinite(retryAfterMs)) return SUBMIT_BUSY_DEFAULT_DELAY_MS
-  return Math.min(SUBMIT_BUSY_MAX_DELAY_MS, Math.max(SUBMIT_BUSY_MIN_DELAY_MS, retryAfterMs))
+  const min = options.atHead === true ? SUBMIT_BUSY_HEAD_MIN_DELAY_MS : SUBMIT_BUSY_MIN_DELAY_MS
+  return Math.min(SUBMIT_BUSY_MAX_DELAY_MS, Math.max(min, retryAfterMs))
 }
 
 /** 積んでからの待ちが期限を過ぎたか。 */

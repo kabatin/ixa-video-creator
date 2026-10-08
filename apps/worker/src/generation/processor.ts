@@ -33,6 +33,7 @@ import {
 } from './busy.js'
 import { generationBenchmarkOf, logGenerationBenchmark } from './benchmark.js'
 import {
+  LOCAL_GPU_HEAD_RETRY_AFTER_MS,
   LOCAL_GPU_RETRY_AFTER_MS,
   type LocalGpuLease,
 } from './local-gpu-lease.js'
@@ -132,6 +133,13 @@ export const SPEC_DRIFT_MESSAGE =
  */
 export const LOCAL_GPU_BUSY_MESSAGE =
   'この Mac で別の動画を作っている最中です（ローカルの動画生成は 1 本ずつ）'
+
+/**
+ * 空いてはいるが、**自分より先に積まれた生成が待っている**ときの理由（整理券。2026-10-08）。
+ * 「混んでいる」と言い分ける: こちらは待てば必ず自分の番が来る。
+ */
+export const localGpuWaitingMessage = (ahead: number): string =>
+  `先に頼まれた動画が ${String(ahead)} 本あります（積んだ順に作ります）`
 
 /**
  * GPU の順番を返す。**ここで投げない。** 返せなかったことで生成の結果を変えない
@@ -301,16 +309,26 @@ const submit = async (
    */
   const holdsLocalGpu = provider.exclusiveResource === 'local-gpu'
   if (holdsLocalGpu) {
-    const lease = await deps.localGpuLease.acquire(job.id)
-    if (lease.state === 'held') {
+    /**
+     * 券の番号は**積んだ時刻**。空いていても自分の番でなければ取らない（整理券。2026-10-08）。
+     * 早い者勝ちにすると、列の長い作品が勝ち続けてもう片方が何時間も進まない。
+     */
+    const lease = await deps.localGpuLease.acquire(job.id, job.queuedAt.getTime())
+    if (lease.state !== 'acquired') {
+      /**
+       * **先頭だけ早く起こす。** 次に取れるのは先頭だけなので、後ろが頻繁に見ても意味が無い。
+       * 先頭なのに取れないのは「いま別の生成が走っている」ときで、終わるのを見張る役がこれ。
+       */
+      const atHead = lease.ahead === 0
       return waitForProviderSlot(
         deps,
         ctx,
         new ProviderBusyError(
-          LOCAL_GPU_BUSY_MESSAGE,
+          lease.state === 'held' ? LOCAL_GPU_BUSY_MESSAGE : localGpuWaitingMessage(lease.ahead),
           model.providerId,
-          LOCAL_GPU_RETRY_AFTER_MS,
+          atHead ? LOCAL_GPU_HEAD_RETRY_AFTER_MS : LOCAL_GPU_RETRY_AFTER_MS,
         ),
+        { atHead },
       )
     }
   }
@@ -376,13 +394,15 @@ const waitForProviderSlot = async (
   deps: GenerationProcessorDeps,
   ctx: JobContext,
   busy: ProviderBusyError,
+  /** 自分が整理券の先頭。**次に取れるのは自分だけ**なので、短く起こす。 */
+  options: { readonly atHead?: boolean } = {},
 ): Promise<GenerationOutcome> => {
   const { job, now } = ctx
   if (submitBusyExpired(job.queuedAt, now)) {
     throw new JobFailure('provider_busy_timeout', SUBMIT_BUSY_TIMEOUT_MESSAGE, true)
   }
 
-  const delayMs = submitBusyDelayMs(busy.retryAfterMs)
+  const delayMs = submitBusyDelayMs(busy.retryAfterMs, options)
   await deps.scheduler.reschedule(ctx.data, delayMs)
   // 断った理由（満杯・応答なし・同じ投入が処理中）を残す。捨てると、諦めたときに何が起きていたか分からない。
   deps.logger.warn(

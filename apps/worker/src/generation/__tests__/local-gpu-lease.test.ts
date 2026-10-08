@@ -12,12 +12,14 @@ import {
   type VideoProvider,
 } from '@ixa/provider-core'
 import { createMemoryStorage } from '@ixa/storage'
+import { SUBMIT_BUSY_DEFAULT_DELAY_MS, SUBMIT_BUSY_HEAD_MIN_DELAY_MS } from '../busy.js'
 import { describe, expect, it, vi } from 'vitest'
 import type { DownloadedObject } from '../download.js'
 import {
   createInMemoryLocalGpuLease,
   createUnprotectedLocalGpuLease,
   LOCAL_GPU_LEASE_TTL_MS,
+  LOCAL_GPU_LINE_STALE_MS,
   type LocalGpuLease,
 } from '../local-gpu-lease.js'
 import { processGenerationJob, type GenerationProcessorDeps } from '../processor.js'
@@ -66,6 +68,8 @@ const localModel = (providerId: string, id: string): VideoModelDescriptor => ({
 /** MiniMax H3（vpipe）と Wan（wan）に相当する 2 台。どちらも同じ GPU を名乗る。 */
 const VPIPE_MODEL = localModel('vpipe', 'vpipe/minimax-h3-turbo-draft')
 const WAN_MODEL = localModel('wan', 'wan/wan2.2-ti2v-5b-draft')
+/** 3 本目の列を作るためのもう 1 台（整理券の試験用）。同じ GPU を名乗る。 */
+const THIRD_MODEL = localModel('third', 'third/local-draft')
 /** 雲の上の Provider（fal）に相当。GPU を名乗らない。 */
 const CLOUD_MODEL = localModel('fal', 'fal/seedance-like')
 
@@ -188,6 +192,67 @@ describe('ローカルの生成は 1 本ずつ', () => {
     expect(f.scheduler.scheduled().map((s) => s.data.generationJobId)).toContain(second)
   })
 
+  /**
+   * **整理券**（制作者 2026-10-08「戦子ちゃん側止まってそうだな」）。
+   *
+   * 早い者勝ちだと、GPU が空いた瞬間に動いていたジョブが取る。
+   * 2 作品を積んだ夜、**先に積んだほうが 5 時間 1 本も進まなかった**。
+   * 空いていても、自分より先に積まれた生成が待っているなら取らない。
+   */
+  it('空いていても、先に積まれた生成が待っていれば投入しない', async () => {
+    const vpipe = localProvider(VPIPE_MODEL)
+    const wan = localProvider(WAN_MODEL)
+    const f = await buildFixture({ providers: [vpipe, wan], models: [VPIPE_MODEL, WAN_MODEL] })
+
+    const earlier = f.jobIdFor(VPIPE_MODEL)
+    const later = f.jobIdFor(WAN_MODEL)
+
+    /** 別の誰かが GPU を使っている間に、2 本とも列へ並ばせる。 */
+    const other = '01ZZZZZZZZZZZZZZZZZZZZZZZZ' as GenerationJobId
+    await f.deps.localGpuLease.acquire(other, 0)
+    expect((await f.runFor(earlier)).state).toBe('busy')
+    expect((await f.runFor(later)).state).toBe('busy')
+    await f.deps.localGpuLease.release(other)
+
+    // **GPU は空いた。** それでも順番は先に積んだほうにあるので、後ろは投入しない
+    const outcome = await f.runFor(later)
+
+    expect(outcome.state).toBe('busy')
+    expect(wan.submitted()).toHaveLength(0)
+    expect((await f.jobs.findById(later))?.status).toBe('queued')
+
+    // 先に積んだほうには渡る
+    expect((await f.runFor(earlier)).state).toBe('submitted')
+    expect(vpipe.submitted()).toHaveLength(1)
+  })
+
+  /**
+   * **後ろは頻繁に見ても取れない。** 取れるのは先頭だけなので、後ろは長く寝かせる。
+   * 先頭だけ短く起こす（空いてから動き出すまでの遊びを減らす）。
+   */
+  it('先頭は短く、後ろは長く寝る', async () => {
+    const f = await buildFixture({
+      providers: [localProvider(VPIPE_MODEL), localProvider(WAN_MODEL), localProvider(THIRD_MODEL)],
+      models: [VPIPE_MODEL, WAN_MODEL, THIRD_MODEL],
+    })
+    const running = f.jobIdFor(VPIPE_MODEL)
+    const head = f.jobIdFor(WAN_MODEL)
+    const behind = f.jobIdFor(THIRD_MODEL)
+
+    // 1 本目が走り出し、2 本目（次の番）と 3 本目（その後ろ）が並ぶ
+    expect((await f.runFor(running)).state).toBe('submitted')
+    await f.runFor(head)
+    await f.runFor(behind)
+
+    const waits = new Map(
+      f.scheduler.scheduled().map((entry) => [entry.data.generationJobId, entry.delayMs]),
+    )
+    // **次の番は短く起こす**（空いてから動き出すまでの遊びを減らす）
+    expect(waits.get(head)).toBe(SUBMIT_BUSY_HEAD_MIN_DELAY_MS)
+    // **その後ろは長く寝かせる**（どうせ取れないので叩く意味が無い）
+    expect(waits.get(behind)).toBe(SUBMIT_BUSY_DEFAULT_DELAY_MS)
+  })
+
   it('1 本目が終われば 2 本目が投入される', async () => {
     const vpipe = localProvider(VPIPE_MODEL, [{ state: 'failed', error: { code: 'x', message: 'だめ', retryable: false } }])
     const wan = localProvider(WAN_MODEL)
@@ -228,7 +293,7 @@ describe('ローカルの生成は 1 本ずつ', () => {
 
     expect((await f.runFor(first)).state).toBe('succeeded')
     // 順番が空いていることを直に確かめる（2 本目が通るだけでは、順番を作っていなくても通る）。
-    expect(await lease.acquire(JOB_A)).toEqual({ state: 'acquired' })
+    expect(await lease.acquire(JOB_A, 1_000)).toEqual({ state: 'acquired' })
     await lease.release(JOB_A)
     expect((await f.runFor(second)).state).toBe('submitted')
   })
@@ -282,7 +347,7 @@ describe('ローカルの生成は 1 本ずつ', () => {
 
     // **順番が空いていることを直に確かめる。** 2 本目が通ることだけでは、
     // 順番を作っていなくても通ってしまい、何も確かめていないことになる。
-    expect(await lease.acquire(JOB_A)).toEqual({ state: 'acquired' })
+    expect(await lease.acquire(JOB_A, 1_000)).toEqual({ state: 'acquired' })
     await lease.release(JOB_A)
 
     // 1 本目は何も投入していないので、2 本目は待たされない。
@@ -315,23 +380,106 @@ describe('ローカルの生成は 1 本ずつ', () => {
 
 const JOB_A = '01ARZ3NDEKTSV4RRFFQ69G5FAV' as GenerationJobId
 const JOB_B = '01BX5ZZKBKACTAV9WEVGEMMVRZ' as GenerationJobId
+const JOB_C = '01CX5ZZKBKACTAV9WEVGEMMVRZ' as GenerationJobId
 
 describe('借りそのもの', () => {
+  /** 券の番号。小さいほど先に積まれた。 */
+  const EARLY = 1_000
+  const LATE = 2_000
+
   it('空いていれば借りられ、ほかのジョブには貸さない', async () => {
     const lease = createInMemoryLocalGpuLease()
-    expect(await lease.acquire(JOB_A)).toEqual({ state: 'acquired' })
-    expect(await lease.acquire(JOB_B)).toEqual({ state: 'held', by: JOB_A })
+    expect(await lease.acquire(JOB_A, EARLY)).toEqual({ state: 'acquired' })
+    expect(await lease.acquire(JOB_B, LATE)).toEqual({ state: 'held', by: JOB_A, ahead: 0 })
     // 同じジョブは何度でも借りられる（冪等）。
-    expect(await lease.acquire(JOB_A)).toEqual({ state: 'acquired' })
+    expect(await lease.acquire(JOB_A, EARLY)).toEqual({ state: 'acquired' })
   })
 
   it('返すのは自分の借りだけ', async () => {
     const lease = createInMemoryLocalGpuLease()
-    await lease.acquire(JOB_A)
+    await lease.acquire(JOB_A, EARLY)
     await lease.release(JOB_B)
-    expect(await lease.acquire(JOB_B)).toEqual({ state: 'held', by: JOB_A })
+    expect(await lease.acquire(JOB_B, LATE)).toEqual({ state: 'held', by: JOB_A, ahead: 0 })
     await lease.release(JOB_A)
-    expect(await lease.acquire(JOB_B)).toEqual({ state: 'acquired' })
+    expect(await lease.acquire(JOB_B, LATE)).toEqual({ state: 'acquired' })
+  })
+
+  /**
+   * **整理券の肝**（制作者 2026-10-08「戦子ちゃん側止まってそうだな」）。
+   *
+   * 早い者勝ちだと、空いた瞬間に起きていたジョブが取る。列の長い作品が勝ち続け、
+   * もう片方は何時間も進まない（実際に 5 時間 0 本）。**先に積んだほうから渡す。**
+   */
+  it('後から積んだジョブが先に頼んでも、先に積んだほうが取る', async () => {
+    const lease = createInMemoryLocalGpuLease()
+
+    // 後から積んだ B が先に並ぶ。A はまだ来ていないので B が先頭
+    expect(await lease.acquire(JOB_B, LATE)).toEqual({ state: 'acquired' })
+    await lease.release(JOB_B)
+
+    // A（先に積んだ）が並んだあとは、B が先に頼んでも A に渡る
+    expect(await lease.acquire(JOB_A, EARLY)).toEqual({ state: 'acquired' })
+    await lease.release(JOB_A)
+    await lease.acquire(JOB_B, LATE)
+    await lease.release(JOB_B)
+
+    // 2 本が同時に待っている状態を作る: C(遅い) が並んでから A(早い) が来る
+    const lease2 = createInMemoryLocalGpuLease()
+    await lease2.acquire(JOB_C, LATE)
+    await lease2.release(JOB_C)
+    // いったん両方を列に入れる（取れないよう、先に別のジョブへ貸しておく）
+    await lease2.acquire(JOB_B, 500)
+    expect(await lease2.acquire(JOB_C, LATE)).toEqual({ state: 'held', by: JOB_B, ahead: 0 })
+    expect(await lease2.acquire(JOB_A, EARLY)).toEqual({ state: 'held', by: JOB_B, ahead: 0 })
+    await lease2.release(JOB_B)
+
+    // 空いた。**後から頼んだ C ではなく、先に積んだ A に渡る**
+    expect(await lease2.acquire(JOB_C, LATE)).toEqual({ state: 'waiting', ahead: 1 })
+    expect(await lease2.acquire(JOB_A, EARLY)).toEqual({ state: 'acquired' })
+  })
+
+  /**
+   * 同じミリ秒に積まれた分（まとめて積むと実際に起きる）は、**jobId の順**で割る。
+   * ULID は時系列なので積んだ順になり、**何度やっても同じ順**。
+   */
+  it('券の番号が同じなら jobId の小さいほうが先', async () => {
+    const lease = createInMemoryLocalGpuLease()
+    await lease.acquire(JOB_C, 100)
+    await lease.release(JOB_C)
+    await lease.acquire(JOB_C, 100)
+
+    expect(await lease.acquire(JOB_B, 500)).toEqual({ state: 'held', by: JOB_C, ahead: 0 })
+    expect(await lease.acquire(JOB_A, 500)).toEqual({ state: 'held', by: JOB_C, ahead: 0 })
+    await lease.release(JOB_C)
+
+    // A と B は同じ番号。**id の小さいほう（= 先に作られた ULID）が先**
+    expect(JOB_A < JOB_B).toBe(true)
+    expect(await lease.acquire(JOB_B, 500)).toEqual({ state: 'waiting', ahead: 1 })
+    expect(await lease.acquire(JOB_A, 500)).toEqual({ state: 'acquired' })
+  })
+
+  /**
+   * **死んだ券で列を止めない。** worker が落ちたジョブは顔を出さなくなる。
+   * 捨てないと、先頭に居座って後ろが永久に進まない。
+   */
+  it('顔を出さなくなった券は捨てて、列を進める', async () => {
+    let nowMs = 1_000_000
+    const lease = createInMemoryLocalGpuLease({ now: () => new Date(nowMs) })
+
+    // A（先に積んだ）が並び、そのまま消える
+    expect(await lease.acquire(JOB_A, EARLY)).toEqual({ state: 'acquired' })
+    await lease.release(JOB_A)
+    await lease.acquire(JOB_C, 500)
+    await lease.acquire(JOB_A, EARLY)
+    expect(await lease.acquire(JOB_B, LATE)).toEqual({ state: 'held', by: JOB_C, ahead: 1 })
+    await lease.release(JOB_C)
+
+    // A が居る間は B に渡らない
+    expect(await lease.acquire(JOB_B, LATE)).toEqual({ state: 'waiting', ahead: 1 })
+
+    // A が顔を出さないまま時間が過ぎると、券が捨てられて B の番になる
+    nowMs += LOCAL_GPU_LINE_STALE_MS + 1
+    expect(await lease.acquire(JOB_B, LATE)).toEqual({ state: 'acquired' })
   })
 
   /** 期限は問い合わせの間隔（手元のサーバは 30 秒おき）より十分長いこと。 */
@@ -345,8 +493,8 @@ describe('借りそのもの', () => {
   it('配線されていない借りは、順番を作っていないことをログに残す', async () => {
     const logger = createCapturingLogger()
     const lease = createUnprotectedLocalGpuLease(logger.logger)
-    expect(await lease.acquire(JOB_A)).toEqual({ state: 'acquired' })
-    expect(await lease.acquire(JOB_B)).toEqual({ state: 'acquired' })
+    expect(await lease.acquire(JOB_A, 1_000)).toEqual({ state: 'acquired' })
+    expect(await lease.acquire(JOB_B, 2_000)).toEqual({ state: 'acquired' })
     expect(logger.lines().some((line) => line.msg.includes('同時に走る'))).toBe(true)
   })
 })

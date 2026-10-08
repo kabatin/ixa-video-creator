@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import {
   SUBMIT_BUSY_DEADLINE_MS,
   SUBMIT_BUSY_DEFAULT_DELAY_MS,
+  SUBMIT_BUSY_HEAD_MIN_DELAY_MS,
   SUBMIT_BUSY_MAX_DELAY_MS,
   SUBMIT_BUSY_MIN_DELAY_MS,
   SUBMIT_BUSY_TIMEOUT_MESSAGE,
@@ -123,6 +124,22 @@ describe('submitBusyDelayMs', () => {
     expect(submitBusyDelayMs(60 * 60_000)).toBe(SUBMIT_BUSY_MAX_DELAY_MS)
     expect(SUBMIT_BUSY_MAX_DELAY_MS).toBe(600_000)
     expect(submitBusyDelayMs(Number.NaN)).toBe(SUBMIT_BUSY_DEFAULT_DELAY_MS)
+  })
+
+  /**
+   * **自分が整理券の先頭なら下限が下がる**（2026-10-08）。
+   * 30 秒の下限は「満杯の生成先を叩き続けない」ため。先頭が見ているのは生成先ではなく
+   * 自分の番が来たかどうか（Redis の鍵 1 つ）なので、相手が違う。
+   * ここが 30 秒のままだと、GPU が空いてから動き出すまで毎回最大 30 秒遊ぶ。
+   */
+  it('先頭のときは下限が 10 秒まで下がる（上限と既定は変わらない）', () => {
+    expect(submitBusyDelayMs(10_000, { atHead: true })).toBe(SUBMIT_BUSY_HEAD_MIN_DELAY_MS)
+    expect(SUBMIT_BUSY_HEAD_MIN_DELAY_MS).toBe(10_000)
+    // 先頭でなければ従来どおり 30 秒へ丸める
+    expect(submitBusyDelayMs(10_000)).toBe(SUBMIT_BUSY_MIN_DELAY_MS)
+    // 下限だけの話。上限と既定は先頭でも同じ
+    expect(submitBusyDelayMs(60 * 60_000, { atHead: true })).toBe(SUBMIT_BUSY_MAX_DELAY_MS)
+    expect(submitBusyDelayMs(null, { atHead: true })).toBe(SUBMIT_BUSY_DEFAULT_DELAY_MS)
   })
 })
 
