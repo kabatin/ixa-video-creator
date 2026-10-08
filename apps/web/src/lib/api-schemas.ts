@@ -5,6 +5,7 @@ import {
   ModelId,
   Project,
   Shot,
+  ShotId,
   Take,
   TakeId,
   UpdateShotPatch,
@@ -103,6 +104,19 @@ export const WireSignedUrl = z.object({
   expiresInSec: z.number().int().positive(),
 })
 export type WireSignedUrl = z.infer<typeof WireSignedUrl>
+
+/** 解像度を上げる仕事（ADR-0044）。投入するまで見込みは分からないので null。 */
+export const WireUpscaleJob = z.object({
+  id: z.string().min(1),
+  shotId: ShotId,
+  sourceTakeId: TakeId,
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  estimateSeconds: z.number().nonnegative().nullable(),
+})
+export type WireUpscaleJob = z.infer<typeof WireUpscaleJob>
+
+export const WireUpscaleSupport = z.object({ supported: z.boolean() })
+export type WireUpscaleSupport = z.infer<typeof WireUpscaleSupport>
 
 /** docs/ARCHITECTURE.md §18: レスポンスは `{ success, data?, error?, meta? }` に統一されている。 */
 export const ApiEnvelope = z.object({

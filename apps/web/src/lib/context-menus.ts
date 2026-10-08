@@ -194,7 +194,7 @@ export const assetMenuEntries = (input: {
   ]
 }
 
-export type TakeMenuAction = 'adopt' | 'unadopt' | 'hide' | 'remake_final'
+export type TakeMenuAction = 'adopt' | 'unadopt' | 'hide' | 'remake_final' | 'upscale'
 
 /**
  * Take のメニュー（Take 比較のカードの右クリックと「…」）。採用する・外す・消す。
@@ -212,6 +212,13 @@ export const takeMenuEntries = (input: {
   readonly finalModelLabel?: string | null
   /** 作り直しに使うシード。無ければ Provider に任せる（文言が変わる）。 */
   readonly seedUsed?: number | null
+  /**
+   * この環境で解像度を上げられるか（ADR-0044）。**まだ引けていなければ `undefined`。**
+   * 分からないうちは押せなくしておく（押して断られるより良い）。
+   */
+  readonly upscaleSupported?: boolean
+  /** 上げられない理由（domain の `upscaleBlocker`）。上げられるなら null。 */
+  readonly upscaleBlocker?: string | null
 }): readonly ContextMenuEntry<TakeMenuAction>[] => [
   item('adopt', '採用する', {
     disabledReason: input.adopted ? 'この Take を採用しています' : null,
@@ -229,6 +236,19 @@ export const takeMenuEntries = (input: {
       `Take ${String(input.index)} と同じ仕様${input.seedUsed === null || input.seedUsed === undefined ? '' : '・同じシード'}で、` +
       `${input.finalModelLabel ?? ''} に作り直しを頼みます。` +
       '本番の画質は 1 本 20 分ほどかかり、できた Take は元の Take と並びます（元は消えません）。',
+  }),
+  /**
+   * 解像度を上げる（ADR-0044）。**絵は変わらない**（作り直しとの違いがここ）。
+   * 対応していない環境・すでに上げた Take では押せない。
+   */
+  item('upscale', '解像度を上げる', {
+    disabledReason:
+      input.upscaleSupported !== true
+        ? '解像度を上げられる AI が登録されていません'
+        : (input.upscaleBlocker ?? null),
+    confirm:
+      `Take ${String(input.index)} の絵はそのままで、細部をはっきりさせます。` +
+      '1 本 5〜20 分ほどかかり、できた Take は元の Take と並びます（元は消えません）。',
   }),
   SEPARATOR,
   item('hide', 'Take を消す', {

@@ -12,7 +12,12 @@ import { aWorkbenchShot, renderInWorkbench } from './workbench-fixture'
  */
 
 /** 「本番で作り直す」が段を探すために一覧を読む（ADR-0042）。読めなくても比較は使える。 */
-const api = vi.hoisted(() => ({ listTakes: vi.fn(), listModels: vi.fn(() => Promise.resolve([])) }))
+const api = vi.hoisted(() => ({
+  listTakes: vi.fn(),
+  listModels: vi.fn(() => Promise.resolve([])),
+  // 解像度を上げられるか（ADR-0044）。この画面は開いたときに 1 回引く。
+  upscaleSupported: vi.fn(() => Promise.resolve(false)),
+}))
 vi.mock('@/lib/api-client', () => ({ createApiClient: () => api }))
 
 const described = aWorkbenchShot(1, { description: '夜の街を走る' })

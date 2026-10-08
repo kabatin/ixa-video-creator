@@ -150,6 +150,27 @@ describe('POST /shots/:shotId/takes/:takeId/upscale', () => {
   })
 })
 
+/** 画面は、これを見て押せる／押せないを決める。 */
+describe('GET /upscale/support', () => {
+  const supported = async (upscaler: VideoUpscaler | null): Promise<boolean> => {
+    const f = await buildFixture({ upscaler })
+    const res = await f.app.request('/upscale/support')
+    return ((await res.json()) as { data: { supported: boolean } }).data.supported
+  }
+
+  it('サーバが対応していれば true', async () => {
+    expect(await supported(stubUpscaler(true))).toBe(true)
+  })
+
+  it('対応していなければ false', async () => {
+    expect(await supported(stubUpscaler(false))).toBe(false)
+  })
+
+  it('この機械に口が無ければ false', async () => {
+    expect(await supported(null)).toBe(false)
+  })
+})
+
 describe('POST /projects/:projectId/upscales/cancel', () => {
   it('待っている仕事を止める', async () => {
     const f = await buildFixture()

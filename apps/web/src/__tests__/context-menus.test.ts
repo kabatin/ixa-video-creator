@@ -225,6 +225,49 @@ describe('takeMenuEntries', () => {
     expect(free?.confirm).toContain('費用')
     expect(adopted?.disabledReason).toBe('採用中の Take は消せません（先に採用を外す）')
   })
+
+  /**
+   * 解像度を上げる（ADR-0044）。**絵は変わらない**（作り直しとの違い）。
+   * 押しても必ず断られる操作を、押せる形で出さない。
+   */
+  describe('解像度を上げる', () => {
+    const upscale = (overrides: Parameters<typeof takeMenuEntries>[0]) =>
+      find(takeMenuEntries(overrides), 'upscale')
+
+    it('対応していれば押せる', () => {
+      const entry = upscale({ adopted: false, index: 1, upscaleSupported: true, upscaleBlocker: null })
+      expect(entry?.disabledReason).toBeNull()
+      expect(entry?.label).toBe('解像度を上げる')
+    })
+
+    /** **分からないうちは押させない。** 押して断られるより良い。 */
+    it('対応が分からないうちは押せない', () => {
+      expect(upscale({ adopted: false, index: 1 })?.disabledReason).toContain('登録されていません')
+    })
+
+    it('対応していなければ押せない', () => {
+      const entry = upscale({ adopted: false, index: 1, upscaleSupported: false })
+      expect(entry?.disabledReason).toContain('登録されていません')
+    })
+
+    /** 理由は domain から来る（ここでは、受け取った理由をそのまま出すことを見る）。 */
+    it('上げられない理由があれば、その理由で押せない', () => {
+      const entry = upscale({
+        adopted: false,
+        index: 1,
+        upscaleSupported: true,
+        upscaleBlocker: 'この Take は、すでに解像度を上げたものです',
+      })
+      expect(entry?.disabledReason).toBe('この Take は、すでに解像度を上げたものです')
+    })
+
+    /** **絵が変わらない**ことを確認の文で言う（作り直しと取り違えない）。 */
+    it('確認の文で、絵が変わらないことを言う', () => {
+      const entry = upscale({ adopted: false, index: 3, upscaleSupported: true, upscaleBlocker: null })
+      expect(entry?.confirm).toContain('絵はそのまま')
+      expect(entry?.confirm).toContain('元は消えません')
+    })
+  })
 })
 
 describe('textClipMenuEntries', () => {

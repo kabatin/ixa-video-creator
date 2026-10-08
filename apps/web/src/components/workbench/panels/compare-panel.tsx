@@ -1,6 +1,6 @@
 'use client'
 
-import { REMAKE_FINAL_REASON, type Take, type TakeId } from '@ixa/domain'
+import { REMAKE_FINAL_REASON, upscaleBlocker, type Take, type TakeId } from '@ixa/domain'
 import { useEffect, useState } from 'react'
 import { TakeComparePanel } from '@/components/take-compare-panel'
 import { TakeGrid } from '@/components/take-grid'
@@ -53,6 +53,26 @@ export const ComparePanel = () => {
       alive = false
     }
   }, [])
+  /**
+   * この環境で解像度を上げられるか（ADR-0044）。**引けるまでは false**（押して断られるより良い）。
+   */
+  const [upscaleSupported, setUpscaleSupported] = useState(false)
+  useEffect(() => {
+    let alive = true
+    createApiClient()
+      .upscaleSupported()
+      .then((supported) => {
+        if (alive) setUpscaleSupported(supported)
+      })
+      .catch(() => {
+        // 読めなくても比較は使える。「解像度を上げる」が押せなくなるだけ。
+        if (alive) setUpscaleSupported(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
   // Take の右クリック（長押し・Shift+F10）とカードの「…」のメニュー: 採用する / 採用を外す / 消す。
   const host = useContextMenuHost()
   const takeMenuItems = (take: Take): readonly ContextMenuItem[] => {
@@ -87,6 +107,21 @@ export const ComparePanel = () => {
           workbench.notify(`作り直しを頼めませんでした: ${describeForPerson(cause)}`)
         }
       },
+      /**
+       * 解像度を上げる（ADR-0044）。**絵は変わらない**（作り直しとの違いがここ）。
+       * できた Take は元の隣に積まれる。上げるのは worker なので、ここは頼むだけ。
+       */
+      upscale: async () => {
+        try {
+          await createApiClient().upscaleTake(take)
+          workbench.notify(
+            `${shot.code} の Take ${String(take.index)} の解像度を上げます（できたら隣に並びます）。`,
+          )
+          reload()
+        } catch (cause: unknown) {
+          workbench.notify(`解像度を上げられませんでした: ${describeForPerson(cause)}`)
+        }
+      },
       // 失敗は投げる（確認の殻が理由を出す）。消したら一覧を読み直し、Shot の状態を映す。
       hide: async () => {
         const updated = await createApiClient().hideTake(take)
@@ -101,6 +136,12 @@ export const ComparePanel = () => {
         index: take.index,
         finalModelLabel: finalModelFor(models, take.modelId)?.label ?? null,
         seedUsed: take.seedUsed,
+        upscaleSupported,
+        /**
+         * 上げられるかの規則は domain に 1 つ（API も同じものを呼ぶ）。
+         * **「いま上げている最中」だけは API が正**（画面は動いている仕事を持っていない）。
+         */
+        upscaleBlocker: upscaleBlocker({ take, siblings: takes ?? [], activeSourceTakeIds: [] }),
       }),
       run,
     )

@@ -18,6 +18,8 @@ import {
   WireShot,
   WireShotList,
   WireSignedUrl,
+  WireUpscaleJob,
+  WireUpscaleSupport,
   WireTakeList,
 } from '@/lib/api-schemas'
 import { createCharacterApi, type CharacterApi } from '@/lib/character-api'
@@ -85,6 +87,13 @@ export type ProjectApi = {
    * 決め直した Shot を返す。
    */
   hideTake: (take: Pick<Take, 'id' | 'shotId'>) => Promise<Shot>
+  /**
+   * その Take の解像度を上げる（ADR-0044）。**絵は変わらない。**
+   * できた Take は元の隣に積まれる（元は消えない）。
+   */
+  upscaleTake: (take: Pick<Take, 'id' | 'shotId'>) => Promise<WireUpscaleJob>
+  /** この環境で上げられるか。**押せる／押せないの判定に使う。** */
+  upscaleSupported: () => Promise<boolean>
   /**
    * 実体を取りに行くための署名付き URL を**都度発行**する（規約 7。DB には保存しない）。
    *
@@ -187,6 +196,16 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
       await requester.remove(`/takes/${encodeURIComponent(take.id)}`)
       return requester.get(shotPath(take.shotId), WireShot)
     },
+
+    upscaleTake: async (take): Promise<WireUpscaleJob> =>
+      requester.post(
+        `/shots/${encodeURIComponent(take.shotId)}/takes/${encodeURIComponent(take.id)}/upscale`,
+        {},
+        WireUpscaleJob,
+      ),
+
+    upscaleSupported: async (): Promise<boolean> =>
+      (await requester.get('/upscale/support', WireUpscaleSupport)).supported,
 
     mediaUrl: async (mediaAssetId: MediaAssetId, expiresInSec?: number): Promise<WireSignedUrl> => {
       const path = `/media/${encodeURIComponent(mediaAssetId)}/url`

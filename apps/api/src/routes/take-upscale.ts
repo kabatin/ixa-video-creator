@@ -115,6 +115,27 @@ const upscaleRoute = createRoute({
   },
 })
 
+/**
+ * 解像度を上げられる環境か。**画面が押せる／押せないを決めるために引く。**
+ * 押しても必ず断られる操作を、押せる形で出さないため。
+ */
+const supportRoute = createRoute({
+  method: 'get',
+  path: '/upscale/support',
+  tags: ['takes'],
+  summary: 'この環境で解像度を上げられるか',
+  responses: {
+    200: {
+      description: '対応の有無',
+      content: {
+        'application/json': {
+          schema: successResponse(z.object({ supported: z.boolean() })),
+        },
+      },
+    },
+  },
+})
+
 const cancelRoute = createRoute({
   method: 'post',
   path: '/projects/{projectId}/upscales/cancel',
@@ -197,6 +218,11 @@ export const takeUpscaleRoutes = (deps: TakeUpscaleRoutesDeps) =>
 
       await publishUpscaleJob(deps, job, shot.projectId)
       return c.json(ok(toResponse(job)), 202)
+    })
+
+    .openapi(supportRoute, async (c) => {
+      const supported = deps.upscaler !== null && (await deps.upscaler.available())
+      return c.json(ok({ supported }), 200)
     })
 
     .openapi(cancelRoute, async (c) => {
