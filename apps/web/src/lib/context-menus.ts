@@ -194,7 +194,7 @@ export const assetMenuEntries = (input: {
   ]
 }
 
-export type TakeMenuAction = 'adopt' | 'unadopt' | 'hide' | 'remake_final' | 'upscale'
+export type TakeMenuAction = 'adopt' | 'unadopt' | 'hide' | 'remake_final' | 'upscale' | 'download'
 
 /**
  * Take のメニュー（Take 比較のカードの右クリックと「…」）。採用する・外す・消す。
@@ -251,6 +251,8 @@ export const takeMenuEntries = (input: {
       '1 本 5〜20 分ほどかかり、できた Take は元の Take と並びます（元は消えません）。',
   }),
   SEPARATOR,
+  /** 制作者 2026-10-09「Take の動画を個別に DL できるようにしたい」。読める名前で保存される。 */
+  item('download', 'ダウンロード'),
   item('hide', 'Take を消す', {
     disabledReason: input.adopted ? '採用中の Take は消せません（先に採用を外す）' : null,
     confirm: `Take ${String(input.index)} を消します。一覧と比較から見えなくなります（記録と使った費用は残ります）。`,

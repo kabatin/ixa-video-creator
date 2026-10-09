@@ -26,6 +26,7 @@ import { turnOffLineTelop } from './narration/telops.js'
 import { generationActivityRoutes, type GenerationActivityDeps } from './routes/generation-activity.js'
 import { generationCancelRoutes } from './routes/generation-cancel.js'
 import { takeHideRoutes } from './routes/take-hide.js'
+import { takeDownloadRoutes } from './routes/take-download.js'
 import { lyricClipRoutes } from './routes/lyric-clips.js'
 import { assistRoutes } from './routes/assist.js'
 import { modelRoutes } from './routes/models.js'
@@ -269,6 +270,7 @@ export const createApp = (deps: AppDeps) => {
   app.route('/', shotRoutes(shotDeps))
   app.route('/', generationCancelRoutes(shotDeps))
   app.route('/', takeHideRoutes(shotDeps))
+  app.route('/', takeDownloadRoutes({ shots: deps.shots, takes: deps.takes, projects, mediaAssets, storage }))
   app.route(
     '/',
     assistRoutes({

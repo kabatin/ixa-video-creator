@@ -93,6 +93,11 @@ export type ProjectApi = {
    * できた Take は元の隣に積まれる（元は消えない）。
    */
   upscaleTake: (take: Pick<Take, 'id' | 'shotId'>) => Promise<WireUpscaleJob>
+  /**
+   * Take の動画を読める名前で落とす URL（制作者 2026-10-09）。**署名付き URL ではない**
+   * （名前を付けるために API が中身を返す）ので、期限も無い。開くと保存が始まる。
+   */
+  takeDownloadUrl: (take: Pick<Take, 'id' | 'shotId'>) => string
   /** この環境で上げられるか。**押せる／押せないの判定に使う。** */
   upscaleSupported: () => Promise<boolean>
   /**
@@ -201,6 +206,9 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
       await requester.remove(`/takes/${encodeURIComponent(take.id)}`)
       return requester.get(shotPath(take.shotId), WireShot)
     },
+
+    takeDownloadUrl: (take): string =>
+      `${baseUrl}/shots/${encodeURIComponent(take.shotId)}/takes/${encodeURIComponent(take.id)}/download`,
 
     upscaleTake: async (take): Promise<WireUpscaleJob> =>
       requester.post(

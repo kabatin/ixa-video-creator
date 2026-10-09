@@ -122,6 +122,16 @@ export const ComparePanel = () => {
           workbench.notify(`解像度を上げられませんでした: ${describeForPerson(cause)}`)
         }
       },
+      /**
+       * 保存はブラウザに任せる。API が `Content-Disposition: attachment` で返すので、
+       * 開いても画面は移らずダウンロードだけが始まる（別オリジンでも効く。`download` 属性は効かない）。
+       */
+      download: () => {
+        const link = document.createElement('a')
+        link.href = createApiClient().takeDownloadUrl(take)
+        link.rel = 'noopener'
+        link.click()
+      },
       // 失敗は投げる（確認の殻が理由を出す）。消したら一覧を読み直し、Shot の状態を映す。
       hide: async () => {
         const updated = await createApiClient().hideTake(take)

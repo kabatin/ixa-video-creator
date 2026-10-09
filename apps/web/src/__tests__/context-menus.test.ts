@@ -226,6 +226,16 @@ describe('takeMenuEntries', () => {
     expect(adopted?.disabledReason).toBe('採用中の Take は消せません（先に採用を外す）')
   })
 
+  /** 制作者 2026-10-09「Take の動画を個別に DL できるようにしたい」。採用していてもいなくても落とせる。 */
+  it('ダウンロードはいつでも押せ、確かめない（何も変えない操作）', () => {
+    for (const adopted of [true, false]) {
+      const download = find(takeMenuEntries({ adopted, index: 2 }), 'download')
+      expect(download?.label).toBe('ダウンロード')
+      expect(download?.disabledReason).toBeNull()
+      expect(download?.confirm).toBeUndefined()
+    }
+  })
+
   /**
    * 解像度を上げる（ADR-0044）。**絵は変わらない**（作り直しとの違い）。
    * 押しても必ず断られる操作を、押せる形で出さない。

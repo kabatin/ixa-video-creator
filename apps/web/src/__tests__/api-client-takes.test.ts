@@ -122,3 +122,13 @@ describe('mediaUrl', () => {
     )
   })
 })
+
+/** 制作者 2026-10-09。**画面が API を呼ぶ場所に揃える**（LAN から開いたときも同じ口を指す）。 */
+describe('takeDownloadUrl', () => {
+  it('API の場所から、Shot と Take の口を指す', () => {
+    const client = createApiClient('http://192.168.0.42:3001')
+    expect(client.takeDownloadUrl({ id: TakeId.parse(TAKE_ID), shotId: ShotId.parse(SHOT_ID) })).toBe(
+      `http://192.168.0.42:3001/shots/${SHOT_ID}/takes/${TAKE_ID}/download`,
+    )
+  })
+})

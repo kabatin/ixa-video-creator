@@ -48,3 +48,14 @@ export const takeExportFileName = (input: TakeExportFileNameInput): string =>
 /** 例: `CUT-01 最初のフレーム.png`（ADR-0025 の絵。画面と同じ言葉にする）。 */
 export const startFrameExportFileName = (shotCode: string, extension: string): string =>
   `${shotPart(shotCode)} 最初のフレーム.${safeExtension(extension)}`
+
+/**
+ * Take を 1 本ダウンロードするときの名前（制作者 2026-10-09「Take の動画を個別に DL できるようにしたい」）。
+ * 例: `進め！戦子ちゃん！4 CUT-06 Take 1 採用.mp4`
+ *
+ * 素材のフォルダ（`takeExportFileName`）と違い、**ダウンロードのフォルダには作品の区別が無い**。
+ * 別の作品の `CUT-06 Take 1` が同じ名前で上書きされないよう、作品名を前に付ける。
+ */
+export const takeDownloadFileName = (
+  input: TakeExportFileNameInput & { readonly projectName: string },
+): string => `${safeNameForFinder(input.projectName, '作品')} ${takeExportFileName(input)}`

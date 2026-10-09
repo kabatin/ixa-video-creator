@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ASSET_FOLDER_NAME,
   startFrameExportFileName,
+  takeDownloadFileName,
   takeExportFileName,
 } from '../asset/asset-export-name.js'
 
@@ -68,5 +69,38 @@ describe('startFrameExportFileName', () => {
 describe('ASSET_FOLDER_NAME', () => {
   it('画面の言葉と同じ', () => {
     expect(ASSET_FOLDER_NAME).toBe('素材')
+  })
+})
+
+/** 制作者 2026-10-09。ダウンロードのフォルダには作品の区別が無いので、作品名を前に付ける。 */
+describe('takeDownloadFileName', () => {
+  it('作品名・Shot・Take 番号・採用が読める', () => {
+    expect(
+      takeDownloadFileName({
+        projectName: '進め！戦子ちゃん！4',
+        shotCode: 'CUT-06',
+        takeIndex: 1,
+        selected: true,
+        extension: 'mp4',
+      }),
+    ).toBe('進め！戦子ちゃん！4 CUT-06 Take 1 採用.mp4')
+  })
+
+  it('作品名の危ない文字はフォルダの外を指せない形にする', () => {
+    const name = takeDownloadFileName({
+      projectName: '../../etc/passwd',
+      shotCode: 'CUT-01',
+      takeIndex: 2,
+      selected: false,
+      extension: 'mp4',
+    })
+    expect(name).not.toContain('/')
+    expect(name.endsWith(' CUT-01 Take 2.mp4')).toBe(true)
+  })
+
+  it('作品名が空なら「作品」', () => {
+    expect(
+      takeDownloadFileName({ projectName: '  ', shotCode: 'CUT-01', takeIndex: 1, selected: false, extension: 'mp4' }),
+    ).toBe('作品 CUT-01 Take 1.mp4')
   })
 })
