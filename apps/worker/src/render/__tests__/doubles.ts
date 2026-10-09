@@ -152,6 +152,11 @@ export const inMemoryMediaAssets = (): InMemoryMediaAssets => {
       Promise.resolve(store.find((a) => a.checksumSha256 === checksum) ?? null),
     create: (input) => {
       const validated = CreateMediaAssetInputSchema.parse(input)
+      // 本物と同じく、同じ中身の素材は 1 つしか持てない（`media_assets_checksum_sha256_live_uidx`）。
+      // これが無いと「同じ書き出しを 2 回すると保存で落ちる」をテストで再現できない。
+      if (store.some((a) => a.checksumSha256 === validated.checksumSha256)) {
+        return Promise.reject(new Error('duplicate key value violates unique constraint "media_assets_checksum_sha256_live_uidx"'))
+      }
       const created = MediaAssetSchema.parse({
         ...validated,
         id: validated.id ?? newId(MediaAssetIdSchema),

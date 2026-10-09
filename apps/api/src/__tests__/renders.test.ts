@@ -1,4 +1,10 @@
-import { TransitionId as TransitionIdSchema, newId, type Project } from '@ixa/domain'
+import {
+  RenderJobId as RenderJobIdSchema,
+  TransitionId as TransitionIdSchema,
+  newId,
+  type MediaAssetId,
+  type Project,
+} from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import {
   UNSUPPORTED_SCOPE_MESSAGE,
@@ -387,5 +393,75 @@ describe('POST /projects/:projectId/render（音量を揃える）', () => {
     const body = (await response.json()) as Ok<RenderJobResponse[]>
 
     expect(body.data[0]).toMatchObject({ normalizeLoudness: true, loudnessLufs: -14.1 })
+  })
+})
+
+/**
+ * 制作者 2026-10-09「時間かけて書き出ししてから保存で失敗すると時間の無駄だし UX 最悪なので事前に分かるように」。
+ * 前回うまくいった書き出しと中身が同じなら、**始める前に** 409 で知らせる。
+ */
+describe('POST /projects/:projectId/render（前回と同じ中身）', () => {
+  type DuplicateBody = { success: false; error: string; duplicateOf: { renderJobId: string; finishedAt: string | null } }
+
+  const setup = () => {
+    const project = aProject()
+    const withTake = aShotWithTake(project, { startSec: 0, durationSec: 4 })
+    const deps = renderDeps({ project, shots: [withTake.shot], takes: [withTake.take], mediaAssets: [withTake.asset] })
+    return { project, deps, asset: withTake.asset }
+  }
+
+  const finish = async (
+    deps: RenderFixtureDeps,
+    renderJobId: string,
+    outputAssetId: MediaAssetId,
+    status: 'succeeded' | 'failed' = 'succeeded',
+  ) => {
+    await deps.renderJobs.update(RenderJobIdSchema.parse(renderJobId), {
+      status,
+      progress: 1,
+      outputAssetId: status === 'succeeded' ? outputAssetId : null,
+      finishedAt: new Date('2026-10-09T05:00:00Z'),
+    })
+  }
+
+  it('前回うまくいった書き出しと同じなら、始めずに 409 で前回を指す', async () => {
+    const { project, deps, asset } = setup()
+    const first = (await (await postRender(deps, project)).json()) as Ok<CreateRenderData>
+    await finish(deps, first.data.renderJobId, asset.id)
+
+    const response = await postRender(deps, project)
+    const body = (await response.json()) as DuplicateBody
+
+    expect(response.status).toBe(409)
+    expect(body.duplicateOf.renderJobId).toBe(first.data.renderJobId)
+    expect(body.duplicateOf.finishedAt).toBe('2026-10-09T05:00:00.000Z')
+    expect(deps.renderJobs.snapshot()).toHaveLength(1)
+  })
+
+  it('もう一度を選べば（force）書き出す', async () => {
+    const { project, deps, asset } = setup()
+    const first = (await (await postRender(deps, project)).json()) as Ok<CreateRenderData>
+    await finish(deps, first.data.renderJobId, asset.id)
+
+    const response = await postRender(deps, project, { preset: 'master_1080p', force: true })
+    expect(response.status).toBe(202)
+    expect(deps.renderJobs.snapshot()).toHaveLength(2)
+  })
+
+  it('設定が違えば同じではない（プリセット・音量）', async () => {
+    const { project, deps, asset } = setup()
+    const first = (await (await postRender(deps, project)).json()) as Ok<CreateRenderData>
+    await finish(deps, first.data.renderJobId, asset.id)
+
+    expect((await postRender(deps, project, { preset: 'preview_720p' })).status).toBe(202)
+    expect((await postRender(deps, project, { preset: 'master_1080p', normalizeLoudness: false })).status).toBe(202)
+  })
+
+  it('前回が失敗していれば、同じ中身でも書き出す', async () => {
+    const { project, deps, asset } = setup()
+    const first = (await (await postRender(deps, project)).json()) as Ok<CreateRenderData>
+    await finish(deps, first.data.renderJobId, asset.id, 'failed')
+
+    expect((await postRender(deps, project)).status).toBe(202)
   })
 })

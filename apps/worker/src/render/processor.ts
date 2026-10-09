@@ -145,6 +145,23 @@ const storeOutput = async (
   const contentType = MIME_BY_EXTENSION[ext] ?? 'application/octet-stream'
 
   const body = await readFile(result.storageKey)
+  const checksumSha256 = createHash('sha256').update(body).digest('hex')
+
+  /**
+   * **中身がまったく同じ書き出しが既にあれば、それを使う。** 素材の表は同じ中身を 1 つしか持てない
+   * （`checksum_sha256` の一意制約）ので、作り直すと保存で落ちていた。書き出しは決定的で、
+   * タイムラインを変えずにもう一度書き出せば同じバイト列になる（2026-10-09 に実際に当たった）。
+   * 同じ中身なので、前のものを指せば何も失わない。置き場にも書かない（同じファイルを 2 つ置かない）。
+   */
+  const existing = await deps.mediaAssets.findByChecksum(checksumSha256)
+  if (existing !== null) {
+    deps.logger.info(
+      { jobId: job.id, mediaAssetId: existing.id },
+      '前の書き出しと中身が同じだったので、前の素材をそのまま使います',
+    )
+    return existing.id
+  }
+
   await deps.storage.put(key, body, { contentType })
 
   const mediaAssetId = newId(MediaAssetIdSchema)
@@ -156,7 +173,7 @@ const storeOutput = async (
     storageKey: key,
     mimeType: contentType,
     bytes: body.byteLength,
-    checksumSha256: createHash('sha256').update(body).digest('hex'),
+    checksumSha256,
     origin: { type: 'rendered', renderJobId: job.id },
     tags: [],
   })

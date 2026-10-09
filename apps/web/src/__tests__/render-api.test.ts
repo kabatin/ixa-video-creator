@@ -54,6 +54,7 @@ describe('書き出しの投入', () => {
       preset: 'preview_720p',
       scope: { type: 'range', start: 4, end: 12 },
       normalizeLoudness: true,
+      force: false,
     })
   })
 
@@ -102,11 +103,39 @@ describe('書き出しの投入', () => {
     const [url, init] = fetchMock.mock.calls[0] ?? []
     expect(url).toBe(`${BASE_URL}/projects/${PROJECT_ID}/render`)
     expect(init?.method).toBe('POST')
-    expect(requestBodyOf(init)).toEqual({ preset: 'master_1080p', scope: { type: 'full' }, normalizeLoudness: true })
+    expect(requestBodyOf(init)).toEqual({ preset: 'master_1080p', scope: { type: 'full' }, normalizeLoudness: true, force: false })
   })
 
   it('scope は常に full。部分書き出しは送らない', () => {
     expect(FULL_SCOPE).toEqual({ type: 'full' })
+  })
+
+  /** 制作者 2026-10-09。前回と中身が同じなら、始める前に知らせる。 */
+  it('409（前回と同じ）は例外にせず、前回の書き出しを値として返す', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        {
+          success: false,
+          error: '前回の書き出しと中身が同じです',
+          duplicateOf: { renderJobId: RENDER_JOB_ID, finishedAt: '2026-10-09T05:00:00.000Z' },
+        },
+        409,
+      ),
+    )
+
+    const outcome = await api().startRender(projectId, 'master_1080p')
+
+    expect(outcome).toEqual({
+      kind: 'duplicate',
+      message: '前回の書き出しと中身が同じです',
+      duplicateOf: { renderJobId: RENDER_JOB_ID, finishedAt: '2026-10-09T05:00:00.000Z' },
+    })
+  })
+
+  it('もう一度を選べば force を送る', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: { renderJobId: RENDER_JOB_ID, warnings: [] } }, 202))
+    await api().startRender(projectId, 'master_1080p', undefined, { normalizeLoudness: true, force: true })
+    expect(requestBodyOf(fetchMock.mock.calls[0]?.[1])).toMatchObject({ force: true })
   })
 
   it('422 は例外にせず、拒否理由を値として返す', async () => {

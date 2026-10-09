@@ -50,11 +50,20 @@ const setup = (
     jobs?: readonly WireRenderJob[]
     canOpen?: boolean
     openFails?: boolean
+    /** 最初の 1 回は「前回と同じ」を返す（2 回目からは受け付ける）。 */
+    duplicateFirst?: boolean
   } = {},
 ) => {
   const startRender = vi
     .fn<RenderApi['startRender']>()
     .mockResolvedValue({ kind: 'accepted', renderJobId: JOB_ID, warnings: [] })
+  if (options.duplicateFirst === true) {
+    startRender.mockResolvedValueOnce({
+      kind: 'duplicate',
+      message: '前回の書き出しと中身が同じです',
+      duplicateOf: { renderJobId: JOB_ID, finishedAt: '2026-10-09T05:00:00.000Z' },
+    })
+  }
   const api: RenderApi = { startRender, getRenderJob: vi.fn(), listRenderJobs: vi.fn() }
   const openRenderFolder = vi.fn<RenderFolderApi['openRenderFolder']>(() =>
     options.openFails === true
@@ -126,8 +135,35 @@ describe('画質', () => {
     fireEvent.click(startButton())
 
     await waitFor(() => {
-      expect(startRender).toHaveBeenCalledWith(projectId, 'master_1080p', undefined, { normalizeLoudness: true })
+      expect(startRender).toHaveBeenCalledWith(projectId, 'master_1080p', undefined, { normalizeLoudness: true, force: false })
     })
+  })
+})
+
+/** 制作者 2026-10-09「時間かけて書き出ししてから保存で失敗すると時間の無駄」。始める前に知らせる。 */
+describe('前回と同じ中身', () => {
+  it('始めずに知らせ、「もう一度書き出す」を選べば force で書き出す', async () => {
+    const { startRender } = setup({ duplicateFirst: true })
+
+    fireEvent.click(startButton())
+    expect(await screen.findByText(/の書き出しと中身が同じです/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'もう一度書き出す' }))
+    await waitFor(() => {
+      expect(startRender).toHaveBeenCalledTimes(2)
+    })
+    expect(startRender.mock.calls[0]?.[3]).toEqual({ normalizeLoudness: true, force: false })
+    expect(startRender.mock.calls[1]?.[3]).toEqual({ normalizeLoudness: true, force: true })
+  })
+
+  it('閉じれば知らせを消す（何も書き出さない）', async () => {
+    const { startRender } = setup({ duplicateFirst: true })
+
+    fireEvent.click(startButton())
+    fireEvent.click(await screen.findByRole('button', { name: '閉じる' }))
+
+    expect(screen.queryByText(/の書き出しと中身が同じです/)).toBeNull()
+    expect(startRender).toHaveBeenCalledTimes(1)
   })
 })
 

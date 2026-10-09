@@ -74,7 +74,7 @@ describe('書き出す範囲', () => {
     fireEvent.click(start())
 
     await waitFor(() => {
-      expect(startRender).toHaveBeenCalledWith(projectId, expect.any(String), { type: 'range', start: 8, end: 16 }, { normalizeLoudness: true })
+      expect(startRender).toHaveBeenCalledWith(projectId, expect.any(String), { type: 'range', start: 8, end: 16 }, { normalizeLoudness: true, force: false })
     })
   })
 
@@ -85,7 +85,7 @@ describe('書き出す範囲', () => {
     fireEvent.click(start())
 
     await waitFor(() => {
-      expect(startRender).toHaveBeenCalledWith(projectId, expect.any(String), undefined, { normalizeLoudness: true })
+      expect(startRender).toHaveBeenCalledWith(projectId, expect.any(String), undefined, { normalizeLoudness: true, force: false })
     })
   })
 

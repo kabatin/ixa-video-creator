@@ -12,6 +12,7 @@ import {
 } from '@ixa/domain'
 import {
   overlapsRange,
+  renderContentKey,
   sliceTimelineDocument,
   timelineRangeProblem,
   validateTimeline,
@@ -101,6 +102,12 @@ const CreateRenderBody = z
     scope: RenderScopeSchema.default({ type: SUPPORTED_RENDER_SCOPE }),
     /** 音量を YouTube・SNS の基準（-14 LUFS）に揃えるか（ADR-0039）。既定は揃える。 */
     normalizeLoudness: z.boolean().default(true),
+    /**
+     * 前回うまくいった書き出しと中身が同じでも書き出す。**既定は false**——同じなら始める前に 409 で知らせる
+     * （制作者 2026-10-09「時間かけて書き出ししてから保存で失敗すると時間の無駄」）。
+     * アプリを更新して描き方が変わったときなど、人が「もう一度」を選んだときだけ true。
+     */
+    force: z.boolean().default(false),
   })
   .openapi('CreateRenderInput')
 
@@ -111,6 +118,20 @@ const CreateRenderData = z
     warnings: z.array(TimelineIssueResponse),
   })
   .openapi('CreateRenderResult')
+
+/** 409 の本文。**前回の書き出し**を指す（画面がそれを示して、もう一度書き出すかを聞く）。 */
+const DuplicateRenderBody = z
+  .object({
+    success: z.literal(false),
+    error: z.string(),
+    duplicateOf: z.object({
+      renderJobId: RenderJobIdSchema,
+      finishedAt: z.string().datetime().nullable(),
+    }),
+  })
+  .openapi('DuplicateRender')
+
+export const DUPLICATE_RENDER_MESSAGE = '前回の書き出しと中身が同じです'
 
 const RenderParams = z.object({
   id: RenderJobIdSchema.openapi({ param: { name: 'id', in: 'path' } }),
@@ -130,6 +151,43 @@ const commonErrors = {
   500: errorContent('サーバ内部エラー'),
 }
 
+/**
+ * 前回うまくいった書き出しのうち、**同じ中身になるもの**（新しい順に最初の 1 つ）。
+ * 比べるのは書き出しの設定（プリセット・範囲・音量）と文書。文書は署名だけが違うものを同じとみなす。
+ */
+const findSameRender = async (
+  renderJobs: Pick<RenderJobRepository, 'findByProject'>,
+  wanted: {
+    readonly projectId: RenderJob['projectId']
+    readonly preset: RenderJob['preset']
+    readonly scope: RenderJob['scope']
+    readonly normalizeLoudness: boolean
+    readonly timelineSnapshot: RenderJob['timelineSnapshot']
+  },
+): Promise<RenderJob | null> => {
+  const wantedKey = renderContentKey({
+    preset: wanted.preset,
+    scope: wanted.scope,
+    normalizeLoudness: wanted.normalizeLoudness,
+    timeline: wanted.timelineSnapshot,
+  })
+  const jobs = await renderJobs.findByProject(wanted.projectId)
+  return (
+    [...jobs]
+      .filter((job) => job.status === 'succeeded' && job.outputAssetId !== null)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .find(
+        (job) =>
+          renderContentKey({
+            preset: job.preset,
+            scope: job.scope,
+            normalizeLoudness: job.normalizeLoudness,
+            timeline: job.timelineSnapshot,
+          }) === wantedKey,
+      ) ?? null
+  )
+}
+
 const createRenderRoute = createRoute({
   method: 'post',
   path: '/projects/{projectId}/render',
@@ -141,6 +199,7 @@ const createRenderRoute = createRoute({
   },
   responses: {
     202: jsonContent('投入されたジョブ', successResponse(CreateRenderData)),
+    409: jsonContent('前回うまくいった書き出しと中身が同じ（force で書き出せる）', DuplicateRenderBody),
     ...commonErrors,
   },
 })
@@ -185,7 +244,7 @@ export const renderRoutes = (deps: RenderRoutesDeps) =>
     })
     .openapi(createRenderRoute, async (c) => {
       const { projectId } = c.req.valid('param')
-      const { preset, scope, normalizeLoudness } = c.req.valid('json')
+      const { preset, scope, normalizeLoudness, force } = c.req.valid('json')
 
       // Shot 単位は range で指定する。**黙って full に落とさない。**
       // 「10 秒だけのつもりが全体をレンダリングしていた」は課金と時間の事故になる。
@@ -223,12 +282,35 @@ export const renderRoutes = (deps: RenderRoutesDeps) =>
 
       // 何をレンダリングしたかが常に分かるよう、投入時点の TimelineDocument を保存する
       // （ARCHITECTURE.md §16）。worker はこのスナップショットだけを使う。一部だけなら切った後のもの。
+      const timelineSnapshot = range === null ? loaded.document : sliceTimelineDocument(loaded.document, range)
+
+      // **始める前に知らせる。** 同じ中身を書き出し直すと、時間をかけたうえ同じものができるだけ。
+      if (!force) {
+        const previous = await findSameRender(deps.renderJobs, {
+          projectId,
+          preset,
+          scope,
+          normalizeLoudness,
+          timelineSnapshot,
+        })
+        if (previous !== null) {
+          return c.json(
+            {
+              success: false as const,
+              error: DUPLICATE_RENDER_MESSAGE,
+              duplicateOf: { renderJobId: previous.id, finishedAt: previous.finishedAt?.toISOString() ?? null },
+            },
+            409,
+          )
+        }
+      }
+
       const job = await deps.renderJobs.create({
         projectId,
         scope,
         preset,
         normalizeLoudness,
-        timelineSnapshot: range === null ? loaded.document : sliceTimelineDocument(loaded.document, range),
+        timelineSnapshot,
       })
       await deps.queue.enqueue(job.id)
 

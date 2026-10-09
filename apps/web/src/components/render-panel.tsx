@@ -9,6 +9,7 @@ import {
   RenderFolderNotice,
   useRenderFolder,
 } from '@/components/render-folder'
+import { RenderDuplicate } from '@/components/render-duplicate'
 import { RenderJobList } from '@/components/render-job-list'
 import { RenderRejected } from '@/components/render-rejected'
 import { RenderPresetField, RenderRangeField } from '@/components/render-settings'
@@ -17,7 +18,13 @@ import { Button } from '@/components/ui/button'
 import { useRenderWatch, type RenderWatch } from '@/components/workbench/use-render-watch'
 import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
-import { createRenderApi, type RenderApi, type RenderRejection, type WireRenderJob } from '@/lib/render-api'
+import {
+  createRenderApi,
+  type RenderApi,
+  type RenderRejection,
+  type StartRenderDuplicate,
+  type WireRenderJob,
+} from '@/lib/render-api'
 import { DEFAULT_RENDER_PRESET } from '@/lib/render-display'
 import type { RenderFolderApi } from '@/lib/render-folder-api'
 import type { RenderRangeChoice } from '@/lib/render-range'
@@ -127,6 +134,7 @@ const RenderPanelView = ({
   const [submitting, setSubmitting] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [rejection, setRejection] = useState<RenderRejection | null>(null)
+  const [duplicate, setDuplicate] = useState<StartRenderDuplicate | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
 
   // チェックして開いたら、最初から「選んだ Shot だけ」。
@@ -139,14 +147,22 @@ const RenderPanelView = ({
       : { errors: chosenRange.blockingIssueCount, warnings: chosenRange.warningIssueCount }
   const blocked = check.errors !== null && check.errors > 0
 
-  const submit = async (): Promise<void> => {
+  /** `force` は「前回と同じでも、もう一度書き出す」を選んだときだけ。 */
+  const submit = async (force = false): Promise<void> => {
     setSubmitting(true)
     setRejection(null)
+    setDuplicate(null)
     setFeedback(null)
     try {
-      const outcome = await client.startRender(projectId, preset, chosenRange?.scope, { normalizeLoudness })
+      const outcome = await client.startRender(projectId, preset, chosenRange?.scope, { normalizeLoudness, force })
       if (outcome.kind === 'rejected') {
         setRejection(outcome.rejection)
+        return
+      }
+      if (outcome.kind === 'duplicate') {
+        setDuplicate(outcome)
+        // 前回の書き出しに一覧で印を付ける（もう終わっているので、見守りはすぐ止まる）。
+        watch.watchJob(outcome.duplicateOf.renderJobId)
         return
       }
       // 見守りに預ける。**この画面を閉じても追跡は続く。**
@@ -225,6 +241,16 @@ const RenderPanelView = ({
           )}
         </div>
         {rejection !== null && <RenderRejected rejection={rejection} />}
+        {duplicate !== null && (
+          <RenderDuplicate
+            duplicate={duplicate}
+            busy={submitting}
+            onRenderAgain={() => void submit(true)}
+            onDismiss={() => {
+              setDuplicate(null)
+            }}
+          />
+        )}
       </section>
 
       <section

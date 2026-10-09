@@ -129,6 +129,29 @@ const buildFixture = async (options: FixtureOptions = {}) => {
   }
 }
 
+/** 制作者 2026-10-09「時間かけて書き出ししてから保存で失敗すると時間の無駄だし UX 最悪」。 */
+describe('processRenderJob の同じ中身の書き出し', () => {
+  it('前の書き出しと中身が同じなら、保存で落とさず前の素材を使う', async () => {
+    const { deps, job, renderJobs, mediaAssets } = await buildFixture()
+    const first = await processRenderJob(deps, { renderJobId: job.id })
+
+    // タイムラインを変えずにもう一度書き出す（同じバイト列になる）。
+    const again = await renderJobs.create({
+      projectId: job.projectId,
+      scope: { type: 'full' },
+      preset: 'master_1080p',
+      timelineSnapshot: job.timelineSnapshot,
+    })
+    const second = await processRenderJob(deps, { renderJobId: again.id })
+
+    if (first.state !== 'succeeded' || second.state !== 'succeeded') {
+      throw new Error(`両方とも成功するはず: ${first.state} / ${second.state}`)
+    }
+    expect(second.outputAssetId).toBe(first.outputAssetId)
+    expect(mediaAssets.snapshot()).toHaveLength(1)
+  })
+})
+
 /** ADR-0045 段 3。書き出しの直前に、枠より小さい映像だけ Lanczos で拡大する。 */
 describe('processRenderJob の書き出しの直前の拡大', () => {
   it('拡大の段が返した文書を書き出しに渡す。枠はプリセットの大きさ', async () => {
