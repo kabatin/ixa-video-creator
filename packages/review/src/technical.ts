@@ -1,5 +1,6 @@
 import {
   TAKE_SHORT_TOLERANCE_SEC,
+  declaredOutputSize,
   takeShortfallSec,
   type CreateReviewFindingInput,
   type Seconds,
@@ -154,22 +155,54 @@ const hasSameAspectRatio = (
   return Math.abs(measured.width / measured.height - wanted) / wanted <= ASPECT_RATIO_TOLERANCE
 }
 
+/**
+ * 解像度（ADR-0045 で基準を変えた）。
+ *
+ * **要求より小さいこと自体は fail にしない。** 手元の生成サーバはモデルが描いた大きさのまま
+ * 返すことがあり（`native`）、その場合は書き出しの直前に拡大するので実害が無い。
+ * 以前は Project の解像度ちょうどでなければ fail にしていたため、
+ * **ネイティブの Take を入れると全件 fail になり、ADR-0005 により LLM のレビュー層ごと止まる**。
+ *
+ * fail にするのは次の 2 つだけ。
+ *
+ * - **比がずれている**: 枠を埋められないので実害がある
+ * - **申告と実物が食い違う**: Provider が言った大きさとファイルが違う。取り込みの事故
+ */
 const checkResolution = (m: ReviewMeasurements): readonly CreateReviewFindingInput[] => {
   const { video, expected } = m
-  if (video.width === expected.width && video.height === expected.height) return []
-
   const label = `解像度 ${px(video.width, video.height)}（要求 ${px(expected.width, expected.height)}）`
 
-  // 要求より大きく、比も同じなら縮小するだけで使える。画質も落ちないので info に留める。
-  if (
-    video.width >= expected.width &&
-    video.height >= expected.height &&
-    hasSameAspectRatio(video, expected)
-  ) {
+  if (!hasSameAspectRatio(video, expected)) {
+    return [finding({ severity: 'fail', message: `${label} は比が違う` })]
+  }
+
+  // 申告があるなら、まずファイルと突き合わせる。**比より先に見ない**（比が違えば理由はそちら）。
+  const declared = declaredOutputSize(m.take)
+  if (declared !== null && (video.width !== declared.width || video.height !== declared.height)) {
+    return [
+      finding({
+        severity: 'fail',
+        message: `${label} が、生成した AI の申告 ${px(declared.width, declared.height)} と食い違う`,
+      }),
+    ]
+  }
+
+  if (video.width === expected.width && video.height === expected.height) return []
+
+  // 要求より大きければ縮小するだけで使える。画質も落ちないので info に留める。
+  if (video.width >= expected.width && video.height >= expected.height) {
     return [finding({ severity: 'info', message: `${label} は要求より大きいが同じ比。縮小して使える` })]
   }
 
-  return [finding({ severity: 'fail', message: `${label} が一致しない` })]
+  // 要求より小さい。申告どおりなら書き出しで拡大する（ADR-0045）。申告が無ければ素性が分からない。
+  return declared === null
+    ? [finding({ severity: 'fail', message: `${label} が一致しない` })]
+    : [
+        finding({
+          severity: 'info',
+          message: `${label} は生成した大きさのまま。書き出しのときに拡大する`,
+        }),
+      ]
 }
 
 const checkFps = (m: ReviewMeasurements): readonly CreateReviewFindingInput[] => {

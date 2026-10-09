@@ -29,6 +29,7 @@ export * from './shot/split-merge.js'
 // 生成
 export * from './generation/duration.js'
 export * from './generation/take-readiness.js'
+export * from './generation/declared-output.js'
 export * from './generation/quality-tier.js'
 export * from './generation/upscale-job.js'
 export * from './generation/spec.js'

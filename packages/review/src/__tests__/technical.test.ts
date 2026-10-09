@@ -160,6 +160,62 @@ describe('technicalReviewer', () => {
       expect(severities(findings)).toEqual(['info'])
     })
 
+    /**
+     * ADR-0045。手元の生成サーバはモデルが描いた大きさのまま返すことがある（`native`）。
+     * **これを fail にすると、ADR-0005 により LLM のレビュー層ごと止まる。**
+     */
+    describe('AI が申告した大きさがあるとき', () => {
+      const declaring = (width: number, height: number) =>
+        makeTake({ providerParams: { kind: 'http', request: { output: { width, height } } } })
+
+      it('申告どおりなら、要求より小さくても info（fail にしない）', () => {
+        const findings = technicalReviewer(
+          makeMeasurements({
+            take: declaring(1344, 756),
+            video: makeVideo({ width: 1344, height: 756 }),
+          }),
+        )
+
+        expect(severities(findings)).toEqual(['info'])
+        expect(findings[0]?.message).toContain('書き出しのとき')
+      })
+
+      it('申告と実物が食い違えば fail（取り込みの事故）', () => {
+        const findings = technicalReviewer(
+          makeMeasurements({
+            take: declaring(1344, 756),
+            video: makeVideo({ width: 1920, height: 1080 }),
+          }),
+        )
+
+        expect(severities(findings)).toEqual(['fail'])
+        expect(findings[0]?.message).toContain('申告')
+      })
+
+      it('申告どおりでも比が違えば fail（枠を埋められない）', () => {
+        const findings = technicalReviewer(
+          makeMeasurements({
+            take: declaring(1344, 700),
+            video: makeVideo({ width: 1344, height: 700 }),
+          }),
+        )
+
+        expect(severities(findings)).toEqual(['fail'])
+        expect(findings[0]?.message).toContain('比が違う')
+      })
+
+      it('申告が無ければ今までどおり fail（持ち込みの Take）', () => {
+        const findings = technicalReviewer(
+          makeMeasurements({
+            take: makeTake({ providerParams: { kind: 'import', sourceModel: null, fileName: null } }),
+            video: makeVideo({ width: 1344, height: 756 }),
+          }),
+        )
+
+        expect(severities(findings)).toEqual(['fail'])
+      })
+    })
+
     it('29.97fps は 30fps 要求に対して指摘しない（NTSC）', () => {
       const findings = technicalReviewer(
         makeMeasurements({ video: makeVideo({ fps: 30000 / 1001 }) }),
