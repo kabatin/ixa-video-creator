@@ -17,6 +17,7 @@ import {
   WireProjectList,
   WireShot,
   WireShotList,
+  WireMediaInfo,
   WireSignedUrl,
   WireUpscaleJob,
   WireUpscaleSupport,
@@ -103,6 +104,10 @@ export type ProjectApi = {
    * ブラウザが期限切れの URL へ範囲リクエストを投げ、再生が黙って止まる。
    */
   mediaUrl: (mediaAssetId: MediaAssetId, expiresInSec?: number) => Promise<WireSignedUrl>
+  /**
+   * 素材の大きさと容量。**署名付き URL とは別の口**（こちらは期限が無く、一度引けば変わらない）。
+   */
+  mediaInfo: (mediaAssetId: MediaAssetId) => Promise<WireMediaInfo>
 }
 
 export type ApiClient = { readonly baseUrl: string } & ProjectApi &
@@ -214,6 +219,9 @@ export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClien
       const query = new URLSearchParams({ expiresInSec: String(expiresInSec) })
       return requester.get(`${path}?${query.toString()}`, WireSignedUrl)
     },
+
+    mediaInfo: async (mediaAssetId: MediaAssetId): Promise<WireMediaInfo> =>
+      requester.get(`/media/${encodeURIComponent(mediaAssetId)}`, WireMediaInfo),
   }
 
   return {

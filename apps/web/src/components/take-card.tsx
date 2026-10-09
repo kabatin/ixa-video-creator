@@ -5,7 +5,14 @@ import { useEffect, useState } from 'react'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { reviewStatusClassName, reviewStatusLabel } from '@/lib/shot-display'
-import { takeCostLabel, takeModelLabel, takeTimeLabel } from '@/lib/take-display'
+import type { MediaInfo } from '@/lib/take-display'
+import {
+  takeBytesLabel,
+  takeCostLabel,
+  takeModelLabel,
+  takeResolutionLabel,
+  takeTimeLabel,
+} from '@/lib/take-display'
 import type { ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
 import type { ContextMenuItem } from '@/components/workbench/ui/context-menu'
 import { MenuButton } from '@/components/workbench/ui/more-menu'
@@ -67,6 +74,35 @@ const useSignedUrl = (mediaAssetId: MediaAssetId): UrlState => {
   return state
 }
 
+/**
+ * 素材の大きさと容量（制作者 2026-10-09）。
+ *
+ * **署名付き URL と別に引く。** あちらは期限があって取り直すが、こちらは変わらないので一度だけ。
+ * 引けなくても比較は使えるので、`undefined` のまま黙って畳む（カードごと赤くしない）。
+ */
+const useMediaInfo = (mediaAssetId: MediaAssetId): MediaInfo | undefined => {
+  const [info, setInfo] = useState<MediaInfo | undefined>(undefined)
+
+  useEffect(() => {
+    let cancelled = false
+    // 別の Take へ切り替わったときに、前の素材の数字を出したままにしない。
+    setInfo(undefined)
+    void createApiClient()
+      .mediaInfo(mediaAssetId)
+      .then((loaded) => {
+        if (!cancelled) setInfo(loaded)
+      })
+      .catch(() => {
+        // 握り潰さない: 画面には「…」が残り、読めていないことが分かる。
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [mediaAssetId])
+
+  return info
+}
+
 const TakePreview = ({ state }: { readonly state: UrlState }) => {
   if (state.kind === 'loading') {
     return <div className="aspect-video w-full animate-pulse rounded bg-line" />
@@ -97,6 +133,7 @@ export const TakeCard = ({
   menuItems,
 }: TakeCardProps) => {
   const urlState = useSignedUrl(take.mediaAssetId)
+  const mediaInfo = useMediaInfo(take.mediaAssetId)
 
   return (
     <li
@@ -133,6 +170,10 @@ export const TakeCard = ({
         <dd>{takeCostLabel(take)}</dd>
         <dt className="text-muted">生成時間</dt>
         <dd>{takeTimeLabel(take)}</dd>
+        <dt className="text-muted">大きさ</dt>
+        <dd>{takeResolutionLabel(mediaInfo)}</dd>
+        <dt className="text-muted">容量</dt>
+        <dd>{takeBytesLabel(mediaInfo)}</dd>
       </dl>
 
       <div className="flex flex-wrap items-center gap-2">

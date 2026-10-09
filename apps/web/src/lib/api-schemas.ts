@@ -105,6 +105,25 @@ export const WireSignedUrl = z.object({
 })
 export type WireSignedUrl = z.infer<typeof WireSignedUrl>
 
+/**
+ * `GET /media/{id}` のうち、画面に出す分だけ。
+ *
+ * **狭く取る。** zod は知らない鍵を落とすので、`storageKey` のような内部の値が
+ * ブラウザ側の型に入らない（CLAUDE.md の画面の言葉「内部 ID は出さない」）。
+ * `probe` は取り込みキューが後から埋めるため、出来たばかりの素材では null。
+ */
+export const WireMediaInfo = z.object({
+  bytes: z.number().int().nonnegative(),
+  probe: z
+    .object({
+      width: z.number().int().positive().nullable(),
+      height: z.number().int().positive().nullable(),
+      fps: z.number().positive().nullable(),
+    })
+    .nullable(),
+})
+export type WireMediaInfo = z.infer<typeof WireMediaInfo>
+
 /** 解像度を上げる仕事（ADR-0044）。投入するまで見込みは分からないので null。 */
 export const WireUpscaleJob = z.object({
   id: z.string().min(1),

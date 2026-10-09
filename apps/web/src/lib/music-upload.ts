@@ -146,20 +146,6 @@ export const uploadProgressRatio = ({ phase, sentBytes, totalBytes }: UploadProg
 export const formatPercent = (ratio: number): string =>
   `${String(Math.round(clampRatio(Number.isFinite(ratio) ? ratio : 0) * 100))}%`
 
-const BYTE_UNITS: readonly string[] = Object.freeze(['B', 'KB', 'MB', 'GB'])
-
-/** `33.1 MB`。1024 区切り。大きな音源を選んだことが数字で分かるようにする。 */
-export const formatBytes = (bytes: number): string => {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
-  let value = bytes
-  let unit = 0
-  while (value >= 1024 && unit < BYTE_UNITS.length - 1) {
-    value /= 1024
-    unit += 1
-  }
-  return `${value.toFixed(unit === 0 ? 0 : 1)} ${BYTE_UNITS[unit] as string}`
-}
-
 /**
  * 再解析の待ち合わせ判定。
  *

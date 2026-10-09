@@ -1,5 +1,12 @@
 import type { Take } from '@ixa/domain'
+import { formatBytes } from '@/lib/format-bytes'
 import { formatSeconds, formatUsd } from '@/lib/shot-display'
+
+/** 画面に出す分だけの素材情報（`WireMediaInfo` と同じ形。型だけここで受ける）。 */
+export type MediaInfo = {
+  readonly bytes: number
+  readonly probe: { readonly width: number | null; readonly height: number | null } | null
+}
 
 /**
  * Take がどこから来たかの言葉（ADR-0026）。
@@ -25,3 +32,22 @@ export const takeCostLabel = (take: Shown): string => {
 
 export const takeTimeLabel = (take: Shown): string =>
   isImported(take) ? '—' : formatSeconds(take.generationTimeSec)
+
+/**
+ * 映像の大きさ（制作者 2026-10-09「Take 比較の情報に解像度とか容量も欲しい」）。
+ *
+ * **引けていない（`undefined`）と、測れていない（`probe` が null）を分ける。**
+ * 前者は読み込み中で、待てば出る。後者は取り込みキューがまだ計測していないか、
+ * 計測に失敗した状態で、待っても出ないことがある（ADR-0044 で実際に起きた）。
+ */
+export const takeResolutionLabel = (info: MediaInfo | undefined): string => {
+  if (info === undefined) return '…'
+  const width = info.probe?.width ?? null
+  const height = info.probe?.height ?? null
+  if (width === null || height === null) return '計測中'
+  return `${String(width)}×${String(height)}`
+}
+
+/** ファイルの容量。**引けるまでは「…」**（0 B と読めると、壊れた Take に見える）。 */
+export const takeBytesLabel = (info: MediaInfo | undefined): string =>
+  info === undefined ? '…' : formatBytes(info.bytes)

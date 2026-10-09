@@ -9,7 +9,10 @@ import { takeJson } from './fixtures'
 /** 持ち込んだ Take はモデル名の代わりに出自を出す（ADR-0026）。 */
 
 vi.mock('@/lib/api-client', () => ({
-  createApiClient: () => ({ mediaUrl: () => new Promise(() => undefined) }),
+  createApiClient: () => ({
+    mediaUrl: () => new Promise(() => undefined),
+    mediaInfo: () => Promise.resolve({ bytes: 2_097_152, probe: { width: 1920, height: 1080 } }),
+  }),
 }))
 
 const aTake = (overrides: Partial<Take>): Take =>
@@ -70,5 +73,15 @@ describe('TakeCard の「…」', () => {
     renderCard(aTake({ index: 2 }))
 
     expect(screen.queryByRole('button', { name: 'Take 2 のその他の操作' })).toBeNull()
+  })
+})
+
+/** 制作者 2026-10-09「Take 比較の情報に解像度とか容量も欲しい」。 */
+describe('TakeCard の大きさと容量', () => {
+  it('素材を引けたら大きさと容量を出す', async () => {
+    renderCard(aTake({}))
+
+    expect(await screen.findByText('1920×1080')).toBeTruthy()
+    expect(screen.getByText('2.0 MB')).toBeTruthy()
   })
 })
