@@ -24,6 +24,7 @@ import {
   createShotReferenceRepository,
   createImageJobRepository,
   createUpscaleJobRepository,
+  createAccessTokenRepository,
   createScriptRepository,
   createEditBatchRepository,
   createStoryboardDraftRepository,
@@ -59,6 +60,7 @@ import { Queue } from 'bullmq'
 import IORedis from 'ioredis'
 import { createRedisProjectEvents } from '@ixa/events'
 import { createAiWiring } from './ai/ai-wiring.js'
+import { createAuth } from './auth/create-auth.js'
 import { createApp } from './app.js'
 import { createFinderOpener } from './render-folder/finder-opener.js'
 import { createLogger, type Logger } from './logger.js'
@@ -292,7 +294,15 @@ export const main = (): void => {
   const voiceJobs = createVoiceJobRepository(db)
   const timelineClips = createTimelineClipRepository(db)
   const textStyles = createTextStyleRepository(db)
+  // 門（認証）。**合言葉が無ければここで止まる**（門を開けたまま LAN に待ち受けない）。
+  const auth = createAuth({
+    passphrase: config.api.passphrase,
+    tokens: createAccessTokenRepository(db),
+    allowedOrigins: config.corsOrigins,
+    logger,
+  })
   const app = createApp({
+    auth,
     narration: {
       projects: projectRepository,
       voices: createVoiceProfileRepository(db),

@@ -35,10 +35,13 @@ const collectRoutes = (dir: string, segments: readonly string[] = []): readonly 
 
 const EXPECTED_ROUTES: readonly string[] = [
   '/',
+  // 認証（2026-10-09）: Claude・Codex に渡す鍵の管理と、合言葉の入り口。
+  '/access-keys',
   '/characters',
   '/characters/[id]',
   '/characters/new',
   '/library',
+  '/login',
   '/projects/[id]',
   '/projects/new',
 ]

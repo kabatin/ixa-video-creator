@@ -18,6 +18,8 @@ export type SiteNavEntry = {
  */
 export const SITE_NAV_ENTRIES: readonly SiteNavEntry[] = Object.freeze([
   { id: 'projects', href: '/', label: 'プロジェクト一覧' },
+  // Claude・Codex（MCP）に渡す鍵（認証。2026-10-09）。
+  { id: 'access-keys', href: '/access-keys', label: 'アクセス用の鍵' },
 ])
 
 /** 新規プロジェクトの入口。ここだけが URL を知っている。 */

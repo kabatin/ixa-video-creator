@@ -107,7 +107,8 @@ export const useProjectEvents = ({
 
     const connect = (): void => {
       if (disposed) return
-      const opened = new EventSource(url)
+      // 合言葉で入ったクッキーを付ける（認証）。EventSource はヘッダを付けられないので、クッキーで通す。
+      const opened = new EventSource(url, { withCredentials: true })
       source = opened
 
       opened.addEventListener(READY_EVENT, () => {

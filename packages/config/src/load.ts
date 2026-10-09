@@ -126,6 +126,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     api: {
       port: parsed.API_PORT,
       host: parsed.API_HOST,
+      passphrase: parsed.IXA_PASSPHRASE ?? null,
     },
     audio: {
       url: parsed.AUDIO_SERVICE_URL,

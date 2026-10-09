@@ -10,6 +10,9 @@ const urlString = z.string().url()
 /** 署名の鍵の最低の長さ。`packages/storage` の `MIN_SIGNING_SECRET_LENGTH` と同じ値。 */
 export const MIN_STORAGE_SIGNING_SECRET_LENGTH = 32
 
+/** 合言葉の最短の長さ（認証）。短いと LAN の中で当てられる。 */
+export const MIN_PASSPHRASE_LENGTH = 12
+
 /** "true" / "false" の文字列を boolean へ変換する。 */
 const booleanFromString = z.enum(['true', 'false']).transform((value) => value === 'true')
 
@@ -45,6 +48,19 @@ export const EnvSchema = z.object({
    *
    * 短い鍵のまま動かすと、署名があるのに破れる。`fs` で未設定なら起動時に止める（storage.ts）。
    */
+  /**
+   * API に入る合言葉（認証）。**12 文字以上。** 空なら未設定。
+   *
+   * worker は API を通らないので要らない。**API は未設定なら起動しない**（`apps/api/src/main.ts`）。
+   * 画面で入れると、その端末は 30 日入ったままになる。
+   */
+  IXA_PASSPHRASE: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v))
+    .refine((v) => v === undefined || v.length >= MIN_PASSPHRASE_LENGTH, {
+      message: `${String(MIN_PASSPHRASE_LENGTH)} 文字以上で書いてください`,
+    })
+    .optional(),
   STORAGE_SIGNING_SECRET: z
     .string()
     .transform((v) => (v.trim() === '' ? undefined : v))
@@ -297,8 +313,10 @@ export interface AppConfig {
   }
   api: {
     port: number
-    /** 待ち受けアドレス。既定は `127.0.0.1`。認証が無いので既定を広げない。 */
+    /** 待ち受けアドレス。既定は `127.0.0.1`（LAN の中は HTTP なので、使わないときは広げない）。 */
     host: string
+    /** 合言葉。**null なら API は起動しない。** */
+    passphrase: string | null
   }
   corsOrigins: readonly string[]
   audio: {

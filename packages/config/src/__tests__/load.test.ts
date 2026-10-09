@@ -492,3 +492,22 @@ describe('loopbackAssetUrlWarning', () => {
     expect(loopbackAssetUrlWarning(host, url)).toBeNull()
   })
 })
+
+/** 認証（2026-10-09）。合言葉は API だけが使う。worker は持たなくても起動する。 */
+describe('合言葉（IXA_PASSPHRASE）', () => {
+  it('書けば API の設定に入る', () => {
+    expect(loadConfig({ ...requiredEnv, IXA_PASSPHRASE: 'correct horse battery' }).api.passphrase).toBe(
+      'correct horse battery',
+    )
+  })
+
+  it('書かなければ null（設定の読み込みは止めない。止めるのは API の起動）', () => {
+    expect(loadConfig({ ...requiredEnv }).api.passphrase).toBeNull()
+    expect(loadConfig({ ...requiredEnv, IXA_PASSPHRASE: '   ' }).api.passphrase).toBeNull()
+  })
+
+  it('12 文字より短い合言葉は受けない', () => {
+    // 理由の文は他の鍵と同じく「不正な値」にまとめて出る（値そのものは出さない）。
+    expect(() => loadConfig({ ...requiredEnv, IXA_PASSPHRASE: 'short-11ch' })).toThrow(/IXA_PASSPHRASE/)
+  })
+})

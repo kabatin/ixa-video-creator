@@ -65,8 +65,30 @@ export type ApiResponse<T> = { success: boolean; data?: T; error?: string }
 
 export const DEFAULT_API_BASE_URL = 'http://127.0.0.1:3001'
 
-export const resolveApiBaseUrl = (): string =>
-  process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_BASE_URL
+/**
+ * API の場所。**ブラウザの中では、いま開いているページと同じホストにする**（ポートと http/https は設定のまま）。
+ *
+ * 合言葉で入るとクッキーが付く（認証。2026-10-09）。クッキーはホストごとに分かれ、`SameSite=Lax` は
+ * 別のサイトへの呼び出しに付かない。`localhost:3000` で開いた画面が `macbookpro.local:3001` を呼ぶと、
+ * 入ったはずなのにクッキーが届かず 401 になる。ページと同じホストに揃えればどこから開いても届く。
+ * Next のサーバ側は設定のまま（クッキーは `server-api-client.ts` が明示して渡す）。
+ */
+export const resolveApiBaseUrl = (): string => {
+  const configured = process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_BASE_URL
+  if (typeof window === 'undefined') return configured
+  return sameHostAsPage(configured, window.location.hostname)
+}
+
+/** 設定の URL のホスト名だけを、ページのホスト名に差し替える。読めない設定はそのまま返す。 */
+export const sameHostAsPage = (configured: string, pageHostname: string): string => {
+  try {
+    const url = new URL(configured)
+    url.hostname = pageHostname
+    return url.toString().replace(/\/+$/u, '')
+  } catch {
+    return configured
+  }
+}
 
 export type ProjectApi = {
   listProjects: (workspaceId: string) => Promise<Project[]>
@@ -150,8 +172,16 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
 
 const shotPath = (id: ShotId, suffix = ''): string => `/shots/${encodeURIComponent(id)}${suffix}`
 
-export const createApiClient = (baseUrl: string = resolveApiBaseUrl()): ApiClient => {
-  const requester = createRequester(baseUrl)
+export type ApiClientOptions = {
+  /** Next のサーバ側から呼ぶときに、来た要求のクッキーをそのまま渡す（`server-api-client.ts`）。 */
+  readonly cookie?: string
+}
+
+export const createApiClient = (
+  baseUrl: string = resolveApiBaseUrl(),
+  options: ApiClientOptions = {},
+): ApiClient => {
+  const requester = createRequester(baseUrl, options)
 
   const projectApi: ProjectApi = {
     listProjects: async (workspaceId: string): Promise<Project[]> => {

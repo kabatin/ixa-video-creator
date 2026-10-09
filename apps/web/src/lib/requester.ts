@@ -24,12 +24,17 @@ export type Requester = {
   readonly remove: (path: string) => Promise<void>
 }
 
-const initFor = (method: string, body: unknown): RequestInit =>
-  body === undefined
-    ? { method, headers: jsonHeaders }
-    : { method, headers: jsonHeaders, body: JSON.stringify(body) }
+export type RequesterOptions = {
+  /** Next のサーバ側から呼ぶときのクッキー（ブラウザの中では要らない。ブラウザが付ける）。 */
+  readonly cookie?: string
+}
 
-export const createRequester = (baseUrl: string): Requester => {
+export const createRequester = (baseUrl: string, options: RequesterOptions = {}): Requester => {
+  const headers: Readonly<Record<string, string>> =
+    options.cookie === undefined || options.cookie === '' ? jsonHeaders : { ...jsonHeaders, cookie: options.cookie }
+  const initFor = (method: string, body: unknown): RequestInit =>
+    body === undefined ? { method, headers } : { method, headers, body: JSON.stringify(body) }
+
   const call = async <T>(
     method: string,
     path: string,
@@ -51,7 +56,7 @@ export const createRequester = (baseUrl: string): Requester => {
     getOrNull: async (path, schema) => {
       const url = joinUrl(baseUrl, path)
       const context = `GET ${url}`
-      const raw = await send(url, { method: 'GET', headers: jsonHeaders })
+      const raw = await send(url, { method: 'GET', headers })
       if (raw.status === 404) return null
       ensureOk(raw, context)
       return unwrap(schema, raw, context)
@@ -65,7 +70,7 @@ export const createRequester = (baseUrl: string): Requester => {
 
     remove: async (path) => {
       const url = joinUrl(baseUrl, path)
-      const raw = await send(url, { method: 'DELETE', headers: jsonHeaders })
+      const raw = await send(url, { method: 'DELETE', headers })
       ensureOk(raw, `DELETE ${url}`)
     },
   }

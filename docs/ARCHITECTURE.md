@@ -1057,6 +1057,7 @@ generation_jobs
 takes                        (JSONB: spec / provider_params。追記のみ)
 image_generation_jobs        (絵コンテの画像を作るジョブ。Shot の最初のフレームになる / ADR-0029。追記のみ)
 upscale_jobs                 (出来た Take の解像度を上げるジョブ / ADR-0044。仕様を持たないので generation_jobs と別。追記のみ)
+access_tokens                (API に入る鍵 / 合言葉で入った端末と自動化用の鍵。鍵はハッシュだけ。取り消しは revoked_at、行は消さない)
 review_runs
 review_findings
 storyboard_draft_runs        (絵コンテ下書きの実行 1 回分)

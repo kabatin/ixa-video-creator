@@ -4,8 +4,9 @@ import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
 import { ProjectList } from '@/components/project-list'
 import { ProjectListActions } from '@/components/project-list-actions'
-import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
+import { resolveApiBaseUrl, type ApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import { createServerApiClient, redirectIfUnauthenticated } from '@/lib/server-api-client'
 import { pickProjectCover, type PosterView } from '@/lib/shot-posters'
 import { NEW_PROJECT_HREF } from '@/lib/site-nav'
 import { resolveWorkspaceId } from '@/lib/workspace'
@@ -18,10 +19,11 @@ type LoadResult =
   | { readonly ok: false; readonly message: string }
 
 /** API 障害でページを落とさない。失敗は必ず表示可能な値へ畳む。 */
-const loadProjects = async (workspaceId: WorkspaceId): Promise<LoadResult> => {
+const loadProjects = async (api: ApiClient, workspaceId: WorkspaceId): Promise<LoadResult> => {
   try {
-    return { ok: true, projects: await createApiClient().listProjects(workspaceId) }
+    return { ok: true, projects: await api.listProjects(workspaceId) }
   } catch (error) {
+    redirectIfUnauthenticated(error)
     return { ok: false, message: describeError(error) }
   }
 }
@@ -31,9 +33,9 @@ const loadProjects = async (workspaceId: WorkspaceId): Promise<LoadResult> => {
  * **取れなかったことは理由として残す。** 空の Map にすると「絵が無い」と区別がつかない。
  */
 const loadCovers = async (
+  api: ApiClient,
   projects: readonly Project[],
 ): Promise<ReadonlyMap<ProjectId, PosterView>> => {
-  const api = createApiClient()
   const entries = await Promise.all(
     projects.map(async (project): Promise<readonly [ProjectId, PosterView]> => {
       try {
@@ -72,8 +74,9 @@ const ProjectsPage = async () => {
     )
   }
 
-  const result = await loadProjects(workspace.workspaceId)
-  const covers = result.ok ? await loadCovers(result.projects) : new Map<ProjectId, PosterView>()
+  const api = await createServerApiClient()
+  const result = await loadProjects(api, workspace.workspaceId)
+  const covers = result.ok ? await loadCovers(api, result.projects) : new Map<ProjectId, PosterView>()
 
   return (
     <main>

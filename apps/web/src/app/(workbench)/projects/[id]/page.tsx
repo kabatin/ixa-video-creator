@@ -9,8 +9,9 @@ import {
 } from '@ixa/domain'
 import { ErrorPanel } from '@/components/error-panel'
 import { ProjectWorkbench } from '@/components/workbench/project-workbench'
-import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
+import { resolveApiBaseUrl, type ApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import { createServerApiClient, redirectIfUnauthenticated } from '@/lib/server-api-client'
 import type { WireMusicAnalysis } from '@/lib/music-api'
 import { parseWorkbenchQuery } from '@/lib/workbench-url'
 
@@ -39,6 +40,7 @@ const attempt = async <T,>(label: string, run: () => Promise<T>): Promise<Part<T
   try {
     return { value: await run(), error: null }
   } catch (error) {
+    redirectIfUnauthenticated(error)
     return { value: null, error: `${label}を読み込めませんでした: ${describeError(error)}` }
   }
 }
@@ -67,15 +69,14 @@ type Music = {
 }
 
 /** 割り当てに使う楽曲は domain の `pickMasterTrack` だけが決める（lessons L-016）。 */
-const loadMusic = async (projectId: ProjectId): Promise<Music> => {
-  const api = createApiClient()
+const loadMusic = async (api: ApiClient, projectId: ProjectId): Promise<Music> => {
   const tracks: readonly MusicTrack[] = await api.listMusicTracks(projectId)
   const track = pickMasterTrack(tracks)
   return { track, analysis: track === null ? null : await api.getAnalysis(track.id) }
 }
 
-const loadLocations = async (project: Project): Promise<readonly Location[]> =>
-  createApiClient().listLocations(project.id)
+const loadLocations = async (api: ApiClient, project: Project): Promise<readonly Location[]> =>
+  api.listLocations(project.id)
 
 const WorkbenchPage = async ({ params, searchParams }: WorkbenchPageProps) => {
   const [{ id }, rawQuery] = await Promise.all([params, searchParams])
@@ -92,7 +93,8 @@ const WorkbenchPage = async ({ params, searchParams }: WorkbenchPageProps) => {
     )
   }
 
-  const project = await attempt('プロジェクト', () => createApiClient().getProject(projectId.data))
+  const api = await createServerApiClient()
+  const project = await attempt('プロジェクト', () => api.getProject(projectId.data))
   if (project.error !== null) {
     return (
       <Blocked
@@ -117,12 +119,10 @@ const WorkbenchPage = async ({ params, searchParams }: WorkbenchPageProps) => {
 
   const loadedProject = project.value
   const [shots, music, sequences, locations] = await Promise.all([
-    attempt<readonly Shot[]>('Shot', () => createApiClient().listShots(projectId.data)),
-    attempt('楽曲と解析', () => loadMusic(projectId.data)),
-    attempt<readonly Sequence[]>('シーケンス', () =>
-      createApiClient().listSequences(projectId.data),
-    ),
-    attempt('ロケーション', () => loadLocations(loadedProject)),
+    attempt<readonly Shot[]>('Shot', () => api.listShots(projectId.data)),
+    attempt('楽曲と解析', () => loadMusic(api, projectId.data)),
+    attempt<readonly Sequence[]>('シーケンス', () => api.listSequences(projectId.data)),
+    attempt('ロケーション', () => loadLocations(api, loadedProject)),
   ])
 
   const loadErrors = [shots.error, music.error, sequences.error, locations.error].filter(

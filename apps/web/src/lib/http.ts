@@ -21,10 +21,28 @@ export const jsonHeaders: Readonly<Record<string, string>> = {
 export const joinUrl = (baseUrl: string, path: string): string =>
   `${baseUrl.replace(/\/+$/u, '')}${path}`
 
+/** 入り口の画面。 */
+export const LOGIN_PATH = '/login'
+
+/**
+ * 鍵が無い・切れたら、ブラウザの中では入り口へ送る（いた場所を `next` に持たせる）。
+ * **入る口・出る口そのものへの 401 では送らない**（合言葉のまちがいで画面が飛ぶと、理由が読めない）。
+ * Next のサーバ側では何もしない（サーバ側の画面が自分で `redirect` する）。
+ */
+const sendToLogin = (url: string): void => {
+  if (typeof window === 'undefined') return
+  if (new URL(url).pathname.startsWith('/auth/')) return
+  if (window.location.pathname === LOGIN_PATH) return
+  const next = `${window.location.pathname}${window.location.search}`
+  window.location.assign(`${LOGIN_PATH}?next=${encodeURIComponent(next)}`)
+}
+
 export const send = async (url: string, init: RequestInit): Promise<RawResponse> => {
   const method = init.method ?? 'GET'
   try {
-    const response = await fetch(url, { ...init, cache: 'no-store' })
+    // クッキーを付けて送る（認証）。画面と API はポートが違うので、既定の same-origin では付かない。
+    const response = await fetch(url, { ...init, cache: 'no-store', credentials: 'include' })
+    if (response.status === 401) sendToLogin(url)
     return { status: response.status, ok: response.ok, text: await response.text() }
   } catch (cause) {
     throw new ApiError(

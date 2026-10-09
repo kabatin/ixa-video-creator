@@ -2,6 +2,7 @@ import { createPhase1EmptyContextSource, ModelId, ProviderId, type GenerationJob
 import { createProviderRegistry, type VideoProvider } from '@ixa/provider-core'
 import { createMemoryStorage } from '@ixa/storage'
 import type { AppDeps } from '../app.js'
+import { openAuthForTests } from '../auth/create-auth.js'
 import { createLogger } from '../logger.js'
 import type { GenerationQueue } from '../routes/shots.js'
 import { createInMemoryGenerationJobRepository } from './in-memory-generation-job-repository.js'
@@ -113,6 +114,8 @@ export const createRecordingReviewQueue = (): RecordingReviewQueue => {
 }
 
 export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps => ({
+  // 誰でも通す門（ルートのテスト用）。本物の門は `auth.test.ts` と `auth-wiring.test.ts` が確かめる。
+  auth: openAuthForTests(),
   projects: createInMemoryProjectRepository(),
   mediaAssets: createInMemoryMediaAssetRepository(),
   shots: createInMemoryShotRepository(),

@@ -119,6 +119,12 @@ const storageSecrets = (config: AppConfig): readonly SecretStatus[] =>
 export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
   secrets: [
     secretStatus(
+      '合言葉',
+      'IXA_PASSPHRASE',
+      config.api.passphrase,
+      'この画面に入るときに聞かれる。未設定だと API が起動しない。',
+    ),
+    secretStatus(
       'fal.ai（映像生成）',
       'FAL_API_KEY',
       config.providers.falApiKey,

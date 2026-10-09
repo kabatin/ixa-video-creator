@@ -8,8 +8,9 @@ import Link from 'next/link'
 import { CharacterWorkbench } from '@/components/character-workbench'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
-import { createApiClient, resolveApiBaseUrl } from '@/lib/api-client'
+import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import { createServerApiClient, redirectIfUnauthenticated } from '@/lib/server-api-client'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,7 @@ type LoadResult =
 
 /** 失敗は必ず表示可能な値へ畳み、ページを落とさない。 */
 const loadCharacter = async (id: CharacterId): Promise<LoadResult> => {
-  const client = createApiClient()
+  const client = await createServerApiClient()
   try {
     const character = await client.getCharacter(id)
     if (character === null) {
@@ -44,6 +45,7 @@ const loadCharacter = async (id: CharacterId): Promise<LoadResult> => {
     ])
     return { ok: true, character, identityImages, looks }
   } catch (error) {
+    redirectIfUnauthenticated(error)
     return {
       ok: false,
       title: 'キャラクターを読み込めませんでした',

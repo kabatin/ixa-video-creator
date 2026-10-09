@@ -1,4 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
+import type { MiddlewareHandler } from 'hono'
 import { cors } from 'hono/cors'
 import type {
   GenerationJobRepository,
@@ -183,7 +184,18 @@ export type AppDeps = {
   files?: FileRoutesDeps
   /** CORS で許可するオリジン。空なら CORS を有効にしない。 */
   corsOrigins: readonly string[]
+  /**
+   * 門（認証。2026-10-09）。**省略できない。** 省略できる形にすると、付け忘れが「全部通す」に化ける。
+   * 本物は `main.ts` が `createAuth` で組む。ルートのテストは `__tests__/app-deps.ts` の開いた門を使う。
+   */
+  auth: AppAuth
   logger: Logger
+}
+
+/** 門と、入る・出る・鍵の管理の口。 */
+export type AppAuth = {
+  readonly gate: MiddlewareHandler
+  readonly routes: OpenAPIHono
 }
 
 /**
@@ -207,11 +219,20 @@ export const createApp = (deps: AppDeps) => {
         origin: [...deps.corsOrigins],
         // 画面の Requester が使うメソッドはすべて（PUT を落としていて「使う AI」の保存と最初のフレームが止まっていた）。
         allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-        allowHeaders: ['Content-Type'],
+        // 自動化用の鍵（Bearer）を送れるように。
+        allowHeaders: ['Content-Type', 'Authorization'],
+        // 合言葉で入ったクッキーを、画面（別のポート）からの呼び出しに付けさせる（認証）。
+        // これが無いと、画面が `credentials: 'include'` で呼んだ応答をブラウザが捨てる。
+        credentials: true,
         maxAge: 600,
       }),
     )
   }
+
+  // **門は CORS の下見のあと、すべての口の前。** 下見（OPTIONS）はクッキーを付けずに来るので、
+  // 門より先に CORS が答える。門の外に置くもの（/health・/files・入る口）は門の中で見分ける。
+  app.use('*', deps.auth.gate)
+  app.route('/', deps.auth.routes)
 
   app.route('/', healthRoutes())
   // 置き場が fs のときだけ。位置は @ixa/storage の定数（署名を作る側と同じものを読む）。

@@ -48,6 +48,8 @@ export const NarrationLineId = brandedId('NarrationLineId')
 export const NarrationTakeId = brandedId('NarrationTakeId')
 export const VoiceJobId = brandedId('VoiceJobId')
 export const UpscaleJobId = brandedId('UpscaleJobId')
+/** 合言葉で入った端末の鍵・自動化用の鍵（認証）。**鍵そのものではなく、表の行の番号。** */
+export const AccessTokenId = brandedId('AccessTokenId')
 
 export type WorkspaceId = z.infer<typeof WorkspaceId>
 export type ProjectId = z.infer<typeof ProjectId>
@@ -83,6 +85,7 @@ export type NarrationLineId = z.infer<typeof NarrationLineId>
 export type NarrationTakeId = z.infer<typeof NarrationTakeId>
 export type VoiceJobId = z.infer<typeof VoiceJobId>
 export type UpscaleJobId = z.infer<typeof UpscaleJobId>
+export type AccessTokenId = z.infer<typeof AccessTokenId>
 
 /**
  * ID の発行器。**同じミリ秒でも必ず増える**（`monotonicFactory`）。
