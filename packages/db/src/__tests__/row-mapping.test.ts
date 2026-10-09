@@ -53,9 +53,12 @@ const INTERNAL_COLUMNS = new Set(['deletedAt'])
 /**
  * そのリポジトリだけ写さない列。全体の例外に入れると、ほかの表で写し忘れても気づけなくなるので分ける。
  * - 作品の音の設定（ADR-0038）: 行が無い作品は既定を返すので、更新した時刻は Domain に持たない
+ * - API に入る鍵（ADR-0046）: **鍵のハッシュは Domain に出さない**（Domain の鍵は API の応答と画面に流れる）。
+ *   引くときは `findByHash` がハッシュで探すので、写さなくても困らない
  */
 const INTERNAL_COLUMNS_BY_FILE: Readonly<Record<string, readonly string[]>> = {
   'project-audio-settings-repository.ts': ['updatedAt'],
+  'access-token-repository.ts': ['tokenHash'],
 }
 
 /**
