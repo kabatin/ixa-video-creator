@@ -54,6 +54,11 @@ export type TimelineSource = {
   /** Shot の採用 Take のメディア URL を引く。未生成の Shot は undefined を返してよい。 */
   readonly resolveShotMedia: (shot: Shot) => string | undefined
   /**
+   * 採用 Take の素材 ID（ADR-0045）。書き出しの直前に大きさを引いて、Project と違うものだけ拡大する。
+   * 省略すれば文書に載せない（A/B 比較など、書き出さない口）。
+   */
+  readonly resolveShotMediaAssetId?: (shot: Shot) => MediaAssetId | undefined
+  /**
    * 採用 Take の長さ（秒）。尺に合わせる速度と「Take が足りない」の検査に使う（ADR-0026）。
    * 省略・null は「分からない」。分からなければ速度は 1 にし、足りないとも言わない。
    */
@@ -108,6 +113,8 @@ const toRenderableClip = (
     content: {
       type: 'media',
       mediaUrl: resolved.url,
+      // 書き出しの直前に大きさを引くため（ADR-0045）。DB のクリップが元から持っている。
+      mediaAssetId: clip.content.mediaAssetId,
       kind: resolved.kind,
       inSec: clip.content.inSec,
       outSec: clip.content.outSec,
@@ -163,12 +170,14 @@ const buildVideo1 = (source: TimelineSource): TimelineDocument['video1'] =>
       ]
     }
     const playbackRate = shotPlaybackRate(shot, source.resolveShotMediaDurationSec?.(shot) ?? null)
+    const mediaAssetId = source.resolveShotMediaAssetId?.(shot)
     return [
       {
         shotId: shot.id,
         startSec: shot.startSec,
         durationSec: shot.durationSec,
         mediaUrl,
+        ...(mediaAssetId === undefined ? {} : { mediaAssetId }),
         inSec: shot.sourceInSec,
         // 1 のときは書かない。速度を変えない Shot の文書は今までと同じ形のまま。
         ...(playbackRate === 1 ? {} : { playbackRate }),

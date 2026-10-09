@@ -228,6 +228,9 @@ importers:
       '@ixa/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@ixa/timeline':
+        specifier: workspace:*
+        version: link:../../packages/timeline
       bullmq:
         specifier: ^6.3.6
         version: 6.3.6(ioredis@5.11.1)

@@ -68,6 +68,11 @@ export const RenderableClipContent = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('media'),
     mediaUrl: z.string(),
+    /**
+     * 元の素材（ADR-0045）。書き出しの直前に、大きさが Project と違う素材だけを拡大するのに使う。
+     * **省略可能にして version は 1 のまま**（無ければ「分からない＝触らない」）。
+     */
+    mediaAssetId: MediaAssetId.optional(),
     /** OffthreadVideo と Img の分岐に使う。拡張子で推測しない。 */
     kind: z.enum(['image', 'video', 'audio']),
     inSec: Seconds,
@@ -120,6 +125,12 @@ export const TimelineDocument = z.object({
       startSec: Seconds,
       durationSec: Seconds,
       mediaUrl: z.string(),
+      /**
+       * 採用 Take の素材（ADR-0045）。書き出しの直前に、大きさが Project と違う素材だけを拡大するのに使う。
+       * 絵コンテの画像（`kind: 'image'`）には付けない。**省略可能にして version は 1 のまま**
+       * （前からの書き出しの記録には無い。無ければ「分からない＝触らない」）。
+       */
+      mediaAssetId: MediaAssetId.optional(),
       inSec: Seconds,
       /**
        * 再生速度（ADR-0026）。尺に合わせる Shot だけが持つ。**無ければ 1**。

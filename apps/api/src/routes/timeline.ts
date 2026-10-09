@@ -260,6 +260,12 @@ export const loadTimelineSource = async (
       const assetId = shotAssetIds.get(shot.id)
       return assetId === undefined ? undefined : media.get(assetId)?.url
     },
+    // 書き出しの直前に大きさを引いて、Project と違う素材だけ拡大する（ADR-0045）。
+    // URL が引けた素材だけ載せる（URL が無ければ映らないので、ID だけ載せても意味が無い）。
+    resolveShotMediaAssetId: (shot) => {
+      const assetId = shotAssetIds.get(shot.id)
+      return assetId !== undefined && media.has(assetId) ? assetId : undefined
+    },
     // 尺に合わせた速度と「Take が足りない」の検査に使う（ADR-0026）。分からなければ null（0 と読み違えない）。
     resolveShotMediaDurationSec: (shot) => {
       const assetId = shotAssetIds.get(shot.id)

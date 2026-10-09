@@ -12,10 +12,11 @@ import {
   type TimelineRenderer,
 } from '@ixa/domain'
 import type { LoudnessMeasurement } from '@ixa/media'
-import { PRESET_SETTINGS } from '@ixa/render'
+import { PRESET_SETTINGS, presetResolution } from '@ixa/render'
 import { renderKey, type ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import { z } from 'zod'
+import type { PrepareMedia } from './prepare-media.js'
 import { createProgressReporter } from './progress.js'
 
 /**
@@ -66,6 +67,11 @@ export type RenderProcessorDeps = {
    * 音が無ければ書かずに null。テストで ffmpeg を使わないための差し込み口。
    */
   readonly normalizeLoudness: (input: string, output: string, audioBitrate: string) => Promise<LoudnessMeasurement | null>
+  /**
+   * 書き出しの直前に、枠より小さい映像だけ Lanczos で拡大する（ADR-0045 段 3）。
+   * 拡大が要る素材が無ければ文書をそのまま返す（いまの素材はすべてそう）。
+   */
+  readonly prepareMedia: PrepareMedia
 }
 
 export type RenderOutcome =
@@ -218,14 +224,21 @@ const render = async (
 
   const progress = createProgressWriter(deps, job)
 
+  // **timelineSnapshot から組む。DB から組み直さない。**
+  // 組み直すと、レンダリング中の編集が出力に混ざって再現できなくなる。
+  // 変えるのは、枠より小さい映像の URL を手元で拡大したものへ差し替えることだけ（ADR-0045）。
+  const prepared = await deps.prepareMedia(job.timelineSnapshot, presetResolution(job.preset))
+
   let result: RenderResult
   try {
-    // **timelineSnapshot をそのまま渡す。DB から組み直さない。**
-    // 組み直すと、レンダリング中の編集が出力に混ざって再現できなくなる。
-    result = await deps.renderer.render(job.timelineSnapshot, job.preset, progress.report)
+    result = await deps.renderer.render(prepared.document, job.preset, progress.report)
   } finally {
     // 失敗しても、そこまでの進捗は書き切ってから抜ける。
     await progress.drain()
+    // 片付けの失敗で書き出しの結果（や本当の失敗理由）を上書きしない。
+    await prepared.release().catch((error: unknown) => {
+      deps.logger.error({ jobId: job.id, err: error }, '書き出しの前に拡大した一時ファイルを片付けられませんでした')
+    })
   }
 
   const { output, loudnessLufs } = await normalizeOutput(deps, job, result)

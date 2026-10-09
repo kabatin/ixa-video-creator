@@ -32,6 +32,7 @@
     "@ixa/render": "workspace:*",
     "@ixa/review": "workspace:*",
     "@ixa/storage": "workspace:*",
+    "@ixa/timeline": "workspace:*",
     "bullmq": "^6.3.6",
     "ioredis": "^5.11.1",
     "pino": "^10.3.1",

@@ -1,3 +1,4 @@
+import { MediaAssetId } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import { buildTimelineDocument } from '../build.js'
 import { makeClip, makeMediaClip, makeShot, makeSource, shotId, snapshot } from './fixtures.js'
@@ -62,6 +63,47 @@ describe('buildTimelineDocument', () => {
 
     expect(document.video1[0]?.mediaUrl).toBe('https://media.test/S1.mp4')
     expect(document.video1[0]).not.toHaveProperty('kind')
+  })
+
+  /**
+   * ADR-0045。書き出しの直前に、大きさが Project と違う素材だけを拡大する。
+   * 大きさを引くには素材 ID が要る（文書の URL からは引けない）。
+   */
+  describe('素材 ID（書き出しの直前の拡大に使う）', () => {
+    const ASSET = MediaAssetId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAW')
+
+    it('引ける口があれば、採用 Take の素材 ID を載せる', () => {
+      const document = buildTimelineDocument(
+        makeSource({ shots: [makeShot(1, 0, 4)], resolveShotMediaAssetId: () => ASSET }),
+      )
+      expect(document.video1[0]?.mediaAssetId).toBe(ASSET)
+    })
+
+    it('口が無ければ載せない（文書は今までと同じ形）', () => {
+      const document = buildTimelineDocument(makeSource({ shots: [makeShot(1, 0, 4)] }))
+      expect(document.video1[0]).not.toHaveProperty('mediaAssetId')
+    })
+
+    it('絵コンテの画像には載せない（拡大の対象ではない）', () => {
+      const document = buildTimelineDocument(
+        makeSource({
+          shots: [makeShot(1, 0, 4)],
+          resolveShotMedia: () => undefined,
+          resolveShotStill: (shot) => `https://media.test/${shot.code}.png`,
+          resolveShotMediaAssetId: () => ASSET,
+        }),
+      )
+      expect(document.video1[0]?.kind).toBe('image')
+      expect(document.video1[0]).not.toHaveProperty('mediaAssetId')
+    })
+
+    it('メディアのクリップは DB のクリップが持つ素材 ID を載せる', () => {
+      const document = buildTimelineDocument(makeSource({ clips: [makeMediaClip(1, 'VIDEO2', 0, 4)] }))
+      expect(document.clips[0]?.content).toMatchObject({
+        type: 'media',
+        mediaAssetId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      })
+    })
   })
 
   it('sourceInSec が inSec に入る（ADR-0011 のトリム位置）', () => {

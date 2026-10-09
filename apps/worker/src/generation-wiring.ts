@@ -1,4 +1,4 @@
-import { normalizeProgramLoudness } from '@ixa/media'
+import { normalizeProgramLoudness, upscaleForRender } from '@ixa/media'
 import { join } from 'node:path'
 import { createProviderRegistry } from '@ixa/provider-core'
 import { createGenerationContextSource } from '@ixa/generation'
@@ -52,6 +52,7 @@ import {
 } from './generation/index.js'
 import type { MediaProcessorDeps } from './media/index.js'
 import type { RenderProcessorDeps } from './render/index.js'
+import { createMediaPreparer } from './render/prepare-media.js'
 import { createReviewWiring, type ReviewWiring } from './review-wiring.js'
 import { createImageWiring } from './image-wiring.js'
 import { createUpscaleWiring } from './upscale-wiring.js'
@@ -276,9 +277,10 @@ export const createGenerationWiring = (
     logger,
   }
 
+  const renderMediaAssets = createMediaAssetRepository(db)
   const render: RenderProcessorDeps = {
     renderJobs: createRenderJobRepository(db),
-    mediaAssets: createMediaAssetRepository(db),
+    mediaAssets: renderMediaAssets,
     projects: createProjectRepository(db),
     storage,
     // Remotion を既定にする（ADR-0010）。個人利用のため無償。
@@ -297,6 +299,13 @@ export const createGenerationWiring = (
     logger,
     // 書き出しの音量を -14 LUFS に揃える（ADR-0039）。
     normalizeLoudness: normalizeProgramLoudness,
+    // 枠より小さい映像は、Chrome に拡大させず先に Lanczos で拡大する（ADR-0045 段 3）。
+    prepareMedia: createMediaPreparer({
+      mediaAssets: renderMediaAssets,
+      storage,
+      upscale: upscaleForRender,
+      logger,
+    }),
   }
 
   /**

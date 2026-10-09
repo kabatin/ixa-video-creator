@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { RenderJobId as RenderJobIdSchema, newId, type Project, type RenderJob } from '@ixa/domain'
+import { RenderJobId as RenderJobIdSchema, newId, type Project, type RenderJob, type TimelineDocument } from '@ixa/domain'
 import { createMemoryStorage, renderKey } from '@ixa/storage'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { processRenderJob, type RenderProcessorDeps } from '../processor.js'
@@ -47,6 +47,11 @@ type FixtureOptions = {
   readonly normalizeLoudness?: boolean
   /** 揃える口の結果。既定は「音が無い」（偽のレンダラの出力は音を持たない）。 */
   readonly loudness?: 'normalized' | 'no_audio' | Error
+  /**
+   * 書き出しの直前の拡大（ADR-0045）。既定は「拡大が要らない」（文書をそのまま返す）。
+   * `replace` は URL を差し替えた新しい文書を返す。`releaseFails` は片付けだけ失敗する。
+   */
+  readonly prepare?: 'passthrough' | 'replace' | 'releaseFails' | Error
 }
 
 const NORMALIZED_BYTES = Buffer.from('normalized-mp4-bytes')
@@ -69,6 +74,9 @@ const buildFixture = async (options: FixtureOptions = {}) => {
   })
 
   const loudnessCalls: { input: string; output: string; audioBitrate: string }[] = []
+  const prepareFrames: { width: number; height: number }[] = []
+  const prepared: TimelineDocument[] = []
+  let releases = 0
   const deps: RenderProcessorDeps = {
     renderJobs,
     mediaAssets,
@@ -85,10 +93,93 @@ const buildFixture = async (options: FixtureOptions = {}) => {
       await writeFile(output, NORMALIZED_BYTES)
       return { integratedLufs: -14.1, truePeakDb: -1.6 }
     },
+    prepareMedia: (doc, frame) => {
+      prepareFrames.push(frame)
+      const mode = options.prepare ?? 'passthrough'
+      if (mode instanceof Error) return Promise.reject(mode)
+      const document =
+        mode === 'replace'
+          ? { ...doc, video1: doc.video1.map((entry) => ({ ...entry, mediaUrl: 'http://127.0.0.1:1/up' })) }
+          : doc
+      prepared.push(document)
+      return Promise.resolve({
+        document,
+        upscaled: mode === 'replace' ? doc.video1.length : 0,
+        release: () => {
+          releases += 1
+          return mode === 'releaseFails' ? Promise.reject(new Error('片付けに失敗')) : Promise.resolve()
+        },
+      })
+    },
   }
 
-  return { deps, job, project, projects, renderJobs, mediaAssets, renderer, mediaQueue, loudnessCalls }
+  return {
+    deps,
+    job,
+    project,
+    projects,
+    renderJobs,
+    mediaAssets,
+    renderer,
+    mediaQueue,
+    loudnessCalls,
+    prepareFrames,
+    prepared,
+    releases: () => releases,
+  }
 }
+
+/** ADR-0045 段 3。書き出しの直前に、枠より小さい映像だけ Lanczos で拡大する。 */
+describe('processRenderJob の書き出しの直前の拡大', () => {
+  it('拡大の段が返した文書を書き出しに渡す。枠はプリセットの大きさ', async () => {
+    const { deps, job, renderer, prepared, prepareFrames } = await buildFixture({ prepare: 'replace' })
+
+    const outcome = await processRenderJob(deps, { renderJobId: job.id })
+
+    expect(outcome.state).toBe('succeeded')
+    expect(prepareFrames).toEqual([{ width: 1920, height: 1080 }])
+    expect(renderer.received()[0]).toBe(prepared[0])
+    expect(renderer.received()[0]?.video1[0]?.mediaUrl).toBe('http://127.0.0.1:1/up')
+  })
+
+  it('拡大が要らなければ、スナップショットそのものを渡す（今日の書き出しの経路）', async () => {
+    const { deps, job, renderer, renderJobs } = await buildFixture()
+
+    await processRenderJob(deps, { renderJobId: job.id })
+
+    expect(renderer.received()[0]).toEqual(renderJobs.snapshot()[0]?.timelineSnapshot)
+  })
+
+  it('書き出しが失敗しても一時ファイルを片付ける', async () => {
+    const { deps, job, releases } = await buildFixture({
+      prepare: 'replace',
+      renderer: { failWith: new Error('Chrome が落ちた') },
+    })
+
+    const outcome = await processRenderJob(deps, { renderJobId: job.id })
+
+    expect(outcome.state).toBe('failed')
+    expect(releases()).toBe(1)
+  })
+
+  it('片付けに失敗しても、書き出しの結果は成功のまま', async () => {
+    const { deps, job, releases } = await buildFixture({ prepare: 'releaseFails' })
+
+    const outcome = await processRenderJob(deps, { renderJobId: job.id })
+
+    expect(outcome.state).toBe('succeeded')
+    expect(releases()).toBe(1)
+  })
+
+  it('拡大に失敗したら、書き出しを始めずに failed にする', async () => {
+    const { deps, job, renderer } = await buildFixture({ prepare: new Error('ffmpeg が落ちた') })
+
+    const outcome = await processRenderJob(deps, { renderJobId: job.id })
+
+    expect(outcome.state).toBe('failed')
+    expect(renderer.calls()).toBe(0)
+  })
+})
 
 describe('processRenderJob', () => {
   it('レンダリングして出力を保存し、RenderJob を succeeded にする', async () => {
