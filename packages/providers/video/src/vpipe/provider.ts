@@ -40,12 +40,14 @@ const binding: LocalServerBinding<VpipeQuality> = {
    * H3 が作れるのは 17n+5 コマだけなので、**尺を切り上げてからコマ数へ戻して送る**（ADR-0031 §2）。
    * 戻せなければ投げる（近いコマ数へ黙って丸めない）。
    */
-  buildBody: ({ spec, model, quality }) =>
+  buildBody: ({ spec, model, quality, hasStartImage }) =>
     buildVpipeBody({
       spec,
       quality,
       frames: framesForDuration(quantizeDuration(spec.durationSec, model.capabilities.durations)),
+      // 画像は共通の層があとから足す。文面だけは「足すかどうか」で組む。
       startImage: null,
+      hasStartImage,
     }),
   /**
    * 送ったステップ数と、**本文の組み立ての版**を記録に残す。

@@ -40,6 +40,11 @@ export type BuildVpipeBody = {
   /** 切り上げ済みの尺から戻したコマ数（17n+5）。 */
   readonly frames: number
   readonly startImage: LocalServerImage | null
+  /**
+   * 開始画像を送るか（プロンプトの 1 行目が変わる）。**画像そのものとは別に受ける。**
+   * 投入では画像を取り寄せる前に本文を組むので、`startImage` は null でも画像は送られることがある。
+   */
+  readonly hasStartImage: boolean
 }
 
 /**
@@ -50,7 +55,11 @@ export type BuildVpipeBody = {
  * （検査が片方にしか無いと、どちらを通ったかで通る値が変わる）。
  */
 export const buildVpipeBody = (input: BuildVpipeBody): VpipeJobBody => {
-  const { spec, quality, frames, startImage } = input
+  const { spec, quality, frames, startImage, hasStartImage } = input
+  // 画像を渡しておきながら「画像なし」の文面で組むのは、h3-official-v1 で起きた取り違え。黙って通さない。
+  if (startImage !== null && !hasStartImage) {
+    throw new Error('開始画像を渡しているのに、文面を「画像なし」で組もうとしています')
+  }
   ensurePromptAndSeed(VPIPE_IDENTITY, spec)
 
   /**
@@ -60,7 +69,7 @@ export const buildVpipeBody = (input: BuildVpipeBody): VpipeJobBody => {
    */
   const prompt = buildH3Prompt({
     spec,
-    hasStartImage: startImage !== null,
+    hasStartImage,
     // 最後の画像を付ける画面がまだ無い（`end_image` は常に null）。
     hasEndImage: false,
   })

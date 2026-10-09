@@ -141,6 +141,30 @@ describe('submit', () => {
     expect(submitCallOf(calls)?.body).not.toContain('X-Amz-Signature')
   })
 
+  /**
+   * h3-official-v1 の取り違え（2026-10-09）。本文は画像を取り寄せる前に組むので、
+   * **画像を送っていても文面が「画像なし」になっていた**。上のテストは画像が送られることだけを見ていて、
+   * 文面を見ていなかったので気付けなかった。
+   */
+  it('開始画像を送るときは、文面の 1 行目に公式の参照の定型文を入れる', async () => {
+    const request = vpipeRequestFor(
+      spec({ references: [{ mediaAssetId: 'asset-1' as MediaAssetId, role: 'start_frame', weight: 1 }] }),
+    )
+    const { calls } = await submitWith(ACCEPTING, request)
+
+    expect(posted(calls).start_image).not.toBeNull()
+    expect(String(posted(calls).prompt).split('\n')[0]).toBe(
+      'For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.',
+    )
+  })
+
+  it('開始画像が無ければ、定型文を入れない', async () => {
+    const { calls } = await submitWith(ACCEPTING, vpipeRequestFor(spec()))
+
+    expect(posted(calls).start_image).toBeNull()
+    expect(String(posted(calls).prompt)).not.toContain('is fully referenced')
+  })
+
   it('start_frame が無ければ前の Shot の最後のフレームを開始画像にする', async () => {
     const request = vpipeRequestFor(
       spec({

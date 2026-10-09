@@ -199,6 +199,23 @@ describe('画像の形式', () => {
   })
 })
 
+describe('本文の組み立て: 開始画像の有無と文面（h3-official-v2）', () => {
+  const spec = () => makeSpec({ resolution: { width: 1920, height: 1080 } })
+  const IMAGE = { data: 'AAAA', media_type: 'image/png' as const }
+
+  it('画像を後から足す投入でも、足すと伝えれば 1 行目が入る', () => {
+    const body = buildVpipeBody({ spec: spec(), quality: 'draft', frames: 56, startImage: null, hasStartImage: true })
+    expect(body.prompt.startsWith('For the target video, at 0.00 seconds')).toBe(true)
+    expect(body.start_image).toBeNull()
+  })
+
+  it('画像を渡しながら「画像なし」で組もうとしたら投げる（v1 の取り違えを黙って通さない）', () => {
+    expect(() =>
+      buildVpipeBody({ spec: spec(), quality: 'draft', frames: 56, startImage: IMAGE, hasStartImage: false }),
+    ).toThrow(/画像なし/)
+  })
+})
+
 describe('本文の組み立て', () => {
   const build = (overrides: Parameters<typeof makeSpec>[0] = {}) =>
     buildVpipeBody({
@@ -206,6 +223,7 @@ describe('本文の組み立て', () => {
       quality: 'standard',
       frames: 107,
       startImage: null,
+      hasStartImage: false,
     })
 
   it('契約どおりの形になる（出力は Project の解像度そのもの・最後のフレームは常に null）', () => {

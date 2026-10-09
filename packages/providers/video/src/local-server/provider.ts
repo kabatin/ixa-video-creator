@@ -73,6 +73,12 @@ export type LocalServerBodyInput<Q extends string> = {
   readonly spec: ShotGenerationSpec
   readonly model: VideoModelDescriptor
   readonly quality: Q
+  /**
+   * 共通の層が `start_image` を足すか。**本文は画像を取り寄せる前に組む**ので、画像そのものは渡せない。
+   * それでもプロンプトは「開始画像があるか」で変わる（H3 の 1 行目。ADR-0042）ので、これで伝える。
+   * 以前はこれが無く、H3 は開始画像を送っていても「画像なし」の文面で組んでいた（h3-official-v1）。
+   */
+  readonly hasStartImage: boolean
 }
 
 /** サーバ 1 台分のモデルの宣言と、投入の本文の組み立て。 */
@@ -206,8 +212,14 @@ export const createLocalServerVideoProvider = <Q extends string>(
 
     // 画像より先に本文を組んで確かめる（プロンプトの長さなどで落ちるなら、画像を取り寄せる前に落とす）。
     ensurePromptAndSeed(identity, request.spec)
-    const bodyWithoutImage = binding.buildBody({ spec: request.spec, model, quality })
+    // **どの画像を使うかを先に決める。** 文面が「開始画像があるか」で変わるので、本文より先に要る。
     const { chosen, ignored } = selectStartReference(request.spec.references)
+    const bodyWithoutImage = binding.buildBody({
+      spec: request.spec,
+      model,
+      quality,
+      hasStartImage: chosen !== null,
+    })
 
     // 満杯なら、開始画像を取り寄せる前に断る（`ProviderBusyError`）。
     await ensureCapacity(http, settings.healthTimeoutMs)

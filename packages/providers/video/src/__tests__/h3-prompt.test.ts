@@ -29,11 +29,12 @@ const build = (spec: ShotGenerationSpec, hasStartImage = true, hasEndImage = fal
 
 describe('H3_PROMPT_FORMAT', () => {
   it('版を名乗る（Take にはこれだけ残る）', () => {
-    expect(H3_PROMPT_FORMAT).toBe('h3-official-v1')
+    // v2: 開始画像を送るときだけ 1 行目が入る（v1 は送っていても入っていなかった）。
+    expect(H3_PROMPT_FORMAT).toBe('h3-official-v2')
   })
 })
 
-describe('buildH3Prompt のゴールデン（h3-official-v1 を凍結する）', () => {
+describe('buildH3Prompt のゴールデン（文面の関数は v1 と v2 で同じ。凍結する）', () => {
   /** 画風・景別・1 コマ目・動作・直し・カメラが全部ある仕様。 */
   const rich = aSpec({
     durationSec: 5.167,
