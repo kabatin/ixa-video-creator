@@ -8,6 +8,7 @@ import {
 } from '@ixa/domain'
 import type { MediaAssetRepository, ProjectRepository, ShotRepository, TakeRepository, UpscaleJobRepository } from '@ixa/db'
 import { ProviderBusyError, type ProviderJobHandle, type VideoUpscaler } from '@ixa/provider-core'
+import { containScale, type FrameSize } from '@ixa/media'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import { recordTake, type RecordTakeDeps } from '../generation/complete.js'
@@ -103,17 +104,28 @@ const readSourceVideo = async (
   return Buffer.from(body).toString('base64')
 }
 
+/** 4:2:0 のため偶数へ切り下げる。 */
+const even = (value: number): number => Math.trunc(Math.round(value) / 2) * 2
+
 /**
- * 出す大きさは**元の Take と同じ**。
+ * 出す大きさ。**元が Project の枠より小さければ、枠に contain で収まる大きさまで上げる。**
+ *
+ * ADR-0045 段 4 から Take はネイティブ（final・16:9 なら 1344×756）で届く。元と同じ大きさを頼むと、
+ * 細部は増えても大きさは変わらず、書き出しでまた Lanczos で引き伸ばすことになる。
+ * 比は元のまま（書き出しの `objectFit: contain` と同じ。比の違う持ち込み素材を歪ませない）。
+ * 枠以上の元は元の大きさのまま（縮めない）。
+ *
  * **推測で埋めない。** 測れていない素材は、大きさを決めようがないので止める。
  */
-const outputSizeOf = (asset: MediaAsset): { readonly width: number; readonly height: number } => {
+const outputSizeOf = (asset: MediaAsset, frame: FrameSize): FrameSize => {
   const width = asset.probe?.width ?? null
   const height = asset.probe?.height ?? null
   if (width === null || height === null) {
     throw new UpscaleFailure('source_size_unknown', '元の映像の大きさが分かりませんでした。', false)
   }
-  return { width, height }
+  const scale = containScale({ width, height }, frame)
+  if (scale <= 1) return { width, height }
+  return { width: even(width * scale), height: even(height * scale) }
 }
 
 type Loaded = {
@@ -166,7 +178,7 @@ const submit = async (
   try {
     const submission = await deps.upscaler.submit({
       video: { data: await readSourceVideo(deps, loaded.sourceAsset), mediaType: 'video/mp4' },
-      output: outputSizeOf(loaded.sourceAsset),
+      output: outputSizeOf(loaded.sourceAsset, loaded.project.resolution),
       // 投げ直しても二重に作らせない。
       idempotencyKey: job.id,
     })

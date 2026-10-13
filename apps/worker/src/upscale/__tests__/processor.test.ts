@@ -150,12 +150,17 @@ const buildFixture = async (options: {
   readonly upscaler?: VideoUpscaler
   readonly lease?: LocalGpuLease
   readonly jobOverrides?: Partial<UpscaleJob>
+  readonly sourceSize?: { readonly width: number; readonly height: number }
 } = {}) => {
   const project = aProject()
   const shot = aShot(project)
   // 素材と Take は相互に参照するので、先に ID を採番して循環を断つ（本番と同じ順）。
   const sourceTakeId = newId(TakeId)
-  const asset = aMediaAsset(project, sourceTakeId)
+  const base = aMediaAsset(project, sourceTakeId)
+  const asset =
+    options.sourceSize === undefined || base.probe === null
+      ? base
+      : { ...base, probe: { ...base.probe, ...options.sourceSize } }
   const source = aSourceTake(shot, sourceTakeId, asset.id)
 
   const mediaAssets = inMemoryMediaAssets()
@@ -220,6 +225,26 @@ describe('投入', () => {
       output: { width: 1920, height: 1080 },
       video: { mediaType: 'video/mp4' },
     })
+  })
+
+  /**
+   * ADR-0045 段 4 から Take はネイティブ（final・16:9 なら 1344×756）で届く。
+   * 元と同じ大きさを頼むと、細部は増えても大きさは 1344×756 のままになる。
+   */
+  it('元が Project の解像度より小さければ、Project の解像度で頼む', async () => {
+    const f = await buildFixture({ sourceSize: { width: 1344, height: 756 } })
+    await processUpscaleJob(f.deps, { upscaleJobId: f.job.id })
+
+    const [request] = (f.upscaler as ReturnType<typeof stubUpscaler>).submitted()
+    expect(request).toMatchObject({ output: { width: 1920, height: 1080 } })
+  })
+
+  it('比率が Project と違う元は、元の比率のまま Project の枠に収まる大きさで頼む（書き出しの contain と同じ）', async () => {
+    const f = await buildFixture({ sourceSize: { width: 1000, height: 750 } })
+    await processUpscaleJob(f.deps, { upscaleJobId: f.job.id })
+
+    const [request] = (f.upscaler as ReturnType<typeof stubUpscaler>).submitted()
+    expect(request).toMatchObject({ output: { width: 1440, height: 1080 } })
   })
 
   it('送ったら、生成先のジョブと見込みを行に積む', async () => {

@@ -94,6 +94,7 @@ describe('submit', () => {
       steps: 6,
       start_image: null,
       end_image: null,
+      native: true,
     })
   })
 

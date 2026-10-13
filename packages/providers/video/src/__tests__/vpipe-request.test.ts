@@ -243,7 +243,16 @@ describe('本文の組み立て', () => {
       steps: VPIPE_STEPS,
       start_image: null,
       end_image: null,
+      native: true,
     })
+  })
+
+  /**
+   * ADR-0045 段 4: 引き伸ばしはサーバにさせず、H3 が描いた大きさのまま受け取る。
+   * `output` は比率と生成サイズを決めるために送り続ける。拡大は書き出しの直前に ixa がやる。
+   */
+  it('native: true を送り、サーバに引き伸ばさせない', () => {
+    expect(build().native).toBe(true)
   })
 
   it('ステップ数はサーバの既定に任せず 6 を明示する', () => {

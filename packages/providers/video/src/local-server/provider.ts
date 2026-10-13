@@ -414,7 +414,7 @@ export const createLocalServerVideoProvider = <Q extends string>(
           fps: output.fps,
           durationSec: output.duration_sec,
         },
-        /** サーバが実際に生成した大きさ（出力はこれを拡大したもの）。 */
+        /** サーバが実際に生成した大きさ（切り抜く前。出力の大きさは上の `output`。ADR-0045 §2）。 */
         generation: result.details?.generation ?? null,
         /** 手元の生成サーバは音を捨てる。出力に音声トラックは無い。 */
         audio: false,

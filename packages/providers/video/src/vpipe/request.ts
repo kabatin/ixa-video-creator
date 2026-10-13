@@ -32,6 +32,11 @@ export type VpipeJobBody = {
   readonly start_image: LocalServerImage | null
   /** **常に null。** 最後のフレームを付ける画面がまだ無い（ADR-0031 の次の段階）。 */
   readonly end_image: null
+  /**
+   * **常に true（ADR-0045 段 4）。** サーバは生成サイズを `output` の比へ中央で切り抜くだけで、
+   * 引き伸ばさない（final・16:9 なら 1344×756 が返る）。拡大は書き出しの直前に ixa が Lanczos でやる。
+   */
+  readonly native: true
 }
 
 export type BuildVpipeBody = {
@@ -77,7 +82,7 @@ export const buildVpipeBody = (input: BuildVpipeBody): VpipeJobBody => {
 
   return {
     prompt,
-    // サーバが小さく作ってこの大きさへ拡大する。Project の解像度そのものを渡す。
+    // 比と生成サイズを決めるために Project の解像度を渡す。`native` なので、この大きさへは拡大されない。
     output: { width: spec.resolution.width, height: spec.resolution.height },
     frames,
     quality,
@@ -85,5 +90,6 @@ export const buildVpipeBody = (input: BuildVpipeBody): VpipeJobBody => {
     steps: VPIPE_STEPS,
     start_image: startImage,
     end_image: null,
+    native: true,
   }
 }
