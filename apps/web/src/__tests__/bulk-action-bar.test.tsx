@@ -488,23 +488,24 @@ describe('BulkActionBar — 一括生成は 2 段階', () => {
 })
 
 describe('BulkActionBar — 一括採用', () => {
-  it('既定は「Take が 1 件だけ」。確認は挟まない', async () => {
+  // 作り直すと最後の Take を採用したくなる（制作者 2026-10-14）。
+  it('既定は「最新の Take」。確認は挟まない', async () => {
     const { props, user } = setup()
 
     await pick(user, '一括採用…')
-    await user.click(screen.getByRole('button', { name: '12 件を採用' }))
-
-    expect(props.onSelectTakes).toHaveBeenCalledWith('only')
-  })
-
-  it('最新の Take を選べる', async () => {
-    const { props, user } = setup()
-
-    await pick(user, '一括採用…')
-    await user.selectOptions(screen.getByLabelText('規則'), 'latest')
     await user.click(screen.getByRole('button', { name: '12 件を採用' }))
 
     expect(props.onSelectTakes).toHaveBeenCalledWith('latest')
+  })
+
+  it('「Take が 1 件だけ」も選べる', async () => {
+    const { props, user } = setup()
+
+    await pick(user, '一括採用…')
+    await user.selectOptions(screen.getByLabelText('規則'), 'only')
+    await user.click(screen.getByRole('button', { name: '12 件を採用' }))
+
+    expect(props.onSelectTakes).toHaveBeenCalledWith('only')
   })
 
   it('採用済みが混ざっていれば上書きになると断る', async () => {

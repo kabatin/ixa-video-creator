@@ -251,9 +251,10 @@ export const BulkGenerateForm = ({
 
 // --- 一括採用 ---
 
+/** 既定は最新。作り直すと最後の Take を採用したくなる（制作者 2026-10-14）。 */
 const RULE_OPTIONS: readonly BulkSelectOption[] = [
-  { value: 'only', label: 'Take が 1 件だけの Shot を採用' },
   { value: 'latest', label: '最新の Take を採用' },
+  { value: 'only', label: 'Take が 1 件だけの Shot を採用' },
 ]
 
 export type BulkSelectTakesFormProps = {
@@ -272,7 +273,7 @@ export const BulkSelectTakesForm = ({
   busy,
   onSelectTakes,
 }: BulkSelectTakesFormProps) => {
-  const [rule, setRule] = useState<BulkTakeRule>('only')
+  const [rule, setRule] = useState<BulkTakeRule>('latest')
 
   return (
     <div className="grid gap-3">
