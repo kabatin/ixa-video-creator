@@ -1,4 +1,5 @@
 import { getConfig } from '@ixa/config'
+import { tolerateSlowLan } from '@ixa/provider-video'
 import { Worker } from 'bullmq'
 import type { Redis } from 'ioredis'
 import type { Logger } from 'pino'
@@ -174,6 +175,8 @@ const registerShutdownHandlers = (
  * ここまでの処理はすべて同期的なため async にはしない。
  */
 export const main = (): void => {
+  // vpipe・wan は Wi-Fi の向こう。Node の既定の接続待ちでは届かないことがある（lan-connections.ts）。
+  tolerateSlowLan()
   const config = getConfig()
   const logger = createLogger(config.logLevel)
 

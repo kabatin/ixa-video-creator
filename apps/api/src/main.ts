@@ -67,7 +67,7 @@ import { createLogger, type Logger } from './logger.js'
 import { GENERATION_QUEUE_NAME, type GenerationQueue } from './routes/shots.js'
 import { IMAGE_QUEUE_NAME, type ImageJobQueue } from './routes/shot-start-frame-generate.js'
 import { UPSCALE_QUEUE_NAME, type UpscaleJobQueue } from './routes/take-upscale.js'
-import { createVpipeUpscaler, VPIPE_IDENTITY } from '@ixa/provider-video'
+import { createVpipeUpscaler, tolerateSlowLan, VPIPE_IDENTITY } from '@ixa/provider-video'
 
 /** graceful shutdown の上限時間（ミリ秒）。超過したら強制終了する。 */
 const SHUTDOWN_TIMEOUT_MS = 30_000
@@ -157,6 +157,8 @@ const registerShutdownHandlers = (
  * 同期処理のみのため async にはしない。
  */
 export const main = (): void => {
+  // vpipe・wan は Wi-Fi の向こう。Node の既定の接続待ちでは届かないことがある（lan-connections.ts）。
+  tolerateSlowLan()
   const config = getConfig()
   const logger = createLogger(config.logLevel)
 
