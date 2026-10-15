@@ -21,6 +21,7 @@ export type BulkOperation =
   | 'draw'
   | 'stop-images'
   | 'remake-final'
+  | 'upscale'
 
 /** 適格性・要約に必要な列だけ。画面は `WireShot` をそのまま渡せる。 */
 export type BulkShot = Pick<WireShot, 'id' | 'code' | 'lockedAt' | 'selectedTakeId'>
@@ -179,6 +180,9 @@ export const eligibilityFor = (operation: BulkOperation, shot: BulkShot): ShotEl
       return stopImagesEligibility(shot)
     case 'remake-final':
       return remakeFinalEligibility(shot)
+    // 解像度を上げるのは絵を変えない（元の Take の隣に積むだけ）。上げられるかは API が見る。
+    case 'upscale':
+      return updateEligibility(shot)
     case 'update':
       return updateEligibility(shot)
     // 絵コンテの画像（ADR-0029）も生成と同じく、ロック済みには触らない。
@@ -280,6 +284,7 @@ const WORDINGS: Readonly<Record<BulkOperation, Wording>> = {
   /** 結果は件数で返る（Shot ごとではない）ので、この文言は要約には使わない。 */
   'stop-images': { done: '絵を止めました', notDone: '絵を止めていません' },
   'remake-final': { done: '本番で作り直しに回しました', notDone: '本番で作り直していません' },
+  upscale: { done: '解像度を上げる順番に入れました', notDone: '解像度を上げていません' },
 }
 
 const codeOf = (shots: readonly ShotRef[], shotId: ShotId): string =>

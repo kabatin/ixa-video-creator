@@ -37,7 +37,7 @@ export const FOREIGN_SHOT_REASON = 'この Project の Shot ではありませ�
 export type ResolvedShot = { readonly shot: Shot } | { readonly reason: string }
 
 export const resolveShot = async (
-  deps: Pick<ShotRoutesDeps, 'shots'>,
+  deps: { readonly shots: Pick<ShotRoutesDeps['shots'], 'findById'> },
   projectId: ProjectId,
   shotId: ShotId,
 ): Promise<ResolvedShot> => {

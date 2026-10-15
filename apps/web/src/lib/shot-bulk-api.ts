@@ -4,6 +4,7 @@ import {
   ShotId,
   ShotStatus,
   TakeId,
+  UpscaleJobId,
   type ProjectId,
   ShotCamera,
 } from '@ixa/domain'
@@ -129,6 +130,25 @@ export const WireBulkRemakeFinalResult = z.object({
   dryRun: z.boolean(),
 })
 export type WireBulkRemakeFinalResult = z.infer<typeof WireBulkRemakeFinalResult>
+
+// --- まとめて解像度を上げる ---
+
+export const WireBulkUpscaleOutcome = z.discriminatedUnion('ok', [
+  z.object({
+    ...succeededShape,
+    /** 下見（`dryRun`）のときは null。積んだときだけ入る。 */
+    jobId: UpscaleJobId.nullable(),
+  }),
+  failedOutcome,
+])
+export type WireBulkUpscaleOutcome = z.infer<typeof WireBulkUpscaleOutcome>
+
+export const WireBulkUpscaleResult = z.object({
+  results: z.array(WireBulkUpscaleOutcome),
+  enqueuedCount: z.number().int().nonnegative(),
+  dryRun: z.boolean(),
+})
+export type WireBulkUpscaleResult = z.infer<typeof WireBulkUpscaleResult>
 
 // --- 一括削除 ---
 
@@ -299,6 +319,14 @@ export type ShotBulkApi = {
     projectId: ProjectId,
     input: { readonly shotIds: readonly ShotId[]; readonly dryRun: boolean },
   ) => Promise<WireBulkRemakeFinalResult>
+  /**
+   * 選んだ Shot の採用 Take を、まとめて解像度を上げる（ADR-0044）。
+   * **`dryRun` は押す前の下見。** 上げたもの・上げている最中・採用していない、などは `ok: false` で並ぶ。
+   */
+  bulkUpscale: (
+    projectId: ProjectId,
+    input: { readonly shotIds: readonly ShotId[]; readonly dryRun: boolean },
+  ) => Promise<WireBulkUpscaleResult>
   /** ソフトデリート。取り消しは無い（確認は画面が取る）。 */
   bulkDeleteShots: (projectId: ProjectId, shotIds: readonly ShotId[]) => Promise<WireBulkDeleteResult>
   /** 共通の値をまとめて変える。 */
@@ -335,6 +363,13 @@ export const createShotBulkApi = (requester: Requester): ShotBulkApi => ({
       bulkPath(projectId, '/remake-final'),
       { shotIds: [...input.shotIds], dryRun: input.dryRun },
       WireBulkRemakeFinalResult,
+    ),
+
+  bulkUpscale: async (projectId, input) =>
+    requester.post(
+      bulkPath(projectId, '/upscale'),
+      { shotIds: [...input.shotIds], dryRun: input.dryRun },
+      WireBulkUpscaleResult,
     ),
 
   bulkDeleteShots: async (projectId, shotIds) =>

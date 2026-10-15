@@ -66,6 +66,9 @@ const baseProps = (overrides: Partial<BulkActionBarProps> = {}): BulkActionBarPr
   finalPreview: null,
   onPreviewRemakeFinal: vi.fn(),
   onRemakeFinal: vi.fn(),
+  upscalePreview: null,
+  onPreviewUpscale: vi.fn(),
+  onUpscale: vi.fn(),
   drawWarning: null,
   ...overrides,
 })
@@ -163,6 +166,7 @@ describe('BulkActionBar — 出る / 出ない', () => {
       '採用を外す',
       '一括で変える…',
       '本番で作り直す…',
+      '解像度を上げる…',
       '絵を止める',
       '結合…',
       '書き出す…',
@@ -255,6 +259,58 @@ describe('BulkActionBar — 出る / 出ない', () => {
 
       expect(screen.getByRole('status')).toHaveTextContent('見込みを出せませんでした')
       expect(screen.queryByRole('button', { name: /本を積む/ })).toBeNull()
+    })
+  })
+
+  /**
+   * 採用中の Take をまとめて解像度を上げる（制作者 2026-10-16）。
+   * 作り直しと同じく、押す前に本数と飛ばすものを出す。
+   */
+  describe('解像度を上げる', () => {
+    const plan = { targetCount: 2, skipped: ['CUT-02 — この Take は、すでに解像度を上げたものです'] }
+
+    it('開くと下見を引く', async () => {
+      const onPreviewUpscale = vi.fn()
+      const { user } = setup({ onPreviewUpscale, upscalePreview: { kind: 'loading' } })
+
+      await pick(user, '解像度を上げる…')
+
+      expect(onPreviewUpscale).toHaveBeenCalledTimes(1)
+      expect(screen.getByRole('status')).toHaveTextContent('上げられる Take を調べています')
+    })
+
+    it('本数と飛ばす理由を出し、押すと積みに行く', async () => {
+      const onUpscale = vi.fn()
+      const { user } = setup({ upscalePreview: { kind: 'ready', plan }, onUpscale })
+
+      await pick(user, '解像度を上げる…')
+
+      const panel = screen.getByRole('group', { name: '解像度を上げる' })
+      expect(panel).toHaveTextContent('採用中の Take 2 本の解像度を上げます')
+      expect(panel).toHaveTextContent('CUT-02 — この Take は、すでに解像度を上げたものです')
+
+      await user.click(within(panel).getByRole('button', { name: '2 本を上げる' }))
+      expect(onUpscale).toHaveBeenCalledTimes(1)
+    })
+
+    it('上げられるものが 0 本なら押せない', async () => {
+      const { user } = setup({ upscalePreview: { kind: 'ready', plan: { ...plan, targetCount: 0 } } })
+
+      await pick(user, '解像度を上げる…')
+
+      expect(screen.getByRole('button', { name: '0 本を上げる' })).toBeDisabled()
+    })
+
+    /** 対応していない環境では API が理由を返す。押せる形で出さない。 */
+    it('調べられなかったらその旨を出し、上げるボタンは出さない', async () => {
+      const { user } = setup({
+        upscalePreview: { kind: 'error', message: '調べられませんでした: この環境では解像度を上げられません' },
+      })
+
+      await pick(user, '解像度を上げる…')
+
+      expect(screen.getByRole('status')).toHaveTextContent('この環境では解像度を上げられません')
+      expect(screen.queryByRole('button', { name: /本を上げる/ })).toBeNull()
     })
   })
 
@@ -786,6 +842,9 @@ describe('BulkActionBar — 打鍵を外へ漏らさない', () => {
           finalPreview={null}
           onPreviewRemakeFinal={vi.fn()}
           onRemakeFinal={vi.fn()}
+          upscalePreview={null}
+          onPreviewUpscale={vi.fn()}
+          onUpscale={vi.fn()}
         />
       </div>,
     )

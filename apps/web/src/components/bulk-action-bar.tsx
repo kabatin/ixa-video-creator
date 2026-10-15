@@ -15,7 +15,8 @@ import { BulkOutcomeView, BulkProgressStrip, MoreMenu, type BulkOutcome } from '
 import { Button } from '@/components/ui/button'
 import { BulkDrawForm } from '@/components/bulk-draw-form'
 import { BulkRemakeFinalForm } from '@/components/bulk-remake-final-form'
-import type { RemakeFinalPreview } from '@/components/workbench/use-bulk-actions'
+import { BulkUpscaleForm } from '@/components/bulk-upscale-form'
+import type { RemakeFinalPreview, UpscalePreview } from '@/components/workbench/use-bulk-actions'
 import type { BulkProgress } from '@/components/workbench/use-bulk-actions'
 import { WORDING } from '@/lib/wording'
 
@@ -43,7 +44,7 @@ export type {
 } from '@/components/bulk-action-forms'
 export type { BulkOutcome } from '@/components/bulk-action-bar-parts'
 
-type PanelKey = 'generate' | 'selectTakes' | 'update' | 'draw' | 'remakeFinal'
+type PanelKey = 'generate' | 'selectTakes' | 'update' | 'draw' | 'remakeFinal' | 'upscale'
 
 const PANEL_LABELS: Readonly<Record<PanelKey, string>> = {
   generate: 'Take を作る',
@@ -51,6 +52,8 @@ const PANEL_LABELS: Readonly<Record<PanelKey, string>> = {
   update: '一括で変える',
   draw: '絵を作る',
   remakeFinal: '本番で作り直す',
+  // Take のメニューと同じ言葉（「高画質化」と呼び分けない）。
+  upscale: '解像度を上げる',
 }
 
 /**
@@ -125,6 +128,12 @@ export type BulkActionBarProps = {
   readonly finalPreview: RemakeFinalPreview | null
   readonly onPreviewRemakeFinal: () => void
   readonly onRemakeFinal: () => void
+  /**
+   * 採用中の Take をまとめて解像度を上げる（ADR-0044）。下見の持ち方は作り直しと同じ。
+   */
+  readonly upscalePreview: UpscalePreview | null
+  readonly onPreviewUpscale: () => void
+  readonly onUpscale: () => void
   /** 絵コンテ（説明）が空の Shot が混じっているときの確認の文。無ければ null（`drawWithoutStoryboardWarning`）。 */
   readonly drawWarning: string | null
 }
@@ -156,6 +165,9 @@ export const BulkActionBar = ({
   finalPreview,
   onPreviewRemakeFinal,
   onRemakeFinal,
+  upscalePreview,
+  onPreviewUpscale,
+  onUpscale,
   drawWarning,
 }: BulkActionBarProps) => {
   const idPrefix = useId()
@@ -292,6 +304,18 @@ export const BulkActionBar = ({
               }}
             />
           )}
+          {open === 'upscale' && (
+            <BulkUpscaleForm
+              preview={upscalePreview}
+              busy={busy}
+              onPreview={onPreviewUpscale}
+              onUpscale={() => {
+                // 積んだら閉じる（API も二重には積まないが、押させない）。
+                close()
+                onUpscale()
+              }}
+            />
+          )}
           {open === 'draw' && (
             <BulkDrawForm
               idPrefix={`${idPrefix}-draw`}
@@ -318,6 +342,8 @@ export const BulkActionBar = ({
             { label: `${PANEL_LABELS.update}…`, disabled: busy, run: () => { openFromMore('update') } },
             // 夜にまとめて積む操作（ADR-0042 段 4）。押す前に見込みを出す。
             { label: `${PANEL_LABELS.remakeFinal}…`, disabled: busy, run: () => { openFromMore('remakeFinal') } },
+            // 採用中の Take をまとめて（制作者 2026-10-16）。押す前に何本・何を飛ばすかを出す。
+            { label: `${PANEL_LABELS.upscale}…`, disabled: busy, run: () => { openFromMore('upscale') } },
             // 選んだ Shot の絵だけ止める。作品の全部を止める口は一覧の帯（上）にある。
             { label: '絵を止める', disabled: busy || drawingCount === 0, run: () => { runFromMore(onStopImages) } },
             { label: '結合…', disabled: busy || selectedCount < 2, run: () => { runFromMore(onMerge) } },

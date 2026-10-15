@@ -8,6 +8,8 @@ import {
   UpscaleJobStatus as UpscaleJobStatusSchema,
   upscaleBlocker,
   type ProjectEventPublisher,
+  type Shot,
+  type Take,
   type UpscaleJob,
   type UpscaleJobId,
 } from '@ixa/domain'
@@ -94,6 +96,60 @@ const publishUpscaleJob = async (
   }
 }
 
+/**
+ * その Take を上げられない理由、または `null`。**規則は domain に 1 つ**（画面も同じものを呼ぶ）。
+ * 1 本ずつの口とまとめて積む口（`shots-bulk-upscale.ts`）がここを通る。
+ */
+export const upscaleBlockerFor = async (
+  deps: Pick<TakeUpscaleRoutesDeps, 'takes'>,
+  take: Take,
+  active: readonly UpscaleJob[],
+): Promise<string | null> =>
+  upscaleBlocker({
+    take,
+    siblings: await deps.takes.findByShot(take.shotId, { includeHidden: true }),
+    activeSourceTakeIds: active.map((job) => job.sourceTakeId),
+  })
+
+/** ジョブを 1 行作って順番に入れる。判定（`upscaleBlockerFor`）は済ませてから呼ぶ。 */
+export const enqueueUpscale = async (
+  deps: Pick<TakeUpscaleRoutesDeps, 'upscaleJobs' | 'upscaleQueue' | 'events' | 'logger'>,
+  upscaler: VideoUpscaler,
+  shot: Shot,
+  take: Take,
+): Promise<UpscaleJob> => {
+  const job = await deps.upscaleJobs.create({
+    projectId: shot.projectId,
+    shotId: shot.id,
+    sourceTakeId: take.id,
+    providerId: upscaler.providerId,
+    modelId: upscaler.modelId,
+  })
+
+  /**
+   * **入れ損ねたら失敗にしてから投げる。** 待っているまま残すと、その Take は
+   * 「上げています」のまま二度と頼めなくなる（`upscaleBlocker` が止めるため）。
+   */
+  try {
+    await deps.upscaleQueue.enqueue(job.id)
+  } catch (error) {
+    const failed = await deps.upscaleJobs.markFailed(
+      job.id,
+      {
+        code: 'enqueue_failed',
+        message: '解像度を上げる順番に入れられませんでした。もう一度押してください。',
+        retryable: true,
+      },
+      null,
+    )
+    await publishUpscaleJob(deps, failed, shot.projectId)
+    throw new Error('upscale キューへ入れられませんでした', { cause: error })
+  }
+
+  await publishUpscaleJob(deps, job, shot.projectId)
+  return job
+}
+
 const upscaleRoute = createRoute({
   method: 'post',
   path: '/shots/{shotId}/takes/{takeId}/upscale',
@@ -176,47 +232,11 @@ export const takeUpscaleRoutes = (deps: TakeUpscaleRoutesDeps) =>
         return c.json(fail(UPSCALE_UNSUPPORTED_MESSAGE), 422)
       }
 
-      /** 上げられるかの規則は domain に 1 つ（画面も同じものを呼ぶ）。 */
-      const [siblings, active] = await Promise.all([
-        deps.takes.findByShot(shot.id, { includeHidden: true }),
-        deps.upscaleJobs.findActiveByProject(shot.projectId),
-      ])
-      const blocker = upscaleBlocker({
-        take,
-        siblings,
-        activeSourceTakeIds: active.map((job) => job.sourceTakeId),
-      })
+      const active = await deps.upscaleJobs.findActiveByProject(shot.projectId)
+      const blocker = await upscaleBlockerFor(deps, take, active)
       if (blocker !== null) return c.json(fail(blocker), 422)
 
-      const job = await deps.upscaleJobs.create({
-        projectId: shot.projectId,
-        shotId: shot.id,
-        sourceTakeId: take.id,
-        providerId: deps.upscaler.providerId,
-        modelId: deps.upscaler.modelId,
-      })
-
-      /**
-       * **入れ損ねたら失敗にしてから投げる。** 待っているまま残すと、その Take は
-       * 「上げています」のまま二度と頼めなくなる（`upscaleBlocker` が止めるため）。
-       */
-      try {
-        await deps.upscaleQueue.enqueue(job.id)
-      } catch (error) {
-        const failed = await deps.upscaleJobs.markFailed(
-          job.id,
-          {
-            code: 'enqueue_failed',
-            message: '解像度を上げる順番に入れられませんでした。もう一度押してください。',
-            retryable: true,
-          },
-          null,
-        )
-        await publishUpscaleJob(deps, failed, shot.projectId)
-        throw new Error('upscale キューへ入れられませんでした', { cause: error })
-      }
-
-      await publishUpscaleJob(deps, job, shot.projectId)
+      const job = await enqueueUpscale(deps, deps.upscaler, shot, take)
       return c.json(ok(toResponse(job)), 202)
     })
 

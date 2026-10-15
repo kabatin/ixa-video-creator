@@ -14,6 +14,7 @@ import { offerReviewAfterGeneration } from '@/lib/offer-review'
 import { describeError } from '@/lib/api-error'
 import { planBulkOperation, summarizeBulkResult, type BulkPlan } from '@/lib/shot-bulk'
 import { planFromRemakeResult, type RemakeFinalPlan } from '@/lib/remake-final-plan'
+import { planFromUpscaleResult, type UpscalePlan } from '@/lib/upscale-plan'
 import { parseBulkGenerateRejection, type BulkGenerateRejection } from '@/lib/shot-bulk-api'
 import { useAskReview } from '@/components/workbench/use-ask-review'
 
@@ -58,6 +59,14 @@ export type BulkActions = {
   readonly forgetRemakeFinalPreview: () => void
   /** 下見のとおりに積む。 */
   readonly remakeFinal: () => void
+  /**
+   * 採用中の Take をまとめて解像度を上げる前の下見（ADR-0044）。**1 件も積まない。**
+   * 作り直しの下見と同じく、開いた時に引き、閉じたら捨てる。
+   */
+  readonly upscalePreview: UpscalePreview | null
+  readonly previewUpscale: () => void
+  readonly forgetUpscalePreview: () => void
+  readonly upscale: () => void
 }
 
 const noteLine = (note: { readonly code: string; readonly message: string }): string =>
@@ -99,6 +108,12 @@ type ActionResult = { readonly summary: string; readonly failures: readonly stri
 export type RemakeFinalPreview =
   | { readonly kind: 'loading' }
   | { readonly kind: 'ready'; readonly plan: RemakeFinalPlan }
+  | { readonly kind: 'error'; readonly message: string }
+
+/** まとめて解像度を上げる前の下見。状態の分け方は `RemakeFinalPreview` と同じ。 */
+export type UpscalePreview =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'ready'; readonly plan: UpscalePlan }
   | { readonly kind: 'error'; readonly message: string }
 
 export const useBulkActions = (): BulkActions => {
@@ -339,6 +354,40 @@ export const useBulkActions = (): BulkActions => {
     })
   }
 
+  /**
+   * 採用中の Take をまとめて解像度を上げる（制作者 2026-10-16）。
+   * **Shot の状態は変わらない**（生成中にならない）ので見張らない。進み具合は Take ごとに出る。
+   */
+  const [upscalePreview, setUpscalePreview] = useState<UpscalePreview | null>(null)
+
+  const previewUpscale = (): void => {
+    const plan = planBulkOperation('upscale', workbench.checked, shots)
+    setUpscalePreview({ kind: 'loading' })
+    void (async () => {
+      try {
+        const result = await api.bulkUpscale(workbench.projectId, {
+          shotIds: [...plan.targetIds],
+          dryRun: true,
+        })
+        setUpscalePreview({ kind: 'ready', plan: planFromUpscaleResult(result, shots) })
+      } catch (error) {
+        setUpscalePreview({ kind: 'error', message: `調べられませんでした: ${describeError(error)}` })
+      }
+    })()
+  }
+
+  const upscale = (): void => {
+    const plan = planBulkOperation('upscale', workbench.checked, shots)
+    void run(plan, async () => {
+      const result = await api.bulkUpscale(workbench.projectId, {
+        shotIds: [...plan.targetIds],
+        dryRun: false,
+      })
+      const summary = summarizeBulkResult('upscale', result.results, shots)
+      return { summary: summary.headline, failures: summary.failures.map(noteLine) }
+    })
+  }
+
   return {
     busy,
     progress,
@@ -358,5 +407,11 @@ export const useBulkActions = (): BulkActions => {
       setFinalPreview(null)
     },
     remakeFinal,
+    upscalePreview,
+    previewUpscale,
+    forgetUpscalePreview: () => {
+      setUpscalePreview(null)
+    },
+    upscale,
   }
 }
