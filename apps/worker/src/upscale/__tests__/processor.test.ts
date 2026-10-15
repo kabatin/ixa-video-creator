@@ -15,7 +15,7 @@ import {
   type UpscaleJobError,
 } from '@ixa/domain'
 import type { UpscaleJobRepository } from '@ixa/db'
-import type { ProviderJobStatus, VideoUpscaler } from '@ixa/provider-core'
+import { ProviderError, type ProviderJobStatus, type VideoUpscaler } from '@ixa/provider-core'
 import { aTake } from '@ixa/generation/testing'
 import { createMemoryStorage } from '@ixa/storage'
 import { describe, expect, it } from 'vitest'
@@ -30,7 +30,10 @@ import {
   inMemoryShots,
   inMemoryTakes,
 } from '../../generation/__tests__/doubles.js'
-import { createInMemoryLocalGpuLease, type LocalGpuLease } from '../../generation/local-gpu-lease.js'
+import {
+  createInMemoryLocalGpuLease,
+  type LocalGpuLease,
+} from '../../generation/local-gpu-lease.js'
 import { processUpscaleJob, type UpscaleProcessorDeps } from '../processor.js'
 
 /**
@@ -118,7 +121,9 @@ const inMemoryUpscaleJobs = (seed: UpscaleJob) => {
   return repo
 }
 
-const stubUpscaler = (overrides: Partial<VideoUpscaler> = {}): VideoUpscaler & {
+const stubUpscaler = (
+  overrides: Partial<VideoUpscaler> = {},
+): VideoUpscaler & {
   readonly submitted: () => readonly unknown[]
 } => {
   const submitted: unknown[] = []
@@ -146,12 +151,14 @@ const stubUpscaler = (overrides: Partial<VideoUpscaler> = {}): VideoUpscaler & {
   }
 }
 
-const buildFixture = async (options: {
-  readonly upscaler?: VideoUpscaler
-  readonly lease?: LocalGpuLease
-  readonly jobOverrides?: Partial<UpscaleJob>
-  readonly sourceSize?: { readonly width: number; readonly height: number }
-} = {}) => {
+const buildFixture = async (
+  options: {
+    readonly upscaler?: VideoUpscaler
+    readonly lease?: LocalGpuLease
+    readonly jobOverrides?: Partial<UpscaleJob>
+    readonly sourceSize?: { readonly width: number; readonly height: number }
+  } = {},
+) => {
   const project = aProject()
   const shot = aShot(project)
   // 素材と Take は相互に参照するので、先に ID を採番して循環を断つ（本番と同じ順）。
@@ -297,7 +304,11 @@ describe('出来上がり', () => {
   it('元の Take の隣に積み、仕様を写して系譜を入れる', async () => {
     const f = await buildFixture({
       upscaler: await succeededUpscaler(),
-      jobOverrides: { status: 'running', providerJobRef: 'job_up_1', startedAt: new Date('2026-10-09T00:01:00.000Z') },
+      jobOverrides: {
+        status: 'running',
+        providerJobRef: 'job_up_1',
+        startedAt: new Date('2026-10-09T00:01:00.000Z'),
+      },
     })
 
     const result = await processUpscaleJob(f.deps, { upscaleJobId: f.job.id })
@@ -325,7 +336,11 @@ describe('出来上がり', () => {
   it('出来た素材を計測に回す', async () => {
     const f = await buildFixture({
       upscaler: await succeededUpscaler(),
-      jobOverrides: { status: 'running', providerJobRef: 'job_up_1', startedAt: new Date('2026-10-09T00:01:00.000Z') },
+      jobOverrides: {
+        status: 'running',
+        providerJobRef: 'job_up_1',
+        startedAt: new Date('2026-10-09T00:01:00.000Z'),
+      },
     })
 
     await processUpscaleJob(f.deps, { upscaleJobId: f.job.id })
@@ -337,7 +352,11 @@ describe('出来上がり', () => {
   it('出来た Take を行に残す', async () => {
     const f = await buildFixture({
       upscaler: await succeededUpscaler(),
-      jobOverrides: { status: 'running', providerJobRef: 'job_up_1', startedAt: new Date('2026-10-09T00:01:00.000Z') },
+      jobOverrides: {
+        status: 'running',
+        providerJobRef: 'job_up_1',
+        startedAt: new Date('2026-10-09T00:01:00.000Z'),
+      },
     })
 
     await processUpscaleJob(f.deps, { upscaleJobId: f.job.id })
@@ -358,5 +377,65 @@ describe('終わっているジョブ', () => {
     expect(result.state).toBe('skipped')
     expect((f.upscaler as ReturnType<typeof stubUpscaler>).submitted()).toHaveLength(0)
     expect(f.takes.snapshot()).toHaveLength(1)
+  })
+})
+
+/**
+ * 出来上がりを取りに行く途中の失敗（2026-10-15）。
+ * vpipe では出来ていたのに、Wi-Fi 越しの取り込み（約 40MB）が時間切れになり、
+ * 行が「走っている」のまま 2 時間止まった。キューは再試行しないので、ここで決着を付ける。
+ */
+describe('問い合わせの途中の失敗', () => {
+  const running = {
+    status: 'running',
+    providerJobRef: 'job_up_1',
+    startedAt: new Date('2026-10-09T00:01:00.000Z'),
+  } as const
+
+  it('やり直せる失敗なら、捨てずに問い合わせを予約し直す', async () => {
+    const f = await buildFixture({
+      upscaler: stubUpscaler({
+        poll: () =>
+          Promise.reject(
+            new ProviderError('出力の取得が時間切れ', 'vpipe' as VideoUpscaler['providerId'], true),
+          ),
+      }),
+      jobOverrides: running,
+    })
+
+    const result = await processUpscaleJob(f.deps, { upscaleJobId: f.job.id })
+
+    expect(result.state).toBe('polling')
+    expect(f.scheduler.scheduled()).toHaveLength(1)
+    expect(f.upscaleJobs.snapshot().status).toBe('running')
+  })
+
+  it('期限を過ぎていれば、予約し直さずに失敗として残す', async () => {
+    const f = await buildFixture({
+      upscaler: stubUpscaler({
+        poll: () =>
+          Promise.reject(
+            new ProviderError('出力の取得が時間切れ', 'vpipe' as VideoUpscaler['providerId'], true),
+          ),
+      }),
+      jobOverrides: { ...running, startedAt: new Date('2026-10-08T00:00:00.000Z') },
+    })
+
+    const result = await processUpscaleJob(f.deps, { upscaleJobId: f.job.id })
+
+    expect(result.state).toBe('failed')
+    expect(f.scheduler.scheduled()).toHaveLength(0)
+    expect(f.upscaleJobs.snapshot().status).toBe('failed')
+  })
+
+  it('知らない失敗でも、行を「走っている」のまま残さない', async () => {
+    const f = await buildFixture({
+      upscaler: stubUpscaler({ poll: () => Promise.reject(new Error('想定外')) }),
+      jobOverrides: running,
+    })
+
+    await expect(processUpscaleJob(f.deps, { upscaleJobId: f.job.id })).rejects.toThrow('想定外')
+
+    expect(f.upscaleJobs.snapshot().status).toBe('failed')
   })
 })

@@ -19,6 +19,7 @@ import {
   retryAfterMsFrom,
   type LocalServerHttp,
 } from '../local-server/http.js'
+import { localServerNoResponseCode } from '../local-server/identity.js'
 import { decodeLocalServerJobRef, encodeLocalServerJobRef } from '../local-server/job-ref.js'
 import {
   hasSavedOutput,
@@ -72,15 +73,27 @@ const WorkflowList = z.object({
 const jobPath = (jobId: string): string => `/v1/jobs/${encodeURIComponent(jobId)}`
 const invalidCode = `${VPIPE_IDENTITY.codePrefix}_invalid_response`
 
+/**
+ * 出来上がりを取り込む時間の上限。**状態の問い合わせ（`http.timeoutMs`）とは分ける。**
+ * 出来上がりは約 40MB あり、Wi-Fi 越しでは 60 秒で取り切れないことがあった（2026-10-15、35 本中 2 本）。
+ */
+export const UPSCALE_DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000
+
 export type VpipeUpscalerOptions = {
   readonly http: LocalServerHttp
   /** 取り込み前の動画を置く場所（生成と同じ `outputDir`）。 */
   readonly outputDir: string
+  /** 省略すると `UPSCALE_DOWNLOAD_TIMEOUT_MS`。 */
+  readonly downloadTimeoutMs?: number
 }
 
 export const createVpipeUpscaler = (options: VpipeUpscalerOptions): VideoUpscaler => {
   const { http, outputDir } = options
   const identity = VPIPE_IDENTITY
+  const downloadHttp: LocalServerHttp = {
+    ...http,
+    timeoutMs: options.downloadTimeoutMs ?? UPSCALE_DOWNLOAD_TIMEOUT_MS,
+  }
 
   const failed = (code: string, message: string, retryable: boolean): ProviderJobStatus => ({
     state: 'failed',
@@ -88,9 +101,18 @@ export const createVpipeUpscaler = (options: VpipeUpscalerOptions): VideoUpscale
   })
 
   const download = async (jobId: string): Promise<string> => {
-    const { response } = await localServerOpen(http, `${jobPath(jobId)}/output`, 'video/mp4')
+    const { response } = await localServerOpen(
+      downloadHttp,
+      `${jobPath(jobId)}/output`,
+      'video/mp4',
+    )
     if (!response.ok) {
-      throw localServerErrorFor(identity, response.status, await readErrorBody(response), '出力の取得')
+      throw localServerErrorFor(
+        identity,
+        response.status,
+        await readErrorBody(response),
+        '出力の取得',
+      )
     }
     const body = response.body
     if (body === null) {
@@ -102,8 +124,23 @@ export const createVpipeUpscaler = (options: VpipeUpscalerOptions): VideoUpscale
         response.status,
       )
     }
-    const saved = await saveOutputAtomically(outputDir, jobId, body)
-    return saved.path
+    try {
+      const saved = await saveOutputAtomically(outputDir, jobId, body)
+      return saved.path
+    } catch (error) {
+      /**
+       * 本文の途中で切れた（時間切れ・接続断）。**向こうでは出来ている**ので、やり直せる失敗にする。
+       * 生の DOMException のまま投げると worker は「知らない失敗」として扱い、捨ててしまう。
+       */
+      throw new LocalServerRequestError(
+        identity.providerId,
+        localServerNoResponseCode(identity),
+        `${identity.label}の出力を取り込む途中で切れました`,
+        true,
+        response.status,
+        { cause: error },
+      )
+    }
   }
 
   return {
@@ -212,7 +249,11 @@ export const createVpipeUpscaler = (options: VpipeUpscalerOptions): VideoUpscale
             job.error?.retryable ?? false,
           )
         case 'canceled':
-          return failed(`${identity.codePrefix}_canceled`, `${identity.label}の解像度上げは取り消されました`, false)
+          return failed(
+            `${identity.codePrefix}_canceled`,
+            `${identity.label}の解像度上げは取り消されました`,
+            false,
+          )
         case 'succeeded': {
           const existing = localServerOutputPath(outputDir, job.id)
           const path = (await hasSavedOutput(existing)) ? existing : await download(job.id)

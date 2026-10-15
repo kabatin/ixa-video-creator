@@ -1,12 +1,11 @@
-import { ProviderBusyError } from '@ixa/provider-core'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { ProviderBusyError, ProviderError } from '@ixa/provider-core'
 import { describe, expect, it, vi } from 'vitest'
 import type { LocalServerFetch, LocalServerHttp } from '../local-server/http.js'
 import { VPIPE_IDENTITY } from '../vpipe/descriptor.js'
-import {
-  FLASHVSR_WORKFLOW_ID,
-  createVpipeUpscaler,
-  flashvsrEstimateSec,
-} from '../vpipe/upscale.js'
+import { FLASHVSR_WORKFLOW_ID, createVpipeUpscaler, flashvsrEstimateSec } from '../vpipe/upscale.js'
 import { errorEnvelope, jsonResponse } from './local-server-fixtures.js'
 
 /**
@@ -53,13 +52,17 @@ const submit = (fetchMock: MockedFetch) =>
 describe('対応しているかはサーバに訊く', () => {
   it('ワークフローの一覧に出ていれば対応している', async () => {
     const list = { workflows: [{ id: 'minimax-h3-turbo-video' }, { id: FLASHVSR_WORKFLOW_ID }] }
-    expect(await upscaler(mockFetch(() => Promise.resolve(jsonResponse(200, list)))).available()).toBe(true)
+    expect(
+      await upscaler(mockFetch(() => Promise.resolve(jsonResponse(200, list)))).available(),
+    ).toBe(true)
   })
 
   /** 対応していない版へ投げると、大きな本文を送ってから断られる。押す前に分かる形にする。 */
   it('出ていなければ対応していない', async () => {
     const list = { workflows: [{ id: 'minimax-h3-turbo-video' }] }
-    expect(await upscaler(mockFetch(() => Promise.resolve(jsonResponse(200, list)))).available()).toBe(false)
+    expect(
+      await upscaler(mockFetch(() => Promise.resolve(jsonResponse(200, list)))).available(),
+    ).toBe(false)
   })
 
   /** **つながらないときは「対応していない」に倒す。** 押せないほうが、押して失敗するより良い。 */
@@ -121,5 +124,71 @@ describe('見込みの式', () => {
   it('グループ単位で切り上がる', () => {
     expect(flashvsrEstimateSec(21)).toBe(106)
     expect(flashvsrEstimateSec(22)).toBe(207)
+  })
+})
+
+/**
+ * 出来上がりの取り込み。**Wi-Fi 越しに約 40MB を 60 秒で取り切れず、本文の途中で切れた**（2026-10-15）。
+ * 向こうでは出来ているので、やり直せる失敗として投げる（worker が捨てずに予約し直す）。
+ */
+describe('出来上がりの取り込み', () => {
+  const succeededJob = {
+    id: 'job_01M4YYYVV1T7ST4HFE8FJMAJ5S',
+    status: 'succeeded',
+    workflow: FLASHVSR_WORKFLOW_ID,
+    created_at: '2026-10-15T05:01:04.225959Z',
+    started_at: '2026-10-15T05:01:04.341077Z',
+    finished_at: '2026-10-15T05:06:12.891490Z',
+    result: {
+      output: {
+        media_type: 'video/mp4',
+        width: 1920,
+        height: 1080,
+        frames: 56,
+        fps: 24,
+        duration_sec: 2.333,
+      },
+      seed_used: null,
+    },
+  }
+  const handle = {
+    providerId: VPIPE_IDENTITY.providerId,
+    modelId: 'vpipe/flashvsr-upscale' as never,
+    ref: 'job_01M4YYYVV1T7ST4HFE8FJMAJ5S',
+    submittedAt: new Date(),
+  }
+
+  it('本文の途中で切れたら、やり直せる失敗として投げる', async () => {
+    const outputDir = await mkdtemp(join(tmpdir(), 'ixa-upscale-dl-'))
+    const brokenBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3]))
+        controller.error(
+          new DOMException('The operation was aborted due to timeout', 'TimeoutError'),
+        )
+      },
+    })
+    const fetchMock = mockFetch((url) =>
+      Promise.resolve(
+        url.endsWith('/output')
+          ? new Response(brokenBody, { status: 200, headers: { 'content-type': 'video/mp4' } })
+          : jsonResponse(200, succeededJob),
+      ),
+    )
+    const target = createVpipeUpscaler({
+      http: {
+        identity: VPIPE_IDENTITY,
+        fetch: fetchMock,
+        baseUrl: BASE_URL,
+        token: 't',
+        timeoutMs: 5_000,
+      },
+      outputDir,
+    })
+
+    const error: unknown = await target.poll(handle).catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(ProviderError)
+    expect((error as ProviderError).retryable).toBe(true)
   })
 })

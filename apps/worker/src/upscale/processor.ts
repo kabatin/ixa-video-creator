@@ -6,14 +6,30 @@ import {
   type Take,
   type UpscaleJob,
 } from '@ixa/domain'
-import type { MediaAssetRepository, ProjectRepository, ShotRepository, TakeRepository, UpscaleJobRepository } from '@ixa/db'
-import { ProviderBusyError, type ProviderJobHandle, type VideoUpscaler } from '@ixa/provider-core'
+import type {
+  MediaAssetRepository,
+  ProjectRepository,
+  ShotRepository,
+  TakeRepository,
+  UpscaleJobRepository,
+} from '@ixa/db'
+import {
+  ProviderBusyError,
+  ProviderError,
+  type ProviderJobHandle,
+  type ProviderJobStatus,
+  type VideoUpscaler,
+} from '@ixa/provider-core'
 import { containScale, type FrameSize } from '@ixa/media'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import { recordTake, type RecordTakeDeps } from '../generation/complete.js'
 import type { MediaJobQueue } from '../generation/processor.js'
-import { submitBusyDelayMs, submitBusyExpired, SUBMIT_BUSY_TIMEOUT_MESSAGE } from '../generation/busy.js'
+import {
+  submitBusyDelayMs,
+  submitBusyExpired,
+  SUBMIT_BUSY_TIMEOUT_MESSAGE,
+} from '../generation/busy.js'
 import {
   LOCAL_GPU_HEAD_RETRY_AFTER_MS,
   LOCAL_GPU_RETRY_AFTER_MS,
@@ -96,10 +112,7 @@ const releaseGpu = async (deps: UpscaleProcessorDeps, jobId: string): Promise<vo
 }
 
 /** 元の Take の動画を、そのまま base64 で読む。 */
-const readSourceVideo = async (
-  deps: UpscaleProcessorDeps,
-  asset: MediaAsset,
-): Promise<string> => {
+const readSourceVideo = async (deps: UpscaleProcessorDeps, asset: MediaAsset): Promise<string> => {
   const body = await deps.storage.get(asset.storageKey)
   return Buffer.from(body).toString('base64')
 }
@@ -140,10 +153,12 @@ const load = async (deps: UpscaleProcessorDeps, job: UpscaleJob): Promise<Loaded
   const shot = await deps.shots.findById(job.shotId)
   if (shot === null) throw new UpscaleFailure('shot_missing', 'この Shot は消されました。', false)
   const project = await deps.projects.findById(shot.projectId)
-  if (project === null) throw new UpscaleFailure('project_missing', 'この作品は消されました。', false)
+  if (project === null)
+    throw new UpscaleFailure('project_missing', 'この作品は消されました。', false)
   // 見えなくした Take も元にできる（記録としては正しい）。
   const source = await deps.takes.findById(job.sourceTakeId, { includeHidden: true })
-  if (source === null) throw new UpscaleFailure('source_missing', '元の Take が見つかりませんでした。', false)
+  if (source === null)
+    throw new UpscaleFailure('source_missing', '元の Take が見つかりませんでした。', false)
   const sourceAsset = await deps.mediaAssets.findById(source.mediaAssetId)
   if (sourceAsset === null) {
     throw new UpscaleFailure('source_media_missing', '元の映像が見つかりませんでした。', false)
@@ -208,6 +223,32 @@ const submit = async (
   }
 }
 
+const assertWithinDeadline = (startedAt: Date, now: Date): void => {
+  if (now.getTime() - startedAt.getTime() > UPSCALE_DEADLINE_MS) {
+    throw new UpscaleFailure('upscale_timeout', '解像度を上げるのに時間が掛かりすぎました。', true)
+  }
+}
+
+/**
+ * 問い合わせる。**Provider が「やり直せる」と言った失敗だけ `null`**（呼び出し側が予約し直す）。
+ * 出来上がりの取り込み（約 40MB）が Wi-Fi 越しに時間切れになっても、向こうでは出来ている（2026-10-15）。
+ */
+const pollOrNull = async (
+  deps: UpscaleProcessorDeps,
+  handle: ProviderJobHandle,
+): Promise<ProviderJobStatus | null> => {
+  try {
+    return await deps.upscaler.poll(handle)
+  } catch (error) {
+    if (!(error instanceof ProviderError && error.retryable)) throw error
+    deps.logger.warn(
+      { ref: handle.ref, err: error },
+      '問い合わせが一時的に失敗した。捨てずに予約し直す',
+    )
+    return null
+  }
+}
+
 /** 送った仕事の様子を見る。 */
 const poll = async (
   deps: UpscaleProcessorDeps,
@@ -225,7 +266,13 @@ const poll = async (
     ref: providerJobRef,
     submittedAt: job.startedAt ?? job.queuedAt,
   }
-  const status = await deps.upscaler.poll(handle)
+  const status = await pollOrNull(deps, handle)
+  if (status === null) {
+    // 取りに行く途中で一時的に失敗した。**向こうで出来ているかもしれないので捨てない。**
+    assertWithinDeadline(job.startedAt ?? job.queuedAt, now)
+    await deps.scheduler.reschedule(data, UPSCALE_POLL_DELAY_MS)
+    return { state: 'polling' }
+  }
 
   if (status.state === 'failed') {
     throw new UpscaleFailure(status.error.code, status.error.message, status.error.retryable)
@@ -233,10 +280,7 @@ const poll = async (
 
   // **まだ終わっていない。** `succeeded` 以外をまとめて受けるので、状態が増えても取りこぼさない
   if (status.state !== 'succeeded') {
-    const startedAt = job.startedAt ?? job.queuedAt
-    if (now.getTime() - startedAt.getTime() > UPSCALE_DEADLINE_MS) {
-      throw new UpscaleFailure('upscale_timeout', '解像度を上げるのに時間が掛かりすぎました。', true)
-    }
+    assertWithinDeadline(job.startedAt ?? job.queuedAt, now)
     await deps.scheduler.reschedule(data, UPSCALE_POLL_DELAY_MS)
     return { state: 'polling' }
   }
@@ -257,7 +301,10 @@ const poll = async (
     seedUsed: null,
     costUsd: 0,
     raw: { ...status.raw, sourceTakeId: source.id },
-    generationTimeSec: Math.max(0, (now.getTime() - (job.startedAt ?? job.queuedAt).getTime()) / 1000),
+    generationTimeSec: Math.max(
+      0,
+      (now.getTime() - (job.startedAt ?? job.queuedAt).getTime()) / 1000,
+    ),
     lineage: { parentTakeId: source.id, regenerationReason: UPSCALE_REASON },
   })
 
@@ -279,6 +326,29 @@ const poll = async (
   await releaseGpu(deps, job.id)
   deps.logger.info({ jobId: job.id, takeId: take.id }, '解像度を上げた Take を作りました')
   return { state: 'succeeded', takeId: take.id }
+}
+
+const markUnexpectedFailure = async (
+  deps: UpscaleProcessorDeps,
+  jobId: UpscaleJob['id'],
+  error: unknown,
+): Promise<void> => {
+  try {
+    await deps.upscaleJobs.markFailed(
+      jobId,
+      {
+        code: 'unexpected',
+        message: `解像度を上げる途中で止まりました: ${error instanceof Error ? error.message : String(error)}`,
+        retryable: true,
+      },
+      null,
+    )
+  } catch (cause) {
+    deps.logger.error(
+      { jobId, err: cause },
+      '失敗を記録できませんでした。行が「走っている」のまま残ります',
+    )
+  }
 }
 
 export const processUpscaleJob = async (
@@ -314,7 +384,11 @@ export const processUpscaleJob = async (
       deps.logger.warn({ jobId: job.id, code: error.code }, '解像度を上げる仕事が失敗しました')
       return { state: 'failed', code: error.code }
     }
-    // 知らない失敗は握り潰さない。順番だけ返して投げ直す（キューが数え、再試行する）。
+    /**
+     * 知らない失敗。**行を「走っている」のまま残さない**（キューは再試行しないので、残すと永久に止まる）。
+     * 握り潰しもしない。失敗として残してから投げ直す。
+     */
+    await markUnexpectedFailure(deps, job.id, error)
     await releaseGpu(deps, job.id)
     throw error
   }
