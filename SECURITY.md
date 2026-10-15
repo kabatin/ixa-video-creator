@@ -5,8 +5,11 @@
 **There is one passphrase and no user accounts** (ADR-0046). It is a single-operator tool that
 runs on the machine of the person editing the film.
 
-- The API answers 401 to everything except `/health`, signed `/files/*` URLs and the login
-  itself until you enter `IXA_PASSPHRASE` (12+ characters; the API refuses to start without it).
+- **The passphrase is optional while the API listens on loopback only** (the default). Without
+  one, the login screen signs you in without asking. **It is required to listen beyond this
+  machine**: with a non-loopback `API_HOST` and no `IXA_PASSPHRASE`, the API refuses to start.
+- With a passphrase set, the API answers 401 to everything except `/health`, signed `/files/*`
+  URLs and the login itself until you enter `IXA_PASSPHRASE` (12+ characters).
 - A login issues a random session key; only its hash is stored. The key lives in an HttpOnly,
   SameSite=Lax cookie for 30 days. Automation gets separate access tokens sent as a Bearer
   header, and either kind can be revoked.

@@ -14,6 +14,7 @@ import { hashToken } from './token.js'
  * - `GET /health`（起動の確認）
  * - `/files/*`（素材の再生・アップロード・書き出し。**署名付き URL そのものが鍵**で、Remotion も使う）
  * - `POST /auth/login`（入るための口）
+ * - `GET /auth/status`（合言葉が要るか。入り口の画面が、聞くか聞かずに入るかを決める）
  * - CORS の下見（OPTIONS。ブラウザはクッキーを付けずに送る）
  */
 
@@ -40,7 +41,8 @@ export const isPublicRequest = (method: string, path: string): boolean =>
   method === 'OPTIONS' ||
   (method === 'GET' && path === '/health') ||
   path.startsWith(`${STORAGE_FILE_ROUTE_PREFIX}/`) ||
-  (method === 'POST' && path === '/auth/login')
+  (method === 'POST' && path === '/auth/login') ||
+  (method === 'GET' && path === '/auth/status')
 
 const WRITE_METHODS: ReadonlySet<string> = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 

@@ -22,6 +22,8 @@ const WireIssuedToken = z.object({ accessToken: WireAccessToken, token: z.string
 export type WireIssuedToken = z.infer<typeof WireIssuedToken>
 
 export type AuthApi = {
+  /** 合言葉が要るか。**鍵なしで訊ける**（入り口の画面が、聞くか聞かずに入るかを決める）。 */
+  status: () => Promise<{ readonly passphraseRequired: boolean }>
   /** 合言葉で入る。成功するとブラウザにクッキーが付く。 */
   login: (passphrase: string) => Promise<WireAccessToken>
   /** この端末の鍵を取り消して出る。 */
@@ -33,6 +35,7 @@ export type AuthApi = {
 }
 
 export const createAuthApi = (requester: Requester): AuthApi => ({
+  status: () => requester.get('/auth/status', z.object({ passphraseRequired: z.boolean() })),
   login: (passphrase) => requester.post('/auth/login', { passphrase }, WireAccessToken),
   logout: async () => {
     await requester.post('/auth/logout', undefined, z.object({}))

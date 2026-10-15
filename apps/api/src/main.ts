@@ -1,7 +1,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { serve, type ServerType } from '@hono/node-server'
-import { describeEnvironment, getConfig, loopbackAssetUrlWarning } from '@ixa/config'
+import { describeEnvironment, getConfig, isLoopbackHost, loopbackAssetUrlWarning } from '@ixa/config'
 import {
   closeDbClient,
   createDbClient,
@@ -296,9 +296,10 @@ export const main = (): void => {
   const voiceJobs = createVoiceJobRepository(db)
   const timelineClips = createTimelineClipRepository(db)
   const textStyles = createTextStyleRepository(db)
-  // 門（認証）。**合言葉が無ければここで止まる**（門を開けたまま LAN に待ち受けない）。
+  // 門（認証）。合言葉が無ければ聞かずに入れる。**ただし外に開くのに無ければここで止まる。**
   const auth = createAuth({
     passphrase: config.api.passphrase,
+    host: config.api.host,
     tokens: createAccessTokenRepository(db),
     allowedOrigins: config.corsOrigins,
     logger,
@@ -457,10 +458,10 @@ export const main = (): void => {
     { fetch: app.fetch, port: config.api.port, hostname: config.api.host },
     (info) => {
       logger.info({ port: info.port, host: config.api.host }, 'api を起動しました')
-      if (config.api.host !== '127.0.0.1' && config.api.host !== 'localhost') {
+      if (!isLoopbackHost(config.api.host)) {
         logger.warn(
           { host: config.api.host },
-          '認証の無い API をこのマシンの外へ公開している。検証が終わったら API_HOST を戻すこと',
+          'API をこのマシンの外へ公開している。http なので合言葉とクッキーは平文で流れる。使わないときは API_HOST を戻すこと',
         )
       }
       // 外から使える形なのに素材の URL だけ手元を指していると、別の端末では素材が 1 つも出ない。

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
@@ -11,6 +11,10 @@ import { createRequester } from '@/lib/requester'
 /**
  * 合言葉を入れる（認証。2026-10-09）。入れたら、来た場所へ戻る。
  *
+ * **合言葉を決めていなければ聞かない**（制作者 2026-10-16「初めて触るひとはいきなり認証画面
+ * 出てきたら拒否反応出しそう」）。開いたら要るかを訊き、要らなければ空のまま入って戻る。
+ * 訊けなかったときは聞く形に倒す（入れなくなるより、入力欄が出るほうがまし）。
+ *
  * **戻るときは画面ごと読み直す**（`location.assign`）。サーバ側で描く画面がクッキー付きで
  * 描き直されないと、入ったのに中身が空のままになる。
  */
@@ -18,18 +22,43 @@ export const LoginForm = ({ next }: { readonly next: string | null }) => {
   const [passphrase, setPassphrase] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [asking, setAsking] = useState(false)
+  const api = useMemo(() => createAuthApi(createRequester(resolveApiBaseUrl())), [])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        if ((await api.status()).passphraseRequired) {
+          setAsking(true)
+          return
+        }
+        await api.login('')
+        window.location.assign(safeNextPath(next))
+      } catch {
+        setAsking(true)
+      }
+    })()
+  }, [api, next])
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
     setBusy(true)
     setError(null)
     try {
-      await createAuthApi(createRequester(resolveApiBaseUrl())).login(passphrase)
+      await api.login(passphrase)
       window.location.assign(safeNextPath(next))
     } catch (cause: unknown) {
       setError(describeForPerson(cause))
       setBusy(false)
     }
+  }
+
+  if (!asking) {
+    return (
+      <p role="status" className="text-sm text-muted">
+        開いています…
+      </p>
+    )
   }
 
   return (

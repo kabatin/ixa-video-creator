@@ -24,7 +24,7 @@ import { errorContent, fail, ok, successResponse } from '../response.js'
 /**
  * 入る・出る・鍵の管理（認証。制作者 2026-10-09「3 はまず認証の仕組みを追加しましょうか」）。
  *
- * `POST /auth/login` だけが門の外。ほかは門を通ったあとに届く。
+ * `POST /auth/login` と `GET /auth/status` だけが門の外。ほかは門を通ったあとに届く。
  */
 
 export const WRONG_PASSPHRASE_MESSAGE = '合言葉が違います'
@@ -32,7 +32,8 @@ export const TOO_MANY_ATTEMPTS_MESSAGE = '続けてまちがえたので、し�
 export const TOKENS_NEED_BROWSER_MESSAGE = 'アクセス用の鍵の発行と取り消しは、画面からだけできます'
 
 export type AuthRoutesDeps = {
-  readonly passphrase: string
+  /** `null` は「決めていない」。入る口は聞かずにクッキーを渡す（`createAuth` の注記）。 */
+  readonly passphrase: string | null
   readonly tokens: AccessTokenRepository
   readonly limiter: LoginLimiter
   readonly now: () => Date
@@ -81,13 +82,28 @@ const loginRoute = createRoute({
   summary: '合言葉で入る（その端末にクッキーを渡す）',
   request: {
     body: {
-      content: { 'application/json': { schema: z.object({ passphrase: z.string().min(1).max(200) }) } },
+      content: { 'application/json': { schema: z.object({ passphrase: z.string().max(200) }) } },
     },
   },
   responses: {
     200: { description: '入った', content: { 'application/json': { schema: successResponse(AccessTokenResponse) } } },
     401: errorContent('合言葉が違う'),
     429: errorContent('続けてまちがえた（Retry-After 秒だけ待つ）'),
+  },
+})
+
+const statusRoute = createRoute({
+  method: 'get',
+  path: '/auth/status',
+  tags: ['auth'],
+  summary: '合言葉が要るか（入り口の画面が、聞くか聞かずに入るかを決める）',
+  responses: {
+    200: {
+      description: '要るか',
+      content: {
+        'application/json': { schema: successResponse(z.object({ passphraseRequired: z.boolean() })) },
+      },
+    },
   },
 })
 
@@ -177,7 +193,8 @@ export const authRoutes = (deps: AuthRoutesDeps) => {
         c.header('Retry-After', String(Math.ceil(waitMs / 1000)))
         return c.json(fail(TOO_MANY_ATTEMPTS_MESSAGE), 429)
       }
-      if (!passphraseMatches(c.req.valid('json').passphrase, deps.passphrase)) {
+      // 決めていなければ聞かない。決めていれば、空も含めて照らし合わせる（空を「決めていない」と取り違えない）。
+      if (deps.passphrase !== null && !passphraseMatches(c.req.valid('json').passphrase, deps.passphrase)) {
         deps.limiter.recordFailure(key, nowMs)
         // 入れた文字はログに出さない。
         deps.logger.warn({ client: key }, '合言葉がまちがっていました')
@@ -201,6 +218,7 @@ export const authRoutes = (deps: AuthRoutesDeps) => {
       })
       return c.json(ok(toResponse(saved)), 200)
     })
+    .openapi(statusRoute, (c) => c.json(ok({ passphraseRequired: deps.passphrase !== null }), 200))
     .openapi(logoutRoute, async (c) => {
       const presented = presentedToken(c)
       const token = presented === null ? null : await resolveAccessToken(deps, presented)

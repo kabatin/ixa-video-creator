@@ -173,8 +173,6 @@ pnpm install
 cp .env.example .env          # defaults are safe: nothing bills
 # signing key for the URLs that show your footage in the browser (required for local files, ADR-0041)
 printf 'STORAGE_SIGNING_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
-# the passphrase the screen asks for (12+ characters; the API will not start without it, ADR-0046)
-echo 'IXA_PASSPHRASE=choose-a-long-phrase' >> .env
 pnpm infra:up                 # postgres, redis
 pnpm db:migrate
 pnpm db:seed                  # creates a workspace and writes its id into .env
@@ -182,7 +180,7 @@ pnpm db:seed                  # creates a workspace and writes its id into .env
 pnpm dev                      # web :3000, api :3001, worker, audio :8100
 ```
 
-Open <http://localhost:3000>, enter the passphrase (the device stays signed in for 30 days), create a project, and drop an audio file onto the window — the
+Open <http://localhost:3000>, create a project, and drop an audio file onto the window — the
 flow bar takes it from there. **Out of the box everything runs on local stubs — no API keys,
 no cost.**
 
@@ -309,10 +307,12 @@ This is a personal project built in the open. Interfaces still move.
 
 ## Security
 
-**One passphrase guards the API** (ADR-0046): without it every endpoint answers 401, even on
-your LAN. Automation (Claude, Codex) gets its own revocable access tokens. The API still binds to
-`127.0.0.1` by default, and there is no HTTPS — on a LAN the passphrase and the session cookie
-travel in plain text. Do not expose it to a network you do not control — see
+**A passphrase guards the API once you set one** (ADR-0046). Out of the box there is none and
+the screen lets you straight in; the API listens on `127.0.0.1` only. Set `IXA_PASSPHRASE`
+(12+ characters) and every endpoint answers 401 until the passphrase is entered — it is
+**required** before the API will listen beyond this machine (`API_HOST`). Automation (Claude,
+Codex) gets its own revocable access tokens. There is no HTTPS — on a LAN the passphrase and the
+session cookie travel in plain text. Do not expose it to a network you do not control — see
 [SECURITY.md](./SECURITY.md).
 
 ## Third-party licensing

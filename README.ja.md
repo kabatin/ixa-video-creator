@@ -155,8 +155,6 @@ pnpm install
 cp .env.example .env          # 既定は安全。課金は発生しない
 # 素材を画面へ見せる URL の署名の鍵（手元のファイルに置くときは必須。ADR-0041）
 printf 'STORAGE_SIGNING_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
-# 画面が聞く合言葉（12 文字以上。無いと API は起動しない。ADR-0046）
-echo 'IXA_PASSPHRASE=choose-a-long-phrase' >> .env
 pnpm infra:up                 # postgres / redis
 pnpm db:migrate
 pnpm db:seed                  # ワークスペースを作り、その ID を .env に書く
@@ -164,7 +162,7 @@ pnpm db:seed                  # ワークスペースを作り、その ID を .
 pnpm dev                      # web :3000, api :3001, worker, audio :8100
 ```
 
-<http://localhost:3000> を開いて合言葉を入れ（その端末は 30 日入ったまま）、Project を作り、音声ファイルを画面に落とす。あとは流れの帯が案内する。
+<http://localhost:3000> を開き、Project を作り、音声ファイルを画面に落とす。あとは流れの帯が案内する。
 **既定ではローカルのスタブだけで動く。鍵も費用も要らない。**
 
 ### 使う AI を選ぶ
@@ -280,8 +278,10 @@ AI の絵コンテの案 → AI の最初のフレーム → Take → レビュ�
 
 ## セキュリティ
 
-**API は合言葉で守られている**（ADR-0046）。合言葉なしでは LAN の中からでも全部 401 を返す。
-自動化（Claude・Codex）には取り消せる「アクセス用の鍵」を別に発行する。既定の待ち受けは `127.0.0.1` のまま。
+**合言葉を決めると API が守られる**（ADR-0046）。既定では決めておらず、画面は聞かずに入れる
+（待ち受けは `127.0.0.1` だけ）。`IXA_PASSPHRASE`（12 文字以上）を決めると、入れるまで全部 401 を返す。
+**この Mac の外（`API_HOST`）に開くなら必須**で、無いと API は起動しない。
+自動化（Claude・Codex）には取り消せる「アクセス用の鍵」を別に発行する。
 **HTTPS は無い**ので、LAN では合言葉とクッキーが平文で流れる。自分の管理下にないネットワークへ公開しないこと。
 [SECURITY.md](./SECURITY.md) を参照。
 

@@ -49,9 +49,10 @@ export const EnvSchema = z.object({
    * 短い鍵のまま動かすと、署名があるのに破れる。`fs` で未設定なら起動時に止める（storage.ts）。
    */
   /**
-   * API に入る合言葉（認証）。**12 文字以上。** 空なら未設定。
+   * API に入る合言葉（認証）。**12 文字以上。** 空なら未設定で、画面は聞かずに入れる。
    *
-   * worker は API を通らないので要らない。**API は未設定なら起動しない**（`apps/api/src/main.ts`）。
+   * worker は API を通らないので要らない。**API をこの Mac の外に開くなら必須**で、
+   * 無ければ起動しない（`apps/api/src/auth/create-auth.ts`）。
    * 画面で入れると、その端末は 30 日入ったままになる。
    */
   IXA_PASSPHRASE: z

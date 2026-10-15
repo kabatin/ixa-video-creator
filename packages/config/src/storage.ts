@@ -45,6 +45,13 @@ export const storageProblem = (env: Env): string | null => {
  *
  * **止めはしない。** 手元だけで使うなら正しい設定なので、起動を妨げずに言葉で残す。
  */
+/**
+ * 待ち受け先（`API_HOST`）がこのマシンの中だけか。`::1` のような IPv6 も括弧を補って読む。
+ * `0.0.0.0` と `::` は**すべての口**なので外とみなす。
+ */
+export const isLoopbackHost = (host: string): boolean =>
+  isLoopbackUrl(`http://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}`)
+
 export const loopbackAssetUrlWarning = (apiHost: string, publicBaseUrl: string): string | null => {
   if (isLoopbackUrl(`http://${apiHost}`)) return null
   if (!isLoopbackUrl(publicBaseUrl)) return null
