@@ -2,23 +2,31 @@
 
 ## Read this before you expose it
 
-**This application has no authentication or authorisation. None.** There are no users, no
-logins, no tokens. Anyone who can reach the HTTP port has full control.
+**There is one passphrase and no user accounts** (ADR-0046). It is a single-operator tool that
+runs on the machine of the person editing the film.
 
-That is a deliberate scope decision — it is a single-operator tool that runs on the
-machine of the person editing the film — but it means the deployment model matters more
-than it usually would.
+- The API answers 401 to everything except `/health`, signed `/files/*` URLs and the login
+  itself until you enter `IXA_PASSPHRASE` (12+ characters; the API refuses to start without it).
+- A login issues a random session key; only its hash is stored. The key lives in an HttpOnly,
+  SameSite=Lax cookie for 30 days. Automation gets separate access tokens sent as a Bearer
+  header, and either kind can be revoked.
+- Cookie-authenticated writes must come from an origin listed in `CORS_ORIGINS`.
+- Five wrong passphrases from one address within 15 minutes are answered with 429.
 
-### What an attacker on the same network could do
+**There is no HTTPS.** On a LAN the passphrase and the session cookie travel in plain text,
+so anyone who can watch that network can take over the session. Treat the passphrase as a
+lock against casual access, not as protection on a network you do not trust.
 
-If you bind the API to a reachable address, anyone on that network can:
+### What an attacker could do with the passphrase or a session
+
+Anyone holding either can:
 
 - delete projects, shots and timeline data
 - **enqueue generation jobs that bill your provider account**
 - read every asset in the storage bucket through signed URLs the API hands out
 - change the project budget, removing the only spending limit
 
-There is no rate limiting and no audit trail of who did what.
+There is no audit trail of who did what.
 
 ### Defaults
 
@@ -28,8 +36,8 @@ There is no rate limiting and no audit trail of who did what.
 | Web (`:3000`) | Next.js default | `next dev` listens on all interfaces. Bind or firewall it yourself if that matters. |
 | Video provider | `stub` | No billing until `VIDEO_PROVIDER=fal`. |
 
-**Do not put this on the public internet.** If you need access from another device, put it
-behind something that authenticates — a reverse proxy with auth, a VPN, or an SSH tunnel:
+**Do not put this on the public internet.** If you need access from another device over a
+network you do not control, use a VPN or an SSH tunnel:
 
 ```bash
 ssh -L 3000:localhost:3000 -L 3001:localhost:3001 you@your-machine
@@ -69,6 +77,6 @@ enough to start billing** — the `VIDEO_PROVIDER` switch has to be flipped deli
 Open a GitHub issue for anything non-sensitive. For something that should not be public
 first, use GitHub's private vulnerability reporting on this repository.
 
-Please do not report "the API has no authentication" — it is documented here and is a known
+Please do not report "the LAN traffic is not encrypted" — it is documented here and is a known
 property of the current scope. Reports about *unintended* exposure (a secret reaching a
 response body or a log, a path that escapes its bucket, an injection) are very welcome.

@@ -173,6 +173,8 @@ pnpm install
 cp .env.example .env          # defaults are safe: nothing bills
 # signing key for the URLs that show your footage in the browser (required for local files, ADR-0041)
 printf 'STORAGE_SIGNING_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
+# the passphrase the screen asks for (12+ characters; the API will not start without it, ADR-0046)
+echo 'IXA_PASSPHRASE=choose-a-long-phrase' >> .env
 pnpm infra:up                 # postgres, redis
 pnpm db:migrate
 pnpm db:seed                  # creates a workspace and writes its id into .env
@@ -180,7 +182,7 @@ pnpm db:seed                  # creates a workspace and writes its id into .env
 pnpm dev                      # web :3000, api :3001, worker, audio :8100
 ```
 
-Open <http://localhost:3000>, create a project, and drop an audio file onto the window — the
+Open <http://localhost:3000>, enter the passphrase (the device stays signed in for 30 days), create a project, and drop an audio file onto the window — the
 flow bar takes it from there. **Out of the box everything runs on local stubs — no API keys,
 no cost.**
 
@@ -252,6 +254,12 @@ it. Measured on an M5: a 2.7s shot took 5.1 min as a draft and 14.0 min as a fin
 different generation size produces a different picture — it is a re-shoot with the same
 instructions, not an upscale.
 
+**Or keep the picture and upscale it** (ADR-0044). *Upscale* runs vpipe's FlashVSR on a finished
+take: the picture stays exactly as adopted and only the detail sharpens, to 1920×1080. Do it per
+take, or for every adopted take from the bulk bar. Measured: about 5.5 min per shot, and the
+upscaled take is appended next to the original. Takes are stored at the size the model actually
+drew (ADR-0045) and scaled once, with Lanczos, at export.
+
 **They share one GPU, so ixa never runs two local generations at the same time.** Ask for two
 and they finish one after another; the waiting one shows as *waiting in line* rather than in
 progress.
@@ -301,8 +309,11 @@ This is a personal project built in the open. Interfaces still move.
 
 ## Security
 
-**The API has no authentication.** It binds to `127.0.0.1` by default. Do not expose it to
-a network you do not control — see [SECURITY.md](./SECURITY.md).
+**One passphrase guards the API** (ADR-0046): without it every endpoint answers 401, even on
+your LAN. Automation (Claude, Codex) gets its own revocable access tokens. The API still binds to
+`127.0.0.1` by default, and there is no HTTPS — on a LAN the passphrase and the session cookie
+travel in plain text. Do not expose it to a network you do not control — see
+[SECURITY.md](./SECURITY.md).
 
 ## Third-party licensing
 
