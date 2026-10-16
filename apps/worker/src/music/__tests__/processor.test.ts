@@ -287,6 +287,16 @@ describe('processMusicJob', () => {
     expect(s.musicJobs.snapshot()[0]?.status).toBe('cancelled')
   })
 
+  it('思わぬ失敗は決まった文だけを画面へ出す（手元のパスなど実装の言葉を出さない）', async () => {
+    const s = await setup(fakeProvider([new Error("ENOENT: no such file '/Users/someone/ace-step/out.wav'")]))
+
+    expect(await processMusicJob(s.deps, { musicJobId: s.job.id })).toEqual({ state: 'failed' })
+
+    const error = s.musicJobs.snapshot()[0]?.error
+    expect(error).toEqual({ code: 'unexpected', message: '曲を作れませんでした。少し待ってからもう一度作ってください。', retryable: true })
+    expect(error?.message).not.toContain('/Users')
+  })
+
   it('この環境に口が無いモデルなら、選び直すよう言って失敗にする', async () => {
     const s = await setup(null)
 

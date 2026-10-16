@@ -31,11 +31,15 @@ export const MUSIC_GPU_TIMEOUT_MESSAGE =
 const GPU_UNAVAILABLE_MESSAGE = 'この Mac の GPU の順番を確かめられませんでした。少し待ってからもう一度作ってください。'
 const BUSY_TIMEOUT_MESSAGE = '曲を作る先が長く混んでいたため、作るのをやめました。少し待ってからもう一度作ってください。'
 
-const describeUnexpected = (error: unknown): MusicJobError => ({
+/**
+ * 思わぬ失敗の画面の文。**例外の文は入れない**（手元のファイルの絶対パスや実装の言葉が混ざる）。
+ * 理由はログ（`err`）にだけ残す。
+ */
+const UNEXPECTED: MusicJobError = {
   code: 'unexpected',
-  message: `曲を作れませんでした: ${error instanceof Error ? error.message : String(error)}`,
+  message: '曲を作れませんでした。少し待ってからもう一度作ってください。',
   retryable: true,
-})
+}
 
 const turnJob = (job: MusicJob): LocalGpuTurnJob => ({ id: job.id, queuedAt: job.queuedAt, logContext: { musicJobId: job.id } })
 
@@ -121,7 +125,7 @@ export const processMusicJob = async (deps: MusicProcessorDeps, data: unknown): 
         ? error.failure
         : error instanceof ProviderBusyError
           ? { code: 'provider_busy_timeout', message: BUSY_TIMEOUT_MESSAGE, retryable: true }
-          : describeUnexpected(error)
+          : UNEXPECTED
     deps.logger.error({ musicJobId: job.id, code: failure.code, err: error }, '曲を作れませんでした')
     const failed = await deps.musicJobs.markFailed(job.id, failure, error instanceof MusicJobFailure ? error.record : null)
     await publishMusicJobStatus(deps, failed)
