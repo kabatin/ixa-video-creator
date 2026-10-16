@@ -13,6 +13,7 @@ import {
   INITIAL_MUSIC_FORM,
   activeMusicJobs,
   describeMusicJob,
+  musicJobAddedTracks,
   musicJobNotice,
   validateMusicForm,
   type MusicForm,
@@ -146,5 +147,24 @@ describe('musicJobNotice', () => {
     expect(musicJobNotice(event('queued'))).toBeNull()
     expect(musicJobNotice(event('running'))).toBeNull()
     expect(musicJobNotice(event('cancelled'))).toBeNull()
+  })
+
+  it('止めたのに間に合わず楽曲を足していたら、足したことを言う（黙ると一覧に増えた理由が分からない）', () => {
+    expect(musicJobNotice(event('cancelled', ['01J9ZK3V8Q4W6N2T5R7Y1X3C9C']))).toBe(
+      '曲を作るのを止めましたが、間に合わず楽曲に 1 曲足しました。',
+    )
+  })
+})
+
+describe('musicJobAddedTracks', () => {
+  it('楽曲を足した知らせなら（できた・止めたが間に合わなかった）楽曲の一覧を読み直す', () => {
+    expect(musicJobAddedTracks(event('succeeded', ['01J9ZK3V8Q4W6N2T5R7Y1X3C9C']))).toBe(true)
+    expect(musicJobAddedTracks(event('cancelled', ['01J9ZK3V8Q4W6N2T5R7Y1X3C9C']))).toBe(true)
+  })
+
+  it('楽曲を足していなければ読み直さない', () => {
+    expect(musicJobAddedTracks(event('running'))).toBe(false)
+    expect(musicJobAddedTracks(event('cancelled'))).toBe(false)
+    expect(musicJobAddedTracks(event('failed', [], '落ちた'))).toBe(false)
   })
 })

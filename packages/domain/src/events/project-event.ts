@@ -108,7 +108,7 @@ export const ProjectEvent = z.discriminatedUnion('type', [
     type: z.literal('music_job.status'),
     jobId: MusicJobId,
     status: MusicJobStatus,
-    /** できた楽曲。成功したときだけ中身がある。 */
+    /** 足した楽曲。成功したときと、楽曲を足している間に止められたときだけ中身がある（画面が楽曲の一覧を読み直す）。 */
     musicTrackIds: z.array(MusicTrackId).default([]),
     error: z.string().nullable(),
   }),

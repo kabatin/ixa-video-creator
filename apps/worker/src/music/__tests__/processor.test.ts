@@ -289,6 +289,30 @@ describe('processMusicJob', () => {
     expect(s.musicJobs.snapshot()[0]?.status).toBe('cancelled')
   })
 
+  it('楽曲を足している間に止められたら、足した楽曲は残し、楽曲の一覧を読み直せるよう ID を知らせる', async () => {
+    const s = await setup(fakeProvider([await succeeded(2)]))
+    const deps: MusicProcessorDeps = {
+      ...s.deps,
+      analysisQueue: {
+        enqueue: async (id) => {
+          s.analyzed.push(id)
+          await s.musicJobs.cancelActive(project.id)
+        },
+      },
+    }
+
+    expect(await processMusicJob(deps, { musicJobId: s.job.id })).toEqual({ state: 'skipped' })
+
+    const tracks = s.tracks.snapshot()
+    expect(tracks).toHaveLength(2)
+    expect(s.musicJobs.snapshot()[0]?.status).toBe('cancelled')
+    expect(s.events.published().at(-1)).toMatchObject({
+      type: 'music_job.status',
+      status: 'cancelled',
+      musicTrackIds: tracks.map((track) => track.id),
+    })
+  })
+
   it('取り込んだ後で worker が落ちて同じジョブをやり直しても、楽曲を二重に作らない', async () => {
     const provider = fakeProvider([await succeeded(2)])
     const s = await setup(provider)

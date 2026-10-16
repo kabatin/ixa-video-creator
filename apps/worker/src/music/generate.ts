@@ -58,6 +58,32 @@ const recordOf = (handle: ProviderJobHandle, raw: Record<string, unknown> = {}):
 })
 
 /**
+ * 成功にして知らせる。**楽曲を足している間に止められていたら**、行は止めたまま（上書きされない）返ってくる。
+ *
+ * そのとき足した楽曲は消さない（1 曲目がマスターになっていることもあり、勝手に戻すと制作者の選びと区別できない）。
+ * 代わりに、足した楽曲の ID を載せて止めた知らせを流し直す。画面はそれを見て楽曲の一覧を読み直す
+ * （載せないと、止めたのに一覧に無い曲が、読み直すまで見えないまま残る）。
+ */
+const settle = async (
+  deps: MusicProcessorDeps,
+  job: MusicJob,
+  musicTrackIds: readonly MusicTrackId[],
+  providerRecord: Record<string, unknown>,
+): Promise<void> => {
+  const settled = await deps.musicJobs.markSucceeded(job.id, { musicTrackIds, providerRecord })
+  if (settled.status === 'succeeded') {
+    await publishMusicJobStatus(deps, settled)
+    return
+  }
+  deps.logger.warn(
+    { musicJobId: job.id, status: settled.status, musicTrackIds },
+    '楽曲を足している間に曲のジョブが止められました。足した楽曲は残します',
+  )
+  await publishMusicJobStatus(deps, { ...settled, musicTrackIds: [...musicTrackIds] })
+  throw new MusicJobCancelled(job.id)
+}
+
+/**
  * 曲を作って楽曲にする（ADR-0048）。順番（GPU）は呼ぶ側が持っている。
  * 投入（冪等キーはジョブの ID）→ 作り始めの印 → 出来上がりを待つ → 数を確かめる → 取り込む → 成功。
  * 手元に置いた WAV は、失敗しても片付ける。
@@ -103,11 +129,7 @@ export const generateMusic = async (deps: MusicProcessorDeps, adapter: MusicAdap
     }
     await throwIfCancelled(deps, job)
     const musicTrackIds = await registerTracks(deps, project, job, result)
-    const succeeded = await deps.musicJobs.markSucceeded(job.id, {
-      musicTrackIds,
-      providerRecord: recordOf(handle, result.raw),
-    })
-    await publishMusicJobStatus(deps, succeeded)
+    await settle(deps, job, musicTrackIds, recordOf(handle, result.raw))
   } finally {
     await adapter.provider.release?.(handle)
   }

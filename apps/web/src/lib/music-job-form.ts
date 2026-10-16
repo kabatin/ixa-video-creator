@@ -102,17 +102,26 @@ export const describeMusicJob = (job: WireMusicJob): string => {
   return job.status === 'queued' ? `順番を待っています…（${what}）` : `曲を作っています…（${what}）`
 }
 
+type MusicJobEvent = Extract<ProjectEvent, { type: 'music_job.status' }>
+
 /**
- * 曲のジョブの出来事から、上の知らせに出す文。できた・作れなかったときだけ。
- * 止めたとき・途中の出来事は null（止めたのは本人なので知らせない）。
+ * 楽曲を足した知らせか（楽曲の一覧を読み直すか）。できたときに加えて、
+ * **止めたが間に合わず足していた**とき（worker が足した楽曲の ID を載せて止めた知らせを流す）も読み直す。
+ */
+export const musicJobAddedTracks = (event: MusicJobEvent): boolean => event.musicTrackIds.length > 0
+
+/**
+ * 曲のジョブの出来事から、上の知らせに出す文。できた・作れなかった・止めたが楽曲を足していたときだけ。
+ * ふつうに止めたとき・途中の出来事は null（止めたのは本人なので知らせない）。
  * 理由を捨てると、利用者から見て「遅い」と「失敗した」が区別できない。
  */
-export const musicJobNotice = (
-  event: Extract<ProjectEvent, { type: 'music_job.status' }>,
-): string | null => {
+export const musicJobNotice = (event: MusicJobEvent): string | null => {
   if (event.status === 'succeeded') {
     return `曲ができました。楽曲に ${String(event.musicTrackIds.length)} 曲足しました（解析を始めています）。`
   }
   if (event.status === 'failed') return `曲を作れませんでした: ${event.error ?? '理由が届きませんでした。'}`
+  if (event.status === 'cancelled' && musicJobAddedTracks(event)) {
+    return `曲を作るのを止めましたが、間に合わず楽曲に ${String(event.musicTrackIds.length)} 曲足しました。`
+  }
   return null
 }
