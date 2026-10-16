@@ -5,8 +5,11 @@ import { MusicJobCancelled, MusicJobFailure, type MusicProcessorDeps } from './d
 /** 問い合わせが続けてこの回数だけ通信で失敗したら諦める（サーバの再起動 1 回で曲を捨てない）。 */
 const MAX_CONSECUTIVE_POLL_FAILURES = 3
 const DEFAULT_POLL_INTERVAL_MS = 3_000
-/** 240 秒の曲を 4 つ作っても収まる長さ。これを過ぎて仕上がらないのはサーバが詰まっている。 */
-export const MUSIC_MAX_WAIT_MS = 60 * 60 * 1000
+/**
+ * 投入してから仕上がるまでの上限（GPU の順番待ちは別に数える）。実測は 60 秒の曲 1 つで 33〜34 秒
+ * （初回は読み込みで最大 93 秒）。240 秒の曲を 4 つ頼んでも十分に収まる長さを取る。
+ */
+export const MUSIC_MAX_WAIT_MS = 15 * 60 * 1000
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 

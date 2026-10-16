@@ -35,7 +35,7 @@ export type MusicProcessorDeps = {
   readonly gpuRenewIntervalMs?: number
   /** 出来上がりを見に行く間隔。既定 3 秒。 */
   readonly pollIntervalMs?: number
-  /** 投入してからこれを過ぎても仕上がらなければ諦める。既定 60 分。 */
+  /** 投入してからこれを過ぎても仕上がらなければ諦める。既定 15 分。 */
   readonly maxWaitMs?: number
 }
 

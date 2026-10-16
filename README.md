@@ -248,7 +248,7 @@ It shares the GPU with video, so it waits in the same line as video and upscalin
 **Music can be made locally too** (ADR-0048). Start ace-step-api (ACE-Step 1.5, default
 `http://127.0.0.1:8768`), set `LOCAL_MUSIC_GENERATOR=ace_step`, and pick it under *Which AI* for
 music. Use *Make a song* in the music area to give a style, optional lyrics, a length (10–240 s),
-instrumental or not, and how many (1–4). Each result becomes a music track and is sent to beat
+instrumental or not, and how many (1–4). About 40 s per 60-second song (up to ~1.5 min on the first run while the model loads), free (MIT licensed). Each result becomes a music track and is sent to beat
 analysis (the first one becomes the master only when the project has none). It shares the GPU with
 video and waits in the same line (`ACE_STEP_API_URL` / `ACE_STEP_API_TOKEN` work like the ones above).
 

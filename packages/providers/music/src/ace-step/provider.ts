@@ -40,9 +40,9 @@ import { ensureAceStepRequest } from './request.js'
 
 /** 1 回の HTTP の上限。投入の本文は歌詞だけなので小さい。 */
 export const ACE_STEP_REQUEST_TIMEOUT_MS = 30_000
-/** 出来上がり 1 曲を取り込む上限。240 秒のステレオ WAV は 40〜90MB。 */
+/** 出来上がり 1 曲を取り込む上限。240 秒・48kHz・PCM16 のステレオ WAV は約 46MB。 */
 export const ACE_STEP_DOWNLOAD_TIMEOUT_MS = 180_000
-/** 出来上がり 1 曲の上限。240 秒・48kHz・32bit のステレオでも 100MB に届かない。 */
+/** 出来上がり 1 曲の上限。240 秒・48kHz・PCM16 のステレオで約 46MB なので、桁違いに大きいものは何かがおかしい。 */
 export const ACE_STEP_MAX_OUTPUT_BYTES = 256 * 1024 * 1024
 
 export type AceStepMusicProviderOptions = {

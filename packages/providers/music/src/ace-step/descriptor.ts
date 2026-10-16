@@ -8,6 +8,10 @@ import type { LocalServerIdentity } from '@ixa/provider-video'
  * 契約の正は ace-step-api の `docs/api.md` と `GET /v1/capabilities`。
  * やりとりの作法は klein-api・vpipe-api と同じ v1 のジョブ式で、出来上がりは WAV（ステレオ）。
  * モデルのファイル・step・CFG はサーバが決める（ixa は曲調・歌詞・長さ・数だけを送る）。
+ * 重みとコードは MIT ライセンス。
+ *
+ * 実測（対象の Mac。2026-10-17）: 60 秒の曲で初回 58〜93 秒（モデルの読み込み込み）、2 回目からは 33〜34 秒。
+ * 出力は PCM16・48kHz・ステレオで、長さは頼んだとおり。**同じ seed でも同じ曲にはならない**（再現は約束しない）。
  */
 export const ACE_STEP_PROVIDER_ID: ProviderId = ProviderId.parse('ace_step')
 
