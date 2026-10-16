@@ -59,6 +59,8 @@ import { createUpscaleWiring } from './upscale-wiring.js'
 import type { UpscaleProcessorDeps } from './upscale/index.js'
 import type { ImageProcessorDeps } from './image/index.js'
 import type { VoiceProcessorDeps } from './voice/index.js'
+import type { MusicProcessorDeps } from './music/index.js'
+import { createMusicWiring } from './music-wiring.js'
 import { createVoiceWiring } from './voice-wiring.js'
 import { createRegenerationEnqueue } from './regeneration-wiring.js'
 import { QUEUE_NAMES } from './queues.js'
@@ -81,6 +83,8 @@ export type GenerationWiring = {
   readonly image: ImageProcessorDeps
   /** ナレーションの声と文字起こし（ADR-0038）。 */
   readonly voice: VoiceProcessorDeps
+  /** 曲を作る（ADR-0048）。 */
+  readonly music: MusicProcessorDeps
   /**
    * 解像度を上げる（ADR-0044）。**この機械に上げる口が無ければ null。**
    * 無いことを `undefined` ではなく `null` で表す（配線し忘れと区別するため）。
@@ -153,6 +157,9 @@ export const createGenerationWiring = (
   const mediaQueue = new Queue(QUEUE_NAMES.media, { connection })
   /** 手元の GPU の順番待ちの絵を積み直す先（ADR-0047）。 */
   const imageQueue = new Queue(QUEUE_NAMES.image, { connection })
+  /** 順番待ちの曲を積み直す先と、できた楽曲を解析に回す先（ADR-0048）。 */
+  const musicQueue = new Queue(QUEUE_NAMES.music, { connection })
+  const analysisQueue = new Queue(QUEUE_NAMES.analysis, { connection })
 
   /** ポーリングの再スケジュールは BullMQ の delay で行う。repeatable job は使わない。 */
   const scheduler: PollScheduler = {
@@ -375,6 +382,22 @@ export const createGenerationWiring = (
       imageQueue,
     }),
     voice: createVoiceWiring({ config, db, storage, mediaQueue: deps.mediaQueue, events: deps.events, logger }),
+    music: createMusicWiring({
+      db,
+      storage,
+      mediaQueue: deps.mediaQueue,
+      events: deps.events,
+      logger,
+      outputRoot: stubOutputDir,
+      aceStep: {
+        enabled: config.providers.localMusicGenerators.includes('ace_step'),
+        baseUrl: config.providers.aceStepApiUrl,
+        token: config.providers.aceStepApiToken,
+      },
+      localGpuLease,
+      musicQueue,
+      analysisQueue,
+    }),
     upscale: upscaleWiring?.deps ?? null,
     queue,
     close: async () => {
@@ -382,6 +405,8 @@ export const createGenerationWiring = (
       await upscaleWiring?.queue.close()
       await mediaQueue.close()
       await imageQueue.close()
+      await musicQueue.close()
+      await analysisQueue.close()
       await regenerationQueue.close()
       await db.$client.end()
     },

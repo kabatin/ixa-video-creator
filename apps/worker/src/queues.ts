@@ -13,6 +13,7 @@ export const QUEUE_NAMES = {
   image: 'image',
   voice: 'voice',
   upscale: 'upscale',
+  music: 'music',
 } as const
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES]
@@ -62,6 +63,10 @@ export const QUEUE_CONFIGS: readonly QueueConfig[] = [
    * （順番そのものは整理券（`local-gpu-lease.ts`）が揃えるが、ここを増やしても待つだけ）。
    */
   { name: QUEUE_NAMES.upscale, concurrency: 1 },
+  /**
+   * 曲を作る（ADR-0048）。**同時 1 つ。** 手元の GPU を使うので、増やしても整理券で待つだけ。
+   */
+  { name: QUEUE_NAMES.music, concurrency: 1 },
 ]
 
 const concurrencyEnvVarName = (queueName: QueueName): string =>

@@ -18,6 +18,7 @@ import { processRegenerationJob } from './regeneration/index.js'
 import { failInterruptedImageJob, processImageJob } from './image/index.js'
 import { processUpscaleJob } from './upscale/index.js'
 import { failInterruptedVoiceJob, processVoiceJob } from './voice/index.js'
+import { failInterruptedMusicJob, processMusicJob } from './music/index.js'
 
 /** graceful shutdown の既定タイムアウト（ミリ秒）。超過したら強制終了する。 */
 const SHUTDOWN_TIMEOUT_MS = 30_000
@@ -59,6 +60,8 @@ const createWorkers = (
             return (await processImageJob(generation.image, job.data)).state
           case QUEUE_NAMES.voice:
             return (await processVoiceJob(generation.voice, job.data)).state
+          case QUEUE_NAMES.music:
+            return (await processMusicJob(generation.music, job.data)).state
           case QUEUE_NAMES.upscale: {
             // 上げる口が無い機械にジョブは積まれない。積まれていたら設定の食い違いなので黙って捨てない。
             if (generation.upscale === null) {
@@ -93,6 +96,9 @@ const createWorkers = (
       }
       if (config.name === QUEUE_NAMES.voice && job !== undefined) {
         void failInterruptedVoiceJob(generation.voice, job.data, error.message)
+      }
+      if (config.name === QUEUE_NAMES.music && job !== undefined) {
+        void failInterruptedMusicJob(generation.music, job.data, error.message)
       }
     })
 
