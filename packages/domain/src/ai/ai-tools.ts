@@ -1,15 +1,15 @@
 import { z } from 'zod'
 
 /**
- * 使う AI（ADR-0032）。この環境で見つかった AI から、テキスト・画像・動画・声・文字起こしごとに 1 つ選ぶ
- * （声と文字起こしは ADR-0038）。
+ * 使う AI（ADR-0032）。この環境で見つかった AI から、テキスト・画像・動画・声・文字起こし・曲ごとに 1 つ選ぶ
+ * （声と文字起こしは ADR-0038、曲は ADR-0048）。
  *
  * **何に使えるかは、アダプタが実際にある用途だけを書く。** 入っていても口が無い用途は選ばせない
  * （Gemini・Grok は見つけて見せるが、テキストの口ができるまでは選べない）。
  * 選べるかの規則は `aiChoiceProblem` の 1 か所で、API の検証と画面の灰色が同じ理由を言う。
  */
 
-export const AiPurpose = z.enum(['text', 'image', 'video', 'voice', 'transcribe'])
+export const AiPurpose = z.enum(['text', 'image', 'video', 'voice', 'transcribe', 'music'])
 export type AiPurpose = z.infer<typeof AiPurpose>
 
 export const AI_PURPOSE_LABELS: Readonly<Record<AiPurpose, string>> = Object.freeze({
@@ -18,6 +18,7 @@ export const AI_PURPOSE_LABELS: Readonly<Record<AiPurpose, string>> = Object.fre
   video: '動画',
   voice: '声',
   transcribe: '文字起こし',
+  music: '曲',
 })
 
 export const AiToolId = z.enum([
@@ -30,6 +31,7 @@ export const AiToolId = z.enum([
   'vpipe',
   'wan',
   'klein',
+  'ace_step',
   'fal',
   'macos_say',
   'gemini_api',
@@ -53,11 +55,11 @@ export type AiToolDetection =
   /** whisper.cpp（`whisper-cli`）が入っていて、モデルのファイル（`WHISPER_CPP_MODEL`）があるか。 */
   | { readonly kind: 'whisper_cpp' }
   /**
-   * 手元の生成サーバが応答するか（`GET /v1/health`。ADR-0031 / 0040 / 0047）。
-   * **どのサーバかを持つ。** 3 台（vpipe-api・wan-api・klein-api）あるので、持たないと
+   * 手元の生成サーバが応答するか（`GET /v1/health`。ADR-0031 / 0040 / 0047 / 0048）。
+   * **どのサーバかを持つ。** 4 台（vpipe-api・wan-api・klein-api・ace-step-api）あるので、持たないと
    * 1 台の起動でほかが「使える」と出てしまう。
    */
-  | { readonly kind: 'local_server'; readonly server: 'vpipe' | 'wan' | 'klein' }
+  | { readonly kind: 'local_server'; readonly server: 'vpipe' | 'wan' | 'klein' | 'ace_step' }
 
 export type AiToolSpec = {
   readonly id: AiToolId
@@ -77,7 +79,8 @@ export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
     id: 'stub',
     label: 'お試し（AI を使わない仮のもの）',
     detect: { kind: 'builtin' },
-    purposes: ['text', 'image', 'video', 'voice', 'transcribe'],
+    // 曲は作れない（選ぶと「曲を作る AI を選んでください」と断る）。選び直すまでの置き場。
+    purposes: ['text', 'image', 'video', 'voice', 'transcribe', 'music'],
   }),
   claude_cli: tool({
     id: 'claude_cli',
@@ -136,6 +139,15 @@ export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
     notice:
       'この Mac で作るので無料です。手元の動画と同じ GPU を使うため、動画を作っている間は順番を待ちます。',
   }),
+  ace_step: tool({
+    id: 'ace_step',
+    label: '手元の ACE-Step 1.5（ace-step・無料）',
+    detect: { kind: 'local_server', server: 'ace_step' },
+    purposes: ['music'],
+    // 動画と同じ機械の GPU を使う（ADR-0048）。動画や絵を作っている間は曲も順番待ちになる。
+    notice:
+      'この Mac で作るので無料です。手元の動画・絵と同じ GPU を使うため、それらを作っている間は順番を待ちます。',
+  }),
   fal: tool({
     id: 'fal',
     label: 'fal（Seedance・従量課金）',
@@ -187,6 +199,7 @@ export const AiSettings = z.object({
   video: AiToolId,
   voice: AiToolId,
   transcribe: AiToolId,
+  music: AiToolId,
 })
 export type AiSettings = z.infer<typeof AiSettings>
 
@@ -215,6 +228,7 @@ const RECOMMENDATION_ORDER: Readonly<Record<AiPurpose, readonly AiToolId[]>> = O
   video: ['vpipe', 'wan', 'local'],
   voice: ['macos_say'],
   transcribe: ['whisper_cpp'],
+  music: ['ace_step'],
 })
 
 /** 初めて選ぶときの初期の組み合わせ。見つかって使えるものから選び、無ければお試し。 */
@@ -231,6 +245,7 @@ export const recommendAiSettings = (
     video: pick('video'),
     voice: pick('voice'),
     transcribe: pick('transcribe'),
+    music: pick('music'),
   }
 }
 
@@ -260,4 +275,6 @@ export const aiDefaultsFromEnv = (env: AiEnvChoices): AiSettings => ({
   // 声と文字起こしは新しい用途。選ぶまではお試し（音を作らない・外に出さない）。
   voice: 'stub',
   transcribe: 'stub',
+  // 曲も新しい用途。選ぶまではお試し（作らない）。
+  music: 'stub',
 })

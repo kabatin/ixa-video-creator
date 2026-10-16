@@ -1044,6 +1044,7 @@ motion_templates
 music_tracks
 music_analyses               (JSONB: beats / downbeats / sections / energy_curve)
 music_analysis_failures      (直近の解析の失敗。楽曲 1 件につき 1 行。頼み直すと消える)
+music_jobs                   (曲を作るジョブ。できた曲は music_tracks になる。追記のみ / ADR-0048)
 scripts
 script_versions
 sequences

@@ -22,6 +22,8 @@ export const aiSettings = pgTable(
      */
     voiceTool: text('voice_tool').notNull().default('stub'),
     transcribeTool: text('transcribe_tool').notNull().default('stub'),
+    /** 曲（ADR-0048）。声と同じ理由で既定値をお試しにする。 */
+    musicTool: text('music_tool').notNull().default('stub'),
     updatedAt: updatedAt(),
   },
   (table) => [check('ai_settings_single_row', sql`${table.id} = 'default'`)],

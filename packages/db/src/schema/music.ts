@@ -1,5 +1,14 @@
 import { boolean, doublePrecision, index, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
-import type { MusicAnalysis, MusicSection, Seconds } from '@ixa/domain'
+import {
+  MusicJobStatus as MusicJobStatusSchema,
+  type MusicAnalysis,
+  type MusicJobError,
+  type MusicJobSpec,
+  type MusicJobStatus,
+  type MusicSection,
+  type MusicTrackId,
+  type Seconds,
+} from '@ixa/domain'
 import { createdAt, deletedAt, seconds, timestampTz, ulidPk, ulidRef } from './columns.js'
 import { mediaAssets } from './media.js'
 import { projects } from './workspace.js'
@@ -78,3 +87,30 @@ export const musicAnalysisFailures = pgTable('music_analysis_failures', {
   message: text('message').notNull(),
   failedAt: timestampTz('failed_at').notNull().defaultNow(),
 })
+
+/**
+ * 曲を作るジョブ（ADR-0048）。★ 追記のみ（状態の遷移と、そのとき決まる列だけ更新する）。
+ * できた曲は楽曲（music_tracks）の側にあり、ここはその ID を持つだけ。
+ */
+export const musicJobs = pgTable(
+  'music_jobs',
+  {
+    id: ulidPk(),
+    projectId: ulidRef('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    tool: text('tool').notNull(),
+    model: text('model'),
+    spec: jsonb('spec').$type<MusicJobSpec>().notNull(),
+    status: text('status', { enum: MusicJobStatusSchema.options }).$type<MusicJobStatus>().notNull(),
+    error: jsonb('error').$type<MusicJobError>(),
+    /** 調べるための記録（生成先のジョブ・かかった時間）。鍵と URL は入れない。 */
+    providerRecord: jsonb('provider_record').$type<Record<string, unknown>>(),
+    /** できた楽曲。成功するまで空。 */
+    musicTrackIds: jsonb('music_track_ids').$type<MusicTrackId[]>().notNull().default([]),
+    queuedAt: timestampTz('queued_at').notNull().defaultNow(),
+    startedAt: timestampTz('started_at'),
+    finishedAt: timestampTz('finished_at'),
+  },
+  (t) => [index('music_jobs_project_status_idx').on(t.projectId, t.status)],
+)

@@ -62,6 +62,7 @@ describe('recommendAiSettings', () => {
       video: 'local',
       voice: 'stub',
       transcribe: 'stub',
+      music: 'stub',
     })
   })
 
@@ -78,6 +79,7 @@ describe('recommendAiSettings', () => {
       video: 'local',
       voice: 'stub',
       transcribe: 'stub',
+      music: 'stub',
     })
   })
 
@@ -110,7 +112,7 @@ describe('recommendAiSettings', () => {
     }
     const recommended = recommendAiSettings(statuses)
 
-    for (const purpose of ['text', 'image', 'video', 'voice', 'transcribe'] as const) {
+    for (const purpose of ['text', 'image', 'video', 'voice', 'transcribe', 'music'] as const) {
       const tool = recommended[purpose]
       expect(aiChoiceProblem(purpose, tool, statuses[tool])).toBeNull()
     }
@@ -118,14 +120,14 @@ describe('recommendAiSettings', () => {
 })
 
 describe('resolveAiSettings', () => {
-  const defaults = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' } as const
+  const defaults = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub' } as const
 
   it('まだ選んでいなければ初期値（環境変数）を使い、そう名乗る', () => {
     expect(resolveAiSettings(null, defaults)).toEqual({ settings: defaults, source: 'default' })
   })
 
   it('選んであれば選んだものが勝つ', () => {
-    const saved = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'macos_say', transcribe: 'whisper_cpp' } as const
+    const saved = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'macos_say', transcribe: 'whisper_cpp', music: 'ace_step' } as const
 
     expect(resolveAiSettings(saved, defaults)).toEqual({ settings: saved, source: 'saved' })
   })
@@ -136,7 +138,7 @@ describe('aiDefaultsFromEnv', () => {
   const env = { storyboardDrafter: 'stub', imageProvider: 'stub' } as const
 
   it('何も指定が無ければ全部お試し', () => {
-    expect(aiDefaultsFromEnv(env)).toEqual({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' })
+    expect(aiDefaultsFromEnv(env)).toEqual({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub' })
   })
 
   it('テキストと画像は、環境変数で選んだ口をそのまま初期値にする', () => {
@@ -148,6 +150,7 @@ describe('aiDefaultsFromEnv', () => {
       video: 'stub',
       voice: 'stub',
       transcribe: 'stub',
+      music: 'stub',
     })
   })
 
@@ -163,14 +166,18 @@ describe('aiDefaultsFromEnv', () => {
 describe('AiSettings', () => {
   it('知らない AI の名前は受けない', () => {
     expect(
-      AiSettings.safeParse({ text: 'chatgpt', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' }).success,
+      AiSettings.safeParse({ text: 'chatgpt', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub' }).success,
     ).toBe(false)
   })
 
-  it('5 つの用途がすべて要る', () => {
+  it('6 つの用途がすべて要る', () => {
     expect(AiSettings.safeParse({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub' }).success).toBe(false)
     expect(
       AiSettings.safeParse({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' }).success,
+    ).toBe(false)
+    expect(
+      AiSettings.safeParse({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub' })
+        .success,
     ).toBe(true)
   })
 })
@@ -220,5 +227,27 @@ describe('声と文字起こし', () => {
     expect(AI_TOOLS.gemini_api.notice).toMatch(/2027-01-01/)
     expect(AI_TOOLS.elevenlabs.notice).toMatch(/商用/)
     expect(AI_TOOLS.claude_cli.notice).toBeNull()
+  })
+})
+
+/** 曲（ADR-0048）。手元の ACE-Step 1.5 だけが作れる。お試しは選べるが曲は作らない。 */
+describe('曲', () => {
+  it('用途の名前は「曲」', () => {
+    expect(AI_PURPOSE_LABELS.music).toBe('曲')
+  })
+
+  it('曲に使えるのは お試し と 手元の ACE-Step だけ', () => {
+    const musicTools = (Object.keys(AI_TOOLS) as AiToolId[]).filter((id) => AI_TOOLS[id].purposes.includes('music'))
+    expect([...musicTools].sort()).toEqual(['ace_step', 'stub'])
+    expect(aiChoiceProblem('music', 'klein', ready())).toMatch(/曲にはまだ使えません/)
+  })
+
+  it('ace-step-api が応答していれば勧め、していなければお試し', () => {
+    expect(recommendAiSettings({ ...allMissing(), ace_step: ready() }).music).toBe('ace_step')
+    expect(recommendAiSettings(allMissing()).music).toBe('stub')
+  })
+
+  it('ACE-Step は手元のサーバ ace_step で見つける', () => {
+    expect(AI_TOOLS.ace_step.detect).toEqual({ kind: 'local_server', server: 'ace_step' })
   })
 })

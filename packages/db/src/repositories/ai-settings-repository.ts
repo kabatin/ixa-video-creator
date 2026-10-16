@@ -27,6 +27,7 @@ export const aiSettingsRowToDomain = (row: AiSettingsRow): AiSettings | null => 
     video: row.videoTool,
     voice: row.voiceTool,
     transcribe: row.transcribeTool,
+    music: row.musicTool,
   })
   return parsed.success ? parsed.data : null
 }
@@ -46,6 +47,7 @@ export const createAiSettingsRepository = (db: DbClient): AiSettingsRepository =
       videoTool: valid.video,
       voiceTool: valid.voice,
       transcribeTool: valid.transcribe,
+      musicTool: valid.music,
       updatedAt: new Date(),
     }
     await db

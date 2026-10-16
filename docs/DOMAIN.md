@@ -31,6 +31,7 @@ Workspace
  ├─ MotionTemplate
  └─ Project
      ├─ MusicTrack ── MusicAnalysis
+     ├─ MusicJob (曲を作る。できた曲は MusicTrack になる / ADR-0048)
      ├─ Script ── ScriptVersion
      ├─ Sequence
      │   └─ Shot ──┬─ ShotCharacter (character + look)
@@ -329,6 +330,32 @@ type MusicSection = {
 ```
 
 **Shot のタイミングは原則ビートにスナップする**。スナップ関数は `packages/timeline` が持つ。
+
+**曲を作る**（ADR-0048）
+
+```ts
+type MusicJob = {
+  id: MusicJobId
+  projectId: ProjectId
+  tool: string                      // 曲の AI（ace_step）
+  model: string | null
+  spec: {                           // 範囲は ace-step-api の契約と同じ
+    prompt: string                  // 曲調 1〜1000 字
+    lyrics: string                  // 歌詞 〜4000 字。空は歌詞なし
+    durationSec: Seconds            // 10〜240
+    instrumental: boolean           // 歌なし（歌詞は使わない）
+    seed: number | null
+    count: number                   // 1〜4
+    title: string | null
+  }
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  error: { code; message; retryable } | null
+  musicTrackIds: MusicTrackId[]     // できた楽曲（成功するまで空）
+}
+```
+
+- できた曲は 1 曲ずつ MediaAsset（`origin: generated_music`）→ MusicTrack になり、解析に回る
+- マスターは「作品にマスターが無いときの 1 曲目」だけ。既にあるマスターは変えない
 
 ---
 
