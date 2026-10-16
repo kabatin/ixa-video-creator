@@ -1,0 +1,25 @@
+{
+  "name": "@ixa/mcp",
+  "version": "0.5.1",
+  "private": true,
+  "type": "module",
+  "description": "AI エージェントが ixa で動画を作るための MCP サーバ（stdio）。ixa の API を Bearer で呼ぶ薄いクライアント",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@ixa/domain": "workspace:*",
+    "@ixa/media": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "pino": "^10.3.1",
+    "tsx": "^4.23.13",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
