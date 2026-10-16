@@ -13,7 +13,7 @@ import { VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 
 /**
- * 使う AI（ADR-0032）。この環境で見つかった AI と、用途（テキスト・画像・動画・声・文字起こし）ごとの選択。
+ * 使う AI（ADR-0032）。この環境で見つかった AI と、用途（テキスト・画像・動画・声・文字起こし・曲）ごとの選択。
  *
  * **選べるかの規則は domain の `aiChoiceProblem` 1 か所。** 一覧の「選べない理由」と、保存の 422 が同じ文を言う。
  * API キーは扱わない（`.env` のまま。規約 6）。
@@ -40,6 +40,7 @@ const Tool = z
       video: z.string().nullable(),
       voice: z.string().nullable(),
       transcribe: z.string().nullable(),
+      music: z.string().nullable(),
     }),
     /** 使う前に知っておくこと（無料枠の扱い・料金・商用の可否）。無ければ null。 */
     notice: z.string().nullable(),

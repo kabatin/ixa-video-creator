@@ -36,6 +36,13 @@ const KLEIN_OFF: LocalServerProbe = {
   check: () => Promise.reject(new Error('有効でないサーバを叩いた')),
 }
 
+/** 曲のサーバ（ADR-0048）。ほかの検査では有効にしない。 */
+const ACE_STEP_OFF: LocalServerProbe = {
+  enabled: false,
+  enabledBy: 'LOCAL_MUSIC_GENERATOR',
+  check: () => Promise.reject(new Error('有効でないサーバを叩いた')),
+}
+
 const probe = (patch: Partial<AiToolProbe> = {}): AiToolProbe => ({
   runCli: runnerWith(
     Object.fromEntries(Object.entries(VERSIONS).map(([name, out]) => [name, completed(out)])),
@@ -48,6 +55,7 @@ const probe = (patch: Partial<AiToolProbe> = {}): AiToolProbe => ({
   whisperModel: () => Promise.resolve('not_configured'),
   localServers: {
           klein: KLEIN_OFF,
+          ace_step: ACE_STEP_OFF,
     vpipe: {
       enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR',
       check: () =>
@@ -82,6 +90,24 @@ describe('detectAiTools', () => {
       },
     })
     expect(on.klein).toEqual({ state: 'ready', version: '0.1.0' })
+  })
+
+  /** ADR-0048。曲のサーバも有効にする一覧の名前が違う。 */
+  it('ACE-Step は LOCAL_MUSIC_GENERATOR で有効にし方を言い、有効なら health を見る', async () => {
+    const off = await detectAiTools(probe())
+    expect(off.ace_step).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/LOCAL_MUSIC_GENERATOR=ace_step/) as unknown,
+    })
+    const base = probe()
+    const on = await detectAiTools({
+      ...base,
+      localServers: {
+        ...base.localServers,
+        ace_step: { enabled: true, enabledBy: 'LOCAL_MUSIC_GENERATOR', check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
+      },
+    })
+    expect(on.ace_step).toEqual({ state: 'ready', version: '0.1.0' })
   })
 
   it('入っている CLI を版つきで見つける', async () => {
@@ -146,6 +172,7 @@ describe('detectAiTools', () => {
       probe({
         localServers: {
           klein: KLEIN_OFF,
+          ace_step: ACE_STEP_OFF,
           vpipe: { enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR', check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
           wan: { enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR', check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
         },
@@ -174,6 +201,7 @@ describe('detectAiTools', () => {
       probe({
         localServers: {
           klein: KLEIN_OFF,
+          ace_step: ACE_STEP_OFF,
           vpipe: { enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR', check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
           wan: {
             enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR',
@@ -194,6 +222,7 @@ describe('detectAiTools', () => {
       probe({
         localServers: {
           klein: KLEIN_OFF,
+          ace_step: ACE_STEP_OFF,
           vpipe: {
             enabled: false, enabledBy: 'LOCAL_VIDEO_GENERATOR',
             check: () => {

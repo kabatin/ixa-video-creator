@@ -9,7 +9,7 @@ import { baseAppDeps } from './app-deps.js'
  * **選べるかの規則は domain の `aiChoiceProblem` 1 か所**（一覧の灰色と 422 が同じ理由を言う）。
  */
 
-const DEFAULTS: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' }
+const DEFAULTS: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub' }
 
 const statuses = (ready: readonly AiToolId[]): Record<AiToolId, AiToolStatus> =>
   Object.fromEntries(
@@ -92,6 +92,7 @@ describe('GET /ai/tools', () => {
       video: 'local',
       voice: 'stub',
       transcribe: 'stub',
+      music: 'stub',
     })
   })
 
@@ -120,7 +121,7 @@ describe('/ai/settings', () => {
 
   it('選んで保存すると、以後はそれを返す', async () => {
     const { app, store } = setup()
-    const chosen = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'stub', transcribe: 'stub' }
+    const chosen = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'stub', transcribe: 'stub', music: 'stub' }
 
     const saved = await put(app, chosen)
     const body = (await (await app.request('/ai/settings')).json()) as { data: unknown }
@@ -133,7 +134,7 @@ describe('/ai/settings', () => {
   it('その用途に使えない AI・見つからない AI は 422 で、用途ごとに理由を返す（保存しない）', async () => {
     const { app, store } = setup()
 
-    const response = await put(app, { text: 'grok_cli', image: 'claude_cli', video: 'stub', voice: 'whisper_cpp', transcribe: 'stub' })
+    const response = await put(app, { text: 'grok_cli', image: 'claude_cli', video: 'stub', voice: 'whisper_cpp', transcribe: 'stub', music: 'klein' })
     const body = (await response.json()) as { fields: Record<string, string[]> }
 
     expect(response.status).toBe(422)
@@ -141,6 +142,7 @@ describe('/ai/settings', () => {
     expect(body.fields.image?.[0]).toMatch(/画像にはまだ使えません/)
     expect(body.fields.video).toBeUndefined()
     expect(body.fields.voice?.[0]).toMatch(/声にはまだ使えません/)
+    expect(body.fields.music?.[0]).toMatch(/曲にはまだ使えません/)
     expect(store.value).toBeNull()
   })
 
@@ -148,7 +150,7 @@ describe('/ai/settings', () => {
     const { app } = setup()
 
     expect(
-      (await put(app, { text: 'chatgpt', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' })).status,
+      (await put(app, { text: 'chatgpt', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub' })).status,
     ).toBe(422)
   })
 })

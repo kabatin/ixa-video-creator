@@ -11,6 +11,7 @@ import {
   type ProviderId,
 } from '@ixa/domain'
 import { execFileCliRunner } from '@ixa/provider-core'
+import { ACE_STEP_IDENTITY, aceStepMusicModel } from '@ixa/provider-music'
 import { KLEIN_IDENTITY, codexCliImageModel, kleinImageModel, stubGeminiLikeImageModel } from '@ixa/provider-image'
 import {
   createClaudeCliStoryboardDrafter,
@@ -23,6 +24,7 @@ import {
   type TextAssistant,
 } from '@ixa/provider-llm'
 import { checkLocalServerHealth, localVideoServerWirings } from '@ixa/provider-video'
+import { chooseMusicModel, type MusicModelChoice } from '../music/music-model.js'
 import type { AiRoutesDeps } from '../routes/ai.js'
 import { detectAiTools, type LocalServerName, type LocalServerProbe, type WhisperModelState } from './detect-ai-tools.js'
 
@@ -39,6 +41,8 @@ export type AiWiring = AiRoutesDeps & {
   readonly imageModel: () => Promise<ImageModelRef>
   /** いま選んでいる動画の AI。AUTO はこの Provider のモデルの中から選ぶ（Provider の id は AI の id と同じ）。 */
   readonly videoProvider: () => Promise<ProviderId>
+  /** いま選んでいる曲の AI で作れるか（ADR-0048）。ジョブに記し、worker がその口で作る。 */
+  readonly musicModel: () => Promise<MusicModelChoice>
 }
 
 const adapterFor = <T>(table: Partial<Record<AiToolId, T>>, id: AiToolId, what: string): T => {
@@ -85,9 +89,20 @@ const localServerProbes = (config: AppConfig): Readonly<Record<LocalServerName, 
         token: config.providers.kleinApiToken,
       }),
   }
+  // 曲のサーバ（ADR-0048）。画像と同じく動画の表には入れない。
+  const aceStep: LocalServerProbe = {
+    enabled: config.providers.localMusicGenerators.includes('ace_step'),
+    enabledBy: 'LOCAL_MUSIC_GENERATOR',
+    check: () =>
+      checkLocalServerHealth({
+        identity: ACE_STEP_IDENTITY,
+        baseUrl: config.providers.aceStepApiUrl,
+        token: config.providers.aceStepApiToken,
+      }),
+  }
   // **一覧をそのまま畳まず、ここは必ず明示で書く。** 畳むと AI が増えたときに
   // 「その AI の調べ方が無い」ことに型が気付かず、画面を開いた瞬間に落ちる。
-  return { vpipe: probeFor('vpipe'), wan: probeFor('wan'), klein }
+  return { vpipe: probeFor('vpipe'), wan: probeFor('wan'), klein, ace_step: aceStep }
 }
 
 /** 使う AI（ADR-0032）の配線。見つけ方・保存先・初期値をここで 1 度だけ決める。 */
@@ -122,6 +137,10 @@ export const createAiWiring = (config: AppConfig, db: DbClient): AiWiring => {
     codex_cli: { providerId: codexCliImageModel.providerId, modelId: codexCliImageModel.id },
     klein: { providerId: kleinImageModel.providerId, modelId: kleinImageModel.id },
   }
+  // 曲（ADR-0048）。`.env` で有効にしていなければ null（選べても作れない理由を言う）。
+  const musicModels = {
+    ace_step: config.providers.localMusicGenerators.includes('ace_step') ? aceStepMusicModel.id : null,
+  }
   return {
     settings: repository,
     defaults,
@@ -151,5 +170,6 @@ export const createAiWiring = (config: AppConfig, db: DbClient): AiWiring => {
     textAssistant: async () => adapterFor(assistants, (await current()).text, 'テキスト（入力の手伝い）'),
     imageModel: async () => adapterFor(imageModels, (await current()).image, '画像'),
     videoProvider: async () => ProviderIdSchema.parse((await current()).video),
+    musicModel: async () => chooseMusicModel((await current()).music, musicModels),
   }
 }

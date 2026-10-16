@@ -37,12 +37,14 @@ import {
   createNarrationLineRepository,
   createNarrationTakeRepository,
   createVoiceJobRepository,
+  createMusicJobRepository,
   createProjectAudioSettingsRepository,
 } from '@ixa/db'
 import { createProviderRegistry, execFileCliRunner } from '@ixa/provider-core'
 import { createTranscribers, createVoiceAdapters } from '@ixa/provider-voice'
 import { estimateSpeakCostUsd, estimateTranscribeCostUsd } from '@ixa/domain'
 import { VOICE_QUEUE_NAME } from './narration/voice-queue.js'
+import { MUSIC_QUEUE_NAME } from './music/deps.js'
 import { createGenerationContextSource } from '@ixa/generation'
 import { RENDER_QUEUE_NAME, type RenderQueue } from './routes/renders.js'
 import { ANALYSIS_QUEUE_NAME, type AnalysisQueue } from './routes/music.js'
@@ -255,6 +257,14 @@ export const main = (): void => {
     },
   }
 
+  // 曲を作る（ADR-0048）。作るのは worker（キュー music。同時 1 つ・手元の GPU の順番に並ぶ）。
+  const musicQueue = new Queue(MUSIC_QUEUE_NAME, { connection })
+  const musicQueuePort = {
+    enqueue: async (musicJobId: string) => {
+      await musicQueue.add('music', { musicJobId })
+    },
+  }
+
   const mediaQueue = new Queue('media', { connection })
   const mediaIngest: MediaIngestDeps = {
     queue: {
@@ -341,6 +351,14 @@ export const main = (): void => {
         whisperCppModel: config.voiceAi.whisperCppModel,
       }),
       transcribeCostEstimate: ({ tool, durationSec }) => estimateTranscribeCostUsd({ tool, durationSec }),
+      events: projectEvents.publisher,
+      logger,
+    },
+    musicGeneration: {
+      projects: projectRepository,
+      musicJobs: createMusicJobRepository(db),
+      musicModel: ai.musicModel,
+      musicQueue: musicQueuePort,
       events: projectEvents.publisher,
       logger,
     },
