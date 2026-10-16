@@ -151,6 +151,8 @@ export const createGenerationWiring = (
    * 次の Shot が使う最終フレームはこの経路でしか作られない。
    */
   const mediaQueue = new Queue(QUEUE_NAMES.media, { connection })
+  /** 手元の GPU の順番待ちの絵を積み直す先（ADR-0047）。 */
+  const imageQueue = new Queue(QUEUE_NAMES.image, { connection })
 
   /** ポーリングの再スケジュールは BullMQ の delay で行う。repeatable job は使わない。 */
   const scheduler: PollScheduler = {
@@ -364,6 +366,13 @@ export const createGenerationWiring = (
       events: deps.events,
       logger,
       stubOutputDir,
+      klein: {
+        enabled: config.providers.localImageGenerators.includes('klein'),
+        baseUrl: config.providers.kleinApiUrl,
+        token: config.providers.kleinApiToken,
+      },
+      localGpuLease,
+      imageQueue,
     }),
     voice: createVoiceWiring({ config, db, storage, mediaQueue: deps.mediaQueue, events: deps.events, logger }),
     upscale: upscaleWiring?.deps ?? null,
@@ -372,6 +381,7 @@ export const createGenerationWiring = (
       await queue.close()
       await upscaleWiring?.queue.close()
       await mediaQueue.close()
+      await imageQueue.close()
       await regenerationQueue.close()
       await db.$client.end()
     },

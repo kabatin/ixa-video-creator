@@ -16,6 +16,33 @@ export const MIN_PASSPHRASE_LENGTH = 12
 /** "true" / "false" の文字列を boolean へ変換する。 */
 const booleanFromString = z.enum(['true', 'false']).transform((value) => value === 'true')
 
+/**
+ * 手元の生成サーバの一覧（`LOCAL_VIDEO_GENERATOR` / `LOCAL_IMAGE_GENERATOR`）。カンマ区切り・既定 `none`。
+ * `none` をほかと並べたら止める（黙ってどちらかを採らない）。同じ値を 2 回書いても 1 つとして扱う。
+ */
+const localGeneratorList = <T extends string>(ids: readonly [T, ...T[]]) =>
+  z
+    .string()
+    .default('none')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item !== ''),
+    )
+    .superRefine((items, ctx) => {
+      if (items.includes('none') && items.length > 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'none はほかの値と並べて書けません（使わないなら none だけにしてください）',
+        })
+      }
+    })
+    .transform((items) => items.filter((item) => item !== 'none'))
+    .pipe(z.array(z.enum(ids)))
+    // 同じサーバを 2 回書いても 1 回として扱う（同じモデル ID を 2 度登録できない）。
+    .transform((items) => [...new Set(items)])
+
 export const EnvSchema = z.object({
   // 必須
   DATABASE_URL: urlString,
@@ -165,32 +192,22 @@ export const EnvSchema = z.object({
    *
    * **両方書いても同時には作らない。** worker が「この機械の GPU」を 1 本ずつに揃える（ADR-0040）。
    */
-  LOCAL_VIDEO_GENERATOR: z
-    .string()
-    .default('none')
-    .transform((value) =>
-      value
-        .split(',')
-        .map((item) => item.trim())
-        .filter((item) => item !== ''),
-    )
-    .superRefine((items, ctx) => {
-      // `none` は「使わない」なので、ほかと並べると意味が決まらない。黙ってどちらかを採らない。
-      if (items.includes('none') && items.length > 1) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'none はほかの値と並べて書けません（使わないなら none だけにしてください）',
-        })
-      }
-    })
-    .transform((items) => items.filter((item) => item !== 'none'))
-    .pipe(z.array(z.enum(['vpipe', 'wan'])))
-    // 同じサーバを 2 回書いても 1 回として扱う（同じモデル ID を 2 度登録できない）。
-    .transform((items) => [...new Set(items)]),
+  LOCAL_VIDEO_GENERATOR: localGeneratorList(['vpipe', 'wan']),
+  /**
+   * 手元の生成サーバで画像を作るか（ADR-0047）。**既定は `none`（使わない）。**
+   *
+   * - `klein` … klein-api の FLUX.2 [klein]
+   *
+   * 書き方と考え方は `LOCAL_VIDEO_GENERATOR` と同じ（URL やトークンの有無で切り替えない）。
+   * 動画と同じ機械の GPU を使うので、動画・高画質化と同じ列に並んで 1 本ずつ作る。
+   */
+  LOCAL_IMAGE_GENERATOR: localGeneratorList(['klein']),
   /** vpipe-api の場所。**既定はこのマシンだけ**（`127.0.0.1`）。 */
   VPIPE_API_URL: urlString.default('http://127.0.0.1:8765'),
   /** wan-api の場所。**既定はこのマシンだけ**（`127.0.0.1`。vpipe-api とポートを分ける）。 */
   WAN_API_URL: urlString.default('http://127.0.0.1:8766'),
+  /** klein-api の場所（ADR-0047）。**既定はこのマシンだけ**（vpipe-api・wan-api とポートを分ける）。 */
+  KLEIN_API_URL: urlString.default('http://127.0.0.1:8767'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
   /**
@@ -257,6 +274,11 @@ export const EnvSchema = z.object({
     .string()
     .transform((v) => (v.trim() === '' ? undefined : v))
     .optional(),
+  /** klein-api の合言葉（ADR-0047）。扱いは `WAN_API_TOKEN` と同じ。 */
+  KLEIN_API_TOKEN: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v))
+    .optional(),
   /**
    * 書き出した動画を置くフォルダ（ADR-0036）。省略すると API がホームの「ムービー」の下に決める。
    * **絶対パスだけ受ける。** 相対パスや `~` は、どこに書くかが起動のしかたで変わってしまう。
@@ -274,6 +296,9 @@ export type Env = z.infer<typeof EnvSchema>
 
 /** 有効にできる手元の生成サーバ（`LOCAL_VIDEO_GENERATOR` に書ける値）。 */
 export type LocalVideoGeneratorId = Env['LOCAL_VIDEO_GENERATOR'][number]
+
+/** 有効にできる手元の画像生成サーバ（`LOCAL_IMAGE_GENERATOR` に書ける値。ADR-0047）。 */
+export type LocalImageGeneratorId = Env['LOCAL_IMAGE_GENERATOR'][number]
 
 export interface AppConfig {
   nodeEnv: Env['NODE_ENV']
@@ -344,6 +369,12 @@ export interface AppConfig {
     wanApiUrl: string
     /** wan-api の合言葉。未設定は null。 */
     wanApiToken: string | null
+    /** 手元の画像生成サーバのうち、有効にしたもの（ADR-0047）。既定は空。 */
+    localImageGenerators: readonly LocalImageGeneratorId[]
+    /** klein-api の場所。 */
+    kleinApiUrl: string
+    /** klein-api の合言葉。未設定は null。 */
+    kleinApiToken: string | null
   }
   /** 書き出した動画を置くフォルダ（絶対パス）。未設定は null（API が既定を決める）。 */
   renderExportDir: string | null

@@ -1,6 +1,6 @@
 import type { CliInvocation, CliRunResult } from '@ixa/provider-core'
 import { describe, expect, it } from 'vitest'
-import { detectAiTools, type AiToolProbe } from '../ai/detect-ai-tools.js'
+import { detectAiTools, type AiToolProbe, type LocalServerProbe } from '../ai/detect-ai-tools.js'
 
 /**
  * この環境で使える AI を見つける（ADR-0032）。**実 CLI は叩かない**（偽の runner で）。
@@ -29,6 +29,13 @@ const completed = (stdout: string, exitCode = 0): CliRunResult => ({
   stderr: '',
 })
 
+/** 画像のサーバ（ADR-0047）。動画の検査では有効にしない。 */
+const KLEIN_OFF: LocalServerProbe = {
+  enabled: false,
+  enabledBy: 'LOCAL_IMAGE_GENERATOR',
+  check: () => Promise.reject(new Error('有効でないサーバを叩いた')),
+}
+
 const probe = (patch: Partial<AiToolProbe> = {}): AiToolProbe => ({
   runCli: runnerWith(
     Object.fromEntries(Object.entries(VERSIONS).map(([name, out]) => [name, completed(out)])),
@@ -40,8 +47,9 @@ const probe = (patch: Partial<AiToolProbe> = {}): AiToolProbe => ({
   },
   whisperModel: () => Promise.resolve('not_configured'),
   localServers: {
+          klein: KLEIN_OFF,
     vpipe: {
-      enabled: true,
+      enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR',
       check: () =>
         Promise.resolve({
           state: 'down',
@@ -49,7 +57,7 @@ const probe = (patch: Partial<AiToolProbe> = {}): AiToolProbe => ({
         }),
     },
     wan: {
-      enabled: true,
+      enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR',
       check: () =>
         Promise.resolve({ state: 'down', reason: '起動していません（wan-api を起動してください）' }),
     },
@@ -58,6 +66,24 @@ const probe = (patch: Partial<AiToolProbe> = {}): AiToolProbe => ({
 })
 
 describe('detectAiTools', () => {
+  /** ADR-0047。画像のサーバは有効にする一覧の名前が違う。動画の名前で案内すると直し方を誤る。 */
+  it('klein は LOCAL_IMAGE_GENERATOR で有効にし方を言い、有効なら health を見る', async () => {
+    const off = await detectAiTools(probe())
+    expect(off.klein).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/LOCAL_IMAGE_GENERATOR=klein/) as unknown,
+    })
+    const base = probe()
+    const on = await detectAiTools({
+      ...base,
+      localServers: {
+        ...base.localServers,
+        klein: { enabled: true, enabledBy: 'LOCAL_IMAGE_GENERATOR', check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
+      },
+    })
+    expect(on.klein).toEqual({ state: 'ready', version: '0.1.0' })
+  })
+
   it('入っている CLI を版つきで見つける', async () => {
     const found = await detectAiTools(probe())
 
@@ -119,8 +145,9 @@ describe('detectAiTools', () => {
     const up = await detectAiTools(
       probe({
         localServers: {
-          vpipe: { enabled: true, check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
-          wan: { enabled: true, check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
+          klein: KLEIN_OFF,
+          vpipe: { enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR', check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
+          wan: { enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR', check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
         },
       }),
     )
@@ -146,9 +173,10 @@ describe('detectAiTools', () => {
     const found = await detectAiTools(
       probe({
         localServers: {
-          vpipe: { enabled: true, check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
+          klein: KLEIN_OFF,
+          vpipe: { enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR', check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
           wan: {
-            enabled: true,
+            enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR',
             check: () => Promise.resolve({ state: 'down', reason: '起動していません' }),
           },
         },
@@ -165,15 +193,16 @@ describe('detectAiTools', () => {
     const found = await detectAiTools(
       probe({
         localServers: {
+          klein: KLEIN_OFF,
           vpipe: {
-            enabled: false,
+            enabled: false, enabledBy: 'LOCAL_VIDEO_GENERATOR',
             check: () => {
               checked = true
               return Promise.resolve({ state: 'up', version: '0.1.0' })
             },
           },
           wan: {
-            enabled: false,
+            enabled: false, enabledBy: 'LOCAL_VIDEO_GENERATOR',
             check: () => {
               checked = true
               return Promise.resolve({ state: 'up', version: '0.1.0' })

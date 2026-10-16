@@ -6,7 +6,7 @@ import type {
   ReferenceRole,
   Resolution,
 } from '@ixa/domain'
-import type { ProviderJobHandle, ProviderOutput } from './provider.js'
+import type { ExclusiveResource, ProviderJobHandle, ProviderOutput } from './provider.js'
 
 /**
  * 画像モデルの能力宣言。`VideoModelCapabilities` の画像版であり、役割も同じ
@@ -68,6 +68,11 @@ export type ImageGenerationRequest = {
    * `sheet` はキャラクターシートのように 1 枚の中に並べる絵で、切り抜かない（ADR-0035）。
    */
   readonly composition?: 'frame' | 'sheet'
+  /**
+   * 投げ直しても二重に作らせないための鍵（絵のジョブの ID）。手元の生成サーバ（ADR-0047）が使う。
+   * 鍵を扱わない Provider（Codex・スタブ）は無視してよい。
+   */
+  readonly idempotencyKey?: string
 }
 
 /**
@@ -103,6 +108,11 @@ export type ImageJobStatus =
 export interface ImageProvider {
   readonly id: ProviderId
   readonly models: readonly ImageModelDescriptor[]
+  /**
+   * 同時に使ってはいけない資源（ADR-0047）。手元の GPU を使う Provider は `local-gpu` を名乗り、
+   * 動画・高画質化と同じ整理券に並ぶ。省略は制限なし。
+   */
+  readonly exclusiveResource?: ExclusiveResource
   submit(request: ImageGenerationRequest): Promise<ProviderJobHandle>
   poll(handle: ProviderJobHandle): Promise<ImageJobStatus>
   cancel(handle: ProviderJobHandle): Promise<void>

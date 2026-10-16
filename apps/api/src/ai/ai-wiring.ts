@@ -11,7 +11,7 @@ import {
   type ProviderId,
 } from '@ixa/domain'
 import { execFileCliRunner } from '@ixa/provider-core'
-import { codexCliImageModel, stubGeminiLikeImageModel } from '@ixa/provider-image'
+import { KLEIN_IDENTITY, codexCliImageModel, kleinImageModel, stubGeminiLikeImageModel } from '@ixa/provider-image'
 import {
   createClaudeCliStoryboardDrafter,
   createStubAssistant,
@@ -22,9 +22,9 @@ import {
   type StoryboardDrafter,
   type TextAssistant,
 } from '@ixa/provider-llm'
-import { localVideoServerWirings, type LocalVideoServerId } from '@ixa/provider-video'
+import { checkLocalServerHealth, localVideoServerWirings } from '@ixa/provider-video'
 import type { AiRoutesDeps } from '../routes/ai.js'
-import { detectAiTools, type LocalServerProbe, type WhisperModelState } from './detect-ai-tools.js'
+import { detectAiTools, type LocalServerName, type LocalServerProbe, type WhisperModelState } from './detect-ai-tools.js'
 
 type ImageModelRef = { readonly providerId: ProviderId; readonly modelId: ModelId }
 
@@ -63,20 +63,31 @@ const whisperModelState = async (path: string | null): Promise<WhisperModelState
  * 手元の生成サーバ（ADR-0031 / 0040）の見つけ方。**サーバごとに持つ。**
  * 一覧は Provider 側の表（`localVideoServerWirings`）から作るので、登録の条件と必ず揃う。
  */
-const localServerProbes = (config: AppConfig): Readonly<Record<LocalVideoServerId, LocalServerProbe>> => {
+const localServerProbes = (config: AppConfig): Readonly<Record<LocalServerName, LocalServerProbe>> => {
   const wirings = localVideoServerWirings({
     enabled: config.providers.localVideoGenerators,
     vpipe: { baseUrl: config.providers.vpipeApiUrl, token: config.providers.vpipeApiToken },
     wan: { baseUrl: config.providers.wanApiUrl, token: config.providers.wanApiToken },
   })
-  const probeFor = (id: LocalVideoServerId): LocalServerProbe => {
+  const probeFor = (id: 'vpipe' | 'wan'): LocalServerProbe => {
     const wiring = wirings.find((candidate) => candidate.id === id)
     if (wiring === undefined) throw new Error(`手元の生成サーバ ${id} の配線がありません`)
-    return { enabled: wiring.enabled, check: () => wiring.checkHealth() }
+    return { enabled: wiring.enabled, enabledBy: 'LOCAL_VIDEO_GENERATOR', check: () => wiring.checkHealth() }
+  }
+  // 画像のサーバ（ADR-0047）。動画の表（`localVideoServerWirings`）には入れない（Provider の種類が違う）。
+  const klein: LocalServerProbe = {
+    enabled: config.providers.localImageGenerators.includes('klein'),
+    enabledBy: 'LOCAL_IMAGE_GENERATOR',
+    check: () =>
+      checkLocalServerHealth({
+        identity: KLEIN_IDENTITY,
+        baseUrl: config.providers.kleinApiUrl,
+        token: config.providers.kleinApiToken,
+      }),
   }
   // **一覧をそのまま畳まず、ここは必ず明示で書く。** 畳むと AI が増えたときに
   // 「その AI の調べ方が無い」ことに型が気付かず、画面を開いた瞬間に落ちる。
-  return { vpipe: probeFor('vpipe'), wan: probeFor('wan') }
+  return { vpipe: probeFor('vpipe'), wan: probeFor('wan'), klein }
 }
 
 /** 使う AI（ADR-0032）の配線。見つけ方・保存先・初期値をここで 1 度だけ決める。 */
@@ -109,6 +120,7 @@ export const createAiWiring = (config: AppConfig, db: DbClient): AiWiring => {
   const imageModels: Partial<Record<AiToolId, ImageModelRef>> = {
     stub: { providerId: stubGeminiLikeImageModel.providerId, modelId: stubGeminiLikeImageModel.id },
     codex_cli: { providerId: codexCliImageModel.providerId, modelId: codexCliImageModel.id },
+    klein: { providerId: kleinImageModel.providerId, modelId: kleinImageModel.id },
   }
   return {
     settings: repository,

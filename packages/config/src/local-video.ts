@@ -1,4 +1,4 @@
-import type { Env, LocalVideoGeneratorId } from './schema.js'
+import type { Env, LocalImageGeneratorId, LocalVideoGeneratorId } from './schema.js'
 
 /**
  * 手元の生成サーバ（vpipe-api・wan-api）の設定の食い違いを起動時に止める（ADR-0031 / 0040）。
@@ -32,11 +32,16 @@ export const isLoopbackUrl = (url: string): boolean => {
  */
 export const LOCAL_VIDEO_TOKEN_PATTERN = /^[\x21-\x7e]{32,}$/
 
+/** 手元の生成サーバ（動画・画像）。検査の規則はどちらも同じ（ADR-0047）。 */
+type LocalServerId = LocalVideoGeneratorId | LocalImageGeneratorId
+
 type LocalVideoServerEnv = {
-  readonly id: LocalVideoGeneratorId
+  readonly id: LocalServerId
+  /** 有効にする一覧の名前。動画のサーバと画像のサーバで違う。 */
+  readonly enabledBy: 'LOCAL_VIDEO_GENERATOR' | 'LOCAL_IMAGE_GENERATOR'
   /** `.env` に書く名前。**値は文に入れない。** */
-  readonly urlEnvName: 'VPIPE_API_URL' | 'WAN_API_URL'
-  readonly tokenEnvName: 'VPIPE_API_TOKEN' | 'WAN_API_TOKEN'
+  readonly urlEnvName: 'VPIPE_API_URL' | 'WAN_API_URL' | 'KLEIN_API_URL'
+  readonly tokenEnvName: 'VPIPE_API_TOKEN' | 'WAN_API_TOKEN' | 'KLEIN_API_TOKEN'
   /** このマシンだけを指す既定。戻し方の案内に出す。 */
   readonly defaultUrl: string
 }
@@ -48,19 +53,28 @@ type LocalVideoServerEnv = {
  * **一覧ではなく `Record` で持つ。** サーバを足したときに書き忘れたら、配列なら黙って
  * 「検査されないサーバ」ができるが、`Record` なら型が落ちる。
  */
-const LOCAL_VIDEO_SERVER_TABLE: Readonly<Record<LocalVideoGeneratorId, LocalVideoServerEnv>> =
+const LOCAL_VIDEO_SERVER_TABLE: Readonly<Record<LocalServerId, LocalVideoServerEnv>> =
   Object.freeze({
     vpipe: {
       id: 'vpipe',
+      enabledBy: 'LOCAL_VIDEO_GENERATOR',
       urlEnvName: 'VPIPE_API_URL',
       tokenEnvName: 'VPIPE_API_TOKEN',
       defaultUrl: 'http://127.0.0.1:8765',
     },
     wan: {
       id: 'wan',
+      enabledBy: 'LOCAL_VIDEO_GENERATOR',
       urlEnvName: 'WAN_API_URL',
       tokenEnvName: 'WAN_API_TOKEN',
       defaultUrl: 'http://127.0.0.1:8766',
+    },
+    klein: {
+      id: 'klein',
+      enabledBy: 'LOCAL_IMAGE_GENERATOR',
+      urlEnvName: 'KLEIN_API_URL',
+      tokenEnvName: 'KLEIN_API_TOKEN',
+      defaultUrl: 'http://127.0.0.1:8767',
     },
   })
 
@@ -81,10 +95,11 @@ export const localVideoGeneratorProblem = (env: Env): string | null => {
   }
 
   for (const server of LOCAL_VIDEO_SERVERS) {
-    if (!env.LOCAL_VIDEO_GENERATOR.includes(server.id)) continue
+    const enabled: readonly string[] = env[server.enabledBy]
+    if (!enabled.includes(server.id)) continue
     if (isLoopbackUrl(env[server.urlEnvName]) || env[server.tokenEnvName] !== undefined) continue
     return (
-      `LOCAL_VIDEO_GENERATOR に ${server.id} があり ${server.urlEnvName} がこのマシンの外を指していますが、` +
+      `${server.enabledBy} に ${server.id} があり ${server.urlEnvName} がこのマシンの外を指していますが、` +
       `${server.tokenEnvName} がありません。` +
       `サーバと同じトークンを .env に設定するか、${server.urlEnvName} を ${server.defaultUrl} に戻して再起動してください。`
     )

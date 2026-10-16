@@ -142,6 +142,9 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       vpipeApiToken: parsed.VPIPE_API_TOKEN ?? null,
       wanApiUrl: parsed.WAN_API_URL,
       wanApiToken: parsed.WAN_API_TOKEN ?? null,
+      localImageGenerators: parsed.LOCAL_IMAGE_GENERATOR,
+      kleinApiUrl: parsed.KLEIN_API_URL,
+      kleinApiToken: parsed.KLEIN_API_TOKEN ?? null,
     },
     renderExportDir: parsed.RENDER_EXPORT_DIR ?? null,
     voiceAi: {

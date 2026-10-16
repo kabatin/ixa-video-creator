@@ -218,6 +218,10 @@ WAN_API_TOKEN=                # 同じ
 使い方は 3 つだけ。**サーバを起動 → `LOCAL_VIDEO_GENERATOR` に書く → 「使う AI」の動画で選ぶ。**
 入れ方と動かし方は各サーバの README にある。
 
+**画像も手元で作れる**（ADR-0047）。[klein-api](https://github.com/kabatin/klein-api)（FLUX.2 [klein]、既定 `http://127.0.0.1:8767`）を
+起動して `LOCAL_IMAGE_GENERATOR=klein` と書き、「使う AI」の画像で選ぶ。1 枚 30 秒ほどで無料、seed を固定すれば同じ絵が出る。
+動画と同じ GPU を使うので、動画・高画質化と同じ列に並んで 1 本ずつ作る（`KLEIN_API_URL` / `KLEIN_API_TOKEN` の扱いは上と同じ）。
+
 書いたサーバのモデルが、試作と標準で出る。vpipe はさらに**本番**の段も出す。
 AUTO がその中から選ぶのは、「使う AI」の動画でそのサーバを選んでいるときだけ。
 

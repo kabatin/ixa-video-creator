@@ -323,6 +323,68 @@ describe('ローカルの動画生成（vpipe）', () => {
   })
 })
 
+describe('ローカルの画像生成（klein。ADR-0047）', () => {
+  it('既定は使わない。URL は既定でこのマシンだけ、トークンは未設定', () => {
+    const config = loadConfig({ ...requiredEnv })
+    expect(config.providers.localImageGenerators).toEqual([])
+    expect(config.providers.kleinApiUrl).toBe('http://127.0.0.1:8767')
+    expect(config.providers.kleinApiToken).toBeNull()
+  })
+
+  it('klein に切り替えられ、動画のサーバや知らない値は弾く', () => {
+    expect(
+      loadConfig({ ...requiredEnv, LOCAL_IMAGE_GENERATOR: 'klein' }).providers.localImageGenerators,
+    ).toEqual(['klein'])
+    for (const value of ['vpipe', 'comfy', 'none,klein']) {
+      expect(() => loadConfig({ ...requiredEnv, LOCAL_IMAGE_GENERATOR: value })).toThrow(
+        /LOCAL_IMAGE_GENERATOR/,
+      )
+    }
+  })
+
+  it('画像のサーバを動画の一覧には書けない', () => {
+    expect(() => loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: 'klein' })).toThrow(
+      /LOCAL_VIDEO_GENERATOR/,
+    )
+  })
+
+  it('トークンや URL を置いただけでは有効にならない', () => {
+    const config = loadConfig({
+      ...requiredEnv,
+      KLEIN_API_URL: 'http://127.0.0.1:9997',
+      KLEIN_API_TOKEN: GOOD_TOKEN,
+    })
+    expect(config.providers.localImageGenerators).toEqual([])
+  })
+
+  /** vpipe・wan と同じ表で検査する。klein だけ検査が無いと 401 まで分からない。 */
+  it('vpipe・wan と同じ規則で止める（形の違う合言葉・外のサーバでトークン無し・URL でない値）', () => {
+    expect(() => loadConfig({ ...requiredEnv, KLEIN_API_TOKEN: 'a'.repeat(31) })).toThrow(
+      /KLEIN_API_TOKEN の形が違います/,
+    )
+    expect(() => loadConfig({ ...requiredEnv, KLEIN_API_URL: 'not-a-url' })).toThrow(/KLEIN_API_URL/)
+
+    const remote = {
+      ...requiredEnv,
+      LOCAL_IMAGE_GENERATOR: 'klein',
+      KLEIN_API_URL: 'http://192.168.1.22:8767',
+    }
+    expect(() => loadConfig(remote)).toThrow(/LOCAL_IMAGE_GENERATOR に klein があり.*KLEIN_API_TOKEN/)
+    try {
+      loadConfig(remote)
+    } catch (error) {
+      expect(error instanceof Error ? error.message : '').not.toContain('192.168.1.22')
+    }
+    expect(() => loadConfig({ ...remote, KLEIN_API_TOKEN: GOOD_TOKEN })).not.toThrow()
+  })
+
+  it('有効にしていなければ外の URL でも止めない', () => {
+    expect(() =>
+      loadConfig({ ...requiredEnv, KLEIN_API_URL: 'http://192.168.1.22:8767' }),
+    ).not.toThrow()
+  })
+})
+
 /** 書き出した動画を置くフォルダ（ADR-0036）。省略すれば null（API がホームの「ムービー」に決める）。 */
 describe('書き出しフォルダ（RENDER_EXPORT_DIR）', () => {
   it('省略・空なら null', () => {

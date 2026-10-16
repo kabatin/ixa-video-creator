@@ -19,6 +19,9 @@ const LOCAL_VIDEO_OFF = {
   vpipeApiToken: null,
   wanApiUrl: 'http://127.0.0.1:8766',
   wanApiToken: null,
+  localImageGenerators: [],
+  kleinApiUrl: 'http://127.0.0.1:8767',
+  kleinApiToken: null,
 } as const
 
 const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
@@ -293,5 +296,40 @@ describe('ローカルの動画生成', () => {
 
   it('サーバの URL は画面に出さない', () => {
     expect(JSON.stringify(describeEnvironment(vpipeOn(null)))).not.toContain('127.0.0.1:8765')
+  })
+})
+
+describe('ローカルの画像生成（ADR-0047）', () => {
+  const KLEIN_TOKEN = 'klein-SUPERSECRET-token-0123456789abcdef'
+  const kleinOn = (url: string): AppConfig =>
+    aConfig({
+      providers: {
+        ...aConfig().providers,
+        localImageGenerators: ['klein'],
+        kleinApiUrl: url,
+        kleinApiToken: KLEIN_TOKEN,
+      },
+    })
+  const settingFor = (config: AppConfig) =>
+    describeEnvironment(config).settings.find((s) => s.envName === 'LOCAL_IMAGE_GENERATOR')
+
+  it('既定（none）は目立たせない', () => {
+    expect(settingFor(aConfig())).toMatchObject({ value: 'none', notable: false, note: '使わない。' })
+  })
+
+  it('klein のときは目立たせ、動画と同じ列に並ぶと書く', () => {
+    const setting = settingFor(kleinOn('http://127.0.0.1:8767'))
+    expect(setting).toMatchObject({ value: 'klein', notable: true })
+    expect(setting?.note).toContain('同じ列')
+    expect(setting?.note).not.toContain('暗号化')
+  })
+
+  it('別のマシンを http で指していたら平文で流れると書く。URL も合言葉も出さない', () => {
+    const status = describeEnvironment(kleinOn('http://192.168.1.22:8767'))
+    expect(status.settings.find((s) => s.envName === 'LOCAL_IMAGE_GENERATOR')?.note).toContain('暗号化されずに')
+    const text = JSON.stringify(status)
+    expect(text).not.toContain('192.168.1.22')
+    expect(text).not.toContain(KLEIN_TOKEN)
+    expect(status.secrets.find((s) => s.envName === 'KLEIN_API_TOKEN')).toMatchObject({ configured: true })
   })
 })

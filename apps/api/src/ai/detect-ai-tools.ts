@@ -11,15 +11,17 @@ export type ApiKeyName = Extract<AiToolSpec['detect'], { readonly kind: 'api_key
 /** whisper.cpp のモデルのファイル。 */
 export type WhisperModelState = 'not_configured' | 'file_missing' | 'ready'
 
-/** 手元の生成サーバの名前（vpipe-api / wan-api）。`AI_TOOLS` の `local_server` が名乗る。 */
+/** 手元の生成サーバの名前（vpipe-api / wan-api / klein-api）。`AI_TOOLS` の `local_server` が名乗る。 */
 export type LocalServerName = Extract<
   AiToolSpec['detect'],
   { readonly kind: 'local_server' }
 >['server']
 
 export type LocalServerProbe = {
-  /** `.env` の `LOCAL_VIDEO_GENERATOR` に書かれているか。**書いていなければ叩かない。** */
+  /** `.env` の有効にする一覧に書かれているか。**書いていなければ叩かない。** */
   readonly enabled: boolean
+  /** 有効にする一覧の名前（動画のサーバは `LOCAL_VIDEO_GENERATOR`、画像は `LOCAL_IMAGE_GENERATOR`。ADR-0047）。 */
+  readonly enabledBy: 'LOCAL_VIDEO_GENERATOR' | 'LOCAL_IMAGE_GENERATOR'
   readonly check: () => Promise<LocalServerHealthCheck>
 }
 
@@ -102,7 +104,7 @@ const statusOf = async (spec: AiToolSpec, probe: AiToolProbe): Promise<AiToolSta
       if (!server.enabled) {
         return {
           state: 'missing',
-          reason: `.env の LOCAL_VIDEO_GENERATOR=${spec.detect.server} で有効にしてから選べます`,
+          reason: `.env の ${server.enabledBy}=${spec.detect.server} で有効にしてから選べます`,
         }
       }
       const health = await server.check()

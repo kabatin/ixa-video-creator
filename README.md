@@ -239,6 +239,12 @@ WAN_API_TOKEN=                # same
 Three steps: **start the server, list it in `LOCAL_VIDEO_GENERATOR`, pick it under *Which AI*
 for video.** Installing and running the servers is documented in their own READMEs.
 
+**Images can be made locally too** (ADR-0047). Start [klein-api](https://github.com/kabatin/klein-api)
+(FLUX.2 [klein], default `http://127.0.0.1:8767`), set `LOCAL_IMAGE_GENERATOR=klein`, and pick it
+under *Which AI* for images. About 30 s per image, free, and a fixed seed reproduces the picture.
+It shares the GPU with video, so it waits in the same line as video and upscaling
+(`KLEIN_API_URL` / `KLEIN_API_TOKEN` work like the ones above).
+
 Each listed server contributes a draft and a standard model; vpipe also publishes a **final**
 one. AUTO chooses among them only when that server is the selected video AI; otherwise it never
 picks them.

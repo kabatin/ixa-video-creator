@@ -1,3 +1,4 @@
+import { createInMemoryLocalGpuLease } from '../../generation/local-gpu-lease.js'
 import { copyFile, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -18,6 +19,7 @@ import {
   createInMemoryImageJobRepository,
   createInMemoryShotReferenceRepository,
 } from '@ixa/generation/testing'
+import { ProviderError } from '@ixa/provider-core'
 import { codexCliImageModel } from '@ixa/provider-image'
 import { createMemoryStorage } from '@ixa/storage'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -99,6 +101,8 @@ const setup = (options: { outcome?: Parameters<typeof fakeImageProvider>[1]; con
     storage: createMemoryStorage(),
     context: options.context ?? contextWithManual(),
     adapters: [{ provider, model: codexCliImageModel }],
+    localGpuLease: createInMemoryLocalGpuLease(),
+    scheduler: { reschedule: () => Promise.resolve() },
     mediaQueue: createRecordingMediaQueue(),
     events: createRecordingEvents(),
     workDir: join(dir, 'work'),
@@ -113,6 +117,97 @@ const setup = (options: { outcome?: Parameters<typeof fakeImageProvider>[1]; con
 }
 
 describe('processImageJob', () => {
+  /** ADR-0047。手元の GPU を使う口（klein）は、作っている間だけ動画と同じ順番を借りる。 */
+  it('手元の GPU を名乗る口は、作っている間だけ順番を借りて、終わったら返す', async () => {
+    const { job, deps, provider } = setup()
+    const lease = createInMemoryLocalGpuLease()
+    const seenBySubmit: string[] = []
+    const local = {
+      ...provider,
+      exclusiveResource: 'local-gpu' as const,
+      submit: async (request: Parameters<typeof provider.submit>[0]) => {
+        seenBySubmit.push((await lease.acquire('video-job', Date.now())).state)
+        return provider.submit(request)
+      },
+    }
+    const result = await processImageJob({ ...deps, localGpuLease: lease, adapters: [{ provider: local, model: codexCliImageModel }] }, { imageJobId: job.id })
+
+    expect(result).toEqual({ state: 'succeeded' })
+    expect(seenBySubmit).toEqual(['held'])
+    expect((await lease.acquire('video-job', Date.now())).state).toBe('acquired')
+  })
+
+  /** 待つ間 worker の処理枠を握ると、GPU を使わない Codex の絵まで止まる。積み直して手を離す。 */
+  it('手元の GPU の順番が来ていなければ、作らずに積み直す（ジョブは queued のまま）', async () => {
+    const { job, deps, provider } = setup()
+    const lease = createInMemoryLocalGpuLease()
+    await lease.acquire('video-job', job.queuedAt.getTime() - 1000)
+    const rescheduled: { data: unknown; delayMs: number }[] = []
+    const result = await processImageJob(
+      {
+        ...deps,
+        localGpuLease: lease,
+        scheduler: { reschedule: (data, delayMs) => { rescheduled.push({ data, delayMs }); return Promise.resolve() } },
+        adapters: [{ provider: { ...provider, exclusiveResource: 'local-gpu' as const }, model: codexCliImageModel }],
+      },
+      { imageJobId: job.id },
+    )
+    expect(result).toEqual({ state: 'waiting' })
+    expect(rescheduled).toEqual([{ data: { imageJobId: job.id }, delayMs: expect.any(Number) as unknown }])
+    expect(provider.requests).toHaveLength(0)
+    expect((await deps.imageJobs.findById(job.id))?.status).toBe('queued')
+  })
+
+  it('問い合わせが 1 回だけ通信で失敗しても、絵を捨てない', async () => {
+    const { job, deps, provider } = setup()
+    let calls = 0
+    const flaky = {
+      ...provider,
+      poll: (handle: Parameters<typeof provider.poll>[0]) => {
+        calls += 1
+        return calls === 1
+          ? Promise.reject(new ProviderError('つながりません', ProviderId.parse('klein'), true))
+          : provider.poll(handle)
+      },
+    }
+    const result = await processImageJob({ ...deps, adapters: [{ provider: flaky, model: codexCliImageModel }] }, { imageJobId: job.id })
+    expect(result).toEqual({ state: 'succeeded' })
+    expect(provider.cancelled).toHaveLength(0)
+  })
+
+  /** 止めずに手を離すと、順番を返したあとで向こうが走り出し、次の動画と同時に GPU を使う。 */
+  it('問い合わせが続けて失敗して諦めるときは、生成先を止めてから手を離す', async () => {
+    const { job, deps, provider } = setup({ outcome: 'running' })
+    const failing = {
+      ...provider,
+      poll: () => Promise.reject(new ProviderError('つながりません', ProviderId.parse('klein'), true)),
+    }
+    const result = await processImageJob({ ...deps, adapters: [{ provider: failing, model: codexCliImageModel }] }, { imageJobId: job.id })
+    expect(result).toEqual({ state: 'failed' })
+    expect(provider.cancelled).toHaveLength(1)
+  })
+
+  it('手元の GPU を名乗らない口（Codex）は順番を借りない', async () => {
+    const { job, deps, provider } = setup()
+    const lease = createInMemoryLocalGpuLease()
+    const seenBySubmit: string[] = []
+    const spying = {
+      ...provider,
+      submit: async (request: Parameters<typeof provider.submit>[0]) => {
+        seenBySubmit.push((await lease.acquire('video-job', Date.now())).state)
+        return provider.submit(request)
+      },
+    }
+    await processImageJob({ ...deps, localGpuLease: lease, adapters: [{ provider: spying, model: codexCliImageModel }] }, { imageJobId: job.id })
+    expect(seenBySubmit).toEqual(['acquired'])
+  })
+
+  it('投げ直しても二重に作らせないよう、ジョブの ID を鍵として渡す', async () => {
+    const { job, deps, provider } = setup()
+    await processImageJob(deps, { imageJobId: job.id })
+    expect(provider.requests[0]?.idempotencyKey).toBe(job.id)
+  })
+
   /** 使う AI は画面で選び直せる（ADR-0032）。worker は起動時の口ではなく、ジョブに記された口で作る。 */
   it('ジョブに記された口で作る', async () => {
     const { job, deps, provider } = setup()

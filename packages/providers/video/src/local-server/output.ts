@@ -42,8 +42,14 @@ export const LOCAL_SERVER_OUTPUT_RETENTION_MS = 24 * 60 * 60 * 1000
  */
 export const LOCAL_SERVER_MAX_OUTPUT_BYTES = 2 * 1024 * 1024 * 1024
 
-export const localServerOutputPath = (outputDir: string, jobId: string): string =>
-  join(outputDir, `${jobId}.mp4`)
+/** 出力の拡張子。動画は mp4、手元の画像生成（ADR-0047）は png。 */
+export type LocalServerOutputExtension = 'mp4' | 'png'
+
+export const localServerOutputPath = (
+  outputDir: string,
+  jobId: string,
+  extension: LocalServerOutputExtension = 'mp4',
+): string => join(outputDir, `${jobId}.${extension}`)
 
 /** 最終の名前で中身のあるファイルがあるか。あれば取りに行かない（同じジョブを 2 度落とさない）。 */
 export const hasSavedOutput = async (path: string): Promise<boolean> => {
@@ -89,11 +95,12 @@ export const saveOutputAtomically = async (
   jobId: string,
   body: ReadableStream<Uint8Array>,
   maxBytes: number = LOCAL_SERVER_MAX_OUTPUT_BYTES,
+  extension: LocalServerOutputExtension = 'mp4',
 ): Promise<{ readonly path: string; readonly bytes: number }> => {
   const tmpDir = join(outputDir, LOCAL_SERVER_TMP_DIR)
   await mkdir(tmpDir, { recursive: true })
   const partPath = join(tmpDir, `${jobId}.${randomUUID()}.part`)
-  const finalPath = localServerOutputPath(outputDir, jobId)
+  const finalPath = localServerOutputPath(outputDir, jobId, extension)
 
   try {
     const bytes = await writeStream(partPath, body, maxBytes)
@@ -107,7 +114,7 @@ export const saveOutputAtomically = async (
 }
 
 /** 消してよいのは自分が作った形のファイルだけ。同じ場所に置かれた別のものに触れない。 */
-const OWN_FILE = /\.(?:mp4|part|json)$/
+const OWN_FILE = /\.(?:mp4|png|part|json)$/
 
 const pruneDir = async (dir: string, cutoffMs: number, warn: LocalServerWarn): Promise<number> => {
   const names = await readdir(dir).catch((error: unknown) => {

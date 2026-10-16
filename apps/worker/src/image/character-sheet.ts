@@ -52,6 +52,8 @@ export const generateCharacterSheet = async (deps: JobDeps, job: ImageGeneration
     references: [{ mediaAssetId: reference, role: 'subject' }],
     resolveReference: localReferenceResolver(deps, dir),
     count: 1,
+    // 投げ直しても二重に作らせない（手元の生成サーバが使う。ADR-0047）。
+    idempotencyKey: job.id,
     // 1 枚の中に並べる絵。Codex に「中央に寄せる」「候補を並べない」と言わせない（並べる指示とぶつかる）。
     composition: 'sheet',
   })

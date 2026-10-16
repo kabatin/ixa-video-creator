@@ -17,6 +17,7 @@
     "@ixa/domain": "workspace:*",
     "@ixa/media": "workspace:*",
     "@ixa/provider-core": "workspace:*",
+    "@ixa/provider-video": "workspace:*",
     "zod": "^3.24.1"
   },
   "devDependencies": {

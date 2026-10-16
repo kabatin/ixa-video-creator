@@ -12,11 +12,14 @@ import type { GenerationContextSource, MediaAssetId, ProjectEventPublisher } fro
 import {
   codexCliImageModel,
   createCodexCliImageProvider,
+  createKleinImageProvider,
   createStubImageProvider,
+  kleinImageModel,
   stubGeminiLikeImageModel,
 } from '@ixa/provider-image'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
+import type { LocalGpuLease } from './generation/local-gpu-lease.js'
 import type { ImageAdapter, ImageProcessorDeps } from './image/index.js'
 
 /**
@@ -24,9 +27,24 @@ import type { ImageAdapter, ImageProcessorDeps } from './image/index.js'
  * API が「使う AI」から決める）。ここは作れる口を並べるだけ。
  * Codex CLI は手元の CLI を呼び、契約の利用枠を使う（作るだけでは何も起動しない）。
  */
-const imageAdapters = (workDir: string, stubOutputDir: string): readonly ImageAdapter[] => [
+/** 手元の画像生成サーバ（ADR-0047）。`.env` の `LOCAL_IMAGE_GENERATOR` に書いたときだけ作る（API の一覧と同じ条件）。 */
+export type KleinSettings = { readonly enabled: boolean; readonly baseUrl: string; readonly token: string | null }
+
+const imageAdapters = (workDir: string, stubOutputDir: string, klein: KleinSettings): readonly ImageAdapter[] => [
   { provider: createStubImageProvider({ outputDir: join(stubOutputDir, 'image') }), model: stubGeminiLikeImageModel },
   { provider: createCodexCliImageProvider({ workingDirRoot: join(workDir, 'codex') }), model: codexCliImageModel },
+  ...(klein.enabled
+    ? [
+        {
+          provider: createKleinImageProvider({
+            baseUrl: klein.baseUrl,
+            token: klein.token,
+            outputDir: join(stubOutputDir, 'klein'),
+          }),
+          model: kleinImageModel,
+        },
+      ]
+    : []),
 ]
 
 export const createImageWiring = (input: {
@@ -37,6 +55,11 @@ export const createImageWiring = (input: {
   readonly events: ProjectEventPublisher
   readonly logger: Logger
   readonly stubOutputDir: string
+  readonly klein: KleinSettings
+  /** 動画・高画質化と同じ整理券（ADR-0047）。 */
+  readonly localGpuLease: LocalGpuLease
+  /** 順番待ちの絵を積み直す先（image キュー）。 */
+  readonly imageQueue: { readonly add: (name: string, data: { readonly imageJobId: string }, options: { readonly delay: number }) => Promise<unknown> }
 }): ImageProcessorDeps => {
   const workDir = process.env.IMAGE_WORK_DIR ?? '/tmp/ixa-image-work'
   return {
@@ -49,7 +72,14 @@ export const createImageWiring = (input: {
     shotReferences: createShotReferenceRepository(input.db),
     storage: input.storage,
     context: input.context,
-    adapters: imageAdapters(workDir, input.stubOutputDir),
+    adapters: imageAdapters(workDir, input.stubOutputDir, input.klein),
+    localGpuLease: input.localGpuLease,
+    scheduler: {
+      reschedule: async (data, delayMs) => {
+        // API と同じ名前で積む（`draw`）。
+        await input.imageQueue.add('draw', data, { delay: delayMs })
+      },
+    },
     mediaQueue: input.mediaQueue,
     events: input.events,
     workDir,

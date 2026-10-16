@@ -54,6 +54,20 @@ const secretStatus = (
   return { label, envName, configured, length: configured ? trimmed.length : null, purpose }
 }
 
+/** ローカルの画像生成の説明（ADR-0047）。書き方は動画と同じ（URL は出さない）。 */
+const localImageNote = (config: AppConfig): string => {
+  const { localImageGenerators, kleinApiUrl } = config.providers
+  if (localImageGenerators.length === 0) return '使わない。'
+  const overNetwork = plainOverNetwork(kleinApiUrl)
+    ? 'サーバが別のマシンにあり、合言葉と画像が暗号化されずに流れる。信頼できる LAN の中だけで使うこと。'
+    : ''
+  return (
+    '画像生成サーバ（klein-api）で FLUX.2 [klein] を動かす。費用は掛からず、1 枚 30 秒ほど。' +
+    '動画と同じ機械の GPU を使うので、動画・高画質化と同じ列に並んで 1 本ずつ作る。' +
+    overNetwork
+  )
+}
+
 /**
  * ローカルの動画生成の説明。**サーバがこのマシンの外にあり http なら、そう書く。**
  * 合言葉も最初のフレームの画像も暗号化されずに流れるので、信頼できる LAN の中だけで使う。
@@ -154,6 +168,12 @@ export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
       config.providers.wanApiToken,
       '別のマシンの動画生成サーバを使うときだけ要る。このマシンのサーバなら未設定でよい。',
     ),
+    secretStatus(
+      'ローカルの画像生成（klein）の合言葉',
+      'KLEIN_API_TOKEN',
+      config.providers.kleinApiToken,
+      '別のマシンの画像生成サーバを使うときだけ要る。このマシンのサーバなら未設定でよい。',
+    ),
     ...storageSecrets(config),
   ],
   settings: [
@@ -190,6 +210,16 @@ export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
       // 費用は掛からないが、この機械の GPU とメモリを長く占める。使っていることが見えるようにする。
       notable: config.providers.localVideoGenerators.length > 0,
       note: localVideoNote(config),
+    },
+    {
+      label: 'ローカルの画像生成',
+      envName: 'LOCAL_IMAGE_GENERATOR',
+      value:
+        config.providers.localImageGenerators.length === 0
+          ? 'none'
+          : config.providers.localImageGenerators.join(','),
+      notable: config.providers.localImageGenerators.length > 0,
+      note: localImageNote(config),
     },
     {
       label: '絵コンテの下書き',

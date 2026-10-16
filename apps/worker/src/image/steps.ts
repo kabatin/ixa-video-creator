@@ -10,7 +10,7 @@ import {
   type MediaAssetId,
   type Project,
 } from '@ixa/domain'
-import type { ImageJobStatus, ImageModelDescriptor, ImageProvider, ProviderOutput } from '@ixa/provider-core'
+import { ProviderError, type ImageJobStatus, type ImageModelDescriptor, type ImageProvider, type ProviderOutput } from '@ixa/provider-core'
 import { mediaKey } from '@ixa/storage'
 import type { ImageProcessorDeps } from './processor.js'
 
@@ -24,7 +24,8 @@ export type ImageAdapter = { readonly provider: ImageProvider; readonly model: I
 /** 1 件のジョブを作るときの材料（ジョブに記された口を選んだ後）。 */
 export type JobDeps = ImageProcessorDeps & ImageAdapter
 
-export type ImageJobResult = { readonly state: 'succeeded' | 'failed' | 'skipped' | 'missing' }
+/** `waiting` は手元の GPU の順番待ちで積み直したとき（ADR-0047）。 */
+export type ImageJobResult = { readonly state: 'succeeded' | 'failed' | 'skipped' | 'missing' | 'waiting' }
 
 /** Provider の時間切れ（5 分）より長く待たない。ここを越えるのは Provider 側の異常。 */
 const MAX_WAIT_MS = 10 * 60 * 1000
@@ -70,9 +71,23 @@ export const throwIfCancelled = async (deps: JobDeps, imageJobId: ImageGeneratio
   if (current?.status === 'cancelled') throw new ImageJobCancelled(imageJobId)
 }
 
+/** 問い合わせが続けてこの回数だけ通信で失敗したら諦める（サーバの再起動 1 回で絵を捨てない）。 */
+const MAX_CONSECUTIVE_POLL_FAILURES = 3
+
+/** 生成先へ止めてと頼む。頼めなくてもログに残して進む（呼ぶ側はもう結果を使わない）。 */
+const stopRemote = async (deps: JobDeps, handle: Handle, imageJobId: ImageGenerationJobId): Promise<void> => {
+  await deps.provider.cancel(handle).catch((error: unknown) => {
+    deps.logger.warn({ imageJobId, err: error }, '生成先へ止めてと頼めませんでした')
+  })
+}
+
 /**
  * 出来上がりを待つ。**待っている間に止められたら、生成先へ止めてと頼んで手を引く。**
  * 頼めなくても止めたことは確定している（届いた絵は使わない）ので、ログに残して進む。
+ *
+ * **諦めるとき（時間切れ・問い合わせが続けて失敗）も生成先を止める。** 止めずに手を離すと、
+ * 手元の GPU の順番を返したあとで向こうの生成が走り出し、次の動画と同時に GPU を使う（ADR-0047）。
+ * 一度だけの通信の失敗（サーバの再起動中など）では諦めない。
  */
 export const waitForResult = async (
   deps: JobDeps,
@@ -80,18 +95,27 @@ export const waitForResult = async (
   imageJobId: ImageGenerationJobId,
 ): Promise<Extract<ImageJobStatus, { state: 'succeeded' }>> => {
   const deadline = Date.now() + MAX_WAIT_MS
+  let failures = 0
   for (;;) {
-    const status = await deps.provider.poll(handle)
-    if (status.state === 'succeeded') return status
-    if (status.state === 'failed') throw new ImageJobFailure(status.error)
+    const status = await deps.provider.poll(handle).catch(async (error: unknown) => {
+      failures += 1
+      if (!(error instanceof ProviderError) || !error.retryable || failures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+        await stopRemote(deps, handle, imageJobId)
+        throw error
+      }
+      deps.logger.warn({ imageJobId, err: error, failures }, '出来上がりの問い合わせに失敗しました。少し待って聞き直します')
+      return null
+    })
+    if (status !== null) failures = 0
+    if (status?.state === 'succeeded') return status
+    if (status?.state === 'failed') throw new ImageJobFailure(status.error)
     const current = await deps.imageJobs.findById(imageJobId)
     if (current?.status === 'cancelled') {
-      await deps.provider.cancel(handle).catch((error: unknown) => {
-        deps.logger.warn({ imageJobId, err: error }, '生成先へ止めてと頼めませんでした。止めたことは確定しています')
-      })
+      await stopRemote(deps, handle, imageJobId)
       throw new ImageJobCancelled(imageJobId)
     }
     if (Date.now() > deadline) {
+      await stopRemote(deps, handle, imageJobId)
       throw new ImageJobFailure({ code: 'timeout', message: '絵が 10 分で仕上がりませんでした。', retryable: true })
     }
     await sleep(deps.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS)

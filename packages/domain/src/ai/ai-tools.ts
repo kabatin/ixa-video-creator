@@ -29,6 +29,7 @@ export const AiToolId = z.enum([
   'local',
   'vpipe',
   'wan',
+  'klein',
   'fal',
   'macos_say',
   'gemini_api',
@@ -52,11 +53,11 @@ export type AiToolDetection =
   /** whisper.cpp（`whisper-cli`）が入っていて、モデルのファイル（`WHISPER_CPP_MODEL`）があるか。 */
   | { readonly kind: 'whisper_cpp' }
   /**
-   * 手元の生成サーバが応答するか（`GET /v1/health`。ADR-0031 / 0040）。
-   * **どのサーバかを持つ。** 2 台（vpipe-api・wan-api）あるので、持たないと
-   * 片方の起動でもう片方が「使える」と出てしまう。
+   * 手元の生成サーバが応答するか（`GET /v1/health`。ADR-0031 / 0040 / 0047）。
+   * **どのサーバかを持つ。** 3 台（vpipe-api・wan-api・klein-api）あるので、持たないと
+   * 1 台の起動でほかが「使える」と出てしまう。
    */
-  | { readonly kind: 'local_server'; readonly server: 'vpipe' | 'wan' }
+  | { readonly kind: 'local_server'; readonly server: 'vpipe' | 'wan' | 'klein' }
 
 export type AiToolSpec = {
   readonly id: AiToolId
@@ -125,6 +126,15 @@ export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
     // **どちらも同じ機械の GPU を使う。** 片方が作っている間、もう片方は順番待ちになる（ADR-0040）。
     notice:
       'この Mac で作るので無料です。MiniMax H3 と同じ GPU を使うため、どちらか 1 本ずつしか作りません。',
+  }),
+  klein: tool({
+    id: 'klein',
+    label: '手元の FLUX.2 [klein]（klein・無料・1 枚ずつ）',
+    detect: { kind: 'local_server', server: 'klein' },
+    purposes: ['image'],
+    // 動画と同じ機械の GPU を使う（ADR-0047）。動画を作っている間は絵も順番待ちになる。
+    notice:
+      'この Mac で作るので無料です。手元の動画と同じ GPU を使うため、動画を作っている間は順番を待ちます。',
   }),
   fal: tool({
     id: 'fal',
@@ -199,7 +209,8 @@ export const aiChoiceProblem = (
  */
 const RECOMMENDATION_ORDER: Readonly<Record<AiPurpose, readonly AiToolId[]>> = Object.freeze({
   text: ['claude_cli', 'codex_cli', 'grok_cli'],
-  image: ['codex_cli'],
+  // klein は実測が揃うまで初期値にしない（ADR-0047）。選べば使える。
+  image: ['codex_cli', 'klein'],
   // vpipe を先に置くのは、実測のある（速さと出来の分かっている）方を初期値にするため（ADR-0040）。
   video: ['vpipe', 'wan', 'local'],
   voice: ['macos_say'],

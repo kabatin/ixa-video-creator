@@ -1,3 +1,4 @@
+import { createInMemoryLocalGpuLease } from '../../generation/local-gpu-lease.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -108,6 +109,8 @@ const setup = async (
       startFrame: () => Promise.resolve(null),
     },
     adapters: [{ provider, model: codexCliImageModel }],
+    localGpuLease: createInMemoryLocalGpuLease(),
+    scheduler: { reschedule: () => Promise.resolve() },
     mediaQueue: createRecordingMediaQueue(),
     events: createRecordingEvents(),
     workDir: join(dir, 'work'),

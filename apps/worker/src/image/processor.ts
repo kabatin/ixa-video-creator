@@ -22,11 +22,13 @@ import {
 import { replaceManualStartFrame, type StartFrameReferences } from '@ixa/generation'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
+import type { LocalGpuLease } from '../generation/local-gpu-lease.js'
 import { withTempDir } from '../media/temp-dir.js'
 import { generateCharacterSheet } from './character-sheet.js'
 import { cropToAspect } from './crop.js'
 import { publishImageJobStatus } from './events.js'
 import { ImageJobData } from './job-data.js'
+import { holdLocalGpu, takeLocalGpuTurn } from './local-gpu.js'
 import { requestShapeFor } from './shape.js'
 import {
   ImageJobCancelled,
@@ -67,6 +69,15 @@ export type ImageProcessorDeps = {
    * どの口で作るかは API が「使う AI」から決めてジョブに記す。worker は起動時の設定で選ばない。
    */
   readonly adapters: readonly ImageAdapter[]
+  /**
+   * 手元の GPU の順番（整理券。ADR-0047）。`exclusiveResource: 'local-gpu'` を名乗る口（klein）だけが並ぶ。
+   * **省略できない形にする。** 省略できると、配線し忘れたとき動画と同時に GPU を使い始める。
+   */
+  readonly localGpuLease: LocalGpuLease
+  /** 順番が来ていない絵を、時間を置いて積み直す口（ADR-0047。待つ間 worker の処理枠を握らない）。 */
+  readonly scheduler: { readonly reschedule: (data: ImageJobData, delayMs: number) => Promise<void> }
+  /** 借りを延ばす間隔。テストで短くするための差し込み口（既定 1 分）。 */
+  readonly gpuRenewIntervalMs?: number
   readonly mediaQueue: { readonly enqueue: (mediaAssetId: MediaAssetId) => Promise<void> }
   readonly events: ProjectEventPublisher
   readonly workDir: string
@@ -122,6 +133,8 @@ const generateStartFrame = async (deps: JobDeps, job: ImageGenerationJob, dir: s
     references: references.map(({ mediaAssetId, role }) => ({ mediaAssetId, role })),
     resolveReference: localReferenceResolver(deps, dir),
     count: 1,
+    // 投げ直しても二重に作らせない（手元の生成サーバが使う。ADR-0047）。
+    idempotencyKey: job.id,
   })
   const cropped = join(dir, 'start-frame.png')
   const raw = await (async () => {
@@ -175,7 +188,18 @@ export const processImageJob = async (deps: ImageProcessorDeps, data: unknown): 
       })
     }
     const generate = job.kind === 'character_sheet' ? generateCharacterSheet : generateStartFrame
-    await withTempDir(deps.workDir, 'image-', (dir) => generate({ ...deps, ...adapter }, job, dir))
+    const work = (): Promise<void> => withTempDir(deps.workDir, 'image-', (dir) => generate({ ...deps, ...adapter }, job, dir))
+    if (adapter.provider.exclusiveResource !== 'local-gpu') {
+      await work()
+      return { state: 'succeeded' }
+    }
+    // 手元の GPU を使う口（ADR-0047）。順番が来ていなければ積み直して手を離す（ジョブは queued のまま）。
+    const turn = await takeLocalGpuTurn(deps, job)
+    if (turn.state === 'wait') {
+      await deps.scheduler.reschedule({ imageJobId: job.id }, turn.delayMs)
+      return { state: 'waiting' }
+    }
+    await holdLocalGpu(deps, job, work)
     return { state: 'succeeded' }
   } catch (error) {
     // 人が止めた。失敗ではないので理由を書かずに手を引く（止めた行はそのまま。画面へは止めた側が知らせている）。
