@@ -3,7 +3,7 @@ import type { MusicJobStatusFromProvider, ProviderJobHandle } from '@ixa/provide
 import { MusicJobCancelled, MusicJobFailure, type MusicAdapter, type MusicProcessorDeps } from './deps.js'
 import { publishMusicJobStatus } from './events.js'
 import { ingestMusic } from './ingest.js'
-import { waitForMusic } from './wait.js'
+import { stopRemoteMusic, waitForMusic } from './wait.js'
 
 type Succeeded = Extract<MusicJobStatusFromProvider, { state: 'succeeded' }>
 
@@ -49,7 +49,7 @@ const recordOf = (handle: ProviderJobHandle, raw: Record<string, unknown> = {}):
 
 /**
  * 曲を作って楽曲にする（ADR-0048）。順番（GPU）は呼ぶ側が持っている。
- * 作り始めの印 → 投入（冪等キーはジョブの ID）→ 出来上がりを待つ → 数を確かめる → 取り込む → 成功。
+ * 投入（冪等キーはジョブの ID）→ 作り始めの印 → 出来上がりを待つ → 数を確かめる → 取り込む → 成功。
  * 手元に置いた WAV は、失敗しても片付ける。
  */
 export const generateMusic = async (deps: MusicProcessorDeps, adapter: MusicAdapter, job: MusicJob): Promise<void> => {
@@ -57,11 +57,6 @@ export const generateMusic = async (deps: MusicProcessorDeps, adapter: MusicAdap
   if (project === null) {
     throw new MusicJobFailure({ code: 'project_missing', message: 'この作品は消されました。', retryable: false })
   }
-  const running = await deps.musicJobs.markRunning(job.id)
-  // 拾ってから作り始めるまでの間に止められた（止めた行は上書きされずに返ってくる）。
-  if (running.status === 'cancelled') throw new MusicJobCancelled(job.id)
-  await publishMusicJobStatus(deps, running)
-
   const { spec } = job
   const handle = await adapter.provider.submit({
     model: adapter.model,
@@ -74,8 +69,17 @@ export const generateMusic = async (deps: MusicProcessorDeps, adapter: MusicAdap
     // 投げ直しても二重に作らせない。
     idempotencyKey: job.id,
   })
-  await deps.musicJobs.recordProvider(job.id, recordOf(handle))
   try {
+    await deps.musicJobs.recordProvider(job.id, recordOf(handle))
+    // 作り始めの印は**投入が通ってから**付ける。先に付けると、混んでいて（429）積み直して待つ間も
+    // 画面が「作っています」になる。
+    const running = await deps.musicJobs.markRunning(job.id)
+    // 拾ってから投入するまでの間に止められた（止めた行は上書きされずに返ってくる）。投げた分は止める。
+    if (running.status === 'cancelled') {
+      await stopRemoteMusic(deps, adapter.provider, handle, job.id)
+      throw new MusicJobCancelled(job.id)
+    }
+    await publishMusicJobStatus(deps, running)
     const result = await waitForMusic(deps, adapter.provider, handle, job.id)
     if (result.outputs.length !== spec.count) {
       throw new MusicJobFailure(

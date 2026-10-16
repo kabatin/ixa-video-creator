@@ -266,7 +266,9 @@ describe('processMusicJob', () => {
 
     expect(await processMusicJob(s.deps, { musicJobId: s.job.id })).toEqual({ state: 'busy' })
     expect(s.rescheduled).toEqual([{ data: { musicJobId: s.job.id }, delayMs: 45_000 }])
-    expect(s.musicJobs.snapshot()[0]?.status).not.toBe('failed')
+    // 積み直して待つ間は「順番を待っています」のまま。「作っています」と出さない。
+    expect(s.musicJobs.snapshot()[0]?.status).toBe('queued')
+    expect(s.events.published()).toEqual([])
   })
 
   it('待っている間に止められたら、生成先を止めて手を引く（楽曲は作らない）', async () => {
