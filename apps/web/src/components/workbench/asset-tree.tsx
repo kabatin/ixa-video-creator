@@ -11,6 +11,7 @@ import { ASSET_DRAG_TYPE, encodeAssetDrag, type AssetDragPayload } from '@/lib/a
 import { matchesAssetQuery } from '@/lib/asset-tree'
 import { VOICE_TOOL_LABELS } from '@/lib/voice-defaults'
 import { sameSelection, type Inspected } from '@/lib/workbench-selection'
+import { MusicJobProgress } from '@/components/workbench/ui/music-job-progress'
 import { useAssetMenu, type AssetTarget } from '@/components/workbench/use-asset-menu'
 import { useContextMenuTrigger, type ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
 
@@ -101,6 +102,17 @@ export const AssetTree = () => {
           }}
         >
           {trackError !== null && <Note tone="danger">{trackError}</Note>}
+          <MusicJobProgress />
+          {/* 手元の AI で曲を作る（ADR-0048）。メニュー「素材 › 曲を作る…」と同じ。 */}
+          <button
+            type="button"
+            onClick={() => {
+              workbench.openDialog('make-music')
+            }}
+            className="px-1 text-xs text-muted underline hover:text-text"
+          >
+            曲を作る…
+          </button>
           {(tracks.state === 'ready' ? tracks.value : [])
             .filter((track) => show(track.title))
             .map((track) => (

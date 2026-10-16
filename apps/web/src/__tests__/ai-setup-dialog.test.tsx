@@ -17,48 +17,48 @@ const TOOLS: readonly WireAiTool[] = [
     id: 'stub',
     label: 'お試し',
     status: { state: 'ready', version: null },
-    problems: { text: null, image: null, video: null, voice: null, transcribe: null },
+    problems: { text: null, image: null, video: null, voice: null, transcribe: null, music: null },
     notice: null,
   },
   {
     id: 'claude_cli',
     label: 'Claude Code',
     status: { state: 'ready', version: '2.1.283' },
-    problems: { text: null, image: '画像にはまだ使えません', video: '動画にはまだ使えません', voice: 'x', transcribe: 'x' },
+    problems: { text: null, image: '画像にはまだ使えません', video: '動画にはまだ使えません', voice: 'x', transcribe: 'x', music: 'x' },
     notice: null,
   },
   {
     id: 'codex_cli',
     label: 'Codex',
     status: { state: 'ready', version: '0.154.0' },
-    problems: { text: 'テキストにはまだ使えません', image: null, video: '動画にはまだ使えません', voice: 'x', transcribe: 'x' },
+    problems: { text: 'テキストにはまだ使えません', image: null, video: '動画にはまだ使えません', voice: 'x', transcribe: 'x', music: 'x' },
     notice: null,
   },
   {
     id: 'local',
     label: '静止画を動かす（無料）',
     status: { state: 'ready', version: null },
-    problems: { text: 'x', image: 'x', video: null, voice: 'x', transcribe: 'x' },
+    problems: { text: 'x', image: 'x', video: null, voice: 'x', transcribe: 'x', music: 'x' },
     notice: null,
   },
   {
     id: 'vpipe',
     label: '手元の MiniMax H3',
     status: { state: 'missing', reason: '起動していません' },
-    problems: { text: 'x', image: 'x', video: '手元の MiniMax H3 を使えません: 起動していません', voice: 'x', transcribe: 'x' },
+    problems: { text: 'x', image: 'x', video: '手元の MiniMax H3 を使えません: 起動していません', voice: 'x', transcribe: 'x', music: 'x' },
     notice: null,
   },
   {
     id: 'gemini_api',
     label: 'Gemini（Google の API・無料枠あり）',
     status: { state: 'ready', version: null },
-    problems: { text: 'x', image: 'x', video: 'x', voice: null, transcribe: null },
+    problems: { text: 'x', image: 'x', video: 'x', voice: null, transcribe: null, music: null },
     notice: '原稿は Google に送られます。無料枠では送った内容が製品の改善に使われます。',
   },
 ]
 
-const RECOMMENDED: AiSettings = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'stub', transcribe: 'stub' }
-const CURRENT: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' }
+const RECOMMENDED: AiSettings = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'stub', transcribe: 'stub', music: 'stub' }
+const CURRENT: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub' }
 
 const fakeApi = (overrides: Partial<AiSettingsApi> = {}): AiSettingsApi => ({
   listAiTools: vi.fn(() => Promise.resolve({ tools: [...TOOLS], recommended: RECOMMENDED })),
@@ -133,6 +133,7 @@ describe('AiSetupDialogBody', () => {
         video: 'local',
         voice: 'stub',
         transcribe: 'stub',
+        music: 'stub',
       })
       expect(value.closeDialog).toHaveBeenCalled()
     })

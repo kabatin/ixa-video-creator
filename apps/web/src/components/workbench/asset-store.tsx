@@ -79,6 +79,8 @@ export type AssetActions = {
   readonly setMasterTrack: (id: MusicTrackId) => Promise<void>
   readonly deleteTrack: (id: MusicTrackId) => Promise<void>
   readonly analyzeTrack: (id: MusicTrackId) => Promise<void>
+  /** 楽曲の一覧を読み直す（曲を作るジョブで、ほかの経路から楽曲が増えたとき。ADR-0048）。 */
+  readonly reloadTracks: () => Promise<void>
   /** 声を名前だけで作る（「使う AI」の声の AI と、その最初の声。ADR-0038）。 */
   readonly createVoice: (name: string) => Promise<WireVoice>
   readonly updateVoice: (id: VoiceProfileId, patch: UpdateVoiceProfilePatch) => Promise<WireVoice>
@@ -358,6 +360,12 @@ export const AssetStoreProvider = ({
       },
       analyzeTrack: async (id) => {
         await api.requestAnalysis(id)
+      },
+      reloadTracks: async () => {
+        const fresh = await api.listMusicTracks(projectId)
+        setTracks({ state: 'ready', value: fresh })
+        // 最初の 1 曲ならマスターになっている。拍・尺の材料を読み直す。
+        router.refresh()
       },
       createVoice: async (name) => {
         const { settings } = await api.getAiSettings()

@@ -26,6 +26,7 @@ import { PosterRenewalContext } from '@/lib/poster-renewal'
 import { sortShotsByStart } from '@/lib/timeline-display'
 import { posterByShotId, postersStale, posterRetryDelayMs, type ShotPosterMap } from '@/lib/shot-posters'
 import { useProjectEvents } from '@/lib/use-project-events'
+import { musicJobNotice } from '@/lib/music-job-form'
 import { voiceJobNotice } from '@/lib/voice-job-notice'
 import type { PanelId } from '@/lib/workbench-layout'
 import type { Inspected } from '@/lib/workbench-selection'
@@ -98,6 +99,8 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
   const [posterEpoch, setPosterEpoch] = useState(0)
   const [narrationEpoch, setNarrationEpoch] = useState(0)
   const bumpNarration = useCallback((): void => setNarrationEpoch((epoch) => epoch + 1), [])
+  const [musicJobEpoch, setMusicJobEpoch] = useState(0)
+  const [musicMadeEpoch, setMusicMadeEpoch] = useState(0)
   const [newTakeCount, setNewTakeCount] = useState(0)
   const [dialog, setDialog] = useState<WorkbenchDialog | null>(props.initialDialog)
   const [dialogShotIds, setDialogShotIds] = useState<readonly ShotId[] | null>(null)
@@ -186,6 +189,13 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       if (event.type === 'voice_job.status') {
         setNarrationEpoch((epoch) => epoch + 1)
         const message = voiceJobNotice(event)
+        if (message !== null) setNotice(message)
+      }
+      // 曲を作るジョブ（ADR-0048）。進み具合を取り直し、できたら楽曲の一覧も取り直す。失敗は理由ごと知らせる。
+      if (event.type === 'music_job.status') {
+        setMusicJobEpoch((epoch) => epoch + 1)
+        if (event.status === 'succeeded') setMusicMadeEpoch((epoch) => epoch + 1)
+        const message = musicJobNotice(event)
         if (message !== null) setNotice(message)
       }
       // **失敗を画面まで運ぶ。** worker が作った理由をここで捨てると、
@@ -321,6 +331,8 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       posterEpoch,
       narrationEpoch,
       bumpNarration,
+      musicJobEpoch,
+      musicMadeEpoch,
       serverEpoch,
       selectedShotId,
       selectShot: (shotId) => {
@@ -384,6 +396,8 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       posterEpoch,
       narrationEpoch,
       bumpNarration,
+      musicJobEpoch,
+      musicMadeEpoch,
       serverEpoch,
       selectedShotId,
       checked,

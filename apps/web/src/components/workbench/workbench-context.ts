@@ -77,6 +77,10 @@ export type WorkbenchContextValue = {
    */
   readonly narrationEpoch: number
   readonly bumpNarration: () => void
+  /** 曲を作るジョブ（ADR-0048）の出来事が届くたびに進む。進み具合（ジョブの一覧）の取り直しの合図。 */
+  readonly musicJobEpoch: number
+  /** 曲ができるたびに進む。楽曲の一覧の取り直しの合図。 */
+  readonly musicMadeEpoch: number
   /**
    * サーバから材料を読み直すたびに進む（`router.refresh()` のあと）。
    * タイムライン文書など、パネルが自分で取る材料の取り直しの合図にする。

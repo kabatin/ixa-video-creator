@@ -28,6 +28,7 @@ import { createCharacterSheetApi, type CharacterSheetApi } from '@/lib/character
 import { createLibraryImportApi, type LibraryImportApi } from '@/lib/library-import-api'
 import { createLocationApi, type LocationApi } from '@/lib/location-api'
 import { createMusicApi, type MusicApi } from '@/lib/music-api'
+import { createMusicJobApi, type MusicJobApi } from '@/lib/music-job-api'
 import { createSequenceApi, type SequenceApi } from '@/lib/sequence-api'
 import { createReviewApi, type ReviewApi } from '@/lib/review-api'
 import { createNarrationApi, type NarrationApi } from '@/lib/narration-api'
@@ -141,6 +142,7 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
   CharacterApi &
   LocationApi &
   MusicApi &
+  MusicJobApi &
   LibraryApi &
   LibraryImportApi &
   CharacterSheetApi &
@@ -271,6 +273,7 @@ export const createApiClient = (
     ...createReviewApi(requester),
     ...createTimelineApi(requester),
     ...createNarrationApi(requester),
+    ...createMusicJobApi(requester),
     ...createRenderApi(requester),
     ...createShotBulkApi(requester),
     ...createShotEditApi(requester),

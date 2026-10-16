@@ -26,6 +26,7 @@ export type WorkbenchDialog =
   | 'align-lyrics'
   | 'library-import'
   | 'project-duplicate'
+  | 'make-music'
 
 export type MenuAction =
   | { readonly kind: 'href'; readonly href: string }
@@ -258,6 +259,8 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
       items: [
         item('import', 'ファイルを取り込む…', command('import-files')),
         item('music', '楽曲', command('inspect-master-track')),
+        // 手元の AI で曲を作る（ADR-0048）。できた曲は楽曲に足される。
+        item('make-music', '曲を作る…', dialog('make-music')),
         // 作った素材を Finder で開く（ADR-0041）。開く前に、まだ入っていないものが入る。
         item('asset-folder', '素材フォルダを開く', command('open-asset-folder')),
       ],

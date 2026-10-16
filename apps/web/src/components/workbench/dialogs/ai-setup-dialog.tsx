@@ -17,6 +17,7 @@ const PURPOSES: Readonly<Record<AiPurpose, { readonly title: string; readonly hi
   video: { title: '動画', hint: 'Shot の映像。AUTO はこの AI のモデルから選びます' },
   voice: { title: '声', hint: 'ナレーション・セリフを読む' },
   transcribe: { title: '文字起こし', hint: '録音したナレーションを聞き取って、行とテロップにする' },
+  music: { title: '曲', hint: '曲調と歌詞から楽曲を作る' },
 }
 
 type Loaded =

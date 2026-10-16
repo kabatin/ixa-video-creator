@@ -29,6 +29,7 @@ import {
 } from '@/lib/workbench-layout'
 import type { Inspected } from '@/lib/workbench-selection'
 import { AssetStoreProvider } from '@/components/workbench/asset-store'
+import { MusicJobsProvider } from '@/components/workbench/music-jobs'
 import { FileIntake } from '@/components/workbench/file-intake'
 import type { WorkbenchQuery } from '@/lib/workbench-url'
 import { ContextMenuHost } from '@/components/workbench/ui/context-menu'
@@ -116,9 +117,12 @@ export const ProjectWorkbench = (props: ProjectWorkbenchProps) => {
         focusPanel={focusPanel}
       >
         {/* 右クリック（長押し・Shift+F10）のメニューの置き場。開いているのは 1 つだけ。 */}
-        <ContextMenuHost>
-          <WorkbenchShell dock={dock} wide={wide} query={props.query} />
-        </ContextMenuHost>
+        {/* 曲を作るジョブの見守り（ADR-0048）。ダイアログを閉じても追い続けるため、ここに置く。 */}
+        <MusicJobsProvider>
+          <ContextMenuHost>
+            <WorkbenchShell dock={dock} wide={wide} query={props.query} />
+          </ContextMenuHost>
+        </MusicJobsProvider>
       </WorkbenchProvider>
     </AssetStoreProvider>
   )

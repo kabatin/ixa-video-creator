@@ -3,6 +3,7 @@
 import type { MusicTrack } from '@ixa/domain'
 import type { ReactNode } from 'react'
 import { AnalysisStarter } from '@/components/analysis-starter'
+import { Button } from '@/components/ui/button'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { GUIDE_TO_CONCEPT_NOTICES, useGuideToConcept } from '@/components/workbench/workflow-context'
 import { PanelEmpty } from '@/components/workbench/panels/panel-frame'
@@ -41,6 +42,15 @@ export const MusicGate = ({
         hint="音源をアップロードして楽曲として登録すると、波形の上で区切りを置けます。"
       >
         <AddTrackButton />
+        {/* 音源が無ければ、手元の AI で作ることもできる（ADR-0048）。 */}
+        <Button
+          size="sm"
+          onClick={() => {
+            workbench.openDialog('make-music')
+          }}
+        >
+          曲を作る…
+        </Button>
       </PanelEmpty>
     )
   }

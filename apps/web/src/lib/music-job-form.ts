@@ -1,0 +1,118 @@
+import {
+  MUSIC_COUNT_MAX,
+  MUSIC_DURATION_MAX_SEC,
+  MUSIC_DURATION_MIN_SEC,
+  MUSIC_LYRICS_MAX_LENGTH,
+  MUSIC_PROMPT_MAX_LENGTH,
+  isMusicJobFinished,
+  type ProjectEvent,
+} from '@ixa/domain'
+import { formatDuration, formatLongDuration } from '@/lib/format-time'
+import type { MusicGenerateBody, WireMusicJob } from '@/lib/music-job-api'
+
+/**
+ * 「曲を作る」（ADR-0048）の中身。**React を含まない。**
+ * 上限は domain の定数をそのまま使い、ここで数を書き写さない（API の検証と同じ値）。
+ */
+
+/** 欄の値。数の欄は打ちかけ（空・`1.`）を持てるよう文字で持つ。 */
+export type MusicForm = {
+  readonly prompt: string
+  readonly lyrics: string
+  readonly durationSec: string
+  readonly instrumental: boolean
+  readonly count: string
+}
+
+export const DEFAULT_MUSIC_DURATION_SEC = 60
+
+export const INITIAL_MUSIC_FORM: MusicForm = {
+  prompt: '',
+  lyrics: '',
+  durationSec: String(DEFAULT_MUSIC_DURATION_SEC),
+  instrumental: false,
+  count: '1',
+}
+
+export type MusicFormField = 'prompt' | 'lyrics' | 'durationSec' | 'count'
+export type MusicFormErrors = Readonly<Partial<Record<MusicFormField, string>>>
+
+export type MusicFormResult =
+  | { readonly ok: true; readonly body: MusicGenerateBody }
+  | { readonly ok: false; readonly errors: MusicFormErrors }
+
+/** 数でなければ null。空欄は 0 になり、範囲の外として止まる。 */
+const toNumber = (raw: string): number | null => {
+  const value = Number(raw.trim())
+  return Number.isFinite(value) ? value : null
+}
+
+const promptError = (prompt: string): string | undefined => {
+  if (prompt === '') return '曲調を入れてください（例: j-pop, upbeat, female vocal）'
+  if (prompt.length > MUSIC_PROMPT_MAX_LENGTH) return `曲調は ${String(MUSIC_PROMPT_MAX_LENGTH)} 字までです`
+  return undefined
+}
+
+const lyricsError = (lyrics: string): string | undefined =>
+  lyrics.length > MUSIC_LYRICS_MAX_LENGTH ? `歌詞は ${String(MUSIC_LYRICS_MAX_LENGTH)} 字までです` : undefined
+
+const durationError = (value: number | null): string | undefined =>
+  value === null || value < MUSIC_DURATION_MIN_SEC || value > MUSIC_DURATION_MAX_SEC
+    ? `長さは ${String(MUSIC_DURATION_MIN_SEC)}〜${String(MUSIC_DURATION_MAX_SEC)} 秒で入れてください`
+    : undefined
+
+const countError = (value: number | null): string | undefined =>
+  value === null || !Number.isInteger(value) || value < 1 || value > MUSIC_COUNT_MAX
+    ? `何曲作るかは 1〜${String(MUSIC_COUNT_MAX)} で選んでください`
+    : undefined
+
+/**
+ * 欄の値を確かめて、頼む本文にする。**歌なしなら歌詞は送らない**（欄に残っていても使わない）。
+ */
+export const validateMusicForm = (form: MusicForm): MusicFormResult => {
+  const prompt = form.prompt.trim()
+  const lyrics = form.instrumental ? '' : form.lyrics
+  const durationSec = toNumber(form.durationSec)
+  const count = toNumber(form.count)
+  const found: ReadonlyArray<readonly [MusicFormField, string | undefined]> = [
+    ['prompt', promptError(prompt)],
+    ['lyrics', lyricsError(lyrics)],
+    ['durationSec', durationError(durationSec)],
+    ['count', countError(count)],
+  ]
+  const errors: MusicFormErrors = Object.fromEntries(
+    found.filter((entry): entry is readonly [MusicFormField, string] => entry[1] !== undefined),
+  )
+  if (Object.keys(errors).length > 0 || durationSec === null || count === null) {
+    return { ok: false, errors }
+  }
+  return { ok: true, body: { prompt, lyrics, durationSec, instrumental: form.instrumental, count } }
+}
+
+/** まだ終わっていないジョブ（待っている・作っている）。 */
+export const activeMusicJobs = (jobs: readonly WireMusicJob[]): readonly WireMusicJob[] =>
+  jobs.filter((job) => !isMusicJobFinished(job.status))
+
+/** 長さの言い方。分をまたぐ長さは時計形式も添える（`format-time` の使い分け）。 */
+const lengthOf = (sec: number): string => (sec >= 60 ? formatLongDuration(sec) : formatDuration(sec))
+
+/** 進み具合の 1 行（`曲を作っています…（2 曲・1:00.00（60.00s））`）。 */
+export const describeMusicJob = (job: WireMusicJob): string => {
+  const what = `${String(job.count)} 曲・${lengthOf(job.durationSec)}`
+  return job.status === 'queued' ? `順番を待っています…（${what}）` : `曲を作っています…（${what}）`
+}
+
+/**
+ * 曲のジョブの出来事から、上の知らせに出す文。できた・作れなかったときだけ。
+ * 止めたとき・途中の出来事は null（止めたのは本人なので知らせない）。
+ * 理由を捨てると、利用者から見て「遅い」と「失敗した」が区別できない。
+ */
+export const musicJobNotice = (
+  event: Extract<ProjectEvent, { type: 'music_job.status' }>,
+): string | null => {
+  if (event.status === 'succeeded') {
+    return `曲ができました。楽曲に ${String(event.musicTrackIds.length)} 曲足しました（解析を始めています）。`
+  }
+  if (event.status === 'failed') return `曲を作れませんでした: ${event.error ?? '理由が届きませんでした。'}`
+  return null
+}

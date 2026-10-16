@@ -21,6 +21,7 @@ const tool = (
     video: 'まだ使えません',
     voice: 'まだ使えません',
     transcribe: 'まだ使えません',
+    music: 'まだ使えません',
     ...problems,
   },
   notice: null,
@@ -117,8 +118,8 @@ describe('aiOptionsFor: 入っているが使えない AI', () => {
 })
 
 describe('initialAiChoice', () => {
-  const recommended: AiSettings = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'macos_say', transcribe: 'stub' }
-  const current: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' }
+  const recommended: AiSettings = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'macos_say', transcribe: 'stub', music: 'stub' }
+  const current: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub' }
 
   it('まだ選んでいなければ勧める組み合わせから始める', () => {
     expect(initialAiChoice({ settings: current, source: 'default' }, recommended)).toEqual(
