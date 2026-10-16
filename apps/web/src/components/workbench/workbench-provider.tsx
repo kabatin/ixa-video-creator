@@ -268,6 +268,10 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
     setShots((current) => (current === null ? current : replaceById(current, updated)))
   }, [])
 
+  const addShot = useCallback((created: Shot): void => {
+    setShots((current) => [...(current ?? []).filter((shot) => shot.id !== created.id), created])
+  }, [])
+
   const saveShot = useCallback(
     async (shotId: ShotId, patch: ShotPatch): Promise<Shot> => {
       const updated = await api.updateShot(shotId, patch)
@@ -334,6 +338,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       live: { ...live, newTakeCount },
       saveShot,
       replaceShots,
+      addShot,
       applyAdoptedShots,
       refresh,
       dialog,
@@ -387,6 +392,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       newTakeCount,
       saveShot,
       replaceShots,
+      addShot,
       applyAdoptedShots,
       refresh,
       dialog,

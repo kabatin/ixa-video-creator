@@ -105,6 +105,8 @@ export type WorkbenchContextValue = {
   // --- Shot を変える口（ここ以外で一覧を書き換えない） ---
   readonly saveShot: (shotId: ShotId, patch: ShotPatch) => Promise<Shot>
   readonly replaceShots: (updated: readonly Shot[]) => void
+  /** 作った Shot を一覧へ足す。読み込み直さなくても出る。 */
+  readonly addShot: (created: Shot) => void
   readonly applyAdoptedShots: (
     adopted: readonly Pick<Shot, 'id' | 'description' | 'mood' | 'camera'>[],
   ) => void

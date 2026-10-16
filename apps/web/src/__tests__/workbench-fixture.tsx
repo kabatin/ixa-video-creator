@@ -87,6 +87,7 @@ export const workbenchValue = (
   live: { state: 'live', lastEventAt: null, attempt: 0, invalidCount: 0, newTakeCount: 0 },
   saveShot: vi.fn(),
   replaceShots: vi.fn(),
+  addShot: vi.fn(),
   applyAdoptedShots: vi.fn(),
   refresh: vi.fn(),
   dialog: null,

@@ -5,7 +5,7 @@ import { useWorkbench } from '@/components/workbench/workbench-context'
 import { useAssets } from '@/components/workbench/asset-store'
 import { nextShotOrder, nextShotStartSec } from '@/lib/shot-form'
 
-/** 新規 Shot（ダイアログ）。作ったらその Shot を選んで閉じる。 */
+/** 新規 Shot（ダイアログ）。作ったら一覧に足し、その Shot を選んで閉じる。 */
 export const NewShotDialogBody = () => {
   const workbench = useWorkbench()
   const shots = workbench.shots ?? []
@@ -20,6 +20,7 @@ export const NewShotDialogBody = () => {
         locationsError={locations.state === 'error' ? locations.message : undefined}
         onCreated={(shot) => {
           workbench.closeDialog()
+          workbench.addShot(shot)
           workbench.selectShot(shot.id)
           workbench.openInspector('settings')
         }}
