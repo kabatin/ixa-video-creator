@@ -7,6 +7,7 @@ import { useWorkbench } from '@/components/workbench/workbench-context'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import type { MusicGenerateBody, MusicJobApi, WireMusicJob } from '@/lib/music-job-api'
+import { activeMusicJobs } from '@/lib/music-job-form'
 
 /**
  * 曲を作るジョブ（ADR-0048）の見守り。**ダイアログより上に置く。**
@@ -14,7 +15,13 @@ import type { MusicGenerateBody, MusicJobApi, WireMusicJob } from '@/lib/music-j
  *
  * 一覧の正はサーバ。出来事（`musicJobEpoch`）が届くたび・頼んだ・止めたあとに引き直す。
  * 曲ができたら（`musicMadeEpoch`）楽曲の一覧を読み直す。
+ *
+ * **待っている・作っているジョブがある間は、少し待って引き直す。** 繋ぎ直しの間に終わりの出来事を
+ * 取りこぼすと、出来事だけに頼った一覧は「作っています」のまま止まる。
  */
+
+/** 終わっていないジョブがある間に一覧を引き直す間隔。 */
+export const MUSIC_JOBS_POLL_INTERVAL_MS = 10_000
 
 export type MusicJobsValue = {
   readonly jobs: Loaded<readonly WireMusicJob[]>
@@ -31,9 +38,12 @@ export const useMusicJobs = (): MusicJobsValue | null => useContext(MusicJobsCon
 
 export const MusicJobsProvider = ({
   api,
+  pollIntervalMs = MUSIC_JOBS_POLL_INTERVAL_MS,
   children,
 }: {
   readonly api?: MusicJobApi
+  /** 終わっていないジョブがある間に引き直す間隔。テストで短くするための差し込み口。 */
+  readonly pollIntervalMs?: number
   readonly children: ReactNode
 }) => {
   const workbench = useWorkbench()
@@ -60,6 +70,17 @@ export const MusicJobsProvider = ({
       cancelled = true
     }
   }, [client, projectId, musicJobEpoch, localEpoch])
+
+  const hasActive = jobs.state === 'ready' && activeMusicJobs(jobs.value).length > 0
+  useEffect(() => {
+    if (!hasActive) return
+    const timer = setTimeout(() => {
+      setLocalEpoch((epoch) => epoch + 1)
+    }, pollIntervalMs)
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [hasActive, jobs, pollIntervalMs])
 
   // 描画ごとに作り直される関数は、最新を控えて呼ぶ（曲ができたときだけ走らせる）。
   const reloadTracks = useRef(actions.reloadTracks)

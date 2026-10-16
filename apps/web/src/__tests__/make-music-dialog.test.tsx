@@ -33,9 +33,9 @@ const fakeApi = (patch: Partial<MusicJobApi> = {}): MusicJobApi => ({
   ...patch,
 })
 
-const renderDialog = (api: MusicJobApi, assets = assetStoreValue()) =>
+const renderDialog = (api: MusicJobApi, assets = assetStoreValue(), pollIntervalMs?: number) =>
   renderInWorkbench(
-    <MusicJobsProvider api={api}>
+    <MusicJobsProvider api={api} pollIntervalMs={pollIntervalMs}>
       <MakeMusicDialogBody />
     </MusicJobsProvider>,
     {},
@@ -103,6 +103,18 @@ describe('曲を作る', () => {
     await waitFor(() => {
       expect(api.cancelMusicJobs).toHaveBeenCalledWith(PROJECT_ID)
     })
+  })
+
+  it('待っている・作っているジョブがある間は、出来事を取りこぼしても少し待って取り直す', async () => {
+    const listMusicJobs = vi.fn().mockResolvedValueOnce([running]).mockResolvedValue([{ ...running, status: 'succeeded' }])
+    renderDialog(fakeApi({ listMusicJobs }), assetStoreValue(), 10)
+
+    await waitFor(() => {
+      expect(listMusicJobs).toHaveBeenCalledTimes(2)
+    })
+    // 終わったら取り直しをやめる。
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(listMusicJobs).toHaveBeenCalledTimes(2)
   })
 
   it('出来事が届いたら進み具合を取り直し、曲ができたら楽曲の一覧を読み直す', async () => {
