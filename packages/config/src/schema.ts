@@ -202,12 +202,23 @@ export const EnvSchema = z.object({
    * 動画と同じ機械の GPU を使うので、動画・高画質化と同じ列に並んで 1 本ずつ作る。
    */
   LOCAL_IMAGE_GENERATOR: localGeneratorList(['klein']),
+  /**
+   * 手元の生成サーバで曲を作るか（ADR-0048）。**既定は `none`（使わない）。**
+   *
+   * - `ace_step` … ace-step-api の ACE-Step 1.5
+   *
+   * 書き方と考え方は `LOCAL_VIDEO_GENERATOR` と同じ（URL やトークンの有無で切り替えない）。
+   * 動画と同じ機械の GPU を使うので、動画・高画質化・絵と同じ列に並んで 1 本ずつ作る。
+   */
+  LOCAL_MUSIC_GENERATOR: localGeneratorList(['ace_step']),
   /** vpipe-api の場所。**既定はこのマシンだけ**（`127.0.0.1`）。 */
   VPIPE_API_URL: urlString.default('http://127.0.0.1:8765'),
   /** wan-api の場所。**既定はこのマシンだけ**（`127.0.0.1`。vpipe-api とポートを分ける）。 */
   WAN_API_URL: urlString.default('http://127.0.0.1:8766'),
   /** klein-api の場所（ADR-0047）。**既定はこのマシンだけ**（vpipe-api・wan-api とポートを分ける）。 */
   KLEIN_API_URL: urlString.default('http://127.0.0.1:8767'),
+  /** ace-step-api の場所（ADR-0048）。**既定はこのマシンだけ**（ほかの生成サーバとポートを分ける）。 */
+  ACE_STEP_API_URL: urlString.default('http://127.0.0.1:8768'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
   /**
@@ -279,6 +290,11 @@ export const EnvSchema = z.object({
     .string()
     .transform((v) => (v.trim() === '' ? undefined : v))
     .optional(),
+  /** ace-step-api の合言葉（ADR-0048）。扱いは `WAN_API_TOKEN` と同じ。 */
+  ACE_STEP_API_TOKEN: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v))
+    .optional(),
   /**
    * 書き出した動画を置くフォルダ（ADR-0036）。省略すると API がホームの「ムービー」の下に決める。
    * **絶対パスだけ受ける。** 相対パスや `~` は、どこに書くかが起動のしかたで変わってしまう。
@@ -296,6 +312,9 @@ export type Env = z.infer<typeof EnvSchema>
 
 /** 有効にできる手元の生成サーバ（`LOCAL_VIDEO_GENERATOR` に書ける値）。 */
 export type LocalVideoGeneratorId = Env['LOCAL_VIDEO_GENERATOR'][number]
+
+/** 有効にできる手元の曲の生成サーバ（`LOCAL_MUSIC_GENERATOR` に書ける値。ADR-0048）。 */
+export type LocalMusicGeneratorId = Env['LOCAL_MUSIC_GENERATOR'][number]
 
 /** 有効にできる手元の画像生成サーバ（`LOCAL_IMAGE_GENERATOR` に書ける値。ADR-0047）。 */
 export type LocalImageGeneratorId = Env['LOCAL_IMAGE_GENERATOR'][number]
@@ -375,6 +394,12 @@ export interface AppConfig {
     kleinApiUrl: string
     /** klein-api の合言葉。未設定は null。 */
     kleinApiToken: string | null
+    /** 手元の曲の生成サーバのうち、有効にしたもの（ADR-0048）。既定は空。 */
+    localMusicGenerators: readonly LocalMusicGeneratorId[]
+    /** ace-step-api の場所。 */
+    aceStepApiUrl: string
+    /** ace-step-api の合言葉。未設定は null。 */
+    aceStepApiToken: string | null
   }
   /** 書き出した動画を置くフォルダ（絶対パス）。未設定は null（API が既定を決める）。 */
   renderExportDir: string | null

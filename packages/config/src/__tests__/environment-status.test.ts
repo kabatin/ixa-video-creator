@@ -22,6 +22,9 @@ const LOCAL_VIDEO_OFF = {
   localImageGenerators: [],
   kleinApiUrl: 'http://127.0.0.1:8767',
   kleinApiToken: null,
+  localMusicGenerators: [],
+  aceStepApiUrl: 'http://127.0.0.1:8768',
+  aceStepApiToken: null,
 } as const
 
 const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
@@ -331,5 +334,40 @@ describe('ローカルの画像生成（ADR-0047）', () => {
     expect(text).not.toContain('192.168.1.22')
     expect(text).not.toContain(KLEIN_TOKEN)
     expect(status.secrets.find((s) => s.envName === 'KLEIN_API_TOKEN')).toMatchObject({ configured: true })
+  })
+})
+
+describe('ローカルの曲の生成（ADR-0048）', () => {
+  const ACE_STEP_TOKEN = 'acestep-SUPERSECRET-token-0123456789abcdef'
+  const aceStepOn = (url: string): AppConfig =>
+    aConfig({
+      providers: {
+        ...aConfig().providers,
+        localMusicGenerators: ['ace_step'],
+        aceStepApiUrl: url,
+        aceStepApiToken: ACE_STEP_TOKEN,
+      },
+    })
+  const settingFor = (config: AppConfig) =>
+    describeEnvironment(config).settings.find((s) => s.envName === 'LOCAL_MUSIC_GENERATOR')
+
+  it('既定（none）は目立たせない', () => {
+    expect(settingFor(aConfig())).toMatchObject({ value: 'none', notable: false, note: '使わない。' })
+  })
+
+  it('ace_step のときは目立たせ、動画と同じ列に並ぶと書く', () => {
+    const setting = settingFor(aceStepOn('http://127.0.0.1:8768'))
+    expect(setting).toMatchObject({ value: 'ace_step', notable: true })
+    expect(setting?.note).toContain('同じ列')
+    expect(setting?.note).not.toContain('暗号化')
+  })
+
+  it('別のマシンを http で指していたら平文で流れると書く。URL も合言葉も出さない', () => {
+    const status = describeEnvironment(aceStepOn('http://192.168.1.22:8768'))
+    expect(status.settings.find((s) => s.envName === 'LOCAL_MUSIC_GENERATOR')?.note).toContain('暗号化されずに')
+    const text = JSON.stringify(status)
+    expect(text).not.toContain('192.168.1.22')
+    expect(text).not.toContain(ACE_STEP_TOKEN)
+    expect(status.secrets.find((s) => s.envName === 'ACE_STEP_API_TOKEN')).toMatchObject({ configured: true })
   })
 })

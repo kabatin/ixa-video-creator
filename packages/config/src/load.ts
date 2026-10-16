@@ -145,6 +145,9 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       localImageGenerators: parsed.LOCAL_IMAGE_GENERATOR,
       kleinApiUrl: parsed.KLEIN_API_URL,
       kleinApiToken: parsed.KLEIN_API_TOKEN ?? null,
+      localMusicGenerators: parsed.LOCAL_MUSIC_GENERATOR,
+      aceStepApiUrl: parsed.ACE_STEP_API_URL,
+      aceStepApiToken: parsed.ACE_STEP_API_TOKEN ?? null,
     },
     renderExportDir: parsed.RENDER_EXPORT_DIR ?? null,
     voiceAi: {

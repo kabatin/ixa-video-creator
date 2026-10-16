@@ -68,6 +68,20 @@ const localImageNote = (config: AppConfig): string => {
   )
 }
 
+/** ローカルの曲の生成の説明（ADR-0048）。書き方は画像と同じ（URL は出さない）。 */
+const localMusicNote = (config: AppConfig): string => {
+  const { localMusicGenerators, aceStepApiUrl } = config.providers
+  if (localMusicGenerators.length === 0) return '使わない。'
+  const overNetwork = plainOverNetwork(aceStepApiUrl)
+    ? 'サーバが別のマシンにあり、合言葉と歌詞が暗号化されずに流れる。信頼できる LAN の中だけで使うこと。'
+    : ''
+  return (
+    '曲の生成サーバ（ace-step-api）で ACE-Step 1.5 を動かす。費用は掛からない。' +
+    '動画と同じ機械の GPU を使うので、動画・高画質化・絵と同じ列に並んで 1 本ずつ作る。' +
+    overNetwork
+  )
+}
+
 /**
  * ローカルの動画生成の説明。**サーバがこのマシンの外にあり http なら、そう書く。**
  * 合言葉も最初のフレームの画像も暗号化されずに流れるので、信頼できる LAN の中だけで使う。
@@ -174,6 +188,12 @@ export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
       config.providers.kleinApiToken,
       '別のマシンの画像生成サーバを使うときだけ要る。このマシンのサーバなら未設定でよい。',
     ),
+    secretStatus(
+      'ローカルの曲の生成（ACE-Step）の合言葉',
+      'ACE_STEP_API_TOKEN',
+      config.providers.aceStepApiToken,
+      '別のマシンの曲の生成サーバを使うときだけ要る。このマシンのサーバなら未設定でよい。',
+    ),
     ...storageSecrets(config),
   ],
   settings: [
@@ -220,6 +240,16 @@ export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
           : config.providers.localImageGenerators.join(','),
       notable: config.providers.localImageGenerators.length > 0,
       note: localImageNote(config),
+    },
+    {
+      label: 'ローカルの曲の生成',
+      envName: 'LOCAL_MUSIC_GENERATOR',
+      value:
+        config.providers.localMusicGenerators.length === 0
+          ? 'none'
+          : config.providers.localMusicGenerators.join(','),
+      notable: config.providers.localMusicGenerators.length > 0,
+      note: localMusicNote(config),
     },
     {
       label: '絵コンテの下書き',

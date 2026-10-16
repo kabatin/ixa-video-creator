@@ -385,6 +385,71 @@ describe('ローカルの画像生成（klein。ADR-0047）', () => {
   })
 })
 
+describe('ローカルの曲の生成（ace_step。ADR-0048）', () => {
+  it('既定は使わない。URL は既定でこのマシンだけ、トークンは未設定', () => {
+    const config = loadConfig({ ...requiredEnv })
+    expect(config.providers.localMusicGenerators).toEqual([])
+    expect(config.providers.aceStepApiUrl).toBe('http://127.0.0.1:8768')
+    expect(config.providers.aceStepApiToken).toBeNull()
+  })
+
+  it('ace_step に切り替えられ、ほかのサーバや知らない値は弾く', () => {
+    expect(
+      loadConfig({ ...requiredEnv, LOCAL_MUSIC_GENERATOR: 'ace_step' }).providers.localMusicGenerators,
+    ).toEqual(['ace_step'])
+    for (const value of ['klein', 'vpipe', 'ace-step', 'none,ace_step']) {
+      expect(() => loadConfig({ ...requiredEnv, LOCAL_MUSIC_GENERATOR: value })).toThrow(
+        /LOCAL_MUSIC_GENERATOR/,
+      )
+    }
+  })
+
+  it('曲のサーバを画像・動画の一覧には書けない', () => {
+    expect(() => loadConfig({ ...requiredEnv, LOCAL_IMAGE_GENERATOR: 'ace_step' })).toThrow(
+      /LOCAL_IMAGE_GENERATOR/,
+    )
+    expect(() => loadConfig({ ...requiredEnv, LOCAL_VIDEO_GENERATOR: 'ace_step' })).toThrow(
+      /LOCAL_VIDEO_GENERATOR/,
+    )
+  })
+
+  it('トークンや URL を置いただけでは有効にならない', () => {
+    const config = loadConfig({
+      ...requiredEnv,
+      ACE_STEP_API_URL: 'http://127.0.0.1:9996',
+      ACE_STEP_API_TOKEN: GOOD_TOKEN,
+    })
+    expect(config.providers.localMusicGenerators).toEqual([])
+  })
+
+  /** vpipe・wan・klein と同じ表で検査する。ace_step だけ検査が無いと 401 まで分からない。 */
+  it('ほかのサーバと同じ規則で止める（形の違う合言葉・外のサーバでトークン無し・URL でない値）', () => {
+    expect(() => loadConfig({ ...requiredEnv, ACE_STEP_API_TOKEN: 'a'.repeat(31) })).toThrow(
+      /ACE_STEP_API_TOKEN の形が違います/,
+    )
+    expect(() => loadConfig({ ...requiredEnv, ACE_STEP_API_URL: 'not-a-url' })).toThrow(/ACE_STEP_API_URL/)
+
+    const remote = {
+      ...requiredEnv,
+      LOCAL_MUSIC_GENERATOR: 'ace_step',
+      ACE_STEP_API_URL: 'http://192.168.1.22:8768',
+    }
+    expect(() => loadConfig(remote)).toThrow(/LOCAL_MUSIC_GENERATOR に ace_step があり.*ACE_STEP_API_TOKEN/)
+    try {
+      loadConfig(remote)
+    } catch (error) {
+      expect(error instanceof Error ? error.message : '').not.toContain('192.168.1.22')
+    }
+    expect(() => loadConfig({ ...remote, ACE_STEP_API_TOKEN: GOOD_TOKEN })).not.toThrow()
+  })
+
+  it('有効にしていなければ外の URL でも止めない', () => {
+    expect(() =>
+      loadConfig({ ...requiredEnv, ACE_STEP_API_URL: 'http://192.168.1.22:8768' }),
+    ).not.toThrow()
+  })
+})
+
 /** 書き出した動画を置くフォルダ（ADR-0036）。省略すれば null（API がホームの「ムービー」に決める）。 */
 describe('書き出しフォルダ（RENDER_EXPORT_DIR）', () => {
   it('省略・空なら null', () => {
