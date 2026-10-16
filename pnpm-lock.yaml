@@ -71,6 +71,9 @@ importers:
       '@ixa/provider-llm':
         specifier: workspace:*
         version: link:../../packages/providers/llm
+      '@ixa/provider-music':
+        specifier: workspace:*
+        version: link:../../packages/providers/music
       '@ixa/provider-video':
         specifier: workspace:*
         version: link:../../packages/providers/video
@@ -213,6 +216,9 @@ importers:
       '@ixa/provider-llm':
         specifier: workspace:*
         version: link:../../packages/providers/llm
+      '@ixa/provider-music':
+        specifier: workspace:*
+        version: link:../../packages/providers/music
       '@ixa/provider-video':
         specifier: workspace:*
         version: link:../../packages/providers/video
@@ -430,6 +436,28 @@ importers:
       '@ixa/provider-core':
         specifier: workspace:*
         version: link:../core
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.3)(jsdom@30.0.1)(terser@5.51.2)
+
+  packages/providers/music:
+    dependencies:
+      '@ixa/domain':
+        specifier: workspace:*
+        version: link:../../domain
+      '@ixa/provider-core':
+        specifier: workspace:*
+        version: link:../core
+      '@ixa/provider-video':
+        specifier: workspace:*
+        version: link:../video
       zod:
         specifier: ^3.24.1
         version: 3.25.76

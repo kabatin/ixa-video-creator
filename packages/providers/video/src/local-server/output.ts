@@ -42,8 +42,8 @@ export const LOCAL_SERVER_OUTPUT_RETENTION_MS = 24 * 60 * 60 * 1000
  */
 export const LOCAL_SERVER_MAX_OUTPUT_BYTES = 2 * 1024 * 1024 * 1024
 
-/** 出力の拡張子。動画は mp4、手元の画像生成（ADR-0047）は png。 */
-export type LocalServerOutputExtension = 'mp4' | 'png'
+/** 出力の拡張子。動画は mp4、手元の画像生成（ADR-0047）は png、曲（ADR-0048）は wav。 */
+export type LocalServerOutputExtension = 'mp4' | 'png' | 'wav'
 
 export const localServerOutputPath = (
   outputDir: string,
@@ -114,7 +114,7 @@ export const saveOutputAtomically = async (
 }
 
 /** 消してよいのは自分が作った形のファイルだけ。同じ場所に置かれた別のものに触れない。 */
-const OWN_FILE = /\.(?:mp4|png|part|json)$/
+const OWN_FILE = /\.(?:mp4|png|wav|part|json)$/
 
 const pruneDir = async (dir: string, cutoffMs: number, warn: LocalServerWarn): Promise<number> => {
   const names = await readdir(dir).catch((error: unknown) => {
