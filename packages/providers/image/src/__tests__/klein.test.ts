@@ -139,13 +139,15 @@ describe('投入', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  /** klein-api は参照を確かめるまで受けない（送ると 422）。宣言が 0 なら送る前に断る。 */
-  it('今の宣言では参照を送らない（送る前に断る）', async () => {
-    expect(kleinImageModel.capabilities.referenceImages.max).toBe(0)
+  /** 実測は 2 枚まで（3 枚目以降は未実測で、klein-api も既定で 422）。宣言を超えたら送る前に断る。 */
+  it('宣言（2 枚）を超える参照は送る前に断る', async () => {
+    expect(kleinImageModel.capabilities.referenceImages.max).toBe(2)
     const fetchMock = mockFetch(() => Promise.resolve(json(202, { id: JOB_ID })))
-    const id = MediaAssetId.parse('01ARZ3NDEKTSV4RRFFQ69G5FA1')
+    const ids = ['01ARZ3NDEKTSV4RRFFQ69G5FA1', '01ARZ3NDEKTSV4RRFFQ69G5FA2', '01ARZ3NDEKTSV4RRFFQ69G5FA3'].map((id) => MediaAssetId.parse(id))
     await expect(
-      provider(fetchMock).submit(request({ references: [{ mediaAssetId: id, role: 'subject' }], resolveReference: () => Promise.resolve('/x.png') })),
+      provider(fetchMock).submit(
+        request({ references: ids.map((mediaAssetId) => ({ mediaAssetId, role: 'subject' as const })), resolveReference: () => Promise.resolve('/x.png') }),
+      ),
     ).rejects.toThrow(/参照画像/)
     expect(fetchMock).not.toHaveBeenCalled()
   })

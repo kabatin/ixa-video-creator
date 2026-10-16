@@ -9,7 +9,7 @@ import type { LocalServerIdentity } from '@ixa/provider-video'
  * モデルのファイル・step・CFG・量子化はサーバが決める（wan と同じ。ADR-0040 §4）。
  *
  * 実測（新Mac・M5 10 コア GPU・32GB。2026-10-16）: 9B・1024×1024・4 step で 1 枚 25.9 秒（毎回起動）。
- * seed を固定すると同じ絵が出る。**参照画像が FLUX.2 の参照として効くかは未確認。**
+ * seed を固定すると同じ絵が出る。参照画像は FLUX.2 の参照として効く（2 枚まで実測）。
  */
 export const KLEIN_PROVIDER_ID: ProviderId = ProviderId.parse('klein')
 
@@ -43,12 +43,11 @@ const SQUARE: Resolution = { width: 1024, height: 1024 }
 const KLEIN_CAPABILITIES: ImageModelCapabilities = {
   referenceImages: {
     /**
-     * **0 にしてある。** `--image` が FLUX.2 の参照として効くか（img2img の下絵になるだけか）が未確認で、
-     * klein-api も確かめるまで受けない（`max_reference_images` の既定 0。送ると 422）。
-     * 0 なら ReferenceResolver が参照を渡さないので、失敗にはならず指示文だけで作る。
-     * 新Mac の実測で効くと分かったら、サーバの設定と一緒に上げる。
+     * **2 枚まで**（新Mac で実測。2026-10-16）。`--image` は FLUX.2 の参照として効き、人物の顔・服が保たれる。
+     * 1 枚で約 2 倍（50 秒）、2 枚で約 2.8 倍（73 秒）かかる。3〜4 枚は未実測なので宣言しない
+     * （上限を超えた分は ReferenceResolver が優先順に切り詰める）。klein-api の既定も 2。
      */
-    max: 0,
+    max: 2,
     roles: ['subject', 'wardrobe', 'location', 'style', 'brand'],
   },
   resolutions: [LANDSCAPE, PORTRAIT, SQUARE],
@@ -73,7 +72,7 @@ export const kleinImageModel: ImageModelDescriptor = {
   economics: {
     /** 手元の GPU。費用は掛からない。 */
     costPerImageUsd: 0,
-    /** 実測 25.9 秒（9B・1024×1024）。 */
-    typicalLatencySec: 30,
+    /** 実測: 参照なし 26〜35 秒、参照 1 枚 50 秒、2 枚 73 秒（9B）。最初のフレームは人物の参照が付くことが多い。 */
+    typicalLatencySec: 50,
   },
 }
