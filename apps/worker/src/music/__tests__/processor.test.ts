@@ -245,6 +245,21 @@ describe('processMusicJob', () => {
     expect(s.musicJobs.snapshot()[0]?.status).toBe('queued')
   })
 
+  it('順番待ちの間に止められたら、次に拾ったとき券を列から外す（後ろの GPU の仕事を待たせない）', async () => {
+    const lease = createInMemoryLocalGpuLease()
+    await lease.acquire('video-job', 0)
+    const provider = fakeProvider([await succeeded(2)])
+    const s = await setup(provider, { lease })
+    expect(await processMusicJob(s.deps, { musicJobId: s.job.id })).toEqual({ state: 'waiting' })
+
+    await s.musicJobs.cancelActive(project.id)
+    expect(await processMusicJob(s.deps, { musicJobId: s.job.id })).toEqual({ state: 'skipped' })
+
+    await lease.release('video-job')
+    expect(await lease.acquire('later-video', s.job.queuedAt.getTime() + 60_000)).toEqual({ state: 'acquired' })
+    expect(provider.calls.submit).toEqual([])
+  })
+
   it('生成先が混んでいたら（429）失敗にせず積み直す', async () => {
     const provider = fakeProvider([], { submitError: new ProviderBusyError('混んでいます', aceStepMusicModel.providerId, 45_000) })
     const s = await setup(provider)

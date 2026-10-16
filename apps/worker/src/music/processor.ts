@@ -1,7 +1,12 @@
 import { isMusicJobFinished, type MusicJob, type MusicJobError } from '@ixa/domain'
 import { ProviderBusyError } from '@ixa/provider-core'
 import { submitBusyDelayMs, submitBusyExpired } from '../generation/busy.js'
-import { holdLocalGpuTurn, requestLocalGpuTurn, type LocalGpuTurnJob } from '../generation/local-gpu-turn.js'
+import {
+  holdLocalGpuTurn,
+  releaseLocalGpuTurn,
+  requestLocalGpuTurn,
+  type LocalGpuTurnJob,
+} from '../generation/local-gpu-turn.js'
 import { MusicJobCancelled, MusicJobFailure, type MusicAdapter, type MusicProcessorDeps } from './deps.js'
 import { publishMusicJobStatus } from './events.js'
 import { generateMusic } from './generate.js'
@@ -80,7 +85,12 @@ export const processMusicJob = async (deps: MusicProcessorDeps, data: unknown): 
     return { state: 'missing' }
   }
   // 終わったジョブと、人が止めたジョブは作らない。
-  if (isMusicJobFinished(job.status)) return { state: 'skipped' }
+  if (isMusicJobFinished(job.status)) {
+    // 順番待ちの間に止められたジョブは、券を列に残したまま手を引かない（後ろの GPU の仕事が 15 分待たされる）。
+    const exclusive = deps.adapters.find((candidate) => candidate.model.id === job.model)?.provider.exclusiveResource
+    if (job.status === 'cancelled' && exclusive === 'local-gpu') await releaseLocalGpuTurn(deps, turnJob(job))
+    return { state: 'skipped' }
+  }
 
   try {
     const adapter = findAdapter(deps, job)

@@ -366,6 +366,25 @@ describe('processImageJob: 止めたジョブ', () => {
     expect((await deps.imageJobs.findById(job.id))?.status).toBe('cancelled')
   })
 
+  it('手元の GPU の順番待ちの間に止めたら、次に拾ったとき券を列から外す（後ろの GPU の仕事を待たせない）', async () => {
+    const { job, deps, provider } = setup()
+    const lease = createInMemoryLocalGpuLease()
+    await lease.acquire('video-job', job.queuedAt.getTime() - 1000)
+    const local = {
+      ...deps,
+      localGpuLease: lease,
+      adapters: [{ provider: { ...provider, exclusiveResource: 'local-gpu' as const }, model: codexCliImageModel }],
+    }
+    expect(await processImageJob(local, { imageJobId: job.id })).toEqual({ state: 'waiting' })
+
+    await deps.imageJobs.cancelActive({ projectId: project.id })
+    expect(await processImageJob(local, { imageJobId: job.id })).toEqual({ state: 'skipped' })
+
+    await lease.release('video-job')
+    expect(await lease.acquire('later-video', job.queuedAt.getTime() + 60_000)).toEqual({ state: 'acquired' })
+    expect(provider.requests).toHaveLength(0)
+  })
+
   it('作っている途中で止めたら、生成先へ止めてと頼み、最初のフレームは変えない', async () => {
     const { job, deps, provider } = setup({ outcome: 'running' })
     // 生成先が作っている間（見に行ったとき）に止める。

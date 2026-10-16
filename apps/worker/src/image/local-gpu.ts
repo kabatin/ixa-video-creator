@@ -4,6 +4,7 @@ import type { LocalGpuLease } from '../generation/local-gpu-lease.js'
 import {
   holdLocalGpuTurn,
   LOCAL_GPU_RENEW_INTERVAL_MS,
+  releaseLocalGpuTurn,
   requestLocalGpuTurn,
   type LocalGpuTurnJob,
 } from '../generation/local-gpu-turn.js'
@@ -76,3 +77,7 @@ export const takeLocalGpuTurn = async (deps: ImageGpuDeps, job: ImageGenerationJ
 /** 順番を持ったまま `run` を走らせ、終わったら（投げても）返す。借りている間は延ばし続ける。 */
 export const holdLocalGpu = <T>(deps: ImageGpuDeps, job: ImageGenerationJob, run: () => Promise<T>): Promise<T> =>
   holdLocalGpuTurn(deps, turnJob(job), run)
+
+/** 順番待ちの間に止められた絵の券を列から外す（自分の券だけ。投げない）。 */
+export const releaseCancelledLocalGpuTurn = (deps: ImageGpuDeps, job: ImageGenerationJob): Promise<void> =>
+  releaseLocalGpuTurn(deps, turnJob(job))

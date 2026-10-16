@@ -28,7 +28,7 @@ import { generateCharacterSheet } from './character-sheet.js'
 import { cropToAspect } from './crop.js'
 import { publishImageJobStatus } from './events.js'
 import { ImageJobData } from './job-data.js'
-import { holdLocalGpu, takeLocalGpuTurn } from './local-gpu.js'
+import { holdLocalGpu, releaseCancelledLocalGpuTurn, takeLocalGpuTurn } from './local-gpu.js'
 import { requestShapeFor } from './shape.js'
 import {
   ImageJobCancelled,
@@ -173,13 +173,19 @@ export const processImageJob = async (deps: ImageProcessorDeps, data: unknown): 
     deps.logger.warn({ imageJobId }, '絵のジョブが見つかりません')
     return { state: 'missing' }
   }
+  const adapter = deps.adapters.find(
+    (candidate) => candidate.model.providerId === job.providerId && candidate.model.id === job.modelId,
+  )
   // 終わったジョブと、人が止めたジョブは作らない。
-  if (job.status === 'succeeded' || job.status === 'failed' || job.status === 'cancelled') return { state: 'skipped' }
+  if (job.status === 'succeeded' || job.status === 'failed' || job.status === 'cancelled') {
+    // 順番待ちの間に止められたジョブは、券を列に残したまま手を引かない（後ろの GPU の仕事が 15 分待たされる）。
+    if (job.status === 'cancelled' && adapter?.provider.exclusiveResource === 'local-gpu') {
+      await releaseCancelledLocalGpuTurn(deps, job)
+    }
+    return { state: 'skipped' }
+  }
 
   try {
-    const adapter = deps.adapters.find(
-      (candidate) => candidate.model.providerId === job.providerId && candidate.model.id === job.modelId,
-    )
     if (adapter === undefined) {
       throw new ImageJobFailure({
         code: 'provider_unavailable',

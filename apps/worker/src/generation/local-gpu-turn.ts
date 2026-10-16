@@ -54,8 +54,14 @@ export type LocalGpuTurnOutcome =
   | { readonly state: 'timeout' }
   | { readonly state: 'unavailable' }
 
-/** 返す。**ここで投げない**（返せなくても期限が来れば空く。結果は変えずにログに残す）。 */
-const release = async (deps: LocalGpuTurnDeps, job: LocalGpuTurnJob): Promise<void> => {
+/**
+ * 返す。**ここで投げない**（返せなくても期限が来れば空く。結果は変えずにログに残す）。
+ * 外すのは**このジョブの券と借りだけ**（Redis の RELEASE_SCRIPT が ID で絞る）。
+ *
+ * 順番待ちの間に止められたジョブは、次に拾ったとき「もう終わった」で手を引く前にこれを呼ぶ。
+ * 呼ばないと券が列に残り、`LOCAL_GPU_LINE_STALE_MS`（15 分）まで後ろの GPU の仕事が全部待たされる。
+ */
+export const releaseLocalGpuTurn = async (deps: LocalGpuTurnDeps, job: LocalGpuTurnJob): Promise<void> => {
   try {
     await deps.localGpuLease.release(job.id)
   } catch (error) {
@@ -84,12 +90,12 @@ export const requestLocalGpuTurn = async (
   if (lease.state === 'acquired') return { state: 'acquired' }
 
   if (await request.isCancelled()) {
-    await release(deps, request)
+    await releaseLocalGpuTurn(deps, request)
     return { state: 'cancelled' }
   }
   const now = deps.now ?? (() => new Date())
   if (now().getTime() - request.queuedAt.getTime() > request.waitDeadlineMs) {
-    await release(deps, request)
+    await releaseLocalGpuTurn(deps, request)
     return { state: 'timeout' }
   }
   return { state: 'wait', delayMs: lease.ahead === 0 ? LOCAL_GPU_HEAD_RETRY_AFTER_MS : LOCAL_GPU_RETRY_AFTER_MS }
@@ -117,6 +123,6 @@ export const holdLocalGpuTurn = async <T>(
     return await run()
   } finally {
     clearInterval(timer)
-    await release(deps, job)
+    await releaseLocalGpuTurn(deps, job)
   }
 }
