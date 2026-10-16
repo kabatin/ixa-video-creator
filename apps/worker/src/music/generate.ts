@@ -16,6 +16,10 @@ const throwIfCancelled = async (deps: MusicProcessorDeps, job: MusicJob): Promis
 /**
  * できた曲を楽曲にする。1 曲ずつ素材 → 楽曲 → 解析の順。
  * **マスターは、作品にマスターが無いときの 1 曲目だけ。** 既にあるマスター（制作者が選んだ曲）は変えない。
+ *
+ * **同じ素材の楽曲が作品に既にあれば、作らずにそれを使う。** 取り込んだ後で worker が落ちると、
+ * 同じジョブがやり直される（冪等キーで同じ曲が返り、素材は中身で 1 つにまとまる）。楽曲の側は
+ * 素材ごとに 1 つという縛りが DB に無いので、ここで見ないと同じ曲が 2 つ並ぶ。
  */
 const registerTracks = async (
   deps: MusicProcessorDeps,
@@ -23,10 +27,16 @@ const registerTracks = async (
   job: MusicJob,
   result: Succeeded,
 ): Promise<readonly MusicTrackId[]> => {
-  const hasMaster = (await deps.musicTracks.findByProject(project.id)).some((track) => track.isMaster)
+  const existing = await deps.musicTracks.findByProject(project.id)
+  const hasMaster = existing.some((track) => track.isMaster)
   const ids: MusicTrackId[] = []
   for (const [index, output] of result.outputs.entries()) {
     const mediaAssetId = await ingestMusic(deps, project, output.path, job.id)
+    const already = existing.find((track) => track.mediaAssetId === mediaAssetId)
+    if (already !== undefined) {
+      ids.push(already.id)
+      continue
+    }
     const track = await deps.musicTracks.create({
       projectId: project.id,
       mediaAssetId,

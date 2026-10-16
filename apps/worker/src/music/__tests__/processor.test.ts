@@ -289,6 +289,21 @@ describe('processMusicJob', () => {
     expect(s.musicJobs.snapshot()[0]?.status).toBe('cancelled')
   })
 
+  it('取り込んだ後で worker が落ちて同じジョブをやり直しても、楽曲を二重に作らない', async () => {
+    const provider = fakeProvider([await succeeded(2)])
+    const s = await setup(provider)
+    const crash = () => Promise.reject(new Error('worker が落ちた'))
+    const crashing: MusicProcessorDeps = { ...s.deps, musicJobs: { ...s.musicJobs, markSucceeded: crash, markFailed: crash } }
+    await expect(processMusicJob(crashing, { musicJobId: s.job.id })).rejects.toThrow('worker が落ちた')
+    expect(s.tracks.snapshot()).toHaveLength(2)
+
+    expect(await processMusicJob(s.deps, { musicJobId: s.job.id })).toEqual({ state: 'succeeded' })
+
+    const tracks = s.tracks.snapshot()
+    expect(tracks).toHaveLength(2)
+    expect(s.musicJobs.snapshot()[0]).toMatchObject({ status: 'succeeded', musicTrackIds: tracks.map((track) => track.id) })
+  })
+
   it('思わぬ失敗は決まった文だけを画面へ出す（手元のパスなど実装の言葉を出さない）', async () => {
     const s = await setup(fakeProvider([new Error("ENOENT: no such file '/Users/someone/ace-step/out.wav'")]))
 
