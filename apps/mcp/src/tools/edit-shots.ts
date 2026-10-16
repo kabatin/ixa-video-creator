@@ -1,0 +1,144 @@
+import { ShotCamera, TransitionType } from '@ixa/domain'
+import { z } from 'zod'
+import { seg, type ApiClient } from '../api-client.js'
+import { bulkResult, WireLook, WireShot, WireShotCharacter, WireTransition } from '../wire.js'
+import { defineTool, Id, jsonResult, mapLimited, ToolInputError } from '../tool-def.js'
+
+/** Shot の中身をまとめて直す（説明・空気・カメラ・場所・登場人物・次へのつなぎ）。 */
+
+const CastEntry = z.object({
+  characterId: Id,
+  lookId: Id.optional().describe("Defaults to the character's default look."),
+  prominence: z.enum(['primary', 'secondary', 'background']).optional().describe('Default: first primary, rest secondary.'),
+})
+
+const Edit = z.object({
+  shotIds: z.array(Id).min(1).max(200).describe('Shots that receive the same change. Use one id for per-shot descriptions.'),
+  description: z
+    .string()
+    .max(4000)
+    .optional()
+    .describe('What happens in the shot (Japanese; shown to the user and used in the prompt).'),
+  mood: z.string().max(500).nullable().optional(),
+  camera: ShotCamera.partial().optional().describe('Only the given camera fields change.'),
+  locationId: Id.nullable().optional(),
+  cast: z.array(CastEntry).max(8).optional().describe('Replaces the whole cast of each shot. [] clears it.'),
+  transitionToNext: z
+    .object({ type: TransitionType, durationSec: z.number().min(0).max(5).optional() })
+    .optional()
+    .describe('Transition from this shot into the next shot in order. type "cut" removes any transition.'),
+})
+
+export const EditShotsInput = z.object({
+  projectId: Id,
+  edits: z.array(Edit).min(1).max(100),
+})
+
+type EditInput = z.infer<typeof Edit>
+
+const BulkPatchResult = z.object({ results: z.array(bulkResult({ shot: WireShot })) })
+
+const patchOf = (edit: EditInput) => ({
+  ...(edit.description === undefined ? {} : { description: edit.description }),
+  ...(edit.mood === undefined ? {} : { mood: edit.mood }),
+  ...(edit.camera === undefined ? {} : { camera: edit.camera }),
+  ...(edit.locationId === undefined ? {} : { locationId: edit.locationId }),
+})
+
+const defaultLookId = async (api: ApiClient, characterId: string): Promise<string> => {
+  const looks = await api.get(`/characters/${seg(characterId)}/looks`, z.array(WireLook))
+  const look = looks.find((l) => l.isDefault === true) ?? looks[0]
+  if (look === undefined) throw new ToolInputError(`キャラクター ${characterId} に Look がありません`)
+  return look.id
+}
+
+const castEntries = async (api: ApiClient, cast: NonNullable<EditInput['cast']>) =>
+  mapLimited(cast, 4, async (entry, i) => ({
+    characterId: entry.characterId,
+    lookId: entry.lookId ?? (await defaultLookId(api, entry.characterId)),
+    prominence: entry.prominence ?? (i === 0 ? 'primary' : 'secondary'),
+    order: i,
+  }))
+
+/** 次の Shot へのつなぎを差し替える。古い出入りは消してから作る（API は 1 つの Shot に出入り 1 本ずつ）。 */
+const replaceTransition = async (
+  api: ApiClient,
+  projectId: string,
+  fromShotId: string,
+  ordered: readonly z.infer<typeof WireShot>[],
+  transition: NonNullable<EditInput['transitionToNext']>,
+): Promise<string> => {
+  const index = ordered.findIndex((s) => s.id === fromShotId)
+  const next = index === -1 ? undefined : ordered[index + 1]
+  if (next === undefined) return 'skipped: no next shot'
+  const existing = await api.get(`/projects/${seg(projectId)}/transitions`, z.array(WireTransition))
+  const stale = existing.filter((t) => t.fromShotId === fromShotId || t.toShotId === next.id)
+  await Promise.all(stale.map((t) => api.request('DELETE', `/transitions/${seg(t.id)}`, z.unknown())))
+  if (transition.type === 'cut') return 'cut'
+  await api.post(
+    `/projects/${seg(projectId)}/transitions`,
+    {
+      fromShotId,
+      toShotId: next.id,
+      type: transition.type,
+      ...(transition.durationSec === undefined ? {} : { durationSec: transition.durationSec }),
+    },
+    WireTransition,
+  )
+  return transition.type
+}
+
+const applyEdit = async (api: ApiClient, projectId: string, edit: EditInput, ordered: readonly z.infer<typeof WireShot>[]) => {
+  const patch = patchOf(edit)
+  const patched =
+    Object.keys(patch).length === 0
+      ? null
+      : await api.request('PATCH', `/projects/${seg(projectId)}/shots/bulk`, BulkPatchResult, {
+          body: { shotIds: edit.shotIds, patch },
+        })
+  const failures = (patched?.results ?? []).flatMap((r) => (r.ok ? [] : [{ shotId: r.shotId, reason: r.reason }]))
+
+  const entries = edit.cast === undefined ? null : await castEntries(api, edit.cast)
+  if (entries !== null) {
+    await mapLimited(edit.shotIds, 4, (shotId) =>
+      api.request('PUT', `/shots/${seg(shotId)}/characters`, z.array(WireShotCharacter), { body: { entries } }),
+    )
+  }
+
+  const transition = edit.transitionToNext
+  // 出入りの表を読み直しながら 1 本ずつ（並べると同じ行を 2 回消しに行く）。
+  const transitions =
+    transition === undefined
+      ? null
+      : await edit.shotIds.reduce<Promise<readonly string[]>>(
+          async (done, shotId) => [...(await done), await replaceTransition(api, projectId, shotId, ordered, transition)],
+          Promise.resolve([]),
+        )
+
+  return {
+    shotIds: edit.shotIds,
+    ...(patched === null ? {} : { patched: patched.results.length - failures.length }),
+    ...(failures.length > 0 ? { failures } : {}),
+    ...(entries === null ? {} : { castSet: entries.length }),
+    ...(transitions === null ? {} : { transitions }),
+  }
+}
+
+export const editShotsTool = defineTool({
+  name: 'edit_shots',
+  description:
+    'Edit shots in bulk. Each edit applies the same change to its shotIds: description (Japanese, what happens on ' +
+    'screen), mood, camera {size, angleH, angle, lensMm, movement, movementIntensity} (only given fields change), ' +
+    'locationId, cast (replaces the cast; characters from create_character) and transitionToNext ' +
+    '(cut|dissolve|dip_to_black|dip_to_white|wipe|whip_pan|glitch). Edits run in order.',
+  input: EditShotsInput,
+  handler: async ({ projectId, edits }, { api }) => {
+    const shots = await api.get(`/projects/${seg(projectId)}/shots`, z.array(WireShot))
+    const ordered = [...shots].sort((a, b) => a.order - b.order)
+    const results = await edits.reduce<Promise<readonly unknown[]>>(
+      async (done, edit) => [...(await done), await applyEdit(api, projectId, edit, ordered)],
+      Promise.resolve([]),
+    )
+    return jsonResult({ results })
+  },
+})

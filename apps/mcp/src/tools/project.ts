@@ -1,0 +1,164 @@
+import { AspectRatio, Fps } from '@ixa/domain'
+import { z } from 'zod'
+import { IxaApiError, seg, type ApiClient } from '../api-client.js'
+import {
+  WireAppendedScript,
+  WireCharacter,
+  WireLocation,
+  WireMusicTrack,
+  WireProject,
+  WireScript,
+  WireShot,
+  WireShotCharacter,
+  WireShotPoster,
+  WireTransition,
+} from '../wire.js'
+import { defineTool, Id, jsonResult, mapLimited, round } from '../tool-def.js'
+
+/** 作品を作る・全体を見る。 */
+
+/** 形ごとの既定の大きさ（web の resolution-presets.ts の先頭と同じ）。 */
+export const DEFAULT_RESOLUTION: Readonly<Record<AspectRatio, { width: number; height: number }>> = {
+  '16:9': { width: 1920, height: 1080 },
+  '9:16': { width: 1080, height: 1920 },
+  '1:1': { width: 1080, height: 1080 },
+  '4:5': { width: 1080, height: 1350 },
+  '21:9': { width: 2560, height: 1080 },
+}
+
+export const CreateProjectInput = z.object({
+  name: z.string().min(1).max(200).describe('Project name shown to the user (Japanese preferred).'),
+  aspectRatio: AspectRatio.default('16:9'),
+  fps: Fps.default(24),
+  resolution: z
+    .object({ width: z.number().int().positive(), height: z.number().int().positive() })
+    .optional()
+    .describe('Defaults by aspect: 16:9 → 1920x1080, 9:16 → 1080x1920, 1:1 → 1080x1080.'),
+  concept: z
+    .string()
+    .max(20000)
+    .optional()
+    .describe('Concept / synopsis of the piece (Japanese). Stored as the project script; storyboard AI reads it.'),
+  styleGuide: z.string().max(4000).optional().describe('Visual style applied to every shot prompt.'),
+  avoid: z.string().max(4000).optional().describe('Things to avoid in every shot (negative guidance).'),
+  budgetUsd: z.number().min(0).optional(),
+})
+
+export const createProjectTool = defineTool({
+  name: 'create_project',
+  description:
+    'Create a new ixa project (a video). Defaults: 16:9, 1920x1080, 24 fps. Optional concept/synopsis, styleGuide ' +
+    'and avoid text steer every generated image/video. Write user-visible text in Japanese.',
+  input: CreateProjectInput,
+  handler: async (args, { api, workspaceId }) => {
+    const created = await api.post(
+      '/projects',
+      {
+        workspaceId,
+        name: args.name,
+        fps: args.fps,
+        resolution: args.resolution ?? DEFAULT_RESOLUTION[args.aspectRatio],
+        aspectRatio: args.aspectRatio,
+        ...(args.budgetUsd === undefined ? {} : { budgetUsd: args.budgetUsd }),
+        ...(args.styleGuide === undefined ? {} : { styleGuide: args.styleGuide }),
+      },
+      WireProject,
+    )
+    // avoid は作るときには受けない口なので、作った後に直す。
+    const project =
+      args.avoid === undefined
+        ? created
+        : await api.request('PATCH', `/projects/${seg(created.id)}`, WireProject, { body: { avoid: args.avoid } })
+    if (args.concept !== undefined && args.concept !== '') {
+      await api.post(
+        `/projects/${seg(project.id)}/script/versions`,
+        { content: args.concept, authoredBy: 'ai' },
+        WireAppendedScript,
+      )
+    }
+    return jsonResult({ project: compactProject(project) })
+  },
+})
+
+const compactProject = (p: WireProject) => ({
+  id: p.id,
+  name: p.name,
+  aspectRatio: p.aspectRatio,
+  resolution: `${String(p.resolution.width)}x${String(p.resolution.height)}`,
+  fps: p.fps,
+  durationSec: p.durationSec,
+  status: p.status,
+  ...(p.styleGuide ? { styleGuide: p.styleGuide } : {}),
+  ...(p.avoid ? { avoid: p.avoid } : {}),
+})
+
+const conceptOf = async (api: ApiClient, projectId: string): Promise<string> => {
+  try {
+    const script = await api.get(`/projects/${seg(projectId)}/script`, WireScript)
+    return script.currentVersion?.content ?? ''
+  } catch (error) {
+    // 脚本がまだ無い作品は 404。
+    if (error instanceof IxaApiError && error.status === 404) return ''
+    throw error
+  }
+}
+
+/** カメラのうち決まっている項目だけ。 */
+const compactCamera = (camera: z.infer<typeof WireShot>['camera']) =>
+  Object.fromEntries(Object.entries(camera).filter(([, value]) => value !== null))
+
+export const getProjectTool = defineTool({
+  name: 'get_project',
+  description:
+    'Everything about a project in one compact JSON: settings, concept, music tracks (which one is master), ' +
+    'characters, locations, and every shot in order with start/duration, description, mood, camera, location, cast, ' +
+    'start-frame state (ready/drawing/missing), selected take, status and the transition into the next shot.',
+  input: z.object({ projectId: Id }),
+  handler: async ({ projectId }, { api }) => {
+    const base = `/projects/${seg(projectId)}`
+    const [project, concept, shots, tracks, characters, locations, posters, transitions] = await Promise.all([
+      api.get(base, WireProject),
+      conceptOf(api, projectId),
+      api.get(`${base}/shots`, z.array(WireShot)),
+      api.get(`${base}/music-tracks`, z.array(WireMusicTrack)),
+      api.get(`${base}/characters`, z.array(WireCharacter)),
+      api.get(`${base}/locations`, z.array(WireLocation)),
+      api.get(`${base}/shot-posters`, z.array(WireShotPoster)),
+      api.get(`${base}/transitions`, z.array(WireTransition)),
+    ])
+    const ordered = [...shots].sort((a, b) => a.order - b.order)
+    const casts = await mapLimited(ordered, 6, (shot) =>
+      api.get(`/shots/${seg(shot.id)}/characters`, z.array(WireShotCharacter)),
+    )
+    const characterName = new Map(characters.map((c) => [c.id, c.displayName]))
+    const locationName = new Map(locations.map((l) => [l.id, l.name]))
+    const posterOf = new Map(posters.map((p) => [p.shotId, p]))
+    const transitionFrom = new Map(transitions.map((t) => [t.fromShotId, t]))
+    return jsonResult({
+      project: compactProject(project),
+      concept,
+      musicTracks: tracks.map((t) => ({ id: t.id, title: t.title, isMaster: t.isMaster ?? false })),
+      characters: characters.map((c) => ({ id: c.id, name: c.name, displayName: c.displayName })),
+      locations: locations.map((l) => ({ id: l.id, name: l.name, references: l.referenceAssetIds?.length ?? 0 })),
+      shots: ordered.map((shot, i) => {
+        const poster = posterOf.get(shot.id)
+        const transition = transitionFrom.get(shot.id)
+        return {
+          id: shot.id,
+          code: shot.code,
+          startSec: round(shot.startSec),
+          durationSec: round(shot.durationSec),
+          description: shot.description ?? '',
+          ...(shot.mood === null ? {} : { mood: shot.mood }),
+          camera: compactCamera(shot.camera),
+          ...(shot.locationId === null ? {} : { location: locationName.get(shot.locationId) ?? shot.locationId }),
+          cast: (casts[i] ?? []).map((c) => ({ name: characterName.get(c.characterId) ?? c.characterId, prominence: c.prominence })),
+          startFrame: poster === undefined ? 'unknown' : poster.drawing ? 'drawing' : poster.hasStartFrame ? 'ready' : 'missing',
+          selectedTakeId: shot.selectedTakeId,
+          status: shot.status,
+          ...(transition === undefined ? {} : { transitionToNext: { type: transition.type, durationSec: transition.durationSec ?? 0 } }),
+        }
+      }),
+    })
+  },
+})
