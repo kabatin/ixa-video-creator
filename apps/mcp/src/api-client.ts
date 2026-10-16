@@ -38,6 +38,14 @@ export class IxaUnreachableError extends Error {
   }
 }
 
+/** 署名付き URL の置き場に届かなかった。 */
+export class StorageUnreachableError extends Error {
+  constructor(options?: { cause?: unknown }) {
+    super('保存先に届きませんでした（素材の置き場が止まっているか、置き場の URL の設定が違います）', options)
+    this.name = 'StorageUnreachableError'
+  }
+}
+
 const ErrorEnvelope = z.object({
   success: z.literal(false),
   error: z.string(),
@@ -106,23 +114,35 @@ const toApiError = (status: number, body: unknown, method: string, path: string)
 export const createApiClient = (config: ApiClientConfig): ApiClient => {
   const resolve = (url: string): string => (url.startsWith('/') ? `${config.baseUrl}${url}` : url)
 
-  const call = async (url: string, init: RequestInit): Promise<Response> => {
+  /** API へ。届かなければ API の起点を添えて知らせる（起点は鍵ではない）。 */
+  const callApi = async (url: string, init: RequestInit): Promise<Response> => {
     try {
       return await config.fetch(url, init)
     } catch (error) {
-      // 例外の文に URL を載せない（署名付き URL が混ざりうる）。原因は cause に残す。
       throw new IxaUnreachableError(config.baseUrl, { cause: error })
     }
   }
 
+  /**
+   * 署名付き URL（置き場）へ。**文に URL を載せない**（署名そのものが鍵）。原因は cause に残す。
+   * API とは別のホストのことがあるので、API に届かない文とは分ける。
+   */
+  const callStorage = async (url: string, init: RequestInit): Promise<Response> => {
+    try {
+      return await config.fetch(url, init)
+    } catch (error) {
+      throw new StorageUnreachableError({ cause: error })
+    }
+  }
+
   const request: ApiClient['request'] = async (method, path, schema, options = {}) => {
-    const headers: Record<string, string> = {
+    const hasBody = options.body !== undefined
+    const headers: Readonly<Record<string, string>> = {
       accept: 'application/json',
       authorization: `Bearer ${config.token}`,
+      ...(hasBody ? { 'content-type': 'application/json' } : {}),
     }
-    const hasBody = options.body !== undefined
-    if (hasBody) headers['content-type'] = 'application/json'
-    const response = await call(`${config.baseUrl}${withQuery(path, options.query)}`, {
+    const response = await callApi(`${config.baseUrl}${withQuery(path, options.query)}`, {
       method,
       headers,
       ...(hasBody ? { body: JSON.stringify(options.body) } : {}),
@@ -149,13 +169,13 @@ export const createApiClient = (config: ApiClientConfig): ApiClient => {
     get: (path, schema, query) => request('GET', path, schema, query === undefined ? {} : { query }),
     post: (path, body, schema) => request('POST', path, schema, { body }),
     download: async (signedUrl) => {
-      const response = await call(resolve(signedUrl), { method: 'GET' })
+      const response = await callStorage(resolve(signedUrl), { method: 'GET' })
       // 本文は読まない（ストレージの失敗応答は署名の一部を反射することがある）。
       if (!response.ok) throw new Error(`素材を取り出せませんでした（${String(response.status)}）`)
       return response
     },
     upload: async (signedUrl, bytes, contentType) => {
-      const response = await call(resolve(signedUrl), {
+      const response = await callStorage(resolve(signedUrl), {
         method: 'PUT',
         headers: { 'content-type': contentType },
         body: bytes,

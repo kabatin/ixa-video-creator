@@ -6,6 +6,13 @@ import { defineTool, Id, jsonResult, ToolInputError, type ToolDeps } from '../to
 /** 終わるまで待つ。1 回の呼び出しは `maxWaitSec`（既定 480 秒）で必ず返る。 */
 
 export const DEFAULT_MAX_WAIT_SEC = 480
+
+/**
+ * 解像度上げには失敗を知らせる口が無い（API のジョブの状態を引けない）。時間切れのときに次の手を示す。
+ */
+export const UPSCALE_HINT =
+  'Upscale jobs report no failure. If one stays pending, check list_takes for a new take whose reason is ' +
+  '"解像度を上げる"; if none appears after a long time, retry upscale_takes for that shot or skip it.'
 export const MAX_WAIT_SEC = 900
 
 export const WaitInput = z.object({
@@ -39,5 +46,9 @@ export const waitTool = defineTool({
     'drawing or rendering in the project. Returns after maxWaitSec (default 480) even if not done ' +
     '(timedOut: true) — just call wait again. Local video generation takes several minutes per take.',
   input: WaitInput,
-  handler: async (args, deps) => jsonResult(await waitWith(deps, args)),
+  handler: async (args, deps) => {
+    const outcome = await waitWith(deps, args)
+    const upscalePending = outcome.timedOut && outcome.results.some((r) => r.kind === 'upscale' && r.state === 'pending')
+    return jsonResult(upscalePending ? { ...outcome, hint: UPSCALE_HINT } : outcome)
+  },
 })

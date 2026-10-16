@@ -1,4 +1,4 @@
-import pino, { type Logger } from 'pino'
+import pino, { type DestinationStream, type Logger } from 'pino'
 
 /**
  * MCP サーバのロガー。**必ず stderr に出す。** stdio の MCP では stdout がプロトコルそのもので、
@@ -6,7 +6,7 @@ import pino, { type Logger } from 'pino'
  *
  * 鍵と署名付き URL はログに渡さない（呼ぶ側の規約）。念のため名前で伏せる。
  */
-export const createLogger = (level: string): Logger =>
+export const createLogger = (level: string, destination: DestinationStream = pino.destination(2)): Logger =>
   pino(
     {
       level,
@@ -15,7 +15,7 @@ export const createLogger = (level: string): Logger =>
         censor: '[redacted]',
       },
     },
-    pino.destination(2),
+    destination,
   )
 
 export type { Logger }

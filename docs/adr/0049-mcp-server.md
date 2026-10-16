@@ -25,8 +25,8 @@ ADR-0046 で自動化用の鍵（Bearer）を用意した。次は Claude Code�
 - **待つのはポーリング。** `wait` は間隔を 2 秒から 15 秒まで広げながら問い合わせ、`maxWaitSec`（既定 480 秒）で
   必ず返す。終わっていなければ `timedOut: true` と途中経過を返し、エージェントにもう一度呼ばせる
 - 尺の規則（vpipe の 17n+5 コマ）は写さず、`/models` の尺と domain の `quantizeDuration` で判定する
-- 曲を作る API（`/projects/{id}/music/generate`・`/music-jobs/{id}`）は並行して実装中のため、
-  呼び出しと応答の形を `tools/music-generation.ts` 1 つに閉じる
+- 曲を作る API（ADR-0048 の `/projects/{id}/music/generate`・`/music-jobs/{id}`）の呼び出しと応答の形は
+  `tools/music-generation.ts` 1 つに閉じ、上限は domain の定数を読む
 
 ## 今回の外
 

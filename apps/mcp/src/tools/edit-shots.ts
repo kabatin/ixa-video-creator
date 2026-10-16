@@ -12,6 +12,26 @@ const CastEntry = z.object({
   prominence: z.enum(['primary', 'secondary', 'background']).optional().describe('Default: first primary, rest secondary.'),
 })
 
+/** cut 以外のつなぎで長さを省いたときの長さ（0 秒だと API が cut に畳んでしまう）。 */
+export const DEFAULT_TRANSITION_SEC = 0.5
+
+const TransitionToNext = z.object({
+  type: TransitionType,
+  durationSec: z
+    .number()
+    .min(0)
+    .max(5)
+    .optional()
+    .describe(`Seconds of overlap. Default ${String(DEFAULT_TRANSITION_SEC)} for non-cut types; must be > 0 for them.`),
+})
+
+/** 長さを決める。cut は 0、それ以外は既定 0.5 秒。cut 以外の 0 秒は断る（黙って cut にしない）。 */
+export const transitionDurationSec = (t: z.infer<typeof TransitionToNext>): number => {
+  if (t.type === 'cut') return 0
+  if (t.durationSec === 0) throw new ToolInputError(`transitionToNext.durationSec: ${t.type} は 0 秒にできません（cut を使う）`)
+  return t.durationSec ?? DEFAULT_TRANSITION_SEC
+}
+
 const Edit = z.object({
   shotIds: z.array(Id).min(1).max(200).describe('Shots that receive the same change. Use one id for per-shot descriptions.'),
   description: z
@@ -23,9 +43,7 @@ const Edit = z.object({
   camera: ShotCamera.partial().optional().describe('Only the given camera fields change.'),
   locationId: Id.nullable().optional(),
   cast: z.array(CastEntry).max(8).optional().describe('Replaces the whole cast of each shot. [] clears it.'),
-  transitionToNext: z
-    .object({ type: TransitionType, durationSec: z.number().min(0).max(5).optional() })
-    .optional()
+  transitionToNext: TransitionToNext.optional()
     .describe('Transition from this shot into the next shot in order. type "cut" removes any transition.'),
 })
 
@@ -81,7 +99,7 @@ const replaceTransition = async (
       fromShotId,
       toShotId: next.id,
       type: transition.type,
-      ...(transition.durationSec === undefined ? {} : { durationSec: transition.durationSec }),
+      durationSec: transitionDurationSec(transition),
     },
     WireTransition,
   )
@@ -133,6 +151,8 @@ export const editShotsTool = defineTool({
     '(cut|dissolve|dip_to_black|dip_to_white|wipe|whip_pan|glitch). Edits run in order.',
   input: EditShotsInput,
   handler: async ({ projectId, edits }, { api }) => {
+    // つなぎの長さは何かを直す前に全部確かめる（途中まで直してから断らない）。
+    edits.forEach((edit) => edit.transitionToNext !== undefined && transitionDurationSec(edit.transitionToNext))
     const shots = await api.get(`/projects/${seg(projectId)}/shots`, z.array(WireShot))
     const ordered = [...shots].sort((a, b) => a.order - b.order)
     const results = await edits.reduce<Promise<readonly unknown[]>>(

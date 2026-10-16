@@ -1,3 +1,4 @@
+import { IxaApiError, IxaUnreachableError } from '../api-client.js'
 import type { Clock } from '../tool-def.js'
 
 /**
@@ -41,6 +42,29 @@ const BACKOFF = 1.5
 
 const isTerminal = (result: CheckResult): boolean => result.state !== 'pending'
 
+/** その対象が無い・受け付けられない。待っても変わらない。 */
+const GONE_STATUSES = new Set([404, 422])
+
+/**
+ * 1 つの問い合わせの失敗で、待ち全体を止めない。
+ * - 404・422 はその対象だけ失敗で終わらせる（API の文を添える）
+ * - 届かない・5xx は一時的なものとして、まだ途中とみなす（次の回にもう一度訊く）
+ * - それ以外（鍵が通らない 401 など）は待っても直らないので、そのまま投げる
+ */
+export const pollSafely = async (check: Check): Promise<CheckResult> => {
+  try {
+    return await check.poll()
+  } catch (error) {
+    if (error instanceof IxaApiError && GONE_STATUSES.has(error.status)) {
+      return { state: 'failed', detail: { error: `${String(error.status)}: ${error.apiMessage}` } }
+    }
+    if (error instanceof IxaUnreachableError || (error instanceof IxaApiError && error.status >= 500)) {
+      return { state: 'pending', detail: { lastError: error instanceof IxaApiError ? `${String(error.status)}: ${error.apiMessage}` : error.message } }
+    }
+    throw error
+  }
+}
+
 export const waitForChecks = async (
   checks: readonly Check[],
   clock: Clock,
@@ -58,7 +82,7 @@ export const waitForChecks = async (
     const results = await Promise.all(
       checks.map((check, i) => {
         const known = latest[i]
-        return known !== null && known !== undefined && isTerminal(known) ? Promise.resolve(known) : check.poll()
+        return known !== null && known !== undefined && isTerminal(known) ? Promise.resolve(known) : pollSafely(check)
       }),
     )
     const finished = results.filter(isTerminal).length

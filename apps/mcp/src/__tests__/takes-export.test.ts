@@ -63,11 +63,11 @@ describe('generate_takes', () => {
     ])
     const result = jsonOf(
       await generateTakesTool.run(
-        { projectId: PROJECT, shotIds: [SHOT], model: MODEL, corrections: ['顔を崩さない'], seed: 3, parentTakeId: TAKE },
+        { projectId: PROJECT, shotIds: [SHOT], model: MODEL, corrections: ['顔を崩さない'], seed: 3, parentTakeId: TAKE, regenerationReason: '顔' },
         depsFor(fake),
       ),
     )
-    expect(fake.calls[0]?.body).toEqual({ model: MODEL, count: 1, corrections: ['顔を崩さない'], seed: 3, parentTakeId: TAKE })
+    expect(fake.calls[0]?.body).toEqual({ model: MODEL, count: 1, corrections: ['顔を崩さない'], seed: 3, parentTakeId: TAKE, regenerationReason: '顔' })
     expect(result).toMatchObject({ jobs: [{ kind: 'generation', id: ulid('JB3') }] })
   })
 

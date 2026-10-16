@@ -1,40 +1,45 @@
+import {
+  MUSIC_COUNT_MAX,
+  MUSIC_DURATION_MAX_SEC,
+  MUSIC_DURATION_MIN_SEC,
+  MUSIC_LYRICS_MAX_LENGTH,
+  MUSIC_PROMPT_MAX_LENGTH,
+  MusicJobStatus,
+} from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import type { CheckResult } from '../lib/wait-loop.js'
-import { defineTool, Id, jsonResult } from '../tool-def.js'
+import { defineTool, Id, jsonResult, SEED_MAX } from '../tool-def.js'
 
 /**
- * 曲を作る（`generate_music`）。**API 側は並行して実装中の契約**（2026-10-17 時点）:
+ * 曲を作る（`generate_music`。ADR-0048 の API: apps/api/src/routes/music-generate.ts）:
  *
  *   POST /projects/{projectId}/music/generate
  *        { prompt, lyrics, durationSec 10–240, instrumental, seed?, count 1–4, title? } → 202 { jobId }
  *   GET  /music-jobs/{id} → { status, error, musicTrackIds }
  *
- * 契約が変わったらこのファイルだけ直せば済むよう、呼び出しと応答の形をここに閉じる。
+ * 上限は domain の定数を読む（写さない）。呼び出しと応答の形はこのファイルに閉じる。
  */
-
-export const MUSIC_DURATION_MIN_SEC = 10
-export const MUSIC_DURATION_MAX_SEC = 240
 
 export const GenerateMusicInput = z.object({
   projectId: Id,
-  prompt: z.string().min(1).max(2000).describe('Style/genre/mood/instrumentation of the song (English or Japanese).'),
+  prompt: z.string().trim().min(1).max(MUSIC_PROMPT_MAX_LENGTH).describe('Style/genre/mood/instrumentation of the song (English or Japanese).'),
   lyrics: z
     .string()
-    .max(5000)
+    .max(MUSIC_LYRICS_MAX_LENGTH)
     .default('')
     .describe('Lyrics with section tags like [verse] [chorus]. Empty for instrumental.'),
-  durationSec: z.number().min(MUSIC_DURATION_MIN_SEC).max(MUSIC_DURATION_MAX_SEC),
+  durationSec: z.number().min(MUSIC_DURATION_MIN_SEC).max(MUSIC_DURATION_MAX_SEC).default(60),
   instrumental: z.boolean().default(false),
-  seed: z.number().int().min(0).optional(),
-  count: z.number().int().min(1).max(4).default(1).describe('How many alternative songs to make.'),
-  title: z.string().min(1).max(200).optional().describe('Track title shown in ixa (Japanese is fine).'),
+  seed: z.number().int().min(0).max(SEED_MAX).optional(),
+  count: z.number().int().min(1).max(MUSIC_COUNT_MAX).default(1).describe('How many alternative songs to make.'),
+  title: z.string().trim().min(1).max(200).optional().describe('Track title shown in ixa (Japanese is fine).'),
 })
 
 const WireMusicJobStarted = z.object({ jobId: z.string() })
 
 const WireMusicJob = z.object({
-  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  status: MusicJobStatus,
   error: z.string().nullable(),
   musicTrackIds: z.array(z.string()),
 })

@@ -1,8 +1,8 @@
-import { UPSCALE_REASON } from '@ixa/domain'
+import { lineagePairViolation, UPSCALE_REASON } from '@ixa/domain'
 import { z } from 'zod'
 import { seg } from '../api-client.js'
 import { bulkResult, WireShot, WireTake } from '../wire.js'
-import { defineTool, Id, jsonResult, mapLimited, round, ToolInputError } from '../tool-def.js'
+import { defineTool, describeError, Id, jsonResult, mapLimited, round, SEED_MAX, ToolInputError } from '../tool-def.js'
 
 /** Take（生成した動画）を作る・並べる・採用する・解像度を上げる。Take は追記のみ。 */
 
@@ -29,8 +29,15 @@ export const GenerateTakesInput = z.object({
     .max(5)
     .optional()
     .describe('Fixes for this attempt, e.g. "keep the face consistent" (per-shot request).'),
-  seed: z.number().int().min(0).optional(),
+  seed: z.number().int().min(0).max(SEED_MAX).optional(),
   parentTakeId: Id.optional().describe('Regenerate from this take (lineage). Only with a single shotId.'),
+  regenerationReason: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe('Why this take is remade (Japanese, shown to the user). Required with parentTakeId.'),
 })
 
 export const generateTakesTool = defineTool({
@@ -44,6 +51,12 @@ export const generateTakesTool = defineTool({
     if (args.parentTakeId !== undefined && args.shotIds.length !== 1) {
       throw new ToolInputError('parentTakeId は shotIds が 1 つのときだけ使えます')
     }
+    // 親を持つなら理由も要る（規則は domain の lineagePairViolation 1 か所）。
+    const lineage = lineagePairViolation({
+      parentTakeId: args.parentTakeId ?? null,
+      regenerationReason: args.regenerationReason ?? null,
+    })
+    if (lineage !== null) throw new ToolInputError(`regenerationReason: ${lineage}`)
     const perShot = args.corrections !== undefined || args.seed !== undefined || args.parentTakeId !== undefined
     if (!perShot) {
       const bulk = await api.post(
@@ -57,8 +70,10 @@ export const generateTakesTool = defineTool({
         jobs: bulk.results.flatMap((r) => (r.ok ? r.jobIds.map((id) => ({ kind: 'generation', id })) : [])),
       })
     }
-    const results = await mapLimited(args.shotIds, 4, async (shotId) => {
-      const started = await api.post(
+    // 1 本の失敗で、もう積めたジョブを失わない（一括の口と同じく理由つきで返す）。
+    const results = await mapLimited(args.shotIds, 4, (shotId) =>
+      api
+        .post(
         `/shots/${seg(shotId)}/generate`,
         {
           model: args.model,
@@ -66,14 +81,18 @@ export const generateTakesTool = defineTool({
           ...(args.corrections === undefined ? {} : { corrections: args.corrections }),
           ...(args.seed === undefined ? {} : { seed: args.seed }),
           ...(args.parentTakeId === undefined ? {} : { parentTakeId: args.parentTakeId }),
+          ...(args.regenerationReason === undefined ? {} : { regenerationReason: args.regenerationReason }),
         },
         WireGenerateStarted,
       )
-      return { shotId, ...started }
-    })
+        .then(
+          (started) => ({ shotId, ok: true as const, ...started }),
+          (error: unknown) => ({ shotId, ok: false as const, reason: describeError(error) }),
+        ),
+    )
     return jsonResult({
       results,
-      jobs: results.flatMap((r) => r.jobIds.map((id) => ({ kind: 'generation', id }))),
+      jobs: results.flatMap((r) => (r.ok ? r.jobIds.map((id) => ({ kind: 'generation', id })) : [])),
     })
   },
 })

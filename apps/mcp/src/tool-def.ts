@@ -69,7 +69,8 @@ export const defineTool = <S extends z.ZodRawShape>(def: {
     try {
       return await def.handler(parsed.data, deps)
     } catch (error) {
-      deps.logger.warn({ tool: def.name, err: describeError(error) }, 'ツールが失敗しました')
+      // 例外そのものを渡す（cause の連なりを残す。鍵と URL は logger 側で伏せる）。
+      deps.logger.warn({ tool: def.name, err: error }, 'ツールが失敗しました')
       return errorResult(describeError(error))
     }
   },
@@ -103,6 +104,9 @@ export const describeError = (error: unknown): string => {
   if (error instanceof Error) return error.message
   return String(error)
 }
+
+/** seed の上限（API の曲の口と同じ 32bit 符号つきの最大）。 */
+export const SEED_MAX = 2 ** 31 - 1
 
 /** ULID（ixa の ID はすべて ULID）。 */
 export const Id = z.string().ulid()
