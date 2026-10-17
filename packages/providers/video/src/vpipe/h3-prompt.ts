@@ -29,12 +29,29 @@ import type { ShotCamera, ShotGenerationSpec } from '@ixa/domain'
  * |---|---|---|
  * | `h3-official-v1` | **常に無し**（開始画像を送っていても） | `hasStartImage: false` で組む |
  * | `h3-official-v2` | 開始画像を送ったときだけ有り | 記録の `startImage` の有無で組む |
+ * | `h3-official-v3` | v2 と同じ | v2 と同じ。音の欄だけ「誰も話さない」（`SILENT_SOUNDSCAPE`） |
  *
  * v1 は**取り違えのまま出していた版**（2026-10-07〜10-09）。投入では画像を取り寄せる前に本文を組むため、
  * 文面がいつも「画像なし」で組まれていた。v1 の Take（113 本）は「1 行目無し」が送った文面そのものなので、
  * 記録どおりに組み直せるよう版を分けた（文面の関数は同じで、渡す条件だけが違う）。
  */
-export const H3_PROMPT_FORMAT = 'h3-official-v2'
+export const H3_PROMPT_FORMAT = 'h3-official-v3'
+export type H3PromptFormat = 'h3-official-v1' | 'h3-official-v2' | 'h3-official-v3'
+
+/** v1・v2 の音の欄。 */
+const AMBIENT_SOUNDSCAPE = 'overall_soundscape: Natural ambience that matches the scene.'
+
+/**
+ * v3 の音の欄。**H3 は音と映像を一緒に作るモデル**で、音の欄に声が無いと書かないと、
+ * 人物のアップで口が話すように動いた（NIGHT RUN 予告編の人物のカットがほぼ口パク。2026-10-17）。
+ * ixa はまだセリフを作らないので、いつも「誰も話さない」と書く（セリフ欄を作るときに分ける）。
+ *
+ * 実測（同じ開始画像・同じ seed で続けて投げた）: 音の欄だけを替えると口の開く回数が減り、
+ * カット説明から強い表情の語（眉根を寄せる・顎に力）を外すと 2 つの seed とも最後まで閉じた。
+ * 表情の語はカット説明の側の問題なので、ここでは音の欄だけを直す。
+ */
+const SILENT_SOUNDSCAPE =
+  'overall_soundscape: Only the ambient sound of the scene. Nobody speaks; there is no dialogue, no voice and no vocal sound.'
 
 /** 1 行目（開始画像だけ）。**一字一句この通り**（公式ガイド）。 */
 const IMAGE_TO_VIDEO_LINE =
@@ -137,6 +154,8 @@ export type H3PromptInput = {
   readonly hasStartImage: boolean
   /** 最後の画像を付けて投げるか。**いまは常に false**（付ける画面がまだ無い）。 */
   readonly hasEndImage: boolean
+  /** 組み直すときの版。省くといまの版（`H3_PROMPT_FORMAT`）。 */
+  readonly format?: H3PromptFormat
 }
 
 /**
@@ -146,7 +165,7 @@ export type H3PromptInput = {
  * → `non_diegetic_music` の順。音の 2 欄は vpipe-api が捨てるが、書式として必須。
  */
 export const buildH3Prompt = (input: H3PromptInput): string => {
-  const { spec, hasStartImage, hasEndImage } = input
+  const { spec, hasStartImage, hasEndImage, format = H3_PROMPT_FORMAT } = input
   const parts = spec.promptParts
 
   const referenceLine = hasEndImage
@@ -180,8 +199,8 @@ export const buildH3Prompt = (input: H3PromptInput): string => {
     ...(referenceLine === null ? [] : [referenceLine, '']),
     `integrated_multimodal_description: [Shot 1] ${description}`,
     '',
-    // 音は使わないが、書式として必須（vpipe-api は音声を捨てる）。
-    'overall_soundscape: Natural ambience that matches the scene.',
+    // 音は捨てる（vpipe-api）が書式として必須で、口の動きにも効く（`SILENT_SOUNDSCAPE`）。
+    format === 'h3-official-v3' ? SILENT_SOUNDSCAPE : AMBIENT_SOUNDSCAPE,
     '',
     'non_diegetic_music: None.',
   ].join('\n')

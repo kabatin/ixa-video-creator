@@ -38,7 +38,12 @@ const Edit = z.object({
     .string()
     .max(4000)
     .optional()
-    .describe('What happens in the shot (Japanese; shown to the user and used in the prompt).'),
+    .describe(
+      'What happens in the shot (Japanese; shown to the user and used in the prompt). Describe only what should ' +
+        'be seen, not what must not happen: negations name the unwanted thing. For people without dialogue, keep ' +
+        'faces calm (e.g. 「無表情で前を見据え、表情は最後まで変わらない」); strong-expression words (frowning, ' +
+        'clenched jaw, shouting) make the video model open and move the mouth.',
+    ),
   mood: z.string().max(500).nullable().optional(),
   camera: ShotCamera.partial().optional().describe('Only the given camera fields change.'),
   locationId: Id.nullable().optional(),

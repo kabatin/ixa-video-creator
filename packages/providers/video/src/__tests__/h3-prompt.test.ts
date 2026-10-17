@@ -24,13 +24,25 @@ const aCamera = (overrides: Partial<ShotCamera> = {}): ShotCamera => ({
 const aSpec = (overrides: Partial<ShotGenerationSpec> = {}): ShotGenerationSpec =>
   makeSpec({ camera: aCamera(), ...overrides })
 
+/** v2 までのゴールデンは v2 の版で組む（版ごとに文面を凍結する）。 */
 const build = (spec: ShotGenerationSpec, hasStartImage = true, hasEndImage = false): string =>
-  buildH3Prompt({ spec, hasStartImage, hasEndImage })
+  buildH3Prompt({ spec, hasStartImage, hasEndImage, format: 'h3-official-v2' })
 
 describe('H3_PROMPT_FORMAT', () => {
   it('版を名乗る（Take にはこれだけ残る）', () => {
     // v2: 開始画像を送るときだけ 1 行目が入る（v1 は送っていても入っていなかった）。
-    expect(H3_PROMPT_FORMAT).toBe('h3-official-v2')
+    // v3: 音の欄が「誰も話さない」（人物のアップで口が動いた）。
+    expect(H3_PROMPT_FORMAT).toBe('h3-official-v3')
+  })
+})
+
+describe('h3-official-v3: 音の欄で誰も話さないと書く', () => {
+  it('いまの版は音の欄に声が無いと書き、それ以外は v2 と同じ', () => {
+    const spec = aSpec()
+    const v3 = buildH3Prompt({ spec, hasStartImage: true, hasEndImage: false })
+    expect(v3).toContain('overall_soundscape: Only the ambient sound of the scene. Nobody speaks;')
+    expect(v3).not.toContain('Natural ambience')
+    expect(v3.replace(/overall_soundscape: .*/, '')).toBe(build(spec).replace(/overall_soundscape: .*/, ''))
   })
 })
 

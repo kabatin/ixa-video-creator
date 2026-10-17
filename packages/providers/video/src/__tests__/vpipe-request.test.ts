@@ -232,7 +232,7 @@ describe('本文の組み立て', () => {
       prompt: [
         'integrated_multimodal_description: [Shot 1] Framed as a medium close-up. takepi が勝利する.',
         '',
-        'overall_soundscape: Natural ambience that matches the scene.',
+        'overall_soundscape: Only the ambient sound of the scene. Nobody speaks; there is no dialogue, no voice and no vocal sound.',
         '',
         'non_diegetic_music: None.',
       ].join('\n'),
