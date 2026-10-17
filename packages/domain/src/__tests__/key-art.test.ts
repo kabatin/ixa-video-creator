@@ -3,6 +3,7 @@ import {
   CharacterId,
   CharacterIdentityImageId,
   ImageGenerationJob,
+  KEY_ART_CONCEPT_MAX_LENGTH,
   KEY_ART_INSTRUCTION_MAX_LENGTH,
   KeyArtInstruction,
   MediaAssetId,
@@ -93,6 +94,20 @@ describe('compileKeyArtPrompt', () => {
     expect(prompt).toContain('ネオンの夜')
     expect(prompt).toContain('夕焼けの屋上')
     expect(prompt).toMatch(/避けること:\n血/)
+  })
+
+  it('制作者の指示と避けることを先に置き、長いコンセプトは縮めて最後に置く（末尾が切られても指示は残る）', () => {
+    const long = compileKeyArtPrompt({
+      project: { name: 'x', styleGuide: '', avoid: '血' },
+      concept: 'あ'.repeat(KEY_ART_CONCEPT_MAX_LENGTH + 500),
+      cast: [],
+      instruction: '夕焼けの屋上',
+    })
+    expect(long.indexOf('夕焼けの屋上')).toBeLessThan(long.indexOf('描き方'))
+    expect(long.indexOf('避けること')).toBeLessThan(long.indexOf('描き方'))
+    expect(long.indexOf('作品のコンセプト')).toBeGreaterThan(long.indexOf('描き方'))
+    expect(long).toContain(`${'あ'.repeat(KEY_ART_CONCEPT_MAX_LENGTH)}…`)
+    expect(long).not.toContain('あ'.repeat(KEY_ART_CONCEPT_MAX_LENGTH + 1))
   })
 
   it('空の項目は見出しごと出さない', () => {

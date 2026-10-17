@@ -92,11 +92,20 @@ export const renderExportFileName = (input: RenderExportFileNameInput): string =
   `${renderExportFolderName(input.projectName)} ${formatStamp(input.createdAt, input.timeZone)} ` +
   `${RENDER_PRESET_LABELS[input.preset]}${scopeSuffix(input.scope)}.mp4`
 
-export type ThumbnailExportFileNameInput = Pick<RenderExportFileNameInput, 'projectName' | 'createdAt' | 'timeZone'>
+export type ThumbnailExportFileNameInput = Pick<RenderExportFileNameInput, 'projectName' | 'createdAt' | 'timeZone'> & {
+  /** 書き出しの ID（ULID）。名前の終わりに一部を付け、同じ秒に頼んだ 2 枚を別の名前にする。 */
+  readonly thumbnailId: string
+}
+
+/** ULID の終わり（乱数の部分）から取る字数。同じ秒の 2 枚がぶつかる見込みは 32^6 分の 1。 */
+const THUMBNAIL_ID_SUFFIX_LENGTH = 6
 
 /**
  * 書き出したサムネイルの名前（ADR-0051）。動画と同じフォルダに並ぶので、作品名と日時の形を揃える。
- * 例: `ぼくははると サムネ 2026-10-02 22.52.31.jpg`
+ * **日時は秒までなので、ID の一部を付けて名前を分ける。** 付けないと同じ秒の 2 枚目がフォルダで
+ * 「もうある」と飛ばされ、1 枚目の JPEG を指してしまう。
+ * 例: `ぼくははると サムネ 2026-10-02 22.52.31 k3m9qz.jpg`
  */
 export const thumbnailExportFileName = (input: ThumbnailExportFileNameInput): string =>
-  `${renderExportFolderName(input.projectName)} サムネ ${formatStamp(input.createdAt, input.timeZone)}.jpg`
+  `${renderExportFolderName(input.projectName)} サムネ ${formatStamp(input.createdAt, input.timeZone)} ` +
+  `${input.thumbnailId.slice(-THUMBNAIL_ID_SUFFIX_LENGTH).toLowerCase()}.jpg`

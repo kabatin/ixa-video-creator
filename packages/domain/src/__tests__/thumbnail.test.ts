@@ -135,18 +135,32 @@ describe('Thumbnail（書き出しの記録）', () => {
 })
 
 describe('thumbnailExportFileName', () => {
-  it('作品名・サムネ・日時（その地域の時刻）の .jpg', () => {
+  const at = new Date('2026-10-02T13:52:31.400Z')
+
+  it('作品名・サムネ・日時（その地域の時刻）・ID の終わりの .jpg', () => {
     expect(
       thumbnailExportFileName({
         projectName: 'ぼくははると',
-        createdAt: new Date('2026-10-02T13:52:31.400Z'),
+        createdAt: at,
         timeZone: 'Asia/Tokyo',
+        thumbnailId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
       }),
-    ).toBe('ぼくははると サムネ 2026-10-02 22.52.31.jpg')
+    ).toBe('ぼくははると サムネ 2026-10-02 22.52.31 9g5fav.jpg')
+  })
+
+  it('同じ秒に頼んだ 2 枚は別の名前になる（フォルダで 2 枚目が飛ばされない）', () => {
+    const name = (thumbnailId: string) =>
+      thumbnailExportFileName({ projectName: 'a', createdAt: at, timeZone: 'UTC', thumbnailId })
+    expect(name('01ARZ3NDEKTSV4RRFFQ69G5FAV')).not.toBe(name('01ARZ3NDEKTSV4RRFFQ69G5FAW'))
   })
 
   it('フォルダの外を指せない名前にする（動画と同じ門を通す）', () => {
-    const name = thumbnailExportFileName({ projectName: '../a/b', createdAt: new Date(0), timeZone: 'UTC' })
+    const name = thumbnailExportFileName({
+      projectName: '../a/b',
+      createdAt: new Date(0),
+      timeZone: 'UTC',
+      thumbnailId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    })
     expect(name).not.toContain('/')
   })
 })

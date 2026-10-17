@@ -1,4 +1,6 @@
 import { getTableConfig } from 'drizzle-orm/pg-core'
+import type { SQL } from 'drizzle-orm'
+import { PgDialect } from 'drizzle-orm/pg-core'
 import { describe, expect, it, vi } from 'vitest'
 import type { DbClient } from '../client.js'
 import {
@@ -39,13 +41,31 @@ const row = (patch: Partial<ThumbnailRow> = {}): ThumbnailRow => ({
   ...patch,
 })
 
-/** `update().set().where().returning()` だけを持つ偽物。書いた中身を覚えて、そのまま行として返す。 */
-const fakeUpdateDb = () => {
+/**
+ * `update().set().where().returning()` と `select().from().where()...` を持つ偽物。
+ * `current` の行が今の DB。update の where は SQL に直して覚え、**状態の条件を本当に評価する**
+ * （元の状態が許されていなければ 0 行。条件を外したら、このテストが落ちる）。
+ */
+const fakeDb = (current: ThumbnailRow = row(), selected: readonly ThumbnailRow[] = [current]) => {
+  const wheres: string[] = []
   const set = vi.fn((patch: Partial<ThumbnailRow>) => ({
-    where: () => ({ returning: () => Promise.resolve([row(patch)]) }),
+    where: (condition: SQL) => {
+      const query = new PgDialect().sqlToQuery(condition)
+      wheres.push(query.sql)
+      const guarded = query.sql.includes('"status" in')
+      const allowed = !guarded || query.params.includes(current.status)
+      return { returning: () => Promise.resolve(allowed ? [row({ ...current, ...patch })] : []) }
+    },
   }))
-  return { db: { update: () => ({ set }) } as unknown as DbClient, set }
+  const chain = {
+    from: () => chain,
+    where: () => chain,
+    orderBy: () => Promise.resolve([...selected]),
+    limit: () => Promise.resolve([current]),
+  }
+  return { db: { update: () => ({ set }), select: () => chain } as unknown as DbClient, set, wheres }
 }
+const fakeUpdateDb = () => fakeDb()
 
 describe('thumbnails', () => {
   it('行を domain の型にする', () => {
@@ -78,5 +98,29 @@ describe('thumbnails', () => {
     const { db, set } = fakeUpdateDb()
     await expect(createThumbnailRepository(db).markFailed(row().id as never, '')).rejects.toThrow()
     expect(set).not.toHaveBeenCalled()
+  })
+
+  it('終わった行は上書きしない（遅れて来た worker が failed を done にしない）', async () => {
+    const failed = row({ status: 'failed', error: '描けませんでした', finishedAt: new Date() })
+    const { db, wheres } = fakeDb(failed)
+    const result = await createThumbnailRepository(db).markDone(failed.id as never, ASSET as never)
+    expect(result.status).toBe('failed')
+    expect(result.outputAssetId).toBeNull()
+    expect(wheres[0]).toContain('"status" in')
+  })
+
+  it('done も failed で上書きしない', async () => {
+    const done = row({ status: 'done', outputAssetId: ASSET, finishedAt: new Date() })
+    const { db } = fakeDb(done)
+    expect((await createThumbnailRepository(db).markFailed(done.id as never, '遅れた失敗')).status).toBe('done')
+  })
+
+  it('一覧は壊れた行を飛ばして知らせる（1 行で一覧とフォルダの同期を落とさない）', async () => {
+    const broken = row({ id: '01ARZ3NDEKTSV4RRFFQ69G5FAZ', status: 'done', outputAssetId: null })
+    const onBrokenRow = vi.fn()
+    const { db } = fakeDb(row(), [broken, row()])
+    const list = await createThumbnailRepository(db, { onBrokenRow }).findByProject(row().projectId as never)
+    expect(list.map((thumbnail) => thumbnail.id)).toEqual([row().id])
+    expect(onBrokenRow).toHaveBeenCalledWith(broken.id, expect.stringContaining('JPEG'))
   })
 })

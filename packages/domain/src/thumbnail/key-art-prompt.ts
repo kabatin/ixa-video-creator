@@ -31,9 +31,23 @@ const castLine = (member: KeyArtCastMember): string => {
   return traits.length === 0 ? `- ${member.displayName}` : `- ${member.displayName}: ${traits.join('、')}`
 }
 
+/**
+ * コンセプトの上限（字）。脚本の全文が入ることがあり、長すぎるとモデルの上限で**末尾が切られる**。
+ * 切られて困るもの（制作者の指示・避けること）は先に置き、コンセプトは縮めて最後に置く。
+ */
+export const KEY_ART_CONCEPT_MAX_LENGTH = 600
+
+const capped = (value: string, max: number): string => {
+  const chars = [...value.trim()]
+  return chars.length <= max ? chars.join('') : `${chars.slice(0, max).join('')}…`
+}
+
 export const compileKeyArtPrompt = (input: KeyArtPromptInput): string =>
   [
     `これは作品「${input.project.name}」の YouTube サムネイルの主役の絵（key visual）。横長 16:9 の 1 枚。`,
+    // 制作者が言ったことと避けることを先に。後ろほどモデルの上限で切られやすい。
+    ...section('制作者の指示（いちばん優先する）', input.instruction ?? ''),
+    ...section('避けること', input.project.avoid),
     '',
     '描き方:',
     '- 人物の顔を大きく、表情がはっきり分かるように描く',
@@ -43,10 +57,8 @@ export const compileKeyArtPrompt = (input: KeyArtPromptInput): string =>
     ...(input.cast.length === 0
       ? []
       : ['', '登場人物（参照の画像の人物と同じ顔・髪型・服装で描く）:', ...input.cast.map(castLine)]),
-    ...section('作品のコンセプト', input.concept),
     ...section('画風・光・質感', input.project.styleGuide),
-    ...section('制作者の指示', input.instruction ?? ''),
-    ...section('避けること', input.project.avoid),
+    ...section('作品のコンセプト（抜粋）', capped(input.concept, KEY_ART_CONCEPT_MAX_LENGTH)),
   ].join('\n')
 
 /** 顔が分かる画像ほど先に使う（サムネイルは顔が主役）。四面図は全身が小さいので後ろ。 */
