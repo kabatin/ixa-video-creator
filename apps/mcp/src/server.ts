@@ -38,7 +38,7 @@ export const TOOLS: readonly ToolDef[] = [
   exportTool,
 ]
 
-export const SERVER_INFO = { name: 'ixa', version: '0.5.1' } as const
+export const SERVER_INFO = { name: 'ixa', version: '0.6.0' } as const
 
 /** MCP サーバを組み立てる。接続（stdio）は main.ts が行う。 */
 export const createServer = (deps: ToolDeps): McpServer => {
