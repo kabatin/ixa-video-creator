@@ -1,10 +1,10 @@
-import { ProjectId, ThumbnailId } from '@ixa/domain'
+import { ImageGenerationJobId, ProjectId, ThumbnailId } from '@ixa/domain'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { ThumbnailPanel } from '@/components/thumbnail/thumbnail-panel'
 import type { RenderFolderApi } from '@/lib/render-folder-api'
 import { PlayheadSecContext } from '@/lib/playhead-sec'
-import { WireThumbnail, type ThumbnailApi } from '@/lib/thumbnail-api'
+import { WireKeyArtJob, WireThumbnail, type ThumbnailApi } from '@/lib/thumbnail-api'
 import { MEDIA_ID, PROJECT_ID } from './fixtures'
 
 /** サムネイルの書き出し画面（ADR-0051）。背景を選んで書き出し、終わったら名前とフォルダの口を出す。 */
@@ -96,5 +96,29 @@ describe('ThumbnailPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '書き出す' }))
     expect(screen.getByText('題名は 40 字までにしてください')).toBeInTheDocument()
     expect(api.startThumbnail).not.toHaveBeenCalled()
+  })
+
+  it('AI に描かせている間は、背景の選び方を替えて戻っても「描かせる」を押せない（2 度頼まない）', async () => {
+    const { api } = setup()
+    vi.mocked(api.generateKeyArt).mockResolvedValue([ImageGenerationJobId.parse('01ARZ3NDEKTSV4RRFFQ69G5FC2')])
+    vi.mocked(api.listKeyArt).mockResolvedValue([
+      WireKeyArtJob.parse({
+        id: '01ARZ3NDEKTSV4RRFFQ69G5FC2',
+        status: 'running',
+        instruction: null,
+        mediaAssetId: null,
+        error: null,
+        queuedAt: '2026-10-17T01:00:00.000Z',
+        finishedAt: null,
+      }),
+    ])
+    fireEvent.click(screen.getByRole('radio', { name: 'AI に描かせる' }))
+    fireEvent.click(screen.getByRole('button', { name: '描かせる' }))
+    await waitFor(() => {
+      expect(api.generateKeyArt).toHaveBeenCalledTimes(1)
+    })
+    fireEvent.click(screen.getByRole('radio', { name: 'Shot の絵' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'AI に描かせる' }))
+    expect(screen.getByRole('button', { name: '描かせる' })).toBeDisabled()
   })
 })

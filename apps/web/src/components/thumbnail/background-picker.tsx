@@ -1,8 +1,9 @@
 'use client'
 
-import type { ProjectId, Shot, ThumbnailBackground } from '@ixa/domain'
+import type { Shot, ThumbnailBackground } from '@ixa/domain'
 import { useMemo, useState } from 'react'
 import { KeyArtPicker } from '@/components/thumbnail/key-art-picker'
+import type { KeyArtJobs } from '@/components/thumbnail/use-key-art-jobs'
 import { Button } from '@/components/ui/button'
 import { ChoiceCard } from '@/components/ui/choice-card'
 import { resolveApiBaseUrl } from '@/lib/api-client'
@@ -12,7 +13,6 @@ import { usePlayheadSec } from '@/lib/playhead-sec'
 import { createRequester } from '@/lib/requester'
 import { createShotStartFrameApi } from '@/lib/shot-start-frame-api'
 import type { ShotPosterMap } from '@/lib/shot-posters'
-import type { ThumbnailApi } from '@/lib/thumbnail-api'
 import { shotPictureChoices, type ShotPictureChoice } from '@/lib/thumbnail-form'
 
 /**
@@ -32,12 +32,12 @@ const modeOf = (background: ThumbnailBackground | null): Mode =>
   background?.kind === 'image' ? 'shot' : 'frame'
 
 export type BackgroundPickerProps = {
-  readonly projectId: ProjectId
   readonly background: ThumbnailBackground | null
   readonly onChange: (background: ThumbnailBackground) => void
   readonly shots: readonly Shot[]
   readonly posters: ShotPosterMap
-  readonly api: ThumbnailApi
+  /** AI に描かせている絵の追いかけ。タブを替えても消えないよう、ダイアログの側が持つ。 */
+  readonly keyArt: KeyArtJobs
 }
 
 /** 再生位置は毎コマ変わるので、読むのはこの小さな部品だけにする（`playhead-sec.ts`）。 */
@@ -85,7 +85,7 @@ const ShotChoices = ({
     </ul>
   )
 
-export const BackgroundPicker = ({ projectId, background, onChange, shots, posters, api }: BackgroundPickerProps) => {
+export const BackgroundPicker = ({ background, onChange, shots, posters, keyArt }: BackgroundPickerProps) => {
   const [mode, setMode] = useState<Mode>(modeOf(background))
   const [problem, setProblem] = useState<string | null>(null)
   const choices = useMemo(() => shotPictureChoices(shots, posters), [shots, posters])
@@ -125,8 +125,7 @@ export const BackgroundPicker = ({ projectId, background, onChange, shots, poste
       {mode === 'shot' && <ShotChoices choices={choices} onPick={pickShot} />}
       {mode === 'ai' && (
         <KeyArtPicker
-          projectId={projectId}
-          api={api}
+          keyArt={keyArt}
           selectedAssetId={background?.kind === 'image' ? background.mediaAssetId : null}
           onPick={(mediaAssetId) => onChange({ kind: 'image', mediaAssetId })}
         />

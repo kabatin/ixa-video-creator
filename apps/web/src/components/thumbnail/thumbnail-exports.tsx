@@ -18,6 +18,10 @@ const STATUS_LABELS: Readonly<Record<ThumbnailStatus, string>> = {
   failed: '書き出せませんでした',
 }
 
+/** いまの 1 枚の様子の文。失敗なら残された理由そのもの（無ければ決まった文）。 */
+export const currentExportMessage = (thumbnail: Pick<WireThumbnail, 'status' | 'error'>): string =>
+  thumbnail.status === 'failed' && thumbnail.error !== null ? thumbnail.error : STATUS_LABELS[thumbnail.status]
+
 const OpenInFolder = ({ folder, thumbnail }: { readonly folder: RenderFolder; readonly thumbnail: WireThumbnail }) =>
   folder.canOpen && thumbnail.status === 'done' ? (
     <Button size="sm" disabled={folder.opening} onClick={() => folder.open({ thumbnailId: thumbnail.id })}>
@@ -30,11 +34,11 @@ export const CurrentExport = ({ thumbnail, folder }: { readonly thumbnail: WireT
     role={thumbnail.status === 'failed' ? 'alert' : 'status'}
     className="flex flex-col gap-2 rounded-md border border-line bg-surface p-3"
   >
+    {/* 失敗の文は worker が決まった日本語で 1 文だけ書く。前置きを重ねず、それだけを出す。 */}
     <p className={`text-sm ${thumbnail.status === 'failed' ? 'text-danger' : 'text-text'}`}>
-      {STATUS_LABELS[thumbnail.status]}
+      {currentExportMessage(thumbnail)}
     </p>
     {thumbnail.status === 'done' && <p className="break-all text-xs text-muted">{thumbnail.fileName}</p>}
-    {thumbnail.error !== null && <p className="text-xs text-danger">{thumbnail.error}</p>}
     <OpenInFolder folder={folder} thumbnail={thumbnail} />
   </div>
 )

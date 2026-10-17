@@ -7,6 +7,7 @@ import { BackgroundPicker } from '@/components/thumbnail/background-picker'
 import { FramingFields, TextFields } from '@/components/thumbnail/thumbnail-fields'
 import { CurrentExport, ThumbnailExportList } from '@/components/thumbnail/thumbnail-exports'
 import { ThumbnailPreview } from '@/components/thumbnail/thumbnail-preview'
+import { useKeyArtJobs } from '@/components/thumbnail/use-key-art-jobs'
 import { useThumbnailExport } from '@/components/thumbnail/use-thumbnail-export'
 import { Button } from '@/components/ui/button'
 import { resolveApiBaseUrl } from '@/lib/api-client'
@@ -50,6 +51,7 @@ export const ThumbnailPanel = ({
   const client = useMemo(() => api ?? defaultApi(), [api])
   const folder = useRenderFolder(projectId, folderApi)
   const exporting = useThumbnailExport(projectId, client)
+  const keyArt = useKeyArtJobs(projectId, client)
   const [form, setForm] = useState<ThumbnailForm>(() => initialThumbnailForm(defaultTitle))
   const [messages, setMessages] = useState<readonly string[]>([])
 
@@ -58,8 +60,8 @@ export const ThumbnailPanel = ({
     setMessages([])
   }
   const spec = useMemo(() => previewSpec(form), [form])
-  const busy =
-    exporting.submitting || exporting.current?.status === 'queued' || exporting.current?.status === 'rendering'
+  // 追いかけている間だけ押せない（諦めたら押せる。`use-thumbnail-export.ts`）。
+  const busy = exporting.busy
 
   const submit = (): void => {
     const check = checkThumbnailForm(form)
@@ -74,12 +76,11 @@ export const ThumbnailPanel = ({
     <div className="grid gap-6 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
       <section aria-label="サムネイルの中身" className="flex flex-col gap-5 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
         <BackgroundPicker
-          projectId={projectId}
           background={form.background}
           onChange={(background) => update({ background })}
           shots={shots}
           posters={posters}
-          api={client}
+          keyArt={keyArt}
         />
         <FramingFields form={form} onChange={update} />
         <TextFields form={form} onChange={update} />
@@ -102,6 +103,11 @@ export const ThumbnailPanel = ({
           {exporting.problem !== null && (
             <p role="alert" className="text-sm text-danger">
               {exporting.problem}
+            </p>
+          )}
+          {exporting.note !== null && (
+            <p role="status" className="text-sm text-warn">
+              {exporting.note}
             </p>
           )}
           {exporting.current !== null && <CurrentExport thumbnail={exporting.current} folder={folder} />}

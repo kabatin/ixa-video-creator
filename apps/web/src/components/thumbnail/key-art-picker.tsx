@@ -5,26 +5,21 @@ import {
   KEY_ART_MAX_COUNT,
   type ImageGenerationJobId,
   type MediaAssetId,
-  type ProjectId,
 } from '@ixa/domain'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { MediaImage } from '@/components/media-image'
 import { Button } from '@/components/ui/button'
-import { describeForPerson } from '@/lib/api-error'
-import { startAsyncPolling, type PollHandle } from '@/lib/poller'
-import { isKeyArtActive, type ThumbnailApi, type WireKeyArtJob } from '@/lib/thumbnail-api'
+import type { KeyArtJobs } from '@/components/thumbnail/use-key-art-jobs'
+import type { WireKeyArtJob } from '@/lib/thumbnail-api'
 
 /**
  * 背景を AI に描かせる（キーアート。ADR-0051）。頼んだ分ができるまで一覧を引き直し、できたものから並べる。
  * 前に描かせた絵も候補に出す（描き直さずに選べる）。1 枚 1 分ほどかかる。
+ * 追いかけはダイアログの側（`useKeyArtJobs`）が持つ。タブを替えても消えない。
  */
 
-/** 1 枚 1〜2 分。数枚頼んでも収まるように長めに待つ。 */
-const KEY_ART_TIMEOUT_MS = 15 * 60 * 1_000
-
 export type KeyArtPickerProps = {
-  readonly projectId: ProjectId
-  readonly api: ThumbnailApi
+  readonly keyArt: KeyArtJobs
   readonly selectedAssetId: MediaAssetId | null
   readonly onPick: (mediaAssetId: MediaAssetId) => void
 }
@@ -36,61 +31,12 @@ const candidatesOf = (jobs: readonly WireKeyArtJob[]): readonly Candidate[] =>
     job.status === 'succeeded' && job.mediaAssetId !== null ? [{ jobId: job.id, mediaAssetId: job.mediaAssetId }] : [],
   )
 
-export const KeyArtPicker = ({ projectId, api, selectedAssetId, onPick }: KeyArtPickerProps) => {
+export const KeyArtPicker = ({ keyArt, selectedAssetId, onPick }: KeyArtPickerProps) => {
   const [instruction, setInstruction] = useState('')
   const [count, setCount] = useState(2)
-  const [jobs, setJobs] = useState<readonly WireKeyArtJob[]>([])
-  const [requested, setRequested] = useState<readonly ImageGenerationJobId[]>([])
-  const [submitting, setSubmitting] = useState(false)
-  const [note, setNote] = useState<string | null>(null)
-  const poll = useRef<PollHandle | null>(null)
-
-  useEffect(() => {
-    let alive = true
-    api
-      .listKeyArt(projectId)
-      .then((found) => {
-        if (alive) setJobs(found)
-      })
-      .catch((cause: unknown) => {
-        if (alive) setNote(`前に描かせた絵を読めませんでした: ${describeForPerson(cause)}`)
-      })
-    return () => {
-      alive = false
-      poll.current?.stop()
-    }
-  }, [api, projectId])
-
-  const follow = (jobIds: readonly ImageGenerationJobId[]): void => {
-    poll.current?.stop()
-    poll.current = startAsyncPolling({
-      probe: async () => {
-        const found = await api.listKeyArt(projectId)
-        return { running: found.some((job) => jobIds.includes(job.id) && isKeyArtActive(job)), value: found }
-      },
-      onProbe: ({ value }) => setJobs(value),
-      onTimeout: () => setNote('時間がかかっています。しばらくしてから開き直してください。'),
-      onFailed: (cause) => setNote(`描いている絵の様子を読めませんでした: ${describeForPerson(cause)}`),
-      timeoutMs: KEY_ART_TIMEOUT_MS,
-    })
-  }
-
-  const generate = async (): Promise<void> => {
-    setSubmitting(true)
-    setNote(null)
-    try {
-      const jobIds = await api.generateKeyArt(projectId, { count, instruction })
-      setRequested(jobIds)
-      follow(jobIds)
-    } catch (cause) {
-      setNote(`頼めませんでした: ${describeForPerson(cause)}`)
-    } finally {
-      setSubmitting(false)
-    }
-  }
+  const { jobs, requested, drawing, submitting, canGenerate, note } = keyArt
 
   const mine = jobs.filter((job) => requested.includes(job.id))
-  const drawing = mine.filter(isKeyArtActive).length
   const failures = mine.flatMap((job) => (job.status === 'failed' && job.error !== null ? [job.error] : []))
   const candidates = candidatesOf(jobs)
 
@@ -120,7 +66,12 @@ export const KeyArtPicker = ({ projectId, api, selectedAssetId, onPick }: KeyArt
             ))}
           </select>
         </label>
-        <Button size="sm" tone="primary" disabled={submitting || drawing > 0} onClick={() => void generate()}>
+        <Button
+          size="sm"
+          tone="primary"
+          disabled={!canGenerate}
+          onClick={() => void keyArt.generate({ count, instruction })}
+        >
           {submitting ? '送信中…' : '描かせる'}
         </Button>
       </div>

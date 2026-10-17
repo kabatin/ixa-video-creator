@@ -27,6 +27,7 @@ import { sortShotsByStart } from '@/lib/timeline-display'
 import { posterByShotId, postersStale, posterRetryDelayMs, type ShotPosterMap } from '@/lib/shot-posters'
 import { useProjectEvents } from '@/lib/use-project-events'
 import { musicJobAddedTracks, musicJobNotice } from '@/lib/music-job-form'
+import { imageJobFailureNotice } from '@/lib/image-job-notice'
 import { voiceJobNotice } from '@/lib/voice-job-notice'
 import type { PanelId } from '@/lib/workbench-layout'
 import type { Inspected } from '@/lib/workbench-selection'
@@ -170,11 +171,9 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       // 絵コンテの画像（ADR-0029）。できたら・作り始めたら絵を取り直す（ストーリーボードとインスペクター）。
       if (event.type === 'image_job.status') {
         setPosterEpoch((epoch) => epoch + 1)
-        if (event.status === 'failed') {
-          // キャラクターシート（ADR-0035）と絵コンテの画像は同じジョブ。何を作れなかったかを言い分ける。
-          const what = event.characterId !== null ? 'キャラクターシート' : '絵コンテの画像'
-          setNotice(`${what}を作れませんでした: ${event.error ?? '理由が届きませんでした。'}`)
-        }
+        // 絵コンテの画像・キャラクターシート（ADR-0035）・サムネイルの背景（ADR-0051）は同じジョブ。言い分ける。
+        const message = imageJobFailureNotice(event)
+        if (message !== null) setNotice(message)
       }
       if (
         event.type === 'generation_job.status' &&
