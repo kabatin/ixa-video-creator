@@ -15,7 +15,7 @@ import { createInMemoryProjectRepository } from './in-memory-project-repository.
 
 type Ok<T> = { success: true; data: T }
 
-const build = () => {
+const build = (options: { readonly failEnqueueFrom?: number } = {}) => {
   const project = aProject()
   const imageJobs = createInMemoryImageJobRepository()
   const enqueued: ImageGenerationJobId[] = []
@@ -27,7 +27,12 @@ const build = () => {
     keyArtRoutes({
       projects: createInMemoryProjectRepository([project]),
       imageJobs,
-      imageQueue: { enqueue: (id) => Promise.resolve(void enqueued.push(id)) },
+      imageQueue: {
+        enqueue: (id) =>
+          options.failEnqueueFrom !== undefined && enqueued.length >= options.failEnqueueFrom
+            ? Promise.reject(new Error('redis down'))
+            : Promise.resolve(void enqueued.push(id)),
+      },
       imageModel: () => Promise.resolve({ providerId: ProviderId.parse('codex-cli'), modelId: ModelId.parse('codex-cli/image-gen') }),
       events: { publish: (event) => Promise.resolve(void events.push(event)) },
       logger: createLogger('silent'),
@@ -56,6 +61,31 @@ describe('POST /projects/{projectId}/key-art/generate', () => {
       Array.from({ length: 3 }, () => ['key_art', null, null, '夕焼けの屋上']),
     )
     expect(f.events.map((event) => event.type)).toEqual(['image_job.status', 'image_job.status', 'image_job.status'])
+  })
+
+  it('2 枚目を積めなくても、積めた 1 枚目の ID と、積めなかったことを返す', async () => {
+    const f = build({ failEnqueueFrom: 1 })
+
+    const res = await f.generate({ count: 3 })
+
+    expect(res.status).toBe(202)
+    const data = ((await res.json()) as Ok<{ jobIds: string[]; failed: { message: string }[] }>).data
+    expect(data.jobIds).toEqual(f.enqueued)
+    expect(data.jobIds).toHaveLength(1)
+    expect(data.failed).toHaveLength(1)
+    // 積めなかった 2 枚目は失敗にしてあり、3 枚目は作っていない。
+    expect(f.imageJobs.snapshot().map((job) => job.status).sort()).toEqual(['failed', 'queued'])
+  })
+
+  it('1 枚も積めなければ 500', async () => {
+    const f = build({ failEnqueueFrom: 0 })
+    expect((await f.generate({ count: 2 })).status).toBe(500)
+  })
+
+  it('全部積めたら failed は空', async () => {
+    const f = build()
+    const data = ((await (await f.generate({ count: 2 })).json()) as Ok<{ failed: unknown[] }>).data
+    expect(data.failed).toEqual([])
   })
 
   it('枚数を省けば 1 枚。空の指示は「指示なし」', async () => {

@@ -133,6 +133,41 @@ describe('export_thumbnail', () => {
     expect(fake.callsTo('POST', `/projects/${PROJECT}/thumbnails`)).toHaveLength(0)
   })
 
+  it('この作品のキーアートに無いジョブ ID は、待たずに理由つきで止める', async () => {
+    const fake = createFakeApi([
+      ...doneRoutes,
+      { method: 'GET', path: `/projects/${PROJECT}/key-art`, data: [keyArtRow(JOB_A, 'running', null)] },
+    ])
+    const result = await exportThumbnailTool.run(
+      { projectId: PROJECT, background: { keyArt: { jobIds: [JOB_A, JOB_B] } }, title: '新曲', waitSec: 120 },
+      depsFor(fake, { outputDir: dir }),
+    )
+    expect(result.isError).toBe(true)
+    expect(textOf(result)).toContain(JOB_B)
+    // 時間切れまで問い合わせ続けない（最初の 1 回で分かる）。
+    expect(fake.callsTo('GET', `/projects/${PROJECT}/key-art`)).toHaveLength(1)
+    expect(fake.callsTo('POST', `/projects/${PROJECT}/thumbnails`)).toHaveLength(0)
+  })
+
+  it('別の名前の 2 枚は別のファイルに保存する（前の 1 枚を返さない）', async () => {
+    const THUMB_2 = ulid('TH2')
+    const OUTPUT_2 = ulid('MD6')
+    const JPEG_2 = new Uint8Array([0xff, 0xd8, 0x00, 0xff, 0xd9])
+    const second = { ...thumbRow('done', OUTPUT_2), id: THUMB_2, fileName: 'なつ_うた サムネ 2026-10-17 12.00.00 zz9999.jpg' }
+    const fake = createFakeApi([
+      ...doneRoutes,
+      { method: 'GET', path: `/thumbnails/${THUMB_2}`, data: second },
+      { method: 'GET', path: `/media/${OUTPUT_2}/url`, data: { url: '/files/thumb2.jpg?sig=T', expiresInSec: 600 } },
+      { method: 'GET', path: '/files/thumb2.jpg', bytes: JPEG_2 },
+    ])
+    const deps = depsFor(fake, { outputDir: dir })
+    const first = jsonOf(await exportThumbnailTool.run({ projectId: PROJECT, background: { atSec: 1 }, title: '新曲' }, deps)) as Record<string, string>
+    const other = jsonOf(await exportThumbnailTool.run({ projectId: PROJECT, thumbnailId: THUMB_2 }, deps)) as Record<string, string>
+    expect(other.filePath).not.toBe(first.filePath)
+    expect([...(await readFile(other.filePath ?? ''))]).toEqual([...JPEG_2])
+    expect([...(await readFile(first.filePath ?? ''))]).toEqual([...JPEG])
+  })
+
   it('41 字の題名は API を呼ぶ前に断る（キーアートも頼まない）', async () => {
     const fake = createFakeApi(doneRoutes)
     const result = await exportThumbnailTool.run(

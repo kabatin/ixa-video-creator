@@ -391,7 +391,15 @@ export const main = (): void => {
     musicTracks: createMusicTrackRepository(db),
     renderJobs: createRenderJobRepository(db),
     renderQueue: renderQueuePort,
-    thumbnails: { repository: createThumbnailRepository(db), queue: thumbnailQueuePort },
+    thumbnails: {
+      // 壊れた行は一覧から飛ばし、ここでログに残す（1 行で一覧とフォルダの同期を落とさない）。
+      repository: createThumbnailRepository(db, {
+        onBrokenRow: (thumbnailId, reason) => {
+          logger.error({ thumbnailId, reason }, 'サムネイルの記録が壊れているので一覧から外しました')
+        },
+      }),
+      queue: thumbnailQueuePort,
+    },
     // 書き出した動画を置くフォルダ（ADR-0036）。既定はホームの「ムービー」の下。日時はこの Mac の時刻で名前に書く。
     renderFolder: {
       rootDir: config.renderExportDir ?? join(homedir(), 'Movies', 'ixa-video-creator'),

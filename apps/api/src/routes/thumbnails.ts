@@ -6,6 +6,7 @@ import {
   ThumbnailId as ThumbnailIdSchema,
   ThumbnailSpec as ThumbnailSpecSchema,
   ThumbnailStatus as ThumbnailStatusSchema,
+  newId,
   thumbnailExportFileName,
   type Project,
   type Thumbnail,
@@ -190,11 +191,14 @@ export const thumbnailRoutes = (deps: ThumbnailRoutesDeps) =>
         return c.json(fail(VALIDATION_ERROR_MESSAGE, { [prepared.field]: [prepared.message] }), 422)
       }
 
+      // ID を先に決め、名前に一部を入れる（同じ秒に頼んだ 2 枚が同じ名前になり、フォルダで 2 枚目が飛ばされないように）。
+      const id = newId(ThumbnailIdSchema)
       const createdAt = new Date()
       const thumbnail = await deps.thumbnails.create({
+        id,
         projectId: project.id,
         spec,
-        fileName: thumbnailExportFileName({ projectName: project.name, createdAt, timeZone: deps.timeZone }),
+        fileName: thumbnailExportFileName({ projectName: project.name, createdAt, timeZone: deps.timeZone, thumbnailId: id }),
         createdAt,
       })
       await enqueueOrFail(deps, thumbnail.id, prepared.timeline)

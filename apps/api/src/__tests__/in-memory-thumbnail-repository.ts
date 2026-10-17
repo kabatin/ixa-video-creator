@@ -1,11 +1,5 @@
 import type { ThumbnailRepository } from '@ixa/db'
-import {
-  Thumbnail as ThumbnailSchema,
-  ThumbnailId as ThumbnailIdSchema,
-  newId,
-  thumbnailViolation,
-  type Thumbnail,
-} from '@ixa/domain'
+import { Thumbnail as ThumbnailSchema, thumbnailViolation, type Thumbnail } from '@ixa/domain'
 
 /** サムネイルの書き出し（ADR-0051）のインメモリ版。書くたびに状態と中身の食い違いを確かめる（実物と同じ）。 */
 export type InMemoryThumbnailRepository = ThumbnailRepository & { readonly snapshot: () => readonly Thumbnail[] }
@@ -19,9 +13,11 @@ export const createInMemoryThumbnailRepository = (seed: readonly Thumbnail[] = [
     store = [...store.filter((candidate) => candidate.id !== parsed.id), parsed]
     return parsed
   }
+  /** 実物と同じく、待ち・描いている行だけを進める。終わった行はそのまま返す。 */
   const update = (id: Thumbnail['id'], patch: Partial<Thumbnail>): Promise<Thumbnail> => {
     const current = store.find((candidate) => candidate.id === id)
     if (current === undefined) return Promise.reject(new Error(`サムネイルがありません: ${id}`))
+    if (current.status === 'done' || current.status === 'failed') return Promise.resolve(current)
     return Promise.resolve(save({ ...current, ...patch }))
   }
   return {
@@ -30,7 +26,7 @@ export const createInMemoryThumbnailRepository = (seed: readonly Thumbnail[] = [
       Promise.resolve(
         save(
           ThumbnailSchema.parse({
-            id: newId(ThumbnailIdSchema),
+            id: input.id,
             projectId: input.projectId,
             spec: input.spec,
             status: 'queued',

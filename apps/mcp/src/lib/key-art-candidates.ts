@@ -54,6 +54,17 @@ const toCandidate = (jobId: string, jobs: readonly WireKeyArtJob[]): KeyArtCandi
   }
 }
 
+/**
+ * この作品のキーアートに無いジョブ ID は、待っても現れない（頼んだ時点で行はできている）。
+ * 待つ前に理由つきで投げる。黙って「まだ」と数えると、時間切れまで待ってから分からないまま終わる。
+ */
+const assertKnown = (jobIds: readonly string[], jobs: readonly WireKeyArtJob[]): void => {
+  const unknown = jobIds.filter((jobId) => !jobs.some((job) => job.id === jobId))
+  if (unknown.length > 0) {
+    throw new Error(`この作品のキーアートに無いジョブです: ${unknown.join(', ')}（jobIds を確かめてください）`)
+  }
+}
+
 /** 頼んだジョブがすべて終わるか、`maxWaitSec` まで待つ。1 回の問い合わせで全部の状態を読む。 */
 export const waitForKeyArt = async (
   api: ApiClient,
@@ -62,6 +73,7 @@ export const waitForKeyArt = async (
   clock: Clock,
   maxWaitSec: number,
 ): Promise<KeyArtOutcome> => {
+  assertKnown(jobIds, await listKeyArt(api, projectId))
   const check = {
     label: { kind: 'key_art' },
     poll: async (): Promise<CheckResult> => {

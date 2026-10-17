@@ -139,6 +139,13 @@ const build = async (
     assets.push(thumbnailAsset)
   }
   const thumbnail = aThumbnail(project, { outputAssetId: thumbnailAsset.id })
+  // 同じ秒に頼んだ 2 枚目（名前は ID の終わりで分かれる）。
+  const secondAsset = aMediaAsset({ storageKey: `media/${project.id}/thumb2.jpg`, kind: 'image', projectId: project.id })
+  if (options.thumbnails === true) {
+    await storage.put(secondAsset.storageKey, Buffer.from('JPEG-2'), { contentType: 'image/jpeg' })
+    assets.push(secondAsset)
+  }
+  const sameSecond = aThumbnail(project, { outputAssetId: secondAsset.id, fileName: SAME_SECOND_NAME })
   const drawing = aThumbnail(project, { status: 'rendering', finishedAt: null, fileName: 'drawing.jpg' })
   const foreignThumbnail = aThumbnail(other, { outputAssetId: thumbnailAsset.id })
   const opened: OpenTarget[] = []
@@ -155,7 +162,7 @@ const build = async (
       projects: createInMemoryProjectRepository([project, other]),
       renderJobs: createInMemoryRenderJobRepository([full, range, queued, foreign]),
       ...(options.thumbnails === true
-        ? { thumbnails: createInMemoryThumbnailRepository([thumbnail, drawing, foreignThumbnail]) }
+        ? { thumbnails: createInMemoryThumbnailRepository([thumbnail, sameSecond, drawing, foreignThumbnail]) }
         : {}),
       mediaAssets: createInMemoryMediaAssetRepository(assets),
       storage,
@@ -173,9 +180,11 @@ const build = async (
       body: JSON.stringify(body),
     })
   const folder = join(root, 'ぼくははると')
-  return { app, project, full, range, queued, foreign, thumbnail, drawing, foreignThumbnail, opened, open, folder }
+  return { app, project, full, range, queued, foreign, thumbnail, sameSecond, drawing, foreignThumbnail, opened, open, folder }
 }
 
+/** 同じ秒に頼んだ 2 枚目。日時は同じで、終わりの ID の部分だけが違う。 */
+const SAME_SECOND_NAME = 'ぼくははると サムネ 2026-10-02 23.10.00 zz9999.jpg'
 const FULL_NAME = 'ぼくははると 2026-10-02 22.52.31 プレビュー（720p）.mp4'
 const RANGE_NAME = 'ぼくははると 2026-10-02 23.00.00 プレビュー（720p） 0分00秒〜0分51秒.mp4'
 
@@ -335,9 +344,19 @@ describe('POST /projects/{id}/render-folder/open', () => {
 
       const data = ((await (await f.open()).json()) as Ok<Opened>).data
 
-      expect(data).toMatchObject({ copied: 3, failed: [] })
-      expect((await readdir(f.folder)).sort()).toEqual([FULL_NAME, RANGE_NAME, THUMB_NAME].sort())
+      expect(data).toMatchObject({ copied: 4, failed: [] })
+      expect((await readdir(f.folder)).sort()).toEqual([FULL_NAME, RANGE_NAME, THUMB_NAME, SAME_SECOND_NAME].sort())
       expect(await readFile(join(f.folder, THUMB_NAME), 'utf8')).toBe('JPEG')
+    })
+
+    it('同じ秒の 2 枚はどちらも入り、指定した方を選んで開く', async () => {
+      const f = await build({ thumbnails: true })
+
+      expect((await f.open({ thumbnailId: f.sameSecond.id })).status).toBe(200)
+
+      expect(await readFile(join(f.folder, SAME_SECOND_NAME), 'utf8')).toBe('JPEG-2')
+      expect(await readFile(join(f.folder, THUMB_NAME), 'utf8')).toBe('JPEG')
+      expect(f.opened).toEqual([{ file: join(f.folder, SAME_SECOND_NAME) }])
     })
 
     it('もう入っているサムネイルは上書きしない', async () => {

@@ -8,12 +8,13 @@ import {
   MediaAssetId as MediaAssetIdSchema,
   ProjectId as ProjectIdSchema,
   type ImageGenerationJob,
+  type ImageGenerationJobId,
   type ModelId,
+  type ProjectId,
   type ProviderId,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
-import { sequentially } from '../sequentially.js'
 import { startImageJob, type ImageJobStartDeps } from './image-job-start.js'
 
 /**
@@ -44,7 +45,43 @@ const GenerateBody = z
   })
   .openapi('KeyArtGenerateInput')
 
-const StartedData = z.object({ jobIds: z.array(ImageGenerationJobIdSchema) }).openapi('KeyArtGenerateStarted')
+const StartedData = z
+  .object({
+    /** 積めたジョブ。途中で積めなくなっても、そこまでの分は返す（描き始めているので隠さない）。 */
+    jobIds: z.array(ImageGenerationJobIdSchema),
+    /** 積めなかった分の理由（利用者にそのまま見せる文）。全部積めたら空。 */
+    failed: z.array(z.object({ message: z.string() })),
+  })
+  .openapi('KeyArtGenerateStarted')
+
+const ENQUEUE_FAILED_MESSAGE = '残りの絵を描く順番に入れられませんでした。もう一度押してください。'
+
+type Started = { readonly jobIds: readonly ImageGenerationJobId[]; readonly failed: readonly { readonly message: string }[] }
+
+/**
+ * 1 枚ずつ積む（順番どおりに描かれる）。**途中で積めなくなったらそこで止め、積めた分を返す。**
+ * 例外にすると 1 枚目はもう描き始めているのに、画面と MCP はその ID を知らないまま待てなくなる。
+ * 1 枚も積めなければ投げる（500）。
+ */
+const startAll = async (
+  deps: KeyArtRoutesDeps,
+  projectId: ProjectId,
+  count: number,
+  instruction: string | null,
+): Promise<Started> => {
+  let jobIds: readonly ImageGenerationJobId[] = []
+  for (let index = 0; index < count; index += 1) {
+    try {
+      const job = await startImageJob(deps, { kind: 'key_art', projectId, instruction, ...(await deps.imageModel()) })
+      jobIds = [...jobIds, job.id]
+    } catch (error) {
+      if (jobIds.length === 0) throw error
+      deps.logger.error({ projectId, queued: jobIds.length, count, err: error }, 'キーアートの残りを積めませんでした')
+      return { jobIds, failed: [{ message: ENQUEUE_FAILED_MESSAGE }] }
+    }
+  }
+  return { jobIds, failed: [] }
+}
 
 export const KeyArtJobResponse = z
   .object({
@@ -108,18 +145,8 @@ export const keyArtRoutes = (deps: KeyArtRoutesDeps) =>
       const project = await deps.projects.findById(projectId)
       if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       const { count, instruction } = c.req.valid('json')
-      // 1 枚ずつ積む（順番どおりに描かれ、途中で積めなくなったらそこで止まる）。
-      const jobs = await sequentially(
-        Array.from({ length: count }, (_unused, index) => index),
-        async () =>
-          startImageJob(deps, {
-            kind: 'key_art',
-            projectId: project.id,
-            instruction: instruction ?? null,
-            ...(await deps.imageModel()),
-          }),
-      )
-      return c.json(ok({ jobIds: jobs.map((job) => job.id) }), 202)
+      const started = await startAll(deps, project.id, count, instruction ?? null)
+      return c.json(ok({ jobIds: [...started.jobIds], failed: [...started.failed] }), 202)
     })
     .openapi(listRoute, async (c) => {
       const { projectId } = c.req.valid('param')

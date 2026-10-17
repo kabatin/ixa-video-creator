@@ -82,12 +82,21 @@ describe('POST /projects/{projectId}/thumbnails', () => {
     const { thumbnailId } = ((await res.json()) as Ok<{ thumbnailId: string }>).data
     const [row] = f.thumbnails.snapshot()
     expect(row).toMatchObject({ id: thumbnailId, status: 'queued', spec: { background: { kind: 'timeline_frame', atSec: 1.5 } } })
-    expect(row?.fileName).toMatch(/^ぼくははると サムネ \d{4}-\d{2}-\d{2} \d{2}\.\d{2}\.\d{2}\.jpg$/)
+    expect(row?.fileName).toMatch(/^ぼくははると サムネ \d{4}-\d{2}-\d{2} \d{2}\.\d{2}\.\d{2} [0-9a-z]{6}\.jpg$/)
+    expect(row?.fileName.endsWith(`${thumbnailId.slice(-6).toLowerCase()}.jpg`)).toBe(true)
     expect(JSON.stringify(row)).not.toMatch(/https?:\/\//)
     expect(f.queue.enqueued).toHaveLength(1)
     expect(f.queue.enqueued[0]?.thumbnailId).toBe(thumbnailId)
     expect(f.queue.enqueued[0]?.timeline?.video1).toHaveLength(1)
     expect(f.queue.enqueued[0]?.timeline?.durationSec).toBe(4)
+  })
+
+  it('同じ秒に 2 枚頼んでも、名前は別になる（フォルダで 2 枚目が飛ばされない）', async () => {
+    const f = build()
+    await f.post(frameSpec(1))
+    await f.post(frameSpec(2))
+    const names = f.thumbnails.snapshot().map((row) => row.fileName)
+    expect(new Set(names).size).toBe(2)
   })
 
   it('画像の背景なら文書を載せない（worker が描く直前に URL を発行する）', async () => {
