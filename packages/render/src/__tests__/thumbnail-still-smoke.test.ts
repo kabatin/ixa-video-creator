@@ -44,6 +44,11 @@ describe.skipIf(!RUN)('サムネイルの renderStill（実 Remotion）', () => 
   afterAll(async () => {
     clearBundleCache()
     if (server !== null) await server.close()
+    // 目で見たいときは THUMBNAIL_SMOKE_KEEP=1 で残す（場所はログに出る）。
+    if (process.env.THUMBNAIL_SMOKE_KEEP === '1') {
+      process.stderr.write(`サムネイルの確かめの出力: ${workDir}\n`)
+      return
+    }
     if (workDir !== '') await rm(workDir, { recursive: true, force: true })
   })
 
