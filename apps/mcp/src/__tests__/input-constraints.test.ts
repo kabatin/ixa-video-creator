@@ -240,6 +240,8 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ cues: [{ startSec: 1, durationSec: 1, prompt: 'a'.repeat(501) }] }, 'cues.0.prompt'],
       [{ cues: [{ startSec: 1, durationSec: 1, prompt: '爆発音' }] }, 'cues.0.prompt'],
       [{ cues: [{ startSec: 1, durationSec: 1, prompt: 'hit', volume: 2.1 }] }, 'cues.0.volume'],
+      [{ cues: [{ startSec: 1, durationSec: 1, prompt: 'hit', negativePrompt: '音楽' }] }, 'cues.0.negativePrompt'],
+      [{ cues: [{ startSec: 3601, durationSec: 1, prompt: 'hit' }] }, 'cues.0.startSec'],
       [{ model: 'ace_step' }, 'model'],
       [{ count: 0 }, 'count'],
       [{ count: 5 }, 'count'],

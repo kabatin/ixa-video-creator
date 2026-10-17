@@ -26,7 +26,8 @@ export const GenerateSfxInput = z.object({
     .max(MAX_CUES)
     .describe(
       'Where and what: startSec (timeline seconds), durationSec 0.5–10, prompt (ENGLISH sound description, ' +
-        'e.g. "car engine revving, tires screeching"), volume 0–2 (default 0.8).',
+        'e.g. "car engine revving, tires screeching"), optional negativePrompt (English; used by moss_sfx, ' +
+        'ignored by stable_audio_sfx), volume 0–2 (default 0.8).',
     ),
   model: z
     .enum(['stable_audio_sfx', 'moss_sfx'])
@@ -42,7 +43,10 @@ export const GenerateSfxInput = z.object({
     .min(0)
     .max(SEED_MAX)
     .optional()
-    .describe('Variant i uses seed + 2i. To reproduce one clip exactly, send its seed with count 1.'),
+    .describe(
+      'Each cue gets a different seed (seed + 2×count×cueIndex); variant j of a cue uses that + 2j. To reproduce one ' +
+        'clip exactly, send its seedsUsed value with count 1 (see wait / list_sfx).',
+    ),
 })
 
 const WireSfxJobsStarted = z.object({ jobIds: z.array(z.string()) })
@@ -52,13 +56,17 @@ const WireSfxJob = z.object({
   error: z.string().nullable(),
   timelineClipId: z.string().nullable(),
   mediaAssetIds: z.array(z.string()),
+  seedsUsed: z.array(z.number().nullable()),
 })
 
 export const sfxJobCheck = async (api: ApiClient, jobId: string): Promise<CheckResult> => {
   const job = await api.get(`/sfx-jobs/${seg(jobId)}`, WireSfxJob)
   if (job.status === 'queued' || job.status === 'running') return { state: 'pending', detail: { status: job.status } }
   if (job.status === 'succeeded') {
-    return { state: 'succeeded', detail: { timelineClipId: job.timelineClipId, mediaAssetIds: job.mediaAssetIds } }
+    return {
+      state: 'succeeded',
+      detail: { timelineClipId: job.timelineClipId, mediaAssetIds: job.mediaAssetIds, seedsUsed: job.seedsUsed },
+    }
   }
   return { state: job.status, detail: { error: job.error } }
 }
@@ -118,10 +126,19 @@ const isSfxClip = (clip: WireSfxClip): boolean => clip.track === 'SFX' && clip.c
 
 export const listSfxTool = defineTool({
   name: 'list_sfx',
-  description: 'List the sound clips on the timeline SFX track (id, startSec, durationSec, volume), ordered by time. Use the ids with remove_sfx.',
+  description:
+    'List the sound clips on the timeline SFX track (id, startSec, durationSec, volume, and seedUsed when ixa made ' +
+    'it — send that seed with count 1 to get the same sound elsewhere), ordered by time. Use the ids with remove_sfx.',
   input: z.object({ projectId: Id }),
   handler: async ({ projectId }, { api }) => {
-    const clips = await api.get(`/projects/${seg(projectId)}/clips`, z.array(WireSfxClip))
+    const [clips, jobs] = await Promise.all([
+      api.get(`/projects/${seg(projectId)}/clips`, z.array(WireSfxClip)),
+      api.get(`/projects/${seg(projectId)}/sfx-jobs`, z.array(WireSfxJob)),
+    ])
+    // 置いたのは 1 本目（素材の並びの先頭）なので、その種がクリップの種。
+    const seedOfClip = new Map(
+      jobs.flatMap((job) => (job.timelineClipId === null ? [] : [[job.timelineClipId, job.seedsUsed[0] ?? null] as const])),
+    )
     const sounds = clips
       .filter(isSfxClip)
       .map((c) => ({
@@ -130,6 +147,7 @@ export const listSfxTool = defineTool({
         durationSec: round(c.durationSec),
         volume: c.content.volume ?? 1,
         mediaAssetId: c.content.mediaAssetId ?? null,
+        seedUsed: seedOfClip.get(c.id) ?? null,
       }))
       .sort((a, b) => a.startSec - b.startSec)
     return jsonResult({ sounds })

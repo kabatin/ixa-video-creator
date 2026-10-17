@@ -6,6 +6,8 @@ import {
   SfxCue,
   SfxJobId as SfxJobIdSchema,
   SfxJobStatus,
+  sfxCueSeed,
+  sfxSeedsUsedOf,
   suggestSfxCues,
   type SfxJob,
 } from '@ixa/domain'
@@ -23,6 +25,14 @@ import { errorContent, fail, ok, successResponse } from '../response.js'
 const RECENT_JOBS_LIMIT = 50
 /** 1 回に頼めるきっかけの数。予告編 1 本ぶんのきっかけが収まる数。 */
 export const SFX_CUES_PER_REQUEST_MAX = 30
+/**
+ * MOSS で 1 回に頼める本数（きっかけ × 本数）。MOSS は 1 本に数分かかり、多く頼むと後ろのジョブが
+ * GPU の順番を 2 時間待ちきれずに失敗する。先に断って、Stable Audio か分けて頼むよう言う。
+ */
+export const MOSS_CLIPS_PER_REQUEST_MAX = 4
+export const MOSS_TOO_MANY_MESSAGE =
+  `MOSS SFX v2 は 1 本に数分かかるため、1 回に頼めるのは きっかけ × 本数 で ${String(MOSS_CLIPS_PER_REQUEST_MAX)} 本までです。` +
+  'Stable Audio 3 で作るか、分けて頼んでください。'
 /** 種の上限（サーバの契約 0〜2³¹−1）。 */
 const SEED_MAX = 2 ** 31 - 1
 
@@ -47,6 +57,7 @@ const SfxCueResponse = z.object({
   startSec: z.number(),
   durationSec: z.number(),
   prompt: z.string(),
+  negativePrompt: z.string().optional(),
   volume: z.number(),
 })
 
@@ -58,6 +69,8 @@ const SfxJobResponse = z
     cue: SfxCueResponse,
     count: z.number().int(),
     mediaAssetIds: z.array(z.string()),
+    /** できた音 1 本ずつの種（素材と同じ順。分からなければ null）。本数 1 で送ると同じ音が返る。 */
+    seedsUsed: z.array(z.number().int().nullable()),
     timelineClipId: z.string().nullable(),
     error: z.string().nullable(),
     queuedAt: z.string().datetime(),
@@ -130,6 +143,7 @@ const toResponse = (job: SfxJob) => ({
   cue: { ...job.spec.cue },
   count: job.spec.count,
   mediaAssetIds: [...job.mediaAssetIds],
+  seedsUsed: [...sfxSeedsUsedOf(job)],
   timelineClipId: job.timelineClipId,
   error: job.error?.message ?? null,
   queuedAt: job.queuedAt.toISOString(),
@@ -144,18 +158,22 @@ export const sfxGenerateRoutes = (deps: SfxGenerationDeps & { readonly suggestio
       const input = c.req.valid('json')
       const choice = await deps.sfxModel(input.tool)
       if (choice.state === 'unavailable') return c.json(fail(choice.reason), 409)
-      // 1 つずつ入れる（1 つ入れ損ねたら、そこで止めて理由を返す。入れた分はそのまま作られる）。
-      const jobIds: string[] = []
-      for (const cue of input.cues) {
+      if (choice.tool === 'moss_sfx' && input.cues.length * input.count > MOSS_CLIPS_PER_REQUEST_MAX) {
+        return c.json(fail(MOSS_TOO_MANY_MESSAGE, { cues: [MOSS_TOO_MANY_MESSAGE] }), 422)
+      }
+      // 1 つずつ順に入れる（1 つ入れ損ねたら、そこで止めて理由を返す。入れた分はそのまま作られる）。
+      // 種はきっかけごとに変える（同じ説明・長さの 2 つのきっかけに、同じ音が鳴らないように）。
+      const jobIds = await input.cues.reduce<Promise<readonly string[]>>(async (started, cue, index) => {
+        const done = await started
         const job = await startSfxJob(deps, {
           projectId,
           tool: choice.tool,
           model: choice.model,
-          spec: { cue, count: input.count, seed: input.seed ?? null },
+          spec: { cue, count: input.count, seed: sfxCueSeed(input.seed ?? null, index, input.count) },
         })
-        jobIds.push(job.id)
-      }
-      return c.json(ok({ jobIds }), 202)
+        return [...done, job.id]
+      }, Promise.resolve([]))
+      return c.json(ok({ jobIds: [...jobIds] }), 202)
     })
     .openapi(jobRoute, async (c) => {
       const job = await deps.sfxJobs.findById(c.req.valid('param').id)

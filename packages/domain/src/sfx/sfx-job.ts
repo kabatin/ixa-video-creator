@@ -10,6 +10,11 @@ import { Seconds } from '../common/time.js'
  * 文章から作るモデルは映像を見ないので、鳴らす時刻は ixa の側（人かエージェント）が決める。
  */
 
+/**
+ * きっかけの時刻の上限（秒）。作品の尺はこれより短い（1 時間）。桁違いの値は置き間違いなので弾く。
+ * 作品の尺そのものとの照合は、尺が後から変わるのでしない。
+ */
+export const SFX_START_MAX_SEC = 60 * 60
 /** 効果音の長さ（秒）。sfx-api の契約と同じ。 */
 export const SFX_DURATION_MIN_SEC = 0.5
 export const SFX_DURATION_MAX_SEC = 10
@@ -36,15 +41,24 @@ export const SfxPrompt = z
   .max(SFX_PROMPT_MAX_LENGTH, `効果音の説明は ${String(SFX_PROMPT_MAX_LENGTH)} 文字までです`)
   .refine(isEnglishText, '効果音の説明は英語で書いてください（AI は英語しか読みません）')
 
+/** 入れたくない音（英語）。MOSS が使う。Stable Audio は受けるが既定では使わない（ADR-0052 §1）。 */
+export const SfxNegativePrompt = z
+  .string()
+  .trim()
+  .min(1, '入れたくない音の説明が空です（要らなければ省いてください）')
+  .max(SFX_PROMPT_MAX_LENGTH, `入れたくない音の説明は ${String(SFX_PROMPT_MAX_LENGTH)} 文字までです`)
+  .refine(isEnglishText, '入れたくない音の説明は英語で書いてください（AI は英語しか読みません）')
+
 /** きっかけ。どこで（時刻）・どれだけ（長さ）・何の音を（説明）・どの大きさで（音量）。 */
 export const SfxCue = z.object({
-  startSec: Seconds,
+  startSec: Seconds.max(SFX_START_MAX_SEC, `効果音の時刻は ${String(SFX_START_MAX_SEC)} 秒までです`),
   durationSec: z
     .number()
     .finite()
     .min(SFX_DURATION_MIN_SEC, `効果音の長さは ${String(SFX_DURATION_MIN_SEC)}〜${String(SFX_DURATION_MAX_SEC)} 秒です`)
     .max(SFX_DURATION_MAX_SEC, `効果音の長さは ${String(SFX_DURATION_MIN_SEC)}〜${String(SFX_DURATION_MAX_SEC)} 秒です`),
   prompt: SfxPrompt,
+  negativePrompt: SfxNegativePrompt.optional(),
   volume: z.number().finite().min(0).max(SFX_VOLUME_MAX).default(SFX_DEFAULT_VOLUME),
 })
 export type SfxCue = z.infer<typeof SfxCue>
@@ -88,6 +102,30 @@ export const SfxJob = z.object({
   finishedAt: z.date().nullable(),
 })
 export type SfxJob = z.infer<typeof SfxJob>
+
+/**
+ * 1 回の頼みの i 番目のきっかけの種。**きっかけごとに違う種にする**（同じ種・説明・長さだと Stable Audio は
+ * ビット一致の同じ音を返すので、2 つのフラッシュに同じ音が鳴る）。サーバは 1 つのきっかけの j 本目に
+ * seed + 2j を使うので、きっかけの間は 2 × 本数 ずつ空けて重ねない。種を指定しなければ null（毎回違う音）。
+ */
+export const sfxCueSeed = (seed: number | null, cueIndex: number, count: number): number | null =>
+  seed === null ? null : seed + cueIndex * 2 * count
+
+/** できた音の種を記録（`providerRecord`）に入れる鍵。素材（`mediaAssetIds`）と同じ順。 */
+export const SFX_SEEDS_USED_KEY = 'seedsUsed'
+
+const SeedsUsed = z.array(z.number().int().nonnegative().nullable())
+
+/**
+ * できた音 1 本ずつの種（素材と同じ順）。この種を本数 1 で送ると同じ音が返る。
+ * 記録に無い・形が違う・素材と数が合わないときは、分からないとして null を並べる（黙って別の種を出さない）。
+ */
+export const sfxSeedsUsedOf = (job: Pick<SfxJob, 'providerRecord' | 'mediaAssetIds'>): readonly (number | null)[] => {
+  const parsed = SeedsUsed.safeParse(job.providerRecord?.[SFX_SEEDS_USED_KEY])
+  return parsed.success && parsed.data.length === job.mediaAssetIds.length
+    ? parsed.data
+    : job.mediaAssetIds.map(() => null)
+}
 
 /** 終わったジョブか（もう状態が変わらない）。 */
 export const isSfxJobFinished = (status: SfxJobStatus): boolean =>

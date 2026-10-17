@@ -4,7 +4,7 @@ import { createInMemorySfxJobRepository } from '@ixa/generation/testing'
 import { describe, expect, it } from 'vitest'
 import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
-import { SFX_CUES_PER_REQUEST_MAX, sfxGenerateRoutes } from '../routes/sfx-generate.js'
+import { MOSS_TOO_MANY_MESSAGE, SFX_CUES_PER_REQUEST_MAX, sfxGenerateRoutes } from '../routes/sfx-generate.js'
 import type { SfxGenerationDeps } from '../sfx/deps.js'
 import { chooseSfxModel, NO_SFX_AI_MESSAGE, type SfxModelChoice } from '../sfx/sfx-model.js'
 import { aProject } from './fixtures.js'
@@ -101,12 +101,36 @@ describe('POST /projects/{projectId}/sfx/generate', () => {
     ])
   })
 
-  it('AI を指定すればそれで作る。本数と種をそのまま記す', async () => {
+  it('AI を指定すればそれで作る。本数と種・入れたくない音をそのまま記す', async () => {
     const { project, asked, sfxJobs, send } = setup()
-    const response = await send('POST', `/projects/${project.id}/sfx/generate`, { cues: [cue()], tool: 'moss_sfx', count: 4, seed: 9 })
+    const response = await send('POST', `/projects/${project.id}/sfx/generate`, {
+      cues: [cue({ negativePrompt: 'music, voice' })],
+      tool: 'moss_sfx',
+      count: 4,
+      seed: 9,
+    })
     expect(response.status).toBe(202)
     expect(asked).toEqual(['moss_sfx'])
-    expect(sfxJobs.snapshot()[0]).toMatchObject({ tool: 'moss_sfx', spec: { count: 4, seed: 9 } })
+    expect(sfxJobs.snapshot()[0]).toMatchObject({ tool: 'moss_sfx', spec: { count: 4, seed: 9, cue: { negativePrompt: 'music, voice' } } })
+  })
+
+  /** 同じ説明・長さの 2 つのきっかけに同じ種を渡すと、Stable Audio はビット一致の同じ音を返す。 */
+  it('種を 1 つ指定したら、きっかけごとに本数ぶん空けた別の種にする', async () => {
+    const { project, sfxJobs, send } = setup()
+    await send('POST', `/projects/${project.id}/sfx/generate`, { cues: [cue(), cue({ startSec: 8 }), cue({ startSec: 9 })], count: 2, seed: 100 })
+    expect(sfxJobs.snapshot().map((job) => job.spec.seed)).toEqual([100, 104, 108])
+  })
+
+  it('MOSS は きっかけ × 本数 が 4 本を超えたら頼まず、理由を言う', async () => {
+    const { project, enqueued, send } = setup()
+    const response = await send('POST', `/projects/${project.id}/sfx/generate`, { cues: [cue(), cue(), cue()], count: 2, tool: 'moss_sfx' })
+    expect(response.status).toBe(422)
+    expect((await json<Err>(response)).error).toBe(MOSS_TOO_MANY_MESSAGE)
+    expect(enqueued).toEqual([])
+    const fine = await send('POST', `/projects/${project.id}/sfx/generate`, { cues: [cue(), cue()], count: 2, tool: 'moss_sfx' })
+    expect(fine.status).toBe(202)
+    // Stable Audio は速いので多く頼める。
+    expect((await send('POST', `/projects/${project.id}/sfx/generate`, { cues: [cue(), cue(), cue()], count: 2 })).status).toBe(202)
   })
 
   it.each([
@@ -118,6 +142,8 @@ describe('POST /projects/{projectId}/sfx/generate', () => {
     ['長さが 10.5 秒', { cues: [cue({ durationSec: 10.5 })] }, 'cues.0.durationSec'],
     ['音量が 2 を超える', { cues: [cue({ volume: 2.5 })] }, 'cues.0.volume'],
     ['時刻が負', { cues: [cue({ startSec: -1 })] }, 'cues.0.startSec'],
+    ['時刻が 1 時間を超える', { cues: [cue({ startSec: 3601 })] }, 'cues.0.startSec'],
+    ['入れたくない音が日本語', { cues: [cue({ negativePrompt: '音楽' })] }, 'cues.0.negativePrompt'],
     ['本数が 5', { cues: [cue()], count: 5 }, 'count'],
     ['種が負', { cues: [cue()], seed: -1 }, 'seed'],
     ['曲の AI を指定', { cues: [cue()], tool: 'ace_step' }, 'tool'],
@@ -173,6 +199,7 @@ describe('ジョブの状態・記録・取り消し', () => {
       cue: { startSec: 3.75, durationSec: 1, prompt: 'cinematic impact hit', volume: 0.8 },
       count: 2,
       mediaAssetIds: [],
+      seedsUsed: [],
       timelineClipId: null,
       error: null,
     })
@@ -189,6 +216,22 @@ describe('ジョブの状態・記録・取り消し', () => {
     const cancelled = await send('POST', `/projects/${project.id}/sfx-jobs/cancel`)
     expect((await json<Ok<{ cancelledJobIds: string[] }>>(cancelled)).data.cancelledJobIds).toHaveLength(2)
     expect(events.published().filter((event) => event.type === 'sfx_job.status' && event.status === 'cancelled')).toHaveLength(2)
+  })
+})
+
+describe('できた音の種', () => {
+  it('成功したジョブは、素材と同じ順で 1 本ずつの種を返す', async () => {
+    const { project, sfxJobs, send } = setup()
+    const created = await json<Ok<{ jobIds: string[] }>>(await send('POST', `/projects/${project.id}/sfx/generate`, { cues: [cue()], count: 2 }))
+    const id = created.data.jobIds[0] as SfxJobId
+    await sfxJobs.markRunning(id)
+    await sfxJobs.markSucceeded(id, {
+      mediaAssetIds: ['01ARZ3NDEKTSV4RRFFQ69G5FA1', '01ARZ3NDEKTSV4RRFFQ69G5FA2'] as never[],
+      timelineClipId: null,
+      providerRecord: { seedsUsed: [11, 13] },
+    })
+    const job = await json<Ok<{ seedsUsed: (number | null)[] }>>(await send('GET', `/sfx-jobs/${id}`))
+    expect(job.data.seedsUsed).toEqual([11, 13])
   })
 })
 

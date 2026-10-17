@@ -43,6 +43,26 @@ describe('checkSfxApiHealth', () => {
     expect(old.state).toBe('up')
   })
 
+  it('叩くのは 1 回だけ', async () => {
+    const fetchMock = serve(health(workflows))
+    await checkSfxApiHealth({ baseUrl: BASE_URL, token: null, workflowId: 'stable-audio-3-sfx', fetch: fetchMock })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('workflow の一覧の形が違えば、全部使えるようには見せない', async () => {
+    const broken = health({ 'stable-audio-3-sfx': { available: 'yes' } })
+    const result = await checkSfxApiHealth({ baseUrl: BASE_URL, token: null, workflowId: 'stable-audio-3-sfx', fetch: serve(broken) })
+    expect(result.state).toBe('down')
+  })
+
+  it('合言葉が合わなければそう言う', async () => {
+    const denied = vi.fn<LocalServerFetch>(() => Promise.resolve(new Response('{}', { status: 401 })))
+    expect(await checkSfxApiHealth({ baseUrl: BASE_URL, token: 'x'.repeat(40), workflowId: 'moss-sfx-v2', fetch: denied })).toEqual({
+      state: 'down',
+      reason: '合言葉（SFX_API_TOKEN）が合いません',
+    })
+  })
+
   it('サーバが止まっていれば起こし方を言う', async () => {
     const refused = vi.fn<LocalServerFetch>(() => Promise.reject(Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } })))
     const result = await checkSfxApiHealth({ baseUrl: BASE_URL, token: null, workflowId: 'stable-audio-3-sfx', fetch: refused })

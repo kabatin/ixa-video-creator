@@ -9,6 +9,8 @@ import {
   SfxJobSpec,
   isSfxJobFinished,
   sfxClipPlacement,
+  sfxCueSeed,
+  sfxSeedsUsedOf,
   type SfxCueInput,
 } from '../sfx/sfx-job.js'
 
@@ -43,10 +45,26 @@ describe('SfxCue', () => {
     ['時刻が負', { startSec: -0.1 }, null],
     ['音量が負', { volume: -0.1 }, null],
     ['音量が 2 を超える', { volume: 2.01 }, null],
+    ['時刻が 1 時間を超える', { startSec: 3600.5 }, /3600 秒まで/],
+    ['入れたくない音が空', { negativePrompt: '  ' }, /空です/],
+    ['入れたくない音が日本語', { negativePrompt: '音楽' }, /英語で書いて/],
+    ['入れたくない音が 500 字を超える', { negativePrompt: 'a'.repeat(501) }, /500 文字まで/],
   ] as const)('%s は受けない', (_label, overrides, message) => {
     const parsed = SfxCue.safeParse(aCue(overrides))
     expect(parsed.success).toBe(false)
     if (message !== null && !parsed.success) expect(parsed.error.issues[0]?.message).toMatch(message)
+  })
+})
+
+describe('sfxCueSeed', () => {
+  it('きっかけごとに違う種にし、本数ぶんの種（seed + 2j）と重ねない', () => {
+    expect([0, 1, 2].map((i) => sfxCueSeed(7, i, 2))).toEqual([7, 11, 15])
+    expect(sfxCueSeed(null, 3, 2)).toBeNull()
+  })
+
+  it('入れたくない音（英語）を持てる', () => {
+    expect(SfxCue.parse(aCue({ negativePrompt: 'music, voice' })).negativePrompt).toBe('music, voice')
+    expect(SfxCue.parse(aCue({ startSec: 3600 })).startSec).toBe(3600)
   })
 })
 
@@ -78,6 +96,18 @@ describe('sfxClipPlacement', () => {
     expect(sfxClipPlacement(cue, 0).durationSec).toBe(1)
     expect(sfxClipPlacement(cue, Number.NaN).durationSec).toBe(1)
     expect(sfxClipPlacement(cue, 0.06).fadeOutSec).toBeCloseTo(0.03)
+  })
+})
+
+describe('sfxSeedsUsedOf', () => {
+  const ids = ['a', 'b'] as never[]
+  it('記録の種を素材と同じ順で返す', () => {
+    expect(sfxSeedsUsedOf({ providerRecord: { seedsUsed: [7, 9] }, mediaAssetIds: ids })).toEqual([7, 9])
+  })
+  it('無い・形が違う・数が合わないときは null を並べる', () => {
+    expect(sfxSeedsUsedOf({ providerRecord: null, mediaAssetIds: ids })).toEqual([null, null])
+    expect(sfxSeedsUsedOf({ providerRecord: { seedsUsed: ['7', 9] }, mediaAssetIds: ids })).toEqual([null, null])
+    expect(sfxSeedsUsedOf({ providerRecord: { seedsUsed: [7] }, mediaAssetIds: ids })).toEqual([null, null])
   })
 })
 

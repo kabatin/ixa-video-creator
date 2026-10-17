@@ -29,7 +29,9 @@ export type SfxJobResult = { readonly state: 'missing' | 'skipped' | 'waiting' |
 export const SFX_GPU_WAIT_DEADLINE_MS = 2 * 60 * 60 * 1000
 
 export const SFX_GPU_TIMEOUT_MESSAGE =
-  'この Mac の GPU の順番が 2 時間たっても回ってこなかったため、効果音を作るのをやめました。動画が空いてからもう一度作ってください。'
+  'この Mac の GPU の順番が 2 時間たっても回ってこなかったため、効果音を作るのをやめました' +
+  '（動画・絵・曲・前の効果音が使っていました。MOSS SFX v2 は 1 本に数分かかります）。' +
+  '空いてからもう一度作るか、Stable Audio 3 で作ってください。'
 const GPU_UNAVAILABLE_MESSAGE = 'この Mac の GPU の順番を確かめられませんでした。少し待ってからもう一度作ってください。'
 const BUSY_TIMEOUT_MESSAGE = '効果音を作る先が長く混んでいたため、作るのをやめました。少し待ってからもう一度作ってください。'
 

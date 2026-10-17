@@ -22,7 +22,7 @@ describe('generate_sfx', () => {
           projectId: PROJECT,
           cues: [
             { startSec: 1, durationSec: 1, prompt: 'cinematic impact hit' },
-            { startSec: 4, durationSec: 2, prompt: 'car engine revving', volume: 1.2 },
+            { startSec: 4, durationSec: 2, prompt: 'car engine revving', negativePrompt: 'music', volume: 1.2 },
           ],
           model: 'moss_sfx',
           count: 2,
@@ -33,7 +33,7 @@ describe('generate_sfx', () => {
     expect(fake.callsTo('POST', `/projects/${PROJECT}/sfx/generate`)[0]?.body).toEqual({
       cues: [
         { startSec: 1, durationSec: 1, prompt: 'cinematic impact hit', volume: 0.8 },
-        { startSec: 4, durationSec: 2, prompt: 'car engine revving', volume: 1.2 },
+        { startSec: 4, durationSec: 2, prompt: 'car engine revving', negativePrompt: 'music', volume: 1.2 },
       ],
       count: 2,
       tool: 'moss_sfx',
@@ -70,10 +70,20 @@ describe('list_sfx / remove_sfx', () => {
     { id: CLIP_A, track: 'SFX', startSec: 1, durationSec: 0.5, content: { type: 'media', mediaAssetId: ulid('MA1'), volume: 1 } },
   ]
 
-  it('SFX の段の音だけを時刻順に返す', async () => {
-    const fake = createFakeApi([{ method: 'GET', path: `/projects/${PROJECT}/clips`, data: clips }])
-    const result = jsonOf(await listSfxTool.run({ projectId: PROJECT }, depsFor(fake))) as { sounds: { id: string }[] }
-    expect(result.sounds.map((s) => s.id)).toEqual([CLIP_A, CLIP_B])
+  it('SFX の段の音だけを時刻順に返し、ixa が作った音には種を添える', async () => {
+    const fake = createFakeApi([
+      { method: 'GET', path: `/projects/${PROJECT}/clips`, data: clips },
+      {
+        method: 'GET',
+        path: `/projects/${PROJECT}/sfx-jobs`,
+        data: [{ status: 'succeeded', error: null, timelineClipId: CLIP_B, mediaAssetIds: [ulid('MA2')], seedsUsed: [42] }],
+      },
+    ])
+    const result = jsonOf(await listSfxTool.run({ projectId: PROJECT }, depsFor(fake))) as { sounds: { id: string; seedUsed: number | null }[] }
+    expect(result.sounds.map((s) => [s.id, s.seedUsed])).toEqual([
+      [CLIP_A, null],
+      [CLIP_B, 42],
+    ])
   })
 
   it('効果音だけを外し、ほかのクリップは理由つきで断る', async () => {
@@ -98,11 +108,11 @@ describe('wait（kind: sfx）', () => {
         method: 'GET',
         path: `/sfx-jobs/${JOB_A}`,
         sequence: [
-          { data: { status: 'running', error: null, timelineClipId: null, mediaAssetIds: [] } },
-          { data: { status: 'succeeded', error: null, timelineClipId: CLIP_A, mediaAssetIds: [ulid('MA1')] } },
+          { data: { status: 'running', error: null, timelineClipId: null, mediaAssetIds: [], seedsUsed: [] } },
+          { data: { status: 'succeeded', error: null, timelineClipId: CLIP_A, mediaAssetIds: [ulid('MA1')], seedsUsed: [7] } },
         ],
       },
-      { method: 'GET', path: `/sfx-jobs/${JOB_B}`, data: { status: 'failed', error: '効果音を作れませんでした', timelineClipId: null, mediaAssetIds: [] } },
+      { method: 'GET', path: `/sfx-jobs/${JOB_B}`, data: { status: 'failed', error: '効果音を作れませんでした', timelineClipId: null, mediaAssetIds: [], seedsUsed: [] } },
     ])
     const outcome = await waitWith(depsFor(fake), {
       jobs: [
@@ -113,7 +123,7 @@ describe('wait（kind: sfx）', () => {
     })
     expect(outcome.timedOut).toBe(false)
     expect(outcome.results).toMatchObject([
-      { kind: 'sfx', state: 'succeeded', timelineClipId: CLIP_A },
+      { kind: 'sfx', state: 'succeeded', timelineClipId: CLIP_A, seedsUsed: [7] },
       { kind: 'sfx', state: 'failed', error: '効果音を作れませんでした' },
     ])
   })

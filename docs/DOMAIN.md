@@ -762,9 +762,10 @@ type TimelineDocument = {
 
 ```ts
 type SfxCue = {                     // きっかけ。鳴らす時刻は ixa が決める（モデルは映像を見ない）
-  startSec: Seconds
+  startSec: Seconds                 // 0〜3600
   durationSec: number               // 0.5〜10（sfx-api の契約と同じ）
   prompt: string                    // 英語 1〜500 字（モデルは英語しか読まない）
+  negativePrompt?: string           // 入れたくない音（英語）。MOSS が使う
   volume: number                    // 0〜2。既定 0.8
 }
 
@@ -783,6 +784,9 @@ type SfxJob = {
 
 - できた音は 1 本ずつ MediaAsset（`origin: generated_sfx`、`kind: audio`）になる
 - **1 本目だけ**を SFX の段のクリップにする（`media`・`inSec 0`・`outSec` = 実際の長さ・`volume` = きっかけの音量・短いフェードアウト）。残りは差し替えの候補
+- 置いたクリップは置いた直後にジョブへ記し、やり直しでは**記したクリップだけ**を「置いた」とみなす（同じ中身の音でも、きっかけごとに置く）
+- 1 回の頼みで種を 1 つ指定したら、i 番目のきっかけは seed + 2 × 本数 × i（同じ説明・長さのきっかけに同じ音を鳴らさない）。できた音の種は `providerRecord.seedsUsed`（素材と同じ順）
+- MOSS は 1 回に きっかけ × 本数 で 4 本まで（1 本に数分かかり、多いと後ろが GPU の順番を待ちきれない）
 - 案を出す純粋な関数 `suggestSfxCues` が、エフェクト（フラッシュ・寄りのパンチ・タイトルカード・スピード線・揺れ）と
   ウィップパンの境目から案を出す。近い時刻の同じ種類の音は 1 つにまとめる
 - 曲の下げ（ducking）は声だけに効き、効果音では下げない

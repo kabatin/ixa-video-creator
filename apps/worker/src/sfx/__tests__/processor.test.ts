@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import {
   SfxCue,
   TimelineClip,
+  sfxSeedsUsedOf,
   TimelineClipId,
   newId,
   type CreateTimelineClipInput,
@@ -193,6 +194,53 @@ describe('processSfxJob', () => {
     expect(s.events.published().at(-1)).toMatchObject({ timelineClipId: clips[0]?.id })
     expect(provider.calls.release).toBe(1)
     expect(await s.lease.acquire('video-job', Date.now())).toEqual({ state: 'acquired' })
+  })
+
+  /** Stable Audio は同じ種・説明・長さならビット一致。中身で 1 つの素材にまとまっても、きっかけごとに置く。 */
+  it('同じ中身の音を別のきっかけで作っても、それぞれの時刻に置く', async () => {
+    const provider = fakeProvider([await succeeded(1)])
+    const s = await setup(provider)
+    const spec = (startSec: number): SfxJobSpec => ({ ...SPEC, count: 1, cue: { ...SPEC.cue, startSec } })
+    const first = await s.sfxJobs.create({ projectId: project.id, tool: 'stable_audio_sfx', model: stableAudioSfxModel.id, spec: spec(1) })
+    const second = await s.sfxJobs.create({ projectId: project.id, tool: 'stable_audio_sfx', model: stableAudioSfxModel.id, spec: spec(6) })
+
+    expect(await processSfxJob(s.deps, { sfxJobId: first.id })).toEqual({ state: 'succeeded' })
+    expect(await processSfxJob(s.deps, { sfxJobId: second.id })).toEqual({ state: 'succeeded' })
+
+    expect(s.mediaAssets.snapshot()).toHaveLength(1)
+    expect(s.clips.snapshot().map((clip) => clip.startSec)).toEqual([1, 6])
+    const jobs = s.sfxJobs.snapshot()
+    expect(jobs.find((j) => j.id === first.id)?.timelineClipId).toBe(s.clips.snapshot()[0]?.id)
+    expect(jobs.find((j) => j.id === second.id)?.timelineClipId).toBe(s.clips.snapshot()[1]?.id)
+  })
+
+  it('入れたくない音を送り、できた音の種を素材と同じ順で記す', async () => {
+    const provider = fakeProvider([await succeeded(2)])
+    const s = await setup(provider)
+    const job = await s.sfxJobs.create({
+      projectId: project.id,
+      tool: 'moss_sfx',
+      model: mossSfxModel.id,
+      spec: { ...SPEC, cue: SfxCue.parse({ ...SPEC.cue, negativePrompt: 'music, voice' }) },
+    })
+    await processSfxJob(s.deps, { sfxJobId: job.id })
+    expect(provider.calls.submit).toMatchObject([{ negativePrompt: 'music, voice' }])
+    const done = s.sfxJobs.snapshot().find((j) => j.id === job.id)
+    expect(sfxSeedsUsedOf(done ?? { providerRecord: null, mediaAssetIds: [] })).toEqual([7, 9])
+  })
+
+  it('キューが打ち切って失敗にした行を、遅れて終わっても成功に戻さない', async () => {
+    const provider = fakeProvider([await succeeded(2)])
+    const s = await setup(provider)
+    const failOnPoll: SfxProvider = {
+      ...provider,
+      poll: async (handle) => {
+        await failInterruptedSfxJob(s.deps, { sfxJobId: s.job.id }, 'stalled')
+        return provider.poll(handle)
+      },
+    }
+    await processSfxJob({ ...s.deps, adapters: [{ provider: failOnPoll, model: stableAudioSfxModel }] }, { sfxJobId: s.job.id })
+    expect(s.sfxJobs.snapshot()[0]?.status).toBe('failed')
   })
 
   it('ジョブに記されたモデルで作る（MOSS は moss-sfx-v2）', async () => {

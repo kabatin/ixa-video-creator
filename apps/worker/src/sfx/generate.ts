@@ -1,4 +1,4 @@
-import { sfxClipPlacement, type MediaAssetId, type Project, type SfxJob, type TimelineClipId } from '@ixa/domain'
+import { SFX_SEEDS_USED_KEY, sfxClipPlacement, type MediaAssetId, type Project, type SfxJob, type TimelineClipId } from '@ixa/domain'
 import type { ProviderJobHandle, SfxJobStatusFromProvider } from '@ixa/provider-core'
 import { SfxJobCancelled, SfxJobFailure, type SfxAdapter, type SfxProcessorDeps } from './deps.js'
 import { publishSfxJobStatus } from './events.js'
@@ -16,8 +16,9 @@ const throwIfCancelled = async (deps: SfxProcessorDeps, job: SfxJob): Promise<vo
 /**
  * 1 本目を効果音の段（SFX）に置く。きっかけの時刻・音量で、**実際の音の長さ**ぶん、短いフェードアウトを付けて。
  *
- * **同じ素材のクリップが効果音の段に既にあれば、置かずにそれを使う。** 置いた後で worker が落ちると、
- * 同じジョブがやり直される（冪等キーで同じ音が返り、素材は中身で 1 つにまとまる）。ここで見ないと同じ音が 2 つ鳴る。
+ * **このジョブが前に置いたクリップ（行に記したもの）だけを「もう置いた」とみなす。** 置いた後で worker が落ちると
+ * 同じジョブがやり直されるので、置いた直後にクリップを行に記す。同じ素材のクリップを探して使い回すと、
+ * 同じ音（同じ種・説明・長さの Stable Audio はビット一致）の別のきっかけが置かれず、成功なのに鳴らない。
  */
 const placeFirst = async (
   deps: SfxProcessorDeps,
@@ -26,11 +27,11 @@ const placeFirst = async (
   mediaAssetId: MediaAssetId,
   actualDurationSec: number,
 ): Promise<TimelineClipId> => {
-  const existing = await deps.timelineClips.findByProject(project.id)
-  const already = existing.find(
-    (clip) => clip.track === 'SFX' && clip.content.type === 'media' && clip.content.mediaAssetId === mediaAssetId,
-  )
-  if (already !== undefined) return already.id
+  const recorded = (await deps.sfxJobs.findById(job.id))?.timelineClipId ?? null
+  if (recorded !== null) {
+    const existing = await deps.timelineClips.findByProject(project.id)
+    if (existing.some((clip) => clip.id === recorded)) return recorded
+  }
   const placement = sfxClipPlacement(job.spec.cue, actualDurationSec)
   const clip = await deps.timelineClips.create({
     projectId: project.id,
@@ -48,6 +49,7 @@ const placeFirst = async (
       fadeOutSec: placement.fadeOutSec,
     },
   })
+  await deps.sfxJobs.recordClip(job.id, clip.id)
   return clip.id
 }
 
@@ -59,6 +61,14 @@ const recordOf = (handle: ProviderJobHandle, raw: Record<string, unknown> = {}):
   ...raw,
 })
 
+/**
+ * 1 本ずつの種（素材と同じ順）。API が `seedsUsed` として返す。この種を本数 1 で送ると同じ音が返る。
+ * 記録（providerRecord）に入れるのは、列を足さずに済むため（domain の `sfxSeedsUsedOf` が読む）。
+ */
+const seedsOf = (result: Succeeded): Record<string, unknown> => ({
+  [SFX_SEEDS_USED_KEY]: result.outputs.map((output) => output.seedUsed),
+})
+
 /** できた音を素材にし、1 本目を置く。素材は番号順。 */
 const register = async (
   deps: SfxProcessorDeps,
@@ -66,10 +76,11 @@ const register = async (
   job: SfxJob,
   result: Succeeded,
 ): Promise<{ readonly mediaAssetIds: readonly MediaAssetId[]; readonly timelineClipId: TimelineClipId }> => {
-  const mediaAssetIds: MediaAssetId[] = []
-  for (const output of result.outputs) {
-    mediaAssetIds.push(await ingestSfx(deps, project, output.path, job.id))
-  }
+  // 1 本ずつ順に取り込む（同じ中身の音は 1 つの素材にまとまる。並べると同じ中身を 2 度書きに行く）。
+  const mediaAssetIds = await result.outputs.reduce<Promise<readonly MediaAssetId[]>>(
+    async (done, output) => [...(await done), await ingestSfx(deps, project, output.path, job.id)],
+    Promise.resolve([]),
+  )
   const [firstId] = mediaAssetIds
   const [firstOutput] = result.outputs
   // 本数は呼ぶ側で確かめてある（1 本以上）。
@@ -118,7 +129,7 @@ export const generateSfx = async (deps: SfxProcessorDeps, adapter: SfxAdapter, j
   const handle = await adapter.provider.submit({
     model: adapter.model,
     prompt: spec.cue.prompt,
-    negativePrompt: null,
+    negativePrompt: spec.cue.negativePrompt ?? null,
     durationSec: spec.cue.durationSec,
     seed: spec.seed,
     count: spec.count,
@@ -147,7 +158,7 @@ export const generateSfx = async (deps: SfxProcessorDeps, adapter: SfxAdapter, j
     }
     await throwIfCancelled(deps, job)
     const outcome = await register(deps, project, job, result)
-    await settle(deps, job, outcome, recordOf(handle, result.raw))
+    await settle(deps, job, outcome, { ...recordOf(handle, result.raw), ...seedsOf(result) })
   } finally {
     await adapter.provider.release?.(handle)
   }

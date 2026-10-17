@@ -4,15 +4,16 @@ import { SfxJob, SfxJobId, newId } from '@ixa/domain'
 /** 効果音を作るジョブ（ADR-0052）の偽物。止めた行は上書きしない（実物と同じ）。 */
 export const createInMemorySfxJobRepository = (): SfxJobRepository & { readonly snapshot: () => readonly SfxJob[] } => {
   let store: readonly SfxJob[] = []
-  const replace = (id: string, patch: Partial<SfxJob>): Promise<SfxJob> => {
+  const active = (job: SfxJob) => job.status === 'queued' || job.status === 'running'
+  const replace = (id: string, patch: Partial<SfxJob>, onlyActive = false): Promise<SfxJob> => {
     const current = store.find((job) => job.id === id)
     if (current === undefined) return Promise.reject(new DbNotFoundError('sfx_jobs', id))
     if (current.status === 'cancelled') return Promise.resolve(current)
+    if (onlyActive && !active(current)) return Promise.resolve(current)
     const updated = SfxJob.parse({ ...current, ...patch })
     store = store.map((job) => (job.id === id ? updated : job))
     return Promise.resolve(updated)
   }
-  const active = (job: SfxJob) => job.status === 'queued' || job.status === 'running'
   return {
     snapshot: () => store,
     create: (input) => {
@@ -46,14 +47,19 @@ export const createInMemorySfxJobRepository = (): SfxJobRepository & { readonly 
     },
     markRunning: (id) => replace(id, { status: 'running', startedAt: new Date() }),
     recordProvider: (id, providerRecord) => replace(id, { providerRecord }),
+    recordClip: (id, timelineClipId) => replace(id, { timelineClipId }),
     markSucceeded: (id, outcome) =>
-      replace(id, {
-        status: 'succeeded',
-        finishedAt: new Date(),
-        mediaAssetIds: [...outcome.mediaAssetIds],
-        timelineClipId: outcome.timelineClipId,
-        providerRecord: outcome.providerRecord,
-      }),
+      replace(
+        id,
+        {
+          status: 'succeeded',
+          finishedAt: new Date(),
+          mediaAssetIds: [...outcome.mediaAssetIds],
+          timelineClipId: outcome.timelineClipId,
+          providerRecord: outcome.providerRecord,
+        },
+        true,
+      ),
     markFailed: (id, error, providerRecord) =>
       replace(id, { status: 'failed', finishedAt: new Date(), error, ...(providerRecord === null ? {} : { providerRecord }) }),
   }
