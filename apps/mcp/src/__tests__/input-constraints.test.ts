@@ -234,6 +234,19 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ renderJobId: 'x' }, 'renderJobId'],
     ],
   },
+  export_thumbnail: {
+    base: { projectId: P, background: { atSec: 1 }, title: '新曲' },
+    cases: [
+      [{ waitSec: 901 }, 'waitSec'],
+      [{ candidateIndex: -1 }, 'candidateIndex'],
+      [{ layout: 'right' }, 'layout'],
+      [{ font: 'comic' }, 'font'],
+      [{ background: { mediaAssetId: 'x' } }, 'background.mediaAssetId'],
+      [{ background: { atSec: -1 } }, 'background.atSec'],
+      [{ background: { keyArt: { instruction: long(501) } } }, 'background.keyArt.instruction'],
+      [{ thumbnailId: 'x' }, 'thumbnailId'],
+    ],
+  },
 }
 
 describe('入力の制約', () => {

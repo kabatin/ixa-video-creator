@@ -3,6 +3,7 @@ import { createCharacterTool, createLocationTool } from './tools/cast.js'
 import { editShotsTool } from './tools/edit-shots.js'
 import { addEffectsTool, listEffectsTool, removeEffectsTool } from './tools/effects.js'
 import { exportTool } from './tools/export.js'
+import { exportThumbnailTool } from './tools/export-thumbnail.js'
 import { generateMusicTool } from './tools/music-generation.js'
 import { musicOverviewTool, setMasterTrackTool, uploadMusicTool } from './tools/music.js'
 import { planShotsTool } from './tools/plan-shots.js'
@@ -40,6 +41,7 @@ export const TOOLS: readonly ToolDef[] = [
   listEffectsTool,
   removeEffectsTool,
   exportTool,
+  exportThumbnailTool,
 ]
 
 export const SERVER_INFO = { name: 'ixa', version: '0.6.0' } as const

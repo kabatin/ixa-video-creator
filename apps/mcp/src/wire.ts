@@ -180,6 +180,25 @@ export const WireRenderJob = z.object({
 })
 export type WireRenderJob = z.infer<typeof WireRenderJob>
 
+/** サムネイルの書き出し（ADR-0051）。仕様は読まない（送ったものと同じ）。 */
+export const WireThumbnail = z.object({
+  id: z.string(),
+  status: z.enum(['queued', 'rendering', 'done', 'failed']),
+  outputAssetId: nullableString,
+  fileName: z.string(),
+  error: nullableString,
+})
+export type WireThumbnail = z.infer<typeof WireThumbnail>
+
+/** サムネイルの背景を AI に描かせるジョブ（ADR-0051）。 */
+export const WireKeyArtJob = z.object({
+  id: z.string(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  mediaAssetId: nullableString,
+  error: nullableString,
+})
+export type WireKeyArtJob = z.infer<typeof WireKeyArtJob>
+
 export const WireMediaAsset = z.object({
   id: z.string(),
   kind: z.string(),
