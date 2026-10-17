@@ -16,6 +16,9 @@ describe('framePositions', () => {
   })
 })
 
+/** 本物の ffmpeg を呼ぶテストの待ち時間。 */
+const REAL_FFMPEG_TIMEOUT_MS = 30_000
+
 describe('ffmpeg での切り出し（本物の ffmpeg）', () => {
   const state = { dir: '' }
   beforeAll(async () => {
@@ -42,7 +45,8 @@ describe('ffmpeg での切り出し（本物の ffmpeg）', () => {
     await import('node:fs/promises').then((fs) => fs.writeFile(out, frames[1]?.jpeg ?? Buffer.alloc(0)))
     const { stderr } = await runFfmpeg(['-i', out, '-f', 'null', '-']).catch((e: { stderr: string }) => e)
     expect(stderr).toContain('640x360')
-  })
+    // 本物の ffmpeg を 4 回呼ぶ。CI の遅い機械では既定の 5 秒を超えて落ちた（2026-10-17）。
+  }, REAL_FFMPEG_TIMEOUT_MS)
 
   it('静止画は 1 枚、元より大きくはしない', async () => {
     const frame = await createFfmpegFrameExtractor().fromImage(join(state.dir, 'still.png'), 4000)
