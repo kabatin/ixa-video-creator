@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { access, mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, extname, join, relative, resolve, sep } from 'node:path'
-import type { MediaAssetRepository, RenderJobRepository } from '@ixa/db'
+import type { MediaAssetRepository, RenderJobRepository, ThumbnailRepository } from '@ixa/db'
 import {
   renderExportFileName,
   renderExportFolderName,
@@ -9,6 +9,7 @@ import {
   toSrt,
   type Project,
   type RenderJob,
+  type Thumbnail,
 } from '@ixa/domain'
 import { ObjectNotFoundError, type ObjectStorage } from '@ixa/storage'
 import type { Logger } from '../logger.js'
@@ -37,6 +38,8 @@ export type FolderOpener = {
 export type RenderFolderDeps = {
   readonly renderJobs: Pick<RenderJobRepository, 'findById' | 'findByProject'>
   readonly mediaAssets: Pick<MediaAssetRepository, 'findById'>
+  /** 書き出したサムネイル（ADR-0051）。無ければ動画だけを入れる。 */
+  readonly thumbnails?: Pick<ThumbnailRepository, 'findById' | 'findByProject'>
   readonly storage: Pick<ObjectStorage, 'get'>
   /** 書き出しフォルダの根（絶対パス。例: `~/Movies/ixa-video-creator`）。 */
   readonly rootDir: string
@@ -48,14 +51,17 @@ export type RenderFolderDeps = {
   readonly logger: Logger
 }
 
-export type SyncFailure = { readonly renderJobId: RenderJob['id']; readonly reason: string }
+/** フォルダへ入れるものの ID。動画の書き出しかサムネイル（どちらも ULID なので混ざらない）。 */
+export type ExportId = RenderJob['id'] | Thumbnail['id']
+
+export type SyncFailure = { readonly id: ExportId; readonly reason: string }
 
 export type SyncResult = {
   readonly folder: string
   readonly copied: number
   readonly failed: readonly SyncFailure[]
-  /** フォルダに入っている動画の場所（書き出しごと）。入れられなかったものは無い。 */
-  readonly files: ReadonlyMap<RenderJob['id'], string>
+  /** フォルダに入っている動画・サムネイルの場所（書き出しごと）。入れられなかったものは無い。 */
+  readonly files: ReadonlyMap<ExportId, string>
 }
 
 /** `parent` の中を指しているか。外を指していれば止める。**素材フォルダ（ADR-0041）も同じ門を通す。** */
@@ -102,8 +108,8 @@ const writeAtomically = async (path: string, body: Uint8Array): Promise<void> =>
   }
 }
 
-const reasonOf = (error: unknown): string =>
-  error instanceof ObjectNotFoundError ? '元の動画が見つかりません' : 'フォルダに書き込めませんでした'
+const reasonOf = (error: unknown, what = '動画'): string =>
+  error instanceof ObjectNotFoundError ? `元の${what}が見つかりません` : 'フォルダに書き込めませんでした'
 
 type DoneJob = RenderJob & { readonly outputAssetId: NonNullable<RenderJob['outputAssetId']> }
 
@@ -141,18 +147,14 @@ const copyOne = async (
   return { path, copied: true }
 }
 
-/**
- * そのプロジェクトの終わった書き出しを、まだ入っていないものだけフォルダへ入れる。
- * **1 本の失敗で全体を止めない。** 入れられなかったものは理由を返し、ログにも残す。
- */
-export const syncRenderFolder = async (deps: RenderFolderDeps, project: Project): Promise<SyncResult> => {
-  const folder = projectFolder(deps.rootDir, project)
-  await mkdir(folder, { recursive: true })
+type Outcome = { readonly id: ExportId; readonly path: string | null; readonly copied: boolean; readonly reason: string | null }
+
+/** 動画の書き出しを 1 本ずつ入れる（大きな動画をいくつも同時にメモリへ読まない）。 */
+const syncVideos = async (deps: RenderFolderDeps, project: Project, folder: string): Promise<readonly Outcome[]> => {
   const done = (await deps.renderJobs.findByProject(project.id)).filter(
     (job): job is DoneJob => job.status === 'succeeded' && job.outputAssetId !== null,
   )
-  // 1 本ずつ（大きな動画をいくつも同時にメモリへ読まない）。
-  const outcomes = await sequentially(done, async (job) => {
+  return sequentially(done, async (job): Promise<Outcome> => {
     const name = renderExportFileName({
       projectName: project.name,
       createdAt: job.createdAt,
@@ -161,16 +163,52 @@ export const syncRenderFolder = async (deps: RenderFolderDeps, project: Project)
       timeZone: deps.timeZone,
     })
     try {
-      return { job, ...(await copyOne(deps, inside(folder, join(folder, name)), job)), reason: null }
+      return { id: job.id, ...(await copyOne(deps, inside(folder, join(folder, name)), job)), reason: null }
     } catch (error) {
       deps.logger.error({ renderJobId: job.id, err: error }, '書き出した動画をフォルダへ入れられませんでした')
-      return { job, path: null, copied: false, reason: `「${name}」: ${reasonOf(error)}` }
+      return { id: job.id, path: null, copied: false, reason: `「${name}」: ${reasonOf(error)}` }
     }
   })
+}
+
+type DoneThumbnail = Thumbnail & { readonly outputAssetId: NonNullable<Thumbnail['outputAssetId']> }
+
+/**
+ * 書き出したサムネイル（ADR-0051）を入れる。名前は頼んだときに決めた `fileName`。動画と同じく、
+ * **もう入っていれば書かない**・素材が消されていれば飛ばす。
+ */
+const syncThumbnails = async (deps: RenderFolderDeps, project: Project, folder: string): Promise<readonly Outcome[]> => {
+  if (deps.thumbnails === undefined) return []
+  const done = (await deps.thumbnails.findByProject(project.id)).filter(
+    (thumbnail): thumbnail is DoneThumbnail => thumbnail.status === 'done' && thumbnail.outputAssetId !== null,
+  )
+  return sequentially(done, async (thumbnail): Promise<Outcome> => {
+    try {
+      const path = inside(folder, join(folder, thumbnail.fileName))
+      if (await exists(path)) return { id: thumbnail.id, path, copied: false, reason: null }
+      const asset = await deps.mediaAssets.findById(thumbnail.outputAssetId)
+      if (asset === null) return { id: thumbnail.id, path: null, copied: false, reason: null }
+      await writeAtomically(path, await deps.storage.get(asset.storageKey))
+      return { id: thumbnail.id, path, copied: true, reason: null }
+    } catch (error) {
+      deps.logger.error({ thumbnailId: thumbnail.id, err: error }, '書き出したサムネイルをフォルダへ入れられませんでした')
+      return { id: thumbnail.id, path: null, copied: false, reason: `「${thumbnail.fileName}」: ${reasonOf(error, '画像')}` }
+    }
+  })
+}
+
+/**
+ * そのプロジェクトの終わった書き出し（動画とサムネイル）を、まだ入っていないものだけフォルダへ入れる。
+ * **1 本の失敗で全体を止めない。** 入れられなかったものは理由を返し、ログにも残す。
+ */
+export const syncRenderFolder = async (deps: RenderFolderDeps, project: Project): Promise<SyncResult> => {
+  const folder = projectFolder(deps.rootDir, project)
+  await mkdir(folder, { recursive: true })
+  const outcomes = [...(await syncVideos(deps, project, folder)), ...(await syncThumbnails(deps, project, folder))]
   return {
     folder,
     copied: outcomes.filter((outcome) => outcome.copied).length,
-    failed: outcomes.flatMap(({ job, reason }) => (reason === null ? [] : [{ renderJobId: job.id, reason }])),
-    files: new Map(outcomes.flatMap(({ job, path }) => (path === null ? [] : [[job.id, path] as const]))),
+    failed: outcomes.flatMap(({ id, reason }) => (reason === null ? [] : [{ id, reason }])),
+    files: new Map(outcomes.flatMap(({ id, path }) => (path === null ? [] : [[id, path] as const]))),
   }
 }

@@ -1,6 +1,12 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type { ProjectRepository } from '@ixa/db'
-import { ProjectId as ProjectIdSchema, RenderJobId as RenderJobIdSchema } from '@ixa/domain'
+import {
+  ProjectId as ProjectIdSchema,
+  RenderJobId as RenderJobIdSchema,
+  ThumbnailId as ThumbnailIdSchema,
+  type Project,
+  type ThumbnailId,
+} from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import {
   displayLocation,
@@ -25,6 +31,9 @@ export type RenderFolderRoutesDeps = RenderFolderDeps & {
 const CANNOT_OPEN_MESSAGE = 'このコンピュータでは Finder を開けません（Mac で動かしているときだけ開けます）'
 const FOREIGN_JOB_MESSAGE = 'このプロジェクトの書き出しではありません'
 const NOT_DONE_MESSAGE = 'まだ終わっていない書き出しです。終わってから開いてください'
+const FOREIGN_THUMBNAIL_MESSAGE = 'このプロジェクトのサムネイルではありません'
+const THUMBNAIL_NOT_DONE_MESSAGE = 'まだできあがっていないサムネイルです。できてから開いてください'
+const BOTH_TARGETS_MESSAGE = '動画とサムネイルのどちらか 1 つを選んでください'
 const JSON_ONLY_MESSAGE = '本文は JSON で送ってください'
 const folderProblem = (location: string): string => `書き出しフォルダを作れませんでした（保存先: ${location}）`
 const finderProblem = (location: string): string =>
@@ -50,6 +59,8 @@ const OpenBody = z
   .object({
     /** 選んだ状態で開く書き出し。省略するとフォルダを開く。 */
     renderJobId: RenderJobIdSchema.optional(),
+    /** 選んだ状態で開くサムネイル（ADR-0051）。`renderJobId` と一緒には選べない。 */
+    thumbnailId: ThumbnailIdSchema.optional(),
   })
   .openapi('RenderFolderOpenInput')
 const OpenedData = z
@@ -89,10 +100,21 @@ const openRoute = createRoute({
     404: errorContent('プロジェクトが存在しない'),
     409: errorContent('この環境では Finder を開けない'),
     415: errorContent('本文が JSON ではない'),
-    422: errorContent('ほかのプロジェクトの書き出し・まだ終わっていない書き出し'),
+    422: errorContent('ほかのプロジェクトの書き出し・サムネイル・まだ終わっていないもの・2 つ同時の指定'),
     500: errorContent('フォルダを作れない・Finder を開けない'),
   },
 })
+
+/** 選ぶサムネイルが、このプロジェクトのできあがったものか。問題があれば理由。 */
+const thumbnailProblem = async (
+  deps: RenderFolderRoutesDeps,
+  project: Project,
+  thumbnailId: ThumbnailId,
+): Promise<string | null> => {
+  const thumbnail = deps.thumbnails === undefined ? null : await deps.thumbnails.findById(thumbnailId)
+  if (thumbnail === null || thumbnail.projectId !== project.id) return FOREIGN_THUMBNAIL_MESSAGE
+  return thumbnail.status !== 'done' || thumbnail.outputAssetId === null ? THUMBNAIL_NOT_DONE_MESSAGE : null
+}
 
 export const renderFolderRoutes = (deps: RenderFolderRoutesDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })
@@ -107,7 +129,14 @@ export const renderFolderRoutes = (deps: RenderFolderRoutesDeps) =>
       const project = await deps.projects.findById(c.req.valid('param').id)
       if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       if (!deps.opener.canOpen) return c.json(fail(CANNOT_OPEN_MESSAGE), 409)
-      const { renderJobId } = c.req.valid('json')
+      const { renderJobId, thumbnailId } = c.req.valid('json')
+      if (renderJobId !== undefined && thumbnailId !== undefined) {
+        return c.json(fail(VALIDATION_ERROR_MESSAGE, { thumbnailId: [BOTH_TARGETS_MESSAGE] }), 422)
+      }
+      if (thumbnailId !== undefined) {
+        const problem = await thumbnailProblem(deps, project, thumbnailId)
+        if (problem !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, { thumbnailId: [problem] }), 422)
+      }
       if (renderJobId !== undefined) {
         const job = await deps.renderJobs.findById(renderJobId)
         const problem =
@@ -125,7 +154,8 @@ export const renderFolderRoutes = (deps: RenderFolderRoutesDeps) =>
       })
       if (synced === null) return c.json(fail(folderProblem(location)), 500)
       // 選ぶはずの 1 本を入れられなかったら、フォルダを開く（何も開かないより、残りが見える方がいい）。
-      const file = renderJobId === undefined ? undefined : synced.files.get(renderJobId)
+      const target = renderJobId ?? thumbnailId
+      const file = target === undefined ? undefined : synced.files.get(target)
       try {
         await deps.opener.open(file === undefined ? { folder: synced.folder } : { file })
       } catch (error) {

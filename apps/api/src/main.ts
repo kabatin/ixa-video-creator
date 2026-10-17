@@ -13,6 +13,7 @@ import {
   type DbClient,
   createMusicTrackRepository,
   createRenderJobRepository,
+  createThumbnailRepository,
   createTextStyleRepository,
   createTimelineClipRepository,
   createTransitionRepository,
@@ -47,6 +48,7 @@ import { VOICE_QUEUE_NAME } from './narration/voice-queue.js'
 import { MUSIC_QUEUE_NAME } from './music/deps.js'
 import { createGenerationContextSource } from '@ixa/generation'
 import { RENDER_QUEUE_NAME, type RenderQueue } from './routes/renders.js'
+import { THUMBNAIL_QUEUE_NAME, type ThumbnailQueue } from './routes/thumbnails.js'
 import { ANALYSIS_QUEUE_NAME, type AnalysisQueue } from './routes/music.js'
 import { REVIEW_QUEUE_NAME, type ReviewQueue } from './routes/reviews.js'
 import type { MediaIngestDeps } from './routes/uploads.js'
@@ -196,6 +198,15 @@ export const main = (): void => {
   const renderQueuePort: RenderQueue = {
     enqueue: async (renderJobId) => {
       await renderQueue.add('render', { renderJobId })
+    },
+  }
+
+  // サムネイル（ADR-0051）。中身には文書（署名付き URL 入り）が載るので DB には書かない。描くのは worker。
+  const thumbnailQueue = new Queue(THUMBNAIL_QUEUE_NAME, { connection })
+  const thumbnailQueuePort: ThumbnailQueue = {
+    enqueue: async (data) => {
+      // 終わったジョブは残さない（中身の署名付き URL を Redis に置き続けない）。
+      await thumbnailQueue.add('thumbnail', data, { removeOnComplete: true })
     },
   }
 
@@ -379,6 +390,7 @@ export const main = (): void => {
     musicTracks: createMusicTrackRepository(db),
     renderJobs: createRenderJobRepository(db),
     renderQueue: renderQueuePort,
+    thumbnails: { repository: createThumbnailRepository(db), queue: thumbnailQueuePort },
     // 書き出した動画を置くフォルダ（ADR-0036）。既定はホームの「ムービー」の下。日時はこの Mac の時刻で名前に書く。
     renderFolder: {
       rootDir: config.renderExportDir ?? join(homedir(), 'Movies', 'ixa-video-creator'),

@@ -6,11 +6,14 @@ import {
   ProjectId as ProjectIdSchema,
   RenderJob as RenderJobSchema,
   RenderJobId as RenderJobIdSchema,
+  Thumbnail as ThumbnailSchema,
+  ThumbnailId as ThumbnailIdSchema,
   TimelineClipId as TimelineClipIdSchema,
   newId,
   type MediaAsset,
   type Project,
   type RenderJob,
+  type Thumbnail,
 } from '@ixa/domain'
 import { createInMemoryMediaAssetRepository } from '@ixa/generation/testing'
 import { createMemoryStorage } from '@ixa/storage'
@@ -21,6 +24,7 @@ import type { FolderOpener, OpenTarget } from '../render-folder/render-folder.js
 import { renderFolderRoutes } from '../routes/render-folder.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
+import { createInMemoryThumbnailRepository } from './in-memory-thumbnail-repository.js'
 import { aMediaAsset, createInMemoryRenderJobRepository } from './in-memory-timeline-repositories.js'
 
 /**
@@ -59,6 +63,20 @@ const aRenderJob = (project: Project, patch: Partial<RenderJob> = {}): RenderJob
     ...patch,
   })
 
+const aThumbnail = (project: Project, patch: Partial<Thumbnail> = {}): Thumbnail =>
+  ThumbnailSchema.parse({
+    id: newId(ThumbnailIdSchema),
+    projectId: project.id,
+    spec: { background: { kind: 'timeline_frame', atSec: 1 }, title: '新曲' },
+    status: 'done',
+    outputAssetId: null,
+    fileName: 'ぼくははると サムネ 2026-10-02 23.10.00.jpg',
+    error: null,
+    createdAt: new Date('2026-10-02T14:10:00.000Z'),
+    finishedAt: new Date('2026-10-02T14:10:05.000Z'),
+    ...patch,
+  })
+
 let root = ''
 let home = ''
 
@@ -80,6 +98,8 @@ const build = async (
     openFails?: boolean
     /** 全体の書き出しにテロップを 1 枚入れる。 */
     telop?: boolean
+    /** できあがったサムネイルと、描いている途中のサムネイルを 1 枚ずつ入れる（ADR-0051）。 */
+    thumbnails?: boolean
   } = {},
 ) => {
   const project = aProject({ name: options.projectName ?? 'ぼくははると' })
@@ -113,6 +133,14 @@ const build = async (
   })
   const queued = aRenderJob(project, { status: 'queued', progress: 0, finishedAt: null })
   const foreign = aRenderJob(other)
+  const thumbnailAsset = aMediaAsset({ storageKey: `media/${project.id}/thumb.jpg`, kind: 'image', projectId: project.id })
+  if (options.thumbnails === true) {
+    await storage.put(thumbnailAsset.storageKey, Buffer.from('JPEG'), { contentType: 'image/jpeg' })
+    assets.push(thumbnailAsset)
+  }
+  const thumbnail = aThumbnail(project, { outputAssetId: thumbnailAsset.id })
+  const drawing = aThumbnail(project, { status: 'rendering', finishedAt: null, fileName: 'drawing.jpg' })
+  const foreignThumbnail = aThumbnail(other, { outputAssetId: thumbnailAsset.id })
   const opened: OpenTarget[] = []
   const opener: FolderOpener = {
     canOpen: options.canOpen ?? true,
@@ -126,6 +154,9 @@ const build = async (
     renderFolderRoutes({
       projects: createInMemoryProjectRepository([project, other]),
       renderJobs: createInMemoryRenderJobRepository([full, range, queued, foreign]),
+      ...(options.thumbnails === true
+        ? { thumbnails: createInMemoryThumbnailRepository([thumbnail, drawing, foreignThumbnail]) }
+        : {}),
       mediaAssets: createInMemoryMediaAssetRepository(assets),
       storage,
       rootDir: root,
@@ -142,7 +173,7 @@ const build = async (
       body: JSON.stringify(body),
     })
   const folder = join(root, 'ぼくははると')
-  return { app, project, full, range, queued, foreign, opened, open, folder }
+  return { app, project, full, range, queued, foreign, thumbnail, drawing, foreignThumbnail, opened, open, folder }
 }
 
 const FULL_NAME = 'ぼくははると 2026-10-02 22.52.31 プレビュー（720p）.mp4'
@@ -294,5 +325,47 @@ describe('POST /projects/{id}/render-folder/open', () => {
 
     expect(await readdir(root)).toEqual(['_.._escape'])
     expect(await readdir(home)).toEqual(['Movies'])
+  })
+
+  describe('サムネイル（ADR-0051）', () => {
+    const THUMB_NAME = 'ぼくははると サムネ 2026-10-02 23.10.00.jpg'
+
+    it('できあがったサムネイルも頼んだときの名前で入れる。途中のものは入れない', async () => {
+      const f = await build({ thumbnails: true })
+
+      const data = ((await (await f.open()).json()) as Ok<Opened>).data
+
+      expect(data).toMatchObject({ copied: 3, failed: [] })
+      expect((await readdir(f.folder)).sort()).toEqual([FULL_NAME, RANGE_NAME, THUMB_NAME].sort())
+      expect(await readFile(join(f.folder, THUMB_NAME), 'utf8')).toBe('JPEG')
+    })
+
+    it('もう入っているサムネイルは上書きしない', async () => {
+      const f = await build({ thumbnails: true })
+      await f.open()
+      await writeFile(join(f.folder, THUMB_NAME), 'EDITED')
+
+      expect(((await (await f.open()).json()) as Ok<Opened>).data.copied).toBe(0)
+      expect(await readFile(join(f.folder, THUMB_NAME), 'utf8')).toBe('EDITED')
+    })
+
+    it('1 枚を指定すると、そのサムネイルを選んだ状態で開く', async () => {
+      const f = await build({ thumbnails: true })
+
+      expect((await f.open({ thumbnailId: f.thumbnail.id })).status).toBe(200)
+
+      expect(f.opened).toEqual([{ file: join(f.folder, THUMB_NAME) }])
+    })
+
+    it('ほかのプロジェクトの・途中のサムネイル、動画と同時の指定は 422。何も開かない', async () => {
+      const f = await build({ thumbnails: true })
+
+      const foreign = await f.open({ thumbnailId: f.foreignThumbnail.id })
+      expect(foreign.status).toBe(422)
+      expect(((await foreign.json()) as Err).fields?.thumbnailId?.[0]).toMatch(/このプロジェクトのサムネイルではありません/)
+      expect((await f.open({ thumbnailId: f.drawing.id })).status).toBe(422)
+      expect((await f.open({ thumbnailId: f.thumbnail.id, renderJobId: f.full.id })).status).toBe(422)
+      expect(f.opened).toEqual([])
+    })
   })
 })

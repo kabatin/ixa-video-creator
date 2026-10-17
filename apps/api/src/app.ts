@@ -59,6 +59,8 @@ import type { RenderFolderDeps } from './render-folder/render-folder.js'
 export type RenderFolderPlace = Pick<RenderFolderDeps, 'rootDir' | 'homeDir' | 'timeZone' | 'opener'>
 import { characterRoutes, shotCharacterRoutes } from './routes/characters.js'
 import { characterSheetRoutes } from './routes/character-sheet.js'
+import { keyArtRoutes } from './routes/key-art.js'
+import { thumbnailRoutes, type ThumbnailQueue } from './routes/thumbnails.js'
 import { assetRoutes } from './routes/assets.js'
 import { libraryImportRoutes } from './routes/library-imports.js'
 import { projectDuplicateRoutes } from './routes/project-duplicate.js'
@@ -87,6 +89,7 @@ import type {
   MusicAnalysisRepository,
   MusicTrackRepository,
   RenderJobRepository,
+  ThumbnailRepository,
   ReviewRepository,
   EditBatchRepository,
   ScriptRepository,
@@ -125,6 +128,8 @@ export type AppDeps = {
    * 書き出した動画を置くフォルダと Finder を開く口（ADR-0036）。無ければ口を置かない（テストの多くは要らない）。
    */
   renderFolder?: RenderFolderPlace
+  /** YouTube のサムネイルの書き出し（ADR-0051）。無ければ口を置かない（テストの多くは要らない）。 */
+  thumbnails?: { readonly repository: ThumbnailRepository; readonly queue: ThumbnailQueue }
   characters: CharacterRepository
   looks: CharacterLookRepository
   shotCharacters: ShotCharacterRepository
@@ -376,6 +381,18 @@ export const createApp = (deps: AppDeps) => {
       logger,
     }),
   )
+  // サムネイルの背景を AI に描かせる（キーアート。ADR-0051）。絵コンテの画像と同じ順番待ち。
+  app.route(
+    '/',
+    keyArtRoutes({
+      projects,
+      imageJobs: deps.imageJobs,
+      imageQueue: deps.imageQueue,
+      imageModel: deps.imageModel,
+      events: deps.events,
+      logger,
+    }),
+  )
   // 手持ちの動画を Take にする（ADR-0026）。
   app.route(
     '/',
@@ -600,6 +617,19 @@ export const createApp = (deps: AppDeps) => {
     '/',
     renderRoutes({ ...timelineDeps, renderJobs: deps.renderJobs, queue: deps.renderQueue }),
   )
+  // サムネイルの書き出し（ADR-0051）。タイムラインのコマは書き出しと同じ口で文書を組む。
+  if (deps.thumbnails !== undefined) {
+    app.route(
+      '/',
+      thumbnailRoutes({
+        ...timelineDeps,
+        thumbnails: deps.thumbnails.repository,
+        thumbnailQueue: deps.thumbnails.queue,
+        // ファイル名の日時は書き出しフォルダと同じ地域で書く。
+        timeZone: deps.renderFolder?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }),
+    )
+  }
   if (deps.renderFolder !== undefined) {
     app.route(
       '/',
@@ -607,6 +637,7 @@ export const createApp = (deps: AppDeps) => {
         ...deps.renderFolder,
         projects,
         renderJobs: deps.renderJobs,
+        ...(deps.thumbnails === undefined ? {} : { thumbnails: deps.thumbnails.repository }),
         mediaAssets,
         storage,
         logger,
