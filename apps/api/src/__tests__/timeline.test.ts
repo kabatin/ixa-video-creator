@@ -185,33 +185,31 @@ describe('GET /projects/:projectId/timeline', () => {
     expect(body.data.clips[0]?.content.type).toBe('unresolved')
   })
 
-  it('音楽の durationSec を MediaAsset の probe から取り、無ければ 0 にする', async () => {
+  /** 曲を作るで候補が何曲もできる（ADR-0048）。全部を重ねると別々の曲が同時に鳴る。 */
+  const twoTracks = async (masterIsProbed: boolean) => {
     const project = aProject()
     const withTake = aShotWithTake(project)
-
     const probed = aMediaAsset({
       workspaceId: project.workspaceId,
       kind: 'audio',
       probe: { durationSec: 116, width: null, height: null, fps: null, hasAudio: true, codec: 'aac' },
     })
     const unprobed = aMediaAsset({ workspaceId: project.workspaceId, kind: 'audio', probe: null })
-
     const musicTracks = createInMemoryMusicTrackRepository()
     await musicTracks.create({
       projectId: project.id,
       mediaAssetId: probed.id,
-      title: '本編',
-      isMaster: true,
+      title: '解析済み',
+      isMaster: masterIsProbed,
       offsetSec: 0,
     })
     await musicTracks.create({
       projectId: project.id,
       mediaAssetId: unprobed.id,
       title: '未解析',
-      isMaster: false,
+      isMaster: !masterIsProbed,
       offsetSec: 0,
     })
-
     const deps: TimelineRoutesDeps = {
       ...timelineDeps({
         project,
@@ -222,12 +220,22 @@ describe('GET /projects/:projectId/timeline', () => {
       }),
       musicTracks,
     }
+    return (await getTimeline(deps, project)).body
+  }
 
-    const { body } = await getTimeline(deps, project)
+  it('鳴らすのはマスターの 1 曲だけで、尺は MediaAsset の probe から取る', async () => {
+    const body = await twoTracks(true)
 
-    expect(body.data.audio.map((track) => track.durationSec)).toEqual([116, 0])
+    expect(body.data.audio.map((track) => track.durationSec)).toEqual([116])
     // 音楽がタイムライン全体の尺を決める（Shot は 3.75 秒しかない）。
     expect(body.data.durationSec).toBe(116)
+  })
+
+  it('マスターが未解析なら尺は 0 で、ほかの楽曲の尺で伸ばさない', async () => {
+    const body = await twoTracks(false)
+
+    expect(body.data.audio.map((track) => track.durationSec)).toEqual([0])
+    expect(body.data.durationSec).toBe(3.75)
   })
 
   it('存在しないプロジェクトは 404', async () => {

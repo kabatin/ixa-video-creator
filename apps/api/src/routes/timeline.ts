@@ -208,12 +208,16 @@ export const loadTimelineSource = async (
   deps: TimelineRoutesDeps,
   project: Project,
 ): Promise<TimelineSource> => {
-  const [shots, transitions, clips, tracks] = await Promise.all([
+  const [shots, transitions, clips, allTracks] = await Promise.all([
     deps.shots.findByProject(project.id),
     deps.transitions.findByProject(project.id),
     deps.timelineClips.findByProject(project.id),
     deps.musicTracks.findByProject(project.id),
   ])
+  // 鳴らすのはマスターの 1 曲だけ。ほかの楽曲は候補（曲を作るで何曲もできる。ADR-0048）で、
+  // 全部を重ねると別々の曲が同時に鳴り、プレビューは Remotion の音の上限（5 本）を超えて落ちる。
+  const master = pickMasterTrack(allTracks)
+  const tracks = master === null ? [] : [master]
 
   const shotAssetIds = await resolveShotAssets(deps.takes, shots)
   const stillAssetIds = await resolveShotStills(deps.shotReferences, shots, shotAssetIds)
