@@ -2,6 +2,7 @@ import {
   compileSpec,
   computeSpecHash,
   quantizeDuration,
+  requestedSourceSec,
   resolveReferences,
   type GenerationContextSource,
   type Project,
@@ -66,8 +67,8 @@ export const rebuildSpec = async (
     shot,
     characters,
     references,
-    // 編集尺をモデルの対応値へ切り上げる（ADR-0011）。
-    generationDurationSec: quantizeDuration(shot.durationSec, caps.durations),
+    // 頼む長さ（尺 × 速さ。ADR-0050）をモデルの対応値へ切り上げる（ADR-0011）。
+    generationDurationSec: quantizeDuration(requestedSourceSec(shot), caps.durations),
     seed,
     negativePrompt: null,
     /**

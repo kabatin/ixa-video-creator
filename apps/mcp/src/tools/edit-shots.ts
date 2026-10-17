@@ -1,4 +1,4 @@
-import { ShotCamera, TransitionType } from '@ixa/domain'
+import { MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE, ShotCamera, TransitionType } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import { bulkResult, WireLook, WireShot, WireShotCharacter, WireTransition } from '../wire.js'
@@ -43,6 +43,20 @@ const Edit = z.object({
   camera: ShotCamera.partial().optional().describe('Only the given camera fields change.'),
   locationId: Id.nullable().optional(),
   cast: z.array(CastEntry).max(8).optional().describe('Replaces the whole cast of each shot. [] clears it.'),
+  speed: z
+    .number()
+    .min(MIN_PLAYBACK_RATE)
+    .max(MAX_PLAYBACK_RATE)
+    .optional()
+    .describe(
+      'Playback speed of the take (1 = as generated). For fast trailer-style action use 1.25–2 with short cuts; ' +
+        'new takes are requested at durationSec × speed so the shot still has enough footage.',
+    ),
+  sourceInSec: z
+    .number()
+    .min(0)
+    .optional()
+    .describe('Where in the take the shot starts (seconds into the take). Use it to skip a weak start.'),
   transitionToNext: TransitionToNext.optional()
     .describe('Transition from this shot into the next shot in order. type "cut" removes any transition.'),
 })
@@ -61,6 +75,8 @@ const patchOf = (edit: EditInput) => ({
   ...(edit.mood === undefined ? {} : { mood: edit.mood }),
   ...(edit.camera === undefined ? {} : { camera: edit.camera }),
   ...(edit.locationId === undefined ? {} : { locationId: edit.locationId }),
+  ...(edit.speed === undefined ? {} : { speed: edit.speed }),
+  ...(edit.sourceInSec === undefined ? {} : { sourceInSec: edit.sourceInSec }),
 })
 
 const defaultLookId = async (api: ApiClient, characterId: string): Promise<string> => {

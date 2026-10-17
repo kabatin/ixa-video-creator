@@ -20,6 +20,7 @@ const shot = (overrides: Partial<Shot> = {}): Shot => ({
   durationSec: 3.75,
   sourceInSec: 0,
   timing: 'trim',
+  speed: 1,
   description: '暗いガレージ。作業台にマットブラックのヘルメット',
   dialogue: null,
   camera: {

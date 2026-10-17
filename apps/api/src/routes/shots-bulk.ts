@@ -139,6 +139,8 @@ const BulkSelectTakeData = z
  */
 const BulkUpdatePatch = UpdateShotPatchSchema.pick({
   mood: true, locationId: true, description: true,
+  // 速さと Take の使い始め（ADR-0050）。予告編の速い編集はまとめて決めることが多い。
+  speed: true, sourceInSec: true,
 })
   .extend({ camera: ShotCameraSchema.partial().strict().optional() })
   .strict()

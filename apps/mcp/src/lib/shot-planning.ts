@@ -1,4 +1,4 @@
-import { DurationNotSupportedError, quantizeDuration, type DurationSupport } from '@ixa/domain'
+import { DurationNotSupportedError, quantizeDuration, requestedSourceSec, type DurationSupport } from '@ixa/domain'
 
 /**
  * Shot 割りの境界を決める純粋関数（`plan_shots`）。
@@ -75,13 +75,16 @@ export type PlannedShot = {
 export const plannedShots = (
   boundariesSec: readonly number[],
   support: DurationSupport | null,
+  /** 予定の速さ（ADR-0050）。頼む長さは尺 × 速さ。 */
+  speed = 1,
 ): readonly PlannedShot[] =>
   boundariesSec.slice(0, -1).map((startSec, i) => {
     const durationSec = ms((boundariesSec[i + 1] as number) - startSec)
     if (support === null) return { startSec, durationSec }
     try {
-      const generateSec = ms(quantizeDuration(durationSec, support))
-      return generateSec < durationSec
+      const needSec = requestedSourceSec({ timing: 'trim', durationSec, sourceInSec: 0, speed })
+      const generateSec = ms(quantizeDuration(needSec, support))
+      return generateSec < needSec
         ? { startSec, durationSec, generateSec, note: 'slowed to fit (timing=fit)' }
         : { startSec, durationSec, generateSec }
     } catch (error) {

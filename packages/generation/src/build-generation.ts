@@ -2,6 +2,7 @@ import {
   compileSpec,
   computeSpecHash,
   quantizeDuration,
+  requestedSourceSec,
   resolveReferences,
   type DurationSupport,
   type GenerationContextSource,
@@ -192,7 +193,7 @@ export const buildGeneration = async <M extends GenerationModel>(
   const spec = compileFor(
     caps.referenceImages.max,
     caps.referenceImages.roles,
-    quantizeDuration(shot.durationSec, caps.durations),
+    quantizeDuration(requestedSourceSec(shot), caps.durations),
   )
 
   const violations = deps.router.validateAgainstCapabilities(spec, chosen)

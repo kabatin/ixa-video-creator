@@ -1,3 +1,4 @@
+import { MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE } from '@ixa/domain'
 import { z } from 'zod'
 import { seg } from '../api-client.js'
 import {
@@ -40,6 +41,15 @@ export const PlanShotsInput = z.object({
     .min(1)
     .optional()
     .describe('Video model id (see ixa_status) to report the length each shot will be generated at.'),
+  speed: z
+    .number()
+    .min(MIN_PLAYBACK_RATE)
+    .max(MAX_PLAYBACK_RATE)
+    .default(1)
+    .describe(
+      'Planned playback speed, only used to report generateSec (= durationSec × speed rounded up). ' +
+        'Short cuts are fine: a 1.2 s cut is generated at the model minimum and trimmed. Set the speed with edit_shots.',
+    ),
   musicTrackId: Id.optional(),
   codePrefix: z.string().regex(/^[A-Za-z0-9]{1,16}$/).optional().describe('Shot code prefix, default CUT.'),
   dryRun: z.boolean().default(false).describe('Only compute the plan, create nothing.'),
@@ -90,7 +100,7 @@ export const planShotsTool = defineTool({
             return found.durations
           })()
 
-    const plan = plannedShots(snapped.boundariesSec, support)
+    const plan = plannedShots(snapped.boundariesSec, support, args.speed)
     const summary = {
       boundariesSec: snapped.boundariesSec,
       ...(snapped.dropped.length > 0 ? { droppedBySnap: snapped.dropped } : {}),

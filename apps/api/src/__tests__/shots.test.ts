@@ -192,6 +192,24 @@ describe('Shot CRUD', () => {
     expect(((await res.json()) as Ok<ShotResponse>).data.timing).toBe('fit')
   })
 
+  /** 速さ（ADR-0050）。0.5〜2.5 倍の外は 422 で、保存しない。 */
+  it('PATCH で速さを変えられ、幅の外は受け付けない', async () => {
+    const f = buildFixture()
+    const patch = (speed: number) =>
+      f.app.request(`/shots/${f.shot.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ speed }),
+      })
+
+    const ok = await patch(1.5)
+    expect(ok.status).toBe(200)
+    expect(((await ok.json()) as Ok<ShotResponse>).data.speed).toBe(1.5)
+
+    expect((await patch(3)).status).toBe(422)
+    expect((await f.shots.findById(f.shot.id))?.speed).toBe(1.5)
+  })
+
   it('PATCH でロケーションを付け外しできる（ADR-0015）', async () => {
     const f = buildFixture()
     const { id: locationId } = await f.locations.create({

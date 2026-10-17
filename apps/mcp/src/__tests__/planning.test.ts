@@ -52,6 +52,13 @@ describe('plannedShots', () => {
   })
 })
 
+describe('plannedShots の速さ（ADR-0050）', () => {
+  it('頼む長さは尺 × 速さを切り上げたもの。短いカットも作れる', () => {
+    expect(plannedShots([0, 1.2], VPIPE, 1.5)[0]).toMatchObject({ durationSec: 1.2, generateSec: 2.333 })
+    expect(plannedShots([0, 2], VPIPE, 2)[0]).toMatchObject({ durationSec: 2, generateSec: 4.458 })
+  })
+})
+
 const analysis = (overrides: Partial<WireAnalysis> = {}): WireAnalysis => ({
   durationSec: 120.123,
   bpm: 128.04,

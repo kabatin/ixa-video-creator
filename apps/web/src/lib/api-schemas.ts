@@ -57,6 +57,8 @@ export const UpdateShotBody = UpdateShotPatch.pick({
   sourceInSec: true,
   // Take を尺に合わせて速度を変えるか（ADR-0026）。
   timing: true,
+  // 再生の速さ（ADR-0050）。
+  speed: true,
   // 場所は後から決められる。null を送れば外す（ADR-0015）。
   locationId: true,
 })

@@ -37,6 +37,7 @@ import {
   Corrections as CorrectionsSchema,
   settledShotStatus,
   stretchesToFit,
+  requestedSourceSec,
 } from '@ixa/domain'
 import {
   GenerationContextError,
@@ -221,6 +222,8 @@ const UpdateShotBody = UpdateShotPatchSchema.pick({
   sourceInSec: true,
   // Take を尺に合わせて速度を変えるか（ADR-0026）。
   timing: true,
+  // 再生の速さ（ADR-0050）。trim の Shot だけが使う。
+  speed: true,
   // 場所は後から決められる。null を送れば外す（ADR-0015）。
   locationId: true,
 }).openapi('UpdateShotPatch')
@@ -429,7 +432,7 @@ export const fitTimingWhenStretched = async (
   shot: Shot,
   compiled: CompiledGeneration<VideoModelDescriptor>,
 ): Promise<boolean> => {
-  if (!stretchesToFit(shot.durationSec, compiled.spec.durationSec)) return false
+  if (!stretchesToFit(requestedSourceSec(shot), compiled.spec.durationSec)) return false
   if (shot.timing !== 'fit') await deps.shots.update(shot.id, { timing: 'fit' })
   return true
 }

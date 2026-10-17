@@ -217,6 +217,16 @@ describe('buildGeneration — モデルを明示したとき', () => {
     expect(compiled.spec.durationSec).toBe(4)
   })
 
+  /** 速さ（ADR-0050）。1.5 倍で流すなら、尺 × 1.5 の長さで頼む。 */
+  it('速さのある Shot は尺 × 速さで頼む', async () => {
+    const shot = aShot(projectId, { durationSec: 3.75, speed: 1.5 }) // 5.625 秒が要る
+    const { deps } = depsOf([modelA])
+
+    const compiled = await buildGeneration(deps, shot, aProject(), modelA.id)
+
+    expect(compiled.spec.durationSec).toBe(6)
+  })
+
   it('未登録のモデルを要求したら catalog の例外をそのまま通す', async () => {
     const shot = aShot(projectId)
     const { deps } = depsOf([modelA])

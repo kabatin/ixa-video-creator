@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ShotId } from '../common/ids.js'
-import { findOverlappingShots, orderBetween, shotEndSec } from '../shot/shot.js'
+import { MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE, Shot, findOverlappingShots, orderBetween, shotEndSec } from '../shot/shot.js'
 import { MANUAL_PRIORITY, referencePriority } from '../shot/reference.js'
 import { cameraToPromptFragment } from '../shot/camera.js'
 
@@ -66,5 +66,21 @@ describe('cameraToPromptFragment', () => {
       movement: 'static', movementIntensity: null,
     })
     expect(fragment).toBe('wide')
+  })
+})
+
+/** 速さ（ADR-0050）。幅は fit と同じ 0.5〜2.5 倍。 */
+describe('Shot.speed', () => {
+  const speedOnly = Shot.shape.speed
+
+  it('省けば 1', () => {
+    expect(speedOnly.parse(undefined)).toBe(1)
+  })
+
+  it('0.5〜2.5 倍だけを受け付ける', () => {
+    expect(speedOnly.safeParse(MIN_PLAYBACK_RATE).success).toBe(true)
+    expect(speedOnly.safeParse(MAX_PLAYBACK_RATE).success).toBe(true)
+    expect(speedOnly.safeParse(0.49).success).toBe(false)
+    expect(speedOnly.safeParse(2.51).success).toBe(false)
   })
 })

@@ -274,6 +274,13 @@
       "when": 1792170483366,
       "tag": "0038_sad_proudstar",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1792210936400,
+      "tag": "0039_thankful_logan",
+      "breakpoints": true
     }
   ]
 }

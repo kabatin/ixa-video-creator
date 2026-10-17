@@ -15,7 +15,18 @@ import { MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE, type Shot } from './shot.js'
 /** これより短い不足は数えない（フレームの端数・probe の丸め）。検査と画面が同じ値を使う。 */
 export const TAKE_SHORT_TOLERANCE_SEC = 0.05
 
-type TimingShot = Pick<Shot, 'timing' | 'durationSec' | 'sourceInSec'>
+/** `speed` は省けば 1（速さを持たない古い呼び出し・試算）。 */
+type TimingShot = Pick<Shot, 'timing' | 'durationSec' | 'sourceInSec'> & { readonly speed?: number }
+
+const speedOf = (shot: TimingShot): number => shot.speed ?? 1
+
+/**
+ * AI に頼む長さの元（切り上げる前。ADR-0050）。`trim` は尺 × 速さ、`fit` は尺のまま
+ * （`fit` は出来た Take の長さから速さを決めるので、頼む長さは変えない）。
+ * **速さ 1 なら今までと同じ値**（仕様のハッシュが変わらない）。
+ */
+export const requestedSourceSec = (shot: TimingShot): number =>
+  shot.timing === 'fit' ? shot.durationSec : shot.durationSec * speedOf(shot)
 
 /**
  * Take の使える長さ（切り出し位置より後ろ）。
@@ -27,10 +38,20 @@ export const usableTakeSec = (shot: TimingShot, takeDurationSec: number | null):
     ? null
     : takeDurationSec - shot.sourceInSec
 
-/** その Shot の再生速度。`trim` と、Take の長さが分からないときは 1。 */
+/**
+ * その Shot の再生速度。
+ * - `trim`: 選んだ速さ。**速めたのに Take が足りなければ、足りるところまで落とす**（1 倍より下げない。
+ *   それでも足りなければ今までどおり最後のコマで止まる）。速さを上げただけで絵が止まるのを避ける
+ * - `fit`: Take 全体を尺に収める速さ
+ * Take の長さが分からなければ、`trim` は選んだ速さ、`fit` は 1。
+ */
 export const shotPlaybackRate = (shot: TimingShot, takeDurationSec: number | null): number => {
-  if (shot.timing !== 'fit') return 1
   const usable = usableTakeSec(shot, takeDurationSec)
+  if (shot.timing !== 'fit') {
+    const speed = speedOf(shot)
+    if (speed <= 1 || usable === null) return speed
+    return Math.min(speed, Math.max(1, usable / shot.durationSec))
+  }
   if (usable === null) return 1
   return Math.min(MAX_PLAYBACK_RATE, Math.max(MIN_PLAYBACK_RATE, usable / shot.durationSec))
 }

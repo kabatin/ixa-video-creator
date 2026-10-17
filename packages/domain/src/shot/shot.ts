@@ -53,6 +53,11 @@ export const Shot = z.object({
   durationSec: Seconds.refine((d) => d > 0, '編集尺は 0 より大きいこと'),
   sourceInSec: Seconds.default(0),
   timing: ShotTiming.default('trim'),
+  /**
+   * 再生の速さ（ADR-0050）。`trim` の Shot だけが使う（`fit` は速さを Take の長さから決める）。
+   * 1.5 なら Take を 1.5 倍で流し、AI には尺 × 1.5 の長さで頼む。予告編の速い編集のため。
+   */
+  speed: z.number().min(MIN_PLAYBACK_RATE).max(MAX_PLAYBACK_RATE).default(1),
 
   // 演出
   description: z.string().default(''),
@@ -152,7 +157,7 @@ export const UpdateShotPatch = Shot.pick({
   sequenceId: true, order: true, code: true,
   startSec: true, durationSec: true, sourceInSec: true,
   description: true, dialogue: true, camera: true, mood: true,
-  continuityMode: true, timing: true,
+  continuityMode: true, timing: true, speed: true,
   locationId: true, sourceType: true, lockedAt: true,
 }).partial()
 export type UpdateShotPatch = z.input<typeof UpdateShotPatch>

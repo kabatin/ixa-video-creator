@@ -46,6 +46,8 @@ export const shots = pgTable(
     sourceInSec: seconds('source_in_sec').notNull().default(0),
     /** Take の長さが尺と違うときの扱い。`fit` は速度を変えて尺に収める（ADR-0026）。 */
     timing: text('timing', { enum: ['trim', 'fit'] }).notNull().default('trim'),
+    /** 再生の速さ（ADR-0050）。`trim` の Shot だけが使う。 */
+    speed: doublePrecision('speed').notNull().default(1),
 
     // 演出
     description: text('description').notNull().default(''),

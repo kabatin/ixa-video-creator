@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createCharacterTool, createLocationTool } from '../tools/cast.js'
-import { editShotsTool } from '../tools/edit-shots.js'
+import { EditShotsInput, editShotsTool } from '../tools/edit-shots.js'
 import { planShotsTool } from '../tools/plan-shots.js'
 import { drawStartFramesTool, setStartFrameTool } from '../tools/start-frames.js'
 import { createFakeApi, depsFor, jsonOf, textOf, ulid } from './fake-api.js'
@@ -133,6 +133,20 @@ describe('edit_shots', () => {
     expect(result).toEqual({
       results: [{ shotIds: [SHOT_A, SHOT_B], patched: 1, failures: [{ shotId: SHOT_B, reason: 'ロック中' }], castSet: 1 }],
     })
+  })
+
+  /** 速さと Take の使い始め（ADR-0050）。予告編の速い編集。 */
+  it('速さと使い始めも一括 PATCH で送り、幅の外は API に送る前に断る', async () => {
+    const fake = createFakeApi([
+      ...baseRoutes,
+      { method: 'PATCH', path: `/projects/${PROJECT}/shots/bulk`, data: { results: [{ shotId: SHOT_A, ok: true, shot: shotRow(SHOT_A, 0) }] } },
+    ])
+    await editShotsTool.run({ projectId: PROJECT, edits: [{ shotIds: [SHOT_A], speed: 1.5, sourceInSec: 0.2 }] }, depsFor(fake))
+    expect(fake.callsTo('PATCH', `/projects/${PROJECT}/shots/bulk`)[0]?.body).toEqual({
+      shotIds: [SHOT_A],
+      patch: { speed: 1.5, sourceInSec: 0.2 },
+    })
+    expect(EditShotsInput.safeParse({ projectId: PROJECT, edits: [{ shotIds: [SHOT_A], speed: 3 }] }).success).toBe(false)
   })
 
   it('つなぎは次の Shot（order 順）へ。古い出入りを消してから作り、cut は消すだけ', async () => {

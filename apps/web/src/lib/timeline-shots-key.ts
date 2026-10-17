@@ -12,6 +12,6 @@ export const timelineShotsKey = (shots: readonly Shot[] | null): string =>
     ? ''
     : shots
         .map((shot) =>
-          [shot.id, shot.startSec, shot.durationSec, shot.timing, shot.sourceInSec, shot.selectedTakeId ?? '-'].join(':'),
+          [shot.id, shot.startSec, shot.durationSec, shot.timing, shot.speed, shot.sourceInSec, shot.selectedTakeId ?? '-'].join(':'),
         )
         .join('|')

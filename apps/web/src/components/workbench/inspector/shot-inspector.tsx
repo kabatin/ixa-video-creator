@@ -9,6 +9,7 @@ import { FootageImportForm } from '@/components/workbench/inspector/footage-impo
 import { ShotCastSection } from '@/components/workbench/inspector/shot-cast-section'
 import { ShotGenerateSection } from '@/components/workbench/inspector/shot-generate-section'
 import { StartFrameField } from '@/components/workbench/inspector/start-frame-field'
+import { TakeSpeedField } from '@/components/workbench/inspector/take-speed-field'
 import { TakeTimingField } from '@/components/workbench/inspector/take-timing-field'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { AutoSaveCheckbox, AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
@@ -387,6 +388,14 @@ const TakeSection = ({ shot }: { readonly shot: Shot }) => {
           {message}
         </p>
       )}
+      <TakeSpeedField
+        shot={shot}
+        adopted={adopted}
+        disabled={isGeneratingStatus(shot.status)}
+        onSave={async (patch) => {
+          await workbench.saveShot(shot.id, patch)
+        }}
+      />
       {/* 普段触らない操作（尺に合わせる・手持ちの動画を取り込む）は畳んでおく。 */}
       <details className="text-sm">
         <summary className="cursor-pointer text-xs text-muted hover:text-text">尺に合わせる・動画を取り込む</summary>

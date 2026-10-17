@@ -43,6 +43,9 @@ export const WireShot = z.object({
   code: z.string(),
   startSec: z.number(),
   durationSec: z.number(),
+  /** 速さと Take の使い始め（ADR-0050）。古い API は返さないので省略可。 */
+  speed: z.number().optional(),
+  sourceInSec: z.number().optional(),
   description: z.string().optional(),
   mood: nullableString,
   camera: WireCamera,
