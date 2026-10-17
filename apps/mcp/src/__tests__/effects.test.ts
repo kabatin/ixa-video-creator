@@ -28,6 +28,9 @@ const clipRow = (id: string, startSec: number, templateKey: string) => ({
   content: { type: 'motion_graphics', templateKey, params: defaultEffectParams('flash') },
 })
 
+/** タイムラインの尺（60 秒）。素材の URL は読まない。 */
+const timelineRoute = { method: 'GET', path: `/projects/${PROJECT}/timeline`, data: { durationSec: 60, video1: [{ mediaUrl: 'https://signed.example/x' }] } }
+
 /** エフェクト（ADR-0050）。型と値は domain のスキーマで、送る前に全部確かめる。 */
 describe('add_effects', () => {
   it('説明に型の一覧と使いどころを載せる', () => {
@@ -38,6 +41,7 @@ describe('add_effects', () => {
 
   it('時刻と Shot の頭から VFX のクリップを作り、既定の尺と値を埋める', async () => {
     const fake = createFakeApi([
+      timelineRoute,
       { method: 'GET', path: `/projects/${PROJECT}/shots`, data: [shotRow(0, 0), shotRow(1, 2.5)] },
       { method: 'POST', path: `/projects/${PROJECT}/clips`, status: 201, sequence: [{ status: 201, data: clipRow(CLIP_A, 1, 'flash') }, { status: 201, data: clipRow(CLIP_B, 2.75, 'zoom_punch') }] },
     ])
@@ -62,7 +66,7 @@ describe('add_effects', () => {
   })
 
   it('範囲外の値があれば 1 つも置かずに断る', async () => {
-    const fake = createFakeApi([])
+    const fake = createFakeApi([timelineRoute])
     const result = await addEffectsTool.run(
       { projectId: PROJECT, effects: [{ template: 'flash', atSec: 0 }, { template: 'shake', atSec: 1, params: { intensity: 2 } }] },
       depsFor(fake),
@@ -73,13 +77,31 @@ describe('add_effects', () => {
   })
 
   it('atSec と shotCode はどちらか 1 つ', async () => {
-    const result = await addEffectsTool.run({ projectId: PROJECT, effects: [{ template: 'flash' }] }, depsFor(createFakeApi([])))
+    const result = await addEffectsTool.run({ projectId: PROJECT, effects: [{ template: 'flash' }] }, depsFor(createFakeApi([timelineRoute])))
     expect(result.isError).toBe(true)
     expect(textOf(result)).toContain('atSec か shotCode')
   })
 
+  it('atSec と offsetSec を一緒に渡したら、黙って捨てずに断る', async () => {
+    const fake = createFakeApi([timelineRoute])
+    const result = await addEffectsTool.run({ projectId: PROJECT, effects: [{ template: 'flash', atSec: 1, offsetSec: 0.5 }] }, depsFor(fake))
+    expect(result.isError).toBe(true)
+    expect(textOf(result)).toContain('offsetSec')
+    expect(fake.callsTo('POST', `/projects/${PROJECT}/clips`)).toEqual([])
+  })
+
+  it('尺はタイムラインの終わりで切り、終わりより後ろは断る（web と同じ）', async () => {
+    const fake = createFakeApi([timelineRoute, { method: 'POST', path: `/projects/${PROJECT}/clips`, status: 201, data: clipRow(CLIP_A, 59, 'title_card') }])
+    jsonOf(await addEffectsTool.run({ projectId: PROJECT, effects: [{ template: 'title_card', atSec: 59 }] }, depsFor(fake)))
+    expect(fake.callsTo('POST', `/projects/${PROJECT}/clips`)[0]?.body).toMatchObject({ startSec: 59, durationSec: 1 })
+    const beyond = await addEffectsTool.run({ projectId: PROJECT, effects: [{ template: 'flash', atSec: 60 }] }, depsFor(fake))
+    expect(beyond.isError).toBe(true)
+    expect(textOf(beyond)).toContain('タイムラインの終わり')
+    expect(JSON.stringify(beyond)).not.toContain('signed.example')
+  })
+
   it('知らない Shot は断る', async () => {
-    const fake = createFakeApi([{ method: 'GET', path: `/projects/${PROJECT}/shots`, data: [shotRow(0, 0)] }])
+    const fake = createFakeApi([timelineRoute, { method: 'GET', path: `/projects/${PROJECT}/shots`, data: [shotRow(0, 0)] }])
     const result = await addEffectsTool.run({ projectId: PROJECT, effects: [{ template: 'flash', shotCode: 'CUT9' }] }, depsFor(fake))
     expect(result.isError).toBe(true)
     expect(textOf(result)).toContain('CUT9')
@@ -110,11 +132,28 @@ describe('list_effects / remove_effects', () => {
 
   it('id で外し、失敗は理由つきで返す', async () => {
     const fake = createFakeApi([
+      { method: 'GET', path: `/projects/${PROJECT}/clips`, data: [clipRow(CLIP_A, 1, 'flash'), clipRow(CLIP_B, 2, 'flash')] },
       { method: 'DELETE', path: `/clips/${CLIP_A}`, status: 204 },
       { method: 'DELETE', path: `/clips/${CLIP_B}`, status: 404, data: '対象が存在しません' },
     ])
-    const result = jsonOf(await removeEffectsTool.run({ effectIds: [CLIP_A, CLIP_B] }, depsFor(fake))) as Record<string, unknown>
+    const result = jsonOf(await removeEffectsTool.run({ projectId: PROJECT, effectIds: [CLIP_A, CLIP_B] }, depsFor(fake))) as Record<string, unknown>
     expect(result.removed).toEqual([CLIP_A])
     expect(result.failures).toEqual([{ id: CLIP_B, reason: '404: 対象が存在しません' }])
+  })
+
+  it('エフェクトではないクリップ・この作品に無いクリップは消さない', async () => {
+    const TEXT_ID = ulid('TX1')
+    const fake = createFakeApi([
+      {
+        method: 'GET',
+        path: `/projects/${PROJECT}/clips`,
+        data: [{ id: TEXT_ID, track: 'TEXT', startSec: 0, durationSec: 1, content: { type: 'text', templateKey: 'plain', params: { text: 'x' } } }],
+      },
+    ])
+    const result = jsonOf(await removeEffectsTool.run({ projectId: PROJECT, effectIds: [TEXT_ID, CLIP_A] }, depsFor(fake))) as { removed: string[]; failures: { id: string; reason: string }[] }
+    expect(result.removed).toEqual([])
+    expect(result.failures.map((f) => f.id)).toEqual([TEXT_ID, CLIP_A])
+    expect(result.failures[0]?.reason).toContain('エフェクトではない')
+    expect(fake.callsTo('DELETE', /\/clips\//)).toEqual([])
   })
 })

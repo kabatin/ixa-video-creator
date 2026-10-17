@@ -12,6 +12,12 @@ import { defineTool, Id, jsonResult, mapLimited, round, ToolInputError } from '.
 /** エフェクトの尺の上限（秒）。長いものはタイトルカード程度で、それ以上は置き間違い。 */
 const MAX_EFFECT_SEC = 30
 
+/** これより短く切れるなら置かない（web の `planEffectInsert` と同じ）。 */
+const MIN_EFFECT_SEC = 0.1
+
+/** タイムラインの尺だけを読む（素材の URL は捨てる。応答にもログにも出さない）。 */
+const WireTimelineLength = z.object({ durationSec: z.number() })
+
 const WireEffectClip = z.object({
   id: z.string(),
   track: z.string(),
@@ -64,11 +70,19 @@ type Planned = {
 }
 
 /** 置く場所と値を全部確かめてから返す。1 つでも読めなければ何も置かない。 */
-const planPlacements = (effects: readonly Placement[], shots: readonly WireShot[] | null): readonly Planned[] =>
+const planPlacements = (
+  effects: readonly Placement[],
+  shots: readonly WireShot[] | null,
+  timelineEndSec: number,
+): readonly Planned[] =>
   effects.map((effect, i) => {
     const where = `effects[${String(i)}]`
     if ((effect.atSec === undefined) === (effect.shotCode === undefined)) {
       throw new ToolInputError(`${where}: atSec か shotCode のどちらか 1 つを指定してください`)
+    }
+    // offsetSec は shotCode と組むものだけ。atSec と一緒なら黙って捨てず断る。
+    if (effect.atSec !== undefined && effect.offsetSec !== undefined) {
+      throw new ToolInputError(`${where}: offsetSec は shotCode と一緒に使います（atSec には足しません）`)
     }
     const shot = effect.shotCode === undefined ? null : (shots ?? []).find((s) => s.code === effect.shotCode)
     if (effect.shotCode !== undefined && (shot === null || shot === undefined)) {
@@ -79,10 +93,15 @@ const planPlacements = (effects: readonly Placement[], shots: readonly WireShot[
     const parsed = parseEffectParams(effect.template, effect.params ?? {})
     if (!parsed.ok) throw new ToolInputError(`${where}.params${parsed.field === null ? '' : `.${parsed.field}`}: ${parsed.message}`)
     const template = EFFECT_TEMPLATES.find((t) => t.key === effect.template)
+    const room = timelineEndSec - startSec
+    if (room < MIN_EFFECT_SEC) {
+      throw new ToolInputError(`${where}: タイムラインの終わり（${String(round(timelineEndSec))} 秒）より後ろには置けません`)
+    }
     return {
       template: effect.template,
       startSec: round(startSec),
-      durationSec: effect.durationSec ?? template?.defaultDurationSec ?? 1,
+      // 終わりで切る（web と同じ）。はみ出た分は絵に出ない。
+      durationSec: round(Math.min(effect.durationSec ?? template?.defaultDurationSec ?? 1, room)),
       params: parsed.value.params,
     }
   })
@@ -125,8 +144,11 @@ export const addEffectsTool = defineTool({
   input: AddEffectsInput,
   handler: async ({ projectId, effects }, { api }) => {
     const needsShots = effects.some((e) => e.shotCode !== undefined)
-    const shots = needsShots ? await api.get(`/projects/${seg(projectId)}/shots`, z.array(WireShot)) : null
-    const planned = planPlacements(effects, shots)
+    const [shots, timeline] = await Promise.all([
+      needsShots ? api.get(`/projects/${seg(projectId)}/shots`, z.array(WireShot)) : Promise.resolve(null),
+      api.get(`/projects/${seg(projectId)}/timeline`, WireTimelineLength),
+    ])
+    const planned = planPlacements(effects, shots, timeline.durationSec)
     const results = await mapLimited(planned, 4, (p) => placeOne(api, projectId, p))
     const failures = results.flatMap((r) => (r.ok ? [] : [r]))
     return jsonResult({
@@ -160,14 +182,25 @@ export const listEffectsTool = defineTool({
   },
 })
 
-export const RemoveEffectsInput = z.object({ effectIds: z.array(Id).min(1).max(200) })
+export const RemoveEffectsInput = z.object({ projectId: Id, effectIds: z.array(Id).min(1).max(200) })
+
+/** エフェクト（VFX の motion_graphics）か。テロップ・効果音・重ね素材はこのツールでは消さない。 */
+const isEffectClip = (clip: z.infer<typeof WireEffectClip>): boolean =>
+  clip.track === 'VFX' && clip.content.type === 'motion_graphics'
 
 export const removeEffectsTool = defineTool({
   name: 'remove_effects',
-  description: 'Remove effect clips by id (ids from list_effects or add_effects). Returns removed ids and failures.',
+  description:
+    'Remove effect clips of a project by id (ids from list_effects or add_effects). Only effect clips (VFX track) are ' +
+    'removed; other ids are refused with a reason. Returns removed ids and failures.',
   input: RemoveEffectsInput,
-  handler: async ({ effectIds }, { api }) => {
+  handler: async ({ projectId, effectIds }, { api }) => {
+    const clips = await api.get(`/projects/${seg(projectId)}/clips`, z.array(WireEffectClip))
+    const byId = new Map(clips.map((clip) => [clip.id, clip]))
     const results = await mapLimited(effectIds, 4, async (id) => {
+      const clip = byId.get(id)
+      if (clip === undefined) return { ok: false as const, id, reason: 'この作品にそのクリップはありません' }
+      if (!isEffectClip(clip)) return { ok: false as const, id, reason: 'エフェクトではないクリップは消しません（テロップ・効果音など）' }
       try {
         await api.request('DELETE', `/clips/${seg(id)}`, z.unknown())
         return { ok: true as const, id }

@@ -218,8 +218,9 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
   },
   list_effects: { base: { projectId: P }, cases: [[{ projectId: 'x' }, 'projectId']] },
   remove_effects: {
-    base: { effectIds: [S] },
+    base: { projectId: P, effectIds: [S] },
     cases: [
+      [{ projectId: 'x' }, 'projectId'],
       [{ effectIds: [] }, 'effectIds'],
       [{ effectIds: ['x'] }, 'effectIds.0'],
       [{ effectIds: many(201, S) }, 'effectIds'],
