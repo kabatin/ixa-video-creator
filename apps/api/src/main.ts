@@ -205,8 +205,9 @@ export const main = (): void => {
   const thumbnailQueue = new Queue(THUMBNAIL_QUEUE_NAME, { connection })
   const thumbnailQueuePort: ThumbnailQueue = {
     enqueue: async (data) => {
-      // 終わったジョブは残さない（中身の署名付き URL を Redis に置き続けない）。
-      await thumbnailQueue.add('thumbnail', data, { removeOnComplete: true })
+      // 終わったジョブは成功でも失敗でも残さない（中身の署名付き URL を Redis に置き続けない）。
+      // 失敗の理由は worker が行に書く（打ち切りも failed の受け口で書く）ので、キューに残す必要は無い。
+      await thumbnailQueue.add('thumbnail', data, { removeOnComplete: true, removeOnFail: true })
     },
   }
 
