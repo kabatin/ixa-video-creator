@@ -1,4 +1,4 @@
-import type { ProjectId, RenderJobId } from '@ixa/domain'
+import type { ProjectId, RenderJobId, ThumbnailId } from '@ixa/domain'
 import { z } from 'zod'
 import type { Requester } from '@/lib/requester'
 
@@ -8,7 +8,7 @@ import type { Requester } from '@/lib/requester'
  *
  * ```
  * GET  /projects/{id}/render-folder       保存先（ホームは ~）と、Finder を開けるか
- * POST /projects/{id}/render-folder/open  入れてから開く（renderJobId を渡すとその 1 本を選んで開く）
+ * POST /projects/{id}/render-folder/open  入れてから開く（renderJobId を渡すとその 1 本、thumbnailId ならそのサムネイルを選んで開く）
  * ```
  */
 
@@ -22,16 +22,22 @@ export const WireRenderFolderOpened = z.object({
 })
 export type WireRenderFolderOpened = z.infer<typeof WireRenderFolderOpened>
 
+/** 選んだ状態で開くもの。書き出した動画（ID そのまま）か、書き出したサムネイル（ADR-0051）。 */
+export type RenderFolderTarget = RenderJobId | { readonly thumbnailId: ThumbnailId }
+
 export type RenderFolderApi = {
   readonly getRenderFolder: (projectId: ProjectId) => Promise<WireRenderFolder>
-  readonly openRenderFolder: (projectId: ProjectId, renderJobId?: RenderJobId) => Promise<WireRenderFolderOpened>
+  readonly openRenderFolder: (projectId: ProjectId, target?: RenderFolderTarget) => Promise<WireRenderFolderOpened>
 }
+
+const openBody = (target: RenderFolderTarget | undefined): Record<string, string> =>
+  target === undefined ? {} : typeof target === 'string' ? { renderJobId: target } : { thumbnailId: target.thumbnailId }
 
 const path = (projectId: ProjectId, suffix = ''): string =>
   `/projects/${encodeURIComponent(projectId)}/render-folder${suffix}`
 
 export const createRenderFolderApi = (requester: Requester): RenderFolderApi => ({
   getRenderFolder: async (projectId) => requester.get(path(projectId), WireRenderFolder),
-  openRenderFolder: async (projectId, renderJobId) =>
-    requester.post(path(projectId, '/open'), renderJobId === undefined ? {} : { renderJobId }, WireRenderFolderOpened),
+  openRenderFolder: async (projectId, target) =>
+    requester.post(path(projectId, '/open'), openBody(target), WireRenderFolderOpened),
 })

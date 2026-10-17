@@ -38,7 +38,7 @@ describe('MenuBar', () => {
     expect(document.activeElement).toHaveTextContent('プロジェクトを複製…')
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowUp' })
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowUp' })
-    expect(document.activeElement).toHaveTextContent('書き出し…')
+    expect(document.activeElement).toHaveTextContent('サムネイルを書き出す…')
   })
 
   it('← → で隣のメニューへ（開いていれば隣を開く）', () => {

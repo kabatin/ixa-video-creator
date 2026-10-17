@@ -12,6 +12,7 @@ import { NewShotDialogBody } from '@/components/workbench/dialogs/new-shot-dialo
 import { PreferencesDialogBody } from '@/components/workbench/dialogs/preferences-dialog'
 import { RenderDialogBody } from '@/components/workbench/dialogs/render-dialog'
 import { SettingsDialogBody } from '@/components/workbench/dialogs/settings-dialog'
+import { ThumbnailDialogBody } from '@/components/workbench/dialogs/thumbnail-dialog'
 import { ShortcutList } from '@/components/workbench/dialogs/shortcuts-dialog'
 import type { RenderWatch } from '@/components/workbench/use-render-watch'
 import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
@@ -32,6 +33,7 @@ const TITLES: Readonly<Record<DialogKind, string>> = {
   'library-import': 'ほかのプロジェクトから取り込む',
   'project-duplicate': 'プロジェクトを複製',
   'make-music': '曲を作る',
+  thumbnail: 'サムネイルを書き出す',
 }
 
 const MEDIUM: ReadonlySet<DialogKind> = new Set([
@@ -85,6 +87,7 @@ export const WorkbenchDialogs = ({
       {dialog === 'library-import' && <LibraryImportDialogBody />}
       {dialog === 'project-duplicate' && <ProjectDuplicateDialogBody />}
       {dialog === 'make-music' && <MakeMusicDialogBody />}
+      {dialog === 'thumbnail' && <ThumbnailDialogBody />}
     </WorkbenchDialog>
   )
 }

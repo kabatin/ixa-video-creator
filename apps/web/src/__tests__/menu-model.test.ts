@@ -223,6 +223,7 @@ describe('行き先', () => {
       'ほかのプロジェクトから取り込む…',
       '設定…',
       '書き出し…',
+      'サムネイルを書き出す…',
     ])
     expect(file?.items.find((entry) => entry.label === '作品の方針…')?.action).toEqual({
       kind: 'command',

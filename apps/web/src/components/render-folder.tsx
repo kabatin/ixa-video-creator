@@ -1,9 +1,14 @@
-import type { ProjectId, RenderJobId } from '@ixa/domain'
+import type { ProjectId } from '@ixa/domain'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
-import { createRenderFolderApi, type RenderFolderApi, type WireRenderFolderOpened } from '@/lib/render-folder-api'
+import {
+  createRenderFolderApi,
+  type RenderFolderApi,
+  type RenderFolderTarget,
+  type WireRenderFolderOpened,
+} from '@/lib/render-folder-api'
 import { createRequester } from '@/lib/requester'
 
 /**
@@ -21,8 +26,8 @@ export type RenderFolder = {
   readonly opening: boolean
   /** 開いた結果・失敗の知らせ。無ければ null。 */
   readonly notice: { readonly tone: 'info' | 'error'; readonly message: string } | null
-  /** フォルダを開く。書き出しを渡すと、その動画を選んだ状態で開く。 */
-  readonly open: (renderJobId?: RenderJobId) => void
+  /** フォルダを開く。書き出し（動画・サムネイル）を渡すと、それを選んだ状態で開く。 */
+  readonly open: (target?: RenderFolderTarget) => void
 }
 
 const defaultApi = (): RenderFolderApi => createRenderFolderApi(createRequester(resolveApiBaseUrl()))
@@ -32,11 +37,11 @@ const openedNotice = (opened: WireRenderFolderOpened): RenderFolder['notice'] =>
   if (opened.failed.length > 0) {
     return {
       tone: 'error',
-      message: `${String(opened.failed.length)} 本はフォルダに入れられませんでした: ${opened.failed.map((f) => f.reason).join(' / ')}`,
+      message: `${String(opened.failed.length)} 件はフォルダに入れられませんでした: ${opened.failed.map((f) => f.reason).join(' / ')}`,
     }
   }
   return opened.copied > 0
-    ? { tone: 'info', message: `書き出した動画 ${String(opened.copied)} 本をフォルダに入れて開きました。` }
+    ? { tone: 'info', message: `書き出したもの ${String(opened.copied)} 件をフォルダに入れて開きました。` }
     : null
 }
 
@@ -62,11 +67,11 @@ export const useRenderFolder = (projectId: ProjectId, api?: RenderFolderApi): Re
   }, [client, projectId])
 
   const open = useCallback(
-    (renderJobId?: RenderJobId) => {
+    (target?: RenderFolderTarget) => {
       setOpening(true)
       setNotice(null)
       client
-        .openRenderFolder(projectId, renderJobId)
+        .openRenderFolder(projectId, target)
         .then((opened) => {
           setPlace((current) => ({ location: opened.location, canOpen: current?.canOpen ?? true }))
           setNotice(openedNotice(opened))

@@ -27,6 +27,7 @@ export type WorkbenchDialog =
   | 'library-import'
   | 'project-duplicate'
   | 'make-music'
+  | 'thumbnail'
 
 export type MenuAction =
   | { readonly kind: 'href'; readonly href: string }
@@ -216,6 +217,8 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
         item('library-import', 'ほかのプロジェクトから取り込む…', dialog('library-import')),
         item('settings', '設定…', dialog('settings')),
         item('render', '書き出し…', dialog('render')),
+        // YouTube のサムネイル（ADR-0051）。書き出しと同じ Remotion の絵で、画面で見た 1 枚がそのまま JPEG になる。
+        item('thumbnail', 'サムネイルを書き出す…', dialog('thumbnail')),
       ],
     },
     {
