@@ -3,6 +3,7 @@ import { readFile, rm } from 'node:fs/promises'
 import type { MediaAssetRepository, ProjectRepository, ThumbnailRepository } from '@ixa/db'
 import {
   MediaAssetId as MediaAssetIdSchema,
+  THUMBNAIL_MAX_BYTES,
   ThumbnailJobData,
   newId,
   type MediaAssetId,
@@ -10,9 +11,11 @@ import {
   type Thumbnail,
   type TimelineDocument,
 } from '@ixa/domain'
-import type { RenderThumbnailStill, ThumbnailBackgroundSource } from '@ixa/render'
+import { THUMBNAIL_TOO_BIG_MESSAGE, type RenderThumbnailStill, type ThumbnailBackgroundSource } from '@ixa/render'
 import { mediaKey, type ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
+import { ThumbnailFailure, describeCause, failureMessageFor } from './failure.js'
+import { stampJpeg } from './jpeg-stamp.js'
 import { withoutUrls } from './redact.js'
 
 /**
@@ -43,10 +46,6 @@ export type ThumbnailOutcome = { readonly state: 'succeeded' | 'failed' | 'skipp
 /** 背景の画像の URL の有効期限。描くのは数秒なので短くてよい。 */
 const IMAGE_URL_EXPIRES_SEC = 600
 
-/** 利用者に見せる理由をそのまま持つ失敗。 */
-class ThumbnailFailure extends Error {
-  override readonly name = 'ThumbnailFailure'
-}
 
 const sourceFor = async (
   deps: ThumbnailProcessorDeps,
@@ -72,8 +71,9 @@ const sourceFor = async (
 }
 
 /**
- * JPEG を素材として保存する。**中身がまったく同じ素材が既にあれば、それを使う**（素材の表は同じ中身を 1 つしか
- * 持てない。同じ仕様で描き直すと同じバイト列になる。書き出しと同じ扱い）。
+ * JPEG を素材として保存する。中身にこの書き出しの ID を書き込むので（`stampJpeg`）、
+ * 書き出しごとに中身が別になり、**いつも自分の作品の素材を持つ**（別の作品の素材を指さない）。
+ * 同じ中身が既にあるのは、同じ書き出しを積み直したとき（素材を作った後に落ちた）だけ。それを使う。
  */
 const storeJpeg = async (
   deps: ThumbnailProcessorDeps,
@@ -81,14 +81,17 @@ const storeJpeg = async (
   project: Project,
   path: string,
 ): Promise<{ readonly id: MediaAssetId; readonly created: boolean }> => {
-  const body = await readFile(path)
+  const body = stampJpeg(await readFile(path), `ixa-thumbnail:${thumbnail.id}`)
+  // 印の分（数十バイト）で上限を越えたら、黙って大きいまま出さない。
+  if (body.byteLength >= THUMBNAIL_MAX_BYTES) throw new ThumbnailFailure(THUMBNAIL_TOO_BIG_MESSAGE)
   const checksumSha256 = createHash('sha256').update(body).digest('hex')
   const existing = await deps.mediaAssets.findByChecksum(checksumSha256)
   if (existing !== null) {
-    deps.logger.info(
-      { thumbnailId: thumbnail.id, mediaAssetId: existing.id },
-      '前のサムネイルと中身が同じだったので、前の素材をそのまま使います',
-    )
+    // 印が同じ＝同じ書き出し。別の作品の素材になっていることは無いはずだが、あれば指さずに止める。
+    if (existing.projectId !== project.id || existing.kind !== 'image') {
+      throw new Error(`同じ中身の素材が別の作品にあります（mediaAssetId=${existing.id}）`)
+    }
+    deps.logger.info({ thumbnailId: thumbnail.id, mediaAssetId: existing.id }, '積み直した書き出しの素材をそのまま使います')
     return { id: existing.id, created: false }
   }
   const id = newId(MediaAssetIdSchema)
@@ -126,10 +129,12 @@ const draw = async (
   deps: ThumbnailProcessorDeps,
   thumbnail: Thumbnail,
   timeline: TimelineDocument | null,
-): Promise<MediaAssetId> => {
+): Promise<MediaAssetId | null> => {
   const project = await deps.projects.findById(thumbnail.projectId)
   if (project === null) throw new ThumbnailFailure('この作品は消されました。')
-  await deps.thumbnails.markRendering(thumbnail.id)
+  const rendering = await deps.thumbnails.markRendering(thumbnail.id)
+  // 拾ってから描き始めるまでに、ほかの手（打ち切りの受け口など）が終わらせていた。描かない。
+  if (rendering.status !== 'rendering') return null
   const source = await sourceFor(deps, thumbnail, project, timeline)
   const still = await deps.renderStill({ props: { spec: thumbnail.spec, source }, outputDir: deps.outputDir })
   try {
@@ -146,6 +151,14 @@ const draw = async (
   }
 }
 
+const skippedBecauseFinished = (deps: ThumbnailProcessorDeps, thumbnail: Thumbnail): ThumbnailOutcome => {
+  deps.logger.warn(
+    { thumbnailId: thumbnail.id, status: thumbnail.status },
+    'サムネイルの行がもう終わっていたので、書き換えずに手を引きます',
+  )
+  return { state: 'skipped' }
+}
+
 export const processThumbnailJob = async (deps: ThumbnailProcessorDeps, data: unknown): Promise<ThumbnailOutcome> => {
   const { thumbnailId, timeline } = ThumbnailJobData.parse(data)
   const thumbnail = await deps.thumbnails.findById(thumbnailId)
@@ -158,14 +171,17 @@ export const processThumbnailJob = async (deps: ThumbnailProcessorDeps, data: un
 
   try {
     const outputAssetId = await draw(deps, thumbnail, timeline)
-    await deps.thumbnails.markDone(thumbnail.id, outputAssetId)
+    if (outputAssetId === null) return skippedBecauseFinished(deps, thumbnail)
+    const done = await deps.thumbnails.markDone(thumbnail.id, outputAssetId)
+    // 描いている間にほかの手が終わらせていた（リポジトリは終わった行を上書きしない）。
+    if (done.status !== 'done') return skippedBecauseFinished(deps, done)
     return { state: 'succeeded' }
   } catch (error) {
-    // **例外の文に署名付き URL が混ざりうる**（Chrome が読めなかった素材の URL など）。DB にもログにも出さない。
-    const reason = withoutUrls(describe(error))
-    const message = error instanceof ThumbnailFailure ? reason : `サムネイルを書き出せませんでした: ${reason}`
-    deps.logger.error({ thumbnailId, err: reason }, 'サムネイルを書き出せませんでした')
-    await deps.thumbnails.markFailed(thumbnail.id, message)
+    // **例外の文に署名付き URL が混ざりうる**（Chrome が読めなかった素材の URL など）。詳細は URL を抜いてログにだけ。
+    // 行（画面に出る文）には決まった日本語だけを書く。
+    deps.logger.error({ thumbnailId, err: describeCause(error) }, 'サムネイルを書き出せませんでした')
+    const failed = await deps.thumbnails.markFailed(thumbnail.id, failureMessageFor(error))
+    if (failed.status !== 'failed') return skippedBecauseFinished(deps, failed)
     return { state: 'failed' }
   }
 }

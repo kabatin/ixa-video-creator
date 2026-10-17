@@ -12,7 +12,7 @@ import {
   type ThumbnailSpecInput,
   type TimelineDocument,
 } from '@ixa/domain'
-import type { RenderThumbnailStillInput } from '@ixa/render'
+import { THUMBNAIL_RENDER_FAILED_MESSAGE, THUMBNAIL_TOO_BIG_MESSAGE, type RenderThumbnailStillInput } from '@ixa/render'
 import { createMemoryStorage, mediaKey } from '@ixa/storage'
 import pino from 'pino'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -23,6 +23,7 @@ import {
   inMemoryProjects,
   silentLogger,
 } from '../../generation/__tests__/doubles.js'
+import { THUMBNAIL_FAILED_MESSAGE } from '../failure.js'
 import { processThumbnailJob, type ThumbnailProcessorDeps } from '../processor.js'
 import { withoutUrls } from '../redact.js'
 
@@ -56,7 +57,9 @@ afterEach(async () => {
 /** 書くたびに状態と中身の食い違いを確かめる偽のリポジトリ（実物と同じ規則）。 */
 const fakeThumbnails = (seed: Thumbnail) => {
   let row = seed
+  /** 実物と同じく、終わった行は書き換えずにそのまま返す。 */
   const save = (patch: Partial<Thumbnail>): Promise<Thumbnail> => {
+    if (row.status === 'done' || row.status === 'failed') return Promise.resolve(row)
     const next = { ...row, ...patch }
     const violation = thumbnailViolation(next)
     if (violation !== null) return Promise.reject(new Error(violation))
@@ -69,7 +72,11 @@ const fakeThumbnails = (seed: Thumbnail) => {
     markDone: (_id, outputAssetId) => save({ status: 'done', outputAssetId, finishedAt: new Date() }),
     markFailed: (_id, error) => save({ status: 'failed', error, finishedAt: new Date() }),
   }
-  return { repo, current: () => row }
+  /** ほかの手（打ち切りの受け口など）が行を終わらせたことにする。 */
+  const finishElsewhere = (patch: Partial<Thumbnail>) => {
+    row = { ...row, ...patch }
+  }
+  return { repo, current: () => row, finishElsewhere }
 }
 
 const aThumbnail = (spec: Partial<ThumbnailSpecInput> = {}, patch: Partial<Thumbnail> = {}): Thumbnail => ({
@@ -86,11 +93,15 @@ const aThumbnail = (spec: Partial<ThumbnailSpecInput> = {}, patch: Partial<Thumb
 })
 
 /** 背景を覚え、JPEG を書く偽の描き手。`fail` なら署名付き URL 入りの文で落ちる（Chrome がそう言うことがある）。 */
-const fakeRenderStill = (options: { fail?: boolean } = {}) => {
+type RenderOptions = { readonly fail?: boolean; readonly failWith?: Error; readonly onRender?: () => void }
+
+const fakeRenderStill = (options: RenderOptions = {}) => {
   const calls: RenderThumbnailStillInput[] = []
   const renderStill = async (input: RenderThumbnailStillInput) => {
     calls.push(input)
-    if (options.fail === true) throw new Error(`Failed to load ${SIGNED}`)
+    options.onRender?.()
+    if (options.failWith !== undefined) throw options.failWith
+    if (options.fail === true) throw new Error(THUMBNAIL_RENDER_FAILED_MESSAGE, { cause: new Error(`Failed to load ${SIGNED} (quality 90)`) })
     const path = join(input.outputDir, `still-${String(calls.length)}.jpg`)
     await writeFile(path, JPEG)
     return { path, bytes: JPEG.byteLength, jpegQuality: 90 }
@@ -98,7 +109,7 @@ const fakeRenderStill = (options: { fail?: boolean } = {}) => {
   return { renderStill, calls }
 }
 
-const setup = async (thumbnail: Thumbnail, options: { fail?: boolean } = {}) => {
+const setup = async (thumbnail: Thumbnail, options: RenderOptions = {}) => {
   const storage = createMemoryStorage()
   const mediaAssets = inMemoryMediaAssets()
   const image = await mediaAssets.create({
@@ -123,9 +134,9 @@ const setup = async (thumbnail: Thumbnail, options: { fail?: boolean } = {}) => 
     renderStill: render.renderStill,
     outputDir: dir,
     mediaQueue: createRecordingMediaQueue(),
-    logger: options.fail === true ? logger : silentLogger,
+    logger: options.fail === true || options.failWith !== undefined ? logger : silentLogger,
   } satisfies ThumbnailProcessorDeps
-  return { deps, thumbnails, render, image, mediaAssets, logged }
+  return { deps, thumbnails, render, image, mediaAssets, logged, storage }
 }
 
 describe('サムネイルのジョブ', () => {
@@ -192,7 +203,7 @@ describe('サムネイルのジョブ', () => {
     expect(repo.current().error).toMatch(/画像ではありません/)
   })
 
-  it('中身が同じ JPEG が既にあれば、それを指す（素材を二重に作らない）', async () => {
+  it('同じ絵になる 2 枚の書き出しでも、それぞれ自分の作品の素材を持つ（別の書き出しの素材を指さない）', async () => {
     const first = await setup(aThumbnail())
     await processThumbnailJob(first.deps, { thumbnailId: first.thumbnails.current().id, timeline: DOC })
     const again = aThumbnail()
@@ -200,8 +211,36 @@ describe('サムネイルのジョブ', () => {
 
     await processThumbnailJob({ ...first.deps, thumbnails: repo.repo }, { thumbnailId: again.id, timeline: DOC })
 
-    expect(repo.current().outputAssetId).toBe(first.thumbnails.current().outputAssetId)
-    expect(first.deps.mediaQueue.enqueued()).toHaveLength(1)
+    const firstAssetId = first.thumbnails.current().outputAssetId
+    const secondAssetId = repo.current().outputAssetId
+    expect(secondAssetId).not.toBeNull()
+    expect(secondAssetId).not.toBe(firstAssetId)
+    const second = secondAssetId === null ? null : await first.mediaAssets.findById(secondAssetId)
+    expect(second).toMatchObject({ projectId: project.id, origin: { type: 'thumbnail', thumbnailId: again.id } })
+  })
+
+  it('同じ書き出しを積み直したら、前に作った素材を使う（二重に作らない）', async () => {
+    const thumbnail = aThumbnail()
+    const f = await setup(thumbnail)
+    await processThumbnailJob(f.deps, { thumbnailId: thumbnail.id, timeline: DOC })
+    const assetId = f.thumbnails.current().outputAssetId
+    // 素材を作った後に落ちて、行は描いている途中のまま積み直された。
+    const retried = fakeThumbnails({ ...thumbnail, status: 'rendering' })
+
+    await processThumbnailJob({ ...f.deps, thumbnails: retried.repo }, { thumbnailId: thumbnail.id, timeline: DOC })
+
+    expect(retried.current().outputAssetId).toBe(assetId)
+    expect(f.deps.mediaQueue.enqueued()).toHaveLength(1)
+  })
+
+  it('JPEG にこの書き出しの ID を書き込み、絵の頭（SOI）は保つ', async () => {
+    const f = await setup(aThumbnail())
+    await processThumbnailJob(f.deps, { thumbnailId: f.thumbnails.current().id, timeline: DOC })
+    const assetId = f.thumbnails.current().outputAssetId
+    const asset = assetId === null ? null : await f.mediaAssets.findById(assetId)
+    const stored = Buffer.from(asset === null ? [] : await f.storage.get(asset.storageKey))
+    expect([...stored.subarray(0, 2)]).toEqual([0xff, 0xd8])
+    expect(stored.includes(`ixa-thumbnail:${f.thumbnails.current().id}`)).toBe(true)
   })
 
   it('終わった行は描き直さない', async () => {
@@ -219,10 +258,39 @@ describe('サムネイルのジョブ', () => {
     expect(await processThumbnailJob(f.deps, { thumbnailId: f.thumbnails.current().id, timeline: DOC })).toEqual({
       state: 'failed',
     })
-    expect(f.thumbnails.current().error).toMatch(/書き出せませんでした/)
     expect(f.thumbnails.current().error).not.toContain('X-Amz-Signature')
     expect(f.logged.join('\n')).not.toContain('X-Amz-Signature')
     expect(f.logged.join('\n')).toContain('(URL)')
+  })
+
+  it('画面に出る文は決まった日本語だけ。Chrome の英語や画質の値は重ねず、ログにだけ残す', async () => {
+    const f = await setup(aThumbnail(), { fail: true })
+    await processThumbnailJob(f.deps, { thumbnailId: f.thumbnails.current().id, timeline: DOC })
+    expect(f.thumbnails.current().error).toBe(THUMBNAIL_FAILED_MESSAGE)
+    expect(f.logged.join('\n')).toContain('Failed to load')
+  })
+
+  it('思いがけない例外（英語の文）でも、画面に出るのは決まった日本語', async () => {
+    const f = await setup(aThumbnail(), { failWith: new TypeError('Cannot read properties of undefined') })
+    await processThumbnailJob(f.deps, { thumbnailId: f.thumbnails.current().id, timeline: DOC })
+    expect(f.thumbnails.current().error).toBe(THUMBNAIL_FAILED_MESSAGE)
+  })
+
+  it('2 MB に収まらなかったときは、その理由の日本語を出す', async () => {
+    const f = await setup(aThumbnail(), { failWith: new Error(THUMBNAIL_TOO_BIG_MESSAGE, { cause: new Error('2.10 MB') }) })
+    await processThumbnailJob(f.deps, { thumbnailId: f.thumbnails.current().id, timeline: DOC })
+    expect(f.thumbnails.current().error).toBe(THUMBNAIL_TOO_BIG_MESSAGE)
+  })
+
+  it('描いている間にほかの手が失敗にしていたら、done で上書きせずに手を引く', async () => {
+    const thumbnail = aThumbnail()
+    const holder: { finish?: () => void } = {}
+    const f = await setup(thumbnail, { onRender: () => holder.finish?.() })
+    holder.finish = () => {
+      f.thumbnails.finishElsewhere({ status: 'failed', error: '打ち切られました', finishedAt: new Date() })
+    }
+    expect(await processThumbnailJob(f.deps, { thumbnailId: thumbnail.id, timeline: DOC })).toEqual({ state: 'skipped' })
+    expect(f.thumbnails.current().status).toBe('failed')
   })
 })
 
