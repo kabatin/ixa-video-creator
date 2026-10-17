@@ -19,7 +19,7 @@ import { failInterruptedImageJob, processImageJob } from './image/index.js'
 import { processUpscaleJob } from './upscale/index.js'
 import { failInterruptedVoiceJob, processVoiceJob } from './voice/index.js'
 import { failInterruptedMusicJob, processMusicJob } from './music/index.js'
-import { processThumbnailJob } from './thumbnail/index.js'
+import { failInterruptedThumbnailJob, processThumbnailJob } from './thumbnail/index.js'
 
 /** graceful shutdown の既定タイムアウト（ミリ秒）。超過したら強制終了する。 */
 const SHUTDOWN_TIMEOUT_MS = 30_000
@@ -102,6 +102,9 @@ const createWorkers = (
       }
       if (config.name === QUEUE_NAMES.music && job !== undefined) {
         void failInterruptedMusicJob(generation.music, job.data, error.message)
+      }
+      if (config.name === QUEUE_NAMES.thumbnail && job !== undefined) {
+        void failInterruptedThumbnailJob(generation.thumbnail, job.data, error.message)
       }
     })
 
