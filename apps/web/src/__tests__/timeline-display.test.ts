@@ -413,6 +413,6 @@ describe('clipChipLabel', () => {
   it('エフェクトは型の名前だけ。タイトルカードは文字も（ADR-0050）', () => {
     expect(clipChipLabel({ type: 'motion_graphics', templateKey: 'flash', params: {} })).toBe('フラッシュ')
     expect(clipChipLabel({ type: 'motion_graphics', templateKey: 'title_card', params: { text: '決勝' } })).toBe('タイトル「決勝」')
-    expect(clipChipLabel({ type: 'motion_graphics', templateKey: 'ink_splash', params: {} })).toBe('知らないエフェクト（ink_splash）')
+    expect(clipChipLabel({ type: 'motion_graphics', templateKey: 'ink_splash', params: {} })).toBe('知らない種類のエフェクト')
   })
 })

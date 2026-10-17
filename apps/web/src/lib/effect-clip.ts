@@ -60,10 +60,12 @@ export const planEffectInsert = (input: {
   return { ok: true, startSec, durationSec, layer }
 }
 
-/** 型の画面の名前。知らない型は鍵のまま（読めない型だと分かるように）。 */
+/** 型の画面の名前。知らない型は「知らない種類」とだけ言う（内部の鍵は画面に出さない）。 */
+export const UNKNOWN_EFFECT_LABEL = '知らない種類のエフェクト'
+
 export const effectLabelOf = (templateKey: string): string => {
   const key = effectTemplateKeyOf(templateKey)
-  return key === null ? `知らないエフェクト（${templateKey}）` : effectTemplateOf(key).label
+  return key === null ? UNKNOWN_EFFECT_LABEL : effectTemplateOf(key).label
 }
 
 /** 帯の札。タイトルカードは文字も出す（何が出るか分かるように）。 */

@@ -10,7 +10,7 @@ import {
   type EffectTemplateKey,
   type TimelineClipId,
 } from '@ixa/domain'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { AutoSaveColor, AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
 import { AutoSaveSlider } from '@/components/workbench/ui/auto-save-slider'
@@ -38,7 +38,12 @@ type Loaded =
   | { readonly kind: 'ready'; readonly clip: WireTimelineClip | null }
   | { readonly kind: 'error'; readonly message: string }
 
-type Save = (patch: Parameters<ReturnType<typeof createApiClient>['updateClip']>[1]) => Promise<void>
+type Patch = Parameters<ReturnType<typeof createApiClient>['updateClip']>[1]
+/**
+ * 保存の口。**送る中身は、その時点の最新のクリップから作る**（`build`）。
+ * 描いた時点の中身から作ると、つまみを続けて 2 回離したとき 2 回目が 1 回目を古い値で上書きした（2026-10-17 のレビュー）。
+ */
+type Save = (build: (latest: WireTimelineClip) => Patch) => Promise<void>
 
 const TEMPLATE_OPTIONS = EFFECT_PICKER_OPTIONS.map((option) => ({ value: option.key, label: option.label }))
 
@@ -101,11 +106,13 @@ const EffectBody = ({ clip, templateKey, save }: { readonly clip: WireTimelineCl
   const content = clip.content
   const parsed = parseEffectParams(content.templateKey, content.params)
   const params = parsed.ok ? parsed.value.params : defaultEffectParams(templateKey)
-  const changeParam = async (key: string, value: unknown): Promise<void> => {
-    const changed = changeEffectParam(content, key, value)
-    if (!changed.ok) throw new Error(changed.message)
-    await save({ content: { type: 'motion_graphics', templateKey, params: { ...changed.params } } })
-  }
+  const changeParam = (key: string, value: unknown): Promise<void> =>
+    save((latest) => {
+      if (latest.content.type !== 'motion_graphics') throw new Error('エフェクトではなくなっています')
+      const changed = changeEffectParam(latest.content, key, value)
+      if (!changed.ok) throw new Error(changed.message)
+      return { content: { type: 'motion_graphics', templateKey, params: { ...changed.params } } }
+    })
   return (
     <Section title="見え方">
       {!parsed.ok && (
@@ -130,13 +137,19 @@ export const EffectInspector = ({ id }: { readonly id: TimelineClipId }) => {
   const api = useMemo(() => createApiClient(), [])
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' })
   const [error, setError] = useState<string | null>(null)
+  /** 最新のクリップ（保存の返事で進める）と、保存の順番待ち。保存は 1 本ずつ順に送る。 */
+  const latest = useRef<WireTimelineClip | null>(null)
+  const queue = useRef<Promise<void>>(Promise.resolve())
 
   useEffect(() => {
     let alive = true
     api
       .listClips(workbench.projectId, EFFECT_TRACK)
       .then((clips) => {
-        if (alive) setLoaded({ kind: 'ready', clip: clips.find((candidate) => candidate.id === id) ?? null })
+        if (!alive) return
+        const found = clips.find((candidate) => candidate.id === id) ?? null
+        latest.current = found
+        setLoaded({ kind: 'ready', clip: found })
       })
       .catch((cause: unknown) => {
         if (alive) setLoaded({ kind: 'error', message: describeForPerson(cause) })
@@ -154,10 +167,18 @@ export const EffectInspector = ({ id }: { readonly id: TimelineClipId }) => {
   }
   const templateKey = effectTemplateKeyOf(clip.content.templateKey)
 
-  const save: Save = async (patch) => {
-    const updated = await api.updateClip(id, patch)
-    setLoaded({ kind: 'ready', clip: updated })
-    workbench.refresh()
+  const save: Save = (build) => {
+    const run = queue.current.then(async () => {
+      const base = latest.current
+      if (base === null) throw new Error('エフェクトを読み直してください')
+      const updated = await api.updateClip(id, build(base))
+      latest.current = updated
+      setLoaded({ kind: 'ready', clip: updated })
+      workbench.refresh()
+    })
+    // 失敗しても次の保存は待たせない（失敗は欄の横に出る）。
+    queue.current = run.catch(() => undefined)
+    return run
   }
 
   return (
@@ -173,20 +194,20 @@ export const EffectInspector = ({ id }: { readonly id: TimelineClipId }) => {
             onSave={async (next) => {
               const key = effectTemplateKeyOf(next)
               if (key === null) return
-              await save({ content: { type: 'motion_graphics', templateKey: key, params: { ...defaultEffectParams(key) } } })
+              await save(() => ({ content: { type: 'motion_graphics', templateKey: key, params: { ...defaultEffectParams(key) } } }))
             }}
           />
           <AutoSaveField
             label="位置"
             value={formatClock(clip.startSec)}
             validate={(next) => (parseClockInput(next) === null ? '0:03.75 のように入れてください' : null)}
-            onSave={(next) => save({ startSec: parseClockInput(next) ?? clip.startSec })}
+            onSave={(next) => save((now) => ({ startSec: parseClockInput(next) ?? now.startSec }))}
           />
           <AutoSaveField
             label="長さ"
             value={formatDuration(clip.durationSec)}
             validate={(next) => (parseDurationInput(next) === null ? '0.40s のように入れてください' : null)}
-            onSave={(next) => save({ durationSec: parseDurationInput(next) ?? clip.durationSec })}
+            onSave={(next) => save((now) => ({ durationSec: parseDurationInput(next) ?? now.durationSec }))}
           />
         </Section>
         {templateKey === null ? (

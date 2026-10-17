@@ -64,6 +64,42 @@ describe('EffectInspector', () => {
     expect(screen.getByLabelText('書体')).toBeTruthy()
   })
 
+  /** 2026-10-17 のレビュー。描いた時点の中身から作ると、2 回目が 1 回目を古い値で上書きした。 */
+  it('続けて 2 つの項目を保存すると、順に送り、2 回目は 1 回目の値を残す', async () => {
+    const resolvers: (() => void)[] = []
+    fake.updateClip.mockImplementation((_id: string, patch: { content?: TimelineClip['content'] }) =>
+      new Promise((resolve) => {
+        resolvers.push(() => {
+          resolve(clip(patch.content ?? flash))
+        })
+      }),
+    )
+    renderInWorkbench(<EffectInspector id={CLIP_ID} />)
+    const intensity = await screen.findByLabelText('強さ')
+    const attack = screen.getByLabelText('立ち上がり')
+    fireEvent.change(intensity, { target: { value: '0.5' } })
+    fireEvent.pointerUp(intensity)
+    fireEvent.change(attack, { target: { value: '0.2' } })
+    fireEvent.pointerUp(attack)
+    await waitFor(() => {
+      expect(fake.updateClip).toHaveBeenCalledTimes(1)
+    })
+    resolvers[0]?.()
+    await waitFor(() => {
+      expect(fake.updateClip).toHaveBeenCalledTimes(2)
+    })
+    resolvers[1]?.()
+    expect(sent()?.content?.params).toEqual({ ...defaultEffectParams('flash'), intensity: 0.5, attackSec: 0.2 })
+  })
+
+  it('読めない値の理由は画面の言葉で出す（生の値を出さない）', async () => {
+    fake.listClips.mockResolvedValue([clip({ type: 'motion_graphics', templateKey: 'speed_lines', params: { direction: 'vertical' } })])
+    renderInWorkbench(<EffectInspector id={CLIP_ID} />)
+    const alert = await screen.findByText(/値を読めないので/)
+    expect(alert.textContent).toContain('中心から')
+    expect(alert.textContent).not.toMatch(/vertical|radial|horizontal/)
+  })
+
   it('知らない種類は理由を出し、選び直せる', async () => {
     fake.listClips.mockResolvedValue([clip({ type: 'motion_graphics', templateKey: 'ink_splash', params: {} })])
     renderInWorkbench(<EffectInspector id={CLIP_ID} />)

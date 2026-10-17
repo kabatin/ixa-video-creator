@@ -59,6 +59,10 @@ describe('画面の言葉', () => {
     })
   })
 
+  it('知らない型は内部の鍵を出さずに言う', () => {
+    expect(effectChipLabel({ templateKey: 'ink_splash', params: {} })).toBe('知らない種類のエフェクト')
+  })
+
   it('帯の札は型の名前。タイトルカードは文字も', () => {
     expect(effectChipLabel({ templateKey: 'zoom_punch', params: {} })).toBe('寄りのパンチ')
     expect(effectChipLabel({ templateKey: 'title_card', params: { text: '決勝' } })).toBe('タイトル「決勝」')
