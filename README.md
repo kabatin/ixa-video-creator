@@ -33,6 +33,9 @@ timeline:
 The work is therefore *edit against the music, then fill each slot* — never *generate clips
 and hope they fit*. The first film made with it is a 1m56s music video in 27 shots.
 
+No finished song yet? *Make a song* writes one on your own Mac with ACE-Step 1.5 — a style, optional
+lyrics, a length — and it lands in the project as a track, analysed like any other.
+
 ![Cutting while listening: section boundaries placed as cuts in one click, with the cuts they make](./docs/images/cutter.jpg)
 
 ## From an empty project to the exported file
@@ -50,24 +53,41 @@ step shows ✓ when it is done, or how far along it is.
 4. **Captions** — the timed lines become text clips. The preview plays the song with the
    captions over black, so you can check timing without generating — or paying for — any
    pictures.
-5. **Cut into shots** — place cuts while listening (Enter works anywhere, cuts snap to the
+5. **Narration** (optional) — write lines and have an AI voice read them, or record your own
+   and let it be transcribed into lines and captions. The music ducks under the voice.
+6. **Cut into shots** — place cuts while listening (Enter works anywhere, cuts snap to the
    beat), or in one click at section boundaries or lyric starts. Cuts are a draft until you
    press *N cuts → shots*.
-6. **Storyboard** — an AI drafts a description, a mood **and a camera** (shot size, angle,
+7. **Storyboard** — an AI drafts a description, a mood **and a camera** (shot size, angle,
    movement) for every shot, each with *why this picture*. It reads the lyrics sung during that
    shot, the characters, the locations and the look. Nothing changes until you adopt a draft,
    shot by shot; you can always write your own.
-7. **Frames** — an AI draws each shot's start frame from its storyboard, with the cast's
+8. **Frames** — an AI draws each shot's start frame from its storyboard, with the cast's
    reference images. Three are drawn at a time (measured: 2.1× faster than one by one), and you
    can stop the whole queue — or only the shots you selected — at any point.
-8. **Takes** — the video for each shot, made from its start frame. While they render you see
+9. **Takes** — the video for each shot, made from its start frame. While they render you see
    which are queued, which are waiting inside the generator and which are being made, with the
    time elapsed and an estimate; generation can be stopped at any point.
-9. **Export** — H.264, the whole film or only the shots you selected. The file is saved into
+10. **Export** — H.264, the whole film or only the shots you selected. The file is saved into
    `~/Movies/ixa-video-creator/<project>/`, and one button opens that folder in Finder.
 
 Skipping a step is allowed, but you are asked first — for example, before drawing frames for
 shots that have no storyboard yet.
+
+## Or hand the whole job to an agent
+
+`apps/mcp` is an MCP server (ADR-0049) that lets Claude Code or Codex drive the same steps through
+21 tools — create the project, make and pick a song, cut it into shots, write the storyboard, draw
+start frames, make takes, adopt them, export. Two of the tools are the agent's eyes: `view`
+returns start frames and frames sampled from a take **as images**, so the agent can look at what it
+made and redraw a broken hand or a morphing car before it moves on.
+
+> "Make a 60-second 16:9 short: a night street race, then the two drivers at dawn."
+
+The agent works through the API with a revocable automation token (ADR-0046), so everything it makes
+appears in the workbench as ordinary shots and takes you can review and change. The first test — a
+62-second, 16-shot short made entirely through these tools, music included — took about four hours
+on one local GPU. Setup: [apps/mcp/README.md](./apps/mcp/README.md).
 
 ## A 30-second spot, start to finish
 
@@ -102,9 +122,10 @@ beat is a choice, and on the reference project 16 of 27 cuts are deliberately of
 path" that can drift from the output — a class of bug that eats hours.
 
 **You choose the AI for each job, from what is already on your machine.** Text (storyboard
-drafts and writing help) can be Claude Code, Codex or Grok; images can be Codex; video can be
-the free local models or fal. The CLIs run under your own sign-in — no API keys for them are
-stored in the app.
+drafts and writing help) can be Claude Code, Codex or Grok; images can be Codex or local FLUX.2
+[klein]; video can be the free local models or fal; music is local ACE-Step 1.5. The CLIs run
+under your own sign-in — no API keys for them are stored in the app. **Text, pictures, video
+and music can all be made on one Mac, for free.**
 
 **Your footage is just files.** Everything the app makes — frames, takes, renders — is written
 to a folder on your disk (`STORAGE_DIR`, no object store in the way), and one button copies a
@@ -140,11 +161,12 @@ leaving it stuck, and a transient network error never discards work you already 
 apps/
   web       Next.js workbench — dockable panels (storyboard, cutter, timeline, compare, drafts)
   api       Hono + zod-openapi
-  worker    BullMQ consumers: video and image generation, media probing, rendering
+  worker    BullMQ consumers: video, image, voice and music generation, media probing, rendering
   audio     Python service — librosa analysis (beats, downbeats, sections, waveform)
+  mcp       MCP server for AI agents (stdio) — a thin client of the API
 packages/
   domain    Pure. No IO. The single source of truth for the model.
-  providers Adapters (video / image / llm). External SDKs and CLIs stop here.
+  providers Adapters (video / image / llm / voice / music). External SDKs and CLIs stop here.
   render    Remotion composition + FFmpeg plan
   db        Drizzle schema and repositories
 ```
@@ -186,17 +208,22 @@ no cost.**
 
 ### Choosing which AI to use
 
-![The "which AI to use" dialog: one choice each for text, images and video, listing what was found on this Mac](./docs/images/ai-chooser.jpg)
+![The "which AI to use" dialog: a tab per job on the left showing the current choice, and the AIs found on this Mac for video on the right, tagged "this Mac" and "free"](./docs/images/ai-chooser.jpg)
 
 The first time you open the workbench, the *使う AI* (which AI to use) dialog appears. It looks
-for the AI CLIs installed on this Mac and a local generation server, and lets you pick one for
+for the AI CLIs, API keys and local generation servers on this Mac, and lets you pick one for
 each job:
 
 | Purpose | Choices |
 |---|---|
-| Text — storyboard drafts, ✦ AI writing help, automatic review | Claude Code · Codex · Grok · stub |
-| Images — shot start frames, character sheets | Codex · stub |
-| Video — takes (AUTO picks among this AI's models) | local still-motion (free) · local MiniMax H3 via vpipe (free) · local Wan 2.2 5B via wan-api (free) · fal (paid) · stub |
+| Text — storyboard drafts, ✦ AI writing help, automatic review | Claude Code · Codex · Grok |
+| Images — shot start frames, character sheets | Codex · FLUX.2 [klein] (local, free) |
+| Video — takes (AUTO picks among this AI's models) | still-motion (free) · MiniMax H3 (local, free) · Wan 2.2 5B (local, free) · Seedance via fal (paid) |
+| Voice — narration | Mac voice (free) · Gemini API · ElevenLabs (paid) |
+| Transcription — recorded narration into lines | whisper.cpp (local, free) · Gemini API · ElevenLabs (paid) |
+| Music — *Make a song* | ACE-Step 1.5 (local, free) |
+
+Every job also has a stub (*お試し*) that runs without any AI.
 
 Change it later from *iXA Video Creator → 使う AI…*. Until you choose, the `.env` settings apply.
 fal and the local server must be enabled in `.env` before they can be chosen — the screen alone
@@ -220,39 +247,42 @@ whether the billing path is open.
 
 ### Generating on this Mac (optional)
 
-Two local generation servers can act as free video providers, and **both can be enabled at once**:
+Four local servers turn one Apple Silicon Mac into a free studio. Enable any of them, or all
+of them.
 
-| Server | Model | Default address |
-|---|---|---|
-| [vpipe-api](https://github.com/kabatin/vpipe-api) | MiniMax H3 Turbo | `http://127.0.0.1:8765` |
-| [wan-api](https://github.com/kabatin/wan-api) | Wan 2.2 TI2V-5B | `http://127.0.0.1:8766` |
+| Server | Makes | Model | Default address |
+|---|---|---|---|
+| [vpipe-api](https://github.com/kabatin/vpipe-api) | video | MiniMax H3 Turbo | `http://127.0.0.1:8765` |
+| [wan-api](https://github.com/kabatin/wan-api) | video | Wan 2.2 TI2V-5B | `http://127.0.0.1:8766` |
+| [klein-api](https://github.com/kabatin/klein-api) | images | FLUX.2 [klein] | `http://127.0.0.1:8767` |
+| [ace-step-api](https://github.com/kabatin/ace-step-api) | music | ACE-Step 1.5 | `http://127.0.0.1:8768` |
 
 ```bash
-# .env (comma-separated; default is `none`)
-LOCAL_VIDEO_GENERATOR=vpipe,wan
+# .env (default for each is `none`)
+LOCAL_VIDEO_GENERATOR=vpipe,wan   # comma-separated
+LOCAL_IMAGE_GENERATOR=klein
+LOCAL_MUSIC_GENERATOR=ace_step
 VPIPE_API_URL=http://127.0.0.1:8765
-VPIPE_API_TOKEN=              # required only when the URL points off this machine
-WAN_API_URL=http://127.0.0.1:8766
-WAN_API_TOKEN=                # same
+VPIPE_API_TOKEN=                  # required only when the URL points off this machine
+# WAN_ / KLEIN_ / ACE_STEP_API_URL and _API_TOKEN work the same way
 ```
 
-Three steps: **start the server, list it in `LOCAL_VIDEO_GENERATOR`, pick it under *Which AI*
-for video.** Installing and running the servers is documented in their own READMEs.
+Three steps: **start the server, list it in `.env`, pick it under *Which AI*.** Installing and
+running the servers is documented in their own READMEs.
 
-**Images can be made locally too** (ADR-0047). Start [klein-api](https://github.com/kabatin/klein-api)
-(FLUX.2 [klein], default `http://127.0.0.1:8767`), set `LOCAL_IMAGE_GENERATOR=klein`, and pick it
-under *Which AI* for images. About 30 s per image, free, and a fixed seed reproduces the picture.
-It shares the GPU with video, so it waits in the same line as video and upscaling
-(`KLEIN_API_URL` / `KLEIN_API_TOKEN` work like the ones above).
+**They share one GPU, so ixa never runs two local generations at the same time.** Video, images,
+upscaling and music wait in one line and finish one after another; the waiting one shows as
+*waiting in line* rather than in progress.
 
-**Music can be made locally too** (ADR-0048). Start ace-step-api (ACE-Step 1.5, default
-`http://127.0.0.1:8768`), set `LOCAL_MUSIC_GENERATOR=ace_step`, and pick it under *Which AI* for
-music. Use *Make a song* in the music area to give a style, optional lyrics, a length (10–240 s),
-instrumental or not, and how many (1–4). About 40 s per 60-second song (up to ~1.5 min on the first run while the model loads), free (MIT licensed). Each result becomes a music track and is sent to beat
-analysis (the first one becomes the master only when the project has none). It shares the GPU with
-video and waits in the same line (`ACE_STEP_API_URL` / `ACE_STEP_API_TOKEN` work like the ones above).
+**Images** (ADR-0047): about 30 s per image, and a fixed seed reproduces the picture.
 
-Each listed server contributes a draft and a standard model; vpipe also publishes a **final**
+**Music** (ADR-0048): *Make a song* in the music area takes a style, optional lyrics, a length
+(10–240 s), instrumental or not, and how many (1–4). About 40 s per 60-second song (up to ~1.5 min
+on the first run while the model loads). Each result becomes a music track and is sent to beat
+analysis; the first one becomes the master only when the project has none. Only the master track
+plays in the preview and the export — the others are candidates.
+
+**Video** (ADR-0031, ADR-0040): each listed server contributes a draft and a standard model; vpipe also publishes a **final**
 one. AUTO chooses among them only when that server is the selected video AI; otherwise it never
 picks them.
 
@@ -270,10 +300,6 @@ take: the picture stays exactly as adopted and only the detail sharpens, to 1920
 take, or for every adopted take from the bulk bar. Measured: about 5.5 min per shot, and the
 upscaled take is appended next to the original. Takes are stored at the size the model actually
 drew (ADR-0045) and scaled once, with Lanczos, at export.
-
-**They share one GPU, so ixa never runs two local generations at the same time.** Ask for two
-and they finish one after another; the waiting one shows as *waiting in line* rather than in
-progress.
 
 **Wan tops out at 5 seconds** (wan-api's contract). A 5–7.5s shot is generated at 5s and slowed to
 fit; beyond 7.5s ixa asks you to split the shot. Use MiniMax H3 (up to 10.125s) for longer cuts.
@@ -295,8 +321,9 @@ Note: with wan-api's `drawthings` backend a start image is rejected — use the 
 
 ## Costs, honestly
 
-Everything except fal is free to run: the stubs, `local/still-motion` and the local MiniMax H3
-and Wan 2.2 servers. Claude Code, Codex and Grok use whatever plan you are already signed in with.
+Everything except fal, ElevenLabs and Gemini's paid tier is free to run: the stubs,
+`local/still-motion`, the four local servers, the Mac voice and whisper.cpp. Claude Code, Codex
+and Grok use whatever plan you are already signed in with.
 
 For the reference project — 27 shots, 110.9s of edited footage — Seedance 2.5 via fal.ai
 bills **140s**, because the model's minimum clip is 4 seconds and 12 of those shots are
@@ -308,8 +335,10 @@ take.
 ## Status
 
 Working end to end, from an empty project to an exported file: analysis → direction → lyric
-timing → captions → cutting → AI storyboard drafts → AI start frames → takes → review →
-timeline → H.264 export. The local video paths (still-motion, MiniMax H3 via vpipe, Wan 2.2 5B via
+timing → captions → narration → cutting → AI storyboard drafts → AI start frames → takes →
+review → timeline → H.264 export — by hand in the workbench, or by an agent through MCP. Local
+images (klein) and local music (ACE-Step) are measured on real hardware and used for real work.
+The local video paths (still-motion, MiniMax H3 via vpipe, Wan 2.2 5B via
 wan-api) are measured on real hardware — though **no clip has been generated from ixa through
 wan-api yet**: those numbers come from wan-api's own benchmarks and the adapter is covered by
 contract tests (ADR-0040). The fal.ai / Seedance 2.5 adapter is implemented and tested against
@@ -345,6 +374,10 @@ operator:
 - **Wan 2.2** (likewise, only if you enable it) is published under Apache-2.0, which permits
   commercial use. ixa does not ship the weights; the attribution and license-notice
   obligations fall on you as the operator — check the model card.
+- **FLUX.2 [klein]** (only if you enable klein-api): the 4B (draft) and 9B (standard) weights
+  are published under different licenses, and the 9B's does not cover commercial use — check
+  both model cards before using the output commercially.
+- **ACE-Step 1.5** (only if you enable ace-step-api) is published under MIT.
 
 ## Contributing
 
