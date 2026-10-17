@@ -30,6 +30,16 @@ export const fadeInOut = (sec: number, durationSec: number, fadeRatio: number): 
   return clamp01(Math.min(sec / fade, (durationSec - sec) / fade))
 }
 
+/** クリップの最後のコマの時刻（秒）。ここで 0 に戻りきれば、次のコマで絵が跳ねない。 */
+export const lastFrameSec = (durationSec: number, fps: number): number => Math.max(1e-6, durationSec - 1 / fps)
+
+/**
+ * 立ち上がり・戻りの長さを、クリップの最後のコマまでに収める縮め率（0〜1）。
+ * 値の合計が尺より長いと、尺の終わりで途中のまま切れて絵が跳ねる（2026-10-17 のレビュー）。
+ */
+export const fitToClip = (totalSec: number, durationSec: number, fps: number): number =>
+  totalSec <= 0 ? 1 : Math.min(1, lastFrameSec(durationSec, fps) / totalSec)
+
 /** コマと尺（秒）。描く部品に渡す時刻の組。 */
 export type EffectTime = {
   /** クリップの頭からの秒。 */

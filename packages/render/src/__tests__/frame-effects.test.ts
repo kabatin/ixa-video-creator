@@ -133,3 +133,45 @@ describe('frameLayerStyle', () => {
     expect(style.filter).toBe('url(#f1) brightness(1.5)')
   })
 })
+
+/** 2026-10-17 のレビューで見つかった跳ね・黒い端・ずれ。 */
+describe('frameLayerAt — 終わりで戻りきる・端を見せない・境目を真ん中に', () => {
+  it('寄りのパンチは戻るまでが尺より長くても、最後のコマで元の大きさに戻る', () => {
+    const movers = buildFrameMovers(makeDocument({ clips: [effect(1, 'zoom_punch', 0, 0.5, { scale: 1.4, peakAtSec: 0.2, decaySec: 3 })] }))
+    const last = Math.round(0.5 * FPS) - 1
+    expect(frameLayerAt(movers, last, FPS)).toEqual(IDENTITY_FRAME_LAYER)
+    expect(frameLayerAt(movers, last - 3, FPS).scale).toBeGreaterThan(1)
+  })
+
+  it('揺れも最後のコマで止まりきる', () => {
+    const movers = buildFrameMovers(makeDocument({ clips: [effect(1, 'shake', 0, 0.5, { intensity: 1 })] }))
+    expect(frameLayerAt(movers, Math.round(0.5 * FPS) - 1, FPS)).toEqual(IDENTITY_FRAME_LAYER)
+  })
+
+  it.each([
+    ['揺れだけ（傾きの分）', [], 0, 60],
+    ['whip_pan と揺れ', [makeTransition(1, shotId(1), shotId(2), 'whip_pan', 0.4)], 54, 66],
+    ['glitch と揺れ', [makeTransition(1, shotId(1), shotId(2), 'glitch', 0.4)], 54, 66],
+  ] as const)('%s を重ねても、ずれと傾きを覆える大きさまで寄る（端の黒を見せない）', (_name, transitions, from, to) => {
+    const shakeAt = from / FPS
+    const movers = buildFrameMovers(
+      makeDocument({ video1: twoShots(), transitions: [...transitions], clips: [effect(1, 'shake', shakeAt, 2, { intensity: 1, frequencyHz: 30 })] }),
+    )
+    for (let frame = from; frame < to; frame += 1) {
+      const s = frameLayerAt(movers, frame, FPS)
+      const rad = (Math.abs(s.rotateDeg) * Math.PI) / 180
+      const cover = (s.scale / (Math.cos(rad) + Math.sin(rad) * 2) - 1) / 2
+      expect(Math.max(Math.abs(s.translateX), Math.abs(s.translateY))).toBeLessThanOrEqual(cover + 1e-4)
+    }
+  })
+
+  it('境目の前に半分の時間が無ければ、前後とも縮めて境目を真ん中に保つ', () => {
+    const doc = makeDocument({
+      video1: [makeVideo1Shot(1, 0, 0.1), makeVideo1Shot(2, 0.1, 2)],
+      transitions: [makeTransition(1, shotId(1), shotId(2), 'whip_pan', 0.4)],
+    })
+    const [mover] = buildFrameMovers(doc)
+    expect(mover?.range).toEqual({ from: 0, durationInFrames: 6 })
+    expect(mover?.kind === 'whip_pan' && mover.boundaryFrame).toBe(3)
+  })
+})

@@ -209,17 +209,17 @@ export const ClipBody: React.FC<{ clip: ClipPlan; fps: number; video: FitRect }>
   const effect = resolveEffectClip(content)
   // 下の絵を動かす型（揺れ・寄りのパンチ）は、ここでは描かない。Shot と VIDEO2 の入れ物に当てる（`timelineLayers`）。
   if (effect.status === 'frame') return null
+  // **入れ物を被せない。** 重なり順と不透明度は部品の要素そのものに付ける（被せると混ぜ方が下の絵に届かない。`OverlayBox`）。
   if (effect.status === 'overlay') {
     return (
-      <AbsoluteFill style={layerStyle}>
-        <EffectClipLayer
-          content={effect.content}
-          clipId={clip.clipId}
-          durationInFrames={clip.range.durationInFrames}
-          fps={fps}
-          video={video}
-        />
-      </AbsoluteFill>
+      <EffectClipLayer
+        content={effect.content}
+        clipId={clip.clipId}
+        durationInFrames={clip.range.durationInFrames}
+        fps={fps}
+        video={video}
+        layer={layerStyle}
+      />
     )
   }
   // 知らない型・読めない値は**無言で消さない**。型の名前と理由を枠で出す。

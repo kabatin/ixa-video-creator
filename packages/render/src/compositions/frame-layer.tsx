@@ -59,14 +59,15 @@ export const TransitionGlitchLayers: React.FC<{ readonly plan: TimelinePlan; rea
         const strength = transitionGlitchStrength(mover, frame)
         if (strength <= 0) return null
         return (
-          <AbsoluteFill key={`glitch:${String(index)}`} style={{ zIndex: plan.transitionOverlayZIndex }}>
-            <GlitchBands
-              name="transition_glitch"
-              bands={glitchBands(strength, frame, mover.seed)}
-              rgbSplit={0.012 * strength}
-              video={plan.video}
-            />
-          </AbsoluteFill>
+          // 入れ物を被せない（被せると difference が下の絵に届かない。`OverlayBox`）。
+          <GlitchBands
+            key={`glitch:${String(index)}`}
+            name="transition_glitch"
+            bands={glitchBands(strength, frame, mover.seed)}
+            rgbSplit={0.012 * strength}
+            video={plan.video}
+            layer={{ zIndex: plan.transitionOverlayZIndex, opacity: 1 }}
+          />
         )
       })}
     </>

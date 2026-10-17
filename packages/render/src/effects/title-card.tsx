@@ -10,9 +10,39 @@ const ENTRANCE_SEC = { punch: 0.18, fade: 0.45 } as const
 const EXIT_SEC = 0.25
 
 const LOOKS = {
-  impact: { font: FONT_STACKS.gothic, weight: 900, size: 0.15, letterSpacing: '0.02em', shadow: '0 6px 28px rgba(0, 0, 0, 0.85)' },
-  elegant: { font: FONT_STACKS.mincho, weight: 400, size: 0.1, letterSpacing: '0.3em', shadow: '0 2px 16px rgba(0, 0, 0, 0.7)' },
+  impact: { font: FONT_STACKS.gothic, weight: 900, size: 0.15, letterSpacingEm: 0.02, shadow: '0 6px 28px rgba(0, 0, 0, 0.85)' },
+  elegant: { font: FONT_STACKS.mincho, weight: 400, size: 0.1, letterSpacingEm: 0.3, shadow: '0 2px 16px rgba(0, 0, 0, 0.7)' },
 } as const
+
+/** 文字を置ける幅（映像の幅に対する割合）。両端に余白を残す。 */
+export const TITLE_SAFE_WIDTH = 0.88
+
+/**
+ * 1 文字の幅の見積もり（em）。全角（かな・漢字・全角記号）は 1、半角は太字の大文字を見込んで 0.72。
+ * 書体を測らずに決める（プレビューと書き出しで端末の書体が違っても、同じ大きさになる）。
+ */
+const charWidthEm = (char: string): number => ((char.codePointAt(0) ?? 0) >= 0x2e80 ? 1 : 0.72)
+
+/** 1 行の幅の見積もり（em）。字間は最後の字の後ろにも付く。 */
+export const titleWidthEm = (text: string, letterSpacingEm: number): number =>
+  [...text].reduce((sum, char) => sum + charWidthEm(char) + letterSpacingEm, 0)
+
+/**
+ * タイトルの文字の大きさ（px）。型の大きさ（映像の高さに対する割合）を上限に、
+ * **見積もった幅が置ける幅に収まるまで小さくする。** 40 字の上限まで 1 行で切れずに収まる。
+ */
+export const titleCardFontSize = (params: TitleCardParams, video: { readonly width: number; readonly height: number }): number => {
+  const look = LOOKS[params.style]
+  const byHeight = video.height * look.size
+  const byWidth = (video.width * TITLE_SAFE_WIDTH) / Math.max(1, titleWidthEm(params.text, look.letterSpacingEm))
+  return Math.max(1, Math.floor(Math.min(byHeight, byWidth)))
+}
+
+const SUBTEXT_SPACING_EM = 0.2
+
+/** 添える文字の大きさ（px）。タイトルの 32% を上限に、同じく置ける幅に収める。 */
+export const titleCardSubtextSize = (subtext: string, titleSize: number, videoWidth: number): number =>
+  Math.max(1, Math.floor(Math.min(titleSize * 0.32, (videoWidth * TITLE_SAFE_WIDTH) / Math.max(1, titleWidthEm(subtext, SUBTEXT_SPACING_EM)))))
 
 export type TitleCardMotion = { readonly opacity: number; readonly scale: number; readonly offsetY: number }
 
@@ -30,14 +60,15 @@ export const titleCardMotion = (params: TitleCardParams, sec: number, durationSe
 }
 
 /** タイトルカード。映像の真ん中に大きな文字を出し、下に添える文字を小さく出す。 */
-export const TitleCard: React.FC<OverlayProps<TitleCardParams>> = ({ params, time, video }) => {
+export const TitleCard: React.FC<OverlayProps<TitleCardParams>> = ({ params, time, video, layer }) => {
   const look = LOOKS[params.style]
   const motion = titleCardMotion(params, time.sec, time.durationSec)
-  const fontSize = Math.round(video.height * look.size)
+  const fontSize = titleCardFontSize(params, video)
   return (
     <OverlayBox
       name="title_card"
       video={video}
+      layer={layer}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -53,12 +84,12 @@ export const TitleCard: React.FC<OverlayProps<TitleCardParams>> = ({ params, tim
           fontFamily: look.font,
           fontWeight: look.weight,
           fontSize,
-          letterSpacing: look.letterSpacing,
+          letterSpacing: `${String(look.letterSpacingEm)}em`,
           lineHeight: 1.1,
           textAlign: 'center',
           textShadow: look.shadow,
           whiteSpace: 'nowrap',
-          maxWidth: video.width * 0.92,
+          maxWidth: video.width * TITLE_SAFE_WIDTH,
         }}
       >
         {params.text}
@@ -69,8 +100,9 @@ export const TitleCard: React.FC<OverlayProps<TitleCardParams>> = ({ params, tim
             color: params.color,
             fontFamily: look.font,
             fontWeight: Math.min(700, look.weight),
-            fontSize: Math.round(fontSize * 0.32),
-            letterSpacing: '0.2em',
+            fontSize: titleCardSubtextSize(params.subtext, fontSize, video.width),
+            letterSpacing: `${String(SUBTEXT_SPACING_EM)}em`,
+            whiteSpace: 'nowrap',
             marginTop: Math.round(fontSize * 0.2),
             textShadow: look.shadow,
             textAlign: 'center',

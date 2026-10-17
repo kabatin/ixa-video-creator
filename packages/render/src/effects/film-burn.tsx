@@ -20,11 +20,10 @@ export const filmBurnStyle = (params: FilmBurnParams, sec: number, durationSec: 
       `radial-gradient(ellipse at ${String(edgeX)}% ${String(edgeY)}%, rgba(255, 250, 235, 0.95) 0%, rgba(255, 245, 225, 0) ${String(core)}%)`,
       `radial-gradient(ellipse at ${String(edgeX)}% ${String(edgeY)}%, rgba(255, 150, 40, 0.95) 0%, rgba(230, 40, 10, 0.8) ${String(r4(spread * 0.6))}%, rgba(120, 0, 0, 0) ${String(spread)}%)`,
     ].join(', '),
-    mixBlendMode: 'screen',
     opacity: r4(params.intensity * envelope * flicker),
   }
 }
 
-export const FilmBurn: React.FC<OverlayProps<FilmBurnParams>> = ({ params, time, video, seed }) => (
-  <OverlayBox name="film_burn" video={video} style={filmBurnStyle(params, time.sec, time.durationSec, time.frame, seed)} />
+export const FilmBurn: React.FC<OverlayProps<FilmBurnParams>> = ({ params, time, video, seed, layer }) => (
+  <OverlayBox name="film_burn" video={video} layer={layer} blend="screen" style={filmBurnStyle(params, time.sec, time.durationSec, time.frame, seed)} />
 )

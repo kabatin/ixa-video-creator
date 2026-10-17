@@ -61,7 +61,11 @@ const transitionMovers = (doc: TimelineDocument): readonly FrameMover[] =>
     if (from === undefined) return []
     const durationSec = transition.durationSec > 0 ? transition.durationSec : DEFAULT_MOVING_TRANSITION_SEC
     const boundarySec = from.startSec + from.durationSec
-    const range = frameRange(Math.max(0, boundarySec - durationSec / 2), durationSec, doc.fps)
+    // 境目の前に半分ぶんの時間が無い（曲の頭のすぐ後の境目）ときは、前後とも縮めて境目を真ん中に保つ。
+    // 頭だけ 0 で切ると、境目が区間の前寄りになって流れ方が左右で揃わない。
+    const half = Math.min(durationSec / 2, boundarySec)
+    if (half <= 0) return []
+    const range = frameRange(boundarySec - half, half * 2, doc.fps)
     const boundaryFrame = secondsToFrames(boundarySec, doc.fps)
     return transition.type === 'whip_pan'
       ? [{ kind: 'whip_pan', range, boundaryFrame }]
@@ -119,14 +123,26 @@ const contributionAt = (mover: FrameMover, frame: number, fps: number): Contribu
   const sec = (frame - mover.range.from) / fps
   switch (mover.kind) {
     case 'shake':
-      return shakeAt(mover.params, mover.seed, sec, mover.range.durationInFrames / fps)
+      return shakeAt(mover.params, mover.seed, sec, mover.range.durationInFrames / fps, fps)
     case 'zoom_punch':
-      return zoomPunchAt(mover.params, sec)
+      return zoomPunchAt(mover.params, sec, mover.range.durationInFrames / fps, fps)
     case 'whip_pan':
       return whipPanAt(mover, frame)
     case 'glitch':
       return glitchAt(mover, frame)
   }
+}
+
+/**
+ * 動かした分だけ寄って、映像の矩形の端（黒）を見せない。
+ * 位置のずれ（幅・高さに対する割合）と傾きの両方を覆える大きさを下限にする。傾きの分は縦横比 2 まで見込む。
+ * 1 つずつの型は自分の分を覆っていても、重ねると（whip_pan ＋ 揺れ）ずれが足されて覆いきれなかった。
+ */
+const coverTranslate = (state: FrameLayerState): FrameLayerState => {
+  const rad = (Math.abs(state.rotateDeg) * Math.PI) / 180
+  const shift = Math.max(Math.abs(state.translateX), Math.abs(state.translateY))
+  const needed = (Math.cos(rad) + Math.sin(rad) * 2) * (1 + 2 * shift)
+  return { ...state, scale: Math.max(state.scale, needed) }
 }
 
 /** 小数の端を丸める。見た目は変わらず、同じコマの値が文字列でも同じになる。 */
@@ -152,10 +168,11 @@ export const frameLayerAt = (movers: readonly FrameMover[], frame: number, fps: 
       }),
       IDENTITY_FRAME_LAYER,
     )
+  const covered = coverTranslate(state)
   return {
-    translateX: round(state.translateX),
+    translateX: round(covered.translateX),
     translateY: round(state.translateY),
-    scale: round(state.scale),
+    scale: round(covered.scale),
     rotateDeg: round(state.rotateDeg),
     blurX: round(state.blurX),
     rgbSplit: round(state.rgbSplit),

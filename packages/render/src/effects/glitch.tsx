@@ -2,7 +2,7 @@ import type { GlitchParams } from '@ixa/domain'
 import type React from 'react'
 import type { FitRect } from '../presets.js'
 import { fadeInOut } from './envelope.js'
-import { OverlayBox, r4, type OverlayProps } from './overlay-box.js'
+import { OverlayBox, r4, type ClipLayer, type OverlayProps } from './overlay-box.js'
 import { randomAt } from './random.js'
 
 /** 2 コマごとに乱れを引き直す。 */
@@ -36,16 +36,22 @@ export const glitchBands = (strength: number, frame: number, seed: number): read
   }))
 }
 
-/** 帯を描く部品。`rgbSplit` は赤と青の縁取りのずれ（映像の幅に対する割合）。 */
+/**
+ * 帯を描く部品。`rgbSplit` は赤と青の縁取りのずれ（映像の幅に対する割合）。
+ *
+ * 全体を `difference` で下の絵と混ぜる。白い帯は下の絵の色を反転し、赤・青の縁取りは色をずらす。
+ * **`backdrop-filter` は使わない。** クリップの不透明度が 1 未満だと入れ物が背景の基準になり、反転の帯が消えた。
+ */
 export const GlitchBands: React.FC<{
   readonly bands: readonly GlitchBand[]
   readonly rgbSplit: number
   readonly video: FitRect
   readonly name: string
-}> = ({ bands, rgbSplit, video, name }) => {
+  readonly layer: ClipLayer
+}> = ({ bands, rgbSplit, video, name, layer }) => {
   const split = r4(rgbSplit * video.width)
   return (
-    <OverlayBox name={name} video={video}>
+    <OverlayBox name={name} video={video} layer={layer} blend="difference">
       {bands.map((band, i) => {
         const base: React.CSSProperties = {
           position: 'absolute',
@@ -55,13 +61,13 @@ export const GlitchBands: React.FC<{
           height: Math.max(1, r4(band.height * video.height)),
         }
         return band.invert ? (
-          <div key={i} style={{ ...base, backdropFilter: 'invert(1) hue-rotate(90deg)', WebkitBackdropFilter: 'invert(1) hue-rotate(90deg)' }} />
+          <div key={i} data-glitch-band="invert" style={{ ...base, backgroundColor: '#ffffff' }} />
         ) : (
           <div
             key={i}
+            data-glitch-band="split"
             style={{
               ...base,
-              mixBlendMode: 'screen',
               boxShadow: `${String(-split)}px 0 0 rgba(255, 0, 60, 0.75), ${String(split)}px 0 0 rgba(0, 220, 255, 0.75)`,
               backgroundColor: 'rgba(255, 255, 255, 0.08)',
             }}
@@ -79,7 +85,7 @@ export const glitchStrength = (params: GlitchParams, time: { readonly sec: numbe
   return resting ? 0 : r4(params.intensity * fadeInOut(time.sec, time.durationSec, 0.1))
 }
 
-export const Glitch: React.FC<OverlayProps<GlitchParams>> = ({ params, time, video, seed }) => {
+export const Glitch: React.FC<OverlayProps<GlitchParams>> = ({ params, time, video, seed, layer }) => {
   const strength = glitchStrength(params, time, seed)
   return (
     <GlitchBands
@@ -87,6 +93,7 @@ export const Glitch: React.FC<OverlayProps<GlitchParams>> = ({ params, time, vid
       bands={glitchBands(strength, time.frame, seed)}
       rgbSplit={0.015 * params.rgbSplit * strength}
       video={video}
+      layer={layer}
     />
   )
 }

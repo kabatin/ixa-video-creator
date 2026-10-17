@@ -2,6 +2,7 @@ import { effectTemplateOf, parseEffectParams, type EffectContent } from '@ixa/do
 import type React from 'react'
 import { useCurrentFrame } from 'remotion'
 import type { FitRect } from '../presets.js'
+import type { ClipLayer } from './overlay-box.js'
 import { effectTimeAt, type EffectTime } from './envelope.js'
 import { FilmBurn } from './film-burn.js'
 import { Flash } from './flash.js'
@@ -37,8 +38,9 @@ export const EffectOverlay: React.FC<{
   readonly time: EffectTime
   readonly video: FitRect
   readonly seed: number
-}> = ({ content, time, video, seed }) => {
-  const common = { time, video, seed }
+  readonly layer: ClipLayer
+}> = ({ content, time, video, seed, layer }) => {
+  const common = { time, video, seed, layer }
   switch (content.templateKey) {
     case 'flash':
       return <Flash params={content.params} {...common} />
@@ -65,7 +67,16 @@ export const EffectClipLayer: React.FC<{
   readonly durationInFrames: number
   readonly fps: number
   readonly video: FitRect
-}> = ({ content, clipId, durationInFrames, fps, video }) => {
+  readonly layer: ClipLayer
+}> = ({ content, clipId, durationInFrames, fps, video, layer }) => {
   const frame = useCurrentFrame()
-  return <EffectOverlay content={content} time={effectTimeAt(frame, durationInFrames, fps)} video={video} seed={hashSeed(clipId)} />
+  return (
+    <EffectOverlay
+      content={content}
+      time={effectTimeAt(frame, durationInFrames, fps)}
+      video={video}
+      seed={hashSeed(clipId)}
+      layer={layer}
+    />
+  )
 }

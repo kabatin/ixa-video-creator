@@ -12,6 +12,14 @@ const CHANNEL = {
 const round = (value: number): number => Math.round(value * 100) / 100
 
 /**
+ * ぼかしの上限（1080 の高さで 24px 相当）。whip_pan の頂点で幅の 5% をそのまま当てると Player で重かった。
+ * 上限は映像の高さに比べて決めるので、出力の大きさが違っても同じ見た目になる。
+ */
+export const MAX_BLUR_AT_1080 = 24
+export const frameBlurPx = (blurX: number, video: FitRect): number =>
+  round(Math.min(blurX * video.width, (MAX_BLUR_AT_1080 * video.height) / 1080))
+
+/**
  * 下の絵に当てる SVG のフィルタ（ADR-0050）。横向きのぼかし（whip_pan）と、赤と青を左右へずらす色ずれ（glitch）。
  * CSS の `blur()` は向きを持てず、色ずれも作れないので SVG で書く。値はコマごとに渡す（`frameLayerAt`）。
  */
@@ -20,7 +28,7 @@ export const FrameFilter: React.FC<{ readonly id: string; readonly state: FrameL
   state,
   video,
 }) => {
-  const blur = round(state.blurX * video.width)
+  const blur = frameBlurPx(state.blurX, video)
   const split = round(state.rgbSplit * video.width)
   const source = blur > 0 ? 'blurred' : 'SourceGraphic'
   return (

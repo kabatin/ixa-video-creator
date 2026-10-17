@@ -44,11 +44,11 @@ export const speedLines = (params: SpeedLinesParams, frame: number, width: numbe
   })
 }
 
-export const SpeedLines: React.FC<OverlayProps<SpeedLinesParams>> = ({ params, time, video, seed }) => {
+export const SpeedLines: React.FC<OverlayProps<SpeedLinesParams>> = ({ params, time, video, seed, layer }) => {
   const lines = speedLines(params, time.frame, video.width, video.height, seed)
   const opacity = r4(params.intensity * fadeInOut(time.sec, time.durationSec, 0.15))
   return (
-    <OverlayBox name="speed_lines" video={video} style={{ opacity }}>
+    <OverlayBox name="speed_lines" video={video} layer={layer} style={{ opacity }}>
       <svg width={video.width} height={video.height} viewBox={`0 0 ${String(video.width)} ${String(video.height)}`}>
         {lines.map((line, i) => (
           <line key={i} x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} stroke="#ffffff" strokeWidth={line.width} strokeLinecap="round" />

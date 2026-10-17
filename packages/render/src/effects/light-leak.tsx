@@ -22,11 +22,10 @@ export const lightLeakStyle = (params: LightLeakParams, sec: number, durationSec
   })
   return {
     backgroundImage: gradients.join(', '),
-    mixBlendMode: 'screen',
     opacity: r4(params.intensity * fadeInOut(sec, durationSec, 0.3)),
   }
 }
 
-export const LightLeak: React.FC<OverlayProps<LightLeakParams>> = ({ params, time, video, seed }) => (
-  <OverlayBox name="light_leak" video={video} style={lightLeakStyle(params, time.sec, time.durationSec, seed)} />
+export const LightLeak: React.FC<OverlayProps<LightLeakParams>> = ({ params, time, video, seed, layer }) => (
+  <OverlayBox name="light_leak" video={video} layer={layer} blend="screen" style={lightLeakStyle(params, time.sec, time.durationSec, seed)} />
 )
