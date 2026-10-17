@@ -11,7 +11,13 @@ import {
   type ProviderId,
 } from '@ixa/domain'
 import { execFileCliRunner } from '@ixa/provider-core'
-import { ACE_STEP_IDENTITY, aceStepMusicModel } from '@ixa/provider-music'
+import {
+  ACE_STEP_IDENTITY,
+  MOSS_SFX_MODEL_ID,
+  checkSfxApiHealth,
+  STABLE_AUDIO_SFX_MODEL_ID,
+  aceStepMusicModel,
+} from '@ixa/provider-music'
 import { KLEIN_IDENTITY, codexCliImageModel, kleinImageModel, stubGeminiLikeImageModel } from '@ixa/provider-image'
 import {
   createClaudeCliStoryboardDrafter,
@@ -25,6 +31,7 @@ import {
 } from '@ixa/provider-llm'
 import { checkLocalServerHealth, localVideoServerWirings } from '@ixa/provider-video'
 import { chooseMusicModel, type MusicModelChoice } from '../music/music-model.js'
+import { chooseSfxModel, type SfxModelChoice } from '../sfx/sfx-model.js'
 import type { AiRoutesDeps } from '../routes/ai.js'
 import { detectAiTools, type LocalServerName, type LocalServerProbe, type WhisperModelState } from './detect-ai-tools.js'
 
@@ -43,6 +50,8 @@ export type AiWiring = AiRoutesDeps & {
   readonly videoProvider: () => Promise<ProviderId>
   /** いま選んでいる曲の AI で作れるか（ADR-0048）。ジョブに記し、worker がその口で作る。 */
   readonly musicModel: () => Promise<MusicModelChoice>
+  /** 効果音の AI で作れるか（ADR-0052）。`tool` を渡せばその AI、省略すれば選んでいるもの。 */
+  readonly sfxModel: (tool?: AiToolId) => Promise<SfxModelChoice>
 }
 
 const adapterFor = <T>(table: Partial<Record<AiToolId, T>>, id: AiToolId, what: string): T => {
@@ -100,9 +109,21 @@ const localServerProbes = (config: AppConfig): Readonly<Record<LocalServerName, 
         token: config.providers.aceStepApiToken,
       }),
   }
+  // 効果音のサーバ（ADR-0052）。1 台で Stable Audio と MOSS の 2 つを出すので、どちらの AI もこれで見つける。
+  const sfxApi: LocalServerProbe = {
+    enabled: config.providers.localSfxGenerators.includes('sfx_api'),
+    enabledBy: 'LOCAL_SFX_GENERATOR',
+    // workflow ごとに見る（片方だけ重みが無い・読み込めないことがある）。
+    check: (workflowId) =>
+      checkSfxApiHealth({
+        baseUrl: config.providers.sfxApiUrl,
+        token: config.providers.sfxApiToken,
+        ...(workflowId === undefined ? {} : { workflowId }),
+      }),
+  }
   // **一覧をそのまま畳まず、ここは必ず明示で書く。** 畳むと AI が増えたときに
   // 「その AI の調べ方が無い」ことに型が気付かず、画面を開いた瞬間に落ちる。
-  return { vpipe: probeFor('vpipe'), wan: probeFor('wan'), klein, ace_step: aceStep }
+  return { vpipe: probeFor('vpipe'), wan: probeFor('wan'), klein, ace_step: aceStep, sfx_api: sfxApi }
 }
 
 /** 使う AI（ADR-0032）の配線。見つけ方・保存先・初期値をここで 1 度だけ決める。 */
@@ -141,6 +162,12 @@ export const createAiWiring = (config: AppConfig, db: DbClient): AiWiring => {
   const musicModels = {
     ace_step: config.providers.localMusicGenerators.includes('ace_step') ? aceStepMusicModel.id : null,
   }
+  // 効果音（ADR-0052）。同じ sfx-api の別の workflow。`.env` で有効にしていなければ null。
+  const sfxEnabled = config.providers.localSfxGenerators.includes('sfx_api')
+  const sfxModels = {
+    stable_audio_sfx: sfxEnabled ? STABLE_AUDIO_SFX_MODEL_ID : null,
+    moss_sfx: sfxEnabled ? MOSS_SFX_MODEL_ID : null,
+  }
   return {
     settings: repository,
     defaults,
@@ -171,5 +198,6 @@ export const createAiWiring = (config: AppConfig, db: DbClient): AiWiring => {
     imageModel: async () => adapterFor(imageModels, (await current()).image, '画像'),
     videoProvider: async () => ProviderIdSchema.parse((await current()).video),
     musicModel: async () => chooseMusicModel((await current()).music, musicModels),
+    sfxModel: async (tool) => chooseSfxModel(tool ?? (await current()).sfx, sfxModels),
   }
 }

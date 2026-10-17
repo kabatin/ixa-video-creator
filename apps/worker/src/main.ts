@@ -19,6 +19,7 @@ import { failInterruptedImageJob, processImageJob } from './image/index.js'
 import { processUpscaleJob } from './upscale/index.js'
 import { failInterruptedVoiceJob, processVoiceJob } from './voice/index.js'
 import { failInterruptedMusicJob, processMusicJob } from './music/index.js'
+import { failInterruptedSfxJob, processSfxJob } from './sfx/index.js'
 import { failInterruptedThumbnailJob, processThumbnailJob } from './thumbnail/index.js'
 
 /** graceful shutdown の既定タイムアウト（ミリ秒）。超過したら強制終了する。 */
@@ -63,6 +64,8 @@ const createWorkers = (
             return (await processVoiceJob(generation.voice, job.data)).state
           case QUEUE_NAMES.music:
             return (await processMusicJob(generation.music, job.data)).state
+          case QUEUE_NAMES.sfx:
+            return (await processSfxJob(generation.sfx, job.data)).state
           case QUEUE_NAMES.thumbnail:
             return (await processThumbnailJob(generation.thumbnail, job.data)).state
           case QUEUE_NAMES.upscale: {
@@ -102,6 +105,9 @@ const createWorkers = (
       }
       if (config.name === QUEUE_NAMES.music && job !== undefined) {
         void failInterruptedMusicJob(generation.music, job.data, error.message)
+      }
+      if (config.name === QUEUE_NAMES.sfx && job !== undefined) {
+        void failInterruptedSfxJob(generation.sfx, job.data, error.message)
       }
       if (config.name === QUEUE_NAMES.thumbnail && job !== undefined) {
         void failInterruptedThumbnailJob(generation.thumbnail, job.data, error.message)

@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { createCharacterTool, createLocationTool } from './tools/cast.js'
 import { editShotsTool } from './tools/edit-shots.js'
 import { addEffectsTool, listEffectsTool, removeEffectsTool } from './tools/effects.js'
+import { generateSfxTool, listSfxTool, removeSfxTool, suggestSfxTool } from './tools/sfx.js'
 import { exportTool } from './tools/export.js'
 import { exportThumbnailTool } from './tools/export-thumbnail.js'
 import { generateMusicTool } from './tools/music-generation.js'
@@ -40,6 +41,10 @@ export const TOOLS: readonly ToolDef[] = [
   addEffectsTool,
   listEffectsTool,
   removeEffectsTool,
+  suggestSfxTool,
+  generateSfxTool,
+  listSfxTool,
+  removeSfxTool,
   exportTool,
   exportThumbnailTool,
 ]

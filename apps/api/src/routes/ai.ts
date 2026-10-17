@@ -41,6 +41,7 @@ const Tool = z
       voice: z.string().nullable(),
       transcribe: z.string().nullable(),
       music: z.string().nullable(),
+      sfx: z.string().nullable(),
     }),
     /** 使う前に知っておくこと（無料枠の扱い・料金・商用の可否）。無ければ null。 */
     notice: z.string().nullable(),

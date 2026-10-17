@@ -76,7 +76,7 @@ export const setAiTool = defineTool({
   name: 'set_ai',
   description:
     'Choose which AI tool ixa uses for one purpose (text = storyboard/assist, image = start frames, video = takes, ' +
-    'voice, transcribe). Check ixa_status first: only tools listed as usableFor that purpose are accepted. ' +
+    'voice, transcribe, music, sfx = sound effects). Check ixa_status first: only tools listed as usableFor that purpose are accepted. ' +
     'This changes the setting for the whole app (the human user sees it too).',
   input: z.object({ purpose: AiPurpose, tool: AiToolId }),
   handler: async ({ purpose, tool }, { api }) => {

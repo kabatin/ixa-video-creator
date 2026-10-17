@@ -61,6 +61,8 @@ import type { ImageProcessorDeps } from './image/index.js'
 import type { VoiceProcessorDeps } from './voice/index.js'
 import type { MusicProcessorDeps } from './music/index.js'
 import { createMusicWiring } from './music-wiring.js'
+import type { SfxProcessorDeps } from './sfx/index.js'
+import { createSfxWiring } from './sfx-wiring.js'
 import { createThumbnailWiring } from './thumbnail-wiring.js'
 import type { ThumbnailProcessorDeps } from './thumbnail/index.js'
 import { createVoiceWiring } from './voice-wiring.js'
@@ -87,6 +89,8 @@ export type GenerationWiring = {
   readonly voice: VoiceProcessorDeps
   /** 曲を作る（ADR-0048）。 */
   readonly music: MusicProcessorDeps
+  /** 効果音を作る（ADR-0052）。 */
+  readonly sfx: SfxProcessorDeps
   /**
    * 解像度を上げる（ADR-0044）。**この機械に上げる口が無ければ null。**
    * 無いことを `undefined` ではなく `null` で表す（配線し忘れと区別するため）。
@@ -164,6 +168,8 @@ export const createGenerationWiring = (
   /** 順番待ちの曲を積み直す先と、できた楽曲を解析に回す先（ADR-0048）。 */
   const musicQueue = new Queue(QUEUE_NAMES.music, { connection })
   const analysisQueue = new Queue(QUEUE_NAMES.analysis, { connection })
+  /** 順番待ちの効果音を積み直す先（ADR-0052）。 */
+  const sfxQueue = new Queue(QUEUE_NAMES.sfx, { connection })
 
   /** ポーリングの再スケジュールは BullMQ の delay で行う。repeatable job は使わない。 */
   const scheduler: PollScheduler = {
@@ -402,6 +408,21 @@ export const createGenerationWiring = (
       musicQueue,
       analysisQueue,
     }),
+    sfx: createSfxWiring({
+      db,
+      storage,
+      mediaQueue: deps.mediaQueue,
+      events: deps.events,
+      logger,
+      outputRoot: stubOutputDir,
+      sfxApi: {
+        enabled: config.providers.localSfxGenerators.includes('sfx_api'),
+        baseUrl: config.providers.sfxApiUrl,
+        token: config.providers.sfxApiToken,
+      },
+      localGpuLease,
+      sfxQueue,
+    }),
     upscale: upscaleWiring?.deps ?? null,
     thumbnail: createThumbnailWiring({ db, storage, mediaQueue: render.mediaQueue, logger }),
     queue,
@@ -411,6 +432,7 @@ export const createGenerationWiring = (
       await mediaQueue.close()
       await imageQueue.close()
       await musicQueue.close()
+      await sfxQueue.close()
       await analysisQueue.close()
       await regenerationQueue.close()
       await db.$client.end()

@@ -43,6 +43,12 @@ const ACE_STEP_OFF: LocalServerProbe = {
   check: () => Promise.reject(new Error('有効でないサーバを叩いた')),
 }
 
+const SFX_API_OFF: LocalServerProbe = {
+  enabled: false,
+  enabledBy: 'LOCAL_SFX_GENERATOR',
+  check: () => Promise.reject(new Error('有効でないサーバを叩いた')),
+}
+
 const probe = (patch: Partial<AiToolProbe> = {}): AiToolProbe => ({
   runCli: runnerWith(
     Object.fromEntries(Object.entries(VERSIONS).map(([name, out]) => [name, completed(out)])),
@@ -56,6 +62,7 @@ const probe = (patch: Partial<AiToolProbe> = {}): AiToolProbe => ({
   localServers: {
           klein: KLEIN_OFF,
           ace_step: ACE_STEP_OFF,
+          sfx_api: SFX_API_OFF,
     vpipe: {
       enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR',
       check: () =>
@@ -108,6 +115,36 @@ describe('detectAiTools', () => {
       },
     })
     expect(on.ace_step).toEqual({ state: 'ready', version: '0.1.0' })
+  })
+
+  /** ADR-0052。効果音のサーバは 1 台で 2 つの AI（Stable Audio・MOSS）を出す。 */
+  it('効果音の 2 つの AI は LOCAL_SFX_GENERATOR で有効にし方を言い、有効なら workflow ごとに health を見る', async () => {
+    const off = await detectAiTools(probe())
+    for (const id of ['stable_audio_sfx', 'moss_sfx'] as const) {
+      expect(off[id]).toEqual({ state: 'missing', reason: expect.stringMatching(/LOCAL_SFX_GENERATOR=sfx_api/) as unknown })
+    }
+    const base = probe()
+    const asked: (string | undefined)[] = []
+    const on = await detectAiTools({
+      ...base,
+      localServers: {
+        ...base.localServers,
+        sfx_api: {
+          enabled: true,
+          enabledBy: 'LOCAL_SFX_GENERATOR',
+          // 片方の workflow だけ使えない（health の workflows）。
+          check: (workflow) => {
+            asked.push(workflow)
+            return Promise.resolve(
+              workflow === 'moss-sfx-v2' ? { state: 'down', reason: 'MOSS SFX v2（手元）は今使えません（重みが無い）' } : { state: 'up', version: '0.2.0' },
+            )
+          },
+        },
+      },
+    })
+    expect(on.stable_audio_sfx).toEqual({ state: 'ready', version: '0.2.0' })
+    expect(on.moss_sfx).toEqual({ state: 'missing', reason: 'MOSS SFX v2（手元）は今使えません（重みが無い）' })
+    expect([...asked].sort()).toEqual(['moss-sfx-v2', 'stable-audio-3-sfx'])
   })
 
   it('入っている CLI を版つきで見つける', async () => {
@@ -173,6 +210,7 @@ describe('detectAiTools', () => {
         localServers: {
           klein: KLEIN_OFF,
           ace_step: ACE_STEP_OFF,
+          sfx_api: SFX_API_OFF,
           vpipe: { enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR', check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
           wan: { enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR', check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
         },
@@ -202,6 +240,7 @@ describe('detectAiTools', () => {
         localServers: {
           klein: KLEIN_OFF,
           ace_step: ACE_STEP_OFF,
+          sfx_api: SFX_API_OFF,
           vpipe: { enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR', check: () => Promise.resolve({ state: 'up', version: '0.1.0' }) },
           wan: {
             enabled: true, enabledBy: 'LOCAL_VIDEO_GENERATOR',
@@ -223,6 +262,7 @@ describe('detectAiTools', () => {
         localServers: {
           klein: KLEIN_OFF,
           ace_step: ACE_STEP_OFF,
+          sfx_api: SFX_API_OFF,
           vpipe: {
             enabled: false, enabledBy: 'LOCAL_VIDEO_GENERATOR',
             check: () => {

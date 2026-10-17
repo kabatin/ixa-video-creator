@@ -39,6 +39,7 @@ import {
   createNarrationTakeRepository,
   createVoiceJobRepository,
   createMusicJobRepository,
+  createSfxJobRepository,
   createProjectAudioSettingsRepository,
 } from '@ixa/db'
 import { createProviderRegistry, execFileCliRunner } from '@ixa/provider-core'
@@ -46,6 +47,7 @@ import { createTranscribers, createVoiceAdapters } from '@ixa/provider-voice'
 import { estimateSpeakCostUsd, estimateTranscribeCostUsd } from '@ixa/domain'
 import { VOICE_QUEUE_NAME } from './narration/voice-queue.js'
 import { MUSIC_QUEUE_NAME } from './music/deps.js'
+import { SFX_QUEUE_NAME } from './sfx/deps.js'
 import { createGenerationContextSource } from '@ixa/generation'
 import { RENDER_QUEUE_NAME, type RenderQueue } from './routes/renders.js'
 import { THUMBNAIL_QUEUE_NAME, type ThumbnailQueue } from './routes/thumbnails.js'
@@ -277,6 +279,14 @@ export const main = (): void => {
     },
   }
 
+  // 効果音を作る（ADR-0052）。作るのは worker（キュー sfx。同時 1 つ・手元の GPU の順番に並ぶ）。
+  const sfxQueue = new Queue(SFX_QUEUE_NAME, { connection })
+  const sfxQueuePort = {
+    enqueue: async (sfxJobId: string) => {
+      await sfxQueue.add('sfx', { sfxJobId })
+    },
+  }
+
   const mediaQueue = new Queue('media', { connection })
   const mediaIngest: MediaIngestDeps = {
     queue: {
@@ -371,6 +381,14 @@ export const main = (): void => {
       musicJobs: createMusicJobRepository(db),
       musicModel: ai.musicModel,
       musicQueue: musicQueuePort,
+      events: projectEvents.publisher,
+      logger,
+    },
+    sfxGeneration: {
+      projects: projectRepository,
+      sfxJobs: createSfxJobRepository(db),
+      sfxModel: ai.sfxModel,
+      sfxQueue: sfxQueuePort,
       events: projectEvents.publisher,
       logger,
     },

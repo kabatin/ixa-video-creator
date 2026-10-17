@@ -24,6 +24,8 @@ import { aiRoutes, type AiRoutesDeps } from './routes/ai.js'
 import type { NarrationDeps } from './narration/deps.js'
 import type { MusicGenerationDeps } from './music/deps.js'
 import { musicGenerateRoutes } from './routes/music-generate.js'
+import type { SfxGenerationDeps } from './sfx/deps.js'
+import { sfxGenerateRoutes } from './routes/sfx-generate.js'
 import { narrationRoutes } from './routes/narration.js'
 import { turnOffLineTelop } from './narration/telops.js'
 import { generationActivityRoutes, type GenerationActivityDeps } from './routes/generation-activity.js'
@@ -49,7 +51,7 @@ import { shotTakeImportRoutes } from './routes/shot-take-import.js'
 import { shotPosterRoutes } from './routes/shot-posters.js'
 import { uploadRoutes, type MediaIngestDeps } from './routes/uploads.js'
 import { shotCompareRoutes } from './routes/shot-compare.js'
-import { beatAlignmentRoutes, roughCutRoutes, timelineRoutes } from './routes/timeline.js'
+import { beatAlignmentRoutes, loadTimelineDocument, roughCutRoutes, timelineRoutes } from './routes/timeline.js'
 import { renderRoutes, type RenderQueue } from './routes/renders.js'
 import { assetFolderRoutes } from './routes/asset-folder.js'
 import { renderFolderRoutes } from './routes/render-folder.js'
@@ -184,6 +186,8 @@ export type AppDeps = {
   narration?: NarrationDeps
   /** 曲を作る（ADR-0048）。無ければ口を置かない（テストの多くは要らない）。 */
   musicGeneration?: MusicGenerationDeps
+  /** 効果音を作る（ADR-0052）。無ければ口を置かない（テストの多くは要らない）。 */
+  sfxGeneration?: SfxGenerationDeps
   /** 動いている生成（順番待ち・作成中）の一覧。無ければ口を置かない。 */
   activeGenerations?: GenerationActivityDeps['activeJobs']
   storage: ObjectStorage
@@ -584,6 +588,17 @@ export const createApp = (deps: AppDeps) => {
   )
 
   app.route('/', timelineRoutes(timelineDeps))
+  // 効果音（ADR-0052）。案は書き出しと同じ組み立て（エフェクトとトランジション）から出す。
+  if (deps.sfxGeneration !== undefined) {
+    app.route(
+      '/',
+      sfxGenerateRoutes({
+        ...deps.sfxGeneration,
+        suggestionSource: async (projectId) =>
+          (await loadTimelineDocument(timelineDeps, projectId))?.document ?? null,
+      }),
+    )
+  }
   // A/B 比較は書き出しと同じ素材の集め方を使うので、Timeline と同じ依存に解析を 1 つ足すだけ。
   app.route('/', shotCompareRoutes({ ...timelineDeps, musicAnalyses: deps.musicAnalyses }))
   // 拍とのズレ。この口だけ解析が要るので factory を分けてある（既存の配線を壊さない）。

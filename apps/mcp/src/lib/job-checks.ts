@@ -2,6 +2,7 @@ import { UPSCALE_REASON } from '@ixa/domain'
 import { z } from 'zod'
 import { IxaApiError, seg, type ApiClient } from '../api-client.js'
 import { musicJobCheck } from '../tools/music-generation.js'
+import { sfxJobCheck } from '../tools/sfx.js'
 import {
   WireActiveGeneration,
   WireAnalysisFailure,
@@ -21,6 +22,7 @@ export const JobRef = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('generation'), id: z.string().ulid().describe('generation jobId') }),
   z.object({ kind: z.literal('render'), id: z.string().ulid().describe('renderJobId') }),
   z.object({ kind: z.literal('music'), id: z.string().ulid().describe('music jobId from generate_music') }),
+  z.object({ kind: z.literal('sfx'), id: z.string().ulid().describe('sfx jobId from generate_sfx') }),
   z.object({ kind: z.literal('analysis'), id: z.string().ulid().describe('musicTrackId') }),
   z.object({ kind: z.literal('start_frame'), id: z.string().ulid().describe('shotId') }),
   z.object({
@@ -89,6 +91,8 @@ export const checkFor = (api: ApiClient, ref: JobRef): Check => {
       return { label: ref, poll: () => renderCheck(api, ref.id) }
     case 'music':
       return { label: ref, poll: () => musicJobCheck(api, ref.id) }
+    case 'sfx':
+      return { label: ref, poll: () => sfxJobCheck(api, ref.id) }
     case 'analysis':
       return { label: ref, poll: () => analysisCheck(api, ref.id) }
     case 'start_frame':
@@ -102,7 +106,7 @@ const ACTIVE_RENDER = new Set(['queued', 'rendering', 'encoding'])
 
 /**
  * 作品の中で動いているもの全部（動画の生成・最初のコマ・書き出し）が止むまで。
- * 解像度上げと曲作りは一覧の口が無いので含まない（ジョブ ID で待つ）。
+ * 解像度上げと曲作り・効果音作りは含まない（ジョブ ID で待つ）。
  */
 export const projectActivityCheck = (api: ApiClient, projectId: string): Check => ({
   label: { kind: 'project', projectId },

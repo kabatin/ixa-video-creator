@@ -14,6 +14,7 @@ export const QUEUE_NAMES = {
   voice: 'voice',
   upscale: 'upscale',
   music: 'music',
+  sfx: 'sfx',
   thumbnail: 'thumbnail',
 } as const
 
@@ -68,6 +69,10 @@ export const QUEUE_CONFIGS: readonly QueueConfig[] = [
    * 曲を作る（ADR-0048）。**同時 1 つ。** 手元の GPU を使うので、増やしても整理券で待つだけ。
    */
   { name: QUEUE_NAMES.music, concurrency: 1 },
+  /**
+   * 効果音を作る（ADR-0052）。**同時 1 つ。** 手元の GPU を使うので、増やしても整理券で待つだけ。
+   */
+  { name: QUEUE_NAMES.sfx, concurrency: 1 },
   /**
    * YouTube のサムネイル（ADR-0051）。**同時 1 つ。** 1 枚は数秒だが、Chrome を起こすので重ねない
    * （書き出しの render と同じ考え）。

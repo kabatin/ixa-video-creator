@@ -8,8 +8,8 @@ import {
 } from '../queues.js'
 
 describe('QUEUE_CONFIGS', () => {
-  it('11 のキューがすべて定義されている', () => {
-    expect(QUEUE_CONFIGS).toHaveLength(11)
+  it('12 のキューがすべて定義されている', () => {
+    expect(QUEUE_CONFIGS).toHaveLength(12)
     expect(QUEUE_CONFIGS.map((config) => config.name).sort()).toEqual(
       Object.values(QUEUE_NAMES).sort(),
     )
@@ -35,6 +35,8 @@ describe('QUEUE_CONFIGS', () => {
       upscale: 1,
       // 曲を作る（ADR-0048）。手元の GPU を使うので 1 つずつ。
       music: 1,
+      // 効果音を作る（ADR-0052）。手元の GPU を使うので 1 つずつ。
+      sfx: 1,
       // サムネイル（ADR-0051）。Chrome を起こすので 1 つずつ。
       thumbnail: 1,
     })
@@ -99,6 +101,7 @@ describe('resolveQueueConfigs', () => {
       voice: 1,
       upscale: 1,
       music: 1,
+      sfx: 1,
       thumbnail: 1,
     })
   })
