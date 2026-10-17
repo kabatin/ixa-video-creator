@@ -79,6 +79,26 @@ describe('frameLayerAt — 揺れ・寄りのパンチ', () => {
   })
 })
 
+describe('frameLayerAt — スピード線の周りのぼかし', () => {
+  const movers = (direction: 'radial' | 'horizontal') =>
+    buildFrameMovers(makeDocument({ clips: [effect(1, 'speed_lines', 1, 1, { direction, intensity: 1 })] }))
+
+  it('放射は全方向、横は横向きにぼかす。絵は動かさない', () => {
+    const radial = frameLayerAt(movers('radial'), 45, FPS)
+    expect(radial.edgeBlur).toBeGreaterThan(0)
+    expect(radial.edgeBlurX).toBe(0)
+    const horizontal = frameLayerAt(movers('horizontal'), 45, FPS)
+    expect(horizontal.edgeBlurX).toBeGreaterThan(0)
+    expect(horizontal.edgeBlur).toBe(0)
+    expect(needsFrameFilter(horizontal)).toBe(true)
+    expect({ ...horizontal, edgeBlurX: 0 }).toEqual(IDENTITY_FRAME_LAYER)
+  })
+
+  it('範囲の外と、頭と尻のコマではぼかさない', () => {
+    for (const frame of [0, 29, 60, 90]) expect(frameLayerAt(movers('radial'), frame, FPS)).toEqual(IDENTITY_FRAME_LAYER)
+  })
+})
+
 describe('frameLayerAt — whip_pan と glitch のトランジション', () => {
   const doc = (type: 'whip_pan' | 'glitch', durationSec = 0.4) =>
     makeDocument({ video1: twoShots(), transitions: [makeTransition(1, shotId(1), shotId(2), type, durationSec)] })

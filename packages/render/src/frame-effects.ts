@@ -2,6 +2,7 @@ import {
   parseEffectParams,
   secondsToFrames,
   type ShakeParams,
+  type SpeedLinesParams,
   type TimelineDocument,
   type ZoomPunchParams,
 } from '@ixa/domain'
@@ -11,6 +12,7 @@ import type { FrameContribution as Contribution, FrameLayerState } from './effec
 import { IDENTITY_FRAME_LAYER } from './effects/frame-layer.js'
 import { hashSeed, randomAt, signedRandomAt } from './effects/random.js'
 import { shakeAt } from './effects/shake.js'
+import { speedLinesFrameAt } from './effects/speed-lines-frame.js'
 import { zoomPunchAt } from './effects/zoom-punch.js'
 import type { FitRect } from './presets.js'
 import { frameRange, type FrameRange } from './timing.js'
@@ -25,6 +27,8 @@ import { frameRange, type FrameRange } from './timing.js'
 export type FrameMover =
   | { readonly kind: 'shake'; readonly seed: number; readonly range: FrameRange; readonly params: ShakeParams }
   | { readonly kind: 'zoom_punch'; readonly range: FrameRange; readonly params: ZoomPunchParams }
+  /** スピード線は重ねる型だが、周りのぼかしだけは下の絵に掛ける（筋だけでは速さが出なかった）。 */
+  | { readonly kind: 'speed_lines'; readonly range: FrameRange; readonly params: SpeedLinesParams }
   | { readonly kind: 'whip_pan'; readonly range: FrameRange; readonly boundaryFrame: number }
   | { readonly kind: 'glitch'; readonly seed: number; readonly range: FrameRange; readonly boundaryFrame: number }
 
@@ -37,7 +41,7 @@ const WHIP_SHIFT = WHIP_SCALE / 2
 const WHIP_BLUR = 0.05
 const WHIP_FLASH = 0.8
 
-const isFrameMoverKey = (key: string): boolean => key === 'shake' || key === 'zoom_punch'
+const isFrameMoverKey = (key: string): boolean => key === 'shake' || key === 'zoom_punch' || key === 'speed_lines'
 
 const clipMovers = (doc: TimelineDocument): readonly FrameMover[] =>
   doc.clips.flatMap((clip): readonly FrameMover[] => {
@@ -50,6 +54,7 @@ const clipMovers = (doc: TimelineDocument): readonly FrameMover[] =>
       return [{ kind: 'shake', seed: hashSeed(clip.id), range, params: parsed.value.params }]
     }
     if (parsed.value.templateKey === 'zoom_punch') return [{ kind: 'zoom_punch', range, params: parsed.value.params }]
+    if (parsed.value.templateKey === 'speed_lines') return [{ kind: 'speed_lines', range, params: parsed.value.params }]
     return []
   })
 
@@ -126,6 +131,8 @@ const contributionAt = (mover: FrameMover, frame: number, fps: number): Contribu
       return shakeAt(mover.params, mover.seed, sec, mover.range.durationInFrames / fps, fps)
     case 'zoom_punch':
       return zoomPunchAt(mover.params, sec, mover.range.durationInFrames / fps, fps)
+    case 'speed_lines':
+      return speedLinesFrameAt(mover.params, sec, mover.range.durationInFrames / fps)
     case 'whip_pan':
       return whipPanAt(mover, frame)
     case 'glitch':
@@ -164,6 +171,8 @@ export const frameLayerAt = (movers: readonly FrameMover[], frame: number, fps: 
         rotateDeg: acc.rotateDeg + (part.rotateDeg ?? 0),
         blurX: acc.blurX + (part.blurX ?? 0),
         rgbSplit: acc.rgbSplit + (part.rgbSplit ?? 0),
+        edgeBlur: acc.edgeBlur + (part.edgeBlur ?? 0),
+        edgeBlurX: acc.edgeBlurX + (part.edgeBlurX ?? 0),
         brightness: acc.brightness * (part.brightness ?? 1),
       }),
       IDENTITY_FRAME_LAYER,
@@ -176,6 +185,8 @@ export const frameLayerAt = (movers: readonly FrameMover[], frame: number, fps: 
     rotateDeg: round(state.rotateDeg),
     blurX: round(state.blurX),
     rgbSplit: round(state.rgbSplit),
+    edgeBlur: round(state.edgeBlur),
+    edgeBlurX: round(state.edgeBlurX),
     brightness: round(state.brightness),
   }
 }
@@ -186,7 +197,8 @@ export const isIdentityFrameLayer = (state: FrameLayerState): boolean =>
   (Object.keys(IDENTITY_FRAME_LAYER) as (keyof FrameLayerState)[]).every((key) => state[key] === IDENTITY_FRAME_LAYER[key])
 
 /** SVG のフィルタ（ぼかし・色ずれ）が要るか。 */
-export const needsFrameFilter = (state: FrameLayerState): boolean => state.blurX > 0 || state.rgbSplit > 0
+export const needsFrameFilter = (state: FrameLayerState): boolean =>
+  state.blurX > 0 || state.rgbSplit > 0 || state.edgeBlur > 0 || state.edgeBlurX > 0
 
 /**
  * 動かし方を CSS にする。何もしないコマでは空（前と同じ絵）。

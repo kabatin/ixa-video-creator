@@ -156,7 +156,7 @@ export const EFFECT_TEMPLATES: readonly EffectTemplate[] = Object.freeze([
   { key: 'flash', label: 'フラッシュ', kind: 'overlay', defaultDurationSec: 0.4, hint: 'カットの頭や拍に一瞬だけ光らせる。白で明るく、黒で締める' },
   { key: 'zoom_punch', label: '寄りのパンチ', kind: 'frame', defaultDurationSec: 0.6, hint: '強い拍や曲の盛り上がりで、絵を一瞬ぐっと寄せて戻す' },
   { key: 'shake', label: '揺れ', kind: 'frame', defaultDurationSec: 0.6, hint: '衝突・着地・低音の山で絵を揺らす。短く使う' },
-  { key: 'speed_lines', label: 'スピード線', kind: 'overlay', defaultDurationSec: 1, hint: '走り・加速の Shot に重ねて速さを足す' },
+  { key: 'speed_lines', label: 'スピード線', kind: 'overlay', defaultDurationSec: 1, hint: '走り・加速の Shot に重ねて速さを足す。前へ進む絵（車内から・正面）は放射、横から追う絵は横。周りが流れて中央は鮮明のまま' },
   { key: 'glitch', label: 'グリッチ', kind: 'overlay', defaultDurationSec: 0.5, hint: 'カットの境目や曲の切り替わりで、絵を乱して色をずらす' },
   { key: 'light_leak', label: '光漏れ', kind: 'overlay', defaultDurationSec: 1.5, hint: 'ゆるい場面のつなぎや、余韻に暖かい光を流す' },
   { key: 'film_burn', label: 'フィルム焼け', kind: 'overlay', defaultDurationSec: 1.2, hint: '場面の切り替わりや回想の入りを、焼けた光で覆う' },

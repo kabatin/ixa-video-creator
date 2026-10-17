@@ -11,11 +11,15 @@ export type FrameLayerState = {
   readonly blurX: number
   /** 赤と青を左右へずらす幅（glitch）。 */
   readonly rgbSplit: number
+  /** 周りだけのぼかし（speed_lines の放射。中央は鮮明のまま）。映像の高さに対する割合。 */
+  readonly edgeBlur: number
+  /** 周りだけの横向きのぼかし（speed_lines の横）。映像の高さに対する割合。 */
+  readonly edgeBlurX: number
   readonly brightness: number
 }
 
 export const IDENTITY_FRAME_LAYER: FrameLayerState = Object.freeze({
-  translateX: 0, translateY: 0, scale: 1, rotateDeg: 0, blurX: 0, rgbSplit: 0, brightness: 1,
+  translateX: 0, translateY: 0, scale: 1, rotateDeg: 0, blurX: 0, rgbSplit: 0, edgeBlur: 0, edgeBlurX: 0, brightness: 1,
 })
 
 /** 1 つの型が足す分。書かない項目は何もしない。 */

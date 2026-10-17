@@ -58,6 +58,19 @@ describe('EffectOverlay', () => {
     expect(markup).toContain('iXA CUP')
   })
 
+  it('スピード線の筋はコマごとに外へ流れ、放射の筋は中央を空ける', () => {
+    const params = { density: 1, intensity: 1, direction: 'radial' } as const
+    expect(speedLines(params, 5, 1920, 1080, 1)).not.toEqual(speedLines(params, 4, 1920, 1080, 1))
+    const half = Math.hypot(1920, 1080) / 2
+    for (const frame of [0, 3, 7, 11]) {
+      for (const streak of speedLines(params, frame, 1920, 1080, 1)) {
+        const [tail] = streak.points.split(' ')
+        const [x, y] = (tail ?? '').split(',').map(Number)
+        expect(Math.hypot((x ?? 0) - 960, (y ?? 0) - 540)).toBeGreaterThanOrEqual(half * 0.38 - 1)
+      }
+    }
+  })
+
   it('スピード線は種が違えば線の位置が違う', () => {
     const params = { density: 0.5, intensity: 0.7, direction: 'radial' } as const
     expect(speedLines(params, 4, 1920, 1080, 1)).toEqual(speedLines(params, 4, 1920, 1080, 1))

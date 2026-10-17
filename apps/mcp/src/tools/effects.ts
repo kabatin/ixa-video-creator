@@ -138,7 +138,7 @@ export const addEffectsTool = defineTool({
     'Layer visual effect templates on the timeline (VFX track) to add speed and punch. Pick a template and its ' +
     'strength; do not describe effects in prose. Place by atSec (timeline seconds) or shotCode+offsetSec. Good spots: ' +
     'cut heads (flash, zoom_punch, glitch), strong beats and the music drop (zoom_punch, shake, flash), action shots ' +
-    '(speed_lines), scene changes (film_burn, light_leak), the opening and section starts (title_card). Keep frame ' +
+    '(speed_lines: radial for forward/POV shots, horizontal for side tracking), scene changes (film_burn, light_leak), the opening and section starts (title_card). Keep frame ' +
     'effects short (0.3–0.8s). Templates:\n' +
     effectCatalog(),
   input: AddEffectsInput,

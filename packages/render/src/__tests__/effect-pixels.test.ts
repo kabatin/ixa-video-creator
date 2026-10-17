@@ -23,7 +23,7 @@ const RENDER_TIMEOUT_MS = 10 * 60 * 1000
 const SETUP_TIMEOUT_MS = 3 * 60 * 1000
 
 const FPS = 12
-const TOTAL_SEC = 4
+const TOTAL_SEC = 5
 const SOURCE = { width: 320, height: 240 } as const
 
 /** 赤の右端（x=400）のすぐ右。素の絵では青。寄ると赤の端が左へ下がって青のまま、流すと赤が来る。 */
@@ -32,6 +32,9 @@ const RIGHT_OF_EDGE: Rect = { x: 410, y: 300, width: 40, height: 120 }
 const LEFT_OF_EDGE: Rect = { x: 320, y: 300, width: 60, height: 120 }
 /** 左の黒帯。寄っても絵がはみ出さないこと。 */
 const LETTERBOX: Rect = { x: 20, y: 300, width: 120, height: 120 }
+/** 赤の端のすぐ右の、画面の上端（スピード線が周りをぼかす場所）と、高さの真ん中（空ける場所）。 */
+const RIGHT_OF_EDGE_TOP: Rect = { x: 402, y: 6, width: 12, height: 24 }
+const RIGHT_OF_EDGE_MIDDLE: Rect = { x: 404, y: 340, width: 12, height: 40 }
 /** 画面の中央。タイトルカードの文字が来る場所。 */
 const CENTER_BAND: Rect = { x: 540, y: 320, width: 200, height: 80 }
 
@@ -64,6 +67,7 @@ const effect = (n: number, templateKey: string, startSec: number, durationSec: n
  * 1.33-1.67      寄りのパンチ（1.4 倍、頭で寄りきる）
  * 2.0            whip_pan（0.5 秒。コマ 21〜26、境目 24）
  * 3.0            glitch（0.5 秒。コマ 33〜38、境目 36）
+ * 4.0-5.0        スピード線（横・強さ 1。コマ 54 が真ん中）
  * ```
  */
 const buildDocument = (media: MediaServer): TimelineDocument =>
@@ -75,6 +79,7 @@ const buildDocument = (media: MediaServer): TimelineDocument =>
       { ...makeVideo1Shot(1, 0, 2), mediaUrl: media.urlFor(splitPath()) },
       { ...makeVideo1Shot(2, 2, 1), mediaUrl: media.urlFor(splitPath()) },
       { ...makeVideo1Shot(3, 3, 1), mediaUrl: media.urlFor(splitPath()) },
+      { ...makeVideo1Shot(4, 4, 1), mediaUrl: media.urlFor(splitPath()) },
     ],
     transitions: [
       makeTransition(1, shotId(1), shotId(2), 'whip_pan', 0.5),
@@ -84,6 +89,7 @@ const buildDocument = (media: MediaServer): TimelineDocument =>
       effect(1, 'flash', 0.25, 0.25, { color: '#ffffff', intensity: 1, attackSec: 0, decaySec: 1 }),
       effect(2, 'title_card', 0.75, 0.5, { text: 'IXA' }),
       effect(3, 'zoom_punch', 16 / FPS, 4 / FPS, { scale: 1.4, peakAtSec: 0, decaySec: 3 }),
+      effect(4, 'speed_lines', 4, 1, { direction: 'horizontal', intensity: 1, density: 0 }),
     ],
     audio: [],
   })
@@ -159,5 +165,14 @@ describe('エフェクトのピクセル検証', () => {
     const a = meanColor(glitched, strip)
     const b = meanColor(plain, strip)
     expect(Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b)).toBeGreaterThan(6)
+  })
+
+  it('スピード線は周りだけを流してぼかし（上端で赤が右へにじむ）、真ん中は鮮明のまま', async () => {
+    const [streaked, plain] = await Promise.all([frameAt(54), frameAt(7)])
+    // 筋（白）は赤・緑・青を同じだけ足す。赤だけ緑より増えたら、それはぼかしで赤が流れてきた分。
+    const redBleed = (frame: Frame, rect: Rect): number => meanColor(frame, rect).r - meanColor(frame, rect).g
+    expect(redBleed(plain, RIGHT_OF_EDGE_TOP)).toBeLessThan(10)
+    expect(redBleed(streaked, RIGHT_OF_EDGE_TOP)).toBeGreaterThan(25)
+    expect(redBleed(streaked, RIGHT_OF_EDGE_MIDDLE)).toBeLessThan(10)
   })
 })
