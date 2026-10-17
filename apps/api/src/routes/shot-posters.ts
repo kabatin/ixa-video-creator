@@ -187,6 +187,23 @@ const posterWithoutTake = (
   return { ...base, thumbnailUrl: null, reason }
 }
 
+/**
+ * 採用 Take の**後に**最初のフレームを描き直したなら、その絵の URL（無ければ null）。
+ *
+ * 以前は採用 Take があると必ず Take の絵を出していた。描き直しても一覧が古い Take のまま変わらず、
+ * 「作り直されていない」と読まれた（制作者 2026-10-18）。新しい Take を作って採用すれば、またそちらが出る。
+ */
+const redrawnFramePoster = (
+  take: Take,
+  startFrame: StartFrameState,
+  assetsById: ReadonlyMap<MediaAssetId, MediaAsset>,
+  urlByKey: ReadonlyMap<string, string>,
+): string | null => {
+  const frame = startFrame.assetId === null ? undefined : assetsById.get(startFrame.assetId)
+  if (frame === undefined || frame.thumbnailKey === null || frame.createdAt <= take.createdAt) return null
+  return urlByKey.get(frame.thumbnailKey) ?? null
+}
+
 const resolveShotPoster = (
   shot: Shot,
   startFrame: StartFrameState,
@@ -199,6 +216,8 @@ const resolveShotPoster = (
   if (shot.selectedTakeId === null) return posterWithoutTake(shot, startFrame, assetsById, urlByKey)
 
   const take = takesById.get(shot.selectedTakeId)
+  const redrawn = take === undefined ? null : redrawnFramePoster(take, startFrame, assetsById, urlByKey)
+  if (redrawn !== null) return { ...base, takeId: shot.selectedTakeId, thumbnailUrl: redrawn, reason: null }
   if (take === undefined) {
     // 選択されているのに引けない。待っても出ないので「まだ」とは書かない。
     return {
@@ -263,7 +282,8 @@ export const buildShotPosters = async (
       : // キャラクターシートのジョブ（Shot を持たない）は数えない（ADR-0035）。
         (await deps.imageJobs.findActiveByProject(projectId)).flatMap((job) => (job.shotId === null ? [] : [job.shotId])),
   )
-  // 最初のフレームは**全 Shot で引く**（あるかどうかを返すため）。絵に使うのは採用 Take が無い Shot だけ。
+  // 最初のフレームは**全 Shot で引く**（あるかどうかを返すため）。絵に使うのは、採用 Take が無い Shot と、
+  // 採用 Take の後に描き直した Shot（`redrawnFramePoster`）。
   const frameOf = new Map<ShotId, MediaAssetId | null>(
     await Promise.all(
       shots.map(
@@ -273,7 +293,7 @@ export const buildShotPosters = async (
   )
   const startFrames = new Map<ShotId, StartFrameState>(
     shots.map((shot): readonly [ShotId, StartFrameState] => {
-      const needsFrame = shot.selectedTakeId === null && !drawing.has(shot.id)
+      const needsFrame = !drawing.has(shot.id)
       return [
         shot.id,
         {

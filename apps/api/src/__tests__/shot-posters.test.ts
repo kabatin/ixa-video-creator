@@ -426,6 +426,8 @@ describe('最初のフレームを絵に使う', () => {
     drawing?: boolean
     /** 最初のフレームを付けない。 */
     noFrame?: boolean
+    /** 採用 Take の後に最初のフレームを描き直した。省くと Take の方が新しい。 */
+    redrawnAfterTake?: boolean
   }) => {
     const project = aProject()
     const storage = createMemoryStorage()
@@ -446,7 +448,9 @@ describe('最初のフレームを絵に使う', () => {
     })
     const video = await seedAsset(mediaAssets, project, { thumbnailKey: `media/${project.workspaceId}/take/thumb.jpg`, checksum: 'd'.repeat(64) })
     const base = aShot(project.id, { order: 1000, code: 'shot_001' })
-    const take = aTake(base, '3'.repeat(64), { mediaAssetId: video.id })
+    // 最初のフレームの行は「いま」作られる。Take の時刻をその前か後に置く。
+    const takeCreatedAt = new Date(options.redrawnAfterTake === true ? '2000-01-01T00:00:00Z' : '2999-01-01T00:00:00Z')
+    const take = { ...aTake(base, '3'.repeat(64), { mediaAssetId: video.id }), createdAt: takeCreatedAt }
     const shot = options.adopted === true ? { ...base, selectedTakeId: take.id } : base
     if (options.noFrame !== true) await replaceManualStartFrame(shotReferences, shot.id, frame.id)
     if (options.drawing === true) {
@@ -488,6 +492,19 @@ describe('最初のフレームを絵に使う', () => {
 
   it('採用 Take があれば、そちらを出す（最初のフレームより優先）', async () => {
     const poster = await setup({ thumbnail: true, adopted: true })
+    expect(poster?.thumbnailUrl).toContain('take/thumb.jpg')
+  })
+
+  /** 描き直しても一覧が古い Take のままで「作り直されていない」と読まれた（制作者 2026-10-18）。 */
+  it('採用 Take の後に最初のフレームを描き直したら、描き直した絵を出す', async () => {
+    const poster = await setup({ thumbnail: true, adopted: true, redrawnAfterTake: true })
+    expect(poster?.thumbnailUrl).toContain('frame/thumb.jpg')
+    expect(poster?.takeId).not.toBeNull()
+    expect(poster).toMatchObject({ reason: null, pending: false })
+  })
+
+  it('描き直した絵のサムネイルがまだ無ければ、Take の絵を出したまま', async () => {
+    const poster = await setup({ thumbnail: false, adopted: true, redrawnAfterTake: true })
     expect(poster?.thumbnailUrl).toContain('take/thumb.jpg')
   })
 
