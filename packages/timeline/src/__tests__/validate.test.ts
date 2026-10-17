@@ -420,7 +420,7 @@ describe('validateTimeline / 列挙', () => {
 
 describe('絵に出ない Transition（Architect 追加）', () => {
   /**
-   * wipe / whip_pan / glitch はレンダリング時に cut へ落ちる。
+   * wipe はレンダリング時に cut へ落ちる（whip_pan・glitch は ADR-0050 で絵に出るようになった）。
    * 置いた本人は選んだ効果が出ると思っているので、黙って落とさない。
    */
   const sourceWith = (type: Transition['type']) => {
@@ -434,7 +434,7 @@ describe('絵に出ない Transition（Architect 追加）', () => {
   const degraded = (type: Transition['type']): TimelineIssue[] =>
     find(validateTimeline(sourceWith(type)), TIMELINE_ISSUE_CODES.transitionDegraded)
 
-  it.each(['wipe', 'whip_pan', 'glitch'] as const)('%s は warning を出す', (type) => {
+  it.each(['wipe'] as const)('%s は warning を出す', (type) => {
     const issues = degraded(type)
 
     expect(issues).toHaveLength(1)
@@ -442,7 +442,7 @@ describe('絵に出ない Transition（Architect 追加）', () => {
     expect(issues[0]?.message).toContain('カット')
   })
 
-  it.each(['cut', 'dissolve', 'dip_to_black', 'dip_to_white'] as const)(
+  it.each(['cut', 'dissolve', 'dip_to_black', 'dip_to_white', 'whip_pan', 'glitch'] as const)(
     '%s は warning を出さない',
     (type) => {
       expect(degraded(type)).toEqual([])

@@ -20,10 +20,13 @@ describe('TRANSITION_SUPPORT', () => {
     expect(Object.keys(TRANSITION_SUPPORT).sort()).toEqual([...TransitionType.options].sort())
   })
 
-  it('Phase 1 未実装のものは cut への縮退として宣言されている', () => {
+  it('未実装の wipe だけが cut への縮退として宣言されている', () => {
     expect(TRANSITION_SUPPORT.wipe).toBe('degraded_to_cut')
-    expect(TRANSITION_SUPPORT.whip_pan).toBe('degraded_to_cut')
-    expect(TRANSITION_SUPPORT.glitch).toBe('degraded_to_cut')
+  })
+
+  it('whip_pan と glitch はエフェクトの部品で描く（ADR-0050）', () => {
+    expect(TRANSITION_SUPPORT.whip_pan).toBe('implemented')
+    expect(TRANSITION_SUPPORT.glitch).toBe('implemented')
   })
 })
 
@@ -113,7 +116,18 @@ describe('buildTimelinePlan — transitions', () => {
     expect(plan.dips[0]?.zIndex).toBeGreaterThan(topShot)
   })
 
-  it.each(['wipe', 'whip_pan', 'glitch'] as const)(
+  it.each(['whip_pan', 'glitch'] as const)('%s は縮退せず、下の絵を動かすものとして並ぶ', (type) => {
+    const doc = makeDocument({
+      video1: twoShots(),
+      transitions: [makeTransition(1, shotId(1), shotId(2), type, 0.5)],
+    })
+    const plan = buildTimelinePlan(doc, CANVAS)
+    expect(plan.degradedTransitions).toEqual([])
+    expect(plan.dips).toEqual([])
+    expect(plan.frameMovers.map((mover) => mover.kind)).toEqual([type])
+  })
+
+  it.each(['wipe'] as const)(
     '%s は cut に縮退し、縮退したことを呼び出し側に見せる',
     (type) => {
       const doc = makeDocument({

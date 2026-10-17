@@ -5,12 +5,43 @@ import { mkdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { buildFfmpegArgs } from './ffmpeg-filters.js'
 
+/** このレンダラが描かずに落とすエフェクト（ADR-0050）。 */
+export type OmittedEffect = {
+  readonly clipId: string
+  readonly templateKey: string
+}
+
+/**
+ * クリップ単位のエフェクトを描けないレンダラで、落ちるエフェクトの一覧。
+ * `RenderResult` には警告の置き場が無い（Port を変えない）ので、レンダラの作り手が受け口（`onOmittedEffects`）を渡す。
+ */
+export const effectsOmittedBy = (
+  doc: TimelineDocument,
+  capabilities: TimelineRenderer['capabilities'],
+): readonly OmittedEffect[] =>
+  capabilities.perClipEffects && capabilities.motionGraphics
+    ? []
+    : doc.clips.flatMap((clip) =>
+        clip.content.type === 'motion_graphics' ? [{ clipId: clip.id, templateKey: clip.content.templateKey }] : [],
+      )
+
 export type FfmpegRendererOptions = {
   /** MP4 の出力先ディレクトリ。無ければ作る。 */
   readonly outputDir: string
   /** ffmpeg プロセスのタイムアウト。既定 30 分。 */
   readonly timeoutMs?: number
+  /**
+   * エフェクト（motion_graphics のクリップ）を描かずに落としたときに呼ぶ。**必須。**
+   * 黙って落とすと、置いた本人は効果が出たと思ったままになる。落ちるものが無ければ呼ばない。
+   */
+  readonly onOmittedEffects: (omitted: readonly OmittedEffect[]) => void
 }
+
+const FFMPEG_CAPABILITIES: TimelineRenderer['capabilities'] = Object.freeze({
+  motionGraphics: false,
+  textAnimation: false,
+  perClipEffects: false,
+})
 
 const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000
 
@@ -33,6 +64,7 @@ const describe = (error: unknown): string =>
  *   - `unresolved`: **無視する。Remotion 版のような赤いプレースホルダは出ない。**
  *     素材が解決できていないことは、このレンダラの出力からは分からない。
  * - `transitions` は `cut` のみ。dissolve / dip / wipe / whip_pan / glitch はすべて cut になる
+ * - エフェクト（ADR-0050）は描かない。落ちたものは `onOmittedEffects` で知らせる
  * - モーショングラフィックス・テキストアニメーション・クリップ単位のエフェクトは出せない
  *
  * これらは `render()` の戻り値では表現できない（`RenderResult` に警告の場がない）ため、
@@ -42,11 +74,7 @@ const describe = (error: unknown): string =>
  */
 export const createFfmpegRenderer = (options: FfmpegRendererOptions): TimelineRenderer => ({
   id: 'ffmpeg',
-  capabilities: {
-    motionGraphics: false,
-    textAnimation: false,
-    perClipEffects: false,
-  },
+  capabilities: FFMPEG_CAPABILITIES,
 
   async render(
     doc: TimelineDocument,
@@ -55,6 +83,8 @@ export const createFfmpegRenderer = (options: FfmpegRendererOptions): TimelineRe
   ): Promise<RenderResult> {
     const outputPath = join(options.outputDir, `ffmpeg-${preset}-${randomUUID()}.mp4`)
     const args = buildFfmpegArgs(doc, preset, outputPath)
+    const omitted = effectsOmittedBy(doc, FFMPEG_CAPABILITIES)
+    if (omitted.length > 0) options.onOmittedEffects(omitted)
 
     // `@ixa/media` の runner は出力をバッファするため、途中経過を取り出せない。
     // 嘘の進捗を刻むより、開始と完了だけを正直に通知する。

@@ -10,6 +10,9 @@ import { makeDocument, makeVideo1Shot } from './fixtures.js'
 /** 実 ffmpeg を叩く。素材生成 + エンコードで数十秒かかる。 */
 const TEST_TIMEOUT_MS = 180_000
 
+/** 落ちるエフェクトの知らせ。ここで描く文書にはエフェクトが無い（`omitted-effects.test.ts` で見る）。 */
+const ignoreOmitted = (): void => undefined
+
 const FPS = 30
 const SHOT_SEC = 2
 const TOTAL_SEC = SHOT_SEC * 2
@@ -93,7 +96,7 @@ afterAll(async () => {
 
 describe('createFfmpegRenderer', () => {
   it('capabilities で機能差を表明する（clips と cut 以外のトランジションは出せない）', () => {
-    const renderer = createFfmpegRenderer({ outputDir: workDir })
+    const renderer = createFfmpegRenderer({ outputDir: workDir, onOmittedEffects: ignoreOmitted })
     expect(renderer.id).toBe('ffmpeg')
     expect(renderer.capabilities).toEqual({
       motionGraphics: false,
@@ -105,7 +108,7 @@ describe('createFfmpegRenderer', () => {
   it(
     '2 本の動画を 1 本の MP4 に連結し、尺・解像度・音声が揃う',
     async () => {
-      const renderer = createFfmpegRenderer({ outputDir: join(workDir, 'out') })
+      const renderer = createFfmpegRenderer({ outputDir: join(workDir, 'out'), onOmittedEffects: ignoreOmitted })
       const progress: number[] = []
       const doc = document()
 
@@ -140,7 +143,7 @@ describe('createFfmpegRenderer', () => {
   it(
     '音声が無いタイムラインでも書き出せる',
     async () => {
-      const renderer = createFfmpegRenderer({ outputDir: join(workDir, 'out-silent') })
+      const renderer = createFfmpegRenderer({ outputDir: join(workDir, 'out-silent'), onOmittedEffects: ignoreOmitted })
       const doc = makeDocument({
         fps: FPS,
         resolution: { width: 320, height: 240 },
@@ -159,7 +162,7 @@ describe('createFfmpegRenderer', () => {
   it(
     '素材が見つからなければ原因を含めて throw する（握り潰さない）',
     async () => {
-      const renderer = createFfmpegRenderer({ outputDir: join(workDir, 'out-missing') })
+      const renderer = createFfmpegRenderer({ outputDir: join(workDir, 'out-missing'), onOmittedEffects: ignoreOmitted })
       const doc = makeDocument({
         fps: FPS,
         durationSec: SHOT_SEC,

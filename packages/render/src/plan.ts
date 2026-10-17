@@ -9,21 +9,21 @@ import type {
   TransitionType,
 } from '@ixa/domain'
 import { duckingGainAt, fadeGainAt, isDegradedTransition, mergeVoiceSpans, type DuckingSettings, type VoiceSpan } from '@ixa/domain'
+import { buildFrameMovers, type FrameMover } from './frame-effects.js'
 import { letterboxFit, type FitRect } from './presets.js'
 import { frameRange, sourceOffsetFrames, totalFrames, type FrameRange } from './timing.js'
 
 /**
- * トランジションの実装状況。**Phase 1 で未実装のものを無言で無視しないための表**。
+ * トランジションの実装状況。**未実装のものを無言で無視しないための表**。
  *
  * - `cut`         : 何もしない（Shot を隣接させるだけ）
  * - `dissolve`    : 前の Shot の尻を次の Shot に重ね、不透明度を 1→0 で補間する
  * - `dip_to_black`: 境界をまたいで黒の単色を挟む（0→1→0）
  * - `dip_to_white`: 同上（白）
- * - `wipe` / `whip_pan` / `glitch`
- *     : **Phase 1 では未実装。`cut` と同じ扱いに縮退する。**
- *       ワイプのマスク、ホイップパンのモーションブラー、グリッチのシェーダは
- *       いずれもモーショングラフィックス機構（Phase 5）の上に載せるべきもので、
- *       中途半端な近似を入れると後で捨てることになるため、あえて実装しない。
+ * - `whip_pan`    : 境界をまたいで絵を横へ流し、横にぼかして一瞬明るくする（ADR-0050。`frame-effects.ts`）
+ * - `glitch`      : 境界をまたいで絵を跳ねさせ、色をずらし、グリッチの帯を重ねる（同上）
+ * - `wipe`
+ *     : **未実装。`cut` と同じ扱いに縮退する。** マスクの形を決めていないため。
  *       縮退したことは `TimelinePlan.degradedTransitions` で呼び出し側に見える。
  */
 /**
@@ -106,6 +106,15 @@ export type TimelinePlan = {
   readonly clips: readonly ClipPlan[]
   readonly audio: readonly AudioPlan[]
   readonly degradedTransitions: readonly DegradedTransition[]
+  /**
+   * 下の絵（VIDEO1・VIDEO2）を動かすもの（ADR-0050）。揺れ・寄りのパンチのクリップと、whip_pan・glitch のトランジション。
+   * 描く側は `frameLayerAt` でコマごとの動かし方を引き、Shot と VIDEO2 の入れ物に当てる。
+   */
+  readonly frameMovers: readonly FrameMover[]
+  /** 動かす入れ物（VIDEO1・VIDEO2）の重なり順。暗転より下。 */
+  readonly frameLayerZIndex: number
+  /** トランジションに重ねるもの（glitch の帯）の重なり順。暗転と同じ高さ。 */
+  readonly transitionOverlayZIndex: number
 }
 
 /** VIDEO2 → VFX → TEXT の順に上へ重ねる。SFX は音声のみで映像を持たない。 */
@@ -260,5 +269,8 @@ export const buildTimelinePlan = (doc: TimelineDocument, canvas: Resolution): Ti
     clips: buildClips(doc, dipZIndex + 1),
     audio: buildAudioPlans(doc),
     degradedTransitions: buildDegraded(doc),
+    frameMovers: buildFrameMovers(doc),
+    frameLayerZIndex: SHOT_Z_BASE,
+    transitionOverlayZIndex: dipZIndex,
   }
 }

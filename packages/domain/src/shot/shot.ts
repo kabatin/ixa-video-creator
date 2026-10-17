@@ -106,6 +106,7 @@ export type TransitionType = z.infer<typeof TransitionType>
  *
  * `degraded_to_cut` はモーショングラフィックス機構の上に載せるべきもので、
  * 中途半端な近似を入れると後で捨てることになるため、あえて実装していない。
+ * whip_pan と glitch はエフェクトの型（ADR-0050）の部品で描くようになった。wipe はまだ。
  */
 export const TRANSITION_SUPPORT: Readonly<
   Record<z.infer<typeof TransitionType>, 'implemented' | 'degraded_to_cut'>
@@ -115,8 +116,8 @@ export const TRANSITION_SUPPORT: Readonly<
   dip_to_black: 'implemented',
   dip_to_white: 'implemented',
   wipe: 'degraded_to_cut',
-  whip_pan: 'degraded_to_cut',
-  glitch: 'degraded_to_cut',
+  whip_pan: 'implemented',
+  glitch: 'implemented',
 })
 
 /** 絵に出ない種別か。画面はこれを見て注意を出す。 */

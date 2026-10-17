@@ -1,5 +1,5 @@
 import type { RenderableClip, Resolution, TimelineDocument } from '@ixa/domain'
-import { useMemo, type ReactNode } from 'react'
+import { useId, useMemo, type ReactNode } from 'react'
 import type React from 'react'
 import {
   AbsoluteFill,
@@ -22,8 +22,10 @@ import {
   type TimelinePlan,
 } from '../plan.js'
 import { clipAudioVolume } from '../clip-audio.js'
+import { EffectClipLayer, resolveEffectClip } from '../effects/index.js'
 import type { FitRect } from '../presets.js'
 import { sourceOffsetFrames, type FrameRange } from '../timing.js'
+import { DEFAULT_FRAME_FILTER_ID, FrameLayer, TransitionGlitchLayers } from './frame-layer.js'
 import { ShotVideo } from './shot-video.js'
 import { TextClip, resolveTextClip } from './text-clip.js'
 
@@ -203,12 +205,28 @@ export const ClipBody: React.FC<{ clip: ClipPlan; fps: number; video: FitRect }>
     )
   }
 
-  // motion_graphics のテンプレート機構は今回の範囲外。
-  // templateKey が分かるプレースホルダを出すだけにする（これも無言で消さない）。
+  // エフェクト（ADR-0050）。読めるかの判定は domain のスキーマ（`resolveEffectClip`）だけが持つ。
+  const effect = resolveEffectClip(content)
+  // 下の絵を動かす型（揺れ・寄りのパンチ）は、ここでは描かない。Shot と VIDEO2 の入れ物に当てる（`timelineLayers`）。
+  if (effect.status === 'frame') return null
+  if (effect.status === 'overlay') {
+    return (
+      <AbsoluteFill style={layerStyle}>
+        <EffectClipLayer
+          content={effect.content}
+          clipId={clip.clipId}
+          durationInFrames={clip.range.durationInFrames}
+          fps={fps}
+          video={video}
+        />
+      </AbsoluteFill>
+    )
+  }
+  // 知らない型・読めない値は**無言で消さない**。型の名前と理由を枠で出す。
   return (
     <AbsoluteFill
       style={{ ...PLACEHOLDER_STYLE, ...layerStyle }}
-    >{`[${content.type}] ${content.templateKey}`}</AbsoluteFill>
+    >{`[${content.type}] ${content.templateKey} — ${effect.reason}`}</AbsoluteFill>
   )
 }
 
@@ -287,31 +305,50 @@ const isNear = (range: FrameRange, frame: number | null, before: number, after: 
  * 巻き戻って鳴り直した（2026-09-28 実測）。範囲外の Sequence は何も描かないので、外しても絵は同じ。
  * 音は区間が長く数も少ないので外さない（付け外しのたびに頭出しし直させない）。
  */
-export const timelineLayers = (plan: TimelinePlan, frame: number | null): ReactNode => {
+export const timelineLayers = (
+  plan: TimelinePlan,
+  frame: number | null,
+  filterId = DEFAULT_FRAME_FILTER_ID,
+): ReactNode => {
   const premountFor = Math.round(PREMOUNT_SEC * plan.fps)
   const postmountFor = Math.round(POSTMOUNT_SEC * plan.fps)
+  const clipSequence = (clip: ClipPlan): ReactNode =>
+    isNear(clip.range, frame, premountFor, 0) ? (
+      <Sequence
+        key={clip.clipId}
+        from={clip.range.from}
+        durationInFrames={clip.range.durationInFrames}
+        premountFor={premountFor}
+      >
+        <ClipBody clip={clip} fps={plan.fps} video={plan.video} />
+      </Sequence>
+    ) : null
 
   return (
     <>
-      {plan.shots.map((shot, index) => {
-        const holds = followsPrevious(plan.shots, index + 1)
-        if (!isNear(shot.range, frame, premountFor, holds ? postmountFor : 0)) return null
-        return (
-          <Sequence
-            key={shot.shotId}
-            from={shot.range.from}
-            durationInFrames={shot.range.durationInFrames}
-            premountFor={premountFor}
-            styleWhilePremounted={
-              followsPrevious(plan.shots, index) ? SHOW_BEHIND_WHILE_PREMOUNTED : undefined
-            }
-            // 次の Shot が隙間なく続くときだけ残す。最後の Shot や隙間の前では、黒のはずの間に絵を残さない。
-            {...(holds ? { postmountFor, styleWhilePostmounted: HOLD_UNDER_WHILE_POSTMOUNTED } : {})}
-          >
-            <ShotBody shot={shot} video={plan.video} />
-          </Sequence>
-        )
-      })}
+      {/* VIDEO1（Shot）と VIDEO2 は 1 つの入れ物に入れ、揺れ・寄り・whip_pan・glitch をまとめて当てる（ADR-0050）。 */}
+      <FrameLayer plan={plan} frame={frame} filterId={filterId}>
+        {plan.shots.map((shot, index) => {
+          const holds = followsPrevious(plan.shots, index + 1)
+          if (!isNear(shot.range, frame, premountFor, holds ? postmountFor : 0)) return null
+          return (
+            <Sequence
+              key={shot.shotId}
+              from={shot.range.from}
+              durationInFrames={shot.range.durationInFrames}
+              premountFor={premountFor}
+              styleWhilePremounted={
+                followsPrevious(plan.shots, index) ? SHOW_BEHIND_WHILE_PREMOUNTED : undefined
+              }
+              // 次の Shot が隙間なく続くときだけ残す。最後の Shot や隙間の前では、黒のはずの間に絵を残さない。
+              {...(holds ? { postmountFor, styleWhilePostmounted: HOLD_UNDER_WHILE_POSTMOUNTED } : {})}
+            >
+              <ShotBody shot={shot} video={plan.video} />
+            </Sequence>
+          )
+        })}
+        {plan.clips.filter((clip) => clip.track === 'VIDEO2').map(clipSequence)}
+      </FrameLayer>
 
       {plan.dips.map((dip) =>
         isNear(dip.range, frame, 0, 0) ? (
@@ -326,18 +363,9 @@ export const timelineLayers = (plan: TimelinePlan, frame: number | null): ReactN
         ) : null,
       )}
 
-      {plan.clips.map((clip) =>
-        isNear(clip.range, frame, premountFor, 0) ? (
-          <Sequence
-            key={clip.clipId}
-            from={clip.range.from}
-            durationInFrames={clip.range.durationInFrames}
-            premountFor={premountFor}
-          >
-            <ClipBody clip={clip} fps={plan.fps} video={plan.video} />
-          </Sequence>
-        ) : null,
-      )}
+      <TransitionGlitchLayers plan={plan} frame={frame} />
+
+      {plan.clips.filter((clip) => clip.track !== 'VIDEO2').map(clipSequence)}
 
       {plan.audio.map((track, index) => (
         <AudioTrack key={`${String(index)}:${track.mediaUrl}:${track.range.from}`} track={track} fps={plan.fps} />
@@ -356,11 +384,13 @@ export const TimelineComposition: React.FC<TimelineCompositionProps> = ({ doc, c
   const frame = useCurrentFrame()
   // 毎コマ描き直すようになったので、並べ方は文書が変わったときだけ組み直す。
   const plan = useMemo(() => buildTimelinePlan(doc, canvas ?? doc.resolution), [doc, canvas])
+  // SVG のフィルタの ID。同じ画面に Player が 2 つあっても取り違えない。
+  const filterId = `ixa-frame-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
 
   return (
     // `isolation` で重なりの基準をここに閉じる。zIndex が負の要素を背景の黒より上に描くため。
     <AbsoluteFill style={{ backgroundColor: '#000000', isolation: 'isolate' }}>
-      {timelineLayers(plan, frame)}
+      {timelineLayers(plan, frame, filterId)}
     </AbsoluteFill>
   )
 }

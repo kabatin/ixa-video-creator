@@ -70,12 +70,12 @@ export const createRemotionRenderer = (options: RemotionRendererOptions): Timeli
    * **事実を書く。** ここは `RenderResult` に警告の置き場が無いぶんの唯一の申告口なので、
    * できないことを true にすると誰も気づけない（ADR-0010）。
    *
-   * text / motion_graphics のクリップは、いまはテンプレート名を書いた
-   * プレースホルダが出るだけでテンプレート機構が無い。だから false。
-   * opacity と layer は実際に効くので perClipEffects だけ true。
+   * motion_graphics のクリップはエフェクトの型（ADR-0050）として描くので true。
+   * テロップの動き（textAnimation）はフェードだけで、型の機構は無いので false のまま。
+   * opacity と layer は実際に効くので perClipEffects は true。
    */
   capabilities: {
-    motionGraphics: false,
+    motionGraphics: true,
     textAnimation: false,
     perClipEffects: true,
   },
