@@ -199,6 +199,11 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
         const message = musicJobNotice(event)
         if (message !== null) setNotice(message)
       }
+      // 効果音を作るジョブ（ADR-0052）。効果音の段に置いたらタイムラインとプレビューを読み直す。失敗は理由ごと知らせる。
+      if (event.type === 'sfx_job.status') {
+        if (event.timelineClipId !== null) setPosterEpoch((epoch) => epoch + 1)
+        if (event.status === 'failed') setNotice(`効果音を作れませんでした: ${event.error ?? '理由が届きませんでした。'}`)
+      }
       // **失敗を画面まで運ぶ。** worker が作った理由をここで捨てると、
       // 利用者から見て「遅い」と「死んだ」が区別できなくなる。
       if (event.type === 'generation_job.status' && event.status === 'failed') {

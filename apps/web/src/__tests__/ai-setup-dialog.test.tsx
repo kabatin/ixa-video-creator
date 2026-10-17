@@ -17,48 +17,55 @@ const TOOLS: readonly WireAiTool[] = [
     id: 'stub',
     label: 'お試し',
     status: { state: 'ready', version: null },
-    problems: { text: null, image: null, video: null, voice: null, transcribe: null, music: null },
+    problems: { text: null, image: null, video: null, voice: null, transcribe: null, music: null, sfx: null },
     notice: null,
   },
   {
     id: 'claude_cli',
     label: 'Claude Code',
     status: { state: 'ready', version: '2.1.283' },
-    problems: { text: null, image: '画像にはまだ使えません', video: '動画にはまだ使えません', voice: 'x', transcribe: 'x', music: 'x' },
+    problems: { text: null, image: '画像にはまだ使えません', video: '動画にはまだ使えません', voice: 'x', transcribe: 'x', music: 'x', sfx: 'x' },
     notice: null,
   },
   {
     id: 'codex_cli',
     label: 'Codex',
     status: { state: 'ready', version: '0.154.0' },
-    problems: { text: 'テキストにはまだ使えません', image: null, video: '動画にはまだ使えません', voice: 'x', transcribe: 'x', music: 'x' },
+    problems: { text: 'テキストにはまだ使えません', image: null, video: '動画にはまだ使えません', voice: 'x', transcribe: 'x', music: 'x', sfx: 'x' },
     notice: null,
   },
   {
     id: 'local',
     label: '静止画を動かす（無料）',
     status: { state: 'ready', version: null },
-    problems: { text: 'x', image: 'x', video: null, voice: 'x', transcribe: 'x', music: 'x' },
+    problems: { text: 'x', image: 'x', video: null, voice: 'x', transcribe: 'x', music: 'x', sfx: 'x' },
     notice: null,
   },
   {
     id: 'vpipe',
     label: 'MiniMax H3',
     status: { state: 'missing', reason: '起動していません' },
-    problems: { text: 'x', image: 'x', video: 'MiniMax H3 を使えません: 起動していません', voice: 'x', transcribe: 'x', music: 'x' },
+    problems: { text: 'x', image: 'x', video: 'MiniMax H3 を使えません: 起動していません', voice: 'x', transcribe: 'x', music: 'x', sfx: 'x' },
+    notice: null,
+  },
+  {
+    id: 'stable_audio_sfx',
+    label: 'Stable Audio 3',
+    status: { state: 'missing', reason: '起動していません（sfx-api を起動してください）' },
+    problems: { text: 'x', image: 'x', video: 'x', voice: 'x', transcribe: 'x', music: 'x', sfx: 'Stable Audio 3 を使えません: 起動していません' },
     notice: null,
   },
   {
     id: 'gemini_api',
     label: 'Gemini（Google の API・無料枠あり）',
     status: { state: 'ready', version: null },
-    problems: { text: 'x', image: 'x', video: 'x', voice: null, transcribe: null, music: null },
+    problems: { text: 'x', image: 'x', video: 'x', voice: null, transcribe: null, music: null, sfx: null },
     notice: '原稿は Google に送られます。無料枠では送った内容が製品の改善に使われます。',
   },
 ]
 
-const RECOMMENDED: AiSettings = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'stub', transcribe: 'stub', music: 'stub' }
-const CURRENT: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub' }
+const RECOMMENDED: AiSettings = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub' }
+const CURRENT: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub' }
 
 const fakeApi = (overrides: Partial<AiSettingsApi> = {}): AiSettingsApi => ({
   listAiTools: vi.fn(() => Promise.resolve({ tools: [...TOOLS], recommended: RECOMMENDED })),
@@ -107,6 +114,17 @@ describe('AiSetupDialogBody', () => {
     expect(screen.getByRole('tab', { name: /画像/ }).textContent).toContain('Codex')
   })
 
+  /** ADR-0052。効果音のタブには効果音の AI とお試しだけが並ぶ。 */
+  it('効果音のタブに効果音の AI を出し、起動していなければ理由を見せる', async () => {
+    await open()
+
+    const sfx = await panel(/効果音/)
+    expect(within(sfx).getByRole('radio', { name: /お試し/ })).toBeChecked()
+    expect(within(sfx).getByRole('radio', { name: /Stable Audio 3/ })).toBeDisabled()
+    expect(within(sfx).getByText(/sfx-api を起動してください/)).toBeTruthy()
+    expect(within(sfx).queryByRole('radio', { name: /Claude/ })).toBeNull()
+  })
+
   it('使えないものは選ばせず、理由を見せる', async () => {
     await open()
 
@@ -129,6 +147,7 @@ describe('AiSetupDialogBody', () => {
         voice: 'stub',
         transcribe: 'stub',
         music: 'stub',
+        sfx: 'stub',
       })
       expect(value.closeDialog).toHaveBeenCalled()
     })
