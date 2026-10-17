@@ -10,7 +10,7 @@ import { describeForPerson } from '@/lib/api-error'
 import { ASSET_DRAG_TYPE, encodeAssetDrag, type AssetDragPayload } from '@/lib/asset-actions'
 import { matchesAssetQuery } from '@/lib/asset-tree'
 import { VOICE_TOOL_LABELS } from '@/lib/voice-defaults'
-import { sameSelection, type Inspected } from '@/lib/workbench-selection'
+import { isAssetSelection, sameSelection, type Inspected } from '@/lib/workbench-selection'
 import { MusicJobProgress } from '@/components/workbench/ui/music-job-progress'
 import { useAssetMenu, type AssetTarget } from '@/components/workbench/use-asset-menu'
 import { useContextMenuTrigger, type ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
@@ -51,8 +51,10 @@ export const AssetTree = () => {
     workbench.inspect(projectSelection)
     workbench.focusPanel('inspector')
   }
+  /** 素材は押しただけで素材ビューアに出す（2 回押さないと見えないのは分かりにくい。制作者 2026-10-17）。 */
   const select = (selection: Inspected): void => {
     workbench.inspect(selection)
+    if (isAssetSelection(selection)) workbench.openViewer()
   }
   const open = (selection: Inspected): void => {
     workbench.inspect(selection)

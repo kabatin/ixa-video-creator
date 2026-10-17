@@ -53,6 +53,16 @@ describe('AssetTree', () => {
     })
   })
 
+  /** 2 回押さないと見えないのは分かりにくい（制作者 2026-10-17）。作品の方針はインスペクターで直す物なので別。 */
+  it('素材は 1 回押しただけで素材ビューアに出す', () => {
+    const { value } = renderInWorkbench(<AssetTree />, {}, { voices: { state: 'ready', value: [aVoice] } })
+
+    fireEvent.click(screen.getByRole('button', { name: /ナレーター/ }))
+
+    expect(value.inspect).toHaveBeenCalledWith({ kind: 'voice', id: aVoice.id })
+    expect(value.openViewer).toHaveBeenCalled()
+  })
+
   it('読めなかった一覧は「0 件」と言わず理由を出す（L-015）', () => {
     renderTree()
     expect(screen.getByRole('alert')).toHaveTextContent('ブランド資産を読み込めませんでした')

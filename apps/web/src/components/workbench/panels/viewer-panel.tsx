@@ -8,25 +8,22 @@ import type {
   CharacterLookImage,
   Location,
   MediaAssetId,
-  MusicTrackId,
 } from '@ixa/domain'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent, ReactNode } from 'react'
+import { ImageLightbox } from '@/components/image-lightbox'
 import { MediaImage } from '@/components/media-image'
 import { ConfirmButton } from '@/components/ui/confirm-button'
-import { WaveformCanvas } from '@/components/waveform-canvas'
 import { useAssets } from '@/components/workbench/asset-store'
 import { acceptsImages, useImageAttach } from '@/components/workbench/use-image-attach'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty, PanelFrame, PanelNotice } from '@/components/workbench/panels/panel-frame'
+import { TrackView, VoiceView } from '@/components/workbench/panels/viewer-audio'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import { droppedFileKind } from '@/lib/asset-actions'
 import { identityRoleLabel } from '@/lib/identity-images'
 import { lookRoleLabel } from '@/lib/look-images'
-import type { WireMusicAnalysis } from '@/lib/music-api'
-import { fetchWaveformPeaks, type WaveformPeaksResult } from '@/lib/waveform-api'
-import { sectionBoundaries } from '@/lib/waveform-draw'
 import { WORDING, deleteConfirmMessage } from '@/lib/wording'
 import { INSPECTED_LABELS, isAssetSelection } from '@/lib/workbench-selection'
 
@@ -42,7 +39,7 @@ export const ViewerPanel = () => {
       <PanelFrame>
         <PanelEmpty
           title="素材を選ぶと、ここに大きく出ます"
-          hint="左の素材ツリーで押すと選び、2 回押すとここに出ます。画像はここへ落とすと、その素材に入ります。"
+          hint="左の素材ツリーで押すと、ここに出ます。画像はここへ落とすと、その素材に入ります。"
         />
       </PanelFrame>
     )
@@ -54,6 +51,7 @@ export const ViewerPanel = () => {
       {inspected.kind === 'location' && <LocationView id={inspected.id} />}
       {inspected.kind === 'brand-asset' && <BrandAssetView id={inspected.id} />}
       {inspected.kind === 'track' && <TrackView id={inspected.id} />}
+      {inspected.kind === 'voice' && <VoiceView id={inspected.id} />}
     </PanelFrame>
   )
 }
@@ -124,35 +122,52 @@ const Gallery = ({
     readonly marked?: boolean
     readonly actions?: ReactNode
   }[]
-}) =>
-  items.length === 0 ? (
-    <p className="py-6 text-center text-sm text-muted">画像はまだありません。</p>
-  ) : (
-    <ul
-      className="grid gap-2"
-      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(10rem, 1fr))' }}
-    >
-      {items.map((item) => (
-        <li
-          key={item.key}
-          className={`overflow-hidden rounded-md border ${item.marked === true ? 'border-accent' : 'border-line'}`}
-        >
-          <MediaImage
-            mediaAssetId={item.mediaAssetId}
-            alt={item.caption}
-            className="aspect-square w-full object-cover"
-          />
-          <div className="px-1.5 py-1 text-xs text-muted">
-            <span className="block truncate">{item.caption}</span>
-            {/* 確認は同じカードの中に開く。押した画像と確認文が離れると、別の画像を消す。 */}
-            {item.actions !== undefined && (
-              <div className="mt-1 flex flex-wrap items-center gap-1">{item.actions}</div>
-            )}
-          </div>
-        </li>
-      ))}
-    </ul>
+}) => {
+  /** 大きく見ている画像の番号。null は閉じている。 */
+  const [enlarged, setEnlarged] = useState<number | null>(null)
+  if (items.length === 0) return <p className="py-6 text-center text-sm text-muted">画像はまだありません。</p>
+  return (
+    <>
+      <ul className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(12rem, 1fr))' }}>
+        {items.map((item, index) => (
+          <li
+            key={item.key}
+            className={`overflow-hidden rounded-md border ${item.marked === true ? 'border-accent' : 'border-line'}`}
+          >
+            {/* 縦長・横長の画像を切り取らずに全体を見せる。押すと大きく出す。 */}
+            <button
+              type="button"
+              aria-label={`${item.caption}を大きく見る`}
+              onClick={() => {
+                setEnlarged(index)
+              }}
+              className="block w-full cursor-zoom-in bg-bg"
+            >
+              <MediaImage mediaAssetId={item.mediaAssetId} alt={item.caption} className="aspect-square w-full object-contain" />
+            </button>
+            <div className="px-1.5 py-1 text-xs text-muted">
+              <span className="block truncate">{item.caption}</span>
+              {/* 確認は同じカードの中に開く。押した画像と確認文が離れると、別の画像を消す。 */}
+              {item.actions !== undefined && (
+                <div className="mt-1 flex flex-wrap items-center gap-1">{item.actions}</div>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+      {enlarged !== null && (
+        <ImageLightbox
+          items={items}
+          index={enlarged}
+          onClose={() => {
+            setEnlarged(null)
+          }}
+          onMove={setEnlarged}
+        />
+      )}
+    </>
   )
+}
 
 /** 読み直しの合図を持つ読み込み。 */
 const useReloadable = <T,>(load: () => Promise<T>, key: string) => {
@@ -485,66 +500,5 @@ const BrandAssetView = ({ id }: { readonly id: BrandAsset['id'] }) => {
         <p className="mt-2 text-sm text-muted">使い方: {asset.usageRule}</p>
       )}
     </ImageDrop>
-  )
-}
-
-const TrackView = ({ id }: { readonly id: MusicTrackId }) => {
-  const api = useMemo(() => createApiClient(), [])
-  const { tracks } = useAssets()
-  const track = (tracks.state === 'ready' ? tracks.value : []).find((item) => item.id === id)
-  const [analysis, setAnalysis] = useState<WireMusicAnalysis | null | 'loading'>('loading')
-  const [peaks, setPeaks] = useState<WaveformPeaksResult>({ status: 'empty' })
-
-  useEffect(() => {
-    let cancelled = false
-    setAnalysis('loading')
-    api
-      .getAnalysis(id)
-      .then(async (loaded) => {
-        if (cancelled) return
-        setAnalysis(loaded)
-        if (loaded !== null) {
-          const result = await fetchWaveformPeaks(loaded.waveformPeaksUrl)
-          if (!cancelled) setPeaks(result)
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setAnalysis(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [api, id])
-
-  if (track === undefined) return <PanelEmpty title="この楽曲は見つかりません" />
-  return (
-    <div className="space-y-2">
-      <h2 className="text-lg font-semibold text-text">
-        {track.title}
-        {track.isMaster && <span className="ml-2 text-xs text-muted">マスター</span>}
-      </h2>
-      {analysis === 'loading' && <p className="text-sm text-muted">解析を読み込んでいます…</p>}
-      {analysis === null && (
-        <p className="text-sm text-muted">
-          まだ解析されていません。右のインスペクターから解析できます。
-        </p>
-      )}
-      {analysis !== null && analysis !== 'loading' && (
-        <>
-          <WaveformCanvas
-            peaks={peaks}
-            durationSec={analysis.durationSec}
-            beats={analysis.beats}
-            downbeats={analysis.downbeats}
-            drops={analysis.drops}
-            sectionBoundarySec={sectionBoundaries(analysis.sections)}
-            heightPx={120}
-          />
-          <p className="text-sm text-muted">
-            {`BPM ${analysis.bpm.toFixed(1)}（信頼度 ${analysis.bpmConfidence.toFixed(2)}）・拍 ${String(analysis.beats.length)}・小節 ${String(analysis.downbeats.length)}・セクション ${String(analysis.sections.length)}・ドロップ ${String(analysis.drops.length)}`}
-          </p>
-        </>
-      )}
-    </div>
   )
 }
