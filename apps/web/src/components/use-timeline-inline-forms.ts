@@ -43,6 +43,10 @@ export type TimelineInlineFormsDeps = {
   readonly onOpenTextClip?: ((id: TimelineClipId) => void) | undefined
   /** 音のクリップ（効果音）を開く。渡せば帯の上の入力ではなくこちらで開く（ADR-0039）。 */
   readonly onOpenMediaClip?: ((id: TimelineClipId) => void) | undefined
+  /** エフェクトのクリップを開く（ADR-0050）。渡さなければ選ぶだけ（数値の一覧で直す）。 */
+  readonly onOpenEffectClip?: ((id: TimelineClipId) => void) | undefined
+  /** 入力を開く前に呼ぶ（エフェクトを選ぶ小窓を閉じる）。 */
+  readonly onBeforeOpen?: (() => void) | undefined
   /** 新しいテロップを置く位置を寄せる（押した所の近くの拍・端へ。切ってあればそのまま）。 */
   readonly snapInsertAt: (atSec: number) => number
 }
@@ -64,6 +68,8 @@ export const useTimelineInlineForms = ({
   setActionError,
   onOpenTextClip,
   onOpenMediaClip,
+  onOpenEffectClip,
+  onBeforeOpen,
   snapInsertAt,
 }: TimelineInlineFormsDeps) => {
   /** 帯の上で開いている入力。開く場所が変わったら下書きも作り直す。 */
@@ -94,6 +100,7 @@ export const useTimelineInlineForms = ({
     anchor: InlineFormAnchor,
     opener: HTMLElement | null,
   ): void => {
+    onBeforeOpen?.()
     openerRef.current = opener
     setOpen({ kind: 'transition', point, anchor })
     setDraft(transitionDraft(point))
@@ -106,6 +113,7 @@ export const useTimelineInlineForms = ({
     anchor: InlineFormAnchor,
     opener: HTMLElement | null,
   ): void => {
+    onBeforeOpen?.()
     openerRef.current = opener
     const probeAt = (at: number) =>
       probeTextInsertion({
@@ -136,6 +144,7 @@ export const useTimelineInlineForms = ({
     anchor: InlineFormAnchor,
     opener: HTMLElement | null,
   ): void => {
+    onBeforeOpen?.()
     if (onOpenTextClip !== undefined && clip.content.type === 'text') {
       closeForm()
       onOpenTextClip(clip.id)
@@ -144,6 +153,12 @@ export const useTimelineInlineForms = ({
     if (onOpenMediaClip !== undefined && clip.content.type === 'media') {
       closeForm()
       onOpenMediaClip(clip.id)
+      return
+    }
+    // エフェクトは帯の上の入力（テロップ用）では直さない。値の形が違う。
+    if (clip.content.type === 'motion_graphics') {
+      closeForm()
+      onOpenEffectClip?.(clip.id)
       return
     }
     openerRef.current = opener

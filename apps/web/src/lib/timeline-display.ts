@@ -9,6 +9,7 @@ import {
   type TransitionType,
 } from '@ixa/domain'
 import type { TimelineIssueSeverity, TimelineIssueView } from '@/lib/timeline-issues'
+import { effectChipLabel } from '@/lib/effect-clip'
 import { formatClock } from '@/lib/format-time'
 
 /**
@@ -34,14 +35,14 @@ export const TIMELINE_ROWS: readonly TimelineRow[] = [VIDEO1_ROW, ...EDITABLE_TR
 /**
  * **いま画面から置けるトラック。**
  *
- * `TimelineTrack` には 4 つあるが、挿入の口があるのは TEXT だけで、
+ * `TimelineTrack` には 4 つあるが、挿入の口があるのは TEXT とエフェクトの VFX（ADR-0050）だけで、
  * 残りは押しても何も起きない空の帯として縦を食っていた。
  * **判定をここ 1 箇所に置く。** 帯を出すかどうかと、押せるかどうかが
  * 別々の場所にあると必ずズレ、「出ているのに押せない」が戻ってくる（L-016）。
  *
- * VFX / VIDEO2 / SFX に置く口ができたら、ここへ足せば帯も出る。
+ * VIDEO2 / SFX に置く口ができたら、ここへ足せば帯も出る。
  */
-export const INSERTABLE_TRACKS: readonly TimelineTrack[] = ['TEXT']
+export const INSERTABLE_TRACKS: readonly TimelineTrack[] = ['TEXT', 'VFX']
 
 export const isInsertableTrack = (track: TimelineTrack): boolean =>
   INSERTABLE_TRACKS.includes(track)
@@ -247,7 +248,7 @@ export const describeClipContent = (content: TimelineClip['content']): string =>
       return params === null ? 'テロップ（文字が読めません）' : `テロップ「${params.text}」`
     }
     case 'motion_graphics':
-      return `モーショングラフィックス ${content.templateKey}`
+      return `エフェクト「${effectChipLabel(content)}」`
   }
 }
 
@@ -257,6 +258,8 @@ export const describeClipContent = (content: TimelineClip['content']): string =>
  * それ以外は一行要約のまま。知らせ・一覧・ツールチップでは種類が混ざるので `describeClipContent` を使う。
  */
 export const clipChipLabel = (content: TimelineClip['content']): string => {
+  // エフェクトも型の名前だけ（帯の名前「VFX（エフェクト）」で種類は分かる）。
+  if (content.type === 'motion_graphics') return effectChipLabel(content)
   if (content.type !== 'text') return describeClipContent(content)
   const params = parseTextClipParams(content.params)
   return params === null ? '（文字が読めません）' : params.text

@@ -1,5 +1,5 @@
 import { ProjectId, TimelineClip, TimelineClipId } from '@ixa/domain'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,6 +7,10 @@ import { TimelineEditor } from '@/components/timeline-editor'
 import { DEFAULT_PX_PER_SEC } from '@/lib/timeline-display'
 import type { BeatSource } from '@/lib/timeline-snap'
 import { PROJECT_ID } from './fixtures'
+
+/** TEXT の帯（VFX の帯も空で出るので、行の名前で探す。ADR-0050）。 */
+const textLane = (): HTMLElement | null =>
+  within(screen.getByText('TEXT（テロップ）').parentElement as HTMLElement).getByText('layer 0').parentElement
 
 /**
  * **帯のテロップを押すと、小窓ではなくインスペクターで開く**（2026-09-28、制作者の指摘
@@ -66,7 +70,7 @@ const editor = (
 
 /** 帯のその秒を押して離す（動かさない）。 */
 const pressLaneAt = (sec: number): void => {
-  const lane = screen.getByText('layer 0').parentElement
+  const lane = textLane()
   if (lane === null) throw new Error('TEXT の帯が無い')
   const at = { clientX: sec * DEFAULT_PX_PER_SEC, pointerId: 1 }
   fireEvent.pointerDown(lane, at)
@@ -140,7 +144,7 @@ describe('小窓を開く位置', () => {
     })
     render(editor([]))
 
-    const lane = screen.getByText('layer 0').parentElement
+    const lane = textLane()
     if (lane === null) throw new Error('TEXT の帯が無い')
     const at = { clientX: 100 + 10 * DEFAULT_PX_PER_SEC, pointerId: 1 }
     fireEvent.pointerDown(lane, at)
@@ -160,7 +164,7 @@ describe('小窓を開く位置', () => {
  */
 it('空きを押して開くときは、焦点をパネルへ移す既定の動きを止める', () => {
   render(editor([]))
-  const lane = screen.getByText('layer 0').parentElement
+  const lane = textLane()
   if (lane === null) throw new Error('TEXT の帯が無い')
 
   const notPrevented = fireEvent.pointerDown(lane, { clientX: 10 * DEFAULT_PX_PER_SEC, pointerId: 1 })

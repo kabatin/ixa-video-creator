@@ -357,26 +357,28 @@ describe('出す帯を決める', () => {
 
   it('置ける帯は中身が無くても出す', () => {
     expect(visibleTracks([])).toContain('TEXT')
+    // エフェクト（ADR-0050）は帯から置ける。
+    expect(visibleTracks([])).toContain('VFX')
   })
 
   it('置けない帯は中身が無ければ出さない', () => {
-    expect(visibleTracks([])).not.toContain('VFX')
+    expect(visibleTracks([])).not.toContain('VIDEO2')
     expect(visibleTracks([])).not.toContain('SFX')
   })
 
   it('音を落として置ける帯（ワークベンチの効果音）は、空でも出して隠したことにしない', () => {
     expect(visibleTracks([], ['SFX'])).toContain('SFX')
-    expect(hiddenTracks([], ['SFX'])).toEqual(['VFX', 'VIDEO2'])
+    expect(hiddenTracks([], ['SFX'])).toEqual(['VIDEO2'])
   })
 
   /** ここを落とすと、過去に入れたクリップが画面から消える。 */
   it('置けない帯でも中身があれば必ず出す', () => {
-    expect(visibleTracks([clipOn('VFX')])).toContain('VFX')
+    expect(visibleTracks([clipOn('VIDEO2')])).toContain('VIDEO2')
   })
 
   it('隠した帯の名前を返す。1 つも隠していなければ空', () => {
-    expect(hiddenTracks([])).toEqual(['VFX', 'VIDEO2', 'SFX'])
-    expect(hiddenTracks([clipOn('VFX')])).toEqual(['VIDEO2', 'SFX'])
+    expect(hiddenTracks([])).toEqual(['VIDEO2', 'SFX'])
+    expect(hiddenTracks([clipOn('SFX')])).toEqual(['VIDEO2'])
   })
 
   /** 帯を出すかどうかと、押せるかどうかが別の場所にあると必ずズレる（L-016）。 */
@@ -408,9 +410,9 @@ describe('clipChipLabel', () => {
     expect(clipChipLabel({ type: 'text', templateKey: 'plain', params: {} })).toBe('（文字が読めません）')
   })
 
-  it('テロップ以外は一行要約のまま', () => {
-    expect(clipChipLabel({ type: 'motion_graphics', templateKey: 'title_card', params: {} })).toBe(
-      'モーショングラフィックス title_card',
-    )
+  it('エフェクトは型の名前だけ。タイトルカードは文字も（ADR-0050）', () => {
+    expect(clipChipLabel({ type: 'motion_graphics', templateKey: 'flash', params: {} })).toBe('フラッシュ')
+    expect(clipChipLabel({ type: 'motion_graphics', templateKey: 'title_card', params: { text: '決勝' } })).toBe('タイトル「決勝」')
+    expect(clipChipLabel({ type: 'motion_graphics', templateKey: 'ink_splash', params: {} })).toBe('知らないエフェクト（ink_splash）')
   })
 })

@@ -84,6 +84,8 @@ export type TimelineTracksProps = {
     anchor: InlineFormAnchor,
     opener: HTMLElement | null,
   ) => void
+  /** エフェクトの帯（VFX）の空きを押した。型を選ぶ小窓を開く（ADR-0050）。渡さなければ押せない。 */
+  readonly onInsertEffect?: (atSec: number, anchor: InlineFormAnchor) => void
   readonly onClipDragBegin: (clip: TimelineClip) => ClipDragContext
   readonly onClipDragMove: (clip: TimelineClip, outcome: ClipDragOutcome) => void
   readonly onClipDragEnd: (clip: TimelineClip, outcome: ClipDragOutcome) => void
@@ -178,6 +180,7 @@ export const TimelineTracks = ({
   onOpenTransition,
   onOpenClip,
   onInsertText,
+  onInsertEffect,
   onClipDragBegin,
   onClipDragMove,
   onClipDragEnd,
@@ -218,14 +221,14 @@ export const TimelineTracks = ({
   const renderTrack = (track: TimelineTrack): ReactNode => {
     const lanes = lanesForTrack(clips, track)
     /**
-     * TEXT は空でも置ける場所として出す。**空の帯を「クリップなし」で塞がない。**
+     * TEXT と VFX（エフェクト）は空でも置ける場所として出す。**空の帯を「クリップなし」で塞がない。**
      * 置ける場所が見えていないと、そこを押せることに気づけない。
      * 素材の選択が要る他のトラックは、この画面からは置けないので従来どおり。
      */
     if (lanes.length === 0 && track === 'SFX' && onDropAudio !== undefined) {
       return <EmptyLane message="効果音のファイルをここへ落とすと置けます" />
     }
-    if (lanes.length === 0 && track !== 'TEXT') return <EmptyLane message="クリップなし" />
+    if (lanes.length === 0 && !isInsertableTrack(track)) return <EmptyLane message="クリップなし" />
 
     const laneList =
       lanes.length === 0 ? [{ layer: TEXT_INSERT_LAYER, clips: [] as TimelineClip[] }] : lanes
@@ -248,9 +251,9 @@ export const TimelineTracks = ({
         onDragMove={onClipDragMove}
         onDragEnd={onClipDragEnd}
         onInsertAt={(atSec, clientX, clientY) => {
-          // 置けるのは TEXT だけ。他は素材の選択が要るのでこの画面では受けない。
-          if (isInsertableTrack(track))
-            onInsertText(track, atSec, anchorFrom(clientX, clientY), null)
+          // 置けるのは TEXT と VFX（エフェクトの型を選ぶ）だけ。他は素材の選択が要るのでこの画面では受けない。
+          if (track === 'VFX') onInsertEffect?.(atSec, anchorFrom(clientX, clientY))
+          else if (isInsertableTrack(track)) onInsertText(track, atSec, anchorFrom(clientX, clientY), null)
         }}
         {...(onClipContextMenu === undefined ? {} : { onClipContextMenu })}
       />

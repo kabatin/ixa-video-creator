@@ -18,6 +18,7 @@ import { TimelineIssuePanel } from '@/components/timeline-issue-panel'
 import { TimelineSnapPanel } from '@/components/timeline-snap-panel'
 import { ProgramMonitor, type ProgramMonitorProps } from '@/components/program-monitor'
 import { TimelineTracks } from '@/components/timeline-tracks'
+import { AddEffectButton, EffectPicker, useEffectInsert } from '@/components/timeline-effect-insert'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import type { WireTimelineBeatAlignment } from '@/lib/beat-alignment-view'
@@ -137,6 +138,8 @@ export type TimelineEditorProps = {
   readonly onOpenTextClip?: (clipId: TimelineClipId) => void
   /** 帯の音のクリップ（効果音）を開く。 */
   readonly onOpenMediaClip?: (clipId: TimelineClipId) => void
+  /** 帯のエフェクトを押したとき・置いたときに開く（ADR-0050）。 */
+  readonly onOpenEffectClip?: (clipId: TimelineClipId) => void
   /** 楽曲の波形の帯。`TimelineTracks` へそのまま渡す。 */
   readonly audioLane?: { readonly durationSec: number; readonly node: ReactNode }
   /** ナレーションのレーン（ADR-0038）。帯の尺度で描く。 */
@@ -184,6 +187,7 @@ export const TimelineEditor = ({
   onTextClipContextMenu,
   onOpenTextClip,
   onOpenMediaClip,
+  onOpenEffectClip,
   audioLane,
   narrationLane,
   onDropAudio,
@@ -340,6 +344,10 @@ export const TimelineEditor = ({
 
   // --- 帯の上の入力（`use-timeline-inline-forms.ts`） ---
 
+  const effects = useEffectInsert({
+    api, projectId, clips, setClips, durationSec, run, setActionError, onOpenEffectClip,
+    snapInsertAt: (atSec) => snapPoint('開始', atSec, overviewCandidates, toleranceSec, snapEnabled).atSec,
+  })
   const forms = useTimelineInlineForms({
     api,
     projectId,
@@ -353,9 +361,16 @@ export const TimelineEditor = ({
     setActionError,
     onOpenTextClip,
     onOpenMediaClip,
+    onOpenEffectClip,
+    // 帯の上の入力を開いたら、エフェクトを選ぶ小窓は閉じる（同時に 2 つ出さない）。
+    onBeforeOpen: effects.close,
     snapInsertAt: (atSec) =>
       snapPoint('開始', atSec, overviewCandidates, toleranceSec, snapEnabled).atSec,
   })
+  const openEffectAt = (atSec: number, anchor: { readonly leftPx: number; readonly topPx: number }): void => {
+    closeForm()
+    effects.openAt(atSec, anchor)
+  }
   const {
     open,
     draft,
@@ -548,6 +563,7 @@ export const TimelineEditor = ({
             {zoomLabel(level)}
           </button>
         ))}
+        <AddEffectButton busy={busy} onOpen={openEffectAt} />
         <label
           className="ml-auto flex items-center gap-1 text-sm text-text"
           title="鳴っている間は帯が流れ、止めている間は再生位置が画面から出たときだけ追いかけます"
@@ -618,6 +634,7 @@ export const TimelineEditor = ({
           onOpenTransition={openTransition}
           onOpenClip={openClip}
           onInsertText={openTextInsert}
+          onInsertEffect={openEffectAt}
           onClipDragBegin={beginDrag}
           onClipDragMove={dragMove}
           onClipDragEnd={dragEnd}
@@ -660,7 +677,9 @@ export const TimelineEditor = ({
           }
           onSeek={seekTo}
           overlay={
-            open === null || draft === null ? null : (
+            effects.picker !== null ? (
+              <EffectPicker state={effects.picker} busy={busy} onPick={effects.place} onDismiss={effects.close} />
+            ) : open === null || draft === null ? null : (
               <TimelineInlineForm
                 // 開く場所が変われば作り直す。残っていると前の打ちかけが出る。
                 key={`${open.kind}-${String(open.anchor.leftPx)}-${String(open.anchor.topPx)}`}

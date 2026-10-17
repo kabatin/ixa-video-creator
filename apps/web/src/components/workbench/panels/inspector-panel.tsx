@@ -13,6 +13,7 @@ import { ShotInspector } from '@/components/workbench/inspector/shot-inspector'
 import { TextClipInspector } from '@/components/workbench/inspector/text-clip-inspector'
 import { VoiceInspector } from '@/components/workbench/inspector/voice-inspector'
 import { AudioClipInspector } from '@/components/workbench/inspector/audio-clip-inspector'
+import { EffectInspector } from '@/components/workbench/inspector/effect-inspector'
 import type { TextClipScopeId } from '@/lib/text-clip-scope'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty, PanelFrame } from '@/components/workbench/panels/panel-frame'
@@ -69,6 +70,14 @@ export const InspectorPanel = () => {
     return (
       <PanelFrame flush>
         <AudioClipInspector key={inspected.id} id={inspected.id} />
+      </PanelFrame>
+    )
+  }
+
+  if (inspected.kind === 'effect-clip') {
+    return (
+      <PanelFrame flush>
+        <EffectInspector key={inspected.id} id={inspected.id} />
       </PanelFrame>
     )
   }

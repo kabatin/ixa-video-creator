@@ -124,6 +124,11 @@ export const TimelinePanel = () => {
           workbench.inspect({ kind: 'audio-clip', id })
           workbench.focusPanel('inspector')
         }}
+        // エフェクトもインスペクターで開く（型・強さ・位置・長さ。ADR-0050）。
+        onOpenEffectClip={(id) => {
+          workbench.inspect({ kind: 'effect-clip', id })
+          workbench.focusPanel('inspector')
+        }}
         {...(audioLane === null ? {} : { audioLane })}
         narrationLane={narrationLane}
         onDropAudio={onDropAudio}

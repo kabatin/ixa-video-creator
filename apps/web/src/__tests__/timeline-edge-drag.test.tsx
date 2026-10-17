@@ -1,5 +1,5 @@
 import { ProjectId, Shot, ShotId, TimelineClip, TimelineClipId } from '@ixa/domain'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TimelineEditor } from '@/components/timeline-editor'
@@ -85,8 +85,9 @@ const dragOn = (target: Element, fromSec: number, toSec: number, altKey = false)
   fireEvent.pointerUp(target, { clientX: x(toSec), pointerId: 1, altKey })
 }
 
+/** TEXT の帯（VFX の帯も空で出るので、行の名前で探す。ADR-0050）。 */
 const textLane = (): Element => {
-  const lane = screen.getByText('layer 0').parentElement
+  const lane = within(screen.getByText('TEXT（テロップ）').parentElement as HTMLElement).getByText('layer 0').parentElement
   if (lane === null) throw new Error('TEXT の帯が無い')
   return lane
 }

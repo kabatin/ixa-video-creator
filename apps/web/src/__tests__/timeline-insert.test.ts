@@ -150,7 +150,7 @@ describe('トランジションを挿せる場所', () => {
   it('置かれているのが絵に出ない種別なら注意を出す', () => {
     const points = transitionInsertionPoints(
       [SHOT_A, SHOT_B],
-      [makeTransition(SHOT_A, SHOT_B, 0.4, 'glitch')],
+      [makeTransition(SHOT_A, SHOT_B, 0.4, 'wipe')],
     )
     expect(points[0]?.notices.join('')).toContain('ただのカット')
   })
@@ -322,7 +322,7 @@ describe('トランジションの入力検証', () => {
       expect(plain.notices).toEqual([])
     }
 
-    const degraded = validateTransitionInsert(point, transitionDraft('glitch', '0.5'))
+    const degraded = validateTransitionInsert(point, transitionDraft('wipe', '0.5'))
     expect(degraded.ok).toBe(true)
     if (degraded.ok) expect(degraded.notices.join('')).toContain('ただのカット')
   })

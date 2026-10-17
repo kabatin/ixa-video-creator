@@ -29,17 +29,20 @@ export type Inspected =
   | { readonly kind: 'voice'; readonly id: VoiceProfileId }
   /** 効果音のクリップ（ADR-0039）。位置・音量を直す。 */
   | { readonly kind: 'audio-clip'; readonly id: TimelineClipId }
+  /** エフェクトのクリップ（ADR-0050）。型・強さ・位置・長さを直す。 */
+  | { readonly kind: 'effect-clip'; readonly id: TimelineClipId }
 
 export type InspectedKind = Inspected['kind']
 
-/** 素材（Shot・テロップ・効果音のクリップ・作品の方針以外）か。素材ビューアに出せるのはこちら。 */
+/** 素材（Shot・テロップ・効果音とエフェクトのクリップ・作品の方針以外）か。素材ビューアに出せるのはこちら。 */
 export const isAssetSelection = (
   selection: Inspected | null,
-): selection is Exclude<Inspected, { kind: 'shot' | 'text-clip' | 'audio-clip' | 'project' }> =>
+): selection is Exclude<Inspected, { kind: 'shot' | 'text-clip' | 'audio-clip' | 'effect-clip' | 'project' }> =>
   selection !== null &&
   selection.kind !== 'shot' &&
   selection.kind !== 'text-clip' &&
   selection.kind !== 'audio-clip' &&
+  selection.kind !== 'effect-clip' &&
   selection.kind !== 'project'
 
 export const sameSelection = (a: Inspected | null, b: Inspected | null): boolean =>
@@ -56,4 +59,5 @@ export const INSPECTED_LABELS: Readonly<Record<InspectedKind, string>> = Object.
   project: '作品の方針',
   voice: '声',
   'audio-clip': '効果音',
+  'effect-clip': 'エフェクト',
 })

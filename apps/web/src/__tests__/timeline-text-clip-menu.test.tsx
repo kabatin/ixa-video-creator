@@ -1,10 +1,14 @@
 import { ProjectId, TimelineClip, TimelineClipId } from '@ixa/domain'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TimelineEditor } from '@/components/timeline-editor'
 import { LONG_PRESS_MS } from '@/components/workbench/use-context-menu'
 import { DEFAULT_PX_PER_SEC } from '@/lib/timeline-display'
 import { PROJECT_ID } from './fixtures'
+
+/** TEXT の帯（VFX の帯も空で出るので、行の名前で探す。ADR-0050）。 */
+const textLane = (): HTMLElement | null =>
+  within(screen.getByText('TEXT（テロップ）').parentElement as HTMLElement).getByText('layer 0').parentElement
 
 /**
  * 帯のテロップを右クリック（長押し）すると、そのテロップのメニュー（2026-09-30）。
@@ -53,7 +57,7 @@ const setup = () => {
       onTextClipContextMenu={onTextClipContextMenu}
     />,
   )
-  const lane = screen.getByText('layer 0').parentElement
+  const lane = textLane()
   if (lane === null) throw new Error('TEXT の帯が無い')
   return { lane, onOpenTextClip, onTextClipContextMenu }
 }
