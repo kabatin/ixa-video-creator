@@ -18,7 +18,7 @@ const ThumbnailPlayer = dynamic(
 )
 
 const PreviewMessage = ({ message, alert = false }: { readonly message: string; readonly alert?: boolean }) => (
-  <div className="flex aspect-video w-full items-center justify-center rounded-md border border-line bg-surface-2 p-4">
+  <div className="flex aspect-video w-full shrink-0 items-center justify-center rounded-md border border-line bg-surface-2 p-4">
     <p role={alert ? 'alert' : 'status'} className={`text-sm ${alert ? 'text-danger' : 'text-muted'}`}>
       {message}
     </p>
@@ -55,8 +55,9 @@ export const ThumbnailPreview = ({ spec, timeline, timelineError }: ThumbnailPre
   }
   if (image.kind === 'error') return <PreviewMessage alert message={`画像を読み込めませんでした: ${image.message}`} />
   if (props === null) return <PreviewMessage message="画像を読み込んでいます…" />
+  // 見本は縮めない。下の一覧が伸びると、縦に流れる列の中で潰れていた。
   return (
-    <div className="overflow-hidden rounded-md border border-line bg-black">
+    <div className="shrink-0 overflow-hidden rounded-md border border-line bg-black">
       <ThumbnailPlayer props={props} />
     </div>
   )
