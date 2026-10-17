@@ -9,10 +9,12 @@ import {
   UpdateTimelineClipPatch as UpdateTimelineClipPatchSchema,
   isTextStyleUnreadable,
   narrationLineOf,
+  parseEffectParams,
   type NarrationLineId,
   type ProjectId,
   type TimelineClip,
   type TimelineClipContent,
+  type TimelineTrack,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import {
@@ -74,6 +76,36 @@ export const NON_POSITIVE_DURATION_MESSAGE = 'durationSec は 0 より大きい�
  */
 export const UNREADABLE_TEXT_STYLE_MESSAGE =
   'テロップの見た目を読めません（色は #RRGGBB、大きさ・ずらし・フェードは決まった範囲、知らない項目は付けない）'
+
+/** エフェクト（motion_graphics。ADR-0050）は VFX トラックにだけ置く。描く側は VFX の層の高さで重ねる。 */
+export const EFFECT_TRACK_MESSAGE = 'エフェクトは VFX トラックにだけ置けます'
+
+type EffectCheckInput = { readonly track?: TimelineTrack; readonly content?: TimelineClipContent }
+
+/**
+ * エフェクトのクリップの検証と、値の正規化（ADR-0050）。
+ *
+ * **型と値は domain の `parseEffectParams` だけで決める。** 知らない型・範囲外の値・知らない項目は 422 にし、
+ * 通った値は既定値を埋めた形で保存する（描く側・画面が「省いた項目」を推測しなくて済む）。
+ * PATCH で track だけを VFX 以外へ変える場合は、既存の中身を読めない（リポジトリに findById が無い）ので見ない。
+ */
+export const normalizeEffectClip = <T extends EffectCheckInput>(
+  input: T,
+): { readonly ok: true; readonly value: T } | { readonly ok: false; readonly fields: FieldErrors } => {
+  const { content } = input
+  if (content?.type !== 'motion_graphics') return { ok: true, value: input }
+  if (input.track !== undefined && input.track !== 'VFX') return { ok: false, fields: { track: [EFFECT_TRACK_MESSAGE] } }
+  const parsed = parseEffectParams(content.templateKey, content.params)
+  if (!parsed.ok) {
+    const key =
+      parsed.field === 'templateKey' ? 'content.templateKey' : parsed.field === null ? 'content.params' : `content.params.${parsed.field}`
+    return { ok: false, fields: { [key]: [parsed.message] } }
+  }
+  return {
+    ok: true,
+    value: { ...input, content: { type: 'motion_graphics', templateKey: parsed.value.templateKey, params: parsed.value.params } },
+  }
+}
 
 /**
  * Domain の enum に「なぜ弾かれるか」が伝わるメッセージだけを足したもの。
@@ -261,7 +293,10 @@ export const clipRoutes = (deps: ClipRoutesDeps) => {
       const missing = await missingAssetErrors(input.content)
       if (missing !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, missing), 422)
 
-      const created = await deps.timelineClips.create({ ...input, projectId })
+      const effect = normalizeEffectClip(input)
+      if (!effect.ok) return c.json(fail(VALIDATION_ERROR_MESSAGE, effect.fields), 422)
+
+      const created = await deps.timelineClips.create({ ...effect.value, projectId })
       return c.json(ok(toClipResponse(created)), 201)
     })
     .openapi(updateClipRoute, async (c) => {
@@ -286,11 +321,14 @@ export const clipRoutes = (deps: ClipRoutesDeps) => {
       const missing = await missingAssetErrors(patch.content)
       if (missing !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, missing), 422)
 
+      const effect = normalizeEffectClip(patch)
+      if (!effect.ok) return c.json(fail(VALIDATION_ERROR_MESSAGE, effect.fields), 422)
+
       /**
        * 存在しなければリポジトリが DbNotFoundError を投げ、共通ハンドラが 404 にする。
        * ここで catch しないのは意図的で、畳んでよい既知の失敗が他に無いため。
        */
-      const updated = await deps.timelineClips.update(c.req.valid('param').id, patch)
+      const updated = await deps.timelineClips.update(c.req.valid('param').id, effect.value)
       return c.json(ok(toClipResponse(updated)), 200)
     })
     .openapi(deleteClipRoute, async (c) => {

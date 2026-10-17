@@ -4,6 +4,7 @@ import {
   MediaAssetId as MediaAssetIdSchema,
   ProjectId as ProjectIdSchema,
   TimelineClipId as TimelineClipIdSchema,
+  defaultEffectParams,
   newId,
 } from '@ixa/domain'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -18,6 +19,7 @@ import {
   MISSING_ASSET_MESSAGE,
   NON_POSITIVE_DURATION_MESSAGE,
   UNREADABLE_TEXT_STYLE_MESSAGE,
+  EFFECT_TRACK_MESSAGE,
   type ClipRoutesDeps,
 } from '../routes/clips.js'
 import { aProject } from './fixtures.js'
@@ -99,7 +101,7 @@ const motionClipPayload = (overrides: Record<string, unknown> = {}) => ({
   track: 'VFX',
   startSec: 4,
   durationSec: 1.25,
-  content: { type: 'motion_graphics', templateKey: 'glitch-wipe' },
+  content: { type: 'motion_graphics', templateKey: 'glitch' },
   ...overrides,
 })
 
@@ -153,13 +155,13 @@ describe('作成（content の 3 バリアント）', () => {
     })
   })
 
-  it('motion_graphics クリップは params 省略時に空オブジェクトになる', async () => {
+  it('motion_graphics クリップは params 省略時に型の既定値で保存される（ADR-0050）', async () => {
     const created = await createClip(project.id, motionClipPayload())
 
     expect(created.content).toEqual({
       type: 'motion_graphics',
-      templateKey: 'glitch-wipe',
-      params: {},
+      templateKey: 'glitch',
+      params: defaultEffectParams('glitch'),
     })
   })
 
@@ -550,5 +552,73 @@ describe('テロップの見た目の検査', () => {
     })
     expect(res.status).toBe(422)
     expect(timelineClips.snapshot()[0]?.content).toMatchObject({ params: { style: { color: '#FFD100' } } })
+  })
+})
+
+/** エフェクト（ADR-0050）。型と値は domain のスキーマで検証し、既定値を埋めて保存する。 */
+describe('エフェクトのクリップの検証', () => {
+  it('値は既定値を埋めて保存する', async () => {
+    const created = await createClip(
+      project.id,
+      motionClipPayload({ content: { type: 'motion_graphics', templateKey: 'flash', params: { intensity: 0.5 } } }),
+    )
+    expect(created.content).toEqual({
+      type: 'motion_graphics',
+      templateKey: 'flash',
+      params: { ...defaultEffectParams('flash'), intensity: 0.5 },
+    })
+  })
+
+  it('範囲外の値は 422 で、項目ごとの日本語の理由を返す', async () => {
+    const res = await send(
+      'POST',
+      `/projects/${project.id}/clips`,
+      motionClipPayload({ content: { type: 'motion_graphics', templateKey: 'zoom_punch', params: { scale: 2 } } }),
+    )
+    expect(res.status).toBe(422)
+    const body = await json<ErrorBody>(res)
+    expect(body.fields?.['content.params.scale']?.[0]).toContain('寄る大きさ')
+    expect(timelineClips.snapshot()).toEqual([])
+  })
+
+  it('知らない型は 422', async () => {
+    const res = await send(
+      'POST',
+      `/projects/${project.id}/clips`,
+      motionClipPayload({ content: { type: 'motion_graphics', templateKey: 'glitch-wipe' } }),
+    )
+    expect(res.status).toBe(422)
+    const body = await json<ErrorBody>(res)
+    expect(body.fields?.['content.templateKey']?.[0]).toContain('知らないエフェクトの型')
+  })
+
+  it('VFX 以外のトラックには置けない', async () => {
+    const res = await send('POST', `/projects/${project.id}/clips`, motionClipPayload({ track: 'TEXT' }))
+    expect(res.status).toBe(422)
+    const body = await json<ErrorBody>(res)
+    expect(body.fields?.track).toEqual([EFFECT_TRACK_MESSAGE])
+  })
+
+  it('更新でも同じ検証を通し、通った値は既定値を埋めて保存する', async () => {
+    const created = await createClip(project.id, motionClipPayload())
+
+    const bad = await send('PATCH', `/clips/${created.id}`, {
+      content: { type: 'motion_graphics', templateKey: 'glitch', params: { rgbSplit: 1.5 } },
+    })
+    expect(bad.status).toBe(422)
+
+    const moved = await send('PATCH', `/clips/${created.id}`, { track: 'TEXT', content: created.content })
+    expect(moved.status).toBe(422)
+
+    const res = await send('PATCH', `/clips/${created.id}`, {
+      content: { type: 'motion_graphics', templateKey: 'shake', params: { intensity: 0.9 } },
+    })
+    expect(res.status).toBe(200)
+    const body = await json<SuccessBody<ClipBody>>(res)
+    expect(body.data.content).toEqual({
+      type: 'motion_graphics',
+      templateKey: 'shake',
+      params: { ...defaultEffectParams('shake'), intensity: 0.9 },
+    })
   })
 })
