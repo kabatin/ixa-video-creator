@@ -1,6 +1,11 @@
 import { THUMBNAIL_MAX_BYTES } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
-import { decideStillSize, withoutUrls } from '../thumbnail-renderer.js'
+import {
+  THUMBNAIL_RENDER_FAILED_MESSAGE,
+  decideStillSize,
+  thumbnailRenderError,
+  withoutUrls,
+} from '../thumbnail-renderer.js'
 
 /** サムネイルの JPEG の大きさの扱い（ADR-0051）。YouTube は 2 MB **未満**しか受け付けない。 */
 
@@ -25,5 +30,15 @@ describe('withoutUrls', () => {
     expect(message).not.toContain('X-Amz-Signature')
     expect(message).not.toContain('http')
     expect(message).toContain('failed')
+  })
+})
+
+describe('thumbnailRenderError', () => {
+  it('画面に出る文は決まった日本語 1 文だけ。英語の詳細・画質・URL は cause にだけ残す', () => {
+    const raw = new Error('Error: net::ERR_CONNECTION_REFUSED loading http://127.0.0.1:9000/a.png?X-Amz-Signature=abc')
+    const error = thumbnailRenderError(raw)
+    expect(error.message).toBe(THUMBNAIL_RENDER_FAILED_MESSAGE)
+    expect(error.message).not.toMatch(/画質|http|Error|net::/)
+    expect(error.cause).toBe(raw)
   })
 })

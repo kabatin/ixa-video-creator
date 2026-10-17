@@ -90,4 +90,22 @@ describe.skipIf(!RUN)('サムネイルの renderStill（実 Remotion）', () => 
     expect(color.g).toBeGreaterThan(200)
     expect(color.r).toBeLessThan(60)
   }, TIMEOUT_MS)
+
+  it('左の配置の英語まじりの題名が列からはみ出さない（NIGHT RUN（試作））', async () => {
+    const media = server as MediaServer
+    const spec = ThumbnailSpec.parse({
+      background: { kind: 'image', mediaAssetId: MediaAssetId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAW') },
+      title: 'NIGHT RUN（試作）',
+      subtitle: '2026 秋 iXA CUP',
+      layout: 'left',
+    })
+    const result = await renderThumbnailStill({
+      props: { spec, source: { kind: 'image', url: media.urlFor(join(workDir, 'green.png')) } },
+      outputDir: workDir,
+    })
+    // 左の列（x < 467）より右に白い字が出ていない。暗がりの外（x ≥ 720）は背景の緑のまま。
+    const right = meanColor(await extractFrame(result.path, 0, workDir), { x: 760, y: 80, width: 440, height: 560 })
+    expect(right.g).toBeGreaterThan(200)
+    expect(right.r).toBeLessThan(60)
+  }, TIMEOUT_MS)
 })

@@ -4,14 +4,17 @@ import { AbsoluteFill, Freeze, Img } from 'remotion'
 import { TimelineComposition } from './Timeline.js'
 import { FONT_STACKS, TEXT_SHADOWS, rgba } from './text-style-css.js'
 import {
+  SUBTITLE_LINE_HEIGHT,
   TEXT_BLOCKS,
+  TITLE_LINE_HEIGHT,
   coverBox,
-  subtitleFontSize,
+  fitThumbnailText,
+  textGap,
   thumbnailFrameOf,
-  titleFontSize,
   zoomTransform,
   type Focus,
 } from './thumbnail-layout.js'
+import type { FittedText } from './thumbnail-text-fit.js'
 import type { ThumbnailBackgroundSource, ThumbnailCompositionProps } from './thumbnail-props.js'
 
 /**
@@ -21,8 +24,6 @@ import type { ThumbnailBackgroundSource, ThumbnailCompositionProps } from './thu
  * タイムラインのコマは `TimelineComposition` を書き写さずにそのまま使い、`<Freeze>` でそのコマに止める。
  * 書体は端末の和文書体（テロップと同じ `FONT_STACKS`）。外部フォントは読まない。
  */
-
-const LINE_HEIGHT = 1.15
 
 /** 背景の種類と材料が食い違ったときの赤い表示。黒い画面のまま悩ませない（Timeline の未解決と同じ扱い）。 */
 const MISMATCH_STYLE: React.CSSProperties = {
@@ -91,14 +92,12 @@ const titleStyle = (spec: ThumbnailSpec, size: number): React.CSSProperties => (
   fontFamily: FONT_STACKS[spec.font],
   fontSize: size,
   fontWeight: 900,
-  lineHeight: LINE_HEIGHT,
+  lineHeight: TITLE_LINE_HEIGHT,
   color: spec.titleColor,
   // 縁取りは線の半分が内側に食い込むので、塗りを後から重ねて外側だけ残す（テロップと同じ）。
   WebkitTextStroke: `${String(Math.max(4, Math.round(size * 0.08)))}px #000000`,
   paintOrder: 'stroke fill',
   textShadow: TEXT_SHADOWS.strong,
-  overflowWrap: 'anywhere',
-  whiteSpace: 'pre-wrap',
   margin: 0,
 })
 
@@ -106,12 +105,25 @@ const subtitleStyle = (spec: ThumbnailSpec, size: number): React.CSSProperties =
   fontFamily: FONT_STACKS[spec.font],
   fontSize: size,
   fontWeight: 700,
-  lineHeight: 1.3,
+  lineHeight: SUBTITLE_LINE_HEIGHT,
   color: '#ffffff',
   textShadow: TEXT_SHADOWS.strong,
-  overflowWrap: 'anywhere',
   margin: 0,
 })
+
+/**
+ * 行は `fitThumbnailText` が決めたもの。**ここでは折り返さない**（1 行ずつ nowrap で描く）。
+ * ブラウザに折り返させると、画面と書き出しで切れ目が変わり、英単語の途中でも切れる。
+ */
+const Lines: React.FC<{ readonly fitted: FittedText; readonly style: React.CSSProperties }> = ({ fitted, style }) => (
+  <p style={style}>
+    {fitted.lines.map((line, index) => (
+      <span key={`${String(index)}:${line}`} style={{ display: 'block', whiteSpace: 'nowrap' }}>
+        {line}
+      </span>
+    ))}
+  </p>
+)
 
 /** 差し色の帯。left・center は題名の上の短い線、bottom は帯の上端いっぱい。 */
 const AccentBar: React.FC<{ readonly spec: ThumbnailSpec; readonly titleSize: number }> = ({ spec, titleSize }) => {
@@ -132,8 +144,8 @@ const AccentBar: React.FC<{ readonly spec: ThumbnailSpec; readonly titleSize: nu
 
 const TextLayer: React.FC<{ readonly spec: ThumbnailSpec }> = ({ spec }) => {
   const block = TEXT_BLOCKS[spec.layout]
-  const titleSize = titleFontSize(spec.title, spec.layout)
-  const subtitleSize = subtitleFontSize(titleSize)
+  const fitted = fitThumbnailText(spec)
+  const titleSize = fitted.title.size
   return (
     <AbsoluteFill style={{ backgroundImage: SCRIMS[spec.layout] }}>
       {spec.layout === 'bottom' && (
@@ -159,12 +171,12 @@ const TextLayer: React.FC<{ readonly spec: ThumbnailSpec }> = ({ spec }) => {
           flexDirection: 'column',
           justifyContent: block.vertical === 'center' ? 'center' : 'flex-end',
           textAlign: block.align,
-          gap: Math.round(titleSize * 0.18),
+          gap: textGap(titleSize),
         }}
       >
         <AccentBar spec={spec} titleSize={titleSize} />
-        <p style={titleStyle(spec, titleSize)}>{spec.title}</p>
-        {spec.subtitle !== null && <p style={subtitleStyle(spec, subtitleSize)}>{spec.subtitle}</p>}
+        <Lines fitted={fitted.title} style={titleStyle(spec, titleSize)} />
+        {fitted.subtitle !== null && <Lines fitted={fitted.subtitle} style={subtitleStyle(spec, fitted.subtitle.size)} />}
       </div>
     </AbsoluteFill>
   )

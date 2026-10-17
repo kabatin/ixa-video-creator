@@ -13,8 +13,23 @@ import type { RenderThumbnailStill } from './compositions/thumbnail-props.js'
  * **2 MB 以上なら画質を下げて描き直す**（90 → 80 → 70）。それでも超えたら失敗にする（YouTube が受け付けない）。
  * 黙って大きいまま返さない。
  *
+ * **投げる例外の文は短い決まった日本語だけ。** 画面にそのまま出る文なので、Remotion・Chrome の英語の詳細や
+ * 画質の数を重ねない。詳細は `cause` に持たせ、受け取った側（worker）が URL を抜いてログに残す。
  * 例外の文に入力（`inputProps`）を入れない。署名付き URL が入っているため（ログにも DB にも残さない）。
  */
+
+/** 描けなかったときの文（画面にそのまま出る）。 */
+export const THUMBNAIL_RENDER_FAILED_MESSAGE = 'サムネイルを描けませんでした。もう一度書き出してください。'
+/** 画質を下げても 2 MB 未満にできなかったときの文。 */
+export const THUMBNAIL_TOO_BIG_MESSAGE =
+  'サムネイルが 2 MB 未満に収まりませんでした。背景を変えるか、拡大を下げて書き出し直してください。'
+
+/** 大きさの上限を超えたことを、ほかの失敗と見分けるための印。 */
+class StillTooBig extends Error {
+  constructor(readonly bytes: number, readonly jpegQuality: number) {
+    super(`JPEG が ${(bytes / (1024 * 1024)).toFixed(2)} MB（画質 ${String(jpegQuality)}）`)
+  }
+}
 
 /** 試す画質の順。1280×720 の JPEG は 90 でもほぼ 1 MB を超えない。下げるのは保険。 */
 export const THUMBNAIL_JPEG_QUALITIES: readonly number[] = Object.freeze([90, 80, 70])
@@ -39,9 +54,9 @@ export const decideStillSize = (
 /** 例外の文から URL を落とす。Remotion は読めなかった素材の URL を文に入れることがある。 */
 export const withoutUrls = (message: string): string => message.replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, '（URL）')
 
-const describe = (error: unknown): string => withoutUrls(error instanceof Error ? error.message : String(error))
-
-const megabytes = (bytes: number): string => (bytes / (1024 * 1024)).toFixed(2)
+/** 外へ投げる例外。文は決まった日本語 1 文、詳細は `cause`（呼び出し側が URL を抜いてログに残す）。 */
+export const thumbnailRenderError = (cause: unknown): Error =>
+  new Error(cause instanceof StillTooBig ? THUMBNAIL_TOO_BIG_MESSAGE : THUMBNAIL_RENDER_FAILED_MESSAGE, { cause })
 
 export const renderThumbnailStill: RenderThumbnailStill = async ({ props, outputDir }) => {
   const path = join(outputDir, `thumbnail-${randomUUID()}.jpg`)
@@ -66,15 +81,11 @@ export const renderThumbnailStill: RenderThumbnailStill = async ({ props, output
       const { size } = await stat(path)
       const decision = decideStillSize(size, jpegQuality)
       if (decision.kind === 'accept') return { path, bytes: size, jpegQuality }
-      if (decision.kind === 'too_big') {
-        throw new Error(
-          `サムネイルが ${megabytes(size)} MB になり、画質を ${String(jpegQuality)} まで下げても 2 MB 未満にできませんでした`,
-        )
-      }
+      if (decision.kind === 'too_big') throw new StillTooBig(size, jpegQuality)
       jpegQuality = decision.jpegQuality
     }
   } catch (error) {
     await rm(path, { force: true })
-    throw new Error(`サムネイルを描けませんでした（画質 ${String(jpegQuality)}）: ${describe(error)}`, { cause: error })
+    throw thumbnailRenderError(error)
   }
 }

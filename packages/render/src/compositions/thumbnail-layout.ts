@@ -7,6 +7,7 @@ import {
 } from '@ixa/domain'
 import { totalFrames } from '../timing.js'
 import type { ThumbnailCompositionProps } from './thumbnail-props.js'
+import { fitText, type FittedText } from './thumbnail-text-fit.js'
 
 /**
  * サムネイル（ADR-0051）の配置の計算。**純粋な関数だけ。** 画面の Player と worker の renderStill が
@@ -84,7 +85,7 @@ export const thumbnailMetadata = (
       }
     : { fps: STILL_FPS, durationInFrames: 1, width: THUMBNAIL_SIZE.width, height: THUMBNAIL_SIZE.height }
 
-/** 文字の塊の置き場所（px）と、題名の最大の大きさ・行数。 */
+/** 文字の塊の置き場所（px）と、題名・副題の最大の大きさ・行数。 */
 export type TextBlock = {
   readonly left: number
   readonly top: number
@@ -95,6 +96,7 @@ export type TextBlock = {
   readonly align: 'left' | 'center'
   readonly maxTitleSize: number
   readonly maxTitleLines: number
+  readonly maxSubtitleLines: number
 }
 
 const { width: W, height: H } = THUMBNAIL_SIZE
@@ -105,6 +107,7 @@ const MARGIN = 64
  * - left: 左の 3 分の 1。人物は右の 3 分の 2 に置く絵向け
  * - center: 真ん中に大きく
  * - bottom: 下の帯（高さの約 3 分の 1）
+ * 行数は 3 行まで（それより多いと縮小表示で読めない塊になる）。
  */
 export const TEXT_BLOCKS: Readonly<Record<ThumbnailLayout, TextBlock>> = Object.freeze({
   left: {
@@ -115,7 +118,8 @@ export const TEXT_BLOCKS: Readonly<Record<ThumbnailLayout, TextBlock>> = Object.
     vertical: 'center',
     align: 'left',
     maxTitleSize: 120,
-    maxTitleLines: 4,
+    maxTitleLines: 3,
+    maxSubtitleLines: 3,
   },
   center: {
     left: MARGIN * 2,
@@ -126,40 +130,82 @@ export const TEXT_BLOCKS: Readonly<Record<ThumbnailLayout, TextBlock>> = Object.
     align: 'center',
     maxTitleSize: 150,
     maxTitleLines: 2,
+    maxSubtitleLines: 2,
   },
   bottom: {
     left: MARGIN,
-    top: Math.round(H * 0.64),
+    top: Math.round(H * 0.6),
     width: W - MARGIN * 2,
-    height: Math.round(H * 0.36) - 40,
+    height: Math.round(H * 0.4) - 40,
     vertical: 'end',
     align: 'left',
     maxTitleSize: 110,
     maxTitleLines: 2,
+    maxSubtitleLines: 2,
   },
 })
 
-/** 題名の下限。これより小さくすると縮小表示で読めない。超える分は折り返す。 */
-export const MIN_TITLE_SIZE = 44
-/** 縁取りと字間の余裕。ぴったりに詰めると最後の字が次の行へ落ちる。 */
-const FIT_MARGIN = 0.9
-/** 半角（英数字・記号）は全角の約 6 割の幅。 */
-const NARROW_WIDTH = 0.6
+/** 題名の下限。これより小さくすると縮小表示で読めない。40 字の和文を左の列に 3 行で入れられる大きさ。 */
+export const MIN_TITLE_SIZE = 28
+const MIN_SUBTITLE_SIZE = 20
+const SUBTITLE_MAX_SIZE = 48
+export const TITLE_LINE_HEIGHT = 1.15
+export const SUBTITLE_LINE_HEIGHT = 1.3
+/** 題名の縁取り（字の高さの 8%）と影のぶん、行の幅に取っておく割合。 */
+const TITLE_STROKE_EM = 0.2
+const SUBTITLE_STROKE_EM = 0.1
+/** 題名の上の差し色の線と、その下の隙間に取っておく高さ（left・center）。 */
+const ACCENT_RESERVE = 48
 
-/** 字の幅の合計（全角 1 字 = 1）。 */
-export const textWidthEm = (text: string): number =>
-  [...text].reduce((sum, char) => sum + (/^[ -~]$/.test(char) ? NARROW_WIDTH : 1), 0)
+/** 題名と副題の間・差し色の線と題名の間。 */
+export const textGap = (titleSize: number): number => Math.round(titleSize * 0.18)
 
-/**
- * 題名の文字の大きさ（px）。塊の幅 × 行数に収まる大きさまで縮め、上限と下限で挟む。
- * 長い題名ほど小さく、短い題名は上限まで大きくする。
- */
-export const titleFontSize = (title: string, layout: ThumbnailLayout): number => {
-  const block = TEXT_BLOCKS[layout]
-  const em = Math.max(1, textWidthEm(title))
-  const fitted = Math.floor((block.width * block.maxTitleLines * FIT_MARGIN) / em)
-  return Math.max(MIN_TITLE_SIZE, Math.min(block.maxTitleSize, fitted))
+export type FittedThumbnailText = {
+  readonly title: FittedText
+  readonly subtitle: FittedText | null
 }
 
-/** 副題は題名の約 4 割。小さすぎると読めず、大きすぎると題名と競る。 */
-export const subtitleFontSize = (titleSize: number): number => Math.min(48, Math.max(28, Math.round(titleSize * 0.4)))
+/** 副題の大きさの上限を題名の何倍までにするか。大きすぎると題名と競る。 */
+const SUBTITLE_TO_TITLE = 0.5
+
+const fitSubtitle = (text: string, block: TextBlock, maxSize: number): FittedText =>
+  fitText(text, {
+    width: block.width,
+    height: Math.ceil(block.maxSubtitleLines * maxSize * SUBTITLE_LINE_HEIGHT),
+    maxLines: block.maxSubtitleLines,
+    maxSize,
+    minSize: Math.min(maxSize, MIN_SUBTITLE_SIZE),
+    lineHeight: SUBTITLE_LINE_HEIGHT,
+    strokeEm: SUBTITLE_STROKE_EM,
+  })
+
+const heightOf = (fitted: FittedText, lineHeight: number): number => Math.ceil(fitted.lines.length * fitted.size * lineHeight)
+
+/**
+ * 題名と副題の大きさと行（ADR-0051）。**画面の Player と書き出しが同じこの結果で 1 行ずつ描く。**
+ *
+ * 先に副題を収め（列の幅・行数）、残った高さに題名をいちばん大きく収める。最後に副題が題名の半分を超えて
+ * いれば、そこまで縮めて収め直す（縮めるだけなので、題名の場所は足りたまま）。
+ */
+export const fitThumbnailText = (
+  spec: { readonly title: string; readonly subtitle: string | null; readonly layout: ThumbnailLayout },
+): FittedThumbnailText => {
+  const block = TEXT_BLOCKS[spec.layout]
+  const accent = spec.layout === 'bottom' ? 0 : ACCENT_RESERVE
+  const firstSubtitle = spec.subtitle === null ? null : fitSubtitle(spec.subtitle, block, SUBTITLE_MAX_SIZE)
+  const reserve =
+    firstSubtitle === null ? 0 : heightOf(firstSubtitle, SUBTITLE_LINE_HEIGHT) + textGap(block.maxTitleSize)
+  const title = fitText(spec.title, {
+    width: block.width,
+    height: block.height - accent - reserve,
+    maxLines: block.maxTitleLines,
+    maxSize: block.maxTitleSize,
+    minSize: MIN_TITLE_SIZE,
+    lineHeight: TITLE_LINE_HEIGHT,
+    strokeEm: TITLE_STROKE_EM,
+  })
+  if (spec.subtitle === null || firstSubtitle === null) return { title, subtitle: null }
+  const cap = Math.round(title.size * SUBTITLE_TO_TITLE)
+  const subtitle = firstSubtitle.size <= cap ? firstSubtitle : fitSubtitle(spec.subtitle, block, cap)
+  return { title, subtitle }
+}

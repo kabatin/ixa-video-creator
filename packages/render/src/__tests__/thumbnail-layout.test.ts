@@ -1,16 +1,6 @@
 import { THUMBNAIL_SIZE, ThumbnailSpec } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
-import {
-  MIN_TITLE_SIZE,
-  TEXT_BLOCKS,
-  coverBox,
-  subtitleFontSize,
-  textWidthEm,
-  thumbnailFrameOf,
-  thumbnailMetadata,
-  titleFontSize,
-  zoomTransform,
-} from '../compositions/thumbnail-layout.js'
+import { TEXT_BLOCKS, coverBox, thumbnailFrameOf, thumbnailMetadata, zoomTransform } from '../compositions/thumbnail-layout.js'
 import { makeDocument } from './fixtures.js'
 
 /** サムネイルの配置の計算（ADR-0051）。画面とレンダリングが同じこの関数を通る。 */
@@ -91,34 +81,7 @@ describe('thumbnailMetadata', () => {
   })
 })
 
-describe('題名の大きさ', () => {
-  it('半角は全角の 6 割で数える', () => {
-    expect(textWidthEm('ab')).toBeCloseTo(1.2)
-    expect(textWidthEm('新曲')).toBe(2)
-  })
-
-  it('短い題名は配置の上限まで大きい', () => {
-    expect(titleFontSize('新曲', 'center')).toBe(TEXT_BLOCKS.center.maxTitleSize)
-    expect(titleFontSize('新曲', 'left')).toBe(TEXT_BLOCKS.left.maxTitleSize)
-  })
-
-  it('長い題名ほど小さくし、行数 × 幅に収める', () => {
-    const long = 'あ'.repeat(30)
-    const size = titleFontSize(long, 'center')
-    expect(size).toBeLessThan(TEXT_BLOCKS.center.maxTitleSize)
-    expect(size * 30).toBeLessThanOrEqual(TEXT_BLOCKS.center.width * TEXT_BLOCKS.center.maxTitleLines)
-  })
-
-  it('40 字でも下限より小さくしない', () => {
-    expect(titleFontSize('あ'.repeat(40), 'left')).toBe(MIN_TITLE_SIZE)
-  })
-
-  it('副題は題名の約 4 割で、28〜48 に挟む', () => {
-    expect(subtitleFontSize(100)).toBe(40)
-    expect(subtitleFontSize(44)).toBe(28)
-    expect(subtitleFontSize(150)).toBe(48)
-  })
-
+describe('文字の塊', () => {
   it('左の配置は左の 3 分の 1 ほどに収まる（人物の側へ出ない）', () => {
     const block = TEXT_BLOCKS.left
     expect(block.left + block.width).toBeLessThanOrEqual(Math.round(1280 / 3) + 40)

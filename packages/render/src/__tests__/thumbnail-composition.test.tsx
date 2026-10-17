@@ -31,10 +31,18 @@ describe('ThumbnailComposition', () => {
 
   it('題名・副題を描き、題名は太字で縁取る', () => {
     const html = markup({ subtitle: '2026 秋' }, { kind: 'image', url: URL })
-    expect(html).toContain('新曲 MV')
+    expect(html).toContain('新曲')
+    expect(html).toContain('MV')
     expect(html).toContain('2026 秋')
     expect(html).toContain('font-weight:900')
     expect(html).toContain('-webkit-text-stroke')
+  })
+
+  it('行は決めたとおりに 1 行ずつ描き、ブラウザに折り返させない', () => {
+    const html = markup({ title: 'NIGHT RUN（試作）' }, { kind: 'image', url: URL })
+    expect(html).toContain('white-space:nowrap')
+    expect(html).toContain('>NIGHT')
+    expect(html).not.toContain('overflow-wrap:anywhere')
   })
 
   it('副題が無ければ副題を出さない', () => {
