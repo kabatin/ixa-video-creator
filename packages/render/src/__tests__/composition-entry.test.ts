@@ -105,19 +105,23 @@ describe('composition-entry の輸出', () => {
       'ClipBody',
       'ClipMedia',
       'PRESET_SETTINGS',
+      'THUMBNAIL_COMPOSITION_ID',
       'TIMELINE_COMPOSITION_ID',
       'TRANSITION_SUPPORT',
+      'ThumbnailComposition',
       'TimelineComposition',
       'buildTimelinePlan',
       'frameRange',
       'letterboxFit',
       'presetResolution',
       'sourceOffsetFrames',
+      'thumbnailMetadata',
       'totalFrames',
     ])
   })
 
   it('コンポジション ID はレンダリング側と同じ値', () => {
     expect(compositionEntry.TIMELINE_COMPOSITION_ID).toBe('Timeline')
+    expect(compositionEntry.THUMBNAIL_COMPOSITION_ID).toBe('Thumbnail')
   })
 })

@@ -16,7 +16,12 @@
  * この方針は `__tests__/composition-entry.test.ts` が固定している。
  */
 
-export { TIMELINE_COMPOSITION_ID } from './composition-id.js'
+export { THUMBNAIL_COMPOSITION_ID, TIMELINE_COMPOSITION_ID } from './composition-id.js'
+
+// サムネイル（ADR-0051）。画面の Player と worker の renderStill が同じコンポジションと同じ大きさの決め方を使う。
+export { ThumbnailComposition } from './compositions/Thumbnail.js'
+export { thumbnailMetadata } from './compositions/thumbnail-layout.js'
+export type { ThumbnailBackgroundSource, ThumbnailCompositionProps } from './compositions/thumbnail-props.js'
 
 export { TimelineComposition, ClipBody, ClipMedia } from './compositions/Timeline.js'
 export type { TimelineCompositionProps } from './compositions/Timeline.js'
