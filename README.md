@@ -77,8 +77,8 @@ shots that have no storyboard yet.
 ## Or hand the whole job to an agent
 
 `apps/mcp` is an MCP server (ADR-0049) that lets Claude Code or Codex drive the same steps through
-21 tools — create the project, make and pick a song, cut it into shots, write the storyboard, draw
-start frames, make takes, adopt them, export. Two of the tools are the agent's eyes: `view`
+22 tools — create the project, make and pick a song, cut it into shots, write the storyboard, draw
+start frames, make takes, adopt them, export, and make the YouTube thumbnail (ADR-0051). Two of the tools are the agent's eyes: `view`
 returns start frames and frames sampled from a take **as images**, so the agent can look at what it
 made and redraw a broken hand or a morphing car before it moves on.
 
