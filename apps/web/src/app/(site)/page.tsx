@@ -77,6 +77,8 @@ const ProjectsPage = async () => {
 
   const api = await createServerApiClient()
   const result = await loadProjects(api, workspace.workspaceId)
+  // 表紙の URL を発行する時刻。画面はここから 1 分を数える（戻るボタンで出た古いページを見分けるため）。
+  const coversIssuedAtMs = Date.now()
   const covers = result.ok ? await loadCovers(api, result.projects) : new Map<ProjectId, PosterView>()
 
   return (
@@ -103,7 +105,7 @@ const ProjectsPage = async () => {
         // 右上の「…」と右クリックで複製・削除（制作者 2026-10-04）。
         <ProjectListActions>
           {/* 表紙の URL は 5 分で切れる。読めなくなったらページを描き直して新しい URL をもらう。 */}
-          <PosterRenewalOnRefresh>
+          <PosterRenewalOnRefresh issuedAtMs={coversIssuedAtMs}>
             <ProjectList projects={result.projects} covers={covers} />
           </PosterRenewalOnRefresh>
         </ProjectListActions>

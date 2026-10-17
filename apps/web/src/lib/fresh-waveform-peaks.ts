@@ -55,7 +55,9 @@ export const useFreshWaveformPeaks = (
   trackId: MusicTrackId | null,
   analysisKey: string | null,
 ): WaveformPeaksResult | null => {
-  const [peaks, setPeaks] = useState<WaveformPeaksResult | null>(null)
+  /** どの楽曲・解析の点か。**取り直している間は前の楽曲の点を返さない**（違う曲の波形を描かない）。 */
+  const key = `${trackId ?? ''}|${analysisKey ?? ''}`
+  const [loaded, setLoaded] = useState<{ readonly key: string; readonly result: WaveformPeaksResult } | null>(null)
   useEffect(() => {
     if (trackId === null) return undefined
     const controller = new AbortController()
@@ -65,11 +67,11 @@ export const useFreshWaveformPeaks = (
       fetchPeaks: (url, signal) => fetchWaveformPeaks(url, { signal }),
     }
     void fetchFreshWaveformPeaks(ports, controller.signal).then((result) => {
-      if (!controller.signal.aborted) setPeaks(result)
+      if (!controller.signal.aborted) setLoaded({ key, result })
     })
     return () => {
       controller.abort()
     }
-  }, [trackId, analysisKey])
-  return peaks
+  }, [trackId, analysisKey, key])
+  return loaded?.key === key ? loaded.result : null
 }

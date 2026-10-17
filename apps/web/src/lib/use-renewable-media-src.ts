@@ -59,34 +59,57 @@ const resumePlayback = (element: HTMLMediaElement, onFail: (message: string) => 
   }
 }
 
+/**
+ * 要素へ渡す URL。**呼び出し側の URL ごとに世代を数える。**
+ *
+ * - `source` は呼び出し側が渡した URL。変わったら描画の中で作り直す（effect で写すと 1 コマ遅れ、
+ *   閉じた動画が 1 コマ残る）
+ * - `generation` は取り直しの結果がどの URL のためのものかの印。取り直している間に閉じた・作り直した
+ *   ときに、古い結果で新しい状態を上書きしない（閉じた動画が開き直して鳴り出す・前の声に戻る）
+ */
+type Tracked = {
+  readonly source: string | null
+  readonly current: string | null
+  readonly error: string | null
+  readonly generation: number
+}
+
+const trackedFor = (url: string | null, generation: number): Tracked => ({
+  source: url,
+  current: url,
+  error: null,
+  generation,
+})
+
 export const useRenewableMediaSrc = ({ url, reload, label }: RenewableMediaOptions): RenewableMediaSrc => {
-  const [current, setCurrent] = useState<string | null>(url)
-  const [error, setError] = useState<string | null>(null)
+  const [tracked, setTracked] = useState<Tracked>(() => trackedFor(url, 0))
+  // 呼び出し側が別の URL を渡したら、位置を引き継がずに初めから。この描画から新しい URL を使う。
+  const view = tracked.source === url ? tracked : trackedFor(url, tracked.generation + 1)
+  if (view !== tracked) setTracked(view)
+
   /** いまの URL を取れた時刻。取り直している間は null。 */
   const obtainedAtRef = useRef<number | null>(url === null ? null : Date.now())
   const resumeRef = useRef<ResumePoint | null>(null)
   const wasPlayingRef = useRef(false)
   const reloadRef = useRef(reload)
-  const mountedRef = useRef(true)
+  /** いまの世代。取り直しの結果が届いたときに、まだ同じ URL のためのものかを見る。 */
+  const generationRef = useRef(view.generation)
 
   useEffect(() => {
     reloadRef.current = reload
   }, [reload])
 
   useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
+    generationRef.current = view.generation
+    resumeRef.current = null
+    obtainedAtRef.current = view.source === null ? null : Date.now()
+  }, [view.generation, view.source])
+
+  const setError = useCallback((generation: number, error: string): void => {
+    setTracked((previous) => (previous.generation === generation ? { ...previous, error } : previous))
   }, [])
 
-  // 呼び出し側が別の URL を渡したら、位置を引き継がずに初めから。
-  useEffect(() => {
-    setCurrent(url)
-    setError(null)
-    resumeRef.current = null
-    obtainedAtRef.current = url === null ? null : Date.now()
-  }, [url])
+  const generation = view.generation
 
   const onError = useCallback(
     (event: MediaEvent): void => {
@@ -94,7 +117,7 @@ export const useRenewableMediaSrc = ({ url, reload, label }: RenewableMediaOptio
       const code = element.error?.code ?? null
       if (!isRecoverableMediaError(code) || !mayRenewAfterError(obtainedAtRef.current, Date.now())) {
         // 取り直している最中に来た続きの失敗は、取り直しの結果を待つ。
-        if (obtainedAtRef.current !== null) setError(`${label}を読み込めませんでした。`)
+        if (obtainedAtRef.current !== null) setError(generation, `${label}を読み込めませんでした。`)
         return
       }
       obtainedAtRef.current = null
@@ -102,19 +125,21 @@ export const useRenewableMediaSrc = ({ url, reload, label }: RenewableMediaOptio
       reloadRef
         .current()
         .then((next) => {
-          if (!mountedRef.current) return
+          // 取り直している間に別の URL になった（閉じた・作り直した）。古い結果は捨てる。
+          if (generationRef.current !== generation) return
           obtainedAtRef.current = Date.now()
-          setError(null)
-          setCurrent(next)
+          setTracked((previous) =>
+            previous.generation === generation ? { ...previous, current: next, error: null } : previous,
+          )
         })
         .catch((caught: unknown) => {
-          if (!mountedRef.current) return
+          if (generationRef.current !== generation) return
           obtainedAtRef.current = Date.now()
           resumeRef.current = null
-          setError(`${label}の一時 URL を取り直せませんでした: ${describeError(caught)}`)
+          setError(generation, `${label}の一時 URL を取り直せませんでした: ${describeError(caught)}`)
         })
     },
-    [label],
+    [generation, label, setError],
   )
 
   const onLoadedMetadata = useCallback((event: MediaEvent): void => {
@@ -125,13 +150,13 @@ export const useRenewableMediaSrc = ({ url, reload, label }: RenewableMediaOptio
     element.currentTime = clampSec(resume.sec, element.duration)
     if (resume.wasPlaying) {
       resumePlayback(element, (message) => {
-        setError(`${label}を続きから再生できませんでした: ${message}`)
+        setError(generation, `${label}を続きから再生できませんでした: ${message}`)
       })
       return
     }
     // `autoPlay` の要素でも、止めていたものは止めたまま戻す（差し替えで勝手に鳴り出さない）。
     element.pause()
-  }, [label])
+  }, [generation, label, setError])
 
   const onPlay = useCallback((): void => {
     wasPlayingRef.current = true
@@ -144,7 +169,7 @@ export const useRenewableMediaSrc = ({ url, reload, label }: RenewableMediaOptio
 
   return {
     mediaProps:
-      current === null ? null : { src: current, onError, onLoadedMetadata, onPlay, onPause },
-    error,
+      view.current === null ? null : { src: view.current, onError, onLoadedMetadata, onPlay, onPause },
+    error: view.error,
   }
 }

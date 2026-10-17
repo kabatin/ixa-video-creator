@@ -22,6 +22,13 @@ import { useUrlRenewal } from '@/lib/use-url-renewal'
  * どちらが何を鳴らすのか区別が無く、押す側は選べない。操作は下の帯に 1 つだけ置く。
  * 鳴らしているのが自分でないときは、絵だけ共有の位置へ合わせる（`followSec`）。
  */
+/** 取れなかったとき。前に取れた材料があれば絵はそれを使い、理由だけ差し替える。 */
+const keepPreviousOnFailure = (
+  previous: Part<WireTimelineDocument> | null,
+  failed: Part<WireTimelineDocument>,
+): Part<WireTimelineDocument> =>
+  previous?.value === null || previous === null ? failed : { value: previous.value, error: failed.error }
+
 export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean }) => {
   const workbench = useWorkbench()
   const { transportControls } = workbench
@@ -34,17 +41,22 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
   // ナレーション（ADR-0038）は声の位置が組み立て結果の音に入る。入れ忘れると、帯では動いたのに鳴る位置が変わらない。
   // 中の素材の URL は 1 時間で切れる。切れる前と、素材を読めなかったときにも取り直す（`use-url-renewal.ts`）。
   const shotsKey = timelineShotsKey(workbench.shots)
-  const { epoch: renewalEpoch, markLoaded, renewAfterError } = useUrlRenewal(TIMELINE_URL_LIFETIME_SEC)
+  const { epoch: renewalEpoch, markLoaded, markFailed, renewAfterError } = useUrlRenewal(TIMELINE_URL_LIFETIME_SEC)
   useEffect(() => {
     let cancelled = false
     void loadTimelineDocument(workbench.projectId).then((loaded) => {
       if (cancelled) return
+      if (loaded.value === null) {
+        // **映っている絵を失敗で置き換えない。** 中の URL はまだ使える（取り直しは期限の 8 割で始める）。
+        // 理由は知らせに出し、絵は前の材料のまま、少し待って取り直す。
+        setDocument((previous) => keepPreviousOnFailure(previous, loaded))
+        markFailed()
+        return
+      }
       setDocument(loaded)
       // 取り直した材料で読めたかは分からないので、前の知らせは消す（直ったのに赤字が残らないように）。
-      if (loaded.value !== null) {
-        setMonitorError(null)
-        markLoaded()
-      }
+      setMonitorError(null)
+      markLoaded()
     })
     return () => {
       cancelled = true
@@ -57,6 +69,7 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
     shotsKey,
     renewalEpoch,
     markLoaded,
+    markFailed,
   ])
 
   /**

@@ -157,4 +157,51 @@ describe('useRenewableMediaSrc', () => {
 
     expect(screen.getByRole('alert').textContent).toContain('動画の一時 URL を取り直せませんでした')
   })
+
+  /**
+   * 取り直している間に閉じた（書き出しの「閉じる」）・作り直した（声の試聴をもう一度）。
+   * 以前は古い結果がそのまま入り、閉じた動画が開き直して鳴り出し、新しい声が前の声に戻った。
+   */
+  it('取り直している間に URL が変わったら、古い結果で上書きしない', async () => {
+    let resolveReload: (url: string) => void = () => undefined
+    const reload = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveReload = resolve
+        }),
+    )
+    const { rerender } = render(<Harness url="https://example.invalid/first" reload={reload} />)
+    act(() => {
+      vi.advanceTimersByTime(330_000)
+    })
+    failWith(video(), MEDIA_ERROR_NETWORK, 10)
+    expect(reload).toHaveBeenCalledTimes(1)
+
+    rerender(<Harness url={null} reload={reload} />)
+    await act(async () => {
+      resolveReload('https://example.invalid/stale')
+      await Promise.resolve()
+    })
+    expect(screen.queryByTestId('video')).toBeNull()
+
+    rerender(<Harness url="https://example.invalid/next" reload={reload} />)
+    expect(video().getAttribute('src')).toBe('https://example.invalid/next')
+  })
+
+  /** 閉じた動画を 1 コマでも描かない（以前は effect で写していたため 1 描画遅れた）。 */
+  it('URL が変わったその描画から新しい URL を使う', () => {
+    const seen: (string | null)[] = []
+    const Probe = ({ url }: { readonly url: string | null }) => {
+      const { mediaProps } = useRenewableMediaSrc({ url, reload: () => Promise.resolve(''), label: '動画' })
+      seen.push(mediaProps?.src ?? null)
+      return null
+    }
+    const { rerender } = render(<Probe url="https://example.invalid/first" />)
+    seen.length = 0
+
+    rerender(<Probe url={null} />)
+
+    expect(seen).not.toContain('https://example.invalid/first')
+    expect(seen.at(-1)).toBeNull()
+  })
 })

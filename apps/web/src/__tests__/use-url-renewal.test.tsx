@@ -87,6 +87,27 @@ describe('useUrlRenewal', () => {
     expect(result.current.epoch).toBe(1)
   })
 
+  /** 取り直しに 1 回失敗しても止めない（スリープ明け・通信の瞬断。手元の URL はまだ 2 割残っている）。 */
+  it('取れなかったら少し待ってもう一度取りにいく', () => {
+    const { result } = renderHook(() => useUrlRenewal(3600))
+    act(() => {
+      result.current.markLoaded()
+      vi.advanceTimersByTime(2_880_000)
+    })
+    expect(result.current.epoch).toBe(1)
+
+    act(() => {
+      result.current.markFailed()
+      vi.advanceTimersByTime(30_000 - 1)
+    })
+    expect(result.current.epoch).toBe(1)
+
+    act(() => {
+      vi.advanceTimersByTime(1)
+    })
+    expect(result.current.epoch).toBe(2)
+  })
+
   it('画面を離れたら取り直さない', () => {
     const { result, unmount } = renderHook(() => useUrlRenewal(3600))
     act(() => {

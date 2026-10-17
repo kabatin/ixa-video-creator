@@ -1,7 +1,7 @@
 'use client'
 
 import type { ShotId, Take, TakeId } from '@ixa/domain'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { TakeCompare, type ExclusivePlayback } from '@/components/take-compare'
 import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
@@ -39,6 +39,10 @@ export type TakeComparePanelProps = {
   readonly exclusive?: ExclusivePlayback
 }
 
+/** 手元の材料が、いま並べようとしている Take の組と同じか。 */
+const sameTakes = (compare: WireShotCompare, takeA: TakeId, takeB: TakeId | null): boolean =>
+  compare.a.takeId === takeA && (compare.b?.takeId ?? null) === takeB
+
 const takeLabel = (take: Take): string => `Take ${String(take.index)}`
 
 export const TakeComparePanel = ({
@@ -68,7 +72,11 @@ export const TakeComparePanel = ({
   const resolvedB = known(takeBId)
 
   // 材料の URL は 1 時間で切れる。切れる前と、素材を読めなかったときにも取り直す（`use-url-renewal.ts`）。
-  const { epoch: renewalEpoch, markLoaded, renewAfterError } = useUrlRenewal(TIMELINE_URL_LIFETIME_SEC)
+  const { epoch: renewalEpoch, markLoaded, markFailed, renewAfterError } = useUrlRenewal(TIMELINE_URL_LIFETIME_SEC)
+
+  /** 失敗したときに、映っている材料を残すかの判断に使う。依存に入れると取れるたびに取り直してしまう。 */
+  const shownRef = useRef(compare)
+  shownRef.current = compare
 
   useEffect(() => {
     if (resolvedA === null) return undefined
@@ -85,7 +93,11 @@ export const TakeComparePanel = ({
       })
       .catch((cause: unknown) => {
         if (cancelled) return
-        // 材料が無い状態で古い絵を残すと、直ったのか壊れたのかが分からない。
+        markFailed()
+        // **同じ Take の取り直しに失敗しただけなら、映っている絵を残す**（中の URL はまだ使える）。少し待って取り直す。
+        // 別の Take を選んだあとの失敗では古い絵を残さない（直ったのか壊れたのかが分からない）。
+        const shown = shownRef.current
+        if (shown !== null && sameTakes(shown, resolvedA, resolvedB)) return
         setCompare(null)
         setError(`比較の材料を取得できませんでした: ${describeError(cause)}`)
       })
@@ -93,7 +105,7 @@ export const TakeComparePanel = ({
     return () => {
       cancelled = true
     }
-  }, [shotId, resolvedA, resolvedB, renewalEpoch, markLoaded])
+  }, [shotId, resolvedA, resolvedB, renewalEpoch, markLoaded, markFailed])
 
   if (takes.length === 0) return null
 

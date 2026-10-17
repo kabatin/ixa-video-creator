@@ -16,10 +16,14 @@ import { STOPPED, aWorkbenchShot, workbenchValue } from './workbench-fixture'
 const loader = vi.hoisted(() => ({ loadTimelineDocument: vi.fn() }))
 vi.mock('@/lib/timeline-loader', () => loader)
 /** モニターは差し替え、渡された「素材を読めなかった」の口だけを控える。 */
-const monitor = vi.hoisted(() => ({ onMediaError: null as (() => void) | null }))
+const monitor = vi.hoisted((): { onMediaError: (() => void) | null; document: unknown } => ({
+  onMediaError: null,
+  document: null,
+}))
 vi.mock('@/components/program-monitor', () => ({
-  ProgramMonitor: (props: { readonly onMediaError?: () => void }) => {
+  ProgramMonitor: (props: { readonly onMediaError?: () => void; readonly document: unknown }) => {
     monitor.onMediaError = props.onMediaError ?? null
+    monitor.document = props.document
     return null
   },
 }))
@@ -52,6 +56,7 @@ beforeEach(() => {
   loader.loadTimelineDocument.mockReset()
   loader.loadTimelineDocument.mockResolvedValue({ value: DOCUMENT, error: null })
   monitor.onMediaError = null
+  monitor.document = null
 })
 afterEach(() => {
   vi.useRealTimers()
@@ -94,5 +99,32 @@ describe('プレビューの材料の取り直し', () => {
     })
     await flush()
     expect(loader.loadTimelineDocument).toHaveBeenCalledTimes(2)
+  })
+
+  /**
+   * 期限の前の取り直しが 1 回落ちても（スリープ明け・通信の瞬断）、映っている絵を失敗で置き換えない。
+   * 中の URL はまだ 2 割（12 分）残っている。以前は失敗の値で置き換え、そのあと二度と取り直さなかった。
+   */
+  it('取り直しに失敗しても前の材料を映したまま、少し待ってもう一度取りにいく', async () => {
+    renderPreview()
+    await flush()
+    expect(monitor.document).toBe(DOCUMENT)
+
+    loader.loadTimelineDocument.mockResolvedValueOnce({ value: null, error: 'TimelineDocument: 通信が切れました' })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_880_000)
+    })
+    await flush()
+    expect(loader.loadTimelineDocument).toHaveBeenCalledTimes(2)
+    expect(monitor.document).toBe(DOCUMENT)
+
+    const FRESH = { durationSec: 10, video1: [], fresh: true }
+    loader.loadTimelineDocument.mockResolvedValueOnce({ value: FRESH, error: null })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+    await flush()
+    expect(loader.loadTimelineDocument).toHaveBeenCalledTimes(3)
+    expect(monitor.document).toBe(FRESH)
   })
 })
