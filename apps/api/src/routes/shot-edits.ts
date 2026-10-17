@@ -118,6 +118,9 @@ export const shotEditRoutes = (deps: ShotEditRoutesDeps) =>
         code: splitShotCode(shot.code, used),
         startSec: plan.secondStartSec,
         durationSec: plan.secondDurationSec,
+        // 合わせ方と速さ（ADR-0026・0050）も引き継ぐ。割っただけで後半が 1 倍に戻らない。
+        timing: shot.timing,
+        speed: shot.speed,
         description: shot.description,
         dialogue: shot.dialogue,
         camera: shot.camera,

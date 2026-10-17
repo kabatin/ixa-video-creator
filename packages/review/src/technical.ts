@@ -1,4 +1,5 @@
 import {
+  usedSourceEndSec,
   TAKE_SHORT_TOLERANCE_SEC,
   declaredOutputSize,
   takeShortfallSec,
@@ -81,9 +82,12 @@ const finding = (draft: FindingDraft): CreateReviewFindingInput => ({
   suggestedPromptDelta: null,
 })
 
-/** 編集で実際に使う区間 `[sourceInSec, sourceInSec + durationSec)`。end は排他（TimeRange と同じ規約）。 */
-const isWithinUsedRange = (frame: FrameSample, shot: Shot): boolean =>
-  frame.atSec >= shot.sourceInSec && frame.atSec < shot.sourceInSec + shot.durationSec
+/**
+ * 編集で実際に使う区間 `[sourceInSec, usedSourceEndSec)`。end は排他（TimeRange と同じ規約）。
+ * 速さ（ADR-0050）と fit を掛けた後の長さで見る（速めた Shot は尺より長く Take を使う）。
+ */
+const isWithinUsedRange = (frame: FrameSample, shot: Shot, takeDurationSec: number): boolean =>
+  frame.atSec >= shot.sourceInSec && frame.atSec < usedSourceEndSec(shot, takeDurationSec)
 
 const checkDuration = (m: ReviewMeasurements): readonly CreateReviewFindingInput[] => {
   const { shot, video, take } = m
@@ -277,7 +281,7 @@ const checkFrames = (m: ReviewMeasurements): readonly CreateReviewFindingInput[]
     ]
   }
 
-  const insideUsedRange = blackFrames.filter((frame) => isWithinUsedRange(frame, shot))
+  const insideUsedRange = blackFrames.filter((frame) => isWithinUsedRange(frame, shot, m.video.durationSec))
 
   if (insideUsedRange.length > 0) {
     return [

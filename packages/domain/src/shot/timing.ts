@@ -57,6 +57,13 @@ export const shotPlaybackRate = (shot: TimingShot, takeDurationSec: number | nul
 }
 
 /**
+ * Take の中で実際に画面に出る区間の終わり（秒。排他）。速さ（ADR-0050）と fit を掛けた後の長さ。
+ * 自動レビューが「観客が見る区間」だけを判定するのに使う。
+ */
+export const usedSourceEndSec = (shot: TimingShot, takeDurationSec: number | null): number =>
+  shot.sourceInSec + shot.durationSec * shotPlaybackRate(shot, takeDurationSec)
+
+/**
  * 速度を考えても Take が足りない秒数。**最後のコマで止まる長さ**。
  * 長さが分からなければ 0（分からないことを「足りない」と言わない）。
  */

@@ -7,7 +7,7 @@ import {
   REMAKE_FINAL_REASON,
   checkCostLimits,
   finalTierModelOf,
-  quantizeDuration,
+  generationSecFor,
   type GenerationJob,
   type Project,
   type Shot,
@@ -118,7 +118,7 @@ const remakeFinalRoute = createRoute({
 /** 作る尺（worker と同じ決め方）。その尺で作れないならモデルの一律の目安に戻す。 */
 const outputSecOf = (shot: Shot, model: VideoModelDescriptor): number | null => {
   try {
-    return quantizeDuration(shot.durationSec, model.capabilities.durations)
+    return generationSecFor(shot, model.capabilities.durations)
   } catch {
     return null
   }

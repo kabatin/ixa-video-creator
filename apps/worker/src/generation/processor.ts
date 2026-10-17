@@ -14,8 +14,7 @@ import {
   type ProjectEventPublisher,
   type Shot,
   type TakeId,
-  quantizeDuration,
-  requestedSourceSec,
+  generationSecFor,
   settledShotStatus,
 } from '@ixa/domain'
 import { ProviderBusyError, ProviderError } from '@ixa/provider-core'
@@ -212,7 +211,7 @@ const requestedDurationSecOf = (
 ): number | null => {
   if (shot === null || model === null) return null
   try {
-    return quantizeDuration(requestedSourceSec(shot), model.capabilities.durations)
+    return generationSecFor(shot, model.capabilities.durations)
   } catch {
     // 作れない尺（最長の 1.5 倍超）。そのジョブは別の検査で止まる。
     return null

@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type { ProjectRepository, ShotRepository } from '@ixa/db'
-import { ProjectId, quantizeDuration, type GenerationJob, type ModelId, type Shot } from '@ixa/domain'
+import { ProjectId, generationSecFor, type GenerationJob, type ModelId, type Shot } from '@ixa/domain'
 import { estimateLatencySec, type ProviderRegistry, type VideoModelDescriptor } from '@ixa/provider-core'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
@@ -76,7 +76,7 @@ const modelOf = (
 const outputSecOf = (shot: Shot | undefined, model: VideoModelDescriptor): number | null => {
   if (shot === undefined) return null
   try {
-    return quantizeDuration(shot.durationSec, model.capabilities.durations)
+    return generationSecFor(shot, model.capabilities.durations)
   } catch {
     return null
   }

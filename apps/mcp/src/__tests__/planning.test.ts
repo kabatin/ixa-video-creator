@@ -57,6 +57,11 @@ describe('plannedShots の速さ（ADR-0050）', () => {
     expect(plannedShots([0, 1.2], VPIPE, 1.5)[0]).toMatchObject({ durationSec: 1.2, generateSec: 2.333 })
     expect(plannedShots([0, 2], VPIPE, 2)[0]).toMatchObject({ durationSec: 2, generateSec: 4.458 })
   })
+  it('尺 × 速さが最長を超えたら、最長で作って速さが落ちると言う（fit とは言わない）', () => {
+    const shot = plannedShots([0, 6], VPIPE, 2)[0]
+    expect(shot).toMatchObject({ generateSec: 10.125 })
+    expect(shot?.note).toContain('speed capped at 1.69x')
+  })
 })
 
 const analysis = (overrides: Partial<WireAnalysis> = {}): WireAnalysis => ({

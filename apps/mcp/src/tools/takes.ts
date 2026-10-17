@@ -111,6 +111,9 @@ export const listTakesTool = defineTool({
     return jsonResult({
       shotId,
       shotDurationSec: round(shot.durationSec),
+      // 速さと使い始め（ADR-0050）。Take がこの尺 × 速さより短ければ、再生は足りる速さまで落ちる。
+      speed: shot.speed ?? 1,
+      sourceInSec: round(shot.sourceInSec ?? 0),
       selectedTakeId: shot.selectedTakeId,
       takes: [...takes]
         .sort((a, b) => a.index - b.index)

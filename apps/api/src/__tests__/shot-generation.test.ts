@@ -305,6 +305,27 @@ describe('POST /shots/:id/generate', () => {
     expect(f.shots.snapshot().find((s) => s.id === long.id)?.timing).toBe('fit')
   })
 
+  /**
+   * 速さ（ADR-0050）。尺は最長以内で、尺 × 速さだけが最長を超える Shot は、最長で頼み **trim のまま**にする。
+   * fit に替えると worker の組み直しが別の長さになり spec_drift で落ちる（レビューで見つかった）。
+   */
+  it('速めた Shot は最長で頼み、尺に合わせる（fit）には替えない', async () => {
+    const project = aProject()
+    const fast = aShot(project.id, { durationSec: 5, speed: 2, code: 'shot_997', order: 7000 })
+    const f = buildFixture({ project, extraShots: [fast] })
+
+    const res = await postJson(f.app, `/shots/${fast.id}/generate`, { model: 'test/cheap' })
+
+    expect(res.status).toBe(202)
+    const json = (await res.json()) as Ok<GenerateData>
+    expect(json.data.stretchedToFit).toBe(false)
+    const expected = await computeSpecHash(
+      compileSpec({ project, shot: fast, characters: [], references: [], generationDurationSec: 8, seed: null, negativePrompt: null }),
+    )
+    expect(json.data.specHash).toBe(expected)
+    expect(f.shots.snapshot().find((s) => s.id === fast.id)?.timing).toBe('trim')
+  })
+
   it('最長に収まる Shot の扱い（速度を変えない）はそのまま', async () => {
     const f = buildFixture()
 

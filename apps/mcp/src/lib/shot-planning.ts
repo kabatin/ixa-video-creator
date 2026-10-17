@@ -1,4 +1,4 @@
-import { DurationNotSupportedError, quantizeDuration, requestedSourceSec, type DurationSupport } from '@ixa/domain'
+import { DurationNotSupportedError, generationSecFor, requestedSourceSec, type DurationSupport } from '@ixa/domain'
 
 /**
  * Shot 割りの境界を決める純粋関数（`plan_shots`）。
@@ -64,6 +64,8 @@ export const boundaryProblem = (boundariesSec: readonly number[]): string | null
   return unordered === -1 ? null : `境界が昇順ではありません（${String(unordered)} 番目: ${String(boundariesSec[unordered])}）`
 }
 
+const round2 = (value: number): number => Math.round(value * 100) / 100
+
 export type PlannedShot = {
   readonly startSec: number
   readonly durationSec: number
@@ -82,11 +84,14 @@ export const plannedShots = (
     const durationSec = ms((boundariesSec[i + 1] as number) - startSec)
     if (support === null) return { startSec, durationSec }
     try {
-      const needSec = requestedSourceSec({ timing: 'trim', durationSec, sourceInSec: 0, speed })
-      const generateSec = ms(quantizeDuration(needSec, support))
-      return generateSec < needSec
-        ? { startSec, durationSec, generateSec, note: 'slowed to fit (timing=fit)' }
-        : { startSec, durationSec, generateSec }
+      const planned = { timing: 'trim' as const, durationSec, sourceInSec: 0, speed }
+      const generateSec = ms(generationSecFor(planned, support))
+      if (generateSec < durationSec) return { startSec, durationSec, generateSec, note: 'slowed to fit (timing=fit)' }
+      // 速さの分だけ最長を超える。最長で作り、再生は Take が足りる速さまで落ちる（ADR-0050）。
+      if (generateSec < requestedSourceSec(planned)) {
+        return { startSec, durationSec, generateSec, note: `speed capped at ${String(round2(generateSec / durationSec))}x by the model's longest length` }
+      }
+      return { startSec, durationSec, generateSec }
     } catch (error) {
       if (error instanceof DurationNotSupportedError) {
         return { startSec, durationSec, generateSec: null, note: error.message }

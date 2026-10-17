@@ -37,7 +37,6 @@ import {
   Corrections as CorrectionsSchema,
   settledShotStatus,
   stretchesToFit,
-  requestedSourceSec,
 } from '@ixa/domain'
 import {
   GenerationContextError,
@@ -432,7 +431,9 @@ export const fitTimingWhenStretched = async (
   shot: Shot,
   compiled: CompiledGeneration<VideoModelDescriptor>,
 ): Promise<boolean> => {
-  if (!stretchesToFit(requestedSourceSec(shot), compiled.spec.durationSec)) return false
+  // 比べるのは編集尺（速さを掛ける前）。速めた trim の Shot は fit にしない（再生が足りる速さまで落ちる。
+  // ここで fit に替えると worker の組み直しが別の長さになり spec_drift で落ちる）。
+  if (!stretchesToFit(shot.durationSec, compiled.spec.durationSec)) return false
   if (shot.timing !== 'fit') await deps.shots.update(shot.id, { timing: 'fit' })
   return true
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  generationSecFor,
   DurationNotSupportedError, MAX_GENERATION_STRETCH, canProduceDuration, defaultSourceInSec,
   quantizeDuration, stretchesToFit,
 } from '../generation/duration.js'
@@ -110,5 +111,29 @@ describe('defaultSourceInSec', () => {
 
   it('余りが無ければ 0', () => {
     expect(defaultSourceInSec(4, 4, false)).toBe(0)
+  })
+})
+
+/** 速さのある Shot の生成尺（ADR-0050）。 */
+describe('generationSecFor', () => {
+  const trim = (durationSec: number, speed: number) => ({ timing: 'trim' as const, durationSec, sourceInSec: 0, speed })
+
+  it('速さ 1 は今までの切り上げと同じ', () => {
+    expect(generationSecFor(trim(3.75, 1), VEO)).toBe(quantizeDuration(3.75, VEO))
+  })
+
+  it('尺 × 速さを切り上げて頼む', () => {
+    expect(generationSecFor(trim(2.5, 2), VEO)).toBe(6)
+  })
+
+  it('尺 × 速さが最長を超えても断らず、最長で頼む（再生が足りる速さまで落ちる）', () => {
+    // 4 秒 × 2.5 = 10 秒。最長 8 秒の 1.5 倍（12 秒）以内でも、伸ばして頼まず 8 秒で頼む。
+    expect(generationSecFor(trim(4, 2.5), VEO)).toBe(8)
+    // 最長 8 秒・1.5 倍で 12 秒を超えるときも断らない。
+    expect(generationSecFor(trim(6, 2.5), VEO)).toBe(8)
+  })
+
+  it('尺そのものが作れない長さなら今までどおり断る', () => {
+    expect(() => generationSecFor(trim(13, 1), VEO)).toThrow(DurationNotSupportedError)
   })
 })

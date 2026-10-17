@@ -1,4 +1,4 @@
-import type { CreateReviewFindingInput, Seconds, Severity, Shot } from '@ixa/domain'
+import { usedSourceEndSec, type CreateReviewFindingInput, type Seconds, type Severity, type Shot } from '@ixa/domain'
 import type {
   BrandColorRequirement,
   DeterministicReviewer,
@@ -44,18 +44,17 @@ const finding = (draft: FindingDraft): CreateReviewFindingInput => ({
 })
 
 /**
- * 判定に使うフレーム。編集で使う区間 `[sourceInSec, sourceInSec + durationSec)` に限る。
+ * 判定に使うフレーム。編集で使う区間 `[sourceInSec, usedSourceEndSec)` に限る（速さを掛けた後。ADR-0050）。
  * のりしろ（ADR-0011）は観客が見ないので、そこにブランド色が無くても欠陥ではない。
  * 区間内のフレームが 1 枚も無い場合だけ、判定材料を失わないよう全フレームに戻す。
  */
 const framesForJudgement = (
   frames: readonly FrameSample[],
   shot: Shot,
+  takeDurationSec: number,
 ): readonly FrameSample[] => {
-  const used = frames.filter(
-    (frame) =>
-      frame.atSec >= shot.sourceInSec && frame.atSec < shot.sourceInSec + shot.durationSec,
-  )
+  const end = usedSourceEndSec(shot, takeDurationSec)
+  const used = frames.filter((frame) => frame.atSec >= shot.sourceInSec && frame.atSec < end)
   return used.length > 0 ? used : frames
 }
 
@@ -154,12 +153,12 @@ const checkRequirement = (
 export const brandReviewer: DeterministicReviewer = (
   measurements: ReviewMeasurements,
 ): readonly CreateReviewFindingInput[] => {
-  const { brandColors, frames, shot } = measurements
+  const { brandColors, frames, shot, video } = measurements
   // 要求が無ければ判定するものが無い（skip）。
   if (brandColors.length === 0) return []
   // フレームが無いことは technical レビュアが fail として報告する。ここで二重に出さない。
   if (frames.length === 0) return []
 
-  const judged = framesForJudgement(frames, shot)
+  const judged = framesForJudgement(frames, shot, video.durationSec)
   return brandColors.flatMap((requirement) => checkRequirement(requirement, judged))
 }

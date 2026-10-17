@@ -1,4 +1,5 @@
 import type { Project } from '../project/project.js'
+import { requestedSourceSec } from '../shot/timing.js'
 import { compileSpec, type CompileInput } from './spec-compiler.js'
 
 export type StartFramePromptInput = Pick<CompileInput, 'shot' | 'characters' | 'references'> & {
@@ -30,12 +31,13 @@ export const compileStartFramePrompt = (input: StartFramePromptInput): string =>
   const spec = compileSpec({
     ...input,
     shot: still,
-    generationDurationSec: input.shot.durationSec,
+    // 速めた Shot（ADR-0050）は尺 × 速さの動画になる。動きが起きる長さはそちら。
+    generationDurationSec: requestedSourceSec(input.shot),
     seed: null,
     negativePrompt: null,
   })
   const avoid = input.project.avoid.trim()
-  const seconds = String(Math.round(input.shot.durationSec * 100) / 100)
+  const seconds = String(Math.round(requestedSourceSec(input.shot) * 100) / 100)
   return [
     `これは ${seconds} 秒の動画を作るときの 1 フレーム目（動画の開始画像）。この 1 枚から映像が動き始める。`,
     `下の「この Shot で起きること」は ${seconds} 秒の間に起きること。その動きが始まる直前の瞬間を描く（動きの途中や結末を描かない）。`,

@@ -1,4 +1,6 @@
 import type { Seconds } from '../common/time.js'
+import type { Shot } from '../shot/shot.js'
+import { requestedSourceSec } from '../shot/timing.js'
 
 /**
  * モデルが出せる尺の表現。
@@ -100,4 +102,21 @@ export const defaultSourceInSec = (
   const slack = generationDurationSec - editDurationSec
   if (slack <= 0) return 0
   return Math.min(HEAD_TRIM_MAX_SEC, slack / 2)
+}
+
+/**
+ * Shot の生成尺（ADR-0050）。**頼む長さの決め方はここが唯一の正**（api の組み立て・worker の組み直し・
+ * 見積り・MCP の計画が同じ値を使わないと、仕様のハッシュが食い違う）。
+ *
+ * `trim` で速めた Shot は尺 × 速さを頼むが、**最長を超える分は頼まない**（最長で作り、再生は Take が
+ * 足りる速さまで落ちる。`shotPlaybackRate`）。速さのせいで今まで作れた Shot が作れなくなることはない。
+ * 尺そのものが最長を超えるときは、今までどおり `quantizeDuration` の伸ばす・断る規則に任せる。
+ */
+export const generationSecFor = (
+  shot: Pick<Shot, 'timing' | 'durationSec' | 'sourceInSec'> & { readonly speed?: number },
+  support: DurationSupport,
+): Seconds => {
+  const wanted = requestedSourceSec(shot)
+  const capped = Math.min(wanted, Math.max(shot.durationSec, longestDuration(support)))
+  return quantizeDuration(capped, support)
 }

@@ -260,6 +260,16 @@ describe('technicalReviewer', () => {
       expect(findings[0]?.evidence?.frameSec).toBe(1)
     })
 
+    /** 速さ（ADR-0050）。2 倍で流す 2 秒の Shot は、4 秒の Take を全部見せる。 */
+    it('速めた Shot は、速さを掛けた後の区間で黒フレームを見る', () => {
+      const frames = [makeFrame(0, 0.4), makeFrame(1, 0.5), makeFrame(2, 0.45), makeFrame(3, 0.001)]
+      const fast = technicalReviewer(makeMeasurements({ frames, shot: makeShot({ durationSec: 2, speed: 2 }) }))
+      const plain = technicalReviewer(makeMeasurements({ frames, shot: makeShot({ durationSec: 2 }) }))
+
+      expect(severities(fast).filter((s) => s === 'fail')).toEqual(['fail'])
+      expect(severities(plain)).not.toContain('fail')
+    })
+
     it('のりしろの黒フレームは info', () => {
       const frames = [makeFrame(0, 0.001), makeFrame(1, 0.4), makeFrame(2, 0.5), makeFrame(3, 0.45)]
       const findings = technicalReviewer(

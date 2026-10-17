@@ -148,6 +148,9 @@ export const getProjectTool = defineTool({
           code: shot.code,
           startSec: round(shot.startSec),
           durationSec: round(shot.durationSec),
+          // 速さと Take の使い始め（ADR-0050）。既定（1 倍・頭から）のときは出さない。
+          ...(shot.speed === undefined || shot.speed === 1 ? {} : { speed: shot.speed }),
+          ...(shot.sourceInSec === undefined || shot.sourceInSec === 0 ? {} : { sourceInSec: round(shot.sourceInSec) }),
           description: shot.description ?? '',
           ...(shot.mood === null ? {} : { mood: shot.mood }),
           camera: compactCamera(shot.camera),
