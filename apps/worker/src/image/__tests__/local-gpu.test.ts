@@ -38,6 +38,7 @@ const aJob = (): ImageGenerationJob => ({
   mediaAssetId: null,
   error: null,
   providerRecord: null,
+  instruction: null,
   queuedAt: QUEUED_AT,
   startedAt: null,
   finishedAt: null,

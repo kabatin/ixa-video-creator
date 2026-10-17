@@ -61,6 +61,8 @@ import type { ImageProcessorDeps } from './image/index.js'
 import type { VoiceProcessorDeps } from './voice/index.js'
 import type { MusicProcessorDeps } from './music/index.js'
 import { createMusicWiring } from './music-wiring.js'
+import { createThumbnailWiring } from './thumbnail-wiring.js'
+import type { ThumbnailProcessorDeps } from './thumbnail/index.js'
 import { createVoiceWiring } from './voice-wiring.js'
 import { createRegenerationEnqueue } from './regeneration-wiring.js'
 import { QUEUE_NAMES } from './queues.js'
@@ -90,6 +92,8 @@ export type GenerationWiring = {
    * 無いことを `undefined` ではなく `null` で表す（配線し忘れと区別するため）。
    */
   readonly upscale: UpscaleProcessorDeps | null
+  /** YouTube のサムネイル（ADR-0051）。 */
+  readonly thumbnail: ThumbnailProcessorDeps
   readonly queue: Queue
   close(): Promise<void>
 }
@@ -399,6 +403,7 @@ export const createGenerationWiring = (
       analysisQueue,
     }),
     upscale: upscaleWiring?.deps ?? null,
+    thumbnail: createThumbnailWiring({ db, storage, mediaQueue: render.mediaQueue, logger }),
     queue,
     close: async () => {
       await queue.close()

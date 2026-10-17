@@ -13,9 +13,11 @@ import {
   type GenerationContextSource,
   type ImageGenerationJob,
   type ImageGenerationJobError,
+  type ImageJobKind,
   type MediaAssetId,
   type Project,
   type ProjectEventPublisher,
+  type ProjectId,
   type Resolution,
   type Shot,
 } from '@ixa/domain'
@@ -25,6 +27,7 @@ import type { Logger } from 'pino'
 import type { LocalGpuLease } from '../generation/local-gpu-lease.js'
 import { withTempDir } from '../media/temp-dir.js'
 import { generateCharacterSheet } from './character-sheet.js'
+import { generateKeyArt } from './key-art.js'
 import { cropToAspect } from './crop.js'
 import { publishImageJobStatus } from './events.js'
 import { ImageJobData } from './job-data.js'
@@ -46,7 +49,8 @@ import {
 export type { ImageAdapter, ImageJobResult } from './steps.js'
 
 /**
- * 絵を 1 枚作る（ADR-0029）。種類で分ける: 最初のフレーム（ここ）とキャラクターシート（`character-sheet.ts`。ADR-0035）。
+ * 絵を 1 枚作る（ADR-0029）。種類で分ける: 最初のフレーム（ここ）・キャラクターシート（`character-sheet.ts`。ADR-0035）・
+ * キーアート（`key-art.ts`。ADR-0051）。
  *
  * 最初のフレーム:
  *
@@ -59,7 +63,9 @@ export type ImageProcessorDeps = {
   readonly shots: Pick<ShotRepository, 'findById'>
   readonly projects: Pick<ProjectRepository, 'findById'>
   /** キャラクターシートの材料と、できたシートを識別画像に足す先（ADR-0035）。 */
-  readonly characters: Pick<CharacterRepository, 'findById' | 'listIdentityImages' | 'addIdentityImage'>
+  readonly characters: Pick<CharacterRepository, 'findById' | 'findByProject' | 'listIdentityImages' | 'addIdentityImage'>
+  /** 作品のコンセプト・あらすじ（脚本のいまの版）。キーアートの指示に入れる（ADR-0051）。無ければ空文字。 */
+  readonly concept: (projectId: ProjectId) => Promise<string>
   readonly mediaAssets: Pick<MediaAssetRepository, 'findById' | 'create'>
   readonly shotReferences: StartFrameReferences
   readonly storage: ObjectStorage
@@ -166,6 +172,18 @@ const describeUnexpected = (error: unknown): ImageGenerationJobError => ({
   retryable: true,
 })
 
+/** 種類ごとの作り方。種類が増えたらここが型エラーになる（黙って最初のフレームとして作らない）。 */
+const generatorFor = (kind: ImageJobKind): ((deps: JobDeps, job: ImageGenerationJob, dir: string) => Promise<void>) => {
+  switch (kind) {
+    case 'start_frame':
+      return generateStartFrame
+    case 'character_sheet':
+      return generateCharacterSheet
+    case 'key_art':
+      return generateKeyArt
+  }
+}
+
 export const processImageJob = async (deps: ImageProcessorDeps, data: unknown): Promise<ImageJobResult> => {
   const { imageJobId } = ImageJobData.parse(data)
   const job = await deps.imageJobs.findById(imageJobId)
@@ -193,7 +211,7 @@ export const processImageJob = async (deps: ImageProcessorDeps, data: unknown): 
         retryable: false,
       })
     }
-    const generate = job.kind === 'character_sheet' ? generateCharacterSheet : generateStartFrame
+    const generate = generatorFor(job.kind)
     const work = (): Promise<void> => withTempDir(deps.workDir, 'image-', (dir) => generate({ ...deps, ...adapter }, job, dir))
     if (adapter.provider.exclusiveResource !== 'local-gpu') {
       await work()

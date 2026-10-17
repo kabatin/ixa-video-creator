@@ -7,7 +7,7 @@ import {
   type ImageGenerationJob,
 } from '@ixa/domain'
 
-/** 絵のジョブ（最初のフレーム・キャラクターシート）のインメモリ版。書くたびに状態と中身の食い違いを確かめる（実物と同じ）。 */
+/** 絵のジョブ（最初のフレーム・キャラクターシート・キーアート）のインメモリ版。書くたびに状態と中身の食い違いを確かめる（実物と同じ）。 */
 export type InMemoryImageJobRepository = ImageJobRepository & { readonly snapshot: () => readonly ImageGenerationJob[] }
 
 export const createInMemoryImageJobRepository = (
@@ -46,6 +46,7 @@ export const createInMemoryImageJobRepository = (
             providerId: input.providerId,
             modelId: input.modelId,
             status: 'queued',
+            instruction: input.kind === 'key_art' ? input.instruction : null,
             referenceAssetIds: input.kind === 'character_sheet' ? [...input.referenceAssetIds] : [],
             mediaAssetId: null,
             error: null,
@@ -66,6 +67,8 @@ export const createInMemoryImageJobRepository = (
       Promise.resolve(newestFirst(store.filter((job) => job.characterId === characterId))[0] ?? null),
     findActiveByProject: (projectId) =>
       Promise.resolve(newestFirst(store.filter((job) => job.projectId === projectId && active(job)))),
+    findKeyArtByProject: (projectId) =>
+      Promise.resolve(newestFirst(store.filter((job) => job.projectId === projectId && job.kind === 'key_art'))),
     cancelActive: ({ projectId, shotIds }) => {
       const targets = store.filter(
         (job) =>

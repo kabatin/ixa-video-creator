@@ -32,6 +32,7 @@ const jobIn = (status: ImageGenerationJob['status']): ImageGenerationJob => ({
   mediaAssetId: null,
   error: null,
   providerRecord: null,
+  instruction: null,
   queuedAt: new Date(),
   startedAt: status === 'queued' ? null : new Date(),
   finishedAt: null,

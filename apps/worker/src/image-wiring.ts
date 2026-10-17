@@ -4,6 +4,7 @@ import {
   createImageJobRepository,
   createMediaAssetRepository,
   createProjectRepository,
+  createScriptRepository,
   createShotReferenceRepository,
   createShotRepository,
   type DbClient,
@@ -62,12 +63,19 @@ export const createImageWiring = (input: {
   readonly imageQueue: { readonly add: (name: string, data: { readonly imageJobId: string }, options: { readonly delay: number }) => Promise<unknown> }
 }): ImageProcessorDeps => {
   const workDir = process.env.IMAGE_WORK_DIR ?? '/tmp/ixa-image-work'
+  const scripts = createScriptRepository(input.db)
   return {
     imageJobs: createImageJobRepository(input.db),
     shots: createShotRepository(input.db),
     projects: createProjectRepository(input.db),
     // キャラクターシート（ADR-0035）の材料と、できたシートを足す先。
     characters: createCharacterRepository(input.db),
+    // キーアート（ADR-0051）の材料。脚本のいまの版がコンセプト・あらすじ（ADR-0030）。
+    concept: async (projectId) => {
+      const script = await scripts.findByProject(projectId)
+      if (script === null || script.currentVersionId === null) return ''
+      return (await scripts.findVersionById(script.currentVersionId))?.content ?? ''
+    },
     mediaAssets: createMediaAssetRepository(input.db),
     shotReferences: createShotReferenceRepository(input.db),
     storage: input.storage,
