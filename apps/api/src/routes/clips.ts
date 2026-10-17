@@ -56,7 +56,7 @@ export const TRIM_LENGTH_MISMATCH_MESSAGE =
   'トリムの長さ（outSec − inSec）と配置する尺（durationSec）を一致させてください'
 /**
  * 部分更新でトリムだけ変えると、長さの整合を確かめる相手（durationSec）が無い。
- * リポジトリに findById が無いため既存値を読めず、**検証が素通りする**。
+ * 当時はリポジトリに findById が無く既存値を読めず、**検証が素通りした**（いまは読めるが、送らせる規則は変えていない）。
  * 素通りさせると、更新経由でだけ食い違った行が作れてしまう。
  * 両方まとめて送らせる。
  */
@@ -87,7 +87,7 @@ type EffectCheckInput = { readonly track?: TimelineTrack; readonly content?: Tim
  *
  * **型と値は domain の `parseEffectParams` だけで決める。** 知らない型・範囲外の値・知らない項目は 422 にし、
  * 通った値は既定値を埋めた形で保存する（描く側・画面が「省いた項目」を推測しなくて済む）。
- * PATCH で track だけを VFX 以外へ変える場合は、既存の中身を読めない（リポジトリに findById が無い）ので見ない。
+ * PATCH では、送られなかった track・content を既存の行で補ってから置き場所を見る（`effectTrackErrors`）。
  */
 export const normalizeEffectClip = <T extends EffectCheckInput>(
   input: T,
@@ -105,6 +105,20 @@ export const normalizeEffectClip = <T extends EffectCheckInput>(
     ok: true,
     value: { ...input, content: { type: 'motion_graphics', templateKey: parsed.value.templateKey, params: parsed.value.params } },
   }
+}
+
+/**
+ * エフェクトの置き場所（VFX だけ）を、**更新した後の形**で見る（2026-10-17 のレビュー）。
+ * 中身だけを送ってテロップをエフェクトに変える・track だけを送ってエフェクトを VFX の外へ動かす、の両方を断る。
+ * 既存の値（params）までは検証し直さない。送られた中身は `normalizeEffectClip` が見る。
+ */
+export const effectTrackErrors = (
+  existing: Pick<TimelineClip, 'track' | 'content'>,
+  patch: EffectCheckInput,
+): FieldErrors | null => {
+  const track = patch.track ?? existing.track
+  const content = patch.content ?? existing.content
+  return content.type === 'motion_graphics' && track !== 'VFX' ? { track: [EFFECT_TRACK_MESSAGE] } : null
 }
 
 /**
@@ -321,14 +335,17 @@ export const clipRoutes = (deps: ClipRoutesDeps) => {
       const missing = await missingAssetErrors(patch.content)
       if (missing !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, missing), 422)
 
+      const id = c.req.valid('param').id
+      const existing = await deps.timelineClips.findById(id)
+      if (existing === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      const misplaced = effectTrackErrors(existing, patch)
+      if (misplaced !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, misplaced), 422)
+
       const effect = normalizeEffectClip(patch)
       if (!effect.ok) return c.json(fail(VALIDATION_ERROR_MESSAGE, effect.fields), 422)
 
-      /**
-       * 存在しなければリポジトリが DbNotFoundError を投げ、共通ハンドラが 404 にする。
-       * ここで catch しないのは意図的で、畳んでよい既知の失敗が他に無いため。
-       */
-      const updated = await deps.timelineClips.update(c.req.valid('param').id, effect.value)
+      // 読んでから書くまでに消されていれば、リポジトリが DbNotFoundError を投げ、共通ハンドラが 404 にする。
+      const updated = await deps.timelineClips.update(id, effect.value)
       return c.json(ok(toClipResponse(updated)), 200)
     })
     .openapi(deleteClipRoute, async (c) => {

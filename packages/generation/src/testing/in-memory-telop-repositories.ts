@@ -32,6 +32,9 @@ export const createInMemoryTimelineClipRepository = (
     findByProject: (projectId) =>
       Promise.resolve(store.filter((clip) => clip.projectId === projectId)),
 
+    // 消したクリップは store から外すので、見つからなければ null（本物のソフトデリートと同じ答え）。
+    findById: (id) => Promise.resolve(store.find((clip) => clip.id === id) ?? null),
+
     create: (input) => {
       const created = TimelineClipSchema.parse({
         ...CreateTimelineClipInputSchema.parse(input),

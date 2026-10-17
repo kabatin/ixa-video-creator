@@ -557,6 +557,19 @@ describe('テロップの見た目の検査', () => {
 
 /** エフェクト（ADR-0050）。型と値は domain のスキーマで検証し、既定値を埋めて保存する。 */
 describe('エフェクトのクリップの検証', () => {
+  it('中身だけを送ってテロップをエフェクトに変えることはできない（TEXT のまま）', async () => {
+    const text = await createClip(project.id, textClipPayload())
+    const res = await send('PATCH', `/clips/${text.id}`, { content: { type: 'motion_graphics', templateKey: 'flash' } })
+    expect(res.status).toBe(422)
+    expect((await json<ErrorBody>(res)).fields?.track).toEqual([EFFECT_TRACK_MESSAGE])
+    expect(timelineClips.snapshot().find((clip) => clip.id === text.id)?.content.type).toBe('text')
+  })
+
+  it('無いクリップの更新は 404', async () => {
+    const res = await send('PATCH', `/clips/${TimelineClipIdSchema.parse('01ARZ3NDEKTSV4RRFFQ69G5FZZ')}`, { layer: 1 })
+    expect(res.status).toBe(404)
+  })
+
   it('値は既定値を埋めて保存する', async () => {
     const created = await createClip(
       project.id,
@@ -609,6 +622,12 @@ describe('エフェクトのクリップの検証', () => {
 
     const moved = await send('PATCH', `/clips/${created.id}`, { track: 'TEXT', content: created.content })
     expect(moved.status).toBe(422)
+
+    // track だけを送って VFX の外へ動かす（既存の中身はエフェクト）。
+    const trackOnly = await send('PATCH', `/clips/${created.id}`, { track: 'TEXT' })
+    expect(trackOnly.status).toBe(422)
+    expect((await json<ErrorBody>(trackOnly)).fields?.track).toEqual([EFFECT_TRACK_MESSAGE])
+    expect(timelineClips.snapshot().find((clip) => clip.id === created.id)?.track).toBe('VFX')
 
     const res = await send('PATCH', `/clips/${created.id}`, {
       content: { type: 'motion_graphics', templateKey: 'shake', params: { intensity: 0.9 } },

@@ -23,6 +23,8 @@ export type TimelineClipRow = typeof timelineClips.$inferSelect
 export type TimelineClipRepository = {
   /** 投入順（ULID の昇順 = 時系列）。ソフトデリート済みは含まない。 */
   findByProject(projectId: ProjectId): Promise<TimelineClip[]>
+  /** 1 件。ソフトデリート済み・無ければ null（更新の前に今の形を読む。ADR-0050）。 */
+  findById(id: TimelineClipId): Promise<TimelineClip | null>
   create(input: CreateTimelineClipInput): Promise<TimelineClip>
   update(id: TimelineClipId, patch: UpdateTimelineClipPatch): Promise<TimelineClip>
   /** 消したクリップを返す（ナレーションのテロップなら、どの行のものかを見るため）。 */
@@ -62,6 +64,12 @@ export const createTimelineClipRepository = (db: DbClient): TimelineClipReposito
       .where(and(eq(timelineClips.projectId, projectId), isNull(timelineClips.deletedAt)))
       .orderBy(asc(timelineClips.id))
     return rows.map(timelineClipRowToDomain)
+  },
+
+  async findById(id) {
+    const rows = await db.select().from(timelineClips).where(liveById(id)).limit(1)
+    const row = rows[0]
+    return row === undefined ? null : timelineClipRowToDomain(row)
   },
 
   async create(input) {
