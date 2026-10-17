@@ -15,6 +15,7 @@ const row = (patch: Partial<ImageJobRow> = {}): ImageJobRow => ({
   shotId: '01ARZ3NDEKTSV4RRFFQ69G5FAX',
   characterId: null,
   status: 'queued',
+  instruction: null,
   providerId: 'codex-cli',
   modelId: 'codex-cli/image-gen',
   referenceAssetIds: [],
@@ -34,6 +35,16 @@ describe('image_generation_jobs', () => {
       imageJobRowToDomain(row({ kind: 'character_sheet', shotId: null, characterId: '01ARZ3NDEKTSV4RRFFQ69G5FAY' })),
     ).toMatchObject({ kind: 'character_sheet', shotId: null })
     expect(() => imageJobRowToDomain(row({ kind: 'character_sheet', characterId: null }))).toThrow(/キャラクター/)
+  })
+
+  /** キーアートは Shot もキャラクターも持たず、指示を持つ（ADR-0051）。 */
+  it('キーアートの行を読み、指示を持つ。ほかの種類が指示を持つ行は止める', () => {
+    expect(imageJobRowToDomain(row({ kind: 'key_art', shotId: null, instruction: '夕焼け' }))).toMatchObject({
+      kind: 'key_art',
+      instruction: '夕焼け',
+    })
+    expect(() => imageJobRowToDomain(row({ kind: 'key_art' }))).toThrow(/Shot/)
+    expect(() => imageJobRowToDomain(row({ instruction: '夕焼け' }))).toThrow(/指示/)
   })
 
   it('行を domain の型にする', () => {

@@ -6,6 +6,7 @@ import {
   ProjectId,
   RenderJobId,
   TakeId,
+  ThumbnailId,
   VoiceJobId,
   WorkspaceId,
 } from '../common/ids.js'
@@ -41,6 +42,8 @@ export const MediaOrigin = z.discriminatedUnion('type', [
   /** AI で作った曲（ADR-0048）。楽曲（MusicTrack）として登録する。 */
   z.object({ type: z.literal('generated_music'), musicJobId: MusicJobId }),
   z.object({ type: z.literal('rendered'), renderJobId: RenderJobId }),
+  /** 書き出したサムネイル（ADR-0051）。書き出しジョブではないので `rendered` と分ける。 */
+  z.object({ type: z.literal('thumbnail'), thumbnailId: ThumbnailId }),
   z.object({ type: z.literal('derived'), sourceAssetId: MediaAssetId, operation: z.string() }),
 ])
 export type MediaOrigin = z.infer<typeof MediaOrigin>

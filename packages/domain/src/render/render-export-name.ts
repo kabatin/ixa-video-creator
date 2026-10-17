@@ -91,3 +91,12 @@ export type RenderExportFileNameInput = {
 export const renderExportFileName = (input: RenderExportFileNameInput): string =>
   `${renderExportFolderName(input.projectName)} ${formatStamp(input.createdAt, input.timeZone)} ` +
   `${RENDER_PRESET_LABELS[input.preset]}${scopeSuffix(input.scope)}.mp4`
+
+export type ThumbnailExportFileNameInput = Pick<RenderExportFileNameInput, 'projectName' | 'createdAt' | 'timeZone'>
+
+/**
+ * 書き出したサムネイルの名前（ADR-0051）。動画と同じフォルダに並ぶので、作品名と日時の形を揃える。
+ * 例: `ぼくははると サムネ 2026-10-02 22.52.31.jpg`
+ */
+export const thumbnailExportFileName = (input: ThumbnailExportFileNameInput): string =>
+  `${renderExportFolderName(input.projectName)} サムネ ${formatStamp(input.createdAt, input.timeZone)}.jpg`

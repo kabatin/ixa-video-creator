@@ -14,8 +14,9 @@ import { projects } from './workspace.js'
 
 /**
  * 絵を 1 枚作るジョブ（ADR-0029）。種類は `start_frame`（Shot の最初のフレーム）と
- * `character_sheet`（キャラクターシート。ADR-0035）。Codex は 1 度に 1 枚なので同じ表・同じ順番待ち。
- * 持ち主は種類で決まる（最初のフレームは shot_id、シートは character_id。domain の `imageJobViolation` が縛る）。
+ * `character_sheet`（キャラクターシート。ADR-0035）・`key_art`（サムネイルの背景。ADR-0051）。Codex は 1 度に 1 枚なので同じ表・同じ順番待ち。
+ * 持ち主は種類で決まる（最初のフレームは shot_id、シートは character_id、キーアートはどちらも null。
+ * domain の `imageJobViolation` が縛る）。
  *
  * ★ 追記のみ。作り直しは新しい行を足す（前の絵と記録は残す）。更新は状態の遷移
  *   （queued → running → succeeded / failed）と、そのとき決まる列だけ。
@@ -33,6 +34,8 @@ export const imageGenerationJobs = pgTable(
     status: text('status', { enum: ImageGenerationJobStatusSchema.options })
       .$type<ImageGenerationJobStatus>()
       .notNull(),
+    /** キーアートに添えた自由な指示（ADR-0051）。ほかの種類は null。 */
+    instruction: text('instruction'),
     providerId: text('provider_id').notNull(),
     modelId: text('model_id').notNull(),
     /** 参照に使った素材。実行時に決まるので、待っている間は空。 */

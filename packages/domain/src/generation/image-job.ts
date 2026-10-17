@@ -8,14 +8,28 @@ import { ModelId, ProviderId } from './take.js'
  * - `character_sheet`: キャラクターシート（四面図）。手本の画像 1 枚から作り、識別画像の四面図に足す
  *   （制作者 2026-10-03「動画生成に役立つ形式のキャラクターシートを 1 枚の画像から作れるといい」。ADR-0035）
  *
+ * - `key_art`: サムネイルの背景（キーアート。ADR-0051）。Shot にもキャラクターにも属さず、作品にだけ属する
+ *
  * **Codex は 1 度に 1 枚**なので、どちらも同じジョブ・同じ順番待ちで作る（別にすると 2 つが同時に Codex を呼ぶ）。
  *
  * **追記のみ。** 作り直しても前のジョブとできた絵は残す（Take と同じ考え。ADR-0003）。
  * 最初のフレームとして使うのは、そのとき差し替えた 1 枚（`ShotReference` が正）。
  */
 
-export const ImageJobKind = z.enum(['start_frame', 'character_sheet'])
+export const ImageJobKind = z.enum(['start_frame', 'character_sheet', 'key_art'])
 export type ImageJobKind = z.infer<typeof ImageJobKind>
+
+/** キーアートに添える自由な指示の上限（ADR-0051）。 */
+export const KEY_ART_INSTRUCTION_MAX_LENGTH = 500
+/** 1 回で頼めるキーアートの枚数（ADR-0051）。Codex は 1 枚ずつなので、多く頼むと待ちが長くなる。 */
+export const KEY_ART_MAX_COUNT = 4
+
+/** キーアートの自由な指示。前後の空白は落とし、空なら null（指示なし）にする。 */
+export const KeyArtInstruction = z
+  .string()
+  .trim()
+  .max(KEY_ART_INSTRUCTION_MAX_LENGTH, `指示は ${String(KEY_ART_INSTRUCTION_MAX_LENGTH)} 字までにしてください`)
+  .transform((value) => (value === '' ? null : value))
 
 /**
  * `cancelled` は人が止めた（制作者 2026-10-04「画像生成も停められるようにしよう」）。失敗ではないので理由を持たない。
@@ -40,11 +54,16 @@ export const ImageGenerationJob = z.object({
   id: ImageGenerationJobId,
   projectId: ProjectId,
   kind: ImageJobKind,
-  /** 最初のフレームを作る Shot。キャラクターシートなら null。 */
+  /** 最初のフレームを作る Shot。キャラクターシート・キーアートなら null。 */
   shotId: ShotId.nullable(),
-  /** シートを作るキャラクター。最初のフレームなら null。 */
+  /** シートを作るキャラクター。最初のフレーム・キーアートなら null。 */
   characterId: CharacterId.nullable(),
   status: ImageGenerationJobStatus,
+  /**
+   * キーアートに添えた自由な指示（ADR-0051）。ほかの種類と、指示なしのキーアートは null。
+   * 前からある行には無いので、無ければ null。
+   */
+  instruction: z.string().max(KEY_ART_INSTRUCTION_MAX_LENGTH).nullable().default(null),
   providerId: ProviderId,
   modelId: ModelId,
   /**
@@ -70,13 +89,18 @@ export type ImageGenerationJob = z.infer<typeof ImageGenerationJob>
  * **規則はここ 1 箇所。** 作る側も読み直す側もこれを呼ぶ（lessons L-016）。
  */
 export const imageJobViolation = (
-  job: Pick<ImageGenerationJob, 'kind' | 'shotId' | 'characterId' | 'status' | 'mediaAssetId' | 'error'>,
+  job: Pick<ImageGenerationJob, 'kind' | 'shotId' | 'characterId' | 'status' | 'mediaAssetId' | 'error'> &
+    Partial<Pick<ImageGenerationJob, 'instruction'>>,
 ): string | null => {
-  // 種類と持ち主: 最初のフレームは Shot だけ、キャラクターシートはキャラクターだけを持つ。
+  // 種類と持ち主: 最初のフレームは Shot だけ、キャラクターシートはキャラクターだけ、キーアートはどちらも持たない。
   if (job.kind === 'start_frame' && job.shotId === null) return '最初のフレームのジョブなのに Shot がありません'
   if (job.kind === 'start_frame' && job.characterId !== null) return '最初のフレームのジョブなのにキャラクターがあります'
   if (job.kind === 'character_sheet' && job.characterId === null) return 'キャラクターシートのジョブなのにキャラクターがありません'
   if (job.kind === 'character_sheet' && job.shotId !== null) return 'キャラクターシートのジョブなのに Shot があります'
+  if (job.kind === 'key_art' && job.shotId !== null) return 'キーアートのジョブなのに Shot があります'
+  if (job.kind === 'key_art' && job.characterId !== null) return 'キーアートのジョブなのにキャラクターがあります'
+  // 自由な指示はキーアートだけが持つ（ほかの種類は指示を Shot・キャラクターから組む）。
+  if (job.kind !== 'key_art' && (job.instruction ?? null) !== null) return 'キーアート以外のジョブなのに指示があります'
   if (job.status === 'succeeded' && job.mediaAssetId === null) return '成功したのに絵がありません'
   if (job.status === 'failed' && job.error === null) return '失敗したのに理由がありません'
   if (job.status !== 'succeeded' && job.mediaAssetId !== null) return 'まだ終わっていないのに絵があります'

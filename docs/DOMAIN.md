@@ -864,6 +864,36 @@ type RenderJob = {
 }
 ```
 
+### Thumbnail（YouTube のサムネイル。ADR-0051）
+
+```ts
+type ThumbnailSpec = {
+  background: { kind: 'timeline_frame'; atSec: Seconds } | { kind: 'image'; mediaAssetId: MediaAssetId }
+  zoom: number                         // 1..2。背景を 1280×720 を覆う大きさにしてからの拡大
+  focusX: number; focusY: number       // 0..1。背景のどこへ寄せるか（0.5 が真ん中）
+  title: string                        // 1..40 字
+  subtitle: string | null              // 60 字まで
+  layout: 'left' | 'center' | 'bottom'
+  titleColor: string; accentColor: string  // #RRGGBB
+  font: 'gothic' | 'mincho' | 'rounded'
+}
+
+type Thumbnail = {                     // 書き出し 1 回の記録。追記のみ
+  id: ThumbnailId
+  projectId: ProjectId
+  spec: ThumbnailSpec                  // 署名付き URL を持たない（タイムラインの文書はジョブの中身で運ぶ）
+  status: 'queued' | 'rendering' | 'done' | 'failed'
+  outputAssetId: MediaAssetId | null   // done のときだけ。MediaAsset.origin = { type: 'thumbnail' }
+  fileName: string                     // `<作品名> サムネ <日時>.jpg`。頼んだときに決める
+  error: string | null                 // failed のときだけ
+  createdAt: Date
+  finishedAt: Date | null
+}
+```
+
+背景の AI の絵（キーアート）は `ImageGenerationJob`（`kind: 'key_art'`。Shot もキャラクターも持たず、
+自由な指示 `instruction` を持つ）で作る。できた絵は `generated_image` の MediaAsset。
+
 ---
 
 ## 15. 実装エージェントへの禁止事項

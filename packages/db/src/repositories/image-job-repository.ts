@@ -21,7 +21,10 @@ import { imageGenerationJobs } from '../schema/image-job.js'
 /** drizzle の row 型。パッケージ外へは出さない。 */
 export type ImageJobRow = typeof imageGenerationJobs.$inferSelect
 
-/** 作るときの入力。持ち主は種類で決まる（最初のフレームは Shot、キャラクターシートはキャラクター。ADR-0035）。 */
+/**
+ * 作るときの入力。持ち主は種類で決まる（最初のフレームは Shot、キャラクターシートはキャラクター。ADR-0035。
+ * キーアートは作品だけ。ADR-0051）。
+ */
 export type CreateImageJobInput = {
   readonly projectId: ProjectId
   readonly providerId: ProviderId
@@ -33,6 +36,12 @@ export type CreateImageJobInput = {
       readonly characterId: CharacterId
       /** 手本の画像。頼んだときに決まる（最初のフレームは実行時に決まるので、ここには無い）。 */
       readonly referenceAssetIds: readonly MediaAssetId[]
+    }
+  | {
+      /** サムネイルの背景（ADR-0051）。作品にだけ属する。参照は実行時に決まる（登場人物の識別画像）。 */
+      readonly kind: 'key_art'
+      /** 自由な指示。無ければ null。domain の `KeyArtInstruction` を通したもの。 */
+      readonly instruction: string | null
     }
 )
 
@@ -56,6 +65,8 @@ export type ImageJobRepository = {
   findLatestByCharacter(characterId: CharacterId): Promise<ImageGenerationJob | null>
   /** Project の中で待っている・動いているジョブ。 */
   findActiveByProject(projectId: ProjectId): Promise<ImageGenerationJob[]>
+  /** Project のキーアートのジョブ（ADR-0051）。新しい順。 */
+  findKeyArtByProject(projectId: ProjectId): Promise<ImageGenerationJob[]>
   /**
    * 待っている・動いているジョブを止める（制作者 2026-10-04）。`shotIds` を渡せばその Shot の絵だけ、
    * 渡さなければ Project の全部（キャラクターシートも）。止めたジョブを返す。
@@ -92,6 +103,18 @@ const first = async (rows: Promise<ImageJobRow[]>): Promise<ImageGenerationJob |
   return row === undefined ? null : imageJobRowToDomain(row)
 }
 
+/** 種類ごとの持ち主と、頼んだときに決まる列。 */
+const ownerOf = (input: CreateImageJobInput) => {
+  switch (input.kind) {
+    case 'start_frame':
+      return { shotId: input.shotId, characterId: null, referenceAssetIds: [], instruction: null }
+    case 'character_sheet':
+      return { shotId: null, characterId: input.characterId, referenceAssetIds: [...input.referenceAssetIds], instruction: null }
+    case 'key_art':
+      return { shotId: null, characterId: null, referenceAssetIds: [], instruction: input.instruction }
+  }
+}
+
 export const createImageJobRepository = (db: DbClient): ImageJobRepository => {
   /**
    * 状態を 1 つ進める。書く前に食い違いを確かめる（読み直しと同じ規則）。
@@ -115,10 +138,7 @@ export const createImageJobRepository = (db: DbClient): ImageJobRepository => {
 
   return {
     async create(input) {
-      const owner =
-        input.kind === 'start_frame'
-          ? { shotId: input.shotId, characterId: null, referenceAssetIds: [] }
-          : { shotId: null, characterId: input.characterId, referenceAssetIds: [...input.referenceAssetIds] }
+      const owner = ownerOf(input)
       const rows = await db
         .insert(imageGenerationJobs)
         .values({
@@ -184,6 +204,15 @@ export const createImageJobRepository = (db: DbClient): ImageJobRepository => {
         .select()
         .from(imageGenerationJobs)
         .where(and(eq(imageGenerationJobs.projectId, projectId), ACTIVE))
+        .orderBy(desc(imageGenerationJobs.id))
+      return rows.map(imageJobRowToDomain)
+    },
+
+    async findKeyArtByProject(projectId) {
+      const rows = await db
+        .select()
+        .from(imageGenerationJobs)
+        .where(and(eq(imageGenerationJobs.projectId, projectId), eq(imageGenerationJobs.kind, 'key_art')))
         .orderBy(desc(imageGenerationJobs.id))
       return rows.map(imageJobRowToDomain)
     },

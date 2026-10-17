@@ -48,6 +48,7 @@ export const NarrationLineId = brandedId('NarrationLineId')
 export const NarrationTakeId = brandedId('NarrationTakeId')
 export const VoiceJobId = brandedId('VoiceJobId')
 export const UpscaleJobId = brandedId('UpscaleJobId')
+export const ThumbnailId = brandedId('ThumbnailId')
 export const MusicJobId = brandedId('MusicJobId')
 /** 合言葉で入った端末の鍵・自動化用の鍵（認証）。**鍵そのものではなく、表の行の番号。** */
 export const AccessTokenId = brandedId('AccessTokenId')
@@ -86,6 +87,7 @@ export type NarrationLineId = z.infer<typeof NarrationLineId>
 export type NarrationTakeId = z.infer<typeof NarrationTakeId>
 export type VoiceJobId = z.infer<typeof VoiceJobId>
 export type UpscaleJobId = z.infer<typeof UpscaleJobId>
+export type ThumbnailId = z.infer<typeof ThumbnailId>
 export type MusicJobId = z.infer<typeof MusicJobId>
 export type AccessTokenId = z.infer<typeof AccessTokenId>
 
