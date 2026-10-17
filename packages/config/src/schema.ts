@@ -211,6 +211,15 @@ export const EnvSchema = z.object({
    * 動画と同じ機械の GPU を使うので、動画・高画質化・絵と同じ列に並んで 1 本ずつ作る。
    */
   LOCAL_MUSIC_GENERATOR: localGeneratorList(['ace_step']),
+  /**
+   * 手元の生成サーバで効果音を作るか（ADR-0052）。**既定は `none`（使わない）。**
+   *
+   * - `sfx_api` … sfx-api（Stable Audio 3・MOSS SFX v2 の 2 つの workflow）
+   *
+   * 書き方と考え方は `LOCAL_VIDEO_GENERATOR` と同じ（URL やトークンの有無で切り替えない）。
+   * 動画と同じ機械の GPU を使うので、動画・絵・曲と同じ列に並んで 1 本ずつ作る。
+   */
+  LOCAL_SFX_GENERATOR: localGeneratorList(['sfx_api']),
   /** vpipe-api の場所。**既定はこのマシンだけ**（`127.0.0.1`）。 */
   VPIPE_API_URL: urlString.default('http://127.0.0.1:8765'),
   /** wan-api の場所。**既定はこのマシンだけ**（`127.0.0.1`。vpipe-api とポートを分ける）。 */
@@ -219,6 +228,8 @@ export const EnvSchema = z.object({
   KLEIN_API_URL: urlString.default('http://127.0.0.1:8767'),
   /** ace-step-api の場所（ADR-0048）。**既定はこのマシンだけ**（ほかの生成サーバとポートを分ける）。 */
   ACE_STEP_API_URL: urlString.default('http://127.0.0.1:8768'),
+  /** sfx-api の場所（ADR-0052）。**既定はこのマシンだけ**（ほかの生成サーバとポートを分ける）。 */
+  SFX_API_URL: urlString.default('http://127.0.0.1:8769'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
   /**
@@ -295,6 +306,11 @@ export const EnvSchema = z.object({
     .string()
     .transform((v) => (v.trim() === '' ? undefined : v))
     .optional(),
+  /** sfx-api の合言葉（ADR-0052）。扱いは `WAN_API_TOKEN` と同じ。 */
+  SFX_API_TOKEN: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v))
+    .optional(),
   /**
    * 書き出した動画を置くフォルダ（ADR-0036）。省略すると API がホームの「ムービー」の下に決める。
    * **絶対パスだけ受ける。** 相対パスや `~` は、どこに書くかが起動のしかたで変わってしまう。
@@ -315,6 +331,9 @@ export type LocalVideoGeneratorId = Env['LOCAL_VIDEO_GENERATOR'][number]
 
 /** 有効にできる手元の曲の生成サーバ（`LOCAL_MUSIC_GENERATOR` に書ける値。ADR-0048）。 */
 export type LocalMusicGeneratorId = Env['LOCAL_MUSIC_GENERATOR'][number]
+
+/** 有効にできる手元の効果音の生成サーバ（`LOCAL_SFX_GENERATOR` に書ける値。ADR-0052）。 */
+export type LocalSfxGeneratorId = Env['LOCAL_SFX_GENERATOR'][number]
 
 /** 有効にできる手元の画像生成サーバ（`LOCAL_IMAGE_GENERATOR` に書ける値。ADR-0047）。 */
 export type LocalImageGeneratorId = Env['LOCAL_IMAGE_GENERATOR'][number]
@@ -400,6 +419,12 @@ export interface AppConfig {
     aceStepApiUrl: string
     /** ace-step-api の合言葉。未設定は null。 */
     aceStepApiToken: string | null
+    /** 手元の効果音の生成サーバのうち、有効にしたもの（ADR-0052）。既定は空。 */
+    localSfxGenerators: readonly LocalSfxGeneratorId[]
+    /** sfx-api の場所。 */
+    sfxApiUrl: string
+    /** sfx-api の合言葉。未設定は null。 */
+    sfxApiToken: string | null
   }
   /** 書き出した動画を置くフォルダ（絶対パス）。未設定は null（API が既定を決める）。 */
   renderExportDir: string | null

@@ -638,3 +638,35 @@ describe('合言葉（IXA_PASSPHRASE）', () => {
     expect(() => loadConfig({ ...requiredEnv, IXA_PASSPHRASE: 'short-11ch' })).toThrow(/IXA_PASSPHRASE/)
   })
 })
+
+describe('ローカルの効果音の生成（sfx_api。ADR-0052）', () => {
+  it('既定は使わない。URL は既定でこのマシンの 8769、トークンは未設定', () => {
+    const config = loadConfig({ ...requiredEnv })
+    expect(config.providers.localSfxGenerators).toEqual([])
+    expect(config.providers.sfxApiUrl).toBe('http://127.0.0.1:8769')
+    expect(config.providers.sfxApiToken).toBeNull()
+  })
+
+  it('sfx_api に切り替えられ、ほかのサーバや知らない値は弾く', () => {
+    expect(loadConfig({ ...requiredEnv, LOCAL_SFX_GENERATOR: 'sfx_api' }).providers.localSfxGenerators).toEqual([
+      'sfx_api',
+    ])
+    for (const value of ['ace_step', 'stable_audio_sfx', 'sfx-api', 'none,sfx_api']) {
+      expect(() => loadConfig({ ...requiredEnv, LOCAL_SFX_GENERATOR: value })).toThrow(/LOCAL_SFX_GENERATOR/)
+    }
+    expect(() => loadConfig({ ...requiredEnv, LOCAL_MUSIC_GENERATOR: 'sfx_api' })).toThrow(/LOCAL_MUSIC_GENERATOR/)
+  })
+
+  it('トークンや URL を置いただけでは有効にならない', () => {
+    const config = loadConfig({ ...requiredEnv, SFX_API_URL: 'http://127.0.0.1:9995', SFX_API_TOKEN: GOOD_TOKEN })
+    expect(config.providers.localSfxGenerators).toEqual([])
+  })
+
+  it('ほかのサーバと同じ規則で止める（形の違う合言葉・外のサーバでトークン無し・URL でない値）', () => {
+    expect(() => loadConfig({ ...requiredEnv, SFX_API_TOKEN: 'a'.repeat(31) })).toThrow(/SFX_API_TOKEN の形が違います/)
+    expect(() => loadConfig({ ...requiredEnv, SFX_API_URL: 'not-a-url' })).toThrow(/SFX_API_URL/)
+    const remote = { ...requiredEnv, LOCAL_SFX_GENERATOR: 'sfx_api', SFX_API_URL: 'http://192.168.1.23:8769' }
+    expect(() => loadConfig(remote)).toThrow(/LOCAL_SFX_GENERATOR に sfx_api があり.*SFX_API_TOKEN/)
+    expect(() => loadConfig({ ...remote, SFX_API_TOKEN: GOOD_TOKEN })).not.toThrow()
+  })
+})

@@ -82,6 +82,20 @@ const localMusicNote = (config: AppConfig): string => {
   )
 }
 
+/** ローカルの効果音の生成の説明（ADR-0052）。書き方は曲と同じ（URL は出さない）。 */
+const localSfxNote = (config: AppConfig): string => {
+  const { localSfxGenerators, sfxApiUrl } = config.providers
+  if (localSfxGenerators.length === 0) return '使わない。'
+  const overNetwork = plainOverNetwork(sfxApiUrl)
+    ? 'サーバが別のマシンにあり、合言葉と説明が暗号化されずに流れる。信頼できる LAN の中だけで使うこと。'
+    : ''
+  return (
+    '効果音の生成サーバ（sfx-api）で Stable Audio 3 と MOSS SFX v2 を動かす。費用は掛からない。' +
+    '動画と同じ機械の GPU を使うので、動画・高画質化・絵・曲と同じ列に並んで 1 本ずつ作る。' +
+    overNetwork
+  )
+}
+
 /**
  * ローカルの動画生成の説明。**サーバがこのマシンの外にあり http なら、そう書く。**
  * 合言葉も最初のフレームの画像も暗号化されずに流れるので、信頼できる LAN の中だけで使う。
@@ -194,6 +208,12 @@ export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
       config.providers.aceStepApiToken,
       '別のマシンの曲の生成サーバを使うときだけ要る。このマシンのサーバなら未設定でよい。',
     ),
+    secretStatus(
+      'ローカルの効果音の生成（sfx-api）の合言葉',
+      'SFX_API_TOKEN',
+      config.providers.sfxApiToken,
+      '別のマシンの効果音の生成サーバを使うときだけ要る。このマシンのサーバなら未設定でよい。',
+    ),
     ...storageSecrets(config),
   ],
   settings: [
@@ -250,6 +270,16 @@ export const describeEnvironment = (config: AppConfig): EnvironmentStatus => ({
           : config.providers.localMusicGenerators.join(','),
       notable: config.providers.localMusicGenerators.length > 0,
       note: localMusicNote(config),
+    },
+    {
+      label: 'ローカルの効果音の生成',
+      envName: 'LOCAL_SFX_GENERATOR',
+      value:
+        config.providers.localSfxGenerators.length === 0
+          ? 'none'
+          : config.providers.localSfxGenerators.join(','),
+      notable: config.providers.localSfxGenerators.length > 0,
+      note: localSfxNote(config),
     },
     {
       label: '絵コンテの下書き',

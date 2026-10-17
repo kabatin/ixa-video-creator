@@ -63,6 +63,7 @@ describe('recommendAiSettings', () => {
       voice: 'stub',
       transcribe: 'stub',
       music: 'stub',
+      sfx: 'stub',
     })
   })
 
@@ -80,6 +81,7 @@ describe('recommendAiSettings', () => {
       voice: 'stub',
       transcribe: 'stub',
       music: 'stub',
+      sfx: 'stub',
     })
   })
 
@@ -112,7 +114,7 @@ describe('recommendAiSettings', () => {
     }
     const recommended = recommendAiSettings(statuses)
 
-    for (const purpose of ['text', 'image', 'video', 'voice', 'transcribe', 'music'] as const) {
+    for (const purpose of ['text', 'image', 'video', 'voice', 'transcribe', 'music', 'sfx'] as const) {
       const tool = recommended[purpose]
       expect(aiChoiceProblem(purpose, tool, statuses[tool])).toBeNull()
     }
@@ -120,14 +122,14 @@ describe('recommendAiSettings', () => {
 })
 
 describe('resolveAiSettings', () => {
-  const defaults = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub' } as const
+  const defaults = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub' } as const
 
   it('まだ選んでいなければ初期値（環境変数）を使い、そう名乗る', () => {
     expect(resolveAiSettings(null, defaults)).toEqual({ settings: defaults, source: 'default' })
   })
 
   it('選んであれば選んだものが勝つ', () => {
-    const saved = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'macos_say', transcribe: 'whisper_cpp', music: 'ace_step' } as const
+    const saved = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'macos_say', transcribe: 'whisper_cpp', music: 'ace_step', sfx: 'stable_audio_sfx' } as const
 
     expect(resolveAiSettings(saved, defaults)).toEqual({ settings: saved, source: 'saved' })
   })
@@ -138,7 +140,7 @@ describe('aiDefaultsFromEnv', () => {
   const env = { storyboardDrafter: 'stub', imageProvider: 'stub' } as const
 
   it('何も指定が無ければ全部お試し', () => {
-    expect(aiDefaultsFromEnv(env)).toEqual({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub' })
+    expect(aiDefaultsFromEnv(env)).toEqual({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub' })
   })
 
   it('テキストと画像は、環境変数で選んだ口をそのまま初期値にする', () => {
@@ -151,6 +153,7 @@ describe('aiDefaultsFromEnv', () => {
       voice: 'stub',
       transcribe: 'stub',
       music: 'stub',
+      sfx: 'stub',
     })
   })
 
@@ -166,17 +169,21 @@ describe('aiDefaultsFromEnv', () => {
 describe('AiSettings', () => {
   it('知らない AI の名前は受けない', () => {
     expect(
-      AiSettings.safeParse({ text: 'chatgpt', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub' }).success,
+      AiSettings.safeParse({ text: 'chatgpt', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub' }).success,
     ).toBe(false)
   })
 
-  it('6 つの用途がすべて要る', () => {
+  it('7 つの用途がすべて要る', () => {
+    expect(
+      AiSettings.safeParse({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub' })
+        .success,
+    ).toBe(false)
     expect(AiSettings.safeParse({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub' }).success).toBe(false)
     expect(
       AiSettings.safeParse({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub' }).success,
     ).toBe(false)
     expect(
-      AiSettings.safeParse({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub' })
+      AiSettings.safeParse({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub' })
         .success,
     ).toBe(true)
   })
@@ -249,5 +256,36 @@ describe('曲', () => {
 
   it('ACE-Step は手元のサーバ ace_step で見つける', () => {
     expect(AI_TOOLS.ace_step.detect).toEqual({ kind: 'local_server', server: 'ace_step' })
+  })
+})
+
+/** 効果音（ADR-0052）。手元の sfx-api の 2 つのモデルだけが作れる。お試しは選べるが効果音は作らない。 */
+describe('効果音', () => {
+  it('用途の名前は「効果音」', () => {
+    expect(AI_PURPOSE_LABELS.sfx).toBe('効果音')
+  })
+
+  it('効果音に使えるのは お試し と 手元の Stable Audio 3・MOSS だけ', () => {
+    const sfxTools = (Object.keys(AI_TOOLS) as AiToolId[]).filter((id) => AI_TOOLS[id].purposes.includes('sfx'))
+    expect([...sfxTools].sort()).toEqual(['moss_sfx', 'stable_audio_sfx', 'stub'])
+    expect(aiChoiceProblem('sfx', 'ace_step', ready())).toMatch(/効果音にはまだ使えません/)
+    expect(aiChoiceProblem('music', 'stable_audio_sfx', ready())).toMatch(/曲にはまだ使えません/)
+  })
+
+  it('sfx-api が応答していれば Stable Audio 3 を勧め、していなければお試し', () => {
+    expect(recommendAiSettings({ ...allMissing(), stable_audio_sfx: ready(), moss_sfx: ready() }).sfx).toBe('stable_audio_sfx')
+    expect(recommendAiSettings({ ...allMissing(), moss_sfx: ready() }).sfx).toBe('moss_sfx')
+    expect(recommendAiSettings(allMissing()).sfx).toBe('stub')
+  })
+
+  it('どちらも手元のサーバ sfx_api で見つけ、GPU を分け合うことを知らせる', () => {
+    expect(AI_TOOLS.stable_audio_sfx.detect).toEqual({ kind: 'local_server', server: 'sfx_api', workflow: 'stable-audio-3-sfx' })
+    expect(AI_TOOLS.moss_sfx.detect).toEqual({ kind: 'local_server', server: 'sfx_api', workflow: 'moss-sfx-v2' })
+    for (const id of ['stable_audio_sfx', 'moss_sfx'] as const) {
+      expect(AI_TOOLS[id].tags).toEqual(['この Mac', '無料'])
+      expect(AI_TOOLS[id].notice).toMatch(/効果音で GPU を分け合う/)
+    }
+    expect(AI_TOOLS.stable_audio_sfx.label).toBe('Stable Audio 3')
+    expect(AI_TOOLS.moss_sfx.label).toBe('MOSS SFX v2')
   })
 })

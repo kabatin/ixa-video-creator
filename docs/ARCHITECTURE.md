@@ -1045,6 +1045,7 @@ music_tracks
 music_analyses               (JSONB: beats / downbeats / sections / energy_curve)
 music_analysis_failures      (直近の解析の失敗。楽曲 1 件につき 1 行。頼み直すと消える)
 music_jobs                   (曲を作るジョブ。できた曲は music_tracks になる。追記のみ / ADR-0048)
+sfx_jobs                     (効果音を作るジョブ。できた音は media_assets と SFX の段のクリップになる。追記のみ / ADR-0052)
 scripts
 script_versions
 sequences
@@ -1104,6 +1105,7 @@ BullMQ + Redis（ADR-0008）。
 | `image` | 3 | 絵コンテの画像・キャラクターシート（ADR-0029・0035） | Codex CLI は契約の利用枠で動く。1 枚 63〜117 秒（平均 85 秒・83 枚の実測）で、その間この機械の CPU はほぼ使わない（外の API を待つ）。3 本同時で 3 枚 109 秒（直列なら 231 秒）・失敗 0 件を実測（2026-10-07） |
 | `voice` | 1 | ナレーションの声・試しに読む・録音の文字起こし（ADR-0038） | 外部 API の回数の上限に配慮。whisper.cpp は手元の機械を大きく使う |
 | `music` | 1 | 曲を作る（ADR-0048）。できた曲を楽曲にして `analysis` へ回す | 手元の GPU を使うので 1 つずつ。順番は生成・絵と同じ整理券で待つ |
+| `sfx` | 1 | 効果音を作る（ADR-0052）。できた音を素材にし、1 本目を `SFX` の段に置く | 手元の GPU を使うので 1 つずつ。順番は生成・絵・曲と同じ整理券で待つ |
 | `upscale` | 1 | 出来た Take の解像度を上げる（ADR-0044） | 手元の GPU を使うので 1 つずつ。順番は生成と同じ整理券で待つ（1 本 5 + 101 × ceil(コマ数 ÷ 21) 秒の実測） |
 
 ### 規約

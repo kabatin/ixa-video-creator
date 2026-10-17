@@ -28,6 +28,7 @@ export const aiSettingsRowToDomain = (row: AiSettingsRow): AiSettings | null => 
     voice: row.voiceTool,
     transcribe: row.transcribeTool,
     music: row.musicTool,
+    sfx: row.sfxTool,
   })
   return parsed.success ? parsed.data : null
 }
@@ -48,6 +49,7 @@ export const createAiSettingsRepository = (db: DbClient): AiSettingsRepository =
       voiceTool: valid.voice,
       transcribeTool: valid.transcribe,
       musicTool: valid.music,
+      sfxTool: valid.sfx,
       updatedAt: new Date(),
     }
     await db

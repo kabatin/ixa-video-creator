@@ -25,6 +25,9 @@ const LOCAL_VIDEO_OFF = {
   localMusicGenerators: [],
   aceStepApiUrl: 'http://127.0.0.1:8768',
   aceStepApiToken: null,
+  localSfxGenerators: [],
+  sfxApiUrl: 'http://127.0.0.1:8769',
+  sfxApiToken: null,
 } as const
 
 const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
@@ -369,5 +372,35 @@ describe('ローカルの曲の生成（ADR-0048）', () => {
     expect(text).not.toContain('192.168.1.22')
     expect(text).not.toContain(ACE_STEP_TOKEN)
     expect(status.secrets.find((s) => s.envName === 'ACE_STEP_API_TOKEN')).toMatchObject({ configured: true })
+  })
+})
+
+describe('ローカルの効果音の生成（ADR-0052）', () => {
+  const SFX_TOKEN = 'sfxapi-SUPERSECRET-token-0123456789abcdef'
+  const sfxOn = (url: string): AppConfig =>
+    aConfig({
+      providers: { ...aConfig().providers, localSfxGenerators: ['sfx_api'], sfxApiUrl: url, sfxApiToken: SFX_TOKEN },
+    })
+  const settingFor = (config: AppConfig) =>
+    describeEnvironment(config).settings.find((s) => s.envName === 'LOCAL_SFX_GENERATOR')
+
+  it('既定（none）は目立たせない', () => {
+    expect(settingFor(aConfig())).toMatchObject({ value: 'none', notable: false, note: '使わない。' })
+  })
+
+  it('sfx_api のときは目立たせ、動画と同じ列に並ぶと書く', () => {
+    const setting = settingFor(sfxOn('http://127.0.0.1:8769'))
+    expect(setting).toMatchObject({ value: 'sfx_api', notable: true })
+    expect(setting?.note).toContain('同じ列')
+    expect(setting?.note).not.toContain('暗号化')
+  })
+
+  it('別のマシンを http で指していたら平文で流れると書く。URL も合言葉も出さない', () => {
+    const status = describeEnvironment(sfxOn('http://192.168.1.23:8769'))
+    expect(settingFor(sfxOn('http://192.168.1.23:8769'))?.note).toContain('暗号化されずに')
+    const text = JSON.stringify(status)
+    expect(text).not.toContain('192.168.1.23')
+    expect(text).not.toContain(SFX_TOKEN)
+    expect(status.secrets.find((s) => s.envName === 'SFX_API_TOKEN')).toMatchObject({ configured: true })
   })
 })

@@ -1,3 +1,7 @@
 export * from './ace-step/api.js'
 export * from './ace-step/descriptor.js'
 export * from './ace-step/provider.js'
+export * from './sfx-api/api.js'
+export * from './sfx-api/descriptor.js'
+export * from './sfx-api/provider.js'
+export * from './sfx-api/health.js'

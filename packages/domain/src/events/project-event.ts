@@ -7,12 +7,15 @@ import {
   MusicTrackId,
   NarrationLineId,
   ProjectId,
+  SfxJobId,
   ShotId,
   TakeId,
+  TimelineClipId,
   UpscaleJobId,
   VoiceJobId,
 } from '../common/ids.js'
 import { MusicJobStatus } from '../music/music-job.js'
+import { SfxJobStatus } from '../sfx/sfx-job.js'
 import { ImageGenerationJobStatus } from '../generation/image-job.js'
 import { UpscaleJobStatus } from '../generation/upscale-job.js'
 import { GenerationJobStatus } from '../generation/take.js'
@@ -112,6 +115,15 @@ export const ProjectEvent = z.discriminatedUnion('type', [
     musicTrackIds: z.array(MusicTrackId).default([]),
     error: z.string().nullable(),
   }),
+  /** 効果音を作るジョブの状態が変わった（ADR-0052）。成功したら効果音の段に置いたクリップを持つ（画面がタイムラインを読み直す）。 */
+  z.object({
+    ...base,
+    type: z.literal('sfx_job.status'),
+    jobId: SfxJobId,
+    status: SfxJobStatus,
+    timelineClipId: TimelineClipId.nullable().default(null),
+    error: z.string().nullable(),
+  }),
 ])
 export type ProjectEvent = z.infer<typeof ProjectEvent>
 
@@ -144,4 +156,5 @@ export const SHOT_LIST_EVENT_TYPES: readonly ProjectEventType[] = [
   'image_job.status',
   'voice_job.status',
   'music_job.status',
+  'sfx_job.status',
 ]

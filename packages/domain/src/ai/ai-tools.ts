@@ -2,14 +2,14 @@ import { z } from 'zod'
 
 /**
  * 使う AI（ADR-0032）。この環境で見つかった AI から、テキスト・画像・動画・声・文字起こし・曲ごとに 1 つ選ぶ
- * （声と文字起こしは ADR-0038、曲は ADR-0048）。
+ * （声と文字起こしは ADR-0038、曲は ADR-0048、効果音は ADR-0052）。
  *
  * **何に使えるかは、アダプタが実際にある用途だけを書く。** 入っていても口が無い用途は選ばせない
  * （Gemini・Grok は見つけて見せるが、テキストの口ができるまでは選べない）。
  * 選べるかの規則は `aiChoiceProblem` の 1 か所で、API の検証と画面の灰色が同じ理由を言う。
  */
 
-export const AiPurpose = z.enum(['text', 'image', 'video', 'voice', 'transcribe', 'music'])
+export const AiPurpose = z.enum(['text', 'image', 'video', 'voice', 'transcribe', 'music', 'sfx'])
 export type AiPurpose = z.infer<typeof AiPurpose>
 
 export const AI_PURPOSE_LABELS: Readonly<Record<AiPurpose, string>> = Object.freeze({
@@ -19,6 +19,7 @@ export const AI_PURPOSE_LABELS: Readonly<Record<AiPurpose, string>> = Object.fre
   voice: '声',
   transcribe: '文字起こし',
   music: '曲',
+  sfx: '効果音',
 })
 
 export const AiToolId = z.enum([
@@ -32,6 +33,8 @@ export const AiToolId = z.enum([
   'wan',
   'klein',
   'ace_step',
+  'stable_audio_sfx',
+  'moss_sfx',
   'fal',
   'macos_say',
   'gemini_api',
@@ -55,11 +58,16 @@ export type AiToolDetection =
   /** whisper.cpp（`whisper-cli`）が入っていて、モデルのファイル（`WHISPER_CPP_MODEL`）があるか。 */
   | { readonly kind: 'whisper_cpp' }
   /**
-   * 手元の生成サーバが応答するか（`GET /v1/health`。ADR-0031 / 0040 / 0047 / 0048）。
-   * **どのサーバかを持つ。** 4 台（vpipe-api・wan-api・klein-api・ace-step-api）あるので、持たないと
-   * 1 台の起動でほかが「使える」と出てしまう。
+   * 手元の生成サーバが応答するか（`GET /v1/health`。ADR-0031 / 0040 / 0047 / 0048 / 0052）。
+   * **どのサーバかを持つ。** 5 台（vpipe-api・wan-api・klein-api・ace-step-api・sfx-api）あるので、持たないと
+   * 1 台の起動でほかが「使える」と出てしまう。sfx-api は 1 台で 2 つのモデル（Stable Audio・MOSS）を出すので、
+   * **どの workflow か**（`workflow`）も持つ。片方だけ使えないことがある（health の `workflows`）。
    */
-  | { readonly kind: 'local_server'; readonly server: 'vpipe' | 'wan' | 'klein' | 'ace_step' }
+  | {
+      readonly kind: 'local_server'
+      readonly server: 'vpipe' | 'wan' | 'klein' | 'ace_step' | 'sfx_api'
+      readonly workflow?: string
+    }
 
 export type AiToolSpec = {
   readonly id: AiToolId
@@ -78,8 +86,8 @@ const tool = (
 ): AiToolSpec => Object.freeze({ ...spec, tags: Object.freeze([...(spec.tags ?? [])]), notice: spec.notice ?? null })
 
 const ON_THIS_MAC_FREE = ['この Mac', '無料'] as const
-/** 手元の動画・絵・曲は同じ GPU を使う（ADR-0040・0047・0048）。 */
-const SHARED_GPU_NOTICE = '手元の動画・絵・曲で GPU を分け合うので、順番待ちがあります。'
+/** 手元の動画・絵・曲・効果音は同じ GPU を使う（ADR-0040・0047・0048・0052）。 */
+const SHARED_GPU_NOTICE = '手元の動画・絵・曲・効果音で GPU を分け合うので、順番待ちがあります。'
 
 export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
   stub: tool({
@@ -87,8 +95,8 @@ export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
     label: 'お試し',
     tags: ['AI を使わない仮のもの'],
     detect: { kind: 'builtin' },
-    // 曲は作れない（選ぶと「曲を作る AI を選んでください」と断る）。選び直すまでの置き場。
-    purposes: ['text', 'image', 'video', 'voice', 'transcribe', 'music'],
+    // 曲と効果音は作れない（選ぶと「曲を作る AI を選んでください」と断る）。選び直すまでの置き場。
+    purposes: ['text', 'image', 'video', 'voice', 'transcribe', 'music', 'sfx'],
   }),
   claude_cli: tool({
     id: 'claude_cli',
@@ -159,6 +167,24 @@ export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
     // 動画と同じ機械の GPU を使う（ADR-0048）。動画や絵を作っている間は曲も順番待ちになる。
     notice: SHARED_GPU_NOTICE,
   }),
+  stable_audio_sfx: tool({
+    id: 'stable_audio_sfx',
+    label: 'Stable Audio 3',
+    tags: ON_THIS_MAC_FREE,
+    detect: { kind: 'local_server', server: 'sfx_api', workflow: 'stable-audio-3-sfx' },
+    purposes: ['sfx'],
+    // 動画と同じ機械の GPU を使う（ADR-0052）。Stability AI Community License（年商 100 万ドル未満は商用可）。
+    notice: SHARED_GPU_NOTICE,
+  }),
+  moss_sfx: tool({
+    id: 'moss_sfx',
+    label: 'MOSS SFX v2',
+    tags: ON_THIS_MAC_FREE,
+    detect: { kind: 'local_server', server: 'sfx_api', workflow: 'moss-sfx-v2' },
+    purposes: ['sfx'],
+    // Stable Audio の控え（ADR-0052）。同じ sfx-api の別の workflow。
+    notice: SHARED_GPU_NOTICE,
+  }),
   fal: tool({
     id: 'fal',
     label: 'Seedance（fal）',
@@ -214,6 +240,7 @@ export const AiSettings = z.object({
   voice: AiToolId,
   transcribe: AiToolId,
   music: AiToolId,
+  sfx: AiToolId,
 })
 export type AiSettings = z.infer<typeof AiSettings>
 
@@ -243,6 +270,7 @@ const RECOMMENDATION_ORDER: Readonly<Record<AiPurpose, readonly AiToolId[]>> = O
   voice: ['macos_say'],
   transcribe: ['whisper_cpp'],
   music: ['ace_step'],
+  sfx: ['stable_audio_sfx', 'moss_sfx'],
 })
 
 /** 初めて選ぶときの初期の組み合わせ。見つかって使えるものから選び、無ければお試し。 */
@@ -260,6 +288,7 @@ export const recommendAiSettings = (
     voice: pick('voice'),
     transcribe: pick('transcribe'),
     music: pick('music'),
+    sfx: pick('sfx'),
   }
 }
 
@@ -291,4 +320,6 @@ export const aiDefaultsFromEnv = (env: AiEnvChoices): AiSettings => ({
   transcribe: 'stub',
   // 曲も新しい用途。選ぶまではお試し（作らない）。
   music: 'stub',
+  // 効果音も新しい用途。選ぶまではお試し（作らない）。
+  sfx: 'stub',
 })

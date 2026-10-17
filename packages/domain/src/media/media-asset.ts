@@ -5,6 +5,7 @@ import {
   MusicJobId,
   ProjectId,
   RenderJobId,
+  SfxJobId,
   TakeId,
   ThumbnailId,
   VoiceJobId,
@@ -41,6 +42,8 @@ export const MediaOrigin = z.discriminatedUnion('type', [
   z.object({ type: z.literal('generated_voice'), voiceJobId: VoiceJobId }),
   /** AI で作った曲（ADR-0048）。楽曲（MusicTrack）として登録する。 */
   z.object({ type: z.literal('generated_music'), musicJobId: MusicJobId }),
+  /** AI で作った効果音（ADR-0052）。1 本目はタイムラインの効果音の段に置き、残りは差し替えの候補。 */
+  z.object({ type: z.literal('generated_sfx'), sfxJobId: SfxJobId }),
   z.object({ type: z.literal('rendered'), renderJobId: RenderJobId }),
   /** 書き出したサムネイル（ADR-0051）。書き出しジョブではないので `rendered` と分ける。 */
   z.object({ type: z.literal('thumbnail'), thumbnailId: ThumbnailId }),

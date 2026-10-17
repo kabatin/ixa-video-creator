@@ -148,6 +148,9 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       localMusicGenerators: parsed.LOCAL_MUSIC_GENERATOR,
       aceStepApiUrl: parsed.ACE_STEP_API_URL,
       aceStepApiToken: parsed.ACE_STEP_API_TOKEN ?? null,
+      localSfxGenerators: parsed.LOCAL_SFX_GENERATOR,
+      sfxApiUrl: parsed.SFX_API_URL,
+      sfxApiToken: parsed.SFX_API_TOKEN ?? null,
     },
     renderExportDir: parsed.RENDER_EXPORT_DIR ?? null,
     voiceAi: {

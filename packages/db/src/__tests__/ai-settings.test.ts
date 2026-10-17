@@ -19,6 +19,7 @@ describe('ai_settings', () => {
     voiceTool: 'macos_say',
     transcribeTool: 'whisper_cpp',
     musicTool: 'ace_step',
+    sfxTool: 'stable_audio_sfx',
     updatedAt: new Date('2026-09-30T00:00:00Z'),
     ...patch,
   })
@@ -31,6 +32,7 @@ describe('ai_settings', () => {
       voice: 'macos_say',
       transcribe: 'whisper_cpp',
       music: 'ace_step',
+      sfx: 'stable_audio_sfx',
     })
   })
 
@@ -53,7 +55,7 @@ describe('ai_settings', () => {
    */
   it('声と文字起こしの列は、既定値がお試し（stub）', () => {
     const columns = getTableConfig(aiSettings).columns
-    for (const name of ['voice_tool', 'transcribe_tool', 'music_tool']) {
+    for (const name of ['voice_tool', 'transcribe_tool', 'music_tool', 'sfx_tool']) {
       const column = columns.find((c) => c.name === name)
       expect(column?.notNull).toBe(true)
       expect(column?.default).toBe('stub')
@@ -70,5 +72,7 @@ describe('ai_settings', () => {
     expect(sql).toMatch(/ADD COLUMN "transcribe_tool" text DEFAULT 'stub' NOT NULL/)
     // 曲（ADR-0048）も同じ。
     expect(sql).toMatch(/ADD COLUMN "music_tool" text DEFAULT 'stub' NOT NULL/)
+    // 効果音（ADR-0052）も同じ。
+    expect(sql).toMatch(/ADD COLUMN "sfx_tool" text DEFAULT 'stub' NOT NULL/)
   })
 })

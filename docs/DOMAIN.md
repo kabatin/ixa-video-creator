@@ -32,6 +32,7 @@ Workspace
  └─ Project
      ├─ MusicTrack ── MusicAnalysis
      ├─ MusicJob (曲を作る。できた曲は MusicTrack になる / ADR-0048)
+     ├─ SfxJob (効果音を作る。できた音は MediaAsset と SFX の段の TimelineClip になる / ADR-0052)
      ├─ Script ── ScriptVersion
      ├─ Sequence
      │   └─ Shot ──┬─ ShotCharacter (character + look)
@@ -756,6 +757,35 @@ type TimelineDocument = {
   ducking?: DuckingSettings     // ナレーションの間に曲を下げる強さ
 }
 ```
+
+**効果音を作る**（ADR-0052）
+
+```ts
+type SfxCue = {                     // きっかけ。鳴らす時刻は ixa が決める（モデルは映像を見ない）
+  startSec: Seconds
+  durationSec: number               // 0.5〜10（sfx-api の契約と同じ）
+  prompt: string                    // 英語 1〜500 字（モデルは英語しか読まない）
+  volume: number                    // 0〜2。既定 0.8
+}
+
+type SfxJob = {
+  id: SfxJobId
+  projectId: ProjectId
+  tool: string                      // 効果音の AI（stable_audio_sfx | moss_sfx）
+  model: string | null
+  spec: { cue: SfxCue; count: number /* 1〜4 */; seed: number | null }
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  error: { code; message; retryable } | null
+  mediaAssetIds: MediaAssetId[]     // できた音（番号順。成功するまで空）
+  timelineClipId: TimelineClipId | null  // SFX の段に置いた 1 本目
+}
+```
+
+- できた音は 1 本ずつ MediaAsset（`origin: generated_sfx`、`kind: audio`）になる
+- **1 本目だけ**を SFX の段のクリップにする（`media`・`inSec 0`・`outSec` = 実際の長さ・`volume` = きっかけの音量・短いフェードアウト）。残りは差し替えの候補
+- 案を出す純粋な関数 `suggestSfxCues` が、エフェクト（フラッシュ・寄りのパンチ・タイトルカード・スピード線・揺れ）と
+  ウィップパンの境目から案を出す。近い時刻の同じ種類の音は 1 つにまとめる
+- 曲の下げ（ducking）は声だけに効き、効果音では下げない
 
 ---
 

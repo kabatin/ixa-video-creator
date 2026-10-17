@@ -2,6 +2,7 @@ import type {
   Env,
   LocalImageGeneratorId,
   LocalMusicGeneratorId,
+  LocalSfxGeneratorId,
   LocalVideoGeneratorId,
 } from './schema.js'
 
@@ -37,20 +38,25 @@ export const isLoopbackUrl = (url: string): boolean => {
  */
 export const LOCAL_VIDEO_TOKEN_PATTERN = /^[\x21-\x7e]{32,}$/
 
-/** 手元の生成サーバ（動画・画像・曲）。検査の規則はどれも同じ（ADR-0047 / 0048）。 */
-type LocalServerId = LocalVideoGeneratorId | LocalImageGeneratorId | LocalMusicGeneratorId
+/** 手元の生成サーバ（動画・画像・曲・効果音）。検査の規則はどれも同じ（ADR-0047 / 0048 / 0052）。 */
+type LocalServerId = LocalVideoGeneratorId | LocalImageGeneratorId | LocalMusicGeneratorId | LocalSfxGeneratorId
 
 type LocalVideoServerEnv = {
   readonly id: LocalServerId
   /** 有効にする一覧の名前。動画のサーバと画像のサーバで違う。 */
-  readonly enabledBy: 'LOCAL_VIDEO_GENERATOR' | 'LOCAL_IMAGE_GENERATOR' | 'LOCAL_MUSIC_GENERATOR'
+  readonly enabledBy:
+    | 'LOCAL_VIDEO_GENERATOR'
+    | 'LOCAL_IMAGE_GENERATOR'
+    | 'LOCAL_MUSIC_GENERATOR'
+    | 'LOCAL_SFX_GENERATOR'
   /** `.env` に書く名前。**値は文に入れない。** */
-  readonly urlEnvName: 'VPIPE_API_URL' | 'WAN_API_URL' | 'KLEIN_API_URL' | 'ACE_STEP_API_URL'
+  readonly urlEnvName: 'VPIPE_API_URL' | 'WAN_API_URL' | 'KLEIN_API_URL' | 'ACE_STEP_API_URL' | 'SFX_API_URL'
   readonly tokenEnvName:
     | 'VPIPE_API_TOKEN'
     | 'WAN_API_TOKEN'
     | 'KLEIN_API_TOKEN'
     | 'ACE_STEP_API_TOKEN'
+    | 'SFX_API_TOKEN'
   /** このマシンだけを指す既定。戻し方の案内に出す。 */
   readonly defaultUrl: string
 }
@@ -91,6 +97,13 @@ const LOCAL_VIDEO_SERVER_TABLE: Readonly<Record<LocalServerId, LocalVideoServerE
       urlEnvName: 'ACE_STEP_API_URL',
       tokenEnvName: 'ACE_STEP_API_TOKEN',
       defaultUrl: 'http://127.0.0.1:8768',
+    },
+    sfx_api: {
+      id: 'sfx_api',
+      enabledBy: 'LOCAL_SFX_GENERATOR',
+      urlEnvName: 'SFX_API_URL',
+      tokenEnvName: 'SFX_API_TOKEN',
+      defaultUrl: 'http://127.0.0.1:8769',
     },
   })
 

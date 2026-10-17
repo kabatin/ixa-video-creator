@@ -15,6 +15,8 @@ export * from './asset/asset-export-name.js'
 export * from './music/music.js'
 export * from './music/beat-alignment.js'
 export * from './music/music-job.js'
+export * from './sfx/sfx-job.js'
+export * from './sfx/sfx-suggest.js'
 export * from './script/script.js'
 
 // Shot（中心ドメイン）
