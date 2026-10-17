@@ -204,6 +204,27 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ maxWaitSec: 1.5 }, 'maxWaitSec'],
     ],
   },
+  add_effects: {
+    base: { projectId: P, effects: [{ template: 'flash', atSec: 0 }] },
+    cases: [
+      [{ effects: [] }, 'effects'],
+      [{ effects: many(101, { template: 'flash', atSec: 0 }) }, 'effects'],
+      [{ effects: [{ template: 'ink_splash', atSec: 0 }] }, 'effects.0.template'],
+      [{ effects: [{ template: 'flash', atSec: -1 }] }, 'effects.0.atSec'],
+      [{ effects: [{ template: 'flash', atSec: 0, durationSec: 0 }] }, 'effects.0.durationSec'],
+      [{ effects: [{ template: 'flash', atSec: 0, durationSec: 31 }] }, 'effects.0.durationSec'],
+      [{ effects: [{ template: 'flash', shotCode: '' }] }, 'effects.0.shotCode'],
+    ],
+  },
+  list_effects: { base: { projectId: P }, cases: [[{ projectId: 'x' }, 'projectId']] },
+  remove_effects: {
+    base: { effectIds: [S] },
+    cases: [
+      [{ effectIds: [] }, 'effectIds'],
+      [{ effectIds: ['x'] }, 'effectIds.0'],
+      [{ effectIds: many(201, S) }, 'effectIds'],
+    ],
+  },
   export: {
     base: { projectId: P },
     cases: [

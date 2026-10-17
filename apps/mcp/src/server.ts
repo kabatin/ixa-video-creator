@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { createCharacterTool, createLocationTool } from './tools/cast.js'
 import { editShotsTool } from './tools/edit-shots.js'
+import { addEffectsTool, listEffectsTool, removeEffectsTool } from './tools/effects.js'
 import { exportTool } from './tools/export.js'
 import { generateMusicTool } from './tools/music-generation.js'
 import { musicOverviewTool, setMasterTrackTool, uploadMusicTool } from './tools/music.js'
@@ -35,6 +36,9 @@ export const TOOLS: readonly ToolDef[] = [
   adoptTakeTool,
   upscaleTakesTool,
   waitTool,
+  addEffectsTool,
+  listEffectsTool,
+  removeEffectsTool,
   exportTool,
 ]
 
