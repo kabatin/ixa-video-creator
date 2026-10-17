@@ -1,6 +1,7 @@
 import { Take } from '@ixa/domain'
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MEDIA_ERROR_NETWORK } from '@/lib/playback-state'
 import userEvent from '@testing-library/user-event'
 import { TakeCard } from '@/components/take-card'
 import { ContextMenuHost } from '@/components/workbench/ui/context-menu'
@@ -8,12 +9,16 @@ import { takeJson } from './fixtures'
 
 /** 持ち込んだ Take はモデル名の代わりに出自を出す（ADR-0026）。 */
 
-vi.mock('@/lib/api-client', () => ({
-  createApiClient: () => ({
-    mediaUrl: () => new Promise(() => undefined),
-    mediaInfo: () => Promise.resolve({ bytes: 2_097_152, probe: { width: 1920, height: 1080 } }),
-  }),
+const api = vi.hoisted(() => ({
+  mediaUrl: vi.fn(),
+  mediaInfo: () => Promise.resolve({ bytes: 2_097_152, probe: { width: 1920, height: 1080 } }),
 }))
+vi.mock('@/lib/api-client', () => ({ createApiClient: () => api }))
+
+beforeEach(() => {
+  api.mediaUrl.mockReset()
+  api.mediaUrl.mockReturnValue(new Promise(() => undefined))
+})
 
 const aTake = (overrides: Partial<Take>): Take =>
   Take.parse({ ...takeJson, createdAt: new Date(), ...overrides })
@@ -83,5 +88,74 @@ describe('TakeCard の大きさと容量', () => {
 
     expect(await screen.findByText('1920×1080')).toBeTruthy()
     expect(screen.getByText('2.0 MB')).toBeTruthy()
+  })
+})
+
+/**
+ * 2026-10-18。以前は 4 分ごとに `src` を差し替えており、見ている途中の動画が頭へ戻った。
+ * いまは時刻では差し替えず、期限切れで読めなくなったときだけ取り直して同じ位置から続ける。
+ */
+describe('TakeCard のプレビューの URL', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date('2026-10-18T00:00:00Z'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const videoOf = (container: HTMLElement): HTMLVideoElement => {
+    const found = container.querySelector('video')
+    if (found === null) throw new Error('video がありません')
+    return found
+  }
+
+  it('時刻では差し替えない（見ている途中で頭へ戻さない）', async () => {
+    api.mediaUrl.mockResolvedValue({ url: 'https://example.invalid/first.mp4', expiresInSec: 300 })
+    const { container } = renderCard(aTake({}))
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(videoOf(container).getAttribute('src')).toBe('https://example.invalid/first.mp4')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600_000)
+    })
+
+    expect(api.mediaUrl).toHaveBeenCalledTimes(1)
+    expect(videoOf(container).getAttribute('src')).toBe('https://example.invalid/first.mp4')
+  })
+
+  it('期限切れで読めなくなったら取り直して同じ位置へ戻す', async () => {
+    api.mediaUrl
+      .mockResolvedValueOnce({ url: 'https://example.invalid/first.mp4', expiresInSec: 300 })
+      .mockResolvedValueOnce({ url: 'https://example.invalid/second.mp4', expiresInSec: 300 })
+    const { container } = renderCard(aTake({}))
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    // 時刻の差し替え（以前の 4 分）より前に読めなくなった場合。取り直すのは失敗が来たからである。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100_000)
+    })
+    const video = videoOf(container)
+    Object.defineProperty(video, 'error', { configurable: true, value: { code: MEDIA_ERROR_NETWORK } })
+    Object.defineProperty(video, 'currentTime', { configurable: true, writable: true, value: 3.25 })
+    await act(async () => {
+      fireEvent.error(video)
+      await Promise.resolve()
+    })
+
+    expect(api.mediaUrl).toHaveBeenCalledTimes(2)
+    expect(videoOf(container).getAttribute('src')).toBe('https://example.invalid/second.mp4')
+
+    // 差し替えた要素は頭から読み直す。
+    Object.defineProperty(video, 'error', { configurable: true, value: null })
+    Object.defineProperty(video, 'duration', { configurable: true, value: 8 })
+    video.currentTime = 0
+    vi.spyOn(video, 'pause').mockImplementation(() => undefined)
+    fireEvent.loadedMetadata(video)
+    expect(video.currentTime).toBe(3.25)
   })
 })

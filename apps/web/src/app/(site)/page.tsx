@@ -2,6 +2,7 @@ import type { Project, ProjectId, WorkspaceId } from '@ixa/domain'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
+import { PosterRenewalOnRefresh } from '@/components/poster-renewal-on-refresh'
 import { ProjectList } from '@/components/project-list'
 import { ProjectListActions } from '@/components/project-list-actions'
 import { resolveApiBaseUrl, type ApiClient } from '@/lib/api-client'
@@ -101,7 +102,10 @@ const ProjectsPage = async () => {
       ) : (
         // 右上の「…」と右クリックで複製・削除（制作者 2026-10-04）。
         <ProjectListActions>
-          <ProjectList projects={result.projects} covers={covers} />
+          {/* 表紙の URL は 5 分で切れる。読めなくなったらページを描き直して新しい URL をもらう。 */}
+          <PosterRenewalOnRefresh>
+            <ProjectList projects={result.projects} covers={covers} />
+          </PosterRenewalOnRefresh>
         </ProjectListActions>
       )}
     </main>

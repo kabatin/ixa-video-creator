@@ -7,7 +7,8 @@ import type { Requester } from '@/lib/requester'
  *
  * 一覧 27 行に対して 27 回 URL を発行させない。**1 プロジェクト 1 往復**にする。
  * 返る URL は署名付きなので **state の外へ出さない**（規約 7。`localStorage` にも入れない）。
- * 期限は API 側の既定（300 秒）。切れたら `<img>` の `onError` で「読み込めません」に切り替わる。
+ * 期限は API 側の既定（300 秒。`POSTER_URL_LIFETIME_SEC`）。ワークベンチは切れる前に引き直し、
+ * 切れた絵は `<img>` の `onError` から引き直しを頼む（`poster-renewal.ts`）。
  */
 
 /**

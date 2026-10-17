@@ -49,7 +49,7 @@ import { snapNoticeClassName, type BeatSource, type SnapNotice } from '@/lib/tim
 import { useAudioPlayback } from '@/lib/use-audio-playback'
 import { useCutEditorSync, type TransportSyncPort } from '@/lib/use-cut-editor-sync'
 import { useElementWidth } from '@/lib/use-element-width'
-import { fetchWaveformPeaks, type WaveformPeaksResult } from '@/lib/waveform-api'
+import { useFreshWaveformPeaks } from '@/lib/fresh-waveform-peaks'
 import { fullView, pixelsPerSecond, sectionBoundaries, type ViewRange } from '@/lib/waveform-draw'
 import { useOptionalContextMenuHost } from '@/components/workbench/ui/context-menu'
 import type { MenuPoint } from '@/components/workbench/use-context-menu'
@@ -180,7 +180,6 @@ export const CutEditor = ({
   const [followPlayhead, setFollowPlayhead] = useState(true)
   /** 区切りを掴んでいる間。掴んだ場所が指の下から逃げないよう、追従を止める。 */
   const [dragging, setDragging] = useState(false)
-  const [peaks, setPeaks] = useState<WaveformPeaksResult | null>(null)
 
   /** 波形の高さ（パネルの余りをもらう）と幅。幅は大きさが変わったときだけ測る。 */
   const { waveBoxRef, waveHeightPx } = useWaveformFillHeight()
@@ -222,17 +221,9 @@ export const CutEditor = ({
     }
   }, [loadSource])
 
-  useEffect(() => {
-    const controller = new AbortController()
-    void fetchWaveformPeaks(analysis.waveformPeaksUrl, { signal: controller.signal }).then(
-      (result) => {
-        if (!controller.signal.aborted) setPeaks(result)
-      },
-    )
-    return () => {
-      controller.abort()
-    }
-  }, [analysis.waveformPeaksUrl])
+  // 波形の点は取る直前に発行した URL で取る。渡された解析の URL はページを描いたときのもので、
+  // 5 分を過ぎてから開くと切れている（`fresh-waveform-peaks.ts`）。
+  const peaks = useFreshWaveformPeaks(track.id, analysis.waveformPeaksUrl)
 
   // 利用者の操作で飛んだ位置は共有の位置へも伝える（`useCutEditorSync`）。
   const playback = useCutEditorSync(useAudioPlayback({ source, onRefreshSource: loadSource }), sync)

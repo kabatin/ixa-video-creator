@@ -1,9 +1,10 @@
 'use client'
 
 import type { MediaAssetId, Take, TakeId } from '@ixa/domain'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import { useRenewableMediaSrc } from '@/lib/use-renewable-media-src'
 import { reviewStatusClassName, reviewStatusLabel } from '@/lib/shot-display'
 import type { MediaInfo } from '@/lib/take-display'
 import {
@@ -34,40 +35,28 @@ type UrlState =
   | { readonly kind: 'error'; readonly message: string }
 
 /**
- * 署名付き URL は state に置いたまま使い回さない。
- * 有効期限の 80% で捨てて取り直す（CLAUDE.md 規約 7）。
+ * 署名付き URL を取る。**時刻では取り直さない**（2026-10-18）。
+ *
+ * 以前は期限の 8 割（4 分）ごとに `src` を差し替えており、見ている途中の動画が 4 分ごとに頭へ戻った。
+ * いまは読めなくなったときだけ取り直し、同じ位置から続ける（`TakePreview` の `useRenewableMediaSrc`）。
  */
-const REFRESH_RATIO = 0.8
+const loadTakeUrl = async (mediaAssetId: MediaAssetId): Promise<string> =>
+  (await createApiClient().mediaUrl(mediaAssetId)).url
 
 const useSignedUrl = (mediaAssetId: MediaAssetId): UrlState => {
   const [state, setState] = useState<UrlState>({ kind: 'loading' })
 
   useEffect(() => {
     let cancelled = false
-    let timer: ReturnType<typeof setTimeout> | null = null
-
-    const load = async (): Promise<void> => {
-      try {
-        const issued = await createApiClient().mediaUrl(mediaAssetId)
-        if (cancelled) return
-        setState({ kind: 'ready', url: issued.url })
-        timer = setTimeout(
-          () => {
-            void load()
-          },
-          issued.expiresInSec * REFRESH_RATIO * 1_000,
-        )
-      } catch (error) {
-        if (cancelled) return
-        setState({ kind: 'error', message: describeError(error) })
-      }
-    }
-
-    void load()
-
+    loadTakeUrl(mediaAssetId)
+      .then((url) => {
+        if (!cancelled) setState({ kind: 'ready', url })
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setState({ kind: 'error', message: describeError(error) })
+      })
     return () => {
       cancelled = true
-      if (timer !== null) clearTimeout(timer)
     }
   }, [mediaAssetId])
 
@@ -103,7 +92,19 @@ const useMediaInfo = (mediaAssetId: MediaAssetId): MediaInfo | undefined => {
   return info
 }
 
-const TakePreview = ({ state }: { readonly state: UrlState }) => {
+const TakePreview = ({
+  state,
+  mediaAssetId,
+}: {
+  readonly state: UrlState
+  readonly mediaAssetId: MediaAssetId
+}) => {
+  const reload = useCallback(() => loadTakeUrl(mediaAssetId), [mediaAssetId])
+  const video = useRenewableMediaSrc({
+    url: state.kind === 'ready' ? state.url : null,
+    reload,
+    label: 'プレビュー',
+  })
   if (state.kind === 'loading') {
     return <div className="aspect-video w-full animate-pulse rounded bg-line" />
   }
@@ -115,12 +116,16 @@ const TakePreview = ({ state }: { readonly state: UrlState }) => {
     )
   }
   return (
-    <video
-      controls
-      preload="metadata"
-      src={state.url}
-      className="aspect-video w-full rounded bg-black"
-    />
+    <>
+      {video.mediaProps !== null && (
+        <video controls preload="metadata" {...video.mediaProps} className="aspect-video w-full rounded bg-black" />
+      )}
+      {video.error !== null && (
+        <p role="alert" className="rounded bg-danger/10 p-2 text-xs text-danger">
+          {video.error}
+        </p>
+      )}
+    </>
   )
 }
 
@@ -157,7 +162,7 @@ export const TakeCard = ({
         </span>
       </div>
 
-      <TakePreview state={urlState} />
+      <TakePreview state={urlState} mediaAssetId={take.mediaAssetId} />
 
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted">
         <dt className="text-muted">モデル</dt>

@@ -1,5 +1,5 @@
 import type { MediaAssetId } from '@ixa/domain'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import type { RenderFolder } from '@/components/render-folder'
 import { Button } from '@/components/ui/button'
 import { describeForPerson } from '@/lib/api-error'
@@ -14,6 +14,7 @@ import {
   sortRenderJobsByNewest,
 } from '@/lib/render-display'
 import { renderScopeLabel } from '@/lib/render-range'
+import { useRenewableMediaSrc } from '@/lib/use-renewable-media-src'
 
 /**
  * 書き出しの履歴（`GET /projects/{id}/renders`）。1 件 1 行にまとめ、完了したものはその場で再生でき、
@@ -64,6 +65,38 @@ const JobRow = ({
   const [playError, setPlayError] = useState<string | null>(null)
   const output = job.status === 'succeeded' ? job.outputAssetId : null
   const loudness = renderLoudnessNote(job)
+
+  // 再生中に URL（5 分）が切れたら取り直して同じ位置から続ける（`use-renewable-media-src.ts`）。
+  const reloadOutput = useCallback(
+    (): Promise<string> =>
+      output === null ? Promise.reject(new Error('書き出した動画がありません')) : resolveOutputUrl(output),
+    [output, resolveOutputUrl],
+  )
+  const video = useRenewableMediaSrc({
+    url: player.state === 'open' ? player.url : null,
+    reload: reloadOutput,
+    label: '動画',
+  })
+
+  /**
+   * 別のタブで開く。**押したときに URL を取る**（持っている URL は 5 分で切れている）。
+   * 取ってから開くとポップアップとして止められるので、先に空のタブを開いてから行き先を入れる。
+   */
+  const openInNewTab = (): void => {
+    if (output === null) return
+    const tab = window.open('', '_blank')
+    if (tab !== null) tab.opener = null
+    setPlayError(null)
+    resolveOutputUrl(output)
+      .then((url) => {
+        if (tab === null) window.open(url, '_blank', 'noreferrer')
+        else tab.location.href = url
+      })
+      .catch((cause: unknown) => {
+        tab?.close()
+        setPlayError(`動画を開けませんでした: ${describeForPerson(cause)}`)
+      })
+  }
 
   const togglePlayer = (): void => {
     if (player.state !== 'closed' || output === null) {
@@ -120,14 +153,13 @@ const JobRow = ({
             </Button>
           )}
           {player.state === 'open' && (
-            <a
-              href={player.url}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="button"
+              onClick={openInNewTab}
               className="text-xs text-muted underline hover:text-text"
             >
               別のタブで開く
-            </a>
+            </button>
           )}
         </div>
       )}
@@ -137,12 +169,17 @@ const JobRow = ({
           {playError}
         </p>
       )}
-      {player.state === 'open' && (
+      {video.error !== null && (
+        <p role="alert" className="mt-2 text-xs text-danger">
+          {video.error}
+        </p>
+      )}
+      {video.mediaProps !== null && (
         <video
           controls
           autoPlay
           preload="metadata"
-          src={player.url}
+          {...video.mediaProps}
           className="mt-2 w-full rounded-md border border-line bg-black"
         >
           <track kind="captions" />

@@ -23,6 +23,8 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/lib/api-client', () => ({
   createApiClient: () => ({
     mediaUrl: () => Promise.resolve({ url: 'https://example.invalid/a.mp3', expiresInSec: 3600 }),
+    // 波形の点は取る直前に解析を引き直して取る（`fresh-waveform-peaks.ts`）。この検査では届かないままにする。
+    getAnalysis: () => new Promise(() => undefined),
     createCuts: api.createCuts,
   }),
 }))

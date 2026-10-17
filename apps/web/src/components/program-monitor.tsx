@@ -82,6 +82,12 @@ export type ProgramMonitorProps = {
   readonly onPlayingChange: (playing: boolean) => void
   readonly onError?: (message: string) => void
   /**
+   * 素材を読めなかった（Shot 1 本分）。**材料を取り直す合図に使う**（2026-10-18）。
+   * いちばん多いのは署名付き URL の期限切れで、TimelineDocument を引き直せば直る。
+   * 文は `onError` にも同じものが流れる。
+   */
+  readonly onMediaError?: () => void
+  /**
    * 絵の合わせ方。
    *
    * - `width`（既定）— 幅いっぱいに広げ、高さは比から決まる。
@@ -109,6 +115,7 @@ export const ProgramMonitor = ({
   onFrame,
   onPlayingChange,
   onError,
+  onMediaError,
   fit = 'width',
   withoutPictures = false,
 }: ProgramMonitorProps) => {
@@ -142,8 +149,9 @@ export const ProgramMonitor = ({
     (message: string) => {
       setMediaFailure(message)
       onError?.(message)
+      onMediaError?.()
     },
-    [onError],
+    [onError, onMediaError],
   )
 
   const state = describeMonitorState(document, playing, failure, { withoutPictures })

@@ -1,7 +1,7 @@
 'use client'
 
 import type { Shot, ThumbnailBackground } from '@ixa/domain'
-import { useMemo, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import { KeyArtPicker } from '@/components/thumbnail/key-art-picker'
 import type { KeyArtJobs } from '@/components/thumbnail/use-key-art-jobs'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import { formatClock } from '@/lib/format-time'
 import { usePlayheadSec } from '@/lib/playhead-sec'
+import { PosterRenewalContext } from '@/lib/poster-renewal'
 import { createRequester } from '@/lib/requester'
 import { createShotStartFrameApi } from '@/lib/shot-start-frame-api'
 import type { ShotPosterMap } from '@/lib/shot-posters'
@@ -59,8 +60,10 @@ const ShotChoices = ({
 }: {
   readonly choices: readonly ShotPictureChoice[]
   readonly onPick: (choice: ShotPictureChoice) => void
-}) =>
-  choices.length === 0 ? (
+}) => {
+  // 絵は Shot のサムネイルと同じ署名付き URL（5 分で切れる）。読めなければ一覧の引き直しを頼む（`shot-poster.tsx` と同じ）。
+  const renew = useContext(PosterRenewalContext)
+  return choices.length === 0 ? (
     <p className="text-sm text-muted">絵のある Shot がまだありません。</p>
   ) : (
     <ul className="relative grid max-h-64 grid-cols-3 gap-2 overflow-y-auto">
@@ -74,7 +77,12 @@ const ShotChoices = ({
             {choice.posterUrl === null ? (
               <div className="aspect-video w-full rounded bg-surface-2" />
             ) : (
-              <img src={choice.posterUrl} alt={`${choice.code} の絵`} className="aspect-video w-full rounded object-cover" />
+              <img
+                src={choice.posterUrl}
+                alt={`${choice.code} の絵`}
+                className="aspect-video w-full rounded object-cover"
+                onError={() => renew?.()}
+              />
             )}
             <span className="mt-1 block truncate text-xs text-muted">
               {`${choice.code}（${choice.kind === 'take' ? '採用 Take' : '最初のフレーム'}）`}
@@ -84,6 +92,7 @@ const ShotChoices = ({
       ))}
     </ul>
   )
+}
 
 export const BackgroundPicker = ({ background, onChange, shots, posters, keyArt }: BackgroundPickerProps) => {
   const [mode, setMode] = useState<Mode>(modeOf(background))

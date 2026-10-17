@@ -1,18 +1,19 @@
 'use client'
 
 import { MediaAssetId, VoiceJobId, type VoiceProfileId } from '@ixa/domain'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
+import { useRenewableMediaSrc } from '@/lib/use-renewable-media-src'
 
 const PREVIEW_TEXT = 'こんにちは。これは試しに読む声です。'
 
 type Preview =
   | { readonly state: 'idle' }
   | { readonly state: 'waiting'; readonly jobId: VoiceJobId }
-  | { readonly state: 'ready'; readonly url: string }
+  | { readonly state: 'ready'; readonly url: string; readonly assetId: MediaAssetId }
   | { readonly state: 'error'; readonly message: string }
 
 /** 好きな一文で試聴する。できたかは声のジョブの出来事（narrationEpoch）で確かめ直す。 */
@@ -34,8 +35,9 @@ export const VoicePreview = ({ voiceId }: { readonly voiceId: VoiceProfileId }) 
         return
       }
       if (job.status !== 'succeeded' || job.resultMediaAssetId === null) return
-      const signed = await api.mediaUrl(MediaAssetId.parse(job.resultMediaAssetId))
-      if (!cancelled) setPreview({ state: 'ready', url: signed.url })
+      const assetId = MediaAssetId.parse(job.resultMediaAssetId)
+      const signed = await api.mediaUrl(assetId)
+      if (!cancelled) setPreview({ state: 'ready', url: signed.url, assetId })
     }
     check().catch((cause: unknown) => {
       if (!cancelled) setPreview({ state: 'error', message: describeForPerson(cause) })
@@ -44,6 +46,18 @@ export const VoicePreview = ({ voiceId }: { readonly voiceId: VoiceProfileId }) 
       cancelled = true
     }
   }, [api, waitingFor, narrationEpoch])
+
+  // 聴き直したときに URL（5 分）が切れていたら取り直して同じ位置から続ける（`use-renewable-media-src.ts`）。
+  const readyAsset = preview.state === 'ready' ? preview.assetId : null
+  const reload = useCallback(async (): Promise<string> => {
+    if (readyAsset === null) throw new Error('試しに読んだ声がありません')
+    return (await api.mediaUrl(readyAsset)).url
+  }, [api, readyAsset])
+  const audio = useRenewableMediaSrc({
+    url: preview.state === 'ready' ? preview.url : null,
+    reload,
+    label: '声',
+  })
 
   const start = (): void => {
     setPreview({ state: 'idle' })
@@ -77,9 +91,14 @@ export const VoicePreview = ({ voiceId }: { readonly voiceId: VoiceProfileId }) 
           試しに読めませんでした: {preview.message}
         </p>
       )}
-      {preview.state === 'ready' && (
+      {audio.error !== null && (
+        <p role="alert" className="text-xs text-danger">
+          {audio.error}
+        </p>
+      )}
+      {audio.mediaProps !== null && (
         // 試聴の音。読ませた文は上の欄に出ている。
-        <audio controls autoPlay src={preview.url} className="w-full" aria-label="試しに読んだ声" />
+        <audio controls autoPlay {...audio.mediaProps} className="w-full" aria-label="試しに読んだ声" />
       )}
     </div>
   )

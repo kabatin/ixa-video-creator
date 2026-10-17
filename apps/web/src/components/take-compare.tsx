@@ -55,12 +55,15 @@ export type TakeCompareProps = {
   readonly error?: string | null
   readonly labelA?: string
   readonly labelB?: string
+  /** 素材を読めなかった。材料を取り直す合図（署名付き URL の期限切れがいちばん多い）。 */
+  readonly onMediaError?: () => void
 }
 
 export const TakeCompare = ({
   compare,
   exclusive,
   error = null,
+  onMediaError,
   labelA = '採用候補 A',
   labelB = '比較 B',
 }: TakeCompareProps) => {
@@ -92,6 +95,7 @@ export const TakeCompare = ({
       labelA={labelA}
       labelB={labelB}
       exclusive={exclusive}
+      onMediaError={onMediaError}
     />
   )
 }
@@ -101,9 +105,10 @@ type CompareBoardProps = {
   readonly labelA: string
   readonly labelB: string
   readonly exclusive: ExclusivePlayback | undefined
+  readonly onMediaError: (() => void) | undefined
 }
 
-const CompareBoard = ({ compare, labelA, labelB, exclusive }: CompareBoardProps) => {
+const CompareBoard = ({ compare, labelA, labelB, exclusive, onMediaError }: CompareBoardProps) => {
   const span: CompareSpan = {
     startSec: compare.shot.startSec,
     durationSec: compare.shot.durationSec,
@@ -228,6 +233,7 @@ const CompareBoard = ({ compare, labelA, labelB, exclusive }: CompareBoardProps)
           onFrame={setCurrentSec}
           onPlayingChange={setPlaying}
           onError={setFailure}
+          onMediaError={onMediaError}
         />
 
         {compare.b !== null && (
@@ -243,6 +249,7 @@ const CompareBoard = ({ compare, labelA, labelB, exclusive }: CompareBoardProps)
             onFrame={ignore}
             onPlayingChange={ignore}
             onError={setFailure}
+            onMediaError={onMediaError}
           />
         )}
       </div>
@@ -276,6 +283,7 @@ type MonitorColumnProps = {
   readonly onFrame: (sec: number) => void
   readonly onPlayingChange: (playing: boolean) => void
   readonly onError: (message: string) => void
+  readonly onMediaError: (() => void) | undefined
 }
 
 const MonitorColumn = ({
@@ -289,6 +297,7 @@ const MonitorColumn = ({
   onFrame,
   onPlayingChange,
   onError,
+  onMediaError,
 }: MonitorColumnProps) => (
   <section aria-label={label} className="flex min-h-0 flex-col gap-1">
     <h3 className="shrink-0 text-xs font-medium text-muted">{label}</h3>
@@ -312,6 +321,7 @@ const MonitorColumn = ({
         onFrame={onFrame}
         onPlayingChange={onPlayingChange}
         onError={onError}
+        {...(onMediaError === undefined ? {} : { onMediaError })}
       />
     </div>
   </section>

@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import type { WireShotCompare } from '@/lib/take-compare'
+import { TIMELINE_URL_LIFETIME_SEC } from '@/lib/signed-url-renewal'
+import { useUrlRenewal } from '@/lib/use-url-renewal'
 
 /**
  * A/B にどの Take を並べるかを決め、比較の材料を取ってくる殻（P61-2 の配線）。
@@ -65,6 +67,9 @@ export const TakeComparePanel = ({
   const resolvedA = known(takeAId) ?? fallbackA
   const resolvedB = known(takeBId)
 
+  // 材料の URL は 1 時間で切れる。切れる前と、素材を読めなかったときにも取り直す（`use-url-renewal.ts`）。
+  const { epoch: renewalEpoch, markLoaded, renewAfterError } = useUrlRenewal(TIMELINE_URL_LIFETIME_SEC)
+
   useEffect(() => {
     if (resolvedA === null) return undefined
 
@@ -76,6 +81,7 @@ export const TakeComparePanel = ({
       .then((next) => {
         if (cancelled) return
         setCompare(next)
+        markLoaded()
       })
       .catch((cause: unknown) => {
         if (cancelled) return
@@ -87,7 +93,7 @@ export const TakeComparePanel = ({
     return () => {
       cancelled = true
     }
-  }, [shotId, resolvedA, resolvedB])
+  }, [shotId, resolvedA, resolvedB, renewalEpoch, markLoaded])
 
   if (takes.length === 0) return null
 
@@ -133,7 +139,7 @@ export const TakeComparePanel = ({
         </label>
       </div>
 
-      <TakeCompare compare={compare} error={error} exclusive={exclusive} />
+      <TakeCompare compare={compare} error={error} exclusive={exclusive} onMediaError={renewAfterError} />
 
       {onAdopt !== undefined && (
         <div className="flex flex-wrap items-center gap-2">

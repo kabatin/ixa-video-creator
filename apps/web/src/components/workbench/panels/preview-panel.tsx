@@ -8,6 +8,8 @@ import { TransportBar } from '@/components/workbench/transport-bar'
 import { loadTimelineDocument, type Part } from '@/lib/timeline-loader'
 import type { WireTimelineDocument } from '@/lib/timeline-api'
 import { timelineShotsKey } from '@/lib/timeline-shots-key'
+import { TIMELINE_URL_LIFETIME_SEC } from '@/lib/signed-url-renewal'
+import { useUrlRenewal } from '@/lib/use-url-renewal'
 
 /**
  * プレビュー（中央上）。Program Monitor 1 枚（D7）。
@@ -30,16 +32,32 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
 
   // Take ができた・サーバから読み直した・Shot の尺や採用を変えた・ナレーションが変わったときに組み立て直す。
   // ナレーション（ADR-0038）は声の位置が組み立て結果の音に入る。入れ忘れると、帯では動いたのに鳴る位置が変わらない。
+  // 中の素材の URL は 1 時間で切れる。切れる前と、素材を読めなかったときにも取り直す（`use-url-renewal.ts`）。
   const shotsKey = timelineShotsKey(workbench.shots)
+  const { epoch: renewalEpoch, markLoaded, renewAfterError } = useUrlRenewal(TIMELINE_URL_LIFETIME_SEC)
   useEffect(() => {
     let cancelled = false
     void loadTimelineDocument(workbench.projectId).then((loaded) => {
-      if (!cancelled) setDocument(loaded)
+      if (cancelled) return
+      setDocument(loaded)
+      // 取り直した材料で読めたかは分からないので、前の知らせは消す（直ったのに赤字が残らないように）。
+      if (loaded.value !== null) {
+        setMonitorError(null)
+        markLoaded()
+      }
     })
     return () => {
       cancelled = true
     }
-  }, [workbench.projectId, workbench.posterEpoch, workbench.serverEpoch, workbench.narrationEpoch, shotsKey])
+  }, [
+    workbench.projectId,
+    workbench.posterEpoch,
+    workbench.serverEpoch,
+    workbench.narrationEpoch,
+    shotsKey,
+    renewalEpoch,
+    markLoaded,
+  ])
 
   /**
    * 選んだ Shot の頭へ移る。
@@ -111,6 +129,7 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
               else if (mine) transportControls.pause()
             }}
             onError={setMonitorError}
+            onMediaError={renewAfterError}
           />
         </div>
         {/* 再生の操作はプレイヤーの直下。画面にひとつだけ（`transport-bar.tsx`）。 */}

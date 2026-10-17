@@ -1,10 +1,11 @@
 'use client'
 
-import type { Shot } from '@ixa/domain'
+import type { MusicTrackId, Shot } from '@ixa/domain'
 import { useEffect, useState } from 'react'
 import { TimelineEditor } from '@/components/timeline-editor'
 import { WaveformCanvas } from '@/components/waveform-canvas'
-import { fetchWaveformPeaks, type WaveformPeaksResult } from '@/lib/waveform-api'
+import { useFreshWaveformPeaks } from '@/lib/fresh-waveform-peaks'
+import type { WaveformPeaksResult } from '@/lib/waveform-api'
 import { sectionBoundaries } from '@/lib/waveform-draw'
 import { usePreferences } from '@/components/preferences-root'
 import { useTransportState, useWorkbench } from '@/components/workbench/workbench-context'
@@ -39,7 +40,7 @@ export const TimelinePanel = () => {
   const { transportControls } = workbench
   const transport = useTransportState()
   const [materials, setMaterials] = useState<TimelineMaterials | null>(null)
-  const peaks = useTrackPeaks(workbench.analysis?.waveformPeaksUrl ?? null)
+  const peaks = useTrackPeaks(workbench.track?.id ?? null, workbench.analysis?.waveformPeaksUrl ?? null)
   // 効果音を置いたら帯を取り直す。
   const [clipsEpoch, setClipsEpoch] = useState(0)
   const { narrationLane, onDropAudio } = useTimelineAudio(() => {
@@ -151,20 +152,14 @@ export const TimelinePanel = () => {
 }
 
 /**
- * 楽曲の波形の点。解析の署名付き URL は期限があるので、**開いたときに 1 回だけ**取る
- * （URL を持ち回さない。規約 7）。取れなければ帯を出さない（読めない理由はカッター側が出す）。
+ * 楽曲の波形の点。**取る直前に解析を引き直して、その URL で取る**（`fresh-waveform-peaks.ts`）。
+ * ページを描いたときの URL（期限 300 秒）で取ると、開いて 5 分を過ぎたパネルでは帯が消えた。
+ * 取れなければ帯を出さない（読めない理由はカッター側が出す）。
  */
-const useTrackPeaks = (url: string | null): WaveformPeaksResult | null => {
-  const [peaks, setPeaks] = useState<WaveformPeaksResult | null>(null)
-  useEffect(() => {
-    if (url === null) return undefined
-    let cancelled = false
-    void fetchWaveformPeaks(url).then((result) => {
-      if (!cancelled) setPeaks(result.status === 'failed' ? null : result)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [url])
-  return peaks
+const useTrackPeaks = (
+  trackId: MusicTrackId | null,
+  analysisKey: string | null,
+): WaveformPeaksResult | null => {
+  const peaks = useFreshWaveformPeaks(analysisKey === null ? null : trackId, analysisKey)
+  return peaks === null || peaks.status === 'failed' ? null : peaks
 }

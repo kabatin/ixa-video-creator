@@ -29,6 +29,7 @@ import { useProjectEvents } from '@/lib/use-project-events'
 import { musicJobAddedTracks, musicJobNotice } from '@/lib/music-job-form'
 import { imageJobFailureNotice } from '@/lib/image-job-notice'
 import { voiceJobNotice } from '@/lib/voice-job-notice'
+import { POSTER_URL_LIFETIME_SEC, renewDelayMs } from '@/lib/signed-url-renewal'
 import type { PanelId } from '@/lib/workbench-layout'
 import type { Inspected } from '@/lib/workbench-selection'
 
@@ -224,6 +225,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
   useEffect(() => {
     let cancelled = false
     let retry: ReturnType<typeof setTimeout> | null = null
+    let renew: ReturnType<typeof setTimeout> | null = null
     api
       .listShotPosters(projectId)
       .then((list) => {
@@ -231,6 +233,11 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
         postersSettledAt.current = Date.now()
         setPosters(posterByShotId(list))
         setPosterError(null)
+        // **切れる前に引き直す**（2026-10-18）。読めなかった絵を待ってから引き直すだけでは、
+        // 見えている絵はそのまま残っても、帯を送って初めて読む絵や読み直しのたびに 403 が積もった。
+        renew = setTimeout(() => {
+          setPosterRenewal((count) => count + 1)
+        }, renewDelayMs(POSTER_URL_LIFETIME_SEC))
         // サムネイルを作っている行があれば、少し待って取り直す（できたら自動で出る）。
         const delay = posterRetryDelayMs(list, posterAttempt.current)
         posterAttempt.current = delay === null ? 0 : posterAttempt.current + 1
@@ -250,6 +257,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
     return () => {
       cancelled = true
       if (retry !== null) clearTimeout(retry)
+      if (renew !== null) clearTimeout(renew)
     }
   }, [api, projectId, posterEpoch, posterRenewal])
 
