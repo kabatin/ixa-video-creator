@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { EFFECT_PARAM_SCHEMAS, type EffectTemplateKey } from './effect-template.js'
+import { EFFECT_CHOICE_LABELS, EFFECT_PARAM_SCHEMAS, type EffectTemplateKey } from './effect-template.js'
 
 /**
  * エフェクトの値を画面で直すための項目の並び（ADR-0050）。
@@ -41,7 +41,7 @@ export type EffectField =
 type FieldSpec =
   | { readonly label: string; readonly unit: EffectNumberUnit }
   | { readonly label: string; readonly control: 'color' | 'text' }
-  | { readonly label: string; readonly choices: Readonly<Record<string, string>> }
+  | { readonly label: string; readonly control: 'choice' }
 
 type ParamKeys<K extends EffectTemplateKey> = keyof z.infer<(typeof EFFECT_PARAM_SCHEMAS)[K]>
 
@@ -57,15 +57,15 @@ const FIELD_SPECS: { readonly [K in EffectTemplateKey]: Readonly<Record<ParamKey
   speed_lines: {
     density: { label: '線の多さ', unit: 'ratio' },
     intensity: { label: '強さ', unit: 'ratio' },
-    direction: { label: '向き', choices: { radial: '中心から', horizontal: '横に流れる' } },
+    direction: { label: '向き', control: 'choice' },
   },
   film_burn: { intensity: { label: '強さ', unit: 'ratio' } },
   glitch: { intensity: { label: '強さ', unit: 'ratio' }, rgbSplit: { label: '色ずれ', unit: 'ratio' } },
   title_card: {
     text: { label: 'タイトル', control: 'text' },
     subtext: { label: '添える文字', control: 'text' },
-    style: { label: '書体', choices: { impact: '太く力強く', elegant: '細く上品に' } },
-    entrance: { label: '出方', choices: { punch: '叩きつける', fade: 'ふわっと' } },
+    style: { label: '書体', control: 'choice' },
+    entrance: { label: '出方', control: 'choice' },
     color: { label: '色', control: 'color' },
   },
   shake: { intensity: { label: '強さ', unit: 'ratio' }, frequencyHz: { label: '揺れの速さ', unit: 'hz' } },
@@ -90,17 +90,17 @@ const toField = (key: string, spec: FieldSpec, schema: z.ZodTypeAny): EffectFiel
       min: inner.minValue ?? 0, max: inner.maxValue ?? 1, defaultValue: typeof fallback === 'number' ? fallback : 0,
     }
   }
-  if ('choices' in spec && inner instanceof z.ZodEnum) {
+  if ('control' in spec && spec.control === 'choice' && inner instanceof z.ZodEnum) {
     // ZodEnum の instanceof は中身の型を失うので、文字列だけを拾い直す。
     const raw: unknown = inner.options
     const values = Array.isArray(raw) ? raw.filter((value): value is string => typeof value === 'string') : []
     return {
       kind: 'choice', key, label: spec.label,
-      options: values.map((value) => ({ value, label: spec.choices[value] ?? value })),
+      options: values.map((value) => ({ value, label: EFFECT_CHOICE_LABELS[value] ?? value })),
       defaultValue: typeof fallback === 'string' ? fallback : (values[0] ?? ''),
     }
   }
-  if ('control' in spec && inner instanceof z.ZodString) {
+  if ('control' in spec && spec.control !== 'choice' && inner instanceof z.ZodString) {
     const defaultValue = typeof fallback === 'string' ? fallback : ''
     return spec.control === 'color'
       ? { kind: 'color', key, label: spec.label, defaultValue }

@@ -176,16 +176,30 @@ export const effectTemplateKeyOf = (key: string): EffectTemplateKey | null => {
   return parsed.success ? parsed.data : null
 }
 
+/**
+ * 選ぶ値の画面の言葉。**生の値（radial など）を画面と理由の文に出さない。**
+ * 画面の項目（`effect-fields.ts`）と、検証の失敗の文が同じ表を読む。
+ */
+export const EFFECT_CHOICE_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  radial: '中心から',
+  horizontal: '横に流れる',
+  impact: '太く力強く',
+  elegant: '細く上品に',
+  punch: '叩きつける',
+  fade: 'ふわっと',
+})
+
+const choiceLabel = (value: string | number): string => EFFECT_CHOICE_LABELS[String(value)] ?? String(value)
+
 export type EffectParamsResult =
   | { readonly ok: true; readonly value: EffectContent }
   | { readonly ok: false; readonly field: string | null; readonly message: string }
 
 const issueMessage = (template: EffectTemplate, issue: z.ZodIssue): string => {
-  if (issue.code === 'unrecognized_keys') {
-    return `${template.label}に無い項目です（${issue.keys.join('、')}）`
-  }
+  // 項目の鍵（attackSec など）は画面に出さない。どの項目かは `field` で返す。
+  if (issue.code === 'unrecognized_keys') return `${template.label}に無い項目があります`
   if (issue.code === 'invalid_enum_value') {
-    return `${template.label}の選べる値は ${issue.options.join(' / ')} です`
+    return `${template.label}で選べるのは ${issue.options.map(choiceLabel).join(' / ')} です`
   }
   if (issue.code === 'invalid_type' && issue.expected === 'string') {
     return `${template.label}の文字・色は文字列で指定してください`
@@ -203,7 +217,7 @@ export const parseEffectParams = (templateKey: string, params: unknown): EffectP
     return {
       ok: false,
       field: 'templateKey',
-      message: `知らないエフェクトの型です（選べるのは ${EffectTemplateKey.options.join(' / ')}）`,
+      message: `知らないエフェクトの型です（選べるのは ${EFFECT_TEMPLATES.map((t) => t.label).join(' / ')}）`,
     }
   }
   const parsed = EffectContent.safeParse({ templateKey: key, params: params ?? {} })

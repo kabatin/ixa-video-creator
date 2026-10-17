@@ -67,6 +67,18 @@ describe('parseEffectParams の拒否', () => {
     if (!parsed.ok) expect(parsed.message).toMatch(/[ぁ-んァ-ヶ一-龠]/)
   })
 
+  /** 理由の文は画面に出る。生の値・項目の鍵・型の鍵を出さない。 */
+  it('理由の文は画面の言葉だけで書く', () => {
+    const choice = parseEffectParams('speed_lines', { direction: 'vertical' })
+    expect(!choice.ok && choice.message).toContain('中心から / 横に流れる')
+    expect(!choice.ok && choice.message).not.toMatch(/radial|horizontal/)
+    const extra = parseEffectParams('flash', { intensty: 0.5 })
+    expect(!extra.ok && extra.message).not.toContain('intensty')
+    const unknown = parseEffectParams('ink_splash', {})
+    expect(!unknown.ok && unknown.message).toContain('寄りのパンチ')
+    expect(!unknown.ok && unknown.message).not.toMatch(/zoom_punch|ink_splash/)
+  })
+
   it('範囲の端の値は通る', () => {
     expect(parseEffectParams('zoom_punch', { scale: 1.4, peakAtSec: 5 }).ok).toBe(true)
     expect(parseEffectParams('zoom_punch', { scale: 1.02 }).ok).toBe(true)
