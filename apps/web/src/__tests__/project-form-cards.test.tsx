@@ -56,7 +56,7 @@ describe('ProjectForm（新規作成）', () => {
 
   it('「使う AI」の動画の AI と、その AI が作る fps を言い、合わせるボタンを出す', async () => {
     show()
-    expect(await screen.findByText(/動画を作る AI: 手元の MiniMax H3/)).toBeInTheDocument()
+    expect(await screen.findByText(/動画を作る AI: MiniMax H3/)).toBeInTheDocument()
     expect(screen.getByText(/この AI の動画は 24 fps です/)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: '24 fps に合わせる' }))

@@ -48,7 +48,7 @@ const TOOLS: readonly WireAiTool[] = [
 
 describe('aiOptionsFor', () => {
   it('その用途に使える AI を、選べるものを先に、選べないものは理由つきで後ろに並べる', () => {
-    const { options } = aiOptionsFor('video', TOOLS)
+    const options = aiOptionsFor('video', TOOLS)
 
     expect(options.map((option) => [option.id, option.problem === null])).toEqual([
       ['stub', true],
@@ -65,55 +65,29 @@ describe('aiOptionsFor', () => {
    * 起動していないものは理由つきで後ろに並ぶ。
    */
   it('手元のサーバ 2 台（MiniMax H3・Wan）がどちらも動画の選択肢に出る', () => {
-    const ids = aiOptionsFor('video', TOOLS).options.map((option) => option.id)
+    const ids = aiOptionsFor('video', TOOLS).map((option) => option.id)
     expect(ids).toContain('vpipe')
     expect(ids).toContain('wan')
     // 起動している方は選べる（灰色にしない）。
-    expect(aiOptionsFor('video', TOOLS).options.find((o) => o.id === 'wan')?.problem).toBeNull()
+    expect(aiOptionsFor('video', TOOLS).find((o) => o.id === 'wan')?.problem).toBeNull()
   })
 
-  /** 行を埋めずに 1 行で言う（「Claude Code / Codex / Grok は動画には未対応」）。 */
-  it('入っているがその用途には使えない AI は、名前だけまとめて返す', () => {
-    const { options, installedButUnsupported } = aiOptionsFor('video', TOOLS)
-
-    expect(installedButUnsupported).toEqual(['claude_cli', 'codex_cli', 'grok_cli'])
-    expect(options.map((option) => option.id)).not.toContain('claude_cli')
+  it('その用途に使えない AI は出さない', () => {
+    expect(aiOptionsFor('video', TOOLS).map((option) => option.id)).not.toContain('claude_cli')
   })
 
-  /** アプリに入っているもの（静止画を動かす）は「入っている AI」ではない。 */
-  it('「入っているが使えない」には、外の AI だけを挙げる', () => {
-    expect(aiOptionsFor('image', TOOLS).installedButUnsupported).not.toContain('local')
+  it('名前の横の札を添える', () => {
+    expect(aiOptionsFor('video', TOOLS).find((option) => option.id === 'vpipe')?.tags).toEqual(['この Mac', '無料'])
   })
 
   it('入っておらず、その用途にも使えない AI はどこにも出さない', () => {
-    const { options, installedButUnsupported } = aiOptionsFor('image', TOOLS)
-
-    expect([...options.map((option) => option.id), ...installedButUnsupported]).not.toContain(
-      'gemini_cli',
-    )
+    expect(aiOptionsFor('image', TOOLS).map((option) => option.id)).not.toContain('gemini_cli')
   })
 
   it('版を添える', () => {
     expect(
-      aiOptionsFor('text', TOOLS).options.find((option) => option.id === 'claude_cli')?.version,
+      aiOptionsFor('text', TOOLS).find((option) => option.id === 'claude_cli')?.version,
     ).toBe('2.1.283')
-  })
-})
-
-describe('aiOptionsFor: 入っているが使えない AI', () => {
-  /**
-   * 「入っているが、この用途には使えない」は、この Mac に入れた AI の CLI のことだけを言う（ADR-0038）。
-   * Mac の声（OS の道具）・whisper.cpp・鍵で使う API は「入れた AI」ではないので、ほかの用途の欄に挙げない。
-   */
-  it('Mac の声・whisper.cpp・Gemini の API は、動画の欄に挙げない', () => {
-    const tools = [
-      ...TOOLS,
-      tool('macos_say', { state: 'ready', version: null }, { voice: null }),
-      tool('whisper_cpp', { state: 'ready', version: null }, { transcribe: null }),
-      tool('gemini_api', { state: 'ready', version: null }, { voice: null, transcribe: null }),
-    ]
-
-    expect(aiOptionsFor('video', tools).installedButUnsupported).toEqual(['claude_cli', 'codex_cli', 'grok_cli'])
   })
 })
 

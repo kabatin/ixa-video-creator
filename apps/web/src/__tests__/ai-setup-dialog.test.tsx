@@ -43,9 +43,9 @@ const TOOLS: readonly WireAiTool[] = [
   },
   {
     id: 'vpipe',
-    label: '手元の MiniMax H3',
+    label: 'MiniMax H3',
     status: { state: 'missing', reason: '起動していません' },
-    problems: { text: 'x', image: 'x', video: '手元の MiniMax H3 を使えません: 起動していません', voice: 'x', transcribe: 'x', music: 'x' },
+    problems: { text: 'x', image: 'x', video: 'MiniMax H3 を使えません: 起動していません', voice: 'x', transcribe: 'x', music: 'x' },
     notice: null,
   },
   {
@@ -75,6 +75,12 @@ const open = async (api: AiSettingsApi = fakeApi()) => {
   return { api, ...rendered }
 }
 
+/** 用途のタブを開いて、その選択肢の群を返す。 */
+const panel = async (name: RegExp) => {
+  await userEvent.click(screen.getByRole('tab', { name }))
+  return screen.getByRole('radiogroup', { name })
+}
+
 describe('AiSetupDialogBody', () => {
   it('探している間はそう言う（CLI を叩くので数秒かかる）', () => {
     renderInWorkbench(
@@ -88,42 +94,31 @@ describe('AiSetupDialogBody', () => {
     await open()
 
     const text = screen.getByRole('radiogroup', { name: /テキスト/ })
-    expect(within(text).getByRole('radio', { name: /Claude Code 2\.1\.283/ })).toBeChecked()
-    expect(
-      within(screen.getByRole('radiogroup', { name: /画像/ })).getByRole('radio', {
-        name: /Codex/,
-      }),
-    ).toBeChecked()
-    expect(
-      within(screen.getByRole('radiogroup', { name: /動画/ })).getByRole('radio', {
-        name: /静止画を動かす/,
-      }),
-    ).toBeChecked()
+    expect(within(text).getByRole('radio', { name: /Claude Code\s*2\.1\.283/ })).toBeChecked()
+    expect(within(await panel(/画像/)).getByRole('radio', { name: /Codex/ })).toBeChecked()
+    expect(within(await panel(/動画/)).getByRole('radio', { name: /静止画を動かす/ })).toBeChecked()
+  })
+
+  /** 用途が増えても縦に伸びないよう、タブで分ける。タブには今選んでいる AI を出す。 */
+  it('用途はタブで分け、タブに選んでいる AI を出す', async () => {
+    await open()
+
+    expect(screen.getAllByRole('radiogroup')).toHaveLength(1)
+    expect(screen.getByRole('tab', { name: /画像/ }).textContent).toContain('Codex')
   })
 
   it('使えないものは選ばせず、理由を見せる', async () => {
     await open()
 
-    const video = screen.getByRole('radiogroup', { name: /動画/ })
-    expect(within(video).getByRole('radio', { name: /手元の MiniMax H3/ })).toBeDisabled()
+    const video = await panel(/動画/)
+    expect(within(video).getByRole('radio', { name: /MiniMax H3/ })).toBeDisabled()
     expect(within(video).getByText(/起動していません/)).toBeTruthy()
-  })
-
-  it('入っているがその用途に使えない AI は、1 行で名前を言う', async () => {
-    await open()
-
-    const video = screen.getByRole('radiogroup', { name: /動画/ })
-    expect(within(video).getByText(/Claude Code・Codex は動画には使えません/)).toBeTruthy()
   })
 
   it('選び直して保存すると、その組み合わせで保存して閉じる', async () => {
     const { api, value } = await open()
 
-    await userEvent.click(
-      within(screen.getByRole('radiogroup', { name: /画像/ })).getByRole('radio', {
-        name: /お試し/,
-      }),
-    )
+    await userEvent.click(within(await panel(/画像/)).getByRole('radio', { name: /お試し/ }))
     await userEvent.click(screen.getByRole('button', { name: 'この設定で使う' }))
 
     await waitFor(() => {
@@ -157,7 +152,9 @@ describe('AiSetupDialogBody', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'この設定で使う' }))
 
-    const alert = await within(screen.getByRole('radiogroup', { name: /動画/ })).findByRole('alert')
+    // 理由のある用途のタブを開いて見せる。
+    const alert = await within(await screen.findByRole('radiogroup', { name: /動画/ })).findByRole('alert')
+    expect(screen.getByRole('tab', { name: /動画/ })).toHaveAttribute('aria-selected', 'true')
     expect(alert.textContent).toContain('壊れています')
     // 中の名前（video）を画面に出さない。
     expect(document.body.textContent).not.toContain('video')
@@ -177,9 +174,9 @@ describe('AiSetupDialogBody', () => {
   it('声と文字起こしも選べ、使う前に知っておくことを AI の下に出す', async () => {
     const { api, value } = await open()
 
-    const voice = screen.getByRole('radiogroup', { name: /^声/ })
+    expect(await panel(/文字起こし/)).toBeInTheDocument()
+    const voice = await panel(/^声/)
     expect(within(voice).getByText(/製品の改善に使われます/)).toBeInTheDocument()
-    expect(screen.getByRole('radiogroup', { name: /文字起こし/ })).toBeInTheDocument()
 
     await userEvent.click(within(voice).getByRole('radio', { name: /Gemini/ }))
     await userEvent.click(screen.getByRole('button', { name: 'この設定で使う' }))

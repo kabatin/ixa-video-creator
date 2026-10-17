@@ -67,17 +67,25 @@ export type AiToolSpec = {
   readonly detect: AiToolDetection
   /** 今この用途の口（アダプタ）がある用途。 */
   readonly purposes: readonly AiPurpose[]
+  /** 選ぶ画面で名前の横に出す短い札（どこで動くか・お金）。名前に括弧で詰め込まない。 */
+  readonly tags: readonly string[]
   /** 使う前に知っておくこと（無料枠の扱い・料金・商用の可否）。選ぶ画面にそのまま出す。無ければ null。 */
   readonly notice: string | null
 }
 
-const tool = (spec: Omit<AiToolSpec, 'notice'> & { readonly notice?: string }): AiToolSpec =>
-  Object.freeze({ ...spec, notice: spec.notice ?? null })
+const tool = (
+  spec: Omit<AiToolSpec, 'notice' | 'tags'> & { readonly notice?: string; readonly tags?: readonly string[] },
+): AiToolSpec => Object.freeze({ ...spec, tags: Object.freeze([...(spec.tags ?? [])]), notice: spec.notice ?? null })
+
+const ON_THIS_MAC_FREE = ['この Mac', '無料'] as const
+/** 手元の動画・絵・曲は同じ GPU を使う（ADR-0040・0047・0048）。 */
+const SHARED_GPU_NOTICE = '手元の動画・絵・曲で GPU を分け合うので、順番待ちがあります。'
 
 export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
   stub: tool({
     id: 'stub',
-    label: 'お試し（AI を使わない仮のもの）',
+    label: 'お試し',
+    tags: ['AI を使わない仮のもの'],
     detect: { kind: 'builtin' },
     // 曲は作れない（選ぶと「曲を作る AI を選んでください」と断る）。選び直すまでの置き場。
     purposes: ['text', 'image', 'video', 'voice', 'transcribe', 'music'],
@@ -111,78 +119,84 @@ export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
   }),
   local: tool({
     id: 'local',
-    label: '静止画を動かす（無料）',
+    label: '静止画を動かす',
+    tags: ['無料'],
     detect: { kind: 'builtin' },
     purposes: ['video'],
   }),
   vpipe: tool({
     id: 'vpipe',
-    label: '手元の MiniMax H3（vpipe・無料・1 本ずつ）',
+    label: 'MiniMax H3',
+    tags: ON_THIS_MAC_FREE,
+    notice: SHARED_GPU_NOTICE,
     detect: { kind: 'local_server', server: 'vpipe' },
     purposes: ['video'],
   }),
   wan: tool({
     id: 'wan',
-    label: '手元の Wan 2.2 5B（wan・無料・1 本ずつ）',
+    label: 'Wan 2.2 5B',
+    tags: ON_THIS_MAC_FREE,
     detect: { kind: 'local_server', server: 'wan' },
     purposes: ['video'],
     // **どちらも同じ機械の GPU を使う。** 片方が作っている間、もう片方は順番待ちになる（ADR-0040）。
-    notice:
-      'この Mac で作るので無料です。MiniMax H3 と同じ GPU を使うため、どちらか 1 本ずつしか作りません。',
+    notice: SHARED_GPU_NOTICE,
   }),
   klein: tool({
     id: 'klein',
-    label: '手元の FLUX.2 [klein]（klein・無料・1 枚ずつ）',
+    label: 'FLUX.2 [klein]',
+    tags: ON_THIS_MAC_FREE,
     detect: { kind: 'local_server', server: 'klein' },
     purposes: ['image'],
     // 動画と同じ機械の GPU を使う（ADR-0047）。動画を作っている間は絵も順番待ちになる。
-    notice:
-      'この Mac で作るので無料です。手元の動画と同じ GPU を使うため、動画を作っている間は順番を待ちます。',
+    notice: SHARED_GPU_NOTICE,
   }),
   ace_step: tool({
     id: 'ace_step',
-    label: '手元の ACE-Step 1.5（ace-step・無料）',
+    label: 'ACE-Step 1.5',
+    tags: ON_THIS_MAC_FREE,
     detect: { kind: 'local_server', server: 'ace_step' },
     purposes: ['music'],
     // 動画と同じ機械の GPU を使う（ADR-0048）。動画や絵を作っている間は曲も順番待ちになる。
-    notice:
-      'この Mac で作るので無料です。手元の動画・絵と同じ GPU を使うため、それらを作っている間は順番を待ちます。',
+    notice: SHARED_GPU_NOTICE,
   }),
   fal: tool({
     id: 'fal',
-    label: 'fal（Seedance・従量課金）',
+    label: 'Seedance（fal）',
+    tags: ['従量課金'],
     detect: { kind: 'api_key', key: 'FAL_API_KEY' },
     purposes: ['video'],
   }),
   macos_say: tool({
     id: 'macos_say',
-    label: 'Mac の声（無料・この Mac で読む）',
+    label: 'Mac の声',
+    tags: ON_THIS_MAC_FREE,
     // `say -v ?` は声の一覧を出すだけで、読み上げない。
     detect: { kind: 'cli', command: 'say', args: ['-v', '?'] },
     purposes: ['voice'],
-    notice: '機械的な声です。間や長さを決める仮のナレーションに向いています。',
+    notice: '機械的な声です。仮のナレーション向き。',
   }),
   gemini_api: tool({
     id: 'gemini_api',
-    label: 'Gemini（Google の API・無料枠あり）',
+    label: 'Gemini API',
+    tags: ['Google', '無料枠あり'],
     detect: { kind: 'api_key', key: 'GEMINI_API_KEY' },
     purposes: ['voice', 'transcribe'],
     notice:
-      '原稿は Google に送られます。無料枠では送った内容が製品の改善に使われ、人が見ることがあります。' +
-      '作った声には透かし（SynthID）が入ります。声の料金は 2027-01-01 から倍になります。',
+      '原稿は Google に送られます（無料枠では製品の改善に使われ、人が見ることあり）。' +
+      '声に透かし（SynthID）が入り、声の料金は 2027-01-01 から倍になります。',
   }),
   elevenlabs: tool({
     id: 'elevenlabs',
-    label: 'ElevenLabs（有料）',
+    label: 'ElevenLabs',
+    tags: ['有料'],
     detect: { kind: 'api_key', key: 'ELEVENLABS_API_KEY' },
     purposes: ['voice', 'transcribe'],
-    notice:
-      '原稿は ElevenLabs に送られます。Free プランは商用に使えず、公開するときはクレジット表記（elevenlabs.io）が要ります。' +
-      '有料プランは商用に使えます。',
+    notice: '原稿は ElevenLabs に送られます。Free プランは商用不可で、公開時にクレジット表記が要ります。',
   }),
   whisper_cpp: tool({
     id: 'whisper_cpp',
-    label: 'whisper.cpp（無料・この Mac で聞き取る）',
+    label: 'whisper.cpp',
+    tags: ON_THIS_MAC_FREE,
     detect: { kind: 'whisper_cpp' },
     purposes: ['transcribe'],
   }),
