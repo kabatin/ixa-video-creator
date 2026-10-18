@@ -116,7 +116,8 @@ export const undoConfirmMessage = (target: UndoTarget, now: Date = new Date()): 
       : `これは ${age}の操作です。その後に行った操作は戻らず、戻すものはこの記録の時点の内容になります。`
   return (
     `${stale}${target.when} の「${target.summary}」を元に戻します。` +
-    `${target.countLabel}が変更前の内容に戻ります。この操作は取り消せません。`
+    // 英字で終わる見出し（「49 件の Shot」）は、助詞の前を空ける（画面の他の文と同じ書き方）。
+    `${target.countLabel}${/[A-Za-z0-9]$/.test(target.countLabel) ? ' ' : ''}が変更前の内容に戻ります。この操作は取り消せません。`
   )
 }
 

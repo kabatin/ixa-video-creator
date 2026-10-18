@@ -84,6 +84,8 @@ describe('⌘Z の確認の文', () => {
     expect(message).not.toContain('Shot')
 
     expect(undoConfirmMessage(target(aBatch()), now)).toContain('3 行のナレーション')
+    expect(undoConfirmMessage(target(aBatch({ kind: 'shot_edit', shotCount: 1, lineCount: 0 })), now)).toContain('1 件の Shot が')
+    expect(undoConfirmMessage(target(clip), now)).toContain('1 件のクリップが')
   })
 
   it('直前（5 分未満）の操作なら古さを言わない', () => {
