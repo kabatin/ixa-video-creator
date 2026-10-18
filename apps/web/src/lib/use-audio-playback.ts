@@ -306,6 +306,20 @@ export const useAudioPlayback = ({
     setActive(source)
   }, [source])
 
+  /**
+   * `load()` のあとの状態を合わせる。**`pause` の行事を待たない。** `pause()` の行事は後で届くが、
+   * 届く前に `load()` が走るとその行事は捨てられる（HTML の load algorithm）。待っていると
+   * 鳴っている途中で音源を替えたとき「再生中」のまま残る（制作者 2026-10-19）。
+   * 取り直しで続きから鳴らす場合だけは「再生中」を保つ（読み込めたら鳴らし直す）。
+   */
+  const settleAfterLoad = useCallback((): void => {
+    const resuming = resumeRef.current?.wasPlaying ?? false
+    if (resuming) return
+    wasPlayingRef.current = false
+    setIsPlaying(false)
+    stopTicking()
+  }, [stopTicking])
+
   // --- URL を要素へ流し込む。取り直した URL もここを通る。 ---
   useEffect(() => {
     const audio = audioRef.current
@@ -314,6 +328,7 @@ export const useAudioPlayback = ({
       audio.pause()
       audio.removeAttribute('src')
       audio.load()
+      settleAfterLoad()
       setIsLoading(false)
       return
     }
@@ -321,7 +336,8 @@ export const useAudioPlayback = ({
     setError(null)
     audio.src = active.url
     audio.load()
-  }, [active])
+    settleAfterLoad()
+  }, [active, settleAfterLoad])
 
   // --- 期限が切れる前に取り直す。切れてから慌てると音が途切れる。 ---
   useEffect(() => {
