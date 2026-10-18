@@ -29,6 +29,7 @@ const KIND_LABELS: Readonly<Record<EditBatchKind, string>> = Object.freeze({
   transition_edit: 'トランジションの編集',
   music_edit: '楽曲の編集',
   project_edit: '作品の編集',
+  asset_edit: '素材の編集',
 })
 
 export const editBatchKindLabel = (kind: EditBatchKind): string => KIND_LABELS[kind]
@@ -83,6 +84,7 @@ export const editBatchCountLabel = (batch: WireEditBatch): string => {
   if (batch.clipCount > 0) return `${batch.clipCount.toString()} 件のテロップ`
   if ((batch.musicCount ?? 0) > 0) return `${String(batch.musicCount)} 曲`
   if ((batch.transitionCount ?? 0) > 0) return `${String(batch.transitionCount)} 件のトランジション`
+  if ((batch.assetCount ?? 0) > 0) return `${String(batch.assetCount)} 件の素材`
   return `${batch.shotCount.toString()} 件の Shot`
 }
 
@@ -147,6 +149,7 @@ const groupsOf = (result: WireUndoResult): readonly UndoGroup[] => {
   const lines = { restored: result.restoredLines ?? [], failed: result.failedLines ?? [] }
   const music = { restored: result.restoredMusicTracks ?? [], failed: result.failedMusicTracks ?? [] }
   const transitions = { restored: result.restoredTransitions ?? [], failed: result.failedTransitions ?? [] }
+  const assets = { restored: result.restoredAssets ?? [], failed: result.failedAssets ?? [] }
   return [
     {
       subject: `${clipNoun} `,
@@ -155,6 +158,17 @@ const groupsOf = (result: WireUndoResult): readonly UndoGroup[] => {
       failed: result.failedClips.map((entry, index) => ({
         key: `failed-clip:${entry.clipId}:${index.toString()}`,
         subject: clipNoun,
+        reason: entry.reason,
+      })),
+    },
+    // 素材は行より先（声を消すと行も「声が未定」になる。見出しは声で言う）。
+    {
+      subject: '素材 ',
+      unit: '件',
+      restored: assets.restored.length,
+      failed: assets.failed.map((entry, index) => ({
+        key: `failed-asset:${entry.assetId}:${index.toString()}`,
+        subject: '素材',
         reason: entry.reason,
       })),
     },
@@ -214,7 +228,7 @@ const projectResultView = (result: WireUndoResult): UndoResultView | null => {
  *
  * **戻せなかった分を件数だけにしない。** 理由がなければ、人は
  * 「なぜこの Shot だけ戻っていないのか」を自分で探すことになる。
- * 見出しは、その記録が持つもののうち最初の種類（クリップ → ナレーションの行 → 曲 → トランジション）で言う。
+ * 見出しは、その記録が持つもののうち最初の種類（クリップ → 素材 → ナレーションの行 → 曲 → トランジション）で言う。
  * どれも無ければ Shot の記録として言う。
  */
 export const buildUndoResultView = (result: WireUndoResult): UndoResultView => {

@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm'
 import {
   CreateVoiceProfileInput as CreateSchema,
   UpdateVoiceProfilePatch as UpdateSchema,
@@ -25,9 +25,12 @@ export type VoiceProfileRepository = {
   findById(id: VoiceProfileId): Promise<VoiceProfile | null>
   /** 同じ作品に同じ名前があるか（作る・名前を変える前に確かめる）。 */
   findByName(projectId: ProjectId, name: string): Promise<VoiceProfile | null>
-  create(input: CreateVoiceProfileInput): Promise<VoiceProfile>
+  /** `id` は省ける（省けばここで振る）。取り消しの記録は書く前に作るので、作る前に ID を決めたい呼び手だけが渡す。 */
+  create(input: CreateVoiceProfileInput & { readonly id?: VoiceProfileId }): Promise<VoiceProfile>
   update(id: VoiceProfileId, patch: UpdateVoiceProfilePatch): Promise<VoiceProfile>
   softDelete(id: VoiceProfileId): Promise<void>
+  /** 消したものを戻す（取り消し。2026-10-19）。同じ ID・同じ中身のまま論理削除を外す。消していない・無いなら `null`。 */
+  restore(id: VoiceProfileId): Promise<VoiceProfile | null>
 }
 
 /** row → Domain。zod で検証する（知らない AI の名前は黙って読み替えず失敗する）。 */
@@ -81,7 +84,7 @@ export const createVoiceProfileRepository = (db: DbExecutor): VoiceProfileReposi
     const valid = CreateSchema.parse(input)
     const rows = await db
       .insert(voiceProfiles)
-      .values({ id: newId(VoiceProfileIdSchema), ...valid })
+      .values({ id: input.id === undefined ? newId(VoiceProfileIdSchema) : VoiceProfileIdSchema.parse(input.id), ...valid })
       .returning()
     const created = single(rows)
     if (created === null) throw new Error('声を作れませんでした')
@@ -107,5 +110,15 @@ export const createVoiceProfileRepository = (db: DbExecutor): VoiceProfileReposi
       .where(and(eq(voiceProfiles.id, id), live))
       .returning({ id: voiceProfiles.id })
     if (rows.length === 0) throw new DbNotFoundError('voice_profiles', id)
+  },
+
+  async restore(id) {
+    const rows = await db
+      .update(voiceProfiles)
+      .set({ deletedAt: null })
+      .where(and(eq(voiceProfiles.id, id), isNotNull(voiceProfiles.deletedAt)))
+      .returning()
+    const row = rows[0]
+    return row === undefined ? null : voiceProfileRowToDomain(row)
   },
 })

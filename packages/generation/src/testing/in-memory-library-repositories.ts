@@ -26,6 +26,8 @@ export type InMemoryBrandAssetRepository = BrandAssetRepository & {
 
 export const createInMemoryBrandAssetRepository = (): InMemoryBrandAssetRepository => {
   let store: readonly BrandAsset[] = []
+  /** 論理削除したもの。一覧・1 件の読みには出さず、`restore` だけが戻す。 */
+  let deleted: readonly BrandAsset[] = []
   const find = (id: BrandAssetId): BrandAsset | undefined => store.find((a) => a.id === id)
 
   return {
@@ -39,7 +41,7 @@ export const createInMemoryBrandAssetRepository = (): InMemoryBrandAssetReposito
     create: (input) => {
       const created = BrandAssetSchema.parse({
         ...CreateBrandAssetInputSchema.parse(input),
-        id: newId(BrandAssetIdSchema),
+        id: input.id ?? newId(BrandAssetIdSchema),
       })
       store = [...store, created]
       return Promise.resolve(created)
@@ -57,9 +59,19 @@ export const createInMemoryBrandAssetRepository = (): InMemoryBrandAssetReposito
     },
 
     softDelete: (id) => {
-      if (find(id) === undefined) return Promise.reject(new DbNotFoundError('BrandAsset', id))
+      const current = find(id)
+      if (current === undefined) return Promise.reject(new DbNotFoundError('BrandAsset', id))
       store = store.filter((a) => a.id !== id)
+      deleted = [...deleted, current]
       return Promise.resolve()
+    },
+
+    restore: (id) => {
+      const removed = deleted.find((a) => a.id === id)
+      if (removed === undefined) return Promise.resolve(null)
+      deleted = deleted.filter((a) => a.id !== id)
+      store = [...store, removed]
+      return Promise.resolve(removed)
     },
   }
 }
@@ -70,6 +82,8 @@ export type InMemoryLocationRepository = LocationRepository & {
 
 export const createInMemoryLocationRepository = (): InMemoryLocationRepository => {
   let store: readonly Location[] = []
+  /** 論理削除したもの。一覧・1 件の読みには出さず、`restore` だけが戻す。 */
+  let deleted: readonly Location[] = []
   const find = (id: LocationId): Location | undefined => store.find((l) => l.id === id)
 
   return {
@@ -83,7 +97,7 @@ export const createInMemoryLocationRepository = (): InMemoryLocationRepository =
     create: (input) => {
       const created = LocationSchema.parse({
         ...CreateLocationInputSchema.parse(input),
-        id: newId(LocationIdSchema),
+        id: input.id ?? newId(LocationIdSchema),
       })
       store = [...store, created]
       return Promise.resolve(created)
@@ -101,9 +115,19 @@ export const createInMemoryLocationRepository = (): InMemoryLocationRepository =
     },
 
     softDelete: (id) => {
-      if (find(id) === undefined) return Promise.reject(new DbNotFoundError('Location', id))
+      const current = find(id)
+      if (current === undefined) return Promise.reject(new DbNotFoundError('Location', id))
       store = store.filter((l) => l.id !== id)
+      deleted = [...deleted, current]
       return Promise.resolve()
+    },
+
+    restore: (id) => {
+      const removed = deleted.find((l) => l.id === id)
+      if (removed === undefined) return Promise.resolve(null)
+      deleted = deleted.filter((l) => l.id !== id)
+      store = [...store, removed]
+      return Promise.resolve(removed)
     },
   }
 }

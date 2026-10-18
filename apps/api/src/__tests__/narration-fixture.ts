@@ -53,9 +53,10 @@ export const setupNarration = (
   const projects = createInMemoryProjectRepository([project, other])
   const editBatches = createInMemoryEditBatchRepository()
   const lines = createInMemoryNarrationLineRepository()
+  const voices = createInMemoryVoiceProfileRepository()
   const deps = {
     projects,
-    voices: createInMemoryVoiceProfileRepository(),
+    voices,
     lines,
     takes: createInMemoryNarrationTakeRepository(),
     voiceJobs,
@@ -66,6 +67,7 @@ export const setupNarration = (
     transaction: (options.recordFails === true ? createFailingRecordTransaction : createInMemoryEditTransaction)({
       editBatches,
       narrationLines: lines,
+      voices,
     }),
     voiceAdapter: (tool: VoiceToolId) => (options.adapters ?? { stub: createStubVoice() })[tool] ?? null,
     voiceQueue: {

@@ -452,7 +452,13 @@ export const createApp = (deps: AppDeps) => {
 
   app.route(
     '/',
-    characterRoutes({ characters: deps.characters, looks: deps.looks, mediaAssets, projects: deps.projects }),
+    characterRoutes({
+      characters: deps.characters,
+      looks: deps.looks,
+      mediaAssets,
+      projects: deps.projects,
+      transaction: deps.editTransaction,
+    }),
   )
   app.route(
     '/',
@@ -469,6 +475,7 @@ export const createApp = (deps: AppDeps) => {
     assetRoutes({
       brandAssets: deps.brandAssets,
       locations: deps.locations,
+      transaction: deps.editTransaction,
       mediaAssets,
       projects: deps.projects,
     }),
@@ -656,6 +663,10 @@ export const createApp = (deps: AppDeps) => {
       transitions: deps.transitions,
       shotCharacters: deps.shotCharacters,
       shotReferences: deps.shotReferences,
+      characters: deps.characters,
+      locations: deps.locations,
+      brandAssets: deps.brandAssets,
+      ...(narration === undefined ? {} : { voices: narration.voices }),
       // ナレーションをまとめて並べた記録を戻す（ADR-0038）。戻したらテロップも作り直す。
       ...(narration === undefined ? {} : { narration }),
     }),

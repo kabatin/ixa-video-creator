@@ -177,7 +177,11 @@ const editTransactionOf = (deps: Omit<AppDeps, 'editTransaction'>) =>
     shotCharacters: deps.shotCharacters,
     shotReferences: deps.shotReferences,
     musicTracks: deps.musicTracks,
-    ...(deps.narration === undefined ? {} : { narrationLines: deps.narration.lines }),
+    characters: deps.characters,
+    looks: deps.looks,
+    locations: deps.locations,
+    brandAssets: deps.brandAssets,
+    ...(deps.narration === undefined ? {} : { narrationLines: deps.narration.lines, voices: deps.narration.voices }),
   })
 
 /**

@@ -1,5 +1,11 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { BrandAssetRepository, LocationRepository, MediaAssetRepository, ProjectRepository } from '@ixa/db'
+import type {
+  BrandAssetRepository,
+  EditTransaction,
+  LocationRepository,
+  MediaAssetRepository,
+  ProjectRepository,
+} from '@ixa/db'
 import {
   BrandAsset as BrandAssetSchema,
   BrandAssetId as BrandAssetIdSchema,
@@ -11,12 +17,14 @@ import {
   ProjectId as ProjectIdSchema,
   UpdateBrandAssetPatch as UpdateBrandAssetPatchSchema,
   UpdateLocationPatch as UpdateLocationPatchSchema,
+  newId,
   type BrandAsset,
   type MediaAssetId,
   type Project,
   type ProjectId,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
+import { changedBefore, recordAssetEdit } from './asset-edit-recording.js'
 import {
   errorContent, fail, listResponse, ok, okList, successResponse, type FieldErrors,
 } from '../response.js'
@@ -154,6 +162,8 @@ export type AssetRoutesDeps = {
   mediaAssets: MediaAssetRepository
   /** 一覧・作成の持ち主の確認と、ワークスペースを引くために使う。 */
   projects: Pick<ProjectRepository, 'findById'>
+  /** 作る・直す・消すの記録と書き込みを、同じトランザクションで行う（取り消し。2026-10-19）。**省けない。** */
+  transaction: EditTransaction
 }
 
 export const assetRoutes = (deps: AssetRoutesDeps) => {
@@ -183,7 +193,12 @@ export const assetRoutes = (deps: AssetRoutesDeps) => {
       if ((await missingAssetIds([input.mediaAssetId])).length > 0) {
         return c.json(fail(VALIDATION_ERROR_MESSAGE, { mediaAssetId: [MISSING_ASSET_MESSAGE] }), 422)
       }
-      return c.json(ok(await deps.brandAssets.create(input)), 201)
+      const id = newId(BrandAssetIdSchema)
+      const created = await deps.transaction(async (tx) => {
+        await recordAssetEdit(tx.editBatches, { projectId: project.id, name: input.name, edit: { asset: 'brand_asset', op: 'create', id } })
+        return tx.brandAssets.create({ ...input, id })
+      })
+      return c.json(ok(created), 201)
     })
     .openapi(updateBrandAssetRoute, async (c) => {
       const { id } = c.req.valid('param')
@@ -197,10 +212,27 @@ export const assetRoutes = (deps: AssetRoutesDeps) => {
       if ((await missingAssetIds([patch.mediaAssetId])).length > 0) {
         return c.json(fail(VALIDATION_ERROR_MESSAGE, { mediaAssetId: [MISSING_ASSET_MESSAGE] }), 422)
       }
-      return c.json(ok(await deps.brandAssets.update(id, patch)), 200)
+      const before = changedBefore(current, patch)
+      const updated = await deps.transaction(async (tx) => {
+        if (before !== null) {
+          await recordAssetEdit(tx.editBatches, {
+            projectId: current.projectId,
+            name: current.name,
+            edit: { asset: 'brand_asset', op: 'update', id, before },
+          })
+        }
+        return tx.brandAssets.update(id, patch)
+      })
+      return c.json(ok(updated), 200)
     })
     .openapi(deleteBrandAssetRoute, async (c) => {
-      await deps.brandAssets.softDelete(c.req.valid('param').id)
+      const { id } = c.req.valid('param')
+      const current = await deps.brandAssets.findById(id)
+      if (current === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      await deps.transaction(async (tx) => {
+        await recordAssetEdit(tx.editBatches, { projectId: current.projectId, name: current.name, edit: { asset: 'brand_asset', op: 'delete', id } })
+        await tx.brandAssets.softDelete(id)
+      })
       return c.body(null, 204)
     })
     .openapi(listLocationsRoute, async (c) => {
@@ -219,7 +251,12 @@ export const assetRoutes = (deps: AssetRoutesDeps) => {
           422,
         )
       }
-      return c.json(ok(await deps.locations.create(input)), 201)
+      const id = newId(LocationIdSchema)
+      const created = await deps.transaction(async (tx) => {
+        await recordAssetEdit(tx.editBatches, { projectId: project.id, name: input.name, edit: { asset: 'location', op: 'create', id } })
+        return tx.locations.create({ ...input, id })
+      })
+      return c.json(ok(created), 201)
     })
     .openapi(updateLocationRoute, async (c) => {
       const patch = c.req.valid('json')
@@ -230,11 +267,30 @@ export const assetRoutes = (deps: AssetRoutesDeps) => {
           422,
         )
       }
-      const updated = await deps.locations.update(c.req.valid('param').id, patch)
+      const { id } = c.req.valid('param')
+      const current = await deps.locations.findById(id)
+      if (current === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      const before = changedBefore(current, patch)
+      const updated = await deps.transaction(async (tx) => {
+        if (before !== null) {
+          await recordAssetEdit(tx.editBatches, {
+            projectId: current.projectId,
+            name: current.name,
+            edit: { asset: 'location', op: 'update', id, before },
+          })
+        }
+        return tx.locations.update(id, patch)
+      })
       return c.json(ok(updated), 200)
     })
     .openapi(deleteLocationRoute, async (c) => {
-      await deps.locations.softDelete(c.req.valid('param').id)
+      const { id } = c.req.valid('param')
+      const current = await deps.locations.findById(id)
+      if (current === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      await deps.transaction(async (tx) => {
+        await recordAssetEdit(tx.editBatches, { projectId: current.projectId, name: current.name, edit: { asset: 'location', op: 'delete', id } })
+        await tx.locations.softDelete(id)
+      })
       return c.body(null, 204)
     })
 }

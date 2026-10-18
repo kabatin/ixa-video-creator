@@ -5,6 +5,7 @@ import {
   UpdateVoiceProfilePatch,
   VoiceProfile,
   VoiceProfileId as VoiceProfileIdSchema,
+  newId,
   VoiceToolId,
   type CharacterId,
   type ProjectId,
@@ -15,6 +16,7 @@ import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import type { NarrationDeps } from '../narration/deps.js'
 import { syncTelops } from '../narration/telops.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
+import { changedBefore, recordAssetEdit } from './asset-edit-recording.js'
 
 /**
  * 声（ADR-0038）。作品ごとにナレーター・キャラクターの声を持つ。声の種類は、その AI の一覧（`/voices/options`）から選ぶ。
@@ -124,7 +126,12 @@ export const narrationVoiceRoutes = (deps: NarrationDeps) =>
       if ((await deps.voices.findByName(projectId, input.name)) !== null) return c.json(duplicate(), 409)
       const foreign = await foreignReference(deps, projectId, input)
       if (foreign !== null) return c.json(mismatch(foreign), 422)
-      return c.json(ok(toVoiceResponse(await deps.voices.create({ ...input, projectId }))), 201)
+      const id = newId(VoiceProfileIdSchema)
+      const created = await deps.transaction(async (tx) => {
+        await recordAssetEdit(tx.editBatches, { projectId, name: input.name, edit: { asset: 'voice', op: 'create', id } })
+        return tx.voices.create({ ...input, projectId, id })
+      })
+      return c.json(ok(toVoiceResponse(created)), 201)
     })
     .openapi(updateVoiceRoute, async (c) => {
       const { id } = c.req.valid('param')
@@ -137,7 +144,17 @@ export const narrationVoiceRoutes = (deps: NarrationDeps) =>
       }
       const foreign = await foreignReference(deps, current.projectId, patch)
       if (foreign !== null) return c.json(mismatch(foreign), 422)
-      const updated = await deps.voices.update(id, patch)
+      const before = changedBefore(current, patch)
+      const updated = await deps.transaction(async (tx) => {
+        if (before !== null) {
+          await recordAssetEdit(tx.editBatches, {
+            projectId: current.projectId,
+            name: current.name,
+            edit: { asset: 'voice', op: 'update', id, before },
+          })
+        }
+        return tx.voices.update(id, patch)
+      })
       // 声の見た目を変えたら、その声の行のテロップに当て直す（名前や声のイメージだけなら、テロップは変わらない）。
       if (patch.textStyleId !== undefined && patch.textStyleId !== current.textStyleId) {
         const lines = await deps.lines.findByProject(current.projectId)
@@ -151,10 +168,19 @@ export const narrationVoiceRoutes = (deps: NarrationDeps) =>
       if (current === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       // その声で話す行は「声が未定」に戻す（消した声を指したままにしない）。
       const lines = (await deps.lines.findByProject(current.projectId)).filter((l) => l.voiceProfileId === id)
-      for (const line of lines) {
-        await deps.lines.update(line.id, { voiceProfileId: null })
-      }
-      await deps.voices.softDelete(id)
+      // 記録と書き込みは同じトランザクション。戻すと声も、その声で話していた行も戻る。
+      await deps.transaction(async (tx) => {
+        await recordAssetEdit(tx.editBatches, {
+          projectId: current.projectId,
+          name: current.name,
+          edit: { asset: 'voice', op: 'delete', id },
+          lineEntries: lines.map((line) => ({ lineId: line.id, voiceProfileId: id })),
+        })
+        for (const line of lines) {
+          await tx.narrationLines.update(line.id, { voiceProfileId: null })
+        }
+        await tx.voices.softDelete(id)
+      })
       // 声の見た目で出していたテロップは、既定の見た目に当て直す。
       await syncTelops(deps, current.projectId, lines.map((line) => line.id))
       return c.body(null, 204)

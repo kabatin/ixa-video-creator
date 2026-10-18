@@ -42,6 +42,8 @@ export const WireEditBatch = z.object({
   musicCount: z.number().int().nonnegative().optional(),
   /** 記録したトランジションの数（置く・消す。差し替えは 2）。前のサーバは返さないので無ければ 0 と読む。 */
   transitionCount: z.number().int().nonnegative().optional(),
+  /** 記録した素材の数。前のサーバは返さないので無ければ 0 と読む。 */
+  assetCount: z.number().int().nonnegative().optional(),
   /** **`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
   undoneAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
@@ -69,6 +71,9 @@ export const WireUndoResult = z.object({
   restoredTransitions: z.array(TransitionId).optional(),
   failedTransitions: z.array(z.object({ transitionId: TransitionId, reason: z.string().min(1) })).optional(),
   /** 作品の欄を戻したか・戻せなかった理由（作品の直しの記録）。前のサーバは返さないので無ければ戻していないと読む。 */
+  /** 戻した素材（キャラクター・ロケーション・ブランド資産・声）。前のサーバは返さないので無ければ空と読む。 */
+  restoredAssets: z.array(z.string().min(1)).optional(),
+  failedAssets: z.array(z.object({ assetId: z.string().min(1), reason: z.string().min(1) })).optional(),
   restoredProject: z.boolean().optional(),
   failedProject: z.string().min(1).nullable().optional(),
 })

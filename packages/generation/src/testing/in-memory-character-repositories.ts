@@ -44,6 +44,8 @@ export const createInMemoryCharacterRepository = (
   seed: readonly Character[] = [],
 ): InMemoryCharacterRepository => {
   let store: readonly Character[] = seed.map((c) => CharacterSchema.parse(c))
+  /** 論理削除したもの。一覧・1 件の読みには出さず、`restore` だけが戻す。 */
+  let deleted: readonly Character[] = []
   let images: readonly CharacterIdentityImage[] = []
 
   const find = (id: CharacterId): Character | undefined => store.find((c) => c.id === id)
@@ -61,7 +63,7 @@ export const createInMemoryCharacterRepository = (
       const validated = CreateCharacterInputSchema.parse(input)
       const created = CharacterSchema.parse({
         ...validated,
-        id: newId(CharacterIdSchema),
+        id: input.id ?? newId(CharacterIdSchema),
         createdAt: new Date(),
       })
       store = [...store, created]
@@ -80,9 +82,19 @@ export const createInMemoryCharacterRepository = (
     },
 
     softDelete: (id) => {
-      if (find(id) === undefined) return Promise.reject(new DbNotFoundError('Character', id))
+      const current = find(id)
+      if (current === undefined) return Promise.reject(new DbNotFoundError('Character', id))
       store = store.filter((c) => c.id !== id)
+      deleted = [...deleted, current]
       return Promise.resolve()
+    },
+
+    restore: (id) => {
+      const removed = deleted.find((c) => c.id === id)
+      if (removed === undefined) return Promise.resolve(null)
+      deleted = deleted.filter((c) => c.id !== id)
+      store = [...store, removed]
+      return Promise.resolve(removed)
     },
 
     listIdentityImages: (characterId) =>

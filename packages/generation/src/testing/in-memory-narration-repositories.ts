@@ -31,6 +31,8 @@ import {
 
 export const createInMemoryVoiceProfileRepository = (): VoiceProfileRepository & { readonly snapshot: () => readonly VoiceProfile[] } => {
   let store: readonly VoiceProfile[] = []
+  /** 論理削除したもの。一覧・1 件の読みには出さず、`restore` だけが戻す。 */
+  let deleted: readonly VoiceProfile[] = []
   const find = (id: string) => store.find((voice) => voice.id === id)
   return {
     snapshot: () => store,
@@ -40,7 +42,7 @@ export const createInMemoryVoiceProfileRepository = (): VoiceProfileRepository &
       Promise.resolve(store.find((voice) => voice.projectId === projectId && voice.name === name.trim()) ?? null),
     create: (input) => {
       const now = new Date()
-      const created = VoiceProfile.parse({ ...CreateVoiceProfileInput.parse(input), id: newId(VoiceProfileId), createdAt: now, updatedAt: now })
+      const created = VoiceProfile.parse({ ...CreateVoiceProfileInput.parse(input), id: input.id ?? newId(VoiceProfileId), createdAt: now, updatedAt: now })
       store = [...store, created]
       return Promise.resolve(created)
     },
@@ -52,9 +54,23 @@ export const createInMemoryVoiceProfileRepository = (): VoiceProfileRepository &
       return Promise.resolve(updated)
     },
     softDelete: (id) => {
-      if (find(id) === undefined) return Promise.reject(new DbNotFoundError('voice_profiles', id))
+      const current = find(id)
+      if (current === undefined) return Promise.reject(new DbNotFoundError('voice_profiles', id))
       store = store.filter((voice) => voice.id !== id)
+      deleted = [...deleted, current]
       return Promise.resolve()
+    },
+
+    restore: (id) => {
+      const removed = deleted.find((voice) => voice.id === id)
+      if (removed === undefined) return Promise.resolve(null)
+      // 本物と同じく、同じ名前の声が後から作られていれば一意制約で落ちる。
+      if (store.some((voice) => voice.projectId === removed.projectId && voice.name === removed.name)) {
+        return Promise.reject(new Error('duplicate key value violates unique constraint'))
+      }
+      deleted = deleted.filter((voice) => voice.id !== id)
+      store = [...store, removed]
+      return Promise.resolve(removed)
     },
   }
 }

@@ -1,10 +1,22 @@
 import { z } from 'zod'
-import { EditBatchId, MediaAssetId, MusicTrackId, NarrationLineId, ProjectId, ShotId, TakeId, TimelineClipId } from '../common/ids.js'
+import {
+  EditBatchId,
+  MediaAssetId,
+  MusicTrackId,
+  NarrationLineId,
+  ProjectId,
+  ShotId,
+  TakeId,
+  TimelineClipId,
+  VoiceProfileId,
+} from '../common/ids.js'
 import { MusicTrack } from '../music/music.js'
 import { Project } from '../project/project.js'
+import { EditBatchAssetEdit } from './edit-batch-asset-edit.js'
 import { EditBatchClipEdit } from './edit-batch-clip-edit.js'
 import { EditBatchTransitionEdit } from './edit-batch-transition-edit.js'
 
+export * from './edit-batch-asset-edit.js'
 export * from './edit-batch-clip-edit.js'
 export * from './edit-batch-transition-edit.js'
 import { ShotCharacter, ShotStatus, UpdateShotPatch } from './shot.js'
@@ -30,6 +42,7 @@ import { ShotCharacter, ShotStatus, UpdateShotPatch } from './shot.js'
  * `transition_edit` はトランジションの置く・消す・差し替え（2026-10-19）。`transitionEdits` で記録する。
  * `music_edit` は楽曲の欄の直しとマスターの切り替え（2026-10-19）。`musicEntries` で記録する。
  * `project_edit` は作品の欄の直し（方針・歌詞・歌詞の時刻など。2026-10-19）。`projectEntry` で記録する。
+ * `asset_edit` は素材（キャラクター・ロケーション・ブランド資産・声）の作る・直す・消す（2026-10-19）。`assetEdits` で記録する。
  */
 export const EditBatchKind = z.enum([
   'rough_cut',
@@ -44,6 +57,7 @@ export const EditBatchKind = z.enum([
   'transition_edit',
   'music_edit',
   'project_edit',
+  'asset_edit',
 ])
 export type EditBatchKind = z.infer<typeof EditBatchKind>
 
@@ -131,6 +145,8 @@ export const EditBatchLineEntry = z.object({
   lineId: NarrationLineId,
   startSec: z.number().nullable().optional(),
   telop: z.boolean().optional(),
+  /** 話す声（声を消すと、その声で話す行は「声が未定」になる。戻すときに行も戻す）。`null` は「未定だった」。 */
+  voiceProfileId: VoiceProfileId.nullable().optional(),
 })
 export type EditBatchLineEntry = z.infer<typeof EditBatchLineEntry>
 
@@ -208,6 +224,8 @@ export const EditBatch = z.object({
   shotEdits: z.array(EditBatchShotEdit).default([]),
   /** 作品の欄の直し。**`null` は「作品を触っていない」**（これまでの記録も `null` として読む）。 */
   projectEntry: EditBatchProjectEntry.nullable().default(null),
+  /** 素材の作る・直す・消す。これまでの記録は空として読む。 */
+  assetEdits: z.array(EditBatchAssetEdit).default([]),
   /** 取り消した時刻。**`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
   undoneAt: z.date().nullable(),
   createdAt: z.date(),
@@ -241,7 +259,8 @@ export const canUndo = (batch: EditBatch): boolean =>
     batch.clipEdits.length > 0 ||
     batch.transitionEdits.length > 0 ||
     batch.shotEdits.length > 0 ||
-    (batch.projectEntry !== null && Object.keys(batch.projectEntry.patch).length > 0))
+    (batch.projectEntry !== null && Object.keys(batch.projectEntry.patch).length > 0) ||
+    batch.assetEdits.length > 0)
 
 /**
  * 1 件ぶんの取り消しで、採用 Take を戻す必要があるか。

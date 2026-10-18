@@ -91,7 +91,8 @@ export const WorkbenchMenu = ({
     void undo.confirm().then((message) => {
       onNotice(message)
       workbench.refresh()
-      void assets?.actions.reloadTracks()
+      // 楽曲・素材も戻りうる（曲を切る・素材を消すの取り消し）。
+      void assets?.actions.reloadAll()
     })
   }
 

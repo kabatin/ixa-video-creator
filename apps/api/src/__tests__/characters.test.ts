@@ -26,6 +26,8 @@ import {
   type InMemoryCharacterRepository,
 } from '@ixa/generation/testing'
 import { aProject } from './fixtures.js'
+import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 
 type SuccessBody<T> = { success: true; data: T }
@@ -71,9 +73,14 @@ let characters: InMemoryCharacterRepository
 let looks: InMemoryCharacterLookRepository
 let assets: readonly MediaAsset[]
 
-const buildApp = (deps: CharacterRoutesDeps) => {
+const buildApp = (deps: Omit<CharacterRoutesDeps, 'transaction'>) => {
   const app = new OpenAPIHono({ defaultHook: validationHook })
-  app.route('/', characterRoutes(deps))
+  const transaction = createInMemoryEditTransaction({
+    editBatches: createInMemoryEditBatchRepository(),
+    characters: deps.characters,
+    looks: deps.looks,
+  })
+  app.route('/', characterRoutes({ ...deps, transaction }))
   registerErrorHandlers(app, createLogger('silent'))
   return app
 }

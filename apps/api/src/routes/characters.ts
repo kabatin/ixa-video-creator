@@ -12,6 +12,7 @@ import {
   ShotCharacter as ShotCharacterSchema,
   ShotId as ShotIdSchema,
   UpdateCharacterPatch as UpdateCharacterPatchSchema,
+  newId,
   type Character,
   type Shot,
   type ShotCharacter,
@@ -24,6 +25,7 @@ import {
 import { identityImageRoutes } from './character-identity-images.js'
 import { lookRoutes } from './character-looks.js'
 import { FOREIGN_CHARACTER_MESSAGE } from './library-ownership.js'
+import { changedBefore, recordAssetEdit } from './asset-edit-recording.js'
 import { recordShotAttachments } from './shot-edit-recording.js'
 
 /**
@@ -121,6 +123,8 @@ export type CharacterRoutesDeps = {
   mediaAssets: MediaAssetRepository
   /** 一覧・作成の持ち主の確認と、ワークスペースを引くために使う。 */
   projects: Pick<ProjectRepository, 'findById'>
+  /** 作る・直す・消すの記録と書き込みを、同じトランザクションで行う（取り消し。2026-10-19）。**省けない。** */
+  transaction: EditTransaction
 }
 
 export const characterRoutes = (deps: CharacterRoutesDeps) =>
@@ -134,13 +138,15 @@ export const characterRoutes = (deps: CharacterRoutesDeps) =>
     .openapi(createCharacterRoute, async (c) => {
       const project = await deps.projects.findById(c.req.valid('param').projectId)
       if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
-      const created = await deps.characters.create({
-        ...c.req.valid('json'),
-        workspaceId: project.workspaceId,
-        projectId: project.id,
+      const input = c.req.valid('json')
+      const id = newId(CharacterIdSchema)
+      const created = await deps.transaction(async (tx) => {
+        await recordAssetEdit(tx.editBatches, { projectId: project.id, name: input.name, edit: { asset: 'character', op: 'create', id } })
+        const character = await tx.characters.create({ ...input, workspaceId: project.workspaceId, projectId: project.id, id })
+        // 既定の Look も作る（DOMAIN.md §5）。無いと Shot の登場人物に入れられない（Look は必須）。
+        await tx.looks.create({ characterId: character.id, ...DEFAULT_LOOK, isDefault: true })
+        return character
       })
-      // 既定の Look も作る（DOMAIN.md §5）。無いと Shot の登場人物に入れられない（Look は必須）。
-      await deps.looks.create({ characterId: created.id, ...DEFAULT_LOOK, isDefault: true })
       return c.json(ok(toCharacterResponse(created)), 201)
     })
     .openapi(getCharacterRoute, async (c) => {
@@ -149,11 +155,31 @@ export const characterRoutes = (deps: CharacterRoutesDeps) =>
       return c.json(ok(toCharacterResponse(found)), 200)
     })
     .openapi(updateCharacterRoute, async (c) => {
-      const updated = await deps.characters.update(c.req.valid('param').id, c.req.valid('json'))
+      const { id } = c.req.valid('param')
+      const current = await deps.characters.findById(id)
+      if (current === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      const patch = c.req.valid('json')
+      const before = changedBefore(current, patch)
+      const updated = await deps.transaction(async (tx) => {
+        if (before !== null) {
+          await recordAssetEdit(tx.editBatches, {
+            projectId: current.projectId,
+            name: current.name,
+            edit: { asset: 'character', op: 'update', id, before },
+          })
+        }
+        return tx.characters.update(id, patch)
+      })
       return c.json(ok(toCharacterResponse(updated)), 200)
     })
     .openapi(deleteCharacterRoute, async (c) => {
-      await deps.characters.softDelete(c.req.valid('param').id)
+      const { id } = c.req.valid('param')
+      const current = await deps.characters.findById(id)
+      if (current === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      await deps.transaction(async (tx) => {
+        await recordAssetEdit(tx.editBatches, { projectId: current.projectId, name: current.name, edit: { asset: 'character', op: 'delete', id } })
+        await tx.characters.softDelete(id)
+      })
       return c.body(null, 204)
     })
     // 識別画像と Look は Character 配下の経路なので、同じルータに mount して

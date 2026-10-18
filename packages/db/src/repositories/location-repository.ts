@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm'
 import type {
   CreateLocationInput, Location, LocationId, UpdateLocationPatch, ProjectId,
 } from '@ixa/domain'
@@ -21,9 +21,12 @@ export type LocationRepository = {
   findById(id: LocationId): Promise<Location | null>
   /** 作成順（ULID 昇順）。ソフトデリート済みは含まない。 */
   findByProject(projectId: ProjectId): Promise<Location[]>
-  create(input: CreateLocationInput): Promise<Location>
+  /** `id` は省ける（省けばここで振る）。取り消しの記録は書く前に作るので、作る前に ID を決めたい呼び手だけが渡す。 */
+  create(input: CreateLocationInput & { readonly id?: LocationId }): Promise<Location>
   update(id: LocationId, patch: UpdateLocationPatch): Promise<Location>
   softDelete(id: LocationId): Promise<void>
+  /** 消したものを戻す（取り消し。2026-10-19）。同じ ID・同じ中身のまま論理削除を外す。消していない・無いなら `null`。 */
+  restore(id: LocationId): Promise<Location | null>
 }
 
 /** row → Domain。zod で検証して branded ID を付ける。 */
@@ -59,7 +62,7 @@ export const createLocationRepository = (db: DbExecutor): LocationRepository => 
     const validated = CreateLocationInputSchema.parse(input)
     const rows = await db
       .insert(locations)
-      .values({ ...validated, id: newId(LocationIdSchema) })
+      .values({ ...validated, id: input.id === undefined ? newId(LocationIdSchema) : LocationIdSchema.parse(input.id) })
       .returning()
     const row = rows[0]
     if (!row) throw new Error('locations への INSERT が行を返しませんでした')
@@ -81,5 +84,15 @@ export const createLocationRepository = (db: DbExecutor): LocationRepository => 
       .where(liveById(id))
       .returning({ id: locations.id })
     if (rows.length === 0) throw new DbNotFoundError('Location', id)
+  },
+
+  async restore(id) {
+    const rows = await db
+      .update(locations)
+      .set({ deletedAt: null })
+      .where(and(eq(locations.id, id), isNotNull(locations.deletedAt)))
+      .returning()
+    const row = rows[0]
+    return row === undefined ? null : locationRowToDomain(row)
   },
 })

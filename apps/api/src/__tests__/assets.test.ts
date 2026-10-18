@@ -21,6 +21,8 @@ import {
   type InMemoryLocationRepository,
 } from '@ixa/generation/testing'
 import { aProject } from './fixtures.js'
+import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 
 type SuccessBody<T> = { success: true; data: T }
@@ -68,9 +70,14 @@ let brandAssets: InMemoryBrandAssetRepository
 let locations: InMemoryLocationRepository
 let logo: MediaAsset
 
-const buildApp = (deps: AssetRoutesDeps) => {
+const buildApp = (deps: Omit<AssetRoutesDeps, 'transaction'>) => {
   const app = new OpenAPIHono({ defaultHook: validationHook })
-  app.route('/', assetRoutes(deps))
+  const transaction = createInMemoryEditTransaction({
+    editBatches: createInMemoryEditBatchRepository(),
+    brandAssets: deps.brandAssets,
+    locations: deps.locations,
+  })
+  app.route('/', assetRoutes({ ...deps, transaction }))
   registerErrorHandlers(app, createLogger('silent'))
   return app
 }

@@ -330,6 +330,13 @@
       "when": 1792354968078,
       "tag": "0046_lush_captain_cross",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1792355707474,
+      "tag": "0047_deep_wraith",
+      "breakpoints": true
     }
   ]
 }

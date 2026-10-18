@@ -1,6 +1,7 @@
 import { index, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
 import type {
   EditBatch,
+  EditBatchAssetEdit,
   EditBatchClipEdit,
   EditBatchClipEntry,
   EditBatchEntry,
@@ -54,6 +55,8 @@ export const shotEditBatches = pgTable(
     shotEdits: jsonb('shot_edits').$type<readonly EditBatchShotEdit[]>().notNull().default([]),
     /** 作品の欄の「変える前」（変えた欄だけ。2026-10-19）。**NULL は作品を触っていない。** */
     projectEntry: jsonb('project_entry').$type<EditBatchProjectEntry>(),
+    /** 素材の作る・直す・消す（作った・消したものは ID、直したものは変えた欄の変える前。2026-10-19）。これまでの記録は空。 */
+    assetEdits: jsonb('asset_edits').$type<readonly EditBatchAssetEdit[]>().notNull().default([]),
     /** 取り消した時刻。**NULL は「まだ取り消していない」**（「取り消せない」ではない）。 */
     undoneAt: timestampTz('undone_at'),
     createdAt: createdAt(),

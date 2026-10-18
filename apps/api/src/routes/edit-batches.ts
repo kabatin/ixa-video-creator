@@ -43,6 +43,7 @@ import {
 import { roughCutLockedReason } from '@ixa/timeline'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, okList, successResponse, listResponse } from '../response.js'
+import { undoAssetEdits, type AssetUndoDeps } from './edit-batch-asset-undo.js'
 import { undoClipEdits } from './edit-batch-clip-undo.js'
 import { undoShotEdits } from './edit-batch-shot-undo.js'
 import { undoTransitionEdits, type TransitionUndoDeps } from './edit-batch-transition-undo.js'
@@ -98,6 +99,8 @@ export const EditBatchSummaryResponse = z
     lineCount: z.number().int().nonnegative().default(0),
     /** 変える前を記録した楽曲の数（曲を最後の Shot で切る・欄の直し・マスターの切り替え）。 */
     musicCount: z.number().int().nonnegative().default(0),
+    /** 記録した素材の数。 */
+    assetCount: z.number().int().nonnegative().default(0),
     /** 記録したトランジションの数（置く・消す。差し替えは 2）。 */
     transitionCount: z.number().int().nonnegative().default(0),
     /** **`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
@@ -147,6 +150,9 @@ export const UndoEditBatchResponse = z
     /** 戻したトランジション（置いた物は消し、消した物は同じ ID で置き直す）。 */
     restoredTransitions: z.array(TransitionIdSchema).default([]),
     failedTransitions: z.array(UndoTransitionFailure).default([]),
+    /** 戻した素材（キャラクター・ロケーション・ブランド資産・声）の ID。 */
+    restoredAssets: z.array(z.string().min(1)).default([]),
+    failedAssets: z.array(z.object({ assetId: z.string().min(1), reason: z.string().min(1) }).openapi('EditBatchUndoAssetFailure')).default([]),
     /** 作品の欄を戻したか（作品の直しの記録）。戻せなければ `failedProject` に理由。 */
     restoredProject: z.boolean().default(false),
     failedProject: z.string().min(1).nullable().default(null),
@@ -162,6 +168,7 @@ export const toEditBatchSummary = (batch: EditBatch): EditBatchSummaryResponse =
   clipCount: batch.clipEntries.length + batch.clipEdits.length,
   lineCount: batch.lineEntries.length,
   musicCount: batch.musicEntries.length,
+  assetCount: batch.assetEdits.length,
   transitionCount: batch.transitionEdits.length,
   undoneAt: batch.undoneAt === null ? null : batch.undoneAt.toISOString(),
   createdAt: batch.createdAt.toISOString(),
@@ -227,7 +234,8 @@ export type EditBatchRoutesDeps = {
   /** Shot の開始フレームを戻す（記録の `startFrame`）。繋いでいない環境では省く。 */
   shotReferences?: StartFrameReferences
   narration?: NarrationTelopSyncDeps & { readonly lines: Pick<NarrationLineRepository, 'findById' | 'update'> }
-} & TransitionUndoDeps
+} & TransitionUndoDeps &
+  AssetUndoDeps
 
 /** 戻す行が無い（消された）。 */
 export const LINE_NOT_FOUND_REASON = 'ナレーションの行が見つかりません（消された可能性があります）'
@@ -452,6 +460,9 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
       restoredClips.push(...clipEdits.restored)
       failedClips.push(...clipEdits.failed)
 
+      // 素材は行より先に戻す（消した声を戻してから、その声で話していた行を戻す）。
+      const assets = await undoAssetEdits(deps, undone.assetEdits)
+
       // ナレーションの行の位置（ADR-0038）。戻してからテロップを作り直す（テロップは行から導かれる）。
       const restoredLines: NarrationLineId[] = []
       const failedLines: { lineId: NarrationLineId; reason: string }[] = []
@@ -465,6 +476,7 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
         await deps.narration?.lines.update(entry.lineId, {
           ...(entry.startSec === undefined ? {} : { startSec: entry.startSec }),
           ...(entry.telop === undefined ? {} : { telop: entry.telop }),
+          ...(entry.voiceProfileId === undefined ? {} : { voiceProfileId: entry.voiceProfileId }),
         })
         restoredLines.push(entry.lineId)
       }
@@ -498,6 +510,8 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
           failedMusicTracks,
           restoredTransitions: [...transitions.restored],
           failedTransitions: [...transitions.failed],
+          restoredAssets: [...assets.restored],
+          failedAssets: [...assets.failed],
           restoredProject: undone.projectEntry !== null && projectReason === null,
           failedProject: projectReason,
         }),

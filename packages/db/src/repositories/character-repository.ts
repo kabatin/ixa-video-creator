@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm'
 import type {
   Character, CharacterId, CharacterIdentityImage, CharacterIdentityImageId,
   CreateCharacterIdentityImageInput, CreateCharacterInput, IdentityImageRole,
@@ -33,9 +33,12 @@ export type CharacterRepository = {
   findById(id: CharacterId): Promise<Character | null>
   /** 作成順（ULID 昇順）。ソフトデリート済みは含まない。 */
   findByProject(projectId: ProjectId): Promise<Character[]>
-  create(input: CreateCharacterInput): Promise<Character>
+  /** `id` は省ける（省けばここで振る）。取り消しの記録は書く前に作るので、作る前に ID を決めたい呼び手だけが渡す。 */
+  create(input: CreateCharacterInput & { readonly id?: CharacterId }): Promise<Character>
   update(id: CharacterId, patch: UpdateCharacterPatch): Promise<Character>
   softDelete(id: CharacterId): Promise<void>
+  /** 消したものを戻す（取り消し。2026-10-19）。同じ ID・同じ中身のまま論理削除を外す。消していない・無いなら `null`。 */
+  restore(id: CharacterId): Promise<Character | null>
 
   /** order 昇順。 */
   listIdentityImages(characterId: CharacterId): Promise<CharacterIdentityImage[]>
@@ -101,7 +104,7 @@ export const createCharacterRepository = (db: DbExecutor): CharacterRepository =
     const validated = CreateCharacterInputSchema.parse(input)
     const rows = await db
       .insert(characters)
-      .values({ ...validated, id: newId(CharacterIdSchema), createdAt: new Date() })
+      .values({ ...validated, id: input.id === undefined ? newId(CharacterIdSchema) : CharacterIdSchema.parse(input.id), createdAt: new Date() })
       .returning()
     const row = rows[0]
     if (!row) throw new Error('characters への INSERT が行を返しませんでした')
@@ -123,6 +126,16 @@ export const createCharacterRepository = (db: DbExecutor): CharacterRepository =
       .where(liveById(id))
       .returning({ id: characters.id })
     if (rows.length === 0) throw new DbNotFoundError('Character', id)
+  },
+
+  async restore(id) {
+    const rows = await db
+      .update(characters)
+      .set({ deletedAt: null })
+      .where(and(eq(characters.id, id), isNotNull(characters.deletedAt)))
+      .returning()
+    const row = rows[0]
+    return row === undefined ? null : characterRowToDomain(row)
   },
 
   async listIdentityImages(characterId) {

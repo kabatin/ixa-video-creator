@@ -1,12 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { CharacterId, CharacterLookId, EditBatchId, MusicTrackId, ProjectId, ShotId, TransitionId, newId } from '../common/ids.js'
+import {
+  CharacterId,
+  CharacterLookId,
+  EditBatchId,
+  MusicTrackId,
+  ProjectId,
+  ShotId,
+  TransitionId,
+  VoiceProfileId,
+  newId,
+} from '../common/ids.js'
 import {
   EditBatch,
+  EditBatchAssetEdit,
   EditBatchEntry,
   EditBatchMusicEntry,
   EditBatchProjectEntry,
   EditBatchShotEdit,
   EditBatchTransitionEdit,
+  assetEditSummary,
   canUndo,
   hasChanges,
 } from '../shot/edit-batch.js'
@@ -125,5 +137,36 @@ describe('作品の記録（EditBatchProjectEntry）', () => {
   it('これまでの記録は無いものとして読み、作品の記録だけでも取り消せる', () => {
     expect(EditBatch.parse({ ...base, kind: 'rough_cut' }).projectEntry).toBeNull()
     expect(canUndo(EditBatch.parse({ ...base, kind: 'project_edit', projectEntry: { patch: { avoid: '' } } }))).toBe(true)
+  })
+})
+
+describe('素材の記録（EditBatchAssetEdit）', () => {
+  it('作った・消した素材は ID だけ、直した素材は変えた欄の変える前を持つ', () => {
+    const id = newId(CharacterId)
+    expect(EditBatchAssetEdit.parse({ asset: 'character', op: 'delete', id })).toEqual({ asset: 'character', op: 'delete', id })
+    expect(EditBatchAssetEdit.parse({ asset: 'character', op: 'update', id, before: { name: '前の名前' } })).toEqual({
+      asset: 'character',
+      op: 'update',
+      id,
+      before: { name: '前の名前' },
+    })
+  })
+
+  it('知らない素材・直した素材に控えが無い・壊れた値は受け付けない', () => {
+    const id = newId(CharacterId)
+    expect(EditBatchAssetEdit.safeParse({ asset: 'prop', op: 'delete', id }).success).toBe(false)
+    expect(EditBatchAssetEdit.safeParse({ asset: 'character', op: 'update', id }).success).toBe(false)
+    expect(EditBatchAssetEdit.safeParse({ asset: 'character', op: 'update', id, before: { name: '' } }).success).toBe(false)
+  })
+
+  it('見出しは素材の種類と名前で言う', () => {
+    expect(assetEditSummary({ asset: 'location', op: 'delete' }, '夕方の店')).toBe('ロケーション「夕方の店」を消す')
+    expect(assetEditSummary({ asset: 'voice', op: 'update' }, '戦子の声')).toBe('声「戦子の声」を直す')
+  })
+
+  it('これまでの記録は空として読み、素材の記録だけでも取り消せる', () => {
+    expect(EditBatch.parse({ ...base, kind: 'rough_cut' }).assetEdits).toEqual([])
+    const batch = EditBatch.parse({ ...base, kind: 'asset_edit', assetEdits: [{ asset: 'voice', op: 'create', id: newId(VoiceProfileId) }] })
+    expect(canUndo(batch)).toBe(true)
   })
 })

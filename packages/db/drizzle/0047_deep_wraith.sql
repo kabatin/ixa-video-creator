@@ -1,0 +1,1 @@
+ALTER TABLE "shot_edit_batches" ADD COLUMN "asset_edits" jsonb DEFAULT '[]'::jsonb NOT NULL;

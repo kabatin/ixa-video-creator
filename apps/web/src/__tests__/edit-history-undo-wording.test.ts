@@ -147,3 +147,22 @@ describe('作品の記録', () => {
     expect(failed.failedClips.map((entry) => [entry.subject, entry.reason])).toEqual([['作品', '作品が見つかりません']])
   })
 })
+
+describe('素材の記録', () => {
+  const batch = aBatch({ kind: 'asset_edit', summary: 'キャラクター「戦子」を消す', lineCount: 0, assetCount: 1 })
+
+  it('種類は素材の編集、件数は素材で言う', () => {
+    expect(buildEditHistoryView([batch]).rows[0]).toMatchObject({ kindLabel: '素材の編集', shotCountLabel: '1 件の素材' })
+  })
+
+  it('戻した結果を素材で言い、戻せなかった理由を出す', () => {
+    const view = buildUndoResultView({
+      ...emptyResult(batch),
+      restoredAssets: [],
+      failedAssets: [{ assetId: 'x', reason: '同じ名前の声があります' }],
+    })
+    expect(view.summary).toBe('素材 0 件を元に戻し、1 件は戻せませんでした')
+    expect(view.failedClips.map((entry) => entry.subject)).toEqual(['素材'])
+    expect(undoRestoredAnything({ ...emptyResult(batch), restoredAssets: ['x'] })).toBe(true)
+  })
+})

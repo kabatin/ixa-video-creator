@@ -1,4 +1,9 @@
 import type { DbClient } from '../client.js'
+import { createBrandAssetRepository, type BrandAssetRepository } from './brand-asset-repository.js'
+import { createCharacterLookRepository, type CharacterLookRepository } from './character-look-repository.js'
+import { createCharacterRepository, type CharacterRepository } from './character-repository.js'
+import { createLocationRepository, type LocationRepository } from './location-repository.js'
+import { createVoiceProfileRepository, type VoiceProfileRepository } from './voice-profile-repository.js'
 import { createEditBatchRepository, type EditBatchRepository } from './edit-batch-repository.js'
 import { createMusicTrackRepository, type MusicTrackRepository } from './music-track-repository.js'
 import { createNarrationLineRepository, type NarrationLineRepository } from './narration-line-repository.js'
@@ -26,6 +31,11 @@ export type EditRepositories = {
   readonly shotReferences: ShotReferenceRepository
   readonly musicTracks: MusicTrackRepository
   readonly narrationLines: NarrationLineRepository
+  readonly characters: CharacterRepository
+  readonly looks: CharacterLookRepository
+  readonly locations: LocationRepository
+  readonly brandAssets: BrandAssetRepository
+  readonly voices: VoiceProfileRepository
 }
 
 export type EditTransaction = <T>(fn: (repos: EditRepositories) => Promise<T>) => Promise<T>
@@ -44,5 +54,10 @@ export const createEditTransaction =
         shotReferences: createShotReferenceRepository(tx),
         musicTracks: createMusicTrackRepository(tx),
         narrationLines: createNarrationLineRepository(tx),
+        characters: createCharacterRepository(tx),
+        looks: createCharacterLookRepository(tx),
+        locations: createLocationRepository(tx),
+        brandAssets: createBrandAssetRepository(tx),
+        voices: createVoiceProfileRepository(tx),
       }),
     )

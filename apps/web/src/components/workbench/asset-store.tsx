@@ -81,6 +81,11 @@ export type AssetActions = {
   readonly analyzeTrack: (id: MusicTrackId) => Promise<void>
   /** 楽曲の一覧を読み直す（曲を作るジョブで、ほかの経路から楽曲が増えたとき。ADR-0048）。 */
   readonly reloadTracks: () => Promise<void>
+  /**
+   * 素材の一覧を全部読み直す（取り消しで、キャラクター・ロケーション・ブランド資産・声・楽曲が戻ったとき。2026-10-19）。
+   * Look はキャラクターが読み直されると一緒に読み直る。
+   */
+  readonly reloadAll: () => Promise<void>
   /** 声を名前だけで作る（「使う AI」の声の AI と、その最初の声。ADR-0038）。 */
   readonly createVoice: (name: string) => Promise<WireVoice>
   readonly updateVoice: (id: VoiceProfileId, patch: UpdateVoiceProfilePatch) => Promise<WireVoice>
@@ -373,6 +378,20 @@ export const AssetStoreProvider = ({
         setTracks({ state: 'ready', value: fresh })
         // 最初の 1 曲ならマスターになっている。拍・尺の材料を読み直す。
         router.refresh()
+      },
+      reloadAll: async () => {
+        const [nextCharacters, nextLocations, nextBrandAssets, nextTracks, nextVoices] = await Promise.all([
+          api.listCharacters(projectId),
+          api.listLocations(projectId),
+          api.listBrandAssets(projectId),
+          api.listMusicTracks(projectId),
+          api.listVoices(projectId),
+        ])
+        setCharacters({ state: 'ready', value: nextCharacters })
+        setLocations({ state: 'ready', value: nextLocations })
+        setBrandAssets({ state: 'ready', value: nextBrandAssets })
+        setTracks({ state: 'ready', value: nextTracks })
+        setVoices({ state: 'ready', value: nextVoices })
       },
       createVoice: async (name) => {
         const { settings } = await api.getAiSettings()

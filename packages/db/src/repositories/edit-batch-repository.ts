@@ -47,6 +47,7 @@ const rowToDomain = (row: EditBatchRow): EditBatch =>
     transitionEdits: row.transitionEdits,
     shotEdits: row.shotEdits,
     projectEntry: row.projectEntry,
+    assetEdits: row.assetEdits,
     undoneAt: row.undoneAt,
     createdAt: row.createdAt,
   })
