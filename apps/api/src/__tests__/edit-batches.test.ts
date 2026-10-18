@@ -82,6 +82,8 @@ const scene = (options: {
           updateStatusCalls += 1
           return shots.updateStatus(shotId, status)
         },
+        softDelete: (id) => shots.softDelete(id),
+        restore: (id) => shots.restore(id),
       },
       editBatches,
       timelineClips: clips,

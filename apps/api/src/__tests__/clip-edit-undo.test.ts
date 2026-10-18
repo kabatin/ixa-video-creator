@@ -54,6 +54,8 @@ const unusedShots = {
   update: () => Promise.reject(new Error('呼ばれない')),
   selectTake: () => Promise.reject(new Error('呼ばれない')),
   updateStatus: () => Promise.reject(new Error('呼ばれない')),
+  softDelete: () => Promise.reject(new Error('呼ばれない')),
+  restore: () => Promise.reject(new Error('呼ばれない')),
 }
 
 const send = (method: string, path: string, payload?: unknown) =>

@@ -330,7 +330,7 @@ export const createApp = (deps: AppDeps) => {
     }),
   )
   // 一括変更だけが記録を作る。1 件ずつの変更は戻す対象にしない（横断 ROADMAP）。
-  app.route('/', shotBulkRoutes({ ...shotDeps, editBatches: deps.editBatches }))
+  app.route('/', shotBulkRoutes({ ...shotDeps, transaction: deps.editTransaction }))
   // まとめて本番で作り直す（ADR-0042 段 4）。費用と投入は一括生成と同じ関数を通る。
   app.route('/', shotBulkFinalRoutes(shotDeps))
   app.route(
@@ -340,6 +340,7 @@ export const createApp = (deps: AppDeps) => {
       projects,
       takes: deps.takes,
       shotCharacters: deps.shotCharacters,
+      transaction: deps.editTransaction,
     }),
   )
   app.route(

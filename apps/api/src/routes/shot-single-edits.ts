@@ -6,11 +6,12 @@ import {
   ShotId as ShotIdSchema,
   TakeId as TakeIdSchema,
   UpdateShotPatch as UpdateShotPatchSchema,
+  newId,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 import { locationProblem } from './library-ownership.js'
-import { recordShotPatch, recordTakeChoice } from './shot-edit-recording.js'
+import { recordShotEdits, recordShotPatch, recordTakeChoice } from './shot-edit-recording.js'
 import { ShotResponse, applySelectedTake, clearSelectedTake, toShotResponse, type ShotRoutesDeps } from './shots.js'
 
 /**
@@ -154,7 +155,16 @@ export const shotSingleEditRoutes = (deps: ShotSingleEditDeps) =>
       const input = c.req.valid('json')
       const problem = await locationProblem(deps.locations, projectId, input.locationId)
       if (problem !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, { locationId: [problem] }), 422)
-      const created = await deps.shots.create({ ...input, projectId })
+      // 記録は書く前に、同じトランザクションで。作る Shot の ID を先に決めて記録に入れる。
+      const id = newId(ShotIdSchema)
+      const created = await deps.transaction(async (tx) => {
+        await recordShotEdits(tx.editBatches, {
+          projectId,
+          summary: `${input.code} を作る`,
+          shotEdits: [{ op: 'create', shotId: id }],
+        })
+        return tx.shots.create({ ...input, projectId, id })
+      })
       return c.json(ok(toShotResponse(created)), 201)
     })
     .openapi(updateShotRoute, async (c) => {
@@ -190,7 +200,16 @@ export const shotSingleEditRoutes = (deps: ShotSingleEditDeps) =>
       }
     })
     .openapi(deleteShotRoute, async (c) => {
-      await deps.shots.softDelete(c.req.valid('param').id)
+      const shot = await deps.shots.findById(c.req.valid('param').id)
+      if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      await deps.transaction(async (tx) => {
+        await recordShotEdits(tx.editBatches, {
+          projectId: shot.projectId,
+          summary: `${shot.code} を消す`,
+          shotEdits: [{ op: 'delete', shotId: shot.id }],
+        })
+        await tx.shots.softDelete(shot.id)
+      })
       return c.body(null, 204)
     })
     .openapi(selectTakeRoute, async (c) => {

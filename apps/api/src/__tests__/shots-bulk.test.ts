@@ -33,6 +33,7 @@ import { createInMemoryProjectEvents } from './in-memory-project-events.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryGenerationJobRepository } from './in-memory-generation-job-repository.js'
 import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { CHEAP_MODEL, GOOD_MODEL, type ErrorBody, type Ok } from './shot-test-support.js'
 import { createTestVideoProvider, testModel } from './test-video-provider.js'
@@ -132,7 +133,8 @@ const buildBulkFixture = (options: BulkFixtureOptions = {}) => {
   const editBatches = createInMemoryEditBatchRepository()
   const app = new OpenAPIHono({ defaultHook: validationHook })
   registerErrorHandlers(app, createLogger('silent'))
-  app.route('/', shotBulkRoutes({ ...deps, editBatches: options.editBatches ?? editBatches }))
+  const transaction = createInMemoryEditTransaction({ editBatches: options.editBatches ?? editBatches, shots })
+  app.route('/', shotBulkRoutes({ ...deps, transaction }))
 
   return { app, project, shots, takes, generationJobs, queue, events, editBatches, locations }
 }

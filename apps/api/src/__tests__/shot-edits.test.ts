@@ -16,9 +16,13 @@ import {
 import { describe, expect, it } from 'vitest'
 import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
+import { editBatchRoutes } from '../routes/edit-batches.js'
 import { shotEditRoutes } from '../routes/shot-edits.js'
 import { aProject } from './fixtures.js'
+import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
+import { createInMemoryTimelineClipRepository } from './in-memory-timeline-repositories.js'
 
 /**
  * Shot の分割と結合（制作者の要望 2026-09-26 / ADR-0024）。規則そのものは domain の
@@ -33,16 +37,19 @@ const post = (app: OpenAPIHono, path: string, body: unknown) =>
   app.request(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
 
 const build = (project: Project, shots: readonly Shot[], options: { takes?: Parameters<typeof createInMemoryTakeRepository>[0] } = {}) => {
-  const deps = {
+  const repos = {
     shots: createInMemoryShotRepository(shots),
     projects: createInMemoryProjectRepository([project]),
     takes: createInMemoryTakeRepository(options.takes ?? []),
     shotCharacters: createInMemoryShotCharacterRepository(),
   }
+  const editBatches = createInMemoryEditBatchRepository()
+  const transaction = createInMemoryEditTransaction({ editBatches, shots: repos.shots, shotCharacters: repos.shotCharacters })
   const app = new OpenAPIHono({ defaultHook: validationHook })
   registerErrorHandlers(app, createLogger('silent'))
-  app.route('/', shotEditRoutes(deps))
-  return { app, ...deps }
+  app.route('/', shotEditRoutes({ ...repos, transaction }))
+  app.route('/', editBatchRoutes({ projects: repos.projects, shots: repos.shots, editBatches, timelineClips: createInMemoryTimelineClipRepository() }))
+  return { app, editBatches, ...repos }
 }
 
 const cuts = (project: Project): readonly Shot[] => [

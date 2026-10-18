@@ -33,6 +33,8 @@ const undo = (setup: Setup, batchId: string) => {
         update: () => Promise.reject(new Error('Shot は触らない')),
         selectTake: () => Promise.reject(new Error('Shot は触らない')),
         updateStatus: () => Promise.reject(new Error('Shot は触らない')),
+        softDelete: () => Promise.reject(new Error('Shot は触らない')),
+        restore: () => Promise.reject(new Error('Shot は触らない')),
       },
       timelineClips: setup.deps.timelineClips,
       editBatches: setup.editBatches,

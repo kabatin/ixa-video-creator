@@ -23,8 +23,9 @@ import {
   editBatchEntry,
   recordEditBatch,
   shotBeforePatch,
-  type EditBatchRecorder,
 } from './edit-batch-recording.js'
+import type { EditTransaction } from '@ixa/db'
+import { recordShotEdits } from './shot-edit-recording.js'
 import { budgetRejection, enqueuePlanned, resolveShot } from './shots-bulk-plan.js'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { locationProblem } from './library-ownership.js'
@@ -340,7 +341,8 @@ const rule = {
  * 記録を作れない状態で一括変更を通すと、押した瞬間に最大 200 件が戻せなくなる。
  */
 export type ShotBulkRoutesDeps = ShotRoutesDeps & {
-  readonly editBatches: EditBatchRecorder
+  /** 記録と書き込みを同じトランザクションで行う口。**省けない。** */
+  readonly transaction: EditTransaction
 }
 
 export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
@@ -458,38 +460,42 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
        * 片方だけ直した日にズレる（lessons L-016）。控えすぎても、
        * 取り消しで同じ値が戻るだけで害は無い。
        */
-      await recordEditBatch(deps.editBatches, {
-        projectId,
-        kind: 'bulk_update',
-        summarize: (count) => `採用 Take を ${count.toString()} 件まとめて決めました`,
-        entries: steps.flatMap((step) =>
-          'reason' in step
-            ? []
-            : [
-                editBatchEntry(
-                  step.shotId,
-                  {},
-                  { selectedTakeId: step.beforeSelectedTakeId, status: step.beforeStatus },
-                ),
-              ],
-        ),
-      })
-
-      const results = []
-      for (const step of steps) {
-        if ('reason' in step) {
-          results.push({ shotId: step.shotId, ok: false as const, reason: step.reason })
-          continue
-        }
-        // 状態遷移は 1 件ずつの採用と同じ関数に任せる。
-        const updated = await applySelectedTake(deps, step.shotId, step.take)
-        results.push({
-          shotId: step.shotId,
-          ok: true as const,
-          takeId: step.take.id,
-          status: updated.status,
+      // 記録と書き込みは同じトランザクション（途中で落ちれば、記録も一部の書き込みも残らない）。
+      const results = await deps.transaction(async (tx) => {
+        await recordEditBatch(tx.editBatches, {
+          projectId,
+          kind: 'bulk_update',
+          summarize: (count) => `採用 Take を ${count.toString()} 件まとめて決めました`,
+          entries: steps.flatMap((step) =>
+            'reason' in step
+              ? []
+              : [
+                  editBatchEntry(
+                    step.shotId,
+                    {},
+                    { selectedTakeId: step.beforeSelectedTakeId, status: step.beforeStatus },
+                  ),
+                ],
+          ),
         })
-      }
+
+        const results = []
+        for (const step of steps) {
+          if ('reason' in step) {
+            results.push({ shotId: step.shotId, ok: false as const, reason: step.reason })
+            continue
+          }
+          // 状態遷移は 1 件ずつの採用と同じ関数に任せる。
+          const updated = await applySelectedTake({ ...deps, shots: tx.shots }, step.shotId, step.take)
+          results.push({
+            shotId: step.shotId,
+            ok: true as const,
+            takeId: step.take.id,
+            status: updated.status,
+          })
+        }
+        return results
+      })
 
       return c.json(ok({ results }), 200)
     })
@@ -521,33 +527,37 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
         })
       }
 
-      await recordEditBatch(deps.editBatches, {
-        projectId,
-        kind: 'bulk_update',
-        summarize: (count) => `採用を ${count.toString()} 件まとめて外しました`,
-        entries: steps.flatMap((step) =>
-          'reason' in step
-            ? []
-            : [
-                editBatchEntry(
-                  step.shotId,
-                  {},
-                  { selectedTakeId: step.beforeSelectedTakeId, status: step.beforeStatus },
-                ),
-              ],
-        ),
-      })
+      // 記録と書き込みは同じトランザクション（途中で落ちれば、記録も一部の書き込みも残らない）。
+      const results = await deps.transaction(async (tx) => {
+        await recordEditBatch(tx.editBatches, {
+          projectId,
+          kind: 'bulk_update',
+          summarize: (count) => `採用を ${count.toString()} 件まとめて外しました`,
+          entries: steps.flatMap((step) =>
+            'reason' in step
+              ? []
+              : [
+                  editBatchEntry(
+                    step.shotId,
+                    {},
+                    { selectedTakeId: step.beforeSelectedTakeId, status: step.beforeStatus },
+                  ),
+                ],
+          ),
+        })
 
-      const results = []
-      for (const step of steps) {
-        if ('reason' in step) {
-          results.push({ shotId: step.shotId, ok: false as const, reason: step.reason })
-          continue
+        const results = []
+        for (const step of steps) {
+          if ('reason' in step) {
+            results.push({ shotId: step.shotId, ok: false as const, reason: step.reason })
+            continue
+          }
+          // 状態遷移は 1 件ずつの「採用を外す」と同じ関数に任せる。
+          const updated = await clearSelectedTake({ ...deps, shots: tx.shots }, step.shot)
+          results.push({ shotId: step.shotId, ok: true as const, status: updated.status })
         }
-        // 状態遷移は 1 件ずつの「採用を外す」と同じ関数に任せる。
-        const updated = await clearSelectedTake(deps, step.shot)
-        results.push({ shotId: step.shotId, ok: true as const, status: updated.status })
-      }
+        return results
+      })
 
       return c.json(ok({ results }), 200)
     })
@@ -581,24 +591,28 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
         steps.push({ shotId, next, before: shotBeforePatch(resolved.shot, next) })
       }
 
-      await recordEditBatch(deps.editBatches, {
-        projectId,
-        kind: 'bulk_update',
-        summarize: (count) => `Shot を ${count.toString()} 件まとめて変更しました`,
-        entries: steps.flatMap((step) =>
-          'reason' in step ? [] : [editBatchEntry(step.shotId, step.before)],
-        ),
-      })
+      // 記録と書き込みは同じトランザクション（途中で落ちれば、記録も一部の書き込みも残らない）。
+      const results = await deps.transaction(async (tx) => {
+        await recordEditBatch(tx.editBatches, {
+          projectId,
+          kind: 'bulk_update',
+          summarize: (count) => `Shot を ${count.toString()} 件まとめて変更しました`,
+          entries: steps.flatMap((step) =>
+            'reason' in step ? [] : [editBatchEntry(step.shotId, step.before)],
+          ),
+        })
 
-      const results = []
-      for (const step of steps) {
-        if ('reason' in step) {
-          results.push({ shotId: step.shotId, ok: false as const, reason: step.reason })
-          continue
+        const results = []
+        for (const step of steps) {
+          if ('reason' in step) {
+            results.push({ shotId: step.shotId, ok: false as const, reason: step.reason })
+            continue
+          }
+          const updated = await tx.shots.update(step.shotId, step.next)
+          results.push({ shotId: step.shotId, ok: true as const, shot: toShotResponse(updated) })
         }
-        const updated = await deps.shots.update(step.shotId, step.next)
-        results.push({ shotId: step.shotId, ok: true as const, shot: toShotResponse(updated) })
-      }
+        return results
+      })
 
       return c.json(ok({ results }), 200)
     })
@@ -608,16 +622,27 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
         return c.json(fail(NOT_FOUND_MESSAGE), 404)
       }
 
-      const results = []
+      /** **書く前に全件を決める**（消せない理由のある Shot は記録に入れない）。 */
+      const steps: ({ readonly shotId: ShotId } | { readonly shotId: ShotId; readonly reason: string })[] = []
       for (const shotId of c.req.valid('json').shotIds) {
         const resolved = await resolveShot(deps, projectId, shotId)
-        if (!('shot' in resolved)) {
-          results.push({ shotId, ok: false as const, reason: resolved.reason })
-          continue
-        }
-        await deps.shots.softDelete(shotId)
-        results.push({ shotId, ok: true as const })
+        steps.push('shot' in resolved ? { shotId } : { shotId, reason: resolved.reason })
       }
+      const removing = steps.filter((step) => !('reason' in step)).map((step) => step.shotId)
+      // 記録と書き込みは同じトランザクション。消した Shot は論理削除なので、戻すと同じ ID・同じ中身。
+      await deps.transaction(async (tx) => {
+        await recordShotEdits(tx.editBatches, {
+          projectId,
+          summary: `Shot を ${String(removing.length)} 件まとめて消す`,
+          shotEdits: removing.map((shotId) => ({ op: 'delete', shotId })),
+        })
+        for (const shotId of removing) await tx.shots.softDelete(shotId)
+      })
+      const results = steps.map((step) =>
+        'reason' in step
+          ? { shotId: step.shotId, ok: false as const, reason: step.reason }
+          : { shotId: step.shotId, ok: true as const },
+      )
       const deletedCount = results.filter((result) => result.ok).length
       return c.json(ok({ results, deletedCount }), 200)
     })

@@ -173,6 +173,7 @@ const editTransactionOf = (deps: Omit<AppDeps, 'editTransaction'>) =>
     timelineClips: deps.timelineClips,
     transitions: deps.transitions,
     shots: deps.shots,
+    shotCharacters: deps.shotCharacters,
     musicTracks: deps.musicTracks,
     ...(deps.narration === undefined ? {} : { narrationLines: deps.narration.lines }),
   })

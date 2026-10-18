@@ -1,16 +1,19 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { ProjectRepository, ShotCharacterRepository, ShotRepository, TakeRepository } from '@ixa/db'
+import type { EditTransaction, ProjectRepository, ShotCharacterRepository, ShotRepository, TakeRepository } from '@ixa/db'
 import {
   ProjectId as ProjectIdSchema,
   ShotId as ShotIdSchema,
   planMerge,
   planSplit,
+  newId,
   splitShotCode,
   type Shot,
   type ShotId,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
+import { editBatchEntry, shotBeforePatch } from './edit-batch-recording.js'
+import { recordShotEdits } from './shot-edit-recording.js'
 import { ShotResponse, toShotResponse } from './shots.js'
 
 /**
@@ -18,7 +21,9 @@ import { ShotResponse, toShotResponse } from './shots.js'
  *
  * 規則（Take の無い Shot だけ・最短の尺・隣り合うこと）は domain の `planSplit` / `planMerge`
  * が持つ。ここは**状態では分からない Take の有無を件数で確かめて**から書く。
- * 取り消しの記録は残さない。確認は画面が取る。
+ * **書く前に、書き込みと同じトランザクションで取り消しの記録を作る**（2026-10-19）。分割は「元の尺 + 後半の作成」、
+ * 結合は「残す Shot の尺 + ほかの削除」を 1 つの記録にし、⌘Z 1 回で元に戻る。
+ * 後半を挟むための並び順の振り直しは記録しない（並びの前後は変わらないので、戻しても害が無い）。
  */
 
 export type ShotEditRoutesDeps = {
@@ -26,6 +31,8 @@ export type ShotEditRoutesDeps = {
   readonly projects: ProjectRepository
   readonly takes: Pick<TakeRepository, 'findByShot'>
   readonly shotCharacters: Pick<ShotCharacterRepository, 'findByShot' | 'replaceAll'>
+  /** 記録と書き込みを同じトランザクションで行う口。**省けない。** */
+  readonly transaction: EditTransaction
 }
 
 /** 並び順の刻み。Shot の order は 1000 刻みで採番する（ARCHITECTURE §19）。 */
@@ -82,7 +89,7 @@ const hasTakes = async (deps: ShotEditRoutesDeps, shotId: ShotId): Promise<boole
  * 元の Shot の直後に入る order。**隙間が無ければ並べ直してから入れる**
  * （order は挿入時に再採番しない方針だが、割った後半を末尾に回すと一覧の並びが崩れる）。
  */
-const orderAfter = async (deps: ShotEditRoutesDeps, shot: Shot): Promise<number> => {
+const orderAfter = async (deps: Pick<ShotEditRoutesDeps, 'shots'>, shot: Shot): Promise<number> => {
   const siblings = (await deps.shots.findByProject(shot.projectId)).sort((a, b) => a.order - b.order)
   const next = siblings.find((sibling) => sibling.order > shot.order)
   if (next === undefined) return shot.order + ORDER_STEP
@@ -108,38 +115,50 @@ export const shotEditRoutes = (deps: ShotEditRoutesDeps) =>
         return c.json(fail(VALIDATION_ERROR_MESSAGE, { atSec: [reason ?? ''] }), 422)
       }
 
-      const order = await orderAfter(deps, shot)
-      const used = new Set((await deps.shots.findByProject(shot.projectId)).map((sibling) => sibling.code))
-      const first = await deps.shots.update(shot.id, { durationSec: plan.firstDurationSec })
-      const second = await deps.shots.create({
-        projectId: shot.projectId,
-        sequenceId: shot.sequenceId,
-        order,
-        code: splitShotCode(shot.code, used),
-        startSec: plan.secondStartSec,
-        durationSec: plan.secondDurationSec,
-        // 合わせ方と速さ（ADR-0026・0050）も引き継ぐ。割っただけで後半が 1 倍に戻らない。
-        timing: shot.timing,
-        speed: shot.speed,
-        description: shot.description,
-        dialogue: shot.dialogue,
-        camera: shot.camera,
-        mood: shot.mood,
-        continuityMode: shot.continuityMode,
-        locationId: shot.locationId,
-        sourceType: shot.sourceType,
-        status: shot.status,
-      })
-      // 登場人物も引き継ぐ。参照（reference）は生成時に登場人物とロケーションから導かれる。
+      const secondId = newId(ShotIdSchema)
+      const firstPatch = { durationSec: plan.firstDurationSec }
       const cast = await deps.shotCharacters.findByShot(shot.id)
-      if (cast.length > 0) {
-        await deps.shotCharacters.replaceAll(
-          second.id,
-          cast.map(({ characterId, lookId, prominence, order: castOrder }) => ({
-            characterId, lookId, prominence, order: castOrder,
-          })),
-        )
-      }
+      const used = new Set((await deps.shots.findByProject(shot.projectId)).map((sibling) => sibling.code))
+      const { first, second } = await deps.transaction(async (tx) => {
+        await recordShotEdits(tx.editBatches, {
+          projectId: shot.projectId,
+          summary: `${shot.code} を分割する`,
+          entries: [editBatchEntry(shot.id, shotBeforePatch(shot, firstPatch))],
+          shotEdits: [{ op: 'create', shotId: secondId }],
+        })
+        const order = await orderAfter({ shots: tx.shots }, shot)
+        const shortened = await tx.shots.update(shot.id, firstPatch)
+        const created = await tx.shots.create({
+          id: secondId,
+          projectId: shot.projectId,
+          sequenceId: shot.sequenceId,
+          order,
+          code: splitShotCode(shot.code, used),
+          startSec: plan.secondStartSec,
+          durationSec: plan.secondDurationSec,
+          // 合わせ方と速さ（ADR-0026・0050）も引き継ぐ。割っただけで後半が 1 倍に戻らない。
+          timing: shot.timing,
+          speed: shot.speed,
+          description: shot.description,
+          dialogue: shot.dialogue,
+          camera: shot.camera,
+          mood: shot.mood,
+          continuityMode: shot.continuityMode,
+          locationId: shot.locationId,
+          sourceType: shot.sourceType,
+          status: shot.status,
+        })
+        // 登場人物も引き継ぐ。参照（reference）は生成時に登場人物とロケーションから導かれる。
+        if (cast.length > 0) {
+          await tx.shotCharacters.replaceAll(
+            created.id,
+            cast.map(({ characterId, lookId, prominence, order: castOrder }) => ({
+              characterId, lookId, prominence, order: castOrder,
+            })),
+          )
+        }
+        return { first: shortened, second: created }
+      })
       return c.json(ok({ first: toShotResponse(first), second: toShotResponse(second) }), 200)
     })
     .openapi(mergeRoute, async (c) => {
@@ -163,8 +182,18 @@ export const shotEditRoutes = (deps: ShotEditRoutesDeps) =>
       const plan = planMerge(shots)
       if (!plan.ok) return reject(plan.reason)
 
-      const merged = await deps.shots.update(plan.keep.id, { durationSec: plan.durationSec })
-      for (const removed of plan.remove) await deps.shots.softDelete(removed.id)
+      const keepPatch = { durationSec: plan.durationSec }
+      const merged = await deps.transaction(async (tx) => {
+        await recordShotEdits(tx.editBatches, {
+          projectId,
+          summary: `${plan.keep.code} に ${String(plan.remove.length)} 件をまとめる`,
+          entries: [editBatchEntry(plan.keep.id, shotBeforePatch(plan.keep, keepPatch))],
+          shotEdits: plan.remove.map((removed) => ({ op: 'delete', shotId: removed.id })),
+        })
+        const kept = await tx.shots.update(plan.keep.id, keepPatch)
+        for (const removed of plan.remove) await tx.shots.softDelete(removed.id)
+        return kept
+      })
       return c.json(
         ok({ shot: toShotResponse(merged), removedShotIds: plan.remove.map((removed) => removed.id) }),
         200,

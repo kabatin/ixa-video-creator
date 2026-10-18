@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm'
 import type {
   CreateShotInput, ProjectId, Shot, ShotId, ShotStatus, TakeId, UpdateShotPatch,
 } from '@ixa/domain'
@@ -25,7 +25,8 @@ export type ShotRepository = {
   findById(id: ShotId): Promise<Shot | null>
   /** order 昇順。ソフトデリート済みは含まない。 */
   findByProject(projectId: ProjectId): Promise<Shot[]>
-  create(input: CreateShotInput): Promise<Shot>
+  /** `id` は省ける（省けばここで振る）。取り消しの記録は書く前に作るので、作る前に ID を決めたい呼び手だけが渡す。 */
+  create(input: CreateShotInput & { readonly id?: ShotId }): Promise<Shot>
   /**
    * 複数の Shot を **1 トランザクションで**追加する（ストーリーボードの一括作成）。
    * 途中で失敗して半分だけ残ると、タイムラインに隙間のある状態が DB に居座る。
@@ -34,6 +35,11 @@ export type ShotRepository = {
   createMany(inputs: readonly CreateShotInput[]): Promise<Shot[]>
   update(id: ShotId, patch: UpdateShotPatch): Promise<Shot>
   softDelete(id: ShotId): Promise<void>
+  /**
+   * 消した Shot を戻す（取り消し。2026-10-19）。**同じ ID・同じ中身のまま**論理削除を外す。
+   * 消していない・無いなら `null`。同じコードの Shot が後から作られていれば一意制約で投げる。
+   */
+  restore(id: ShotId): Promise<Shot | null>
   /** 採用 Take を差し替える。sourceInSec は維持する（ADR-0011）。 */
   /**
    * 採用 Take を設定する。**`null` で採用を外す。**
@@ -114,7 +120,8 @@ export const createShotRepository = (db: DbExecutor): ShotRepository => {
         .insert(shots)
         .values({
           ...validated,
-          id: newId(ShotIdSchema),
+          // 渡された ID は検証してから使う（規約 4）。
+          id: input.id === undefined ? newId(ShotIdSchema) : ShotIdSchema.parse(input.id),
           selectedTakeId: null,
           lockedAt: null,
           createdAt: now,
@@ -163,6 +170,16 @@ export const createShotRepository = (db: DbExecutor): ShotRepository => {
         .where(liveById(id))
         .returning({ id: shots.id })
       if (rows.length === 0) throw new DbNotFoundError('Shot', id)
+    },
+
+    async restore(id) {
+      const rows = await db
+        .update(shots)
+        .set({ deletedAt: null, updatedAt: new Date() })
+        .where(and(eq(shots.id, id), isNotNull(shots.deletedAt)))
+        .returning()
+      const row = rows[0]
+      return row === undefined ? null : shotRowToDomain(row)
     },
 
     selectTake: async (shotId, takeId) => updateLive(shotId, { selectedTakeId: takeId }),

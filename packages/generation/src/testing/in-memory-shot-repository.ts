@@ -21,6 +21,8 @@ export const createInMemoryShotRepository = (
   seed: readonly Shot[] = [],
 ): InMemoryShotRepository => {
   let store: readonly Shot[] = seed.map((shot) => ShotSchema.parse(shot))
+  /** 論理削除したもの。一覧・1 件の読みには出さず、`restore` だけが戻す。 */
+  let deleted: readonly Shot[] = []
 
   const find = (id: ShotId): Shot | undefined => store.find((s) => s.id === id)
 
@@ -47,7 +49,7 @@ export const createInMemoryShotRepository = (
       const now = new Date()
       const created = ShotSchema.parse({
         ...validated,
-        id: newId(ShotIdSchema),
+        id: input.id ?? newId(ShotIdSchema),
         selectedTakeId: null,
         lockedAt: null,
         createdAt: now,
@@ -78,9 +80,23 @@ export const createInMemoryShotRepository = (
     update: (id, patch) => replace(id, UpdateShotPatchSchema.parse(patch)),
 
     softDelete: (id) => {
-      if (find(id) === undefined) return Promise.reject(new DbNotFoundError('Shot', id))
+      const current = find(id)
+      if (current === undefined) return Promise.reject(new DbNotFoundError('Shot', id))
       store = store.filter((shot) => shot.id !== id)
+      deleted = [...deleted, current]
       return Promise.resolve()
+    },
+
+    // 本物と同じく、同じコードの Shot が後から作られていれば一意制約で落ちる。
+    restore: (id) => {
+      const removed = deleted.find((shot) => shot.id === id)
+      if (removed === undefined) return Promise.resolve(null)
+      if (store.some((shot) => shot.projectId === removed.projectId && shot.code === removed.code)) {
+        return Promise.reject(new Error('duplicate key value violates unique constraint "shots_project_id_code_uidx"'))
+      }
+      deleted = deleted.filter((shot) => shot.id !== id)
+      store = [...store, removed]
+      return Promise.resolve(removed)
     },
 
     selectTake: (shotId, takeId) => replace(shotId, { selectedTakeId: takeId }),

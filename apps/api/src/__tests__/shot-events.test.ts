@@ -81,7 +81,13 @@ const buildFixture = (options: FixtureOptions = {}) => {
       transaction: createInMemoryEditTransaction({ editBatches: createInMemoryEditBatchRepository(), shots: deps.shots }),
     }),
   )
-  app.route('/', shotBulkRoutes({ ...deps, editBatches: createInMemoryEditBatchRepository() }))
+  app.route(
+    '/',
+    shotBulkRoutes({
+      ...deps,
+      transaction: createInMemoryEditTransaction({ editBatches: createInMemoryEditBatchRepository(), shots: deps.shots }),
+    }),
+  )
 
   return { app, project, events, shots }
 }

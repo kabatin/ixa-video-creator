@@ -266,6 +266,8 @@ export const inMemoryShots = (seed: readonly Shot[]): InMemoryShots => {
     createMany: () => Promise.reject(new Error('未使用')),
     update: (id, patch) => replace(id, patch as Partial<Shot>),
     softDelete: () => Promise.resolve(),
+    // worker は Shot を戻さない（取り消しは API だけ）。
+    restore: () => Promise.resolve(null),
     selectTake: (shotId, takeId) => replace(shotId, { selectedTakeId: takeId }),
     updateStatus: (shotId, status) => replace(shotId, { status }),
   }

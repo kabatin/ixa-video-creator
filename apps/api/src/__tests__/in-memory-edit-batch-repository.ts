@@ -59,6 +59,7 @@ export const createInMemoryEditBatchRepository = (
         musicEntries: parsed.musicEntries,
         clipEdits: parsed.clipEdits,
         transitionEdits: parsed.transitionEdits,
+        shotEdits: parsed.shotEdits,
         undoneAt: null,
         createdAt: new Date(),
       })

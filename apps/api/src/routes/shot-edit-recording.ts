@@ -1,4 +1,4 @@
-import type { EditBatch, Shot, UpdateShotPatch } from '@ixa/domain'
+import { hasChanges, type EditBatch, type EditBatchEntry, type EditBatchShotEdit, type Shot, type UpdateShotPatch } from '@ixa/domain'
 import { editBatchEntry, recordEditBatch, shotBeforePatch, type EditBatchRecorder } from './edit-batch-recording.js'
 
 /**
@@ -35,3 +35,27 @@ export const recordTakeChoice = (
     summarize: () => (action === 'select' ? `${shot.code} の採用 Take を決める` : `${shot.code} の採用を外す`),
     entries: [editBatchEntry(shot.id, {}, { selectedTakeId: shot.selectedTakeId, status: shot.status })],
   })
+
+/**
+ * Shot の作成・削除を含む記録（作成・削除・分割・結合・一括削除）。尺などを直した Shot は `entries` に、
+ * 作った・消した Shot は `shotEdits` に入れる。**何も無ければ作らない**（`null`）。
+ */
+export const recordShotEdits = async (
+  recorder: EditBatchRecorder,
+  draft: {
+    readonly projectId: Shot['projectId']
+    readonly summary: string
+    readonly shotEdits: readonly EditBatchShotEdit[]
+    readonly entries?: readonly EditBatchEntry[]
+  },
+): Promise<EditBatch | null> => {
+  const entries = (draft.entries ?? []).filter(hasChanges)
+  if (draft.shotEdits.length === 0 && entries.length === 0) return null
+  return await recorder.create({
+    projectId: draft.projectId,
+    kind: 'shot_edit',
+    summary: draft.summary,
+    entries: [...entries],
+    shotEdits: [...draft.shotEdits],
+  })
+}

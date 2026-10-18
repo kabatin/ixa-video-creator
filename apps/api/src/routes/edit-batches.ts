@@ -37,6 +37,7 @@ import { roughCutLockedReason } from '@ixa/timeline'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, okList, successResponse, listResponse } from '../response.js'
 import { undoClipEdits } from './edit-batch-clip-undo.js'
+import { undoShotEdits } from './edit-batch-shot-undo.js'
 import { undoTransitionEdits, type TransitionUndoDeps } from './edit-batch-transition-undo.js'
 import { FOREIGN_SHOT_REASON, SHOT_NOT_FOUND_REASON } from './shots-bulk.js'
 
@@ -147,7 +148,7 @@ export const toEditBatchSummary = (batch: EditBatch): EditBatchSummaryResponse =
   id: batch.id,
   kind: batch.kind,
   summary: batch.summary,
-  shotCount: batch.entries.length,
+  shotCount: batch.entries.length + batch.shotEdits.length,
   clipCount: batch.clipEntries.length + batch.clipEdits.length,
   lineCount: batch.lineEntries.length,
   musicCount: batch.musicEntries.length,
@@ -197,7 +198,7 @@ export type EditBatchRoutesDeps = {
    * 戻すのは `update` / `selectTake` / `updateStatus` の 3 つだけ。Take の作成には触らない。
    * 一括採用は採用 Take と状態の両方を動かすので、状態を戻す口も要る。
    */
-  shots: Pick<ShotRepository, 'findById' | 'selectTake' | 'update' | 'updateStatus'>
+  shots: Pick<ShotRepository, 'findById' | 'selectTake' | 'update' | 'updateStatus' | 'softDelete' | 'restore'>
   editBatches: Pick<EditBatchRepository, 'findByProject' | 'findById' | 'markUndone'>
   /**
    * テロップの見た目を戻す（`clipEntries`。文字・時間には触らない）と、
@@ -375,8 +376,10 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
       const undone = await deps.editBatches.markUndone(batch.id, new Date())
       if (undone === null) return c.json(fail(ALREADY_UNDONE_MESSAGE), 409)
 
-      const restored: ShotId[] = []
-      const failed: { shotId: ShotId; reason: string }[] = []
+      // Shot の作成・削除を先に戻す（結合を戻すと消した Shot が戻ってから、残した Shot の尺が戻る）。
+      const shotEdits = await undoShotEdits(deps, undone.shotEdits)
+      const restored: ShotId[] = [...shotEdits.restored]
+      const failed: { shotId: ShotId; reason: string }[] = [...shotEdits.failed]
       for (const entry of undone.entries) {
         const reason = await restoreEntry(deps, projectId, undone, entry)
         if (reason === null) restored.push(entry.shotId)

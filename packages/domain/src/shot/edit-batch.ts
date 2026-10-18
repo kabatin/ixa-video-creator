@@ -51,6 +51,17 @@ export type EditBatchKind = z.infer<typeof EditBatchKind>
  * 巻き戻してしまう。変えた欄だけを戻せば、無関係な編集は残る。
  */
 /**
+ * Shot の作成・削除（`shot_edit`。2026-10-19）。**Shot は論理削除なので ID だけを持つ**（中身は DB に残り、戻すと同じ ID・同じ中身）。
+ * 作った Shot は戻すと論理削除し、消した Shot は戻すと論理削除を外す。分割は「元の尺の直し + 後半の作成」、
+ * 結合は「残す Shot の尺の直し + ほかの削除」で 1 つの記録にする。
+ */
+export const EditBatchShotEdit = z.discriminatedUnion('op', [
+  z.object({ op: z.literal('create'), shotId: ShotId }),
+  z.object({ op: z.literal('delete'), shotId: ShotId }),
+])
+export type EditBatchShotEdit = z.infer<typeof EditBatchShotEdit>
+
+/**
  * 記録に書ける欄。**`lockedAt` は書けない。**
  *
  * 2 つの理由がある。
@@ -156,6 +167,8 @@ export const EditBatch = z.object({
   clipEdits: z.array(EditBatchClipEdit).default([]),
   /** トランジションの置く・消す。これまでの記録は空として読む。 */
   transitionEdits: z.array(EditBatchTransitionEdit).default([]),
+  /** Shot の作成・削除。これまでの記録は空として読む。 */
+  shotEdits: z.array(EditBatchShotEdit).default([]),
   /** 取り消した時刻。**`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
   undoneAt: z.date().nullable(),
   createdAt: z.date(),
@@ -187,7 +200,8 @@ export const canUndo = (batch: EditBatch): boolean =>
     batch.lineEntries.length > 0 ||
     batch.musicEntries.length > 0 ||
     batch.clipEdits.length > 0 ||
-    batch.transitionEdits.length > 0)
+    batch.transitionEdits.length > 0 ||
+    batch.shotEdits.length > 0)
 
 /**
  * 1 件ぶんの取り消しで、採用 Take を戻す必要があるか。
