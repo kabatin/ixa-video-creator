@@ -1,6 +1,5 @@
 import type {
   CharacterRepository,
-  EditBatchRepository,
   MediaAssetRepository,
   NarrationLineRepository,
   NarrationTakeRepository,
@@ -10,6 +9,7 @@ import type {
   TimelineClipRepository,
   VoiceJobRepository,
   VoiceProfileRepository,
+  EditTransaction,
 } from '@ixa/db'
 import type { AiToolId, ProjectEventPublisher, ProjectId, VoiceJobId, VoiceToolId } from '@ixa/domain'
 import type { TranscribeToolId, Transcriber, VoiceAdapter } from '@ixa/provider-core'
@@ -28,8 +28,11 @@ export type NarrationDeps = {
   readonly timelineClips: Pick<TimelineClipRepository, 'findByProject' | 'replace'>
   /** 声をキャラクターの声にするとき、その作品のキャラクターかを確かめる。 */
   readonly characters: Pick<CharacterRepository, 'findById'>
-  /** まとめて並べた記録（戻せるようにする）。**省けない**（省くと戻せない操作が黙って増える）。 */
-  readonly editBatches: Pick<EditBatchRepository, 'create'>
+  /**
+   * 行を動かす・まとめて並べる記録と書き込みを、同じトランザクションで行う口（戻せるようにする）。
+   * **省けない**（省くと戻せない操作が黙って増える）。書き込みが落ちれば記録も残らない。
+   */
+  readonly transaction: EditTransaction
   /** 声の AI ごとの口（声の種類の一覧を出すため・使えるかを確かめるため）。口が無い AI は null。 */
   readonly voiceAdapter: (tool: VoiceToolId) => VoiceAdapter | null
   /** 声のジョブを worker の `voice` キューへ入れる。 */

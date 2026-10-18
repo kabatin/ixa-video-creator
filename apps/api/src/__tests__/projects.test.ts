@@ -5,12 +5,12 @@ import {
   newId,
 } from '@ixa/domain'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createApp, type AppDeps } from '../app.js'
+import type { AppDeps } from '../app.js'
 import { INTERNAL_ERROR_MESSAGE } from '../errors.js'
 import { createLogger } from '../logger.js'
 import type { ProjectResponse } from '../routes/projects.js'
 import { createMemoryStorage } from '@ixa/storage'
-import { baseAppDeps } from './app-deps.js'
+import { baseAppDeps, createTestApp } from './app-deps.js'
 import { aMediaAsset } from './in-memory-timeline-repositories.js'
 import { createInMemoryMediaAssetRepository } from '@ixa/generation/testing'
 import {
@@ -22,7 +22,7 @@ import {
 const logger = createLogger('silent')
 
 const buildApp = (projects: AppDeps['projects']) =>
-  createApp({
+  createTestApp({
     ...baseAppDeps(),
     projects,
     mediaAssets: createInMemoryMediaAssetRepository(),
@@ -258,7 +258,7 @@ describe('PATCH /projects/:id — 作品の方針', () => {
   const foreign = aMediaAsset({ workspaceId: newId(WorkspaceIdSchema), kind: 'image', mimeType: 'image/png' })
 
   const setup = async () => {
-    const app = createApp({
+    const app = createTestApp({
       ...baseAppDeps(),
       projects: createInMemoryProjectRepository(),
       mediaAssets: createInMemoryMediaAssetRepository([image, video, foreign]),
@@ -317,7 +317,7 @@ describe('PATCH /projects/:id — 作品の方針', () => {
  */
 describe('PATCH /projects/:id — 歌詞', () => {
   const setup = async () => {
-    const app = createApp({
+    const app = createTestApp({
       ...baseAppDeps(),
       projects: createInMemoryProjectRepository(),
       logger: createLogger('silent'),
@@ -325,7 +325,7 @@ describe('PATCH /projects/:id — 歌詞', () => {
     const created = (await (await postJson(app, '/projects', validBody())).json()) as SuccessBody
     return { app, id: created.data.id }
   }
-  const read = async (app: ReturnType<typeof createApp>, id: string) =>
+  const read = async (app: ReturnType<typeof createTestApp>, id: string) =>
     ((await (await app.request(`/projects/${id}`)).json()) as SuccessBody).data as unknown as {
       lyrics: string
       lyricCues: number[]

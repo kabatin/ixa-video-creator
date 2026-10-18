@@ -15,7 +15,7 @@ import {
   type VoiceProfileId,
   type VoiceSpec,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { voiceJobs } from '../schema/narration.js'
 
@@ -121,7 +121,7 @@ const valuesOf = (input: CreateVoiceJobInput) => {
   }
 }
 
-export const createVoiceJobRepository = (db: DbClient): VoiceJobRepository => {
+export const createVoiceJobRepository = (db: DbExecutor): VoiceJobRepository => {
   const first = (rows: VoiceJobRow[]): VoiceJob | null => {
     const row = rows[0]
     return row === undefined ? null : voiceJobRowToDomain(row)

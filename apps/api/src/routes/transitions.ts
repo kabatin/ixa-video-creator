@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { ProjectRepository, ShotRepository, TransitionRepository } from '@ixa/db'
+import type { EditRepositories, EditTransaction, ProjectRepository, ShotRepository, TransitionRepository } from '@ixa/db'
 import {
   CreateTransitionInput as CreateTransitionInputSchema,
   ProjectId as ProjectIdSchema,
@@ -10,10 +10,13 @@ import {
   type EditBatchTransitionEdit,
   type ProjectId,
   type Shot,
+  type ShotId,
+  type Transition,
+  type TransitionType,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
-import type { EditBatchRecorder } from './edit-batch-recording.js'
+import type { FieldErrors } from '../response.js'
 
 /**
  * Transition（2 つの Shot をつなぐ 1 本の切り替え）の CRUD（DOMAIN.md §8 / ADR-0002）。
@@ -132,15 +135,15 @@ export type TransitionRoutesDeps = {
   shots: ShotRepository
   /** Project の実在確認だけに使う。 */
   projects: ProjectRepository
-  /** 置く・消す・差し替えを書く前に記録する（取り消し）。**省けない。** */
-  editBatches: EditBatchRecorder
+  /** 置く・消す・差し替えを、書く前に、書き込みと同じトランザクションで記録する（取り消し）。**省けない。** */
+  transaction: EditTransaction
 }
 
 const summaryOf = (edits: readonly EditBatchTransitionEdit[]): string =>
   edits.length > 1 ? 'トランジションを差し替える' : edits[0]?.op === 'delete' ? 'トランジションを消す' : 'トランジションを置く'
 
 const recordTransitionEdits = async (
-  recorder: EditBatchRecorder,
+  recorder: EditRepositories['editBatches'],
   projectId: ProjectId,
   transitionEdits: readonly EditBatchTransitionEdit[],
 ): Promise<void> => {
@@ -165,6 +168,79 @@ const recordTransitionEdits = async (
 const normalizeDurationSec = (type: z.infer<typeof TransitionSchema>['type'], durationSec: number) =>
   type === 'cut' ? 0 : durationSec
 
+/** 置けるか（置く口と、消したものを置き直す取り消しの両方が使う。規則を 2 か所に書かない）。通れば正規化した尺を返す。 */
+export const checkPlacement = async (
+  deps: { readonly shots: Pick<ShotRepository, 'findById'> },
+  projectId: ProjectId,
+  input: { readonly fromShotId: ShotId; readonly toShotId: ShotId; readonly type: TransitionType; readonly durationSec: number },
+  existing: readonly Transition[],
+): Promise<{ readonly ok: true; readonly durationSec: number } | { readonly ok: false; readonly fields: FieldErrors }> => {
+  /** 自分自身への遷移。先に見るのは、Shot を 1 つしか引かずに判る誤りだから。 */
+  if (input.fromShotId === input.toShotId) {
+    return { ok: false, fields: { toShotId: [SELF_TRANSITION_MESSAGE] } }
+  }
+
+  const [fromShot, toShot] = await Promise.all([
+    deps.shots.findById(input.fromShotId),
+    deps.shots.findById(input.toShotId),
+  ])
+
+  /**
+   * 他 Project の Shot を繋ぐと、**別の作品のカット**がこの Project の
+   * タイムラインに現れる。経路の Project と突き合わせて弾く。
+   */
+  const belongs = (shot: Shot | null): shot is Shot =>
+    shot !== null && shot.projectId === projectId
+
+  if (!belongs(fromShot) || !belongs(toShot)) {
+    // 片方だけでなく両方まとめて返す。1 往復ごとに 1 件では直しづらい。
+    return {
+      ok: false,
+      fields: {
+        ...(belongs(fromShot) ? {} : { fromShotId: [FOREIGN_SHOT_MESSAGE] }),
+        ...(belongs(toShot) ? {} : { toShotId: [FOREIGN_SHOT_MESSAGE] }),
+      },
+    }
+  }
+
+  /**
+   * 同じ (from, to) の重複。`TransitionRepository` は
+   * 「(fromShotId, toShotId) に対して一意」を前提に更新口を持たないので、
+   * 2 本目を通すとどちらが有効か決まらなくなる。
+   * 同じ組の重複は、出入りの重複より具体的なので先に見る。
+   */
+  const duplicated = existing.some(
+    (t) => t.fromShotId === input.fromShotId && t.toShotId === input.toShotId,
+  )
+  if (duplicated) {
+    return { ok: false, fields: { toShotId: [DUPLICATE_TRANSITION_MESSAGE] } }
+  }
+
+  if (existing.some((t) => t.fromShotId === input.fromShotId)) {
+    return { ok: false, fields: { fromShotId: [EXISTING_OUTGOING_MESSAGE] } }
+  }
+
+  if (existing.some((t) => t.toShotId === input.toShotId)) {
+    return { ok: false, fields: { toShotId: [EXISTING_INCOMING_MESSAGE] } }
+  }
+
+  const durationSec = normalizeDurationSec(input.type, input.durationSec)
+
+  /**
+   * つなぐ 2 つの Shot のどちらよりも長い Transition は作らせない。
+   * のりしろは接する Shot の尺から取るので、超えると素材が足りず
+   * タイムラインが壊れる（`validateTimeline` の `transition_too_long` と同じ規則）。
+   *
+   * `cut` は上で 0 に正規化済みなので、この検査には決して掛からない。
+   */
+  const shortestSec = Math.min(fromShot.durationSec, toShot.durationSec)
+  if (durationSec > shortestSec + TIME_EPSILON) {
+    return { ok: false, fields: { durationSec: [transitionTooLongMessage(shortestSec)] } }
+  }
+
+  return { ok: true, durationSec }
+}
+
 export const transitionRoutes = (deps: TransitionRoutesDeps) => {
   const projectMissing = async (projectId: ProjectId): Promise<boolean> =>
     (await deps.projects.findById(projectId)) === null
@@ -185,40 +261,6 @@ export const transitionRoutes = (deps: TransitionRoutesDeps) => {
       if (await projectMissing(projectId)) return c.json(fail(NOT_FOUND_MESSAGE), 404)
 
       const { replaceTransitionId, ...input } = c.req.valid('json')
-
-      /** 自分自身への遷移。先に見るのは、Shot を 1 つしか引かずに判る誤りだから。 */
-      if (input.fromShotId === input.toShotId) {
-        return c.json(fail(VALIDATION_ERROR_MESSAGE, { toShotId: [SELF_TRANSITION_MESSAGE] }), 422)
-      }
-
-      const [fromShot, toShot] = await Promise.all([
-        deps.shots.findById(input.fromShotId),
-        deps.shots.findById(input.toShotId),
-      ])
-
-      /**
-       * 他 Project の Shot を繋ぐと、**別の作品のカット**がこの Project の
-       * タイムラインに現れる。経路の Project と突き合わせて弾く。
-       */
-      const belongs = (shot: Shot | null): shot is Shot =>
-        shot !== null && shot.projectId === projectId
-
-      if (!belongs(fromShot) || !belongs(toShot)) {
-        // 片方だけでなく両方まとめて返す。1 往復ごとに 1 件では直しづらい。
-        return c.json(
-          fail(VALIDATION_ERROR_MESSAGE, {
-            ...(belongs(fromShot) ? {} : { fromShotId: [FOREIGN_SHOT_MESSAGE] }),
-            ...(belongs(toShot) ? {} : { toShotId: [FOREIGN_SHOT_MESSAGE] }),
-          }),
-          422,
-        )
-      }
-
-      /**
-       * 同じ (from, to) の重複。`TransitionRepository` は
-       * 「(fromShotId, toShotId) に対して一意」を前提に更新口を持たないので、
-       * 2 本目を通すとどちらが有効か決まらなくなる。
-       */
       const all = await deps.transitions.findByProject(projectId)
       const replaced = replaceTransitionId === undefined ? undefined : all.find((t) => t.id === replaceTransitionId)
       if (
@@ -227,59 +269,21 @@ export const transitionRoutes = (deps: TransitionRoutesDeps) => {
       ) {
         return c.json(fail(VALIDATION_ERROR_MESSAGE, { replaceTransitionId: [REPLACE_TARGET_MESSAGE] }), 422)
       }
+
       // 差し替える相手は消してから置くので、重なりの検査から外す。
-      const existing = all.filter((t) => t.id !== replaceTransitionId)
+      const placement = await checkPlacement(deps, projectId, input, all.filter((t) => t.id !== replaceTransitionId))
+      if (!placement.ok) return c.json(fail(VALIDATION_ERROR_MESSAGE, placement.fields), 422)
 
-      // 同じ組の重複は、出入りの重複より具体的なので先に見る。
-      const duplicated = existing.some(
-        (t) => t.fromShotId === input.fromShotId && t.toShotId === input.toShotId,
-      )
-      if (duplicated) {
-        return c.json(
-          fail(VALIDATION_ERROR_MESSAGE, { toShotId: [DUPLICATE_TRANSITION_MESSAGE] }),
-          422,
-        )
-      }
-
-      if (existing.some((t) => t.fromShotId === input.fromShotId)) {
-        return c.json(
-          fail(VALIDATION_ERROR_MESSAGE, { fromShotId: [EXISTING_OUTGOING_MESSAGE] }),
-          422,
-        )
-      }
-
-      if (existing.some((t) => t.toShotId === input.toShotId)) {
-        return c.json(
-          fail(VALIDATION_ERROR_MESSAGE, { toShotId: [EXISTING_INCOMING_MESSAGE] }),
-          422,
-        )
-      }
-
-      const durationSec = normalizeDurationSec(input.type, input.durationSec)
-
-      /**
-       * つなぐ 2 つの Shot のどちらよりも長い Transition は作らせない。
-       * のりしろは接する Shot の尺から取るので、超えると素材が足りず
-       * タイムラインが壊れる（`validateTimeline` の `transition_too_long` と同じ規則）。
-       *
-       * `cut` は上で 0 に正規化済みなので、この検査には決して掛からない。
-       */
-      const shortestSec = Math.min(fromShot.durationSec, toShot.durationSec)
-      if (durationSec > shortestSec + TIME_EPSILON) {
-        return c.json(
-          fail(VALIDATION_ERROR_MESSAGE, { durationSec: [transitionTooLongMessage(shortestSec)] }),
-          422,
-        )
-      }
-
-      // 記録は書く前に作る。置く物の ID を先に決めて記録に入れる。
+      // 記録・消す・置くを 1 つのトランザクションで（差し替えの途中で落ちても、前のトランジションが消えたままにならない）。
       const id = newId(TransitionIdSchema)
-      await recordTransitionEdits(deps.editBatches, projectId, [
-        ...(replaced === undefined ? [] : [{ op: 'delete' as const, transitionId: replaced.id, before: transitionSnapshotOf(replaced) }]),
-        { op: 'create', transitionId: id },
-      ])
-      if (replaced !== undefined) await deps.transitions.delete(replaced.id)
-      const created = await deps.transitions.create({ ...input, projectId, durationSec, id })
+      const created = await deps.transaction(async (tx) => {
+        await recordTransitionEdits(tx.editBatches, projectId, [
+          ...(replaced === undefined ? [] : [{ op: 'delete' as const, transitionId: replaced.id, before: transitionSnapshotOf(replaced) }]),
+          { op: 'create', transitionId: id },
+        ])
+        if (replaced !== undefined) await tx.transitions.delete(replaced.id)
+        return tx.transitions.create({ ...input, projectId, durationSec: placement.durationSec, id })
+      })
       return c.json(ok(created), 201)
     })
     .openapi(deleteTransitionRoute, async (c) => {
@@ -291,10 +295,12 @@ export const transitionRoutes = (deps: TransitionRoutesDeps) => {
       const { id } = c.req.valid('param')
       const existing = await deps.transitions.findById(id)
       if (existing === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
-      await recordTransitionEdits(deps.editBatches, existing.projectId, [
-        { op: 'delete', transitionId: id, before: transitionSnapshotOf(existing) },
-      ])
-      await deps.transitions.delete(id)
+      await deps.transaction(async (tx) => {
+        await recordTransitionEdits(tx.editBatches, existing.projectId, [
+          { op: 'delete', transitionId: id, before: transitionSnapshotOf(existing) },
+        ])
+        await tx.transitions.delete(id)
+      })
       return c.body(null, 204)
     })
 }

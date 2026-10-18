@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { EditBatchRepository, MusicTrackRepository, ProjectRepository, ShotRepository } from '@ixa/db'
+import { DbNotFoundError, type EditTransaction, type MusicTrackRepository, type ProjectRepository, type ShotRepository } from '@ixa/db'
 import {
   EditBatchId as EditBatchIdSchema,
   MusicTrack as MusicTrackSchema,
@@ -55,8 +55,9 @@ const trimRoute = createRoute({
 export type MusicTrimRoutesDeps = {
   readonly projects: Pick<ProjectRepository, 'findById'>
   readonly shots: Pick<ShotRepository, 'findByProject'>
-  readonly musicTracks: Pick<MusicTrackRepository, 'findByProject' | 'update'>
-  readonly editBatches: Pick<EditBatchRepository, 'create'>
+  readonly musicTracks: Pick<MusicTrackRepository, 'findByProject'>
+  /** 記録と書き込みを同じトランザクションで（書き込みが落ちれば記録も残らない）。 */
+  readonly transaction: EditTransaction
 }
 
 export const musicTrimRoutes = (deps: MusicTrimRoutesDeps) =>
@@ -79,15 +80,19 @@ export const musicTrimRoutes = (deps: MusicTrimRoutesDeps) =>
     const unchanged = before.endSec === patch.endSec && patch.fadeOutSec === undefined
     if (unchanged) return c.json(ok({ track: master, editBatchId: null }), 200)
 
-    // 記録は書く前に作る（書いた後だと、記録に失敗したとき戻せない変更だけが残る）。
-    const batch = await deps.editBatches.create({
-      projectId,
-      kind: 'music_trim',
-      summary: `曲「${master.title}」を最後の Shot の終わりで切りました`,
-      entries: [],
-      musicEntries: [{ musicTrackId: master.id, ...before }],
+    // 記録は書く前に、同じトランザクションで作る（どちらか片方だけが残らない）。
+    const { batch, updated } = await deps.transaction(async (tx) => {
+      const created = await tx.editBatches.create({
+        projectId,
+        kind: 'music_trim',
+        summary: `曲「${master.title}」を最後の Shot の終わりで切りました`,
+        entries: [],
+        musicEntries: [{ musicTrackId: master.id, ...before }],
+      })
+      const written = await tx.musicTracks.update(master.id, patch)
+      // 途中で消されていたら投げて記録ごと巻き戻す（共通ハンドラが 404 にする）。
+      if (written === null) throw new DbNotFoundError('MusicTrack', master.id)
+      return { batch: created, updated: written }
     })
-    const updated = await deps.musicTracks.update(master.id, patch)
-    if (updated === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
     return c.json(ok({ track: updated, editBatchId: batch.id }), 200)
   })

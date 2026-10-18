@@ -7,7 +7,7 @@ import {
   TakeUpdate as TakeUpdateSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { takes } from '../schema/generation.js'
 import { shots } from '../schema/shot.js'
@@ -86,7 +86,7 @@ export const takeRowToDomain = (row: TakeRow): Take =>
 const visibleUnless = (visibility: TakeVisibility | undefined) =>
   visibility?.includeHidden === true ? undefined : isNull(takes.deletedAt)
 
-export const createTakeRepository = (db: DbClient): TakeRepository => {
+export const createTakeRepository = (db: DbExecutor): TakeRepository => {
   /** Shot 内の次の連番。takes は 1 始まりで (shot_id, index) が UNIQUE。 */
   const nextIndex = async (shotId: ShotId): Promise<number> => {
     const rows = await db

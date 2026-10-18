@@ -1,5 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
-import { ProviderId, createPhase1EmptyContextSource, type Shot } from '@ixa/domain'
+import type { Shot } from '@ixa/domain'
 import {
   aShot,
   aTake,
@@ -7,20 +7,16 @@ import {
   createInMemoryShotRepository,
   createInMemoryTakeRepository,
 } from '@ixa/generation/testing'
-import { createProviderRegistry } from '@ixa/provider-core'
 import { describe, expect, it } from 'vitest'
 import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
 import { editBatchRoutes, type EditBatchSummaryResponse } from '../routes/edit-batches.js'
-import { shotRoutes } from '../routes/shots.js'
-import { createRecordingQueue } from './app-deps.js'
+import { shotSingleEditRoutes } from '../routes/shot-single-edits.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
-import { createInMemoryGenerationJobRepository } from './in-memory-generation-job-repository.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryProjectEvents } from './in-memory-project-events.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
-import { CHEAP_MODEL } from './shot-test-support.js'
-import { createTestVideoProvider } from './test-video-provider.js'
 
 /**
  * Shot 1 件の直し・採用 Take の 1 件の決定と外しを取り消す（2026-10-19 の見直し）。
@@ -38,19 +34,13 @@ const build = (shots: readonly Shot[], takes = createInMemoryTakeRepository()) =
   registerErrorHandlers(app, createLogger('silent'))
   app.route(
     '/',
-    shotRoutes({
+    shotSingleEditRoutes({
       shots: shotRepo,
-      projects,
       locations: createInMemoryLocationRepository(),
       takes,
-      generationJobs: createInMemoryGenerationJobRepository(),
-      registry: createProviderRegistry([createTestVideoProvider([CHEAP_MODEL])]),
-      videoProvider: () => Promise.resolve(ProviderId.parse('test')),
-      context: createPhase1EmptyContextSource(),
-      queue: createRecordingQueue(),
       events: createInMemoryProjectEvents(),
       logger: createLogger('silent'),
-      editBatches,
+      transaction: createInMemoryEditTransaction({ editBatches, shots: shotRepo }),
     }),
   )
   app.route('/', editBatchRoutes({ projects, shots: shotRepo, editBatches, timelineClips: unusedClips }))

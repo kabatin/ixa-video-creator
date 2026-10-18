@@ -13,7 +13,7 @@ import {
   type UpscaleJobError,
   type UpscaleJobId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { upscaleJobs } from '../schema/upscale-job.js'
 
@@ -85,7 +85,7 @@ const first = async (rows: Promise<UpscaleJobRow[]>): Promise<UpscaleJob | null>
   return row === undefined ? null : upscaleJobRowToDomain(row)
 }
 
-export const createUpscaleJobRepository = (db: DbClient): UpscaleJobRepository => {
+export const createUpscaleJobRepository = (db: DbExecutor): UpscaleJobRepository => {
   /**
    * 状態を 1 つ進める。書く前に食い違いを確かめる（読み直しと同じ規則）。
    * **止めた行は上書きしない。** そのときは止めた行をそのまま返す（呼び出し側が `cancelled` を見て手を引く）。

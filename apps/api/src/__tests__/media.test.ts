@@ -8,7 +8,6 @@ import {
 import { createMemoryStorage, mediaKey } from '@ixa/storage'
 import type { ObjectStorage } from '@ixa/storage'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createApp } from '../app.js'
 import { createLogger } from '../logger.js'
 import {
   DEFAULT_SIGNED_URL_EXPIRES_SEC,
@@ -23,7 +22,7 @@ import {
   type InMemoryMediaAssetRepository,
 } from '@ixa/generation/testing'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
-import { baseAppDeps } from './app-deps.js'
+import { baseAppDeps, createTestApp } from './app-deps.js'
 
 const logger = createLogger('silent')
 
@@ -33,7 +32,7 @@ type UrlBody = { success: true; data: { url: string; expiresInSec: number } }
 type ErrorBody = { success: false; error: string; fields?: Record<string, string[]> }
 
 const buildApp = (mediaAssets: InMemoryMediaAssetRepository, storage: ObjectStorage) =>
-  createApp({
+  createTestApp({
     ...baseAppDeps(),
     projects: createInMemoryProjectRepository(),
     mediaAssets,

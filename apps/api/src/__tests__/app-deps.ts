@@ -1,7 +1,7 @@
 import { createPhase1EmptyContextSource, ModelId, ProviderId, type GenerationJobId } from '@ixa/domain'
 import { createProviderRegistry, type VideoProvider } from '@ixa/provider-core'
 import { createMemoryStorage } from '@ixa/storage'
-import type { AppDeps } from '../app.js'
+import { createApp, type AppDeps } from '../app.js'
 import { openAuthForTests } from '../auth/create-auth.js'
 import { createLogger } from '../logger.js'
 import type { GenerationQueue } from '../routes/shots.js'
@@ -43,6 +43,7 @@ import { createInMemoryProjectEvents } from './in-memory-project-events.js'
 import { createInMemoryStoryboardDraftRepository } from './in-memory-storyboard-draft-repository.js'
 import { createStubAssistant, createStubStoryboardDrafter } from '@ixa/provider-llm'
 import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryMusicAnalysisFailureRepository } from './in-memory-music-analysis-failure-repository.js'
 
 /** 投入されたジョブ ID を記録するだけのキュー。Redis には接続しない。 */
@@ -113,7 +114,7 @@ export const createRecordingReviewQueue = (): RecordingReviewQueue => {
   }
 }
 
-export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps => ({
+const baseDeps = (providers: readonly VideoProvider[]): Omit<AppDeps, 'editTransaction'> => ({
   // 誰でも通す門（ルートのテスト用）。本物の門は `auth.test.ts` と `auth-wiring.test.ts` が確かめる。
   auth: openAuthForTests(),
   projects: createInMemoryProjectRepository(),
@@ -164,3 +165,25 @@ export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps =
   events: createInMemoryProjectEvents(),
   logger: createLogger('silent'),
 })
+
+/** その deps のリポジトリで書くメモリ版の `EditTransaction`（書き込みが落ちれば記録を巻き戻す）。 */
+const editTransactionOf = (deps: Omit<AppDeps, 'editTransaction'>) =>
+  createInMemoryEditTransaction({
+    editBatches: deps.editBatches,
+    timelineClips: deps.timelineClips,
+    transitions: deps.transitions,
+    shots: deps.shots,
+    musicTracks: deps.musicTracks,
+    ...(deps.narration === undefined ? {} : { narrationLines: deps.narration.lines }),
+  })
+
+/**
+ * テスト用の `createApp`。**取り消しの記録と書き込みの口を、渡した deps のリポジトリで作り直す。**
+ * `{ ...baseAppDeps(), shots }` のように差し替えると、`baseAppDeps` の口は古いリポジトリへ書いてしまうため。
+ */
+export const createTestApp = (deps: AppDeps) => createApp({ ...deps, editTransaction: editTransactionOf(deps) })
+
+export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps => {
+  const deps = baseDeps(providers)
+  return { ...deps, editTransaction: editTransactionOf(deps) }
+}

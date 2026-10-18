@@ -9,7 +9,7 @@ import {
   UpdateLocationPatch as UpdateLocationPatchSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { locations } from '../schema/library.js'
 
@@ -39,7 +39,7 @@ export const locationRowToDomain = (row: LocationRow): Location =>
 
 const liveById = (id: LocationId) => and(eq(locations.id, id), isNull(locations.deletedAt))
 
-export const createLocationRepository = (db: DbClient): LocationRepository => ({
+export const createLocationRepository = (db: DbExecutor): LocationRepository => ({
   async findById(id) {
     const rows = await db.select().from(locations).where(liveById(id)).limit(1)
     const row = rows[0]

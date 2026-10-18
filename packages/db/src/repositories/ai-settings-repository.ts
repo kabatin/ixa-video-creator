@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { AiSettings as AiSettingsSchema, type AiSettings } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { aiSettings } from '../schema/ai-settings.js'
 
 /** drizzle の row 型。パッケージ外へは出さない。 */
@@ -33,7 +33,7 @@ export const aiSettingsRowToDomain = (row: AiSettingsRow): AiSettings | null => 
   return parsed.success ? parsed.data : null
 }
 
-export const createAiSettingsRepository = (db: DbClient): AiSettingsRepository => ({
+export const createAiSettingsRepository = (db: DbExecutor): AiSettingsRepository => ({
   async get() {
     const rows = await db.select().from(aiSettings).where(eq(aiSettings.id, AI_SETTINGS_ROW_ID))
     const row = rows[0]

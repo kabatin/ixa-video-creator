@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { EditBatchId, MusicTrackId, NarrationLineId, ProjectId, ShotId, TakeId, TimelineClipId } from '../common/ids.js'
-import { Seconds } from '../common/time.js'
-import { MUSIC_FADE_MAX_SEC, MusicEndSec } from '../music/music.js'
+import { MusicTrack } from '../music/music.js'
 import { EditBatchClipEdit } from './edit-batch-clip-edit.js'
 import { EditBatchTransitionEdit } from './edit-batch-transition-edit.js'
 
@@ -120,14 +119,20 @@ export type EditBatchLineEntry = z.infer<typeof EditBatchLineEntry>
  * **`endSec: null` は「自然な終わりだった」**。
  * `master: true` は「戻すとこの曲をマスターにする」（マスターを切り替える前のマスター）。
  */
+const track = MusicTrack.shape
+/**
+ * 値の規則は**楽曲そのもの（`MusicTrack`）から取る**（書き写さない）。控えるのは楽曲に入っていた値なので、
+ * 直す口の規則（空の題を断る・前後の空白を落とす）で読むと、空の題の楽曲を改名できず、空白も戻らない。
+ * 既定値は外す（欄が無いのを「既定値だった」と読み替えない）。
+ */
 export const EditBatchMusicEntry = z.object({
   musicTrackId: MusicTrackId,
-  title: z.string().trim().min(1).optional(),
-  offsetSec: Seconds.optional(),
-  volume: z.number().min(0).max(2).optional(),
-  fadeInSec: Seconds.max(MUSIC_FADE_MAX_SEC).optional(),
-  fadeOutSec: Seconds.max(MUSIC_FADE_MAX_SEC).optional(),
-  endSec: MusicEndSec.nullable().optional(),
+  title: track.title.optional(),
+  offsetSec: track.offsetSec.removeDefault().optional(),
+  volume: track.volume.removeDefault().optional(),
+  fadeInSec: track.fadeInSec,
+  fadeOutSec: track.fadeOutSec,
+  endSec: track.endSec,
   master: z.literal(true).optional(),
 })
 export type EditBatchMusicEntry = z.infer<typeof EditBatchMusicEntry>

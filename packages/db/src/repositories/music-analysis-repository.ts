@@ -6,7 +6,7 @@ import {
   MusicAnalysisId as MusicAnalysisIdSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { musicAnalyses } from '../schema/music.js'
 
 /** drizzle の row 型。パッケージ外へは出さない。 */
@@ -53,7 +53,7 @@ export const musicAnalysisRowToDomain = (row: MusicAnalysisRow): MusicAnalysis =
     createdAt: row.createdAt,
   })
 
-export const createMusicAnalysisRepository = (db: DbClient): MusicAnalysisRepository => ({
+export const createMusicAnalysisRepository = (db: DbExecutor): MusicAnalysisRepository => ({
   async findByTrack(musicTrackId) {
     const rows = await db
       .select()

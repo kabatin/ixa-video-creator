@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { createApp } from '../app.js'
 import { createLogger } from '../logger.js'
 import { createMemoryStorage } from '@ixa/storage'
 import { createInMemoryMediaAssetRepository } from '@ixa/generation/testing'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
-import { baseAppDeps } from './app-deps.js'
+import { baseAppDeps, createTestApp } from './app-deps.js'
 
 const buildApp = () =>
-  createApp({
+  createTestApp({
     ...baseAppDeps(),
     projects: createInMemoryProjectRepository(),
     mediaAssets: createInMemoryMediaAssetRepository(),
@@ -55,7 +54,7 @@ describe('GET /openapi.json', () => {
 
 describe('CORS', () => {
   it('許可したオリジンからのプリフライトを通す', async () => {
-    const app = createApp({ ...baseAppDeps(), corsOrigins: ['http://127.0.0.1:3000'] })
+    const app = createTestApp({ ...baseAppDeps(), corsOrigins: ['http://127.0.0.1:3000'] })
     const res = await app.request('/health', {
       method: 'OPTIONS',
       headers: {
@@ -71,7 +70,7 @@ describe('CORS', () => {
    * 「使う AI」の保存と、最初のフレームを手で付ける操作がブラウザで止まっていた（2026-09-30）。
    */
   it.each(['GET', 'POST', 'PATCH', 'PUT', 'DELETE'])('画面が使う %s のプリフライトを通す', async (method) => {
-    const app = createApp({ ...baseAppDeps(), corsOrigins: ['http://127.0.0.1:3000'] })
+    const app = createTestApp({ ...baseAppDeps(), corsOrigins: ['http://127.0.0.1:3000'] })
     const res = await app.request('/ai/settings', {
       method: 'OPTIONS',
       headers: { Origin: 'http://127.0.0.1:3000', 'Access-Control-Request-Method': method },
@@ -80,7 +79,7 @@ describe('CORS', () => {
   })
 
   it('許可していないオリジンには許可ヘッダを返さない', async () => {
-    const app = createApp({ ...baseAppDeps(), corsOrigins: ['http://127.0.0.1:3000'] })
+    const app = createTestApp({ ...baseAppDeps(), corsOrigins: ['http://127.0.0.1:3000'] })
     const res = await app.request('/health', {
       headers: { Origin: 'http://evil.example.com' },
     })
@@ -88,7 +87,7 @@ describe('CORS', () => {
   })
 
   it('ワイルドカードを返さない（許可先を明示する設計）', async () => {
-    const app = createApp({ ...baseAppDeps(), corsOrigins: ['http://127.0.0.1:3000'] })
+    const app = createTestApp({ ...baseAppDeps(), corsOrigins: ['http://127.0.0.1:3000'] })
     const res = await app.request('/health', {
       headers: { Origin: 'http://127.0.0.1:3000' },
     })
@@ -96,7 +95,7 @@ describe('CORS', () => {
   })
 
   it('設定が空なら CORS を有効にしない', async () => {
-    const app = createApp({ ...baseAppDeps(), corsOrigins: [] })
+    const app = createTestApp({ ...baseAppDeps(), corsOrigins: [] })
     const res = await app.request('/health', {
       headers: { Origin: 'http://127.0.0.1:3000' },
     })

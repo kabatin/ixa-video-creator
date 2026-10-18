@@ -19,6 +19,7 @@ import {
   createInMemoryVoiceProfileRepository,
 } from '@ixa/generation/testing'
 import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createFailingRecordTransaction, createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryProjectEvents } from './in-memory-project-events.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 
@@ -51,20 +52,21 @@ export const setupNarration = (
   const other = aProject({ name: '別の作品' })
   const projects = createInMemoryProjectRepository([project, other])
   const editBatches = createInMemoryEditBatchRepository()
+  const lines = createInMemoryNarrationLineRepository()
   const deps = {
     projects,
     voices: createInMemoryVoiceProfileRepository(),
-    lines: createInMemoryNarrationLineRepository(),
+    lines,
     takes: createInMemoryNarrationTakeRepository(),
     voiceJobs,
     audioSettings: createInMemoryAudioSettingsRepository(),
     textStyles: createInMemoryTextStyleRepository(),
     timelineClips: createInMemoryTimelineClipRepository(),
     characters: createInMemoryCharacterRepository(),
-    editBatches:
-      options.recordFails === true
-        ? { ...editBatches, create: () => Promise.reject(new Error('記録を作れません')) }
-        : editBatches,
+    transaction: (options.recordFails === true ? createFailingRecordTransaction : createInMemoryEditTransaction)({
+      editBatches,
+      narrationLines: lines,
+    }),
     voiceAdapter: (tool: VoiceToolId) => (options.adapters ?? { stub: createStubVoice() })[tool] ?? null,
     voiceQueue: {
       enqueue: (id) => {
@@ -92,7 +94,7 @@ export const setupNarration = (
       headers: { 'content-type': 'application/json' },
       body: payload === undefined ? undefined : JSON.stringify(payload),
     })
-  return { app, deps, project, other, send, enqueued, events }
+  return { app, deps, project, other, send, enqueued, events, editBatches }
 }
 
 export const json = async <T>(res: Response): Promise<T> => (await res.json()) as T

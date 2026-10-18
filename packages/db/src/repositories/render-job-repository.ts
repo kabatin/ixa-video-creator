@@ -9,7 +9,7 @@ import {
   UpdateRenderJobPatch as UpdateRenderJobPatchSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { renderJobs } from '../schema/render.js'
 
@@ -49,7 +49,7 @@ export const renderJobRowToDomain = (row: RenderJobRow): RenderJob =>
     finishedAt: row.finishedAt,
   })
 
-export const createRenderJobRepository = (db: DbClient): RenderJobRepository => ({
+export const createRenderJobRepository = (db: DbExecutor): RenderJobRepository => ({
   async findById(id) {
     const rows = await db.select().from(renderJobs).where(eq(renderJobs.id, id)).limit(1)
     const row = rows[0]

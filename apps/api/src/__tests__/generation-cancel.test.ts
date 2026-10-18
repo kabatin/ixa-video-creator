@@ -7,8 +7,7 @@ import {
 } from '@ixa/generation/testing'
 import { createProviderRegistry } from '@ixa/provider-core'
 import { describe, expect, it } from 'vitest'
-import { createApp } from '../app.js'
-import { baseAppDeps } from './app-deps.js'
+import { baseAppDeps, createTestApp } from './app-deps.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryGenerationJobRepository } from './in-memory-generation-job-repository.js'
 import { createInMemoryProjectEvents } from './in-memory-project-events.js'
@@ -74,7 +73,7 @@ const build = (
     options.cancelError === undefined ? {} : { cancelError: options.cancelError },
   )
   const events = createInMemoryProjectEvents()
-  const app = createApp({
+  const app = createTestApp({
     ...baseAppDeps(),
     projects: createInMemoryProjectRepository([project]),
     shots,

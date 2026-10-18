@@ -3,9 +3,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createFsStorage, signStorageAccess, type FsStorage } from '@ixa/storage'
-import { createApp } from '../app.js'
 import { createLogger } from '../logger.js'
-import { baseAppDeps } from './app-deps.js'
+import { baseAppDeps, createTestApp } from './app-deps.js'
 
 /**
  * 手元に置いた素材を返す口（ADR-0041）。
@@ -23,7 +22,7 @@ const MAX_UPLOAD_BYTES = 16
 const temporaryDirs: string[] = []
 
 type Harness = {
-  readonly app: ReturnType<typeof createApp>
+  readonly app: ReturnType<typeof createTestApp>
   readonly storage: FsStorage
 }
 
@@ -36,7 +35,7 @@ const makeHarness = async (nowMs = NOW_MS): Promise<Harness> => {
     signingSecret: SECRET,
     nowMs: () => nowMs,
   })
-  const app = createApp({
+  const app = createTestApp({
     ...baseAppDeps(),
     storage,
     files: {
@@ -267,7 +266,7 @@ describe('PUT /files/{key}', () => {
  */
 describe('置き場が s3 のとき', () => {
   it('この口は無い', async () => {
-    const app = createApp({ ...baseAppDeps() })
+    const app = createTestApp({ ...baseAppDeps() })
 
     expect((await app.request(`/files/${KEY}?exp=1&sig=x`)).status).toBe(404)
   })

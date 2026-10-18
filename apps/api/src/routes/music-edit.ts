@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { MusicTrackRepository } from '@ixa/db'
+import { DbNotFoundError, type EditTransaction, type MusicTrackRepository } from '@ixa/db'
 import {
   EditBatchMusicEntry as EditBatchMusicEntrySchema,
   MusicTrackId as MusicTrackIdSchema,
@@ -10,7 +10,6 @@ import {
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
-import type { EditBatchRecorder } from './edit-batch-recording.js'
 import { MusicTrackResponse } from './music.js'
 
 /**
@@ -57,8 +56,9 @@ const setMasterRoute = createRoute({
 })
 
 export type MusicEditDeps = {
-  readonly musicTracks: Pick<MusicTrackRepository, 'findById' | 'findByProject' | 'update' | 'setMaster'>
-  readonly editBatches: EditBatchRecorder
+  readonly musicTracks: Pick<MusicTrackRepository, 'findById' | 'findByProject'>
+  /** 記録と書き込みを同じトランザクションで（書き込みが落ちれば記録も残らない）。 */
+  readonly transaction: EditTransaction
 }
 
 /** 今の値。省かれた欄は既定（フェード 0・曲の終わりは自然な終わり）として比べる。 */
@@ -84,6 +84,12 @@ export const musicBeforeEntry = (track: MusicTrack, patch: UpdateMusicTrackPatch
   })
 }
 
+/** 書いた結果が無い（途中で消された）なら投げる。トランザクションの中で使い、記録を残さない。 */
+const orNotFound = (track: MusicTrack | null, id: MusicTrack['id']): MusicTrack => {
+  if (track === null) throw new DbNotFoundError('MusicTrack', id)
+  return track
+}
+
 export const musicEditRoutes = (deps: MusicEditDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })
     .openapi(updateMusicTrackRoute, async (c) => {
@@ -92,28 +98,32 @@ export const musicEditRoutes = (deps: MusicEditDeps) =>
       if (track === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       const patch = c.req.valid('json')
       const before = musicBeforeEntry(track, patch)
-      if (before !== null) {
-        await deps.editBatches.create({
-          projectId: track.projectId,
-          kind: 'music_edit',
-          summary: `曲「${track.title}」を直す`,
-          entries: [],
-          musicEntries: [before],
-        })
-      }
-      const updated = await deps.musicTracks.update(id, patch)
-      if (updated === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      const updated = await deps.transaction(async (tx) => {
+        if (before !== null) {
+          await tx.editBatches.create({
+            projectId: track.projectId,
+            kind: 'music_edit',
+            summary: `曲「${track.title}」を直す`,
+            entries: [],
+            musicEntries: [before],
+          })
+        }
+        // 途中で消されていたら投げて記録ごと巻き戻す（共通ハンドラが 404 にする）。
+        return orNotFound(await tx.musicTracks.update(id, patch), id)
+      })
       return c.json(ok(updated), 200)
     })
     .openapi(setMasterRoute, async (c) => {
       const { id } = c.req.valid('param')
       const track = await deps.musicTracks.findById(id)
       if (track === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
-      if (!track.isMaster) {
-        // 戻すと前のマスターをマスターに戻す。前にマスターが無ければ、この曲を外す口が無いので記録しない。
-        const previous = (await deps.musicTracks.findByProject(track.projectId)).find((each) => each.isMaster)
+      // 戻すと前のマスターをマスターに戻す。前にマスターが無ければ、この曲を外す口が無いので記録しない。
+      const previous = track.isMaster
+        ? undefined
+        : (await deps.musicTracks.findByProject(track.projectId)).find((each) => each.isMaster)
+      const updated = await deps.transaction(async (tx) => {
         if (previous !== undefined) {
-          await deps.editBatches.create({
+          await tx.editBatches.create({
             projectId: track.projectId,
             kind: 'music_edit',
             summary: `マスターを「${track.title}」にする`,
@@ -121,9 +131,8 @@ export const musicEditRoutes = (deps: MusicEditDeps) =>
             musicEntries: [{ musicTrackId: previous.id, master: true }],
           })
         }
-      }
-      const updated = await deps.musicTracks.setMaster(id)
-      if (updated === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+        return orNotFound(await tx.musicTracks.setMaster(id), id)
+      })
       // 降格した側も画面が持ち直せるよう、Project の全曲を返す。
       return c.json(okList(await deps.musicTracks.findByProject(updated.projectId)), 200)
     })

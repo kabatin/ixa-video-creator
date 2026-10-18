@@ -9,8 +9,7 @@ import {
 import { STUB_PROVIDER_IDS } from '@ixa/provider-video'
 import { describe, expect, it } from 'vitest'
 import { projectRoutes, type CostMeterResponse } from '../routes/projects.js'
-import { createApp } from '../app.js'
-import { baseAppDeps } from './app-deps.js'
+import { baseAppDeps, createTestApp } from './app-deps.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 
@@ -245,7 +244,7 @@ describe('GET /projects/{id}/cost', () => {
   it('組み上がったアプリからも引ける（app.ts の配線の確認）', async () => {
     const project = aProject({ budgetUsd: 300 })
     const shot = aShot(project.id)
-    const app = createApp({
+    const app = createTestApp({
       ...baseAppDeps(),
       projects: createInMemoryProjectRepository([project]),
       shots: createInMemoryShotRepository([shot]),

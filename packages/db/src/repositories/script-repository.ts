@@ -12,7 +12,7 @@ import {
   ScriptVersionId as ScriptVersionIdSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { scriptVersions, scripts } from '../schema/script.js'
 
@@ -75,7 +75,7 @@ export const scriptVersionRowToDomain = (row: ScriptVersionRow): ScriptVersion =
 
 const liveById = (id: ScriptId) => and(eq(scripts.id, id), isNull(scripts.deletedAt))
 
-export const createScriptRepository = (db: DbClient): ScriptRepository => {
+export const createScriptRepository = (db: DbExecutor): ScriptRepository => {
   const scriptByProject = async (projectId: ProjectId): Promise<Script | null> => {
     const rows = await db
       .select()

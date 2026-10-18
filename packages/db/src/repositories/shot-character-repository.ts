@@ -1,7 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm'
 import type { CharacterId, ShotCharacter, ShotId } from '@ixa/domain'
 import { ShotCharacter as ShotCharacterSchema } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { shotCharacters } from '../schema/shot.js'
 
@@ -49,7 +49,7 @@ const byKey = (shotId: ShotId, characterId: CharacterId) =>
 
 const ORDER = [asc(shotCharacters.order), asc(shotCharacters.characterId)] as const
 
-export const createShotCharacterRepository = (db: DbClient): ShotCharacterRepository => ({
+export const createShotCharacterRepository = (db: DbExecutor): ShotCharacterRepository => ({
   async findByShot(shotId) {
     const rows = await db.select().from(shotCharacters).where(byShot(shotId)).orderBy(...ORDER)
     return rows.map(shotCharacterRowToDomain)

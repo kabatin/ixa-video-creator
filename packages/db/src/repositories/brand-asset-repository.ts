@@ -9,7 +9,7 @@ import {
   UpdateBrandAssetPatch as UpdateBrandAssetPatchSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { brandAssets } from '../schema/library.js'
 
@@ -46,7 +46,7 @@ export const brandAssetRowToDomain = (row: BrandAssetRow): BrandAsset =>
 
 const liveById = (id: BrandAssetId) => and(eq(brandAssets.id, id), isNull(brandAssets.deletedAt))
 
-export const createBrandAssetRepository = (db: DbClient): BrandAssetRepository => ({
+export const createBrandAssetRepository = (db: DbExecutor): BrandAssetRepository => ({
   async findById(id) {
     const rows = await db.select().from(brandAssets).where(liveById(id)).limit(1)
     const row = rows[0]

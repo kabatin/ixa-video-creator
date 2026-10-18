@@ -17,6 +17,7 @@ import { createLogger } from '../logger.js'
 import { turnOffLineTelop } from '../narration/telops.js'
 import { clipRoutes } from '../routes/clips.js'
 import { editBatchRoutes } from '../routes/edit-batches.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { json, setupNarration, type Ok } from './narration-fixture.js'
 
 /** 取り消しの口。ナレーションの口と同じ記録・行・テロップを見る。 */
@@ -34,7 +35,7 @@ const undo = (setup: Setup, batchId: string) => {
         updateStatus: () => Promise.reject(new Error('Shot は触らない')),
       },
       timelineClips: setup.deps.timelineClips,
-      editBatches: setup.deps.editBatches,
+      editBatches: setup.editBatches,
       narration: setup.deps,
     }),
   )
@@ -201,7 +202,7 @@ describe('手でテロップを消す', () => {
         projects: setup.deps.projects,
         mediaAssets: setup.deps.mediaAssets,
         onNarrationTelopDeleted: (lineId) => turnOffLineTelop(setup.deps, lineId),
-        editBatches: setup.deps.editBatches,
+        transaction: createInMemoryEditTransaction({ editBatches: setup.editBatches, timelineClips: setup.deps.timelineClips }),
       }),
     )
     registerErrorHandlers(app, logger)
@@ -230,15 +231,32 @@ describe('手でテロップを消す', () => {
     const [first] = before
 
     await withClips(setup).request(`/clips/${String(first?.id)}`, { method: 'DELETE' })
-    const [batch] = setup.deps.editBatches.snapshot()
+    const [batch] = setup.editBatches.snapshot()
     expect(batch).toMatchObject({ kind: 'clip_edit', summary: 'テロップを消す', lineEntries: [{ lineId: line.id, telop: true }] })
 
-    expect((await undo(setup, batch!.id)).status).toBe(200)
+    const undone = (await (await undo(setup, batch!.id)).json()) as Ok<{ restoredClips: string[] }>
+    expect(undone.data.restoredClips.sort()).toEqual(before.map((clip) => clip.id).sort())
 
     expect(setup.deps.lines.snapshot()[0]?.telop).toBe(true)
-    // テロップは行から作り直される（ID は変わる）。位置・中身は消す前と同じ。
-    const shape = (clips: typeof before) => clips.map(({ startSec, durationSec, content }) => ({ startSec, durationSec, content }))
-    expect(shape(telops(setup))).toEqual(shape(before))
+    // 行のテロップ全部が同じ ID・同じ中身で戻る（作り直しは今の形と同じと見て何もしない）。
+    const byId = (clips: typeof before) => [...clips].sort((x, y) => x.id.localeCompare(y.id))
+    expect(byId(telops(setup))).toEqual(byId(before))
+  })
+
+  it('戻したテロップが行の今の形と違って作り直されたら、消えた ID ではなく今のテロップの ID を返す', async () => {
+    const setup = setupNarration()
+    const line = await placedLine(setup)
+    await setup.send('PATCH', `/narration-lines/${line.id}`, { startSec: 10 })
+    const [first] = telops(setup)
+    // 行の形からずれたテロップ（作り直せば元の形に戻る）。
+    await setup.deps.timelineClips.update(first!.id, { startSec: 10.05 })
+
+    await withClips(setup).request(`/clips/${String(first?.id)}`, { method: 'DELETE' })
+    const [batch] = setup.editBatches.snapshot()
+    const undone = (await (await undo(setup, batch!.id)).json()) as Ok<{ restoredClips: string[] }>
+
+    const alive = telops(setup).map((clip) => clip.id).sort()
+    expect([...undone.data.restoredClips].sort()).toEqual(alive)
   })
 
   it('手で置いたテロップを消しても、行には触らない', async () => {
@@ -272,7 +290,7 @@ describe('ナレーションをまとめて並べた記録', () => {
     await setup.send('POST', `/projects/${setup.project.id}/narration/arrange`, { fromSec: 1, gapSec: 0.5 })
     expect(setup.deps.lines.snapshot()[0]?.startSec).toBe(1)
 
-    const [batch] = setup.deps.editBatches.snapshot()
+    const [batch] = setup.editBatches.snapshot()
     expect(batch).toMatchObject({ kind: 'narration_arrange', lineEntries: [{ lineId: line.id, startSec: 9 }] })
     expect(batch?.summary).toBe('ナレーション 1 行を並べました')
 
@@ -295,11 +313,11 @@ describe('ナレーションをまとめて並べた記録', () => {
     const setup = setupNarration()
     const line = await placedLine(setup, { startSec: 9 })
     await setup.send('PATCH', `/narration-lines/${line.id}`, { startSec: 9 })
-    const before = setup.deps.editBatches.snapshot().length
+    const before = setup.editBatches.snapshot().length
 
     await setup.send('PATCH', `/narration-lines/${line.id}`, { startSec: 15 })
-    const [batch] = setup.deps.editBatches.snapshot()
-    expect(setup.deps.editBatches.snapshot()).toHaveLength(before + 1)
+    const [batch] = setup.editBatches.snapshot()
+    expect(setup.editBatches.snapshot()).toHaveLength(before + 1)
     expect(batch).toMatchObject({ kind: 'narration_edit', summary: 'ナレーション「あいうえ。かきくけ。」を動かす', lineEntries: [{ lineId: line.id, startSec: 9 }] })
 
     expect((await undo(setup, batch!.id)).status).toBe(200)
@@ -310,10 +328,10 @@ describe('ナレーションをまとめて並べた記録', () => {
   it('位置を変えない直し（文字など）は位置の記録を作らない', async () => {
     const setup = setupNarration()
     const line = await placedLine(setup, { startSec: 9 })
-    const before = setup.deps.editBatches.snapshot().length
+    const before = setup.editBatches.snapshot().length
     await setup.send('PATCH', `/narration-lines/${line.id}`, { startSec: 9 })
     await setup.send('PATCH', `/narration-lines/${line.id}`, { direction: 'ゆっくり' })
-    expect(setup.deps.editBatches.snapshot()).toHaveLength(before)
+    expect(setup.editBatches.snapshot()).toHaveLength(before)
   })
 
   it('置く行が無ければ記録を作らない（空の履歴を並べない）', async () => {
@@ -321,6 +339,6 @@ describe('ナレーションをまとめて並べた記録', () => {
 
     await setup.send('POST', `/projects/${setup.project.id}/narration/arrange`, { fromSec: 1, gapSec: 0.5 })
 
-    expect(setup.deps.editBatches.snapshot()).toEqual([])
+    expect(setup.editBatches.snapshot()).toEqual([])
   })
 })

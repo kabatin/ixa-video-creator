@@ -2,8 +2,7 @@ import type { Project } from '@ixa/domain'
 import { aShot, createInMemoryShotRepository } from '@ixa/generation/testing'
 import type { AssistRequest, TextAssistant } from '@ixa/provider-llm'
 import { describe, expect, it } from 'vitest'
-import { createApp } from '../app.js'
-import { baseAppDeps } from './app-deps.js'
+import { baseAppDeps, createTestApp } from './app-deps.js'
 import { aCharacterBundle, aProject } from './fixtures.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { createInMemoryCharacterRepository } from '@ixa/generation/testing'
@@ -33,7 +32,7 @@ const build = (reply: Awaited<ReturnType<TextAssistant['suggest']>> = { ok: true
   // ほかのプロジェクトのキャラクター（ADR-0034）。
   const foreign = aCharacterBundle()
   const recording = recordingAssistant(reply)
-  const app = createApp({
+  const app = createTestApp({
     ...baseAppDeps(),
     projects: createInMemoryProjectRepository([project]),
     shots: createInMemoryShotRepository([shot]),

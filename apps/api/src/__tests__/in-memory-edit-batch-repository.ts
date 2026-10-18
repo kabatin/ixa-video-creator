@@ -18,6 +18,8 @@ import {
 export type InMemoryEditBatchRepository = EditBatchRepository & {
   /** 現在保持している記録（直近が先頭）。 */
   readonly snapshot: () => readonly EditBatch[]
+  /** 記録を `snapshot` の時点へ戻す（トランザクションの巻き戻しを真似る。`in-memory-edit-transaction.ts`）。 */
+  readonly reset: (batches: readonly EditBatch[]) => void
 }
 
 export const createInMemoryEditBatchRepository = (
@@ -31,6 +33,10 @@ export const createInMemoryEditBatchRepository = (
 
   return {
     snapshot: () => newestFirst(store),
+
+    reset: (batches) => {
+      store = [...batches]
+    },
 
     findByProject: (projectId, limit = 50) =>
       Promise.resolve(

@@ -1,0 +1,39 @@
+import type { DbClient } from '../client.js'
+import { createEditBatchRepository, type EditBatchRepository } from './edit-batch-repository.js'
+import { createMusicTrackRepository, type MusicTrackRepository } from './music-track-repository.js'
+import { createNarrationLineRepository, type NarrationLineRepository } from './narration-line-repository.js'
+import { createShotRepository, type ShotRepository } from './shot-repository.js'
+import { createTimelineClipRepository, type TimelineClipRepository } from './timeline-clip-repository.js'
+import { createTransitionRepository, type TransitionRepository } from './transition-repository.js'
+
+/**
+ * 取り消しの記録と、その記録が戻す書き込みを**同じトランザクション**で行う口（2026-10-19）。
+ *
+ * 記録を作ってから書き込みが落ちる（一意制約・途中で消された・INSERT 失敗）と、記録だけが残り、
+ * ⌘Z が何も戻さない記録を拾って、本当に戻したい 1 つ前が戻らなくなる。逆に書き込みだけが残ると戻せない。
+ * どちらも起こさないよう、1 つのトランザクションに閉じる。`fn` が投げれば両方とも無かったことになる。
+ */
+export type EditRepositories = {
+  readonly editBatches: Pick<EditBatchRepository, 'create'>
+  readonly timelineClips: TimelineClipRepository
+  readonly transitions: TransitionRepository
+  readonly shots: ShotRepository
+  readonly musicTracks: MusicTrackRepository
+  readonly narrationLines: NarrationLineRepository
+}
+
+export type EditTransaction = <T>(fn: (repos: EditRepositories) => Promise<T>) => Promise<T>
+
+export const createEditTransaction =
+  (db: DbClient): EditTransaction =>
+  (fn) =>
+    db.transaction((tx) =>
+      fn({
+        editBatches: createEditBatchRepository(tx),
+        timelineClips: createTimelineClipRepository(tx),
+        transitions: createTransitionRepository(tx),
+        shots: createShotRepository(tx),
+        musicTracks: createMusicTrackRepository(tx),
+        narrationLines: createNarrationLineRepository(tx),
+      }),
+    )

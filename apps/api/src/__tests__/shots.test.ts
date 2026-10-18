@@ -6,9 +6,8 @@ import {
   newId,
 } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
-import { createApp } from '../app.js'
 import { type ShotResponse } from '../routes/shots.js'
-import { baseAppDeps } from './app-deps.js'
+import { baseAppDeps, createTestApp } from './app-deps.js'
 import { aProject } from './fixtures.js'
 import { aShot, aTake, createInMemoryShotRepository, createInMemoryTakeRepository } from '@ixa/generation/testing'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
@@ -48,7 +47,7 @@ describe('POST /shots/:id/select-take', () => {
     const foreign = aTake(otherShot, 'b'.repeat(64))
     const takes = createInMemoryTakeRepository([foreign])
 
-    const app = createApp({
+    const app = createTestApp({
       ...baseAppDeps(),
       projects: createInMemoryProjectRepository([f.project]),
       shots: f.shots,
@@ -128,7 +127,7 @@ describe('Shot CRUD', () => {
       aShot(project.id, { order: 1000, code: 'shot_001' }),
       aShot(project.id, { order: 2000, code: 'shot_002' }),
     ])
-    const app = createApp({
+    const app = createTestApp({
       ...baseAppDeps(),
       projects: createInMemoryProjectRepository([project]),
       shots,
@@ -265,7 +264,7 @@ describe('GET /shots/:id/takes', () => {
     const f = buildFixture()
     const one = aTake(f.shot, 'c'.repeat(64), { index: 1 })
     const two = aTake(f.shot, 'd'.repeat(64), { index: 2 })
-    const app = createApp({
+    const app = createTestApp({
       ...baseAppDeps(),
       projects: createInMemoryProjectRepository([f.project]),
       shots: f.shots,

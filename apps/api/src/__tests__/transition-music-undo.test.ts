@@ -9,6 +9,7 @@ import { musicEditRoutes } from '../routes/music-edit.js'
 import { transitionRoutes } from '../routes/transitions.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import {
   createInMemoryMusicTrackRepository,
@@ -46,8 +47,9 @@ const build = (tracks: readonly MusicTrack[] = []) => {
   const editBatches = createInMemoryEditBatchRepository()
   const projects = createInMemoryProjectRepository([project])
   const app = new OpenAPIHono({ defaultHook: validationHook })
-  app.route('/', transitionRoutes({ transitions, shots, projects, editBatches }))
-  app.route('/', musicEditRoutes({ musicTracks, editBatches }))
+  const transaction = createInMemoryEditTransaction({ editBatches, transitions, musicTracks })
+  app.route('/', transitionRoutes({ transitions, shots, projects, transaction }))
+  app.route('/', musicEditRoutes({ musicTracks, transaction }))
   app.route(
     '/',
     editBatchRoutes({ projects, shots, editBatches, timelineClips: createInMemoryTimelineClipRepository(), transitions, musicTracks }),
@@ -77,7 +79,7 @@ const build = (tracks: readonly MusicTrack[] = []) => {
     expect(res.status).toBe(201)
     return ((await res.json()) as Ok<Transition>).data
   }
-  return { transitions, musicTracks, send, latest, undo, place }
+  return { transitions, musicTracks, shots, send, latest, undo, place }
 }
 
 describe('トランジション', () => {
@@ -143,6 +145,21 @@ describe('トランジション', () => {
   })
 })
 
+describe('トランジションの置き直しも置く口と同じ検査を通す', () => {
+  it('消した後で Shot が縮み尺に収まらなくなっていたら、置き直さず理由を返す', async () => {
+    const f = build()
+    const placed = await f.place({ durationSec: 3.5 })
+    await f.send('DELETE', `/transitions/${placed.id}`)
+    const removed = await f.latest()
+    await f.shots.update(shotB.id, { durationSec: 2 })
+
+    const result = await f.undo(removed!.id)
+    expect(result.restoredTransitions).toEqual([])
+    expect(result.failedTransitions[0]?.reason).toContain('上限')
+    expect(f.transitions.snapshot()).toEqual([])
+  })
+})
+
 describe('楽曲', () => {
   it('欄を直すと変えた欄だけが記録され、戻すとその欄だけが元に戻る', async () => {
     const song = track({ title: '前の題', volume: 1, fadeInSec: 0 })
@@ -155,6 +172,13 @@ describe('楽曲', () => {
     await f.send('PATCH', `/music-tracks/${song.id}`, { offsetSec: 2 })
     await f.undo(batch!.id)
     expect(await f.musicTracks.findById(song.id)).toMatchObject({ title: '前の題', volume: 1, offsetSec: 2 })
+  })
+
+  it('空の題の楽曲も改名でき、記録が残る（題の規則は楽曲そのものから取る）', async () => {
+    const song = track({ title: '' })
+    const f = build([song])
+    expect((await f.send('PATCH', `/music-tracks/${song.id}`, { title: '名前' })).status).toBe(200)
+    expect((await f.latest())?.kind).toBe('music_edit')
   })
 
   it('何も変わらない直しは記録しない', async () => {

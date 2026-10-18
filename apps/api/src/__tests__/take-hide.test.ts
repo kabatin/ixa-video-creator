@@ -6,9 +6,8 @@ import {
   createInMemoryTakeRepository,
 } from '@ixa/generation/testing'
 import { describe, expect, it } from 'vitest'
-import { createApp } from '../app.js'
 import { ADOPTED_TAKE_CANNOT_HIDE } from '../routes/take-hide.js'
-import { baseAppDeps } from './app-deps.js'
+import { baseAppDeps, createTestApp } from './app-deps.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryProjectEvents } from './in-memory-project-events.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
@@ -30,7 +29,7 @@ const build = (options: { readonly adopted?: boolean; readonly status?: Shot['st
   const shots = createInMemoryShotRepository([shot])
   const takes = createInMemoryTakeRepository([first, second])
   const events = createInMemoryProjectEvents()
-  const app = createApp({
+  const app = createTestApp({
     ...baseAppDeps(),
     projects: createInMemoryProjectRepository([project]),
     shots,

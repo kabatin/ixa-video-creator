@@ -58,9 +58,14 @@ describe('EditBatchMusicEntry（広げた形）', () => {
     expect(EditBatchMusicEntry.parse({ musicTrackId, master: true })).toEqual({ musicTrackId, master: true })
   })
 
+  it('楽曲に入っていた値はそのまま控える（空の題も、前後の空白も）。欄の無いところに既定値を入れない', () => {
+    expect(EditBatchMusicEntry.parse({ musicTrackId, title: '' })).toEqual({ musicTrackId, title: '' })
+    expect(EditBatchMusicEntry.parse({ musicTrackId, title: ' 曲 ' })).toEqual({ musicTrackId, title: ' 曲 ' })
+    expect(EditBatchMusicEntry.parse({ musicTrackId })).toEqual({ musicTrackId })
+  })
+
   it('範囲外の値は受け付けない', () => {
     expect(EditBatchMusicEntry.safeParse({ musicTrackId, volume: 3 }).success).toBe(false)
-    expect(EditBatchMusicEntry.safeParse({ musicTrackId, title: '' }).success).toBe(false)
     expect(EditBatchMusicEntry.safeParse({ musicTrackId, offsetSec: -1 }).success).toBe(false)
     expect(EditBatchMusicEntry.safeParse({ musicTrackId, master: false }).success).toBe(false)
   })

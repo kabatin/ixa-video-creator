@@ -9,7 +9,7 @@ import {
   ProjectId as ProjectIdSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { projects } from '../schema/workspace.js'
 
@@ -53,7 +53,7 @@ export const projectRowToDomain = (row: ProjectRow): Project =>
 
 const liveById = (id: ProjectId) => and(eq(projects.id, id), isNull(projects.deletedAt))
 
-export const createProjectRepository = (db: DbClient): ProjectRepository => ({
+export const createProjectRepository = (db: DbExecutor): ProjectRepository => ({
   async findById(id) {
     const rows = await db.select().from(projects).where(liveById(id)).limit(1)
     const row = rows[0]

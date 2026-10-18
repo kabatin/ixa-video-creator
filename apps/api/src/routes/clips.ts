@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { MediaAssetRepository, ProjectRepository, TimelineClipRepository } from '@ixa/db'
+import type { EditTransaction, MediaAssetRepository, ProjectRepository, TimelineClipRepository } from '@ixa/db'
 import {
   CreateTimelineClipInput as CreateTimelineClipInputSchema,
   ProjectId as ProjectIdSchema,
@@ -13,6 +13,7 @@ import {
   narrationLineOf,
   newId,
   parseEffectParams,
+  type EditBatchClipEdit,
   type EditBatchLineEntry,
   type NarrationLineId,
   type ProjectId,
@@ -31,7 +32,6 @@ import {
   type FieldErrors,
 } from '../response.js'
 import { changedFieldsOf, recordClipEdits, updateEditOf } from './clip-edit-recording.js'
-import type { EditBatchRecorder } from './edit-batch-recording.js'
 
 /**
  * VIDEO1 以外のトラックに載る `TimelineClip` の CRUD（docs/DOMAIN.md §12）。
@@ -274,15 +274,32 @@ export type ClipRoutesDeps = {
   mediaAssets: Pick<MediaAssetRepository, 'findById'>
   /** ナレーションのテロップを手で消したとき（その行を「テロップなし」にする。ADR-0038）。ナレーションが無い環境では省く。 */
   onNarrationTelopDeleted?: (lineId: NarrationLineId) => Promise<void>
-  /** 作る・直す・消すを、書く前に記録する（取り消し。2026-10-19）。**省けない**（省くと戻せない操作が黙って増える）。 */
-  editBatches: EditBatchRecorder
+  /**
+   * 作る・直す・消すを、**書く前に、書き込みと同じトランザクションで**記録する（取り消し。2026-10-19）。
+   * **省けない**（省くと戻せない操作が黙って増える）。書き込みが落ちれば記録も残らない。
+   */
+  transaction: EditTransaction
 }
 
-/** ナレーションのテロップなら、その行（消すと「テロップなし」になる。戻すときに行も戻す）。 */
-const narrationLineEntriesOf = (clip: TimelineClip): readonly EditBatchLineEntry[] => {
-  const lineId = clip.content.type === 'text' ? narrationLineOf(clip.content.params) : null
-  // ナレーションのテロップは「テロップあり」の行にしか作られないので、消す前は必ず true。
-  return lineId === null ? [] : [{ lineId, telop: true }]
+const lineOfClip = (clip: TimelineClip): NarrationLineId | null =>
+  clip.content.type === 'text' ? narrationLineOf(clip.content.params) : null
+
+/**
+ * 消すときの記録。ナレーションのテロップなら、**その行のテロップ全部**と行の「テロップあり」を控える。
+ * 1 枚消すと行は「テロップなし」になり、残りの枚も作り直しで消える。全部を同じ ID で戻し、行も戻せば、
+ * 作り直しは今の形と同じと見て何もしない（ID が変わらない）。
+ */
+const deleteRecordOf = (
+  clip: TimelineClip,
+  projectClips: readonly TimelineClip[],
+): { readonly edits: readonly EditBatchClipEdit[]; readonly lineEntries: readonly EditBatchLineEntry[] } => {
+  const lineId = lineOfClip(clip)
+  const siblings = lineId === null ? [] : projectClips.filter((each) => each.id !== clip.id && lineOfClip(each) === lineId)
+  return {
+    edits: [clip, ...siblings].map((each) => ({ op: 'delete', clipId: each.id, before: clipSnapshotOf(each) })),
+    // ナレーションのテロップは「テロップあり」の行にしか作られないので、消す前は必ず true。
+    lineEntries: lineId === null ? [] : [{ lineId, telop: true }],
+  }
 }
 
 export const clipRoutes = (deps: ClipRoutesDeps) => {
@@ -325,14 +342,16 @@ export const clipRoutes = (deps: ClipRoutesDeps) => {
       const effect = normalizeEffectClip(input)
       if (!effect.ok) return c.json(fail(VALIDATION_ERROR_MESSAGE, effect.fields), 422)
 
-      // 記録は書く前に作る。作る物の ID を先に決めて記録に入れる。
+      // 記録は書く前に、同じトランザクションで作る。作る物の ID を先に決めて記録に入れる。
       const id = newId(TimelineClipIdSchema)
-      await recordClipEdits(deps.editBatches, {
-        projectId,
-        summary: clipEditSummary('create', effect.value),
-        edits: [{ op: 'create', clipId: id }],
+      const created = await deps.transaction(async (tx) => {
+        await recordClipEdits(tx.editBatches, {
+          projectId,
+          summary: clipEditSummary('create', effect.value),
+          edits: [{ op: 'create', clipId: id }],
+        })
+        return tx.timelineClips.create({ ...effect.value, projectId, id })
       })
-      const created = await deps.timelineClips.create({ ...effect.value, projectId, id })
       return c.json(ok(toClipResponse(created)), 201)
     })
     .openapi(updateClipRoute, async (c) => {
@@ -367,30 +386,37 @@ export const clipRoutes = (deps: ClipRoutesDeps) => {
       if (!effect.ok) return c.json(fail(VALIDATION_ERROR_MESSAGE, effect.fields), 422)
 
       const edit = updateEditOf(existing, effect.value)
-      if (edit !== null) {
-        const after = { track: effect.value.track ?? existing.track, content: effect.value.content ?? existing.content }
-        await recordClipEdits(deps.editBatches, {
-          projectId: existing.projectId,
-          summary: clipEditSummary('update', after, changedFieldsOf(existing, effect.value)),
-          edits: [edit],
-        })
-      }
-      // 読んでから書くまでに消されていれば、リポジトリが DbNotFoundError を投げ、共通ハンドラが 404 にする。
-      const updated = await deps.timelineClips.update(id, effect.value)
+      const after = { track: effect.value.track ?? existing.track, content: effect.value.content ?? existing.content }
+      // 読んでから書くまでに消されていれば、リポジトリが DbNotFoundError を投げ、共通ハンドラが 404 にする（記録も残らない）。
+      const updated = await deps.transaction(async (tx) => {
+        if (edit !== null) {
+          await recordClipEdits(tx.editBatches, {
+            projectId: existing.projectId,
+            summary: clipEditSummary('update', after, changedFieldsOf(existing, effect.value)),
+            edits: [edit],
+          })
+        }
+        return tx.timelineClips.update(id, effect.value)
+      })
       return c.json(ok(toClipResponse(updated)), 200)
     })
     .openapi(deleteClipRoute, async (c) => {
       const id = c.req.valid('param').id
       const existing = await deps.timelineClips.findById(id)
       if (existing === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
-      await recordClipEdits(deps.editBatches, {
-        projectId: existing.projectId,
-        summary: clipEditSummary('delete', existing),
-        edits: [{ op: 'delete', clipId: id, before: clipSnapshotOf(existing) }],
-        lineEntries: narrationLineEntriesOf(existing),
+      const record = deleteRecordOf(
+        existing,
+        lineOfClip(existing) === null ? [] : await deps.timelineClips.findByProject(existing.projectId),
+      )
+      const removed = await deps.transaction(async (tx) => {
+        await recordClipEdits(tx.editBatches, {
+          projectId: existing.projectId,
+          summary: clipEditSummary('delete', existing),
+          ...record,
+        })
+        return tx.timelineClips.softDelete(id)
       })
-      const removed = await deps.timelineClips.softDelete(id)
-      const lineId = removed.content.type === 'text' ? narrationLineOf(removed.content.params) : null
+      const lineId = lineOfClip(removed)
       if (lineId !== null) await deps.onNarrationTelopDeleted?.(lineId)
       return c.body(null, 204)
     })

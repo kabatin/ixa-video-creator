@@ -13,7 +13,7 @@ import {
   UpdateTextStylePresetPatch as UpdateSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { textStyles } from '../schema/text-style.js'
 
@@ -45,7 +45,7 @@ export const textStyleRowToDomain = (row: TextStyleRow): TextStylePreset =>
 
 const live = isNull(textStyles.deletedAt)
 
-export const createTextStyleRepository = (db: DbClient): TextStyleRepository => ({
+export const createTextStyleRepository = (db: DbExecutor): TextStyleRepository => ({
   async findByProject(projectId) {
     const rows = await db
       .select()

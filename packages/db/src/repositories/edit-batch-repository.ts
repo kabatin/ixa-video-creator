@@ -6,7 +6,7 @@ import {
   EditBatchId as EditBatchIdSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { shotEditBatches } from '../schema/edit-batch.js'
 
@@ -52,7 +52,7 @@ const rowToDomain = (row: EditBatchRow): EditBatch =>
 /** 履歴に出す既定の件数。全部返すと、長く使った Project で画面が重くなる。 */
 export const DEFAULT_EDIT_BATCH_LIMIT = 50
 
-export const createEditBatchRepository = (db: DbClient): EditBatchRepository => ({
+export const createEditBatchRepository = (db: DbExecutor): EditBatchRepository => ({
   findByProject: async (projectId, limit = DEFAULT_EDIT_BATCH_LIMIT) => {
     const rows = await db
       .select()

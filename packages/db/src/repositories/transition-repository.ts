@@ -6,7 +6,7 @@ import {
   TransitionId as TransitionIdSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { transitions } from '../schema/shot.js'
 
@@ -45,7 +45,7 @@ export const transitionRowToDomain = (row: TransitionRow): Transition =>
     durationSec: row.durationSec,
   })
 
-export const createTransitionRepository = (db: DbClient): TransitionRepository => ({
+export const createTransitionRepository = (db: DbExecutor): TransitionRepository => ({
   async findByProject(projectId) {
     const rows = await db
       .select()

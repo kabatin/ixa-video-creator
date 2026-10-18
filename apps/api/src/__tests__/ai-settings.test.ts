@@ -1,8 +1,7 @@
 import { AiToolId, type AiSettings, type AiToolStatus } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
-import { createApp } from '../app.js'
 import type { AiRoutesDeps } from '../routes/ai.js'
-import { baseAppDeps } from './app-deps.js'
+import { baseAppDeps, createTestApp } from './app-deps.js'
 
 /**
  * 使う AI（ADR-0032）。見つかった AI の一覧と、用途ごとの選択の読み書き。
@@ -36,7 +35,7 @@ const setup = (
     detect: () => Promise.resolve(statuses(ready)),
     defaults: DEFAULTS,
   }
-  return { app: createApp({ ...baseAppDeps(), ai: deps }), store }
+  return { app: createTestApp({ ...baseAppDeps(), ai: deps }), store }
 }
 
 const put = (app: ReturnType<typeof setup>['app'], body: unknown) =>

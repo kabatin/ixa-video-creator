@@ -19,7 +19,7 @@ import {
   ReviewRunOutcome as ReviewRunOutcomeSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { takes } from '../schema/generation.js'
 import { reviewFindings, reviewRuns } from '../schema/review.js'
@@ -89,7 +89,7 @@ export const reviewFindingRowToDomain = (row: ReviewFindingRow): ReviewFinding =
     suggestedPromptDelta: row.suggestedPromptDelta,
   })
 
-export const createReviewRepository = (db: DbClient): ReviewRepository => ({
+export const createReviewRepository = (db: DbExecutor): ReviewRepository => ({
   async findRunById(id) {
     const rows = await db.select().from(reviewRuns).where(eq(reviewRuns.id, id)).limit(1)
     const row = rows[0]

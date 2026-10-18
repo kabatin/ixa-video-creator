@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { createApp } from '../app.js'
 import { createAuth } from '../auth/create-auth.js'
 import { createLogger } from '../logger.js'
-import { baseAppDeps } from './app-deps.js'
+import { baseAppDeps, createTestApp } from './app-deps.js'
 import { createInMemoryAccessTokens } from './in-memory-access-token-repository.js'
 
 /**
@@ -12,7 +11,7 @@ import { createInMemoryAccessTokens } from './in-memory-access-token-repository.
 const PASSPHRASE = 'correct horse battery staple'
 
 const realApp = (passphrase: string | null = PASSPHRASE, host = '127.0.0.1') =>
-  createApp({
+  createTestApp({
     ...baseAppDeps(),
     auth: createAuth({
       passphrase,

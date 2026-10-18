@@ -52,6 +52,14 @@ describe('EditBatchClipEdit', () => {
     expect(EditBatchClipEdit.parse({ op: 'update', clipId: sfx.id, before }).op).toBe('update')
   })
 
+  it('直した物は変えた欄だけを持てる', () => {
+    expect(EditBatchClipEdit.parse({ op: 'update', clipId: sfx.id, before: { startSec: 1 } })).toEqual({
+      op: 'update',
+      clipId: sfx.id,
+      before: { startSec: 1 },
+    })
+  })
+
   it('直した物・消した物に控えが無ければ受け付けない（戻す先が無い）', () => {
     expect(EditBatchClipEdit.safeParse({ op: 'delete', clipId: sfx.id }).success).toBe(false)
     expect(EditBatchClipEdit.safeParse({ op: 'update', clipId: sfx.id, before: null }).success).toBe(false)

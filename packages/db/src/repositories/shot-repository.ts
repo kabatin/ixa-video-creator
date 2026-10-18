@@ -9,7 +9,7 @@ import {
   UpdateShotPatch as UpdateShotPatchSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { shots } from '../schema/shot.js'
 
@@ -75,7 +75,7 @@ export const shotRowToDomain = (row: ShotRow): Shot =>
 
 const liveById = (id: ShotId) => and(eq(shots.id, id), isNull(shots.deletedAt))
 
-export const createShotRepository = (db: DbClient): ShotRepository => {
+export const createShotRepository = (db: DbExecutor): ShotRepository => {
   /** 生存行を 1 件更新して Domain 型で返す。対象が無ければ DbNotFoundError。 */
   const updateLive = async (
     id: ShotId,

@@ -13,7 +13,7 @@ import {
   type ImportedSfxSound,
   type TimelineClipId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { sfxJobs } from '../schema/sfx.js'
 
@@ -81,7 +81,7 @@ export const sfxJobRowToDomain = (row: SfxJobRow): SfxJob =>
 
 const ACTIVE = inArray(sfxJobs.status, ['queued', 'running'])
 
-export const createSfxJobRepository = (db: DbClient): SfxJobRepository => {
+export const createSfxJobRepository = (db: DbExecutor): SfxJobRepository => {
   const first = (rows: SfxJobRow[]): SfxJob | null => {
     const row = rows[0]
     return row === undefined ? null : sfxJobRowToDomain(row)

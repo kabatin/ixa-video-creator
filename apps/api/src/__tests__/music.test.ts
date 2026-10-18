@@ -25,6 +25,7 @@ import {
 import { musicEditRoutes } from '../routes/music-edit.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import {
   createInMemoryMusicAnalysisRepository,
@@ -102,7 +103,13 @@ let app: OpenAPIHono
 const buildApp = (deps: MusicRoutesDeps) => {
   const app = new OpenAPIHono({ defaultHook: validationHook })
   app.route('/', musicRoutes(deps))
-  app.route('/', musicEditRoutes({ musicTracks: deps.musicTracks, editBatches: createInMemoryEditBatchRepository() }))
+  app.route(
+    '/',
+    musicEditRoutes({
+      musicTracks: deps.musicTracks,
+      transaction: createInMemoryEditTransaction({ editBatches: createInMemoryEditBatchRepository(), musicTracks: deps.musicTracks }),
+    }),
+  )
   registerErrorHandlers(app, createLogger('silent'))
   return app
 }

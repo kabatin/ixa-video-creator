@@ -5,7 +5,7 @@ import {
   type ProjectAudioSettings,
   type ProjectId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { projectAudioSettings } from '../schema/narration.js'
 
 /** drizzle の row 型。パッケージ外へは出さない。 */
@@ -27,7 +27,7 @@ export const audioSettingsRowToDomain = (row: ProjectAudioSettingsRow): ProjectA
     telopHighlight: row.telopHighlight,
   })
 
-export const createProjectAudioSettingsRepository = (db: DbClient): ProjectAudioSettingsRepository => ({
+export const createProjectAudioSettingsRepository = (db: DbExecutor): ProjectAudioSettingsRepository => ({
   async get(projectId) {
     const rows = await db.select().from(projectAudioSettings).where(eq(projectAudioSettings.projectId, projectId))
     const row = rows[0]

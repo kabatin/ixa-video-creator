@@ -2,9 +2,9 @@ import { ProviderId, compileSpec, computeSpecHash, type Project } from '@ixa/dom
 import { GenerationContextError } from '@ixa/generation'
 import { createProviderRegistry } from '@ixa/provider-core'
 import { describe, expect, it } from 'vitest'
-import { createApp, type AppDeps } from '../app.js'
+import type { AppDeps } from '../app.js'
 import { MAX_TAKES_PER_REQUEST } from '../routes/shots.js'
-import { baseAppDeps, createRecordingQueue } from './app-deps.js'
+import { baseAppDeps, createTestApp, createRecordingQueue } from './app-deps.js'
 import { aProject, createTestContextSource } from './fixtures.js'
 import {
   aShot,
@@ -216,7 +216,7 @@ describe('POST /shots/:id/generate', () => {
         registry: createProviderRegistry([createTestVideoProvider([CHEAP_MODEL]), createTestVideoProvider([PAID])]),
         videoProvider: () => Promise.resolve(ProviderId.parse(videoProvider)),
       }
-      return { app: createApp(deps), shot }
+      return { app: createTestApp(deps), shot }
     }
 
     it('選んだ AI のモデルだけから選ぶ（安くて良い別の AI があっても）', async () => {
@@ -380,7 +380,7 @@ describe('POST /shots/:id/generate の失敗の切り分け', () => {
         charactersForShot: () => Promise.reject(error),
       },
     }
-    return { app: createApp(deps), shot, generationJobs }
+    return { app: createTestApp(deps), shot, generationJobs }
   }
 
   it('壊れたキャラクター参照は 422 を characters フィールドで返す', async () => {
@@ -449,7 +449,7 @@ describe('コスト上限（実 Provider に切り替えたときの歯止め）
       registry: createProviderRegistry([createTestVideoProvider([PRICEY])]),
       generationQueue: createRecordingQueue(),
     }
-    return { app: createApp(deps), project, shot, takes }
+    return { app: createTestApp(deps), project, shot, takes }
   }
 
   it('1 回の要求の上限を超えたら 422 で止め、キューに入れない', async () => {

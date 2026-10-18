@@ -10,6 +10,7 @@ import {
   TransitionId as TransitionIdSchema,
   canUndo,
   isUndone,
+  narrationLineOf,
   undoTouchesSelectedTake,
   undoTouchesStatus,
   type EditBatch,
@@ -320,6 +321,28 @@ const restoreEntry = async (
   }
 }
 
+/**
+ * ナレーションのテロップは行から作り直される。戻したテロップが今の行の形と違えば（手で直していた・前の作り直しが
+ * 済んでいなかった）、作り直しで別の ID に替わる。**直後に消えた ID は返さず**、代わりにその行の今のテロップを返す。
+ */
+const settledRestoredClips = async (
+  deps: Pick<EditBatchRoutesDeps, 'timelineClips'>,
+  projectId: ProjectId,
+  restored: readonly TimelineClipId[],
+  lineIds: readonly NarrationLineId[],
+): Promise<readonly TimelineClipId[]> => {
+  const alive = await deps.timelineClips.findByProject(projectId)
+  const aliveIds = new Set<string>(alive.map((clip) => clip.id))
+  const kept = restored.filter((id) => aliveIds.has(id))
+  if (kept.length === restored.length) return restored
+  const lines = new Set<string>(lineIds)
+  const replacements = alive
+    .filter((clip) => clip.content.type === 'text' && lines.has(narrationLineOf(clip.content.params) ?? ''))
+    .map((clip) => clip.id)
+    .filter((id) => !kept.includes(id))
+  return [...kept, ...replacements]
+}
+
 export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })
     .openapi(listRoute, async (c) => {
@@ -396,6 +419,8 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
       if (restoredLines.length > 0 && deps.narration !== undefined) {
         await syncNarrationTelops(deps.narration, projectId)
       }
+      const settledClips =
+        restoredLines.length === 0 ? restoredClips : await settledRestoredClips(deps, projectId, restoredClips, restoredLines)
 
       const restoredMusicTracks: MusicTrackId[] = []
       const failedMusicTracks: { musicTrackId: MusicTrackId; reason: string }[] = []
@@ -412,7 +437,7 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
           batch: toEditBatchSummary(undone),
           restored,
           failed,
-          restoredClips,
+          restoredClips: [...settledClips],
           failedClips,
           restoredLines,
           failedLines,

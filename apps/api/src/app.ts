@@ -42,6 +42,7 @@ import { healthRoutes } from './routes/health.js'
 import { mediaRoutes } from './routes/media.js'
 import { projectRoutes } from './routes/projects.js'
 import { shotRoutes, type GenerationQueue } from './routes/shots.js'
+import { shotSingleEditRoutes } from './routes/shot-single-edits.js'
 import { shotBulkRoutes } from './routes/shots-bulk.js'
 import { shotBulkFinalRoutes } from './routes/shots-bulk-final.js'
 import { shotEditRoutes } from './routes/shot-edits.js'
@@ -97,6 +98,7 @@ import type {
   ThumbnailRepository,
   ReviewRepository,
   EditBatchRepository,
+  EditTransaction,
   ScriptRepository,
   StoryboardDraftRepository,
   SequenceRepository,
@@ -156,6 +158,8 @@ export type AppDeps = {
   storyboardDrafts: StoryboardDraftRepository
   /** 一括編集の記録と取り消し（Undo と履歴）。 */
   editBatches: EditBatchRepository
+  /** 取り消しの記録と、その記録が戻す書き込みを同じトランザクションで行う口。 */
+  editTransaction: EditTransaction
   /**
    * 絵コンテ下書きの口。**どの実装を挿すかは main.ts だけが決める**
    * （レビュアと同じ方針。`apps/worker/src/review-wiring.ts`）。
@@ -306,7 +310,9 @@ export const createApp = (deps: AppDeps) => {
     events: deps.events,
     logger,
   }
-  app.route('/', shotRoutes({ ...shotDeps, editBatches: deps.editBatches }))
+  app.route('/', shotRoutes(shotDeps))
+  // Shot 1 件の作成・直し・削除と採用 Take の決定・外し（取り消しの記録と同じトランザクションで書く）。
+  app.route('/', shotSingleEditRoutes({ ...shotDeps, transaction: deps.editTransaction }))
   app.route('/', generationCancelRoutes(shotDeps))
   app.route('/', takeHideRoutes(shotDeps))
   app.route('/', takeDownloadRoutes({ shots: deps.shots, takes: deps.takes, projects, mediaAssets, storage }))
@@ -521,11 +527,11 @@ export const createApp = (deps: AppDeps) => {
     }),
   )
   // 楽曲の欄の直しとマスターの切り替え。取り消せるよう、書く前に記録する。
-  app.route('/', musicEditRoutes({ musicTracks: deps.musicTracks, editBatches: deps.editBatches }))
+  app.route('/', musicEditRoutes({ musicTracks: deps.musicTracks, transaction: deps.editTransaction }))
   // 曲を最後の Shot で切る（尻の黒画面の直し）。取り消せるよう記録を残す。
   app.route(
     '/',
-    musicTrimRoutes({ projects, shots: deps.shots, musicTracks: deps.musicTracks, editBatches: deps.editBatches }),
+    musicTrimRoutes({ projects, shots: deps.shots, musicTracks: deps.musicTracks, transaction: deps.editTransaction }),
   )
   app.route('/', scriptRoutes({ scripts: deps.scripts, projects }))
 
@@ -566,7 +572,7 @@ export const createApp = (deps: AppDeps) => {
     reviewRoutes({ takes: deps.takes, reviews: deps.reviews, queue: deps.reviewQueue }),
   )
 
-  app.route('/', transitionRoutes({ transitions: deps.transitions, shots: deps.shots, projects, editBatches: deps.editBatches }))
+  app.route('/', transitionRoutes({ transitions: deps.transitions, shots: deps.shots, projects, transaction: deps.editTransaction }))
   // ナレーションのテロップを手で消したら、その行を「テロップなし」にする（ADR-0038）。
   app.route(
     '/',
@@ -575,11 +581,11 @@ export const createApp = (deps: AppDeps) => {
       projects,
       mediaAssets,
       ...(narration === undefined ? {} : { onNarrationTelopDeleted: (lineId: NarrationLineId) => turnOffLineTelop(narration, lineId) }),
-      editBatches: deps.editBatches,
+      transaction: deps.editTransaction,
     }),
   )
   // 帯で境目を動かす（当人と隣を 1 つの記録にまとめる）。
-  app.route('/', clipSpanRoutes({ timelineClips: deps.timelineClips, projects, editBatches: deps.editBatches }))
+  app.route('/', clipSpanRoutes({ timelineClips: deps.timelineClips, projects, transaction: deps.editTransaction }))
   // テロップの見た目: 名前を付けて保存し、まとめて当てる（ADR-0028）。
   app.route('/', textStyleRoutes({ textStyles: deps.textStyles, projects }))
   // 歌詞をフレーズごとのテロップにする（ADR-0033）。
@@ -592,7 +598,7 @@ export const createApp = (deps: AppDeps) => {
       textStyles: deps.textStyles,
       musicTracks: deps.musicTracks,
       mediaAssets,
-      editBatches: deps.editBatches,
+      transaction: deps.editTransaction,
     }),
   )
   app.route(

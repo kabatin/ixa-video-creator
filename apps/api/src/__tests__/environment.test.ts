@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { EnvironmentStatus } from '@ixa/config'
-import { createApp } from '../app.js'
-import { baseAppDeps } from './app-deps.js'
+import { baseAppDeps, createTestApp } from './app-deps.js'
 
 /**
  * 環境の状態を返す口（A 案）。
@@ -35,7 +34,7 @@ const aStatus = (): EnvironmentStatus => ({
 })
 
 const appWith = (status: () => EnvironmentStatus) =>
-  createApp({ ...baseAppDeps(), environment: { status } })
+  createTestApp({ ...baseAppDeps(), environment: { status } })
 
 describe('GET /environment', () => {
   it('設定されているかと文字数を返す', async () => {

@@ -9,7 +9,7 @@ import {
   UpdateTimelineClipPatch as UpdateTimelineClipPatchSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { timelineClips } from '../schema/timeline.js'
 
@@ -71,7 +71,7 @@ const idOf = (input: NewTimelineClip): TimelineClipId =>
 const liveById = (id: TimelineClipId) =>
   and(eq(timelineClips.id, id), isNull(timelineClips.deletedAt))
 
-export const createTimelineClipRepository = (db: DbClient): TimelineClipRepository => ({
+export const createTimelineClipRepository = (db: DbExecutor): TimelineClipRepository => ({
   async findByProject(projectId) {
     const rows = await db
       .select()

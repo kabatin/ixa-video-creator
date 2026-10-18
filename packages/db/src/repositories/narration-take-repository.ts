@@ -8,7 +8,7 @@ import {
   type NarrationTake,
   type NarrationTakeId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { narrationTakes } from '../schema/narration.js'
 
@@ -50,7 +50,7 @@ export const narrationTakeRowToDomain = (row: NarrationTakeRow): NarrationTake =
     createdAt: row.createdAt,
   })
 
-export const createNarrationTakeRepository = (db: DbClient): NarrationTakeRepository => ({
+export const createNarrationTakeRepository = (db: DbExecutor): NarrationTakeRepository => ({
   async findById(id) {
     const rows = await db.select().from(narrationTakes).where(eq(narrationTakes.id, id))
     const row = rows[0]

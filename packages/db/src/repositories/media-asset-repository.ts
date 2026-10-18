@@ -10,7 +10,7 @@ import {
   UpdateMediaAssetPatch as UpdateMediaAssetPatchSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { mediaAssets } from '../schema/media.js'
 
@@ -52,7 +52,7 @@ export const mediaAssetRowToDomain = (row: MediaAssetRow): MediaAsset =>
 const liveById = (id: MediaAssetId) =>
   and(eq(mediaAssets.id, id), isNull(mediaAssets.deletedAt))
 
-export const createMediaAssetRepository = (db: DbClient): MediaAssetRepository => ({
+export const createMediaAssetRepository = (db: DbExecutor): MediaAssetRepository => ({
   async findById(id) {
     const rows = await db.select().from(mediaAssets).where(liveById(id)).limit(1)
     const row = rows[0]

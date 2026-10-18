@@ -20,6 +20,7 @@ import { describe, expect, it } from 'vitest'
 import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
 import type { ShotRoutesDeps } from '../routes/shots.js'
+import { shotSingleEditRoutes } from '../routes/shot-single-edits.js'
 import { shotRoutes } from '../routes/shots.js'
 import { shotBulkRoutes } from '../routes/shots-bulk.js'
 import { createRecordingQueue } from './app-deps.js'
@@ -30,6 +31,7 @@ import {
 } from './in-memory-project-events.js'
 import { createInMemoryGenerationJobRepository } from './in-memory-generation-job-repository.js'
 import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { CHEAP_MODEL, GOOD_MODEL, type Ok } from './shot-test-support.js'
 import { createTestVideoProvider } from './test-video-provider.js'
@@ -71,7 +73,14 @@ const buildFixture = (options: FixtureOptions = {}) => {
 
   const app = new OpenAPIHono({ defaultHook: validationHook })
   registerErrorHandlers(app, createLogger('silent'))
-  app.route('/', shotRoutes({ ...deps, editBatches: createInMemoryEditBatchRepository() }))
+  app.route('/', shotRoutes(deps))
+  app.route(
+    '/',
+    shotSingleEditRoutes({
+      ...deps,
+      transaction: createInMemoryEditTransaction({ editBatches: createInMemoryEditBatchRepository(), shots: deps.shots }),
+    }),
+  )
   app.route('/', shotBulkRoutes({ ...deps, editBatches: createInMemoryEditBatchRepository() }))
 
   return { app, project, events, shots }

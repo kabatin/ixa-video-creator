@@ -24,6 +24,7 @@ import {
 } from '../routes/clips.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import {
   aMediaAsset,
@@ -122,7 +123,7 @@ beforeEach(() => {
     timelineClips,
     projects: createInMemoryProjectRepository([project, otherProject]),
     mediaAssets: createInMemoryMediaAssetRepository([asset]),
-    editBatches: createInMemoryEditBatchRepository(),
+    transaction: createInMemoryEditTransaction({ editBatches: createInMemoryEditBatchRepository(), timelineClips }),
   })
 })
 

@@ -11,7 +11,7 @@ import {
   type ProjectId,
   type UpdateNarrationLinePatch,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { narrationLines } from '../schema/narration.js'
 
@@ -50,7 +50,7 @@ export const narrationLineRowToDomain = (row: NarrationLineRow): NarrationLine =
 
 const live = isNull(narrationLines.deletedAt)
 
-export const createNarrationLineRepository = (db: DbClient): NarrationLineRepository => ({
+export const createNarrationLineRepository = (db: DbExecutor): NarrationLineRepository => ({
   async findByProject(projectId) {
     const rows = await db
       .select()

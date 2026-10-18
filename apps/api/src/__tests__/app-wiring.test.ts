@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createApp } from '../app.js'
-import { baseAppDeps } from './app-deps.js'
+import { baseAppDeps, createTestApp } from './app-deps.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 
@@ -11,7 +10,7 @@ import { createInMemoryProjectRepository } from './in-memory-project-repository.
 const project = aProject()
 
 const buildApp = () =>
-  createApp({ ...baseAppDeps(), projects: createInMemoryProjectRepository([project]) })
+  createTestApp({ ...baseAppDeps(), projects: createInMemoryProjectRepository([project]) })
 
 describe('createApp のルート配線', () => {
   it('Script のルートが生えている', async () => {

@@ -28,6 +28,7 @@ import {
   createAccessTokenRepository,
   createScriptRepository,
   createEditBatchRepository,
+  createEditTransaction,
   createStoryboardDraftRepository,
   createSequenceRepository,
   createMusicAnalysisRepository,
@@ -348,8 +349,8 @@ export const main = (): void => {
       textStyles,
       timelineClips,
       characters,
-      // まとめて並べた記録（戻せるようにする。ADR-0038）。
-      editBatches: createEditBatchRepository(db),
+      // 行を動かす・まとめて並べる記録と書き込みを同じトランザクションで（戻せるようにする。ADR-0038）。
+      transaction: createEditTransaction(db),
       voiceAdapter,
       voiceQueue: voiceQueuePort,
       // 予算は動画の Take と声・文字起こしを足して見る（声だけで予算を食い潰さない）。
@@ -434,6 +435,8 @@ export const main = (): void => {
     scripts: createScriptRepository(db),
     storyboardDrafts: createStoryboardDraftRepository(db),
     editBatches: createEditBatchRepository(db),
+    // 取り消しの記録と書き込みを同じトランザクションで行う口。
+    editTransaction: createEditTransaction(db),
     // 絵コンテの案の口は「使う AI」のテキストで決まる（ADR-0032。未選択なら STORYBOARD_DRAFTER）。
     storyboardDrafter: ai.storyboardDrafter,
     textAssistant: ai.textAssistant,

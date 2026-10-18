@@ -9,7 +9,7 @@ import {
   UpdateSequencePatch as UpdateSequencePatchSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { sequences } from '../schema/script.js'
 
@@ -45,7 +45,7 @@ export const sequenceRowToDomain = (row: SequenceRow): Sequence =>
 
 const liveById = (id: SequenceId) => and(eq(sequences.id, id), isNull(sequences.deletedAt))
 
-export const createSequenceRepository = (db: DbClient): SequenceRepository => ({
+export const createSequenceRepository = (db: DbExecutor): SequenceRepository => ({
   async findById(id) {
     const rows = await db.select().from(sequences).where(liveById(id)).limit(1)
     const row = rows[0]

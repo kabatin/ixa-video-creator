@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { ProjectRepository, TimelineClipRepository } from '@ixa/db'
+import type { EditTransaction, ProjectRepository, TimelineClipRepository } from '@ixa/db'
 import {
   ProjectId as ProjectIdSchema,
   Seconds,
@@ -13,7 +13,6 @@ import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../
 import { errorContent, fail, okList, listResponse } from '../response.js'
 import { recordClipEdits, updateEditOf } from './clip-edit-recording.js'
 import { NON_POSITIVE_DURATION_MESSAGE, TimelineClipResponse, toClipResponse } from './clips.js'
-import type { EditBatchRecorder } from './edit-batch-recording.js'
 
 /**
  * 帯でいくつかのクリップの位置と尺をいっしょに変える（境目を動かすと隣も付いてくる）。**1 つの記録にまとめる。**
@@ -56,9 +55,10 @@ const spansRoute = createRoute({
 })
 
 export type ClipSpanDeps = {
-  readonly timelineClips: Pick<TimelineClipRepository, 'findById' | 'update'>
+  readonly timelineClips: Pick<TimelineClipRepository, 'findById'>
   readonly projects: Pick<ProjectRepository, 'findById'>
-  readonly editBatches: EditBatchRecorder
+  /** 記録と書き込みを同じトランザクションで（途中で落ちれば、記録も一部の書き込みも残らない）。 */
+  readonly transaction: EditTransaction
 }
 
 /** 2 件以上なら「境目を動かす」。1 件なら単独の見出しと同じ。 */
@@ -88,13 +88,15 @@ export const clipSpanRoutes = (deps: ClipSpanDeps) =>
         return clip === undefined ? null : updateEditOf(clip, { startSec: span.startSec, durationSec: span.durationSec })
       })
       .filter((edit): edit is EditBatchClipEdit => edit !== null)
-    // 記録は書く前に作る。変わらない分は記録に入れない。
-    await recordClipEdits(deps.editBatches, { projectId, summary: summaryOf(clips), edits })
-
-    const updated: TimelineClip[] = []
-    for (const span of spans) {
-      // 1 件ずつ順に書く（縮む側が先。同時に送ると順が保てない）。
-      updated.push(await deps.timelineClips.update(span.id, { startSec: span.startSec, durationSec: span.durationSec }))
-    }
+    // 記録は書く前に、同じトランザクションで作る。変わらない分は記録に入れない。
+    const updated = await deps.transaction(async (tx) => {
+      await recordClipEdits(tx.editBatches, { projectId, summary: summaryOf(clips), edits })
+      const written: TimelineClip[] = []
+      for (const span of spans) {
+        // 1 件ずつ順に書く（縮む側が先。同時に送ると順が保てない）。
+        written.push(await tx.timelineClips.update(span.id, { startSec: span.startSec, durationSec: span.durationSec }))
+      }
+      return written
+    })
     return c.json(okList(updated.map(toClipResponse)), 200)
   })

@@ -1,7 +1,7 @@
 import { createProviderRegistry } from '@ixa/provider-core'
 import type { Project, Shot } from '@ixa/domain'
-import { createApp, type AppDeps } from '../app.js'
-import { baseAppDeps, createRecordingQueue, type RecordingQueue } from './app-deps.js'
+import type { AppDeps } from '../app.js'
+import { baseAppDeps, createTestApp, createRecordingQueue, type RecordingQueue } from './app-deps.js'
 import { aProject } from './fixtures.js'
 import {
   aShot,
@@ -57,10 +57,10 @@ export const buildFixture = (options: FixtureOptions = {}) => {
     generationQueue: queue,
   }
 
-  return { app: createApp(deps), project, shot, shots, takes, generationJobs, queue, locations }
+  return { app: createTestApp(deps), project, shot, shots, takes, generationJobs, queue, locations }
 }
 
-export const postJson = (app: ReturnType<typeof createApp>, path: string, body: unknown) =>
+export const postJson = (app: ReturnType<typeof createTestApp>, path: string, body: unknown) =>
   app.request(path, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

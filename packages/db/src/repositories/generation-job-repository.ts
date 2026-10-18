@@ -10,7 +10,7 @@ import {
   lineagePairViolation,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { generationJobs } from '../schema/generation.js'
 import { shots } from '../schema/shot.js'
@@ -71,7 +71,7 @@ export const generationJobRowToDomain = (row: GenerationJobRow): GenerationJob =
   })
 }
 
-export const createGenerationJobRepository = (db: DbClient): GenerationJobRepository => ({
+export const createGenerationJobRepository = (db: DbExecutor): GenerationJobRepository => ({
   async findById(id) {
     const rows = await db.select().from(generationJobs).where(eq(generationJobs.id, id)).limit(1)
     const row = rows[0]
@@ -121,7 +121,7 @@ export const createGenerationJobRepository = (db: DbClient): GenerationJobReposi
  * プロジェクトで動いている生成（順番待ち・作成中）。生きている Shot のものだけ、投入順。
  * 「生成中です」だけでは分からなかったので、画面にモデルと経過を出すのに使う（2026-09-30）。
  */
-export const findActiveGenerationJobs = async (db: DbClient, projectId: ProjectId): Promise<GenerationJob[]> => {
+export const findActiveGenerationJobs = async (db: DbExecutor, projectId: ProjectId): Promise<GenerationJob[]> => {
   const rows = await db
     .select({ job: generationJobs })
     .from(generationJobs)

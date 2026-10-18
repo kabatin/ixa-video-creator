@@ -18,7 +18,7 @@ import {
   StoryboardDraftRunId as StoryboardDraftRunIdSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { storyboardDraftItems, storyboardDraftRuns } from '../schema/storyboard.js'
 
@@ -87,7 +87,7 @@ const itemRowToDomain = (row: StoryboardDraftItemRow): StoryboardDraftItem =>
     createdAt: row.createdAt,
   })
 
-export const createStoryboardDraftRepository = (db: DbClient): StoryboardDraftRepository => ({
+export const createStoryboardDraftRepository = (db: DbExecutor): StoryboardDraftRepository => ({
   findRunById: async (id) => {
     const [row] = await db
       .select()

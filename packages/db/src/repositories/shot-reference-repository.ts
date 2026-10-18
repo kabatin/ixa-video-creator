@@ -6,7 +6,7 @@ import {
   ShotReferenceId as ShotReferenceIdSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { shotReferences } from '../schema/shot.js'
 
@@ -41,7 +41,7 @@ export const shotReferenceRowToDomain = (row: ShotReferenceRow): ShotReference =
     sourceKind: row.sourceKind,
   })
 
-export const createShotReferenceRepository = (db: DbClient): ShotReferenceRepository => ({
+export const createShotReferenceRepository = (db: DbExecutor): ShotReferenceRepository => ({
   async findByShot(shotId) {
     const rows = await db
       .select()

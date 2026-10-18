@@ -9,8 +9,7 @@ import {
 } from '@ixa/domain'
 import { createProviderRegistry } from '@ixa/provider-core'
 import { describe, expect, it } from 'vitest'
-import { createApp } from '../app.js'
-import { baseAppDeps } from './app-deps.js'
+import { baseAppDeps, createTestApp } from './app-deps.js'
 import { aCharacterBundle, aProject, createTestContextSource } from './fixtures.js'
 import { aShot, createInMemoryShotRepository } from '@ixa/generation/testing'
 import { createInMemoryGenerationJobRepository } from './in-memory-generation-job-repository.js'
@@ -58,7 +57,7 @@ describe('参照がある場合の生成（Phase 2 への備え）', () => {
     const shot = aShot(project.id)
     const bundle = aCharacterBundle()
 
-    const app = createApp({
+    const app = createTestApp({
       ...baseAppDeps(),
       projects: createInMemoryProjectRepository([project]),
       shots: createInMemoryShotRepository([shot]),
@@ -87,7 +86,7 @@ describe('参照がある場合の生成（Phase 2 への備え）', () => {
     const bundle = aCharacterBundle()
     const tight = testModel({ id: 'test/tight', capabilities: { referenceImages: { max: 1, roles: [...ReferenceRoleSchema.options] } } })
 
-    const app = createApp({
+    const app = createTestApp({
       ...baseAppDeps(),
       projects: createInMemoryProjectRepository([project]),
       shots: createInMemoryShotRepository([shot]),
@@ -114,7 +113,7 @@ describe('参照がある場合の生成（Phase 2 への備え）', () => {
     })
 
     const jobs = createInMemoryGenerationJobRepository()
-    const app = createApp({
+    const app = createTestApp({
       ...baseAppDeps(),
       projects: createInMemoryProjectRepository([project]),
       shots: createInMemoryShotRepository([shot]),
@@ -143,7 +142,7 @@ describe('参照がある場合の生成（Phase 2 への備え）', () => {
       capabilities: { referenceImages: { max: 0, roles: [] } },
     })
 
-    const app = createApp({
+    const app = createTestApp({
       ...baseAppDeps(),
       projects: createInMemoryProjectRepository([project]),
       shots: createInMemoryShotRepository([shot]),
@@ -169,7 +168,7 @@ describe('参照がある場合の生成（Phase 2 への備え）', () => {
     })
 
     const jobs = createInMemoryGenerationJobRepository()
-    const app = createApp({
+    const app = createTestApp({
       ...baseAppDeps(),
       projects: createInMemoryProjectRepository([project]),
       shots: createInMemoryShotRepository([shot]),

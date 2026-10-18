@@ -11,7 +11,7 @@ import {
   type VoiceProfile,
   type VoiceProfileId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { voiceProfiles } from '../schema/narration.js'
 
@@ -57,7 +57,7 @@ const single = (rows: VoiceProfileRow[]): VoiceProfile | null => {
   return row === undefined ? null : voiceProfileRowToDomain(row)
 }
 
-export const createVoiceProfileRepository = (db: DbClient): VoiceProfileRepository => ({
+export const createVoiceProfileRepository = (db: DbExecutor): VoiceProfileRepository => ({
   async findByProject(projectId) {
     const rows = await db
       .select()

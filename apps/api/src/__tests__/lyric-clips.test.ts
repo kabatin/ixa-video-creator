@@ -18,6 +18,7 @@ import { editBatchRoutes } from '../routes/edit-batches.js'
 import { lyricClipRoutes } from '../routes/lyric-clips.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createFailingRecordTransaction, createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { createInMemoryTextStyleRepository } from './in-memory-text-style-repository.js'
 import {
@@ -42,6 +43,8 @@ const build = (options: {
   readonly lyricStyle?: boolean
   /** 曲の長さ（秒）。null なら曲を置かない。 */
   readonly songSec?: number | null
+  /** 取り消しの記録が作れない（書く前に記録することを確かめる）。 */
+  readonly recordFails?: boolean
 } = {}) => {
   const project = { ...aProject(), lyrics: '一行目\n二行目\n三行目', lyricCues: [1, 3], ...options.project }
   const shots = createInMemoryShotRepository(
@@ -90,7 +93,10 @@ const build = (options: {
     '/',
     lyricClipRoutes({
       projects,
-      editBatches,
+      transaction: (options.recordFails === true ? createFailingRecordTransaction : createInMemoryEditTransaction)({
+        editBatches,
+        timelineClips,
+      }),
       shots,
       timelineClips,
       textStyles,
@@ -171,6 +177,13 @@ describe('POST /projects/:id/clips/lyrics', () => {
     expect((await g.undo(batch!.id)).status).toBe(200)
     const byId = (clips: readonly TimelineClip[]) => [...clips].sort((a, b) => a.id.localeCompare(b.id))
     expect(byId(g.timelineClips.snapshot())).toEqual(byId(before))
+  })
+
+  it('記録が作れなければ置き直さない（前の歌詞のテロップも残る）', async () => {
+    const g = build({ recordFails: true, clips: (projectId) => [handPlaced(projectId, { text: '古い歌詞', lyricLine: 0 }, LYRIC_TELOP_LAYER)] })
+    const before = g.timelineClips.snapshot()
+    expect((await g.place()).status).toBe(500)
+    expect(g.timelineClips.snapshot()).toEqual(before)
   })
 
   it('保存した「歌詞」のスタイルがあれば、その見た目で置く', async () => {

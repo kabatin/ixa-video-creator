@@ -14,7 +14,7 @@ import {
   UpdateCharacterPatch as UpdateCharacterPatchSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { characterIdentityImages, characters } from '../schema/character.js'
 
@@ -81,7 +81,7 @@ export const identityImageRowToDomain = (row: CharacterIdentityImageRow): Charac
 
 const liveById = (id: CharacterId) => and(eq(characters.id, id), isNull(characters.deletedAt))
 
-export const createCharacterRepository = (db: DbClient): CharacterRepository => ({
+export const createCharacterRepository = (db: DbExecutor): CharacterRepository => ({
   async findById(id) {
     const rows = await db.select().from(characters).where(liveById(id)).limit(1)
     const row = rows[0]

@@ -1,4 +1,6 @@
-import { drizzle } from 'drizzle-orm/postgres-js'
+import type { ExtractTablesWithRelations } from 'drizzle-orm'
+import type { PgDatabase } from 'drizzle-orm/pg-core'
+import { drizzle, type PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { z } from 'zod'
 import * as schema from './schema/index.js'
@@ -36,6 +38,13 @@ export const createDbClient = (databaseUrl: string, options: DbClientOptions = {
 }
 
 export type DbClient = ReturnType<typeof createDbClient>
+
+/**
+ * リポジトリが書き込む相手。接続そのもの（`DbClient`）か、その中のトランザクション。
+ * 取り消しの記録と書き込みを同じトランザクションで行うため（`edit-transaction.ts`）、
+ * リポジトリはどちらでも作れるようにする。
+ */
+export type DbExecutor = PgDatabase<PostgresJsQueryResultHKT, typeof schema, ExtractTablesWithRelations<typeof schema>>
 
 /** プールを閉じる。未完了のクエリは待ってから閉じる。 */
 export const closeDbClient = async (client: DbClient): Promise<void> => {

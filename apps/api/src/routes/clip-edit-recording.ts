@@ -1,4 +1,5 @@
 import {
+  ClipSnapshot as ClipSnapshotSchema,
   canonicalJson,
   clipSnapshotOf,
   type ClipSnapshot,
@@ -54,18 +55,20 @@ const afterPatch = (before: ClipSnapshot, patch: ClipPatch): ClipSnapshot => ({
 })
 
 /**
- * 直す 1 件の記録。**何も変わらないなら `null`**（同じ値を送り直しただけの操作を履歴に並べない）。
- * 比べるのは丸ごとの形で、中身（`content`）は並びに左右されない書き方（`canonicalJson`）で比べる。
+ * 直す 1 件の記録。**変わる欄の、変える前の値だけ**を持つ（丸ごと控えると、戻すときにその後の別の直しまで巻き戻す）。
+ * **何も変わらないなら `null`**（同じ値を送り直しただけの操作を履歴に並べない）。
+ * 中身（`content`）は並びに左右されない書き方（`canonicalJson`）で比べる。
  */
 export const updateEditOf = (clip: TimelineClip, patch: ClipPatch): EditBatchClipEdit | null => {
-  const before = clipSnapshotOf(clip)
-  return canonicalJson(before) === canonicalJson(afterPatch(before, patch))
-    ? null
-    : { op: 'update', clipId: clip.id, before }
+  const snapshot = clipSnapshotOf(clip)
+  const changed = changedFieldsOf(clip, patch)
+  if (changed.length === 0) return null
+  const before = ClipSnapshotSchema.partial().parse(Object.fromEntries(changed.map((key) => [key, snapshot[key]])))
+  return { op: 'update', clipId: clip.id, before }
 }
 
 /** 実際に値が変わる欄（見出しの「動かす」「直す」の判定に使う）。 */
-export const changedFieldsOf = (clip: TimelineClip, patch: ClipPatch): readonly string[] => {
+export const changedFieldsOf = (clip: TimelineClip, patch: ClipPatch): readonly (keyof ClipSnapshot)[] => {
   const before = clipSnapshotOf(clip)
   const after = afterPatch(before, patch)
   return (Object.keys(before) as (keyof ClipSnapshot)[]).filter(

@@ -14,6 +14,7 @@ import { createLogger } from '../logger.js'
 import { editBatchRoutes, type UndoEditBatchResponse } from '../routes/edit-batches.js'
 import { NO_MASTER_TRACK_MESSAGE, NO_SHOTS_MESSAGE, musicTrimRoutes } from '../routes/music-trim.js'
 import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createFailingRecordTransaction, createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { createInMemoryMusicTrackRepository, createInMemoryTimelineClipRepository } from './in-memory-timeline-repositories.js'
 import { aProject } from './fixtures.js'
@@ -59,9 +60,11 @@ const scene = (
   const projects = createInMemoryProjectRepository([project])
   const app = new OpenAPIHono({ defaultHook: validationHook })
   registerErrorHandlers(app, createLogger('silent'))
-  const recorder =
-    options.recordFails === true ? { create: () => Promise.reject(new Error('記録を作れません')) } : editBatches
-  app.route('/', musicTrimRoutes({ projects, shots, musicTracks, editBatches: recorder }))
+  const transaction = (options.recordFails === true ? createFailingRecordTransaction : createInMemoryEditTransaction)({
+    editBatches,
+    musicTracks,
+  })
+  app.route('/', musicTrimRoutes({ projects, shots, musicTracks, transaction }))
   app.route(
     '/',
     editBatchRoutes({

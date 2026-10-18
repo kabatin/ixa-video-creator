@@ -14,7 +14,7 @@ import {
   type ProviderId,
   type ShotId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { imageGenerationJobs } from '../schema/image-job.js'
 
@@ -115,7 +115,7 @@ const ownerOf = (input: CreateImageJobInput) => {
   }
 }
 
-export const createImageJobRepository = (db: DbClient): ImageJobRepository => {
+export const createImageJobRepository = (db: DbExecutor): ImageJobRepository => {
   /**
    * 状態を 1 つ進める。書く前に食い違いを確かめる（読み直しと同じ規則）。
    * **止めた行は上書きしない。** そのときは止めた行をそのまま返す（呼び出し側が `cancelled` を見て手を引く）。

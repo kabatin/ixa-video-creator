@@ -13,7 +13,7 @@ import {
   UpdateCharacterLookPatch as UpdateCharacterLookPatchSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { characterLookImages, characterLooks } from '../schema/character.js'
 
@@ -95,7 +95,7 @@ const LAST_LOOK_MESSAGE =
 const LAST_DEFAULT_MESSAGE =
   'Character は最低 1 つの isDefault な Look を持つ必要があるため、既定の Look を解除できません'
 
-export const createCharacterLookRepository = (db: DbClient): CharacterLookRepository => ({
+export const createCharacterLookRepository = (db: DbExecutor): CharacterLookRepository => ({
   async findById(id) {
     const rows = await db.select().from(characterLooks).where(liveById(id)).limit(1)
     const row = rows[0]

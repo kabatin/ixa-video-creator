@@ -7,7 +7,7 @@ import {
   type AccessTokenId,
   type AccessTokenKind,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { accessTokens } from '../schema/access-token.js'
 
@@ -47,7 +47,7 @@ export const accessTokenRowToDomain = (row: AccessTokenRow): AccessToken =>
     revokedAt: row.revokedAt,
   })
 
-export const createAccessTokenRepository = (db: DbClient): AccessTokenRepository => ({
+export const createAccessTokenRepository = (db: DbExecutor): AccessTokenRepository => ({
   async create(input) {
     const [row] = await db
       .insert(accessTokens)

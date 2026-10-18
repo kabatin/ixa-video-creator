@@ -14,7 +14,7 @@ import {
   MusicTrackId as MusicTrackIdSchema,
   newId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { musicTracks } from '../schema/music.js'
 
 /** drizzle の row 型。パッケージ外へは出さない。 */
@@ -62,7 +62,7 @@ export const musicTrackRowToDomain = (row: MusicTrackRow): MusicTrack =>
     endSec: row.endSec,
   })
 
-export const createMusicTrackRepository = (db: DbClient): MusicTrackRepository => ({
+export const createMusicTrackRepository = (db: DbExecutor): MusicTrackRepository => ({
   async findById(id) {
     const rows = await db
       .select()

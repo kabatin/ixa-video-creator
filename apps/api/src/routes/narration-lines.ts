@@ -143,22 +143,24 @@ export const narrationLineRoutes = (deps: NarrationDeps) =>
       // 位置・テロップの有無を変えるなら、書く前に記録する（取り消し。2026-10-19）。ほかの欄は戻せる形が無いので記録しない。
       const moved = patch.startSec !== undefined && patch.startSec !== current.startSec
       const telopChanged = patch.telop !== undefined && patch.telop !== current.telop
-      if (moved || telopChanged) {
-        await deps.editBatches.create({
-          projectId: current.projectId,
-          kind: 'narration_edit',
-          summary: `ナレーション「${narrationHeadline(current.text)}」を${moved ? '動かす' : '直す'}`,
-          entries: [],
-          lineEntries: [
-            {
-              lineId: id,
-              ...(moved ? { startSec: current.startSec } : {}),
-              ...(telopChanged ? { telop: current.telop } : {}),
-            },
-          ],
-        })
-      }
-      await deps.lines.update(id, patch)
+      await deps.transaction(async (tx) => {
+        if (moved || telopChanged) {
+          await tx.editBatches.create({
+            projectId: current.projectId,
+            kind: 'narration_edit',
+            summary: `ナレーション「${narrationHeadline(current.text)}」を${moved ? '動かす' : '直す'}`,
+            entries: [],
+            lineEntries: [
+              {
+                lineId: id,
+                ...(moved ? { startSec: current.startSec } : {}),
+                ...(telopChanged ? { telop: current.telop } : {}),
+              },
+            ],
+          })
+        }
+        await tx.narrationLines.update(id, patch)
+      })
       // 話す声を変えたら、その声の見た目に当て直す（ほかは今の見た目を引き継ぐ）。
       const voiceChanged = patch.voiceProfileId !== undefined && patch.voiceProfileId !== current.voiceProfileId
       await syncTelops(deps, current.projectId, voiceChanged ? [id] : [])
@@ -199,19 +201,22 @@ export const narrationLineRoutes = (deps: NarrationDeps) =>
       }
       // 1 回押すと置いた行の位置が全部変わる。戻せるように、置く前の位置を**書く前に**記録する（ADR-0038）。
       // 書いた後で記録すると、記録に失敗したとき戻せない変更だけが残る。
+      // 記録と書き込みは同じトランザクション（途中で落ちても、半分だけ並んだ行と記録が残らない）。
       if (targets.length > 0) {
-        await deps.editBatches.create({
-          projectId,
-          kind: 'narration_arrange',
-          summary: `ナレーション ${String(targets.length)} 行を並べました`,
-          entries: [],
-          lineEntries: targets.map((line) => ({ lineId: line.id, startSec: line.startSec })),
+        await deps.transaction(async (tx) => {
+          await tx.editBatches.create({
+            projectId,
+            kind: 'narration_arrange',
+            summary: `ナレーション ${String(targets.length)} 行を並べました`,
+            entries: [],
+            lineEntries: targets.map((line) => ({ lineId: line.id, startSec: line.startSec })),
+          })
+          let at = fromSec
+          for (const line of targets) {
+            await tx.narrationLines.update(line.id, { startSec: Math.round(at * 1000) / 1000 })
+            at += lineLengthSec(line) + gapSec
+          }
         })
-      }
-      let at = fromSec
-      for (const line of targets) {
-        await deps.lines.update(line.id, { startSec: Math.round(at * 1000) / 1000 })
-        at += lineLengthSec(line) + gapSec
       }
       await syncTelops(deps, projectId)
       return c.json(await overviewJson(deps, projectId), 200)

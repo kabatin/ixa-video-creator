@@ -1,5 +1,6 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type {
+  EditTransaction,
   MediaAssetRepository,
   MusicTrackRepository,
   ProjectRepository,
@@ -25,7 +26,6 @@ import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 import { recordClipEdits } from './clip-edit-recording.js'
 import { TimelineClipResponse, toClipResponse } from './clips.js'
-import type { EditBatchRecorder } from './edit-batch-recording.js'
 
 /**
  * 歌詞をテロップにする（ADR-0033。制作者 2026-10-01「1 フレーズごとにテロップを自動生成できると入力の手間が省ける」）。
@@ -48,13 +48,13 @@ export const NO_LENGTH_FOR_LYRICS_MESSAGE =
 export type LyricClipDeps = {
   readonly projects: Pick<ProjectRepository, 'findById'>
   readonly shots: Pick<ShotRepository, 'findByProject'>
-  readonly timelineClips: Pick<TimelineClipRepository, 'findByProject' | 'replace'>
+  readonly timelineClips: Pick<TimelineClipRepository, 'findByProject'>
   readonly textStyles: Pick<TextStyleRepository, 'findByProject'>
   /** 曲の終わりを知るため（タイムラインの長さと同じく、音源の probe の尺を使う）。 */
   readonly musicTracks: Pick<MusicTrackRepository, 'findByProject'>
   readonly mediaAssets: Pick<MediaAssetRepository, 'findById'>
-  /** 置き直しを書く前に記録する（取り消すと前の歌詞のテロップが戻り、置いた分は消える）。 */
-  readonly editBatches: EditBatchRecorder
+  /** 置き直しを書く前に、同じトランザクションで記録する（取り消すと前の歌詞のテロップが戻り、置いた分は消える）。 */
+  readonly transaction: EditTransaction
 }
 
 const PlacedData = z
@@ -132,29 +132,31 @@ export const lyricClipRoutes = (deps: LyricClipDeps) =>
       (clip) => clip.content.type === 'text' && lyricLineOf(clip.content.params) !== null,
     )
 
-    // 記録は書く前に作る。置く物の ID を先に決めて記録に入れる。
+    // 記録は書く前に、同じトランザクションで作る。置く物の ID を先に決めて記録に入れる。
     const inputs = spans.map((span) => ({ span, id: newId(TimelineClipIdSchema) }))
-    await recordClipEdits(deps.editBatches, {
-      projectId,
-      summary: '歌詞をテロップにする',
-      edits: [
-        ...previous.map((clip) => ({ op: 'delete' as const, clipId: clip.id, before: clipSnapshotOf(clip) })),
-        ...inputs.map(({ id }) => ({ op: 'create' as const, clipId: id })),
-      ],
-    })
-    const placed = await deps.timelineClips.replace(
-      previous.map((clip) => clip.id),
-      inputs.map(({ span, id }) => ({
-        id,
+    const placed = await deps.transaction(async (tx) => {
+      await recordClipEdits(tx.editBatches, {
         projectId,
-        track: 'TEXT',
-        startSec: span.startSec,
-        durationSec: span.durationSec,
-        layer: LYRIC_TELOP_LAYER,
-        content: lyricContent(span.text, span.lineIndex, preset),
-        opacity: 1,
-      })),
-    )
+        summary: '歌詞をテロップにする',
+        edits: [
+          ...previous.map((clip) => ({ op: 'delete' as const, clipId: clip.id, before: clipSnapshotOf(clip) })),
+          ...inputs.map(({ id }) => ({ op: 'create' as const, clipId: id })),
+        ],
+      })
+      return tx.timelineClips.replace(
+        previous.map((clip) => clip.id),
+        inputs.map(({ span, id }) => ({
+          id,
+          projectId,
+          track: 'TEXT',
+          startSec: span.startSec,
+          durationSec: span.durationSec,
+          layer: LYRIC_TELOP_LAYER,
+          content: lyricContent(span.text, span.lineIndex, preset),
+          opacity: 1,
+        })),
+      )
+    })
     return c.json(
       ok({
         clips: placed.map(toClipResponse),

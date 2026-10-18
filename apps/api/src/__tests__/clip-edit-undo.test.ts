@@ -9,6 +9,7 @@ import { clipRoutes } from '../routes/clips.js'
 import { editBatchRoutes, type EditBatchSummaryResponse, type UndoEditBatchResponse } from '../routes/edit-batches.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import {
   aMediaAsset,
@@ -39,9 +40,10 @@ beforeEach(() => {
   clips = createInMemoryTimelineClipRepository()
   editBatches = createInMemoryEditBatchRepository()
   const projects = createInMemoryProjectRepository([project])
+  const transaction = createInMemoryEditTransaction({ editBatches, timelineClips: clips })
   app = new OpenAPIHono({ defaultHook: validationHook })
-  app.route('/', clipRoutes({ timelineClips: clips, projects, mediaAssets: createInMemoryMediaAssetRepository([asset]), editBatches }))
-  app.route('/', clipSpanRoutes({ timelineClips: clips, projects, editBatches }))
+  app.route('/', clipRoutes({ timelineClips: clips, projects, mediaAssets: createInMemoryMediaAssetRepository([asset]), transaction }))
+  app.route('/', clipSpanRoutes({ timelineClips: clips, projects, transaction }))
   app.route('/', editBatchRoutes({ projects, shots: unusedShots, editBatches, timelineClips: clips }))
   registerErrorHandlers(app, createLogger('silent'))
 })
@@ -174,6 +176,16 @@ describe('直す → 取り消す', () => {
 
     await undo(batch.id)
     expect(clips.snapshot()).toEqual([text])
+  })
+
+  it('戻すのは変えた欄だけ。記録の後に別の欄を直していたら、それは残る', async () => {
+    const sfx = await create(sfxPayload)
+    await send('PATCH', `/clips/${sfx.id}`, { startSec: 5 })
+    const moved = await latest()
+    await send('PATCH', `/clips/${sfx.id}`, { opacity: 0.5 })
+
+    await undo(moved.id)
+    expect(clips.snapshot()).toEqual([{ ...sfx, opacity: 0.5 }])
   })
 
   it('何も変わらない更新は記録しない', async () => {

@@ -11,7 +11,7 @@ import {
   type MusicTrackId,
   type ProjectId,
 } from '@ixa/domain'
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { musicJobs } from '../schema/music.js'
 
@@ -66,7 +66,7 @@ export const musicJobRowToDomain = (row: MusicJobRow): MusicJob =>
 
 const ACTIVE = inArray(musicJobs.status, ['queued', 'running'])
 
-export const createMusicJobRepository = (db: DbClient): MusicJobRepository => {
+export const createMusicJobRepository = (db: DbExecutor): MusicJobRepository => {
   const first = (rows: MusicJobRow[]): MusicJob | null => {
     const row = rows[0]
     return row === undefined ? null : musicJobRowToDomain(row)
