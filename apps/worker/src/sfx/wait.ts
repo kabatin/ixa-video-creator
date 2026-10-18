@@ -5,6 +5,11 @@ import { SfxJobCancelled, SfxJobFailure, type SfxAdapter, type SfxProcessorDeps 
 /** 問い合わせが続けてこの回数だけ通信で失敗したら諦める（サーバの再起動 1 回で音を捨てない）。 */
 const MAX_CONSECUTIVE_POLL_FAILURES = 3
 const DEFAULT_POLL_INTERVAL_MS = 1_000
+/**
+ * 生成先で順番を待つ上限。sfx-api は同じ機械の vpipe・klein・ace-step が空くまで走らない
+ * （2026-10-18 の実測で 22 分待った）。その間を仕上がりの上限に数えると、作れる音を時間切れで捨てる。
+ */
+export const SFX_MAX_QUEUED_MS = 2 * 60 * 60 * 1000
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** 生成先へ止めてと頼む。頼めなくてもログに残して進む（呼ぶ側はもう結果を使わない）。 */
@@ -31,7 +36,10 @@ export const waitForSfx = async (
 ): Promise<Extract<SfxJobStatusFromProvider, { state: 'succeeded' }>> => {
   const { provider } = adapter
   // 上限はモデルで桁が違う（Stable Audio は数秒、MOSS は数十分。descriptor の `maxWaitSec`）。
-  const deadline = Date.now() + (deps.maxWaitMs ?? adapter.model.maxWaitSec * 1000)
+  const queuedDeadline = Date.now() + (deps.maxQueuedMs ?? SFX_MAX_QUEUED_MS)
+  const maxRunMs = deps.maxWaitMs ?? adapter.model.maxWaitSec * 1000
+  // 生成先で走り出してから数える。順番待ちの間は別の上限（queuedDeadline）だけを見る。
+  let runDeadline: number | null = null
   let failures = 0
   for (;;) {
     const status = await provider.poll(handle).catch(async (error: unknown) => {
@@ -51,7 +59,8 @@ export const waitForSfx = async (
       await stopRemoteSfx(deps, provider, handle, sfxJobId)
       throw new SfxJobCancelled(sfxJobId)
     }
-    if (Date.now() > deadline) {
+    if (status !== null && status.state !== 'pending' && runDeadline === null) runDeadline = Date.now() + maxRunMs
+    if (Date.now() > (runDeadline ?? queuedDeadline)) {
       await stopRemoteSfx(deps, provider, handle, sfxJobId)
       throw new SfxJobFailure({ code: 'timeout', message: '効果音が時間内に仕上がりませんでした。', retryable: true })
     }

@@ -31,8 +31,10 @@ export type SfxProcessorDeps = {
   readonly gpuRenewIntervalMs?: number
   /** 出来上がりを見に行く間隔。既定 1 秒（10 秒の音で約 1 秒）。 */
   readonly pollIntervalMs?: number
-  /** 投入してからこれを過ぎても仕上がらなければ諦める。既定はモデルの `maxWaitSec`（Stable Audio 5 分・MOSS 90 分）。 */
+  /** 走り出してから（生成先の順番待ちは数えない）これを過ぎても仕上がらなければ諦める。既定はモデルの `maxWaitSec`（Stable Audio 5 分・MOSS 90 分）。 */
   readonly maxWaitMs?: number
+  /** 生成先で順番を待つ（queued）のを、これを過ぎたら諦める。既定は `SFX_MAX_QUEUED_MS`。 */
+  readonly maxQueuedMs?: number
 }
 
 /** 理由を書いて終える失敗。`record` は調べるための記録（あれば残す）。 */

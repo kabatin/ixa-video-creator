@@ -283,6 +283,33 @@ describe('processSfxJob', () => {
     expect(s.sfxJobs.snapshot()[0]?.status).toBe('queued')
   })
 
+  it('生成先で順番を待っている間（queued）は、仕上がりの上限を数えない', async () => {
+    const pending: SfxJobStatusFromProvider = { state: 'pending', progress: null }
+    const provider = fakeProvider([pending, pending, pending, await succeeded(2)])
+    const s = await setup(provider)
+
+    expect(await processSfxJob({ ...s.deps, maxWaitMs: 0 }, { sfxJobId: s.job.id })).toEqual({ state: 'succeeded' })
+    expect(provider.calls.cancel).toBe(0)
+  })
+
+  it('走り出してから上限を過ぎたら、生成先を止めて時間切れにする', async () => {
+    const provider = fakeProvider([{ state: 'running', progress: 0.1 }])
+    const s = await setup(provider)
+
+    expect(await processSfxJob({ ...s.deps, maxWaitMs: 0 }, { sfxJobId: s.job.id })).toEqual({ state: 'failed' })
+    expect(s.sfxJobs.snapshot()[0]?.error).toMatchObject({ code: 'timeout' })
+    expect(provider.calls.cancel).toBe(1)
+  })
+
+  it('順番待ちにも別の上限があり、過ぎたら生成先を止めて時間切れにする', async () => {
+    const provider = fakeProvider([{ state: 'pending', progress: null }])
+    const s = await setup(provider)
+
+    expect(await processSfxJob({ ...s.deps, maxQueuedMs: 0 }, { sfxJobId: s.job.id })).toEqual({ state: 'failed' })
+    expect(s.sfxJobs.snapshot()[0]?.error).toMatchObject({ code: 'timeout' })
+    expect(provider.calls.cancel).toBe(1)
+  })
+
   it('生成先が混んでいたら（429）失敗にせず積み直す', async () => {
     const provider = fakeProvider([], { submitError: new ProviderBusyError('混んでいます', stableAudioSfxModel.providerId, 45_000) })
     const s = await setup(provider)

@@ -46,7 +46,7 @@ Bearer・`Idempotency-Key`・429 + `Retry-After`・失敗の封筒・取消・`G
 - `negative_prompt` は MOSS が使う。Stable Audio は受けるが既定では使わない（`capabilities` の `negative_prompt.applied`）
 - 音量はピークが -1 dBFS を超えた音だけを下げる（リミッタはかけない）
 - 速さ（M5・温まった状態・1 本）: Stable Audio は 2 秒の音で 0.37 秒・10 秒で 0.53 秒、冷えていれば 3.2 秒・約 4GB。
-  MOSS は MPS で動くが遅く、2 秒の音に 273 秒（測り直し中）。**待つ上限はモデルごと**（Stable Audio 5 分・MOSS 90 分）
+  MOSS は MPS で動くが遅く、2 秒の音に 273 秒（測り直し中）。**待つ上限はモデルごと**（Stable Audio 5 分・MOSS 90 分）。走り出してから数え、生成先の順番待ち（同じ機械の vpipe などが空くまで。実測 22 分）は別に 2 時間まで待つ
 
 ### 2. 「使う AI」に効果音を足す
 
