@@ -79,8 +79,7 @@ export const musicTrimRoutes = (deps: MusicTrimRoutesDeps) =>
     const unchanged = before.endSec === patch.endSec && patch.fadeOutSec === undefined
     if (unchanged) return c.json(ok({ track: master, editBatchId: null }), 200)
 
-    const updated = await deps.musicTracks.update(master.id, patch)
-    if (updated === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+    // 記録は書く前に作る（書いた後だと、記録に失敗したとき戻せない変更だけが残る）。
     const batch = await deps.editBatches.create({
       projectId,
       kind: 'music_trim',
@@ -88,5 +87,7 @@ export const musicTrimRoutes = (deps: MusicTrimRoutesDeps) =>
       entries: [],
       musicEntries: [{ musicTrackId: master.id, ...before }],
     })
+    const updated = await deps.musicTracks.update(master.id, patch)
+    if (updated === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
     return c.json(ok({ track: updated, editBatchId: batch.id }), 200)
   })

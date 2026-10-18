@@ -5,6 +5,7 @@ import {
   NarrationLineId,
   ShotId,
   TimelineClipId,
+  TransitionId,
   type EditBatchId as EditBatchIdType,
   type ProjectId,
 } from '@ixa/domain'
@@ -39,6 +40,8 @@ export const WireEditBatch = z.object({
   lineCount: z.number().int().nonnegative().default(0),
   /** 曲を最後の Shot で切った記録の曲の数。前のサーバは返さないので無ければ 0 と読む。 */
   musicCount: z.number().int().nonnegative().optional(),
+  /** 記録したトランジションの数（置く・消す。差し替えは 2）。前のサーバは返さないので無ければ 0 と読む。 */
+  transitionCount: z.number().int().nonnegative().optional(),
   /** **`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
   undoneAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
@@ -62,6 +65,9 @@ export const WireUndoResult = z.object({
   /** 戻した楽曲（曲の終わりとフェードアウト）。前のサーバは返さないので無ければ空と読む。 */
   restoredMusicTracks: z.array(MusicTrackId).optional(),
   failedMusicTracks: z.array(z.object({ musicTrackId: MusicTrackId, reason: z.string().min(1) })).optional(),
+  /** 戻したトランジション。前のサーバは返さないので無ければ空と読む。 */
+  restoredTransitions: z.array(TransitionId).optional(),
+  failedTransitions: z.array(z.object({ transitionId: TransitionId, reason: z.string().min(1) })).optional(),
 })
 export type WireUndoResult = z.infer<typeof WireUndoResult>
 

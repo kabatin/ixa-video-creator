@@ -12,7 +12,6 @@ import {
   MusicTrack as MusicTrackSchema,
   MusicTrackId as MusicTrackIdSchema,
   ProjectId as ProjectIdSchema,
-  UpdateMusicTrackPatch as UpdateMusicTrackPatchSchema,
   type MusicAnalysis,
   type MusicTrack,
   type MusicTrackId,
@@ -140,31 +139,7 @@ const createMusicTrackRoute = createRoute({
   },
 })
 
-const UpdateMusicTrackBody = UpdateMusicTrackPatchSchema.openapi('UpdateMusicTrackInput')
-
-const updateMusicTrackRoute = createRoute({
-  method: 'patch',
-  path: '/music-tracks/{id}',
-  tags: ['music'],
-  summary: '楽曲の題名・オフセット・音量を直す（マスターは set-master で変える）',
-  request: { params: MusicTrackParams, body: body(UpdateMusicTrackBody) },
-  responses: {
-    200: jsonContent('更新後の楽曲', successResponse(MusicTrackResponse)),
-    ...commonErrors,
-  },
-})
-
-const setMasterRoute = createRoute({
-  method: 'post',
-  path: '/music-tracks/{id}/set-master',
-  tags: ['music'],
-  summary: 'この楽曲をマスターにする（同じ Project の他の楽曲は降格する）',
-  request: { params: MusicTrackParams },
-  responses: {
-    200: jsonContent('Project の楽曲一覧（付け替え後）', listResponse(MusicTrackResponse)),
-    ...commonErrors,
-  },
-})
+// 題名・オフセット・音量などの直しとマスターの切り替えは `music-edit.ts`（取り消しの記録を作る）。
 
 const deleteMusicTrackRoute = createRoute({
   method: 'delete',
@@ -271,17 +246,6 @@ export const musicRoutes = (deps: MusicRoutesDeps) => {
 
       const created = await deps.musicTracks.create({ ...input, projectId })
       return c.json(ok(created), 201)
-    })
-    .openapi(updateMusicTrackRoute, async (c) => {
-      const updated = await deps.musicTracks.update(c.req.valid('param').id, c.req.valid('json'))
-      if (updated === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
-      return c.json(ok(updated), 200)
-    })
-    .openapi(setMasterRoute, async (c) => {
-      const updated = await deps.musicTracks.setMaster(c.req.valid('param').id)
-      if (updated === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
-      // 降格した側も画面が持ち直せるよう、Project の全曲を返す。
-      return c.json(okList(await deps.musicTracks.findByProject(updated.projectId)), 200)
     })
     .openapi(deleteMusicTrackRoute, async (c) => {
       const removed = await deps.musicTracks.softDelete(c.req.valid('param').id)

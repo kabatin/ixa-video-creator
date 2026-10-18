@@ -39,7 +39,14 @@ const aTrack = (project: Project, overrides: Partial<MusicTrack> = {}): MusicTra
   ...overrides,
 })
 
-const scene = (options: { readonly tracks?: (project: Project) => readonly MusicTrack[]; readonly shots?: (project: Project) => readonly Shot[] } = {}) => {
+const scene = (
+  options: {
+    readonly tracks?: (project: Project) => readonly MusicTrack[]
+    readonly shots?: (project: Project) => readonly Shot[]
+    /** 取り消しの記録が作れない（書く前に記録することを確かめる）。 */
+    readonly recordFails?: boolean
+  } = {},
+) => {
   const project = aProject()
   const musicTracks = createInMemoryMusicTrackRepository(options.tracks?.(project) ?? [aTrack(project)])
   const shots = createInMemoryShotRepository(
@@ -52,7 +59,9 @@ const scene = (options: { readonly tracks?: (project: Project) => readonly Music
   const projects = createInMemoryProjectRepository([project])
   const app = new OpenAPIHono({ defaultHook: validationHook })
   registerErrorHandlers(app, createLogger('silent'))
-  app.route('/', musicTrimRoutes({ projects, shots, musicTracks, editBatches }))
+  const recorder =
+    options.recordFails === true ? { create: () => Promise.reject(new Error('記録を作れません')) } : editBatches
+  app.route('/', musicTrimRoutes({ projects, shots, musicTracks, editBatches: recorder }))
   app.route(
     '/',
     editBatchRoutes({
@@ -68,6 +77,13 @@ const scene = (options: { readonly tracks?: (project: Project) => readonly Music
 }
 
 describe('POST /projects/{projectId}/music-tracks/trim-to-shots', () => {
+  it('記録は書く前に作る（記録が作れなければ曲は切らない）', async () => {
+    const s = scene({ recordFails: true })
+    expect((await s.trim()).status).toBe(500)
+    const [track] = await s.musicTracks.findByProject(s.project.id)
+    expect(track?.endSec ?? null).toBeNull()
+  })
+
   it('曲の終わりを最後の Shot の終わりにし、フェードアウトが 0 なら 0.5 秒にする', async () => {
     const s = scene()
     const res = await s.trim()

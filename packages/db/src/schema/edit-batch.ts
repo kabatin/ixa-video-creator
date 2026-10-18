@@ -6,6 +6,7 @@ import type {
   EditBatchEntry,
   EditBatchLineEntry,
   EditBatchMusicEntry,
+  EditBatchTransitionEdit,
 } from '@ixa/domain'
 import { EditBatchKind as EditBatchKindSchema } from '@ixa/domain'
 import { createdAt, timestampTz, ulidPk, ulidRef } from './columns.js'
@@ -45,6 +46,8 @@ export const shotEditBatches = pgTable(
     musicEntries: jsonb('music_entries').$type<readonly EditBatchMusicEntry[]>().notNull().default([]),
     /** クリップ 1 件ずつの作る・直す・消す（変える前の丸ごとの控え。2026-10-19）。これまでの記録は空。 */
     clipEdits: jsonb('clip_edits').$type<readonly EditBatchClipEdit[]>().notNull().default([]),
+    /** トランジションの置く・消す（消した物の丸ごとの控え。2026-10-19）。これまでの記録は空。 */
+    transitionEdits: jsonb('transition_edits').$type<readonly EditBatchTransitionEdit[]>().notNull().default([]),
     /** 取り消した時刻。**NULL は「まだ取り消していない」**（「取り消せない」ではない）。 */
     undoneAt: timestampTz('undone_at'),
     createdAt: createdAt(),

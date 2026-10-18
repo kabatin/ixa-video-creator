@@ -5,10 +5,10 @@ import {
   TimelineDocument,
   TimelineTrack,
   Transition,
+  TransitionId,
   UpdateTimelineClipPatch,
   type ProjectId,
   type TimelineClipId,
-  type TransitionId,
 } from '@ixa/domain'
 import { z } from 'zod'
 import type { Requester } from '@/lib/requester'
@@ -54,7 +54,10 @@ export const WireTimelineDocument = TimelineDocument
 export type WireTimelineDocument = z.infer<typeof WireTimelineDocument>
 
 /** projectId は経路が持つので本文には含めない。正が 2 つになるのを避ける。 */
-export const CreateTransitionBody = CreateTransitionInput.omit({ projectId: true })
+/** `replaceTransitionId` を付けると、そのトランジションを消してから置く（差し替え。取り消しの記録が 1 つになる）。 */
+export const CreateTransitionBody = CreateTransitionInput.omit({ projectId: true }).extend({
+  replaceTransitionId: TransitionId.optional(),
+})
 export type CreateTransitionBody = z.input<typeof CreateTransitionBody>
 
 export const CreateClipBody = CreateTimelineClipInput.omit({ projectId: true })

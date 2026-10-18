@@ -20,10 +20,17 @@ export type TransitionRow = typeof transitions.$inferSelect
  * 付け替えは delete + create で表す。
  * ソフトデリートもしない（transitions テーブルは deleted_at を持たない）。
  */
+/**
+ * 作るトランジション。**`id` は省ける**（省けばここで振る）。取り消しの記録は書く前に作るので作る前に ID を決めたい呼び手と、
+ * 消したものを同じ ID で置き直す取り消しだけが渡す。
+ */
+export type NewTransition = CreateTransitionInput & { readonly id?: TransitionId }
+
 export type TransitionRepository = {
   /** 投入順（ULID の昇順 = 時系列）。 */
   findByProject(projectId: ProjectId): Promise<Transition[]>
-  create(input: CreateTransitionInput): Promise<Transition>
+  findById(id: TransitionId): Promise<Transition | null>
+  create(input: NewTransition): Promise<Transition>
   delete(id: TransitionId): Promise<void>
 }
 
@@ -48,11 +55,19 @@ export const createTransitionRepository = (db: DbClient): TransitionRepository =
     return rows.map(transitionRowToDomain)
   },
 
+  async findById(id) {
+    const rows = await db.select().from(transitions).where(eq(transitions.id, id)).limit(1)
+    const row = rows[0]
+    return row === undefined ? null : transitionRowToDomain(row)
+  },
+
   async create(input) {
     const validated = CreateTransitionInputSchema.parse(input)
+    // 渡された ID は検証してから使う（規約 4）。
+    const id = input.id === undefined ? newId(TransitionIdSchema) : TransitionIdSchema.parse(input.id)
     const rows = await db
       .insert(transitions)
-      .values({ ...validated, id: newId(TransitionIdSchema) })
+      .values({ ...validated, id })
       .returning()
     const row = rows[0]
     if (!row) throw new Error('transitions への INSERT が行を返しませんでした')

@@ -3,8 +3,10 @@ import { EditBatchId, MusicTrackId, NarrationLineId, ProjectId, ShotId, TakeId, 
 import { Seconds } from '../common/time.js'
 import { MUSIC_FADE_MAX_SEC, MusicEndSec } from '../music/music.js'
 import { EditBatchClipEdit } from './edit-batch-clip-edit.js'
+import { EditBatchTransitionEdit } from './edit-batch-transition-edit.js'
 
 export * from './edit-batch-clip-edit.js'
+export * from './edit-batch-transition-edit.js'
 import { ShotStatus, UpdateShotPatch } from './shot.js'
 
 /**
@@ -25,6 +27,8 @@ import { ShotStatus, UpdateShotPatch } from './shot.js'
  * `clip_edit` はクリップ 1 件ずつの作る・直す・消す（2026-10-19）。クリップの丸ごとの控えを記録する（`clipEdits`）。
  * `shot_edit` は Shot 1 件の直し・採用 Take の決定と外し（2026-10-19）。一括と同じ形（`entries`）で記録する。
  * `narration_edit` はナレーションの行 1 件の位置の変更（2026-10-19）。`lineEntries` で記録する。
+ * `transition_edit` はトランジションの置く・消す・差し替え（2026-10-19）。`transitionEdits` で記録する。
+ * `music_edit` は楽曲の欄の直しとマスターの切り替え（2026-10-19）。`musicEntries` で記録する。
  */
 export const EditBatchKind = z.enum([
   'rough_cut',
@@ -36,6 +40,8 @@ export const EditBatchKind = z.enum([
   'clip_edit',
   'shot_edit',
   'narration_edit',
+  'transition_edit',
+  'music_edit',
 ])
 export type EditBatchKind = z.infer<typeof EditBatchKind>
 
@@ -109,13 +115,20 @@ export const EditBatchLineEntry = z.object({
 export type EditBatchLineEntry = z.infer<typeof EditBatchLineEntry>
 
 /**
- * 楽曲 1 曲ぶんの「変える前」（曲を最後の Shot で切る。2026-10-19）。切ると曲の終わりとフェードアウトが変わるので、その 2 つを持つ。
+ * 楽曲 1 曲ぶんの「変える前」。**変えた欄だけを持つ**（欄が無いのは「触っていない」）。
+ * 曲を最後の Shot で切る（`music_trim`）は曲の終わりとフェードアウト、欄の直し（`music_edit`）は直した欄を持つ。
  * **`endSec: null` は「自然な終わりだった」**。
+ * `master: true` は「戻すとこの曲をマスターにする」（マスターを切り替える前のマスター）。
  */
 export const EditBatchMusicEntry = z.object({
   musicTrackId: MusicTrackId,
-  endSec: MusicEndSec.nullable(),
-  fadeOutSec: Seconds.max(MUSIC_FADE_MAX_SEC),
+  title: z.string().trim().min(1).optional(),
+  offsetSec: Seconds.optional(),
+  volume: z.number().min(0).max(2).optional(),
+  fadeInSec: Seconds.max(MUSIC_FADE_MAX_SEC).optional(),
+  fadeOutSec: Seconds.max(MUSIC_FADE_MAX_SEC).optional(),
+  endSec: MusicEndSec.nullable().optional(),
+  master: z.literal(true).optional(),
 })
 export type EditBatchMusicEntry = z.infer<typeof EditBatchMusicEntry>
 
@@ -136,6 +149,8 @@ export const EditBatch = z.object({
   musicEntries: z.array(EditBatchMusicEntry).default([]),
   /** クリップ 1 件ずつの作る・直す・消す。これまでの記録は空として読む。 */
   clipEdits: z.array(EditBatchClipEdit).default([]),
+  /** トランジションの置く・消す。これまでの記録は空として読む。 */
+  transitionEdits: z.array(EditBatchTransitionEdit).default([]),
   /** 取り消した時刻。**`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
   undoneAt: z.date().nullable(),
   createdAt: z.date(),
@@ -166,7 +181,8 @@ export const canUndo = (batch: EditBatch): boolean =>
     batch.clipEntries.length > 0 ||
     batch.lineEntries.length > 0 ||
     batch.musicEntries.length > 0 ||
-    batch.clipEdits.length > 0)
+    batch.clipEdits.length > 0 ||
+    batch.transitionEdits.length > 0)
 
 /**
  * 1 件ぶんの取り消しで、採用 Take を戻す必要があるか。

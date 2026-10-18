@@ -22,7 +22,9 @@ import {
   type AnalysisQueue,
   type MusicRoutesDeps,
 } from '../routes/music.js'
+import { musicEditRoutes } from '../routes/music-edit.js'
 import { aProject } from './fixtures.js'
+import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import {
   createInMemoryMusicAnalysisRepository,
@@ -100,6 +102,7 @@ let app: OpenAPIHono
 const buildApp = (deps: MusicRoutesDeps) => {
   const app = new OpenAPIHono({ defaultHook: validationHook })
   app.route('/', musicRoutes(deps))
+  app.route('/', musicEditRoutes({ musicTracks: deps.musicTracks, editBatches: createInMemoryEditBatchRepository() }))
   registerErrorHandlers(app, createLogger('silent'))
   return app
 }

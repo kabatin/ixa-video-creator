@@ -5,11 +5,15 @@ import {
   ProjectId as ProjectIdSchema,
   Transition as TransitionSchema,
   TransitionId as TransitionIdSchema,
+  newId,
+  transitionSnapshotOf,
+  type EditBatchTransitionEdit,
   type ProjectId,
   type Shot,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
+import type { EditBatchRecorder } from './edit-batch-recording.js'
 
 /**
  * Transition（2 つの Shot をつなぐ 1 本の切り替え）の CRUD（DOMAIN.md §8 / ADR-0002）。
@@ -17,7 +21,10 @@ import { errorContent, fail, listResponse, ok, okList, successResponse } from '.
  *
  * **PATCH は持たない。** `TransitionRepository` に更新口が無く、
  * 「2 つの Shot の間に 1 本」という不変条件は
- * 差し替え（delete → create）のほうが保ちやすいため。
+ * 差し替え（delete → create）のほうが保ちやすいため。差し替えは作成の本文に `replaceTransitionId` を付け、
+ * 消すと置くを 1 つの取り消しの記録にまとめる（2026-10-19）。
+ *
+ * **置く・消す・差し替えは書く前に記録する**（`transition_edit`）。これまで記録が無く、消したら二度と戻らなかった。
  */
 
 /** 実在しない Shot と、他 Project の Shot はどちらも「この経路では繋げない」ので同じ扱いにする。 */
@@ -58,10 +65,16 @@ const TIME_EPSILON = 1e-6
 
 export const TransitionResponse = TransitionSchema.openapi('Transition')
 
-/** projectId は経路が持つので本文には含めない。正が 2 つになるのを避ける。 */
-const CreateTransitionBody = CreateTransitionInputSchema.omit({ projectId: true }).openapi(
-  'CreateTransitionInput',
-)
+/** 差し替える相手が無い・別の 2 つの Shot の間のもの。差し替えは同じ組の付け替えだけ。 */
+export const REPLACE_TARGET_MESSAGE = '差し替えられるのは、同じ 2 つの Shot の間にあるトランジションだけです'
+
+/**
+ * projectId は経路が持つので本文には含めない。正が 2 つになるのを避ける。
+ * `replaceTransitionId` を付けると、そのトランジションを消してから置く（差し替え。1 つの記録）。
+ */
+const CreateTransitionBody = CreateTransitionInputSchema.omit({ projectId: true })
+  .extend({ replaceTransitionId: TransitionIdSchema.optional() })
+  .openapi('CreateTransitionInput')
 
 const ProjectParams = z.object({
   projectId: ProjectIdSchema.openapi({ param: { name: 'projectId', in: 'path' } }),
@@ -119,6 +132,19 @@ export type TransitionRoutesDeps = {
   shots: ShotRepository
   /** Project の実在確認だけに使う。 */
   projects: ProjectRepository
+  /** 置く・消す・差し替えを書く前に記録する（取り消し）。**省けない。** */
+  editBatches: EditBatchRecorder
+}
+
+const summaryOf = (edits: readonly EditBatchTransitionEdit[]): string =>
+  edits.length > 1 ? 'トランジションを差し替える' : edits[0]?.op === 'delete' ? 'トランジションを消す' : 'トランジションを置く'
+
+const recordTransitionEdits = async (
+  recorder: EditBatchRecorder,
+  projectId: ProjectId,
+  transitionEdits: readonly EditBatchTransitionEdit[],
+): Promise<void> => {
+  await recorder.create({ projectId, kind: 'transition_edit', summary: summaryOf(transitionEdits), entries: [], transitionEdits: [...transitionEdits] })
 }
 
 /**
@@ -158,7 +184,7 @@ export const transitionRoutes = (deps: TransitionRoutesDeps) => {
       const { projectId } = c.req.valid('param')
       if (await projectMissing(projectId)) return c.json(fail(NOT_FOUND_MESSAGE), 404)
 
-      const input = c.req.valid('json')
+      const { replaceTransitionId, ...input } = c.req.valid('json')
 
       /** 自分自身への遷移。先に見るのは、Shot を 1 つしか引かずに判る誤りだから。 */
       if (input.fromShotId === input.toShotId) {
@@ -193,7 +219,16 @@ export const transitionRoutes = (deps: TransitionRoutesDeps) => {
        * 「(fromShotId, toShotId) に対して一意」を前提に更新口を持たないので、
        * 2 本目を通すとどちらが有効か決まらなくなる。
        */
-      const existing = await deps.transitions.findByProject(projectId)
+      const all = await deps.transitions.findByProject(projectId)
+      const replaced = replaceTransitionId === undefined ? undefined : all.find((t) => t.id === replaceTransitionId)
+      if (
+        replaceTransitionId !== undefined &&
+        (replaced === undefined || replaced.fromShotId !== input.fromShotId || replaced.toShotId !== input.toShotId)
+      ) {
+        return c.json(fail(VALIDATION_ERROR_MESSAGE, { replaceTransitionId: [REPLACE_TARGET_MESSAGE] }), 422)
+      }
+      // 差し替える相手は消してから置くので、重なりの検査から外す。
+      const existing = all.filter((t) => t.id !== replaceTransitionId)
 
       // 同じ組の重複は、出入りの重複より具体的なので先に見る。
       const duplicated = existing.some(
@@ -237,7 +272,14 @@ export const transitionRoutes = (deps: TransitionRoutesDeps) => {
         )
       }
 
-      const created = await deps.transitions.create({ ...input, projectId, durationSec })
+      // 記録は書く前に作る。置く物の ID を先に決めて記録に入れる。
+      const id = newId(TransitionIdSchema)
+      await recordTransitionEdits(deps.editBatches, projectId, [
+        ...(replaced === undefined ? [] : [{ op: 'delete' as const, transitionId: replaced.id, before: transitionSnapshotOf(replaced) }]),
+        { op: 'create', transitionId: id },
+      ])
+      if (replaced !== undefined) await deps.transitions.delete(replaced.id)
+      const created = await deps.transitions.create({ ...input, projectId, durationSec, id })
       return c.json(ok(created), 201)
     })
     .openapi(deleteTransitionRoute, async (c) => {
@@ -246,7 +288,13 @@ export const transitionRoutes = (deps: TransitionRoutesDeps) => {
        * ここで catch しないのは意図的で、畳んでよい既知の失敗が他に無いため。
        * 例外を丸ごと捕まえると DB 障害まで「見つからない」として返してしまう。
        */
-      await deps.transitions.delete(c.req.valid('param').id)
+      const { id } = c.req.valid('param')
+      const existing = await deps.transitions.findById(id)
+      if (existing === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      await recordTransitionEdits(deps.editBatches, existing.projectId, [
+        { op: 'delete', transitionId: id, before: transitionSnapshotOf(existing) },
+      ])
+      await deps.transitions.delete(id)
       return c.body(null, 204)
     })
 }

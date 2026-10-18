@@ -94,11 +94,17 @@ export const createInMemoryTransitionRepository = (
 
     findByProject: (projectId) => Promise.resolve(store.filter((t) => t.projectId === projectId)),
 
+    findById: (id) => Promise.resolve(store.find((t) => t.id === id) ?? null),
+
     create: (input) => {
       const created = TransitionSchema.parse({
         ...CreateTransitionInputSchema.parse(input),
-        id: newId(TransitionIdSchema),
+        id: input.id ?? newId(TransitionIdSchema),
       })
+      // 本物と同じく、同じ組（from, to）・同じ ID の 2 本目は UNIQUE で落ちる。
+      if (store.some((t) => t.id === created.id || (t.fromShotId === created.fromShotId && t.toShotId === created.toShotId))) {
+        return Promise.reject(new Error('duplicate key value violates unique constraint "transitions_from_shot_id_to_shot_id_uidx"'))
+      }
       store = [...store, created]
       return Promise.resolve(created)
     },

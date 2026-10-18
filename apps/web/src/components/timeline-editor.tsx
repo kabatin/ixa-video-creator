@@ -202,6 +202,13 @@ export const TimelineEditor = ({
 
   const [transitions, setTransitions] = useState(initialTransitions)
   const [clips, setClips] = useState(initialClips)
+  /** トランジションも同じく、読み直した一覧が届いたら差し替える（⌘Z で置き直した・消したものを帯に出す）。 */
+  const lastInitialTransitions = useRef(initialTransitions)
+  useEffect(() => {
+    if (lastInitialTransitions.current === initialTransitions) return
+    lastInitialTransitions.current = initialTransitions
+    setTransitions(initialTransitions)
+  }, [initialTransitions])
   /**
    * 読み直した一覧が届いたら差し替える。インスペクターで直した文字・時間・削除が、
    * 手元の古い一覧のまま帯に残らないように。最初の描画は初期値そのものなので数えない。

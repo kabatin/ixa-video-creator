@@ -170,8 +170,8 @@ export const useTimelineInlineForms = ({
   }
 
   /**
-   * トランジションは差し替えの口が無いので、**消してから作り直す**。
-   * 2 つの Shot の間に 1 本、という不変条件を保ちやすいため（`timeline-api.ts`）。
+   * トランジションの差し替えは、消す相手を付けて置く（サーバが消してから置く）。
+   * 消すと置くを別々に送ると取り消しの記録が 2 つに割れ、⌘Z 1 回では片方しか戻らない。
    */
   const submitTransition = (point: TransitionInsertionPoint, next: InlineFormDraft): void => {
     if (next.kind !== 'transition') return
@@ -185,14 +185,14 @@ export const useTimelineInlineForms = ({
     }
     const existing = point.existing
     void run(existing === null ? 'Transition を追加' : 'Transition を差し替え', async () => {
-      if (existing !== null) {
-        await api.deleteTransition(existing.id)
-        setTransitions((current) =>
-          current === null ? current : current.filter((t) => t.id !== existing.id),
-        )
-      }
-      const created = await api.createTransition(projectId, result.value)
-      setTransitions((current) => (current === null ? [created] : [...current, created]))
+      const created = await api.createTransition(
+        projectId,
+        existing === null ? result.value : { ...result.value, replaceTransitionId: existing.id },
+      )
+      setTransitions((current) => [
+        ...(current ?? []).filter((t) => existing === null || t.id !== existing.id),
+        created,
+      ])
       closeForm()
     })
   }

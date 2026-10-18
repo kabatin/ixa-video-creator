@@ -155,6 +155,14 @@ describe('Transition', () => {
     })
   })
 
+  it('差し替えは消す相手を本文に付けて 1 回で送る（1 つの取り消しの記録になる）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: transitionJson }, 201))
+
+    await api().createTransition(projectId, { fromShotId, toShotId, type: 'cut', replaceTransitionId: transitionId })
+
+    expect(requestBodyOf(lastCall()[1])).toMatchObject({ replaceTransitionId: TRANSITION_ID })
+  })
+
   it('削除は本文を読まずに DELETE する', async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
 

@@ -15,6 +15,7 @@ import {
   type TransitionRoutesDeps,
 } from '../routes/transitions.js'
 import { aProject } from './fixtures.js'
+import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import {
   createInMemoryTransitionRepository,
@@ -94,6 +95,7 @@ beforeEach(() => {
     transitions,
     shots: createInMemoryShotRepository([shotA, shotB, shotC, foreignShot]),
     projects: createInMemoryProjectRepository([project, otherProject]),
+    editBatches: createInMemoryEditBatchRepository(),
   })
 })
 

@@ -1,12 +1,14 @@
 import {
   EditBatchId as EditBatchIdSchema,
+  MusicTrackId as MusicTrackIdSchema,
   NarrationLineId as NarrationLineIdSchema,
   TimelineClipId as TimelineClipIdSchema,
+  TransitionId as TransitionIdSchema,
   newId,
 } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import { undoConfirmMessage, type UndoTarget } from '@/components/workbench/use-edit-history'
-import { buildUndoResultView, editBatchCountLabel, undoRestoredAnything } from '@/lib/edit-history'
+import { buildEditHistoryView, buildUndoResultView, editBatchCountLabel, undoRestoredAnything } from '@/lib/edit-history'
 import type { WireEditBatch, WireUndoResult } from '@/lib/edit-history-api'
 
 /**
@@ -96,5 +98,36 @@ describe('⌘Z の確認の文', () => {
 
     const older = aBatch({ createdAt: '2026-10-18T22:00:00.000Z' })
     expect(undoConfirmMessage(target(older), now)).toContain('3 時間前の操作です')
+  })
+})
+
+describe('トランジションと楽曲の記録', () => {
+  const transitionId = newId(TransitionIdSchema)
+
+  it('種類と件数をトランジション・曲で言う', () => {
+    const transition = aBatch({ kind: 'transition_edit', summary: 'トランジションを差し替える', lineCount: 0, transitionCount: 2 })
+    const [row] = buildEditHistoryView([transition]).rows
+    expect(row?.kindLabel).toBe('トランジションの編集')
+    expect(row?.shotCountLabel).toBe('2 件のトランジション')
+
+    const music = aBatch({ kind: 'music_edit', summary: '曲「宣伝の曲」を直す', lineCount: 0, musicCount: 1 })
+    expect(buildEditHistoryView([music]).rows[0]).toMatchObject({ kindLabel: '楽曲の編集', shotCountLabel: '1 曲' })
+  })
+
+  it('戻した結果をトランジションで言い、戻せなかった理由を出す', () => {
+    const batch = aBatch({ kind: 'transition_edit', lineCount: 0, transitionCount: 2 })
+    const view = buildUndoResultView({
+      ...emptyResult(batch),
+      restoredTransitions: [transitionId],
+      failedTransitions: [{ transitionId, reason: '別のトランジションが置かれています' }],
+    })
+    expect(view.summary).toBe('トランジション 1 件を元に戻し、1 件は戻せませんでした')
+    expect(view.failedClips.map((entry) => entry.subject)).toEqual(['トランジション'])
+    expect(undoRestoredAnything({ ...emptyResult(batch), restoredTransitions: [transitionId] })).toBe(true)
+  })
+
+  it('曲だけ戻っても「戻した」と数える', () => {
+    const musicTrackId = newId(MusicTrackIdSchema)
+    expect(undoRestoredAnything({ ...emptyResult(aBatch()), restoredMusicTracks: [musicTrackId] })).toBe(true)
   })
 })

@@ -70,6 +70,7 @@ import { scriptRoutes } from './routes/scripts.js'
 import { sequenceRoutes } from './routes/sequences.js'
 import { musicRoutes, type AnalysisQueue } from './routes/music.js'
 import { editBatchRoutes } from './routes/edit-batches.js'
+import { musicEditRoutes } from './routes/music-edit.js'
 import { musicTrimRoutes } from './routes/music-trim.js'
 import { storyboardDraftRoutes } from './routes/storyboard-drafts.js'
 import { imageJobCancelRoutes } from './routes/image-job-cancel.js'
@@ -519,6 +520,8 @@ export const createApp = (deps: AppDeps) => {
       queue: deps.analysisQueue,
     }),
   )
+  // 楽曲の欄の直しとマスターの切り替え。取り消せるよう、書く前に記録する。
+  app.route('/', musicEditRoutes({ musicTracks: deps.musicTracks, editBatches: deps.editBatches }))
   // 曲を最後の Shot で切る（尻の黒画面の直し）。取り消せるよう記録を残す。
   app.route(
     '/',
@@ -563,7 +566,7 @@ export const createApp = (deps: AppDeps) => {
     reviewRoutes({ takes: deps.takes, reviews: deps.reviews, queue: deps.reviewQueue }),
   )
 
-  app.route('/', transitionRoutes({ transitions: deps.transitions, shots: deps.shots, projects }))
+  app.route('/', transitionRoutes({ transitions: deps.transitions, shots: deps.shots, projects, editBatches: deps.editBatches }))
   // ナレーションのテロップを手で消したら、その行を「テロップなし」にする（ADR-0038）。
   app.route(
     '/',
@@ -640,6 +643,7 @@ export const createApp = (deps: AppDeps) => {
       editBatches: deps.editBatches,
       timelineClips: deps.timelineClips,
       musicTracks: deps.musicTracks,
+      transitions: deps.transitions,
       // ナレーションをまとめて並べた記録を戻す（ADR-0038）。戻したらテロップも作り直す。
       ...(narration === undefined ? {} : { narration }),
     }),
