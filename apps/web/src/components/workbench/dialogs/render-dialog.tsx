@@ -1,6 +1,7 @@
 'use client'
 
 import type { ProjectId } from '@ixa/domain'
+import { useState } from 'react'
 import { RenderPanel } from '@/components/render-panel'
 import { useLoaded } from '@/components/workbench/use-loaded'
 import type { RenderWatch } from '@/components/workbench/use-render-watch'
@@ -52,10 +53,12 @@ const loadRenderMaterials = async (projectId: ProjectId): Promise<RenderMaterial
  */
 export const RenderDialogBody = ({ watch }: { readonly watch: RenderWatch }) => {
   const workbench = useWorkbench()
+  // 検査の指摘から直したら（曲を最後の Shot で切った）、検査と尺を読み直す。
+  const [reloads, setReloads] = useState(0)
   const loaded = useLoaded(
     '書き出しの材料',
     () => loadRenderMaterials(workbench.projectId),
-    workbench.projectId,
+    `${workbench.projectId}:${String(reloads)}`,
   )
 
   if (loaded.state === 'loading') return <p className="text-sm text-muted">読み込んでいます…</p>
@@ -84,6 +87,9 @@ export const RenderDialogBody = ({ watch }: { readonly watch: RenderWatch }) => 
         selectedShotId: workbench.selectedShotId,
         issues: issues.value,
       })}
+      onTimelineChanged={() => {
+        setReloads((count) => count + 1)
+      }}
       onFixTimeline={() => {
         workbench.closeDialog()
         workbench.focusPanel('timeline')

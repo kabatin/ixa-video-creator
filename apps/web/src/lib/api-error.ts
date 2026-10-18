@@ -60,6 +60,7 @@ const FIELD_LABELS: Readonly<Record<string, string>> = {
   startSec: '開始',
   durationSec: '尺',
   offsetSec: '開始位置',
+  endSec: '曲の終わり',
   volume: '音量',
   fps: 'fps',
   resolution: '大きさ',

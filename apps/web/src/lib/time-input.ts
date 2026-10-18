@@ -36,3 +36,13 @@ export const parseFadeInput = (raw: string): number | null => {
   if (!/^\d+(?:\.\d+)?$/.test(text)) return null
   return Number(text)
 }
+
+/**
+ * 曲の終わり（タイムライン上の位置）。**空は「曲の自然な終わり」**（null）。`0:26.38` / `26.38` で受ける。
+ * 0 で止めると曲が鳴らないので、0 と読めない値は `unreadable`。
+ */
+export const parseMusicEndInput = (raw: string): { readonly endSec: number | null } | 'unreadable' => {
+  if (raw.trim() === '') return { endSec: null }
+  const value = parseClockInput(raw)
+  return value === null || value <= 0 ? 'unreadable' : { endSec: value }
+}

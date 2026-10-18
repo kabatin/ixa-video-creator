@@ -2,6 +2,7 @@ import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import {
   EditBatchId as EditBatchIdSchema,
   EditBatchKind as EditBatchKindSchema,
+  MusicTrackId as MusicTrackIdSchema,
   NarrationLineId as NarrationLineIdSchema,
   ProjectId as ProjectIdSchema,
   ShotId as ShotIdSchema,
@@ -13,6 +14,8 @@ import {
   type EditBatch,
   type EditBatchClipEntry,
   type EditBatchEntry,
+  type EditBatchMusicEntry,
+  type MusicTrackId,
   type NarrationLineId,
   type ProjectId,
   type ShotId,
@@ -21,6 +24,7 @@ import {
 } from '@ixa/domain'
 import type {
   EditBatchRepository,
+  MusicTrackRepository,
   NarrationLineRepository,
   ProjectRepository,
   ShotRepository,
@@ -80,6 +84,8 @@ export const EditBatchSummaryResponse = z
     clipCount: z.number().int().nonnegative(),
     /** 変える前を記録したナレーションの行の件数（まとめて並べる。ADR-0038）。 */
     lineCount: z.number().int().nonnegative().default(0),
+    /** 変える前を記録した楽曲の数（曲を最後の Shot で切る）。 */
+    musicCount: z.number().int().nonnegative().default(0),
     /** **`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
     undoneAt: z.string().datetime().nullable(),
     createdAt: z.string().datetime(),
@@ -97,6 +103,10 @@ const UndoClipFailure = z
   .object({ clipId: TimelineClipIdSchema, reason: z.string().min(1) })
   .openapi('EditBatchUndoClipFailure')
 
+const UndoMusicFailure = z
+  .object({ musicTrackId: MusicTrackIdSchema, reason: z.string().min(1) })
+  .openapi('EditBatchUndoMusicFailure')
+
 const UndoLineFailure = z
   .object({ lineId: NarrationLineIdSchema, reason: z.string().min(1) })
   .openapi('EditBatchUndoLineFailure')
@@ -113,6 +123,9 @@ export const UndoEditBatchResponse = z
     /** 戻したナレーションの行（ADR-0038）。 */
     restoredLines: z.array(NarrationLineIdSchema).default([]),
     failedLines: z.array(UndoLineFailure).default([]),
+    /** 戻した楽曲（曲の終わりとフェードアウト）。 */
+    restoredMusicTracks: z.array(MusicTrackIdSchema).default([]),
+    failedMusicTracks: z.array(UndoMusicFailure).default([]),
   })
   .openapi('UndoEditBatchResult')
 export type UndoEditBatchResponse = z.infer<typeof UndoEditBatchResponse>
@@ -124,6 +137,7 @@ export const toEditBatchSummary = (batch: EditBatch): EditBatchSummaryResponse =
   shotCount: batch.entries.length,
   clipCount: batch.clipEntries.length,
   lineCount: batch.lineEntries.length,
+  musicCount: batch.musicEntries.length,
   undoneAt: batch.undoneAt === null ? null : batch.undoneAt.toISOString(),
   createdAt: batch.createdAt.toISOString(),
   canUndo: canUndo(batch),
@@ -177,11 +191,30 @@ export type EditBatchRoutesDeps = {
    * ナレーションの行の位置を戻す（`lineEntries`。ADR-0038）。戻したあとテロップも作り直す。
    * ナレーションを繋いでいない環境では省く（その記録は作られない）。
    */
+  /** 楽曲の曲の終わりとフェードアウトを戻す（`musicEntries`）。楽曲を繋いでいない環境では省く（その記録は戻せないと返す）。 */
+  musicTracks?: Pick<MusicTrackRepository, 'update'>
   narration?: NarrationTelopSyncDeps & { readonly lines: Pick<NarrationLineRepository, 'findById' | 'update'> }
 }
 
 /** 戻す行が無い（消された）。 */
 export const LINE_NOT_FOUND_REASON = 'ナレーションの行が見つかりません（消された可能性があります）'
+
+/** 戻す楽曲が無い（消された）。 */
+export const MUSIC_TRACK_NOT_FOUND_REASON = '楽曲が見つかりません（消された可能性があります）'
+
+/** 楽曲 1 曲の曲の終わりとフェードアウトを変える前へ戻す。ほかの欄（音量・開始位置）は触らない。 */
+const restoreMusicEntry = async (
+  deps: Pick<EditBatchRoutesDeps, 'musicTracks'>,
+  entry: EditBatchMusicEntry,
+): Promise<string | null> => {
+  if (deps.musicTracks === undefined) return MUSIC_TRACK_NOT_FOUND_REASON
+  try {
+    const restored = await deps.musicTracks.update(entry.musicTrackId, { endSec: entry.endSec, fadeOutSec: entry.fadeOutSec })
+    return restored === null ? MUSIC_TRACK_NOT_FOUND_REASON : null
+  } catch (cause) {
+    return `戻せませんでした: ${cause instanceof Error ? cause.message : String(cause)}`
+  }
+}
 
 /** 戻すテロップが無い（消された）。 */
 export const CLIP_NOT_FOUND_REASON = 'テロップが見つかりません（消された可能性があります）'
@@ -333,8 +366,26 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
         await syncNarrationTelops(deps.narration, projectId)
       }
 
+      const restoredMusicTracks: MusicTrackId[] = []
+      const failedMusicTracks: { musicTrackId: MusicTrackId; reason: string }[] = []
+      for (const entry of undone.musicEntries) {
+        const reason = await restoreMusicEntry(deps, entry)
+        if (reason === null) restoredMusicTracks.push(entry.musicTrackId)
+        else failedMusicTracks.push({ musicTrackId: entry.musicTrackId, reason })
+      }
+
       return c.json(
-        ok({ batch: toEditBatchSummary(undone), restored, failed, restoredClips, failedClips, restoredLines, failedLines }),
+        ok({
+          batch: toEditBatchSummary(undone),
+          restored,
+          failed,
+          restoredClips,
+          failedClips,
+          restoredLines,
+          failedLines,
+          restoredMusicTracks,
+          failedMusicTracks,
+        }),
         200,
       )
     })

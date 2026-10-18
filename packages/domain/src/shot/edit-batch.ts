@@ -1,5 +1,7 @@
 import { z } from 'zod'
-import { EditBatchId, NarrationLineId, ProjectId, ShotId, TakeId, TimelineClipId } from '../common/ids.js'
+import { EditBatchId, MusicTrackId, NarrationLineId, ProjectId, ShotId, TakeId, TimelineClipId } from '../common/ids.js'
+import { Seconds } from '../common/time.js'
+import { MUSIC_FADE_MAX_SEC, MusicEndSec } from '../music/music.js'
 import { ShotStatus, UpdateShotPatch } from './shot.js'
 
 /**
@@ -14,8 +16,11 @@ import { ShotStatus, UpdateShotPatch } from './shot.js'
  * （Take・絵コンテの案と同じ考え方・ADR-0003）。
  */
 
-/** `text_style` はテロップの見た目のまとめ変更（2026-10-02）。Shot ではなくテロップを記録する（`clipEntries`）。 */
-export const EditBatchKind = z.enum(['rough_cut', 'draft_adopt', 'bulk_update', 'text_style', 'narration_arrange'])
+/**
+ * `text_style` はテロップの見た目のまとめ変更（2026-10-02）。Shot ではなくテロップを記録する（`clipEntries`）。
+ * `music_trim` は曲を最後の Shot で切る（2026-10-19）。楽曲を記録する（`musicEntries`）。
+ */
+export const EditBatchKind = z.enum(['rough_cut', 'draft_adopt', 'bulk_update', 'text_style', 'narration_arrange', 'music_trim'])
 export type EditBatchKind = z.infer<typeof EditBatchKind>
 
 /**
@@ -84,6 +89,17 @@ export const EditBatchLineEntry = z.object({
 })
 export type EditBatchLineEntry = z.infer<typeof EditBatchLineEntry>
 
+/**
+ * 楽曲 1 曲ぶんの「変える前」（曲を最後の Shot で切る。2026-10-19）。切ると曲の終わりとフェードアウトが変わるので、その 2 つを持つ。
+ * **`endSec: null` は「自然な終わりだった」**。
+ */
+export const EditBatchMusicEntry = z.object({
+  musicTrackId: MusicTrackId,
+  endSec: MusicEndSec.nullable(),
+  fadeOutSec: Seconds.max(MUSIC_FADE_MAX_SEC),
+})
+export type EditBatchMusicEntry = z.infer<typeof EditBatchMusicEntry>
+
 export const MAX_EDIT_BATCH_SUMMARY_LENGTH = 200
 
 export const EditBatch = z.object({
@@ -97,6 +113,8 @@ export const EditBatch = z.object({
   clipEntries: z.array(EditBatchClipEntry).default([]),
   /** ナレーションの行の記録（ADR-0038）。これまでの記録は空として読む。 */
   lineEntries: z.array(EditBatchLineEntry).default([]),
+  /** 楽曲の記録（曲を切る）。これまでの記録は空として読む。 */
+  musicEntries: z.array(EditBatchMusicEntry).default([]),
   /** 取り消した時刻。**`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
   undoneAt: z.date().nullable(),
   createdAt: z.date(),
@@ -122,7 +140,8 @@ export const isUndone = (batch: EditBatch): boolean => batch.undoneAt !== null
  * 直した内容を古い値で塗り潰す。戻したものをやり直したいなら、新しく操作する。
  */
 export const canUndo = (batch: EditBatch): boolean =>
-  !isUndone(batch) && (batch.entries.length > 0 || batch.clipEntries.length > 0 || batch.lineEntries.length > 0)
+  !isUndone(batch) &&
+  (batch.entries.length > 0 || batch.clipEntries.length > 0 || batch.lineEntries.length > 0 || batch.musicEntries.length > 0)
 
 /**
  * 1 件ぶんの取り消しで、採用 Take を戻す必要があるか。

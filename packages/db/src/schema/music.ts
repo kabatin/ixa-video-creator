@@ -34,6 +34,8 @@ export const musicTracks = pgTable(
     /** 頭と終わりのフェード（秒。ADR-0039）。0 はフェードしない。 */
     fadeInSec: seconds('fade_in_sec').notNull().default(0),
     fadeOutSec: seconds('fade_out_sec').notNull().default(0),
+    /** 曲の終わり（タイムライン上の秒）。ここで曲を止める。NULL は曲の自然な終わり（2026-10-19）。 */
+    endSec: seconds('end_sec'),
     deletedAt: deletedAt(),
   },
   (t) => [index('music_tracks_project_id_idx').on(t.projectId)],

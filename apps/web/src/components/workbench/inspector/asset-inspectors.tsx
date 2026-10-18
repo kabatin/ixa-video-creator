@@ -27,10 +27,10 @@ import { PanelEmpty } from '@/components/workbench/panels/panel-frame'
 import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
-import { formatDuration } from '@/lib/format-time'
+import { formatClock, formatDuration } from '@/lib/format-time'
 import type { WireMusicAnalysis } from '@/lib/music-api'
 import { summarizeAnalysis } from '@/lib/music-upload'
-import { parseClockInput, parseFadeInput } from '@/lib/time-input'
+import { parseClockInput, parseFadeInput, parseMusicEndInput } from '@/lib/time-input'
 
 /**
  * 素材のインスペクター（UI-WORKBENCH-2 §5.3）。**旧ページのフォームは使わず、同じ API を新しい部品から呼ぶ。**
@@ -457,6 +457,19 @@ export const TrackInspector = ({ id }: { readonly id: MusicTrackId }) => {
           validate={fadeProblem}
           onSave={async (next) => {
             await actions.updateTrack(id, { fadeOutSec: parseFadeInput(next) ?? 0 })
+          }}
+        />
+        {/* 曲の終わり。ここで曲を止め、尺もここで終わる（尻の黒画面を消す）。空にすると曲の自然な終わりへ戻す。 */}
+        <AutoSaveField
+          label="曲の終わり"
+          value={track.endSec === null || track.endSec === undefined ? '' : formatClock(track.endSec)}
+          placeholder="空なら曲の最後まで"
+          validate={(next) =>
+            parseMusicEndInput(next) === 'unreadable' ? '0:26.38 のように入れてください（空なら曲の最後まで）' : null
+          }
+          onSave={async (next) => {
+            const parsed = parseMusicEndInput(next)
+            if (parsed !== 'unreadable') await actions.updateTrack(id, { endSec: parsed.endSec })
           }}
         />
         {track.isMaster ? (

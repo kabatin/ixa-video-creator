@@ -18,11 +18,17 @@ const baseRow = (overrides: Partial<MusicTrackRow> = {}): MusicTrackRow => ({
   volume: 1,
   fadeInSec: 0,
   fadeOutSec: 0,
+  endSec: null,
   deletedAt: null,
   ...overrides,
 })
 
 describe('musicTrackRowToDomain', () => {
+  it('曲の終わりを持つ。NULL は自然な終わり', () => {
+    expect(musicTrackRowToDomain(baseRow({ endSec: 26.38 })).endSec).toBe(26.38)
+    expect(musicTrackRowToDomain(baseRow()).endSec).toBeNull()
+  })
+
   it('row を MusicTrack に変換する', () => {
     const row = baseRow()
     const track = musicTrackRowToDomain(row)

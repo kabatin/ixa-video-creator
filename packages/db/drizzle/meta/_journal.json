@@ -295,6 +295,13 @@
       "when": 1792254971935,
       "tag": "0041_flaky_tomorrow_man",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1792344315795,
+      "tag": "0042_brave_titania",
+      "breakpoints": true
     }
   ]
 }

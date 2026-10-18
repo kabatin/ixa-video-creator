@@ -70,6 +70,7 @@ import { scriptRoutes } from './routes/scripts.js'
 import { sequenceRoutes } from './routes/sequences.js'
 import { musicRoutes, type AnalysisQueue } from './routes/music.js'
 import { editBatchRoutes } from './routes/edit-batches.js'
+import { musicTrimRoutes } from './routes/music-trim.js'
 import { storyboardDraftRoutes } from './routes/storyboard-drafts.js'
 import { imageJobCancelRoutes } from './routes/image-job-cancel.js'
 import { shotBulkUpscaleRoutes } from './routes/shots-bulk-upscale.js'
@@ -513,6 +514,11 @@ export const createApp = (deps: AppDeps) => {
       queue: deps.analysisQueue,
     }),
   )
+  // 曲を最後の Shot で切る（尻の黒画面の直し）。取り消せるよう記録を残す。
+  app.route(
+    '/',
+    musicTrimRoutes({ projects, shots: deps.shots, musicTracks: deps.musicTracks, editBatches: deps.editBatches }),
+  )
   app.route('/', scriptRoutes({ scripts: deps.scripts, projects }))
 
   // 絵コンテの下書き（PHASE 6.3）。どの口を挿すかは main.ts が決める。
@@ -624,6 +630,7 @@ export const createApp = (deps: AppDeps) => {
       shots: deps.shots,
       editBatches: deps.editBatches,
       timelineClips: deps.timelineClips,
+      musicTracks: deps.musicTracks,
       // ナレーションをまとめて並べた記録を戻す（ADR-0038）。戻したらテロップも作り直す。
       ...(narration === undefined ? {} : { narration }),
     }),

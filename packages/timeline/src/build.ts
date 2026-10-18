@@ -9,6 +9,7 @@ import type {
   TimelineDocument,
   Transition,
 } from '@ixa/domain'
+import { musicPlayedDurationSec } from '@ixa/domain'
 import { clipsEndSec, shotsEndSec, sortClips, sortShotsByStart } from './ordering.js'
 import { shotPlaybackRate } from './speed.js'
 
@@ -22,7 +23,16 @@ export type TimelineMusicTrack = {
   /** 頭と終わりのフェード（秒。ADR-0039）。無ければ 0。 */
   readonly fadeInSec?: Seconds
   readonly fadeOutSec?: Seconds
+  /**
+   * 曲の終わり（タイムライン上の秒。`MusicTrack.endSec`）。ここで曲を止め、尺もここで終わる。
+   * null・無しは音源の自然な終わり（ミュージックビデオの既定）。フェードアウトはこの終わりに向けて効く。
+   */
+  readonly endSec?: Seconds | null
 }
+
+/** 曲がタイムライン上で鳴る長さ。曲の終わりで止める（`musicPlayedDurationSec`）。 */
+const playedSec = (track: TimelineMusicTrack): Seconds =>
+  musicPlayedDurationSec({ offsetSec: track.startSec, endSec: track.endSec }, track.durationSec)
 
 /**
  * ナレーション・セリフの 1 行の声の投影（ADR-0038）。行の位置に、選んだ Take の音を置く。
@@ -135,7 +145,7 @@ export const timelineDurationSec = (source: TimelineSource): Seconds => {
   // 音楽は開始位置ではなく**終了位置**で尺に効く。
   // Shot が曲より短くてもタイムラインを曲の終わりまで伸ばす。
   const musicEnd = source.musicTracks.reduce(
-    (latest, track) => Math.max(latest, track.startSec + track.durationSec),
+    (latest, track) => Math.max(latest, track.startSec + playedSec(track)),
     0,
   )
   // 声も終わりで尺に効く（曲も Shot も無い作品でも、ナレーションが最後まで鳴る）。
@@ -204,7 +214,7 @@ export const buildTimelineDocument = (source: TimelineSource): TimelineDocument 
     ...source.musicTracks.map((track) => ({
       mediaUrl: track.mediaUrl,
       startSec: track.startSec,
-      durationSec: track.durationSec,
+      durationSec: playedSec(track),
       volume: track.volume,
       ...(track.fadeInSec === undefined || track.fadeInSec <= 0 ? {} : { fadeInSec: track.fadeInSec }),
       ...(track.fadeOutSec === undefined || track.fadeOutSec <= 0 ? {} : { fadeOutSec: track.fadeOutSec }),

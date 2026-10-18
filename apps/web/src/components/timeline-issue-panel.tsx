@@ -1,5 +1,7 @@
 import type { ProjectId } from '@ixa/domain'
+import { TIMELINE_ISSUE_CODES } from '@ixa/timeline'
 import Link from 'next/link'
+import { TrimMusicButton } from '@/components/trim-music-button'
 import {
   MAX_ROWS_PER_GROUP,
   describeIssueShot,
@@ -37,6 +39,8 @@ export type TimelineIssuePanelProps = {
    * （呼び出し元がまだ渡していない間に、押せないリンクを作らないため）。
    */
   readonly projectId?: ProjectId
+  /** 「曲を最後の Shot で切る」を押したあと。検査結果を自分で持っている画面が読み直す。 */
+  readonly onTimelineChanged?: () => void
 }
 
 const PANEL_LABEL = 'タイムラインの検証結果'
@@ -124,7 +128,7 @@ const IssueGroupBlock = ({
   )
 }
 
-export const TimelineIssuePanel = ({ issues, projectId }: TimelineIssuePanelProps) => {
+export const TimelineIssuePanel = ({ issues, projectId, onTimelineChanged }: TimelineIssuePanelProps) => {
   const summary = summarizeTimelineIssues(issues)
 
   if (summary.state === 'unchecked') {
@@ -185,6 +189,13 @@ export const TimelineIssuePanel = ({ issues, projectId }: TimelineIssuePanelProp
         {groups.map((group) => (
           <li key={group.code}>
             <IssueGroupBlock group={group} projectId={projectId} />
+            {/* 尻の黒画面は、曲の方を最後の Shot で切れば消える（制作者 2026-10-19）。畳んだままでも押せるよう外に置く。 */}
+            {group.code === TIMELINE_ISSUE_CODES.shotGapTail && projectId !== undefined && (
+              <TrimMusicButton
+                projectId={projectId}
+                {...(onTimelineChanged === undefined ? {} : { onTrimmed: onTimelineChanged })}
+              />
+            )}
           </li>
         ))}
       </ul>

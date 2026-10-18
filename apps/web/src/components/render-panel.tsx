@@ -71,6 +71,8 @@ export type RenderPanelProps = {
   readonly range?: RenderRangeChoice | null
   /** 「タイムラインで直す」。無ければボタンを出さない。 */
   readonly onFixTimeline?: () => void
+  /** 検査の指摘から直した（曲を最後の Shot で切った）あと。検査結果を読み直す。 */
+  readonly onTimelineChanged?: () => void
   /** テストや Storybook から差し替えるための注入口。 */
   readonly api?: RenderApi
   readonly folderApi?: RenderFolderApi
@@ -121,6 +123,7 @@ const RenderPanelView = ({
   watch,
   range = null,
   onFixTimeline,
+  onTimelineChanged,
   api,
   folderApi,
   resolveOutputUrl,
@@ -210,7 +213,13 @@ const RenderPanelView = ({
         </div>
         <RenderCheckSummary
           check={check}
-          details={<TimelineIssuePanel issues={issues} projectId={projectId} />}
+          details={
+            <TimelineIssuePanel
+              issues={issues}
+              projectId={projectId}
+              {...(onTimelineChanged === undefined ? {} : { onTimelineChanged })}
+            />
+          }
           {...(onFixTimeline === undefined ? {} : { onFixTimeline })}
         />
         {issuesError !== null && (

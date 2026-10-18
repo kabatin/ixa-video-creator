@@ -243,6 +243,8 @@ export const loadTimelineSource = async (
         // 頭と終わりのフェード（ADR-0039）。
         ...(track.fadeInSec === undefined ? {} : { fadeInSec: track.fadeInSec }),
         ...(track.fadeOutSec === undefined ? {} : { fadeOutSec: track.fadeOutSec }),
+        // 曲の終わり。ここで曲も尺も止まる（null は自然な終わり）。
+        endSec: track.endSec ?? null,
       },
     ]
   })

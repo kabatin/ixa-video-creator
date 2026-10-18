@@ -33,7 +33,7 @@ export type MusicTrackRepository = {
   /** 投入順（ULID の昇順 = 時系列）。ソフトデリート済みは含まない。 */
   findByProject(projectId: ProjectId): Promise<MusicTrack[]>
   create(input: CreateMusicTrackInput): Promise<MusicTrack>
-  /** 題名・オフセット・音量を直す（PHASE 8）。無い・消した曲なら null。 */
+  /** 題名・オフセット・音量・フェード・曲の終わりを直す（PHASE 8）。無い・消した曲なら null。 */
   update(id: MusicTrackId, patch: UpdateMusicTrackPatch): Promise<MusicTrack | null>
   /**
    * この曲をマスターにし、同じ Project の他の曲を降格する（PHASE 8）。
@@ -59,6 +59,7 @@ export const musicTrackRowToDomain = (row: MusicTrackRow): MusicTrack =>
     volume: row.volume,
     fadeInSec: row.fadeInSec,
     fadeOutSec: row.fadeOutSec,
+    endSec: row.endSec,
   })
 
 export const createMusicTrackRepository = (db: DbClient): MusicTrackRepository => ({

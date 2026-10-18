@@ -89,3 +89,24 @@ describe('ナレーションをまとめて並べた記録', () => {
     expect(canUndo(empty)).toBe(false)
   })
 })
+
+/**
+ * 曲を最後の Shot で切った記録（制作者 2026-10-19「カットより長い部分は楽曲をカットするとか？」）。
+ * 曲の終わりとフェードアウトの「変える前」を持ち、取り消しで戻す。
+ */
+describe('曲を切った記録', () => {
+  const musicEntry = { musicTrackId: '01ARZ3NDEKTSV4RRFFQ69G5FAY', endSec: null, fadeOutSec: 0 }
+
+  it('変える前の曲の終わり（null は自然な終わり）とフェードアウトを持つ。これまでの記録は空として読む', () => {
+    expect(EditBatch.parse({ ...base, kind: 'music_trim', musicEntries: [musicEntry] }).musicEntries).toEqual([musicEntry])
+    expect(EditBatch.parse(base).musicEntries).toEqual([])
+  })
+
+  it('曲の記録だけでも取り消せる', () => {
+    expect(canUndo(EditBatch.parse({ ...base, kind: 'music_trim', musicEntries: [musicEntry] }))).toBe(true)
+  })
+
+  it('変える前の曲の終わりも正の秒だけ', () => {
+    expect(EditBatch.safeParse({ ...base, kind: 'music_trim', musicEntries: [{ ...musicEntry, endSec: 0 }] }).success).toBe(false)
+  })
+})

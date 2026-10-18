@@ -3,7 +3,9 @@
 import { goToMasterTrack, goToProjectConcept } from '@/components/workbench/workbench-navigation'
 import type { DockviewApi } from 'dockview-react'
 import { useRouter } from 'next/navigation'
+import { useContext } from 'react'
 import { MenuBar } from '@/components/workbench/menu-bar'
+import { AssetStoreContext } from '@/components/workbench/asset-store'
 import {
   mergeBlockerOf,
   splitAtPlayhead,
@@ -64,6 +66,8 @@ export const WorkbenchMenu = ({
 }: WorkbenchMenuProps) => {
   const router = useRouter()
   const workbench = useWorkbench()
+  // 曲を切った記録を戻すと楽曲の欄（曲の終わり）が変わる。戻したら楽曲の一覧も読み直す。
+  const assets = useContext(AssetStoreContext)
   // 分割できるかは再生位置で変わる。メニューの帯だけが毎フレーム描き直す（ワークベンチ全体は巻き込まない）。
   const transport = useTransport()
   const current = useSelectedShot()
@@ -87,6 +91,7 @@ export const WorkbenchMenu = ({
     void undo.confirm().then((message) => {
       onNotice(message)
       workbench.refresh()
+      void assets?.actions.reloadTracks()
     })
   }
 

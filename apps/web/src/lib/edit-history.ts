@@ -22,6 +22,7 @@ const KIND_LABELS: Readonly<Record<EditBatchKind, string>> = Object.freeze({
   bulk_update: 'Shot の一括変更',
   text_style: 'テロップの見た目の一括変更',
   narration_arrange: 'ナレーションをまとめて並べる',
+  music_trim: '曲を最後の Shot で切る',
 })
 
 export const editBatchKindLabel = (kind: EditBatchKind): string => KIND_LABELS[kind]
@@ -70,6 +71,7 @@ const countLabelOf = (batch: WireEditBatch): string => {
   if (batch.shotCount > 0) return `${batch.shotCount.toString()} 件の Shot`
   if (batch.lineCount > 0) return `${batch.lineCount.toString()} 行のナレーション`
   if (batch.clipCount > 0) return `${batch.clipCount.toString()} 件のテロップ`
+  if ((batch.musicCount ?? 0) > 0) return `${String(batch.musicCount)} 曲`
   return `${batch.shotCount.toString()} 件の Shot`
 }
 
@@ -115,8 +117,8 @@ export type UndoResultView = {
   readonly tone: EditHistoryTone
   /** 戻せなかった分。**件数に畳まず、1 件ずつ理由を出す**（lessons L-015）。 */
   readonly failed: readonly UndoFailureView[]
-  /** 戻せなかったテロップ。同じく 1 件ずつ理由を出す。 */
-  readonly failedClips: readonly { readonly key: string; readonly reason: string }[]
+  /** 戻せなかったテロップ・曲。同じく 1 件ずつ理由を出す（`subject` は何が戻らなかったか）。 */
+  readonly failedClips: readonly { readonly key: string; readonly subject: string; readonly reason: string }[]
 }
 
 /**
@@ -128,19 +130,33 @@ export type UndoResultView = {
 export const buildUndoResultView = (result: WireUndoResult): UndoResultView => {
   // テロップの記録（見た目のまとめ変更）ならテロップの件数で言う。Shot の記録は今までどおり。
   const clips = result.restoredClips.length + result.failedClips.length > 0
-  const restored = clips ? result.restoredClips.length : result.restored.length
-  const failed = clips ? result.failedClips.length : result.failed.length
-  const subject = clips ? 'テロップ ' : ''
+  // 曲を切った記録なら曲の数で言う。
+  const restoredMusic = result.restoredMusicTracks ?? []
+  const failedMusicTracks = result.failedMusicTracks ?? []
+  const music = !clips && restoredMusic.length + failedMusicTracks.length > 0
+  const restored = clips ? result.restoredClips.length : music ? restoredMusic.length : result.restored.length
+  const failed = clips ? result.failedClips.length : music ? failedMusicTracks.length : result.failed.length
+  const subject = clips ? 'テロップ ' : music ? '曲 ' : ''
+  const failedMusic = failedMusicTracks.map((entry, index) => ({
+    key: `failed-music:${entry.musicTrackId}:${index.toString()}`,
+    subject: '曲',
+    reason: entry.reason,
+  }))
   return {
     summary:
       failed === 0
         ? `${subject}${restored.toString()} 件を元に戻しました`
         : `${subject}${restored.toString()} 件を元に戻し、${failed.toString()} 件は戻せませんでした`,
     tone: failed === 0 ? 'normal' : 'warn',
-    failedClips: result.failedClips.map((entry, index) => ({
-      key: `failed-clip:${entry.clipId}:${index.toString()}`,
-      reason: entry.reason,
-    })),
+    // 戻せなかった曲も、テロップと同じく理由を 1 件ずつ出す。
+    failedClips: [
+      ...result.failedClips.map((entry, index) => ({
+        key: `failed-clip:${entry.clipId}:${index.toString()}`,
+        subject: 'テロップ',
+        reason: entry.reason,
+      })),
+      ...failedMusic,
+    ],
     failed: result.failed.map((entry, index) => ({
       key: `failed:${entry.shotId}:${index.toString()}`,
       shotId: entry.shotId,

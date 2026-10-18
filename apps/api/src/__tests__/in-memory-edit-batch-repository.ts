@@ -50,6 +50,7 @@ export const createInMemoryEditBatchRepository = (
         // 本物（db のリポジトリ）は入力を丸ごと書く。テロップの記録も落とさない。
         clipEntries: parsed.clipEntries,
         lineEntries: parsed.lineEntries,
+        musicEntries: parsed.musicEntries,
         undoneAt: null,
         createdAt: new Date(),
       })

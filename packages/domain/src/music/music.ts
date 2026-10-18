@@ -5,6 +5,9 @@ import { Seconds } from '../common/time.js'
 /** フェードの上限（秒）。 */
 export const MUSIC_FADE_MAX_SEC = 30
 
+/** 曲の終わり（タイムライン上の秒）。0 で止めると鳴らないので正の秒だけ。 */
+export const MusicEndSec = Seconds.positive()
+
 export const MusicTrack = z.object({
   id: MusicTrackId,
   projectId: ProjectId,
@@ -23,6 +26,12 @@ export const MusicTrack = z.object({
    */
   fadeInSec: Seconds.max(MUSIC_FADE_MAX_SEC).optional(),
   fadeOutSec: Seconds.max(MUSIC_FADE_MAX_SEC).optional(),
+  /**
+   * 曲の終わり（タイムライン上の秒）。この秒で曲を止める。**null・無しは曲の自然な終わり**。
+   * Shot より曲が長い作品で、尻が黒画面にならないよう曲の方を切る（制作者 2026-10-19）。
+   * フェードアウトはこの終わりに向けて効く。0 で止めると曲が鳴らないので正の秒だけ。
+   */
+  endSec: MusicEndSec.nullable().optional(),
 })
 export type MusicTrack = z.infer<typeof MusicTrack>
 
@@ -40,6 +49,8 @@ export const UpdateMusicTrackPatch = z
     volume: z.number().min(0).max(2).optional(),
     fadeInSec: Seconds.max(MUSIC_FADE_MAX_SEC).optional(),
     fadeOutSec: Seconds.max(MUSIC_FADE_MAX_SEC).optional(),
+    /** null で自然な終わりへ戻す。 */
+    endSec: MusicEndSec.nullable().optional(),
   })
   .strict()
 export type UpdateMusicTrackPatch = z.infer<typeof UpdateMusicTrackPatch>
