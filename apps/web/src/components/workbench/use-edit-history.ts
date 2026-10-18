@@ -4,7 +4,7 @@ import type { EditBatchId, ProjectId } from '@ixa/domain'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
-import { formatEditBatchTime } from '@/lib/edit-history'
+import { editBatchCountLabel, formatEditBatchTime } from '@/lib/edit-history'
 import type { WireEditBatch } from '@/lib/edit-history-api'
 import { undoDisabledReason, type UndoAvailability } from '@/lib/menu-model'
 
@@ -17,9 +17,12 @@ import { undoDisabledReason, type UndoAvailability } from '@/lib/menu-model'
 export type UndoTarget = {
   readonly id: EditBatchId
   readonly summary: string
-  readonly shotCount: number
+  /** 何が何件戻るか（「49 件の Shot」「1 件のクリップ」）。記録が持つもので言う。 */
+  readonly countLabel: string
   /** いつの操作か（`formatEditBatchTime` の書式）。 */
   readonly when: string
+  /** いつの操作か（ISO）。古さを測る。 */
+  readonly createdAt: string
 }
 
 /** 「元に戻す」の状態一式。確認を挟むため、開始・確定・取りやめを分けて持つ。 */
@@ -81,15 +84,41 @@ const latestTargetOf = (batches: readonly WireEditBatch[]): UndoTarget | null =>
     : {
         id: batch.id,
         summary: batch.summary,
-        shotCount: batch.shotCount,
+        countLabel: editBatchCountLabel(batch),
         when: formatEditBatchTime(batch.createdAt),
+        createdAt: batch.createdAt,
       }
 }
 
-/** 確認の文。**何が・いつ・何件戻るのかと、取り消せないことを必ず書く。** */
-export const undoConfirmMessage = (target: UndoTarget): string =>
-  `${target.when} の「${target.summary}」を元に戻します。` +
-  `${target.shotCount.toString()} 件の Shot が変更前の内容に戻ります。この操作は取り消せません。`
+/** これより前の記録は「古い」と強く知らせる（その後に記録の残らない操作をしているかもしれない）。 */
+export const STALE_UNDO_MINUTES = 5
+
+/** 何分・何時間・何日前か。古くなければ `null`。 */
+const ageOf = (createdAt: string, now: Date): string | null => {
+  const minutes = Math.floor((now.getTime() - new Date(createdAt).getTime()) / 60_000)
+  if (!Number.isFinite(minutes) || minutes < STALE_UNDO_MINUTES) return null
+  if (minutes < 60) return `${minutes.toString()} 分前`
+  const hours = Math.floor(minutes / 60)
+  return hours < 24 ? `${hours.toString()} 時間前` : `${Math.floor(hours / 24).toString()} 日前`
+}
+
+/**
+ * 確認の文。**何が・いつ・何件戻るのかと、取り消せないことを必ず書く。**
+ *
+ * ⌘Z が拾うのは作品の履歴の先頭で、直前の 1 手とは限らない（記録の残らない操作もある）。
+ * 古い記録なら、その後の操作は戻らないことを先に言う。
+ */
+export const undoConfirmMessage = (target: UndoTarget, now: Date = new Date()): string => {
+  const age = ageOf(target.createdAt, now)
+  const stale =
+    age === null
+      ? ''
+      : `これは ${age}の操作です。その後に行った操作は戻らず、戻すものはこの記録の時点の内容になります。`
+  return (
+    `${stale}${target.when} の「${target.summary}」を元に戻します。` +
+    `${target.countLabel}が変更前の内容に戻ります。この操作は取り消せません。`
+  )
+}
 
 /**
  * メニュー「元に戻す」（⌘Z）の口（UI-WORKBENCH §4）。**戻せるのは一括操作だけ。**
@@ -139,7 +168,11 @@ export const useEditHistory = (projectId: ProjectId, epoch: number): EditHistory
     try {
       const result = await api.undoEditBatch(projectId, target.id)
       setReloads((count) => count + 1)
-      const failed = result.failed.length + result.failedClips.length + (result.failedMusicTracks?.length ?? 0)
+      const failed =
+        result.failed.length +
+        result.failedClips.length +
+        (result.failedLines?.length ?? 0) +
+        (result.failedMusicTracks?.length ?? 0)
       return failed === 0
         ? `「${target.summary}」を戻しました。`
         : `「${target.summary}」を戻しました（${String(failed)} 件は戻せませんでした。変更履歴で理由を確認できます）。`

@@ -166,7 +166,7 @@ describe('確認してから戻す（S2）', () => {
       throw new Error('戻せる対象がありません')
     }
     expect(availability.target.summary).toBe('絵コンテを 3 件採用しました')
-    expect(availability.target.shotCount).toBe(49)
+    expect(availability.target.countLabel).toBe('49 件の Shot')
   })
 })
 
@@ -184,7 +184,7 @@ describe('履歴を読めなかったとき（S4）', () => {
     })
 
     expect(notice).toContain('履歴を読めませんでした')
-    expect(notice).not.toContain('戻せる一括操作がありません')
+    expect(notice).not.toContain('戻せる操作がありません')
     expect(undoCalls).toEqual([])
     expect(result.current.canUndo.pending).toBeNull()
   })
@@ -210,7 +210,7 @@ describe('履歴を読めなかったとき（S4）', () => {
       brokenNotice = await broken.current.undoLatest()
     })
 
-    expect(emptyNotice).toBe('戻せる一括操作がありません。')
+    expect(emptyNotice).toBe('戻せる操作がありません。')
     expect(brokenNotice).not.toBe(emptyNotice)
   })
 

@@ -72,8 +72,8 @@ export type Menu = {
 export type UndoSummary = {
   /** サーバが付けた見出し。「粗編集を 49 件の Shot へ適用しました」など。 */
   readonly summary: string
-  /** 変わる Shot の件数。 */
-  readonly shotCount: number
+  /** 何が何件戻るか（「49 件の Shot」「1 件のクリップ」）。記録が持つもので言う。 */
+  readonly countLabel: string
 }
 
 /**
@@ -184,7 +184,7 @@ export const undoDisabledReason = (undo: UndoAvailability): string | null => {
     case 'unreadable':
       return `履歴を読めませんでした（${undo.reason}）`
     case 'none':
-      return '戻せる一括操作がありません'
+      return '戻せる操作がありません'
   }
 }
 

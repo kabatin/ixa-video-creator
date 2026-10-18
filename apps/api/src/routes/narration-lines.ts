@@ -172,20 +172,21 @@ export const narrationLineRoutes = (deps: NarrationDeps) =>
       if (lineIds !== undefined && targets.length !== lineIds.length) {
         return c.json(fail('この作品の行ではないものがあります', { lineIds: ['この作品の行ではないものがあります'] }), 422)
       }
-      let at = fromSec
-      for (const line of targets) {
-        await deps.lines.update(line.id, { startSec: Math.round(at * 1000) / 1000 })
-        at += lineLengthSec(line) + gapSec
-      }
-      // 1 回押すと置いた行の位置が全部変わる。戻せるように、置く前の位置を記録する（ADR-0038）。
+      // 1 回押すと置いた行の位置が全部変わる。戻せるように、置く前の位置を**書く前に**記録する（ADR-0038）。
+      // 書いた後で記録すると、記録に失敗したとき戻せない変更だけが残る。
       if (targets.length > 0) {
-        await deps.editBatches?.create({
+        await deps.editBatches.create({
           projectId,
           kind: 'narration_arrange',
           summary: `ナレーション ${String(targets.length)} 行を並べました`,
           entries: [],
           lineEntries: targets.map((line) => ({ lineId: line.id, startSec: line.startSec })),
         })
+      }
+      let at = fromSec
+      for (const line of targets) {
+        await deps.lines.update(line.id, { startSec: Math.round(at * 1000) / 1000 })
+        at += lineLengthSec(line) + gapSec
       }
       await syncTelops(deps, projectId)
       return c.json(await overviewJson(deps, projectId), 200)

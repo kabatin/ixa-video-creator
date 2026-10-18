@@ -282,6 +282,15 @@ describe('ナレーションをまとめて並べた記録', () => {
     expect(telops(setup).map((clip) => clip.startSec)).toEqual([9, 10.2])
   })
 
+  it('記録は書く前に作る（記録が作れなければ行は動かさない）', async () => {
+    const setup = setupNarration({ recordFails: true })
+    const line = await placedLine(setup, { startSec: 9 })
+    await setup.send('PATCH', `/narration-lines/${line.id}`, { startSec: 9 })
+    const res = await setup.send('POST', `/projects/${setup.project.id}/narration/arrange`, { fromSec: 1, gapSec: 0.5 })
+    expect(res.status).toBe(500)
+    expect(setup.deps.lines.snapshot()[0]?.startSec).toBe(9)
+  })
+
   it('置く行が無ければ記録を作らない（空の履歴を並べない）', async () => {
     const setup = setupNarration()
 

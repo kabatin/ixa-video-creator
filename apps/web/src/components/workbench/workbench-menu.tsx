@@ -193,7 +193,7 @@ export const WorkbenchMenu = ({
     <>
       <WorkbenchDialog
         open={undo.pending !== null}
-        title="一括操作を元に戻す"
+        title="元に戻す"
         size="medium"
         onClose={undo.cancel}
       >

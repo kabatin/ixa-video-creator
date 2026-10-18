@@ -8,6 +8,7 @@ import { createRequester } from '@/lib/requester'
 import {
   buildEditHistoryView,
   buildUndoResultView,
+  undoRestoredAnything,
   editHistoryShotLabel,
   type EditHistoryTone,
   type UndoResultView,
@@ -103,7 +104,7 @@ export const EditHistoryPanel = ({
           setBatches((current) =>
             current.map((batch) => (batch.id === result.batch.id ? result.batch : batch)),
           )
-          if (result.restored.length > 0 || result.restoredClips.length > 0 || (result.restoredMusicTracks?.length ?? 0) > 0) {
+          if (undoRestoredAnything(result)) {
             onUndone?.()
           }
         })

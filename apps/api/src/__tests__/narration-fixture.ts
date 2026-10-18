@@ -34,6 +34,8 @@ export const setupNarration = (
     readonly costPerSpeak?: number
     readonly budgetUsd?: number | null
     readonly enqueueFails?: boolean
+    /** 取り消しの記録が作れない（書く前に記録することを確かめる）。 */
+    readonly recordFails?: boolean
     readonly transcribeTool?: AiToolId
     readonly transcribers?: Partial<Record<TranscribeToolId, Transcriber>>
     readonly costPerTranscribe?: number
@@ -48,6 +50,7 @@ export const setupNarration = (
   const logger = createLogger('silent')
   const other = aProject({ name: '別の作品' })
   const projects = createInMemoryProjectRepository([project, other])
+  const editBatches = createInMemoryEditBatchRepository()
   const deps = {
     projects,
     voices: createInMemoryVoiceProfileRepository(),
@@ -58,7 +61,10 @@ export const setupNarration = (
     textStyles: createInMemoryTextStyleRepository(),
     timelineClips: createInMemoryTimelineClipRepository(),
     characters: createInMemoryCharacterRepository(),
-    editBatches: createInMemoryEditBatchRepository(),
+    editBatches:
+      options.recordFails === true
+        ? { ...editBatches, create: () => Promise.reject(new Error('記録を作れません')) }
+        : editBatches,
     voiceAdapter: (tool: VoiceToolId) => (options.adapters ?? { stub: createStubVoice() })[tool] ?? null,
     voiceQueue: {
       enqueue: (id) => {

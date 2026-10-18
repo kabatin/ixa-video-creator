@@ -2,6 +2,7 @@ import {
   EditBatchId,
   EditBatchKind,
   MusicTrackId,
+  NarrationLineId,
   ShotId,
   TimelineClipId,
   type EditBatchId as EditBatchIdType,
@@ -55,6 +56,9 @@ export const WireUndoResult = z.object({
   /** 戻したテロップ。Shot の記録なら空。 */
   restoredClips: z.array(TimelineClipId),
   failedClips: z.array(z.object({ clipId: TimelineClipId, reason: z.string().min(1) })),
+  /** 戻したナレーションの行（まとめて並べる・テロップを消す）。前のサーバは返さないので無ければ空と読む。 */
+  restoredLines: z.array(NarrationLineId).optional(),
+  failedLines: z.array(z.object({ lineId: NarrationLineId, reason: z.string().min(1) })).optional(),
   /** 戻した楽曲（曲の終わりとフェードアウト）。前のサーバは返さないので無ければ空と読む。 */
   restoredMusicTracks: z.array(MusicTrackId).optional(),
   failedMusicTracks: z.array(z.object({ musicTrackId: MusicTrackId, reason: z.string().min(1) })).optional(),

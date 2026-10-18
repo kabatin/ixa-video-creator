@@ -122,7 +122,7 @@ describe('元に戻す', () => {
   const aSummary = '粗編集を 49 件の Shot へ適用しました'
   const READY_UNDO: UndoAvailability = {
     state: 'ready',
-    target: { summary: aSummary, shotCount: 49 },
+    target: { summary: aSummary, countLabel: '49 件の Shot' },
   }
 
   it('まだ読めていない間は無効。「ありません」と言い切らない', () => {
@@ -139,10 +139,10 @@ describe('元に戻す', () => {
     expect(entry.disabledReason).not.toBe(undoItem({ state: 'none' }).disabledReason)
   })
 
-  it('0 件のときだけ「戻せる一括操作がありません」', () => {
+  it('0 件のときだけ「戻せる操作がありません」', () => {
     const entry = undoItem({ state: 'none' })
     expect(entry.enabled).toBe(false)
-    expect(entry.disabledReason).toBe('戻せる一括操作がありません')
+    expect(entry.disabledReason).toBe('戻せる操作がありません')
   })
 
   it('3 つの「戻せない」がすべて違う文になる（畳んでいないことの確認）', () => {
@@ -162,7 +162,7 @@ describe('元に戻す', () => {
   })
 
   it('長い見出しは項目名で省く（メニューを横に伸ばさない）', () => {
-    const entry = undoItem({ state: 'ready', target: { summary: 'あ'.repeat(120), shotCount: 3 } })
+    const entry = undoItem({ state: 'ready', target: { summary: 'あ'.repeat(120), countLabel: '3 件の Shot' } })
     expect(entry.label.length).toBeLessThan(50)
     expect(entry.label).toContain('…')
   })
@@ -170,7 +170,7 @@ describe('元に戻す', () => {
   it('履歴を持たない見本（boolean）は対象を名乗らない', () => {
     expect(undoItem(true).label).toBe('元に戻す')
     expect(undoItem(true).enabled).toBe(true)
-    expect(undoItem(false).disabledReason).toBe('戻せる一括操作がありません')
+    expect(undoItem(false).disabledReason).toBe('戻せる操作がありません')
   })
 })
 
