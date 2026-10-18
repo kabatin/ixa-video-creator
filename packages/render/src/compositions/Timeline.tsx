@@ -254,7 +254,7 @@ export const AudioTrack: React.FC<{ track: AudioPlan; fps: number }> = ({ track,
  * 書き出し（renderMedia）では Remotion が premount を使わないので、絵は変わらない。
  * `premountFor` は `layout="none"` と組み合わせられないため、Shot とクリップは既定の layout にする。
  */
-const PREMOUNT_SEC = 1
+export const PREMOUNT_SEC = 1
 
 /**
  * **待っている Shot は見える状態のまま、いまの Shot の裏に置く。**

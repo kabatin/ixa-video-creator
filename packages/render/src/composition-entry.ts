@@ -23,7 +23,10 @@ export { ThumbnailComposition } from './compositions/Thumbnail.js'
 export { thumbnailMetadata } from './compositions/thumbnail-layout.js'
 export type { ThumbnailBackgroundSource, ThumbnailCompositionProps } from './compositions/thumbnail-props.js'
 
-export { TimelineComposition, ClipBody, ClipMedia } from './compositions/Timeline.js'
+export { TimelineComposition, ClipBody, ClipMedia, PREMOUNT_SEC } from './compositions/Timeline.js'
+
+// プレビューの Player が用意する <audio> の数（同時に鳴る音が多いと止まるため）。
+export { DEFAULT_SHARED_AUDIO_TAGS, peakMountedAudio, sharedAudioTagsFor } from './audio-tags.js'
 export type { TimelineCompositionProps } from './compositions/Timeline.js'
 
 export { buildTimelinePlan, TRANSITION_SUPPORT } from './plan.js'

@@ -1,9 +1,16 @@
 'use client'
 
 import type { TimelineDocument } from '@ixa/domain'
-import { TimelineComposition, type TimelineCompositionProps } from '@ixa/render/composition'
+import {
+  buildTimelinePlan,
+  peakMountedAudio,
+  PREMOUNT_SEC,
+  sharedAudioTagsFor,
+  TimelineComposition,
+  type TimelineCompositionProps,
+} from '@ixa/render/composition'
 import { Player, type PlayerRef } from '@remotion/player'
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { usePlaybackVolume } from '@/lib/use-playback-volume'
 import {
   frameToSec,
@@ -91,7 +98,42 @@ const isMediaElement = (target: EventTarget | null): boolean =>
   target instanceof HTMLImageElement ||
   target instanceof HTMLAudioElement
 
-export const ProgramMonitorPlayer = ({
+/**
+ * プレビューの Player が前もって用意する `<audio>` の数を、タイムラインの音の重なりから決める。
+ *
+ * Remotion の既定は 5 本で、同時に組み立てる音がそれを超えると Player が例外で止まる
+ * （宣伝動画で、曲＋足音＋題名の衝撃音が重なる 24 秒付近で止まった。2026-10-19）。
+ * この数は Player を作った後には変えられない（変えると Remotion が例外を投げる）ので、
+ * 数が変わったら内側を作り直す。作り直すときは、最後に報告した位置から始める。
+ */
+export const ProgramMonitorPlayer = (props: ProgramMonitorPlayerProps) => {
+  const { document, initialSec, onFrame } = props
+  const audioTags = useMemo(() => {
+    const plan = buildTimelinePlan(document, document.resolution)
+    return sharedAudioTagsFor(peakMountedAudio(plan, Math.round(PREMOUNT_SEC * document.fps)))
+  }, [document])
+
+  const lastSecRef = useRef(initialSec)
+  const handleFrame = useCallback(
+    (sec: number) => {
+      lastSecRef.current = sec
+      onFrame(sec)
+    },
+    [onFrame],
+  )
+
+  return (
+    <ProgramMonitorPlayerInner
+      key={audioTags}
+      {...props}
+      initialSec={lastSecRef.current}
+      onFrame={handleFrame}
+      audioTags={audioTags}
+    />
+  )
+}
+
+const ProgramMonitorPlayerInner = ({
   document,
   initialSec,
   seek,
@@ -104,7 +146,8 @@ export const ProgramMonitorPlayer = ({
   onPlayingChange,
   onFatalError,
   onMediaError,
-}: ProgramMonitorPlayerProps) => {
+  audioTags,
+}: ProgramMonitorPlayerProps & { readonly audioTags: number }) => {
   const playerRef = useRef<PlayerRef | null>(null)
 
   /**
@@ -303,6 +346,7 @@ export const ProgramMonitorPlayer = ({
       // 個人利用のため会社規模によるライセンス契約は不要（制作者に確認、2026-09-18）。
       // 商用として販売する段になったら remotion.dev/license を見直すこと。
       acknowledgeRemotionLicense
+      numberOfSharedAudioTags={audioTags}
       clickToPlay={false}
       // 再生・停止の割り当ては画面側で 1 か所にまとめる（cut-editor-keys と同じ方針）。
       // Player が独自に Space を奪うと、割り当てが 2 箇所に分かれる。

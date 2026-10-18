@@ -23,6 +23,11 @@ vi.mock('@remotion/player', () => ({
 vi.mock('@ixa/render/composition', () => ({
   TimelineComposition: () => null,
   totalFrames: (durationSec: number, fps: number) => Math.max(1, Math.round(durationSec * fps)),
+  // 用意する <audio> の数（音の重なりから決める）。ここでは中身を見ないので既定の 5 にする。
+  buildTimelinePlan: () => ({}),
+  peakMountedAudio: () => 0,
+  sharedAudioTagsFor: () => 5,
+  PREMOUNT_SEC: 1,
 }))
 
 const document: TimelineDocument = {

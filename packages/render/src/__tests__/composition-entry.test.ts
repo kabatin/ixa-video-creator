@@ -104,6 +104,8 @@ describe('composition-entry の輸出', () => {
     expect(Object.keys(compositionEntry).sort()).toEqual([
       'ClipBody',
       'ClipMedia',
+      'DEFAULT_SHARED_AUDIO_TAGS',
+      'PREMOUNT_SEC',
       'PRESET_SETTINGS',
       'THUMBNAIL_COMPOSITION_ID',
       'TIMELINE_COMPOSITION_ID',
@@ -113,7 +115,9 @@ describe('composition-entry の輸出', () => {
       'buildTimelinePlan',
       'frameRange',
       'letterboxFit',
+      'peakMountedAudio',
       'presetResolution',
+      'sharedAudioTagsFor',
       'sourceOffsetFrames',
       'thumbnailMetadata',
       'totalFrames',
