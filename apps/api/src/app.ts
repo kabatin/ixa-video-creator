@@ -351,6 +351,7 @@ export const createApp = (deps: AppDeps) => {
       mediaAssets,
       shotReferences: deps.shotReferences,
       imageJobs: deps.imageJobs,
+      transaction: deps.editTransaction,
     }),
   )
   // 絵コンテの画像を作る（ADR-0029）。作るのは worker。
@@ -459,6 +460,7 @@ export const createApp = (deps: AppDeps) => {
       shotCharacters: deps.shotCharacters,
       characters: deps.characters,
       looks: deps.looks,
+      transaction: deps.editTransaction,
     }),
   )
   app.route(
@@ -651,6 +653,8 @@ export const createApp = (deps: AppDeps) => {
       timelineClips: deps.timelineClips,
       musicTracks: deps.musicTracks,
       transitions: deps.transitions,
+      shotCharacters: deps.shotCharacters,
+      shotReferences: deps.shotReferences,
       // ナレーションをまとめて並べた記録を戻す（ADR-0038）。戻したらテロップも作り直す。
       ...(narration === undefined ? {} : { narration }),
     }),

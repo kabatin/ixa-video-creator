@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type {
-  CharacterLookRepository, CharacterRepository, MediaAssetRepository, ProjectRepository,
+  CharacterLookRepository, CharacterRepository, EditTransaction, MediaAssetRepository, ProjectRepository,
   ShotCharacterRepository, ShotRepository,
 } from '@ixa/db'
 import {
@@ -14,6 +14,7 @@ import {
   UpdateCharacterPatch as UpdateCharacterPatchSchema,
   type Character,
   type Shot,
+  type ShotCharacter,
   type ShotId,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
@@ -23,6 +24,7 @@ import {
 import { identityImageRoutes } from './character-identity-images.js'
 import { lookRoutes } from './character-looks.js'
 import { FOREIGN_CHARACTER_MESSAGE } from './library-ownership.js'
+import { recordShotAttachments } from './shot-edit-recording.js'
 
 /**
  * Character の CRUD（DOMAIN.md §5 / ARCHITECTURE.md §8）と、
@@ -213,7 +215,13 @@ export type ShotCharacterRoutesDeps = {
   shotCharacters: ShotCharacterRepository
   characters: CharacterRepository
   looks: CharacterLookRepository
+  /** 登場人物を変える記録と書き込みを、同じトランザクションで行う（取り消し。2026-10-19）。**省けない。** */
+  transaction: EditTransaction
 }
+
+/** 記録に入れる形（Shot の ID を外す）。 */
+const castOf = (cast: readonly ShotCharacter[]) =>
+  cast.map(({ characterId, lookId, prominence, order }) => ({ characterId, lookId, prominence, order }))
 
 const DUPLICATE_CHARACTER_MESSAGE = '同じ Character が複数回指定されています'
 const MISSING_CHARACTER_MESSAGE = '指定された Character が存在しません'
@@ -280,11 +288,26 @@ export const shotCharacterRoutes = (deps: ShotCharacterRoutesDeps) => {
       const fields = await invalidEntries(shot, entries)
       if (fields !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, fields), 422)
 
-      return c.json(okList(await deps.shotCharacters.replaceAll(shotId, entries)), 200)
+      const before = await deps.shotCharacters.findByShot(shotId)
+      const replaced = await deps.transaction(async (tx) => {
+        await recordShotAttachments(tx.editBatches, shot, { kind: 'cast', before: castOf(before), after: entries })
+        return tx.shotCharacters.replaceAll(shotId, entries)
+      })
+      return c.json(okList(replaced), 200)
     })
     .openapi(removeShotCharacterRoute, async (c) => {
       const { shotId, characterId } = c.req.valid('param')
-      await deps.shotCharacters.remove(shotId, characterId)
+      const shot = await deps.shots.findById(shotId)
+      if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      const before = castOf(await deps.shotCharacters.findByShot(shotId))
+      await deps.transaction(async (tx) => {
+        await recordShotAttachments(tx.editBatches, shot, {
+          kind: 'cast',
+          before,
+          after: before.filter((entry) => entry.characterId !== characterId),
+        })
+        await tx.shotCharacters.remove(shotId, characterId)
+      })
       return c.body(null, 204)
     })
 }

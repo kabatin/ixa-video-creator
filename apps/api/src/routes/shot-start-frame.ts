@@ -1,5 +1,6 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type {
+  EditTransaction,
   ImageJobRepository,
   MediaAssetRepository,
   ProjectRepository,
@@ -15,6 +16,7 @@ import {
 import { clearManualStartFrame, manualStartFrameOf, replaceManualStartFrame } from '@ixa/generation'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
+import { recordShotAttachments } from './shot-edit-recording.js'
 
 /**
  * Shot の最初のフレーム（ADR-0025）。画像を 1 枚付け、ローカルの画像→動画などで Take にする。
@@ -31,6 +33,8 @@ export type ShotStartFrameRoutesDeps = {
   readonly shotReferences: Pick<ShotReferenceRepository, 'findByShot' | 'create' | 'delete'>
   /** 絵コンテの画像を作るジョブ（ADR-0029）。直近の 1 件の状態と失敗の理由を返す。 */
   readonly imageJobs: Pick<ImageJobRepository, 'findLatestByShot'>
+  /** 開始フレームを変える記録と書き込みを、同じトランザクションで行う（取り消し。2026-10-19）。**省けない。** */
+  readonly transaction: EditTransaction
 }
 
 const NOT_IMAGE_MESSAGE = '最初のフレームには画像を指定してください'
@@ -123,12 +127,20 @@ export const shotStartFrameRoutes = (deps: ShotStartFrameRoutesDeps) =>
         return c.json(fail(VALIDATION_ERROR_MESSAGE, { mediaAssetId: [reason] }), 422)
       }
 
-      await replaceManualStartFrame(deps.shotReferences, shot.id, mediaAssetId)
+      const before = await manualStartFrameOf(deps.shotReferences, shot.id)
+      await deps.transaction(async (tx) => {
+        await recordShotAttachments(tx.editBatches, shot, { kind: 'startFrame', before, after: mediaAssetId })
+        await replaceManualStartFrame(tx.shotReferences, shot.id, mediaAssetId)
+      })
       return c.json(ok({ mediaAssetId }), 200)
     })
     .openapi(deleteRoute, async (c) => {
       const shot = await deps.shots.findById(c.req.valid('param').id)
       if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
-      await clearManualStartFrame(deps.shotReferences, shot.id)
+      const before = await manualStartFrameOf(deps.shotReferences, shot.id)
+      await deps.transaction(async (tx) => {
+        await recordShotAttachments(tx.editBatches, shot, { kind: 'startFrame', before, after: null })
+        await clearManualStartFrame(tx.shotReferences, shot.id)
+      })
       return c.body(null, 204)
     })

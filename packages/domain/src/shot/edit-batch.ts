@@ -1,12 +1,12 @@
 import { z } from 'zod'
-import { EditBatchId, MusicTrackId, NarrationLineId, ProjectId, ShotId, TakeId, TimelineClipId } from '../common/ids.js'
+import { EditBatchId, MediaAssetId, MusicTrackId, NarrationLineId, ProjectId, ShotId, TakeId, TimelineClipId } from '../common/ids.js'
 import { MusicTrack } from '../music/music.js'
 import { EditBatchClipEdit } from './edit-batch-clip-edit.js'
 import { EditBatchTransitionEdit } from './edit-batch-transition-edit.js'
 
 export * from './edit-batch-clip-edit.js'
 export * from './edit-batch-transition-edit.js'
-import { ShotStatus, UpdateShotPatch } from './shot.js'
+import { ShotCharacter, ShotStatus, UpdateShotPatch } from './shot.js'
 
 /**
  * 一括で変えた記録と、その取り消し（横断 ROADMAP: Undo と履歴）。
@@ -96,6 +96,13 @@ export const EditBatchEntry = z.object({
    * 戻せる範囲を型で正直に表して両方戻す。
    */
   status: ShotStatus.optional(),
+  /**
+   * 登場人物を変えたときだけ持つ（2026-10-19）。**丸ごと**の控え（登場人物は「誰が・どの衣装で・何番目に」の組で 1 つの欄）。
+   * **欄が無いのは「触っていない」、空配列は「誰もいなかった」。**
+   */
+  cast: z.array(ShotCharacter.omit({ shotId: true })).optional(),
+  /** 手で付けた開始フレームを変えたときだけ持つ（2026-10-19）。**`null` は「付けていなかった」、欄が無いのは「触っていない」。** */
+  startFrame: MediaAssetId.nullable().optional(),
 })
 export type EditBatchEntry = z.infer<typeof EditBatchEntry>
 
@@ -219,4 +226,6 @@ export const undoTouchesStatus = (entry: EditBatchEntry): boolean => entry.statu
 export const hasChanges = (entry: EditBatchEntry): boolean =>
   Object.keys(entry.patch).length > 0 ||
   undoTouchesSelectedTake(entry) ||
-  undoTouchesStatus(entry)
+  undoTouchesStatus(entry) ||
+  entry.cast !== undefined ||
+  entry.startFrame !== undefined

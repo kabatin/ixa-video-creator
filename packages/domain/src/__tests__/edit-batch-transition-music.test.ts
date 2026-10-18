@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { EditBatchId, MusicTrackId, ProjectId, ShotId, TransitionId, newId } from '../common/ids.js'
-import { EditBatch, EditBatchMusicEntry, EditBatchShotEdit, EditBatchTransitionEdit, canUndo } from '../shot/edit-batch.js'
+import { CharacterId, CharacterLookId, EditBatchId, MusicTrackId, ProjectId, ShotId, TransitionId, newId } from '../common/ids.js'
+import {
+  EditBatch,
+  EditBatchEntry,
+  EditBatchMusicEntry,
+  EditBatchShotEdit,
+  EditBatchTransitionEdit,
+  canUndo,
+  hasChanges,
+} from '../shot/edit-batch.js'
 
 /**
  * トランジションの置く・消す・差し替えと、楽曲の欄の直し・マスターの切り替えの記録（2026-10-19 の見直し）。
@@ -82,5 +90,22 @@ describe('EditBatchShotEdit（Shot の作成・削除）', () => {
   it('これまでの記録は空として読み、Shot の作成・削除だけでも取り消せる', () => {
     expect(EditBatch.parse({ ...base, kind: 'rough_cut' }).shotEdits).toEqual([])
     expect(canUndo(EditBatch.parse({ ...base, kind: 'shot_edit', shotEdits: [{ op: 'delete', shotId: newId(ShotId) }] }))).toBe(true)
+  })
+})
+
+describe('Shot の登場人物・開始フレームの記録（EditBatchEntry）', () => {
+  const shotId = newId(ShotId)
+  const cast = [{ characterId: newId(CharacterId), lookId: newId(CharacterLookId), prominence: 'primary', order: 0 }]
+
+  it('登場人物は丸ごと、開始フレームは素材（無ければ null）を控えられる。欄が無いのは触っていない', () => {
+    expect(EditBatchEntry.parse({ shotId, patch: {}, cast })).toEqual({ shotId, patch: {}, cast })
+    expect(EditBatchEntry.parse({ shotId, patch: {}, startFrame: null })).toEqual({ shotId, patch: {}, startFrame: null })
+    expect(hasChanges(EditBatchEntry.parse({ shotId, patch: {}, cast: [] }))).toBe(true)
+    expect(hasChanges(EditBatchEntry.parse({ shotId, patch: {}, startFrame: null }))).toBe(true)
+    expect(hasChanges(EditBatchEntry.parse({ shotId, patch: {} }))).toBe(false)
+  })
+
+  it('壊れた登場人物は受け付けない', () => {
+    expect(EditBatchEntry.safeParse({ shotId, patch: {}, cast: [{ ...cast[0], prominence: 'star' }] }).success).toBe(false)
   })
 })

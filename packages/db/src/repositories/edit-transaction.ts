@@ -3,6 +3,7 @@ import { createEditBatchRepository, type EditBatchRepository } from './edit-batc
 import { createMusicTrackRepository, type MusicTrackRepository } from './music-track-repository.js'
 import { createNarrationLineRepository, type NarrationLineRepository } from './narration-line-repository.js'
 import { createShotCharacterRepository, type ShotCharacterRepository } from './shot-character-repository.js'
+import { createShotReferenceRepository, type ShotReferenceRepository } from './shot-reference-repository.js'
 import { createShotRepository, type ShotRepository } from './shot-repository.js'
 import { createTimelineClipRepository, type TimelineClipRepository } from './timeline-clip-repository.js'
 import { createTransitionRepository, type TransitionRepository } from './transition-repository.js'
@@ -20,6 +21,7 @@ export type EditRepositories = {
   readonly transitions: TransitionRepository
   readonly shots: ShotRepository
   readonly shotCharacters: ShotCharacterRepository
+  readonly shotReferences: ShotReferenceRepository
   readonly musicTracks: MusicTrackRepository
   readonly narrationLines: NarrationLineRepository
 }
@@ -36,6 +38,7 @@ export const createEditTransaction =
         transitions: createTransitionRepository(tx),
         shots: createShotRepository(tx),
         shotCharacters: createShotCharacterRepository(tx),
+        shotReferences: createShotReferenceRepository(tx),
         musicTracks: createMusicTrackRepository(tx),
         narrationLines: createNarrationLineRepository(tx),
       }),

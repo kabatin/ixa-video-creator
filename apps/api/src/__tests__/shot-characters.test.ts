@@ -22,6 +22,8 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
 import { shotCharacterRoutes, type ShotCharacterRoutesDeps } from '../routes/characters.js'
+import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 
 /**
  * Shot と Character の紐づけを扱う HTTP ルート。実 DB には接続しない。
@@ -85,6 +87,7 @@ describe('PUT /shots/{shotId}/characters', () => {
       shotCharacters,
       characters,
       looks,
+      transaction: createInMemoryEditTransaction({ editBatches: createInMemoryEditBatchRepository(), shotCharacters }),
     })
   })
 

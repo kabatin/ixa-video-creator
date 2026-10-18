@@ -25,6 +25,7 @@ export const createInMemoryEditTransaction = (given: Given): EditTransaction => 
     transitions: given.transitions ?? unused('transitions'),
     shots: given.shots ?? unused('shots'),
     shotCharacters: given.shotCharacters ?? unused('shotCharacters'),
+    shotReferences: given.shotReferences ?? unused('shotReferences'),
     musicTracks: given.musicTracks ?? unused('musicTracks'),
     narrationLines: given.narrationLines ?? unused('narrationLines'),
   }

@@ -29,10 +29,17 @@ import type {
   MusicTrackRepository,
   NarrationLineRepository,
   ProjectRepository,
+  ShotCharacterRepository,
   ShotRepository,
   TimelineClipRepository,
 } from '@ixa/db'
-import { syncNarrationTelops, type NarrationTelopSyncDeps } from '@ixa/generation'
+import {
+  clearManualStartFrame,
+  replaceManualStartFrame,
+  syncNarrationTelops,
+  type NarrationTelopSyncDeps,
+  type StartFrameReferences,
+} from '@ixa/generation'
 import { roughCutLockedReason } from '@ixa/timeline'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, okList, successResponse, listResponse } from '../response.js'
@@ -211,6 +218,10 @@ export type EditBatchRoutesDeps = {
    */
   /** 楽曲の曲の終わりとフェードアウトを戻す（`musicEntries`）。楽曲を繋いでいない環境では省く（その記録は戻せないと返す）。 */
   musicTracks?: Pick<MusicTrackRepository, 'update' | 'setMaster'>
+  /** Shot の登場人物を戻す（記録の `cast`）。繋いでいない環境では省く（その記録は戻せないと返す）。 */
+  shotCharacters?: Pick<ShotCharacterRepository, 'replaceAll'>
+  /** Shot の開始フレームを戻す（記録の `startFrame`）。繋いでいない環境では省く。 */
+  shotReferences?: StartFrameReferences
   narration?: NarrationTelopSyncDeps & { readonly lines: Pick<NarrationLineRepository, 'findById' | 'update'> }
 } & TransitionUndoDeps
 
@@ -281,9 +292,28 @@ const restoreClipEntry = async (
  */
 const respectsLock = (batch: EditBatch): boolean => batch.kind === 'rough_cut'
 
+export const ATTACHMENTS_UNAVAILABLE_REASON = '登場人物・開始フレームを戻す口がありません'
+
+/** 登場人物・開始フレーム（欄があるときだけ）を戻す。登場人物は丸ごと、開始フレームは付いていた素材に戻す。 */
+const restoreAttachments = async (
+  deps: Pick<EditBatchRoutesDeps, 'shotCharacters' | 'shotReferences'>,
+  entry: EditBatchEntry,
+): Promise<string | null> => {
+  if (entry.cast !== undefined) {
+    if (deps.shotCharacters === undefined) return ATTACHMENTS_UNAVAILABLE_REASON
+    await deps.shotCharacters.replaceAll(entry.shotId, entry.cast)
+  }
+  if (entry.startFrame !== undefined) {
+    if (deps.shotReferences === undefined) return ATTACHMENTS_UNAVAILABLE_REASON
+    if (entry.startFrame === null) await clearManualStartFrame(deps.shotReferences, entry.shotId)
+    else await replaceManualStartFrame(deps.shotReferences, entry.shotId, entry.startFrame)
+  }
+  return null
+}
+
 /** 記録 1 件ぶんを Shot へ当て直す。当てなかった / 当てられなかったときは理由を返す。 */
 const restoreEntry = async (
-  deps: Pick<EditBatchRoutesDeps, 'shots'>,
+  deps: Pick<EditBatchRoutesDeps, 'shots' | 'shotCharacters' | 'shotReferences'>,
   projectId: ProjectId,
   batch: EditBatch,
   entry: EditBatchEntry,
@@ -315,7 +345,7 @@ const restoreEntry = async (
     if (undoTouchesStatus(entry) && status !== undefined) {
       await deps.shots.updateStatus(entry.shotId, status)
     }
-    return null
+    return await restoreAttachments(deps, entry)
   } catch (cause) {
     // 握り潰さない（規約 5）。1 件の失敗で残りを止めもしない。
     return `戻せませんでした: ${cause instanceof Error ? cause.message : String(cause)}`

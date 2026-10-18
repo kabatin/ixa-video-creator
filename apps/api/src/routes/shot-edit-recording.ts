@@ -1,4 +1,12 @@
-import { hasChanges, type EditBatch, type EditBatchEntry, type EditBatchShotEdit, type Shot, type UpdateShotPatch } from '@ixa/domain'
+import {
+  hasChanges,
+  type EditBatch,
+  type EditBatchEntry,
+  type EditBatchShotEdit,
+  type MediaAssetId,
+  type Shot,
+  type UpdateShotPatch,
+} from '@ixa/domain'
 import { editBatchEntry, recordEditBatch, shotBeforePatch, type EditBatchRecorder } from './edit-batch-recording.js'
 
 /**
@@ -57,5 +65,36 @@ export const recordShotEdits = async (
     summary: draft.summary,
     entries: [...entries],
     shotEdits: [...draft.shotEdits],
+  })
+}
+
+/** 登場人物の比べ方（並びと値だけ。Shot の ID は見ない）。 */
+const castKey = (cast: readonly NonNullable<EditBatchEntry['cast']>[number][]): string =>
+  JSON.stringify(cast.map(({ characterId, lookId, prominence, order }) => [characterId, lookId, prominence, order]))
+
+/**
+ * 登場人物・開始フレームを変える前の記録（2026-10-19）。**変わらないなら作らない**（`null`）。
+ * 登場人物は丸ごと、開始フレームは付いていた素材（無ければ `null`）を控える。
+ */
+export const recordShotAttachments = (
+  recorder: EditBatchRecorder,
+  shot: Shot,
+  change:
+    | { readonly kind: 'cast'; readonly before: NonNullable<EditBatchEntry['cast']>; readonly after: NonNullable<EditBatchEntry['cast']> }
+    | { readonly kind: 'startFrame'; readonly before: MediaAssetId | null; readonly after: MediaAssetId | null },
+): Promise<EditBatch | null> => {
+  const unchanged = change.kind === 'cast' ? castKey(change.before) === castKey(change.after) : change.before === change.after
+  if (unchanged) return Promise.resolve(null)
+  return recordEditBatch(recorder, {
+    projectId: shot.projectId,
+    kind: 'shot_edit',
+    summarize: () => (change.kind === 'cast' ? `${shot.code} の登場人物を変える` : `${shot.code} の開始フレームを変える`),
+    entries: [
+      {
+        shotId: shot.id,
+        patch: {},
+        ...(change.kind === 'cast' ? { cast: [...change.before] } : { startFrame: change.before }),
+      },
+    ],
   })
 }

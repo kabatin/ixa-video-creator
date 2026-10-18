@@ -13,6 +13,8 @@ import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
 import { shotStartFrameRoutes } from '../routes/shot-start-frame.js'
 import { aProject } from './fixtures.js'
+import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { aMediaAsset } from './in-memory-timeline-repositories.js'
 
@@ -32,9 +34,13 @@ const build = (project: Project, shot: Shot, assets: readonly MediaAsset[]) => {
     shotReferences: createInMemoryShotReferenceRepository(),
     imageJobs: createInMemoryImageJobRepository(),
   }
+  const editBatches = createInMemoryEditBatchRepository()
   const app = new OpenAPIHono({ defaultHook: validationHook })
   registerErrorHandlers(app, createLogger('silent'))
-  app.route('/', shotStartFrameRoutes(deps))
+  app.route(
+    '/',
+    shotStartFrameRoutes({ ...deps, transaction: createInMemoryEditTransaction({ editBatches, shotReferences: deps.shotReferences }) }),
+  )
   const call = (method: string, body?: unknown) =>
     app.request(`/shots/${shot.id}/start-frame`, {
       method,
