@@ -145,8 +145,11 @@ const SELF_HANDLING_TAGS: ReadonlySet<string> = new Set(['BUTTON', 'TEXTAREA'])
 export const resolveInlineFormKey = (event: InlineFormKeyEvent): InlineFormKeyAction => {
   if (event.key === 'Escape') return 'dismiss'
   if (event.key !== 'Enter') return 'contain'
+  const tagName = (event.target?.tagName ?? '').toUpperCase()
+  // 複数行の欄（テロップの文字）は Enter で改行、⌘Enter / Ctrl+Enter で送る（インスペクターの欄と同じ作法）。
+  if (tagName === 'TEXTAREA' && !event.shiftKey && (event.ctrlKey || event.metaKey)) return 'submit'
   if (event.shiftKey || event.ctrlKey || event.metaKey) return 'contain'
-  return SELF_HANDLING_TAGS.has((event.target?.tagName ?? '').toUpperCase()) ? 'contain' : 'submit'
+  return SELF_HANDLING_TAGS.has(tagName) ? 'contain' : 'submit'
 }
 
 const probe = (key: string): InlineFormKeyEvent => ({

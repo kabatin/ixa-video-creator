@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom'
 import { FIELD_HINT_CLASS } from '@/components/form/field-styles'
 import { SelectField } from '@/components/form/select-field'
 import { TextField } from '@/components/form/text-field'
+import { TextareaField } from '@/components/form/textarea-field'
 import { Button } from '@/components/ui/button'
 import { transitionTypeLabel } from '@/lib/timeline-display'
 import { TEXT_TEMPLATE_LABELS } from '@/lib/text-style-form'
@@ -92,7 +93,7 @@ const UNREADABLE_TEXT =
   '保存されている文字を読み取れませんでした。空欄は元の文字ではありません。' +
   'このまま送ると、保存されている文字は上書きされます。'
 
-const TEXT_LENGTH_HINT = `${String(MAX_TEXT_CLIP_LENGTH)} 文字まで`
+const TEXT_LENGTH_HINT = `${String(MAX_TEXT_CLIP_LENGTH)} 文字まで。Enter で改行、⌘Enter で確定`
 
 /** 読めなかったことの断り。欄の直下に出す。 */
 const Unreadable = ({ children }: { readonly children: string }) => (
@@ -285,9 +286,11 @@ export const TimelineInlineForm = ({
               ) : null}
             </div>
             <div>
-              <TextField
+              {/* 改行できる欄（制作者 2026-10-19「テロップに改行が入れられない」）。 */}
+              <TextareaField
                 id={`${idPrefix}-text`}
                 label="文字"
+                rows={2}
                 value={values.text ?? ''}
                 disabled={busy}
                 error={fieldError('text')}

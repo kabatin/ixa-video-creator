@@ -52,6 +52,8 @@ export type TimelineClipLaneProps = {
    * 渡さなければ、これまでどおりブラウザのメニュー。
    */
   readonly onClipContextMenu?: (clip: TimelineClip, at: MenuPoint, origin: HTMLElement) => boolean
+  /** 空の段に添える一言（押すと何が起きるか）。クリップがあれば出さない。 */
+  readonly emptyHint?: string
 }
 
 type DragState = {
@@ -79,6 +81,7 @@ export const TimelineClipLane = ({
   onDragEnd,
   onInsertAt,
   onClipContextMenu,
+  emptyHint,
 }: TimelineClipLaneProps) => {
   const laneRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragState | null>(null)
@@ -218,6 +221,9 @@ export const TimelineClipLane = ({
       <span className="pointer-events-none absolute left-1 top-1 text-xs text-muted">
         {`layer ${String(layer)}`}
       </span>
+      {emptyHint !== undefined && clips.length === 0 && (
+        <span className="pointer-events-none absolute left-16 top-4 text-xs text-muted">{emptyHint}</span>
+      )}
 
       {clips.map((clip) => {
         const span = previews.get(clip.id) ?? clip

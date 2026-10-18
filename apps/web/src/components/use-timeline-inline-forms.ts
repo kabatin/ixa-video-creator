@@ -109,6 +109,7 @@ export const useTimelineInlineForms = ({
 
   const openTextInsert = (
     track: TimelineTrack,
+    layer: number,
     atSec: number,
     anchor: InlineFormAnchor,
     opener: HTMLElement | null,
@@ -119,7 +120,7 @@ export const useTimelineInlineForms = ({
       probeTextInsertion({
         clips: clips ?? [],
         track,
-        layer: TEXT_INSERT_LAYER,
+        layer,
         atSec: at,
         programEndSec: durationSec,
       })
@@ -134,7 +135,7 @@ export const useTimelineInlineForms = ({
       return
     }
     setActionError(null)
-    setOpen({ kind: 'text_insert', track, layer: TEXT_INSERT_LAYER, anchor })
+    setOpen({ kind: 'text_insert', track, layer, anchor })
     setDraft(textInsertDraft(probe))
     setFormIssues([])
   }
@@ -198,8 +199,10 @@ export const useTimelineInlineForms = ({
 
   const submitTextClip = (next: InlineFormDraft, existing: TimelineClip | null): void => {
     if (next.kind !== 'text') return
-    const track: TimelineTrack = existing?.track ?? 'TEXT'
-    const layer = existing?.layer ?? TEXT_INSERT_LAYER
+    // 新しく置くときは押した段に置く（重ねて置くときは空いた上の段）。
+    const inserting = open?.kind === 'text_insert' ? open : null
+    const track: TimelineTrack = existing?.track ?? inserting?.track ?? 'TEXT'
+    const layer = existing?.layer ?? inserting?.layer ?? TEXT_INSERT_LAYER
     const result = validateTextClipInsert({
       // 自分自身は重なりの相手にしない。直しているのだから当然ぶつかる。
       clips: (clips ?? []).filter((clip) => clip.id !== existing?.id),

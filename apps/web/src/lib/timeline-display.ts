@@ -217,6 +217,18 @@ export const lanesForTrack = (
 ): readonly TimelineLane<TimelineClip>[] =>
   stackByLayer(clips.filter((clip) => clip.track === track))
 
+/**
+ * テロップの段に、いちばん上の段の次の**空いた段を 1 つ足す**（制作者 2026-10-19「テロップを重ねて複数置けない」）。
+ * 置いたテロップの上は押すと開くので、同じ時刻に 2 つ目を置く場所がほかに無い。空いた段ならどの時刻も押せる。
+ * 段の中の上下は layer で決まり、書き出しでも layer の大きいほうが上に描かれる。
+ */
+export const textLanesWithSpare = (
+  lanes: readonly TimelineLane<TimelineClip>[],
+): readonly TimelineLane<TimelineClip>[] => {
+  const top = lanes.reduce((max, lane) => Math.max(max, lane.layer), -1)
+  return [...lanes, { layer: top + 1, clips: [] }]
+}
+
 // --- 尺と時刻の整形 ---
 
 /**

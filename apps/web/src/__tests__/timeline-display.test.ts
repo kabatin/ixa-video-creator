@@ -35,6 +35,7 @@ import {
   sortClipsForDisplay,
   sortTimelineIssues,
   stackByLayer,
+  textLanesWithSpare,
   summarizeTimelineIssues,
   timeSpanToRect,
   timelineRowLabel,
@@ -221,6 +222,20 @@ describe('トラックとレーン', () => {
 
     expect(lanes.map((lane) => lane.layer)).toEqual([0, 2])
     expect(lanes[0]?.clips.map((clip) => clip.id)).toEqual([early.id, late.id])
+  })
+
+  /** 制作者 2026-10-19「テロップを重ねて複数置けない」。どの時刻にも重ねて置けるよう、空いた段を 1 つ足す。 */
+  it('テロップの段には、いちばん上の段の次に空いた段を 1 つ足す', () => {
+    const lanes = stackByLayer([makeClip('C17', 'TEXT', 0, 1, 0), makeClip('C18', 'TEXT', 0, 1, 2)])
+
+    const withSpare = textLanesWithSpare(lanes)
+
+    expect(withSpare.map((lane) => lane.layer)).toEqual([0, 2, 3])
+    expect(withSpare[2]?.clips).toEqual([])
+  })
+
+  it('テロップが無ければ空いた段は 1 つだけ（layer 0）', () => {
+    expect(textLanesWithSpare([]).map((lane) => lane.layer)).toEqual([0])
   })
 
   it('入力の配列を変更しない', () => {

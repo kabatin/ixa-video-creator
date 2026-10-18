@@ -82,7 +82,8 @@ beforeEach(() => {
 
 const open = async () => {
   const { value } = renderInWorkbench(<TextClipInspector id={CLIP_ID} />)
-  await screen.findByText('一行目')
+  // 文字の欄（複数行）も同じ字を持つので、欄の外の見出しで待つ。
+  await screen.findByText('一行目', { ignore: 'textarea' })
   return value
 }
 const sentParams = () => (fake.updateClip.mock.calls.at(-1)?.[1] as { content: { params: unknown } }).content.params
@@ -243,10 +244,25 @@ describe('TextClipInspector', () => {
     const text = screen.getByLabelText('文字')
 
     await userEvent.clear(text)
-    await userEvent.type(text, '直した{Enter}')
+    await userEvent.type(text, '直した{Meta>}{Enter}{/Meta}')
 
     await waitFor(() => {
       expect(sentParams()).toEqual({ text: '直した', style: { size: 0.05 }, styleId: null })
+    })
+  })
+
+  /** 制作者 2026-10-19「テロップに改行が入れられない」。Enter は改行、⌘Enter か欄を離れると確定。 */
+  it('文字の欄は Enter で改行でき、2 行のまま送る', async () => {
+    await open()
+    const text = screen.getByLabelText('文字')
+
+    await userEvent.clear(text)
+    await userEvent.type(text, '一行目{Enter}二行目')
+    expect(fake.updateClip).not.toHaveBeenCalled()
+    await userEvent.type(text, '{Meta>}{Enter}{/Meta}')
+
+    await waitFor(() => {
+      expect(sentParams()).toMatchObject({ text: '一行目\n二行目' })
     })
   })
 })
@@ -295,7 +311,7 @@ describe('TextClipInspector の時間と削除', () => {
 
     it('開始は近い拍へ寄せて送り、寄せたと言う', async () => {
       renderInWorkbench(<TextClipInspector id={CLIP_ID} />, withBeats)
-      await screen.findByText('一行目')
+      await screen.findByText('一行目', { ignore: 'textarea' })
 
       await retype('開始', '0:02.58')
 
@@ -307,7 +323,7 @@ describe('TextClipInspector の時間と削除', () => {
 
     it('尺は開始を動かさず、終わりを近い拍へ寄せる', async () => {
       renderInWorkbench(<TextClipInspector id={CLIP_ID} />, withBeats)
-      await screen.findByText('一行目')
+      await screen.findByText('一行目', { ignore: 'textarea' })
 
       // 開始 1 + 尺 2.43 = 終わり 3.43 → 3.5 へ寄せて尺 2.5
       await retype('尺', '2.43s')
@@ -324,7 +340,7 @@ describe('TextClipInspector の時間と削除', () => {
       )
       try {
         renderInWorkbench(<TextClipInspector id={CLIP_ID} />, withBeats)
-        await screen.findByText('一行目')
+        await screen.findByText('一行目', { ignore: 'textarea' })
 
         await retype('開始', '0:02.58')
 
@@ -379,7 +395,7 @@ describe('TextClipInspector の変える範囲', () => {
   const openLyric = async () => {
     fake.listClips.mockResolvedValue(lyricClips())
     const { value } = renderInWorkbench(<TextClipInspector id={LYRIC_A} />)
-    await screen.findByText('ぼくは')
+    await screen.findByText('ぼくは', { ignore: 'textarea' })
     return value
   }
 
@@ -452,11 +468,11 @@ describe('TextClipInspector の変える範囲', () => {
       </PreferencesRoot>
     )
     const { rerender } = render(tree(LYRIC_A))
-    await screen.findByText('ぼくは')
+    await screen.findByText('ぼくは', { ignore: 'textarea' })
     await userEvent.click(screen.getByRole('radio', { name: '歌詞のテロップすべて（2）' }))
 
     rerender(tree(LYRIC_B))
-    await screen.findByText('はると')
+    await screen.findByText('はると', { ignore: 'textarea' })
 
     expect(screen.getByRole('radio', { name: '歌詞のテロップすべて（2）' })).toBeChecked()
   })

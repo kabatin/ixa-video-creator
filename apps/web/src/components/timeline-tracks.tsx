@@ -14,6 +14,7 @@ import {
   VIDEO1_ROW,
   formatClock,
   lanesForTrack,
+  textLanesWithSpare,
   rulerTicks,
   secondsToPx,
   timelineRowLabel,
@@ -50,7 +51,7 @@ const LANE_HEIGHT_PX = 44
 const TRANSITION_ROW_HEIGHT_PX = 32
 const MIN_CONTENT_WIDTH_PX = 320
 
-/** テロップを置く層。いまは 1 層だけ扱う。 */
+/** テロップを置く既定の層（段を指さずに置くとき・空の帯）。 */
 export const TEXT_INSERT_LAYER = 0
 
 export type TimelineTracksProps = {
@@ -80,6 +81,8 @@ export type TimelineTracksProps = {
   ) => void
   readonly onInsertText: (
     track: TimelineTrack,
+    /** 押した段。重ねて置くときは空いた上の段を押す。 */
+    layer: number,
     atSec: number,
     anchor: InlineFormAnchor,
     opener: HTMLElement | null,
@@ -230,8 +233,13 @@ export const TimelineTracks = ({
     }
     if (lanes.length === 0 && !isInsertableTrack(track)) return <EmptyLane message="クリップなし" />
 
+    // テロップは空いた段を 1 つ足す（重ねて置く場所）。エフェクトは置くときに空いた段を自分で選ぶ（`planEffectInsert`）。
     const laneList =
-      lanes.length === 0 ? [{ layer: TEXT_INSERT_LAYER, clips: [] as TimelineClip[] }] : lanes
+      track === 'TEXT'
+        ? textLanesWithSpare(lanes)
+        : lanes.length === 0
+          ? [{ layer: TEXT_INSERT_LAYER, clips: [] as TimelineClip[] }]
+          : lanes
 
     return laneList.map((lane) => (
       <TimelineClipLane
@@ -253,9 +261,12 @@ export const TimelineTracks = ({
         onInsertAt={(atSec, clientX, clientY) => {
           // 置けるのは TEXT と VFX（エフェクトの型を選ぶ）だけ。他は素材の選択が要るのでこの画面では受けない。
           if (track === 'VFX') onInsertEffect?.(atSec, anchorFrom(clientX, clientY))
-          else if (isInsertableTrack(track)) onInsertText(track, atSec, anchorFrom(clientX, clientY), null)
+          else if (isInsertableTrack(track)) onInsertText(track, lane.layer, atSec, anchorFrom(clientX, clientY), null)
         }}
         {...(onClipContextMenu === undefined ? {} : { onClipContextMenu })}
+        {...(track === 'TEXT' && lanes.length > 0 && lane.clips.length === 0
+          ? { emptyHint: '空いているところを押すと、テロップを重ねて置けます' }
+          : {})}
       />
     ))
   }

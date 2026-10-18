@@ -41,6 +41,14 @@ describe('resolveInlineFormKey — 打鍵の行き先', () => {
     expect(resolveInlineFormKey(event('Enter', { shiftKey: true }))).toBe('contain')
   })
 
+  /** 制作者 2026-10-19「テロップに改行が入れられない」。複数行の欄では Enter は改行、⌘Enter で送る。 */
+  it('複数行の欄では Enter は改行（受け止める）、⌘Enter / Ctrl+Enter で送る', () => {
+    expect(resolveInlineFormKey(event('Enter', { tagName: 'TEXTAREA' }))).toBe('contain')
+    expect(resolveInlineFormKey(event('Enter', { tagName: 'TEXTAREA', metaKey: true }))).toBe('submit')
+    expect(resolveInlineFormKey(event('Enter', { tagName: 'TEXTAREA', ctrlKey: true }))).toBe('submit')
+    expect(resolveInlineFormKey(event('Enter', { tagName: 'TEXTAREA', shiftKey: true }))).toBe('contain')
+  })
+
   it('当てはまらない打鍵は受け止める。null を返さない', () => {
     expect(resolveInlineFormKey(event('s'))).toBe('contain')
     expect(resolveInlineFormKey(event('ArrowLeft'))).toBe('contain')

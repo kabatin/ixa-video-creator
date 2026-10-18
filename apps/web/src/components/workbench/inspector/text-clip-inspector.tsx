@@ -263,6 +263,7 @@ export const TextClipInspector = ({
           )}
           <AutoSaveField
             label="文字"
+            multiline
             value={params?.text ?? ''}
             validate={(next) => (next.trim() === '' ? '文字を入れてください' : null)}
             onSave={(next) => save({ params: { ...content.params, text: next.trim() } })}
