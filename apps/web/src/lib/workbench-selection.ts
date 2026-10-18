@@ -3,6 +3,7 @@ import type {
   CharacterId,
   CharacterLookId,
   LocationId,
+  MediaAssetId,
   MusicTrackId,
   ProjectId,
   ShotId,
@@ -31,6 +32,8 @@ export type Inspected =
   | { readonly kind: 'audio-clip'; readonly id: TimelineClipId }
   /** エフェクトのクリップ（ADR-0050）。型・強さ・位置・長さを直す。 */
   | { readonly kind: 'effect-clip'; readonly id: TimelineClipId }
+  /** 効果音の素材（音 1 本。ADR-0052）。素材ツリーで選び、素材ビューアで聴く。置いたクリップを直すのは `audio-clip`。 */
+  | { readonly kind: 'sfx'; readonly id: MediaAssetId }
 
 export type InspectedKind = Inspected['kind']
 
@@ -60,4 +63,5 @@ export const INSPECTED_LABELS: Readonly<Record<InspectedKind, string>> = Object.
   voice: '声',
   'audio-clip': '効果音',
   'effect-clip': 'エフェクト',
+  sfx: '効果音',
 })

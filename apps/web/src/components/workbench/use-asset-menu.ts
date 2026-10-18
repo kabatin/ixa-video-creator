@@ -8,8 +8,8 @@ import { useWorkbench } from '@/components/workbench/workbench-context'
 import { assetMenuEntries, type AssetMenuAction } from '@/lib/context-menus'
 import type { Inspected } from '@/lib/workbench-selection'
 
-/** 素材ツリーに並ぶ物（Shot・テロップ以外）。 */
-export type AssetTarget = Exclude<Inspected, { kind: 'shot' | 'text-clip' | 'audio-clip' | 'effect-clip' }>
+/** 素材ツリーに並ぶ物（Shot・テロップ以外）。効果音の素材はメニューを持たない（消すのは置いたクリップ）。 */
+export type AssetTarget = Exclude<Inspected, { kind: 'shot' | 'text-clip' | 'audio-clip' | 'effect-clip' | 'sfx' }>
 
 type Resolved = {
   readonly name: string

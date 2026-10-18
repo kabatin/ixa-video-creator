@@ -13,6 +13,7 @@ import {
 } from '@ixa/domain'
 import { useEffect, useMemo, useState } from 'react'
 import { readyOr, useAssets } from '@/components/workbench/asset-store'
+import { AudioSoloButton } from '@/components/workbench/ui/audio-solo-button'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { AutoSaveCheckbox, AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
 import { MenuButton } from '@/components/workbench/ui/more-menu'
@@ -408,6 +409,8 @@ export const TrackInspector = ({ id }: { readonly id: MusicTrackId }) => {
       }
     >
       <Section title="楽曲">
+        {/* この曲だけを頭から鳴らす（プレビューの再生とは別）。 */}
+        <AudioSoloButton mediaAssetId={track.mediaAssetId} label={track.title} />
         <AutoSaveField
           label="題名"
           value={track.title}

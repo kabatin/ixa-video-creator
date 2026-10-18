@@ -77,6 +77,12 @@ export type WorkbenchContextValue = {
    */
   readonly narrationEpoch: number
   readonly bumpNarration: () => void
+  /**
+   * 効果音の素材（ADR-0052）が変わるたびに進む。素材ツリーの「効果音」の取り直しの合図。
+   * タイムラインに音を落とした・効果音のクリップを動かした / 切った / 消した・効果音ができたときに `bumpSfx` で進める。
+   */
+  readonly sfxEpoch: number
+  readonly bumpSfx: () => void
   /** 曲を作るジョブ（ADR-0048）の出来事が届くたびに進む。進み具合（ジョブの一覧）の取り直しの合図。 */
   readonly musicJobEpoch: number
   /** 曲ができるたびに進む。楽曲の一覧の取り直しの合図。 */

@@ -2,6 +2,7 @@
 
 import { CLIP_FADE_MAX_SEC, type TimelineClipId } from '@ixa/domain'
 import { useEffect, useMemo, useState } from 'react'
+import { AudioSoloButton } from '@/components/workbench/ui/audio-solo-button'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { ObjectHeader } from '@/components/workbench/ui/object-header'
 import { Section } from '@/components/workbench/ui/section'
@@ -10,6 +11,7 @@ import { PanelEmpty } from '@/components/workbench/panels/panel-frame'
 import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
+import { clipSoloRange } from '@/lib/audio-solo'
 import { formatClock, formatDuration } from '@/lib/format-time'
 import type { WireTimelineClip } from '@/lib/timeline-api'
 import { parseClockInput, parseFadeInput } from '@/lib/time-input'
@@ -68,6 +70,12 @@ export const AudioClipInspector = ({ id }: { readonly id: TimelineClipId }) => {
       <ObjectHeader kind="効果音" title={`${formatClock(clip.startSec)}・${formatDuration(clip.durationSec)}`} />
       <div className="workbench-panel-body relative min-h-0 flex-1 overflow-auto">
         <Section title="効果音">
+          {/* この効果音だけを、書き出しと同じ範囲（素材の inSec から durationSec だけ）で鳴らす。 */}
+          <AudioSoloButton
+            mediaAssetId={content.mediaAssetId}
+            label="この効果音"
+            range={clipSoloRange({ inSec: content.inSec, durationSec: clip.durationSec })}
+          />
           <AutoSaveField
             label="位置"
             value={formatClock(clip.startSec)}

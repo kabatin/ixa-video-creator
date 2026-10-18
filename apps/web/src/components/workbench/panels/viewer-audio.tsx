@@ -1,64 +1,77 @@
 'use client'
 
 import type { MediaAssetId, MusicTrackId, VoiceProfileId } from '@ixa/domain'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AudioTransport } from '@/components/audio-transport'
 import { WaveformCanvas } from '@/components/waveform-canvas'
 import { readyOr, useAssets } from '@/components/workbench/asset-store'
 import { PanelEmpty } from '@/components/workbench/panels/panel-frame'
+import { useSfxAssets } from '@/components/workbench/sfx-assets'
+import { useSoloAudio } from '@/components/workbench/solo-audio'
 import { VoicePreview } from '@/components/workbench/voice-preview'
 import { createApiClient } from '@/lib/api-client'
-import { describeForPerson } from '@/lib/api-error'
+import { formatSpan } from '@/lib/format-time'
 import type { WireMusicAnalysis } from '@/lib/music-api'
-import { AUDIO_URL_EXPIRES_IN_SEC, type SignedSource } from '@/lib/playback-state'
-import { useAudioPlayback } from '@/lib/use-audio-playback'
 import { fetchWaveformPeaks, type WaveformPeaksResult } from '@/lib/waveform-api'
 import { sectionBoundaries } from '@/lib/waveform-draw'
 
 /**
- * 素材ビューアの音の素材（楽曲・声）。**聴いて確かめる場所。** 直すのは右のインスペクター。
+ * 素材ビューアの音の素材（楽曲・声・効果音）。**聴いて確かめる場所。** 直すのは右のインスペクター。
  */
+
+/** 素材ビューアの試聴が名乗る名前（インスペクターの「この音だけ鳴らす」と区別する）。 */
+const VIEWER_KEY = 'viewer'
 
 /**
- * 音源 1 本を鳴らす。URL は期限を明示して取り、切れたら取り直す（規約 7）。
- * 再生ボタンはこの音源だけを鳴らす（プレビューの共通ボタンとは別）。
+ * 音源 1 本を鳴らす。鳴らすのはワークベンチに 1 つの再生器（`solo-audio`）で、インスペクターの
+ * 「この音だけ鳴らす」と同じ `<audio>`・同じ URL を使う（重ならない・取り直しは 1 回）。
+ * 再生ボタンはこの音源だけを鳴らす（プレビューの共通ボタンとは別。鳴らすとプレビューは止まる）。
  */
 const AudioPreview = ({ mediaAssetId, label }: { readonly mediaAssetId: MediaAssetId; readonly label: string }) => {
-  const loadSource = useCallback(
-    async (): Promise<SignedSource> => createApiClient().mediaUrl(mediaAssetId, AUDIO_URL_EXPIRES_IN_SEC),
-    [mediaAssetId],
-  )
-  const [source, setSource] = useState<SignedSource | null>(null)
-  const [sourceError, setSourceError] = useState<string | null>(null)
-
+  const solo = useSoloAudio()
+  const prepare = solo?.prepare
+  const release = solo?.release
   useEffect(() => {
-    let cancelled = false
-    setSource(null)
-    setSourceError(null)
-    loadSource()
-      .then((next) => {
-        if (!cancelled) setSource(next)
-      })
-      .catch((cause: unknown) => {
-        if (!cancelled) setSourceError(describeForPerson(cause))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [loadSource])
+    prepare?.(mediaAssetId)
+  }, [prepare, mediaAssetId])
+  useEffect(
+    () => () => {
+      release?.(VIEWER_KEY)
+    },
+    [release],
+  )
 
-  const playback = useAudioPlayback({ source, onRefreshSource: loadSource })
-  if (sourceError !== null) {
+  if (solo === null) return null
+  if (solo.sourceError !== null) {
     return (
       <p role="alert" className="text-sm text-danger">
-        {`音源を読めませんでした: ${sourceError}`}
+        {`音源を読めませんでした: ${solo.sourceError}`}
       </p>
     )
+  }
+  if (solo.loadedId !== mediaAssetId) return <p className="text-sm text-muted">音源を読み込んでいます…</p>
+  const { playback } = solo
+  // 鳴らすときは再生器に「素材ビューアが全体を鳴らす」と伝える（範囲の止めを外す）。
+  const viewerPlayback = {
+    ...playback,
+    play: () => {
+      solo.playFree(VIEWER_KEY, mediaAssetId)
+    },
+    toggle: () => {
+      if (playback.isPlaying) playback.pause()
+      else solo.playFree(VIEWER_KEY, mediaAssetId)
+    },
   }
   // 空白キーはワークベンチ全体の再生に割り当て済み。ここでは奪わない。
   // 音量はステータスバーにひとつだけ置く（ここには出さない）。
   return (
-    <AudioTransport playback={playback} label={label} layout="inline" keyboardShortcuts={false} showVolume={false} />
+    <AudioTransport
+      playback={viewerPlayback}
+      label={label}
+      layout="inline"
+      keyboardShortcuts={false}
+      showVolume={false}
+    />
   )
 }
 
@@ -133,6 +146,26 @@ export const VoiceView = ({ id }: { readonly id: VoiceProfileId }) => {
     <div className="space-y-2">
       <h2 className="text-lg font-semibold text-text">{voice.name}</h2>
       <VoicePreview voiceId={id} />
+    </div>
+  )
+}
+
+/** 効果音（ADR-0052）。音 1 本を頭から終わりまで聴く。置いた位置を添える（直すのは置いたクリップ）。 */
+export const SfxView = ({ id }: { readonly id: MediaAssetId }) => {
+  const sfx = useSfxAssets()
+  if (sfx === null || sfx.state === 'loading') return <p className="text-sm text-muted">効果音を読み込んでいます…</p>
+  if (sfx.state === 'error') return <PanelEmpty title="効果音を読めませんでした" hint={sfx.message} />
+  const item = sfx.value.find((candidate) => candidate.mediaAssetId === id)
+  if (item === undefined) return <PanelEmpty title="この効果音は見つかりません" />
+  return (
+    <div className="space-y-2">
+      <h2 className="text-lg font-semibold text-text">{item.label}</h2>
+      <AudioPreview mediaAssetId={item.mediaAssetId} label={item.label} />
+      <p className="text-sm text-muted">
+        {item.placements.length === 0
+          ? 'タイムラインにはまだ置いていません。'
+          : `置いた位置: ${item.placements.map((placement) => formatSpan(placement.startSec, placement.durationSec)).join('、')}`}
+      </p>
     </div>
   )
 }

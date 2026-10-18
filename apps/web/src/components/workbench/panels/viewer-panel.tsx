@@ -18,7 +18,7 @@ import { useAssets } from '@/components/workbench/asset-store'
 import { acceptsImages, useImageAttach } from '@/components/workbench/use-image-attach'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty, PanelFrame, PanelNotice } from '@/components/workbench/panels/panel-frame'
-import { TrackView, VoiceView } from '@/components/workbench/panels/viewer-audio'
+import { SfxView, TrackView, VoiceView } from '@/components/workbench/panels/viewer-audio'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import { droppedFileKind } from '@/lib/asset-actions'
@@ -52,6 +52,7 @@ export const ViewerPanel = () => {
       {inspected.kind === 'brand-asset' && <BrandAssetView id={inspected.id} />}
       {inspected.kind === 'track' && <TrackView id={inspected.id} />}
       {inspected.kind === 'voice' && <VoiceView id={inspected.id} />}
+      {inspected.kind === 'sfx' && <SfxView id={inspected.id} />}
     </PanelFrame>
   )
 }

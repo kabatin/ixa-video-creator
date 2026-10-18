@@ -70,6 +70,8 @@ export const workbenchValue = (
   musicJobEpoch: 0,
   musicMadeEpoch: 0,
   bumpNarration: vi.fn(),
+  sfxEpoch: 0,
+  bumpSfx: vi.fn(),
   serverEpoch: 0,
   selectedShotId: null,
   selectShot: vi.fn(),

@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ViewerPanel } from '@/components/workbench/panels/viewer-panel'
+import { SoloAudioProvider } from '@/components/workbench/solo-audio'
 import { WireVoice } from '@/lib/narration-api'
 import { PROJECT_ID, WORKSPACE_ID } from './fixtures'
 import { renderInWorkbench } from './workbench-fixture'
@@ -88,10 +89,17 @@ describe('画像を大きく見る', () => {
 })
 
 describe('音を聴く', () => {
+  // 鳴らすのはワークベンチに 1 つの再生器（素材ビューアとインスペクターが同じ `<audio>` を使う）。
   it('楽曲はその場で鳴らせる（URL は期限を付けて取る）', async () => {
-    renderInWorkbench(<ViewerPanel />, { inspected: { kind: 'track', id: aTrack.id } }, {
-      tracks: { state: 'ready', value: [aTrack] },
-    })
+    renderInWorkbench(
+      <SoloAudioProvider>
+        <ViewerPanel />
+      </SoloAudioProvider>,
+      { inspected: { kind: 'track', id: aTrack.id } },
+      {
+        tracks: { state: 'ready', value: [aTrack] },
+      },
+    )
 
     expect(await screen.findByRole('region', { name: 'NIGHT RUN の再生操作' })).toBeInTheDocument()
     await waitFor(() => {

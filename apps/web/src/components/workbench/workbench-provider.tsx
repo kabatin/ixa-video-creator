@@ -101,6 +101,8 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
   const [posterEpoch, setPosterEpoch] = useState(0)
   const [narrationEpoch, setNarrationEpoch] = useState(0)
   const bumpNarration = useCallback((): void => setNarrationEpoch((epoch) => epoch + 1), [])
+  const [sfxEpoch, setSfxEpoch] = useState(0)
+  const bumpSfx = useCallback((): void => setSfxEpoch((epoch) => epoch + 1), [])
   const [musicJobEpoch, setMusicJobEpoch] = useState(0)
   const [musicMadeEpoch, setMusicMadeEpoch] = useState(0)
   const [newTakeCount, setNewTakeCount] = useState(0)
@@ -202,6 +204,8 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       // 効果音を作るジョブ（ADR-0052）。効果音の段に置いたらタイムラインとプレビューを読み直す。失敗は理由ごと知らせる。
       if (event.type === 'sfx_job.status') {
         if (event.timelineClipId !== null) setPosterEpoch((epoch) => epoch + 1)
+        // 段に置かれない候補もできるので、できたら置いたかどうかに関わらず素材ツリーの効果音を取り直す。
+        if (event.status === 'succeeded') bumpSfx()
         if (event.status === 'failed') setNotice(`効果音を作れませんでした: ${event.error ?? '理由が届きませんでした。'}`)
       }
       // **失敗を画面まで運ぶ。** worker が作った理由をここで捨てると、
@@ -344,6 +348,8 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       posterEpoch,
       narrationEpoch,
       bumpNarration,
+      sfxEpoch,
+      bumpSfx,
       musicJobEpoch,
       musicMadeEpoch,
       serverEpoch,
@@ -409,6 +415,8 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       posterEpoch,
       narrationEpoch,
       bumpNarration,
+      sfxEpoch,
+      bumpSfx,
       musicJobEpoch,
       musicMadeEpoch,
       serverEpoch,

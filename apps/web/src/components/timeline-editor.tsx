@@ -8,6 +8,7 @@ import type {
   ShotId,
   TimelineClip,
   TimelineClipId,
+  TimelineTrack,
   Transition,
   TransitionId,
 } from '@ixa/domain'
@@ -146,6 +147,8 @@ export type TimelineEditorProps = {
   readonly narrationLane?: (pxPerSec: number) => ReactNode
   /** 効果音の帯に音のファイルを落とした。 */
   readonly onDropAudio?: (file: File, atSec: number) => void
+  /** 帯のクリップを動かした・切った・消した（書けたあと）。素材の一覧など、ほかの場所の取り直しの合図。 */
+  readonly onClipChanged?: (track: TimelineTrack) => void
 }
 
 /**
@@ -191,6 +194,7 @@ export const TimelineEditor = ({
   audioLane,
   narrationLane,
   onDropAudio,
+  onClipChanged,
 }: TimelineEditorProps) => {
   const api = useMemo(() => createTimelineApi(createRequester(resolveApiBaseUrl())), [])
 
@@ -440,6 +444,7 @@ export const TimelineEditor = ({
         setClips((current) =>
           current === null ? current : current.map((each) => (each.id === updated.id ? updated : each)),
         )
+        onClipChanged?.(updated.track)
       }
     })
   }
@@ -464,13 +469,16 @@ export const TimelineEditor = ({
       setClips((current) =>
         current === null ? current : current.map((clip) => (clip.id === id ? updated : clip)),
       )
+      onClipChanged?.(updated.track)
     })
   }
 
   const removeClip = (id: TimelineClipId): void => {
     void run('クリップを削除', async () => {
+      const removed = (clips ?? []).find((clip) => clip.id === id)
       await api.deleteClip(id)
       setClips((current) => (current === null ? current : current.filter((clip) => clip.id !== id)))
+      if (removed !== undefined) onClipChanged?.(removed.track)
       setSelectedClipId((current) => (current === id ? null : current))
     })
   }

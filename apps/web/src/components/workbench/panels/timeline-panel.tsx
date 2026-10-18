@@ -133,6 +133,10 @@ export const TimelinePanel = () => {
         {...(audioLane === null ? {} : { audioLane })}
         narrationLane={narrationLane}
         onDropAudio={onDropAudio}
+        // 効果音のクリップを帯で動かした・切った・消したら、素材ツリーの効果音（置いた位置）を取り直す。
+        onClipChanged={(track) => {
+          if (track === 'SFX') workbench.bumpSfx()
+        }}
         initialSnapEnabled={preferences.playback.snapToBeat}
         // 聴きながら切るで鳴らしていても位置は動く。「再生位置を追う」は、どこかが鳴っていれば帯を流す。
         playheadMoving={transport.playing}

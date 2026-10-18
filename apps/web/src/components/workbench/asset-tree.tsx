@@ -9,9 +9,11 @@ import { GUIDE_TO_CONCEPT_NOTICES, useGuideToConcept } from '@/components/workbe
 import { describeForPerson } from '@/lib/api-error'
 import { ASSET_DRAG_TYPE, encodeAssetDrag, type AssetDragPayload } from '@/lib/asset-actions'
 import { matchesAssetQuery } from '@/lib/asset-tree'
+import type { SfxTreeItem } from '@/lib/sfx-tree'
 import { VOICE_TOOL_LABELS } from '@/lib/voice-defaults'
 import { isAssetSelection, sameSelection, type Inspected } from '@/lib/workbench-selection'
 import { MusicJobProgress } from '@/components/workbench/ui/music-job-progress'
+import { useSfxAssets } from '@/components/workbench/sfx-assets'
 import { useAssetMenu, type AssetTarget } from '@/components/workbench/use-asset-menu'
 import { useContextMenuTrigger, type ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
 
@@ -35,6 +37,8 @@ export const AssetTree = () => {
     workbench.openDialog('library-import')
   }
   const { characters, looks, locations, brandAssets, tracks, voices, actions } = useAssets()
+  // 効果音（ADR-0052）。見守りの外（単体の部品のテスト）では null で、段ごと出さない。
+  const sfx = useSfxAssets()
   const [query, setQuery] = useState('')
   const audioInput = useRef<HTMLInputElement>(null)
   const [trackError, setTrackError] = useState<string | null>(null)
@@ -127,6 +131,29 @@ export const AssetTree = () => {
               />
             ))}
         </Group>
+
+        {/* 効果音（ADR-0052）。段に置いた音と手元の AI で作った音。押すと素材ビューアで単品で聴ける。 */}
+        {sfx !== null && (
+          <Group label="効果音" count={sfx} addLabel="効果音を追加">
+            {readySfx(sfx)
+              .filter((item) => show(item.label))
+              .map((item) => (
+                <Row
+                  key={item.mediaAssetId}
+                  icon="♬"
+                  label={item.label}
+                  badge={sfxBadge(item.placements.length)}
+                  selected={sameSelection(workbench.inspected, { kind: 'sfx', id: item.mediaAssetId })}
+                  onSelect={() => {
+                    select({ kind: 'sfx', id: item.mediaAssetId })
+                  }}
+                  onOpen={() => {
+                    open({ kind: 'sfx', id: item.mediaAssetId })
+                  }}
+                />
+              ))}
+          </Group>
+        )}
 
         <Group
           label="キャラクター"
@@ -302,6 +329,13 @@ export const AssetTree = () => {
   )
 }
 
+const readySfx = (loaded: Loaded<readonly SfxTreeItem[]>): readonly SfxTreeItem[] =>
+  loaded.state === 'ready' ? loaded.value : []
+
+/** 置いていない候補と、何か所にも置いた音だけに添える（1 か所なら何も添えない）。 */
+const sfxBadge = (placements: number): string | undefined =>
+  placements === 0 ? '置いていない' : placements > 1 ? `${String(placements)} か所` : undefined
+
 /** 件数の見出し。読めていないときは件数を出さない（0 件と言わない。L-015）。 */
 const countLabel = (loaded: Loaded<readonly unknown[]>): string =>
   loaded.state === 'ready'
@@ -349,19 +383,22 @@ const Group = ({
           {label}
           <span className="text-xs font-normal">{countLabel(count)}</span>
         </button>
-        <button
-          type="button"
-          aria-label={addLabel}
-          title={addLabel}
-          onClick={() => {
-            setOpen(true)
-            if (onAdd !== undefined) onAdd()
-            else setAdding(true)
-          }}
-          className="inline-flex h-6 min-w-6 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text"
-        >
-          ＋
-        </button>
+        {/* 足す口が無い段（効果音。置くのはタイムラインへ落とすか AI に頼む）には ＋ を出さない。 */}
+        {(onAdd !== undefined || create !== undefined) && (
+          <button
+            type="button"
+            aria-label={addLabel}
+            title={addLabel}
+            onClick={() => {
+              setOpen(true)
+              if (onAdd !== undefined) onAdd()
+              else setAdding(true)
+            }}
+            className="inline-flex h-6 min-w-6 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text"
+          >
+            ＋
+          </button>
+        )}
         {onImport !== undefined && (
           <button
             type="button"

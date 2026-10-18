@@ -30,6 +30,8 @@ import {
 import type { Inspected } from '@/lib/workbench-selection'
 import { AssetStoreProvider } from '@/components/workbench/asset-store'
 import { MusicJobsProvider } from '@/components/workbench/music-jobs'
+import { SfxAssetsProvider } from '@/components/workbench/sfx-assets'
+import { SoloAudioProvider } from '@/components/workbench/solo-audio'
 import { FileIntake } from '@/components/workbench/file-intake'
 import type { WorkbenchQuery } from '@/lib/workbench-url'
 import { ContextMenuHost } from '@/components/workbench/ui/context-menu'
@@ -119,9 +121,15 @@ export const ProjectWorkbench = (props: ProjectWorkbenchProps) => {
         {/* 右クリック（長押し・Shift+F10）のメニューの置き場。開いているのは 1 つだけ。 */}
         {/* 曲を作るジョブの見守り（ADR-0048）。ダイアログを閉じても追い続けるため、ここに置く。 */}
         <MusicJobsProvider>
-          <ContextMenuHost>
-            <WorkbenchShell dock={dock} wide={wide} query={props.query} />
-          </ContextMenuHost>
+          {/* 効果音の素材（ADR-0052）。素材ツリー・素材ビューア・インスペクターが同じ一覧を見る。 */}
+          <SfxAssetsProvider>
+            {/* 音 1 本だけを鳴らす再生器。素材ビューアとインスペクターが同じ 1 つを使う。 */}
+            <SoloAudioProvider>
+              <ContextMenuHost>
+                <WorkbenchShell dock={dock} wide={wide} query={props.query} />
+              </ContextMenuHost>
+            </SoloAudioProvider>
+          </SfxAssetsProvider>
         </MusicJobsProvider>
       </WorkbenchProvider>
     </AssetStoreProvider>

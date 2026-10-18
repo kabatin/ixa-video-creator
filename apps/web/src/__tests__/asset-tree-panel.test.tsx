@@ -2,6 +2,9 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { AssetTree } from '@/components/workbench/asset-tree'
+import { SfxAssetsProvider } from '@/components/workbench/sfx-assets'
+import { WireSfxJob } from '@/lib/sfx-job-api'
+import { WireTimelineClip } from '@/lib/timeline-api'
 import { Location } from '@ixa/domain'
 import { WireVoice } from '@/lib/narration-api'
 import { locationJson } from './fixtures'
@@ -94,6 +97,48 @@ describe('AssetTree', () => {
       expect(createVoice).toHaveBeenCalledWith('戦子の声')
       expect(value.inspect).toHaveBeenCalledWith({ kind: 'voice', id: '01ARZ3NDEKTSV4RRFFQ69G5FD1' })
     })
+  })
+
+  /** 効果音は素材ツリーに無く、単品で聴くところが無かった（制作者 2026-10-19）。 */
+  it('効果音（段に置いた音と作った候補）が並び、押すと素材ビューアで聴ける', async () => {
+    const placed = '01ARZ3NDEKTSV4RRFFQ69G5FE1'
+    const candidate = '01ARZ3NDEKTSV4RRFFQ69G5FE2'
+    const api = {
+      listClips: vi.fn().mockResolvedValue([
+        WireTimelineClip.parse({
+          id: '01ARZ3NDEKTSV4RRFFQ69G5FE3',
+          projectId: '01ARZ3NDEKTSV4RRFFQ69G5FE4',
+          track: 'SFX',
+          startSec: 3.5,
+          durationSec: 1.2,
+          content: { type: 'media', mediaAssetId: placed, inSec: 0, outSec: 1.2, volume: 1 },
+          createdAt: new Date().toISOString(),
+        }),
+      ]),
+      listSfxJobs: vi.fn().mockResolvedValue([
+        WireSfxJob.parse({
+          id: '01ARZ3NDEKTSV4RRFFQ69G5FE5',
+          status: 'succeeded',
+          cue: { startSec: 3.5, durationSec: 1.2, prompt: 'whoosh', volume: 1 },
+          mediaAssetIds: [placed, candidate],
+          timelineClipId: '01ARZ3NDEKTSV4RRFFQ69G5FE3',
+        }),
+      ]),
+    }
+    const { value } = renderInWorkbench(
+      <SfxAssetsProvider api={api}>
+        <AssetTree />
+      </SfxAssetsProvider>,
+    )
+
+    expect(await screen.findByRole('button', { name: '効果音(2)' })).toBeInTheDocument()
+    // 足す口の無い段に ＋ は出さない（置くのはタイムラインへ落とすか AI に頼む）。
+    expect(screen.queryByRole('button', { name: '効果音を追加' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /whoosh（候補 2）/ })).toHaveTextContent('置いていない')
+
+    fireEvent.click(screen.getByRole('button', { name: /^whoosh$/ }))
+    expect(value.inspect).toHaveBeenCalledWith({ kind: 'sfx', id: placed })
+    expect(value.openViewer).toHaveBeenCalled()
   })
 
   /** 素材の上で右クリック（長押し）すると、その素材のメニュー（2026-09-30）。 */

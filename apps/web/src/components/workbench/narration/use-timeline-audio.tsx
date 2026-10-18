@@ -54,6 +54,7 @@ export const useTimelineAudio = (onClipsChanged: () => void) => {
         })
         workbench.notify(`効果音「${file.name}」を ${formatClock(atSec)} に置きました。`)
         onClipsChanged()
+        workbench.bumpSfx()
       })
       .catch((cause: unknown) => {
         workbench.notify(`効果音を置けませんでした: ${describeForPerson(cause)}`)
