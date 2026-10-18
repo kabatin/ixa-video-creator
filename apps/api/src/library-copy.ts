@@ -3,8 +3,22 @@ import type {
   CharacterLookRepository,
   CharacterRepository,
   LocationRepository,
+  MusicAnalysisRepository,
+  MusicTrackRepository,
 } from '@ixa/db'
-import type { BrandAsset, Character, CharacterLookId, Location, Project } from '@ixa/domain'
+import {
+  MANUAL_ANALYZER_VERSION,
+  copyMusicAnalysisInput,
+  importMusicTrackInput,
+  type BrandAsset,
+  type Character,
+  type CharacterLookId,
+  type Location,
+  type MusicAnalysis,
+  type MusicTrack,
+  type Project,
+} from '@ixa/domain'
+import { sequentially } from './sequentially.js'
 
 /**
  * キャラクター・ロケーション・ブランド資産を別のプロジェクトへ写す（ADR-0034）。
@@ -102,3 +116,35 @@ export const copyBrandAsset = (deps: LibraryCopyDeps, source: BrandAsset, target
     value: source.value,
     usageRule: source.usageRule,
   })
+
+export type MusicCopyDeps = {
+  readonly musicTracks: Pick<MusicTrackRepository, 'create'>
+  readonly musicAnalyses: Pick<MusicAnalysisRepository, 'findByTrack' | 'findByTrackAndVersion' | 'create'>
+}
+
+/**
+ * 曲の解析のうち写すもの: 手で直した解析と最新の解析（同じなら 1 つ）。古い順。
+ * 「作品を複製」と同じ選び方（手で直した拍は常に優先されるので、最新だけ写すと手直しが消える）。
+ */
+export const analysesToCopy = async (deps: MusicCopyDeps, track: MusicTrack): Promise<readonly MusicAnalysis[]> => {
+  const [latest, manual] = await Promise.all([
+    deps.musicAnalyses.findByTrack(track.id),
+    deps.musicAnalyses.findByTrackAndVersion(track.id, MANUAL_ANALYZER_VERSION),
+  ])
+  return [manual, latest]
+    .filter((analysis): analysis is MusicAnalysis => analysis !== null)
+    .filter((analysis, index, all) => all.findIndex((other) => other.id === analysis.id) === index)
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+}
+
+/** 楽曲を取り込む（ADR-0053）。同じ音を指し、解析も写す（解析し直さない）。取り込み先ではマスターにしない。 */
+export const copyMusicTrack = async (
+  deps: MusicCopyDeps,
+  source: MusicTrack,
+  target: Pick<Project, 'id'>,
+): Promise<MusicTrack> => {
+  const analyses = await analysesToCopy(deps, source)
+  const copy = await deps.musicTracks.create(importMusicTrackInput(source, target.id))
+  await sequentially(analyses, (analysis) => deps.musicAnalyses.create(copyMusicAnalysisInput(analysis, copy.id)))
+  return copy
+}

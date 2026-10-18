@@ -15,7 +15,9 @@ import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
 import { libraryImportRoutes } from '../routes/library-imports.js'
 import { aProject } from './fixtures.js'
+import { createInMemoryMusicAnalysisRepository } from './in-memory-music-analysis-repository.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
+import { createInMemoryMusicTrackRepository } from './in-memory-timeline-repositories.js'
 
 /**
  * ほかのプロジェクトから取り込む（ADR-0034。制作者 2026-10-03「全プロジェクトで共有になっている。プロジェクト単位に
@@ -68,6 +70,8 @@ beforeEach(() => {
       looks,
       locations,
       brandAssets,
+      musicTracks: createInMemoryMusicTrackRepository(),
+      musicAnalyses: createInMemoryMusicAnalysisRepository(),
     }),
   )
   registerErrorHandlers(app, createLogger('silent'))

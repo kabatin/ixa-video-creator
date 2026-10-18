@@ -9,6 +9,7 @@ import { GUIDE_TO_CONCEPT_NOTICES, useGuideToConcept } from '@/components/workbe
 import { describeForPerson } from '@/lib/api-error'
 import { ASSET_DRAG_TYPE, encodeAssetDrag, type AssetDragPayload } from '@/lib/asset-actions'
 import { matchesAssetQuery } from '@/lib/asset-tree'
+import type { LibraryImportSection } from '@/lib/library-import-sections'
 import type { SfxTreeItem } from '@/lib/sfx-tree'
 import { VOICE_TOOL_LABELS } from '@/lib/voice-defaults'
 import { isAssetSelection, sameSelection, type Inspected } from '@/lib/workbench-selection'
@@ -32,9 +33,9 @@ const ITEM =
 export const AssetTree = () => {
   const workbench = useWorkbench()
   const guideToConcept = useGuideToConcept()
-  // キャラクター・ロケーション・ブランド資産はプロジェクトごと。ほかのプロジェクトのものは取り込んで使う（ADR-0034）。
-  const openImport = (): void => {
-    workbench.openDialog('library-import')
+  // 素材の段はプロジェクトごと。ほかのプロジェクトのものは取り込んで使う（ADR-0034・ADR-0053）。開くのはその段の区分。
+  const openImport = (importSection: LibraryImportSection) => (): void => {
+    workbench.openDialog('library-import', { importSection })
   }
   const { characters, looks, locations, brandAssets, tracks, voices, actions } = useAssets()
   // 効果音（ADR-0052）。見守りの外（単体の部品のテスト）では null で、段ごと出さない。
@@ -103,6 +104,7 @@ export const AssetTree = () => {
           label="楽曲"
           count={tracks}
           addLabel="楽曲を追加"
+          onImport={openImport('musicTracks')}
           onAdd={() => {
             audioInput.current?.click()
           }}
@@ -134,7 +136,7 @@ export const AssetTree = () => {
 
         {/* 効果音（ADR-0052）。段に置いた音と手元の AI で作った音。押すと素材ビューアで単品で聴ける。 */}
         {sfx !== null && (
-          <Group label="効果音" count={sfx} addLabel="効果音を追加">
+          <Group label="効果音" count={sfx} addLabel="効果音を追加" onImport={openImport('sfx')}>
             {readySfx(sfx)
               .filter((item) => show(item.label))
               .map((item) => (
@@ -159,7 +161,7 @@ export const AssetTree = () => {
           label="キャラクター"
           count={characters}
           addLabel="キャラクターを追加"
-          onImport={openImport}
+          onImport={openImport('characters')}
           create={async (name) => {
             const created = await actions.createCharacter(name)
             select({ kind: 'character', id: created.id })
@@ -210,6 +212,7 @@ export const AssetTree = () => {
           label="声"
           count={voices}
           addLabel="声を追加"
+          onImport={openImport('voices')}
           create={async (name) => {
             const created = await actions.createVoice(name)
             select({ kind: 'voice', id: created.id })
@@ -232,7 +235,7 @@ export const AssetTree = () => {
           label="ロケーション"
           count={locations}
           addLabel="ロケーションを追加"
-          onImport={openImport}
+          onImport={openImport('locations')}
           create={async (name) => {
             const created = await actions.createLocation(name)
             select({ kind: 'location', id: created.id })
@@ -262,7 +265,7 @@ export const AssetTree = () => {
           label="ブランド資産"
           count={brandAssets}
           addLabel="ブランド資産を追加"
-          onImport={openImport}
+          onImport={openImport('brandAssets')}
           create={async (name) => {
             // 名前が色の値（#RRGGBB）なら色として作る。それ以外はロゴとして作り、種類は右で直す。
             const isColor = /^#[0-9a-f]{6}$/i.test(name.trim())

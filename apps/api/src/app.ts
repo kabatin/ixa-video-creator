@@ -470,6 +470,10 @@ export const createApp = (deps: AppDeps) => {
       looks: deps.looks,
       locations: deps.locations,
       brandAssets: deps.brandAssets,
+      musicTracks: deps.musicTracks,
+      musicAnalyses: deps.musicAnalyses,
+      ...(deps.narration === undefined ? {} : { voices: deps.narration.voices }),
+      ...(deps.sfxGeneration === undefined ? {} : { sfxJobs: deps.sfxGeneration.sfxJobs }),
     }),
   )
   // 作品を複製する（持っていく項目を選べる。ADR-0037）。

@@ -87,7 +87,8 @@ export type AssetActions = {
   /** 消すと、その声で話す行は「声が未定」に戻る（ナレーションの一覧は呼び出し側が取り直す）。 */
   readonly deleteVoice: (id: VoiceProfileId) => Promise<void>
   /**
-   * ほかのプロジェクトのものを複製して、このプロジェクトへ取り込む（ADR-0034）。取り込んだ分を一覧に足して返す。
+   * ほかのプロジェクトのものを複製して、このプロジェクトへ取り込む（ADR-0034・ADR-0053）。取り込んだ分を一覧に足して返す。
+   * 効果音の一覧はここに無いので、呼び出し側が取り直しの合図（`bumpSfx`）を出す。
    * Look は足したキャラクターの分を読み直す（キャラクターの並びが変わると読む）。
    */
   readonly importLibrary: (request: LibraryImportRequest) => Promise<WireLibraryImportResult>
@@ -356,6 +357,12 @@ export const AssetStoreProvider = ({
         setCharacters((current) => mapReady(current, (items) => [...items, ...imported.characters]))
         setLocations((current) => mapReady(current, (items) => [...items, ...imported.locations]))
         setBrandAssets((current) => mapReady(current, (items) => [...items, ...imported.brandAssets]))
+        setVoices((current) => mapReady(current, (items) => [...items, ...imported.voices]))
+        if (imported.musicTracks.length > 0) {
+          // 曲が無かった作品では、最初の 1 曲をサーバがマスターにする。一覧ごと読み直し、拍・尺の材料も読み直す。
+          setTracks({ state: 'ready', value: await api.listMusicTracks(projectId) })
+          router.refresh()
+        }
         return imported
       },
       analyzeTrack: async (id) => {

@@ -39,19 +39,18 @@ const shorten = (text: string): string => {
   return trimmed.length <= SFX_LABEL_MAX_CHARS ? trimmed : `${trimmed.slice(0, SFX_LABEL_MAX_CHARS - 1)}…`
 }
 
+/** 作った音の名前（きっかけの文）。1 回に何本か作ったときは 2 本目から「候補 n」を添える。 */
+export const sfxSoundLabel = (prompt: string, index: number): string =>
+  index === 0 ? shorten(prompt) : `${shorten(prompt)}（候補 ${String(index + 1)}）`
+
 /**
- * 作った音の名前。1 回に何本か作ったときは 2 本目から「候補 n」を添える。
- * ジョブは新しい順に届く。同じ素材が複数のジョブにあれば**新しいジョブの文**を使う（先に入れたものを残す）。
+ * 作った音の名前。ジョブは新しい順に届く。同じ素材が複数のジョブにあれば**新しいジョブの文**を使う
+ * （先に入れたものを残す）。
  */
 const jobLabels = (jobs: readonly WireSfxJob[]): ReadonlyMap<MediaAssetId, string> =>
   jobs
     .filter((job) => job.status === 'succeeded')
-    .flatMap((job) =>
-      job.mediaAssetIds.map((id, index) => ({
-        id,
-        label: index === 0 ? shorten(job.cue.prompt) : `${shorten(job.cue.prompt)}（候補 ${String(index + 1)}）`,
-      })),
-    )
+    .flatMap((job) => job.mediaAssetIds.map((id, index) => ({ id, label: sfxSoundLabel(job.cue.prompt, index) })))
     .reduce<ReadonlyMap<MediaAssetId, string>>(
       (acc, { id, label }) => (acc.has(id) ? acc : new Map([...acc, [id, label]])),
       new Map(),

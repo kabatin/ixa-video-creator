@@ -44,6 +44,15 @@ const renderTree = (ui: ReactNode = <AssetTree />) =>
   })
 
 describe('AssetTree', () => {
+  /** 制作者 2026-10-19「戦子ちゃんにある声素材が欲しいと思ってしまった」。段ごとの取り込み口（ADR-0053）。 */
+  it('声・楽曲の段の取り込み口は、その段の区分で取り込みの窓を開く', () => {
+    const { value } = renderTree()
+    fireEvent.click(screen.getByRole('button', { name: '声をほかのプロジェクトから取り込む' }))
+    expect(value.openDialog).toHaveBeenLastCalledWith('library-import', { importSection: 'voices' })
+    fireEvent.click(screen.getByRole('button', { name: '楽曲をほかのプロジェクトから取り込む' }))
+    expect(value.openDialog).toHaveBeenLastCalledWith('library-import', { importSection: 'musicTracks' })
+  })
+
   it('＋ で名前を入れて Enter すると作り、作った物を選ぶ', async () => {
     const { value } = renderTree()
     fireEvent.click(screen.getByRole('button', { name: 'ロケーションを追加' }))

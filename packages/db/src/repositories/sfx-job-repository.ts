@@ -10,6 +10,7 @@ import {
   type SfxJobError,
   type SfxJobId,
   type SfxJobSpec,
+  type ImportedSfxSound,
   type TimelineClipId,
 } from '@ixa/domain'
 import type { DbClient } from '../client.js'
@@ -35,6 +36,11 @@ export type SfxJobOutcome = {
 /** 効果音を作るジョブの読み書き（ADR-0052）。戻り値は必ず `@ixa/domain` の型。 */
 export type SfxJobRepository = {
   create(input: CreateSfxJobInput): Promise<SfxJob>
+  /**
+   * ほかの作品から取り込んだ効果音を、**できた（成功した）ジョブ**として 1 行で記す（ADR-0053）。キューには入れない。
+   * 待っている行を作ってから成功にすると、その間だけ「作っている」に見え、途中で落ちると待ったままの行が残る。
+   */
+  recordImported(input: ImportedSfxSound): Promise<SfxJob>
   findById(id: SfxJobId): Promise<SfxJob | null>
   /** 作品の新しい順に `limit` 件。 */
   findRecentByProject(projectId: ProjectId, limit: number): Promise<SfxJob[]>
@@ -116,6 +122,31 @@ export const createSfxJobRepository = (db: DbClient): SfxJobRepository => {
           .returning(),
       )
       if (created === null) throw new Error('効果音のジョブを作れませんでした')
+      return created
+    },
+
+    async recordImported(input) {
+      const spec = SfxJobSpecSchema.parse(input.spec)
+      const now = new Date()
+      const created = first(
+        await db
+          .insert(sfxJobs)
+          .values({
+            id: newId(SfxJobIdSchema),
+            projectId: input.projectId,
+            tool: input.tool,
+            model: input.model,
+            spec,
+            status: 'succeeded',
+            providerRecord: input.providerRecord,
+            mediaAssetIds: [...input.mediaAssetIds],
+            queuedAt: now,
+            startedAt: now,
+            finishedAt: now,
+          })
+          .returning(),
+      )
+      if (created === null) throw new Error('取り込んだ効果音を記せませんでした')
       return created
     },
 

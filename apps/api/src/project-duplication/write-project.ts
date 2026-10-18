@@ -1,5 +1,6 @@
 import {
   copyClipInput,
+  copyMusicAnalysisInput,
   copyNarrationLineInput,
   copyNarrationTakeInput,
   copyVoiceInput,
@@ -79,23 +80,8 @@ export const writeMusic = async (deps: ProjectDuplicationDeps, target: Project, 
       offsetSec: track.offsetSec,
       volume: track.volume,
     })
-    // 写す列は名前で並べる（行を丸ごと広げると、ID まで写す・列が増えたとき黙って写すことになる）。
-    await sequentially(analyses, (analysis) =>
-      deps.musicAnalyses.create({
-        musicTrackId: copied.id,
-        analyzerVersion: analysis.analyzerVersion,
-        durationSec: analysis.durationSec,
-        bpm: analysis.bpm,
-        bpmConfidence: analysis.bpmConfidence,
-        beats: analysis.beats,
-        downbeats: analysis.downbeats,
-        sections: analysis.sections,
-        energyCurve: analysis.energyCurve,
-        onsets: analysis.onsets,
-        drops: analysis.drops,
-        waveformPeaksKey: analysis.waveformPeaksKey,
-      }),
-    )
+    // 写す列は名前で並べる（取り込みと同じ規則。ADR-0053）。
+    await sequentially(analyses, (analysis) => deps.musicAnalyses.create(copyMusicAnalysisInput(analysis, copied.id)))
   })
 }
 

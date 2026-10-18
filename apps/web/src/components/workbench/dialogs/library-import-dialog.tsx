@@ -1,40 +1,109 @@
 'use client'
 
-import type { BrandAsset, Character, Location, Project, ProjectId } from '@ixa/domain'
+import {
+  BrandAssetId,
+  CharacterId,
+  LocationId,
+  MusicTrackId,
+  VoiceProfileId,
+  type Project,
+  type ProjectId,
+} from '@ixa/domain'
 import { useMemo, useState } from 'react'
+import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { useAssets } from '@/components/workbench/asset-store'
 import { useLoaded } from '@/components/workbench/use-loaded'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { createApiClient, type ApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
+import type { LibraryImportRequest } from '@/lib/library-import-api'
+import {
+  LIBRARY_IMPORT_SECTIONS,
+  LIBRARY_IMPORT_SECTION_LABELS,
+  LIBRARY_IMPORT_SECTION_NOTES,
+  sfxImportChoices,
+  type LibraryImportSection,
+} from '@/lib/library-import-sections'
+import { VOICE_TOOL_LABELS } from '@/lib/voice-defaults'
 
 /**
- * ほかのプロジェクトから取り込む（ADR-0034。制作者 2026-10-03「全プロジェクトで共有になっている。プロジェクト単位に
- * しないと大変なことになる」）。
+ * ほかのプロジェクトから取り込む（ADR-0034・ADR-0053。制作者 2026-10-03「全プロジェクトで共有になっている。
+ * プロジェクト単位にしないと大変なことになる」、2026-10-19「素材ツリーにある各種項目の素材を他のプロジェクトから
+ * 簡単にコピーできるといいなぁ。現にいま、戦子ちゃんにある声素材が欲しいと思ってしまった」）。
  *
- * キャラクター・ロケーション・ブランド資産はプロジェクトごと。別のプロジェクトのものを使うときは、ここで選んで**複製**する。
- * キャラクターは Look・画像ごと。複製した後は別物（元を直しても、こちらは変わらない）。
+ * 素材ツリーの段はプロジェクトごと。取り込み元を選び、段ごとの区分でチェックした分を**複製**する。
+ * 画像・音のファイルは同じものを使う。複製した後は別物（元を直しても、こちらは変わらない）。
  */
 
 export type LibraryImportSourceApi = Pick<
   ApiClient,
-  'listProjects' | 'listCharacters' | 'listLocations' | 'listBrandAssets'
+  | 'listProjects'
+  | 'listCharacters'
+  | 'listLocations'
+  | 'listBrandAssets'
+  | 'listVoices'
+  | 'listMusicTracks'
+  | 'listSfxJobs'
 >
 
-type SourceItems = {
-  readonly characters: readonly Character[]
-  readonly locations: readonly Location[]
-  readonly brandAssets: readonly BrandAsset[]
+type Choice = { readonly key: string; readonly label: string; readonly badge?: string }
+
+type SourceItems = Readonly<Record<LibraryImportSection, readonly Choice[]>> & {
+  /** 効果音の行の鍵 → 取り込みで送る組（ジョブと音）。 */
+  readonly sfxRefs: ReadonlyMap<string, LibraryImportRequest['sfxSounds'][number]>
 }
 
-const NO_ITEMS: SourceItems = { characters: [], locations: [], brandAssets: [] }
+const NO_ITEMS: SourceItems = {
+  musicTracks: [],
+  sfx: [],
+  characters: [],
+  voices: [],
+  locations: [],
+  brandAssets: [],
+  sfxRefs: new Map(),
+}
 
-const toggled = (set: ReadonlySet<string>, id: string): ReadonlySet<string> => {
-  const next = new Set(set)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  return next
+const loadSource = async (client: LibraryImportSourceApi, sourceId: ProjectId): Promise<SourceItems> => {
+  const [characters, locations, brandAssets, voices, tracks, sfxJobs] = await Promise.all([
+    client.listCharacters(sourceId),
+    client.listLocations(sourceId),
+    client.listBrandAssets(sourceId),
+    client.listVoices(sourceId),
+    client.listMusicTracks(sourceId),
+    client.listSfxJobs(sourceId),
+  ])
+  const sfx = sfxImportChoices(sfxJobs)
+  return {
+    musicTracks: tracks.map((track) => ({ key: track.id, label: track.title, badge: track.isMaster ? 'マスター' : undefined })),
+    sfx: sfx.map(({ key, label }) => ({ key, label })),
+    characters: characters.map((item) => ({ key: item.id, label: item.displayName })),
+    voices: voices.map((voice) => ({ key: voice.id, label: voice.name, badge: VOICE_TOOL_LABELS[voice.tool] })),
+    locations: locations.map((item) => ({ key: item.id, label: item.name })),
+    brandAssets: brandAssets.map((item) => ({ key: item.id, label: item.name })),
+    sfxRefs: new Map(sfx.map(({ key, sfxJobId, mediaAssetId }) => [key, { sfxJobId, mediaAssetId }])),
+  }
+}
+
+const toggled = (set: ReadonlySet<string>, id: string): ReadonlySet<string> =>
+  set.has(id) ? new Set([...set].filter((other) => other !== id)) : new Set([...set, id])
+
+/** チェックした鍵を、送る形にする（その区分の一覧にある順）。 */
+const requestOf = (source: SourceItems, chosen: ReadonlySet<string>): LibraryImportRequest => {
+  const picked = (section: LibraryImportSection): string[] =>
+    source[section].filter((item) => chosen.has(item.key)).map((item) => item.key)
+  return {
+    // 鍵は読み込みの境界で検証した ID そのもの。型を付け直すために通し直す。
+    characterIds: z.array(CharacterId).parse(picked('characters')),
+    locationIds: z.array(LocationId).parse(picked('locations')),
+    brandAssetIds: z.array(BrandAssetId).parse(picked('brandAssets')),
+    voiceIds: z.array(VoiceProfileId).parse(picked('voices')),
+    musicTrackIds: z.array(MusicTrackId).parse(picked('musicTracks')),
+    sfxSounds: picked('sfx').flatMap((key) => {
+      const ref = source.sfxRefs.get(key)
+      return ref === undefined ? [] : [ref]
+    }),
+  }
 }
 
 export const LibraryImportDialogBody = ({ api }: { readonly api?: LibraryImportSourceApi }) => {
@@ -55,36 +124,26 @@ export const LibraryImportDialogBody = ({ api }: { readonly api?: LibraryImportS
 
   const items = useLoaded(
     '取り込み元の素材',
-    async (): Promise<SourceItems> => {
-      if (sourceId === null) return NO_ITEMS
-      const [characters, locations, brandAssets] = await Promise.all([
-        client.listCharacters(sourceId),
-        client.listLocations(sourceId),
-        client.listBrandAssets(sourceId),
-      ])
-      return { characters, locations, brandAssets }
-    },
+    async (): Promise<SourceItems> => (sourceId === null ? NO_ITEMS : loadSource(client, sourceId)),
     sourceId ?? 'none',
   )
   const source = items.state === 'ready' ? items.value : NO_ITEMS
 
+  const [section, setSection] = useState<LibraryImportSection>(workbench.dialogImportSection ?? 'characters')
   const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const pick = (id: string): void => {
-    setChosen((current) => toggled(current, id))
-  }
 
-  const characterIds = source.characters.filter((item) => chosen.has(item.id)).map((item) => item.id)
-  const locationIds = source.locations.filter((item) => chosen.has(item.id)).map((item) => item.id)
-  const brandAssetIds = source.brandAssets.filter((item) => chosen.has(item.id)).map((item) => item.id)
-  const count = characterIds.length + locationIds.length + brandAssetIds.length
+  const chosenIn = (target: LibraryImportSection): number => source[target].filter((item) => chosen.has(item.key)).length
+  const count = LIBRARY_IMPORT_SECTIONS.reduce((sum, target) => sum + chosenIn(target), 0)
 
   const run = async (): Promise<void> => {
     setBusy(true)
     setError(null)
     try {
-      await actions.importLibrary({ characterIds, locationIds, brandAssetIds })
+      const request = requestOf(source, chosen)
+      await actions.importLibrary(request)
+      if (request.sfxSounds.length > 0) workbench.bumpSfx()
       workbench.notify(`${String(count)} 件を取り込みました（複製なので、元のプロジェクトのものとは別物です）。`)
       workbench.closeDialog()
     } catch (cause) {
@@ -100,27 +159,11 @@ export const LibraryImportDialogBody = ({ api }: { readonly api?: LibraryImportS
     return <p className="text-sm text-muted">取り込めるほかのプロジェクトがありません。</p>
   }
 
-  const group = (label: string, list: readonly { readonly id: string; readonly name: string }[]) => (
-    <fieldset className="space-y-1">
-      <legend className="text-xs font-semibold text-muted">{label}</legend>
-      {list.length === 0 ? (
-        <p className="text-xs text-muted">ありません</p>
-      ) : (
-        list.map((item) => (
-          <label key={item.id} className="flex items-center gap-2 text-sm text-text">
-            <input type="checkbox" checked={chosen.has(item.id)} disabled={busy} onChange={() => pick(item.id)} />
-            {item.name}
-          </label>
-        ))
-      )}
-    </fieldset>
-  )
-
+  const list = source[section]
   return (
     <div className="flex max-h-[70vh] flex-col gap-3 text-sm">
       <p className="text-muted">
-        キャラクター・ロケーション・ブランド資産はプロジェクトごとです。チェックしたものを、このプロジェクトへ複製します。
-        キャラクターは Look と画像ごと複製します。
+        素材はプロジェクトごとです。チェックしたものを、このプロジェクトへ複製します（区分をまたいで選べます）。
       </p>
       <label className="flex items-center gap-2">
         <span className="text-muted">取り込み元</span>
@@ -141,13 +184,54 @@ export const LibraryImportDialogBody = ({ api }: { readonly api?: LibraryImportS
           ))}
         </select>
       </label>
+      <div role="tablist" aria-label="取り込む素材の区分" className="flex flex-wrap gap-1 border-b border-line">
+        {LIBRARY_IMPORT_SECTIONS.map((target) => {
+          const selectedCount = chosenIn(target)
+          return (
+            <button
+              key={target}
+              type="button"
+              role="tab"
+              aria-selected={target === section}
+              onClick={() => {
+                setSection(target)
+              }}
+              className={`rounded-t px-2 py-1 text-sm ${
+                target === section ? 'border border-b-0 border-line bg-surface font-semibold text-text' : 'text-muted hover:text-text'
+              }`}
+            >
+              {LIBRARY_IMPORT_SECTION_LABELS[target]}
+              {selectedCount > 0 && <span className="ml-1 text-xs text-accent">{`✓${String(selectedCount)}`}</span>}
+            </button>
+          )
+        })}
+      </div>
       {items.state === 'loading' && <p className="text-muted">読み込んでいます…</p>}
       {items.state === 'error' && <p role="alert" className="text-danger">{items.message}</p>}
       {items.state === 'ready' && (
-        <div className="relative min-h-0 flex-1 space-y-3 overflow-auto rounded border border-line p-3">
-          {group('キャラクター', source.characters.map((item) => ({ id: item.id, name: item.displayName })))}
-          {group('ロケーション', source.locations)}
-          {group('ブランド資産', source.brandAssets)}
+        <div role="tabpanel" aria-label={LIBRARY_IMPORT_SECTION_LABELS[section]} className="relative min-h-0 flex-1 space-y-2 overflow-auto rounded border border-line p-3">
+          <p className="text-xs text-muted">{LIBRARY_IMPORT_SECTION_NOTES[section]}</p>
+          <fieldset className="space-y-1">
+            <legend className="sr-only">{LIBRARY_IMPORT_SECTION_LABELS[section]}</legend>
+            {list.length === 0 ? (
+              <p className="text-xs text-muted">ありません</p>
+            ) : (
+              list.map((item) => (
+                <label key={item.key} className="flex items-center gap-2 text-sm text-text">
+                  <input
+                    type="checkbox"
+                    checked={chosen.has(item.key)}
+                    disabled={busy}
+                    onChange={() => {
+                      setChosen((current) => toggled(current, item.key))
+                    }}
+                  />
+                  <span className="min-w-0 truncate">{item.label}</span>
+                  {item.badge !== undefined && <span className="text-xs text-muted">{item.badge}</span>}
+                </label>
+              ))
+            )}
+          </fieldset>
         </div>
       )}
       {error !== null && (

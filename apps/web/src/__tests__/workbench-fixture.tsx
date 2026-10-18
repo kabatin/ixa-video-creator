@@ -97,6 +97,7 @@ export const workbenchValue = (
   dialog: null,
   openDialog: vi.fn(),
   dialogShotIds: null,
+  dialogImportSection: null,
   closeDialog: vi.fn(),
   focusPanel: vi.fn(),
   inspectorTab: 'settings',

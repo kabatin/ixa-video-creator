@@ -28,6 +28,7 @@ import { posterByShotId, postersStale, posterRetryDelayMs, type ShotPosterMap } 
 import { useProjectEvents } from '@/lib/use-project-events'
 import { musicJobAddedTracks, musicJobNotice } from '@/lib/music-job-form'
 import { imageJobFailureNotice } from '@/lib/image-job-notice'
+import type { LibraryImportSection } from '@/lib/library-import-sections'
 import { voiceJobNotice } from '@/lib/voice-job-notice'
 import { POSTER_URL_LIFETIME_SEC, renewDelayMs } from '@/lib/signed-url-renewal'
 import type { PanelId } from '@/lib/workbench-layout'
@@ -108,6 +109,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
   const [newTakeCount, setNewTakeCount] = useState(0)
   const [dialog, setDialog] = useState<WorkbenchDialog | null>(props.initialDialog)
   const [dialogShotIds, setDialogShotIds] = useState<readonly ShotId[] | null>(null)
+  const [dialogImportSection, setDialogImportSection] = useState<LibraryImportSection | null>(null)
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('settings')
   const [cutterMode, setCutterMode] = useState<CutterMode>('cut')
   const [inspectorRequest, setInspectorRequest] = useState(0)
@@ -377,12 +379,15 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
         // ダイアログを開いている間はプレビューを止める。ぼかしの下で再生すると重い（§12）。
         controls.pause()
         setDialogShotIds(options?.shotIds ?? null)
+        setDialogImportSection(options?.importSection ?? null)
         setDialog(next)
       },
       dialogShotIds,
+      dialogImportSection,
       closeDialog: () => {
         setDialog(null)
         setDialogShotIds(null)
+        setDialogImportSection(null)
       },
       focusPanel: props.focusPanel,
       inspectorTab,
@@ -432,6 +437,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       refresh,
       dialog,
       dialogShotIds,
+      dialogImportSection,
       inspectorTab,
       inspectorRequest,
       activeGenerations,

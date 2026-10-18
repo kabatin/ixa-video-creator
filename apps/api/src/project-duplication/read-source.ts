@@ -1,5 +1,4 @@
 import {
-  MANUAL_ANALYZER_VERSION,
   isTelopClip,
   type BrandAsset,
   type Character,
@@ -21,6 +20,7 @@ import {
   type Transition,
   type VoiceProfile,
 } from '@ixa/domain'
+import { analysesToCopy } from '../library-copy.js'
 import type { ProjectDuplicationDeps } from './deps.js'
 
 /**
@@ -74,17 +74,10 @@ const readConcept = async (deps: ProjectDuplicationDeps, project: Project): Prom
   return (await deps.scripts.findVersionById(script.currentVersionId))?.content ?? null
 }
 
-const readTrack = async (deps: ProjectDuplicationDeps, track: MusicTrack): Promise<SourceTrack> => {
-  const [latest, manual] = await Promise.all([
-    deps.musicAnalyses.findByTrack(track.id),
-    deps.musicAnalyses.findByTrackAndVersion(track.id, MANUAL_ANALYZER_VERSION),
-  ])
-  const analyses = [manual, latest]
-    .filter((analysis): analysis is MusicAnalysis => analysis !== null)
-    .filter((analysis, index, all) => all.findIndex((other) => other.id === analysis.id) === index)
-    .sort((a, b) => (a.id < b.id ? -1 : 1))
-  return { track, analyses }
-}
+const readTrack = async (deps: ProjectDuplicationDeps, track: MusicTrack): Promise<SourceTrack> => ({
+  track,
+  analyses: await analysesToCopy(deps, track),
+})
 
 const readShot = async (deps: ProjectDuplicationDeps, shot: Shot, items: ReadonlySet<DuplicationItem>): Promise<SourceShot> => {
   const [cast, references, allTakes, visibleTakes] = await Promise.all([

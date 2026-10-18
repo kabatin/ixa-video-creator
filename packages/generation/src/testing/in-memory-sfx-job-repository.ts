@@ -35,6 +35,26 @@ export const createInMemorySfxJobRepository = (): SfxJobRepository & { readonly 
       store = [...store, created]
       return Promise.resolve(created)
     },
+    recordImported: (input) => {
+      const now = new Date()
+      const created = SfxJob.parse({
+        id: newId(SfxJobId),
+        projectId: input.projectId,
+        tool: input.tool,
+        model: input.model,
+        spec: input.spec,
+        status: 'succeeded',
+        error: null,
+        providerRecord: input.providerRecord,
+        mediaAssetIds: [...input.mediaAssetIds],
+        timelineClipId: null,
+        queuedAt: now,
+        startedAt: now,
+        finishedAt: now,
+      })
+      store = [...store, created]
+      return Promise.resolve(created)
+    },
     findById: (id) => Promise.resolve(store.find((job) => job.id === id) ?? null),
     findRecentByProject: (projectId, limit) =>
       Promise.resolve([...store].reverse().filter((job) => job.projectId === projectId).slice(0, limit)),

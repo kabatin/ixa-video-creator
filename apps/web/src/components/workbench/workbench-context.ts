@@ -4,6 +4,7 @@ import type { Location, MusicTrack, Project, ProjectId, Sequence, Shot, ShotId }
 import type { ActiveGenerations } from '@/components/workbench/use-active-generations'
 import { createContext, useContext } from 'react'
 import type { UpdateShotBody } from '@/lib/api-schemas'
+import type { LibraryImportSection } from '@/lib/library-import-sections'
 import type { WireMusicAnalysis } from '@/lib/music-api'
 import type { WorkbenchDialog } from '@/lib/menu-model'
 import { usePlayheadSec } from '@/lib/playhead-sec'
@@ -125,10 +126,18 @@ export type WorkbenchContextValue = {
 
   // --- 画面の操作 ---
   readonly dialog: WorkbenchDialog | null
-  /** `shotIds` は右クリックのメニューから開くときの対象（削除: 右クリックした Shot だけ）。 */
-  readonly openDialog: (dialog: WorkbenchDialog, options?: { readonly shotIds?: readonly ShotId[] }) => void
+  /**
+   * `shotIds` は右クリックのメニューから開くときの対象（削除: 右クリックした Shot だけ）。
+   * `importSection` は取り込みの窓で最初に開く区分（素材ツリーの段から開いたとき、その段）。
+   */
+  readonly openDialog: (
+    dialog: WorkbenchDialog,
+    options?: { readonly shotIds?: readonly ShotId[]; readonly importSection?: LibraryImportSection },
+  ) => void
   /** ダイアログの対象として渡された Shot。渡されなければ null（チェック・選択から決める）。 */
   readonly dialogShotIds: readonly ShotId[] | null
+  /** 取り込みの窓で最初に開く区分。渡されなければ null（窓が決める）。 */
+  readonly dialogImportSection: LibraryImportSection | null
   readonly closeDialog: () => void
   readonly focusPanel: (panel: PanelId) => void
   /** インスペクターのどのタブを前に出すか。メニュー「生成」から生成タブを開くのに使う。 */
