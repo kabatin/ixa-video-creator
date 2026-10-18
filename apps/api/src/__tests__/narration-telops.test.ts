@@ -201,6 +201,7 @@ describe('手でテロップを消す', () => {
         projects: setup.deps.projects,
         mediaAssets: setup.deps.mediaAssets,
         onNarrationTelopDeleted: (lineId) => turnOffLineTelop(setup.deps, lineId),
+        editBatches: setup.deps.editBatches,
       }),
     )
     registerErrorHandlers(app, logger)
@@ -219,6 +220,25 @@ describe('手でテロップを消す', () => {
     expect(telops(setup)).toEqual([])
     await setup.send('PATCH', `/narration-lines/${line.id}`, { startSec: 12 })
     expect(telops(setup)).toEqual([])
+  })
+
+  it('消したナレーションのテロップは、取り消すと行が「テロップあり」に戻り、テロップも見た目ごと戻る', async () => {
+    const setup = setupNarration()
+    const line = await placedLine(setup)
+    await setup.send('PATCH', `/narration-lines/${line.id}`, { startSec: 10 })
+    const before = telops(setup)
+    const [first] = before
+
+    await withClips(setup).request(`/clips/${String(first?.id)}`, { method: 'DELETE' })
+    const [batch] = setup.deps.editBatches.snapshot()
+    expect(batch).toMatchObject({ kind: 'clip_edit', summary: 'テロップを消す', lineEntries: [{ lineId: line.id, telop: true }] })
+
+    expect((await undo(setup, batch!.id)).status).toBe(200)
+
+    expect(setup.deps.lines.snapshot()[0]?.telop).toBe(true)
+    // テロップは行から作り直される（ID は変わる）。位置・中身は消す前と同じ。
+    const shape = (clips: typeof before) => clips.map(({ startSec, durationSec, content }) => ({ startSec, durationSec, content }))
+    expect(shape(telops(setup))).toEqual(shape(before))
   })
 
   it('手で置いたテロップを消しても、行には触らない', async () => {

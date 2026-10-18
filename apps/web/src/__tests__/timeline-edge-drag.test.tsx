@@ -17,7 +17,7 @@ vi.mock('next/navigation', () => ({
 }))
 
 const fake = vi.hoisted(() => ({
-  timeline: { updateClip: vi.fn() },
+  timeline: { updateClipSpans: vi.fn() },
   roughCut: { applyRoughCut: vi.fn(), planRoughCut: vi.fn() },
 }))
 vi.mock('@/lib/timeline-api', async (importOriginal) => {
@@ -93,7 +93,7 @@ const textLane = (): Element => {
 }
 
 beforeEach(() => {
-  fake.timeline.updateClip.mockReset()
+  fake.timeline.updateClipSpans.mockReset()
   fake.roughCut.applyRoughCut.mockReset()
 })
 
@@ -101,48 +101,52 @@ describe('テロップの端をつまむ', () => {
   // 行1 0–2 / 行2 2–4 が接している。行3 10–12 は離れている。
   const clips = [textClip(1, 0, 2), textClip(2, 2, 2), textClip(3, 10, 2)]
   const byId = new Map(clips.map((clip) => [clip.id, clip]))
-  const echo = (id: TimelineClipId, patch: { startSec: number; durationSec: number }): Promise<TimelineClip> =>
-    Promise.resolve({ ...(byId.get(id) as TimelineClip), ...patch })
+  type Span = { readonly id: TimelineClipId; readonly startSec: number; readonly durationSec: number }
+  const echo = (_projectId: ProjectId, spans: readonly Span[]): Promise<TimelineClip[]> =>
+    Promise.resolve(spans.map(({ id, ...span }) => ({ ...(byId.get(id) as TimelineClip), ...span })))
+  /** 1 回の呼び出しで送った位置と尺（境目を動かすと当人と隣を 1 つの記録にまとめて送る）。 */
+  const sentSpans = (): readonly Span[] => (fake.timeline.updateClipSpans.mock.calls[0] as [ProjectId, Span[]])[1]
 
-  it('右端を右へ引くと、隣の頭が付いてきて 2 件書く。縮む隣を先に書く', async () => {
-    fake.timeline.updateClip.mockImplementation(echo)
+  it('右端を右へ引くと、隣の頭が付いてきて 2 件を 1 回で書く（1 つの記録）。縮む隣を先に送る', async () => {
+    fake.timeline.updateClipSpans.mockImplementation(echo)
     render(editor({ clips }))
 
     dragOn(textLane(), 2, 3)
 
     await waitFor(() => {
-      expect(fake.timeline.updateClip).toHaveBeenCalledTimes(2)
+      expect(fake.timeline.updateClipSpans).toHaveBeenCalledTimes(1)
     })
-    expect(fake.timeline.updateClip.mock.calls).toEqual([
-      [clipId(2), { startSec: 3, durationSec: 1 }],
-      [clipId(1), { startSec: 0, durationSec: 3 }],
+    expect(fake.timeline.updateClipSpans.mock.calls[0]?.[0]).toBe(projectId)
+    expect(sentSpans()).toEqual([
+      { id: clipId(2), startSec: 3, durationSec: 1 },
+      { id: clipId(1), startSec: 0, durationSec: 3 },
     ])
   })
 
   it('Option を押していれば、隣は動かさずそのテロップだけを縮める', async () => {
-    fake.timeline.updateClip.mockImplementation(echo)
+    fake.timeline.updateClipSpans.mockImplementation(echo)
     render(editor({ clips }))
 
     dragOn(textLane(), 2, 1.5, true)
 
     await waitFor(() => {
-      expect(fake.timeline.updateClip).toHaveBeenCalledTimes(1)
+      expect(fake.timeline.updateClipSpans).toHaveBeenCalledTimes(1)
     })
-    expect(fake.timeline.updateClip).toHaveBeenCalledWith(clipId(1), { startSec: 0, durationSec: 1.5 })
+    expect(sentSpans()).toEqual([{ id: clipId(1), startSec: 0, durationSec: 1.5 }])
   })
 
   /** 隣の頭（= 元の境目）が吸着の候補に残ると、少し引いただけでは元の位置へ吸い戻されて動かない。 */
   it('元の境目へ吸い戻さない（付いてくる隣の端は吸着の候補から外す）', async () => {
-    fake.timeline.updateClip.mockImplementation(echo)
+    fake.timeline.updateClipSpans.mockImplementation(echo)
     render(editor({ clips }))
 
     dragOn(textLane(), 2, 2.15)
 
     await waitFor(() => {
-      expect(fake.timeline.updateClip).toHaveBeenCalledTimes(2)
+      expect(fake.timeline.updateClipSpans).toHaveBeenCalledTimes(1)
     })
-    const [, [, grown]] = fake.timeline.updateClip.mock.calls as [unknown, [unknown, { durationSec: number }]]
-    expect(grown.durationSec).toBeCloseTo(2.15)
+    const [, grown] = sentSpans()
+    expect(grown?.durationSec).toBeCloseTo(2.15)
   })
 })
 

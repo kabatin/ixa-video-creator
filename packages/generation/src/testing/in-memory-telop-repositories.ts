@@ -25,6 +25,8 @@ export const createInMemoryTimelineClipRepository = (
   seed: readonly TimelineClip[] = [],
 ): InMemoryTimelineClipRepository => {
   let store: readonly TimelineClip[] = seed.map((clip) => TimelineClipSchema.parse(clip))
+  /** 論理削除したもの。一覧・1 件の読みには出さず、`restore` だけが戻す。 */
+  let deleted: readonly TimelineClip[] = []
 
   return {
     snapshot: () => store,
@@ -38,7 +40,7 @@ export const createInMemoryTimelineClipRepository = (
     create: (input) => {
       const created = TimelineClipSchema.parse({
         ...CreateTimelineClipInputSchema.parse(input),
-        id: newId(TimelineClipIdSchema),
+        id: input.id ?? newId(TimelineClipIdSchema),
         createdAt: new Date(),
       })
       store = [...store, created]
@@ -60,7 +62,16 @@ export const createInMemoryTimelineClipRepository = (
       const current = store.find((clip) => clip.id === id)
       if (current === undefined) return Promise.reject(new DbNotFoundError('TimelineClip', id))
       store = store.filter((clip) => clip.id !== id)
+      deleted = [...deleted, current]
       return Promise.resolve(current)
+    },
+
+    restore: (id) => {
+      const removed = deleted.find((clip) => clip.id === id)
+      if (removed === undefined) return Promise.resolve(null)
+      deleted = deleted.filter((clip) => clip.id !== id)
+      store = [...store, removed]
+      return Promise.resolve(removed)
     },
 
     // 本物と同じく、消す相手が 1 件でも無ければ何も変えずに投げる（まとめて差し替える）。
@@ -70,10 +81,11 @@ export const createInMemoryTimelineClipRepository = (
       const created = inputs.map((input) =>
         TimelineClipSchema.parse({
           ...CreateTimelineClipInputSchema.parse(input),
-          id: newId(TimelineClipIdSchema),
+          id: input.id ?? newId(TimelineClipIdSchema),
           createdAt: new Date(),
         }),
       )
+      deleted = [...deleted, ...store.filter((clip) => removeIds.includes(clip.id))]
       store = [...store.filter((clip) => !removeIds.includes(clip.id)), ...created]
       return Promise.resolve(created)
     },

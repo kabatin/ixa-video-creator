@@ -1,5 +1,12 @@
 import { index, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
-import type { EditBatch, EditBatchClipEntry, EditBatchEntry, EditBatchLineEntry, EditBatchMusicEntry } from '@ixa/domain'
+import type {
+  EditBatch,
+  EditBatchClipEdit,
+  EditBatchClipEntry,
+  EditBatchEntry,
+  EditBatchLineEntry,
+  EditBatchMusicEntry,
+} from '@ixa/domain'
 import { EditBatchKind as EditBatchKindSchema } from '@ixa/domain'
 import { createdAt, timestampTz, ulidPk, ulidRef } from './columns.js'
 import { projects } from './workspace.js'
@@ -36,6 +43,8 @@ export const shotEditBatches = pgTable(
     lineEntries: jsonb('line_entries').$type<readonly EditBatchLineEntry[]>().notNull().default([]),
     /** 楽曲の「変える前」（曲を最後の Shot で切る。2026-10-19）。これまでの記録は空。 */
     musicEntries: jsonb('music_entries').$type<readonly EditBatchMusicEntry[]>().notNull().default([]),
+    /** クリップ 1 件ずつの作る・直す・消す（変える前の丸ごとの控え。2026-10-19）。これまでの記録は空。 */
+    clipEdits: jsonb('clip_edits').$type<readonly EditBatchClipEdit[]>().notNull().default([]),
     /** 取り消した時刻。**NULL は「まだ取り消していない」**（「取り消せない」ではない）。 */
     undoneAt: timestampTz('undone_at'),
     createdAt: createdAt(),

@@ -26,6 +26,7 @@ import type { Requester } from '@/lib/requester'
  * GET    /projects/{projectId}/clips          一覧（?track= で絞れる）
  * POST   /projects/{projectId}/clips          作成
  * PATCH  /clips/{id}                          更新
+ * POST   /projects/{projectId}/clips/spans    いくつかの位置と尺をいっしょに更新（1 つの記録）
  * DELETE /clips/{id}                          削除
  * ```
  *
@@ -62,6 +63,11 @@ export type CreateClipBody = z.input<typeof CreateClipBody>
 export const UpdateClipBody = UpdateTimelineClipPatch
 export type UpdateClipBody = z.input<typeof UpdateClipBody>
 
+/** 位置と尺だけ。帯で境目を動かすと当人と隣が動く（送った順にサーバが書く）。 */
+export const ClipSpan = TimelineClip.pick({ id: true, startSec: true, durationSec: true })
+export type ClipSpan = z.infer<typeof ClipSpan>
+const ClipSpansBody = z.object({ spans: z.array(ClipSpan).min(1) })
+
 /**
  * タイムラインの検証結果。**判定はサーバの `validateTimeline` だけが持つ。**
  * 画面に同じ規則を書くと必ずズレて、レンダリングでは止まるのに画面では合格に見える。
@@ -92,6 +98,8 @@ export type TimelineApi = {
   listClips: (projectId: ProjectId, track?: TimelineTrack) => Promise<WireTimelineClip[]>
   createClip: (projectId: ProjectId, body: CreateClipBody) => Promise<WireTimelineClip>
   updateClip: (id: TimelineClipId, patch: UpdateClipBody) => Promise<WireTimelineClip>
+  /** いくつかの位置と尺を 1 回で変える。**取り消しの記録が 1 つにまとまる**（⌘Z 1 回で両方戻る）。 */
+  updateClipSpans: (projectId: ProjectId, spans: readonly ClipSpan[]) => Promise<WireTimelineClip[]>
   deleteClip: (id: TimelineClipId) => Promise<void>
 }
 
@@ -135,6 +143,13 @@ export const createTimelineApi = (requester: Requester): TimelineApi => ({
 
   updateClip: async (id, patch) =>
     requester.patch(clipPath(id), UpdateClipBody.parse(patch), WireTimelineClip),
+
+  updateClipSpans: async (projectId, spans) =>
+    requester.post(
+      projectPath(projectId, '/clips/spans'),
+      ClipSpansBody.parse({ spans }),
+      WireTimelineClipList,
+    ),
 
   deleteClip: async (id) => requester.remove(clipPath(id)),
 })

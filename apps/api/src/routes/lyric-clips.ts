@@ -11,16 +11,21 @@ import {
   LYRIC_STYLE_NAME,
   LYRIC_TELOP_LAYER,
   ProjectId as ProjectIdSchema,
+  TimelineClipId as TimelineClipIdSchema,
+  clipSnapshotOf,
   lyricLineOf,
   lyricLines,
   lyricTelopSpans,
+  newId,
   type CreateTimelineClipInput,
   type ProjectId as ProjectIdType,
   type TextStylePreset,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
+import { recordClipEdits } from './clip-edit-recording.js'
 import { TimelineClipResponse, toClipResponse } from './clips.js'
+import type { EditBatchRecorder } from './edit-batch-recording.js'
 
 /**
  * 歌詞をテロップにする（ADR-0033。制作者 2026-10-01「1 フレーズごとにテロップを自動生成できると入力の手間が省ける」）。
@@ -48,6 +53,8 @@ export type LyricClipDeps = {
   /** 曲の終わりを知るため（タイムラインの長さと同じく、音源の probe の尺を使う）。 */
   readonly musicTracks: Pick<MusicTrackRepository, 'findByProject'>
   readonly mediaAssets: Pick<MediaAssetRepository, 'findById'>
+  /** 置き直しを書く前に記録する（取り消すと前の歌詞のテロップが戻り、置いた分は消える）。 */
+  readonly editBatches: EditBatchRecorder
 }
 
 const PlacedData = z
@@ -125,9 +132,20 @@ export const lyricClipRoutes = (deps: LyricClipDeps) =>
       (clip) => clip.content.type === 'text' && lyricLineOf(clip.content.params) !== null,
     )
 
+    // 記録は書く前に作る。置く物の ID を先に決めて記録に入れる。
+    const inputs = spans.map((span) => ({ span, id: newId(TimelineClipIdSchema) }))
+    await recordClipEdits(deps.editBatches, {
+      projectId,
+      summary: '歌詞をテロップにする',
+      edits: [
+        ...previous.map((clip) => ({ op: 'delete' as const, clipId: clip.id, before: clipSnapshotOf(clip) })),
+        ...inputs.map(({ id }) => ({ op: 'create' as const, clipId: id })),
+      ],
+    })
     const placed = await deps.timelineClips.replace(
       previous.map((clip) => clip.id),
-      spans.map((span) => ({
+      inputs.map(({ span, id }) => ({
+        id,
         projectId,
         track: 'TEXT',
         startSec: span.startSec,

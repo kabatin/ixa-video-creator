@@ -2,6 +2,9 @@ import { z } from 'zod'
 import { EditBatchId, MusicTrackId, NarrationLineId, ProjectId, ShotId, TakeId, TimelineClipId } from '../common/ids.js'
 import { Seconds } from '../common/time.js'
 import { MUSIC_FADE_MAX_SEC, MusicEndSec } from '../music/music.js'
+import { EditBatchClipEdit } from './edit-batch-clip-edit.js'
+
+export * from './edit-batch-clip-edit.js'
 import { ShotStatus, UpdateShotPatch } from './shot.js'
 
 /**
@@ -19,8 +22,17 @@ import { ShotStatus, UpdateShotPatch } from './shot.js'
 /**
  * `text_style` はテロップの見た目のまとめ変更（2026-10-02）。Shot ではなくテロップを記録する（`clipEntries`）。
  * `music_trim` は曲を最後の Shot で切る（2026-10-19）。楽曲を記録する（`musicEntries`）。
+ * `clip_edit` はクリップ 1 件ずつの作る・直す・消す（2026-10-19）。クリップの丸ごとの控えを記録する（`clipEdits`）。
  */
-export const EditBatchKind = z.enum(['rough_cut', 'draft_adopt', 'bulk_update', 'text_style', 'narration_arrange', 'music_trim'])
+export const EditBatchKind = z.enum([
+  'rough_cut',
+  'draft_adopt',
+  'bulk_update',
+  'text_style',
+  'narration_arrange',
+  'music_trim',
+  'clip_edit',
+])
 export type EditBatchKind = z.infer<typeof EditBatchKind>
 
 /**
@@ -80,12 +92,15 @@ export const EditBatchClipEntry = z.object({
 export type EditBatchClipEntry = z.infer<typeof EditBatchClipEntry>
 
 /**
- * ナレーションの行 1 件ぶんの「変える前」（ADR-0038）。まとめて並べると置いた行の位置が全部変わるので、位置だけを持つ。
- * **`null` は「置いていなかった」**（触っていない行は記録に入れない）。
+ * ナレーションの行 1 件ぶんの「変える前」（ADR-0038）。まとめて並べると置いた行の位置が全部変わるので、位置を持つ。
+ * **`startSec: null` は「置いていなかった」**（触っていない行は記録に入れない）。
+ * `telop` はテロップを出すか（ナレーションのテロップを手で消すと、その行は「テロップなし」になる）。
+ * **どちらも欄が無いのは「触っていない」。**
  */
 export const EditBatchLineEntry = z.object({
   lineId: NarrationLineId,
-  startSec: z.number().nullable(),
+  startSec: z.number().nullable().optional(),
+  telop: z.boolean().optional(),
 })
 export type EditBatchLineEntry = z.infer<typeof EditBatchLineEntry>
 
@@ -115,6 +130,8 @@ export const EditBatch = z.object({
   lineEntries: z.array(EditBatchLineEntry).default([]),
   /** 楽曲の記録（曲を切る）。これまでの記録は空として読む。 */
   musicEntries: z.array(EditBatchMusicEntry).default([]),
+  /** クリップ 1 件ずつの作る・直す・消す。これまでの記録は空として読む。 */
+  clipEdits: z.array(EditBatchClipEdit).default([]),
   /** 取り消した時刻。**`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
   undoneAt: z.date().nullable(),
   createdAt: z.date(),
@@ -141,7 +158,11 @@ export const isUndone = (batch: EditBatch): boolean => batch.undoneAt !== null
  */
 export const canUndo = (batch: EditBatch): boolean =>
   !isUndone(batch) &&
-  (batch.entries.length > 0 || batch.clipEntries.length > 0 || batch.lineEntries.length > 0 || batch.musicEntries.length > 0)
+  (batch.entries.length > 0 ||
+    batch.clipEntries.length > 0 ||
+    batch.lineEntries.length > 0 ||
+    batch.musicEntries.length > 0 ||
+    batch.clipEdits.length > 0)
 
 /**
  * 1 件ぶんの取り消しで、採用 Take を戻す必要があるか。

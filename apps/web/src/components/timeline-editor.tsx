@@ -435,17 +435,14 @@ export const TimelineEditor = ({
         : [{ id: neighborClip.id, from: neighborClip, to: neighbor.span }]),
     ])
     void run(writes.length > 1 ? 'クリップの境目を更新' : 'クリップの位置と尺を更新', async () => {
-      // 1 件ずつ順に書く（縮む側が先。同時に送ると順が保てない）。
-      for (const write of writes) {
-        const updated = await api.updateClip(write.id, {
-          startSec: write.to.startSec,
-          durationSec: write.to.durationSec,
-        })
-        setClips((current) =>
-          current === null ? current : current.map((each) => (each.id === updated.id ? updated : each)),
-        )
-        onClipChanged?.(updated.track)
-      }
+      // 当人と隣を 1 回で送る（取り消しの記録が 1 つにまとまる）。サーバは送った順に書く（縮む側が先）。
+      const updated = await api.updateClipSpans(
+        projectId,
+        writes.map((write) => ({ id: write.id, startSec: write.to.startSec, durationSec: write.to.durationSec })),
+      )
+      const byId = new Map(updated.map((each) => [each.id, each]))
+      setClips((current) => (current === null ? current : current.map((each) => byId.get(each.id) ?? each)))
+      for (const track of new Set(updated.map((each) => each.track))) onClipChanged?.(track)
     })
   }
 

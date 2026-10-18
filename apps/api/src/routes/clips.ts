@@ -7,9 +7,13 @@ import {
   TimelineClipId as TimelineClipIdSchema,
   TimelineTrack as TimelineTrackSchema,
   UpdateTimelineClipPatch as UpdateTimelineClipPatchSchema,
+  clipEditSummary,
+  clipSnapshotOf,
   isTextStyleUnreadable,
   narrationLineOf,
+  newId,
   parseEffectParams,
+  type EditBatchLineEntry,
   type NarrationLineId,
   type ProjectId,
   type TimelineClip,
@@ -26,6 +30,8 @@ import {
   successResponse,
   type FieldErrors,
 } from '../response.js'
+import { changedFieldsOf, recordClipEdits, updateEditOf } from './clip-edit-recording.js'
+import type { EditBatchRecorder } from './edit-batch-recording.js'
 
 /**
  * VIDEO1 以外のトラックに載る `TimelineClip` の CRUD（docs/DOMAIN.md §12）。
@@ -268,6 +274,15 @@ export type ClipRoutesDeps = {
   mediaAssets: Pick<MediaAssetRepository, 'findById'>
   /** ナレーションのテロップを手で消したとき（その行を「テロップなし」にする。ADR-0038）。ナレーションが無い環境では省く。 */
   onNarrationTelopDeleted?: (lineId: NarrationLineId) => Promise<void>
+  /** 作る・直す・消すを、書く前に記録する（取り消し。2026-10-19）。**省けない**（省くと戻せない操作が黙って増える）。 */
+  editBatches: EditBatchRecorder
+}
+
+/** ナレーションのテロップなら、その行（消すと「テロップなし」になる。戻すときに行も戻す）。 */
+const narrationLineEntriesOf = (clip: TimelineClip): readonly EditBatchLineEntry[] => {
+  const lineId = clip.content.type === 'text' ? narrationLineOf(clip.content.params) : null
+  // ナレーションのテロップは「テロップあり」の行にしか作られないので、消す前は必ず true。
+  return lineId === null ? [] : [{ lineId, telop: true }]
 }
 
 export const clipRoutes = (deps: ClipRoutesDeps) => {
@@ -310,7 +325,14 @@ export const clipRoutes = (deps: ClipRoutesDeps) => {
       const effect = normalizeEffectClip(input)
       if (!effect.ok) return c.json(fail(VALIDATION_ERROR_MESSAGE, effect.fields), 422)
 
-      const created = await deps.timelineClips.create({ ...effect.value, projectId })
+      // 記録は書く前に作る。作る物の ID を先に決めて記録に入れる。
+      const id = newId(TimelineClipIdSchema)
+      await recordClipEdits(deps.editBatches, {
+        projectId,
+        summary: clipEditSummary('create', effect.value),
+        edits: [{ op: 'create', clipId: id }],
+      })
+      const created = await deps.timelineClips.create({ ...effect.value, projectId, id })
       return c.json(ok(toClipResponse(created)), 201)
     })
     .openapi(updateClipRoute, async (c) => {
@@ -344,12 +366,30 @@ export const clipRoutes = (deps: ClipRoutesDeps) => {
       const effect = normalizeEffectClip(patch)
       if (!effect.ok) return c.json(fail(VALIDATION_ERROR_MESSAGE, effect.fields), 422)
 
+      const edit = updateEditOf(existing, effect.value)
+      if (edit !== null) {
+        const after = { track: effect.value.track ?? existing.track, content: effect.value.content ?? existing.content }
+        await recordClipEdits(deps.editBatches, {
+          projectId: existing.projectId,
+          summary: clipEditSummary('update', after, changedFieldsOf(existing, effect.value)),
+          edits: [edit],
+        })
+      }
       // 読んでから書くまでに消されていれば、リポジトリが DbNotFoundError を投げ、共通ハンドラが 404 にする。
       const updated = await deps.timelineClips.update(id, effect.value)
       return c.json(ok(toClipResponse(updated)), 200)
     })
     .openapi(deleteClipRoute, async (c) => {
-      const removed = await deps.timelineClips.softDelete(c.req.valid('param').id)
+      const id = c.req.valid('param').id
+      const existing = await deps.timelineClips.findById(id)
+      if (existing === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      await recordClipEdits(deps.editBatches, {
+        projectId: existing.projectId,
+        summary: clipEditSummary('delete', existing),
+        edits: [{ op: 'delete', clipId: id, before: clipSnapshotOf(existing) }],
+        lineEntries: narrationLineEntriesOf(existing),
+      })
+      const removed = await deps.timelineClips.softDelete(id)
       const lineId = removed.content.type === 'text' ? narrationLineOf(removed.content.params) : null
       if (lineId !== null) await deps.onNarrationTelopDeleted?.(lineId)
       return c.body(null, 204)

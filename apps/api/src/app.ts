@@ -79,6 +79,7 @@ import { storyboardRoutes } from './routes/storyboard.js'
 import { reviewRoutes, type ReviewQueue } from './routes/reviews.js'
 import { transitionRoutes } from './routes/transitions.js'
 import { clipRoutes } from './routes/clips.js'
+import { clipSpanRoutes } from './routes/clip-spans.js'
 import { clipTextStyleRoutes } from './routes/clip-text-style.js'
 import { textStyleRoutes } from './routes/text-styles.js'
 import { eventRoutes } from './routes/events.js'
@@ -571,8 +572,11 @@ export const createApp = (deps: AppDeps) => {
       projects,
       mediaAssets,
       ...(narration === undefined ? {} : { onNarrationTelopDeleted: (lineId: NarrationLineId) => turnOffLineTelop(narration, lineId) }),
+      editBatches: deps.editBatches,
     }),
   )
+  // 帯で境目を動かす（当人と隣を 1 つの記録にまとめる）。
+  app.route('/', clipSpanRoutes({ timelineClips: deps.timelineClips, projects, editBatches: deps.editBatches }))
   // テロップの見た目: 名前を付けて保存し、まとめて当てる（ADR-0028）。
   app.route('/', textStyleRoutes({ textStyles: deps.textStyles, projects }))
   // 歌詞をフレーズごとのテロップにする（ADR-0033）。
@@ -585,6 +589,7 @@ export const createApp = (deps: AppDeps) => {
       textStyles: deps.textStyles,
       musicTracks: deps.musicTracks,
       mediaAssets,
+      editBatches: deps.editBatches,
     }),
   )
   app.route(

@@ -234,6 +234,18 @@ describe('TimelineClip', () => {
     expect(updated.startSec).toBe(3)
   })
 
+  it('境目を動かすときは、いくつかの位置と尺を 1 回で送る（1 つの記録にまとめる）', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [{ ...clipJson, startSec: 3 }], meta: { total: 1 } }))
+
+    const updated = await api().updateClipSpans(projectId, [{ id: clipId, startSec: 3, durationSec: 1 }])
+
+    const [url, init] = lastCall()
+    expect(url).toBe(`${BASE_URL}/projects/${PROJECT_ID}/clips/spans`)
+    expect(init?.method).toBe('POST')
+    expect(requestBodyOf(init)).toEqual({ spans: [{ id: CLIP_ID, startSec: 3, durationSec: 1 }] })
+    expect(updated.map((clip) => clip.startSec)).toEqual([3])
+  })
+
   it('削除は DELETE する', async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
 

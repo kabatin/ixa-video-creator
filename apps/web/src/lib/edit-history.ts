@@ -23,6 +23,7 @@ const KIND_LABELS: Readonly<Record<EditBatchKind, string>> = Object.freeze({
   text_style: 'テロップの見た目の一括変更',
   narration_arrange: 'ナレーションをまとめて並べる',
   music_trim: '曲を最後の Shot で切る',
+  clip_edit: 'クリップの編集',
 })
 
 export const editBatchKindLabel = (kind: EditBatchKind): string => KIND_LABELS[kind]
@@ -68,6 +69,8 @@ export type EditHistoryRow = {
  * テロップの見た目のまとめ変更（2026-10-02）はテロップ、ナレーションをまとめて並べる（ADR-0038）は行。
  */
 const countLabelOf = (batch: WireEditBatch): string => {
+  // クリップ 1 件ずつの記録は効果音・エフェクトも含むので、テロップと呼ばない。
+  if (batch.kind === 'clip_edit') return `${batch.clipCount.toString()} 件のクリップ`
   if (batch.shotCount > 0) return `${batch.shotCount.toString()} 件の Shot`
   if (batch.lineCount > 0) return `${batch.lineCount.toString()} 行のナレーション`
   if (batch.clipCount > 0) return `${batch.clipCount.toString()} 件のテロップ`
@@ -136,7 +139,8 @@ export const buildUndoResultView = (result: WireUndoResult): UndoResultView => {
   const music = !clips && restoredMusic.length + failedMusicTracks.length > 0
   const restored = clips ? result.restoredClips.length : music ? restoredMusic.length : result.restored.length
   const failed = clips ? result.failedClips.length : music ? failedMusicTracks.length : result.failed.length
-  const subject = clips ? 'テロップ ' : music ? '曲 ' : ''
+  const clipNoun = result.batch.kind === 'clip_edit' ? 'クリップ' : 'テロップ'
+  const subject = clips ? `${clipNoun} ` : music ? '曲 ' : ''
   const failedMusic = failedMusicTracks.map((entry, index) => ({
     key: `failed-music:${entry.musicTrackId}:${index.toString()}`,
     subject: '曲',
@@ -152,7 +156,7 @@ export const buildUndoResultView = (result: WireUndoResult): UndoResultView => {
     failedClips: [
       ...result.failedClips.map((entry, index) => ({
         key: `failed-clip:${entry.clipId}:${index.toString()}`,
-        subject: 'テロップ',
+        subject: clipNoun,
         reason: entry.reason,
       })),
       ...failedMusic,

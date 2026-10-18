@@ -34,6 +34,7 @@ import { syncNarrationTelops, type NarrationTelopSyncDeps } from '@ixa/generatio
 import { roughCutLockedReason } from '@ixa/timeline'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, okList, successResponse, listResponse } from '../response.js'
+import { undoClipEdits } from './edit-batch-clip-undo.js'
 import { FOREIGN_SHOT_REASON, SHOT_NOT_FOUND_REASON } from './shots-bulk.js'
 
 /**
@@ -80,7 +81,7 @@ export const EditBatchSummaryResponse = z
     summary: z.string().min(1),
     /** 変える前を記録した Shot の件数。 */
     shotCount: z.number().int().nonnegative(),
-    /** 変える前を記録したテロップの件数（テロップの見た目のまとめ変更）。 */
+    /** 変える前を記録したクリップの件数（テロップの見た目のまとめ変更・クリップ 1 件ずつの作る・直す・消す）。 */
     clipCount: z.number().int().nonnegative(),
     /** 変える前を記録したナレーションの行の件数（まとめて並べる。ADR-0038）。 */
     lineCount: z.number().int().nonnegative().default(0),
@@ -117,7 +118,7 @@ export const UndoEditBatchResponse = z
     batch: EditBatchSummaryResponse,
     restored: z.array(ShotIdSchema),
     failed: z.array(UndoFailure),
-    /** 戻したテロップ。Shot の記録だけなら空。 */
+    /** 戻したクリップ（テロップの見た目・クリップ 1 件ずつの記録）。Shot の記録だけなら空。 */
     restoredClips: z.array(TimelineClipIdSchema),
     failedClips: z.array(UndoClipFailure),
     /** 戻したナレーションの行（ADR-0038）。 */
@@ -135,7 +136,7 @@ export const toEditBatchSummary = (batch: EditBatch): EditBatchSummaryResponse =
   kind: batch.kind,
   summary: batch.summary,
   shotCount: batch.entries.length,
-  clipCount: batch.clipEntries.length,
+  clipCount: batch.clipEntries.length + batch.clipEdits.length,
   lineCount: batch.lineEntries.length,
   musicCount: batch.musicEntries.length,
   undoneAt: batch.undoneAt === null ? null : batch.undoneAt.toISOString(),
@@ -185,8 +186,11 @@ export type EditBatchRoutesDeps = {
    */
   shots: Pick<ShotRepository, 'findById' | 'selectTake' | 'update' | 'updateStatus'>
   editBatches: Pick<EditBatchRepository, 'findByProject' | 'findById' | 'markUndone'>
-  /** テロップの見た目を戻す（`clipEntries`）。文字・時間には触らない。 */
-  timelineClips: Pick<TimelineClipRepository, 'findByProject' | 'update'>
+  /**
+   * テロップの見た目を戻す（`clipEntries`。文字・時間には触らない）と、
+   * クリップ 1 件ずつの作る・直す・消すを戻す（`clipEdits`。消したものは論理削除を外す）。
+   */
+  timelineClips: Pick<TimelineClipRepository, 'findByProject' | 'findById' | 'update' | 'softDelete' | 'restore'>
   /**
    * ナレーションの行の位置を戻す（`lineEntries`。ADR-0038）。戻したあとテロップも作り直す。
    * ナレーションを繋いでいない環境では省く（その記録は作られない）。
@@ -349,6 +353,10 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
         if (reason === null) restoredClips.push(entry.clipId)
         else failedClips.push({ clipId: entry.clipId, reason })
       }
+      // クリップ 1 件ずつの記録。行（ナレーションのテロップ）より先に戻す（行を戻すとテロップを作り直すため）。
+      const clipEdits = await undoClipEdits(deps, undone.clipEdits)
+      restoredClips.push(...clipEdits.restored)
+      failedClips.push(...clipEdits.failed)
 
       // ナレーションの行の位置（ADR-0038）。戻してからテロップを作り直す（テロップは行から導かれる）。
       const restoredLines: NarrationLineId[] = []
@@ -359,7 +367,11 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
           failedLines.push({ lineId: entry.lineId, reason: LINE_NOT_FOUND_REASON })
           continue
         }
-        await deps.narration?.lines.update(entry.lineId, { startSec: entry.startSec })
+        // **欄が無ければ触っていないので戻さない。**
+        await deps.narration?.lines.update(entry.lineId, {
+          ...(entry.startSec === undefined ? {} : { startSec: entry.startSec }),
+          ...(entry.telop === undefined ? {} : { telop: entry.telop }),
+        })
         restoredLines.push(entry.lineId)
       }
       if (restoredLines.length > 0 && deps.narration !== undefined) {

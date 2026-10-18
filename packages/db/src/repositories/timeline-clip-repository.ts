@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm'
 import type {
   CreateTimelineClipInput, ProjectId, TimelineClip, TimelineClipId, UpdateTimelineClipPatch,
 } from '@ixa/domain'
@@ -17,6 +17,12 @@ import { timelineClips } from '../schema/timeline.js'
 export type TimelineClipRow = typeof timelineClips.$inferSelect
 
 /**
+ * 作るクリップ。**`id` は省ける**（省けばここで振る）。取り消しの記録は書く前に作るので、
+ * 作る前に ID を決めておきたい呼び手（クリップの作成・歌詞の置き直し）だけが渡す。
+ */
+export type NewTimelineClip = CreateTimelineClipInput & { readonly id?: TimelineClipId }
+
+/**
  * TimelineClip の読み書き。戻り値は必ず `@ixa/domain` の型。
  * VIDEO1 は Shot の投影なので、ここには現れない（ADR-0002）。
  */
@@ -25,17 +31,22 @@ export type TimelineClipRepository = {
   findByProject(projectId: ProjectId): Promise<TimelineClip[]>
   /** 1 件。ソフトデリート済み・無ければ null（更新の前に今の形を読む。ADR-0050）。 */
   findById(id: TimelineClipId): Promise<TimelineClip | null>
-  create(input: CreateTimelineClipInput): Promise<TimelineClip>
+  create(input: NewTimelineClip): Promise<TimelineClip>
   update(id: TimelineClipId, patch: UpdateTimelineClipPatch): Promise<TimelineClip>
   /** 消したクリップを返す（ナレーションのテロップなら、どの行のものかを見るため）。 */
   softDelete(id: TimelineClipId): Promise<TimelineClip>
+  /**
+   * 消したクリップを戻す（取り消し。2026-10-19）。**同じ ID・同じ中身のまま**論理削除を外す。
+   * 消していない・無いなら `null`（呼ぶ側が理由を出す）。
+   */
+  restore(id: TimelineClipId): Promise<TimelineClip | null>
   /**
    * いくつか消して、いくつか置く（歌詞のテロップの置き直し。ADR-0033）。**1 トランザクションで**行う。
    * 途中で落ちて半分だけ差し替わると、前の歌詞と新しい歌詞が帯に混ざる。消す相手が無ければ `DbNotFoundError`。
    */
   replace(
     removeIds: readonly TimelineClipId[],
-    inputs: readonly CreateTimelineClipInput[],
+    inputs: readonly NewTimelineClip[],
   ): Promise<TimelineClip[]>
 }
 
@@ -52,6 +63,10 @@ export const timelineClipRowToDomain = (row: TimelineClipRow): TimelineClip =>
     opacity: row.opacity,
     createdAt: row.createdAt,
   })
+
+/** 渡された ID は検証してから使う（規約 4）。無ければ振る。 */
+const idOf = (input: NewTimelineClip): TimelineClipId =>
+  input.id === undefined ? newId(TimelineClipIdSchema) : TimelineClipIdSchema.parse(input.id)
 
 const liveById = (id: TimelineClipId) =>
   and(eq(timelineClips.id, id), isNull(timelineClips.deletedAt))
@@ -76,7 +91,7 @@ export const createTimelineClipRepository = (db: DbClient): TimelineClipReposito
     const validated = CreateTimelineClipInputSchema.parse(input)
     const rows = await db
       .insert(timelineClips)
-      .values({ ...validated, id: newId(TimelineClipIdSchema), createdAt: new Date() })
+      .values({ ...validated, id: idOf(input), createdAt: new Date() })
       .returning()
     const row = rows[0]
     if (!row) throw new Error('timeline_clips への INSERT が行を返しませんでした')
@@ -102,8 +117,18 @@ export const createTimelineClipRepository = (db: DbClient): TimelineClipReposito
     return timelineClipRowToDomain(row)
   },
 
+  async restore(id) {
+    const rows = await db
+      .update(timelineClips)
+      .set({ deletedAt: null })
+      .where(and(eq(timelineClips.id, id), isNotNull(timelineClips.deletedAt)))
+      .returning()
+    const row = rows[0]
+    return row === undefined ? null : timelineClipRowToDomain(row)
+  },
+
   async replace(removeIds, inputs) {
-    const validated = inputs.map((input) => CreateTimelineClipInputSchema.parse(input))
+    const validated = inputs.map((input) => ({ ...CreateTimelineClipInputSchema.parse(input), id: idOf(input) }))
     return db.transaction(async (tx) => {
       const now = new Date()
       for (const id of removeIds) {
@@ -117,7 +142,7 @@ export const createTimelineClipRepository = (db: DbClient): TimelineClipReposito
       if (validated.length === 0) return []
       const rows = await tx
         .insert(timelineClips)
-        .values(validated.map((input) => ({ ...input, id: newId(TimelineClipIdSchema), createdAt: now })))
+        .values(validated.map((input) => ({ ...input, createdAt: now })))
         .returning()
       return rows.map(timelineClipRowToDomain)
     })

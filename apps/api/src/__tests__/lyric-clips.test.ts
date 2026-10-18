@@ -14,8 +14,10 @@ import { aShot, createInMemoryMediaAssetRepository, createInMemoryShotRepository
 import { describe, expect, it } from 'vitest'
 import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
+import { editBatchRoutes } from '../routes/edit-batches.js'
 import { lyricClipRoutes } from '../routes/lyric-clips.js'
 import { aProject } from './fixtures.js'
+import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 import { createInMemoryTextStyleRepository } from './in-memory-text-style-repository.js'
 import {
@@ -82,10 +84,13 @@ const build = (options: {
       : [],
   )
   const app = new OpenAPIHono({ defaultHook: validationHook })
+  const editBatches = createInMemoryEditBatchRepository()
+  const projects = createInMemoryProjectRepository([project])
   app.route(
     '/',
     lyricClipRoutes({
-      projects: createInMemoryProjectRepository([project]),
+      projects,
+      editBatches,
       shots,
       timelineClips,
       textStyles,
@@ -93,9 +98,11 @@ const build = (options: {
       mediaAssets: createInMemoryMediaAssetRepository([song]),
     }),
   )
+  app.route('/', editBatchRoutes({ projects, shots, editBatches, timelineClips }))
   registerErrorHandlers(app, createLogger('silent'))
   const place = () => app.request(`/projects/${project.id}/clips/lyrics`, { method: 'POST' })
-  return { project, timelineClips, place }
+  const undo = (batchId: string) => app.request(`/projects/${project.id}/edit-batches/${batchId}/undo`, { method: 'POST' })
+  return { project, timelineClips, editBatches, place, undo }
 }
 
 const handPlaced = (projectId: Project['id'], params: Record<string, unknown>, layer = 0) =>
@@ -145,6 +152,25 @@ describe('POST /projects/:id/clips/lyrics', () => {
     )
     expect(texts).toContain('手で置いた')
     expect(texts).not.toContain('古い歌詞')
+  })
+
+  it('置き直しは 1 つの記録になり、取り消すと前の歌詞のテロップが同じ ID で戻り、置いた分は消える', async () => {
+    const g = build({
+      clips: (projectId) => [
+        handPlaced(projectId, { text: '手で置いた' }),
+        handPlaced(projectId, { text: '古い歌詞', lyricLine: 0 }, LYRIC_TELOP_LAYER),
+      ],
+    })
+    const before = g.timelineClips.snapshot()
+
+    await g.place()
+    const [batch] = g.editBatches.snapshot()
+    expect(batch).toMatchObject({ kind: 'clip_edit', summary: '歌詞をテロップにする' })
+    expect(batch?.clipEdits.map((edit) => edit.op)).toEqual(['delete', 'create', 'create'])
+
+    expect((await g.undo(batch!.id)).status).toBe(200)
+    const byId = (clips: readonly TimelineClip[]) => [...clips].sort((a, b) => a.id.localeCompare(b.id))
+    expect(byId(g.timelineClips.snapshot())).toEqual(byId(before))
   })
 
   it('保存した「歌詞」のスタイルがあれば、その見た目で置く', async () => {
