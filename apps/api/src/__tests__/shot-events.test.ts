@@ -19,6 +19,7 @@ import { createProviderRegistry } from '@ixa/provider-core'
 import { describe, expect, it } from 'vitest'
 import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
+import type { EditTransaction } from '@ixa/db'
 import type { ShotRoutesDeps } from '../routes/shots.js'
 import { shotSingleEditRoutes } from '../routes/shot-single-edits.js'
 import { shotRoutes } from '../routes/shots.js'
@@ -49,6 +50,8 @@ type FixtureOptions = {
   readonly takes?: readonly Take[]
   /** 差し替えると publish が必ず失敗する。**失敗しても本処理が通る**ことの確認に使う。 */
   readonly events?: ProjectEventPublisher
+  /** 書き終えた後で確定（コミット）に失敗する。**確定しなかった状態を流さない**ことの確認に使う。 */
+  readonly commitFails?: boolean
 }
 
 const buildFixture = (options: FixtureOptions = {}) => {
@@ -71,23 +74,20 @@ const buildFixture = (options: FixtureOptions = {}) => {
     logger: createLogger('silent'),
   }
 
+  const inner = createInMemoryEditTransaction({ editBatches: createInMemoryEditBatchRepository(), shots: deps.shots })
+  const transaction: EditTransaction =
+    options.commitFails === true
+      ? (fn) =>
+          inner(async (repos) => {
+            await fn(repos)
+            throw new Error('確定に失敗しました')
+          })
+      : inner
   const app = new OpenAPIHono({ defaultHook: validationHook })
   registerErrorHandlers(app, createLogger('silent'))
   app.route('/', shotRoutes(deps))
-  app.route(
-    '/',
-    shotSingleEditRoutes({
-      ...deps,
-      transaction: createInMemoryEditTransaction({ editBatches: createInMemoryEditBatchRepository(), shots: deps.shots }),
-    }),
-  )
-  app.route(
-    '/',
-    shotBulkRoutes({
-      ...deps,
-      transaction: createInMemoryEditTransaction({ editBatches: createInMemoryEditBatchRepository(), shots: deps.shots }),
-    }),
-  )
+  app.route('/', shotSingleEditRoutes({ ...deps, transaction }))
+  app.route('/', shotBulkRoutes({ ...deps, transaction }))
 
   return { app, project, events, shots }
 }
@@ -230,6 +230,32 @@ describe('Take の採用で shot.status を流す', () => {
 
     expect(res.status).toBe(200)
     expect(parsedEvents(f.events.published())).toHaveLength(1)
+  })
+})
+
+/**
+ * 段 5 のレビュー（2026-10-19）。採用の書き込みはトランザクションの中で行い、**状態の配信は確定した後**に流す。
+ * 中で流すと、巻き戻した・確定する前の状態が画面に出る。
+ */
+describe('確定しなかった採用は流さない', () => {
+  it('1 件ずつの採用・外す、一括の採用・外す', async () => {
+    const project = aProject()
+    const shot = aShot(project.id)
+    const take = aTake(shot, 'a'.repeat(64))
+    const adopted = { ...aShot(project.id, { code: 'shot_002', order: 2000, status: 'approved' as const }) }
+    const adoptedTake = aTake(adopted, 'b'.repeat(64))
+    const f = buildFixture({
+      project,
+      shots: [shot, { ...adopted, selectedTakeId: adoptedTake.id }],
+      takes: [take, adoptedTake],
+      commitFails: true,
+    })
+
+    expect((await postJson(f.app, `/shots/${shot.id}/select-take`, { takeId: take.id })).status).toBe(500)
+    expect((await f.app.request(`/shots/${adopted.id}/selected-take`, { method: 'DELETE' })).status).toBe(500)
+    expect((await postJson(f.app, `/projects/${project.id}/shots/bulk/select-take`, { shotIds: [shot.id], rule: 'only' })).status).toBe(500)
+    expect((await postJson(f.app, `/projects/${project.id}/shots/bulk/unselect-take`, { shotIds: [adopted.id] })).status).toBe(500)
+    expect(f.events.published()).toEqual([])
   })
 })
 

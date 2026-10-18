@@ -1,4 +1,4 @@
-import type { DbClient } from '../client.js'
+import type { DbExecutor } from '../client.js'
 import { createBrandAssetRepository, type BrandAssetRepository } from './brand-asset-repository.js'
 import { createCharacterLookRepository, type CharacterLookRepository } from './character-look-repository.js'
 import { createCharacterRepository, type CharacterRepository } from './character-repository.js'
@@ -40,8 +40,9 @@ export type EditRepositories = {
 
 export type EditTransaction = <T>(fn: (repos: EditRepositories) => Promise<T>) => Promise<T>
 
+/** 接続でも、外側のトランザクションでも作れる（外側の中なら入れ子の SAVEPOINT になる。結合テストはこれで後片付けする）。 */
 export const createEditTransaction =
-  (db: DbClient): EditTransaction =>
+  (db: DbExecutor): EditTransaction =>
   (fn) =>
     db.transaction((tx) =>
       fn({

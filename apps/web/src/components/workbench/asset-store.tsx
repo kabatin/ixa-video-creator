@@ -28,6 +28,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
+import { loadedFromSettled } from '@/lib/settled-load'
 import { defaultLook, lookKeyFromName } from '@/lib/asset-actions'
 import type { LibraryImportRequest, WireLibraryImportResult } from '@/lib/library-import-api'
 import { deriveTrackTitle } from '@/lib/music-upload'
@@ -380,18 +381,19 @@ export const AssetStoreProvider = ({
         router.refresh()
       },
       reloadAll: async () => {
-        const [nextCharacters, nextLocations, nextBrandAssets, nextTracks, nextVoices] = await Promise.all([
+        // 1 つ読めなくても他は反映する。読めなかった一覧は理由を出す（最初に読むときと同じ言い方）。
+        const [nextCharacters, nextLocations, nextBrandAssets, nextTracks, nextVoices] = await Promise.allSettled([
           api.listCharacters(projectId),
           api.listLocations(projectId),
           api.listBrandAssets(projectId),
           api.listMusicTracks(projectId),
           api.listVoices(projectId),
         ])
-        setCharacters({ state: 'ready', value: nextCharacters })
-        setLocations({ state: 'ready', value: nextLocations })
-        setBrandAssets({ state: 'ready', value: nextBrandAssets })
-        setTracks({ state: 'ready', value: nextTracks })
-        setVoices({ state: 'ready', value: nextVoices })
+        setCharacters(loadedFromSettled('キャラクター', nextCharacters))
+        setLocations(loadedFromSettled('ロケーション', nextLocations))
+        setBrandAssets(loadedFromSettled('ブランド資産', nextBrandAssets))
+        setTracks(loadedFromSettled('楽曲', nextTracks))
+        setVoices(loadedFromSettled('声', nextVoices))
       },
       createVoice: async (name) => {
         const { settings } = await api.getAiSettings()

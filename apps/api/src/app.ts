@@ -657,6 +657,7 @@ export const createApp = (deps: AppDeps) => {
     editBatchRoutes({
       projects,
       shots: deps.shots,
+      takes: deps.takes,
       editBatches: deps.editBatches,
       timelineClips: deps.timelineClips,
       musicTracks: deps.musicTracks,

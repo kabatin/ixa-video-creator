@@ -12,7 +12,14 @@ import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../
 import { errorContent, fail, ok, successResponse } from '../response.js'
 import { locationProblem } from './library-ownership.js'
 import { recordShotEdits, recordShotPatch, recordTakeChoice } from './shot-edit-recording.js'
-import { ShotResponse, applySelectedTake, clearSelectedTake, toShotResponse, type ShotRoutesDeps } from './shots.js'
+import {
+  ShotResponse,
+  publishShotStatus,
+  settleClearedTake,
+  settleSelectedTake,
+  toShotResponse,
+  type ShotRoutesDeps,
+} from './shots.js'
 
 /**
  * Shot 1 件の作成・直し・削除と、採用 Take の決定・外し（`shots.ts` から分けた。2026-10-19）。
@@ -227,8 +234,10 @@ export const shotSingleEditRoutes = (deps: ShotSingleEditDeps) =>
 
       const updated = await deps.transaction(async (tx) => {
         await recordTakeChoice(tx.editBatches, shot, 'select')
-        return applySelectedTake({ ...deps, shots: tx.shots }, shot.id, take)
+        return settleSelectedTake(tx.shots, shot.id, take)
       })
+      // 状態は確定した後に流す（巻き戻した状態を画面に出さない）。
+      await publishShotStatus(deps, updated)
       return c.json(ok(toShotResponse(updated)), 200)
     })
     .openapi(unselectTakeRoute, async (c) => {
@@ -236,7 +245,8 @@ export const shotSingleEditRoutes = (deps: ShotSingleEditDeps) =>
       if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       const updated = await deps.transaction(async (tx) => {
         if (shot.selectedTakeId !== null) await recordTakeChoice(tx.editBatches, shot, 'unselect')
-        return clearSelectedTake({ ...deps, shots: tx.shots }, shot)
+        return settleClearedTake(tx.shots, shot)
       })
+      if (updated !== shot) await publishShotStatus(deps, updated)
       return c.json(ok(toShotResponse(updated)), 200)
     })

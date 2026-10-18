@@ -1,4 +1,4 @@
-import { aShot, createInMemoryShotRepository } from '@ixa/generation/testing'
+import { aShot, aTake, createInMemoryShotRepository, createInMemoryTakeRepository } from '@ixa/generation/testing'
 import type { Shot } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import type { EditBatchSummaryResponse, UndoEditBatchResponse } from '../routes/edit-batches.js'
@@ -18,6 +18,7 @@ const project = aProject()
 
 const build = (shots: readonly Shot[], options: { readonly recordFails?: boolean } = {}) => {
   const repo = createInMemoryShotRepository(shots)
+  const takes = createInMemoryTakeRepository()
   const editBatches = createInMemoryEditBatchRepository()
   const recorder =
     options.recordFails === true ? { ...editBatches, create: () => Promise.reject(new Error('記録を作れません')) } : editBatches
@@ -25,6 +26,7 @@ const build = (shots: readonly Shot[], options: { readonly recordFails?: boolean
     ...baseAppDeps(),
     projects: createInMemoryProjectRepository([project]),
     shots: repo,
+    takes,
     editBatches: recorder,
   })
   const send = (method: string, path: string, body?: unknown) =>
@@ -41,7 +43,7 @@ const build = (shots: readonly Shot[], options: { readonly recordFails?: boolean
     return ((await res.json()) as Ok<UndoEditBatchResponse>).data
   }
   const live = () => repo.findByProject(project.id)
-  return { repo, editBatches, send, latest, undo, live }
+  return { repo, takes, editBatches, send, latest, undo, live }
 }
 
 const a = aShot(project.id, { code: 'CUT-01', order: 1000, startSec: 0, durationSec: 4 })
@@ -139,5 +141,51 @@ describe('分割・結合・一括削除', () => {
     expect((await f.send('POST', `/projects/${project.id}/shots/merge`, { shotIds: [a.id, b.id] })).status).toBe(500)
     expect((await f.send('POST', `/projects/${project.id}/shots/bulk/delete`, { shotIds: [a.id] })).status).toBe(500)
     expect(await f.live()).toEqual([a, b])
+  })
+})
+
+/**
+ * 段 5 のレビュー（2026-10-19）。戻すと Shot が黙って消える・タイムラインに穴が空く、を起こさない。
+ */
+describe('戻せない Shot は戻さない', () => {
+  it('作った後で Take ができた Shot は、作成を戻さず理由を返す（分割の「Take が無い Shot だけ」と同じ）', async () => {
+    const f = build([a])
+    const res = await f.send('POST', `/projects/${project.id}/shots`, createBody({ code: 'CUT-09', order: 9000, startSec: 6, durationSec: 2 }))
+    const made = ((await res.json()) as Ok<Shot>).data
+    const batch = await f.latest()
+    await f.takes.create(aTake({ ...a, id: made.id }, 'a'.repeat(64)))
+
+    const result = await f.undo(batch!.id)
+    expect(result.failed.map((entry) => entry.shotId)).toEqual([made.id])
+    expect((await f.live()).map((shot) => shot.id)).toContain(made.id)
+  })
+
+  it('生成中・ロック中の Shot も、作成を戻さない', async () => {
+    const f = build([a])
+    const res = await f.send('POST', `/projects/${project.id}/shots`, createBody({ code: 'CUT-09', order: 9000, startSec: 6, durationSec: 2 }))
+    const made = ((await res.json()) as Ok<Shot>).data
+    const batch = await f.latest()
+    await f.repo.updateStatus(made.id, 'generating')
+
+    const result = await f.undo(batch!.id)
+    expect(result.failed.map((entry) => entry.shotId)).toEqual([made.id])
+
+    const g = build([a])
+    const res2 = await g.send('POST', `/projects/${project.id}/shots`, createBody({ code: 'CUT-09', order: 9000, startSec: 6, durationSec: 2 }))
+    const locked = ((await res2.json()) as Ok<Shot>).data
+    const batch2 = await g.latest()
+    await g.repo.update(locked.id, { lockedAt: new Date() })
+    expect((await g.undo(batch2!.id)).failed.map((entry) => entry.shotId)).toEqual([locked.id])
+  })
+
+  it('結合を戻すとき、消した Shot を戻せなければ残した Shot の尺も戻さない（穴を空けない）', async () => {
+    const f = build([a, b])
+    await f.send('POST', `/projects/${project.id}/shots/merge`, { shotIds: [a.id, b.id] })
+    const merged = await f.latest()
+    await f.send('POST', `/projects/${project.id}/shots`, createBody({ code: 'CUT-02', order: 5000, startSec: 6, durationSec: 2 }))
+
+    const result = await f.undo(merged!.id)
+    expect(result.failed.map((entry) => entry.shotId).sort()).toEqual([a.id, b.id].sort())
+    expect((await f.repo.findById(a.id))?.durationSec).toBe(6)
   })
 })

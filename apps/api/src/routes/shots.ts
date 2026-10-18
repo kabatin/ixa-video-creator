@@ -447,15 +447,23 @@ export const applySelectedTake = async (
   shotId: ShotId,
   take: Pick<Take, 'id'>,
 ): Promise<Shot> => {
-  await deps.shots.selectTake(shotId, take.id)
-  // 判断は domain の 1 箇所（worker の成功・失敗と同じ関数を引く）。
-  const updated = await deps.shots.updateStatus(
-    shotId,
-    settledShotStatus({ hasSelectedTake: true, hasTakes: true }),
-  )
-  // 1 件ずつの採用も一括採用もここを通るので、出来事もここで 1 回だけ流す。
+  const updated = await settleSelectedTake(deps.shots, shotId, take)
   await publishShotStatus(deps, updated)
   return updated
+}
+
+/**
+ * 採用を書くだけ（出来事は流さない）。**トランザクションの中ではこちらを使い、確定した後に流す**（2026-10-19 のレビュー）。
+ * 中で流すと、巻き戻した・確定する前の状態が画面に出る。
+ */
+export const settleSelectedTake = async (
+  shots: Pick<ShotRepository, 'selectTake' | 'updateStatus'>,
+  shotId: ShotId,
+  take: Pick<Take, 'id'>,
+): Promise<Shot> => {
+  await shots.selectTake(shotId, take.id)
+  // 判断は domain の 1 箇所（worker の成功・失敗と同じ関数を引く）。
+  return shots.updateStatus(shotId, settledShotStatus({ hasSelectedTake: true, hasTakes: true }))
 }
 
 /**
@@ -468,16 +476,23 @@ export const clearSelectedTake = async (
   shot: Shot,
 ): Promise<Shot> => {
   if (shot.selectedTakeId === null) return shot
-  await deps.shots.selectTake(shot.id, null)
+  const updated = await settleClearedTake(deps.shots, shot)
+  await publishShotStatus(deps, updated)
+  return updated
+}
+
+/** 採用を外して書くだけ（出来事は流さない。`settleSelectedTake` と同じく、確定した後に流す）。 */
+export const settleClearedTake = async (
+  shots: Pick<ShotRepository, 'findById' | 'selectTake' | 'updateStatus'>,
+  shot: Shot,
+): Promise<Shot> => {
+  if (shot.selectedTakeId === null) return shot
+  await shots.selectTake(shot.id, null)
   const updated =
     shot.status === 'generating'
-      ? await deps.shots.findById(shot.id)
-      : await deps.shots.updateStatus(
-          shot.id,
-          settledShotStatus({ hasSelectedTake: false, hasTakes: true }),
-        )
+      ? await shots.findById(shot.id)
+      : await shots.updateStatus(shot.id, settledShotStatus({ hasSelectedTake: false, hasTakes: true }))
   if (updated === null) throw new Error(`採用を外した Shot が見つかりません: ${shot.id}`)
-  await publishShotStatus(deps, updated)
   return updated
 }
 

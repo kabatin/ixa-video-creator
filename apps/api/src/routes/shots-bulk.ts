@@ -33,8 +33,9 @@ import { errorContent, fail, ok, successResponse } from '../response.js'
 import {
   MAX_TAKES_PER_REQUEST,
   ShotResponse,
-  applySelectedTake,
-  clearSelectedTake,
+  publishShotStatus,
+  settleClearedTake,
+  settleSelectedTake,
   costLimitsFor,
   generationFailureFields,
   generationPorts,
@@ -461,6 +462,7 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
        * 取り消しで同じ値が戻るだけで害は無い。
        */
       // 記録と書き込みは同じトランザクション（途中で落ちれば、記録も一部の書き込みも残らない）。
+      const settled: Shot[] = []
       const results = await deps.transaction(async (tx) => {
         await recordEditBatch(tx.editBatches, {
           projectId,
@@ -486,7 +488,8 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
             continue
           }
           // 状態遷移は 1 件ずつの採用と同じ関数に任せる。
-          const updated = await applySelectedTake({ ...deps, shots: tx.shots }, step.shotId, step.take)
+          const updated = await settleSelectedTake(tx.shots, step.shotId, step.take)
+          settled.push(updated)
           results.push({
             shotId: step.shotId,
             ok: true as const,
@@ -496,6 +499,8 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
         }
         return results
       })
+      // 状態は確定した後に流す（巻き戻した状態を画面に出さない）。
+      for (const shot of settled) await publishShotStatus(deps, shot)
 
       return c.json(ok({ results }), 200)
     })
@@ -528,6 +533,7 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
       }
 
       // 記録と書き込みは同じトランザクション（途中で落ちれば、記録も一部の書き込みも残らない）。
+      const settled: Shot[] = []
       const results = await deps.transaction(async (tx) => {
         await recordEditBatch(tx.editBatches, {
           projectId,
@@ -553,11 +559,13 @@ export const shotBulkRoutes = (deps: ShotBulkRoutesDeps) =>
             continue
           }
           // 状態遷移は 1 件ずつの「採用を外す」と同じ関数に任せる。
-          const updated = await clearSelectedTake({ ...deps, shots: tx.shots }, step.shot)
+          const updated = await settleClearedTake(tx.shots, step.shot)
+          settled.push(updated)
           results.push({ shotId: step.shotId, ok: true as const, status: updated.status })
         }
         return results
       })
+      for (const shot of settled) await publishShotStatus(deps, shot)
 
       return c.json(ok({ results }), 200)
     })

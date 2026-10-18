@@ -31,6 +31,7 @@ import type {
   ProjectRepository,
   ShotCharacterRepository,
   ShotRepository,
+  TakeRepository,
   TimelineClipRepository,
 } from '@ixa/db'
 import {
@@ -45,6 +46,7 @@ import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, okList, successResponse, listResponse } from '../response.js'
 import { undoAssetEdits, type AssetUndoDeps } from './edit-batch-asset-undo.js'
 import { undoClipEdits } from './edit-batch-clip-undo.js'
+import { VOICE_NOT_RESTORED_REASON, settleVoiceUndo } from './edit-batch-voice-undo.js'
 import { undoShotEdits } from './edit-batch-shot-undo.js'
 import { undoTransitionEdits, type TransitionUndoDeps } from './edit-batch-transition-undo.js'
 import { FOREIGN_SHOT_REASON, SHOT_NOT_FOUND_REASON } from './shots-bulk.js'
@@ -217,6 +219,8 @@ export type EditBatchRoutesDeps = {
    * 一括採用は採用 Take と状態の両方を動かすので、状態を戻す口も要る。
    */
   shots: Pick<ShotRepository, 'findById' | 'selectTake' | 'update' | 'updateStatus' | 'softDelete' | 'restore'>
+  /** 作った Shot を戻すとき、Take ができていないかを見る（ある Shot は消さない）。 */
+  takes?: Pick<TakeRepository, 'findByShot'>
   editBatches: Pick<EditBatchRepository, 'findByProject' | 'findById' | 'markUndone'>
   /**
    * テロップの見た目を戻す（`clipEntries`。文字・時間には触らない）と、
@@ -236,6 +240,9 @@ export type EditBatchRoutesDeps = {
   narration?: NarrationTelopSyncDeps & { readonly lines: Pick<NarrationLineRepository, 'findById' | 'update'> }
 } & TransitionUndoDeps &
   AssetUndoDeps
+
+/** 同じ記録の Shot の作成・削除を戻せなかったので、尺などを当てない。 */
+export const SHOT_EDITS_INCOMPLETE_REASON = '一緒に作った・消した Shot を戻せなかったので、この Shot も戻していません'
 
 /** 戻す行が無い（消された）。 */
 export const LINE_NOT_FOUND_REASON = 'ナレーションの行が見つかりません（消された可能性があります）'
@@ -321,7 +328,13 @@ const restoreProjectEntry = async (
 
 export const ATTACHMENTS_UNAVAILABLE_REASON = '登場人物・開始フレームを戻す口がありません'
 
-/** 登場人物・開始フレーム（欄があるときだけ）を戻す。登場人物は丸ごと、開始フレームは付いていた素材に戻す。 */
+/**
+ * 登場人物・開始フレーム（欄があるときだけ）を戻す。登場人物は丸ごと、開始フレームは付いていた素材に戻す。
+ *
+ * **開始フレームの参照は、同じ素材を指す新しい行として作り直す（参照の行の ID は戻らない）。** 参照は
+ * `ShotReferenceRepository` の約束どおり更新口を持たず、付け替えはいつも「消して作る」で表す。参照の行を ID で
+ * 指すものは無く（生成は Shot から参照を引き直す）、同じ素材・同じ役割に戻れば結果は同じなので、ID までは揃えない。
+ */
 const restoreAttachments = async (
   deps: Pick<EditBatchRoutesDeps, 'shotCharacters' | 'shotReferences'>,
   entry: EditBatchEntry,
@@ -437,8 +450,10 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
       const shotEdits = await undoShotEdits(deps, undone.shotEdits)
       const restored: ShotId[] = [...shotEdits.restored]
       const failed: { shotId: ShotId; reason: string }[] = [...shotEdits.failed]
+      // 作成・削除が 1 件でも戻らなければ、同じ記録の尺などは当てない（結合の戻しで穴・分割の戻しで重なりを作らない）。
+      const shotsSettled = shotEdits.failed.length === 0
       for (const entry of undone.entries) {
-        const reason = await restoreEntry(deps, projectId, undone, entry)
+        const reason = shotsSettled ? await restoreEntry(deps, projectId, undone, entry) : SHOT_EDITS_INCOMPLETE_REASON
         if (reason === null) restored.push(entry.shotId)
         else failed.push({ shotId: entry.shotId, reason })
       }
@@ -462,6 +477,7 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
 
       // 素材は行より先に戻す（消した声を戻してから、その声で話していた行を戻す）。
       const assets = await undoAssetEdits(deps, undone.assetEdits)
+      const failedVoices = await settleVoiceUndo(deps, projectId, undone.assetEdits, assets)
 
       // ナレーションの行の位置（ADR-0038）。戻してからテロップを作り直す（テロップは行から導かれる）。
       const restoredLines: NarrationLineId[] = []
@@ -470,6 +486,11 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
         const line = await deps.narration?.lines.findById(entry.lineId)
         if (line === undefined || line === null) {
           failedLines.push({ lineId: entry.lineId, reason: LINE_NOT_FOUND_REASON })
+          continue
+        }
+        // 話していた声を戻せなかったら、行も戻さない（戻すと消えた声を指す）。
+        if (typeof entry.voiceProfileId === 'string' && failedVoices.has(entry.voiceProfileId)) {
+          failedLines.push({ lineId: entry.lineId, reason: VOICE_NOT_RESTORED_REASON })
           continue
         }
         // **欄が無ければ触っていないので戻さない。**

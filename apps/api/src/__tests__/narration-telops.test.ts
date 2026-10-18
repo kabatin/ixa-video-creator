@@ -39,6 +39,7 @@ const undo = (setup: Setup, batchId: string) => {
       timelineClips: setup.deps.timelineClips,
       editBatches: setup.editBatches,
       narration: setup.deps,
+      voices: setup.deps.voices,
     }),
   )
   registerErrorHandlers(app, createLogger('silent'))
@@ -342,5 +343,57 @@ describe('ナレーションをまとめて並べた記録', () => {
     await setup.send('POST', `/projects/${setup.project.id}/narration/arrange`, { fromSec: 1, gapSec: 0.5 })
 
     expect(setup.editBatches.snapshot()).toEqual([])
+  })
+})
+
+/**
+ * 声の取り消しのレビュー（2026-10-19）。声を戻せないのに行だけ戻すと、行が消えた声を指す。
+ * 作った声を戻すと、その声に割り当てた行も「声が未定」に戻す。見た目を戻すとテロップも作り直す。
+ */
+describe('声の取り消し', () => {
+  const latest = (setup: Setup) => {
+    const [batch] = setup.editBatches.snapshot()
+    if (batch === undefined) throw new Error('記録が無い')
+    return batch
+  }
+
+  it('消した声を戻せなければ（同じ名前の声が後からある）、その声で話していた行も戻さず理由を返す', async () => {
+    const setup = setupNarration()
+    const voice = await setup.deps.voices.create({ projectId: setup.project.id, name: 'ナレーター', tool: 'stub', voiceName: 'stub' })
+    const line = await placedLine(setup, { voiceProfileId: voice.id })
+    await setup.send('DELETE', `/voices/${voice.id}`)
+    const removed = latest(setup)
+    await setup.deps.voices.create({ projectId: setup.project.id, name: 'ナレーター', tool: 'stub', voiceName: 'stub' })
+
+    const undone = (await (await undo(setup, removed.id)).json()) as Ok<{ failedLines: { lineId: string }[] }>
+    expect(undone.data.failedLines.map((entry) => entry.lineId)).toEqual([line.id])
+    expect((await setup.deps.lines.findById(line.id))?.voiceProfileId).toBeNull()
+  })
+
+  it('作った声を戻すと、その声に割り当てた行は「声が未定」に戻り、テロップも既定の見た目に作り直す', async () => {
+    const setup = setupNarration()
+    const look = await setup.deps.textStyles.create(setup.project.id, { name: '戦子', style: { anchor: 'top-center' } })
+    const res = await setup.send('POST', `/projects/${setup.project.id}/voices`, { name: '戦子の声', tool: 'stub', voiceName: 'stub', textStyleId: look.id })
+    const voiceId = ((await res.json()) as Ok<{ id: string }>).data.id
+    const made = latest(setup)
+    const line = await placedLine(setup)
+    await setup.send('PATCH', `/narration-lines/${line.id}`, { voiceProfileId: voiceId })
+    expect(styleOf(telops(setup)[0])).toEqual({ anchor: 'top-center' })
+
+    expect((await undo(setup, made.id)).status).toBe(200)
+    expect((await setup.deps.lines.findById(line.id))?.voiceProfileId).toBeNull()
+    expect(styleOf(telops(setup)[0])).toEqual(DEFAULT_NARRATION_TEXT_STYLE)
+  })
+
+  it('声の見た目の直しを戻すと、その声の行のテロップも前の見た目に作り直す', async () => {
+    const setup = setupNarration()
+    const voice = await setup.deps.voices.create({ projectId: setup.project.id, name: '戦子の声', tool: 'stub', voiceName: 'stub' })
+    await placedLine(setup, { voiceProfileId: voice.id })
+    const look = await setup.deps.textStyles.create(setup.project.id, { name: '戦子', style: { anchor: 'top-center' } })
+    await setup.send('PATCH', `/voices/${voice.id}`, { textStyleId: look.id })
+    expect(styleOf(telops(setup)[0])).toEqual({ anchor: 'top-center' })
+
+    expect((await undo(setup, latest(setup).id)).status).toBe(200)
+    expect(styleOf(telops(setup)[0])).toEqual(DEFAULT_NARRATION_TEXT_STYLE)
   })
 })
