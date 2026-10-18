@@ -24,6 +24,8 @@ const KIND_LABELS: Readonly<Record<EditBatchKind, string>> = Object.freeze({
   narration_arrange: 'ナレーションをまとめて並べる',
   music_trim: '曲を最後の Shot で切る',
   clip_edit: 'クリップの編集',
+  shot_edit: 'Shot の編集',
+  narration_edit: 'ナレーションの編集',
 })
 
 export const editBatchKindLabel = (kind: EditBatchKind): string => KIND_LABELS[kind]

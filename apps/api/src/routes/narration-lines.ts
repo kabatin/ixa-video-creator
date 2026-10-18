@@ -96,6 +96,13 @@ const tooLongLine = (lines: readonly string[]): string | null => {
   return `${index + 1} 行目が長すぎます（${[...(lines[index] ?? '')].length} 字。1 行は ${NARRATION_TEXT_MAX} 字まで）。句点で分けて別の行にしてください`
 }
 
+/** 履歴の見出しに入れる行の頭。長い行は省く（見出しの上限を超えない）。 */
+const HEADLINE_CHARS = 20
+const narrationHeadline = (text: string): string => {
+  const chars = [...text.replace(/\s+/g, ' ')]
+  return chars.length <= HEADLINE_CHARS ? chars.join('') : `${chars.slice(0, HEADLINE_CHARS - 1).join('')}…`
+}
+
 const overviewJson = async (deps: NarrationDeps, projectId: ProjectId) =>
   ok(toOverviewResponse(await buildNarrationOverview(deps, projectId)))
 
@@ -132,6 +139,24 @@ export const narrationLineRoutes = (deps: NarrationDeps) =>
       if (patch.selectedTakeId !== undefined && patch.selectedTakeId !== null) {
         const take = await deps.takes.findById(patch.selectedTakeId)
         if (take?.lineId !== id) return c.json(fail('この行の声ではありません', { selectedTakeId: ['この行の声ではありません'] }), 422)
+      }
+      // 位置・テロップの有無を変えるなら、書く前に記録する（取り消し。2026-10-19）。ほかの欄は戻せる形が無いので記録しない。
+      const moved = patch.startSec !== undefined && patch.startSec !== current.startSec
+      const telopChanged = patch.telop !== undefined && patch.telop !== current.telop
+      if (moved || telopChanged) {
+        await deps.editBatches.create({
+          projectId: current.projectId,
+          kind: 'narration_edit',
+          summary: `ナレーション「${narrationHeadline(current.text)}」を${moved ? '動かす' : '直す'}`,
+          entries: [],
+          lineEntries: [
+            {
+              lineId: id,
+              ...(moved ? { startSec: current.startSec } : {}),
+              ...(telopChanged ? { telop: current.telop } : {}),
+            },
+          ],
+        })
       }
       await deps.lines.update(id, patch)
       // 話す声を変えたら、その声の見た目に当て直す（ほかは今の見た目を引き継ぐ）。

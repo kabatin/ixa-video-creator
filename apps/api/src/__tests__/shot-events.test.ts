@@ -71,7 +71,7 @@ const buildFixture = (options: FixtureOptions = {}) => {
 
   const app = new OpenAPIHono({ defaultHook: validationHook })
   registerErrorHandlers(app, createLogger('silent'))
-  app.route('/', shotRoutes(deps))
+  app.route('/', shotRoutes({ ...deps, editBatches: createInMemoryEditBatchRepository() }))
   app.route('/', shotBulkRoutes({ ...deps, editBatches: createInMemoryEditBatchRepository() }))
 
   return { app, project, events, shots }

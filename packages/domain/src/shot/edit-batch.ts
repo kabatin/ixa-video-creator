@@ -23,6 +23,8 @@ import { ShotStatus, UpdateShotPatch } from './shot.js'
  * `text_style` はテロップの見た目のまとめ変更（2026-10-02）。Shot ではなくテロップを記録する（`clipEntries`）。
  * `music_trim` は曲を最後の Shot で切る（2026-10-19）。楽曲を記録する（`musicEntries`）。
  * `clip_edit` はクリップ 1 件ずつの作る・直す・消す（2026-10-19）。クリップの丸ごとの控えを記録する（`clipEdits`）。
+ * `shot_edit` は Shot 1 件の直し・採用 Take の決定と外し（2026-10-19）。一括と同じ形（`entries`）で記録する。
+ * `narration_edit` はナレーションの行 1 件の位置の変更（2026-10-19）。`lineEntries` で記録する。
  */
 export const EditBatchKind = z.enum([
   'rough_cut',
@@ -32,6 +34,8 @@ export const EditBatchKind = z.enum([
   'narration_arrange',
   'music_trim',
   'clip_edit',
+  'shot_edit',
+  'narration_edit',
 ])
 export type EditBatchKind = z.infer<typeof EditBatchKind>
 

@@ -57,7 +57,9 @@ import {
 } from '@ixa/provider-core'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import type { Logger } from '../logger.js'
+import type { EditBatchRecorder } from './edit-batch-recording.js'
 import { locationProblem } from './library-ownership.js'
+import { recordShotPatch, recordTakeChoice } from './shot-edit-recording.js'
 import {
   errorContent,
   fail,
@@ -611,7 +613,8 @@ export const generationFailureFields = (error: unknown): FieldErrors | null => {
   return null
 }
 
-export const shotRoutes = (deps: ShotRoutesDeps) =>
+/** 1 件ずつの直し・採用を、書く前に記録する（取り消し。2026-10-19）。 */
+export const shotRoutes = (deps: ShotRoutesDeps & { readonly editBatches: EditBatchRecorder }) =>
   new OpenAPIHono({ defaultHook: validationHook })
     .openapi(listShotsRoute, async (c) => {
       const found = await deps.shots.findByProject(c.req.valid('param').projectId)
@@ -637,9 +640,9 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
     })
     .openapi(updateShotRoute, async (c) => {
       const patch = c.req.valid('json')
+      const shot = await deps.shots.findById(c.req.valid('param').id)
+      if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       if (patch.locationId !== undefined && patch.locationId !== null) {
-        const shot = await deps.shots.findById(c.req.valid('param').id)
-        if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
         const problem = await locationProblem(deps.locations, shot.projectId, patch.locationId)
         if (problem !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, { locationId: [problem] }), 422)
       }
@@ -650,8 +653,9 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
        * 何が悪いか分かる 422 にする。他の Shot を読み比べるより、
        * 制約に任せて衝突だけを畳むほうが競合に強い。
        */
+      await recordShotPatch(deps.editBatches, shot, patch)
       try {
-        const updated = await deps.shots.update(c.req.valid('param').id, patch)
+        const updated = await deps.shots.update(shot.id, patch)
         return c.json(ok(toShotResponse(updated)), 200)
       } catch (error) {
         if (patch.code !== undefined && isUniqueViolation(error)) {
@@ -686,12 +690,14 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
         )
       }
 
+      await recordTakeChoice(deps.editBatches, shot, 'select')
       const updated = await applySelectedTake(deps, shot.id, take)
       return c.json(ok(toShotResponse(updated)), 200)
     })
     .openapi(unselectTakeRoute, async (c) => {
       const shot = await deps.shots.findById(c.req.valid('param').id)
       if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      if (shot.selectedTakeId !== null) await recordTakeChoice(deps.editBatches, shot, 'unselect')
       return c.json(ok(toShotResponse(await clearSelectedTake(deps, shot))), 200)
     })
     .openapi(generateRoute, async (c) => {

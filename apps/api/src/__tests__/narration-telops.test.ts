@@ -291,6 +291,31 @@ describe('ナレーションをまとめて並べた記録', () => {
     expect(setup.deps.lines.snapshot()[0]?.startSec).toBe(9)
   })
 
+  it('行を 1 本だけ動かしても記録が残り、取り消すと位置とテロップが戻る', async () => {
+    const setup = setupNarration()
+    const line = await placedLine(setup, { startSec: 9 })
+    await setup.send('PATCH', `/narration-lines/${line.id}`, { startSec: 9 })
+    const before = setup.deps.editBatches.snapshot().length
+
+    await setup.send('PATCH', `/narration-lines/${line.id}`, { startSec: 15 })
+    const [batch] = setup.deps.editBatches.snapshot()
+    expect(setup.deps.editBatches.snapshot()).toHaveLength(before + 1)
+    expect(batch).toMatchObject({ kind: 'narration_edit', summary: 'ナレーション「あいうえ。かきくけ。」を動かす', lineEntries: [{ lineId: line.id, startSec: 9 }] })
+
+    expect((await undo(setup, batch!.id)).status).toBe(200)
+    expect(setup.deps.lines.snapshot()[0]?.startSec).toBe(9)
+    expect(telops(setup).map((clip) => clip.startSec)).toEqual([9, 10.2])
+  })
+
+  it('位置を変えない直し（文字など）は位置の記録を作らない', async () => {
+    const setup = setupNarration()
+    const line = await placedLine(setup, { startSec: 9 })
+    const before = setup.deps.editBatches.snapshot().length
+    await setup.send('PATCH', `/narration-lines/${line.id}`, { startSec: 9 })
+    await setup.send('PATCH', `/narration-lines/${line.id}`, { direction: 'ゆっくり' })
+    expect(setup.deps.editBatches.snapshot()).toHaveLength(before)
+  })
+
   it('置く行が無ければ記録を作らない（空の履歴を並べない）', async () => {
     const setup = setupNarration()
 

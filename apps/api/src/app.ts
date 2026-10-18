@@ -305,7 +305,7 @@ export const createApp = (deps: AppDeps) => {
     events: deps.events,
     logger,
   }
-  app.route('/', shotRoutes(shotDeps))
+  app.route('/', shotRoutes({ ...shotDeps, editBatches: deps.editBatches }))
   app.route('/', generationCancelRoutes(shotDeps))
   app.route('/', takeHideRoutes(shotDeps))
   app.route('/', takeDownloadRoutes({ shots: deps.shots, takes: deps.takes, projects, mediaAssets, storage }))
