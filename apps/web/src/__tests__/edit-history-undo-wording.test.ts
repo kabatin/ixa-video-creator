@@ -131,3 +131,19 @@ describe('トランジションと楽曲の記録', () => {
     expect(undoRestoredAnything({ ...emptyResult(aBatch()), restoredMusicTracks: [musicTrackId] })).toBe(true)
   })
 })
+
+describe('作品の記録', () => {
+  const batch = aBatch({ kind: 'project_edit', summary: '歌詞の時刻を直す', lineCount: 0 })
+
+  it('種類は作品の編集、件数は「作品」で言う', () => {
+    expect(buildEditHistoryView([batch]).rows[0]).toMatchObject({ kindLabel: '作品の編集', shotCountLabel: '作品' })
+  })
+
+  it('作品を戻せたら「作品を元に戻しました」、戻せなければ理由を出す', () => {
+    expect(buildUndoResultView({ ...emptyResult(batch), restoredProject: true }).summary).toBe('作品を元に戻しました')
+    expect(undoRestoredAnything({ ...emptyResult(batch), restoredProject: true })).toBe(true)
+    const failed = buildUndoResultView({ ...emptyResult(batch), failedProject: '作品が見つかりません' })
+    expect(failed.tone).toBe('warn')
+    expect(failed.failedClips.map((entry) => [entry.subject, entry.reason])).toEqual([['作品', '作品が見つかりません']])
+  })
+})

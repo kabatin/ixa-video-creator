@@ -1,5 +1,12 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { MediaAssetRepository, ProjectRepository, ShotRepository, TakeRepository, VoiceJobRepository } from '@ixa/db'
+import type {
+  EditTransaction,
+  MediaAssetRepository,
+  ProjectRepository,
+  ShotRepository,
+  TakeRepository,
+  VoiceJobRepository,
+} from '@ixa/db'
 import {
   CreateProjectInput as CreateProjectInputSchema,
   Project as ProjectSchema,
@@ -20,6 +27,7 @@ import {
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
+import { projectBeforeEntry, recordProjectEdit } from './project-edit-recording.js'
 
 /**
  * Project の CRUD。ADR-0006 に従い zod スキーマとハンドラを 1 ファイルに同居させる。
@@ -238,6 +246,8 @@ const getProjectCostRoute = createRoute({
 
 export type ProjectRoutesDeps = {
   projects: ProjectRepository
+  /** 作品の欄の直しの記録と書き込みを、同じトランザクションで行う（取り消し。2026-10-19）。**省けない。** */
+  transaction: EditTransaction
   /** 作品の手本画像（ADR-0030）が、画像で同じワークスペースのものかを確かめるために引く。 */
   mediaAssets: Pick<MediaAssetRepository, 'findById'>
   /** 行として出せる Shot を知るために引く。**額の合計には使わない。** */
@@ -294,18 +304,13 @@ const styleReferenceProblem = async (
  * **歌詞の行が減ったら、時刻もそこまでに切り詰める**（消えた行の時刻は意味が無い）。
  * どちらも送られていなければ何もしない。
  */
-const settleLyrics = async (
-  projects: ProjectRepository,
-  id: ProjectId,
+const settleLyrics = (
+  project: Project,
   patch: UpdateProjectPatch,
-): Promise<
+):
   | { readonly kind: 'ok'; readonly patch: UpdateProjectPatch }
-  | { readonly kind: 'missing' }
-  | { readonly kind: 'invalid'; readonly message: string }
-> => {
+  | { readonly kind: 'invalid'; readonly message: string } => {
   if (patch.lyrics === undefined && patch.lyricCues === undefined) return { kind: 'ok', patch }
-  const project = await projects.findById(id)
-  if (project === null) return { kind: 'missing' }
   const lines = lyricLines(patch.lyrics ?? project.lyrics)
   if (patch.lyricCues !== undefined) {
     const problem = lyricCuesProblem(patch.lyricCues)
@@ -327,6 +332,7 @@ export const projectRoutes = ({
   reviews,
   voiceJobs,
   stubProviderIds,
+  transaction,
 }: ProjectRoutesDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })
     .openapi(createProjectRoute, async (c) => {
@@ -348,20 +354,23 @@ export const projectRoutes = ({
     .openapi(updateProjectRoute, async (c) => {
       const id = c.req.valid('param').id
       const patch = c.req.valid('json')
+      const project = await projects.findById(id)
+      if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       if (patch.styleReferenceAssetIds !== undefined) {
-        const project = await projects.findById(id)
-        if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
         const problem = await styleReferenceProblem(mediaAssets, project.workspaceId, patch.styleReferenceAssetIds)
         if (problem !== null) {
           return c.json(fail(VALIDATION_ERROR_MESSAGE, { styleReferenceAssetIds: [problem] }), 422)
         }
       }
-      const lyrics = await settleLyrics(projects, id, patch)
-      if (lyrics.kind === 'missing') return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      const lyrics = settleLyrics(project, patch)
       if (lyrics.kind === 'invalid') {
         return c.json(fail(VALIDATION_ERROR_MESSAGE, { lyricCues: [lyrics.message] }), 422)
       }
-      const updated = await projects.update(id, lyrics.patch)
+      // 記録は書く前に、同じトランザクションで（変えた欄の、変える前の値）。
+      const updated = await transaction(async (tx) => {
+        await recordProjectEdit(tx.editBatches, project.id, projectBeforeEntry(project, lyrics.patch))
+        return tx.projects.update(id, lyrics.patch)
+      })
       return c.json(ok(toProjectResponse(updated)), 200)
     })
     .openapi(deleteProjectRoute, async (c) => {

@@ -2,6 +2,7 @@ import type { DbClient } from '../client.js'
 import { createEditBatchRepository, type EditBatchRepository } from './edit-batch-repository.js'
 import { createMusicTrackRepository, type MusicTrackRepository } from './music-track-repository.js'
 import { createNarrationLineRepository, type NarrationLineRepository } from './narration-line-repository.js'
+import { createProjectRepository, type ProjectRepository } from './project-repository.js'
 import { createShotCharacterRepository, type ShotCharacterRepository } from './shot-character-repository.js'
 import { createShotReferenceRepository, type ShotReferenceRepository } from './shot-reference-repository.js'
 import { createShotRepository, type ShotRepository } from './shot-repository.js'
@@ -17,6 +18,7 @@ import { createTransitionRepository, type TransitionRepository } from './transit
  */
 export type EditRepositories = {
   readonly editBatches: Pick<EditBatchRepository, 'create'>
+  readonly projects: ProjectRepository
   readonly timelineClips: TimelineClipRepository
   readonly transitions: TransitionRepository
   readonly shots: ShotRepository
@@ -34,6 +36,7 @@ export const createEditTransaction =
     db.transaction((tx) =>
       fn({
         editBatches: createEditBatchRepository(tx),
+        projects: createProjectRepository(tx),
         timelineClips: createTimelineClipRepository(tx),
         transitions: createTransitionRepository(tx),
         shots: createShotRepository(tx),

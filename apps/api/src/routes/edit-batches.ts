@@ -147,6 +147,9 @@ export const UndoEditBatchResponse = z
     /** 戻したトランジション（置いた物は消し、消した物は同じ ID で置き直す）。 */
     restoredTransitions: z.array(TransitionIdSchema).default([]),
     failedTransitions: z.array(UndoTransitionFailure).default([]),
+    /** 作品の欄を戻したか（作品の直しの記録）。戻せなければ `failedProject` に理由。 */
+    restoredProject: z.boolean().default(false),
+    failedProject: z.string().min(1).nullable().default(null),
   })
   .openapi('UndoEditBatchResult')
 export type UndoEditBatchResponse = z.infer<typeof UndoEditBatchResponse>
@@ -200,7 +203,8 @@ const undoRoute = createRoute({
 })
 
 export type EditBatchRoutesDeps = {
-  projects: Pick<ProjectRepository, 'findById'>
+  /** 実在の確認と、作品の欄を戻す（記録の `projectEntry`）ため。 */
+  projects: Pick<ProjectRepository, 'findById' | 'update'>
   /**
    * 戻すのは `update` / `selectTake` / `updateStatus` の 3 つだけ。Take の作成には触らない。
    * 一括採用は採用 Take と状態の両方を動かすので、状態を戻す口も要る。
@@ -291,6 +295,21 @@ const restoreClipEntry = async (
  * 片方だけ厳しくすると、行きで書けたものが帰りで戻せなくなる。
  */
 const respectsLock = (batch: EditBatch): boolean => batch.kind === 'rough_cut'
+
+/** 作品の欄（変えた欄だけ）を変える前へ戻す。戻せなければ理由を返す（握り潰さない）。 */
+const restoreProjectEntry = async (
+  deps: Pick<EditBatchRoutesDeps, 'projects'>,
+  projectId: ProjectId,
+  entry: EditBatch['projectEntry'],
+): Promise<string | null> => {
+  if (entry === null || Object.keys(entry.patch).length === 0) return null
+  try {
+    await deps.projects.update(projectId, entry.patch)
+    return null
+  } catch (cause) {
+    return `戻せませんでした: ${cause instanceof Error ? cause.message : String(cause)}`
+  }
+}
 
 export const ATTACHMENTS_UNAVAILABLE_REASON = '登場人物・開始フレームを戻す口がありません'
 
@@ -464,6 +483,7 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
       }
 
       const transitions = await undoTransitionEdits(deps, projectId, undone.transitionEdits)
+      const projectReason = await restoreProjectEntry(deps, projectId, undone.projectEntry)
 
       return c.json(
         ok({
@@ -478,6 +498,8 @@ export const editBatchRoutes = (deps: EditBatchRoutesDeps) =>
           failedMusicTracks,
           restoredTransitions: [...transitions.restored],
           failedTransitions: [...transitions.failed],
+          restoredProject: undone.projectEntry !== null && projectReason === null,
+          failedProject: projectReason,
         }),
         200,
       )

@@ -170,6 +170,7 @@ const baseDeps = (providers: readonly VideoProvider[]): Omit<AppDeps, 'editTrans
 const editTransactionOf = (deps: Omit<AppDeps, 'editTransaction'>) =>
   createInMemoryEditTransaction({
     editBatches: deps.editBatches,
+    projects: deps.projects,
     timelineClips: deps.timelineClips,
     transitions: deps.transitions,
     shots: deps.shots,

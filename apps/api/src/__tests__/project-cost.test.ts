@@ -11,6 +11,8 @@ import { describe, expect, it } from 'vitest'
 import { projectRoutes, type CostMeterResponse } from '../routes/projects.js'
 import { baseAppDeps, createTestApp } from './app-deps.js'
 import { aProject } from './fixtures.js'
+import { createInMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 
 /**
@@ -48,6 +50,8 @@ const buildRoutes = (options: {
     app: projectRoutes({
       projects: createInMemoryProjectRepository(project === null ? [] : [project]),
       mediaAssets: { findById: () => Promise.resolve(null) },
+      // 額を読むだけ。作品の直しは呼ばれない。
+      transaction: createInMemoryEditTransaction({ editBatches: createInMemoryEditBatchRepository() }),
       shots: createInMemoryShotRepository(options.shots ?? []),
       takes: createInMemoryTakeRepository(options.takes ?? []),
       storyboardDrafts: { findRunsByProject: () => Promise.resolve(draftRuns) },

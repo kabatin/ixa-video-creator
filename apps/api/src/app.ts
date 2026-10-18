@@ -292,6 +292,7 @@ export const createApp = (deps: AppDeps) => {
       reviews: deps.reviews,
       ...(deps.narration === undefined ? {} : { voiceJobs: deps.narration.voiceJobs }),
       stubProviderIds: [...STUB_PROVIDER_IDS],
+      transaction: deps.editTransaction,
     }),
   )
   app.route('/', uploadRoutes({ mediaAssets, storage, mediaIngest: deps.mediaIngest }))

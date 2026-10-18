@@ -4,6 +4,7 @@ import {
   EditBatch,
   EditBatchEntry,
   EditBatchMusicEntry,
+  EditBatchProjectEntry,
   EditBatchShotEdit,
   EditBatchTransitionEdit,
   canUndo,
@@ -107,5 +108,22 @@ describe('Shot の登場人物・開始フレームの記録（EditBatchEntry）
 
   it('壊れた登場人物は受け付けない', () => {
     expect(EditBatchEntry.safeParse({ shotId, patch: {}, cast: [{ ...cast[0], prominence: 'star' }] }).success).toBe(false)
+  })
+})
+
+describe('作品の記録（EditBatchProjectEntry）', () => {
+  it('変えた欄の、変える前の値だけを持つ。欄の無いところに既定値を入れない', () => {
+    expect(EditBatchProjectEntry.parse({ patch: { lyrics: '', lyricCues: [] } })).toEqual({ patch: { lyrics: '', lyricCues: [] } })
+    expect(EditBatchProjectEntry.parse({ patch: {} })).toEqual({ patch: {} })
+  })
+
+  it('作品の値の規則で読む（壊れた値・知らない欄は受け付けない）', () => {
+    expect(EditBatchProjectEntry.safeParse({ patch: { lyricCues: [-1] } }).success).toBe(false)
+    expect(EditBatchProjectEntry.safeParse({ patch: { workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' } }).success).toBe(false)
+  })
+
+  it('これまでの記録は無いものとして読み、作品の記録だけでも取り消せる', () => {
+    expect(EditBatch.parse({ ...base, kind: 'rough_cut' }).projectEntry).toBeNull()
+    expect(canUndo(EditBatch.parse({ ...base, kind: 'project_edit', projectEntry: { patch: { avoid: '' } } }))).toBe(true)
   })
 })

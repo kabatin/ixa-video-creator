@@ -173,7 +173,8 @@ export const useEditHistory = (projectId: ProjectId, epoch: number): EditHistory
         result.failedClips.length +
         (result.failedLines?.length ?? 0) +
         (result.failedMusicTracks?.length ?? 0) +
-        (result.failedTransitions?.length ?? 0)
+        (result.failedTransitions?.length ?? 0) +
+        (result.failedProject === undefined || result.failedProject === null ? 0 : 1)
       return failed === 0
         ? `「${target.summary}」を戻しました。`
         : `「${target.summary}」を戻しました（${String(failed)} 件は戻せませんでした。変更履歴で理由を確認できます）。`

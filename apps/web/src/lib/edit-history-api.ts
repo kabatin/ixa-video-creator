@@ -68,6 +68,9 @@ export const WireUndoResult = z.object({
   /** 戻したトランジション。前のサーバは返さないので無ければ空と読む。 */
   restoredTransitions: z.array(TransitionId).optional(),
   failedTransitions: z.array(z.object({ transitionId: TransitionId, reason: z.string().min(1) })).optional(),
+  /** 作品の欄を戻したか・戻せなかった理由（作品の直しの記録）。前のサーバは返さないので無ければ戻していないと読む。 */
+  restoredProject: z.boolean().optional(),
+  failedProject: z.string().min(1).nullable().optional(),
 })
 export type WireUndoResult = z.infer<typeof WireUndoResult>
 

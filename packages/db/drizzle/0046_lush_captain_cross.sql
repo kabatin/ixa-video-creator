@@ -1,0 +1,1 @@
+ALTER TABLE "shot_edit_batches" ADD COLUMN "project_entry" jsonb;

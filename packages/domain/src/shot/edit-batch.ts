@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { EditBatchId, MediaAssetId, MusicTrackId, NarrationLineId, ProjectId, ShotId, TakeId, TimelineClipId } from '../common/ids.js'
 import { MusicTrack } from '../music/music.js'
+import { Project } from '../project/project.js'
 import { EditBatchClipEdit } from './edit-batch-clip-edit.js'
 import { EditBatchTransitionEdit } from './edit-batch-transition-edit.js'
 
@@ -28,6 +29,7 @@ import { ShotCharacter, ShotStatus, UpdateShotPatch } from './shot.js'
  * `narration_edit` はナレーションの行 1 件の位置の変更（2026-10-19）。`lineEntries` で記録する。
  * `transition_edit` はトランジションの置く・消す・差し替え（2026-10-19）。`transitionEdits` で記録する。
  * `music_edit` は楽曲の欄の直しとマスターの切り替え（2026-10-19）。`musicEntries` で記録する。
+ * `project_edit` は作品の欄の直し（方針・歌詞・歌詞の時刻など。2026-10-19）。`projectEntry` で記録する。
  */
 export const EditBatchKind = z.enum([
   'rough_cut',
@@ -41,6 +43,7 @@ export const EditBatchKind = z.enum([
   'narration_edit',
   'transition_edit',
   'music_edit',
+  'project_edit',
 ])
 export type EditBatchKind = z.infer<typeof EditBatchKind>
 
@@ -155,6 +158,33 @@ export const EditBatchMusicEntry = z.object({
 })
 export type EditBatchMusicEntry = z.infer<typeof EditBatchMusicEntry>
 
+const project = Project.shape
+/**
+ * 作品 1 件ぶんの「変える前」（2026-10-19）。**変えた欄だけを持つ**（欄が無いのは触っていない）。
+ * 値の規則は作品そのもの（`Project`）から取り、既定値は外す（欄が無いのを「既定値だった」と読み替えない）。
+ * **知らない欄は受け付けない**（ID・ワークスペースは直す欄ではない）。
+ */
+export const EditBatchProjectEntry = z.object({
+  patch: z
+    .object({
+      name: project.name.optional(),
+      fps: project.fps.optional(),
+      resolution: project.resolution.optional(),
+      aspectRatio: project.aspectRatio.optional(),
+      durationSec: project.durationSec.optional(),
+      budgetUsd: project.budgetUsd.optional(),
+      styleGuide: project.styleGuide.removeDefault().optional(),
+      avoid: project.avoid.removeDefault().optional(),
+      styleReferenceAssetIds: project.styleReferenceAssetIds.removeDefault().optional(),
+      lyrics: project.lyrics.removeDefault().optional(),
+      lyricCues: project.lyricCues.removeDefault().optional(),
+      instrumental: project.instrumental.removeDefault().optional(),
+      status: project.status.optional(),
+    })
+    .strict(),
+})
+export type EditBatchProjectEntry = z.infer<typeof EditBatchProjectEntry>
+
 export const MAX_EDIT_BATCH_SUMMARY_LENGTH = 200
 
 export const EditBatch = z.object({
@@ -176,6 +206,8 @@ export const EditBatch = z.object({
   transitionEdits: z.array(EditBatchTransitionEdit).default([]),
   /** Shot の作成・削除。これまでの記録は空として読む。 */
   shotEdits: z.array(EditBatchShotEdit).default([]),
+  /** 作品の欄の直し。**`null` は「作品を触っていない」**（これまでの記録も `null` として読む）。 */
+  projectEntry: EditBatchProjectEntry.nullable().default(null),
   /** 取り消した時刻。**`null` は「まだ取り消していない」**（「取り消せない」ではない）。 */
   undoneAt: z.date().nullable(),
   createdAt: z.date(),
@@ -208,7 +240,8 @@ export const canUndo = (batch: EditBatch): boolean =>
     batch.musicEntries.length > 0 ||
     batch.clipEdits.length > 0 ||
     batch.transitionEdits.length > 0 ||
-    batch.shotEdits.length > 0)
+    batch.shotEdits.length > 0 ||
+    (batch.projectEntry !== null && Object.keys(batch.projectEntry.patch).length > 0))
 
 /**
  * 1 件ぶんの取り消しで、採用 Take を戻す必要があるか。

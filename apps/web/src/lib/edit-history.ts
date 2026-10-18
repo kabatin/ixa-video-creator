@@ -28,6 +28,7 @@ const KIND_LABELS: Readonly<Record<EditBatchKind, string>> = Object.freeze({
   narration_edit: 'ナレーションの編集',
   transition_edit: 'トランジションの編集',
   music_edit: '楽曲の編集',
+  project_edit: '作品の編集',
 })
 
 export const editBatchKindLabel = (kind: EditBatchKind): string => KIND_LABELS[kind]
@@ -75,6 +76,8 @@ export type EditHistoryRow = {
 export const editBatchCountLabel = (batch: WireEditBatch): string => {
   // クリップ 1 件ずつの記録は効果音・エフェクトも含むので、テロップと呼ばない。
   if (batch.kind === 'clip_edit') return `${batch.clipCount.toString()} 件のクリップ`
+  // 作品の直しは 1 つの作品の欄なので、件数で言わない。
+  if (batch.kind === 'project_edit') return '作品'
   if (batch.shotCount > 0) return `${batch.shotCount.toString()} 件の Shot`
   if (batch.lineCount > 0) return `${batch.lineCount.toString()} 行のナレーション`
   if (batch.clipCount > 0) return `${batch.clipCount.toString()} 件のテロップ`
@@ -190,7 +193,21 @@ const groupsOf = (result: WireUndoResult): readonly UndoGroup[] => {
 
 /** 何か 1 つでも戻ったか（画面を読み直す合図）。行・曲だけが戻った記録も数える。 */
 export const undoRestoredAnything = (result: WireUndoResult): boolean =>
-  result.restored.length > 0 || groupsOf(result).some((group) => group.restored > 0)
+  result.restored.length > 0 || result.restoredProject === true || groupsOf(result).some((group) => group.restored > 0)
+
+/** 作品の直しの記録の結果（作品は 1 つなので件数で言わない）。作品を触っていない記録なら `null`。 */
+const projectResultView = (result: WireUndoResult): UndoResultView | null => {
+  const reason = result.failedProject ?? null
+  if (result.restoredProject !== true && reason === null) return null
+  return reason === null
+    ? { summary: '作品を元に戻しました', tone: 'normal', failed: [], failedClips: [] }
+    : {
+        summary: '作品を元に戻せませんでした',
+        tone: 'warn',
+        failed: [],
+        failedClips: [{ key: 'failed-project', subject: '作品', reason }],
+      }
+}
 
 /**
  * 取り消しの結果を読める形に写す。
@@ -201,6 +218,8 @@ export const undoRestoredAnything = (result: WireUndoResult): boolean =>
  * どれも無ければ Shot の記録として言う。
  */
 export const buildUndoResultView = (result: WireUndoResult): UndoResultView => {
+  const project = projectResultView(result)
+  if (project !== null) return project
   const groups = groupsOf(result)
   const main = groups.find((group) => group.restored + group.failed.length > 0) ?? {
     subject: '',

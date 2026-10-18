@@ -6,6 +6,7 @@ import type {
   EditBatchEntry,
   EditBatchLineEntry,
   EditBatchMusicEntry,
+  EditBatchProjectEntry,
   EditBatchShotEdit,
   EditBatchTransitionEdit,
 } from '@ixa/domain'
@@ -51,6 +52,8 @@ export const shotEditBatches = pgTable(
     transitionEdits: jsonb('transition_edits').$type<readonly EditBatchTransitionEdit[]>().notNull().default([]),
     /** Shot の作成・削除（ID だけ。Shot は論理削除で中身が残る。2026-10-19）。これまでの記録は空。 */
     shotEdits: jsonb('shot_edits').$type<readonly EditBatchShotEdit[]>().notNull().default([]),
+    /** 作品の欄の「変える前」（変えた欄だけ。2026-10-19）。**NULL は作品を触っていない。** */
+    projectEntry: jsonb('project_entry').$type<EditBatchProjectEntry>(),
     /** 取り消した時刻。**NULL は「まだ取り消していない」**（「取り消せない」ではない）。 */
     undoneAt: timestampTz('undone_at'),
     createdAt: createdAt(),

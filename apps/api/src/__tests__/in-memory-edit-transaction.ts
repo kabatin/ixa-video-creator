@@ -21,6 +21,7 @@ const unused = <T extends object>(name: string): T =>
 export const createInMemoryEditTransaction = (given: Given): EditTransaction => {
   const repos: EditRepositories = {
     editBatches: given.editBatches,
+    projects: given.projects ?? unused('projects'),
     timelineClips: given.timelineClips ?? unused('timelineClips'),
     transitions: given.transitions ?? unused('transitions'),
     shots: given.shots ?? unused('shots'),
