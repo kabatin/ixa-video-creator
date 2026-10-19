@@ -10,12 +10,17 @@ import type { MotionEvent, MotionEventKind, MotionOnset } from './motion-analysi
 /** タイムラインの秒に直した出来事。 */
 export type TimelineMotionEvent = {
   readonly kind: MotionEventKind
+  /** その Shot の始まり（タイムラインの秒）。山で合わせて前へ寄せるときの下限。 */
+  readonly notBeforeSec: number
   readonly startSec: number
   readonly durationSec: number
   readonly label: string
   readonly sfxPrompt: string
   readonly confidence: number
 }
+
+/** 音の一番大きいところで合わせる種類（ADR-0054 追記）。続く音と環境音は鳴り始めで置く。 */
+const PEAK_ALIGNED_KINDS: ReadonlySet<MotionEventKind> = new Set(['moment', 'pass_by'])
 
 /** 長い続く音を分けたときに、隣と重ねる長さ（秒）。つなぎ目でぶつ切りにしない。 */
 export const MOTION_SFX_SPLIT_OVERLAP_SEC = 0.25
@@ -58,6 +63,7 @@ export const motionEventsOnTimeline = (
     return [
       {
         kind: event.kind,
+        notBeforeSec: shot.startSec,
         startSec,
         durationSec: Math.max(0, toSec - fromSec) / rate,
         label: event.label,
@@ -132,6 +138,9 @@ export const motionEventsToSfxCues = (events: readonly TimelineMotionEvent[]): r
         durationSec: round3(Math.min(SFX_DURATION_MAX_SEC, Math.max(SFX_DURATION_MIN_SEC, piece.durationSec))),
         prompt: event.sfxPrompt,
         volume: KIND_VOLUME[event.kind],
+        ...(PEAK_ALIGNED_KINDS.has(event.kind) && pieces.length === 1
+          ? { align: { to: 'peak' as const, notBeforeSec: event.notBeforeSec } }
+          : {}),
       },
     }))
   })

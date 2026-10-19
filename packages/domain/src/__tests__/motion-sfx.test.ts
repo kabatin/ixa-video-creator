@@ -86,6 +86,7 @@ describe('motionEventsOnTimeline', () => {
 
 const timelineEvent = (overrides: Partial<TimelineMotionEvent> = {}): TimelineMotionEvent => ({
   kind: 'moment',
+  notBeforeSec: 22.22,
   startSec: 24.18,
   durationSec: 0.4,
   label: '着地',
@@ -161,5 +162,22 @@ describe('energyOnTimeline / onsetsOnTimeline', () => {
       { atSec: 5, strength: 0.5 },
     ])
     expect(onsets).toEqual([{ atSec: 11, strength: 1 }])
+  })
+})
+
+describe('音の一番大きいところで合わせる印（ADR-0054 追記）', () => {
+  it('置く出来事は、その Shot の始まりを下限として持つ', () => {
+    const [placed] = motionEventsOnTimeline(shot(), 8, [event({ takeStartSec: 1 })])
+    expect(placed?.notBeforeSec).toBe(10)
+  })
+
+  it.each(['moment', 'pass_by'] as const)('%s は山で合わせる', (kind) => {
+    const [cue] = motionEventsToSfxCues([timelineEvent({ kind })])
+    expect(cue?.cue.align).toEqual({ to: 'peak', notBeforeSec: 22.22 })
+  })
+
+  it.each(['sustained', 'ambient'] as const)('%s は合わせない（鳴り始めで置く）', (kind) => {
+    const [cue] = motionEventsToSfxCues([timelineEvent({ kind, durationSec: 3 })])
+    expect(cue?.cue.align).toBeUndefined()
   })
 })

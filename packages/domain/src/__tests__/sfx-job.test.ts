@@ -10,6 +10,7 @@ import {
   isSfxJobFinished,
   sfxClipPlacement,
   sfxCueSeed,
+  sfxPeakOffsetsOf,
   sfxSeedsUsedOf,
   type SfxCueInput,
 } from '../sfx/sfx-job.js'
@@ -141,5 +142,49 @@ describe('sfx_job.status と素材の出自', () => {
   it('generated_sfx はジョブを指す', () => {
     expect(MediaOrigin.safeParse({ type: 'generated_sfx', sfxJobId: newId(SfxJobId) }).success).toBe(true)
     expect(MediaOrigin.safeParse({ type: 'generated_sfx' }).success).toBe(false)
+  })
+})
+
+describe('音の一番大きいところで合わせる（ADR-0054 追記）', () => {
+  const peakCue = SfxCue.parse(aCue({ startSec: 24.14, align: { to: 'peak', notBeforeSec: 22.22 } }))
+
+  it('合わせる印のあるきっかけは、時刻から山までの秒を引いて置く', () => {
+    expect(sfxClipPlacement(peakCue, 0.5, 0.18).startSec).toBeCloseTo(23.96)
+  })
+
+  it('Shot の始まりより前には寄せない（端で切る）', () => {
+    const early = SfxCue.parse(aCue({ startSec: 22.3, align: { to: 'peak', notBeforeSec: 22.22 } }))
+    expect(sfxClipPlacement(early, 1, 0.6).startSec).toBe(22.22)
+  })
+
+  it('0 秒より前にも寄せない', () => {
+    const atZero = SfxCue.parse(aCue({ startSec: 0.1, align: { to: 'peak', notBeforeSec: 0 } }))
+    expect(sfxClipPlacement(atZero, 1, 0.5).startSec).toBe(0)
+  })
+
+  it('山が測れなかった・印が無いきっかけは、時刻のまま置く', () => {
+    expect(sfxClipPlacement(peakCue, 0.5, null).startSec).toBe(24.14)
+    expect(sfxClipPlacement(SfxCue.parse(aCue()), 0.5, 0.3).startSec).toBe(3.75)
+  })
+
+  it('負の山の秒・数でない山の秒は、無いものとして扱う', () => {
+    expect(sfxClipPlacement(peakCue, 0.5, -0.2).startSec).toBe(24.14)
+    expect(sfxClipPlacement(peakCue, 0.5, Number.NaN).startSec).toBe(24.14)
+  })
+
+  it.each([
+    ['知らない合わせ方', { to: 'end', notBeforeSec: 0 }],
+    ['負の下限', { to: 'peak', notBeforeSec: -1 }],
+  ])('%s は弾く', (_, align) => {
+    expect(SfxCue.safeParse({ ...aCue(), align }).success).toBe(false)
+  })
+})
+
+describe('sfxPeakOffsetsOf', () => {
+  const ids = ['a', 'b'] as never[]
+  it('記録の山の秒を素材と同じ順で返し、無い・数が合わないときは null を並べる', () => {
+    expect(sfxPeakOffsetsOf({ providerRecord: { peakOffsetsSec: [0.01, null] }, mediaAssetIds: ids })).toEqual([0.01, null])
+    expect(sfxPeakOffsetsOf({ providerRecord: null, mediaAssetIds: ids })).toEqual([null, null])
+    expect(sfxPeakOffsetsOf({ providerRecord: { peakOffsetsSec: [0.01] }, mediaAssetIds: ids })).toEqual([null, null])
   })
 })

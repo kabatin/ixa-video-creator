@@ -49,6 +49,14 @@ export const SfxNegativePrompt = z
   .max(SFX_PROMPT_MAX_LENGTH, `入れたくない音の説明は ${String(SFX_PROMPT_MAX_LENGTH)} 文字までです`)
   .refine(isEnglishText, '入れたくない音の説明は英語で書いてください（AI は英語しか読みません）')
 
+/**
+ * 音の一番大きいところで合わせる印（ADR-0054 追記）。付いたきっかけの `startSec` は**山を鳴らしたい時刻**で、
+ * 置くときは「時刻 − 鳴り始めから山までの秒」へ寄せる（`sfxClipPlacement`）。`notBeforeSec`（Shot の始まり）より前には寄せない。
+ * 動きの出来事のうち、瞬間と通り過ぎに付ける（続く音・環境音は鳴り始めで置く）。
+ */
+export const SfxCueAlign = z.object({ to: z.literal('peak'), notBeforeSec: Seconds })
+export type SfxCueAlign = z.infer<typeof SfxCueAlign>
+
 /** きっかけ。どこで（時刻）・どれだけ（長さ）・何の音を（説明）・どの大きさで（音量）。 */
 export const SfxCue = z.object({
   startSec: Seconds.max(SFX_START_MAX_SEC, `効果音の時刻は ${String(SFX_START_MAX_SEC)} 秒までです`),
@@ -60,6 +68,7 @@ export const SfxCue = z.object({
   prompt: SfxPrompt,
   negativePrompt: SfxNegativePrompt.optional(),
   volume: z.number().finite().min(0).max(SFX_VOLUME_MAX).default(SFX_DEFAULT_VOLUME),
+  align: SfxCueAlign.optional(),
 })
 export type SfxCue = z.infer<typeof SfxCue>
 export type SfxCueInput = z.input<typeof SfxCue>
@@ -131,20 +140,45 @@ export const sfxSeedsUsedOf = (job: Pick<SfxJob, 'providerRecord' | 'mediaAssetI
 export const isSfxJobFinished = (status: SfxJobStatus): boolean =>
   status === 'succeeded' || status === 'failed' || status === 'cancelled'
 
+/** できた音の、鳴り始めから一番大きいところまでの秒を記録（`providerRecord`）に入れる鍵。素材と同じ順（ADR-0054 追記）。 */
+export const SFX_PEAK_OFFSETS_KEY = 'peakOffsetsSec'
+
+const PeakOffsets = z.array(Seconds.nullable())
+
+/** できた音 1 本ずつの山までの秒（素材と同じ順）。記録に無い・形が違う・数が合わないときは null を並べる。 */
+export const sfxPeakOffsetsOf = (job: Pick<SfxJob, 'providerRecord' | 'mediaAssetIds'>): readonly (number | null)[] => {
+  const parsed = PeakOffsets.safeParse(job.providerRecord?.[SFX_PEAK_OFFSETS_KEY])
+  return parsed.success && parsed.data.length === job.mediaAssetIds.length
+    ? parsed.data
+    : job.mediaAssetIds.map(() => null)
+}
+
+/**
+ * 置く時刻。**山で合わせる印があり、山の秒が測れていれば**「時刻 − 山の秒」へ寄せ、Shot の始まりと 0 秒で切る。
+ * それ以外は時刻のまま（画面と MCP のどちらから頼んでも、この 1 か所で決まる）。
+ */
+export const sfxClipStartSec = (cue: SfxCue, peakOffsetSec: number | null): number => {
+  if (cue.align === undefined || peakOffsetSec === null || !Number.isFinite(peakOffsetSec) || peakOffsetSec < 0) {
+    return cue.startSec
+  }
+  return Math.max(0, cue.align.notBeforeSec, cue.startSec - peakOffsetSec)
+}
+
 /**
  * できた音をクリップにするときの中身。**長さは実際の音の長さ**（頼んだ長さと少し違うことがある）。
- * 実際の長さが取れなければ頼んだ長さで置く。
+ * 実際の長さが取れなければ頼んだ長さで置く。時刻は `sfxClipStartSec`（山で合わせる印があれば寄せる）。
  */
 export const sfxClipPlacement = (
   cue: SfxCue,
   actualDurationSec: number | null,
+  peakOffsetSec: number | null = null,
 ): { readonly startSec: number; readonly durationSec: number; readonly volume: number; readonly fadeOutSec: number } => {
   const durationSec =
     actualDurationSec !== null && Number.isFinite(actualDurationSec) && actualDurationSec > 0
       ? actualDurationSec
       : cue.durationSec
   return {
-    startSec: cue.startSec,
+    startSec: sfxClipStartSec(cue, peakOffsetSec),
     durationSec,
     volume: cue.volume,
     fadeOutSec: Math.min(SFX_CLIP_FADE_OUT_SEC, durationSec / 2),

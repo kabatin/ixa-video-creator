@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import {
   SfxCue,
   TimelineClip,
+  sfxPeakOffsetsOf,
   sfxSeedsUsedOf,
   TimelineClipId,
   newId,
@@ -107,6 +108,39 @@ const succeeded = async (count: number): Promise<SfxJobStatusFromProvider> => ({
   costUsd: 0,
   raw: { workflow: 'stable-audio-3-sfx' },
 })
+
+/** 16 bit モノラルの WAV。`peakAt` 秒のあたりだけ大きい。 */
+const peakWav = (peakAt: number, sec = 0.6, sampleRate = 8000): Uint8Array => {
+  const frames = Math.round(sec * sampleRate)
+  const buffer = Buffer.alloc(44 + frames * 2)
+  buffer.write('RIFF', 0, 'ascii')
+  buffer.writeUInt32LE(36 + frames * 2, 4)
+  buffer.write('WAVEfmt ', 8, 'ascii')
+  buffer.writeUInt32LE(16, 16)
+  buffer.writeUInt16LE(1, 20)
+  buffer.writeUInt16LE(1, 22)
+  buffer.writeUInt32LE(sampleRate, 24)
+  buffer.writeUInt32LE(sampleRate * 2, 28)
+  buffer.writeUInt16LE(2, 32)
+  buffer.writeUInt16LE(16, 34)
+  buffer.write('data', 36, 'ascii')
+  buffer.writeUInt32LE(frames * 2, 40)
+  for (let i = 0; i < frames; i += 1) {
+    buffer.writeInt16LE(Math.abs(i / sampleRate - peakAt) < 0.005 ? 30000 : 500, 44 + i * 2)
+  }
+  return new Uint8Array(buffer)
+}
+
+const succeededWithPeak = async (peakAt: number): Promise<SfxJobStatusFromProvider> => {
+  const path = join(dir, `peak-${String(peakAt)}.wav`)
+  await writeFile(path, peakWav(peakAt))
+  return {
+    state: 'succeeded',
+    outputs: [{ path, durationSec: 0.6, sampleRate: 8000, channels: 1, seedUsed: 7 }],
+    costUsd: 0,
+    raw: { workflow: 'stable-audio-3-sfx' },
+  }
+}
 
 /** タイムラインのクリップの偽物。 */
 const inMemoryClips = () => {
@@ -227,6 +261,36 @@ describe('processSfxJob', () => {
     expect(provider.calls.submit).toMatchObject([{ negativePrompt: 'music, voice' }])
     const done = s.sfxJobs.snapshot().find((j) => j.id === job.id)
     expect(sfxSeedsUsedOf(done ?? { providerRecord: null, mediaAssetIds: [] })).toEqual([7, 9])
+  })
+
+  /** ADR-0054 追記。山で合わせる印のあるきっかけは、音の一番大きいところが時刻に来るよう前へ寄せる。 */
+  it('山で合わせるきっかけは、測った山の秒だけ前へ寄せて置き、山の秒を記す', async () => {
+    const provider = fakeProvider([await succeededWithPeak(0.2)])
+    const s = await setup(provider)
+    const job = await s.sfxJobs.create({
+      projectId: project.id,
+      tool: 'stable_audio_sfx',
+      model: stableAudioSfxModel.id,
+      spec: { ...SPEC, count: 1, cue: SfxCue.parse({ ...SPEC.cue, startSec: 5, align: { to: 'peak', notBeforeSec: 4 } }) },
+    })
+    expect(await processSfxJob(s.deps, { sfxJobId: job.id })).toEqual({ state: 'succeeded' })
+    expect(s.clips.snapshot()[0]?.startSec).toBeCloseTo(4.8, 2)
+    const done = s.sfxJobs.snapshot().find((j) => j.id === job.id)
+    const [offset] = sfxPeakOffsetsOf(done ?? { providerRecord: null, mediaAssetIds: [] })
+    expect(offset).toBeCloseTo(0.2, 2)
+  })
+
+  it('印の無いきっかけは、山を測っても時刻のまま置く', async () => {
+    const provider = fakeProvider([await succeededWithPeak(0.2)])
+    const s = await setup(provider)
+    const job = await s.sfxJobs.create({
+      projectId: project.id,
+      tool: 'stable_audio_sfx',
+      model: stableAudioSfxModel.id,
+      spec: { ...SPEC, count: 1 },
+    })
+    await processSfxJob(s.deps, { sfxJobId: job.id })
+    expect(s.clips.snapshot()[0]?.startSec).toBe(3.75)
   })
 
   it('キューが打ち切って失敗にした行を、遅れて終わっても成功に戻さない', async () => {

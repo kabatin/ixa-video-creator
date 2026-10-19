@@ -1,8 +1,18 @@
-import { SFX_SEEDS_USED_KEY, sfxClipPlacement, type MediaAssetId, type Project, type SfxJob, type TimelineClipId } from '@ixa/domain'
+import { readFile } from 'node:fs/promises'
+import {
+  SFX_PEAK_OFFSETS_KEY,
+  SFX_SEEDS_USED_KEY,
+  sfxClipPlacement,
+  type MediaAssetId,
+  type Project,
+  type SfxJob,
+  type TimelineClipId,
+} from '@ixa/domain'
 import type { ProviderJobHandle, SfxJobStatusFromProvider } from '@ixa/provider-core'
 import { SfxJobCancelled, SfxJobFailure, type SfxAdapter, type SfxProcessorDeps } from './deps.js'
 import { publishSfxJobStatus } from './events.js'
 import { ingestSfx } from './ingest.js'
+import { wavPeakOffsetSec } from './peak-offset.js'
 import { stopRemoteSfx, waitForSfx } from './wait.js'
 
 type Succeeded = Extract<SfxJobStatusFromProvider, { state: 'succeeded' }>
@@ -26,13 +36,14 @@ const placeFirst = async (
   job: SfxJob,
   mediaAssetId: MediaAssetId,
   actualDurationSec: number,
+  peakOffsetSec: number | null,
 ): Promise<TimelineClipId> => {
   const recorded = (await deps.sfxJobs.findById(job.id))?.timelineClipId ?? null
   if (recorded !== null) {
     const existing = await deps.timelineClips.findByProject(project.id)
     if (existing.some((clip) => clip.id === recorded)) return recorded
   }
-  const placement = sfxClipPlacement(job.spec.cue, actualDurationSec)
+  const placement = sfxClipPlacement(job.spec.cue, actualDurationSec, peakOffsetSec)
   const clip = await deps.timelineClips.create({
     projectId: project.id,
     track: 'SFX',
@@ -69,12 +80,29 @@ const seedsOf = (result: Succeeded): Record<string, unknown> => ({
   [SFX_SEEDS_USED_KEY]: result.outputs.map((output) => output.seedUsed),
 })
 
+/**
+ * 1 本ずつの、鳴り始めから一番大きいところまでの秒（ADR-0054 追記）。読めない・無音は null（時刻のまま置く）。
+ * 測れないことで作った音を捨てない（置く位置が少しずれるだけ）ので、失敗はログに残して null にする。
+ */
+const peakOffsetsOf = async (deps: SfxProcessorDeps, job: SfxJob, result: Succeeded): Promise<readonly (number | null)[]> =>
+  Promise.all(
+    result.outputs.map(async (output) => {
+      try {
+        return wavPeakOffsetSec(await readFile(output.path))
+      } catch (error) {
+        deps.logger.warn({ sfxJobId: job.id, err: error }, '効果音の一番大きいところを測れませんでした。時刻のまま置きます')
+        return null
+      }
+    }),
+  )
+
 /** できた音を素材にし、1 本目を置く。素材は番号順。 */
 const register = async (
   deps: SfxProcessorDeps,
   project: Project,
   job: SfxJob,
   result: Succeeded,
+  peakOffsets: readonly (number | null)[],
 ): Promise<{ readonly mediaAssetIds: readonly MediaAssetId[]; readonly timelineClipId: TimelineClipId }> => {
   // 1 本ずつ順に取り込む（同じ中身の音は 1 つの素材にまとまる。並べると同じ中身を 2 度書きに行く）。
   const mediaAssetIds = await result.outputs.reduce<Promise<readonly MediaAssetId[]>>(
@@ -87,7 +115,7 @@ const register = async (
   if (firstId === undefined || firstOutput === undefined) {
     throw new SfxJobFailure({ code: 'output_missing', message: '効果音が 1 本も返ってきませんでした。', retryable: true })
   }
-  const timelineClipId = await placeFirst(deps, project, job, firstId, firstOutput.durationSec)
+  const timelineClipId = await placeFirst(deps, project, job, firstId, firstOutput.durationSec, peakOffsets[0] ?? null)
   return { mediaAssetIds, timelineClipId }
 }
 
@@ -157,8 +185,13 @@ export const generateSfx = async (deps: SfxProcessorDeps, adapter: SfxAdapter, j
       )
     }
     await throwIfCancelled(deps, job)
-    const outcome = await register(deps, project, job, result)
-    await settle(deps, job, outcome, { ...recordOf(handle, result.raw), ...seedsOf(result) })
+    const peakOffsets = await peakOffsetsOf(deps, job, result)
+    const outcome = await register(deps, project, job, result, peakOffsets)
+    await settle(deps, job, outcome, {
+      ...recordOf(handle, result.raw),
+      ...seedsOf(result),
+      [SFX_PEAK_OFFSETS_KEY]: peakOffsets,
+    })
   } finally {
     await adapter.provider.release?.(handle)
   }
