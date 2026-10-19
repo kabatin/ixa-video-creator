@@ -22,6 +22,7 @@ import {
   TIMELINE_LANE_HEIGHT_PX,
   type TimeSpan,
 } from '@/lib/timeline-display'
+import { assignOverlapRows, overlapRowAtOffset } from '@/lib/timeline-overlap-rows'
 import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX, type MenuPoint } from '@/components/workbench/use-context-menu'
 
 /**
@@ -38,6 +39,8 @@ const LANE_HEIGHT_PX = TIMELINE_LANE_HEIGHT_PX
 /** 上の 12px は「LayerN」の札。クリップはその下に置く（36px の段で文字が 1 行収まる高さ）。 */
 const CLIP_TOP_PX = 12
 const CLIP_HEIGHT_PX = LANE_HEIGHT_PX - CLIP_TOP_PX - 2
+/** 重なるクリップをずらす行の間隔（1 行なら帯の高さは今までどおり）。 */
+const ROW_PITCH_PX = CLIP_HEIGHT_PX + 2
 
 export type TimelineClipLaneProps = {
   readonly layer: number
@@ -104,10 +107,19 @@ export const TimelineClipLane = ({
     pressRef.current = null
   }
 
-  const clipAt = (clientX: number): TimelineClip | undefined => {
+  // 時間が重なるクリップは別の行に出す（制作者 2026-10-19）。行は確定した位置で決める（動かしている途中で入れ替えない）。
+  const overlap = assignOverlapRows(clips)
+  const layout = { topPx: CLIP_TOP_PX, rowPitchPx: ROW_PITCH_PX, rowCount: overlap.rowCount }
+  const rowOf = (clip: TimelineClip): number => overlap.rows.get(clip.id) ?? 0
+
+  /** 押した位置のクリップ。**押した行のものだけ**を見る（横の位置だけで探すと、重なった別のクリップを掴む）。 */
+  const clipAt = (clientX: number, clientY: number): TimelineClip | undefined => {
     const bounds = boundsOf()
+    const row = overlapRowAtOffset(clientY - (laneRef.current?.getBoundingClientRect().top ?? 0), layout)
     return clips.find(
-      (clip) => clipHandleAtClientX(clip, clientX, bounds, pxPerSec, grabWidthFor(clip, pxPerSec)) !== null,
+      (clip) =>
+        rowOf(clip) === row &&
+        clipHandleAtClientX(clip, clientX, bounds, pxPerSec, grabWidthFor(clip, pxPerSec)) !== null,
     )
   }
 
@@ -123,11 +135,7 @@ export const TimelineClipLane = ({
     const bounds = boundsOf()
     const atSec = timelineSecAtClientX(event.clientX, bounds, pxPerSec)
 
-    const hit = clips.find(
-      (clip) =>
-        clipHandleAtClientX(clip, event.clientX, bounds, pxPerSec, grabWidthFor(clip, pxPerSec)) !==
-        null,
-    )
+    const hit = clipAt(event.clientX, event.clientY)
     if (hit === undefined) {
       // 押した瞬間に小窓を開く。既定の動きのままだと、このあと焦点がパネルへ移って
       // 小窓（パネルの外に出す）の欄から抜ける。Esc も打った文字も届かなくなる。
@@ -215,14 +223,14 @@ export const TimelineClipLane = ({
     <div
       ref={laneRef}
       className="relative"
-      style={{ height: LANE_HEIGHT_PX }}
+      style={{ height: CLIP_TOP_PX + overlap.rowCount * ROW_PITCH_PX }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={finish}
       onPointerCancel={finish}
       onContextMenu={(event) => {
         if (onClipContextMenu === undefined || longPressedRef.current) return
-        const hit = clipAt(event.clientX)
+        const hit = clipAt(event.clientX, event.clientY)
         if (hit === undefined) return
         if (onClipContextMenu(hit, { x: event.clientX, y: event.clientY }, event.currentTarget)) event.preventDefault()
       }}
@@ -269,7 +277,12 @@ export const TimelineClipLane = ({
                 ? 'bg-info/25 text-text ring-info/60'
                 : 'bg-info/10 text-text ring-info/60 hover:bg-info/25'
             } ${previews.has(clip.id) ? 'opacity-80 ring-2 ring-info/60' : ''}`}
-            style={{ top: CLIP_TOP_PX, left: rect.leftPx, width: rect.widthPx, height: CLIP_HEIGHT_PX }}
+            style={{
+              top: CLIP_TOP_PX + rowOf(clip) * ROW_PITCH_PX,
+              left: rect.leftPx,
+              width: rect.widthPx,
+              height: CLIP_HEIGHT_PX,
+            }}
           >
             {/* 端の掴みしろ。幅は本体を食いつぶさないよう `timeline-drag` が決める。 */}
             <span
