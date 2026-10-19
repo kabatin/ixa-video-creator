@@ -131,3 +131,17 @@ describe('Claude CLI の画像チェックの厳しさ', () => {
     expect(buildImageCheckPrompt(request())).toMatch(/文字.*指示で禁じられていても.*text/)
   })
 })
+
+/** チェックだけに効くモデルの指定（ADR-0055 追記）。渡したときだけ --model を付ける。 */
+describe('Claude CLI の画像チェックのモデル', () => {
+  it('モデルを渡せば --model で指定し、渡さなければ付けない', async () => {
+    const withModel = recordingRunner(completedWith(envelope(JSON.stringify(valid))))
+    await createClaudeCliImageChecker({ runner: withModel.runner, model: 'sonnet' }).check(request())
+    const args = withModel.calls[0]?.args ?? []
+    expect(args[args.indexOf('--model') + 1]).toBe('sonnet')
+
+    const without = recordingRunner(completedWith(envelope(JSON.stringify(valid))))
+    await createClaudeCliImageChecker({ runner: without.runner }).check(request())
+    expect(without.calls[0]?.args).not.toContain('--model')
+  })
+})

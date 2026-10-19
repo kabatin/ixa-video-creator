@@ -79,13 +79,15 @@ export const createImageWiring = (input: {
   readonly textTool: () => Promise<AiToolId>
   /** 自動のやり直しの上限（ADR-0055）。 */
   readonly maxRetries: number
+  /** チェックに使う Claude のモデル（`IMAGE_CHECK_MODEL`。既定 sonnet）。**チェックにだけ効かせる**。 */
+  readonly checkModel: string
 }): ImageProcessorDeps => {
   const workDir = process.env.IMAGE_WORK_DIR ?? '/tmp/ixa-image-work'
   const scripts = createScriptRepository(input.db)
   return {
     imageJobs: createImageJobRepository(input.db),
     imageChecks: createImageCheckRepository(input.db),
-    checker: createClaudeCliImageChecker(),
+    checker: createClaudeCliImageChecker({ model: input.checkModel }),
     textTool: input.textTool,
     // 設定の範囲は domain の規則で確かめ直す（設定側と食い違ったら起動時に落とす）。
     maxRetries: ImageCheckMaxRetries.parse(input.maxRetries),
