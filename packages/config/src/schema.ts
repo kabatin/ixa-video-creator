@@ -208,8 +208,10 @@ export const EnvSchema = z.object({
    */
   IMAGE_CHECK_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
   /**
-   * 作った画像のチェックに使う Claude のモデル（ADR-0055 追記。制作者の了承 2026-10-19）。既定は `sonnet`（費用を抑える）。
-   * Claude CLI の `--model` にそのまま渡す（別名 `sonnet` / `opus` か、モデル ID）。**チェックにだけ効く**。
+   * 作った画像のチェックに使う Claude のモデル（ADR-0055 追記。制作者の了承 2026-10-19）。既定は Sonnet（費用を抑える）。
+   * Claude CLI の `--model` にそのまま渡す（モデル ID か別名）。**チェックにだけ効く**。
+   * 既定は**モデル ID** にする。別名 `sonnet` は Claude Code の設定（ANTHROPIC_DEFAULT_SONNET_MODEL）で
+   * 別のモデルに向けられることがあり、この Mac では Opus に向いていた（実測: 単価が Opus のまま）。
    * 引数に渡すので、英数字と `.` `-` `_` だけを受ける。
    */
   IMAGE_CHECK_MODEL: z
@@ -218,7 +220,7 @@ export const EnvSchema = z.object({
     .min(1)
     .max(100)
     .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, '英数字と . - _ だけで書いてください')
-    .default('sonnet'),
+    .default('claude-sonnet-5-5'),
   /**
    * 手元の生成サーバで曲を作るか（ADR-0048）。**既定は `none`（使わない）。**
    *

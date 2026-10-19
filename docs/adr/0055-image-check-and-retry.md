@@ -136,6 +136,8 @@ klein での実機確認で、ネオン看板の崩れた文字と、デフォ�
   worker はチェックの結果を残す前にこれを通す
 - 文字のことは、指示で禁じられていても text で挙げさせる（prompt に入れると retry に残るため）
 - チェックのモデルは Sonnet にする（制作者の了承 2026-10-19）。Opus 相当の既定のモデルで 1 回 0.19〜0.84 ドルかかっていた。
-  `IMAGE_CHECK_MODEL`（既定 `sonnet`、config の zod で検査）を Claude CLI の `--model` に渡す。**チェックにだけ効かせる**
+  `IMAGE_CHECK_MODEL`（既定 `claude-sonnet-5-5`、config の zod で検査）を Claude CLI の `--model` に渡す。**チェックにだけ効かせる**。
+  既定を別名 `sonnet` にしなかったのは、Claude Code の設定（`ANTHROPIC_DEFAULT_SONNET_MODEL`）でこの Mac では
+  別名が Opus に向いていたため（`--model sonnet` で `modelUsage` が claude-opus-5、1 回 0.26 ドル。モデル ID なら 0.10 ドル）
   （動きの分析・レビュー・絵コンテの案などの呼び出しは変えない）
 

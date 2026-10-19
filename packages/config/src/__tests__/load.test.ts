@@ -683,10 +683,14 @@ describe('IMAGE_CHECK_MAX_RETRIES', () => {
   })
 })
 
-/** 画像のチェックに使う Claude のモデル（ADR-0055 追記。制作者の了承 2026-10-19）。既定は sonnet。 */
+/**
+ * 画像のチェックに使う Claude のモデル（ADR-0055 追記。制作者の了承 2026-10-19）。
+ * 既定は**モデル ID**（claude-sonnet-5-5）。別名 `sonnet` は、この Mac の Claude Code の設定
+ * （ANTHROPIC_DEFAULT_SONNET_MODEL）で Opus に向いていて、実測で Opus の単価のままだった。
+ */
 describe('IMAGE_CHECK_MODEL', () => {
-  it('既定は sonnet。別名やモデル ID を受ける', () => {
-    expect(loadConfig(requiredEnv).imageCheckModel).toBe('sonnet')
+  it('既定は Sonnet のモデル ID。別名やモデル ID を受ける', () => {
+    expect(loadConfig(requiredEnv).imageCheckModel).toBe('claude-sonnet-5-5')
     expect(loadConfig({ ...requiredEnv, IMAGE_CHECK_MODEL: 'opus' }).imageCheckModel).toBe('opus')
     expect(loadConfig({ ...requiredEnv, IMAGE_CHECK_MODEL: 'claude-sonnet-5-5' }).imageCheckModel).toBe('claude-sonnet-5-5')
     expect(loadConfig({ ...requiredEnv, IMAGE_CHECK_MODEL: ' sonnet ' }).imageCheckModel).toBe('sonnet')

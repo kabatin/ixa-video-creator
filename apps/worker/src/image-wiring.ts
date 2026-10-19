@@ -79,7 +79,7 @@ export const createImageWiring = (input: {
   readonly textTool: () => Promise<AiToolId>
   /** 自動のやり直しの上限（ADR-0055）。 */
   readonly maxRetries: number
-  /** チェックに使う Claude のモデル（`IMAGE_CHECK_MODEL`。既定 sonnet）。**チェックにだけ効かせる**。 */
+  /** チェックに使う Claude のモデル（`IMAGE_CHECK_MODEL`。既定は Sonnet のモデル ID）。**チェックにだけ効かせる**。 */
   readonly checkModel: string
 }): ImageProcessorDeps => {
   const workDir = process.env.IMAGE_WORK_DIR ?? '/tmp/ixa-image-work'
