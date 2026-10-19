@@ -35,8 +35,11 @@ export const createInMemoryImageJobRepository = (
   const newestFirst = (jobs: readonly ImageGenerationJob[]) => [...jobs].sort((a, b) => b.id.localeCompare(a.id))
   return {
     snapshot: () => store,
-    create: (input) =>
-      Promise.resolve(
+    create: (input) => {
+      // 1 つのジョブのやり直しは 1 行だけ（実物は一意の部分インデックス）。重ねて頼まれたら先の行を返す。
+      const retried = input.retryOf === undefined ? undefined : store.find((job) => job.retryOfJobId === input.retryOf?.jobId)
+      if (retried !== undefined) return Promise.resolve(retried)
+      return Promise.resolve(
         save(
           ImageGenerationJobSchema.parse({
             id: newId(ImageGenerationJobIdSchema),
@@ -60,7 +63,8 @@ export const createInMemoryImageJobRepository = (
             finishedAt: null,
           }),
         ),
-      ),
+      )
+    },
     findById: (id) => Promise.resolve(store.find((job) => job.id === id) ?? null),
     findActiveByShot: (shotId) =>
       Promise.resolve(newestFirst(store.filter((job) => job.shotId === shotId && active(job)))[0] ?? null),

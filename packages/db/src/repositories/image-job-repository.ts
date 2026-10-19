@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, ne } from 'drizzle-orm'
+import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm'
 import {
   ImageGenerationJob as ImageGenerationJobSchema,
   ImageGenerationJobId as ImageGenerationJobIdSchema,
@@ -179,6 +179,16 @@ export const createImageJobRepository = (db: DbExecutor): ImageJobRepository => 
     return current
   }
 
+  const findRetryOf = (id: ImageGenerationJobId): Promise<ImageGenerationJob | null> =>
+    first(
+      db
+        .select()
+        .from(imageGenerationJobs)
+        .where(eq(imageGenerationJobs.retryOfJobId, id))
+        .orderBy(desc(imageGenerationJobs.id))
+        .limit(1),
+    )
+
   return {
     async create(input) {
       const owner = ownerOf(input)
@@ -196,10 +206,14 @@ export const createImageJobRepository = (db: DbExecutor): ImageJobRepository => 
           status: 'queued',
           queuedAt: new Date(),
         })
+        // 1 つのジョブのやり直しは 1 行だけ（一意の部分インデックス）。重ねて頼まれたら、先にできた行を返す。
+        .onConflictDoNothing({ target: imageGenerationJobs.retryOfJobId, where: sql`${imageGenerationJobs.retryOfJobId} is not null` })
         .returning()
       const row = rows[0]
-      if (row === undefined) throw new Error('絵コンテの画像ジョブを作れませんでした')
-      return imageJobRowToDomain(row)
+      if (row !== undefined) return imageJobRowToDomain(row)
+      const existing = input.retryOf === undefined ? null : await findRetryOf(input.retryOf.jobId)
+      if (existing === null) throw new Error('絵コンテの画像ジョブを作れませんでした')
+      return existing
     },
 
     findById: (id) => first(db.select().from(imageGenerationJobs).where(eq(imageGenerationJobs.id, id))),
@@ -280,15 +294,7 @@ export const createImageJobRepository = (db: DbExecutor): ImageJobRepository => 
       return rows.map(imageJobRowToDomain)
     },
 
-    findRetryOf: (id) =>
-      first(
-        db
-          .select()
-          .from(imageGenerationJobs)
-          .where(eq(imageGenerationJobs.retryOfJobId, id))
-          .orderBy(desc(imageGenerationJobs.id))
-          .limit(1),
-      ),
+    findRetryOf,
 
     async findChainUpTo(id) {
       const walk = async (

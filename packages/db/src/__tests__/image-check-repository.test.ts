@@ -98,3 +98,14 @@ describe('retryImageJobInput', () => {
     expect(retryImageJobInput(sheet)).toMatchObject({ kind: 'character_sheet', referenceAssetIds: ['01ARZ3NDEKTSV4RRFFQ69G5FA8'] })
   })
 })
+
+/** レビューの指摘（2026-10-19）。一意と消し方は実際の DB でも確かめる（*.integration.test.ts）。 */
+describe('やり直しのつながりの一意と消し方', () => {
+  it('1 つのジョブのやり直しは 1 行だけ（null は数えない部分インデックス）', () => {
+    const index = getTableConfig(imageGenerationJobs).indexes.find(
+      (candidate) => candidate.config.name === 'image_generation_jobs_retry_of_job_id_uidx',
+    )
+    expect(index?.config.unique).toBe(true)
+    expect(index?.config.where).toBeDefined()
+  })
+})

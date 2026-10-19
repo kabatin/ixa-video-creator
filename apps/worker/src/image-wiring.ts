@@ -56,6 +56,34 @@ const imageAdapters = (workDir: string, stubOutputDir: string, klein: KleinSetti
     : []),
 ]
 
+/** image キューへ積む口（BullMQ の `Queue.add` の部分）。 */
+export type ImageQueueAdd = {
+  readonly add: (
+    name: string,
+    data: { readonly imageJobId: string; readonly step?: 'check' },
+    options?: {
+      readonly delay?: number
+      readonly jobId?: string
+      readonly removeOnComplete?: boolean
+      readonly removeOnFail?: boolean
+    },
+  ) => Promise<unknown>
+}
+
+/**
+ * 描く手順とチェックの手順を積む口（ADR-0055）。描く手順は API と同じ名前（`draw`）で積む。
+ * **チェックの手順は `check-<ジョブ>` の ID で 1 つにまとめる**（同じ絵を 2 度見て払い、やり直しを 2 つ積まない。
+ * レビューの指摘 2026-10-19）。終わったら消すので、後でまた積める（描く手順の投げ直しなど）。
+ */
+export const imageQueuePorts = (queue: ImageQueueAdd): ImageProcessorDeps['queue'] => ({
+  draw: async (imageJobId) => {
+    await queue.add('draw', { imageJobId })
+  },
+  check: async (imageJobId) => {
+    await queue.add('check', { imageJobId, step: 'check' }, { jobId: `check-${imageJobId}`, removeOnComplete: true, removeOnFail: true })
+  },
+})
+
 export const createImageWiring = (input: {
   readonly db: DbClient
   readonly storage: ObjectStorage
@@ -68,13 +96,7 @@ export const createImageWiring = (input: {
   /** 動画・高画質化と同じ整理券（ADR-0047）。 */
   readonly localGpuLease: LocalGpuLease
   /** 順番待ちの絵を積み直す先（image キュー）。 */
-  readonly imageQueue: {
-    readonly add: (
-      name: string,
-      data: { readonly imageJobId: string; readonly step?: 'check' },
-      options?: { readonly delay: number },
-    ) => Promise<unknown>
-  }
+  readonly imageQueue: ImageQueueAdd
   /** いま選んでいる文章の AI（ADR-0032）。Claude のときだけ作った絵をチェックする（ADR-0055）。 */
   readonly textTool: () => Promise<AiToolId>
   /** 自動のやり直しの上限（ADR-0055）。 */
@@ -91,15 +113,7 @@ export const createImageWiring = (input: {
     textTool: input.textTool,
     // 設定の範囲は domain の規則で確かめ直す（設定側と食い違ったら起動時に落とす）。
     maxRetries: ImageCheckMaxRetries.parse(input.maxRetries),
-    queue: {
-      // API と同じ名前で積む（`draw`）。チェックは同じキューの `check`（GPU の順番は持たない）。
-      draw: async (imageJobId) => {
-        await input.imageQueue.add('draw', { imageJobId })
-      },
-      check: async (imageJobId) => {
-        await input.imageQueue.add('check', { imageJobId, step: 'check' })
-      },
-    },
+    queue: imageQueuePorts(input.imageQueue),
     shots: createShotRepository(input.db),
     projects: createProjectRepository(input.db),
     // キャラクターシート（ADR-0035）の材料と、できたシートを足す先。

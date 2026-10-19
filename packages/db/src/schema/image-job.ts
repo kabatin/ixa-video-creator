@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import { doublePrecision, index, integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import {
@@ -52,7 +53,10 @@ export const imageGenerationJobs = pgTable(
     error: jsonb('error').$type<ImageGenerationJobError>(),
     /** 再現用の記録（CLI の版・終了コードなど）。指示の本文は入れない。 */
     providerRecord: jsonb('provider_record').$type<Record<string, unknown>>(),
-    /** やり直しのとき、前のジョブ（ADR-0055）。1 枚目は null。 */
+    /**
+     * やり直しのとき、前のジョブ（ADR-0055）。1 枚目は null。**1 つのジョブのやり直しは 1 行だけ**（一意。チェックの手順が
+     * 2 度走っても、やり直しを 2 つ積まない。レビューの指摘 2026-10-19）。
+     */
     retryOfJobId: ulidRef('retry_of_job_id').references((): AnyPgColumn => imageGenerationJobs.id, {
       onDelete: 'set null',
     }),
@@ -68,7 +72,7 @@ export const imageGenerationJobs = pgTable(
     index('image_generation_jobs_shot_id_idx').on(t.shotId),
     index('image_generation_jobs_character_id_idx').on(t.characterId),
     index('image_generation_jobs_project_status_idx').on(t.projectId, t.status),
-    index('image_generation_jobs_retry_of_job_id_idx').on(t.retryOfJobId),
+    uniqueIndex('image_generation_jobs_retry_of_job_id_uidx').on(t.retryOfJobId).where(sql`${t.retryOfJobId} is not null`),
     index('image_generation_jobs_media_asset_id_idx').on(t.mediaAssetId),
   ],
 )
