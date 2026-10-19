@@ -102,9 +102,12 @@ export const TextClipInspector = ({
   id,
   api,
   scopeChoice,
+  focusText = false,
 }: {
   readonly id: TimelineClipId
   readonly api?: TimelineApi
+  /** 文字の欄にフォーカスして開く（「＋テロップ」で置いた直後）。 */
+  readonly focusText?: boolean
   /** 渡さなければ、このインスペクターの中だけで持つ（「このテロップだけ」から）。 */
   readonly scopeChoice?: TextClipScopeChoice
 }) => {
@@ -264,6 +267,7 @@ export const TextClipInspector = ({
           <AutoSaveField
             label="文字"
             multiline
+            focusOnMount={focusText}
             value={params?.text ?? ''}
             validate={(next) => (next.trim() === '' ? '文字を入れてください' : null)}
             onSave={(next) => save({ params: { ...content.params, text: next.trim() } })}

@@ -32,6 +32,8 @@ export type AutoSaveFieldProps = {
    * 「使う」で欄に入れていつもどおり保存する（↺ で戻せる）。
    */
   readonly assist?: AssistRequest
+  /** 出たときにフォーカスして中身を選ぶ（置いた直後の仮の文字をそのまま打ち替えられるように）。 */
+  readonly focusOnMount?: boolean
 }
 
 /**
@@ -51,8 +53,15 @@ export const AutoSaveField = ({
   placeholder,
   disabled = false,
   assist,
+  focusOnMount = false,
 }: AutoSaveFieldProps) => {
   const id = useId()
+  const fieldRef = useRef<HTMLInputElement & HTMLTextAreaElement>(null)
+  useEffect(() => {
+    if (!focusOnMount) return
+    fieldRef.current?.focus()
+    fieldRef.current?.select()
+  }, [focusOnMount])
   const [draft, setDraft] = useState(value)
   const [state, setState] = useState<SaveState>({ kind: 'idle' })
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -99,6 +108,7 @@ export const AutoSaveField = ({
 
   const common = {
     id,
+    ref: fieldRef,
     value: draft,
     placeholder,
     disabled: disabled || state.kind === 'saving',

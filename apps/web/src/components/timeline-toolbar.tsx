@@ -1,6 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { usePlayheadSec } from '@/lib/playhead-sec'
 import { ZOOM_LEVELS, zoomLabel } from '@/lib/timeline-display'
 
 /**
@@ -32,6 +33,33 @@ const GroupLabel = ({ children }: { readonly children: string }) => (
 )
 
 const ZOOM_BUTTON = 'rounded px-2 py-0.5 text-xs ring-1'
+
+/**
+ * 再生位置にテロップを置く（制作者 2026-10-19「＋テロップが欲しい」）。
+ * 位置は押した瞬間だけ読む。毎コマ読むのはこの末端だけ（`@/lib/playhead-sec`）。
+ */
+export const AddTextButton = ({
+  busy,
+  onAdd,
+}: {
+  readonly busy: boolean
+  readonly onAdd: (atSec: number) => void
+}) => {
+  const playheadSec = usePlayheadSec()
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => {
+        onAdd(playheadSec)
+      }}
+      className="rounded bg-surface px-2 py-0.5 text-xs text-text ring-1 ring-line-strong hover:bg-surface-2 disabled:opacity-50"
+      title="再生位置にテロップを置き、インスペクターで文字を打てるようにします"
+    >
+      ＋ テロップ
+    </button>
+  )
+}
 
 export const TimelineToolbar = ({
   clock,

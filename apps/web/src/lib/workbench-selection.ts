@@ -23,7 +23,12 @@ export type Inspected =
   | { readonly kind: 'brand-asset'; readonly id: BrandAssetId }
   | { readonly kind: 'track'; readonly id: MusicTrackId }
   /** テロップ（ADR-0028）。見た目・位置・フェードとスタイルを直す。 */
-  | { readonly kind: 'text-clip'; readonly id: TimelineClipId }
+  | {
+      readonly kind: 'text-clip'
+      readonly id: TimelineClipId
+      /** 開いたら文字の欄にフォーカスする（「＋テロップ」で置いた直後。すぐ打てるように）。 */
+      readonly focusText?: boolean
+    }
   /** 作品の方針（ADR-0030）。作品全体のコンセプト・ルック・手本画像・避けたいもの。 */
   | { readonly kind: 'project'; readonly id: ProjectId }
   /** 声（ADR-0038）。ナレーター・キャラクターの声。素材ビューアでは一文を読ませて聴く。 */

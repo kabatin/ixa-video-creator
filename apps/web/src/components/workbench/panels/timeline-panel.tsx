@@ -106,8 +106,8 @@ export const TimelinePanel = () => {
           if (clip !== undefined) textClipMenu.open(clip, at, origin)
         }}
         // 帯のテロップは小窓でなくインスペクターで開く（小窓は見切れて編集しづらい）。
-        onOpenTextClip={(id) => {
-          workbench.inspect({ kind: 'text-clip', id })
+        onOpenTextClip={(id, options) => {
+          workbench.inspect({ kind: 'text-clip', id, ...(options?.focusText === true ? { focusText: true } : {}) })
           workbench.focusPanel('inspector')
         }}
         // 効果音もインスペクターで開く（位置・音量）。

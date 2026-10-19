@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { TimelineInlineForm, inlineFormErrors } from '@/components/timeline-inline-form'
 import { ProgramMonitor, type ProgramMonitorProps } from '@/components/program-monitor'
 import { TimelineTracks } from '@/components/timeline-tracks'
-import { TimelineToolbar } from '@/components/timeline-toolbar'
+import { AddTextButton, TimelineToolbar } from '@/components/timeline-toolbar'
 import { AddEffectButton, EffectPicker, useEffectInsert } from '@/components/timeline-effect-insert'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
@@ -45,6 +45,7 @@ import {
 import { adjacentIds, edgeNeighbors, previewSpans, shrinkFirst } from '@/lib/timeline-rolling'
 import { INSERTABLE_TRANSITION_TYPES } from '@/lib/timeline-insert'
 import { openFormCaption } from '@/lib/timeline-open-form'
+import { planQuickText, QUICK_TEXT_LABEL } from '@/lib/timeline-quick-text'
 import {
   buildSnapCandidates,
   snapPoint,
@@ -125,7 +126,7 @@ export type TimelineEditorProps = {
    * **渡すと帯の上の小窓では直さない。** 小窓はパネルの端で見切れて編集しづらかった
    * （2026-09-28、制作者の指摘）。渡さなければ今までどおり小窓で直す（単独のタイムライン）。
    */
-  readonly onOpenTextClip?: (clipId: TimelineClipId) => void
+  readonly onOpenTextClip?: (clipId: TimelineClipId, options?: { readonly focusText?: boolean }) => void
   /** 帯の音のクリップ（効果音）を開く。 */
   readonly onOpenMediaClip?: (clipId: TimelineClipId) => void
   /** 帯のエフェクトを押したとき・置いたときに開く（ADR-0050）。 */
@@ -452,6 +453,26 @@ export const TimelineEditor = ({
     }
   }
 
+  /**
+   * 「＋テロップ」。再生位置から 2 秒、埋まっていれば空いた段に置き（`planQuickText`）、
+   * すぐ選んでインスペクターの文字の欄で打てるようにする。取り消しは作成の記録（clip_edit）で戻る。
+   */
+  const addTextAt = (atSec: number): void => {
+    const plan = planQuickText({ clips: clips ?? [], atSec, programEndSec: durationSec })
+    void run('テロップを追加', async () => {
+      const created = await api.createClip(projectId, {
+        track: 'TEXT',
+        startSec: plan.startSec,
+        durationSec: plan.durationSec,
+        layer: plan.layer,
+        content: { type: 'text', templateKey: 'lower_third', params: { text: QUICK_TEXT_LABEL } },
+      })
+      setClips((current) => (current === null ? [created] : [...current, created]))
+      setSelectedClipId(created.id)
+      onOpenTextClip?.(created.id, { focusText: true })
+    })
+  }
+
   const removeClip = (id: TimelineClipId): void => {
     void run('クリップを削除', async () => {
       const removed = (clips ?? []).find((clip) => clip.id === id)
@@ -494,7 +515,12 @@ export const TimelineEditor = ({
         }
         pxPerSec={pxPerSec}
         onZoom={setPxPerSec}
-        additions={<AddEffectButton busy={busy} onOpen={openEffectAt} />}
+        additions={
+          <>
+            <AddTextButton busy={busy || clips === null} onAdd={addTextAt} />
+            <AddEffectButton busy={busy} onOpen={openEffectAt} />
+          </>
+        }
         snapEnabled={snapEnabled}
         onSnapChange={setSnapEnabled}
         followPlayhead={followPlayhead}

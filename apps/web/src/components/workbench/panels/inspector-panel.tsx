@@ -105,6 +105,7 @@ export const InspectorPanel = () => {
         <TextClipInspector
           key={inspected.id}
           id={inspected.id}
+          focusText={inspected.focusText === true}
           scopeChoice={{ value: textClipScope, onChange: setTextClipScope }}
         />
       </PanelFrame>
