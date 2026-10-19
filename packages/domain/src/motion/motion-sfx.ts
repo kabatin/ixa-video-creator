@@ -1,7 +1,7 @@
 import type { Shot } from '../shot/shot.js'
 import { shotPlaybackRate, takeSecToTimelineSec, usedSourceEndSec } from '../shot/timing.js'
 import { SFX_DURATION_MAX_SEC, SFX_DURATION_MIN_SEC, type SfxCue } from '../sfx/sfx-job.js'
-import type { MotionEvent, MotionEventKind } from './motion-analysis.js'
+import type { MotionEvent, MotionEventKind, MotionOnset } from './motion-analysis.js'
 
 /**
  * 動きの出来事をタイムラインに置き、効果音のきっかけにする（ADR-0054 §4）。**純粋。**
@@ -67,6 +67,38 @@ export const motionEventsOnTimeline = (
     ]
   })
 }
+
+/** タイムラインに直した動きの強さ。i 番目は startSec + i × hopSec 秒。 */
+export type TimelineEnergyCurve = { readonly startSec: number; readonly hopSec: number; readonly values: readonly number[] }
+
+/** 動きの強さのうち、Shot に映る範囲だけをタイムラインの秒に直す（画面の波）。 */
+export const energyOnTimeline = (
+  shot: PlacementShot,
+  takeDurationSec: number | null,
+  energy: readonly number[],
+  hopSec: number,
+): TimelineEnergyCurve => {
+  const rate = shotPlaybackRate(shot, takeDurationSec)
+  const visibleEnd = usedSourceEndSec(shot, takeDurationSec)
+  const first = Math.ceil(shot.sourceInSec / hopSec - 1e-9)
+  const values = energy.filter((_, i) => i >= first && i * hopSec < visibleEnd)
+  return {
+    startSec: shot.startSec + (first * hopSec - shot.sourceInSec) / rate,
+    hopSec: hopSec / rate,
+    values,
+  }
+}
+
+/** 動きの山のうち、Shot に映るものだけをタイムラインの秒に直す。 */
+export const onsetsOnTimeline = (
+  shot: PlacementShot,
+  takeDurationSec: number | null,
+  onsets: readonly MotionOnset[],
+): readonly MotionOnset[] =>
+  onsets.flatMap((onset) => {
+    const atSec = takeSecToTimelineSec(shot, onset.atSec, takeDurationSec)
+    return atSec === null ? [] : [{ atSec, strength: onset.strength }]
+  })
 
 const round3 = (sec: number): number => Math.round(sec * 1000) / 1000
 

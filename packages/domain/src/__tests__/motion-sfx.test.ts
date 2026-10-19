@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { MotionEvent } from '../motion/motion-analysis.js'
 import {
   MOTION_SFX_SPLIT_OVERLAP_SEC,
+  energyOnTimeline,
+  onsetsOnTimeline,
   motionEventsOnTimeline,
   motionEventsToSfxCues,
   type TimelineMotionEvent,
@@ -140,5 +142,24 @@ describe('suggestSfxCues に動きの出来事を混ぜる', () => {
       ['impact', 3],
       ['motion_moment', 5],
     ])
+  })
+})
+
+describe('energyOnTimeline / onsetsOnTimeline', () => {
+  it('映る範囲の強さだけを、タイムラインの秒と間隔に直す', () => {
+    // 使い始め 1 秒・速さ 2 → 映るのは Take の 1〜9 秒。間隔 0.5 秒はタイムラインで 0.25 秒
+    const energy = Array.from({ length: 20 }, (_, i) => i / 100)
+    const curve = energyOnTimeline(shot({ sourceInSec: 1, speed: 2 }), 10, energy, 0.5)
+    expect(curve.startSec).toBe(10)
+    expect(curve.hopSec).toBe(0.25)
+    expect(curve.values).toEqual(energy.slice(2, 18))
+  })
+
+  it('山は映る範囲のものだけを直す', () => {
+    const onsets = onsetsOnTimeline(shot(), 8, [
+      { atSec: 1, strength: 1 },
+      { atSec: 5, strength: 0.5 },
+    ])
+    expect(onsets).toEqual([{ atSec: 11, strength: 1 }])
   })
 })
