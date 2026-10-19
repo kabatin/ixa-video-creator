@@ -1,7 +1,13 @@
-import { index, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
+import { doublePrecision, index, integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import {
+  ImageCheckOutcome as ImageCheckOutcomeSchema,
+  ImageCheckVerdict as ImageCheckVerdictSchema,
   ImageGenerationJobStatus as ImageGenerationJobStatusSchema,
   ImageJobKind as ImageJobKindSchema,
+  type ImageCheckIssue,
+  type ImageCheckOutcome,
+  type ImageCheckVerdict,
   type ImageGenerationJobError,
   type ImageGenerationJobStatus,
   type ImageJobKind,
@@ -19,7 +25,8 @@ import { projects } from './workspace.js'
  * domain の `imageJobViolation` が縛る）。
  *
  * ★ 追記のみ。作り直しは新しい行を足す（前の絵と記録は残す）。更新は状態の遷移
- *   （queued → running → succeeded / failed）と、そのとき決まる列だけ。
+ *   （queued → running → checking → succeeded / failed）と、そのとき決まる列だけ。
+ *   やり直しは前のジョブを `retry_of_job_id` で指す新しい行（ADR-0055）。
  */
 export const imageGenerationJobs = pgTable(
   'image_generation_jobs',
@@ -45,6 +52,14 @@ export const imageGenerationJobs = pgTable(
     error: jsonb('error').$type<ImageGenerationJobError>(),
     /** 再現用の記録（CLI の版・終了コードなど）。指示の本文は入れない。 */
     providerRecord: jsonb('provider_record').$type<Record<string, unknown>>(),
+    /** やり直しのとき、前のジョブ（ADR-0055）。1 枚目は null。 */
+    retryOfJobId: ulidRef('retry_of_job_id').references((): AnyPgColumn => imageGenerationJobs.id, {
+      onDelete: 'set null',
+    }),
+    /** 何枚目の試しか。1 から数える。 */
+    attempt: integer('attempt').notNull().default(1),
+    /** つながりの最後にこの絵を当てたとき（ADR-0055）。当てていなければ null。 */
+    appliedAt: timestampTz('applied_at'),
     queuedAt: timestampTz('queued_at').notNull().defaultNow(),
     startedAt: timestampTz('started_at'),
     finishedAt: timestampTz('finished_at'),
@@ -53,5 +68,31 @@ export const imageGenerationJobs = pgTable(
     index('image_generation_jobs_shot_id_idx').on(t.shotId),
     index('image_generation_jobs_character_id_idx').on(t.characterId),
     index('image_generation_jobs_project_status_idx').on(t.projectId, t.status),
+    index('image_generation_jobs_retry_of_job_id_idx').on(t.retryOfJobId),
+    index('image_generation_jobs_media_asset_id_idx').on(t.mediaAssetId),
   ],
+)
+
+/**
+ * 作った絵のチェック（ADR-0055）。**ジョブに 1 行・追記のみ。** 見た・飛ばした・落ちたを `outcome` で分ける
+ * （飛ばした・落ちたを「合格」に化けさせない）。
+ */
+export const imageChecks = pgTable(
+  'image_checks',
+  {
+    id: ulidPk(),
+    imageJobId: ulidRef('image_job_id')
+      .notNull()
+      .references(() => imageGenerationJobs.id, { onDelete: 'cascade' }),
+    outcome: text('outcome', { enum: ImageCheckOutcomeSchema.options }).$type<ImageCheckOutcome>().notNull(),
+    verdict: text('verdict', { enum: ImageCheckVerdictSchema.options }).$type<ImageCheckVerdict>(),
+    score: doublePrecision('score'),
+    issues: jsonb('issues').$type<ImageCheckIssue[]>().notNull().default([]),
+    promptDelta: text('prompt_delta'),
+    /** 飛ばした・落ちた理由（利用者に見せる文）。 */
+    note: text('note'),
+    costUsd: doublePrecision('cost_usd').notNull().default(0),
+    createdAt: timestampTz('created_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('image_checks_image_job_id_idx').on(t.imageJobId)],
 )

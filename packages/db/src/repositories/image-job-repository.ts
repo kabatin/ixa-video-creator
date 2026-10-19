@@ -29,6 +29,8 @@ export type CreateImageJobInput = {
   readonly projectId: ProjectId
   readonly providerId: ProviderId
   readonly modelId: ModelId
+  /** やり直しのとき、前のジョブと何枚目か（ADR-0055）。省けば 1 枚目。 */
+  readonly retryOf?: { readonly jobId: ImageGenerationJobId; readonly attempt: number }
 } & (
   | { readonly kind: 'start_frame'; readonly shotId: ShotId }
   | {
@@ -44,6 +46,25 @@ export type CreateImageJobInput = {
       readonly instruction: string | null
     }
 )
+
+/**
+ * やり直しのジョブの入力（ADR-0055）。前のジョブと同じ種類・持ち主・AI で、つながりに足す。
+ * 自動のやり直し（worker）と人が押すやり直し（API）が同じ形で作るため、ここ 1 箇所に置く。
+ */
+export const retryImageJobInput = (job: ImageGenerationJob): CreateImageJobInput => {
+  const common = {
+    projectId: job.projectId,
+    providerId: job.providerId,
+    modelId: job.modelId,
+    retryOf: { jobId: job.id, attempt: job.attempt + 1 },
+  }
+  if (job.kind === 'start_frame' && job.shotId !== null) return { ...common, kind: 'start_frame', shotId: job.shotId }
+  if (job.kind === 'character_sheet' && job.characterId !== null) {
+    return { ...common, kind: 'character_sheet', characterId: job.characterId, referenceAssetIds: job.referenceAssetIds }
+  }
+  if (job.kind === 'key_art') return { ...common, kind: 'key_art', instruction: job.instruction }
+  throw new Error(`絵のジョブ ${job.id} の持ち主が種類と食い違っていて、やり直せません`)
+}
 
 /** 止める範囲。`shotIds` が無ければ Project の全部。 */
 export type ImageJobCancelTarget = {
@@ -67,6 +88,14 @@ export type ImageJobRepository = {
   findActiveByProject(projectId: ProjectId): Promise<ImageGenerationJob[]>
   /** Project のキーアートのジョブ（ADR-0051）。新しい順。 */
   findKeyArtByProject(projectId: ProjectId): Promise<ImageGenerationJob[]>
+  /** その Shot の開始フレームのジョブ全部（履歴。ADR-0055）。新しい順。 */
+  findByShot(shotId: ShotId): Promise<ImageGenerationJob[]>
+  /** その絵を作ったジョブ（識別画像・キーアートに印を付けるため。ADR-0055）。 */
+  findByMediaAssetIds(mediaAssetIds: readonly MediaAssetId[]): Promise<ImageGenerationJob[]>
+  /** そのジョブをやり直したジョブ（重ねてやり直さないため。ADR-0055）。無ければ null。 */
+  findRetryOf(id: ImageGenerationJobId): Promise<ImageGenerationJob | null>
+  /** そのジョブから前へ辿ったやり直しのつながり（1 枚目から順に、そのジョブまで）。 */
+  findChainUpTo(id: ImageGenerationJobId): Promise<ImageGenerationJob[]>
   /**
    * 待っている・動いているジョブを止める（制作者 2026-10-04）。`shotIds` を渡せばその Shot の絵だけ、
    * 渡さなければ Project の全部（キャラクターシートも）。止めたジョブを返す。
@@ -78,6 +107,16 @@ export type ImageJobRepository = {
     mediaAssetId: MediaAssetId,
     providerRecord: Record<string, unknown>,
   ): Promise<ImageGenerationJob>
+  /** 絵ができた。まだ当てずにチェックへ回す（ADR-0055）。 */
+  markChecking(
+    id: ImageGenerationJobId,
+    mediaAssetId: MediaAssetId,
+    providerRecord: Record<string, unknown>,
+  ): Promise<ImageGenerationJob>
+  /** チェックが済んだ（やり直しを積んだ・当てる絵を決めた）。チェック中の行だけを終える。 */
+  finishChecking(id: ImageGenerationJobId): Promise<ImageGenerationJob>
+  /** この絵を当てた印。止めた行には付けない。 */
+  markApplied(id: ImageGenerationJobId): Promise<ImageGenerationJob>
   markFailed(
     id: ImageGenerationJobId,
     error: ImageGenerationJobError,
@@ -96,7 +135,11 @@ export const imageJobRowToDomain = (row: ImageJobRow): ImageGenerationJob => {
   return job
 }
 
-const ACTIVE = inArray(imageGenerationJobs.status, ['queued', 'running'])
+/** 動いている。チェック中も数える（チェック中・やり直し待ちの間に重ねて頼ませない。ADR-0055）。 */
+const ACTIVE = inArray(imageGenerationJobs.status, ['queued', 'running', 'checking'])
+
+/** つながりを辿る上限。既定の上限（2 回）と人の押したやり直しを足しても、ここまでは来ない。壊れた輪で止まらないため。 */
+const MAX_CHAIN_LENGTH = 50
 
 const first = async (rows: Promise<ImageJobRow[]>): Promise<ImageGenerationJob | null> => {
   const row = (await rows)[0]
@@ -148,6 +191,8 @@ export const createImageJobRepository = (db: DbExecutor): ImageJobRepository => 
           ...owner,
           providerId: input.providerId,
           modelId: input.modelId,
+          retryOfJobId: input.retryOf?.jobId ?? null,
+          attempt: input.retryOf?.attempt ?? 1,
           status: 'queued',
           queuedAt: new Date(),
         })
@@ -217,6 +262,46 @@ export const createImageJobRepository = (db: DbExecutor): ImageJobRepository => 
       return rows.map(imageJobRowToDomain)
     },
 
+    async findByShot(shotId) {
+      const rows = await db
+        .select()
+        .from(imageGenerationJobs)
+        .where(and(eq(imageGenerationJobs.shotId, shotId), eq(imageGenerationJobs.kind, 'start_frame')))
+        .orderBy(desc(imageGenerationJobs.id))
+      return rows.map(imageJobRowToDomain)
+    },
+
+    async findByMediaAssetIds(mediaAssetIds) {
+      if (mediaAssetIds.length === 0) return []
+      const rows = await db
+        .select()
+        .from(imageGenerationJobs)
+        .where(inArray(imageGenerationJobs.mediaAssetId, [...mediaAssetIds]))
+      return rows.map(imageJobRowToDomain)
+    },
+
+    findRetryOf: (id) =>
+      first(
+        db
+          .select()
+          .from(imageGenerationJobs)
+          .where(eq(imageGenerationJobs.retryOfJobId, id))
+          .orderBy(desc(imageGenerationJobs.id))
+          .limit(1),
+      ),
+
+    async findChainUpTo(id) {
+      const walk = async (
+        current: ImageGenerationJobId | null,
+        acc: readonly ImageGenerationJob[],
+      ): Promise<readonly ImageGenerationJob[]> => {
+        if (current === null || acc.length >= MAX_CHAIN_LENGTH) return acc
+        const job = await first(db.select().from(imageGenerationJobs).where(eq(imageGenerationJobs.id, current)))
+        return job === null ? acc : walk(job.retryOfJobId, [job, ...acc])
+      }
+      return [...(await walk(id, []))]
+    },
+
     async cancelActive({ projectId, shotIds }) {
       if (shotIds !== undefined && shotIds.length === 0) return []
       const rows = await db
@@ -238,6 +323,24 @@ export const createImageJobRepository = (db: DbExecutor): ImageJobRepository => 
 
     markSucceeded: (id, mediaAssetId, providerRecord) =>
       transition(id, { status: 'succeeded', mediaAssetId, providerRecord, finishedAt: new Date() }),
+
+    markChecking: (id, mediaAssetId, providerRecord) =>
+      transition(id, { status: 'checking', mediaAssetId, providerRecord }),
+
+    async finishChecking(id) {
+      const rows = await db
+        .update(imageGenerationJobs)
+        .set({ status: 'succeeded', finishedAt: new Date() })
+        .where(and(eq(imageGenerationJobs.id, id), eq(imageGenerationJobs.status, 'checking')))
+        .returning()
+      const row = rows[0]
+      if (row !== undefined) return imageJobRowToDomain(row)
+      const current = await first(db.select().from(imageGenerationJobs).where(eq(imageGenerationJobs.id, id)))
+      if (current === null) throw new DbNotFoundError('image_generation_jobs', id)
+      return current
+    },
+
+    markApplied: (id) => transition(id, { appliedAt: new Date() }),
 
     markFailed: (id, error, providerRecord) =>
       transition(id, { status: 'failed', error, providerRecord, finishedAt: new Date() }),

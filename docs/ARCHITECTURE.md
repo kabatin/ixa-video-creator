@@ -1059,6 +1059,7 @@ generation_jobs
 takes                        (JSONB: spec / provider_params。追記のみ)
 take_motion_analyses         (Take の動きの強さ・山・出来事。効果音を映像に合わせる。追記のみ / ADR-0054)
 image_generation_jobs        (絵コンテの画像を作るジョブ。Shot の最初のフレームになる / ADR-0029。追記のみ)
+image_checks                 (作った絵のチェック。ジョブに 1 行。やり直すか・どれを当てるかの材料 / ADR-0055。追記のみ)
 upscale_jobs                 (出来た Take の解像度を上げるジョブ / ADR-0044。仕様を持たないので generation_jobs と別。追記のみ)
 access_tokens                (API に入る鍵 / 合言葉で入った端末と自動化用の鍵。鍵はハッシュだけ。取り消しは revoked_at、行は消さない)
 review_runs
