@@ -1057,6 +1057,7 @@ timeline_clips
 text_styles                  (テロップの見た目に名前を付けたもの。当てると値をテロップへ写す / ADR-0028)
 generation_jobs
 takes                        (JSONB: spec / provider_params。追記のみ)
+take_motion_analyses         (Take の動きの強さ・山・出来事。効果音を映像に合わせる。追記のみ / ADR-0054)
 image_generation_jobs        (絵コンテの画像を作るジョブ。Shot の最初のフレームになる / ADR-0029。追記のみ)
 upscale_jobs                 (出来た Take の解像度を上げるジョブ / ADR-0044。仕様を持たないので generation_jobs と別。追記のみ)
 access_tokens                (API に入る鍵 / 合言葉で入った端末と自動化用の鍵。鍵はハッシュだけ。取り消しは revoked_at、行は消さない)
@@ -1106,6 +1107,7 @@ BullMQ + Redis（ADR-0008）。
 | `voice` | 1 | ナレーションの声・試しに読む・録音の文字起こし（ADR-0038） | 外部 API の回数の上限に配慮。whisper.cpp は手元の機械を大きく使う |
 | `music` | 1 | 曲を作る（ADR-0048）。できた曲を楽曲にして `analysis` へ回す | 手元の GPU を使うので 1 つずつ。順番は生成・絵と同じ整理券で待つ |
 | `sfx` | 1 | 効果音を作る（ADR-0052）。できた音を素材にし、1 本目を `SFX` の段に置く | 手元の GPU を使うので 1 つずつ。順番は生成・絵・曲と同じ整理券で待つ |
+| `motion` | 1 | Take の動きの分析（ADR-0054）。ffmpeg で動きの強さを測り、Claude にコマの帯を見せて出来事を出す | Claude は契約の利用枠を使い、1 回に数十秒かかる。結果は Take ごとに残して使い回す |
 | `upscale` | 1 | 出来た Take の解像度を上げる（ADR-0044） | 手元の GPU を使うので 1 つずつ。順番は生成と同じ整理券で待つ（1 本 5 + 101 × ceil(コマ数 ÷ 21) 秒の実測） |
 
 ### 規約

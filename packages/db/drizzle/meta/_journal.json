@@ -337,6 +337,13 @@
       "when": 1792355707474,
       "tag": "0047_deep_wraith",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1792385457652,
+      "tag": "0048_awesome_pride",
+      "breakpoints": true
     }
   ]
 }
