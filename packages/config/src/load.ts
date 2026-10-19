@@ -153,6 +153,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       sfxApiToken: parsed.SFX_API_TOKEN ?? null,
     },
     renderExportDir: parsed.RENDER_EXPORT_DIR ?? null,
+    imageCheckMaxRetries: parsed.IMAGE_CHECK_MAX_RETRIES,
     voiceAi: {
       apiProviders: parsed.AUDIO_API_PROVIDERS,
       geminiApiKey: parsed.GEMINI_API_KEY ?? null,

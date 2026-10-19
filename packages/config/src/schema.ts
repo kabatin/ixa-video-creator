@@ -203,6 +203,11 @@ export const EnvSchema = z.object({
    */
   LOCAL_IMAGE_GENERATOR: localGeneratorList(['klein']),
   /**
+   * 作った画像を自動でやり直す上限の回数（ADR-0055）。既定 2（最初の 1 枚と合わせて最大 3 枚）。
+   * やり直すのは手元の画像の AI（klein）でチェックが「やり直す」と言ったときだけ。0 で自動のやり直しをしない。
+   */
+  IMAGE_CHECK_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+  /**
    * 手元の生成サーバで曲を作るか（ADR-0048）。**既定は `none`（使わない）。**
    *
    * - `ace_step` … ace-step-api の ACE-Step 1.5
@@ -428,6 +433,8 @@ export interface AppConfig {
   }
   /** 書き出した動画を置くフォルダ（絶対パス）。未設定は null（API が既定を決める）。 */
   renderExportDir: string | null
+  /** 作った画像を自動でやり直す上限の回数（ADR-0055）。 */
+  imageCheckMaxRetries: number
   /** 声と文字起こしの AI（ADR-0038）。 */
   voiceAi: {
     /** 使ってよい外部の API。ここに無いものは鍵があっても選べない。 */

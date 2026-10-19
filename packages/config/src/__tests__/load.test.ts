@@ -670,3 +670,15 @@ describe('ローカルの効果音の生成（sfx_api。ADR-0052）', () => {
     expect(() => loadConfig({ ...remote, SFX_API_TOKEN: GOOD_TOKEN })).not.toThrow()
   })
 })
+
+/** 作った画像を自動でやり直す上限（ADR-0055）。手元の GPU を占有しないよう、上限の上限を置く。 */
+describe('IMAGE_CHECK_MAX_RETRIES', () => {
+  it('既定は 2。0〜5 の整数だけ受ける', () => {
+    expect(loadConfig(requiredEnv).imageCheckMaxRetries).toBe(2)
+    expect(loadConfig({ ...requiredEnv, IMAGE_CHECK_MAX_RETRIES: '0' }).imageCheckMaxRetries).toBe(0)
+    expect(loadConfig({ ...requiredEnv, IMAGE_CHECK_MAX_RETRIES: '5' }).imageCheckMaxRetries).toBe(5)
+    expect(() => loadConfig({ ...requiredEnv, IMAGE_CHECK_MAX_RETRIES: '6' })).toThrow()
+    expect(() => loadConfig({ ...requiredEnv, IMAGE_CHECK_MAX_RETRIES: '-1' })).toThrow()
+    expect(() => loadConfig({ ...requiredEnv, IMAGE_CHECK_MAX_RETRIES: '1.5' })).toThrow()
+  })
+})

@@ -63,6 +63,7 @@ const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
       ...LOCAL_VIDEO_OFF,
     },
     renderExportDir: null,
+    imageCheckMaxRetries: 2,
     voiceAi: {
       apiProviders: [],
       geminiApiKey: null,
