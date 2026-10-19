@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import type { Clock } from '../tool-def.js'
-import { WireKeyArtJob } from '../wire.js'
+import { WireKeyArtJob, type WireImageCheck } from '../wire.js'
 import { waitForChecks, type CheckResult } from './wait-loop.js'
 
 /**
@@ -19,6 +19,8 @@ export type KeyArtCandidate = {
   readonly status: WireKeyArtJob['status']
   readonly mediaAssetId: string | null
   readonly error: string | null
+  /** 作った絵のチェック（ADR-0055）。 */
+  readonly check: WireImageCheck | null
 }
 
 export type KeyArtOutcome = {
@@ -38,9 +40,15 @@ export const startKeyArt = async (api: ApiClient, projectId: string, instruction
 const listKeyArt = (api: ApiClient, projectId: string): Promise<readonly WireKeyArtJob[]> =>
   api.get(`/projects/${seg(projectId)}/key-art`, z.array(WireKeyArtJob))
 
+/** 待っている・作っている・チェックしている（ADR-0055）。 */
+const isActive = (status: WireKeyArtJob['status']): boolean =>
+  status === 'queued' || status === 'running' || status === 'checking'
+
 const toCheckResult = (job: WireKeyArtJob | undefined): CheckResult => {
   if (job === undefined) return { state: 'pending', detail: { status: 'missing' } }
-  if (job.status === 'queued' || job.status === 'running') return { state: 'pending', detail: { status: job.status } }
+  if (job.status === 'queued' || job.status === 'running' || job.status === 'checking') {
+    return { state: 'pending', detail: { status: job.status } }
+  }
   return { state: job.status, detail: {} }
 }
 
@@ -51,6 +59,7 @@ const toCandidate = (jobId: string, jobs: readonly WireKeyArtJob[]): KeyArtCandi
     status: job?.status ?? 'queued',
     mediaAssetId: job?.mediaAssetId ?? null,
     error: job?.error ?? null,
+    check: job?.check ?? null,
   }
 }
 
@@ -87,7 +96,7 @@ export const waitForKeyArt = async (
   if (maxWaitSec > 0) await waitForChecks([check], clock, { maxWaitSec })
   const jobs = await listKeyArt(api, projectId)
   const candidates = jobIds.map((jobId) => toCandidate(jobId, jobs))
-  const settled = candidates.every((candidate) => candidate.status !== 'queued' && candidate.status !== 'running')
+  const settled = candidates.every((candidate) => !isActive(candidate.status))
   return { timedOut: !settled, candidates }
 }
 

@@ -71,7 +71,7 @@ IXA_API_TOKEN=... IXA_WORKSPACE_ID=... pnpm --filter @ixa/mcp --silent start
 
 `ixa_status` · `set_ai` · `create_project` · `get_project` · `generate_music` · `upload_music` ·
 `set_master_track` · `music_overview` · `plan_shots` · `edit_shots` · `create_character` · `create_location` ·
-`draw_start_frames` · `set_start_frame` · `view` · `generate_takes` · `list_takes` · `adopt_take` ·
+`draw_start_frames` · `set_start_frame` · `list_start_frame_history` · `use_start_frame` · `retry_image` · `view` · `generate_takes` · `list_takes` · `adopt_take` ·
 `upscale_takes` · `wait` · `add_effects` · `list_effects` · `remove_effects` · `suggest_sfx` · `generate_sfx` ·
 `list_sfx` · `remove_sfx` · `export` · `export_thumbnail`
 

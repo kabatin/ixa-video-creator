@@ -147,6 +147,15 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
     ],
   },
   set_start_frame: { base: { shotId: S, mediaAssetId: S }, cases: [[{ shotId: 'x' }, 'shotId']] },
+  list_start_frame_history: { base: { shotId: S }, cases: [[{ shotId: 'x' }, 'shotId']] },
+  use_start_frame: {
+    base: { shotId: S, jobId: S },
+    cases: [
+      [{ shotId: 'x' }, 'shotId'],
+      [{ jobId: 'x' }, 'jobId'],
+    ],
+  },
+  retry_image: { base: { jobId: S }, cases: [[{ jobId: 'x' }, 'jobId']] },
   view: {
     base: { mediaAssetId: S },
     cases: [

@@ -66,6 +66,27 @@ describe('wait ツール', () => {
       { method: 'GET', path: `/shots/${SHOT}/start-frame`, data: { mediaAssetId: ulid('MD1'), job: { id: JOB, status: 'succeeded', error: null } } },
       {
         method: 'GET',
+        path: `/shots/${SHOT}/start-frame/history`,
+        data: {
+          maxRetries: 2,
+          items: [
+            {
+              jobId: JOB,
+              status: 'succeeded',
+              attempt: 1,
+              retryOfJobId: null,
+              mediaAssetId: ulid('MD1'),
+              applied: true,
+              current: true,
+              check: { mark: 'pass', score: 0.9, issues: [], note: null },
+              error: null,
+              queuedAt: '2026-10-19T00:00:00.000Z',
+            },
+          ],
+        },
+      },
+      {
+        method: 'GET',
         path: `/shots/${SHOT}/takes`,
         data: [takeRow(ulid('TK2'), TAKE, UPSCALE_REASON, SHOT)],
       },
@@ -88,7 +109,14 @@ describe('wait ツール', () => {
     expect(outcome.results).toEqual([
       { kind: 'generation', id: JOB, state: 'failed', shotId: SHOT, error: '落ちました' },
       { kind: 'analysis', id: TRACK, state: 'failed', error: '解析できません' },
-      { kind: 'start_frame', id: SHOT, state: 'succeeded', mediaAssetId: ulid('MD1') },
+      {
+        kind: 'start_frame',
+        id: SHOT,
+        state: 'succeeded',
+        mediaAssetId: ulid('MD1'),
+        check: { mark: 'pass', score: 0.9, issues: [], note: null },
+        jobId: JOB,
+      },
       { kind: 'upscale', shotId: SHOT, takeId: TAKE, state: 'succeeded', upscaledTakeId: ulid('TK2') },
       { kind: 'music', id: JOB, state: 'succeeded', musicTrackIds: [TRACK] },
     ])

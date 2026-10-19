@@ -10,6 +10,7 @@ import {
   WireRenderJob,
   WireShotPoster,
   WireStartFrame,
+  WireStartFrameHistory,
   WireTake,
 } from '../wire.js'
 import type { Check, CheckResult } from './wait-loop.js'
@@ -61,16 +62,26 @@ const analysisCheck = async (api: ApiClient, trackId: string): Promise<CheckResu
   return failure === null ? pending() : { state: 'failed', detail: { error: failure.message } }
 }
 
+/**
+ * 最初のコマ。チェック中・自動のやり直し中は待つ（ADR-0055）。できたら、いま付いている絵のチェックの結果も返す
+ * （`retry` や `review` なら、エージェントが view で確かめるか retry_image で描き直す手がかり）。
+ */
 const startFrameCheck = async (api: ApiClient, shotId: string): Promise<CheckResult> => {
   const frame = await api.get(`/shots/${seg(shotId)}/start-frame`, WireStartFrame)
   const job = frame.job ?? null
-  if (job !== null && (job.status === 'queued' || job.status === 'running')) return pending({ status: job.status })
+  if (job !== null && (job.status === 'queued' || job.status === 'running' || job.status === 'checking')) {
+    return pending({ status: job.status, attempt: job.attempt })
+  }
   if (job !== null && (job.status === 'failed' || job.status === 'cancelled')) {
     return { state: job.status, detail: { error: job.error } }
   }
-  return frame.mediaAssetId === null
-    ? { state: 'failed', detail: { error: '最初のコマがありません（描いていません）' } }
-    : { state: 'succeeded', detail: { mediaAssetId: frame.mediaAssetId } }
+  if (frame.mediaAssetId === null) return { state: 'failed', detail: { error: '最初のコマがありません（描いていません）' } }
+  const history = await api.get(`/shots/${seg(shotId)}/start-frame/history`, WireStartFrameHistory)
+  const current = history.items.find((item) => item.current)
+  return {
+    state: 'succeeded',
+    detail: { mediaAssetId: frame.mediaAssetId, check: current?.check ?? null, jobId: current?.jobId ?? null },
+  }
 }
 
 /**

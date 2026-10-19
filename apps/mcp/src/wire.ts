@@ -1,4 +1,4 @@
-import { RenderPreset, RenderScope } from '@ixa/domain'
+import { ImageCheckIssue, ImageGenerationJobStatus, RenderPreset, RenderScope } from '@ixa/domain'
 import { z } from 'zod'
 
 /**
@@ -128,10 +128,43 @@ export const WireShotPoster = z.object({
 export const JobStatus = z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled'])
 export type JobStatus = z.infer<typeof JobStatus>
 
+/**
+ * 作った絵のチェック（ADR-0055）。`mark` は pass（問題なし）・review（要確認）・retry（やり直し）・unchecked（見ていない）。
+ */
+export const WireImageCheck = z.object({
+  mark: z.enum(['pass', 'review', 'retry', 'unchecked']),
+  score: z.number().nullable(),
+  issues: z.array(ImageCheckIssue),
+  note: nullableString,
+})
+export type WireImageCheck = z.infer<typeof WireImageCheck>
+
+/** 絵のジョブの状態。`checking` は絵ができてチェックしている最中（ADR-0055）。 */
+export const ImageJobStatus = ImageGenerationJobStatus
+
 export const WireStartFrame = z.object({
   mediaAssetId: nullableString,
-  job: z.object({ id: z.string(), status: JobStatus, error: nullableString }).nullable().optional(),
+  job: z
+    .object({ id: z.string(), status: ImageJobStatus, error: nullableString, attempt: z.number().int().default(1) })
+    .nullable()
+    .optional(),
 })
+
+export const WireImageHistoryEntry = z.object({
+  jobId: z.string(),
+  status: ImageJobStatus,
+  attempt: z.number().int(),
+  retryOfJobId: nullableString,
+  mediaAssetId: nullableString,
+  applied: z.boolean(),
+  current: z.boolean(),
+  check: WireImageCheck.nullable(),
+  error: nullableString,
+  queuedAt: z.string(),
+})
+export type WireImageHistoryEntry = z.infer<typeof WireImageHistoryEntry>
+
+export const WireStartFrameHistory = z.object({ items: z.array(WireImageHistoryEntry), maxRetries: z.number().int() })
 
 export const WireGenerationJob = z.object({
   id: z.string(),
@@ -193,9 +226,11 @@ export type WireThumbnail = z.infer<typeof WireThumbnail>
 /** サムネイルの背景を AI に描かせるジョブ（ADR-0051）。 */
 export const WireKeyArtJob = z.object({
   id: z.string(),
-  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  status: ImageJobStatus,
   mediaAssetId: nullableString,
   error: nullableString,
+  /** 作った絵のチェック（ADR-0055）。 */
+  check: WireImageCheck.nullable().default(null),
 })
 export type WireKeyArtJob = z.infer<typeof WireKeyArtJob>
 
