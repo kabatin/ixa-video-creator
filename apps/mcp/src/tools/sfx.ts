@@ -76,9 +76,10 @@ export const generateSfxTool = defineTool({
   name: 'generate_sfx',
   description:
     'Make sound effects with the local text-to-audio AI and place them on the timeline SFX track (submit only). ' +
-    'The model does NOT see the video, so you decide when each sound plays: give cues with timeline startSec, ' +
-    'durationSec and an English prompt. Get cue ideas from suggest_sfx (effects/transitions), and add shot-content ' +
-    'sounds yourself (engine, tires, rain, crowd) from the shot descriptions. Returns jobIds; then call wait with ' +
+    'The model does NOT see the video, so decide the timing first: (1) call analyze_motion with the shotId to get ' +
+    'timed events (landings, footsteps, skids, whooshes) and cue ideas in timeline seconds, (2) edit those cues ' +
+    '(drop unwanted ones, refine the English prompt, volume, durationSec 0.5–10; long sounds are already split), ' +
+    '(3) pass them here. suggest_sfx adds effect/transition cues. Returns jobIds; then call wait with ' +
     '{kind:"sfx", id} per job. Check placed sounds with list_sfx and remove with remove_sfx.',
   input: GenerateSfxInput,
   handler: async ({ projectId, model, ...rest }, deps) => {
@@ -104,8 +105,9 @@ export const suggestSfxTool = defineTool({
   name: 'suggest_sfx',
   description:
     'Suggest sound-effect cues from the timeline effects and transitions (flash/zoom_punch → impact, whip_pan → ' +
-    'whoosh, title_card → low boom, speed_lines → pass-by whoosh, shake → thud). Makes nothing. Edit the prompts/' +
-    'volumes if needed and pass the cues to generate_sfx. Content sounds (engine, rain) are not suggested.',
+    'whoosh, title_card → low boom, speed_lines → pass-by whoosh, shake → thud) and from the motion events of shots ' +
+    'already analyzed with analyze_motion (kind motion_*). Makes nothing. Edit the prompts/volumes if needed and ' +
+    'pass the cues to generate_sfx. Run analyze_motion first for shots whose content needs sounds.',
   input: z.object({ projectId: Id }),
   handler: async ({ projectId }, { api }) => {
     const suggestions = await api.get(`/projects/${seg(projectId)}/sfx/suggestions`, z.array(WireSuggestion))

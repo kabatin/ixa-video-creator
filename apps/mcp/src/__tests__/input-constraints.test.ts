@@ -227,6 +227,15 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ effectIds: many(201, S) }, 'effectIds'],
     ],
   },
+  analyze_motion: {
+    base: { shotId: S },
+    cases: [
+      [{ shotId: 'x' }, 'shotId'],
+      [{ takeId: 'x' }, 'takeId'],
+      [{ maxWaitSec: 0 }, 'maxWaitSec'],
+      [{ maxWaitSec: 601 }, 'maxWaitSec'],
+    ],
+  },
   suggest_sfx: { base: { projectId: P }, cases: [[{ projectId: 'x' }, 'projectId']] },
   generate_sfx: {
     base: { projectId: P, cues: [{ startSec: 1, durationSec: 1, prompt: 'impact hit' }] },
