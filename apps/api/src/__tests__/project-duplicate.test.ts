@@ -5,6 +5,8 @@ import {
   VoiceJobId,
   MusicAnalysis,
   MusicAnalysisId,
+  MOTION_ANALYZER_VERSION,
+  type CreateMotionAnalysisInput,
   computeSpecHash,
   newId,
   type DuplicationItem,
@@ -29,6 +31,7 @@ import { projectDuplicateRoutes, type ProjectDuplicateRoutesDeps } from '../rout
 import { baseAppDeps } from './app-deps.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
+import { createInMemoryMotionAnalysisRepository } from './in-memory-motion-analysis-repository.js'
 
 /**
  * プロジェクトを複製する（制作者 2026-10-04「持って行きたいところだけ持っていけるようにすると超便利」）。
@@ -78,6 +81,7 @@ const seed = async () => {
     narrationLines: createInMemoryNarrationLineRepository(),
     narrationTakes: createInMemoryNarrationTakeRepository(),
   }
+  const motionAnalyses = createInMemoryMotionAnalysisRepository()
   const deps: ProjectDuplicateRoutesDeps & typeof base = {
     ...base,
     projects: createInMemoryProjectRepository([source]),
@@ -85,6 +89,7 @@ const seed = async () => {
     takes: createInMemoryTakeRepository([takeA1, takeA2]),
     shotCharacters: createInMemoryShotCharacterRepository(),
     ...narration,
+    motionAnalyses,
     logger: createLogger('silent'),
   }
   await deps.takes.hide(takeA1.id, new Date())
@@ -161,7 +166,7 @@ const seed = async () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name, items }),
     })
-  return { deps, narration, source, shotA, shotB, takeA1, takeA2, character, look, location, style, voice, narrationLine: narrationLine!, narrationTake, duplicate }
+  return { deps, motionAnalyses, narration, source, shotA, shotB, takeA1, takeA2, character, look, location, style, voice, narrationLine: narrationLine!, narrationTake, duplicate }
 }
 
 const shotsOf = async (deps: Awaited<ReturnType<typeof seed>>['deps'], projectId: string) =>
@@ -365,5 +370,47 @@ describe('POST /projects/:id/duplicate（声とナレーション）', () => {
     expect(telop?.content.type === 'text' ? telop.content.params : null).toEqual({ text: '勝負の時が来た。' })
     expect(notes).toContain('ナレーションを持っていかなかったので、テロップ 1 件のナレーションとの結び付きを外しました（文字は残り、作り直しで消えません）')
     expect(notes).toContain('声を持っていかなかったので、キャラクター 1 人の声を外しました')
+  })
+})
+
+describe('POST /projects/:id/duplicate（動きの分析。ADR-0054 追記）', () => {
+  const analysisInput = (takeId: Take['id'], patch: Partial<CreateMotionAnalysisInput> = {}): CreateMotionAnalysisInput => ({
+    takeId,
+    analyzerVersion: MOTION_ANALYZER_VERSION,
+    status: 'succeeded',
+    energyHopSec: 1 / 12,
+    energy: [0, 0.05],
+    onsets: [{ atSec: 1, strength: 1 }],
+    events: [{ kind: 'moment', takeStartSec: 1, takeDurationSec: 0.3, label: '着地', sfxPrompt: 'soft footstep', confidence: 0.9 }],
+    visionUsed: true,
+    costUsd: 0.34,
+    failureMessage: null,
+    ...patch,
+  })
+
+  it('Take を写すなら、最新の成功の分析を新しい Take の分析として写す（分析し直さない）', async () => {
+    const f = await seed()
+    await f.motionAnalyses.create(analysisInput(f.takeA2.id, { analyzerVersion: 'motion-v1', events: [] }))
+    const latest = await f.motionAnalyses.create(analysisInput(f.takeA2.id))
+    await f.motionAnalyses.create(analysisInput(f.takeA2.id, { status: 'failed', failureMessage: '失敗しました。', events: [] }))
+
+    const res = await f.duplicate([...DUPLICATION_ITEMS])
+    const { project } = ((await res.json()) as Ok<Duplicated>).data
+    const [copiedA] = await shotsOf(f.deps, project.id)
+    const copiedTakeId = copiedA?.selectedTakeId
+    expect(copiedTakeId).toBeTruthy()
+
+    const copied = await f.motionAnalyses.findLatestByTake(copiedTakeId as Take['id'])
+    expect(copied).toMatchObject({ status: 'succeeded', analyzerVersion: MOTION_ANALYZER_VERSION, costUsd: 0, visionUsed: true })
+    expect(copied?.events).toEqual(latest.events)
+    // 元の Take の分析はそのまま（写した 1 行だけが増える）。
+    expect(f.motionAnalyses.snapshot()).toHaveLength(4)
+  })
+
+  it('Take を持っていかなければ、分析も写さない', async () => {
+    const f = await seed()
+    await f.motionAnalyses.create(analysisInput(f.takeA2.id))
+    await f.duplicate(['shots'])
+    expect(f.motionAnalyses.snapshot()).toHaveLength(1)
   })
 })

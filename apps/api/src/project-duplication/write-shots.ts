@@ -2,6 +2,7 @@ import {
   TakeId as TakeIdSchema,
   copyCastEntries,
   copyShotInput,
+  copyMotionAnalysisInput,
   copyTakeInput,
   copyTransitionInputs,
   newId,
@@ -76,6 +77,19 @@ const writeTakes = async (
     const copiedShot = shotMap.get(shot.id)
     if (selected !== undefined && copiedShot !== undefined) await deps.shots.selectTake(copiedShot, selected)
   })
+  await writeMotionAnalyses(deps, takeMap)
+}
+
+/** 写した Take の動きの分析（最新の成功）を写す（ADR-0054 追記）。 */
+const writeMotionAnalyses = async (deps: ProjectDuplicationDeps, takeMap: ReadonlyMap<TakeId, TakeId>): Promise<void> => {
+  const analyses = deps.motionAnalyses
+  if (analyses === undefined || takeMap.size === 0) return
+  const latest = await analyses.findLatestSucceededByTakes([...takeMap.keys()])
+  const inputs = [...latest.values()].flatMap((analysis) => {
+    const input = copyMotionAnalysisInput(analysis, takeMap)
+    return input === null ? [] : [input]
+  })
+  await sequentially(inputs, (input) => analyses.create(input))
 }
 
 export const writeShots = async (

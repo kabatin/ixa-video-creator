@@ -13,6 +13,7 @@ import type {
   ShotCharacterRepository,
   ShotReferenceRepository,
   ShotRepository,
+  TakeMotionAnalysisRepository,
   TakeRepository,
   TextStyleRepository,
   TimelineClipRepository,
@@ -48,5 +49,10 @@ export type ProjectDuplicationDeps = LibraryCopyDeps & {
   readonly voices?: Pick<VoiceProfileRepository, 'findByProject' | 'create'>
   readonly narrationLines?: Pick<NarrationLineRepository, 'findByProject' | 'createMany' | 'update'>
   readonly narrationTakes?: Pick<NarrationTakeRepository, 'findByLines' | 'create'>
+  /**
+   * Take の動きの分析（ADR-0054 追記）。Take を写すとき、最新の成功の分析も写す（分析し直さない）。
+   * 繋いでいない環境では省く（写した先で必要になったら分析し直すだけで、失うものは無い）。
+   */
+  readonly motionAnalyses?: Pick<TakeMotionAnalysisRepository, 'findLatestSucceededByTakes' | 'create'>
   readonly logger: Logger
 }

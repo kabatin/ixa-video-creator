@@ -112,6 +112,7 @@ import type {
   ShotReferenceRepository,
   TextStyleRepository,
   TimelineClipRepository,
+  TakeMotionAnalysisRepository,
   TransitionRepository,
 } from '@ixa/db'
 
@@ -208,7 +209,10 @@ export type AppDeps = {
   /** 手元のファイルから取り込んだ効果音（ADR-0056）。無ければ口を置かない（テストの多くは要らない）。 */
   uploadedSfx?: UploadedSfxRoutesDeps['uploadedSfx']
   /** Take の動きの分析（ADR-0054）。無ければ口を置かず、効果音の案は動きを見ない（テストの多くは要らない）。 */
-  motion?: Pick<MotionAnalysisDeps, 'analyses' | 'queue'>
+  motion?: {
+    readonly analyses: MotionAnalysisDeps['analyses'] & Pick<TakeMotionAnalysisRepository, 'create'>
+    readonly queue: MotionAnalysisDeps['queue']
+  }
   /** 動いている生成（順番待ち・作成中）の一覧。無ければ口を置かない。 */
   activeGenerations?: GenerationActivityDeps['activeJobs']
   storage: ObjectStorage
@@ -551,6 +555,8 @@ export const createApp = (deps: AppDeps) => {
       ...(narration === undefined
         ? {}
         : { voices: narration.voices, narrationLines: narration.lines, narrationTakes: narration.takes }),
+      // 動きの分析（ADR-0054 追記）。Take を写すなら分析も写す。
+      ...(deps.motion === undefined ? {} : { motionAnalyses: deps.motion.analyses }),
       logger,
     }),
   )

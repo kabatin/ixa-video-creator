@@ -10,6 +10,7 @@ import {
   SequenceId,
   ShotId,
   TakeId,
+  TakeMotionAnalysisId,
   TextStyleId,
   TimelineClipId,
   TransitionId,
@@ -20,12 +21,14 @@ import {
 import { computeSpecHash } from '../generation/spec-compiler.js'
 import type { ShotGenerationSpec } from '../generation/spec.js'
 import { Take } from '../generation/take.js'
+import { MOTION_ANALYZER_VERSION, MotionAnalysis } from '../motion/motion-analysis.js'
 import { NarrationLine } from '../narration/narration-line.js'
 import { NarrationTake } from '../narration/narration-take.js'
 import { VoiceProfile } from '../narration/voice-profile.js'
 import {
   copyCastEntries,
   copyClipInput,
+  copyMotionAnalysisInput,
   copyNarrationLineInput,
   copyNarrationTakeInput,
   copyShotInput,
@@ -528,5 +531,51 @@ describe('声とナレーション', () => {
       costUsd: 0.002,
       source: { type: 'copied', fromTakeId: take.id },
     })
+  })
+})
+
+describe('copyMotionAnalysisInput（動きの分析も写す。ADR-0054 追記）', () => {
+  const sourceTake = newId(TakeId)
+  const copiedTake = newId(TakeId)
+  const analysis = MotionAnalysis.parse({
+    id: newId(TakeMotionAnalysisId),
+    takeId: sourceTake,
+    analyzerVersion: MOTION_ANALYZER_VERSION,
+    status: 'succeeded',
+    energyHopSec: 1 / 12,
+    energy: [0, 0.05],
+    onsets: [{ atSec: 0.083, strength: 1 }],
+    events: [
+      { kind: 'moment', takeStartSec: 0.083, takeDurationSec: 0.3, label: '着地', sfxPrompt: 'soft footstep', confidence: 0.9 },
+    ],
+    visionUsed: true,
+    costUsd: 0.34,
+    failureMessage: null,
+    createdAt: new Date('2026-10-19T00:00:00Z'),
+  })
+
+  it('新しい Take の ID に付け替え、中身はそのまま写す。費用は 0（この作品では払っていない）', () => {
+    const input = copyMotionAnalysisInput(analysis, new Map([[sourceTake, copiedTake]]))
+    expect(input).toEqual({
+      takeId: copiedTake,
+      analyzerVersion: MOTION_ANALYZER_VERSION,
+      status: 'succeeded',
+      energyHopSec: 1 / 12,
+      energy: [0, 0.05],
+      onsets: [{ atSec: 0.083, strength: 1 }],
+      events: analysis.events,
+      visionUsed: true,
+      costUsd: 0,
+      failureMessage: null,
+    })
+  })
+
+  it('写していない Take の分析は写さない（null）', () => {
+    expect(copyMotionAnalysisInput(analysis, new Map())).toBeNull()
+  })
+
+  it('失敗の行は写さない（写すのは成功した結果だけ）', () => {
+    const failed = { ...analysis, status: 'failed' as const, failureMessage: '失敗しました。' }
+    expect(copyMotionAnalysisInput(failed, new Map([[sourceTake, copiedTake]]))).toBeNull()
   })
 })

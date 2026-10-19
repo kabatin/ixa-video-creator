@@ -14,6 +14,7 @@ import type { NarrationTake } from '../narration/narration-take.js'
 import type { CreateVoiceProfileInput, VoiceProfile } from '../narration/voice-profile.js'
 import { computeSpecHash } from '../generation/spec-compiler.js'
 import type { CreateTakeInput, Take } from '../generation/take.js'
+import type { CreateMotionAnalysisInput, MotionAnalysis } from '../motion/motion-analysis.js'
 import type {
   CreateShotInput,
   CreateTransitionInput,
@@ -305,6 +306,31 @@ export type DuplicationDrops = {
   readonly narrationLinksDropped: number
   /** 声を持っていかなかったので、キャラクターから外した声の数。 */
   readonly characterVoicesDropped: number
+}
+
+/**
+ * Take の動きの分析を、写した Take へ付け替える（ADR-0054 追記）。複製のたびに Claude で分析し直さない。
+ * **写すのは成功した結果だけ**（失敗は写した先で作り直せばよい）。写していない Take の分析は写さない（null）。
+ * 費用は 0 にする（この作品では払っていない。Take の `copiedFromTakeId` と同じ考え）。
+ */
+export const copyMotionAnalysisInput = (
+  analysis: MotionAnalysis,
+  takes: IdMap<TakeId>,
+): CreateMotionAnalysisInput | null => {
+  const takeId = takes.get(analysis.takeId)
+  if (takeId === undefined || analysis.status !== 'succeeded') return null
+  return {
+    takeId,
+    analyzerVersion: analysis.analyzerVersion,
+    status: analysis.status,
+    energyHopSec: analysis.energyHopSec,
+    energy: [...analysis.energy],
+    onsets: analysis.onsets.map((onset) => ({ ...onset })),
+    events: analysis.events.map((event) => ({ ...event })),
+    visionUsed: analysis.visionUsed,
+    costUsd: 0,
+    failureMessage: null,
+  }
 }
 
 /** 外したものを、数と理由で言う（ID を出さない）。何も外していなければ空。 */
