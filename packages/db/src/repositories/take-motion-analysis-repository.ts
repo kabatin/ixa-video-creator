@@ -15,7 +15,9 @@ export type TakeMotionAnalysisRepository = {
   /** いちばん新しい行（成功・失敗を問わない）。無ければ null。 */
   findLatestByTake(takeId: TakeId): Promise<MotionAnalysis | null>
   /** Take ごとのいちばん新しい**成功**の行。タイムラインの印に使う。成功の無い Take は入らない。 */
-  findLatestSucceededByTakes(takeIds: readonly TakeId[]): Promise<ReadonlyMap<TakeId, MotionAnalysis>>
+  findLatestSucceededByTakes(
+    takeIds: readonly TakeId[],
+  ): Promise<ReadonlyMap<TakeId, MotionAnalysis>>
   create(input: CreateMotionAnalysisInput): Promise<MotionAnalysis>
 }
 
@@ -36,7 +38,9 @@ export const takeMotionAnalysisRowToDomain = (row: TakeMotionAnalysisRow): Motio
     createdAt: row.createdAt,
   })
 
-export const createTakeMotionAnalysisRepository = (db: DbExecutor): TakeMotionAnalysisRepository => ({
+export const createTakeMotionAnalysisRepository = (
+  db: DbExecutor,
+): TakeMotionAnalysisRepository => ({
   async findLatestByTake(takeId) {
     const rows = await db
       .select()
@@ -50,20 +54,31 @@ export const createTakeMotionAnalysisRepository = (db: DbExecutor): TakeMotionAn
 
   async findLatestSucceededByTakes(takeIds) {
     if (takeIds.length === 0) return new Map()
+    // Take ごとに最新の 1 行だけを DB で選ぶ（過去の行の energy まで読まない）。
     const rows = await db
-      .select()
+      .selectDistinctOn([takeMotionAnalyses.takeId])
       .from(takeMotionAnalyses)
-      .where(and(inArray(takeMotionAnalyses.takeId, [...takeIds]), eq(takeMotionAnalyses.status, 'succeeded')))
-      .orderBy(desc(takeMotionAnalyses.id))
-    // 新しい順に読むので、Take ごとに最初に出た行が最新。
-    return rows.reduce<Map<TakeId, MotionAnalysis>>((latest, row) => {
-      const analysis = takeMotionAnalysisRowToDomain(row)
-      return latest.has(analysis.takeId) ? latest : new Map([...latest, [analysis.takeId, analysis]])
-    }, new Map())
+      .where(
+        and(
+          inArray(takeMotionAnalyses.takeId, [...takeIds]),
+          eq(takeMotionAnalyses.status, 'succeeded'),
+        ),
+      )
+      .orderBy(takeMotionAnalyses.takeId, desc(takeMotionAnalyses.id))
+    return new Map(
+      rows.map((row) => {
+        const analysis = takeMotionAnalysisRowToDomain(row)
+        return [analysis.takeId, analysis] as const
+      }),
+    )
   },
 
   async create(input) {
-    const validated = MotionAnalysisSchema.parse({ ...input, id: newId(TakeMotionAnalysisId), createdAt: new Date() })
+    const validated = MotionAnalysisSchema.parse({
+      ...input,
+      id: newId(TakeMotionAnalysisId),
+      createdAt: new Date(),
+    })
     const rows = await db.insert(takeMotionAnalyses).values(validated).returning()
     const row = rows[0]
     if (!row) throw new Error('take_motion_analyses への INSERT が行を返しませんでした')
