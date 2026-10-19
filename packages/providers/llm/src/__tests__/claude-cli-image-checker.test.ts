@@ -116,3 +116,18 @@ describe('Claude CLI の画像チェックの長さの頼み方', () => {
     expect(prompt).toMatch(/"pass" なら promptDelta は null/)
   })
 })
+
+/** チームリーダー 2026-10-19。文字と頭身ではやり直さない（判定は domain の規則でも強制する）。 */
+describe('Claude CLI の画像チェックの厳しさ', () => {
+  it('文字と頭身は「やり直す」にしないと言い、頭身は proportion で挙げさせる', () => {
+    const prompt = buildImageCheckPrompt(request())
+    expect(prompt).toContain('"proportion"')
+    expect(prompt).toMatch(/意味の無い文字.*"review"/)
+    expect(prompt).toMatch(/頭身.*proportion/)
+    expect(prompt).not.toMatch(/"retry" は[^\n]*意味の無い文字/)
+  })
+
+  it('文字は、指示で禁じられていても text で挙げさせる（prompt にしない）', () => {
+    expect(buildImageCheckPrompt(request())).toMatch(/文字.*指示で禁じられていても.*text/)
+  })
+})
