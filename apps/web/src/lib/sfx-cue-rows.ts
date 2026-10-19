@@ -1,4 +1,4 @@
-import { SFX_DURATION_MIN_SEC, SFX_DEFAULT_VOLUME, SfxCue, type SfxCueInput } from '@ixa/domain'
+import { SFX_DURATION_MIN_SEC, SFX_DEFAULT_VOLUME, SfxCue, type SfxCueAlign, type SfxCueInput } from '@ixa/domain'
 import { formatClock } from '@/lib/format-time'
 
 /**
@@ -18,12 +18,20 @@ export type SfxCueRow = {
   readonly volume: string
   /** なぜこの行か（案の理由。手で足した行は空）。 */
   readonly reason: string
+  /** 音の一番大きいところを時刻に合わせる印（ADR-0054 追記）。手で足した行・印の無い案は null。 */
+  readonly align: SfxCueAlign | null
 }
 
 export type SfxSuggestionLike = {
   readonly kind: string
   readonly reason: string
-  readonly cue: { readonly startSec: number; readonly durationSec: number; readonly prompt: string; readonly volume: number }
+  readonly cue: {
+    readonly startSec: number
+    readonly durationSec: number
+    readonly prompt: string
+    readonly volume: number
+    readonly align?: SfxCueAlign
+  }
 }
 
 /** 下に敷く音。案に出しても最初はチェックを外す（足すかは人が決める）。 */
@@ -44,6 +52,7 @@ export const cueRowsFromSuggestions = (suggestions: readonly SfxSuggestionLike[]
     prompt: s.cue.prompt,
     volume: String(s.cue.volume),
     reason: s.reason,
+    align: s.cue.align ?? null,
   }))
 
 export const blankCueRow = (atSec: number): SfxCueRow => ({
@@ -54,6 +63,7 @@ export const blankCueRow = (atSec: number): SfxCueRow => ({
   prompt: '',
   volume: String(SFX_DEFAULT_VOLUME),
   reason: '',
+  align: null,
 })
 
 /** `0:24.72`・`1:02.5`・`24.72` を秒にする。読めなければ null。 */
@@ -82,6 +92,7 @@ const rowToCue = (row: SfxCueRow): { readonly cue: SfxCueInput } | { readonly er
     durationSec: Number(row.duration),
     prompt: row.prompt,
     volume: Number(row.volume),
+    ...(row.align === null ? {} : { align: row.align }),
   })
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? '入力を確かめてください。' }
   return { cue: parsed.data }

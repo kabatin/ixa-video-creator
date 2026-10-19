@@ -69,6 +69,11 @@ export const SfxCueRowFields = ({
         />
       </label>
       {row.reason !== '' && <span className="text-xs text-muted">{row.reason}</span>}
+      {row.align !== null && (
+        <span className="text-xs text-muted" title="できた音の一番大きいところがこの時刻に来るよう、少し前から鳴らします">
+          音の山を時刻に合わせる
+        </span>
+      )}
       <button type="button" className="ml-auto text-xs text-muted hover:text-danger" onClick={onRemove}>
         行を消す
       </button>

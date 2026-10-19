@@ -1,4 +1,4 @@
-import { MotionEventKind, type ShotId } from '@ixa/domain'
+import { MotionEventKind, SfxCueAlign, type ShotId } from '@ixa/domain'
 import { z } from 'zod'
 import type { Requester } from '@/lib/requester'
 
@@ -10,7 +10,14 @@ import type { Requester } from '@/lib/requester'
 export const WireMotionState = z.enum(['none', 'queued', 'running', 'succeeded', 'failed'])
 export type WireMotionState = z.infer<typeof WireMotionState>
 
-const WireCue = z.object({ startSec: z.number(), durationSec: z.number(), prompt: z.string(), volume: z.number() })
+const WireCue = z.object({
+  startSec: z.number(),
+  durationSec: z.number(),
+  prompt: z.string(),
+  volume: z.number(),
+  /** 音の一番大きいところを時刻に合わせる印（瞬間・通り過ぎ）。 */
+  align: SfxCueAlign.optional(),
+})
 
 export const WireShotMotion = z.object({
   shotId: z.string(),

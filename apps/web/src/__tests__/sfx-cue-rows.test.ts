@@ -74,3 +74,24 @@ describe('blankCueRow', () => {
     expect(blankCueRow(3.5)).toMatchObject({ checked: true, start: '0:03.50', prompt: '' })
   })
 })
+
+describe('山で合わせる印（ADR-0054 追記）', () => {
+  const aligned = {
+    kind: 'motion_moment',
+    reason: '動き: 着地',
+    cue: { startSec: 24.14, durationSec: 0.5, prompt: 'soft footstep', volume: 0.8, align: { to: 'peak' as const, notBeforeSec: 22.22 } },
+  }
+
+  it('案の印を行に持ち、作るときのきっかけにそのまま渡す（時刻を直しても印は残る）', () => {
+    const [row] = cueRowsFromSuggestions([aligned])
+    expect(row?.align).toEqual({ to: 'peak', notBeforeSec: 22.22 })
+    const result = validateCueRows([{ ...row!, start: '0:24.30' }])
+    expect(result.ok && result.cues[0]).toMatchObject({ startSec: 24.3, align: { to: 'peak', notBeforeSec: 22.22 } })
+  })
+
+  it('印の無い案・手で足した行は、印を持たない', () => {
+    expect(cueRowsFromSuggestions([suggestion(1)])[0]?.align).toBeNull()
+    const result = validateCueRows([{ ...blankCueRow(3), prompt: 'whoosh' }])
+    expect(result.ok && 'align' in (result.cues[0] ?? {})).toBe(false)
+  })
+})

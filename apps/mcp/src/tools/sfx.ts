@@ -1,4 +1,4 @@
-import { SFX_COUNT_MAX, SfxCue, SfxJobStatus } from '@ixa/domain'
+import { SFX_COUNT_MAX, SfxCue, SfxCueAlign, SfxJobStatus } from '@ixa/domain'
 import { z } from 'zod'
 import { IxaApiError, seg } from '../api-client.js'
 import type { CheckResult } from '../lib/wait-loop.js'
@@ -27,7 +27,9 @@ export const GenerateSfxInput = z.object({
     .describe(
       'Where and what: startSec (timeline seconds), durationSec 0.5–10, prompt (ENGLISH sound description, ' +
         'e.g. "car engine revving, tires screeching"), optional negativePrompt (English; used by moss_sfx, ' +
-        'ignored by the Stable Audio models), volume 0–2 (default 0.8).',
+        'ignored by the Stable Audio models), volume 0–2 (default 0.8), optional align {to:"peak", notBeforeSec}: ' +
+        'treat startSec as the moment the loudest part should hit (ixa measures the made sound and starts it earlier, ' +
+        'never before notBeforeSec). Keep align as given in cues from analyze_motion / suggest_sfx.',
     ),
   model: z
     .enum(['stable_audio_medium_sfx', 'stable_audio_sfx', 'moss_sfx'])
@@ -78,8 +80,8 @@ export const generateSfxTool = defineTool({
     'Make sound effects with the local text-to-audio AI and place them on the timeline SFX track (submit only). ' +
     'The model does NOT see the video, so decide the timing first: (1) call analyze_motion with the shotId to get ' +
     'timed events (landings, footsteps, skids, whooshes) and cue ideas in timeline seconds, (2) edit those cues ' +
-    '(drop unwanted ones, refine the English prompt, volume, durationSec 0.5–10; long sounds are already split), ' +
-    '(3) pass them here. suggest_sfx adds effect/transition cues. Returns jobIds; then call wait with ' +
+    '(drop unwanted ones, refine the English prompt, volume, durationSec 0.5–10; long sounds are already split; ' +
+    'keep each cue\'s align field — it lines the loudest part of the sound up with the event), (3) pass them here. suggest_sfx adds effect/transition cues. Returns jobIds; then call wait with ' +
     '{kind:"sfx", id} per job. Check placed sounds with list_sfx and remove with remove_sfx.',
   input: GenerateSfxInput,
   handler: async ({ projectId, model, ...rest }, deps) => {
@@ -98,7 +100,13 @@ export const generateSfxTool = defineTool({
 const WireSuggestion = z.object({
   kind: z.string(),
   reason: z.string(),
-  cue: z.object({ startSec: z.number(), durationSec: z.number(), prompt: z.string(), volume: z.number() }),
+  cue: z.object({
+    startSec: z.number(),
+    durationSec: z.number(),
+    prompt: z.string(),
+    volume: z.number(),
+    align: SfxCueAlign.optional(),
+  }),
 })
 
 export const suggestSfxTool = defineTool({

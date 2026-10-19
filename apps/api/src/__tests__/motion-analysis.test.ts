@@ -145,6 +145,8 @@ describe('GET /shots/{id}/motion-analysis', () => {
     expect(body.data.energy).toMatchObject({ startSec: 20, hopSec: 0.5 })
     expect(body.data.energy.values).toHaveLength(8)
     expect(body.data.suggestions.map((s) => [s.kind, s.cue.startSec])).toEqual([['motion_moment', 21]])
+    // 瞬間は、音の一番大きいところを時刻に合わせる印を持つ（下限は Shot の始まり）。
+    expect((body.data.suggestions[0]?.cue as { align?: unknown }).align).toEqual({ to: 'peak', notBeforeSec: 20 })
   })
 
   it('採用中の Take が無い Shot は none で takeId は null', async () => {

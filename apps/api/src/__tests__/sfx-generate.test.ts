@@ -302,3 +302,20 @@ describe('sfxModelsFor', () => {
     expect(Object.values(sfxModelsFor(false))).toEqual([null, null, null])
   })
 })
+
+describe('山で合わせる印（ADR-0054 追記）', () => {
+  it('きっかけの align をそのままジョブに記す（置く位置は worker が山を測って決める）', async () => {
+    const { project, sfxJobs, send } = setup()
+    const res = await send('POST', `/projects/${project.id}/sfx/generate`, {
+      cues: [cue({ align: { to: 'peak', notBeforeSec: 3 } })],
+    })
+    expect(res.status).toBe(202)
+    expect(sfxJobs.snapshot()[0]?.spec.cue.align).toEqual({ to: 'peak', notBeforeSec: 3 })
+  })
+
+  it('知らない合わせ方は 422', async () => {
+    const { project, send } = setup()
+    const res = await send('POST', `/projects/${project.id}/sfx/generate`, { cues: [cue({ align: { to: 'end', notBeforeSec: 3 } })] })
+    expect(res.status).toBe(422)
+  })
+})

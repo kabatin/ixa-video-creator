@@ -61,7 +61,14 @@ const ShotMotionResponse = z
       z.object({
         kind: z.string(),
         reason: z.string(),
-        cue: z.object({ startSec: z.number(), durationSec: z.number(), prompt: z.string(), volume: z.number() }),
+        cue: z.object({
+          startSec: z.number(),
+          durationSec: z.number(),
+          prompt: z.string(),
+          volume: z.number(),
+          /** 音の一番大きいところを時刻に合わせる印（瞬間・通り過ぎ）。そのまま効果音の頼みに渡す。 */
+          align: z.object({ to: z.literal('peak'), notBeforeSec: z.number() }).optional(),
+        }),
       }),
     ),
   })

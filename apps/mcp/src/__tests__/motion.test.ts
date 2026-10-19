@@ -101,3 +101,22 @@ describe('効果音のツールの説明', () => {
     expect(suggestSfxTool.description).toMatch(/analyze_motion/)
   })
 })
+
+describe('山で合わせる印（ADR-0054 追記）', () => {
+  it('suggest_sfx は案の印をそのまま返し、generate_sfx は印をそのまま送る', async () => {
+    const PROJECT = ulid('PJ1')
+    const aligned = { startSec: 24.14, durationSec: 0.5, prompt: 'soft footstep', volume: 0.8, align: { to: 'peak', notBeforeSec: 22.22 } }
+    const fake = createFakeApi([
+      { method: 'GET', path: `/projects/${PROJECT}/sfx/suggestions`, data: [{ kind: 'motion_moment', reason: '動き: 着地', cue: aligned }] },
+      { method: 'POST', path: `/projects/${PROJECT}/sfx/generate`, status: 202, data: { jobIds: [ulid('SJA')] } },
+    ])
+    const suggested = jsonOf(await suggestSfxTool.run({ projectId: PROJECT }, depsFor(fake))) as { cues: unknown[] }
+    expect(suggested.cues).toEqual([aligned])
+    await generateSfxTool.run({ projectId: PROJECT, cues: suggested.cues }, depsFor(fake))
+    expect(fake.callsTo('POST', `/projects/${PROJECT}/sfx/generate`)[0]?.body).toMatchObject({ cues: [aligned] })
+  })
+
+  it('generate_sfx の説明は、印を消さずに渡すよう言う', () => {
+    expect(generateSfxTool.description).toMatch(/align/)
+  })
+})

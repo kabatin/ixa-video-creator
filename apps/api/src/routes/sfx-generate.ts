@@ -59,6 +59,8 @@ const SfxCueResponse = z.object({
   prompt: z.string(),
   negativePrompt: z.string().optional(),
   volume: z.number(),
+  /** 音の一番大きいところを時刻に合わせる印（ADR-0054 追記）。 */
+  align: z.object({ to: z.literal('peak'), notBeforeSec: z.number() }).optional(),
 })
 
 const SfxJobResponse = z
