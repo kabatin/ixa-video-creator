@@ -34,8 +34,8 @@ export type ResponseStage = 'envelope' | 'result'
  * `command` は**プロンプト本文を伏せた**形で渡すこと。プロンプトには都度発行した
  * 署名付き URL が含まれており、そのままログへ流すと CLAUDE.md 規約 7 の意図に反する。
  */
-/** どの判定で落ちたか。動画のレビュア種別と、作った画像のチェック（ADR-0055）。 */
-export type VisionCheckName = ReviewerType | 'image_check'
+/** どの判定で落ちたか。動画のレビュア種別と、作った画像のチェック（ADR-0055）と、Take の動きの分析（ADR-0054）。 */
+export type VisionCheckName = ReviewerType | 'image_check' | 'motion_analysis'
 
 export type VisionReviewerErrorContext = {
   readonly reviewer: VisionCheckName
