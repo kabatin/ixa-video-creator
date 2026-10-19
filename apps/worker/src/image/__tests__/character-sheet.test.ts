@@ -27,6 +27,7 @@ import {
   inMemoryShots,
   silentLogger,
 } from '../../generation/__tests__/doubles.js'
+import { retryImageJobInput } from '@ixa/db'
 import type { ImageProcessorDeps } from '../processor.js'
 import { checkDeps, fakeImageChecker, PASS, RETRY, runImageJob } from './queue-doubles.js'
 import { FAKE_PNG, fakeImageProvider } from './doubles.js'
@@ -193,5 +194,21 @@ describe('キャラクターシートのジョブ', () => {
     expect(f.provider.requests[1]?.references).toEqual([{ mediaAssetId: f.front.id, role: 'subject' }])
     const sheets = (await f.deps.characters.listIdentityImages(f.character.id)).filter((image) => image.role === 'four_view')
     expect(sheets.map((image) => image.mediaAssetId)).toEqual([jobs[1]?.mediaAssetId])
+  })
+
+  /** レビューの指摘（2026-10-19）。Codex で当てたあと人が押したやり直しのシートも、識別画像に入る。 */
+  it('人が押したやり直しのシートも、識別画像の四面図に足す', async () => {
+    const f = await setup()
+    const deps = { ...f.deps, textTool: () => Promise.resolve('claude_cli' as const), checker: fakeImageChecker([RETRY(0.3)]) }
+    await runImageJob(deps, { imageJobId: f.job.id })
+    const first = await f.deps.imageJobs.findById(f.job.id)
+
+    const manual = await f.deps.imageJobs.create(retryImageJobInput(first ?? f.job))
+    await runImageJob(deps, { imageJobId: manual.id })
+
+    const redrawn = await f.deps.imageJobs.findById(manual.id)
+    const sheets = (await f.deps.characters.listIdentityImages(f.character.id)).filter((image) => image.role === 'four_view')
+    expect(sheets.map((image) => image.mediaAssetId)).toEqual([first?.mediaAssetId, redrawn?.mediaAssetId])
+    expect(redrawn?.appliedAt).not.toBeNull()
   })
 })

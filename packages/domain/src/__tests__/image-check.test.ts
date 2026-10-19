@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   appendRetryDelta,
+  chainToSettle,
   enforceImageCheckVerdict,
   RETRY_ISSUE_KINDS,
   IMAGE_CHECK_DEFAULT_MAX_RETRIES,
@@ -242,5 +243,44 @@ describe('理由の種類でやり直しを決め直す（enforceImageCheckVerdi
   it('頭身は理由の種類として読める。知らない種類は通さない', () => {
     expect(ImageCheckResult.safeParse({ verdict: 'review', score: 0.5, issues: [{ kind: 'proportion', message: '頭身が高い' }], promptDelta: null }).success).toBe(true)
     expect(ImageCheckResult.safeParse({ verdict: 'review', score: 0.5, issues: [{ kind: 'style', message: '画風' }], promptDelta: null }).success).toBe(false)
+  })
+})
+
+/**
+ * つながりのどこから当てる絵を選ぶか（レビューの指摘 2026-10-19）。人が押したやり直しは、前に当てた後に頼まれる。
+ * 前に当てた絵で止めると、やり直した絵が当たらなかった。**前の当て以降を新しいつながりとして選ぶ。**
+ */
+describe('当てる絵を選ぶ範囲（chainToSettle）', () => {
+  const t = (minute: number) => new Date(Date.UTC(2026, 9, 19, 0, minute))
+  const job = (id: string, queuedMinute: number, appliedMinute: number | null) => ({
+    id,
+    queuedAt: t(queuedMinute),
+    appliedAt: appliedMinute === null ? null : t(appliedMinute),
+  })
+
+  it('まだ何も当てていなければ、つながり全部から選ぶ', () => {
+    const b = job('b', 1, null)
+    expect(chainToSettle([job('a', 0, null), b], b)?.map((j) => j.id)).toEqual(['a', 'b'])
+  })
+
+  it('人が押したやり直し（前に当てた後に頼まれた）は、前の当てより後だけから選ぶ', () => {
+    const b = job('b', 5, null)
+    expect(chainToSettle([job('a', 0, 2), b], b)?.map((j) => j.id)).toEqual(['b'])
+  })
+
+  it('当てたのと同じ時刻に頼まれたやり直しは、新しいつながりとして選ぶ（自動のやり直しは当てる前に頼まれる）', () => {
+    const b = job('b', 2, null)
+    expect(chainToSettle([job('a', 0, 2), b], b)?.map((j) => j.id)).toEqual(['b'])
+  })
+
+  it('人のやり直しが 2 回続いても、最後の当てより後だけ', () => {
+    const c = job('c', 9, null)
+    expect(chainToSettle([job('a', 0, 2), job('b', 5, 7), c], c)?.map((j) => j.id)).toEqual(['c'])
+  })
+
+  it('このつながりがもう当て終わっていれば（自分が頼まれた後に当てた）、選ばない（二重に当てない）', () => {
+    const b = job('b', 5, null)
+    expect(chainToSettle([job('a', 0, 6), b], b)).toBeNull()
+    expect(chainToSettle([job('a', 0, 3)], job('a', 0, 3))).toBeNull()
   })
 })

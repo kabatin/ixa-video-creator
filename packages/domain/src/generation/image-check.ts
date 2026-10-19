@@ -186,3 +186,21 @@ export const enforceImageCheckVerdict = (result: ImageCheckResult): ImageCheckRe
   result.verdict === 'retry' && !result.issues.some((issue) => RETRY_ISSUE_KINDS.includes(issue.kind))
     ? { ...result, verdict: 'review' }
     : result
+
+type Settleable = { readonly queuedAt: Date; readonly appliedAt: Date | null }
+
+/**
+ * つながり（1 枚目から `current` まで）のうち、当てる絵を選ぶ範囲。もう当て終わっていれば null。
+ *
+ * - `current` が頼まれたより**後**に当てた絵があれば、このつながりは当て終わっている（投げ直しで二重に当てない）
+ * - `current` が頼まれた時刻以前に当てた絵は、前のつながりの結果。人が押したやり直しはその後に始まる
+ *   新しいつながりなので、前の当てより後のジョブだけから選ぶ（レビューの指摘 2026-10-19。前の当てで止めると、
+ *   やり直した絵が開始フレームにも識別画像にも入らなかった）
+ */
+export const chainToSettle = <J extends Settleable>(chain: readonly J[], current: Settleable): readonly J[] | null => {
+  const queued = current.queuedAt.getTime()
+  const applied = chain.flatMap((job) => (job.appliedAt === null ? [] : [job.appliedAt.getTime()]))
+  if (applied.some((at) => at > queued)) return null
+  const boundary = applied.reduce((latest, at) => Math.max(latest, at), Number.NEGATIVE_INFINITY)
+  return chain.filter((job) => job.appliedAt === null && job.queuedAt.getTime() >= boundary)
+}

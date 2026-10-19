@@ -287,17 +287,34 @@ describe('投げ直し・止めた・打ち切られた', () => {
     expect((await deps.imageJobs.findById(job.id))?.status).toBe('succeeded')
   })
 
-  it('つながりの中でもう当てていれば、当て直さない', async () => {
+  it('当て終えた後にチェックの手順が投げ直されても、当て直さない（人が替えた絵を戻さない）', async () => {
     const { job, deps } = setup()
-    await runImageJob(deps, { imageJobId: job.id })
-    const applied = await deps.imageJobs.findById(job.id)
-    // 人が別の絵に替えたあとで、つながりの後ろのやり直しが失敗の知らせを持って来た。
+    await processImageJob(deps, { imageJobId: job.id })
+    deps.queue.pending.length = 0
+    // 1 度目は、当てた後・チェック中を終える前に落ちた。
+    const crashing = { ...deps, imageJobs: { ...deps.imageJobs, finishChecking: () => Promise.reject(new Error('落ちた')) } }
+    await expect(processImageJob(crashing, { imageJobId: job.id, step: 'check' })).rejects.toThrow('落ちた')
+    // その間に人が別の絵に替えた。
     const other = newId(ImageGenerationJobIdSchema) as unknown as NonNullable<ImageGenerationJob['mediaAssetId']>
     await replaceManualStartFrame(deps.shotReferences, shot.id, other)
-    const late = await deps.imageJobs.create(retryImageJobInput(applied ?? job))
-    await deps.imageJobs.markFailed(late.id, { code: 'x', message: '作れませんでした', retryable: true }, null)
-    await processImageJob(deps, { imageJobId: late.id, step: 'check' })
+    await processImageJob(deps, { imageJobId: job.id, step: 'check' })
     expect(await manualStartFrameOf(deps.shotReferences, shot.id)).toBe(other)
+    expect((await deps.imageJobs.findById(job.id))?.status).toBe('succeeded')
+  })
+
+  /** レビューの指摘（2026-10-19）。人が押したやり直しは新しいつながり。前に当てた絵で止めない。 */
+  it('人が押したやり直しの絵は、前に当てた絵があっても当てる（利用枠を使う AI）', async () => {
+    const { job, deps, provider } = setup({ results: [RETRY(0.3), RETRY(0.2)], local: false })
+    await runImageJob(deps, { imageJobId: job.id })
+    expect((await deps.imageJobs.findById(job.id))?.appliedAt).not.toBeNull()
+
+    const manual = await deps.imageJobs.create(retryImageJobInput((await deps.imageJobs.findById(job.id)) ?? job))
+    await runImageJob(deps, { imageJobId: manual.id })
+
+    const redrawn = await deps.imageJobs.findById(manual.id)
+    expect(provider.requests).toHaveLength(2)
+    expect(redrawn?.appliedAt).not.toBeNull()
+    expect(await manualStartFrameOf(deps.shotReferences, shot.id)).toBe(redrawn?.mediaAssetId)
   })
 
   it('当てる絵を選んでいる間に止められたら、当てない', async () => {

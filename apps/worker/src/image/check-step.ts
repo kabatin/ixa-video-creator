@@ -2,6 +2,7 @@ import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { retryImageJobInput } from '@ixa/db'
 import {
+  chainToSettle,
   enforceImageCheckVerdict,
   pickImageToApply,
   shouldAutoRetry,
@@ -121,11 +122,14 @@ const enqueueRetry = async (deps: ImageProcessorDeps, job: ImageGenerationJob): 
   }
 }
 
-/** つながりから当てる絵を選んで当てる（既に当てていれば何もしない）。止めたジョブには当てない。 */
+/**
+ * つながりから当てる絵を選んで当てる。止めたジョブには当てない。
+ * 選ぶ範囲は `chainToSettle`: このつながりを当て終えていれば何もしない。人が押したやり直しは、前の当てより後だけから選ぶ。
+ */
 const settleChain = async (deps: ImageProcessorDeps, job: ImageGenerationJob): Promise<void> => {
-  const chain = await deps.imageJobs.findChainUpTo(job.id)
-  if (chain.some((candidate) => candidate.appliedAt !== null)) return
-  const drawn = chain.filter(
+  const segment = chainToSettle(await deps.imageJobs.findChainUpTo(job.id), job)
+  if (segment === null) return
+  const drawn = segment.filter(
     (candidate) => candidate.mediaAssetId !== null && (candidate.status === 'succeeded' || candidate.status === 'checking'),
   )
   const checks = await deps.imageChecks.findByJobIds(drawn.map((candidate) => candidate.id))
