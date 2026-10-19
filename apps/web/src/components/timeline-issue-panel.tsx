@@ -46,6 +46,8 @@ export type TimelineIssuePanelProps = {
    * 開く手間を挟まない。書き出しの窓のように狭い所では畳んだまま（既定）。
    */
   readonly expandGroups?: boolean
+  /** Shot のコード。渡せば指摘に添える Shot をコードで出す（内部 ID を出さない）。 */
+  readonly shotCodes?: ReadonlyMap<string, string>
 }
 
 const PANEL_LABEL = 'タイムラインの検証結果'
@@ -53,12 +55,14 @@ const PANEL_LABEL = 'タイムラインの検証結果'
 const IssueRow = ({
   issue,
   projectId,
+  shotCodes,
 }: {
   readonly issue: TimelineIssueView
   readonly projectId: ProjectId | undefined
+  readonly shotCodes: ReadonlyMap<string, string> | undefined
 }) => {
   // 見分けは常に出す。`projectId` が無いときに消えるのはリンクだけ。
-  const shot = describeIssueShot(issue, projectId)
+  const shot = describeIssueShot(issue, projectId, shotCodes)
 
   return (
     <li className="flex flex-wrap items-start gap-2 border-t border-line py-2 text-sm text-text first:border-t-0">
@@ -91,10 +95,12 @@ const IssueGroupBlock = ({
   group,
   projectId,
   expanded,
+  shotCodes,
 }: {
   readonly group: TimelineIssueGroup
   readonly projectId: ProjectId | undefined
   readonly expanded: boolean
+  readonly shotCodes: ReadonlyMap<string, string> | undefined
 }) => {
   const { rows, hiddenCount } = rowsForGroup(group)
 
@@ -124,6 +130,7 @@ const IssueGroupBlock = ({
             key={`${issue.code}-${issue.shotId ?? 'none'}-${String(index)}`}
             issue={issue}
             projectId={projectId}
+            shotCodes={shotCodes}
           />
         ))}
       </ul>
@@ -142,6 +149,7 @@ export const TimelineIssuePanel = ({
   projectId,
   onTimelineChanged,
   expandGroups = false,
+  shotCodes,
 }: TimelineIssuePanelProps) => {
   const summary = summarizeTimelineIssues(issues)
 
@@ -204,7 +212,7 @@ export const TimelineIssuePanel = ({
       <ul className="mt-3 space-y-2">
         {groups.map((group) => (
           <li key={group.code}>
-            <IssueGroupBlock group={group} projectId={projectId} expanded={expandGroups} />
+            <IssueGroupBlock group={group} projectId={projectId} expanded={expandGroups} shotCodes={shotCodes} />
             {/* 尻の黒画面は、曲の方を最後の Shot で切れば消える（制作者 2026-10-19）。畳んだままでも押せるよう外に置く。 */}
             {group.code === TIMELINE_ISSUE_CODES.shotGapTail && projectId !== undefined && (
               <TrimMusicButton

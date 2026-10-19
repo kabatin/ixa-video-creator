@@ -1,6 +1,7 @@
 import { ProjectId, ShotId } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import {
+  BOTTOM_TABS,
   EMPTY_WORKBENCH_QUERY,
   MAIN_TABS,
   parseWorkbenchQuery,
@@ -62,6 +63,12 @@ describe('parseWorkbenchQuery', () => {
   it('中央上のタブは PANEL_SPECS の main 区画と同じ集合', () => {
     const mainPanels = PANEL_IDS.filter((id) => PANEL_SPECS[id].area === 'main')
     expect([...MAIN_TABS].sort()).toEqual([...mainPanels].sort())
+  })
+
+  it('下の区画のタブは PANEL_SPECS の bottom 区画と同じ集合（検査・変更履歴・コンソールも URL で開ける）', () => {
+    const bottomPanels = PANEL_IDS.filter((id) => PANEL_SPECS[id].area === 'bottom')
+    expect([...BOTTOM_TABS].sort()).toEqual([...bottomPanels].sort())
+    expect(parseWorkbenchQuery({ bottom: 'checks' }).bottom).toBe('checks')
   })
 
   it('知らないダイアログは開かない', () => {

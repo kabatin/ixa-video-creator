@@ -5,7 +5,7 @@ import { RoughCutPanel } from '@/components/rough-cut-panel'
 import { TimelineIssuePanel } from '@/components/timeline-issue-panel'
 import { SnapSourceSummary } from '@/components/timeline-snap-panel'
 import { PanelFrame } from '@/components/workbench/panels/panel-frame'
-import { useTimelineMaterials } from '@/components/workbench/use-timeline-materials'
+import { useTimelineMaterials } from '@/components/workbench/timeline-materials-provider'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { programEndSec } from '@/lib/timeline-display'
 import { timelineLoadErrors } from '@/lib/timeline-loader'
@@ -23,11 +23,11 @@ export type ChecksPanelProps = {
  * - 粗編集の提案。**指摘の真下に置く**（「重なり 72 件」を見た人が次に取る行動がこれ）
  * - ビート吸着の候補。入り切りはタイムラインのツールバーの「拍に吸着」
  *
- * 材料はタイムラインのタブとは別に自分で取る（§7.3）。
+ * 材料はタイムラインのタブと同じもの（`TimelineMaterialsProvider`）。
  */
 export const ChecksPanel = ({ onIssueCount }: ChecksPanelProps) => {
   const workbench = useWorkbench()
-  const materials = useTimelineMaterials()
+  const { materials } = useTimelineMaterials()
   const shots = workbench.shots
   const shotCodes = useMemo(() => new Map((shots ?? []).map((shot) => [shot.id, shot.code])), [shots])
 
@@ -80,6 +80,7 @@ export const ChecksPanel = ({ onIssueCount }: ChecksPanelProps) => {
           projectId={workbench.projectId}
           onTimelineChanged={workbench.refresh}
           expandGroups
+          shotCodes={shotCodes}
         />
         <RoughCutPanel projectId={workbench.projectId} shotCodes={shotCodes} onApplied={workbench.refresh} />
         <SnapSourceSummary beatSource={materials.beatSource} candidates={candidates} />

@@ -20,6 +20,7 @@ import { useEditHistory } from '@/components/workbench/use-edit-history'
 import { useQueryNavigation } from '@/components/workbench/use-query-navigation'
 import { useWorkbenchKeys } from '@/components/workbench/use-workbench-keys'
 import { useCutterFront } from '@/components/workbench/use-cutter-front'
+import { TimelineMaterialsProvider } from '@/components/workbench/timeline-materials-provider'
 import type { WireMusicAnalysis } from '@/lib/music-api'
 import {
   addDefaultPanels,
@@ -127,7 +128,10 @@ export const ProjectWorkbench = (props: ProjectWorkbenchProps) => {
             {/* 音 1 本だけを鳴らす再生器。素材ビューアとインスペクターが同じ 1 つを使う。 */}
             <SoloAudioProvider>
               <ContextMenuHost>
-                <WorkbenchShell dock={dock} wide={wide} query={props.query} />
+                {/* タイムラインの材料。タイムラインと検査のタブが同じ 1 つを読む。 */}
+                <TimelineMaterialsProvider>
+                  <WorkbenchShell dock={dock} wide={wide} query={props.query} />
+                </TimelineMaterialsProvider>
               </ContextMenuHost>
             </SoloAudioProvider>
           </SfxAssetsProvider>
@@ -166,9 +170,14 @@ const WorkbenchShell = ({
     setNotice('パネルを初期配置に戻しました。')
   }
 
+  /**
+   * ⌘Z とメニューの「元に戻す」。**ここでは戻さない。** 確認を出すだけで、戻すのは確認の「戻す」
+   * （`workbench-menu.tsx` の `runUndo`。そちらが作品と素材の一覧を読み直す）。
+   * 戻せないときは、その理由（履歴を読めない・戻せるものが無い）を警告として出す。
+   */
   const undo = (): void => {
     void history.undoLatest().then((message) => {
-      setNotice(message)
+      setNotice(message, 'warn')
       workbench.refresh()
     })
   }

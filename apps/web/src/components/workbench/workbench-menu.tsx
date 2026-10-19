@@ -1,5 +1,6 @@
 'use client'
 
+import type { ConsoleLevel } from '@/lib/console-log'
 import { goToMasterTrack, goToProjectConcept } from '@/components/workbench/workbench-navigation'
 import type { DockviewApi } from 'dockview-react'
 import { useRouter } from 'next/navigation'
@@ -40,7 +41,7 @@ export type WorkbenchMenuProps = {
   /** 「元に戻す」を**求める**だけ。実行はこのあとの確認ダイアログで決まる。 */
   readonly onUndo: () => void
   readonly onResetLayout: () => void
-  readonly onNotice: (message: string) => void
+  readonly onNotice: (message: string, level?: ConsoleLevel) => void
   readonly dock: React.RefObject<DockviewApi | null>
   /** ドックが変わるたびに進む。見えているタブを読み直す合図（値そのものは使わない）。 */
   readonly dockEpoch: number
@@ -88,8 +89,8 @@ export const WorkbenchMenu = ({
    * 複数 Shot に及び、やり直しも無い操作なので、⌘Z もメニューもこの 1 箇所を通す。
    */
   const runUndo = (): void => {
-    void undo.confirm().then((message) => {
-      onNotice(message)
+    void undo.confirm().then((line) => {
+      onNotice(line.text, line.level)
       workbench.refresh()
       // 楽曲・素材も戻りうる（曲を切る・素材を消すの取り消し）。
       void assets?.actions.reloadAll()
@@ -112,7 +113,7 @@ export const WorkbenchMenu = ({
       })
       .catch((cause: unknown) => {
         // 書けない環境がある（権限・非 https）。リンクそのものは見せて、手で写せるようにする。
-        onNotice(`コピーできませんでした（${describeError(cause)}）。リンク: ${url}`)
+        onNotice(`コピーできませんでした（${describeError(cause)}）。リンク: ${url}`, 'error')
       })
   }
 
@@ -133,7 +134,7 @@ export const WorkbenchMenu = ({
         if (notice !== null) onNotice(notice)
       })
       .catch((cause: unknown) => {
-        onNotice(`素材フォルダを開けませんでした（${describeError(cause)}）`)
+        onNotice(`素材フォルダを開けませんでした（${describeError(cause)}）`, 'error')
       })
   }
 

@@ -35,7 +35,7 @@ import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX, type MenuPoint } from '@/components/
  */
 
 const LANE_HEIGHT_PX = TIMELINE_LANE_HEIGHT_PX
-/** 上の 12px は「layer N」の札。クリップはその下に置く（36px の段で文字が 1 行収まる高さ）。 */
+/** 上の 12px は「段 N」の札。クリップはその下に置く（36px の段で文字が 1 行収まる高さ）。 */
 const CLIP_TOP_PX = 12
 const CLIP_HEIGHT_PX = LANE_HEIGHT_PX - CLIP_TOP_PX - 2
 
@@ -228,7 +228,8 @@ export const TimelineClipLane = ({
       }}
     >
       <span className="pointer-events-none absolute left-1 top-0 text-xs leading-3 text-muted">
-        {`layer ${String(layer)}`}
+        {/* 画面では 1 から数える（layer は内部の 0 始まりの番号。制作者に見せる言葉ではない）。 */}
+        {`段 ${String(layer + 1)}`}
       </span>
       {emptyHint !== undefined && clips.length === 0 && (
         <span className="pointer-events-none absolute left-16 text-xs text-muted" style={{ top: CLIP_TOP_PX }}>
@@ -245,12 +246,25 @@ export const TimelineClipLane = ({
         return (
           <div
             key={clip.id}
-            // ボタンにしない。押す・掴む・端を引くの 3 つを 1 つの要素で受けるため、
+            // `<button>` にしない。押す・掴む・端を引くの 3 つを 1 つの要素で受けるため、
             // 判定は `timeline-drag` に任せて親が pointer を捌く。
-            // 数値で直すのはインスペクター（押すと開く）。帯の下の数値の一覧は外した（制作者 2026-10-19）。
-            aria-hidden="true"
+            // **キーボードからはフォーカスして Enter / Space で開く**（数値はインスペクターで直す）。
+            // 帯の下の数値の一覧を外したので、ここがキーボードの唯一の入口（レビュー 2026-10-19）。
+            role="button"
+            tabIndex={0}
+            aria-label={`${clipChipLabel(clip.content)} ${formatTimeSpan(span)}`}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return
+              // Space を再生に渡さない。フォーカスがクリップにあるときは「開く」。
+              event.preventDefault()
+              event.stopPropagation()
+              if (busy) return
+              const box = event.currentTarget.getBoundingClientRect()
+              onSelect(clip.id)
+              onOpen(clip, box.left + box.width / 2, box.bottom)
+            }}
             title={`${formatTimeSpan(span)} ${describeClipContent(clip.content)}`}
-            className={`absolute touch-none select-none overflow-hidden rounded text-left text-xs ring-1 ${
+            className={`absolute touch-none select-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus overflow-hidden rounded text-left text-xs ring-1 ${
               selected
                 ? 'bg-info/25 text-text ring-info/60'
                 : 'bg-info/10 text-text ring-info/60 hover:bg-info/25'

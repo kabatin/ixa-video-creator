@@ -53,7 +53,7 @@ describe('WorkflowBar', () => {
     expect(music).toHaveAttribute('aria-current', 'step')
     await userEvent.click(music)
     expect(value.focusPanel).toHaveBeenCalledWith('assets')
-    expect(value.notify).toHaveBeenCalledWith(expect.stringContaining('楽曲がまだありません'))
+    expect(value.notify).toHaveBeenCalledWith(expect.stringContaining('楽曲がまだありません'), 'warn')
   })
 
   it('ルックが空なら ② 作品の方針が途中（2/3）で次。押すと作品の方針を開く', async () => {

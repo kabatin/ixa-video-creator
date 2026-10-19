@@ -143,14 +143,15 @@ describe('確認してから戻す（S2）', () => {
       await result.current.undoLatest()
     })
 
-    let notice = ''
+    let notice = { level: '', text: '' }
     await act(async () => {
       notice = await result.current.canUndo.confirm()
     })
 
     expect(undoCalls).toEqual([batch.id])
-    expect(notice).toContain(SUMMARY)
-    expect(notice).toContain('戻しました')
+    expect(notice.text).toContain(SUMMARY)
+    expect(notice.text).toContain('戻しました')
+    expect(notice.level).toBe('info')
     expect(result.current.canUndo.pending).toBeNull()
   })
 

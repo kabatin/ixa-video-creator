@@ -1,5 +1,6 @@
 'use client'
 
+import type { ConsoleLevel } from '@/lib/console-log'
 import type { ShotId } from '@ixa/domain'
 import { useEffect, useRef, useState } from 'react'
 import { useAssets } from '@/components/workbench/asset-store'
@@ -30,7 +31,7 @@ export const FileIntake = ({
   onNotice,
   registerOpener,
 }: {
-  readonly onNotice: (message: string) => void
+  readonly onNotice: (message: string, level?: ConsoleLevel) => void
   readonly registerOpener: (open: () => void) => void
 }) => {
   const workbench = useWorkbench()
@@ -56,7 +57,7 @@ export const FileIntake = ({
   const intake = async (files: readonly File[]): Promise<void> => {
     const { audio, image: images, video: videos, otherCount } = groupDroppedFiles(files)
     if (otherCount > 0)
-      onNotice(`${String(otherCount)} 件は取り込めない種類のファイルでした（音声・画像・動画だけ受けます）。`)
+      onNotice(`${String(otherCount)} 件は取り込めない種類のファイルでした（音声・画像・動画だけ受けます）。`, 'warn')
     for (const file of audio) {
       try {
         const track = await actions.addTrackFromFile(file)
@@ -66,7 +67,7 @@ export const FileIntake = ({
           onNotice(`「${track.title}」を楽曲として登録し、解析を始めました。`)
         }
       } catch (cause) {
-        onNotice(`${file.name} を登録できませんでした: ${describeForPerson(cause)}`)
+        onNotice(`${file.name} を登録できませんでした: ${describeForPerson(cause)}`, 'error')
       }
     }
     if (images.length > 0) setPendingImages(images)
@@ -125,7 +126,7 @@ export const FileIntake = ({
       )
       setPendingImages([])
     } catch (cause) {
-      onNotice(`画像を取り込めませんでした: ${describeForPerson(cause)}`)
+      onNotice(`画像を取り込めませんでした: ${describeForPerson(cause)}`, 'error')
     } finally {
       setBusy(false)
     }

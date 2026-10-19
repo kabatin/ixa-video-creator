@@ -70,7 +70,7 @@ export const useShotMenu = () => {
             workbench.notify(`${shot.code} の絵コンテの画像を作り始めました（「使う AI」の画像の AI で）。`)
           })
           .catch((cause: unknown) => {
-            workbench.notify(`${shot.code} の絵コンテの画像を作れませんでした: ${describeForPerson(cause)}`)
+            workbench.notify(`${shot.code} の絵コンテの画像を作れませんでした: ${describeForPerson(cause)}`, 'error')
           })
       },
       split: () => {

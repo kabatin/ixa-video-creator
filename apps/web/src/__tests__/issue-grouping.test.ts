@@ -10,6 +10,7 @@ import {
   shortShotId,
 } from '@/lib/issue-grouping'
 import { summarizeTimelineIssues } from '@/lib/timeline-display'
+import { TIMELINE_ISSUE_CODES } from '@ixa/timeline'
 import type { TimelineIssueView } from '@/lib/timeline-issues'
 
 const SHOT_A = '01M2M3CEK506X6FRYYW9R4T5HT'
@@ -220,6 +221,16 @@ describe('describeIssueShot', () => {
     expect(described?.href).toBeNull()
   })
 
+  it('Shot のコードが分かれば、ID ではなくコードで出す', () => {
+    const codes = new Map([[SHOT_A, 'TT-07']])
+    expect(describeIssueShot({ shotId: SHOT_A }, PROJECT, codes)?.label).toBe('TT-07')
+  })
+
+  it('コードの一覧を渡しているのに見つからない Shot は、ID を出さずに一覧に無いと言う', () => {
+    const codes = new Map([[SHOT_B, 'TT-02']])
+    expect(describeIssueShot({ shotId: SHOT_A }, PROJECT, codes)?.label).toBe('一覧に無い Shot')
+  })
+
   it('shotId が無ければ添えるものが無い', () => {
     expect(describeIssueShot({ shotId: undefined }, PROJECT)).toBeNull()
     expect(describeIssueShot({ shotId: undefined }, undefined)).toBeNull()
@@ -249,8 +260,16 @@ describe('issueCodeLabel', () => {
     expect(issueCodeLabel('text_style_unreadable')).toBe('テロップの見た目が読めない（既定の見た目で出る）')
   })
 
-  it('知らないコードは黙って消さず、そのまま出す', () => {
-    expect(issueCodeLabel('brand_new_code')).toBe('brand_new_code')
+  it('サーバの種類はすべて日本語の名前を持つ（内部コードを画面に出さない）', () => {
+    Object.values(TIMELINE_ISSUE_CODES).forEach((code) => {
+      expect(issueCodeLabel(code)).not.toBe(code)
+      expect(issueCodeLabel(code)).not.toMatch(/[a-z]_[a-z]/)
+    })
+    expect(issueCodeLabel('voice_overlap')).toBe('ナレーション・セリフの声が重なっている')
+  })
+
+  it('知らないコードも内部の名前は出さず、「そのほかの指摘」にまとめる（指摘の文は残る）', () => {
+    expect(issueCodeLabel('brand_new_code')).toBe('そのほかの指摘')
   })
 })
 

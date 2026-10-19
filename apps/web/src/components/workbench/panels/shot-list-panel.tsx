@@ -193,7 +193,7 @@ export const ShotListPanel = () => {
               const { cancelledJobIds } = await createApiClient().cancelImages(workbench.projectId)
               workbench.notify(`${String(cancelledJobIds.length)} 件の絵を止めました。`)
             } catch (cause) {
-              workbench.notify(`絵を止められませんでした: ${describeForPerson(cause)}`)
+              workbench.notify(`絵を止められませんでした: ${describeForPerson(cause)}`, 'error')
             }
           }}
         />

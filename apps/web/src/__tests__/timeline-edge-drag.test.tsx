@@ -86,7 +86,7 @@ const dragOn = (target: Element, fromSec: number, toSec: number, altKey = false)
 
 /** TEXT の帯（VFX の帯も空で出るので、行の名前で探す。ADR-0050）。 */
 const textLane = (): Element => {
-  const lane = within(screen.getByText('TEXT（テロップ）').parentElement as HTMLElement).getByText('layer 0').parentElement
+  const lane = within(screen.getByText('TEXT（テロップ）').parentElement as HTMLElement).getByText('段 1').parentElement
   if (lane === null) throw new Error('TEXT の帯が無い')
   return lane
 }

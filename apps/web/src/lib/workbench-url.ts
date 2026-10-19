@@ -14,7 +14,8 @@ import { z } from 'zod'
 export const MAIN_TABS = ['storyboard', 'preview', 'compare', 'viewer', 'draft', 'narration'] as const
 export type MainTab = (typeof MAIN_TABS)[number]
 
-export const BOTTOM_TABS = ['cutter', 'timeline'] as const
+/** 下の区画のタブ。**`PANEL_SPECS` の `area: 'bottom'` と同じ集合であること**（テストで検査）。 */
+export const BOTTOM_TABS = ['timeline', 'cutter', 'checks', 'history', 'console'] as const
 export type BottomTab = (typeof BOTTOM_TABS)[number]
 
 export const SIDE_TABS = ['shots', 'inspector'] as const

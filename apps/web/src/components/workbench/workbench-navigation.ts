@@ -1,3 +1,4 @@
+import type { ConsoleLevel } from '@/lib/console-log'
 import type { WorkbenchContextValue } from '@/components/workbench/workbench-context'
 
 /**
@@ -13,9 +14,12 @@ type Navigable = Pick<
 >
 
 /** 楽曲（マスター）を見る。まだ無ければ、登録のしかたを言って素材ツリーへ。 */
-export const goToMasterTrack = (workbench: Navigable, notify: (message: string) => void): void => {
+export const goToMasterTrack = (
+  workbench: Navigable,
+  notify: (message: string, level?: ConsoleLevel) => void,
+): void => {
   if (workbench.track === null) {
-    notify(NO_TRACK_NOTICE)
+    notify(NO_TRACK_NOTICE, 'warn')
     workbench.focusPanel('assets')
     return
   }

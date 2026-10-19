@@ -35,7 +35,7 @@ export const useTimelineAudio = (onClipsChanged: () => void) => {
           .updateNarrationLine(line.id, { startSec })
           .then(apply)
           .catch((cause: unknown) => {
-            workbench.notify(`ナレーションを動かせませんでした: ${describeForPerson(cause)}`)
+            workbench.notify(`ナレーションを動かせませんでした: ${describeForPerson(cause)}`, 'error')
           })
       }}
     />
@@ -57,7 +57,7 @@ export const useTimelineAudio = (onClipsChanged: () => void) => {
         workbench.bumpSfx()
       })
       .catch((cause: unknown) => {
-        workbench.notify(`効果音を置けませんでした: ${describeForPerson(cause)}`)
+        workbench.notify(`効果音を置けませんでした: ${describeForPerson(cause)}`, 'error')
       })
   }
 

@@ -10,7 +10,7 @@ import { PROJECT_ID } from './fixtures'
 
 /** TEXT の帯（VFX の帯も空で出るので、行の名前で探す。ADR-0050）。 */
 const textLane = (): HTMLElement | null =>
-  within(screen.getByText('TEXT（テロップ）').parentElement as HTMLElement).getByText('layer 0').parentElement
+  within(screen.getByText('TEXT（テロップ）').parentElement as HTMLElement).getByText('段 1').parentElement
 
 /**
  * **帯のテロップを押すと、小窓ではなくインスペクターで開く**（2026-09-28、制作者の指摘
@@ -245,8 +245,8 @@ describe('帯の効果音を押したとき（ADR-0039）', () => {
       />,
     )
 
-    // TEXT（空）と SFX の 2 本に layer 0 がある。下の SFX を押す。
-    const lane = screen.getAllByText('layer 0').at(-1)?.parentElement
+    // TEXT（空）と SFX の 2 本に「段 1」がある。下の SFX を押す。
+    const lane = screen.getAllByText('段 1').at(-1)?.parentElement
     if (lane === null || lane === undefined) throw new Error('SFX の帯が無い')
     const at = { clientX: 2 * DEFAULT_PX_PER_SEC, pointerId: 1 }
     fireEvent.pointerDown(lane, at)

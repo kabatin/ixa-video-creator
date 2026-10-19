@@ -1,5 +1,6 @@
 'use client'
 
+import type { ConsoleLevel } from '@/lib/console-log'
 import type { ProjectId } from '@ixa/domain'
 import {
   DockviewReact,
@@ -27,6 +28,7 @@ import { ViewerPanel } from '@/components/workbench/panels/viewer-panel'
 import {
   addDefaultPanels,
   focusPanel,
+  migrateLegacyLayout,
   PANEL_SPECS,
   readStoredWorkbenchLayout,
   constrainAreas,
@@ -81,6 +83,12 @@ const ChecksDock: FunctionComponent<IDockviewPanelProps> = ({ api }) => {
   return <ChecksPanel onIssueCount={onIssueCount} />
 }
 
+/** 変更履歴は表に出ているときだけ取り直す。 */
+const HistoryDock: FunctionComponent<IDockviewPanelProps> = ({ api }) => {
+  const visible = useVisible(api)
+  return <HistoryPanel visible={visible} />
+}
+
 /** Dockview に渡す部品。id は `workbench-layout.ts` の `PANEL_IDS` と同じ。 */
 const COMPONENTS: Readonly<Record<PanelId, FunctionComponent<IDockviewPanelProps>>> = Object.freeze(
   {
@@ -93,7 +101,7 @@ const COMPONENTS: Readonly<Record<PanelId, FunctionComponent<IDockviewPanelProps
     cutter: CutterDock,
     timeline: () => <TimelinePanel />,
     checks: ChecksDock,
-    history: () => <HistoryPanel />,
+    history: HistoryDock,
     console: () => <ConsolePanel />,
     shots: () => <ShotListPanel />,
     inspector: () => <InspectorPanel />,
@@ -107,7 +115,7 @@ export type WorkbenchDockProps = {
   readonly query: WorkbenchQuery
   readonly onReady: (api: DockviewApi) => void
   /** 配置を戻した理由など。利用者に必ず知らせる。 */
-  readonly onNotice: (message: string) => void
+  readonly onNotice: (message: string, level?: ConsoleLevel) => void
 }
 
 /**
@@ -131,13 +139,24 @@ export const WorkbenchDock = ({ projectId, query, onReady, onNotice }: Workbench
           `保存した配置を復元できないため初期配置で開きました: ${
             error instanceof Error ? error.message : '不明なエラー'
           }`,
+          'warn',
         )
       }
     } else {
-      addDefaultPanels(api)
-      sizeDefaultAreas(api, api.height)
-      if (stored.state === 'invalid') {
-        onNotice(`保存した配置が壊れているため初期配置で開きました: ${stored.reason}`)
+      // v3 が無ければ v2 を移す（利用者が組んだ配置を黙って捨てない）。
+      const legacy = stored.state === 'missing' ? migrateLegacyLayout(api, window.localStorage, projectId) : null
+      if (legacy?.state === 'migrated') {
+        writeWorkbenchLayout(window.localStorage, projectId, api.toJSON())
+        onNotice('配置を新しくしました。下の区画に「検査」「変更履歴」「コンソール」のタブを足しています。')
+      } else {
+        addDefaultPanels(api)
+        sizeDefaultAreas(api, api.height)
+        if (stored.state === 'invalid') {
+          onNotice(`保存した配置が壊れているため初期配置で開きました: ${stored.reason}`, 'warn')
+        }
+        if (legacy?.state === 'unreadable') {
+          onNotice(`配置を新しくしました。前の配置は戻せなかったため初期配置で開いています: ${legacy.reason}`, 'warn')
+        }
       }
     }
 

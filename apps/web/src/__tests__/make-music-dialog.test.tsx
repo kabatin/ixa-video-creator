@@ -90,7 +90,7 @@ describe('曲を作る', () => {
     await userEvent.click(screen.getByRole('button', { name: '曲を作る' }))
 
     await waitFor(() => {
-      expect(value.notify).toHaveBeenCalledWith(reason)
+      expect(value.notify).toHaveBeenCalledWith(reason, 'error')
     })
     expect(screen.getByRole('alert')).toHaveTextContent(reason)
   })

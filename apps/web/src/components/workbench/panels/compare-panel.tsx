@@ -104,7 +104,7 @@ export const ComparePanel = () => {
           workbench.notify(`${shot.code} の Take ${String(take.index)} を ${finalModel.label} で作り直します。`)
           reload()
         } catch (cause: unknown) {
-          workbench.notify(`作り直しを頼めませんでした: ${describeForPerson(cause)}`)
+          workbench.notify(`作り直しを頼めませんでした: ${describeForPerson(cause)}`, 'error')
         }
       },
       /**
@@ -119,7 +119,7 @@ export const ComparePanel = () => {
           )
           reload()
         } catch (cause: unknown) {
-          workbench.notify(`解像度を上げられませんでした: ${describeForPerson(cause)}`)
+          workbench.notify(`解像度を上げられませんでした: ${describeForPerson(cause)}`, 'error')
         }
       },
       /**

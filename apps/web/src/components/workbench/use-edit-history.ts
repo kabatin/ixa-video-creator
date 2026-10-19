@@ -1,5 +1,6 @@
 'use client'
 
+import type { ConsoleLine } from '@/lib/console-log'
 import type { EditBatchId, ProjectId } from '@ixa/domain'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createApiClient } from '@/lib/api-client'
@@ -31,8 +32,11 @@ export type UndoState = {
   readonly availability: UndoAvailability
   /** 確認待ちの対象。`null` なら確認を出していない。**ここが埋まるまで API は呼ばない。** */
   readonly pending: UndoTarget | null
-  /** 確認の「戻す」。実行して、通知に出す文を返す。 */
-  readonly confirm: () => Promise<string>
+  /**
+   * 確認の「戻す」。実行して、通知に出す文と重さを返す。
+   * 戻せなかったら `error`、一部だけ戻せなかったら `warn`（コンソールで「情報」に混ぜない）。
+   */
+  readonly confirm: () => Promise<ConsoleLine>
   /** 確認の「やめる」。何も実行しない。 */
   readonly cancel: () => void
 }
@@ -162,8 +166,8 @@ export const useEditHistory = (projectId: ProjectId, epoch: number): EditHistory
     return target === null ? { state: 'none' } : { state: 'ready', target }
   }, [load])
 
-  const confirm = useCallback(async (): Promise<string> => {
-    if (pending === null) return '戻す対象がありません。もう一度お試しください。'
+  const confirm = useCallback(async (): Promise<ConsoleLine> => {
+    if (pending === null) return { level: 'warn', text: '戻す対象がありません。もう一度お試しください。' }
     const target = pending
     setPending(null)
     try {
@@ -178,10 +182,13 @@ export const useEditHistory = (projectId: ProjectId, epoch: number): EditHistory
         (result.failedAssets?.length ?? 0) +
         (result.failedProject === undefined || result.failedProject === null ? 0 : 1)
       return failed === 0
-        ? `「${target.summary}」を戻しました。`
-        : `「${target.summary}」を戻しました（${String(failed)} 件は戻せませんでした。変更履歴で理由を確認できます）。`
+        ? { level: 'info', text: `「${target.summary}」を戻しました。` }
+        : {
+            level: 'warn',
+            text: `「${target.summary}」を戻しました（${String(failed)} 件は戻せませんでした。変更履歴で理由を確認できます）。`,
+          }
     } catch (cause) {
-      return `戻せませんでした: ${describeForPerson(cause)}`
+      return { level: 'error', text: `戻せませんでした: ${describeForPerson(cause)}` }
     }
   }, [api, projectId, pending])
 

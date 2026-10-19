@@ -1,7 +1,6 @@
 'use client'
 
 import type { MusicTrackId, Shot } from '@ixa/domain'
-import { useState } from 'react'
 import { TimelineEditor } from '@/components/timeline-editor'
 import { TIMELINE_LANE_HEIGHT_PX } from '@/lib/timeline-display'
 import { musicEndMark } from '@/lib/music-end-mark'
@@ -14,7 +13,7 @@ import { useTransportState, useWorkbench } from '@/components/workbench/workbenc
 import { PanelFrame } from '@/components/workbench/panels/panel-frame'
 import { useConsoleLog } from '@/components/workbench/console-log-context'
 import { renderedShotIdsOf, timelineLoadErrors } from '@/lib/timeline-loader'
-import { useTimelineMaterials } from '@/components/workbench/use-timeline-materials'
+import { useTimelineMaterials } from '@/components/workbench/timeline-materials-provider'
 import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
 import { useShotMenu } from '@/components/workbench/use-shot-menu'
 import { useTextClipMenu } from '@/components/workbench/use-text-clip-menu'
@@ -39,14 +38,9 @@ export const TimelinePanel = () => {
   const { transportControls } = workbench
   const transport = useTransportState()
   const peaks = useTrackPeaks(workbench.track?.id ?? null, workbench.analysis?.waveformPeaksUrl ?? null)
-  // 効果音を置いたら帯を取り直す。
-  const [clipsEpoch, setClipsEpoch] = useState(0)
-  const { narrationLane, onDropAudio } = useTimelineAudio(() => {
-    setClipsEpoch((epoch) => epoch + 1)
-  })
-
-  // 取り直しの合図は `useTimelineMaterials` が持つ。効果音を置いたときはここから進める。
-  const materials = useTimelineMaterials(clipsEpoch)
+  // 材料はワークベンチに 1 つ（検査のタブと同じもの）。効果音を置いたら取り直す（サーバの読み直しを通らないため）。
+  const { materials, reload } = useTimelineMaterials()
+  const { narrationLane, onDropAudio } = useTimelineAudio(reload)
 
   if (materials === null) {
     return (

@@ -44,7 +44,8 @@ const STACK: readonly {
   { id: 'cutter', body: <CutterPanel visible />, tall: true },
   { id: 'timeline', body: <TimelinePanel />, tall: true },
   { id: 'checks', body: <ChecksPanel />, tall: true },
-  { id: 'history', body: <HistoryPanel /> },
+  // 縦一列では全部が見えているので、表にあるものとして扱う。
+  { id: 'history', body: <HistoryPanel visible /> },
   { id: 'console', body: <ConsolePanel /> },
   { id: 'assets', body: <AssetsPanel /> },
   { id: 'viewer', body: <ViewerPanel /> },

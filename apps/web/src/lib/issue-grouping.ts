@@ -19,7 +19,8 @@ import type { TimelineIssueSeverity, TimelineIssueView } from '@/lib/timeline-is
 
 /**
  * 種類の見出し。コードをそのまま出しても、何を直せばよいかが分からない。
- * キーはサーバの定数を参照して書き写しを避ける。知らないコードは生のまま出す。
+ * キーはサーバの定数を参照して書き写しを避ける。**サーバの種類は全部ここに載せる**（テストで検査。
+ * 声の 2 種類が抜けていて、検査のタブに `voice_overlap` が出ていた）。
  */
 const ISSUE_CODE_LABELS: Readonly<Record<string, string>> = Object.freeze({
   [TIMELINE_ISSUE_CODES.shotOverlap]: 'Shot どうしが時間で重なっている',
@@ -35,9 +36,14 @@ const ISSUE_CODE_LABELS: Readonly<Record<string, string>> = Object.freeze({
   [TIMELINE_ISSUE_CODES.clipOutOfRange]: 'クリップが尺の外にある',
   [TIMELINE_ISSUE_CODES.textClipUnreadable]: '書き出すと赤い枠になるテロップがある',
   [TIMELINE_ISSUE_CODES.textStyleUnreadable]: 'テロップの見た目が読めない（既定の見た目で出る）',
+  [TIMELINE_ISSUE_CODES.voiceOverlap]: 'ナレーション・セリフの声が重なっている',
+  [TIMELINE_ISSUE_CODES.voiceOutOfRange]: '声が最後の Shot より後ろまで続く',
 })
 
-export const issueCodeLabel = (code: string): string => ISSUE_CODE_LABELS[code] ?? code
+/** 知らない種類（サーバが先に増えた）の見出し。内部の名前は出さない。指摘の文は束の中に残る。 */
+const UNKNOWN_ISSUE_LABEL = 'そのほかの指摘'
+
+export const issueCodeLabel = (code: string): string => ISSUE_CODE_LABELS[code] ?? UNKNOWN_ISSUE_LABEL
 
 /** 種類ごとにまとめた指摘。`issues` は入力の順を保つ。 */
 export type TimelineIssueGroup = {
@@ -164,7 +170,14 @@ export type IssueShotLink = {
 export const describeIssueShot = (
   issue: Pick<TimelineIssueView, 'shotId'>,
   projectId: ProjectId | undefined,
-): IssueShotLink | null =>
-  issue.shotId === undefined
-    ? null
-    : { label: `Shot ${shortShotId(issue.shotId)}`, href: issueShotHref(issue, projectId) }
+  /**
+   * Shot のコード（TT-07 など）。渡せばコードで出し、内部 ID は出さない。
+   * 渡さない呼び出し元（書き出しの窓）では、これまでどおり ID の末尾で見分ける。
+   */
+  shotCodes?: ReadonlyMap<string, string>,
+): IssueShotLink | null => {
+  if (issue.shotId === undefined) return null
+  const href = issueShotHref(issue, projectId)
+  if (shotCodes === undefined) return { label: `Shot ${shortShotId(issue.shotId)}`, href }
+  return { label: shotCodes.get(issue.shotId) ?? '一覧に無い Shot', href }
+}

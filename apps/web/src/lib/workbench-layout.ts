@@ -282,12 +282,17 @@ export const focusPanel = (api: DockLike, id: PanelId): void => {
     existing.api.setActive()
     return
   }
+  addToArea(api, id, false)
+}
+
+/** 住んでいた区画へ置く。区画に既にパネルがあればそのタブに並べ、無ければ区画を作る。 */
+const addToArea = (api: DockLike, id: PanelId, inactive: boolean): void => {
   const present = (area: DockArea): string | null =>
     DEFAULT_ORDER.find(
       (other) => PANEL_SPECS[other].area === area && api.getPanel(other) !== undefined,
     ) ?? null
   api.addPanel(
-    panelOptions(id, { sibling: present(PANEL_SPECS[id].area), mainPanel: present('main') }, false),
+    panelOptions(id, { sibling: present(PANEL_SPECS[id].area), mainPanel: present('main') }, inactive),
   )
 }
 
@@ -333,9 +338,53 @@ export const applyPreset = (api: DockLike, preset: Preset): void => {
 //    版を上げないと、保存済みの配置には新しいタブが出ず、メニューから開くまで在ることに気づけない。
 const LAYOUT_VERSION = 3
 
-/** 旧 `ixa:storyboard-layout:v4` と v1・v2 は読まない（パネルの組が違う）。 */
+/** 旧 `ixa:storyboard-layout:v4` と v1・v2 は読まない（パネルの組が違う）。v2 は `migrateLegacyLayout` が移す。 */
 export const workbenchLayoutKey = (projectId: ProjectId): string =>
   `ixa:workbench-layout:v${String(LAYOUT_VERSION)}:${projectId}`
+
+const legacyLayoutKey = (projectId: ProjectId): string => `ixa:workbench-layout:v2:${projectId}`
+
+/** v3 で足したパネル。v2 の配置を移すとき、これだけを下の区画の裏に足す（閉じていたほかのパネルは戻さない）。 */
+const PANELS_ADDED_IN_V3: readonly PanelId[] = ['checks', 'history', 'console']
+
+export type LegacyMigration =
+  | { readonly state: 'none' }
+  | { readonly state: 'migrated' }
+  | { readonly state: 'unreadable'; readonly reason: string }
+
+/**
+ * v2 の配置を移す。**利用者が組んだ配置を黙って捨てない**（レビュー 2026-10-19）。
+ *
+ * - v2 が無ければ何もしない（`none`）
+ * - 戻せたら、v3 で足したパネルを下の区画の裏に足す（`migrated`）
+ * - 読めない・戻せないならドックを空にして `unreadable`。呼び出し側が既定の配置で開いて知らせる
+ *
+ * どの場合も v2 は消す。知らせは 1 回きりになる。v3 への書き込みは呼び出し側（配置が変わるたびに書く）。
+ */
+export const migrateLegacyLayout = (
+  api: DockLike & { readonly fromJSON: (layout: SerializedDockview) => void; readonly clear: () => void },
+  storage: Pick<Storage, 'getItem' | 'removeItem'>,
+  projectId: ProjectId,
+): LegacyMigration => {
+  const legacy = readLayoutAt(storage, legacyLayoutKey(projectId))
+  if (legacy.state === 'missing') return { state: 'none' }
+  try {
+    storage.removeItem(legacyLayoutKey(projectId))
+  } catch {
+    // 消せなくても移す。次に開いたときにもう一度移すだけ。
+  }
+  if (legacy.state === 'invalid') return { state: 'unreadable', reason: legacy.reason }
+  try {
+    api.fromJSON(legacy.layout)
+  } catch (error) {
+    api.clear()
+    return { state: 'unreadable', reason: error instanceof Error ? error.message : '不明なエラー' }
+  }
+  PANELS_ADDED_IN_V3.forEach((id) => {
+    if (api.getPanel(id) === undefined) addToArea(api, id, true)
+  })
+  return { state: 'migrated' }
+}
 
 const SerializedLayout = z.custom<SerializedDockview>(
   (value) => typeof value === 'object' && value !== null && 'grid' in value && 'panels' in value,
@@ -350,9 +399,11 @@ export type StoredLayoutResult =
 export const readStoredWorkbenchLayout = (
   storage: Pick<Storage, 'getItem'>,
   projectId: ProjectId,
-): StoredLayoutResult => {
+): StoredLayoutResult => readLayoutAt(storage, workbenchLayoutKey(projectId))
+
+const readLayoutAt = (storage: Pick<Storage, 'getItem'>, key: string): StoredLayoutResult => {
   try {
-    const raw = storage.getItem(workbenchLayoutKey(projectId))
+    const raw = storage.getItem(key)
     if (raw === null) return { state: 'missing' }
     const parsed = SerializedLayout.safeParse(JSON.parse(raw) as unknown)
     return parsed.success

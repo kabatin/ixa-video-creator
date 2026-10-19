@@ -61,7 +61,7 @@ export const MakeMusicDialogBody = () => {
     } catch (cause) {
       const message = describeForPerson(cause)
       setFormError(`曲を作り始められませんでした: ${message}`)
-      if (cause instanceof ApiError && cause.status === CONFLICT_STATUS) workbench.notify(message)
+      if (cause instanceof ApiError && cause.status === CONFLICT_STATUS) workbench.notify(message, 'error')
     } finally {
       setSubmitting(false)
     }

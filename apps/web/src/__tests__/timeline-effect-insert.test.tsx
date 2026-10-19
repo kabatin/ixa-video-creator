@@ -39,7 +39,7 @@ const editor = (onOpenEffectClip: (id: TimelineClipId) => void): ReactElement =>
 )
 
 const vfxLane = (): HTMLElement => {
-  const lane = within(screen.getByText('VFX（エフェクト）').parentElement as HTMLElement).getByText('layer 0').parentElement
+  const lane = within(screen.getByText('VFX（エフェクト）').parentElement as HTMLElement).getByText('段 1').parentElement
   if (lane === null) throw new Error('VFX の帯が無い')
   return lane
 }

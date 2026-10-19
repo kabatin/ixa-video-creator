@@ -8,7 +8,7 @@ import { PROJECT_ID } from './fixtures'
 
 /** TEXT の帯（VFX の帯も空で出るので、行の名前で探す。ADR-0050）。 */
 const textLane = (): HTMLElement | null =>
-  within(screen.getByText('TEXT（テロップ）').parentElement as HTMLElement).getByText('layer 0').parentElement
+  within(screen.getByText('TEXT（テロップ）').parentElement as HTMLElement).getByText('段 1').parentElement
 
 /**
  * 帯のテロップを右クリック（長押し）すると、そのテロップのメニュー（2026-09-30）。

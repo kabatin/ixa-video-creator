@@ -1,3 +1,4 @@
+import type { ConsoleLevel } from '@/lib/console-log'
 import { planMerge, planSplit, type Shot } from '@ixa/domain'
 import type { WorkbenchContextValue } from '@/components/workbench/workbench-context'
 import { createApiClient } from '@/lib/api-client'
@@ -27,7 +28,7 @@ type SplitPort = Pick<WorkbenchContextValue, 'notify' | 'refresh'>
 export const splitAtPlayhead = (workbench: SplitPort, current: Shot | null, atSec: number): void => {
   const blocker = splitBlockerOf(current, atSec)
   if (current === null || blocker !== null) {
-    workbench.notify(`分割できません: ${blocker ?? ''}`)
+    workbench.notify(`分割できません: ${blocker ?? ''}`, 'warn')
     return
   }
   createApiClient()
@@ -37,14 +38,18 @@ export const splitAtPlayhead = (workbench: SplitPort, current: Shot | null, atSe
       workbench.refresh()
     })
     .catch((cause: unknown) => {
-      workbench.notify(`${current.code} を分割できませんでした: ${describeError(cause)}`)
+      workbench.notify(`${current.code} を分割できませんでした: ${describeError(cause)}`, 'error')
     })
 }
 
 type UnselectPort = Pick<WorkbenchContextValue, 'replaceShots' | 'refresh'>
 
 /** 採用を外す（Take は残る）。メニューバーと右クリックのメニューの両方がここを通す。結果は `notify` へ。 */
-export const unselectAdoptedTake = (workbench: UnselectPort, shot: Shot, notify: (message: string) => void): void => {
+export const unselectAdoptedTake = (
+  workbench: UnselectPort,
+  shot: Shot,
+  notify: (message: string, level?: ConsoleLevel) => void,
+): void => {
   createApiClient()
     .unselectTake(shot.id)
     .then((updated) => {
@@ -53,6 +58,6 @@ export const unselectAdoptedTake = (workbench: UnselectPort, shot: Shot, notify:
       notify(`${shot.code} の採用を外しました（Take は残っています）。`)
     })
     .catch((cause: unknown) => {
-      notify(`採用を外せませんでした: ${describeError(cause)}`)
+      notify(`採用を外せませんでした: ${describeError(cause)}`, 'error')
     })
 }
