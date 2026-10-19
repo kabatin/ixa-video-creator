@@ -1046,6 +1046,7 @@ music_analyses               (JSONB: beats / downbeats / sections / energy_curve
 music_analysis_failures      (直近の解析の失敗。楽曲 1 件につき 1 行。頼み直すと消える)
 music_jobs                   (曲を作るジョブ。できた曲は music_tracks になる。追記のみ / ADR-0048)
 sfx_jobs                     (効果音を作るジョブ。できた音は media_assets と SFX の段のクリップになる。追記のみ / ADR-0052)
+uploaded_sfx_sounds          (手元のファイルから取り込んだ効果音。作ったジョブとは別に記す。段には置かない候補 / ADR-0056)
 scripts
 script_versions
 sequences

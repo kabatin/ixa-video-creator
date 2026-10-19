@@ -26,6 +26,7 @@ import type { MusicGenerationDeps } from './music/deps.js'
 import { musicGenerateRoutes } from './routes/music-generate.js'
 import type { SfxGenerationDeps } from './sfx/deps.js'
 import { sfxGenerateRoutes } from './routes/sfx-generate.js'
+import { uploadedSfxRoutes, type UploadedSfxRoutesDeps } from './routes/uploaded-sfx.js'
 import { motionAnalysisRoutes } from './routes/motion-analysis.js'
 import type { MotionAnalysisDeps } from './motion/deps.js'
 import { loadProjectMotionEvents } from './motion/shot-motion.js'
@@ -204,6 +205,8 @@ export type AppDeps = {
   musicGeneration?: MusicGenerationDeps
   /** 効果音を作る（ADR-0052）。無ければ口を置かない（テストの多くは要らない）。 */
   sfxGeneration?: SfxGenerationDeps
+  /** 手元のファイルから取り込んだ効果音（ADR-0056）。無ければ口を置かない（テストの多くは要らない）。 */
+  uploadedSfx?: UploadedSfxRoutesDeps['uploadedSfx']
   /** Take の動きの分析（ADR-0054）。無ければ口を置かず、効果音の案は動きを見ない（テストの多くは要らない）。 */
   motion?: Pick<MotionAnalysisDeps, 'analyses' | 'queue'>
   /** 動いている生成（順番待ち・作成中）の一覧。無ければ口を置かない。 */
@@ -667,6 +670,9 @@ export const createApp = (deps: AppDeps) => {
         },
       }),
     )
+  }
+  if (deps.uploadedSfx !== undefined) {
+    app.route('/', uploadedSfxRoutes({ projects: deps.projects, mediaAssets, uploadedSfx: deps.uploadedSfx }))
   }
   // A/B 比較は書き出しと同じ素材の集め方を使うので、Timeline と同じ依存に解析を 1 つ足すだけ。
   app.route('/', shotCompareRoutes({ ...timelineDeps, musicAnalyses: deps.musicAnalyses }))

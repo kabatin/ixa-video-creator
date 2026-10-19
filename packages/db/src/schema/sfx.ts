@@ -7,7 +7,8 @@ import {
   type SfxJobStatus,
   type TimelineClipId,
 } from '@ixa/domain'
-import { timestampTz, ulidPk, ulidRef } from './columns.js'
+import { createdAt, deletedAt, timestampTz, ulidPk, ulidRef } from './columns.js'
+import { mediaAssets } from './media.js'
 import { projects } from './workspace.js'
 
 /**
@@ -39,4 +40,26 @@ export const sfxJobs = pgTable(
     finishedAt: timestampTz('finished_at'),
   },
   (t) => [index('sfx_jobs_project_status_idx').on(t.projectId, t.status)],
+)
+
+/**
+ * 手元のファイルから取り込んだ効果音（ADR-0056）。作った効果音（sfx_jobs）とは別に記す
+ * （作っていない音に作り物のきっかけを書かない）。効果音の段には置かない候補で、素材ツリーから段へ置く。
+ */
+export const uploadedSfx = pgTable(
+  'uploaded_sfx_sounds',
+  {
+    id: ulidPk(),
+    projectId: ulidRef('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    mediaAssetId: ulidRef('media_asset_id')
+      .notNull()
+      .references(() => mediaAssets.id, { onDelete: 'restrict' }),
+    /** ファイル名から拡張子を除いたもの。 */
+    title: text('title').notNull(),
+    createdAt: createdAt(),
+    deletedAt: deletedAt(),
+  },
+  (t) => [index('uploaded_sfx_sounds_project_id_idx').on(t.projectId)],
 )

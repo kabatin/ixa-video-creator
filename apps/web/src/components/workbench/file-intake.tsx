@@ -4,6 +4,8 @@ import type { ConsoleLevel } from '@/lib/console-log'
 import type { ShotId } from '@ixa/domain'
 import { useEffect, useRef, useState } from 'react'
 import { useAssets } from '@/components/workbench/asset-store'
+import { AudioRoleDialog } from '@/components/workbench/audio-role-dialog'
+import { useSfxFileImport } from '@/components/workbench/use-sfx-file-import'
 import { FootageImportForm } from '@/components/workbench/inspector/footage-import-form'
 import {
   imageChoicesFor,
@@ -16,11 +18,14 @@ import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
 import { Button } from '@/components/ui/button'
 import { describeForPerson } from '@/lib/api-error'
 import { ASSET_DRAG_TYPE, groupDroppedFiles } from '@/lib/asset-actions'
+import { audioFileDurationSec } from '@/lib/audio-file-duration'
+import { defaultAudioRole, type AudioRole } from '@/lib/audio-intake-role'
 
 /**
  * ファイルを落とせば入る（UI-WORKBENCH-2 §4.5 / P8）。
  *
- * - 音声 → 楽曲として登録し、解析を始める
+ * - 音声 → 楽曲か効果音かを 1 回だけ聞く（短い音は効果音を選んでおく。制作者 2026-10-19）。
+ *   楽曲なら登録して解析を始め、効果音なら素材の効果音に入れる
  * - 画像 → 行き先を 1 回だけ聞く（選んでいる素材 / 新しいロケーション / 新しいブランド資産）
  * - 動画 → 選んでいる Shot の Take にする（ADR-0026）。Shot を選んでいなければ、そう伝える
  * - 素材ビューアの区画に落とした場合は、そちらが受けて伝わりを止める（ここへ来ない）
@@ -40,7 +45,12 @@ export const FileIntake = ({
   const attach = useImageAttach()
   const input = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
+  const importSfxFile = useSfxFileImport()
   const [pendingImages, setPendingImages] = useState<readonly File[]>([])
+  const [pendingAudio, setPendingAudio] = useState<{
+    readonly files: readonly File[]
+    readonly role: AudioRole
+  } | null>(null)
   /** 落とした時点で選んでいた Shot に入れる（確かめている間に選び直しても行き先を変えない）。 */
   const [pendingVideos, setPendingVideos] = useState<{
     readonly shotId: ShotId
@@ -58,7 +68,21 @@ export const FileIntake = ({
     const { audio, image: images, video: videos, otherCount } = groupDroppedFiles(files)
     if (otherCount > 0)
       onNotice(`${String(otherCount)} 件は取り込めない種類のファイルでした（音声・画像・動画だけ受けます）。`, 'warn')
-    for (const file of audio) {
+    if (images.length > 0) setPendingImages(images)
+    if (videos.length > 0) {
+      const inspected = workbench.inspected
+      if (inspected?.kind === 'shot') setPendingVideos({ shotId: inspected.id, files: videos })
+      else onNotice('動画は、Shot を選んでから落とすとその Shot の Take になります。')
+    }
+    if (audio.length > 0) {
+      // 長さを読めなかった音は長い音とみなす（楽曲を選んでおく）。読めない理由は取り込むときに出る。
+      const durations = await Promise.all(audio.map((file) => audioFileDurationSec(file).catch(() => null)))
+      setPendingAudio({ files: audio, role: defaultAudioRole(durations) })
+    }
+  }
+
+  const addTracks = async (files: readonly File[]): Promise<void> => {
+    for (const file of files) {
       try {
         const track = await actions.addTrackFromFile(file)
         // 作品の方針がまだなら方針を開く（次にやること）。済んでいれば登録した楽曲を見せる。
@@ -70,11 +94,28 @@ export const FileIntake = ({
         onNotice(`${file.name} を登録できませんでした: ${describeForPerson(cause)}`, 'error')
       }
     }
-    if (images.length > 0) setPendingImages(images)
-    if (videos.length > 0) {
-      const inspected = workbench.inspected
-      if (inspected?.kind === 'shot') setPendingVideos({ shotId: inspected.id, files: videos })
-      else onNotice('動画は、Shot を選んでから落とすとその Shot の Take になります。')
+  }
+
+  const addSfx = async (files: readonly File[]): Promise<void> => {
+    for (const file of files) {
+      try {
+        const sound = await importSfxFile(file)
+        onNotice(`「${sound.title}」を効果音として取り込みました。素材の効果音からタイムラインの効果音の段へドラッグして置けます。`)
+      } catch (cause) {
+        onNotice(`${file.name} を効果音として取り込めませんでした: ${describeForPerson(cause)}`, 'error')
+      }
+    }
+    workbench.bumpSfx()
+  }
+
+  const importAudio = async (role: AudioRole): Promise<void> => {
+    if (pendingAudio === null) return
+    setBusy(true)
+    try {
+      await (role === 'sfx' ? addSfx(pendingAudio.files) : addTracks(pendingAudio.files))
+    } finally {
+      setBusy(false)
+      setPendingAudio(null)
     }
   }
 
@@ -158,9 +199,22 @@ export const FileIntake = ({
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-bg/60 backdrop-blur-sm">
           <p className="rounded-lg border-2 border-dashed border-accent bg-surface px-6 py-4 text-base text-text">
-            落とすと取り込みます（音声 → 楽曲、画像 → 行き先を選ぶ、動画 → 選んでいる Shot の Take）
+            落とすと取り込みます（音声 → 楽曲か効果音かを選ぶ、画像 → 行き先を選ぶ、動画 → 選んでいる Shot の Take）
           </p>
         </div>
+      )}
+      {pendingAudio !== null && (
+        <AudioRoleDialog
+          files={pendingAudio.files}
+          initialRole={pendingAudio.role}
+          busy={busy}
+          onChoose={(role) => {
+            void importAudio(role)
+          }}
+          onClose={() => {
+            setPendingAudio(null)
+          }}
+        />
       )}
       <WorkbenchDialog
         open={pendingImages.length > 0}

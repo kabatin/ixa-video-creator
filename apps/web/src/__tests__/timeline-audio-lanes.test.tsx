@@ -59,6 +59,40 @@ describe('効果音の帯', () => {
     expect(windowDrop).not.toHaveBeenCalled()
     window.removeEventListener('drop', windowDrop)
   })
+
+  it('素材ツリーの効果音を落とすと、その素材と落とした秒で渡す（取り込んだ・作った音を置く）', () => {
+    const onDropAudio = vi.fn()
+    const onDropSfxAsset = vi.fn()
+    tracks({ onDropAudio, onDropSfxAsset })
+    const zone = screen.getByText('効果音のファイルをここへ落とすと置けます').parentElement
+    if (zone === null) throw new Error('帯がありません')
+    const payload = JSON.stringify({ kind: 'sfx', id: 'asset-1' })
+    const dataTransfer = {
+      files: [],
+      items: [{ kind: 'string' }],
+      types: ['application/x-ixa-asset'],
+      getData: (type: string) => (type === 'application/x-ixa-asset' ? payload : ''),
+    }
+
+    fireEvent.dragOver(zone, { dataTransfer })
+    fireEvent.drop(zone, { dataTransfer, clientX: 80 })
+
+    expect(onDropSfxAsset).toHaveBeenCalledWith('asset-1', expect.any(Number))
+    expect(onDropAudio).not.toHaveBeenCalled()
+  })
+
+  it('キャラクターのような効果音でない素材は受けない', () => {
+    const onDropSfxAsset = vi.fn()
+    tracks({ onDropAudio: vi.fn(), onDropSfxAsset })
+    const zone = screen.getByText('効果音のファイルをここへ落とすと置けます').parentElement
+    if (zone === null) throw new Error('帯がありません')
+    const payload = JSON.stringify({ kind: 'character', id: 'c1' })
+    const dataTransfer = { files: [], items: [{ kind: 'string' }], types: ['application/x-ixa-asset'], getData: () => payload }
+
+    fireEvent.drop(zone, { dataTransfer, clientX: 80 })
+
+    expect(onDropSfxAsset).not.toHaveBeenCalled()
+  })
 })
 
 describe('ナレーションのレーン', () => {

@@ -4,20 +4,23 @@ import { MediaAssetId } from '@ixa/domain'
 import { readyOr, useAssets } from '@/components/workbench/asset-store'
 import { NarrationLane } from '@/components/workbench/narration/narration-lane'
 import { useNarration } from '@/components/workbench/narration/use-narration'
+import { useSfxAssets } from '@/components/workbench/sfx-assets'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { describeForPerson } from '@/lib/api-error'
-import { audioFileDurationSec } from '@/lib/audio-file-duration'
+import { audioFileDurationSec, audioUrlDurationSec } from '@/lib/audio-file-duration'
 import { formatClock } from '@/lib/format-time'
 import { laneBlocks } from '@/lib/narration-lane'
 
 /**
- * タイムラインの音の口（ADR-0038 / 0039）。ナレーションのレーン（行の投影・動かす）と、効果音の帯へ落とした音を置く。
+ * タイムラインの音の口（ADR-0038 / 0039）。ナレーションのレーン（行の投影・動かす）と、効果音の帯へ落とした音
+ * （手元のファイル・素材ツリーの効果音）を置く。
  * 失敗は上の知らせに出す（押したのに何も起きない、にしない）。
  */
 export const useTimelineAudio = (onClipsChanged: () => void) => {
   const workbench = useWorkbench()
   const { voices } = useAssets()
   const { api, overview, apply } = useNarration()
+  const sfx = useSfxAssets()
   const lines = overview.state === 'ready' ? overview.value.lines : []
   const blocks = laneBlocks(
     lines,
@@ -61,5 +64,31 @@ export const useTimelineAudio = (onClipsChanged: () => void) => {
       })
   }
 
-  return { narrationLane, onDropAudio }
+  /** 素材ツリーの効果音を置く。長さは音そのものから読む（作った音のきっかけの長さは、置いた後に直されうる）。 */
+  const onDropSfxAsset = (rawId: string, atSec: number): void => {
+    const parsed = MediaAssetId.safeParse(rawId)
+    if (!parsed.success) return
+    const mediaAssetId = parsed.data
+    const name = (sfx?.state === 'ready' ? sfx.value : []).find((item) => item.mediaAssetId === mediaAssetId)?.label ?? '効果音'
+    workbench.notify(`効果音「${name}」を ${formatClock(atSec)} に置いています…`)
+    api
+      .mediaUrl(mediaAssetId)
+      .then(({ url }) => audioUrlDurationSec(url, name))
+      .then(async (durationSec) => {
+        await api.createClip(workbench.projectId, {
+          track: 'SFX',
+          startSec: atSec,
+          durationSec,
+          content: { type: 'media', mediaAssetId, inSec: 0, outSec: durationSec, volume: 1 },
+        })
+        workbench.notify(`効果音「${name}」を ${formatClock(atSec)} に置きました。`)
+        onClipsChanged()
+        workbench.bumpSfx()
+      })
+      .catch((cause: unknown) => {
+        workbench.notify(`効果音を置けませんでした: ${describeForPerson(cause)}`, 'error')
+      })
+  }
+
+  return { narrationLane, onDropAudio, onDropSfxAsset }
 }

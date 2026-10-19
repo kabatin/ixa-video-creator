@@ -33,6 +33,8 @@ export const ASSET_DRAG_TYPE = 'application/x-ixa-asset'
 const AssetDragPayload = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('character'), id: z.string().min(1) }),
   z.object({ kind: z.literal('location'), id: z.string().min(1) }),
+  /** 効果音の素材（MediaAsset）。効果音の段だけが受ける。Shot のカードや行は受けない。 */
+  z.object({ kind: z.literal('sfx'), id: z.string().min(1) }),
 ])
 export type AssetDragPayload = z.infer<typeof AssetDragPayload>
 

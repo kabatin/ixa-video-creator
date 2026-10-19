@@ -9,16 +9,17 @@ import { describeForPerson } from '@/lib/api-error'
 import type { SfxJobApi } from '@/lib/sfx-job-api'
 import { sfxTreeItems, type SfxTreeItem } from '@/lib/sfx-tree'
 import type { TimelineApi } from '@/lib/timeline-api'
+import type { UploadedSfxApi } from '@/lib/uploaded-sfx-api'
 
 /**
  * 効果音の素材（ADR-0052）。素材ツリー・素材ビューア・インスペクターが同じ一覧を見る。
  *
- * 一覧の正はサーバ（効果音の段のクリップと、作った効果音のジョブ）。サーバの材料を読み直したとき（`serverEpoch`。
+ * 一覧の正はサーバ（効果音の段のクリップと、作った効果音のジョブと、取り込んだ効果音。ADR-0056）。サーバの材料を読み直したとき（`serverEpoch`。
  * インスペクターでクリップを直した・消した）と、効果音の素材が変わったとき（`sfxEpoch`。音を落とした・帯で動かした /
  * 切った / 消した・効果音ができた）に引き直す。`posterEpoch` は Take や絵のたびに進むので見ない（取り直しが多すぎる）。
  */
 
-type SfxAssetsApi = Pick<TimelineApi, 'listClips'> & Pick<SfxJobApi, 'listSfxJobs'>
+type SfxAssetsApi = Pick<TimelineApi, 'listClips'> & Pick<SfxJobApi, 'listSfxJobs'> & Pick<UploadedSfxApi, 'listUploadedSfx'>
 
 const SfxAssetsContext = createContext<Loaded<readonly SfxTreeItem[]> | null>(null)
 
@@ -38,9 +39,9 @@ export const SfxAssetsProvider = ({
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([client.listClips(projectId, 'SFX'), client.listSfxJobs(projectId)])
-      .then(([clips, jobs]) => {
-        if (!cancelled) setItems({ state: 'ready', value: sfxTreeItems(clips, jobs) })
+    Promise.all([client.listClips(projectId, 'SFX'), client.listSfxJobs(projectId), client.listUploadedSfx(projectId)])
+      .then(([clips, jobs, uploads]) => {
+        if (!cancelled) setItems({ state: 'ready', value: sfxTreeItems(clips, jobs, uploads) })
       })
       .catch((cause: unknown) => {
         // 読めなかったことを黙らせない。空のままだと「効果音が無い」に化ける（L-015）。

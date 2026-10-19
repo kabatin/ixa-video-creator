@@ -36,6 +36,10 @@ describe('ドラッグの中身', () => {
     })
   })
 
+  it('効果音（素材ツリーから効果音の段へ）も運べる', () => {
+    expect(parseAssetDrag(encodeAssetDrag({ kind: 'sfx', id: 'asset-1' }))).toEqual({ kind: 'sfx', id: 'asset-1' })
+  })
+
   it('他から落とされた文字は null', () => {
     expect(parseAssetDrag('hello')).toBeNull()
     expect(parseAssetDrag('{"kind":"shot","id":"x"}')).toBeNull()

@@ -31,7 +31,8 @@ export const useAssetDrop = (onMessage: (message: string) => void) => {
 
   const assign = async (shot: Shot, raw: string): Promise<void> => {
     const payload = parseAssetDrag(raw)
-    if (payload === null) return
+    // 効果音は効果音の段に置くもの。Shot には割り当てない。
+    if (payload === null || payload.kind === 'sfx') return
     setTarget({ shotId: shot.id, state: 'saving' })
     try {
       if (payload.kind === 'location') {

@@ -10,7 +10,11 @@ const Count = () => {
 }
 
 const renderProvider = () => {
-  const api = { listClips: vi.fn().mockResolvedValue([]), listSfxJobs: vi.fn().mockResolvedValue([]) }
+  const api = {
+    listClips: vi.fn().mockResolvedValue([]),
+    listSfxJobs: vi.fn().mockResolvedValue([]),
+    listUploadedSfx: vi.fn().mockResolvedValue([]),
+  }
   const result = renderInWorkbench(
     <SfxAssetsProvider api={api}>
       <Count />
@@ -30,6 +34,7 @@ describe('SfxAssetsProvider', () => {
     await waitFor(() => {
       expect(api.listClips).toHaveBeenCalledTimes(2)
       expect(api.listSfxJobs).toHaveBeenCalledTimes(2)
+      expect(api.listUploadedSfx).toHaveBeenCalledTimes(2)
     })
   })
 

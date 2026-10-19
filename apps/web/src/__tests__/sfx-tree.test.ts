@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { SFX_LABEL_MAX_CHARS, sfxTreeItems } from '@/lib/sfx-tree'
 import { WireSfxJob } from '@/lib/sfx-job-api'
 import { WireTimelineClip } from '@/lib/timeline-api'
+import { WireUploadedSfx } from '@/lib/uploaded-sfx-api'
 
 const PROJECT = '01ARZ3NDEKTSV4RRFFQ69G5FA0'
 const SOUND_A = '01ARZ3NDEKTSV4RRFFQ69G5FA1'
@@ -35,6 +36,26 @@ const job = (prompt: string, mediaAssetIds: readonly string[], status = 'succeed
     mediaAssetIds,
     timelineClipId: null,
   })
+
+const uploaded = (title: string, mediaAssetId: string, id = '01ARZ3NDEKTSV4RRFFQ69G5FD0') =>
+  WireUploadedSfx.parse({ id, mediaAssetId, title, createdAt: new Date().toISOString() })
+
+describe('sfxTreeItems: 取り込んだ音（制作者 2026-10-19）', () => {
+  it('置いていない取り込んだ音も候補として出し、ファイルの名前で呼ぶ', () => {
+    const items = sfxTreeItems([], [job('door slam', [SOUND_A])], [uploaded('ドアの音', SOUND_B)])
+    expect(items.map((item) => [item.mediaAssetId, item.label, item.placements.length])).toEqual([
+      [SOUND_A, 'door slam', 0],
+      [SOUND_B, 'ドアの音', 0],
+    ])
+  })
+
+  it('段に置いた取り込んだ音は、置いた位置ではなくファイルの名前で呼ぶ', () => {
+    const items = sfxTreeItems([clip('01ARZ3NDEKTSV4RRFFQ69G5FC9', 'SFX', 2, SOUND_C)], [], [uploaded('足音', SOUND_C)])
+    expect(items).toHaveLength(1)
+    expect(items[0]?.label).toBe('足音')
+    expect(items[0]?.placements).toHaveLength(1)
+  })
+})
 
 describe('sfxTreeItems', () => {
   it('同じ音を 2 か所に置いても 1 行にまとめ、置いた位置を早い順に添える', () => {

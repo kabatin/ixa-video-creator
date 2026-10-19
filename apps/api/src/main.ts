@@ -42,6 +42,7 @@ import {
   createVoiceJobRepository,
   createMusicJobRepository,
   createSfxJobRepository,
+  createUploadedSfxRepository,
   createTakeMotionAnalysisRepository,
   createProjectAudioSettingsRepository,
 } from '@ixa/db'
@@ -405,6 +406,7 @@ export const main = (): void => {
       logger,
     },
     motion: { analyses: createTakeMotionAnalysisRepository(db), queue: motionQueuePort },
+    uploadedSfx: createUploadedSfxRepository(db),
     sfxGeneration: {
       projects: projectRepository,
       sfxJobs: createSfxJobRepository(db),

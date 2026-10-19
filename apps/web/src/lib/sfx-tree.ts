@@ -2,11 +2,13 @@ import type { MediaAssetId } from '@ixa/domain'
 import { formatClock } from '@/lib/format-time'
 import type { WireSfxJob } from '@/lib/sfx-job-api'
 import type { WireTimelineClip } from '@/lib/timeline-api'
+import type { WireUploadedSfx } from '@/lib/uploaded-sfx-api'
 
 /**
  * 素材ツリーの「効果音」（ADR-0052）。**React を含まない。**
  *
- * 音 1 本（素材）ごとに 1 行。効果音の段に置いたクリップの音と、手元の AI で作った音（置いていない候補も）を合わせる。
+ * 音 1 本（素材）ごとに 1 行。効果音の段に置いたクリップの音と、手元の AI で作った音・手元のファイルから取り込んだ音
+ * （ADR-0056。置いていない候補も）を合わせる。
  * 同じ音を何か所に置いても 1 行にまとめ、置いた位置を添える。
  */
 
@@ -25,7 +27,7 @@ export type SfxPlacement = {
 
 export type SfxTreeItem = {
   readonly mediaAssetId: MediaAssetId
-  /** 画面に出す名前。作った音はきっかけの文、落とした音は置いた位置。 */
+  /** 画面に出す名前。作った音はきっかけの文、取り込んだ音はファイルの名前、段に直に落とした音は置いた位置。 */
   readonly label: string
   /** 置いた位置（早い順）。まだ置いていない候補は空。 */
   readonly placements: readonly SfxPlacement[]
@@ -81,12 +83,26 @@ const placementsOf = (clips: readonly WireTimelineClip[]): ReadonlyMap<MediaAsse
       new Map(),
     )
 
-/** 並びは置いた位置の早い順、置いていない候補はそのあと（作った新しい順）。ID はどちらも読み込みの境界で検証済み。 */
+/** 取り込んだ音の名前。作った音の名前があればそちらを残す（同じ素材を両方が指すことは普通は無い）。 */
+const withUploadLabels = (
+  labels: ReadonlyMap<MediaAssetId, string>,
+  uploads: readonly WireUploadedSfx[],
+): ReadonlyMap<MediaAssetId, string> =>
+  uploads.reduce<ReadonlyMap<MediaAssetId, string>>(
+    (acc, upload) => (acc.has(upload.mediaAssetId) ? acc : new Map([...acc, [upload.mediaAssetId, shorten(upload.title)]])),
+    labels,
+  )
+
+/**
+ * 並びは置いた位置の早い順、置いていない候補はそのあと（作った音の新しい順、続けて取り込んだ音の新しい順）。
+ * ID はどれも読み込みの境界で検証済み。
+ */
 export const sfxTreeItems = (
   clips: readonly WireTimelineClip[],
   jobs: readonly WireSfxJob[],
+  uploads: readonly WireUploadedSfx[] = [],
 ): readonly SfxTreeItem[] => {
-  const labels = jobLabels(jobs)
+  const labels = withUploadLabels(jobLabels(jobs), uploads)
   const placements = placementsOf(clips)
   const unplaced = [...labels.keys()].filter((id) => !placements.has(id))
   return [...placements.keys(), ...unplaced].map((id) => {

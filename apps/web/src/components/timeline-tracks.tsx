@@ -29,6 +29,7 @@ import type { TransitionInsertionPoint } from '@/lib/timeline-insert'
 import type { ShotPosterMap } from '@/lib/shot-posters'
 import { usePlayheadSec } from '@/lib/playhead-sec'
 import { playheadLeftPx, seekSecAtClientX } from '@/lib/timeline-playhead'
+import { ASSET_DRAG_TYPE, parseAssetDrag } from '@/lib/asset-actions'
 import {
   alignmentByShotId,
   beatAlignmentToneClass,
@@ -141,6 +142,8 @@ export type TimelineTracksProps = {
   readonly narrationLane?: (pxPerSec: number) => ReactNode
   /** 効果音の帯に音のファイルを落とした（落とした秒）。渡せば効果音の帯を空でも出す。 */
   readonly onDropAudio?: (file: File, atSec: number) => void
+  /** 効果音の帯に素材ツリーの効果音を落とした（その素材と、落とした秒）。 */
+  readonly onDropSfxAsset?: (mediaAssetId: string, atSec: number) => void
   /** 効果音の段の上に薄く出す、動きの分析の出来事の印（ADR-0054）。押すとそこから再生する。 */
   readonly motionMarks?: { readonly marks: readonly MotionMark[]; readonly onPlayFrom: (sec: number) => void }
 }
@@ -206,6 +209,7 @@ export const TimelineTracks = ({
   shotEdges,
   narrationLane,
   onDropAudio,
+  onDropSfxAsset,
   motionMarks,
 }: TimelineTracksProps) => {
   /** 横スクロールの箱。再生位置を追うときに送る。 */
@@ -368,7 +372,12 @@ export const TimelineTracks = ({
               <MotionMarks marks={motionMarks.marks} pxPerSec={pxPerSec} onPlayFrom={motionMarks.onPlayFrom} />
             )}
             {track === 'SFX' && onDropAudio !== undefined ? (
-              <AudioDrop pxPerSec={pxPerSec} durationSec={durationSec} onDrop={onDropAudio}>
+              <AudioDrop
+                pxPerSec={pxPerSec}
+                durationSec={durationSec}
+                onDrop={onDropAudio}
+                {...(onDropSfxAsset === undefined ? {} : { onDropAsset: onDropSfxAsset })}
+              >
                 {renderTrack(track)}
               </AudioDrop>
             ) : (
@@ -406,27 +415,32 @@ export const TimelineTracks = ({
 }
 
 /**
- * 音のファイルを落として置く帯（効果音）。落とした位置を秒にして渡す。
- * **ここで受けたら伝わりを止める。** 止めないと画面全体の取り込み（音は楽曲にする）にも流れる（file-intake.tsx）。
+ * 音のファイルや素材ツリーの効果音を落として置く帯（効果音）。落とした位置を秒にして渡す。
+ * **ここで受けたら伝わりを止める。** 止めないと画面全体の取り込み（音は楽曲か効果音かを聞く）にも流れる（file-intake.tsx）。
  */
 const AudioDrop = ({
   pxPerSec,
   durationSec,
   onDrop,
+  onDropAsset,
   children,
 }: {
   readonly pxPerSec: number
   readonly durationSec: number
   readonly onDrop: (file: File, atSec: number) => void
+  readonly onDropAsset?: (mediaAssetId: string, atSec: number) => void
   readonly children: ReactNode
 }) => {
   const [over, setOver] = useState(false)
   const audioOf = (files: FileList): File | undefined => [...files].find((file) => file.type.startsWith('audio/'))
+  // ドラッグの途中は中身を読めない（型だけ見える）。素材のドラッグなら受ける構えだけ見せ、効果音かは落としたときに確かめる。
+  const accepts = (types: readonly string[], items: DataTransferItemList): boolean =>
+    [...items].some((item) => item.kind === 'file') || (onDropAsset !== undefined && types.includes(ASSET_DRAG_TYPE))
   return (
     <div
       className={over ? 'rounded outline outline-2 outline-focus' : ''}
       onDragOver={(event) => {
-        if (![...event.dataTransfer.items].some((item) => item.kind === 'file')) return
+        if (!accepts([...event.dataTransfer.types], event.dataTransfer.items)) return
         event.preventDefault()
         event.stopPropagation()
         setOver(true)
@@ -436,12 +450,20 @@ const AudioDrop = ({
       }}
       onDrop={(event) => {
         setOver(false)
+        const left = event.currentTarget.getBoundingClientRect().left
+        const atSec = seekSecAtClientX(event.clientX, { left }, pxPerSec, durationSec)
+        const asset = onDropAsset === undefined ? null : parseAssetDrag(event.dataTransfer.getData(ASSET_DRAG_TYPE))
+        if (asset !== null && asset.kind === 'sfx') {
+          event.preventDefault()
+          event.stopPropagation()
+          onDropAsset?.(asset.id, atSec)
+          return
+        }
         const file = audioOf(event.dataTransfer.files)
         if (file === undefined) return
         event.preventDefault()
         event.stopPropagation()
-        const left = event.currentTarget.getBoundingClientRect().left
-        onDrop(file, seekSecAtClientX(event.clientX, { left }, pxPerSec, durationSec))
+        onDrop(file, atSec)
       }}
     >
       {children}

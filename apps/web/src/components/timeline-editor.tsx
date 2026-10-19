@@ -142,6 +142,8 @@ export type TimelineEditorProps = {
   readonly narrationLane?: (pxPerSec: number) => ReactNode
   /** 効果音の帯に音のファイルを落とした。 */
   readonly onDropAudio?: (file: File, atSec: number) => void
+  /** 効果音の帯に素材ツリーの効果音を落とした。 */
+  readonly onDropSfxAsset?: (mediaAssetId: string, atSec: number) => void
   /** 帯のクリップを動かした・切った・消した（書けたあと）。素材の一覧など、ほかの場所の取り直しの合図。 */
   readonly onClipChanged?: (track: TimelineTrack) => void
 }
@@ -190,6 +192,7 @@ export const TimelineEditor = ({
   audioLane,
   narrationLane,
   onDropAudio,
+  onDropSfxAsset,
   onClipChanged,
 }: TimelineEditorProps) => {
   const api = useMemo(() => createTimelineApi(createRequester(resolveApiBaseUrl())), [])
@@ -620,6 +623,7 @@ export const TimelineEditor = ({
           {...(audioLane === undefined ? {} : { audioLane })}
           {...(narrationLane === undefined ? {} : { narrationLane })}
           {...(onDropAudio === undefined ? {} : { onDropAudio })}
+          {...(onDropSfxAsset === undefined ? {} : { onDropSfxAsset })}
           {...(motionMarks === undefined ? {} : { motionMarks })}
           beatAlignment={
             beatAlignment === null

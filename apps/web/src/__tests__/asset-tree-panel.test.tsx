@@ -133,6 +133,7 @@ describe('AssetTree', () => {
           timelineClipId: '01ARZ3NDEKTSV4RRFFQ69G5FE3',
         }),
       ]),
+      listUploadedSfx: vi.fn().mockResolvedValue([]),
     }
     const { value } = renderInWorkbench(
       <SfxAssetsProvider api={api}>
@@ -148,6 +149,13 @@ describe('AssetTree', () => {
     fireEvent.click(screen.getByRole('button', { name: /^whoosh$/ }))
     expect(value.inspect).toHaveBeenCalledWith({ kind: 'sfx', id: placed })
     expect(value.openViewer).toHaveBeenCalled()
+
+    // 効果音の段へドラッグして置ける（Shot への割り当てとは別の中身を運ぶ）。
+    const setData = vi.fn()
+    fireEvent.dragStart(screen.getByRole('button', { name: /whoosh（候補 2）/ }), {
+      dataTransfer: { setData, effectAllowed: 'all' },
+    })
+    expect(setData).toHaveBeenCalledWith('application/x-ixa-asset', JSON.stringify({ kind: 'sfx', id: candidate }))
   })
 
   /** 素材の上で右クリック（長押し）すると、その素材のメニュー（2026-09-30）。 */

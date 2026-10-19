@@ -41,7 +41,7 @@ export const TimelinePanel = () => {
   const peaks = useTrackPeaks(workbench.track?.id ?? null, workbench.analysis?.waveformPeaksUrl ?? null)
   // 材料はワークベンチに 1 つ（検査のタブと同じもの）。効果音を置いたら取り直す（サーバの読み直しを通らないため）。
   const { materials, reload } = useTimelineMaterials()
-  const { narrationLane, onDropAudio } = useTimelineAudio(reload)
+  const { narrationLane, onDropAudio, onDropSfxAsset } = useTimelineAudio(reload)
   // 動きの分析の印（ADR-0054）。「効果音を作る」窓を閉じたら読み直す（そこで分析が終わっていることが多い）。
   const motionMarks = useTimelineMotionMarks(workbench.shots, workbench.dialog === null)
 
@@ -134,6 +134,7 @@ export const TimelinePanel = () => {
         {...(audioLane === null ? {} : { audioLane })}
         narrationLane={narrationLane}
         onDropAudio={onDropAudio}
+        onDropSfxAsset={onDropSfxAsset}
         // 効果音のクリップを帯で動かした・切った・消したら、素材ツリーの効果音（置いた位置）を取り直す。
         onClipChanged={(track) => {
           if (track === 'SFX') workbench.bumpSfx()

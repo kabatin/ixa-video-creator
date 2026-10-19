@@ -145,6 +145,7 @@ export const AssetTree = () => {
                   icon="♬"
                   label={item.label}
                   badge={sfxBadge(item.placements.length)}
+                  drag={{ kind: 'sfx', id: item.mediaAssetId }}
                   selected={sameSelection(workbench.inspected, { kind: 'sfx', id: item.mediaAssetId })}
                   onSelect={() => {
                     select({ kind: 'sfx', id: item.mediaAssetId })
@@ -532,7 +533,7 @@ const Row = ({
   readonly selected: boolean
   readonly onSelect: () => void
   readonly onOpen: () => void
-  /** ドラッグで Shot に割り当てられる素材なら、その中身。 */
+  /** ドラッグで Shot に割り当てられる・効果音の段に置ける素材なら、その中身。 */
   readonly drag?: AssetDragPayload
   /** 右クリック・長押し・Shift+F10 でその素材のメニューを開く口。 */
   readonly contextMenu?: ContextMenuTriggerProps
@@ -545,7 +546,8 @@ const Row = ({
     onDragStart={(event: DragEvent<HTMLButtonElement>) => {
       if (drag === undefined) return
       event.dataTransfer.setData(ASSET_DRAG_TYPE, encodeAssetDrag(drag))
-      event.dataTransfer.effectAllowed = 'link'
+      // 効果音は段に置く（クリップを作る）ので copy。Shot への割り当ては link。
+      event.dataTransfer.effectAllowed = drag.kind === 'sfx' ? 'copy' : 'link'
     }}
     onClick={onSelect}
     onDoubleClick={onOpen}
@@ -558,7 +560,11 @@ const Row = ({
       onOpen()
     }}
     title={
-      drag === undefined ? undefined : 'Shot のカードや一覧の行へドラッグすると割り当てられます'
+      drag === undefined
+        ? undefined
+        : drag.kind === 'sfx'
+          ? 'タイムラインの効果音の段へドラッグすると置けます'
+          : 'Shot のカードや一覧の行へドラッグすると割り当てられます'
     }
     className={`${ITEM} ${selected ? 'bg-accent/15' : 'hover:bg-surface-2'}`}
   >

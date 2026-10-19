@@ -52,6 +52,8 @@ export const UpscaleJobId = brandedId('UpscaleJobId')
 export const ThumbnailId = brandedId('ThumbnailId')
 export const MusicJobId = brandedId('MusicJobId')
 export const SfxJobId = brandedId('SfxJobId')
+/** 手元のファイルから取り込んだ効果音（ADR-0056）。 */
+export const UploadedSfxId = brandedId('UploadedSfxId')
 /** Take の動きの分析（ADR-0054）。 */
 export const TakeMotionAnalysisId = brandedId('TakeMotionAnalysisId')
 /** 合言葉で入った端末の鍵・自動化用の鍵（認証）。**鍵そのものではなく、表の行の番号。** */
@@ -95,6 +97,7 @@ export type UpscaleJobId = z.infer<typeof UpscaleJobId>
 export type ThumbnailId = z.infer<typeof ThumbnailId>
 export type MusicJobId = z.infer<typeof MusicJobId>
 export type SfxJobId = z.infer<typeof SfxJobId>
+export type UploadedSfxId = z.infer<typeof UploadedSfxId>
 export type TakeMotionAnalysisId = z.infer<typeof TakeMotionAnalysisId>
 export type AccessTokenId = z.infer<typeof AccessTokenId>
 

@@ -351,6 +351,13 @@
       "when": 1792388034457,
       "tag": "0049_wise_princess_powerful",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1792403996048,
+      "tag": "0050_fixed_black_knight",
+      "breakpoints": true
     }
   ]
 }
