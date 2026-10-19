@@ -108,4 +108,11 @@ describe('やり直しのつながりの一意と消し方', () => {
     expect(index?.config.unique).toBe(true)
     expect(index?.config.where).toBeDefined()
   })
+
+  it('前のジョブを消したら、やり直しも消す（宙に浮いた attempt > 1 を残さない）', () => {
+    const fk = getTableConfig(imageGenerationJobs).foreignKeys.find((key) =>
+      key.reference().columns.some((column) => column.name === 'retry_of_job_id'),
+    )
+    expect(fk?.onDelete).toBe('cascade')
+  })
 })

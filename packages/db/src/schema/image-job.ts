@@ -55,10 +55,11 @@ export const imageGenerationJobs = pgTable(
     providerRecord: jsonb('provider_record').$type<Record<string, unknown>>(),
     /**
      * やり直しのとき、前のジョブ（ADR-0055）。1 枚目は null。**1 つのジョブのやり直しは 1 行だけ**（一意。チェックの手順が
-     * 2 度走っても、やり直しを 2 つ積まない。レビューの指摘 2026-10-19）。
+     * 2 度走っても、やり直しを 2 つ積まない）。前のジョブを消したら、やり直しも消す（宙に浮いた `attempt > 1` は
+     * domain の検査で壊れた行になるため。レビューの指摘 2026-10-19）。
      */
     retryOfJobId: ulidRef('retry_of_job_id').references((): AnyPgColumn => imageGenerationJobs.id, {
-      onDelete: 'set null',
+      onDelete: 'cascade',
     }),
     /** 何枚目の試しか。1 から数える。 */
     attempt: integer('attempt').notNull().default(1),
