@@ -722,7 +722,7 @@ type ImageCheck = {
   outcome: 'checked' | 'skipped' | 'failed' // 飛ばした・落ちたを「合格」に化けさせない
   verdict: 'pass' | 'review' | 'retry' | null
   score: number | null                    // 0..1
-  issues: { kind: 'anatomy' | 'artifact' | 'text' | 'identity' | 'prompt' | 'look'; message: string }[]
+  issues: { kind: 'anatomy' | 'artifact' | 'text' | 'identity' | 'prompt' | 'look' | 'proportion'; message: string }[]
   promptDelta: string | null              // やり直すときに指示へ足す直し方（英語）
   note: string | null                     // 飛ばした・落ちた理由
   costUsd: number
@@ -736,6 +736,7 @@ type ImageCheck = {
 ```
 
 - 自動でやり直すのは、画像の AI が手元（`local-gpu`）で `retry` のときだけ（`shouldAutoRetry`。上限は既定 2 回）
+- 文字（text）と頭身（proportion）だけの `retry` は `review` に下げる（`enforceImageCheckVerdict`）
 - 当てるのはつながりの最後に 1 回だけ（`pickImageToApply`。合格した最新、無ければ 要確認 → 見ていない → やり直し の順・点・新しさ）
 
 ---
