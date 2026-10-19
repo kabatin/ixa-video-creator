@@ -64,6 +64,7 @@ describe('Claude CLI の動きの分析のプロンプト', () => {
     expect(prompt).toContain('1.00 秒（強さ 1.00）')
     expect(prompt).toContain('戦子が店の通路で跳ねる')
     expect(prompt).toContain('"moment" | "sustained" | "pass_by" | "ambient"')
+    expect(prompt).toContain('繰り返す動き')
   })
 })
 

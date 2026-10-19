@@ -11,7 +11,7 @@ import { SfxPrompt } from '../sfx/sfx-job.js'
  */
 
 /** 解析器の版。抜き方（12fps・64×36・灰色）・山の取り方・AI への頼み方を変えたら上げる。 */
-export const MOTION_ANALYZER_VERSION = 'motion-v1'
+export const MOTION_ANALYZER_VERSION = 'motion-v2'
 
 /** 1 つの分析で持てる出来事の数。AI が暴走して何百も返したら置き間違いとして弾く。 */
 export const MOTION_EVENTS_MAX = 80

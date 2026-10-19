@@ -690,7 +690,7 @@ LLM は「人物が同じ人に見えるか」「構図が指示通りか」な�
 type TakeMotionAnalysis = {
   id: TakeMotionAnalysisId
   takeId: TakeId                       // Take に何行でも（追記のみ）。いちばん新しい行が今の結果
-  analyzerVersion: string              // 'motion-v1'
+  analyzerVersion: string              // 'motion-v2'（AI への頼み方を変えたら上げる）
   status: 'succeeded' | 'failed'
   energyHopSec: number                 // 強さの列のコマの間隔（1/12 秒）
   energy: number[]                     // 隣のコマとの差の平均（0..1）
