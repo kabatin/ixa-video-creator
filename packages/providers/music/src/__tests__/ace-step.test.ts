@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { ProviderBusyError, ProviderError, type MusicGenerationRequest, type ProviderJobHandle } from '@ixa/provider-core'
 import type { LocalServerFetch } from '@ixa/provider-video'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ACE_STEP_MUSIC_MODEL_ID, ACE_STEP_PROVIDER_ID, aceStepMusicModel } from '../ace-step/descriptor.js'
+import { ACE_STEP_MUSIC_MODEL_ID, ACE_STEP_PROVIDER_ID, aceStepMusicModel, minimaxMusic3Model } from '../ace-step/descriptor.js'
 import { createAceStepMusicProvider } from '../ace-step/provider.js'
 
 /**
@@ -271,7 +271,7 @@ describe('宣言', () => {
   it('手元の GPU を名乗る（動画・絵と同じ整理券に並ぶ）。長さ 10〜240 秒・4 曲まで', () => {
     const aceStep = provider(mockFetch(() => Promise.reject(new Error('呼ばない'))))
     expect(aceStep.exclusiveResource).toBe('local-gpu')
-    expect(aceStep.models).toEqual([aceStepMusicModel])
+    expect(aceStep.models).toEqual([aceStepMusicModel, minimaxMusic3Model])
     expect(aceStepMusicModel).toMatchObject({ durationSec: { min: 10, max: 240 }, maxCount: 4 })
   })
 })

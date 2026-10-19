@@ -8,7 +8,7 @@ import {
 } from '@ixa/db'
 import type { MediaAssetId, MusicTrackId, ProjectEventPublisher } from '@ixa/domain'
 import {
-  aceStepMusicModel,
+  ACE_STEP_MUSIC_MODELS,
   createAceStepMusicProvider,
   createSfxApiMusicProvider,
   stableAudioMusicModel,
@@ -23,26 +23,25 @@ import type { SfxApiSettings } from './sfx-wiring.js'
 export type AceStepSettings = { readonly enabled: boolean; readonly baseUrl: string; readonly token: string | null }
 
 /**
- * 作れる口。Stable Audio の歌なし BGM（ADR-0048 追記）は効果音と同じ sfx-api なので、
+ * 作れる口。ace-step-api は 1 台で ACE-Step と MiniMax-Music3 を出す（口は 1 つで、モデルごとに並べる）。
+ * Stable Audio の歌なし BGM（ADR-0048 追記）は効果音と同じ sfx-api なので、
  * 効果音のサーバを有効にしたときに並ぶ（API の「使える」と同じ条件）。
  */
+const aceStepAdapters = (outputRoot: string, aceStep: AceStepSettings): readonly MusicAdapter[] => {
+  const provider = createAceStepMusicProvider({
+    baseUrl: aceStep.baseUrl,
+    token: aceStep.token,
+    outputDir: join(outputRoot, 'ace-step'),
+  })
+  return ACE_STEP_MUSIC_MODELS.map((model) => ({ provider, model }))
+}
+
 export const musicAdapters = (
   outputRoot: string,
   aceStep: AceStepSettings,
   sfxApi: SfxApiSettings,
 ): readonly MusicAdapter[] => [
-  ...(aceStep.enabled
-    ? [
-        {
-          provider: createAceStepMusicProvider({
-            baseUrl: aceStep.baseUrl,
-            token: aceStep.token,
-            outputDir: join(outputRoot, 'ace-step'),
-          }),
-          model: aceStepMusicModel,
-        },
-      ]
-    : []),
+  ...(aceStep.enabled ? aceStepAdapters(outputRoot, aceStep) : []),
   ...(sfxApi.enabled
     ? [
         {

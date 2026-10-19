@@ -34,6 +34,7 @@ export const AiToolId = z.enum([
   'wan',
   'klein',
   'ace_step',
+  'minimax_music3',
   'stable_audio_medium_music',
   // 効果音はメインの Medium を先に置く（画面の選択肢はこの並び）。
   'stable_audio_medium_sfx',
@@ -64,7 +65,8 @@ export type AiToolDetection =
   /**
    * 手元の生成サーバが応答するか（`GET /v1/health`。ADR-0031 / 0040 / 0047 / 0048 / 0052）。
    * **どのサーバかを持つ。** 5 台（vpipe-api・wan-api・klein-api・ace-step-api・sfx-api）あるので、持たないと
-   * 1 台の起動でほかが「使える」と出てしまう。sfx-api は 1 台で複数のモデル（Stable Audio Medium・Small・MOSS・曲の Medium）を出すので、
+   * 1 台の起動でほかが「使える」と出てしまう。sfx-api（Stable Audio Medium・Small・MOSS・曲の Medium）と
+   * ace-step-api（ACE-Step・MiniMax-Music3）は 1 台で複数のモデルを出すので、
    * **どの workflow か**（`workflow`）も持つ。片方だけ使えないことがある（health の `workflows`）。
    */
   | {
@@ -166,10 +168,23 @@ export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
     id: 'ace_step',
     label: 'ACE-Step 1.5',
     tags: ON_THIS_MAC_FREE,
-    detect: { kind: 'local_server', server: 'ace_step' },
+    // ace-step-api は 1 台で 2 つのエンジンを出す。片方だけ使えないことがあるので workflow ごとに見る。
+    detect: { kind: 'local_server', server: 'ace_step', workflow: 'ace-step-1.5' },
     purposes: ['music'],
     // 動画と同じ機械の GPU を使う（ADR-0048）。動画や絵を作っている間は曲も順番待ちになる。
     notice: SHARED_GPU_NOTICE,
+  }),
+  minimax_music3: tool({
+    id: 'minimax_music3',
+    // MiniMax-Music3 Community License は製品の画面に「MiniMax-Music3」を目立つように出すことを求める。名前はこの表記のまま。
+    label: 'MiniMax-Music3',
+    tags: ON_THIS_MAC_FREE,
+    detect: { kind: 'local_server', server: 'ace_step', workflow: 'minimax-music3' },
+    purposes: ['music'],
+    notice:
+      'MiniMax-Music3（MiniMax-Music3 Community License）。歌あり・歌なしを作れますが遅く、60 秒の曲で約 10 分かかります。' +
+      '長さは上限で、曲が早く終わることがあります。' +
+      SHARED_GPU_NOTICE,
   }),
   stable_audio_medium_music: tool({
     id: 'stable_audio_medium_music',

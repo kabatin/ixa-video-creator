@@ -12,9 +12,10 @@ import {
 } from '@ixa/domain'
 import { execFileCliRunner } from '@ixa/provider-core'
 import {
-  ACE_STEP_IDENTITY,
+  checkAceStepHealth,
   checkSfxApiHealth,
   aceStepMusicModel,
+  minimaxMusic3Model,
   stableAudioMusicModel,
 } from '@ixa/provider-music'
 import { KLEIN_IDENTITY, codexCliImageModel, kleinImageModel, stubGeminiLikeImageModel } from '@ixa/provider-image'
@@ -97,15 +98,16 @@ const localServerProbes = (config: AppConfig): Readonly<Record<LocalServerName, 
         token: config.providers.kleinApiToken,
       }),
   }
-  // 曲のサーバ（ADR-0048）。画像と同じく動画の表には入れない。
+  // 曲のサーバ（ADR-0048）。画像と同じく動画の表には入れない。1 台で ACE-Step と MiniMax-Music3 を出すので、
+  // workflow ごとに見る（片方のエンジンだけ使えないことがある）。
   const aceStep: LocalServerProbe = {
     enabled: config.providers.localMusicGenerators.includes('ace_step'),
     enabledBy: 'LOCAL_MUSIC_GENERATOR',
-    check: () =>
-      checkLocalServerHealth({
-        identity: ACE_STEP_IDENTITY,
+    check: (workflowId) =>
+      checkAceStepHealth({
         baseUrl: config.providers.aceStepApiUrl,
         token: config.providers.aceStepApiToken,
+        ...(workflowId === undefined ? {} : { workflowId }),
       }),
   }
   // 効果音のサーバ（ADR-0052）。1 台で Stable Audio（Medium・Small）と MOSS、曲の Stable Audio を出すので、どの AI もこれで見つける。
@@ -159,8 +161,11 @@ export const createAiWiring = (config: AppConfig, db: DbClient): AiWiring => {
   }
   // 曲（ADR-0048）。`.env` で有効にしていなければ null（選べても作れない理由を言う）。
   // Stable Audio の歌なし BGM は効果音と同じ sfx-api なので、効果音のサーバの有効・無効に従う。
+  const aceStepEnabled = config.providers.localMusicGenerators.includes('ace_step')
   const musicModels = {
-    ace_step: config.providers.localMusicGenerators.includes('ace_step') ? aceStepMusicModel.id : null,
+    ace_step: aceStepEnabled ? aceStepMusicModel.id : null,
+    // 同じ ace-step-api の別の workflow（ADR-0048 追記）。
+    minimax_music3: aceStepEnabled ? minimaxMusic3Model.id : null,
     stable_audio_medium_music: config.providers.localSfxGenerators.includes('sfx_api') ? stableAudioMusicModel.id : null,
   }
   // 効果音（ADR-0052）。同じ sfx-api の別の workflow。`.env` で有効にしていなければ null。

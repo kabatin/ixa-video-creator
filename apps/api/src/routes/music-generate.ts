@@ -7,14 +7,16 @@ import {
   MUSIC_PROMPT_MAX_LENGTH,
   MusicJobId as MusicJobIdSchema,
   MusicJobStatus,
-  MUSIC_VOCAL_FALLBACK_TOOL,
+  MUSIC_VOCAL_FALLBACK_ORDER,
   ProjectId as ProjectIdSchema,
   decideMusicTool,
+  normalizeMusicSpec,
   type MusicJob,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import type { MusicGenerationDeps } from '../music/deps.js'
 import { publishMusicJob, startMusicJob } from '../music/music-job-start.js'
+import type { MusicModelChoice } from '../music/music-model.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 
 /**
@@ -24,6 +26,8 @@ import { errorContent, fail, ok, successResponse } from '../response.js'
 
 /** 「作った曲」の記録に出す件数。 */
 const RECENT_JOBS_LIMIT = 20
+type ReadyMusicModel = Extract<MusicModelChoice, { state: 'ready' }>
+
 /** 種の上限（サーバの契約 0〜2³¹−1）。 */
 const SEED_MAX = 2 ** 31 - 1
 
@@ -136,23 +140,23 @@ export const musicGenerateRoutes = (deps: MusicGenerationDeps) =>
       if (choice.state === 'unavailable') return c.json(fail(choice.reason), 409)
       // 歌なしだけの AI（既定の Stable Audio）に歌ありが来たら、歌える AI が使えればそちらで作る（制作者 2026-10-19）。
       // 使えない・ほかの理由で作れない頼み方（歌詞だけ・190 秒超）は、黙って捨てずに断る。
-      const fallback = await deps.musicModel(MUSIC_VOCAL_FALLBACK_TOOL)
-      const decision = decideMusicTool(
-        choice.tool,
-        input,
-        (tool) => tool === MUSIC_VOCAL_FALLBACK_TOOL && fallback.state === 'ready',
-      )
+      const fallbacks = await Promise.all(MUSIC_VOCAL_FALLBACK_ORDER.map((tool) => deps.musicModel(tool)))
+      const ready = (tool: string): ReadyMusicModel | undefined =>
+        fallbacks.find((model): model is ReadyMusicModel => model.state === 'ready' && model.tool === tool)
+      const decision = decideMusicTool(choice.tool, input, (tool) => ready(tool) !== undefined)
       if (decision.state === 'rejected') return c.json(fail(decision.reason), 409)
-      const chosen = decision.rerouted && fallback.state === 'ready' ? fallback : choice
+      const chosen = (decision.rerouted ? ready(decision.tool) : undefined) ?? choice
+      // 歌詞が空なら、どの AI も歌なしで作る。記録もそれに揃える。
+      const spec = normalizeMusicSpec(input)
       const job = await startMusicJob(deps, {
         projectId,
         tool: chosen.tool,
         model: chosen.model,
         spec: {
           prompt: input.prompt,
-          lyrics: input.lyrics,
-          durationSec: input.durationSec,
-          instrumental: input.instrumental,
+          lyrics: spec.lyrics,
+          durationSec: spec.durationSec,
+          instrumental: spec.instrumental,
           seed: input.seed ?? null,
           count: input.count,
           title: input.title ?? null,

@@ -27,6 +27,7 @@ const STABLE_AUDIO: MusicModelChoice = {
 }
 
 const ACE_STEP_OFF: MusicModelChoice = { state: 'unavailable', reason: 'ACE-Step 1.5 はこの環境で有効になっていません。' }
+const MINIMAX: MusicModelChoice = { state: 'ready', tool: 'minimax_music3', model: 'ace_step/minimax-music3' }
 
 const setup = (
   options: {
@@ -45,7 +46,11 @@ const setup = (
     projects: createInMemoryProjectRepository([project]),
     musicJobs,
     musicModel: (tool?: AiToolId) =>
-      Promise.resolve(tool === undefined ? (options.choice ?? READY) : (options.named?.[tool] ?? (tool === 'ace_step' ? READY : ACE_STEP_OFF))),
+      Promise.resolve(
+        tool === undefined
+          ? (options.choice ?? READY)
+          : (options.named?.[tool] ?? (tool === 'ace_step' ? READY : { state: 'unavailable', reason: `${tool} は無効` })),
+      ),
     musicQueue: {
       enqueue: (id: MusicJobId) => {
         if (options.enqueueFails === true) return Promise.reject(new Error('Redis に繋がりません'))
@@ -83,7 +88,8 @@ describe('POST /projects/{projectId}/music/generate', () => {
       tool: 'ace_step',
       model: 'ace_step/ace-step-1.5',
       status: 'queued',
-      spec: { prompt: 'j-pop, upbeat', lyrics: '', durationSec: 60, instrumental: false, seed: null, count: 1, title: null },
+      // 歌詞が空なら、どの AI も歌なしで作る。記録もそれに揃える（`normalizeMusicSpec`）。
+      spec: { prompt: 'j-pop, upbeat', lyrics: '', durationSec: 60, instrumental: true, seed: null, count: 1, title: null },
     })
     expect(events.published()).toMatchObject([{ type: 'music_job.status', jobId: data.jobId, status: 'queued' }])
   })
@@ -171,8 +177,27 @@ describe('POST /projects/{projectId}/music/generate', () => {
     })
   })
 
+  it('Stable Audio に歌ありを頼み、ACE-Step が使えず MiniMax-Music3 が使えれば、MiniMax-Music3 で記す', async () => {
+    const { project, musicJobs, send } = setup({ choice: STABLE_AUDIO, named: { ace_step: ACE_STEP_OFF, minimax_music3: MINIMAX } })
+    const response = await send('POST', `/projects/${project.id}/music/generate`, { prompt: 'city pop', lyrics: '[verse]\nはしれ' })
+    expect(response.status).toBe(202)
+    expect(musicJobs.snapshot()[0]).toMatchObject({ tool: 'minimax_music3', model: 'ace_step/minimax-music3' })
+  })
+
+  it('MiniMax-Music3 を選んでいれば、歌ありも歌なしもそのモデルで記す', async () => {
+    const { project, musicJobs, send } = setup({ choice: MINIMAX })
+    await send('POST', `/projects/${project.id}/music/generate`, { prompt: 'city pop', lyrics: '[verse]\nはしれ' })
+    await send('POST', `/projects/${project.id}/music/generate`, { prompt: 'ambient', instrumental: true, durationSec: 15 })
+    expect(musicJobs.snapshot().map((job) => [job.tool, job.spec.instrumental])).toEqual(
+      expect.arrayContaining([
+        ['minimax_music3', false],
+        ['minimax_music3', true],
+      ]),
+    )
+  })
+
   it.each([
-    ['歌あり（ACE-Step が使えない）', { instrumental: false }, { ace_step: ACE_STEP_OFF }, /歌なしの曲だけ/],
+    ['歌あり（歌える AI がどれも使えない）', { instrumental: false, lyrics: 'はしれ' }, { ace_step: ACE_STEP_OFF }, /歌なしの曲だけ/],
     ['歌詞だけ付いた歌なし', { instrumental: true, lyrics: '[verse]\nはしれ' }, {}, /歌詞は使えません/],
     ['190 秒を超える歌なし', { instrumental: true, durationSec: 190.5 }, {}, /10〜190 秒/],
   ] as const)('Stable Audio に %s を頼むと 409 で理由を言う（頼まない）', async (_label, body, named, message) => {

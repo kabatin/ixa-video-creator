@@ -74,3 +74,29 @@ domain の `decideMusicTool` 1 か所）。「使える」は `.env` で ace-ste
 - 長さは 10〜190 秒（サーバは 0.5 秒から受けるが、曲のジョブの下限 10 秒に合わせる）。上限の正はサーバの `GET /v1/capabilities`
 - 本文は効果音と同じ形（説明・長さ・数・種）。「TrackType: Music, VocalType: Instrumental, 」の前置きはサーバが付ける（ixa は付けない）
 - 出力は PCM16・44.1kHz・ステレオの WAV で、頼んだ長さちょうど
+
+## 追記（2026-10-19）: MiniMax-Music3 を足し、振り分けを AI が増えても崩れない形にする
+
+曲の AI に `minimax_music3`（モデル `ace_step/minimax-music3`）を足す。ace-step-api（6681bcf）の別の workflow で、
+本文は ace-step-1.5 とまったく同じ。`LOCAL_MUSIC_GENERATOR=ace_step` で ACE-Step と一緒に有効になる。
+既定・勧める順・`aiDefaultsFromEnv` は替えない（制作者に確かめてから）。
+
+- **名前の表記。** MiniMax-Music3 Community License は製品の画面に「MiniMax-Music3」を目立つように出すことを求める。
+  「使う AI」の名前は `MiniMax-Music3` のままにし、説明（notice）にライセンス名を書く。「曲を作る」の窓にも名前と説明を出す
+- **長さは上限。** 曲が早く終わることがある（62 秒を頼んで 22.9 秒の例）。楽曲の長さは取り込みで測ったものを使う（今までどおり）
+- **とても遅い。** 曲 1 秒あたり約 9 秒（60 秒の曲で約 10 分）で、進み具合が 0.95 で止まったまま見積もりを超えることがある。
+  待つ上限をモデルごとに持たせ（`MusicModelDescriptor.maxWaitSec`）、MiniMax は 3 時間（240 秒 × 4 曲でも収まる）。ほかは今までの 15 分
+- 実際に歌なしで作ったか（`details.generation.instrumental`）は記録（`providerRecord.details`）に残す
+- ace-step-api の health は workflow ごとに見る（片方のエンジンが使えなくても、もう片方は使える）。
+  見方は sfx-api と同じなので、`checkWorkflowHealth` に寄せて両方が使う
+- メモリを 24GB 使う。動画と同じ整理券（`local-gpu`）に並ぶので、worker の中では動画と同時には動かない
+
+振り分け（`decideMusicTool`）は表で決める:
+
+- 曲を作れる AI は `MusicAiToolId` に並べ、歌えるか・長さを `LIMITS` に必ず書く（足し忘れはテストが落とす）
+- 歌える AI は `MUSIC_VOCAL_FALLBACK_ORDER`（速い方から: ACE-Step → MiniMax-Music3）に必ず入れる（同じくテストが見張る）
+- 歌なしだけの AI に歌ありが来たら、この順で使えて作れる最初の AI へ回す。どれも使えなければ選んだ AI の理由で 409
+- **歌詞が空の歌ありは歌なしとして扱う**（`normalizeMusicSpec`）。どちらのエンジンも歌詞が空なら歌なしで作る
+  （`empty_means_instrumental`）ので、記録もそれに揃え、回さない。画面は「歌を入れる／入れない」をどの AI でも選ばせ
+  （既定は入れない）、歌を入れるのに歌詞が空なら頼む前に止める
+

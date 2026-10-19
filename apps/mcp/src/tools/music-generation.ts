@@ -58,9 +58,12 @@ export const generateMusicTool = defineTool({
   description:
     'Compose a new song for the project with the local music AI (submit only; takes minutes). ' +
     'Which AI is used comes from the user\'s AI settings (music): stable_audio_medium_music (the default) makes instrumental BGM only ' +
-    '(instrumental:true, no lyrics, 10–190 s, English prompt); ace_step sings or plays instrumental (10–240 s). ' +
-    'A vocal request (instrumental:false) while Stable Audio is selected is routed to ace_step when it is available, ' +
-    'otherwise rejected with 409; lyrics with instrumental:true are rejected, never silently dropped. ' +
+    '(instrumental:true, no lyrics, 10–190 s, English prompt); ace_step sings or plays instrumental (10–240 s); ' +
+    'minimax_music3 (MiniMax-Music3) sings or plays instrumental but is very slow (about 10 minutes per 60 s of music) and ' +
+    'durationSec is only an upper bound (the track may end early). To sing, send instrumental:false with lyrics — ' +
+    'empty lyrics are made instrumental by every AI. A vocal request while Stable Audio is selected is routed to a singing AI ' +
+    '(ace_step, then minimax_music3) when one is available, otherwise rejected with 409; ' +
+    'lyrics with instrumental:true are rejected, never silently dropped. ' +
     'Returns a music jobId; then call wait with {kind:"music", id} — when it succeeds you get musicTrackIds. ' +
     'Pick one with set_master_track, which also starts the beat analysis. ' +
     'Track titles are shown to the user in Japanese UI, so Japanese titles are preferred.',

@@ -1,7 +1,7 @@
 import { MUSIC_LYRICS_MAX_LENGTH, MUSIC_PROMPT_MAX_LENGTH } from '@ixa/domain'
 import type { MusicGenerationRequest } from '@ixa/provider-core'
 import { localServerInputError } from '@ixa/provider-video'
-import { ACE_STEP_IDENTITY } from './descriptor.js'
+import { ACE_STEP_IDENTITY, aceStepWorkflowOf } from './descriptor.js'
 
 /**
  * 送る前の検査（ace-step-api の契約と同じ範囲）。範囲の外をサーバに送ってから 422 で断られないように。
@@ -12,6 +12,7 @@ export const ensureAceStepRequest = (request: MusicGenerationRequest): void => {
     throw localServerInputError(ACE_STEP_IDENTITY, message)
   }
   const { model } = request
+  if (aceStepWorkflowOf(model.id) === null) fail('知らない曲のモデルです')
   if (request.prompt.trim() === '') fail('曲調が空です')
   if ([...request.prompt].length > MUSIC_PROMPT_MAX_LENGTH) {
     fail(`曲調が ${String(MUSIC_PROMPT_MAX_LENGTH)} 文字を超えています`)

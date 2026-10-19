@@ -42,3 +42,38 @@ export const aceStepMusicModel: MusicModelDescriptor = Object.freeze({
   durationSec: Object.freeze({ min: 10, max: 240 }),
   maxCount: 4,
 })
+
+/**
+ * 同じ ace-step-api の **MiniMax-Music3**（ADR-0048 追記。ace-step-api 6681bcf）。本文は ace-step-1.5 とまったく同じ。
+ *
+ * - 出力は PCM16・44.1kHz・ステレオ。**長さは上限**で、曲が早く終わることがある（62 秒を頼んで 22.9 秒の例）。
+ *   実際の長さは出来上がりの `duration_sec`（取り込みでも測り直す）。
+ * - 曲 1 秒あたり約 9 秒（60 秒の曲で約 10 分。`typical_seconds.60s_track` 580）。進み具合は 0.95 で止まったまま
+ *   見積もりを超えることがある。メモリを 24GB 使う。
+ * - 実際に歌なしで作ったかは結果の `details.generation.instrumental`（記録に残す）。
+ * - MiniMax-Music3 Community License。製品の画面に「MiniMax-Music3」を目立つように出す（「使う AI」の名前と説明）。
+ */
+export const MINIMAX_MUSIC3_WORKFLOW_ID = 'minimax-music3'
+
+export const MINIMAX_MUSIC3_MODEL_ID: ModelId = ModelId.parse(`ace_step/${MINIMAX_MUSIC3_WORKFLOW_ID}`)
+
+export const minimaxMusic3Model: MusicModelDescriptor = Object.freeze({
+  id: MINIMAX_MUSIC3_MODEL_ID,
+  providerId: ACE_STEP_PROVIDER_ID,
+  label: 'MiniMax-Music3（手元）',
+  durationSec: Object.freeze({ min: 10, max: 240 }),
+  maxCount: 4,
+  // 240 秒の曲を 4 つ（曲 1 秒あたり約 9 秒、見積もり超えもある）でも収まるよう、1 秒あたり 10 秒 × 4 曲に余裕を足す。
+  maxWaitSec: 3 * 60 * 60,
+})
+
+/** ace-step-api が出すモデル。worker はモデルごとに口を並べ、投入はモデルの workflow に送る。 */
+export const ACE_STEP_MUSIC_MODELS: readonly MusicModelDescriptor[] = Object.freeze([aceStepMusicModel, minimaxMusic3Model])
+
+const WORKFLOWS: ReadonlyMap<string, string> = new Map([
+  [ACE_STEP_MUSIC_MODEL_ID, ACE_STEP_WORKFLOW_ID],
+  [MINIMAX_MUSIC3_MODEL_ID, MINIMAX_MUSIC3_WORKFLOW_ID],
+])
+
+/** モデルの workflow。知らないモデルは null。 */
+export const aceStepWorkflowOf = (modelId: string): string | null => WORKFLOWS.get(modelId) ?? null

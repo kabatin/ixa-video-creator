@@ -117,6 +117,38 @@ describe('detectAiTools', () => {
     expect(on.ace_step).toEqual({ state: 'ready', version: '0.1.0' })
   })
 
+  /** ace-step-api は 1 台で ACE-Step と MiniMax-Music3 を出す。片方のエンジンだけ使えないことがある。 */
+  it('ACE-Step と MiniMax-Music3 は同じ LOCAL_MUSIC_GENERATOR で有効にし、workflow ごとに health を見る', async () => {
+    const off = await detectAiTools(probe())
+    expect(off.minimax_music3).toEqual({
+      state: 'missing',
+      reason: expect.stringMatching(/LOCAL_MUSIC_GENERATOR=ace_step/) as unknown,
+    })
+    const base = probe()
+    const asked: (string | undefined)[] = []
+    const on = await detectAiTools({
+      ...base,
+      localServers: {
+        ...base.localServers,
+        ace_step: {
+          enabled: true,
+          enabledBy: 'LOCAL_MUSIC_GENERATOR',
+          check: (workflow) => {
+            asked.push(workflow)
+            return Promise.resolve(
+              workflow === 'minimax-music3'
+                ? { state: 'down', reason: 'MiniMax-Music3（手元）は今使えません（読み込めない）' }
+                : { state: 'up', version: '0.1.0' },
+            )
+          },
+        },
+      },
+    })
+    expect(on.ace_step).toEqual({ state: 'ready', version: '0.1.0' })
+    expect(on.minimax_music3).toEqual({ state: 'missing', reason: 'MiniMax-Music3（手元）は今使えません（読み込めない）' })
+    expect([...asked].sort()).toEqual(['ace-step-1.5', 'minimax-music3'])
+  })
+
   /** ADR-0052・0048 追記。sfx-api は 1 台で効果音の 3 つの AI（Stable Audio Medium・Small・MOSS）と曲の Stable Audio を出す。 */
   it('sfx-api の 4 つの AI は LOCAL_SFX_GENERATOR で有効にし方を言い、有効なら workflow ごとに health を見る', async () => {
     const off = await detectAiTools(probe())

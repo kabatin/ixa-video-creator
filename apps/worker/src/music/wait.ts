@@ -1,5 +1,11 @@
 import type { MusicJobId } from '@ixa/domain'
-import { ProviderError, type MusicJobStatusFromProvider, type MusicProvider, type ProviderJobHandle } from '@ixa/provider-core'
+import {
+  ProviderError,
+  type MusicJobStatusFromProvider,
+  type MusicModelDescriptor,
+  type MusicProvider,
+  type ProviderJobHandle,
+} from '@ixa/provider-core'
 import { MusicJobCancelled, MusicJobFailure, type MusicProcessorDeps } from './deps.js'
 
 /** 問い合わせが続けてこの回数だけ通信で失敗したら諦める（サーバの再起動 1 回で曲を捨てない）。 */
@@ -10,6 +16,10 @@ const DEFAULT_POLL_INTERVAL_MS = 3_000
  * （初回は読み込みで最大 93 秒）。240 秒の曲を 4 つ頼んでも十分に収まる長さを取る。
  */
 export const MUSIC_MAX_WAIT_MS = 15 * 60 * 1000
+
+/** モデルごとの待つ上限。とても遅いモデル（MiniMax-Music3）は自分の上限を持つ。 */
+export const musicMaxWaitMs = (model: MusicModelDescriptor): number =>
+  model.maxWaitSec === undefined ? MUSIC_MAX_WAIT_MS : model.maxWaitSec * 1000
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -35,8 +45,9 @@ export const waitForMusic = async (
   provider: MusicProvider,
   handle: ProviderJobHandle,
   musicJobId: MusicJobId,
+  maxWaitMs: number = MUSIC_MAX_WAIT_MS,
 ): Promise<Extract<MusicJobStatusFromProvider, { state: 'succeeded' }>> => {
-  const deadline = Date.now() + (deps.maxWaitMs ?? MUSIC_MAX_WAIT_MS)
+  const deadline = Date.now() + (deps.maxWaitMs ?? maxWaitMs)
   let failures = 0
   for (;;) {
     const status = await provider.poll(handle).catch(async (error: unknown) => {

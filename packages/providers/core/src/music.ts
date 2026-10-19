@@ -14,6 +14,8 @@ export type MusicModelDescriptor = {
   readonly durationSec: { readonly min: number; readonly max: number }
   /** 1 回で作れる曲の数の上限。 */
   readonly maxCount: number
+  /** 投入から仕上がりまで待つ上限（秒）。省略は worker の既定（15 分）。とても遅いモデルだけ長く取る。 */
+  readonly maxWaitSec?: number
 }
 
 /** Domain から Provider へ渡す要求。範囲は呼ぶ側（`MusicJobSpec`）で検査済み。 */

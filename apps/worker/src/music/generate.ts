@@ -3,7 +3,7 @@ import type { MusicJobStatusFromProvider, ProviderJobHandle } from '@ixa/provide
 import { MusicJobCancelled, MusicJobFailure, type MusicAdapter, type MusicProcessorDeps } from './deps.js'
 import { publishMusicJobStatus } from './events.js'
 import { ingestMusic } from './ingest.js'
-import { stopRemoteMusic, waitForMusic } from './wait.js'
+import { musicMaxWaitMs, stopRemoteMusic, waitForMusic } from './wait.js'
 
 type Succeeded = Extract<MusicJobStatusFromProvider, { state: 'succeeded' }>
 
@@ -116,7 +116,7 @@ export const generateMusic = async (deps: MusicProcessorDeps, adapter: MusicAdap
       throw new MusicJobCancelled(job.id)
     }
     await publishMusicJobStatus(deps, running)
-    const result = await waitForMusic(deps, adapter.provider, handle, job.id)
+    const result = await waitForMusic(deps, adapter.provider, handle, job.id, musicMaxWaitMs(adapter.model))
     if (result.outputs.length !== spec.count) {
       throw new MusicJobFailure(
         {

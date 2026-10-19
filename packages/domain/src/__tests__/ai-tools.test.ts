@@ -252,9 +252,9 @@ describe('曲', () => {
     expect(AI_PURPOSE_LABELS.music).toBe('曲')
   })
 
-  it('曲に使えるのは お試し と 手元の ACE-Step と Stable Audio（歌なし）だけ', () => {
+  it('曲に使えるのは お試し と 手元の ACE-Step・MiniMax-Music3・Stable Audio（歌なし）だけ', () => {
     const musicTools = (Object.keys(AI_TOOLS) as AiToolId[]).filter((id) => AI_TOOLS[id].purposes.includes('music'))
-    expect([...musicTools].sort()).toEqual(['ace_step', 'stable_audio_medium_music', 'stub'])
+    expect([...musicTools].sort()).toEqual(['ace_step', 'minimax_music3', 'stable_audio_medium_music', 'stub'])
     expect(aiChoiceProblem('music', 'klein', ready())).toMatch(/曲にはまだ使えません/)
     // 同じ sfx-api でも、効果音の AI は曲に使えず、曲の AI は効果音に使えない。
     expect(aiChoiceProblem('music', 'stable_audio_medium_sfx', ready())).toMatch(/曲にはまだ使えません/)
@@ -274,8 +274,22 @@ describe('曲', () => {
     expect(recommendAiSettings({ ...allMissing(), stable_audio_medium_music: ready() }).music).toBe('stable_audio_medium_music')
   })
 
-  it('ACE-Step は手元のサーバ ace_step で見つける', () => {
-    expect(AI_TOOLS.ace_step.detect).toEqual({ kind: 'local_server', server: 'ace_step' })
+  /** ace-step-api は 1 台で 2 つのエンジンを出し、片方だけ使えないことがある。workflow ごとに見る。 */
+  it('ACE-Step は手元のサーバ ace_step の ace-step-1.5 で見つける', () => {
+    expect(AI_TOOLS.ace_step.detect).toEqual({ kind: 'local_server', server: 'ace_step', workflow: 'ace-step-1.5' })
+  })
+
+  it('MiniMax-Music3 は同じ ace_step の minimax-music3 で見つけ、ライセンスの表記と遅さを言う', () => {
+    expect(AI_TOOLS.minimax_music3.detect).toEqual({ kind: 'local_server', server: 'ace_step', workflow: 'minimax-music3' })
+    // MiniMax-Music3 Community License は製品の画面に「MiniMax-Music3」を目立つように出すことを求める。
+    expect(AI_TOOLS.minimax_music3.label).toBe('MiniMax-Music3')
+    expect(AI_TOOLS.minimax_music3.notice).toMatch(/MiniMax-Music3 Community License/)
+    expect(AI_TOOLS.minimax_music3.notice).toMatch(/60 秒の曲で約 10 分/)
+    expect(AI_TOOLS.minimax_music3.notice).toMatch(/早く終わる/)
+  })
+
+  it('MiniMax-Music3 は勧める順に入れない（既定は制作者に確かめてから）', () => {
+    expect(recommendAiSettings({ ...allMissing(), minimax_music3: ready() }).music).toBe('stub')
   })
 
   it('Stable Audio の曲は sfx-api の stable-audio-3-medium-music で見つけ、歌なしと分かる名前にする', () => {

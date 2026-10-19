@@ -338,7 +338,7 @@ type MusicSection = {
 type MusicJob = {
   id: MusicJobId
   projectId: ProjectId
-  tool: string                      // 曲の AI（ace_step | stable_audio_medium_music。後者は歌なしだけ・190 秒まで）
+  tool: string                      // 曲の AI（ace_step | minimax_music3 | stable_audio_medium_music。最後は歌なしだけ・190 秒まで）
   model: string | null
   spec: {                           // 範囲は ace-step-api の契約と同じ
     prompt: string                  // 曲調 1〜1000 字

@@ -194,8 +194,16 @@ describe('曲', () => {
   it('generate_music の説明は、既定の Stable Audio が歌なしだけ・190 秒までで、歌ありは ACE-Step に回ると言う', () => {
     expect(generateMusicTool.description).toMatch(/stable_audio_medium_music \(the default\) makes instrumental BGM only/)
     expect(generateMusicTool.description).toMatch(/10–190 s/)
-    expect(generateMusicTool.description).toMatch(/routed to ace_step/)
+    expect(generateMusicTool.description).toMatch(/routed to a singing AI \(ace_step, then minimax_music3\)/)
     expect(generateMusicTool.description).toMatch(/409/)
+  })
+
+  /** MiniMax-Music3 Community License は名前の表記を求める。遅さと、長さが上限であることも呼ぶ側に伝える。 */
+  it('generate_music の説明は、MiniMax-Music3 の遅さ・長さが上限・歌詞が空なら歌なしを言う', () => {
+    expect(generateMusicTool.description).toMatch(/minimax_music3 \(MiniMax-Music3\)/)
+    expect(generateMusicTool.description).toMatch(/about 10 minutes per 60 s/)
+    expect(generateMusicTool.description).toMatch(/upper bound/)
+    expect(generateMusicTool.description).toMatch(/empty lyrics are made instrumental/)
   })
 
   it('upload_music は sign → PUT（鍵なし）→ complete（sha256）→ 曲 → 解析の順', async () => {

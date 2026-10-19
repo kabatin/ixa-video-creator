@@ -25,7 +25,7 @@ export type LocalServerProbe = {
    * 曲は `LOCAL_MUSIC_GENERATOR`（ADR-0048）、効果音は `LOCAL_SFX_GENERATOR`（ADR-0052））。
    */
   readonly enabledBy: 'LOCAL_VIDEO_GENERATOR' | 'LOCAL_IMAGE_GENERATOR' | 'LOCAL_MUSIC_GENERATOR' | 'LOCAL_SFX_GENERATOR'
-  /** `workflow` は 1 台で複数のモデルを出すサーバ（sfx-api）だけが見る。ほかのサーバは無視する。 */
+  /** `workflow` は 1 台で複数のモデルを出すサーバ（sfx-api・ace-step-api）だけが見る。ほかのサーバは無視する。 */
   readonly check: (workflow?: string) => Promise<LocalServerHealthCheck>
 }
 

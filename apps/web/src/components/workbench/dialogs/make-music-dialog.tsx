@@ -69,11 +69,8 @@ export const MakeMusicDialogBody = () => {
   const planned = tool === null ? null : plannedMusicTool(tool, form.instrumental)
   const limits = planned === null ? DEFAULT_MUSIC_LIMITS : musicToolLimits(planned)
   const rerouted = tool !== null && planned !== null && planned !== tool
-
-  // 歌なしだけの AI を選んでいれば、歌なしで始める（そのまま押せば選んだ AI で作る）。
-  useEffect(() => {
-    if (tool !== null && !musicToolLimits(tool).vocals) setForm((current) => ({ ...current, instrumental: true }))
-  }, [tool])
+  // 作る AI の注意（遅さ・長さの意味・ライセンスの表記）。MiniMax-Music3 は名前を画面に出す約束がある。
+  const notice = planned === null ? null : AI_TOOLS[planned].notice
 
   const change = (patch: Partial<MusicForm>): void => {
     setForm((current) => ({ ...current, ...patch }))
@@ -118,10 +115,8 @@ export const MakeMusicDialogBody = () => {
       {tool !== null && (
         <div className="rounded-md border border-line bg-surface-2 p-2 text-xs text-text">
           <p>{`曲を作る AI: ${AI_TOOLS[tool].label}`}</p>
-          {!musicToolLimits(tool).vocals && !rerouted && (
-            <p className="text-muted">歌なしの BGM を作ります（曲調は英語で書くのがおすすめです）。</p>
-          )}
           {rerouted && planned !== null && <p className="text-muted">{`歌ありは ${AI_TOOLS[planned].label} で作ります`}</p>}
+          {notice !== null && <p className="text-muted">{notice}</p>}
         </div>
       )}
       <TextField
@@ -134,19 +129,34 @@ export const MakeMusicDialogBody = () => {
           change({ prompt })
         }}
       />
-      <label className="flex items-center gap-2 text-sm text-text">
-        <input
-          type="checkbox"
-          checked={form.instrumental}
-          onChange={(event) => {
-            change({ instrumental: event.target.checked })
-          }}
-        />
-        歌なし（歌詞は使いません）
-      </label>
+      <fieldset className="flex flex-wrap items-center gap-4 text-sm text-text">
+        <legend className={FIELD_LABEL_CLASS}>歌</legend>
+        <label className="flex items-center gap-2">
+          <input
+            type="radio"
+            name="make-music-vocals"
+            checked={form.instrumental}
+            onChange={() => {
+              change({ instrumental: true })
+            }}
+          />
+          歌を入れない
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="radio"
+            name="make-music-vocals"
+            checked={!form.instrumental}
+            onChange={() => {
+              change({ instrumental: false })
+            }}
+          />
+          歌を入れる
+        </label>
+      </fieldset>
       <TextareaField
         id="make-music-lyrics"
-        label="歌詞（なくてもよい）"
+        label="歌詞"
         rows={6}
         value={form.lyrics}
         disabled={form.instrumental}

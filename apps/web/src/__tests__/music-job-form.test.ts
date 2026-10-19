@@ -36,11 +36,25 @@ const errorsOf = (patch: Partial<MusicForm>) => {
 }
 
 describe('validateMusicForm', () => {
-  it('既定の値（60 秒・1 曲・歌あり）で本文になる。曲調は前後の空白を落とす', () => {
-    expect(validateMusicForm(form({ prompt: '  j-pop  ', lyrics: '[verse]\nあ' }))).toEqual({
+  it('既定の値（60 秒・1 曲・歌を入れない）で本文になる。曲調は前後の空白を落とす', () => {
+    expect(validateMusicForm(form({ prompt: '  j-pop  ' }))).toEqual({
       ok: true,
-      body: { prompt: 'j-pop', lyrics: '[verse]\nあ', durationSec: 60, instrumental: false, count: 1 },
+      body: { prompt: 'j-pop', lyrics: '', durationSec: 60, instrumental: true, count: 1 },
     })
+  })
+
+  it('歌を入れるなら歌詞ごと頼む', () => {
+    expect(validateMusicForm(form({ instrumental: false, lyrics: '[verse]\nあ' }))).toEqual({
+      ok: true,
+      body: { prompt: 'j-pop, upbeat', lyrics: '[verse]\nあ', durationSec: 60, instrumental: false, count: 1 },
+    })
+  })
+
+  /** 歌詞が空だと、どの AI も歌なしで作る（ace-step-api の `empty_means_instrumental`）。 */
+  it('歌を入れるのに歌詞が空（空白だけ）なら止める', () => {
+    expect(errorsOf({ instrumental: false, lyrics: ' \n ' }).lyrics).toBe(
+      '歌を入れるときは歌詞を書いてください（入れないなら「歌を入れない」を選んでください）',
+    )
   })
 
   it('歌なしなら歌詞は送らない（欄に残っていても）', () => {
@@ -62,8 +76,8 @@ describe('validateMusicForm', () => {
   })
 
   it('歌詞の上限', () => {
-    expect(validateMusicForm(form({ lyrics: 'あ'.repeat(MUSIC_LYRICS_MAX_LENGTH) })).ok).toBe(true)
-    expect(errorsOf({ lyrics: 'あ'.repeat(MUSIC_LYRICS_MAX_LENGTH + 1) }).lyrics).toBe('歌詞は 4000 字までです')
+    expect(validateMusicForm(form({ instrumental: false, lyrics: 'あ'.repeat(MUSIC_LYRICS_MAX_LENGTH) })).ok).toBe(true)
+    expect(errorsOf({ instrumental: false, lyrics: 'あ'.repeat(MUSIC_LYRICS_MAX_LENGTH + 1) }).lyrics).toBe('歌詞は 4000 字までです')
   })
 
   it('長さは 10〜240 秒。端は通し、外と空と数でないものは止める', () => {
@@ -95,6 +109,8 @@ describe('validateMusicForm', () => {
     expect(plannedMusicTool('stable_audio_medium_music', true)).toBe('stable_audio_medium_music')
     expect(plannedMusicTool('ace_step', true)).toBe('ace_step')
     expect(plannedMusicTool('ace_step', false)).toBe('ace_step')
+    expect(plannedMusicTool('minimax_music3', false)).toBe('minimax_music3')
+    expect(plannedMusicTool('minimax_music3', true)).toBe('minimax_music3')
   })
 
   it('Stable Audio の長さは 10〜190 秒', () => {

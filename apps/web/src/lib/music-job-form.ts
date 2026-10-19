@@ -32,7 +32,8 @@ export const INITIAL_MUSIC_FORM: MusicForm = {
   prompt: '',
   lyrics: '',
   durationSec: String(DEFAULT_MUSIC_DURATION_SEC),
-  instrumental: false,
+  // 既定は歌を入れない（BGM）。歌を入れるかはどの AI でも画面で選ぶ。
+  instrumental: true,
   count: '1',
 }
 
@@ -55,8 +56,16 @@ const promptError = (prompt: string): string | undefined => {
   return undefined
 }
 
-const lyricsError = (lyrics: string): string | undefined =>
-  lyrics.length > MUSIC_LYRICS_MAX_LENGTH ? `歌詞は ${String(MUSIC_LYRICS_MAX_LENGTH)} 字までです` : undefined
+/**
+ * 歌を入れるのに歌詞が空なら止める。どの AI も歌詞が空なら歌なしで作る（`normalizeMusicSpec`）ので、
+ * 歌を入れるつもりで歌なしが届かないようにする。
+ */
+const lyricsError = (lyrics: string, instrumental: boolean): string | undefined => {
+  if (!instrumental && lyrics.trim() === '') {
+    return '歌を入れるときは歌詞を書いてください（入れないなら「歌を入れない」を選んでください）'
+  }
+  return lyrics.length > MUSIC_LYRICS_MAX_LENGTH ? `歌詞は ${String(MUSIC_LYRICS_MAX_LENGTH)} 字までです` : undefined
+}
 
 /** 選んでいる曲の AI が分からない間は、歌える AI（ACE-Step）の範囲で確かめる。API がもう一度確かめる。 */
 export const DEFAULT_MUSIC_LIMITS: MusicToolLimits = musicToolLimits('ace_step')
@@ -81,7 +90,9 @@ const countError = (value: number | null): string | undefined =>
  */
 export const plannedMusicTool = (chosen: AiToolId, instrumental: boolean): AiToolId => {
   const shortest = musicToolLimits(chosen).durationSec.min
-  const decision = decideMusicTool(chosen, { lyrics: '', instrumental, durationSec: shortest }, () => true)
+  // 歌を入れるなら歌詞がある前提で見る（空なら欄の確かめが止める）。
+  const lyrics = instrumental ? '' : '歌詞'
+  const decision = decideMusicTool(chosen, { lyrics, instrumental, durationSec: shortest }, () => true)
   return decision.state === 'ready' ? decision.tool : chosen
 }
 
@@ -97,7 +108,7 @@ export const validateMusicForm = (form: MusicForm, limits: MusicToolLimits = DEF
   const count = toNumber(form.count)
   const found: ReadonlyArray<readonly [MusicFormField, string | undefined]> = [
     ['prompt', promptError(prompt)],
-    ['lyrics', lyricsError(lyrics)],
+    ['lyrics', lyricsError(lyrics, instrumental)],
     ['durationSec', durationError(durationSec, limits)],
     ['count', countError(count)],
   ]

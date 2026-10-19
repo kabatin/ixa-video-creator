@@ -26,7 +26,7 @@ import {
   type LocalServerHttp,
 } from '@ixa/provider-video'
 import { AceStepJob, AceStepSubmitResponse, type AceStepOutputInfo } from './api.js'
-import { ACE_STEP_IDENTITY, ACE_STEP_WORKFLOW_ID, aceStepMusicModel } from './descriptor.js'
+import { ACE_STEP_IDENTITY, ACE_STEP_MUSIC_MODELS, aceStepWorkflowOf } from './descriptor.js'
 import { ensureAceStepRequest } from './request.js'
 
 /**
@@ -59,6 +59,7 @@ export type AceStepMusicProviderOptions = {
 const identity = ACE_STEP_IDENTITY
 const invalidCode = localServerInvalidResponseCode(identity)
 const jobPath = (jobId: string): string => `/v1/jobs/${encodeURIComponent(jobId)}`
+const maxCount = Math.max(...ACE_STEP_MUSIC_MODELS.map((model) => model.maxCount))
 
 /** 出来上がり 1 曲の置き場所。ジョブ ID は `LocalServerJobId` で検査済み（`../` を含まない）。 */
 const outputName = (jobId: string, index: number): string => `${jobId}-${String(index)}`
@@ -135,17 +136,19 @@ export const createAceStepMusicProvider = (options: AceStepMusicProviderOptions)
 
   return {
     id: identity.providerId,
-    models: [aceStepMusicModel],
+    models: ACE_STEP_MUSIC_MODELS,
     exclusiveResource: 'local-gpu',
 
     async submit(request: MusicGenerationRequest): Promise<ProviderJobHandle> {
       ensureAceStepRequest(request)
+      // 検査で知っているモデルだと確かめてある。
+      const workflow = aceStepWorkflowOf(request.model.id) ?? ''
       const key = idempotencyKeyOf(identity, request.idempotencyKey)
 
       const response = await localServerRequest(
         http,
         'POST',
-        `/v1/workflows/${ACE_STEP_WORKFLOW_ID}/jobs`,
+        `/v1/workflows/${encodeURIComponent(workflow)}/jobs`,
         {
           prompt: request.prompt,
           // 歌なしなら歌詞は送らない（サーバも無視するが、要らない文を流さない）。
@@ -213,8 +216,9 @@ export const createAceStepMusicProvider = (options: AceStepMusicProviderOptions)
             // 手元の GPU。費用は掛からない。
             costUsd: 0,
             raw: {
-              workflow: ACE_STEP_WORKFLOW_ID,
+              workflow: job.workflow,
               outputs: outputs.map(({ index, duration_sec, seed_used }) => ({ index, duration_sec, seed_used })),
+              ...(job.result.details === null || job.result.details === undefined ? {} : { details: job.result.details }),
               ...(job.timings === null || job.timings === undefined ? {} : { timings: job.timings }),
             },
           }
@@ -234,7 +238,7 @@ export const createAceStepMusicProvider = (options: AceStepMusicProviderOptions)
     async release(handle: ProviderJobHandle): Promise<void> {
       const jobId = decodeLocalServerJobRef(identity, handle.ref)
       await Promise.all(
-        Array.from({ length: aceStepMusicModel.maxCount }, (_, index) =>
+        Array.from({ length: maxCount }, (_, index) =>
           rm(localServerOutputPath(outputDir, outputName(jobId, index), 'wav'), { force: true }),
         ),
       )

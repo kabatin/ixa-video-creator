@@ -22,6 +22,8 @@ export type AceStepOutputInfo = z.infer<typeof AceStepOutputInfo>
 export const AceStepJobResult = z.object({
   outputs: z.array(AceStepOutputInfo).min(1),
   seed_used: z.number().int().nonnegative().nullable(),
+  /** MiniMax-Music3 が返す作り方の記録（実際に歌なしで作ったか `generation.instrumental` など）。中身は見ずに記録に残す。 */
+  details: z.record(z.unknown()).nullish(),
 })
 
 const timestamp = z.string().datetime({ offset: true })

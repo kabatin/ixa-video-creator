@@ -44,13 +44,16 @@ const renderDialog = (api: MusicJobApi, assets = assetStoreValue(), pollInterval
   )
 
 describe('曲を作る', () => {
-  it('歌なしにすると歌詞の欄が使えなくなり、歌詞は送らない', async () => {
+  /** どの AI でも、歌を入れるか入れないかを選ぶ。既定は入れない（BGM）。 */
+  it('歌を入れないにすると歌詞の欄が使えなくなり、歌詞は送らない', async () => {
     const api = fakeApi()
     renderDialog(api)
+    expect(screen.getByLabelText('歌を入れない')).toBeChecked()
     await userEvent.type(screen.getByLabelText('曲調'), 'lofi, piano')
-    await userEvent.type(screen.getByLabelText('歌詞（なくてもよい）'), 'らら')
-    await userEvent.click(screen.getByLabelText('歌なし（歌詞は使いません）'))
-    expect(screen.getByLabelText('歌詞（なくてもよい）')).toBeDisabled()
+    await userEvent.click(screen.getByLabelText('歌を入れる'))
+    await userEvent.type(screen.getByLabelText('歌詞'), 'らら')
+    await userEvent.click(screen.getByLabelText('歌を入れない'))
+    expect(screen.getByLabelText('歌詞')).toBeDisabled()
     await userEvent.selectOptions(screen.getByLabelText('何曲'), '3')
     await userEvent.click(screen.getByRole('button', { name: '曲を作る' }))
 
@@ -66,17 +69,25 @@ describe('曲を作る', () => {
     expect(await screen.findByText('受け付けました。閉じても作り続けます。')).toBeInTheDocument()
   })
 
-  /** 制作者 2026-10-19。既定の Stable Audio は歌なしで始め、歌ありにすれば ACE-Step で作ると言う。 */
-  it('曲の AI が Stable Audio なら、そう言い、歌なしで始めて長さは 190 秒までと出す', async () => {
+  /** 歌詞が空だと、どの AI も歌なしで作る。歌を入れるつもりで歌なしが届かないよう、ここで止める。 */
+  it('歌を入れるのに歌詞が空なら頼まず、そう言う', async () => {
+    const api = fakeApi()
+    renderDialog(api)
+    await userEvent.type(screen.getByLabelText('曲調'), 'j-pop')
+    await userEvent.click(screen.getByLabelText('歌を入れる'))
+    await userEvent.click(screen.getByRole('button', { name: '曲を作る' }))
+    expect(await screen.findByText(/歌を入れるときは歌詞を書いてください/)).toBeInTheDocument()
+    expect(api.generateMusic).not.toHaveBeenCalled()
+  })
+
+  /** 制作者 2026-10-19。既定の Stable Audio は歌なしで作り、歌を入れるなら歌える AI で作ると言う。 */
+  it('曲の AI が Stable Audio なら、そう言い、歌を入れないで長さは 190 秒までと出す', async () => {
     const api = fakeApi({ musicTool: vi.fn().mockResolvedValue('stable_audio_medium_music') })
     renderDialog(api)
     expect(await screen.findByText('曲を作る AI: Stable Audio 3 Medium（歌なし）')).toBeInTheDocument()
-    const instrumental = screen.getByLabelText('歌なし（歌詞は使いません）')
-    await waitFor(() => {
-      expect(instrumental).toBeChecked()
-    })
-    expect(instrumental).toBeEnabled()
-    expect(screen.getByLabelText('歌詞（なくてもよい）')).toBeDisabled()
+    expect(screen.getByLabelText('歌を入れない')).toBeChecked()
+    expect(screen.getByLabelText('歌を入れる')).toBeEnabled()
+    expect(screen.getByLabelText('歌詞')).toBeDisabled()
     expect(screen.getByText('10〜190 秒')).toBeInTheDocument()
     expect(screen.queryByText('歌ありは ACE-Step 1.5 で作ります')).not.toBeInTheDocument()
 
@@ -93,18 +104,15 @@ describe('曲を作る', () => {
     })
   })
 
-  it('曲の AI が Stable Audio でも、歌ありにすれば歌詞を書け、ACE-Step で作ると言い、長さは 240 秒まで', async () => {
+  it('曲の AI が Stable Audio でも、歌を入れれば歌詞を書け、ACE-Step で作ると言い、長さは 240 秒まで', async () => {
     const api = fakeApi({ musicTool: vi.fn().mockResolvedValue('stable_audio_medium_music') })
     renderDialog(api)
-    const instrumental = await screen.findByLabelText('歌なし（歌詞は使いません）')
-    await waitFor(() => {
-      expect(instrumental).toBeChecked()
-    })
-    await userEvent.click(instrumental)
+    await screen.findByText('曲を作る AI: Stable Audio 3 Medium（歌なし）')
+    await userEvent.click(screen.getByLabelText('歌を入れる'))
     expect(screen.getByText('歌ありは ACE-Step 1.5 で作ります')).toBeInTheDocument()
     expect(screen.getByText('10〜240 秒')).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('曲調'), 'j-pop')
-    await userEvent.type(screen.getByLabelText('歌詞（なくてもよい）'), 'らら')
+    await userEvent.type(screen.getByLabelText('歌詞'), 'らら')
     await userEvent.click(screen.getByRole('button', { name: '曲を作る' }))
     await waitFor(() => {
       expect(api.generateMusic).toHaveBeenCalledWith(PROJECT_ID, {
@@ -117,11 +125,23 @@ describe('曲を作る', () => {
     })
   })
 
-  it('曲の AI が ACE-Step なら、歌ありのまま選べる', async () => {
+  it('曲の AI が ACE-Step なら、歌を入れる・入れないのどちらも選べ、そのまま作る', async () => {
     renderDialog(fakeApi())
     expect(await screen.findByText('曲を作る AI: ACE-Step 1.5')).toBeInTheDocument()
-    expect(screen.getByLabelText('歌なし（歌詞は使いません）')).toBeEnabled()
+    await userEvent.click(screen.getByLabelText('歌を入れる'))
+    expect(screen.getByLabelText('歌詞')).toBeEnabled()
     expect(screen.getByText('10〜240 秒')).toBeInTheDocument()
+    expect(screen.queryByText(/歌ありは .* で作ります/)).not.toBeInTheDocument()
+  })
+
+  /** MiniMax-Music3 Community License は製品の画面に「MiniMax-Music3」を目立つように出すことを求める。 */
+  it('曲の AI が MiniMax-Music3 なら、その名前と、遅いこと・長さが上限であることを出す', async () => {
+    renderDialog(fakeApi({ musicTool: vi.fn().mockResolvedValue('minimax_music3') }))
+    expect(await screen.findByText('曲を作る AI: MiniMax-Music3')).toBeInTheDocument()
+    expect(screen.getByText(/60 秒の曲で約 10 分/)).toBeInTheDocument()
+    expect(screen.getByText(/早く終わる/)).toBeInTheDocument()
+    await userEvent.click(screen.getByLabelText('歌を入れる'))
+    expect(screen.queryByText(/歌ありは .* で作ります/)).not.toBeInTheDocument()
   })
 
   it('欄が正しくなければ頼まず、欄ごとに理由を出す', async () => {

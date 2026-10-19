@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { MUSIC_DURATION_MAX_SEC, MUSIC_DURATION_MIN_SEC, STABLE_AUDIO_MUSIC_DURATION_MAX_SEC } from '../music/music-job.js'
-import { MUSIC_VOCAL_FALLBACK_TOOL, decideMusicTool, musicSpecProblem, musicToolLimits } from '../music/music-tool.js'
+import { AI_TOOLS, type AiToolId } from '../ai/ai-tools.js'
+import {
+  MUSIC_VOCAL_FALLBACK_ORDER,
+  MusicAiToolId,
+  decideMusicTool,
+  musicSpecProblem,
+  musicToolLimits,
+  normalizeMusicSpec,
+} from '../music/music-tool.js'
 
 /** 曲の AI ごとの違い。Stable Audio は歌なしだけ・190 秒まで（sfx-api の `GET /v1/capabilities`）。 */
 const instrumental = { lyrics: '', instrumental: true, durationSec: 30 }
@@ -58,8 +66,8 @@ describe('decideMusicTool', () => {
   const vocal = { lyrics: '[verse]\nはしれ', instrumental: false, durationSec: 60 }
   const usable = (...tools: string[]) => (tool: string) => tools.includes(tool)
 
-  it('歌える AI は ACE-Step', () => {
-    expect(MUSIC_VOCAL_FALLBACK_TOOL).toBe('ace_step')
+  it('歌ありを回す先は ACE-Step、次に MiniMax-Music3（速い方から）', () => {
+    expect(MUSIC_VOCAL_FALLBACK_ORDER).toEqual(['ace_step', 'minimax_music3'])
   })
 
   it('選んだ AI で作れるならそのまま（回さない）', () => {
@@ -71,12 +79,37 @@ describe('decideMusicTool', () => {
     expect(decideMusicTool('ace_step', vocal, usable())).toEqual({ state: 'ready', tool: 'ace_step', rerouted: false })
   })
 
-  it('Stable Audio に歌あり（歌詞あり・なし）が来て ACE-Step が使えれば、ACE-Step に回す', () => {
+  it('Stable Audio に歌詞のある歌ありが来て ACE-Step が使えれば、ACE-Step に回す', () => {
     const rerouted = { state: 'ready', tool: 'ace_step', rerouted: true }
     expect(decideMusicTool('stable_audio_medium_music', vocal, usable('ace_step'))).toEqual(rerouted)
-    expect(decideMusicTool('stable_audio_medium_music', { ...vocal, lyrics: '' }, usable('ace_step'))).toEqual(rerouted)
     // 歌ありなら長さは ACE-Step の範囲（240 秒まで）。
     expect(decideMusicTool('stable_audio_medium_music', { ...vocal, durationSec: 240 }, usable('ace_step'))).toEqual(rerouted)
+  })
+
+  /** 歌詞の無い歌ありは、どのエンジンでも歌なしになる（`normalizeMusicSpec`）。回さずに選んだ AI で作る。 */
+  it('歌詞の無い歌ありは回さず、Stable Audio のまま作る', () => {
+    expect(decideMusicTool('stable_audio_medium_music', { ...vocal, lyrics: '' }, usable('ace_step'))).toEqual({
+      state: 'ready',
+      tool: 'stable_audio_medium_music',
+      rerouted: false,
+    })
+  })
+
+  it('ACE-Step が使えず MiniMax-Music3 が使えれば、MiniMax-Music3 に回す', () => {
+    expect(decideMusicTool('stable_audio_medium_music', vocal, usable('minimax_music3'))).toEqual({
+      state: 'ready',
+      tool: 'minimax_music3',
+      rerouted: true,
+    })
+  })
+
+  it('MiniMax-Music3 を選んでいれば、歌あり・歌なしのどちらもそのまま（回さない）', () => {
+    expect(decideMusicTool('minimax_music3', vocal, usable())).toEqual({ state: 'ready', tool: 'minimax_music3', rerouted: false })
+    expect(decideMusicTool('minimax_music3', instrumental, usable())).toEqual({
+      state: 'ready',
+      tool: 'minimax_music3',
+      rerouted: false,
+    })
   })
 
   it('ACE-Step が使えなければ、今までどおりの理由で断る', () => {
@@ -101,5 +134,43 @@ describe('decideMusicTool', () => {
       state: 'rejected',
       reason: expect.stringMatching(/10〜190 秒/) as unknown,
     })
+  })
+})
+
+/** AI が増えても規則の表が欠けないように（足した AI は必ずここで歌えるか・長さを決める）。 */
+describe('曲の AI の表', () => {
+  const musicTools = (Object.keys(AI_TOOLS) as AiToolId[]).filter(
+    (id) => id !== 'stub' && AI_TOOLS[id].purposes.includes('music'),
+  )
+
+  it('曲に使える AI はすべて MusicAiToolId にある（歌えるか・長さを決めてある）', () => {
+    expect([...MusicAiToolId.options].sort()).toEqual([...musicTools].sort())
+  })
+
+  it('歌える AI はすべて、歌ありを回す先の並びにある', () => {
+    const vocal = musicTools.filter((id) => musicToolLimits(id).vocals)
+    expect([...MUSIC_VOCAL_FALLBACK_ORDER].sort()).toEqual([...vocal].sort())
+  })
+
+  it('MiniMax-Music3 は歌えて、長さは 10〜240 秒（上限。曲が早く終わることがある）', () => {
+    expect(musicToolLimits('minimax_music3')).toEqual({ vocals: true, durationSec: { min: 10, max: 240 } })
+  })
+})
+
+/** 歌ありで歌詞が空なら、どの AI も歌なしで作る（ace-step-api の `empty_means_instrumental`）。記録もそれに揃える。 */
+describe('normalizeMusicSpec', () => {
+  it('歌ありでも歌詞が空（空白だけ）なら歌なしにする', () => {
+    expect(normalizeMusicSpec({ lyrics: ' \n', instrumental: false, durationSec: 30 })).toEqual({
+      lyrics: ' \n',
+      instrumental: true,
+      durationSec: 30,
+    })
+  })
+
+  it('歌詞があれば歌ありのまま。歌なしは歌なしのまま', () => {
+    const vocal = { lyrics: 'はしれ', instrumental: false, durationSec: 30 }
+    expect(normalizeMusicSpec(vocal)).toEqual(vocal)
+    const none = { lyrics: 'はしれ', instrumental: true, durationSec: 30 }
+    expect(normalizeMusicSpec(none)).toEqual(none)
   })
 })
