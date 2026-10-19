@@ -131,7 +131,7 @@ export const extractJsonText = (resultText: string): string => {
   return trimmed
 }
 
-const parseJson = (
+export const parseJson = (
   text: string,
   stage: 'envelope' | 'result',
   context: VisionReviewerErrorContext,
@@ -145,7 +145,7 @@ const parseJson = (
   }
 }
 
-const formatIssues = (error: z.ZodError): readonly string[] =>
+export const formatIssues = (error: z.ZodError): readonly string[] =>
   error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
 
 

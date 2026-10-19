@@ -34,8 +34,11 @@ export type ResponseStage = 'envelope' | 'result'
  * `command` は**プロンプト本文を伏せた**形で渡すこと。プロンプトには都度発行した
  * 署名付き URL が含まれており、そのままログへ流すと CLAUDE.md 規約 7 の意図に反する。
  */
+/** どの判定で落ちたか。動画のレビュア種別と、作った画像のチェック（ADR-0055）。 */
+export type VisionCheckName = ReviewerType | 'image_check'
+
 export type VisionReviewerErrorContext = {
-  readonly reviewer: ReviewerType
+  readonly reviewer: VisionCheckName
   /** 実行したコマンド（プロンプト本文は伏字）。何を叩いて失敗したかを残すため。 */
   readonly command: string
   /** どのアダプタが投げたか。複数のレビュアを並べたときに発生源を特定するため。 */
@@ -50,7 +53,7 @@ export const excerpt = (value: string, maxLength: number = MAX_EXCERPT_LENGTH): 
 
 export class VisionReviewerError extends Error {
   readonly code: VisionReviewerErrorCode
-  readonly reviewer: ReviewerType
+  readonly reviewer: VisionCheckName
   readonly command: string
   readonly adapter: string
 
