@@ -109,6 +109,11 @@ export type AssetStoreValue = {
   readonly tracks: Loaded<readonly MusicTrack[]>
   /** 声（ADR-0038）。ナレーションの行の「話す声」とキャラクターの「声」の選択肢にもなる。 */
   readonly voices: Loaded<readonly WireVoice[]>
+  /**
+   * テロップのスタイルを読み直す合図（2026-10-19）。スタイルの一覧はインスペクターが自分で読むので、ここには持たない。
+   * 素材の読み直し（`reloadAll`。取り消しの後）で 1 つ進む。
+   */
+  readonly textStylesEpoch: number
   readonly actions: AssetActions
 }
 
@@ -197,6 +202,7 @@ export const AssetStoreProvider = ({
   const [tracks, setTracks] = useLoadedList('楽曲', () => api.listMusicTracks(projectId), projectId)
   const [voices, setVoices] = useLoadedList('声', () => api.listVoices(projectId), projectId)
   const [looks, setLooks] = useState<ReadonlyMap<CharacterId, readonly CharacterLook[]>>(new Map())
+  const [textStylesEpoch, setTextStylesEpoch] = useState(0)
 
   /** Look はキャラクターが読めたら一緒に読む（ツリーで子として並べるため）。 */
   const readyCharacters = characters.state === 'ready' ? characters.value : null
@@ -394,6 +400,7 @@ export const AssetStoreProvider = ({
         setBrandAssets(loadedFromSettled('ブランド資産', nextBrandAssets))
         setTracks(loadedFromSettled('楽曲', nextTracks))
         setVoices(loadedFromSettled('声', nextVoices))
+        setTextStylesEpoch((epoch) => epoch + 1)
       },
       createVoice: async (name) => {
         const { settings } = await api.getAiSettings()
@@ -430,8 +437,8 @@ export const AssetStoreProvider = ({
   )
 
   const value = useMemo<AssetStoreValue>(
-    () => ({ characters, looks, locations, brandAssets, tracks, voices, actions }),
-    [characters, looks, locations, brandAssets, tracks, voices, actions],
+    () => ({ characters, looks, locations, brandAssets, tracks, voices, textStylesEpoch, actions }),
+    [characters, looks, locations, brandAssets, tracks, voices, textStylesEpoch, actions],
   )
 
   return <AssetStoreContext.Provider value={value}>{children}</AssetStoreContext.Provider>

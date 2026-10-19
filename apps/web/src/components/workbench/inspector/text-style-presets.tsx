@@ -1,9 +1,10 @@
 'use client'
 
 import type { ProjectId, TextStyle, TimelineClipId } from '@ixa/domain'
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useContext, useEffect, useId, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ConfirmButton } from '@/components/ui/confirm-button'
+import { AssetStoreContext } from '@/components/workbench/asset-store'
 import { FieldRow, INPUT_CLASS, Section } from '@/components/workbench/ui/section'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
@@ -47,6 +48,8 @@ export const TextStylePresets = ({
   const [reflect, setReflect] = useState(true)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ readonly tone: 'ok' | 'error'; readonly text: string } | null>(null)
+  // 取り消しでスタイルが戻ったら読み直す（素材の読み直しの合図。ワークベンチの外では 0 のまま）。
+  const reloadEpoch = useContext(AssetStoreContext)?.textStylesEpoch ?? 0
 
   useEffect(() => {
     let alive = true
@@ -63,7 +66,7 @@ export const TextStylePresets = ({
     return () => {
       alive = false
     }
-  }, [client, projectId])
+  }, [client, projectId, reloadEpoch])
 
   const preset = presets?.find((candidate) => candidate.id === selected) ?? null
   const users = preset === null ? [] : textClips.filter((clip) => clip.styleId === preset.id)

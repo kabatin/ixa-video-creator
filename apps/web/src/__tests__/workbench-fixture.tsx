@@ -124,6 +124,7 @@ export const assetStoreValue = (patch: Partial<AssetStoreValue> = {}): AssetStor
   brandAssets: { state: 'ready', value: [] },
   tracks: { state: 'ready', value: [] },
   voices: { state: 'ready', value: [] },
+  textStylesEpoch: 0,
   actions: {
     createCharacter: vi.fn(),
     updateCharacter: vi.fn(),
