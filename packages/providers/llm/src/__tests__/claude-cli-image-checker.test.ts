@@ -106,3 +106,13 @@ describe('Claude CLI の画像チェックの異常系（とりあえず通さ�
     await expect(createClaudeCliImageChecker({ runner }).check(request())).rejects.toBeInstanceOf(CliExitFailedError)
   })
 })
+
+describe('Claude CLI の画像チェックの長さの頼み方', () => {
+  /** 実機で 500 字を超える直し方が返り、検査で落ちた（2026-10-19）。上限より短く頼む。 */
+  it('理由と直し方の長さを、検査の上限より短く頼む', () => {
+    const prompt = buildImageCheckPrompt(request())
+    expect(prompt).toContain('100 字以内')
+    expect(prompt).toContain('250 字以内')
+    expect(prompt).toMatch(/"pass" なら promptDelta は null/)
+  })
+})

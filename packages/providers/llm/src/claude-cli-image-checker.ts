@@ -1,4 +1,10 @@
-import { ImageCheckResult, type ImageJobKind } from '@ixa/domain'
+import {
+  IMAGE_CHECK_ISSUE_MESSAGE_MAX_LENGTH,
+  IMAGE_CHECK_MAX_ISSUES,
+  IMAGE_CHECK_PROMPT_DELTA_MAX_LENGTH,
+  ImageCheckResult,
+  type ImageJobKind,
+} from '@ixa/domain'
 import { z } from 'zod'
 import { DEFAULT_CLI_TIMEOUT_MS, execFileCliRunner, redactCommand, type CliRunResult, type CliRunner } from '@ixa/provider-core'
 import {
@@ -56,6 +62,13 @@ const WHAT: Readonly<Record<ImageJobKind, string>> = {
   key_art: 'YouTube のサムネイルの背景になる 1 枚の絵',
 }
 
+/**
+ * 指示に書く長さ。**検査の上限より短く頼む**（実機で 500 字を超える直し方が返り、検査で落ちた。2026-10-19）。
+ * 上限そのものは domain の値。ここは余裕を持たせた頼み方だけ。
+ */
+const ISSUE_HINT = Math.floor(IMAGE_CHECK_ISSUE_MESSAGE_MAX_LENGTH / 2)
+const DELTA_HINT = Math.floor(IMAGE_CHECK_PROMPT_DELTA_MAX_LENGTH / 2)
+
 const imageLines = (title: string, images: readonly ReviewImage[]): string =>
   images.length === 0 ? `${title}: なし` : [`${title}:`, ...images.map((image) => `- ${image.label}: ${image.path}`)].join('\n')
 
@@ -89,11 +102,12 @@ export const buildImageCheckPrompt = (request: ImageCheckRequest): string =>
     '{',
     '  "verdict": "pass" | "review" | "retry",',
     '  "score": 0 以上 1 以下の数値（1 が申し分ない）,',
-    '  "issues": [{ "kind": "anatomy" | "artifact" | "text" | "identity" | "prompt" | "look", "message": 日本語の 1 文 }],',
-    '  "promptDelta": やり直すときに指示へ足す英語の具体的な直し方。直す点が無ければ null',
+    `  "issues": [{ "kind": "anatomy" | "artifact" | "text" | "identity" | "prompt" | "look", "message": 日本語の 1 文（${String(ISSUE_HINT)} 字以内） }],`,
+    `  "promptDelta": やり直すときに指示へ足す英語の具体的な直し方（${String(DELTA_HINT)} 字以内の 1〜2 文）。直す点が無ければ null`,
     '}',
     '',
-    'issues は 8 件まで。"retry" なら 1 件以上。問題が無ければ空の配列にしてください。',
+    `issues は ${String(IMAGE_CHECK_MAX_ISSUES)} 件まで。"retry" なら 1 件以上。問題が無ければ空の配列にしてください。`,
+    '"pass" なら promptDelta は null にしてください。',
     'promptDelta に「頑張って」のような抽象的な指示を書かないでください。',
   ].join('\n')
 
