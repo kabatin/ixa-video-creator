@@ -2,6 +2,7 @@ import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { retryImageJobInput } from '@ixa/db'
 import {
+  enforceImageCheckVerdict,
   pickImageToApply,
   shouldAutoRetry,
   type ImageCheck,
@@ -82,7 +83,9 @@ const runCheck = async (
   if (adapter === undefined || job.mediaAssetId === null) return skipped(CHECK_NO_TOOL_NOTE)
   try {
     const { result, costUsd } = await askChecker({ ...deps, ...adapter }, job, job.mediaAssetId)
-    return await deps.imageChecks.create({ imageJobId: job.id, outcome: 'checked', ...result, note: null, costUsd })
+    // 文字と頭身だけの「やり直す」は要確認に下げる（AI の言葉だけに頼らない。domain の規則）。
+    const enforced = enforceImageCheckVerdict(result)
+    return await deps.imageChecks.create({ imageJobId: job.id, outcome: 'checked', ...enforced, note: null, costUsd })
   } catch (error) {
     deps.logger.warn({ imageJobId: job.id, kind: job.kind, err: error }, '絵をチェックできませんでした。チェックせずに使います')
     return deps.imageChecks.create({

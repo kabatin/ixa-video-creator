@@ -215,6 +215,25 @@ describe('手元の AI での自動のやり直し', () => {
     expect(await manualStartFrameOf(deps.shotReferences, shot.id)).toBe(jobs[1]?.mediaAssetId)
   })
 
+  /** チームリーダー 2026-10-19。文字と頭身だけの「やり直す」は、AI が言っても要確認に下げる（GPU を使わない）。 */
+  it('意味の無い文字・頭身だけの「やり直す」は、やり直さずに要確認として当てる', async () => {
+    const textOnly: ImageCheckResult = {
+      verdict: 'retry',
+      score: 0.4,
+      issues: [
+        { kind: 'text', message: '看板の文字が崩れています' },
+        { kind: 'proportion', message: '頭身が参照より高い' },
+      ],
+      promptDelta: 'no lettering on signs',
+    }
+    const { job, deps, provider } = setup({ results: [textOnly] })
+    await runImageJob(deps, { imageJobId: job.id })
+
+    expect(provider.requests).toHaveLength(1)
+    expect(deps.imageChecks.snapshot()).toMatchObject([{ verdict: 'review', issues: textOnly.issues }])
+    expect((await deps.imageJobs.findById(job.id))?.appliedAt).not.toBeNull()
+  })
+
   it('上限を 0 にすると自動でやり直さない', async () => {
     const { job, deps, provider } = setup({ results: [RETRY(0.3)], maxRetries: 0 })
     await runImageJob(deps, { imageJobId: job.id })
