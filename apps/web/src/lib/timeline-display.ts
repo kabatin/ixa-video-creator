@@ -29,8 +29,17 @@ export const EDITABLE_TRACKS: readonly TimelineTrack[] = TimelineTrackSchema.opt
 
 export type TimelineRow = typeof VIDEO1_ROW | TimelineTrack
 
+/**
+ * 帯を縦に並べる順（制作者 2026-10-19「VIDEO・Transition・ナレーション・テロップ・VFX・SFX」）。
+ * ドメインの enum の並びは画面の並びではないので、ここで決める。enum に足したらここにも足す（テストが見る）。
+ */
+export const TRACK_DISPLAY_ORDER: readonly TimelineTrack[] = ['VIDEO2', 'TEXT', 'VFX', 'SFX']
+
+/** 映像の帯。VIDEO1 のすぐ下（Transition より上）に出す。 */
+const VIDEO_TRACKS: readonly TimelineTrack[] = ['VIDEO2']
+
 /** 画面に縦に並べる行。VIDEO1 が一番上。 */
-export const TIMELINE_ROWS: readonly TimelineRow[] = [VIDEO1_ROW, ...EDITABLE_TRACKS]
+export const TIMELINE_ROWS: readonly TimelineRow[] = [VIDEO1_ROW, ...TRACK_DISPLAY_ORDER]
 
 /**
  * **いま画面から置けるトラック。**
@@ -59,7 +68,7 @@ export const visibleTracks = (
   droppable: readonly TimelineTrack[] = [],
 ): readonly TimelineTrack[] => {
   const used = new Set(clips.map((clip) => clip.track))
-  return EDITABLE_TRACKS.filter((track) => isInsertableTrack(track) || droppable.includes(track) || used.has(track))
+  return TRACK_DISPLAY_ORDER.filter((track) => isInsertableTrack(track) || droppable.includes(track) || used.has(track))
 }
 
 /**
@@ -71,8 +80,16 @@ export const hiddenTracks = (
   droppable: readonly TimelineTrack[] = [],
 ): readonly TimelineTrack[] => {
   const shown = new Set(visibleTracks(clips, droppable))
-  return EDITABLE_TRACKS.filter((track) => !shown.has(track))
+  return TRACK_DISPLAY_ORDER.filter((track) => !shown.has(track))
 }
+
+/** 出す帯を、VIDEO1 の下に置く映像の帯と、Transition・ナレーションの下に置く残りに分ける。 */
+export const timelineTrackGroups = (
+  shown: readonly TimelineTrack[],
+): { readonly video: readonly TimelineTrack[]; readonly rest: readonly TimelineTrack[] } => ({
+  video: shown.filter((track) => VIDEO_TRACKS.includes(track)),
+  rest: shown.filter((track) => !VIDEO_TRACKS.includes(track)),
+})
 
 const ROW_LABELS: Readonly<Record<TimelineRow, string>> = {
   VIDEO1: 'VIDEO1（Shot）',

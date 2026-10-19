@@ -45,6 +45,9 @@ import {
   isInsertableTrack,
   visibleTracks,
   transitionBarLabel,
+  timelineTrackGroups,
+  TRACK_DISPLAY_ORDER,
+  EDITABLE_TRACKS,
 } from '@/lib/timeline-display'
 import {
   type TimelineIssueView,
@@ -390,6 +393,18 @@ describe('出す帯を決める', () => {
   /** ここを落とすと、過去に入れたクリップが画面から消える。 */
   it('置けない帯でも中身があれば必ず出す', () => {
     expect(visibleTracks([clipOn('VIDEO2')])).toContain('VIDEO2')
+  })
+
+  /** 並びは VIDEO・Transition・ナレーション・テロップ・VFX・SFX（制作者 2026-10-19）。VIDEO2 は VIDEO1 の下。 */
+  it('映像の帯と、Transition・ナレーションの下に並べる帯に分け、テロップを VFX より上にする', () => {
+    const all = visibleTracks([clipOn('VIDEO2'), clipOn('SFX')])
+    expect(all).toEqual(['VIDEO2', 'TEXT', 'VFX', 'SFX'])
+    expect(timelineTrackGroups(all)).toEqual({ video: ['VIDEO2'], rest: ['TEXT', 'VFX', 'SFX'] })
+    expect(hiddenTracks([])).toEqual(['VIDEO2', 'SFX'])
+  })
+
+  it('並びの表は、ドメインの帯をちょうど 1 回ずつ持つ（enum に足して並びに足し忘れると帯が消える）', () => {
+    expect([...TRACK_DISPLAY_ORDER].sort()).toEqual([...EDITABLE_TRACKS].sort())
   })
 
   it('隠した帯の名前を返す。1 つも隠していなければ空', () => {

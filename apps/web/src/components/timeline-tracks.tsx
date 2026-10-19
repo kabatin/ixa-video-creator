@@ -19,6 +19,7 @@ import {
   rulerTicks,
   secondsToPx,
   timelineRowLabel,
+  timelineTrackGroups,
   TIMELINE_LANE_HEIGHT_PX,
   TIMELINE_TRANSITION_ROW_HEIGHT_PX,
   type TimeSpan,
@@ -230,6 +231,27 @@ export const TimelineTracks = ({
   const droppable: readonly TimelineTrack[] = onDropAudio === undefined ? [] : ['SFX']
   const shownTracks = visibleTracks(clips, droppable)
   const hidden = hiddenTracks(clips, droppable)
+  const trackGroups = timelineTrackGroups(shownTracks)
+
+  const renderTrackRow = (track: TimelineTrack): ReactNode => (
+    <Row key={track} label={timelineRowLabel(track)} contentWidthPx={contentWidthPx}>
+      {track === 'SFX' && motionMarks !== undefined && (
+        <MotionMarks marks={motionMarks.marks} pxPerSec={pxPerSec} onPlayFrom={motionMarks.onPlayFrom} />
+      )}
+      {track === 'SFX' && onDropAudio !== undefined ? (
+        <AudioDrop
+          pxPerSec={pxPerSec}
+          durationSec={durationSec}
+          onDrop={onDropAudio}
+          {...(onDropSfxAsset === undefined ? {} : { onDropAsset: onDropSfxAsset })}
+        >
+          {renderTrack(track)}
+        </AudioDrop>
+      ) : (
+        renderTrack(track)
+      )}
+    </Row>
+  )
 
   const renderTrack = (track: TimelineTrack): ReactNode => {
     const lanes = lanesForTrack(clips, track)
@@ -342,6 +364,9 @@ export const TimelineTracks = ({
           )}
         </Row>
 
+        {/* VIDEO2（重ね素材）は映像の仲間なので VIDEO1 のすぐ下（制作者 2026-10-19 の並び）。 */}
+        {trackGroups.video.map(renderTrackRow)}
+
         <Row label="Transition" contentWidthPx={contentWidthPx}>
           <TimelineTransitionRow
             points={transitionPoints}
@@ -366,25 +391,7 @@ export const TimelineTracks = ({
           </Row>
         )}
 
-        {shownTracks.map((track) => (
-          <Row key={track} label={timelineRowLabel(track)} contentWidthPx={contentWidthPx}>
-            {track === 'SFX' && motionMarks !== undefined && (
-              <MotionMarks marks={motionMarks.marks} pxPerSec={pxPerSec} onPlayFrom={motionMarks.onPlayFrom} />
-            )}
-            {track === 'SFX' && onDropAudio !== undefined ? (
-              <AudioDrop
-                pxPerSec={pxPerSec}
-                durationSec={durationSec}
-                onDrop={onDropAudio}
-                {...(onDropSfxAsset === undefined ? {} : { onDropAsset: onDropSfxAsset })}
-              >
-                {renderTrack(track)}
-              </AudioDrop>
-            ) : (
-              renderTrack(track)
-            )}
-          </Row>
-        ))}
+        {trackGroups.rest.map(renderTrackRow)}
 
         {showPlayhead && <PlayheadLine durationSec={durationSec} pxPerSec={pxPerSec} />}
         {overlay}

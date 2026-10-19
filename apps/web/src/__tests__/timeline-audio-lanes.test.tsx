@@ -1,3 +1,4 @@
+import { ProjectId, TimelineClipId, newId, type TimelineClip } from '@ixa/domain'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { TimelineTracks } from '@/components/timeline-tracks'
@@ -118,5 +119,34 @@ describe('ナレーションのレーン', () => {
   it('タイムラインにはナレーションの行として出る（渡したときだけ）', () => {
     tracks({ narrationLane: (px) => <NarrationLane blocks={[block]} pxPerSec={px} onMove={vi.fn()} /> })
     expect(screen.getByText('ナレーション')).toBeInTheDocument()
+  })
+})
+
+/** 帯の並び（制作者 2026-10-19）: VIDEO・Transition・ナレーション・テロップ・VFX・SFX。楽曲の波形は一番上のまま。 */
+describe('帯の並び', () => {
+  it('VIDEO2 は VIDEO1 の下、テロップは VFX の上、効果音は一番下', () => {
+    const video2: TimelineClip = {
+      id: newId(TimelineClipId),
+      projectId: newId(ProjectId),
+      track: 'VIDEO2',
+      startSec: 0,
+      durationSec: 1,
+      layer: 0,
+      content: { type: 'text', templateKey: 'plain', params: { text: 'a' } },
+      opacity: 1,
+      createdAt: new Date(),
+    }
+    tracks({
+      clips: [video2],
+      onDropAudio: vi.fn(),
+      narrationLane: () => null,
+      audioLane: { durationSec: 10, node: null },
+    })
+    const labels = ['MUSIC（波形）', 'VIDEO1（Shot）', 'VIDEO2（重ね素材）', 'Transition', 'ナレーション', 'TEXT（テロップ）', 'VFX（エフェクト）', 'SFX（効果音）']
+    const nodes = labels.map((label) => screen.getByText(label))
+    const ordered = nodes.every(
+      (node, index) => index === 0 || (nodes[index - 1]?.compareDocumentPosition(node) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING,
+    )
+    expect(ordered).toBe(true)
   })
 })
