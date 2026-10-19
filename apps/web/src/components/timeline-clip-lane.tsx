@@ -227,7 +227,7 @@ export const TimelineClipLane = ({
         if (onClipContextMenu(hit, { x: event.clientX, y: event.clientY }, event.currentTarget)) event.preventDefault()
       }}
     >
-      <span className="pointer-events-none absolute left-1 top-0 text-[10px] leading-3 text-muted">
+      <span className="pointer-events-none absolute left-1 top-0 text-xs leading-3 text-muted">
         {`layer ${String(layer)}`}
       </span>
       {emptyHint !== undefined && clips.length === 0 && (
