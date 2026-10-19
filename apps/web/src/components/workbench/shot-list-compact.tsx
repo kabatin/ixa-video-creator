@@ -51,6 +51,8 @@ export type ShotListCompactProps = {
   readonly showBeat: boolean
   /** 生成中の Shot の様子（`作成中 2:31 / 約 4 分`）。分からなければ null（「生成中」だけ出す）。 */
   readonly activityOf?: (shotId: ShotId) => string | null
+  /** 超解像の待ち・作成中の Shot の様子（`超解像中 2:31 / 約 4 分`・`超解像待ち`）。無ければ null。 */
+  readonly upscaleOf?: (shotId: ShotId) => string | null
   /** 右クリック・長押し・Shift+F10 でその Shot のメニューを開く口。 */
   readonly contextMenu?: (shot: Shot) => ContextMenuTriggerProps
 }
@@ -88,6 +90,7 @@ export const ShotListCompact = ({
   alignmentOf,
   showBeat,
   activityOf,
+  upscaleOf,
   contextMenu,
 }: ShotListCompactProps) => {
   const headerRef = useRef<HTMLInputElement>(null)
@@ -253,6 +256,7 @@ export const ShotListCompact = ({
                 <ShotActivityBadges
                   drawing={posters.get(shot.id)?.drawing ?? false}
                   video={activityOf?.(shot.id) ?? null}
+                  upscale={upscaleOf?.(shot.id) ?? null}
                 />
               </td>
             </tr>

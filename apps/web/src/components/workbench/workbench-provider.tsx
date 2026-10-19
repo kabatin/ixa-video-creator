@@ -12,6 +12,7 @@ import {
   type WorkbenchContextValue,
 } from '@/components/workbench/workbench-context'
 import { useActiveGenerations } from '@/components/workbench/use-active-generations'
+import { useActiveUpscales } from '@/components/workbench/use-active-upscales'
 import { ConsoleLogContext } from '@/components/workbench/console-log-context'
 import { createConsoleLog, jobEventEntry, type ConsoleLevel } from '@/lib/console-log'
 import { useProjectConcept } from '@/components/workbench/use-project-concept'
@@ -134,6 +135,12 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
     (shots ?? []).some((shot) => isGeneratingStatus(shot.status)),
   )
 
+  // 超解像の待ち・作成中（2026-10-19）。開いたときと超解像の出来事で聞き、終わったら Take（と表紙の絵）を読み直す。
+  const [upscaleEpoch, setUpscaleEpoch] = useState(0)
+  const activeUpscales = useActiveUpscales(api, projectId, upscaleEpoch, () => {
+    setPosterEpoch((epoch) => epoch + 1)
+  })
+
   const [serverEpoch, setServerEpoch] = useState(0)
   const lastServerShots = useRef(props.initialShots)
   // 帯の ② の材料。`saved` は setState なので変わらない（値の作り直しを招かない）。
@@ -203,6 +210,11 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
         setNewTakeCount((count) => count + 1)
         // 採用 Take が変わればサムネイルも変わる。まとめて 1 往復で引き直す。
         setPosterEpoch((epoch) => epoch + 1)
+      }
+      // 超解像（ADR-0044）。待ち・作成中の印を取り直す。出来たら Take が増えているので Take と表紙の絵を読み直す。
+      if (event.type === 'upscale_job.status') {
+        setUpscaleEpoch((epoch) => epoch + 1)
+        if (event.status === 'succeeded') setPosterEpoch((epoch) => epoch + 1)
       }
       // 声のジョブ（ADR-0038）。ナレーションの一覧とタイムライン（声・テロップ）を取り直す。失敗は理由ごと知らせる。
       if (event.type === 'voice_job.status') {
@@ -423,6 +435,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
         props.focusPanel('cutter')
       },
       activeGenerations,
+      activeUpscales,
       concept,
       conceptSaved,
     }),
@@ -456,6 +469,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       inspectorTab,
       inspectorRequest,
       activeGenerations,
+      activeUpscales,
       inspected,
       notice,
       notify,

@@ -37,6 +37,7 @@ import {
 } from '@/lib/shot-list-view'
 import { useNow } from '@/components/workbench/use-active-generations'
 import { describeActiveGeneration } from '@/lib/generation-progress'
+import { describeActiveUpscale } from '@/lib/upscale-progress'
 import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
 import { useShotMenu } from '@/components/workbench/use-shot-menu'
 import { drawWithoutStoryboardWarning } from '@/lib/step-guards'
@@ -68,10 +69,15 @@ export const ShotListPanel = () => {
     })
   })
   // 生成中の様子（どのモデルで・経過・目安）。動いている生成があるあいだだけ毎秒刻む。
-  const now = useNow(workbench.activeGenerations.size > 0)
+  const now = useNow(workbench.activeGenerations.size > 0 || workbench.activeUpscales.size > 0)
   const activityOf = (shotId: ShotId): string | null => {
     const generation = workbench.activeGenerations.get(shotId)?.[0]
     return generation === undefined ? null : describeActiveGeneration(generation, now).short
+  }
+  // 超解像の待ち・作成中（Shot の状態を変えないので別に出す。2026-10-19）。
+  const upscaleOf = (shotId: ShotId): string | null => {
+    const upscale = workbench.activeUpscales.get(shotId)?.[0]
+    return upscale === undefined ? null : describeActiveUpscale(upscale, now)
   }
   const bulk = useBulkActions()
   const drop = useAssetDrop(workbench.notify)
@@ -245,6 +251,7 @@ export const ShotListPanel = () => {
           dropHandlers={drop.handlers}
           dropState={drop.stateOf}
           activityOf={activityOf}
+          upscaleOf={upscaleOf}
           contextMenu={shotMenu}
         />
         {/* 一覧が短いときも、操作のバーはパネルの下端に置く（伸びて押し下げる）。長いときは下端に貼り付いて重なる。 */}

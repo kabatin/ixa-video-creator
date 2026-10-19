@@ -162,6 +162,23 @@ describe('StoryboardGrid', () => {
     expect(screen.getAllByRole('button', { name: /Take を作る/ })).toHaveLength(1)
   })
 
+  /** 超解像は Shot の状態を変えないので、生成中とは別にカードの下へ出す（制作者 2026-10-19）。 */
+  it('超解像の待ち・作成中の Shot には、その 1 行を出す', () => {
+    const cards = [aWorkbenchShot(1, { status: 'review' }), aWorkbenchShot(2, { status: 'review' })]
+    render(
+      <StoryboardGrid
+        shots={cards}
+        posters={new Map()}
+        selectedShotId={null}
+        onSelect={vi.fn()}
+        upscaleOf={(shotId) => (shotId === cards[1]?.id ? '超解像待ち' : null)}
+      />,
+    )
+
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    expect(screen.getByRole('status')).toHaveTextContent('超解像待ち')
+  })
+
   /** 制作者 2026-10-01「動画生成をキャンセル出来るようにしたい、もし出来るならUIが分かりづらい」。 */
   it('生成中の Shot にだけ「生成をやめる」を出し、押すとその Shot で知らせる', () => {
     const cards = [aWorkbenchShot(1, { status: 'generating' }), aWorkbenchShot(2, { status: 'draft' })]

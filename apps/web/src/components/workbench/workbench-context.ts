@@ -2,6 +2,7 @@
 
 import type { Location, MusicTrack, Project, ProjectId, Sequence, Shot, ShotId } from '@ixa/domain'
 import type { ActiveGenerations } from '@/components/workbench/use-active-generations'
+import type { ActiveUpscales } from '@/components/workbench/use-active-upscales'
 import { createContext, useContext } from 'react'
 import type { UpdateShotBody } from '@/lib/api-schemas'
 import type { LibraryImportSection } from '@/lib/library-import-sections'
@@ -164,6 +165,10 @@ export type WorkbenchContextValue = {
    * 生成中の Shot があるあいだだけ追う（`use-active-generations.ts`）。
    */
   readonly activeGenerations: ActiveGenerations
+  /**
+   * 動いている超解像（Shot ごと。作成中を先に）。超解像は Shot の状態を変えないので別に追う（`use-active-upscales.ts`）。
+   */
+  readonly activeUpscales: ActiveUpscales
   /**
    * 作品の方針のコンセプト・あらすじ（流れの帯 ②）。**読めていなければ null**（空文字は「まだ書いていない」）。
    */

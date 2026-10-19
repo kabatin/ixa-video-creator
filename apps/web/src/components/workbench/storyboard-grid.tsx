@@ -39,6 +39,8 @@ export type StoryboardGridProps = {
   readonly onMakeTake?: (shotId: ShotId) => void
   /** 生成中の Shot の様子（`作成中 2:31 / 約 4 分`）。分からなければ null（状態の点だけ）。 */
   readonly activityOf?: (shotId: ShotId) => string | null
+  /** 超解像の待ち・作成中の Shot の様子（`超解像中 2:31 / 約 4 分`・`超解像待ち`）。無ければ null。 */
+  readonly upscaleOf?: (shotId: ShotId) => string | null
   /** 「生成をやめる」を押した（生成中の Shot だけに出す。確認は呼び出し側）。渡さなければ出さない。 */
   readonly onCancelGeneration?: (shot: Shot) => void
   /** 右クリック・長押し・Shift+F10 でその Shot のメニューを開く口。 */
@@ -91,6 +93,7 @@ export const StoryboardGrid = ({
   onOpen,
   onMakeTake,
   activityOf,
+  upscaleOf,
   onCancelGeneration,
   contextMenu,
   locationName,
@@ -182,6 +185,11 @@ export const StoryboardGrid = ({
               {activityOf?.(shot.id) != null && (
                 <p role="status" className="mt-1 truncate px-1 text-xs tabular-nums text-info">
                   {activityOf(shot.id)}
+                </p>
+              )}
+              {upscaleOf?.(shot.id) != null && (
+                <p role="status" data-kind="upscale" className="mt-1 truncate px-1 text-xs tabular-nums text-info">
+                  {upscaleOf(shot.id)}
                 </p>
               )}
               {onCancelGeneration !== undefined && isGeneratingStatus(shot.status) && (

@@ -103,6 +103,7 @@ export const workbenchValue = (
   inspectorTab: 'settings',
   inspectorRequest: 0,
   activeGenerations: new Map(),
+  activeUpscales: new Map(),
   concept: '',
   conceptSaved: vi.fn(),
   openInspector: vi.fn(),

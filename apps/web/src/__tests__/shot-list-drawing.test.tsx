@@ -35,7 +35,11 @@ const rowOf = (code: string): HTMLElement => {
   return row
 }
 
-const show = (map: ShotPosterMap, activityOf?: (shotId: ShotId) => string | null) =>
+const show = (
+  map: ShotPosterMap,
+  activityOf?: (shotId: ShotId) => string | null,
+  upscaleOf?: (shotId: ShotId) => string | null,
+) =>
   render(
     <ShotListCompact
       shots={SHOTS}
@@ -53,6 +57,7 @@ const show = (map: ShotPosterMap, activityOf?: (shotId: ShotId) => string | null
       alignmentOf={() => undefined}
       showBeat={false}
       {...(activityOf === undefined ? {} : { activityOf })}
+      {...(upscaleOf === undefined ? {} : { upscaleOf })}
     />,
   )
 
@@ -74,6 +79,14 @@ describe('Shot 一覧の作っている印', () => {
     const badge = within(rowOf('CUT-02')).getByRole('status')
     expect(badge).toHaveAttribute('data-kind', 'video')
     expect(badge).toHaveTextContent('動画 作成中 2:31 / 約 4 分')
+  })
+
+  /** 超解像は Shot の状態を変えないので、別の印で出す（制作者 2026-10-19）。 */
+  it('超解像の待ち・作成中の Shot には、超解像の印と経過を出す', () => {
+    show(posters, undefined, (shotId) => (shotId === idle.id ? '超解像中 2:31 / 約 4 分' : null))
+    const badge = within(rowOf('CUT-02')).getByRole('status')
+    expect(badge).toHaveAttribute('data-kind', 'upscale')
+    expect(badge).toHaveTextContent('超解像中 2:31 / 約 4 分')
   })
 
   it('採用 Take があっても、絵を作っている間は絵の印を出す', () => {
