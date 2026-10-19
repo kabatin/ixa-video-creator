@@ -33,7 +33,8 @@ import {
   inMemoryShots,
   silentLogger,
 } from '../../generation/__tests__/doubles.js'
-import { processImageJob, type ImageProcessorDeps } from '../processor.js'
+import type { ImageProcessorDeps } from '../processor.js'
+import { checkDeps, runImageJob } from './queue-doubles.js'
 import { FAKE_PNG, fakeImageProvider } from './doubles.js'
 
 /**
@@ -65,6 +66,9 @@ const queuedJob = (): ImageGenerationJob => ({
   mediaAssetId: null,
   error: null,
   providerRecord: null,
+  retryOfJobId: null,
+  attempt: 1,
+  appliedAt: null,
   instruction: null,
   queuedAt: new Date(),
   startedAt: null,
@@ -93,6 +97,7 @@ const setup = (options: { outcome?: Parameters<typeof fakeImageProvider>[1]; con
   const job = queuedJob()
   const provider = fakeImageProvider(dir, options.outcome)
   const deps = {
+    ...checkDeps(),
     imageJobs: createInMemoryImageJobRepository([job]),
     shots: inMemoryShots([shot]),
     projects: inMemoryProjects([project]),
@@ -132,7 +137,7 @@ describe('processImageJob', () => {
         return provider.submit(request)
       },
     }
-    const result = await processImageJob({ ...deps, localGpuLease: lease, adapters: [{ provider: local, model: codexCliImageModel }] }, { imageJobId: job.id })
+    const result = await runImageJob({ ...deps, localGpuLease: lease, adapters: [{ provider: local, model: codexCliImageModel }] }, { imageJobId: job.id })
 
     expect(result).toEqual({ state: 'succeeded' })
     expect(seenBySubmit).toEqual(['held'])
@@ -145,7 +150,7 @@ describe('processImageJob', () => {
     const lease = createInMemoryLocalGpuLease()
     await lease.acquire('video-job', job.queuedAt.getTime() - 1000)
     const rescheduled: { data: unknown; delayMs: number }[] = []
-    const result = await processImageJob(
+    const result = await runImageJob(
       {
         ...deps,
         localGpuLease: lease,
@@ -172,7 +177,7 @@ describe('processImageJob', () => {
           : provider.poll(handle)
       },
     }
-    const result = await processImageJob({ ...deps, adapters: [{ provider: flaky, model: codexCliImageModel }] }, { imageJobId: job.id })
+    const result = await runImageJob({ ...deps, adapters: [{ provider: flaky, model: codexCliImageModel }] }, { imageJobId: job.id })
     expect(result).toEqual({ state: 'succeeded' })
     expect(provider.cancelled).toHaveLength(0)
   })
@@ -184,7 +189,7 @@ describe('processImageJob', () => {
       ...provider,
       poll: () => Promise.reject(new ProviderError('つながりません', ProviderId.parse('klein'), true)),
     }
-    const result = await processImageJob({ ...deps, adapters: [{ provider: failing, model: codexCliImageModel }] }, { imageJobId: job.id })
+    const result = await runImageJob({ ...deps, adapters: [{ provider: failing, model: codexCliImageModel }] }, { imageJobId: job.id })
     expect(result).toEqual({ state: 'failed' })
     expect(provider.cancelled).toHaveLength(1)
   })
@@ -200,13 +205,13 @@ describe('processImageJob', () => {
         return provider.submit(request)
       },
     }
-    await processImageJob({ ...deps, localGpuLease: lease, adapters: [{ provider: spying, model: codexCliImageModel }] }, { imageJobId: job.id })
+    await runImageJob({ ...deps, localGpuLease: lease, adapters: [{ provider: spying, model: codexCliImageModel }] }, { imageJobId: job.id })
     expect(seenBySubmit).toEqual(['acquired'])
   })
 
   it('投げ直しても二重に作らせないよう、ジョブの ID を鍵として渡す', async () => {
     const { job, deps, provider } = setup()
-    await processImageJob(deps, { imageJobId: job.id })
+    await runImageJob(deps, { imageJobId: job.id })
     expect(provider.requests[0]?.idempotencyKey).toBe(job.id)
   })
 
@@ -216,7 +221,7 @@ describe('processImageJob', () => {
     const other = { ...fakeImageProvider(dir), id: ProviderId.parse('stub-image') }
     const otherModel = { ...codexCliImageModel, providerId: ProviderId.parse('stub-image'), id: ModelId.parse('stub/gemini-like-image') }
 
-    await processImageJob({ ...deps, adapters: [{ provider: other, model: otherModel }, { provider, model: codexCliImageModel }] }, { imageJobId: job.id })
+    await runImageJob({ ...deps, adapters: [{ provider: other, model: otherModel }, { provider, model: codexCliImageModel }] }, { imageJobId: job.id })
 
     expect(provider.requests).toHaveLength(1)
     expect(other.requests).toHaveLength(0)
@@ -225,7 +230,7 @@ describe('processImageJob', () => {
   it('この環境に無い口のジョブは、理由を付けて失敗にする（作り直せない）', async () => {
     const { job, deps } = setup()
 
-    const result = await processImageJob({ ...deps, adapters: [] }, { imageJobId: job.id })
+    const result = await runImageJob({ ...deps, adapters: [] }, { imageJobId: job.id })
 
     expect(result).toEqual({ state: 'failed' })
     expect((await deps.imageJobs.findById(job.id))?.error).toMatchObject({ code: 'provider_unavailable', retryable: false })
@@ -234,7 +239,7 @@ describe('processImageJob', () => {
   it('作った絵を素材として取り込み、最初のフレームを差し替える', async () => {
     const { job, deps } = setup()
 
-    const result = await processImageJob(deps, { imageJobId: job.id })
+    const result = await runImageJob(deps, { imageJobId: job.id })
 
     expect(result.state).toBe('succeeded')
     const done = await deps.imageJobs.findById(job.id)
@@ -252,7 +257,7 @@ describe('processImageJob', () => {
   it('Shot の説明から、比に合わせた形で 1 枚だけ頼む', async () => {
     const { job, deps, provider } = setup()
 
-    await processImageJob(deps, { imageJobId: job.id })
+    await runImageJob(deps, { imageJobId: job.id })
 
     const request = provider.requests[0]
     expect(request?.prompt).toContain('暗いガレージ')
@@ -286,7 +291,7 @@ describe('processImageJob', () => {
       },
     }
 
-    await processImageJob({ ...deps, adapters: [{ provider: spying, model: codexCliImageModel }] }, { imageJobId: job.id })
+    await runImageJob({ ...deps, adapters: [{ provider: spying, model: codexCliImageModel }] }, { imageJobId: job.id })
 
     expect(resolved).not.toMatch(/^https?:/)
     expect((await deps.imageJobs.findById(job.id))?.referenceAssetIds).toEqual([referenceId])
@@ -297,7 +302,7 @@ describe('processImageJob', () => {
     const previous: MediaAssetId = newId(MediaAssetIdSchema)
     await replaceManualStartFrame(deps.shotReferences, shot.id, previous)
 
-    const result = await processImageJob(deps, { imageJobId: job.id })
+    const result = await runImageJob(deps, { imageJobId: job.id })
 
     expect(result.state).toBe('failed')
     expect((await deps.imageJobs.findById(job.id))?.error).toMatchObject({ message: 'Codex CLI が絵を返しませんでした。' })
@@ -312,9 +317,9 @@ describe('processImageJob', () => {
   /** Provider が手元に置いた出力（Codex の作業ディレクトリ）は、取り込んだら片付けてもらう。 */
   it('取り込んだ後も、失敗した後も、Provider に片付けを頼む', async () => {
     const ok = setup()
-    await processImageJob(ok.deps, { imageJobId: ok.job.id })
+    await runImageJob(ok.deps, { imageJobId: ok.job.id })
     const failing = setup({ outcome: { code: 'no_image', message: '絵が無い' } })
-    await processImageJob(failing.deps, { imageJobId: failing.job.id })
+    await runImageJob(failing.deps, { imageJobId: failing.job.id })
 
     expect(ok.provider.released).toEqual(['job-1'])
     expect(failing.provider.released).toEqual(['job-1'])
@@ -323,10 +328,11 @@ describe('processImageJob', () => {
   it('始まった・終わったを出来事で知らせる', async () => {
     const { job, deps } = setup()
 
-    await processImageJob(deps, { imageJobId: job.id })
+    await runImageJob(deps, { imageJobId: job.id })
 
     expect(deps.events.published().map((event) => (event.type === 'image_job.status' ? event.status : event.type))).toEqual([
       'running',
+      'checking',
       'succeeded',
     ])
   })
@@ -335,7 +341,7 @@ describe('processImageJob', () => {
     const { job, deps, provider } = setup()
     const refusing = { ...provider, submit: () => Promise.reject(new Error('モデルでは次の要求を満たせません')) }
 
-    const result = await processImageJob({ ...deps, adapters: [{ provider: refusing, model: codexCliImageModel }] }, { imageJobId: job.id })
+    const result = await runImageJob({ ...deps, adapters: [{ provider: refusing, model: codexCliImageModel }] }, { imageJobId: job.id })
 
     expect(result.state).toBe('failed')
     expect((await deps.imageJobs.findById(job.id))?.error?.message).toContain('満たせません')
@@ -343,9 +349,9 @@ describe('processImageJob', () => {
 
   it('もう終わったジョブはやり直さない', async () => {
     const { job, deps, provider } = setup()
-    await processImageJob(deps, { imageJobId: job.id })
+    await runImageJob(deps, { imageJobId: job.id })
 
-    const again = await processImageJob(deps, { imageJobId: job.id })
+    const again = await runImageJob(deps, { imageJobId: job.id })
 
     expect(again.state).toBe('skipped')
     expect(provider.requests).toHaveLength(1)
@@ -361,7 +367,7 @@ describe('processImageJob: 止めたジョブ', () => {
     const { job, deps, provider } = setup()
     await deps.imageJobs.cancelActive({ projectId: project.id })
 
-    const result = await processImageJob(deps, { imageJobId: job.id })
+    const result = await runImageJob(deps, { imageJobId: job.id })
 
     expect(result).toEqual({ state: 'skipped' })
     expect(provider.requests).toHaveLength(0)
@@ -377,10 +383,10 @@ describe('processImageJob: 止めたジョブ', () => {
       localGpuLease: lease,
       adapters: [{ provider: { ...provider, exclusiveResource: 'local-gpu' as const }, model: codexCliImageModel }],
     }
-    expect(await processImageJob(local, { imageJobId: job.id })).toEqual({ state: 'waiting' })
+    expect(await runImageJob(local, { imageJobId: job.id })).toEqual({ state: 'waiting' })
 
     await deps.imageJobs.cancelActive({ projectId: project.id })
-    expect(await processImageJob(local, { imageJobId: job.id })).toEqual({ state: 'skipped' })
+    expect(await runImageJob(local, { imageJobId: job.id })).toEqual({ state: 'skipped' })
 
     await lease.release('video-job')
     expect(await lease.acquire('later-video', job.queuedAt.getTime() + 60_000)).toEqual({ state: 'acquired' })
@@ -396,7 +402,7 @@ describe('processImageJob: 止めたジョブ', () => {
       return poll(handle)
     } }
 
-    const result = await processImageJob({ ...deps, adapters: [{ provider: stopping, model: codexCliImageModel }] }, { imageJobId: job.id })
+    const result = await runImageJob({ ...deps, adapters: [{ provider: stopping, model: codexCliImageModel }] }, { imageJobId: job.id })
 
     expect(result).toEqual({ state: 'skipped' })
     expect(provider.cancelled).toEqual(['job-1'])
@@ -408,7 +414,7 @@ describe('processImageJob: 止めたジョブ', () => {
   it('絵が届いた後、差し替える前に止めたら、差し替えない', async () => {
     const { job, deps } = setup()
     const crop = deps.crop
-    const result = await processImageJob(
+    const result = await runImageJob(
       {
         ...deps,
         crop: async (input: string, output: string) => {

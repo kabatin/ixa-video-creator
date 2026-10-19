@@ -27,7 +27,8 @@ import {
   inMemoryShots,
   silentLogger,
 } from '../../generation/__tests__/doubles.js'
-import { processImageJob, type ImageProcessorDeps } from '../processor.js'
+import type { ImageProcessorDeps } from '../processor.js'
+import { checkDeps, runImageJob } from './queue-doubles.js'
 import { FAKE_PNG, fakeImageProvider } from './doubles.js'
 
 /**
@@ -82,6 +83,9 @@ const setup = async (options: { outcome?: Parameters<typeof fakeImageProvider>[1
     mediaAssetId: null,
     error: null,
     providerRecord: null,
+    retryOfJobId: null,
+    attempt: 1,
+    appliedAt: null,
     queuedAt: new Date(),
     startedAt: null,
     finishedAt: null,
@@ -89,6 +93,7 @@ const setup = async (options: { outcome?: Parameters<typeof fakeImageProvider>[1
   const provider = fakeImageProvider(dir, options.outcome)
   const crops: AspectRatio[] = []
   const deps = {
+    ...checkDeps(),
     imageJobs: createInMemoryImageJobRepository([job]),
     shots: inMemoryShots([]),
     projects: inMemoryProjects(options.withProject === false ? [] : [project]),
@@ -125,7 +130,7 @@ describe('キーアートのジョブ', () => {
   it('作品の方針・人物・指示から横長で作り、16:9 に切り抜いて素材にする', async () => {
     const f = await setup()
 
-    const result = await processImageJob(f.deps, { imageJobId: f.job.id })
+    const result = await runImageJob(f.deps, { imageJobId: f.job.id })
     expect((await f.deps.imageJobs.findById(f.job.id))?.error).toBeNull()
     expect(result).toEqual({ state: 'succeeded' })
 
@@ -147,20 +152,20 @@ describe('キーアートのジョブ', () => {
     // 識別画像は変えない（候補の 1 枚を足すだけ）。
     expect((await f.characters.listIdentityImages(f.character.id)).map((image) => image.role)).toEqual(['face_front'])
     const statuses = f.deps.events.published().flatMap((event) => (event.type === 'image_job.status' ? [event.status] : []))
-    expect(statuses).toEqual(['running', 'succeeded'])
+    expect(statuses).toEqual(['running', 'checking', 'succeeded'])
   })
 
   it('作れなければ理由を残す', async () => {
     const f = await setup({ outcome: { code: 'no_image', message: 'Codex CLI が絵を返しませんでした。' } })
 
-    expect(await processImageJob(f.deps, { imageJobId: f.job.id })).toEqual({ state: 'failed' })
+    expect(await runImageJob(f.deps, { imageJobId: f.job.id })).toEqual({ state: 'failed' })
     expect((await f.deps.imageJobs.findById(f.job.id))?.error?.message).toMatch(/絵を返しませんでした/)
   })
 
   it('作品が消されていたら、理由を付けて失敗にする', async () => {
     const f = await setup({ withProject: false })
 
-    expect(await processImageJob(f.deps, { imageJobId: f.job.id })).toEqual({ state: 'failed' })
+    expect(await runImageJob(f.deps, { imageJobId: f.job.id })).toEqual({ state: 'failed' })
     expect((await f.deps.imageJobs.findById(f.job.id))?.error?.code).toBe('project_missing')
     expect(f.provider.requests).toEqual([])
   })

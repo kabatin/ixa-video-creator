@@ -27,7 +27,8 @@ import {
   inMemoryShots,
   silentLogger,
 } from '../../generation/__tests__/doubles.js'
-import { processImageJob, type ImageProcessorDeps } from '../processor.js'
+import type { ImageProcessorDeps } from '../processor.js'
+import { checkDeps, fakeImageChecker, PASS, RETRY, runImageJob } from './queue-doubles.js'
 import { FAKE_PNG, fakeImageProvider } from './doubles.js'
 
 /**
@@ -87,6 +88,9 @@ const setup = async (
     mediaAssetId: null,
     error: null,
     providerRecord: null,
+    retryOfJobId: null,
+    attempt: 1,
+    appliedAt: null,
     instruction: null,
     queuedAt: new Date(),
     startedAt: null,
@@ -95,6 +99,7 @@ const setup = async (
   const provider = fakeImageProvider(dir, options.outcome)
   const crops: string[] = []
   const deps = {
+    ...checkDeps(),
     imageJobs: createInMemoryImageJobRepository([job]),
     shots: inMemoryShots([]),
     projects: inMemoryProjects([project]),
@@ -130,7 +135,7 @@ describe('キャラクターシートのジョブ', () => {
   it('手本を subject に、四面図の指示で横長に作り、切り抜かずに識別画像の四面図（主）として足す', async () => {
     const f = await setup()
 
-    const result = await processImageJob(f.deps, { imageJobId: f.job.id })
+    const result = await runImageJob(f.deps, { imageJobId: f.job.id })
 
     expect(result).toEqual({ state: 'succeeded' })
     const [request] = f.provider.requests
@@ -150,7 +155,7 @@ describe('キャラクターシートのジョブ', () => {
   it('四面図の主がもうあれば、新しいシートは主にしない（足していく）', async () => {
     const f = await setup({ existingSheet: true })
 
-    await processImageJob(f.deps, { imageJobId: f.job.id })
+    await runImageJob(f.deps, { imageJobId: f.job.id })
 
     const sheets = (await f.deps.characters.listIdentityImages(f.character.id)).filter((image) => image.role === 'four_view')
     expect(sheets.map((image) => image.isPrimary)).toEqual([true, false])
@@ -159,7 +164,7 @@ describe('キャラクターシートのジョブ', () => {
   it('作れなければ理由を残し、識別画像は変えない', async () => {
     const f = await setup({ outcome: { code: 'no_image', message: 'Codex CLI が絵を返しませんでした。' } })
 
-    expect(await processImageJob(f.deps, { imageJobId: f.job.id })).toEqual({ state: 'failed' })
+    expect(await runImageJob(f.deps, { imageJobId: f.job.id })).toEqual({ state: 'failed' })
     expect((await f.deps.imageJobs.findById(f.job.id))?.error?.message).toMatch(/絵を返しませんでした/)
     expect((await f.deps.characters.listIdentityImages(f.character.id)).map((image) => image.role)).toEqual(['full_body'])
   })
@@ -168,7 +173,25 @@ describe('キャラクターシートのジョブ', () => {
     const f = await setup()
     await f.deps.characters.softDelete(f.character.id)
 
-    expect(await processImageJob(f.deps, { imageJobId: f.job.id })).toEqual({ state: 'failed' })
+    expect(await runImageJob(f.deps, { imageJobId: f.job.id })).toEqual({ state: 'failed' })
     expect((await f.deps.imageJobs.findById(f.job.id))?.error?.code).toBe('character_missing')
+  })
+
+  /** ADR-0055。当てなかった試しは識別画像に足さない（四面図が試しの数だけ増えない）。 */
+  it('手元の AI でやり直したら、当てた 1 枚だけを識別画像に足す（手本の画像は同じものを使う）', async () => {
+    const f = await setup()
+    const deps = {
+      ...f.deps,
+      textTool: () => Promise.resolve('claude_cli' as const),
+      checker: fakeImageChecker([RETRY(0.2), PASS]),
+      adapters: [{ provider: { ...f.provider, exclusiveResource: 'local-gpu' as const }, model: codexCliImageModel }],
+    }
+    await runImageJob(deps, { imageJobId: f.job.id })
+
+    const jobs = [...f.deps.imageJobs.snapshot()].sort((a, b) => a.attempt - b.attempt)
+    expect(jobs.map((job) => job.attempt)).toEqual([1, 2])
+    expect(f.provider.requests[1]?.references).toEqual([{ mediaAssetId: f.front.id, role: 'subject' }])
+    const sheets = (await f.deps.characters.listIdentityImages(f.character.id)).filter((image) => image.role === 'four_view')
+    expect(sheets.map((image) => image.mediaAssetId)).toEqual([jobs[1]?.mediaAssetId])
   })
 })

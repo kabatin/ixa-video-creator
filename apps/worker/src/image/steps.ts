@@ -3,6 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   MediaAssetId as MediaAssetIdSchema,
+  appendRetryDelta,
   newId,
   type ImageGenerationJob,
   type ImageGenerationJobError,
@@ -12,6 +13,7 @@ import {
 } from '@ixa/domain'
 import { ProviderError, type ImageJobStatus, type ImageModelDescriptor, type ImageProvider, type ProviderOutput } from '@ixa/provider-core'
 import { mediaKey } from '@ixa/storage'
+import { publishImageJobStatus } from './events.js'
 import type { ImageProcessorDeps } from './processor.js'
 
 /**
@@ -41,7 +43,7 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 
 /** 参照を手元のファイルへ落とす（Codex CLI には手元のファイルしか渡せない。署名付き URL も作らない）。 */
 export const localReferenceResolver =
-  (deps: JobDeps, dir: string) =>
+  (deps: Pick<JobDeps, 'mediaAssets' | 'storage'>, dir: string) =>
   async (id: MediaAssetId): Promise<string> => {
     const asset = await deps.mediaAssets.findById(id)
     if (asset === null) {
@@ -151,3 +153,36 @@ export const ingest = async (deps: JobDeps, project: Project, job: ImageGenerati
   return id
 }
 
+
+/**
+ * やり直しのジョブなら、前の絵のチェックが出した直し方を指示に足す（ADR-0055）。1 枚目・直し方が無ければ元のまま。
+ */
+export const withRetryDelta = async (deps: JobDeps, job: ImageGenerationJob, prompt: string): Promise<string> => {
+  if (job.retryOfJobId === null) return prompt
+  const previous = await deps.imageChecks.findByJobId(job.retryOfJobId)
+  return appendRetryDelta(prompt, previous?.promptDelta ?? null)
+}
+
+/**
+ * 絵ができた。**まだ何にも当てない**（ADR-0055）。チェック中にし、サムネイルを頼み、チェックの手順を積む。
+ * 当てるのはチェックの手順（`check-step.ts`）が、つながりの最後に 1 回だけ。
+ * チェックの手順を積めなければ、当てずに終える（チェック中のまま固めない）。
+ */
+export const finishDrawing = async (
+  deps: JobDeps,
+  job: ImageGenerationJob,
+  mediaAssetId: MediaAssetId,
+  raw: Record<string, unknown>,
+): Promise<void> => {
+  const checking = await deps.imageJobs.markChecking(job.id, mediaAssetId, raw)
+  if (checking.status === 'cancelled') throw new ImageJobCancelled(job.id)
+  await deps.mediaQueue.enqueue(mediaAssetId)
+  await publishImageJobStatus(deps, checking)
+  try {
+    await deps.queue.check(job.id)
+  } catch (error) {
+    // チェック中のまま固まると、その Shot で二度と頼めない。当てずに終え、履歴から選べるようにする。
+    deps.logger.error({ imageJobId: job.id, err: error }, 'チェックの手順を積めませんでした。当てずに終えます')
+    await publishImageJobStatus(deps, await deps.imageJobs.finishChecking(job.id))
+  }
+}

@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import {
   createCharacterRepository,
+  createImageCheckRepository,
   createImageJobRepository,
   createMediaAssetRepository,
   createProjectRepository,
@@ -9,7 +10,14 @@ import {
   createShotRepository,
   type DbClient,
 } from '@ixa/db'
-import type { GenerationContextSource, MediaAssetId, ProjectEventPublisher } from '@ixa/domain'
+import {
+  ImageCheckMaxRetries,
+  type AiToolId,
+  type GenerationContextSource,
+  type MediaAssetId,
+  type ProjectEventPublisher,
+} from '@ixa/domain'
+import { createClaudeCliImageChecker } from '@ixa/provider-llm'
 import {
   codexCliImageModel,
   createCodexCliImageProvider,
@@ -60,12 +68,36 @@ export const createImageWiring = (input: {
   /** 動画・高画質化と同じ整理券（ADR-0047）。 */
   readonly localGpuLease: LocalGpuLease
   /** 順番待ちの絵を積み直す先（image キュー）。 */
-  readonly imageQueue: { readonly add: (name: string, data: { readonly imageJobId: string }, options: { readonly delay: number }) => Promise<unknown> }
+  readonly imageQueue: {
+    readonly add: (
+      name: string,
+      data: { readonly imageJobId: string; readonly step?: 'check' },
+      options?: { readonly delay: number },
+    ) => Promise<unknown>
+  }
+  /** いま選んでいる文章の AI（ADR-0032）。Claude のときだけ作った絵をチェックする（ADR-0055）。 */
+  readonly textTool: () => Promise<AiToolId>
+  /** 自動のやり直しの上限（ADR-0055）。 */
+  readonly maxRetries: number
 }): ImageProcessorDeps => {
   const workDir = process.env.IMAGE_WORK_DIR ?? '/tmp/ixa-image-work'
   const scripts = createScriptRepository(input.db)
   return {
     imageJobs: createImageJobRepository(input.db),
+    imageChecks: createImageCheckRepository(input.db),
+    checker: createClaudeCliImageChecker(),
+    textTool: input.textTool,
+    // 設定の範囲は domain の規則で確かめ直す（設定側と食い違ったら起動時に落とす）。
+    maxRetries: ImageCheckMaxRetries.parse(input.maxRetries),
+    queue: {
+      // API と同じ名前で積む（`draw`）。チェックは同じキューの `check`（GPU の順番は持たない）。
+      draw: async (imageJobId) => {
+        await input.imageQueue.add('draw', { imageJobId })
+      },
+      check: async (imageJobId) => {
+        await input.imageQueue.add('check', { imageJobId, step: 'check' })
+      },
+    },
     shots: createShotRepository(input.db),
     projects: createProjectRepository(input.db),
     // キャラクターシート（ADR-0035）の材料と、できたシートを足す先。

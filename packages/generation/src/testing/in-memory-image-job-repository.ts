@@ -25,7 +25,8 @@ export const createInMemoryImageJobRepository = (
     if (job === undefined) throw new Error(`ジョブがありません: ${id}`)
     return job
   }
-  const active = (job: ImageGenerationJob) => job.status === 'queued' || job.status === 'running'
+  const active = (job: ImageGenerationJob) =>
+    job.status === 'queued' || job.status === 'running' || job.status === 'checking'
   /** 止めた行は上書きしない（実物と同じ）。止めた行をそのまま返す。 */
   const transition = (id: ImageGenerationJob['id'], patch: Partial<ImageGenerationJob>): ImageGenerationJob => {
     const current = get(id)
@@ -51,6 +52,9 @@ export const createInMemoryImageJobRepository = (
             mediaAssetId: null,
             error: null,
             providerRecord: null,
+            retryOfJobId: input.retryOf?.jobId ?? null,
+            attempt: input.retryOf?.attempt ?? 1,
+            appliedAt: null,
             queuedAt: new Date(),
             startedAt: null,
             finishedAt: null,
@@ -69,6 +73,18 @@ export const createInMemoryImageJobRepository = (
       Promise.resolve(newestFirst(store.filter((job) => job.projectId === projectId && active(job)))),
     findKeyArtByProject: (projectId) =>
       Promise.resolve(newestFirst(store.filter((job) => job.projectId === projectId && job.kind === 'key_art'))),
+    findByShot: (shotId) =>
+      Promise.resolve(newestFirst(store.filter((job) => job.shotId === shotId && job.kind === 'start_frame'))),
+    findByMediaAssetIds: (ids) =>
+      Promise.resolve(store.filter((job) => job.mediaAssetId !== null && ids.includes(job.mediaAssetId))),
+    findRetryOf: (id) => Promise.resolve(newestFirst(store.filter((job) => job.retryOfJobId === id))[0] ?? null),
+    findChainUpTo: (id) => {
+      const walk = (current: ImageGenerationJob['id'] | null, acc: readonly ImageGenerationJob[]): readonly ImageGenerationJob[] => {
+        const job = current === null ? undefined : store.find((candidate) => candidate.id === current)
+        return job === undefined ? acc : walk(job.retryOfJobId, [job, ...acc])
+      }
+      return Promise.resolve([...walk(id, [])])
+    },
     cancelActive: ({ projectId, shotIds }) => {
       const targets = store.filter(
         (job) =>
@@ -82,6 +98,13 @@ export const createInMemoryImageJobRepository = (
       Promise.resolve(transition(id, { status: 'running', referenceAssetIds: [...referenceAssetIds], startedAt: new Date() })),
     markSucceeded: (id, mediaAssetId, providerRecord) =>
       Promise.resolve(transition(id, { status: 'succeeded', mediaAssetId, providerRecord, finishedAt: new Date() })),
+    markChecking: (id, mediaAssetId, providerRecord) =>
+      Promise.resolve(transition(id, { status: 'checking', mediaAssetId, providerRecord })),
+    finishChecking: (id) => {
+      const current = get(id)
+      return Promise.resolve(current.status === 'checking' ? save({ ...current, status: 'succeeded', finishedAt: new Date() }) : current)
+    },
+    markApplied: (id) => Promise.resolve(transition(id, { appliedAt: new Date() })),
     markFailed: (id, error, providerRecord) =>
       Promise.resolve(transition(id, { status: 'failed', error, providerRecord, finishedAt: new Date() })),
   }

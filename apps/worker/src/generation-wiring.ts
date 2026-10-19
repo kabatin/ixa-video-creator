@@ -394,6 +394,9 @@ export const createGenerationWiring = (
       },
       localGpuLease,
       imageQueue,
+      // 作った絵のチェック（ADR-0055）。文章の AI が Claude のときだけ見る。上限は設定から。
+      textTool: chosenTextTool(config, db),
+      maxRetries: config.imageCheckMaxRetries,
     }),
     voice: createVoiceWiring({ config, db, storage, mediaQueue: deps.mediaQueue, events: deps.events, logger }),
     music: createMusicWiring({

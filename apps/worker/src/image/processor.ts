@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import type {
   CharacterRepository,
+  ImageCheckRepository,
   ImageJobRepository,
   MediaAssetRepository,
   ProjectRepository,
@@ -9,6 +10,7 @@ import type {
 import {
   compileStartFramePrompt,
   resolveReferences,
+  type AiToolId,
   type AspectRatio,
   type GenerationContextSource,
   type ImageGenerationJob,
@@ -21,12 +23,14 @@ import {
   type Resolution,
   type Shot,
 } from '@ixa/domain'
-import { replaceManualStartFrame, type StartFrameReferences } from '@ixa/generation'
+import type { StartFrameReferences } from '@ixa/generation'
+import type { ImageChecker } from '@ixa/provider-llm'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import type { LocalGpuLease } from '../generation/local-gpu-lease.js'
 import { withTempDir } from '../media/temp-dir.js'
 import { generateCharacterSheet } from './character-sheet.js'
+import { processImageCheck } from './check-step.js'
 import { generateKeyArt } from './key-art.js'
 import { cropToAspect } from './crop.js'
 import { publishImageJobStatus } from './events.js'
@@ -34,6 +38,7 @@ import { ImageJobData } from './job-data.js'
 import { holdLocalGpu, releaseCancelledLocalGpuTurn, takeLocalGpuTurn } from './local-gpu.js'
 import { requestShapeFor } from './shape.js'
 import {
+  finishDrawing,
   ImageJobCancelled,
   ImageJobFailure,
   ingest,
@@ -41,6 +46,7 @@ import {
   localReferenceResolver,
   throwIfCancelled,
   waitForResult,
+  withRetryDelta,
   type ImageAdapter,
   type ImageJobResult,
   type JobDeps,
@@ -55,11 +61,25 @@ export type { ImageAdapter, ImageJobResult } from './steps.js'
  * 最初のフレーム:
  *
  * 材料を集める（登場人物・衣装・場所の参照と Shot の説明）→ 参照を手元へ落とす → 作る →
- * プロジェクトの比に切り抜く → 素材として取り込む → **最初のフレームを差し替える** → 知らせる。
+ * プロジェクトの比に切り抜く → 素材として取り込む → チェックへ回す（ADR-0055）→ 知らせる。
+ * 最初のフレームを差し替えるのは、チェックの手順がつながりの最後に 1 回だけ（`check-step.ts`）。
  * 失敗したら理由を残し、最初のフレームは変えない。
  */
 export type ImageProcessorDeps = {
   readonly imageJobs: ImageJobRepository
+  /** 作った絵のチェック（ADR-0055）。 */
+  readonly imageChecks: ImageCheckRepository
+  /** 絵を見る口（Claude CLI）。文章の AI が Claude のときだけ使う。 */
+  readonly checker: ImageChecker
+  /** いま選んでいる文章の AI（ADR-0032）。チェックするたびに読む。 */
+  readonly textTool: () => Promise<AiToolId>
+  /** 自動のやり直しの上限（回数。既定 2）。 */
+  readonly maxRetries: number
+  /** image キューへ積む口。描く手順（やり直し）とチェックの手順。 */
+  readonly queue: {
+    readonly draw: (imageJobId: ImageGenerationJob['id']) => Promise<void>
+    readonly check: (imageJobId: ImageGenerationJob['id']) => Promise<void>
+  }
   readonly shots: Pick<ShotRepository, 'findById'>
   readonly projects: Pick<ProjectRepository, 'findById'>
   /** キャラクターシートの材料と、できたシートを識別画像に足す先（ADR-0035）。 */
@@ -103,7 +123,8 @@ const loadShotAndProject = async (deps: JobDeps, job: ImageGenerationJob): Promi
   return { shot, project }
 }
 
-const generateStartFrame = async (deps: JobDeps, job: ImageGenerationJob, dir: string): Promise<void> => {
+/** 開始フレームの材料と指示。描くときとチェックするときが同じものを使う。 */
+export const startFrameMaterials = async (deps: JobDeps, job: ImageGenerationJob) => {
   const { shot, project } = await loadShotAndProject(deps, job)
   const [characters, locations, manualReferences] = await Promise.all([
     deps.context.charactersForShot(shot.id),
@@ -123,6 +144,11 @@ const generateStartFrame = async (deps: JobDeps, job: ImageGenerationJob, dir: s
     maxReferences: caps.referenceImages.max,
     supportedRoles: caps.referenceImages.roles,
   })
+  return { shot, project, references, prompt: compileStartFramePrompt({ project, shot, characters, references }) }
+}
+
+const generateStartFrame = async (deps: JobDeps, job: ImageGenerationJob, dir: string): Promise<void> => {
+  const { project, references, prompt } = await startFrameMaterials(deps, job)
   const running = await deps.imageJobs.markRunning(job.id, references.map((reference) => reference.mediaAssetId))
   // 拾ってから作り始めるまでの間に止められた（止めた行は上書きされずに返ってくる）。
   if (running.status === 'cancelled') throw new ImageJobCancelled(job.id)
@@ -131,7 +157,7 @@ const generateStartFrame = async (deps: JobDeps, job: ImageGenerationJob, dir: s
   const shape = requestShapeFor(deps.model, project.aspectRatio)
   const handle = await deps.provider.submit({
     model: deps.model,
-    prompt: compileStartFramePrompt({ project, shot, characters, references }),
+    prompt: await withRetryDelta(deps, job, prompt),
     negativePrompt: null,
     resolution: shape.resolution,
     aspectRatio: shape.aspectRatio,
@@ -159,11 +185,7 @@ const generateStartFrame = async (deps: JobDeps, job: ImageGenerationJob, dir: s
   })()
   // 絵が届いた後に止められたら、取り込まず差し替えない（止めたのに絵が変わらないように）。
   await throwIfCancelled(deps, job.id)
-  const mediaAssetId = await ingest(deps, project, job, cropped)
-  await replaceManualStartFrame(deps.shotReferences, shot.id, mediaAssetId)
-  const succeeded = await deps.imageJobs.markSucceeded(job.id, mediaAssetId, raw)
-  await deps.mediaQueue.enqueue(mediaAssetId)
-  await publishImageJobStatus(deps, succeeded)
+  await finishDrawing(deps, job, await ingest(deps, project, job, cropped), raw)
 }
 
 const describeUnexpected = (error: unknown): ImageGenerationJobError => ({
@@ -185,7 +207,7 @@ const generatorFor = (kind: ImageJobKind): ((deps: JobDeps, job: ImageGeneration
 }
 
 export const processImageJob = async (deps: ImageProcessorDeps, data: unknown): Promise<ImageJobResult> => {
-  const { imageJobId } = ImageJobData.parse(data)
+  const { imageJobId, step } = ImageJobData.parse(data)
   const job = await deps.imageJobs.findById(imageJobId)
   if (job === null) {
     deps.logger.warn({ imageJobId }, '絵のジョブが見つかりません')
@@ -194,6 +216,13 @@ export const processImageJob = async (deps: ImageProcessorDeps, data: unknown): 
   const adapter = deps.adapters.find(
     (candidate) => candidate.model.providerId === job.providerId && candidate.model.id === job.modelId,
   )
+  // 作った絵のチェックと、当てる・やり直すの判断（ADR-0055）。GPU の順番は持たない。
+  if (step === 'check') return processImageCheck(deps, adapter, job)
+  // 描き終えてチェックへ回したジョブ（描く手順の投げ直し）。描き直さず、チェックの手順をもう一度積む（冪等）。
+  if (job.status === 'checking') {
+    await deps.queue.check(job.id)
+    return { state: 'skipped' }
+  }
   // 終わったジョブと、人が止めたジョブは作らない。
   if (job.status === 'succeeded' || job.status === 'failed' || job.status === 'cancelled') {
     // 順番待ちの間に止められたジョブは、券を列に残したまま手を引かない（後ろの GPU の仕事が 15 分待たされる）。
@@ -239,6 +268,12 @@ export const processImageJob = async (deps: ImageProcessorDeps, data: unknown): 
     )
     const failed = await deps.imageJobs.markFailed(job.id, failure, error instanceof ImageJobFailure ? error.record : null)
     await publishImageJobStatus(deps, failed)
+    // やり直しが失敗したら、前までの絵から選んで当てる（ADR-0055 §7）。
+    if (failed.status === 'failed' && failed.retryOfJobId !== null) {
+      await deps.queue.check(failed.id).catch((enqueueError: unknown) => {
+        deps.logger.error({ imageJobId, err: enqueueError }, 'やり直しの失敗のあと、前の絵を当てる手順を積めませんでした')
+      })
+    }
     return { state: 'failed' }
   }
 }

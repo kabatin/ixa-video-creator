@@ -4,6 +4,7 @@ import { compileCharacterSheetPrompt, type ImageGenerationJob } from '@ixa/domai
 import { publishImageJobStatus } from './events.js'
 import { requestShapeFor } from './shape.js'
 import {
+  finishDrawing,
   ImageJobCancelled,
   ImageJobFailure,
   ingest,
@@ -11,6 +12,7 @@ import {
   localReferenceResolver,
   throwIfCancelled,
   waitForResult,
+  withRetryDelta,
   type JobDeps,
 } from './steps.js'
 
@@ -19,19 +21,26 @@ import {
  * キャラクターシートを 1 枚の画像から作れるといい。正面などの画像を用意したら、それを基に Codex CLI で作る」）。
  *
  * 手本（頼んだときに決めた 1 枚）を `subject` にし、四面図の指示で**横長**に作る → 素材として取り込む →
- * 識別画像の四面図に足す（四面図の主が無ければ主にする）→ 知らせる。
+ * チェックへ回す（ADR-0055）→ 知らせる。識別画像の四面図に足すのは、チェックの手順がつながりの最後に 1 回だけ
+ * （`apply.ts`。当てなかった試しは足さない）。
  * **プロジェクトの比には切り抜かない。** 4 つの全身の端が欠けると、参照として使えない。
  */
 
 /** 横長で頼む（4 つの全身を横一列に並べる）。Codex なら 1536×1024。 */
 const SHEET_ASPECT = '16:9'
 
-export const generateCharacterSheet = async (deps: JobDeps, job: ImageGenerationJob, dir: string): Promise<void> => {
+/** キャラクターシートの材料と指示。描くときとチェックするときが同じものを使う。 */
+export const characterSheetMaterials = async (deps: JobDeps, job: ImageGenerationJob) => {
   const character = job.characterId === null ? null : await deps.characters.findById(job.characterId)
   const project = character === null ? null : await deps.projects.findById(character.projectId)
   if (character === null || project === null) {
     throw new ImageJobFailure({ code: 'character_missing', message: 'このキャラクターは消されました。', retryable: false })
   }
+  return { character, project, prompt: compileCharacterSheetPrompt(character) }
+}
+
+export const generateCharacterSheet = async (deps: JobDeps, job: ImageGenerationJob, dir: string): Promise<void> => {
+  const { project, prompt } = await characterSheetMaterials(deps, job)
   const [reference] = job.referenceAssetIds
   if (reference === undefined) {
     throw new ImageJobFailure({ code: 'reference_missing', message: '手本の画像が記録されていません。もう一度作ってください。', retryable: false })
@@ -44,7 +53,7 @@ export const generateCharacterSheet = async (deps: JobDeps, job: ImageGeneration
   const shape = requestShapeFor(deps.model, SHEET_ASPECT)
   const handle = await deps.provider.submit({
     model: deps.model,
-    prompt: compileCharacterSheetPrompt(character),
+    prompt: await withRetryDelta(deps, job, prompt),
     negativePrompt: null,
     resolution: shape.resolution,
     aspectRatio: shape.aspectRatio,
@@ -72,19 +81,7 @@ export const generateCharacterSheet = async (deps: JobDeps, job: ImageGeneration
       await deps.provider.release?.(handle)
     }
   })()
-  // 届いた後に止められたら、識別画像に足さない。
+  // 届いた後に止められたら、取り込まない（識別画像にも足さない）。
   await throwIfCancelled(deps, job.id)
-  const mediaAssetId = await ingest(deps, project, job, sheetPath)
-  const images = await deps.characters.listIdentityImages(character.id)
-  await deps.characters.addIdentityImage({
-    characterId: character.id,
-    mediaAssetId,
-    role: 'four_view',
-    // 四面図の主が無ければ主にする（生成の参照で優先される）。あれば足すだけ（気に入らなければ人が選び直す）。
-    isPrimary: !images.some((image) => image.role === 'four_view' && image.isPrimary),
-    order: images.length,
-  })
-  const succeeded = await deps.imageJobs.markSucceeded(job.id, mediaAssetId, raw)
-  await deps.mediaQueue.enqueue(mediaAssetId)
-  await publishImageJobStatus(deps, succeeded)
+  await finishDrawing(deps, job, await ingest(deps, project, job, sheetPath), raw)
 }

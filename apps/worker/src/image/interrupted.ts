@@ -21,7 +21,7 @@ const INTERRUPTED_MESSAGE = '作っている途中で処理が止まりました
  */
 export const failInterruptedImageJob = async (
   deps: {
-    readonly imageJobs: Pick<ImageJobRepository, 'findById' | 'markFailed'>
+    readonly imageJobs: Pick<ImageJobRepository, 'findById' | 'markFailed' | 'finishChecking'>
     readonly events: ProjectEventPublisher
     readonly logger: Logger
   },
@@ -40,6 +40,15 @@ export const failInterruptedImageJob = async (
       return
     }
     if (job.status === 'succeeded' || job.status === 'failed') return
+    // 描き終えてチェックの手順にいたジョブ（ADR-0055 §7）。失敗にせず、当てずに終える（固まって頼めなくならない）。
+    if (job.status === 'checking') {
+      deps.logger.error(
+        { imageJobId: job.id, shotId: job.shotId, queueReason },
+        '絵のチェックがキューに打ち切られました。当てずに終えます',
+      )
+      await publishImageJobStatus(deps, await deps.imageJobs.finishChecking(job.id))
+      return
+    }
     deps.logger.error(
       { imageJobId: job.id, shotId: job.shotId, queueReason },
       '絵のジョブがキューに打ち切られました。失敗にします',
