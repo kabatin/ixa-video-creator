@@ -1,4 +1,5 @@
-import { index, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
+import { index, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core'
 import {
   SfxJobStatus as SfxJobStatusSchema,
   type MediaAssetId,
@@ -61,5 +62,11 @@ export const uploadedSfx = pgTable(
     createdAt: createdAt(),
     deletedAt: deletedAt(),
   },
-  (t) => [index('uploaded_sfx_sounds_project_id_idx').on(t.projectId)],
+  (t) => [
+    index('uploaded_sfx_sounds_project_id_idx').on(t.projectId),
+    // 同じ素材は 1 作品に 1 行だけ（消した行は数えない）。続けて押されても重ねて記さない（レビューの指摘 2026-10-19）。
+    uniqueIndex('uploaded_sfx_sounds_project_id_media_asset_id_uidx')
+      .on(t.projectId, t.mediaAssetId)
+      .where(sql`${t.deletedAt} is null`),
+  ],
 )

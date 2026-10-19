@@ -40,3 +40,15 @@ describe('uploaded_sfx', () => {
     ])
   })
 })
+
+/** レビューの指摘（2026-10-19）。同じ素材は 1 作品に 1 行だけ。実際の DB でも確かめる（*.integration.test.ts）。 */
+describe('uploaded_sfx_sounds の一意', () => {
+  it('作品と素材の組は、消していない行の中で 1 つだけ', () => {
+    const index = getTableConfig(uploadedSfx).indexes.find(
+      (candidate) => candidate.config.name === 'uploaded_sfx_sounds_project_id_media_asset_id_uidx',
+    )
+    expect(index?.config.unique).toBe(true)
+    expect(index?.config.columns.map((column) => ('name' in column ? column.name : ''))).toEqual(['project_id', 'media_asset_id'])
+    expect(index?.config.where).toBeDefined()
+  })
+})

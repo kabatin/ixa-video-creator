@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import {
   CreateUploadedSfxInput as CreateUploadedSfxInputSchema,
   UploadedSfx as UploadedSfxSchema,
@@ -16,6 +16,7 @@ export type UploadedSfxRow = typeof uploadedSfx.$inferSelect
 
 /** 手元のファイルから取り込んだ効果音の読み書き（ADR-0056）。戻り値は必ず `@ixa/domain` の型。 */
 export type UploadedSfxRepository = {
+  /** 記す。同じ素材が作品にもう記されていれば（消した行は除く）、その行を返す（重ねて記さない）。 */
   create(input: CreateUploadedSfxInput): Promise<UploadedSfx>
   /** 作品の取り込んだ効果音（消したものは除く。新しい順）。 */
   findByProject(projectId: ProjectId): Promise<UploadedSfx[]>
@@ -37,9 +38,25 @@ export const createUploadedSfxRepository = (db: DbExecutor): UploadedSfxReposito
     const [row] = await db
       .insert(uploadedSfx)
       .values({ id: newId(UploadedSfxIdSchema), ...validated })
+      .onConflictDoNothing({
+        target: [uploadedSfx.projectId, uploadedSfx.mediaAssetId],
+        where: sql`${uploadedSfx.deletedAt} is null`,
+      })
       .returning()
-    if (row === undefined) throw new Error('取り込んだ効果音を記せませんでした')
-    return uploadedSfxRowToDomain(row)
+    if (row !== undefined) return uploadedSfxRowToDomain(row)
+    const [existing] = await db
+      .select()
+      .from(uploadedSfx)
+      .where(
+        and(
+          eq(uploadedSfx.projectId, validated.projectId),
+          eq(uploadedSfx.mediaAssetId, validated.mediaAssetId),
+          isNull(uploadedSfx.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (existing === undefined) throw new Error('取り込んだ効果音を記せませんでした')
+    return uploadedSfxRowToDomain(existing)
   },
 
   async findByProject(projectId) {
