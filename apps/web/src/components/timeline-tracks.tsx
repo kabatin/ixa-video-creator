@@ -18,6 +18,8 @@ import {
   rulerTicks,
   secondsToPx,
   timelineRowLabel,
+  TIMELINE_LANE_HEIGHT_PX,
+  TIMELINE_TRANSITION_ROW_HEIGHT_PX,
   type TimeSpan,
 } from '@/lib/timeline-display'
 import type { ClipDragContext, ClipDragOutcome } from '@/lib/timeline-drag'
@@ -47,8 +49,8 @@ import type { ContextMenuTriggerProps, MenuPoint } from '@/components/workbench/
  */
 
 const LABEL_WIDTH_CLASS = 'w-44'
-const LANE_HEIGHT_PX = 44
-const TRANSITION_ROW_HEIGHT_PX = 32
+const LANE_HEIGHT_PX = TIMELINE_LANE_HEIGHT_PX
+const TRANSITION_ROW_HEIGHT_PX = TIMELINE_TRANSITION_ROW_HEIGHT_PX
 const MIN_CONTENT_WIDTH_PX = 320
 
 /** テロップを置く既定の層（段を指さずに置くとき・空の帯）。 */
@@ -149,7 +151,7 @@ type RowProps = {
 const Row = ({ label, contentWidthPx, children }: RowProps) => (
   <div className="flex border-t border-line">
     <div
-      className={`sticky left-0 z-10 ${LABEL_WIDTH_CLASS} shrink-0 border-r border-line bg-surface-2 px-3 py-2 text-xs font-medium text-text`}
+      className={`sticky left-0 z-10 ${LABEL_WIDTH_CLASS} shrink-0 border-r border-line bg-surface-2 px-3 py-1 text-xs font-medium text-text`}
     >
       {label}
     </div>
@@ -289,7 +291,7 @@ export const TimelineTracks = ({
         <Row label={`尺 ${formatClock(durationSec)}`} contentWidthPx={contentWidthPx}>
           {/* 目盛りを押したらその秒へ。判定は `timeline-playhead` が持つ。 */}
           <div
-            className={`relative h-8 ${onSeek === undefined ? '' : 'cursor-pointer'}`}
+            className={`relative h-6 ${onSeek === undefined ? '' : 'cursor-pointer'}`}
             onPointerDown={(event) => {
               if (onSeek === undefined) return
               const left = event.currentTarget.getBoundingClientRect().left

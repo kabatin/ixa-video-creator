@@ -177,7 +177,7 @@ export const AddEffectButton = ({
         const rect = event.currentTarget.getBoundingClientRect()
         onOpen(playheadSec, { leftPx: rect.left + rect.width / 2, topPx: rect.bottom })
       }}
-      className="rounded-md bg-surface px-3 py-1 text-sm text-text ring-1 ring-line-strong hover:bg-surface-2 disabled:opacity-50"
+      className="rounded bg-surface px-2 py-0.5 text-xs text-text ring-1 ring-line-strong hover:bg-surface-2 disabled:opacity-50"
       title="再生位置にエフェクト（フラッシュ・寄りのパンチ・揺れなど）を置きます"
     >
       ＋ エフェクト

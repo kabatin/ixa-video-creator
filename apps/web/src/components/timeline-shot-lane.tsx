@@ -8,7 +8,7 @@ import type { ContextMenuTriggerProps } from '@/components/workbench/use-context
 import { chipRingClass, describeDrift, type ShotBeatAlignmentView } from '@/lib/beat-alignment-view'
 import { formatDuration } from '@/lib/format-time'
 import { posterViewFor, type ShotPosterMap } from '@/lib/shot-posters'
-import { formatTimeSpan, timeSpanToRect } from '@/lib/timeline-display'
+import { formatTimeSpan, timeSpanToRect, TIMELINE_LANE_HEIGHT_PX } from '@/lib/timeline-display'
 import { clipDragHandleLabel, edgeGrabWidthPx } from '@/lib/timeline-drag'
 
 /**
@@ -16,7 +16,7 @@ import { clipDragHandleLabel, edgeGrabWidthPx } from '@/lib/timeline-drag'
  * 端の動きと当て方は `use-shot-edge-drag`。ここは並べて繋ぐだけ。
  */
 
-const LANE_HEIGHT_PX = 44
+const LANE_HEIGHT_PX = TIMELINE_LANE_HEIGHT_PX
 
 export type TimelineShotLaneProps = {
   readonly shots: readonly Shot[]
@@ -89,13 +89,13 @@ export const TimelineShotLane = ({
                 ? `${shot.code} ${formatTimeSpan(span)}`
                 : `${shot.code} ${formatTimeSpan(span)} / ${describeDrift(alignment)}`
             }
-            className={`absolute top-2 overflow-hidden rounded px-1 text-xs ${
+            className={`absolute top-1 overflow-hidden rounded px-1 text-xs ${
               rendered ? 'bg-line text-text' : 'border border-dashed bg-warn/10 text-warn'
             } ${chipRingClass({ rendered, alignment: alignment?.alignment ?? null })} ${
               // 拍の色は ring。選択は outline にして両方を同時に見せる。
               selected ? 'outline outline-2 outline-offset-1 outline-accent' : ''
             } ${onSelectShot === undefined ? '' : 'cursor-pointer'} ${moving ? 'opacity-80' : ''}`}
-            style={{ ...menu?.style, left: rect.leftPx, width: rect.widthPx, height: LANE_HEIGHT_PX - 16 }}
+            style={{ ...menu?.style, left: rect.leftPx, width: rect.widthPx, height: LANE_HEIGHT_PX - 8 }}
           >
             {poster !== null && (
               <>

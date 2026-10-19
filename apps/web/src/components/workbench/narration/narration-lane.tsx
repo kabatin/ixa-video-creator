@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import { formatClock } from '@/lib/format-time'
 import { draggedStartSec, nudgedStartSec, peaksPath, type LaneBlock } from '@/lib/narration-lane'
+import { TIMELINE_LANE_HEIGHT_PX } from '@/lib/timeline-display'
 
-const LANE_HEIGHT_PX = 44
-const BLOCK_HEIGHT_PX = 36
+const LANE_HEIGHT_PX = TIMELINE_LANE_HEIGHT_PX
+const BLOCK_HEIGHT_PX = LANE_HEIGHT_PX - 8
 /** これより動かさなければ「押しただけ」とみなす（動かさない）。 */
 const DRAG_THRESHOLD_PX = 3
 

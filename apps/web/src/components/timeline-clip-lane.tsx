@@ -14,7 +14,14 @@ import {
   type ClipDragOutcome,
   type ClipDragStart,
 } from '@/lib/timeline-drag'
-import { clipChipLabel, describeClipContent, formatTimeSpan, timeSpanToRect, type TimeSpan } from '@/lib/timeline-display'
+import {
+  clipChipLabel,
+  describeClipContent,
+  formatTimeSpan,
+  timeSpanToRect,
+  TIMELINE_LANE_HEIGHT_PX,
+  type TimeSpan,
+} from '@/lib/timeline-display'
 import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX, type MenuPoint } from '@/components/workbench/use-context-menu'
 
 /**
@@ -27,8 +34,10 @@ import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX, type MenuPoint } from '@/components/
  * すべて `timeline-drag.ts` の純粋関数が決める。ここは指の動きを渡して結果を受けるだけ。
  */
 
-const LANE_HEIGHT_PX = 44
-const CLIP_HEIGHT_PX = LANE_HEIGHT_PX - 20
+const LANE_HEIGHT_PX = TIMELINE_LANE_HEIGHT_PX
+/** 上の 12px は「layer N」の札。クリップはその下に置く（36px の段で文字が 1 行収まる高さ）。 */
+const CLIP_TOP_PX = 12
+const CLIP_HEIGHT_PX = LANE_HEIGHT_PX - CLIP_TOP_PX - 2
 
 export type TimelineClipLaneProps = {
   readonly layer: number
@@ -218,11 +227,13 @@ export const TimelineClipLane = ({
         if (onClipContextMenu(hit, { x: event.clientX, y: event.clientY }, event.currentTarget)) event.preventDefault()
       }}
     >
-      <span className="pointer-events-none absolute left-1 top-1 text-xs text-muted">
+      <span className="pointer-events-none absolute left-1 top-0 text-[10px] leading-3 text-muted">
         {`layer ${String(layer)}`}
       </span>
       {emptyHint !== undefined && clips.length === 0 && (
-        <span className="pointer-events-none absolute left-16 top-4 text-xs text-muted">{emptyHint}</span>
+        <span className="pointer-events-none absolute left-16 text-xs text-muted" style={{ top: CLIP_TOP_PX }}>
+          {emptyHint}
+        </span>
       )}
 
       {clips.map((clip) => {
@@ -236,15 +247,15 @@ export const TimelineClipLane = ({
             key={clip.id}
             // ボタンにしない。押す・掴む・端を引くの 3 つを 1 つの要素で受けるため、
             // 判定は `timeline-drag` に任せて親が pointer を捌く。
-            // **キーボードからは帯の下の一覧で操作する**（数値のほうが正確に置ける）。
+            // 数値で直すのはインスペクター（押すと開く）。帯の下の数値の一覧は外した（制作者 2026-10-19）。
             aria-hidden="true"
             title={`${formatTimeSpan(span)} ${describeClipContent(clip.content)}`}
-            className={`absolute top-4 touch-none select-none overflow-hidden rounded text-left text-xs ring-1 ${
+            className={`absolute touch-none select-none overflow-hidden rounded text-left text-xs ring-1 ${
               selected
                 ? 'bg-info/25 text-text ring-info/60'
                 : 'bg-info/10 text-text ring-info/60 hover:bg-info/25'
             } ${previews.has(clip.id) ? 'opacity-80 ring-2 ring-info/60' : ''}`}
-            style={{ left: rect.leftPx, width: rect.widthPx, height: CLIP_HEIGHT_PX }}
+            style={{ top: CLIP_TOP_PX, left: rect.leftPx, width: rect.widthPx, height: CLIP_HEIGHT_PX }}
           >
             {/* 端の掴みしろ。幅は本体を食いつぶさないよう `timeline-drag` が決める。 */}
             <span

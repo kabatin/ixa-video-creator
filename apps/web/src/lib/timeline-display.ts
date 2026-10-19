@@ -117,6 +117,15 @@ export const zoomLabel = (pxPerSec: number): string => ZOOM_LABELS[pxPerSec] ?? 
 
 export const DEFAULT_PX_PER_SEC = 40
 
+/**
+ * 帯 1 段の高さ（px）。楽曲・Shot・ナレーション・クリップの段が同じ値を見る。
+ * 44 から詰めた（制作者 2026-10-19「縦幅を詰め、帯をできるだけ上に出したい」）。
+ */
+export const TIMELINE_LANE_HEIGHT_PX = 36
+
+/** トランジションの行の高さ（px）。段より低くてよい（境目の印だけを置く）。 */
+export const TIMELINE_TRANSITION_ROW_HEIGHT_PX = 24
+
 /** 尺 0 のクリップを幅 0 で描くと画面から消える。消さずに最低幅で必ず出す。 */
 export const MIN_CLIP_WIDTH_PX = 3
 

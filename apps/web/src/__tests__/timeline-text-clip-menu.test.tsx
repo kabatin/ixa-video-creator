@@ -46,7 +46,6 @@ const setup = () => {
       initialTransitions={[]}
       initialClips={[clip]}
       renderedShotIds={[]}
-      initialIssues={[]}
       documentDurationSec={30}
       initialDocument={null}
       beatSource={{ state: 'no_track' }}

@@ -58,7 +58,6 @@ const editor = (clips: readonly TimelineClip[]) => (
     initialTransitions={[]}
     initialClips={clips}
     renderedShotIds={[]}
-    initialIssues={[]}
     documentDurationSec={30}
     initialDocument={null}
     beatSource={{ state: 'no_track' }}

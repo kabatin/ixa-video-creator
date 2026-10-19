@@ -13,18 +13,14 @@ import type {
   TransitionId,
 } from '@ixa/domain'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { TimelineClipList, type ClipPatch } from '@/components/timeline-clip-list'
 import { TimelineInlineForm, inlineFormErrors } from '@/components/timeline-inline-form'
-import { TimelineIssuePanel } from '@/components/timeline-issue-panel'
-import { TimelineSnapPanel } from '@/components/timeline-snap-panel'
 import { ProgramMonitor, type ProgramMonitorProps } from '@/components/program-monitor'
 import { TimelineTracks } from '@/components/timeline-tracks'
+import { TimelineToolbar } from '@/components/timeline-toolbar'
 import { AddEffectButton, EffectPicker, useEffectInsert } from '@/components/timeline-effect-insert'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import type { WireTimelineBeatAlignment } from '@/lib/beat-alignment-view'
-import { EditHistoryPanel } from '@/components/edit-history-panel'
-import { RoughCutPanel } from '@/components/rough-cut-panel'
 import { PlayheadSecContext, usePlayheadSec } from '@/lib/playhead-sec'
 import { nextSeekCommand, type SeekCommand } from '@/lib/program-monitor'
 import type { ShotPosterMap } from '@/lib/shot-posters'
@@ -32,13 +28,10 @@ import { createRequester } from '@/lib/requester'
 import {
   createTimelineApi,
   type WireTimelineDocument,
-  type WireTimelineIssue,
 } from '@/lib/timeline-api'
 import { resolveTimelineKey } from '@/lib/timeline-playhead'
 import {
   DEFAULT_PX_PER_SEC,
-  ZOOM_LEVELS,
-  zoomLabel,
   formatClock,
   programEndSec,
   type TimeSpan,
@@ -55,11 +48,8 @@ import { openFormCaption } from '@/lib/timeline-open-form'
 import {
   buildSnapCandidates,
   snapPoint,
-  snapSpan,
   snapToleranceSec,
   type BeatSource,
-  type SnapSpanInput,
-  type SnapSpanOutcome,
 } from '@/lib/timeline-snap'
 import type { ContextMenuTriggerProps, MenuPoint } from '@/components/workbench/use-context-menu'
 import { useTimelineInlineForms } from '@/components/use-timeline-inline-forms'
@@ -85,8 +75,6 @@ export type TimelineEditorProps = {
   readonly initialClips: readonly TimelineClip[] | null
   /** `TimelineDocument.video1` に載った ShotId。null なら組み立て結果を読めていない。 */
   readonly renderedShotIds: readonly ShotId[] | null
-  /** サーバの検証結果。null は「検査できていない」（指摘なしの空配列とは別物）。 */
-  readonly initialIssues: readonly WireTimelineIssue[] | null
   readonly documentDurationSec: number | null
   /** モニターの入力。null は読めていない（空のタイムラインとは別）。 */
   readonly initialDocument: WireTimelineDocument | null
@@ -119,10 +107,11 @@ export type TimelineEditorProps = {
   /** 「拍に吸着」の初期値。環境設定の既定を渡す（UI-WORKBENCH §3.4）。 */
   readonly initialSnapEnabled?: boolean
   /**
-   * 検査・粗編集・履歴・吸着を帯の下へ畳むか（PHASE 7.1 ワークベンチ）。
-   * ワークベンチの中央下は高さが限られ、上に積むと帯が見えるところまで届かない。
+   * 操作の結果（「…しました」）と失敗の送り先（ワークベンチのコンソール）。
+   * **渡すと帯の上に出さない。** 出すたびに帯が押し下がっていた（制作者 2026-10-19）。
+   * 渡さなければ今までどおりツールバーの下に出す（単独のタイムライン）。
    */
-  readonly collapseAuxiliary?: boolean
+  readonly onLog?: (level: 'info' | 'error', message: string) => void
   /** 帯に敷くサムネイル・選択中の Shot・選ぶ口（PHASE 7.2 ワークベンチ）。`TimelineTracks` へそのまま渡す。 */
   readonly posters?: ShotPosterMap
   readonly selectedShotId?: ShotId | null
@@ -171,7 +160,6 @@ export const TimelineEditor = ({
   initialTransitions,
   initialClips,
   renderedShotIds,
-  initialIssues,
   documentDurationSec,
   initialDocument,
   beatSource,
@@ -182,7 +170,7 @@ export const TimelineEditor = ({
   showMonitor = true,
   playheadMoving,
   initialSnapEnabled = true,
-  collapseAuxiliary = false,
+  onLog,
   posters,
   selectedShotId,
   onSelectShot,
@@ -284,16 +272,19 @@ export const TimelineEditor = ({
     }
   }, [controlled])
 
-  /**
-   * 検証はサーバの `validateTimeline` が唯一の正。**画面に同じ規則を置かない。**
-   * 置くと必ずズレて、レンダリングでは止まるのに画面では合格に見える状態が生まれる。
-   *
-   * null は「検査できていない」を意味する（取得に失敗した場合）。空配列の
-   * 「指摘なし」とは別物で、画面も出し分ける。
-   */
-  const issues = initialIssues
-
   const durationSec = documentDurationSec ?? programEndSec(shots ?? [])
+
+  // 結果と失敗はコンソールへ送る（渡されていれば）。同じ文が続いても、run の頭で null に戻すので毎回届く。
+  const onLogRef = useRef(onLog)
+  useEffect(() => {
+    onLogRef.current = onLog
+  })
+  useEffect(() => {
+    if (status !== null) onLogRef.current?.('info', status)
+  }, [status])
+  useEffect(() => {
+    if (actionError !== null) onLogRef.current?.('error', actionError)
+  }, [actionError])
 
   /**
    * 吸着の材料。読み込めていない部分は空として渡すしかないが、
@@ -314,23 +305,17 @@ export const TimelineEditor = ({
   /** 許容距離はズーム率から。px で一定にするのは `snapToleranceSecForZoom` の判断。 */
   const toleranceSec = snapToleranceSec(pxPerSec)
 
-  /** 内訳の表示用。どのクリップも除外していない状態の候補数。 */
+  /** 置くときの吸着の候補。どのクリップも除外していない。 */
   const overviewCandidates = useMemo(
     () => buildSnapCandidates(snapSource, { clipId: null }),
     [snapSource],
   )
 
-  /**
-   * **動かしている当のクリップを必ず除外する。**
-   * 自分の端は距離 0 の候補になり、そこへ吸着して二度と動かせなくなる。
-   */
-  const snapSpanForClip = (clipId: TimelineClipId | null, span: SnapSpanInput): SnapSpanOutcome =>
-    snapSpan(span, buildSnapCandidates(snapSource, { clipId }), toleranceSec, snapEnabled)
-
   /** 失敗を握り潰すと「押したのに何も起きない」画面になる。必ず理由を出す。 */
   const run = async (label: string, action: () => Promise<void>): Promise<void> => {
     setBusy(true)
     setActionError(null)
+    setStatus(null)
     try {
       await action()
       setStatus(`${label}しました`)
@@ -467,16 +452,6 @@ export const TimelineEditor = ({
     }
   }
 
-  const updateClip = (id: TimelineClipId, patch: ClipPatch): void => {
-    void run('クリップを更新', async () => {
-      const updated = await api.updateClip(id, patch)
-      setClips((current) =>
-        current === null ? current : current.map((clip) => (clip.id === id ? updated : clip)),
-      )
-      onClipChanged?.(updated.track)
-    })
-  }
-
   const removeClip = (id: TimelineClipId): void => {
     void run('クリップを削除', async () => {
       const removed = (clips ?? []).find((clip) => clip.id === id)
@@ -487,49 +462,9 @@ export const TimelineEditor = ({
     })
   }
 
-  /** 検査・粗編集・履歴・吸着。帯の操作の周りの道具。 */
-  const auxiliary = (
-    <>
-      <TimelineIssuePanel issues={issues} projectId={projectId} />
-
-      {/**
-       * 粗編集の提案（PHASE 6.3）。**指摘の真下に置く。**
-       * 「重なり 72 件」を見た人が次に取る行動がこれなので、探させない。
-       * 押すまで何も変わらない作りは部品側が持つ。
-       */}
-      <RoughCutPanel
-        projectId={projectId}
-        shotCodes={new Map((shots ?? []).map((shot) => [shot.id, shot.code]))}
-        onApplied={() => {
-          router.refresh()
-        }}
-      />
-
-      {/**
-       * 一括で変えたものを戻す（横断 ROADMAP）。**押した場所の隣に置く。**
-       * 49 件を当てた直後に「戻したい」と思うので、別の画面へ探しに行かせない。
-       */}
-      <EditHistoryPanel
-        projectId={projectId}
-        shotCodes={new Map((shots ?? []).map((shot) => [shot.id, shot.code]))}
-        onUndone={() => {
-          router.refresh()
-        }}
-      />
-
-      <TimelineSnapPanel
-        enabled={snapEnabled}
-        onToggle={setSnapEnabled}
-        beatSource={beatSource}
-        toleranceSec={toleranceSec}
-        candidates={overviewCandidates}
-      />
-    </>
-  )
-
   const body = (
-    // 行の間は詰める。帯（本体）をできるだけ上に出す（制作者 2026-10-02）。
-    <div className="space-y-3">
+    // 行の間は詰める。帯（本体）をできるだけ上に出す（制作者 2026-10-02 / 2026-10-19）。
+    <div className="space-y-1">
       {loadErrors.length > 0 && (
         <ul role="alert" className="space-y-1 rounded-lg border border-danger/40 bg-danger/10 p-4">
           {loadErrors.map((message) => (
@@ -540,64 +475,38 @@ export const TimelineEditor = ({
         </ul>
       )}
 
-      {!collapseAuxiliary && auxiliary}
-
       {/*
-        再生の状態と位置はズームの行に寄せる（制作者 2026-10-02「停止中と時間の表示が縦幅を占有してしまう」）。
-        全体の尺は帯の左上（「尺 …」）にあるので出さない（同「冗長のため削除」）。
+        ツールバーは 1 行（`timeline-toolbar.tsx`）。全体の尺は帯の左上（「尺 …」）にあるので出さない。
+        検査・粗編集・変更履歴・吸着の候補は下の区画の別のタブ（制作者 2026-10-19）。
       */}
-      <div className="flex flex-wrap items-center gap-3">
-        {document !== null && (
-          <span role="status" className="min-w-32 text-sm tabular-nums text-muted">
-            {/*
-              Space の説明を常設しない。キーの持ち主はフォーカスの場所で決まるようになり
-              （`resolveKeyOwner`）、「Space で再生」と無条件に書くと嘘になる。
-              割り当ては ヘルプ > キーボードショートカット が持つ。
-            */}
-            <PlaybackClock playing={playing} />
-          </span>
-        )}
-        <span className="text-sm text-muted">ズーム</span>
-        {ZOOM_LEVELS.map((level) => (
-          <button
-            key={level}
-            type="button"
-            aria-pressed={level === pxPerSec}
-            onClick={() => {
-              setPxPerSec(level)
-            }}
-            className={`rounded-md px-3 py-1 text-sm ring-1 ${
-              level === pxPerSec
-                ? 'bg-accent text-accent-fg ring-accent'
-                : 'bg-surface text-text ring-line-strong hover:bg-surface-2'
-            }`}
-          >
-            {zoomLabel(level)}
-          </button>
-        ))}
-        <AddEffectButton busy={busy} onOpen={openEffectAt} />
-        <label
-          className="ml-auto flex items-center gap-1 text-sm text-text"
-          title="鳴っている間は帯が流れ、止めている間は再生位置が画面から出たときだけ追いかけます"
-        >
-          <input
-            type="checkbox"
-            checked={followPlayhead}
-            onChange={(event) => {
-              setFollowPlayhead(event.target.checked)
-            }}
-            className="h-3.5 w-3.5"
-          />
-          再生位置を追う
-        </label>
-      </div>
+      <TimelineToolbar
+        clock={
+          document !== null && (
+            <span role="status" className="min-w-28 text-xs tabular-nums text-muted">
+              {/*
+                Space の説明を常設しない。キーの持ち主はフォーカスの場所で決まるようになり
+                （`resolveKeyOwner`）、「Space で再生」と無条件に書くと嘘になる。
+                割り当ては ヘルプ > キーボードショートカット が持つ。
+              */}
+              <PlaybackClock playing={playing} />
+            </span>
+          )
+        }
+        pxPerSec={pxPerSec}
+        onZoom={setPxPerSec}
+        additions={<AddEffectButton busy={busy} onOpen={openEffectAt} />}
+        snapEnabled={snapEnabled}
+        onSnapChange={setSnapEnabled}
+        followPlayhead={followPlayhead}
+        onFollowChange={setFollowPlayhead}
+      />
 
-      {actionError !== null && (
+      {onLog === undefined && actionError !== null && (
         <p role="alert" className="rounded-md bg-danger/10 p-3 text-sm text-danger">
           {actionError}
         </p>
       )}
-      {status !== null && actionError === null && (
+      {onLog === undefined && status !== null && actionError === null && (
         <p role="status" className="rounded-md bg-surface-2 p-3 text-sm text-text">
           {status}
         </p>
@@ -734,36 +643,6 @@ export const TimelineEditor = ({
         </ul>
       )}
 
-      {/**
-       * 数値で直す口は残す。**帯の上の操作は掴める幅に限りがある。**
-       * 0.01 秒を合わせ込むには数値のほうが速く、キーボードだけでも操作できる。
-       * 主でなくなったので、開かないと出ないところへ下げてある。
-       */}
-      <details className="rounded-lg border border-line bg-surface p-4">
-        <summary className="cursor-pointer text-sm font-semibold text-text">
-          クリップを数値で直す
-        </summary>
-        <div className="mt-4">
-          <TimelineClipList
-            clips={clips}
-            busy={busy}
-            selectedClipId={selectedClipId}
-            onSelect={setSelectedClipId}
-            onUpdate={updateClip}
-            onRemove={removeClip}
-            onSnapSpan={snapSpanForClip}
-          />
-        </div>
-      </details>
-
-      {collapseAuxiliary && (
-        <details className="rounded-lg border border-line bg-surface p-3">
-          <summary className="cursor-pointer text-sm font-semibold text-text">
-            検査・粗編集・変更の履歴・ビート吸着
-          </summary>
-          <div className="mt-3 space-y-4">{auxiliary}</div>
-        </details>
-      )}
     </div>
   )
 

@@ -3,6 +3,7 @@
 import type { MusicTrackId, Shot } from '@ixa/domain'
 import { useState } from 'react'
 import { TimelineEditor } from '@/components/timeline-editor'
+import { TIMELINE_LANE_HEIGHT_PX } from '@/lib/timeline-display'
 import { WaveformCanvas } from '@/components/waveform-canvas'
 import { useFreshWaveformPeaks } from '@/lib/fresh-waveform-peaks'
 import type { WaveformPeaksResult } from '@/lib/waveform-api'
@@ -10,6 +11,7 @@ import { sectionBoundaries } from '@/lib/waveform-draw'
 import { usePreferences } from '@/components/preferences-root'
 import { useTransportState, useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelFrame } from '@/components/workbench/panels/panel-frame'
+import { useConsoleLog } from '@/components/workbench/console-log-context'
 import { renderedShotIdsOf, timelineLoadErrors } from '@/lib/timeline-loader'
 import { useTimelineMaterials } from '@/components/workbench/use-timeline-materials'
 import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
@@ -32,6 +34,7 @@ export const TimelinePanel = () => {
     shotMenuActions.open(shot, at, origin)
   })
   const { preferences } = usePreferences()
+  const consoleLog = useConsoleLog()
   const { transportControls } = workbench
   const transport = useTransportState()
   const peaks = useTrackPeaks(workbench.track?.id ?? null, workbench.analysis?.waveformPeaksUrl ?? null)
@@ -67,7 +70,7 @@ export const TimelinePanel = () => {
               downbeats={analysis.downbeats}
               drops={analysis.drops}
               sectionBoundarySec={sectionBoundaries(analysis.sections)}
-              heightPx={44}
+              heightPx={TIMELINE_LANE_HEIGHT_PX}
               compact
             />
           ),
@@ -83,13 +86,16 @@ export const TimelinePanel = () => {
         renderedShotIds={renderedShotIdsOf(materials)}
         documentDurationSec={materials.document.value?.durationSec ?? null}
         initialDocument={materials.document.value}
-        initialIssues={materials.issues.value}
         beatSource={materials.beatSource}
         lyricCues={workbench.project.lyricCues}
         beatAlignment={materials.beatAlignment.value}
         loadErrors={timelineLoadErrors(materials)}
         showMonitor={false}
-        collapseAuxiliary
+        // 操作の結果はコンソールへ。失敗は上の 1 行の知らせにも出す（帯の上に積んで押し下げない）。
+        onLog={(level, message) => {
+          if (level === 'error') workbench.notify(message, 'error')
+          else consoleLog?.push('info', message)
+        }}
         posters={workbench.posters}
         selectedShotId={workbench.selectedShotId}
         onSelectShot={workbench.selectShot}

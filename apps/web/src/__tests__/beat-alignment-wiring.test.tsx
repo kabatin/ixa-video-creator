@@ -50,7 +50,6 @@ const renderEditor = (beatAlignment: WireTimelineBeatAlignment | null) =>
       initialTransitions={[]}
       initialClips={[]}
       renderedShotIds={shots.map((shot) => shot.id)}
-      initialIssues={[]}
       documentDurationSec={4}
       initialDocument={null}
       beatSource={{ state: 'no_track' }}

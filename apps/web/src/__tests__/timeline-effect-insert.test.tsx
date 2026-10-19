@@ -27,7 +27,6 @@ const editor = (onOpenEffectClip: (id: TimelineClipId) => void): ReactElement =>
     initialTransitions={[]}
     initialClips={[]}
     renderedShotIds={[]}
-    initialIssues={[]}
     documentDurationSec={30}
     initialDocument={null}
     beatSource={{ state: 'no_track' }}

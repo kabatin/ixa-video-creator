@@ -33,7 +33,6 @@ const editor = (playheadMoving: boolean) => (
     initialTransitions={[]}
     initialClips={[]}
     renderedShotIds={[]}
-    initialIssues={[]}
     documentDurationSec={120}
     initialDocument={document}
     beatSource={{ state: 'no_track' }}
