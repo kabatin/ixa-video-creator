@@ -6,6 +6,7 @@ import {
   MusicTrackId,
   ProjectId,
   ShotId,
+  TextStyleId,
   TransitionId,
   VoiceProfileId,
   newId,
@@ -168,5 +169,14 @@ describe('素材の記録（EditBatchAssetEdit）', () => {
     expect(EditBatch.parse({ ...base, kind: 'rough_cut' }).assetEdits).toEqual([])
     const batch = EditBatch.parse({ ...base, kind: 'asset_edit', assetEdits: [{ asset: 'voice', op: 'create', id: newId(VoiceProfileId) }] })
     expect(canUndo(batch)).toBe(true)
+  })
+})
+
+describe('テロップのスタイルの記録', () => {
+  it('素材の記録として持て、見出しは「テロップのスタイル」で言う', () => {
+    const id = newId(TextStyleId)
+    expect(EditBatchAssetEdit.parse({ asset: 'text_style', op: 'update', id, before: { name: '歌詞' } }).asset).toBe('text_style')
+    expect(EditBatchAssetEdit.safeParse({ asset: 'text_style', op: 'update', id, before: { name: '' } }).success).toBe(false)
+    expect(assetEditSummary({ asset: 'text_style', op: 'delete' }, '歌詞')).toBe('テロップのスタイル「歌詞」を消す')
   })
 })

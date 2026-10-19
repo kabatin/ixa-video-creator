@@ -1,6 +1,7 @@
 import { aShot, aTake, createInMemoryShotRepository, createInMemoryTakeRepository } from '@ixa/generation/testing'
 import type { Shot } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
+import { SHOT_CODE_TAKEN_REASON } from '../routes/edit-batch-shot-undo.js'
 import type { EditBatchSummaryResponse, UndoEditBatchResponse } from '../routes/edit-batches.js'
 import { baseAppDeps, createTestApp } from './app-deps.js'
 import { aProject } from './fixtures.js'
@@ -86,6 +87,7 @@ describe('作る・消す', () => {
 
     const result = await f.undo(removed!.id)
     expect(result.failed.map((entry) => entry.shotId)).toEqual([b.id])
+    expect(result.failed[0]?.reason).toBe(SHOT_CODE_TAKEN_REASON)
   })
 
   it('記録が作れなければ作らない・消さない', async () => {

@@ -1,14 +1,16 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { ProjectRepository, TextStyleRepository } from '@ixa/db'
+import type { EditTransaction, ProjectRepository, TextStyleRepository } from '@ixa/db'
 import {
   CreateTextStylePresetInput,
   ProjectId as ProjectIdSchema,
   TextStyleId as TextStyleIdSchema,
+  newId,
   TextStylePreset,
   UpdateTextStylePresetPatch,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
+import { changedBefore, recordAssetEdit } from './asset-edit-recording.js'
 
 /**
  * 名前を付けて保存したテロップの見た目（ADR-0028）。プロジェクトごと。
@@ -18,6 +20,8 @@ import { errorContent, fail, listResponse, ok, okList, successResponse } from '.
 export type TextStyleRoutesDeps = {
   readonly textStyles: TextStyleRepository
   readonly projects: Pick<ProjectRepository, 'findById'>
+  /** 作る・直す・消すの記録と書き込みを、同じトランザクションで行う（取り消し。2026-10-19）。**省けない。** */
+  readonly transaction: EditTransaction
 }
 
 export const DUPLICATE_TEXT_STYLE_NAME_MESSAGE = '同じ名前のスタイルが、このプロジェクトに既にあります'
@@ -100,7 +104,12 @@ export const textStyleRoutes = (deps: TextStyleRoutesDeps) =>
       if ((await deps.projects.findById(projectId)) === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       const input = c.req.valid('json')
       if ((await deps.textStyles.findByName(projectId, input.name)) !== null) return c.json(duplicate(), 409)
-      const created = await deps.textStyles.create(projectId, input)
+      // 記録は書く前に、同じトランザクションで。作るスタイルの ID を先に決めて記録に入れる。
+      const id = newId(TextStyleIdSchema)
+      const created = await deps.transaction(async (tx) => {
+        await recordAssetEdit(tx.editBatches, { projectId, name: input.name, edit: { asset: 'text_style', op: 'create', id } })
+        return tx.textStyles.create(projectId, { ...input, id })
+      })
       return c.json(ok(toResponse(created)), 201)
     })
     .openapi(updateStyleRoute, async (c) => {
@@ -112,10 +121,27 @@ export const textStyleRoutes = (deps: TextStyleRoutesDeps) =>
         const sameName = await deps.textStyles.findByName(current.projectId, patch.name)
         if (sameName !== null && sameName.id !== id) return c.json(duplicate(), 409)
       }
-      const updated = await deps.textStyles.update(id, patch)
+      const before = changedBefore(current, patch)
+      const updated = await deps.transaction(async (tx) => {
+        if (before !== null) {
+          await recordAssetEdit(tx.editBatches, {
+            projectId: current.projectId,
+            name: current.name,
+            edit: { asset: 'text_style', op: 'update', id, before },
+          })
+        }
+        return tx.textStyles.update(id, patch)
+      })
       return c.json(ok(toResponse(updated)), 200)
     })
     .openapi(deleteStyleRoute, async (c) => {
-      await deps.textStyles.softDelete(c.req.valid('param').id)
+      const { id } = c.req.valid('param')
+      const current = await deps.textStyles.findById(id)
+      if (current === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
+      // 消してもテロップの見た目は残る（当てた値を写している）ので、テロップから外すものは無い。スタイルだけを控える。
+      await deps.transaction(async (tx) => {
+        await recordAssetEdit(tx.editBatches, { projectId: current.projectId, name: current.name, edit: { asset: 'text_style', op: 'delete', id } })
+        await tx.textStyles.softDelete(id)
+      })
       return c.body(null, 204)
     })

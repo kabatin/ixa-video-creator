@@ -1,5 +1,13 @@
-import { DbNotFoundError, type BrandAssetRepository, type CharacterRepository, type LocationRepository, type VoiceProfileRepository } from '@ixa/db'
+import {
+  DbNotFoundError,
+  type BrandAssetRepository,
+  type CharacterRepository,
+  type LocationRepository,
+  type TextStyleRepository,
+  type VoiceProfileRepository,
+} from '@ixa/db'
 import type { EditBatchAssetEdit } from '@ixa/domain'
+import { isUniqueViolation } from './unique-violation.js'
 
 /**
  * 素材の記録（`assetEdits`）を戻す。**消したものは同じ ID・同じ中身で論理削除を外し**、作ったものは論理削除し、
@@ -17,11 +25,13 @@ export type AssetUndoDeps = {
   readonly locations?: Pick<LocationRepository, 'update' | 'softDelete' | 'restore'>
   readonly brandAssets?: Pick<BrandAssetRepository, 'update' | 'softDelete' | 'restore'>
   readonly voices?: Pick<VoiceProfileRepository, 'update' | 'softDelete' | 'restore'>
+  readonly textStyles?: Pick<TextStyleRepository, 'update' | 'softDelete' | 'restore'>
 }
 
 export const ASSET_UNAVAILABLE_REASON = 'この素材を戻す口がありません'
 export const ASSET_ALREADY_REMOVED_REASON = '素材は既に消されています'
 export const ASSET_NOT_REMOVED_REASON = '素材は既に戻っているか、見つかりません'
+export const ASSET_NAME_TAKEN_REASON = '同じ名前のものが後から作られているので戻せません（どちらかの名前を変えてください）'
 
 const undoWith = async <I, P, E>(
   repo: Writable<I, P, E> | undefined,
@@ -54,6 +64,8 @@ const undoOne = (deps: AssetUndoDeps, edit: EditBatchAssetEdit): Promise<string 
       return undoWith(deps.brandAssets, edit.op, edit.id, edit.op === 'update' ? edit.before : undefined)
     case 'voice':
       return undoWith(deps.voices, edit.op, edit.id, edit.op === 'update' ? edit.before : undefined)
+    case 'text_style':
+      return undoWith(deps.textStyles, edit.op, edit.id, edit.op === 'update' ? edit.before : undefined)
   }
 }
 
@@ -73,7 +85,11 @@ export const undoAssetEdits = async (
       if (reason === null) restored.push(edit.id)
       else failed.push({ assetId: edit.id, reason })
     } catch (cause) {
-      // 同じ名前の声が後から作られていると、一意制約で戻せない。
+      // 同じ名前の声・スタイルが後から作られていると、一意制約で戻せない。DB の文は出さず、何をすればよいかを言う。
+      if (isUniqueViolation(cause)) {
+        failed.push({ assetId: edit.id, reason: ASSET_NAME_TAKEN_REASON })
+        continue
+      }
       failed.push({ assetId: edit.id, reason: `戻せませんでした: ${cause instanceof Error ? cause.message : String(cause)}` })
     }
   }

@@ -181,6 +181,7 @@ const editTransactionOf = (deps: Omit<AppDeps, 'editTransaction'>) =>
     looks: deps.looks,
     locations: deps.locations,
     brandAssets: deps.brandAssets,
+    textStyles: deps.textStyles,
     ...(deps.narration === undefined ? {} : { narrationLines: deps.narration.lines, voices: deps.narration.voices }),
   })
 

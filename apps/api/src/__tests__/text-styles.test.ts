@@ -13,6 +13,7 @@ import {
   type InMemoryTimelineClipRepository,
 } from './in-memory-timeline-repositories.js'
 import { createInMemoryEditBatchRepository, type InMemoryEditBatchRepository } from './in-memory-edit-batch-repository.js'
+import { createInMemoryEditTransaction } from './in-memory-edit-transaction.js'
 
 /** テロップのスタイル（ADR-0028）。名前を付けて保存し、まとめて当てる。 */
 
@@ -58,7 +59,7 @@ beforeEach(() => {
   editBatches = createInMemoryEditBatchRepository()
   const projects = createInMemoryProjectRepository([project, other])
   app = new OpenAPIHono({ defaultHook: validationHook })
-  app.route('/', textStyleRoutes({ textStyles, projects }))
+  app.route('/', textStyleRoutes({ textStyles, projects, transaction: createInMemoryEditTransaction({ editBatches, textStyles }) }))
   app.route('/', clipTextStyleRoutes({ textStyles, projects, timelineClips: clips, editBatches }))
   registerErrorHandlers(app, createLogger('silent'))
 })

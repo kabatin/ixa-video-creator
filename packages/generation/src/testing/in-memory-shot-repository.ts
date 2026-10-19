@@ -92,7 +92,9 @@ export const createInMemoryShotRepository = (
       const removed = deleted.find((shot) => shot.id === id)
       if (removed === undefined) return Promise.resolve(null)
       if (store.some((shot) => shot.projectId === removed.projectId && shot.code === removed.code)) {
-        return Promise.reject(new Error('duplicate key value violates unique constraint "shots_project_id_code_uidx"'))
+        return Promise.reject(
+          Object.assign(new Error('duplicate key value violates unique constraint "shots_project_id_code_uidx"'), { code: '23505' }),
+        )
       }
       deleted = deleted.filter((shot) => shot.id !== id)
       store = [...store, removed]

@@ -1,5 +1,6 @@
 import { DbNotFoundError, type ShotRepository, type TakeRepository } from '@ixa/db'
 import type { EditBatchShotEdit, ShotId } from '@ixa/domain'
+import { isUniqueViolation } from './unique-violation.js'
 
 /**
  * Shot の作成・削除の記録（`shotEdits`）を戻す。**消した Shot は同じ ID・同じ中身で論理削除を外し**、作った Shot は論理削除する。
@@ -21,6 +22,7 @@ export const SHOT_HAS_TAKE_REASON = 'Take があるので消しません（Take 
 export const SHOT_GENERATING_REASON = '生成中なので消しません'
 export const SHOT_LOCKED_REASON = 'ロック中なので消しません'
 export const SHOT_TAKES_UNKNOWN_REASON = 'Take があるか確かめられないので消しません'
+export const SHOT_CODE_TAKEN_REASON = '同じコードの Shot が後から作られているので戻せません（どちらかのコードを変えてください）'
 
 /** 作った Shot を消してよいか。だめなら理由。 */
 const createdShotBlocker = async (deps: ShotEditUndoDeps, shotId: ShotId): Promise<string | null> => {
@@ -63,7 +65,11 @@ export const undoShotEdits = async (
       if (reason === null) restored.push(edit.shotId)
       else failed.push({ shotId: edit.shotId, reason })
     } catch (cause) {
-      // 同じコードの Shot が後から作られていると、一意制約で戻せない。
+      // 同じコードの Shot が後から作られていると、一意制約で戻せない。DB の文は出さず、何をすればよいかを言う。
+      if (isUniqueViolation(cause)) {
+        failed.push({ shotId: edit.shotId, reason: SHOT_CODE_TAKEN_REASON })
+        continue
+      }
       failed.push({ shotId: edit.shotId, reason: `戻せませんでした: ${cause instanceof Error ? cause.message : String(cause)}` })
     }
   }

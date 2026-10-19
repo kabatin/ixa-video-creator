@@ -34,6 +34,7 @@ export const createInMemoryEditTransaction = (given: Given): EditTransaction => 
     locations: given.locations ?? unused('locations'),
     brandAssets: given.brandAssets ?? unused('brandAssets'),
     voices: given.voices ?? unused('voices'),
+    textStyles: given.textStyles ?? unused('textStyles'),
   }
   return async (fn) => {
     const before = given.editBatches.snapshot?.()

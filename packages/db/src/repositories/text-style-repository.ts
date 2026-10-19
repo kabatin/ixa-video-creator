@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm'
 import type {
   CreateTextStylePresetInput,
   ProjectId,
@@ -27,9 +27,15 @@ export type TextStyleRepository = {
   findById(id: TextStyleId): Promise<TextStylePreset | null>
   /** 同じプロジェクトに同じ名前があるか（作る・名前を変える前に確かめる）。 */
   findByName(projectId: ProjectId, name: string): Promise<TextStylePreset | null>
-  create(projectId: ProjectId, input: CreateTextStylePresetInput): Promise<TextStylePreset>
+  /** `id` は省ける（省けばここで振る）。取り消しの記録は書く前に作るので、作る前に ID を決めたい呼び手だけが渡す。 */
+  create(projectId: ProjectId, input: CreateTextStylePresetInput & { readonly id?: TextStyleId }): Promise<TextStylePreset>
   update(id: TextStyleId, patch: UpdateTextStylePresetPatch): Promise<TextStylePreset>
   softDelete(id: TextStyleId): Promise<void>
+  /**
+   * 消したスタイルを戻す（取り消し。2026-10-19）。同じ ID・同じ中身のまま論理削除を外す。消していない・無いなら `null`。
+   * 同じ名前のスタイルが後から作られていれば一意制約で投げる。
+   */
+  restore(id: TextStyleId): Promise<TextStylePreset | null>
 }
 
 /** row → Domain。zod で検証して branded ID を付ける。 */
@@ -75,7 +81,14 @@ export const createTextStyleRepository = (db: DbExecutor): TextStyleRepository =
     const now = new Date()
     const rows = await db
       .insert(textStyles)
-      .values({ ...validated, id: newId(TextStyleIdSchema), projectId, createdAt: now, updatedAt: now })
+      .values({
+        ...validated,
+        // 渡された ID は検証してから使う（規約 4）。
+        id: input.id === undefined ? newId(TextStyleIdSchema) : TextStyleIdSchema.parse(input.id),
+        projectId,
+        createdAt: now,
+        updatedAt: now,
+      })
       .returning()
     const row = rows[0]
     if (!row) throw new Error('text_styles への INSERT が行を返しませんでした')
@@ -101,5 +114,15 @@ export const createTextStyleRepository = (db: DbExecutor): TextStyleRepository =
       .where(and(eq(textStyles.id, id), live))
       .returning({ id: textStyles.id })
     if (rows.length === 0) throw new DbNotFoundError('TextStyle', id)
+  },
+
+  async restore(id) {
+    const rows = await db
+      .update(textStyles)
+      .set({ deletedAt: null })
+      .where(and(eq(textStyles.id, id), isNotNull(textStyles.deletedAt)))
+      .returning()
+    const row = rows[0]
+    return row === undefined ? null : textStyleRowToDomain(row)
   },
 })

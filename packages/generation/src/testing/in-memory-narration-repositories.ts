@@ -66,7 +66,7 @@ export const createInMemoryVoiceProfileRepository = (): VoiceProfileRepository &
       if (removed === undefined) return Promise.resolve(null)
       // 本物と同じく、同じ名前の声が後から作られていれば一意制約で落ちる。
       if (store.some((voice) => voice.projectId === removed.projectId && voice.name === removed.name)) {
-        return Promise.reject(new Error('duplicate key value violates unique constraint'))
+        return Promise.reject(Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' }))
       }
       deleted = deleted.filter((voice) => voice.id !== id)
       store = [...store, removed]

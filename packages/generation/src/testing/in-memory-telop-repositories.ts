@@ -101,6 +101,8 @@ export const createInMemoryTextStyleRepository = (
   seed: readonly TextStylePreset[] = [],
 ): InMemoryTextStyleRepository => {
   let store: readonly TextStylePreset[] = seed.map((style) => TextStylePreset.parse(style))
+  /** 論理削除したもの。一覧・1 件の読みには出さず、`restore` だけが戻す。 */
+  let deleted: readonly TextStylePreset[] = []
   const find = (id: string) => store.find((style) => style.id === id)
 
   return {
@@ -113,7 +115,7 @@ export const createInMemoryTextStyleRepository = (
       const now = new Date()
       const created = TextStylePreset.parse({
         ...CreateTextStylePresetInput.parse(input),
-        id: newId(TextStyleId),
+        id: input.id ?? newId(TextStyleId),
         projectId,
         createdAt: now,
         updatedAt: now,
@@ -129,9 +131,24 @@ export const createInMemoryTextStyleRepository = (
       return Promise.resolve(updated)
     },
     softDelete: (id) => {
-      if (find(id) === undefined) return Promise.reject(new DbNotFoundError('TextStyle', id))
+      const current = find(id)
+      if (current === undefined) return Promise.reject(new DbNotFoundError('TextStyle', id))
       store = store.filter((style) => style.id !== id)
+      deleted = [...deleted, current]
       return Promise.resolve()
+    },
+
+    // 本物と同じく、同じ名前のスタイルが後から作られていれば一意制約で落ちる。
+    restore: (id) => {
+      const removed = deleted.find((style) => style.id === id)
+      if (removed === undefined) return Promise.resolve(null)
+      if (store.some((style) => style.projectId === removed.projectId && style.name === removed.name)) {
+        // 本物（postgres.js）と同じく、一意制約違反は code 23505 を持つ。
+        return Promise.reject(Object.assign(new Error('duplicate key value violates unique constraint "text_styles_project_id_name_uidx"'), { code: '23505' }))
+      }
+      deleted = deleted.filter((style) => style.id !== id)
+      store = [...store, removed]
+      return Promise.resolve(removed)
     },
   }
 }

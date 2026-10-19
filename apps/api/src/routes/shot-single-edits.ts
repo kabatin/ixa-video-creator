@@ -11,6 +11,7 @@ import {
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 import { locationProblem } from './library-ownership.js'
+import { isUniqueViolation } from './unique-violation.js'
 import { recordShotEdits, recordShotPatch, recordTakeChoice } from './shot-edit-recording.js'
 import {
   ShotResponse,
@@ -62,22 +63,6 @@ const UpdateShotBody = UpdateShotPatchSchema.pick({
   // 場所は後から決められる。null を送れば外す（ADR-0015）。
   locationId: true,
 }).openapi('UpdateShotPatch')
-
-/**
- * PostgreSQL の一意制約違反かどうか。
- * **エラーの型で判定せず code で見る。** drizzle は driver の例外を包んで投げるため、
- * instanceof では捕まえられない（実際に包まれていることを確認済み）。
- */
-const isUniqueViolation = (error: unknown): boolean => {
-  const seen = new Set<unknown>()
-  let current: unknown = error
-  while (current !== null && current !== undefined && !seen.has(current)) {
-    seen.add(current)
-    if (typeof current === 'object' && 'code' in current && current.code === '23505') return true
-    current = typeof current === 'object' && 'cause' in current ? current.cause : null
-  }
-  return false
-}
 
 /** `(project_id, code)` は UNIQUE。衝突は利用者の入力ミスなので 422 で返す。 */
 export const DUPLICATE_SHOT_CODE_MESSAGE = 'このコードは同じ Project の別の Shot が使っています'

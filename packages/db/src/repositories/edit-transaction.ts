@@ -11,6 +11,7 @@ import { createProjectRepository, type ProjectRepository } from './project-repos
 import { createShotCharacterRepository, type ShotCharacterRepository } from './shot-character-repository.js'
 import { createShotReferenceRepository, type ShotReferenceRepository } from './shot-reference-repository.js'
 import { createShotRepository, type ShotRepository } from './shot-repository.js'
+import { createTextStyleRepository, type TextStyleRepository } from './text-style-repository.js'
 import { createTimelineClipRepository, type TimelineClipRepository } from './timeline-clip-repository.js'
 import { createTransitionRepository, type TransitionRepository } from './transition-repository.js'
 
@@ -36,6 +37,7 @@ export type EditRepositories = {
   readonly locations: LocationRepository
   readonly brandAssets: BrandAssetRepository
   readonly voices: VoiceProfileRepository
+  readonly textStyles: TextStyleRepository
 }
 
 export type EditTransaction = <T>(fn: (repos: EditRepositories) => Promise<T>) => Promise<T>
@@ -60,5 +62,6 @@ export const createEditTransaction =
         locations: createLocationRepository(tx),
         brandAssets: createBrandAssetRepository(tx),
         voices: createVoiceProfileRepository(tx),
+        textStyles: createTextStyleRepository(tx),
       }),
     )

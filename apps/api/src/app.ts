@@ -598,7 +598,7 @@ export const createApp = (deps: AppDeps) => {
   // 帯で境目を動かす（当人と隣を 1 つの記録にまとめる）。
   app.route('/', clipSpanRoutes({ timelineClips: deps.timelineClips, projects, transaction: deps.editTransaction }))
   // テロップの見た目: 名前を付けて保存し、まとめて当てる（ADR-0028）。
-  app.route('/', textStyleRoutes({ textStyles: deps.textStyles, projects }))
+  app.route('/', textStyleRoutes({ textStyles: deps.textStyles, projects, transaction: deps.editTransaction }))
   // 歌詞をフレーズごとのテロップにする（ADR-0033）。
   app.route(
     '/',
@@ -667,6 +667,7 @@ export const createApp = (deps: AppDeps) => {
       characters: deps.characters,
       locations: deps.locations,
       brandAssets: deps.brandAssets,
+      textStyles: deps.textStyles,
       ...(narration === undefined ? {} : { voices: narration.voices }),
       // ナレーションをまとめて並べた記録を戻す（ADR-0038）。戻したらテロップも作り直す。
       ...(narration === undefined ? {} : { narration }),
