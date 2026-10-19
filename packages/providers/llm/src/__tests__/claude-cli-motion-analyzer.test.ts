@@ -56,6 +56,19 @@ describe('Claude CLI の動きの分析の正常系', () => {
   })
 })
 
+describe('Claude CLI の動きの分析のモデル（ADR-0054 追記）', () => {
+  it('モデルを渡せば --model で指定し、渡さなければ付けない', async () => {
+    const withModel = recordingRunner(completedWith(envelope(JSON.stringify(valid))))
+    await createClaudeCliMotionAnalyzer({ runner: withModel.runner, model: 'claude-sonnet-5-5' }).analyze(request())
+    const args = withModel.calls[0]?.args ?? []
+    expect(args[args.indexOf('--model') + 1]).toBe('claude-sonnet-5-5')
+
+    const without = recordingRunner(completedWith(envelope(JSON.stringify(valid))))
+    await createClaudeCliMotionAnalyzer({ runner: without.runner }).analyze(request())
+    expect(without.calls[0]?.args).not.toContain('--model')
+  })
+})
+
 describe('Claude CLI の動きの分析のプロンプト', () => {
   it('帯の画像・各コマの時刻・山の時刻・Shot の説明を載せる', () => {
     const prompt = buildMotionPrompt(request())

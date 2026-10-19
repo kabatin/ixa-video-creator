@@ -702,3 +702,21 @@ describe('IMAGE_CHECK_MODEL', () => {
     }
   })
 })
+
+/**
+ * 動きの分析に使う Claude のモデル（ADR-0054 追記。制作者の了承 2026-10-19）。
+ * 画像のチェックと同じく、既定は Sonnet の**モデル ID**（別名 `sonnet` はこの Mac で Opus に向く）。
+ */
+describe('MOTION_ANALYSIS_MODEL', () => {
+  it('既定は Sonnet のモデル ID。別名やモデル ID を受ける', () => {
+    expect(loadConfig(requiredEnv).motionAnalysisModel).toBe('claude-sonnet-5-5')
+    expect(loadConfig({ ...requiredEnv, MOTION_ANALYSIS_MODEL: 'claude-opus-5-5' }).motionAnalysisModel).toBe('claude-opus-5-5')
+    expect(loadConfig({ ...requiredEnv, MOTION_ANALYSIS_MODEL: ' opus ' }).motionAnalysisModel).toBe('opus')
+  })
+
+  it('空・空白入り・記号入り・長すぎる値は受けない（CLI の引数に渡すため）', () => {
+    for (const bad of ['', '   ', 'son net', 'sonnet;rm', '--model', 'a'.repeat(101)]) {
+      expect(() => loadConfig({ ...requiredEnv, MOTION_ANALYSIS_MODEL: bad })).toThrow()
+    }
+  })
+})

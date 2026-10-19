@@ -222,6 +222,17 @@ export const EnvSchema = z.object({
     .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, '英数字と . - _ だけで書いてください')
     .default('claude-sonnet-5-5'),
   /**
+   * 動きの分析（コマの帯を見る）に使う Claude のモデル（ADR-0054 追記。制作者の了承 2026-10-19）。既定は Sonnet。
+   * 考え方は `IMAGE_CHECK_MODEL` と同じ（モデル ID で書く。**動きの分析にだけ効く**）。
+   */
+  MOTION_ANALYSIS_MODEL: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, '英数字と . - _ だけで書いてください')
+    .default('claude-sonnet-5-5'),
+  /**
    * 手元の生成サーバで曲を作るか（ADR-0048）。**既定は `none`（使わない）。**
    *
    * - `ace_step` … ace-step-api の ACE-Step 1.5
@@ -451,6 +462,8 @@ export interface AppConfig {
   imageCheckMaxRetries: number
   /** 作った画像のチェックに使う Claude のモデル（ADR-0055 追記）。 */
   imageCheckModel: string
+  /** 動きの分析に使う Claude のモデル（ADR-0054 追記）。 */
+  motionAnalysisModel: string
   /** 声と文字起こしの AI（ADR-0038）。 */
   voiceAi: {
     /** 使ってよい外部の API。ここに無いものは鍵があっても選べない。 */

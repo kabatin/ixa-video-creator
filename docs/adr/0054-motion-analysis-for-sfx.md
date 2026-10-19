@@ -104,3 +104,11 @@ energy_hop_sec・energy（double の配列）・onsets（jsonb）・events（jso
   無音・読めない形式は null。1 本ずつの値を `providerRecord.peakOffsetsSec` に残す（表は変えない。種と同じ置き方）
 - 置く時刻は domain の `sfxClipStartSec` の 1 か所で決める: 印があり山が測れていれば `max(0, notBeforeSec, startSec − 山の秒)`、
   それ以外は `startSec`。画面の「効果音を作る」窓も MCP も、案の印をそのまま頼みに渡すだけで、同じ規則で置かれる
+
+## 追記（2026-10-19）: 動きの分析の Claude を Sonnet にする
+
+制作者の了承で、分析の費用を下げるため、コマの帯を見る Claude を Sonnet にする（画像のチェック・ADR-0055 と同じ形）。
+
+- 環境変数 `MOTION_ANALYSIS_MODEL`（既定 `claude-sonnet-5-5`）。`packages/config` の zod で、英数字と `.` `-` `_` だけを受ける
+- **モデル ID で書く。** 別名 `sonnet` はこの Mac の Claude Code の設定で Opus に向いている（ADR-0055 の実測）
+- `--model` は動きの分析の呼び出しにだけ渡す（レビュー・下書きなど、ほかの Claude CLI の呼び出しは変えない）

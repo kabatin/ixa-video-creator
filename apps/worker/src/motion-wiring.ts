@@ -21,13 +21,15 @@ export const createMotionWiring = (input: {
   readonly logger: Logger
   /** いま選んでいる文章の AI（ADR-0032）。判定するたびに読む。 */
   readonly textTool: () => Promise<AiToolId>
+  /** コマの帯を見る Claude のモデル（`MOTION_ANALYSIS_MODEL`。既定は Sonnet のモデル ID）。**動きの分析にだけ効かせる**。 */
+  readonly model: string
 }): MotionProcessorDeps => ({
   takes: createTakeRepository(input.db),
   shots: createShotRepository(input.db),
   mediaAssets: createMediaAssetRepository(input.db),
   analyses: createTakeMotionAnalysisRepository(input.db),
   measurer: createFfmpegMotionMeasurer({ storage: input.storage }),
-  vision: createClaudeCliMotionAnalyzer(),
+  vision: createClaudeCliMotionAnalyzer({ model: input.model }),
   textTool: input.textTool,
   workDir: process.env.MOTION_WORK_DIR ?? '/tmp/ixa-motion-work',
   logger: input.logger,
