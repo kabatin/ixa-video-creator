@@ -4,6 +4,7 @@ import type { MusicTrackId, Shot } from '@ixa/domain'
 import { useState } from 'react'
 import { TimelineEditor } from '@/components/timeline-editor'
 import { TIMELINE_LANE_HEIGHT_PX } from '@/lib/timeline-display'
+import { musicEndMark } from '@/lib/music-end-mark'
 import { WaveformCanvas } from '@/components/waveform-canvas'
 import { useFreshWaveformPeaks } from '@/lib/fresh-waveform-peaks'
 import type { WaveformPeaksResult } from '@/lib/waveform-api'
@@ -71,6 +72,7 @@ export const TimelinePanel = () => {
               drops={analysis.drops}
               sectionBoundarySec={sectionBoundaries(analysis.sections)}
               heightPx={TIMELINE_LANE_HEIGHT_PX}
+              endMark={workbench.track === null ? null : musicEndMark(workbench.track, analysis.durationSec)}
               compact
             />
           ),

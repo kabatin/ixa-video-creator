@@ -16,6 +16,7 @@ import { CutWaveformOverlay } from '@/components/cut-waveform-overlay'
 import { LyricCueOverlay } from '@/components/lyric-cue-overlay'
 import { Button } from '@/components/ui/button'
 import { WaveformCanvas } from '@/components/waveform-canvas'
+import { musicEndMark } from '@/lib/music-end-mark'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { HelpDisclosure } from '@/components/ui/help-disclosure'
@@ -649,6 +650,7 @@ export const CutEditor = ({
             drops={analysis.drops}
             sectionBoundarySec={sectionBoundarySec}
             heightPx={waveHeightPx}
+            endMark={musicEndMark(track, durationSec)}
           >
             <CutWaveformOverlay
               {...(openMarkMenu === undefined ? {} : { onMarkContextMenu: openMarkMenu })}

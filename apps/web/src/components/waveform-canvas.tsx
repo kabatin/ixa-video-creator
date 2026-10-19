@@ -7,6 +7,7 @@ import { THEME_ATTRIBUTE } from '@/lib/theme'
 import type { WaveformPeaksResult } from '@/lib/waveform-api'
 import { peaksOf } from '@/lib/waveform-api'
 import { HelpDisclosure } from '@/components/ui/help-disclosure'
+import { musicEndOverlayPct, type MusicEndMark } from '@/lib/music-end-mark'
 import {
   BAND_HEIGHT_RATIO,
   BAND_ORDER,
@@ -71,6 +72,8 @@ export type WaveformCanvasProps = {
   readonly compact?: boolean
   /** 再生位置などの重ね描き。 */
   readonly children?: ReactNode
+  /** 曲の終わり（`music-end-mark.ts`）。赤い縦線を引き、後ろの波形を薄くする。null・省略なら引かない。 */
+  readonly endMark?: MusicEndMark | null
 }
 
 // --- 計測 ---
@@ -414,6 +417,30 @@ const BandLegend = ({ palette }: { readonly palette: WaveformPalette }) => (
 
 // --- 本体 ---
 
+/**
+ * 曲の終わりの赤線と、その後ろを薄くする幕。後ろの波形は不透明度 0.3 相当（地の色を 70% 重ねる）。
+ * 線は細いので、題（`title`）を出す当たりは左右に広げる。
+ * **重ね描き（children）より下に置く。** 聴きながら切るの区切りの操作を線が横取りしないように。
+ */
+const MusicEndOverlay = ({ mark, view }: { readonly mark: MusicEndMark; readonly view: ViewRange }) => {
+  const pct = musicEndOverlayPct(mark.atSec, view)
+  if (pct === null) return null
+  return (
+    <>
+      <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 bg-bg/70" style={{ left: `${String(pct)}%` }} />
+      <div
+        role="img"
+        aria-label={mark.title}
+        title={mark.title}
+        className="absolute inset-y-0 flex w-2 -translate-x-1/2 justify-center"
+        style={{ left: `${String(pct)}%` }}
+      >
+        <span className="h-full w-0.5 bg-danger" />
+      </div>
+    </>
+  )
+}
+
 export const WaveformCanvas = ({
   peaks,
   durationSec,
@@ -425,6 +452,7 @@ export const WaveformCanvas = ({
   heightPx = WAVEFORM_HEIGHT_PX,
   compact = false,
   children,
+  endMark,
 }: WaveformCanvasProps) => {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -534,6 +562,7 @@ export const WaveformCanvas = ({
         style={{ height: `${heightPx}px` }}
       >
         <canvas ref={canvasRef} role="img" aria-label={label} className="block h-full w-full" />
+        {endMark !== undefined && endMark !== null && <MusicEndOverlay mark={endMark} view={safeView} />}
         {children}
       </div>
 
