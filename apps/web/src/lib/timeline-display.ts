@@ -10,7 +10,7 @@ import {
 } from '@ixa/domain'
 import type { TimelineIssueSeverity, TimelineIssueView } from '@/lib/timeline-issues'
 import { effectChipLabel } from '@/lib/effect-clip'
-import { formatClock } from '@/lib/format-time'
+import { formatClock, formatDuration } from '@/lib/format-time'
 
 /**
  * タイムライン編集画面の表示用ロジック。**React を含まない純粋関数だけを置く。**
@@ -95,6 +95,10 @@ const TRANSITION_LABELS: Readonly<Record<TransitionType, string>> = {
 }
 
 export const transitionTypeLabel = (type: TransitionType): string => TRANSITION_LABELS[type]
+
+/** 帯に出すトランジションの文字（`白フェード 1.00s`）。位置は帯の場所で分かるので出さない（制作者 2026-10-19）。 */
+export const transitionBarLabel = (type: TransitionType, durationSec: number): string =>
+  `${transitionTypeLabel(type)} ${formatDuration(durationSec)}`
 
 // --- ズームと座標 ---
 

@@ -44,6 +44,7 @@ import {
   hiddenTracks,
   isInsertableTrack,
   visibleTracks,
+  transitionBarLabel,
 } from '@/lib/timeline-display'
 import {
   type TimelineIssueView,
@@ -429,5 +430,13 @@ describe('clipChipLabel', () => {
     expect(clipChipLabel({ type: 'motion_graphics', templateKey: 'flash', params: {} })).toBe('フラッシュ')
     expect(clipChipLabel({ type: 'motion_graphics', templateKey: 'title_card', params: { text: '決勝' } })).toBe('タイトル「決勝」')
     expect(clipChipLabel({ type: 'motion_graphics', templateKey: 'ink_splash', params: {} })).toBe('知らない種類のエフェクト')
+  })
+})
+
+/** トランジションの帯の文字は「名称 尺」だけ（制作者 2026-10-19。位置は帯の場所で分かるので出さない）。 */
+describe('transitionBarLabel', () => {
+  it('名称と尺だけを出す', () => {
+    expect(transitionBarLabel('dip_to_white', 1)).toBe('白フェード 1.00s')
+    expect(transitionBarLabel('whip_pan', 0.4)).toBe('ホイップパン 0.40s')
   })
 })
