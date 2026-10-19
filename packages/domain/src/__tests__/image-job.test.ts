@@ -129,6 +129,12 @@ describe('チェック中・やり直しのつながり', () => {
     expect(imageJobViolation(aJob({ status: 'checking' }))).toMatch(/チェック/)
   })
 
+  it('チェック中に止めた行は絵を持ったまま残る（止める前に絵があったかどうかは問わない）', () => {
+    expect(imageJobViolation(aJob({ status: 'cancelled', mediaAssetId: assetId }))).toBeNull()
+    expect(imageJobViolation(aJob({ status: 'cancelled' }))).toBeNull()
+    expect(imageJobViolation(aJob({ status: 'queued', mediaAssetId: assetId }))).not.toBeNull()
+  })
+
   it('前からある行は 1 枚目で、つながりも当てた記録も無い', () => {
     const job = aJob()
     expect(job.attempt).toBe(1)

@@ -118,9 +118,9 @@ export const imageJobViolation = (
   if (job.status === 'succeeded' && job.mediaAssetId === null) return '成功したのに絵がありません'
   if (job.status === 'checking' && job.mediaAssetId === null) return 'チェック中なのに絵がありません'
   if (job.status === 'failed' && job.error === null) return '失敗したのに理由がありません'
-  if (job.status !== 'succeeded' && job.status !== 'checking' && job.mediaAssetId !== null) {
-    return 'まだ終わっていないのに絵があります'
-  }
+  // 止めた行は、チェック中に止めたなら絵を持つ（描き終えていた。履歴から選べるように残す。ADR-0055 §7）。
+  const mayHoldImage = job.status === 'succeeded' || job.status === 'checking' || job.status === 'cancelled'
+  if (!mayHoldImage && job.mediaAssetId !== null) return 'まだ終わっていないのに絵があります'
   if ((job.appliedAt ?? null) !== null && job.mediaAssetId === null) return '絵が無いのに当てた記録があります'
   if (job.status !== 'failed' && job.error !== null) return '失敗していないのに理由があります'
   return null
