@@ -116,6 +116,11 @@ export const TimelinePanel = () => {
           workbench.inspect({ kind: 'effect-clip', id })
           workbench.focusPanel('inspector')
         }}
+        // 再生位置の Shot（無ければ選んでいる Shot）の効果音を作る（ADR-0054）。
+        onMakeSfx={(atSec) => {
+          const under = workbench.shots?.find((shot) => atSec >= shot.startSec && atSec < shot.startSec + shot.durationSec)
+          workbench.openDialog('make-sfx', under === undefined ? {} : { shotIds: [under.id] })
+        }}
         {...(audioLane === null ? {} : { audioLane })}
         narrationLane={narrationLane}
         onDropAudio={onDropAudio}

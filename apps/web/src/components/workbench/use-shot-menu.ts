@@ -59,6 +59,9 @@ export const useShotMenu = () => {
         workbench.openInspector('generate')
       },
       'cancel-generation': () => generation.cancel(shot),
+      'make-sfx': () => {
+        workbench.openDialog('make-sfx', { shotIds: [shot.id] })
+      },
       'open-compare': () => {
         workbench.selectShot(shot.id)
         workbench.focusPanel('compare')

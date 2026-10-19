@@ -8,7 +8,7 @@ import { ZOOM_LEVELS, zoomLabel } from '@/lib/timeline-display'
  * タイムラインのツールバー（1 行）。**見出し付きの 3 つの群**に分ける（制作者 2026-10-19）。
  *
  * - 表示：ズーム（全体／フレーズ／小節／拍／細かく）
- * - 追加：＋テロップ ＋エフェクト（再生位置に置く）
+ * - 追加：＋テロップ ＋エフェクト（再生位置に置く）＋効果音（再生位置の Shot の動きから作る）
  * - 右寄せ：拍に吸着・再生位置を追う
  *
  * 再生の状態と位置は左端に寄せる（制作者 2026-10-02「停止中と時間の表示が縦幅を占有してしまう」）。
@@ -57,6 +57,26 @@ export const AddTextButton = ({
       title="再生位置にテロップを置き、インスペクターで文字を打てるようにします"
     >
       ＋ テロップ
+    </button>
+  )
+}
+
+/**
+ * 再生位置の Shot の「効果音を作る」窓を開く（ADR-0054）。動きの分析から効果音の案を出す。
+ * 位置は押した瞬間だけ読む（`@/lib/playhead-sec`）。
+ */
+export const AddSfxButton = ({ onOpen }: { readonly onOpen: (atSec: number) => void }) => {
+  const playheadSec = usePlayheadSec()
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        onOpen(playheadSec)
+      }}
+      className="rounded bg-surface px-2 py-0.5 text-xs text-text ring-1 ring-line-strong hover:bg-surface-2"
+      title="再生位置の Shot の動きを分析し、映像に合わせた効果音の案を出します"
+    >
+      ＋ 効果音
     </button>
   )
 }

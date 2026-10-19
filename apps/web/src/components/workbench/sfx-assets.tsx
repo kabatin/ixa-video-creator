@@ -18,7 +18,7 @@ import type { TimelineApi } from '@/lib/timeline-api'
  * 切った / 消した・効果音ができた）に引き直す。`posterEpoch` は Take や絵のたびに進むので見ない（取り直しが多すぎる）。
  */
 
-type SfxAssetsApi = Pick<TimelineApi, 'listClips'> & SfxJobApi
+type SfxAssetsApi = Pick<TimelineApi, 'listClips'> & Pick<SfxJobApi, 'listSfxJobs'>
 
 const SfxAssetsContext = createContext<Loaded<readonly SfxTreeItem[]> | null>(null)
 

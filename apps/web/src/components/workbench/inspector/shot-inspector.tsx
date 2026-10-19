@@ -379,9 +379,20 @@ const TakeSection = ({ shot }: { readonly shot: Shot }) => {
           : `${String(takes.length)} 本 / 採用: ${adopted === null ? 'なし' : `Take ${String(adopted.index)}`}`}
       </p>
       {adopted !== null && (
-        <Button size="sm" disabled={busy} onClick={() => void unselect()}>
-          {busy ? '外しています…' : '採用を外す'}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" disabled={busy} onClick={() => void unselect()}>
+            {busy ? '外しています…' : '採用を外す'}
+          </Button>
+          {/* 採用中の Take の動きから効果音の案を出す（ADR-0054）。 */}
+          <Button
+            size="sm"
+            onClick={() => {
+              workbench.openDialog('make-sfx', { shotIds: [shot.id] })
+            }}
+          >
+            効果音を作る…
+          </Button>
+        </div>
       )}
       {message !== null && (
         <p role="alert" className="text-xs text-danger">

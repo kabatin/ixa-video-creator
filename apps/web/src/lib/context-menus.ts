@@ -54,6 +54,7 @@ const SEPARATOR = { kind: 'separator' } as const
 
 export type ShotMenuAction =
   | 'make-take'
+  | 'make-sfx'
   | 'cancel-generation'
   | 'open-compare'
   | 'draw-start-frame'
@@ -98,6 +99,7 @@ export const shotMenuEntries = (input: {
     keepLabel: KEEP_GENERATING_LABEL,
   }),
   item('open-compare', 'Take 比較で見る'),
+  item('make-sfx', '効果音を作る…'),
   item('draw-start-frame', '絵コンテの画像を AI で作る', drawGuardOf(input.shot)),
   SEPARATOR,
   item('split', '再生位置で分割', { shortcut: SPLIT_SHORTCUT, disabledReason: input.splitBlocker }),

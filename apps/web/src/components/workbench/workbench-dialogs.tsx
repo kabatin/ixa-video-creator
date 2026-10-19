@@ -6,6 +6,7 @@ import { DeleteShotsDialogBody } from '@/components/workbench/dialogs/delete-sho
 import { MergeShotsDialogBody } from '@/components/workbench/dialogs/merge-shots-dialog'
 import { HistoryDialogBody } from '@/components/workbench/dialogs/history-dialog'
 import { MakeMusicDialogBody } from '@/components/workbench/dialogs/make-music-dialog'
+import { MakeSfxDialogBody } from '@/components/workbench/dialogs/make-sfx-dialog'
 import { LibraryImportDialogBody } from '@/components/workbench/dialogs/library-import-dialog'
 import { ProjectDuplicateDialogBody } from '@/components/workbench/dialogs/project-duplicate-dialog'
 import { NewShotDialogBody } from '@/components/workbench/dialogs/new-shot-dialog'
@@ -33,6 +34,7 @@ const TITLES: Readonly<Record<DialogKind, string>> = {
   'library-import': 'ほかのプロジェクトから取り込む',
   'project-duplicate': 'プロジェクトを複製',
   'make-music': '曲を作る',
+  'make-sfx': '効果音を作る',
   thumbnail: 'サムネイルを書き出す',
 }
 
@@ -87,6 +89,7 @@ export const WorkbenchDialogs = ({
       {dialog === 'library-import' && <LibraryImportDialogBody />}
       {dialog === 'project-duplicate' && <ProjectDuplicateDialogBody />}
       {dialog === 'make-music' && <MakeMusicDialogBody />}
+      {dialog === 'make-sfx' && <MakeSfxDialogBody />}
       {dialog === 'thumbnail' && <ThumbnailDialogBody />}
     </WorkbenchDialog>
   )

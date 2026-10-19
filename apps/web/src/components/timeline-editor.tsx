@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { TimelineInlineForm, inlineFormErrors } from '@/components/timeline-inline-form'
 import { ProgramMonitor, type ProgramMonitorProps } from '@/components/program-monitor'
 import { TimelineTracks } from '@/components/timeline-tracks'
-import { AddTextButton, TimelineToolbar } from '@/components/timeline-toolbar'
+import { AddSfxButton, AddTextButton, TimelineToolbar } from '@/components/timeline-toolbar'
 import { AddEffectButton, EffectPicker, useEffectInsert } from '@/components/timeline-effect-insert'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
@@ -131,6 +131,8 @@ export type TimelineEditorProps = {
   readonly onOpenMediaClip?: (clipId: TimelineClipId) => void
   /** 帯のエフェクトを押したとき・置いたときに開く（ADR-0050）。 */
   readonly onOpenEffectClip?: (clipId: TimelineClipId) => void
+  /** 「＋効果音」を押したとき（ADR-0054）。無ければボタンを出さない。 */
+  readonly onMakeSfx?: (atSec: number) => void
   /** 楽曲の波形の帯。`TimelineTracks` へそのまま渡す。 */
   readonly audioLane?: { readonly durationSec: number; readonly node: ReactNode }
   /** ナレーションのレーン（ADR-0038）。帯の尺度で描く。 */
@@ -180,6 +182,7 @@ export const TimelineEditor = ({
   onOpenTextClip,
   onOpenMediaClip,
   onOpenEffectClip,
+  onMakeSfx,
   audioLane,
   narrationLane,
   onDropAudio,
@@ -519,6 +522,7 @@ export const TimelineEditor = ({
           <>
             <AddTextButton busy={busy || clips === null} onAdd={addTextAt} />
             <AddEffectButton busy={busy} onOpen={openEffectAt} />
+            {onMakeSfx !== undefined && <AddSfxButton onOpen={onMakeSfx} />}
           </>
         }
         snapEnabled={snapEnabled}

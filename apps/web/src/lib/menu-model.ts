@@ -27,6 +27,7 @@ export type WorkbenchDialog =
   | 'library-import'
   | 'project-duplicate'
   | 'make-music'
+  | 'make-sfx'
   | 'thumbnail'
 
 export type MenuAction =
@@ -277,6 +278,10 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
       items: [
         item('new-shot', '新規 Shot', dialog('new-shot')),
         item('bulk-edit', '選択を一括変更…', command('bulk-edit'), { disabledReason: noChecked }),
+        // 採用中の Take の動きから効果音の案を出す（ADR-0054）。
+        item('make-sfx', '効果音を作る…', dialog('make-sfx'), {
+          disabledReason: state.hasCurrentShot ? null : NO_CURRENT_SHOT,
+        }),
         item('unselect-take', '採用を外す', command('unselect-take'), {
           disabledReason: state.hasCurrentShot
             ? state.currentHasTake
