@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { waitWith } from '../tools/wait.js'
-import { generateSfxTool, listSfxTool, removeSfxTool, suggestSfxTool } from '../tools/sfx.js'
+import { GenerateSfxInput, generateSfxTool, listSfxTool, removeSfxTool, suggestSfxTool } from '../tools/sfx.js'
 import { createFakeApi, depsFor, jsonOf, ulid } from './fake-api.js'
 
 /** 効果音（ADR-0052）。きっかけは domain の `SfxCue` で確かめ、置いた音は SFX の段の media クリップ。 */
@@ -43,6 +43,19 @@ describe('generate_sfx', () => {
       { kind: 'sfx', id: JOB_A },
       { kind: 'sfx', id: JOB_B },
     ])
+  })
+
+  it.each(['stable_audio_medium_sfx', 'stable_audio_sfx', 'moss_sfx'] as const)('モデル %s を選べ、そのまま tool で送る', async (model) => {
+    const fake = createFakeApi([{ method: 'POST', path: `/projects/${PROJECT}/sfx/generate`, status: 202, data: { jobIds: [JOB_A] } }])
+    await generateSfxTool.run({ projectId: PROJECT, cues: [{ startSec: 0, durationSec: 1, prompt: 'whoosh' }], model }, depsFor(fake))
+    expect(fake.callsTo('POST', `/projects/${PROJECT}/sfx/generate`)[0]?.body).toMatchObject({ tool: model })
+  })
+
+  it('説明はメインを Medium、Small を速い控え、MOSS を遅い控えと言う', () => {
+    const description = GenerateSfxInput.shape.model.description ?? ''
+    expect(description).toMatch(/stable_audio_medium_sfx is the main/)
+    expect(description).toMatch(/stable_audio_sfx is a fast fallback/)
+    expect(description).toMatch(/moss_sfx is a slow fallback/)
   })
 
   it('モデルを省けば tool を送らない（作品の効果音の AI）', async () => {

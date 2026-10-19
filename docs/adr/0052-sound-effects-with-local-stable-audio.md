@@ -87,3 +87,19 @@ GPU は動画・絵・曲と同じ整理券（`generation/local-gpu-turn.ts`）�
 - 効果音のライブラリ（作った音を作品をまたいで使い回す）
 - 曲との音量の自動調整（効果音で曲を下げる）
 - 費用の表示（手元の GPU で 0 円）
+
+## 追記（2026-10-19）: Stable Audio 3 Medium をメインにする
+
+sfx-api に 3 つ目の workflow `stable-audio-3-medium-sfx` が増えた。制作者の判断で、これを効果音の**メイン**にする。
+`stable-audio-3-sfx`（Small）は速い控え、`moss-sfx-v2` は遅い控えとして残す。
+
+- AI の名前は `stable_audio_medium_sfx`（画面では「Stable Audio 3 Medium」。Small は「Stable Audio 3 Small」と名乗り直す）。
+  モデルは `sfx_api/stable-audio-3-medium-sfx`
+- 契約は Small と同じ: 長さ 0.5〜10 秒（小数可・頼んだ長さのまま）・1〜4 本・WAV 16-bit 44.1kHz 2ch・i 本目は seed + 2i。
+  `negative_prompt` は受けるが使わない
+- **「TrackType: SFX, 」の前置きはサーバが付ける。ixa は説明をそのまま送る**（付けると二重になる）
+- 速さ（サーバ側の実測）: 温まっていて 1 本 約 1.1 秒（1〜2 秒の音）〜 1.7 秒（10 秒の音）、読み込み 約 0.7〜1.2 秒、
+  メモリ最大 11GB。待つ上限は Small と同じ 5 分。GPU は今までどおり整理券に並ぶ
+- ライセンスは Small と同じ Stability AI Community License
+- 「使う AI」の勧める順と選択肢の並びを Medium・Small・MOSS にする。**保存済みの選択は書き換えない**
+  （既に選んでいれば、画面で選び直すまでその AI のまま）

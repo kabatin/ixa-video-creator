@@ -4,11 +4,11 @@ import {
   AI_PURPOSE_LABELS,
   AI_TOOLS,
   AiSettings,
+  AiToolId,
   aiChoiceProblem,
   aiDefaultsFromEnv,
   recommendAiSettings,
   resolveAiSettings,
-  type AiToolId,
   type AiToolStatus,
 } from '../ai/ai-tools.js'
 
@@ -259,33 +259,48 @@ describe('曲', () => {
   })
 })
 
-/** 効果音（ADR-0052）。手元の sfx-api の 2 つのモデルだけが作れる。お試しは選べるが効果音は作らない。 */
+/** 効果音（ADR-0052）。手元の sfx-api の 3 つのモデルだけが作れる。お試しは選べるが効果音は作らない。 */
 describe('効果音', () => {
   it('用途の名前は「効果音」', () => {
     expect(AI_PURPOSE_LABELS.sfx).toBe('効果音')
   })
 
-  it('効果音に使えるのは お試し と 手元の Stable Audio 3・MOSS だけ', () => {
+  it('効果音に使えるのは お試し と 手元の Stable Audio 3（Medium・Small）・MOSS だけ', () => {
     const sfxTools = (Object.keys(AI_TOOLS) as AiToolId[]).filter((id) => AI_TOOLS[id].purposes.includes('sfx'))
-    expect([...sfxTools].sort()).toEqual(['moss_sfx', 'stable_audio_sfx', 'stub'])
+    expect([...sfxTools].sort()).toEqual(['moss_sfx', 'stable_audio_medium_sfx', 'stable_audio_sfx', 'stub'])
     expect(aiChoiceProblem('sfx', 'ace_step', ready())).toMatch(/効果音にはまだ使えません/)
     expect(aiChoiceProblem('music', 'stable_audio_sfx', ready())).toMatch(/曲にはまだ使えません/)
   })
 
-  it('sfx-api が応答していれば Stable Audio 3 を勧め、していなければお試し', () => {
+  it('sfx-api が応答していれば Medium を勧め、使えなければ Small・MOSS の順、どれも無ければお試し', () => {
+    const all = { ...allMissing(), stable_audio_medium_sfx: ready(), stable_audio_sfx: ready(), moss_sfx: ready() }
+    expect(recommendAiSettings(all).sfx).toBe('stable_audio_medium_sfx')
+    expect(recommendAiSettings({ ...all, stable_audio_medium_sfx: missing() }).sfx).toBe('stable_audio_sfx')
     expect(recommendAiSettings({ ...allMissing(), stable_audio_sfx: ready(), moss_sfx: ready() }).sfx).toBe('stable_audio_sfx')
     expect(recommendAiSettings({ ...allMissing(), moss_sfx: ready() }).sfx).toBe('moss_sfx')
     expect(recommendAiSettings(allMissing()).sfx).toBe('stub')
   })
 
-  it('どちらも手元のサーバ sfx_api で見つけ、GPU を分け合うことを知らせる', () => {
+  /** 画面の選択肢は `AiToolId` の並びで出る。メインの Medium を先頭にする。 */
+  it('選択肢の並びは Medium・Small・MOSS', () => {
+    const order = AiToolId.options.filter((id) => AI_TOOLS[id].purposes.includes('sfx') && id !== 'stub')
+    expect(order).toEqual(['stable_audio_medium_sfx', 'stable_audio_sfx', 'moss_sfx'])
+  })
+
+  it('どれも手元のサーバ sfx_api で見つけ、GPU を分け合うことを知らせる', () => {
+    expect(AI_TOOLS.stable_audio_medium_sfx.detect).toEqual({
+      kind: 'local_server',
+      server: 'sfx_api',
+      workflow: 'stable-audio-3-medium-sfx',
+    })
     expect(AI_TOOLS.stable_audio_sfx.detect).toEqual({ kind: 'local_server', server: 'sfx_api', workflow: 'stable-audio-3-sfx' })
     expect(AI_TOOLS.moss_sfx.detect).toEqual({ kind: 'local_server', server: 'sfx_api', workflow: 'moss-sfx-v2' })
-    for (const id of ['stable_audio_sfx', 'moss_sfx'] as const) {
+    for (const id of ['stable_audio_medium_sfx', 'stable_audio_sfx', 'moss_sfx'] as const) {
       expect(AI_TOOLS[id].tags).toEqual(['この Mac', '無料'])
       expect(AI_TOOLS[id].notice).toMatch(/効果音で GPU を分け合う/)
     }
-    expect(AI_TOOLS.stable_audio_sfx.label).toBe('Stable Audio 3')
+    expect(AI_TOOLS.stable_audio_medium_sfx.label).toBe('Stable Audio 3 Medium')
+    expect(AI_TOOLS.stable_audio_sfx.label).toBe('Stable Audio 3 Small')
     expect(AI_TOOLS.moss_sfx.label).toBe('MOSS SFX v2')
   })
 })

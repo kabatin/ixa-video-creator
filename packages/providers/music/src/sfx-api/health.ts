@@ -14,7 +14,7 @@ import { SFX_API_IDENTITY, SFX_API_MODELS } from './descriptor.js'
  * sfx-api の health（ADR-0052）。サーバが応答するかに加えて、**workflow ごとに使えるか**を見る。
  * `GET /v1/health` は `workflows: { [id]: { available, loaded, reason } }` を返す。
  * `available: true, loaded: false` は待機中のふつうの状態（初回に読み込む）。
- * 1 台で 2 つの AI（Stable Audio・MOSS）を出すので、片方だけ使えないことがある。
+ * 1 台で 3 つの AI（Stable Audio Medium・Small・MOSS）を出すので、一部だけ使えないことがある。
  *
  * **叩くのは 1 回だけ。** 判断の仕方は動画のサーバの `checkLocalServerHealth` と同じ（合言葉・形・起こし方）。
  */

@@ -214,7 +214,7 @@ export const EnvSchema = z.object({
   /**
    * 手元の生成サーバで効果音を作るか（ADR-0052）。**既定は `none`（使わない）。**
    *
-   * - `sfx_api` … sfx-api（Stable Audio 3・MOSS SFX v2 の 2 つの workflow）
+   * - `sfx_api` … sfx-api（Stable Audio 3 Medium・Small・MOSS SFX v2 の 3 つの workflow）
    *
    * 書き方と考え方は `LOCAL_VIDEO_GENERATOR` と同じ（URL やトークンの有無で切り替えない）。
    * 動画と同じ機械の GPU を使うので、動画・絵・曲と同じ列に並んで 1 本ずつ作る。

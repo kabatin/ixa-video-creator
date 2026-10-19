@@ -27,14 +27,15 @@ export const GenerateSfxInput = z.object({
     .describe(
       'Where and what: startSec (timeline seconds), durationSec 0.5–10, prompt (ENGLISH sound description, ' +
         'e.g. "car engine revving, tires screeching"), optional negativePrompt (English; used by moss_sfx, ' +
-        'ignored by stable_audio_sfx), volume 0–2 (default 0.8).',
+        'ignored by the Stable Audio models), volume 0–2 (default 0.8).',
     ),
   model: z
-    .enum(['stable_audio_sfx', 'moss_sfx'])
+    .enum(['stable_audio_medium_sfx', 'stable_audio_sfx', 'moss_sfx'])
     .optional()
     .describe(
-      "Default: the selected sound-effect AI (set_ai purpose sfx). stable_audio_sfx is the main one (well under a " +
-        'second per clip); moss_sfx is a slow fallback (minutes per clip) — use it only if Stable Audio is unavailable.',
+      'Default: the selected sound-effect AI (set_ai purpose sfx). stable_audio_medium_sfx is the main one (about ' +
+        '1–2 seconds per clip); stable_audio_sfx is a fast fallback (Stable Audio 3 Small, under a second per clip); ' +
+        'moss_sfx is a slow fallback (minutes per clip) — use it only if neither Stable Audio is available.',
     ),
   count: z.number().int().min(1).max(SFX_COUNT_MAX).default(1).describe('Variants per cue. The first is placed; others stay as assets.'),
   seed: z

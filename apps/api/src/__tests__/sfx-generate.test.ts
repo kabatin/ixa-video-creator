@@ -1,12 +1,12 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
-import type { AiToolId, SfxJobId, SfxSuggestionInput } from '@ixa/domain'
+import { AI_TOOLS, AiToolId, type SfxJobId, type SfxSuggestionInput } from '@ixa/domain'
 import { createInMemorySfxJobRepository } from '@ixa/generation/testing'
 import { describe, expect, it } from 'vitest'
 import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
 import { MOSS_TOO_MANY_MESSAGE, SFX_CUES_PER_REQUEST_MAX, sfxGenerateRoutes } from '../routes/sfx-generate.js'
 import type { SfxGenerationDeps } from '../sfx/deps.js'
-import { chooseSfxModel, NO_SFX_AI_MESSAGE, type SfxModelChoice } from '../sfx/sfx-model.js'
+import { chooseSfxModel, NO_SFX_AI_MESSAGE, sfxModelsFor, type SfxModelChoice } from '../sfx/sfx-model.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryProjectEvents } from './in-memory-project-events.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
@@ -99,6 +99,13 @@ describe('POST /projects/{projectId}/sfx/generate', () => {
       { type: 'sfx_job.status', jobId: data.jobIds[0], status: 'queued' },
       { type: 'sfx_job.status', jobId: data.jobIds[1], status: 'queued' },
     ])
+  })
+
+  it.each(['stable_audio_medium_sfx', 'stable_audio_sfx'] as const)('Stable Audio の %s も指定できる', async (tool) => {
+    const { project, asked, send } = setup()
+    const response = await send('POST', `/projects/${project.id}/sfx/generate`, { cues: [cue()], tool })
+    expect(response.status).toBe(202)
+    expect(asked).toEqual([tool])
   })
 
   it('AI を指定すればそれで作る。本数と種・入れたくない音をそのまま記す', async () => {
@@ -257,7 +264,11 @@ describe('GET /projects/{projectId}/sfx/suggestions', () => {
 
 describe('chooseSfxModel', () => {
   it('お試し・口の無い AI は「選ばれていない」、有効にしていない AI はそう言う（設定の名前は出さない）', () => {
-    const models = { stable_audio_sfx: 'sfx_api/stable-audio-3-sfx', moss_sfx: 'sfx_api/moss-sfx-v2' }
+    const models = {
+      stable_audio_medium_sfx: 'sfx_api/stable-audio-3-medium-sfx',
+      stable_audio_sfx: 'sfx_api/stable-audio-3-sfx',
+      moss_sfx: 'sfx_api/moss-sfx-v2',
+    }
     expect(chooseSfxModel('stub', models)).toEqual({ state: 'unavailable', reason: NO_SFX_AI_MESSAGE })
     expect(chooseSfxModel('ace_step', models)).toEqual({ state: 'unavailable', reason: NO_SFX_AI_MESSAGE })
     const disabled = chooseSfxModel('stable_audio_sfx', { stable_audio_sfx: null })
@@ -265,5 +276,29 @@ describe('chooseSfxModel', () => {
     expect(disabled.state === 'unavailable' ? disabled.reason : '').not.toMatch(/LOCAL_SFX_GENERATOR/)
     expect(chooseSfxModel('stable_audio_sfx', models)).toEqual(READY)
     expect(chooseSfxModel('moss_sfx', models)).toEqual(MOSS)
+    expect(chooseSfxModel('stable_audio_medium_sfx', models)).toEqual({
+      state: 'ready',
+      tool: 'stable_audio_medium_sfx',
+      model: 'sfx_api/stable-audio-3-medium-sfx',
+    })
+  })
+})
+
+describe('sfxModelsFor', () => {
+  /** 効果音に使える AI ごとに、見つけ方の workflow と同じ workflow のモデルを配線する（漏れると選べても作れない）。 */
+  it('有効なら効果音の AI すべてに、同じ workflow のモデルを配線する', () => {
+    const models = sfxModelsFor(true)
+    const sfxTools = AiToolId.options.filter((id) => id !== 'stub' && AI_TOOLS[id].purposes.includes('sfx'))
+    expect(Object.keys(models).sort()).toEqual([...sfxTools].sort())
+    for (const id of sfxTools) {
+      const detect = AI_TOOLS[id].detect
+      const workflow = detect.kind === 'local_server' ? detect.workflow : undefined
+      expect(models[id]).toBe(`sfx_api/${String(workflow)}`)
+    }
+    expect(models.stable_audio_medium_sfx).toBe('sfx_api/stable-audio-3-medium-sfx')
+  })
+
+  it('有効でなければすべて null（選べても作れない理由を言う）', () => {
+    expect(Object.values(sfxModelsFor(false))).toEqual([null, null, null])
   })
 })

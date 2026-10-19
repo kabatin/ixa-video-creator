@@ -772,7 +772,7 @@ type SfxCue = {                     // きっかけ。鳴らす時刻は ixa が
 type SfxJob = {
   id: SfxJobId
   projectId: ProjectId
-  tool: string                      // 効果音の AI（stable_audio_sfx | moss_sfx）
+  tool: string                      // 効果音の AI（stable_audio_medium_sfx | stable_audio_sfx | moss_sfx）
   model: string | null
   spec: { cue: SfxCue; count: number /* 1〜4 */; seed: number | null }
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'

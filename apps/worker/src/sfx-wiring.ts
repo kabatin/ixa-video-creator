@@ -16,7 +16,7 @@ import type { SfxAdapter, SfxJobData, SfxProcessorDeps } from './sfx/index.js'
 /** 手元の効果音の生成サーバ（ADR-0052）。`.env` の `LOCAL_SFX_GENERATOR` に書いたときだけ作る（API と同じ条件）。 */
 export type SfxApiSettings = { readonly enabled: boolean; readonly baseUrl: string; readonly token: string | null }
 
-/** 1 台の sfx-api が 2 つのモデル（Stable Audio 3・MOSS）を出す。口は 1 つで、モデルごとに並べる。 */
+/** 1 台の sfx-api が 3 つのモデル（Stable Audio 3 Medium・Small・MOSS）を出す。口は 1 つで、モデルごとに並べる。 */
 const sfxAdapters = (outputRoot: string, sfxApi: SfxApiSettings): readonly SfxAdapter[] => {
   if (!sfxApi.enabled) return []
   const provider = createSfxApiProvider({

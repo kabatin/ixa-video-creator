@@ -33,6 +33,8 @@ export const AiToolId = z.enum([
   'wan',
   'klein',
   'ace_step',
+  // 効果音はメインの Medium を先に置く（画面の選択肢はこの並び）。
+  'stable_audio_medium_sfx',
   'stable_audio_sfx',
   'moss_sfx',
   'fal',
@@ -60,7 +62,7 @@ export type AiToolDetection =
   /**
    * 手元の生成サーバが応答するか（`GET /v1/health`。ADR-0031 / 0040 / 0047 / 0048 / 0052）。
    * **どのサーバかを持つ。** 5 台（vpipe-api・wan-api・klein-api・ace-step-api・sfx-api）あるので、持たないと
-   * 1 台の起動でほかが「使える」と出てしまう。sfx-api は 1 台で 2 つのモデル（Stable Audio・MOSS）を出すので、
+   * 1 台の起動でほかが「使える」と出てしまう。sfx-api は 1 台で 3 つのモデル（Stable Audio Medium・Small・MOSS）を出すので、
    * **どの workflow か**（`workflow`）も持つ。片方だけ使えないことがある（health の `workflows`）。
    */
   | {
@@ -167,13 +169,22 @@ export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
     // 動画と同じ機械の GPU を使う（ADR-0048）。動画や絵を作っている間は曲も順番待ちになる。
     notice: SHARED_GPU_NOTICE,
   }),
+  stable_audio_medium_sfx: tool({
+    id: 'stable_audio_medium_sfx',
+    label: 'Stable Audio 3 Medium',
+    tags: ON_THIS_MAC_FREE,
+    detect: { kind: 'local_server', server: 'sfx_api', workflow: 'stable-audio-3-medium-sfx' },
+    purposes: ['sfx'],
+    // 効果音のメイン（ADR-0052 追記）。動画と同じ機械の GPU を使う。Stability AI Community License（Small と同じ）。
+    notice: SHARED_GPU_NOTICE,
+  }),
   stable_audio_sfx: tool({
     id: 'stable_audio_sfx',
-    label: 'Stable Audio 3',
+    label: 'Stable Audio 3 Small',
     tags: ON_THIS_MAC_FREE,
     detect: { kind: 'local_server', server: 'sfx_api', workflow: 'stable-audio-3-sfx' },
     purposes: ['sfx'],
-    // 動画と同じ機械の GPU を使う（ADR-0052）。Stability AI Community License（年商 100 万ドル未満は商用可）。
+    // Medium の速い控え（ADR-0052）。Stability AI Community License（年商 100 万ドル未満は商用可）。
     notice: SHARED_GPU_NOTICE,
   }),
   moss_sfx: tool({
@@ -182,7 +193,7 @@ export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
     tags: ON_THIS_MAC_FREE,
     detect: { kind: 'local_server', server: 'sfx_api', workflow: 'moss-sfx-v2' },
     purposes: ['sfx'],
-    // Stable Audio の控え（ADR-0052）。同じ sfx-api の別の workflow。
+    // Stable Audio の遅い控え（ADR-0052）。同じ sfx-api の別の workflow。
     notice: SHARED_GPU_NOTICE,
   }),
   fal: tool({
@@ -270,7 +281,7 @@ const RECOMMENDATION_ORDER: Readonly<Record<AiPurpose, readonly AiToolId[]>> = O
   voice: ['macos_say'],
   transcribe: ['whisper_cpp'],
   music: ['ace_step'],
-  sfx: ['stable_audio_sfx', 'moss_sfx'],
+  sfx: ['stable_audio_medium_sfx', 'stable_audio_sfx', 'moss_sfx'],
 })
 
 /** 初めて選ぶときの初期の組み合わせ。見つかって使えるものから選び、無ければお試し。 */

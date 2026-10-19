@@ -1,4 +1,5 @@
 import { AI_TOOLS, type AiToolId } from '@ixa/domain'
+import { MOSS_SFX_MODEL_ID, STABLE_AUDIO_MEDIUM_SFX_MODEL_ID, STABLE_AUDIO_SFX_MODEL_ID } from '@ixa/provider-music'
 
 /**
  * 効果音の AI で作れるか（ADR-0052）。作れるなら記す AI とモデル、作れないなら画面に出す理由。
@@ -15,6 +16,13 @@ export const NO_SFX_AI_MESSAGE = '効果音を作る AI が選ばれていませ
  * 口の無い AI は入れない。
  */
 export type SfxModels = Partial<Record<AiToolId, string | null>>
+
+/** 効果音の AI ごとのモデル（同じ sfx-api の別の workflow）。`.env` で有効にしていなければすべて null。 */
+export const sfxModelsFor = (enabled: boolean): SfxModels => ({
+  stable_audio_medium_sfx: enabled ? STABLE_AUDIO_MEDIUM_SFX_MODEL_ID : null,
+  stable_audio_sfx: enabled ? STABLE_AUDIO_SFX_MODEL_ID : null,
+  moss_sfx: enabled ? MOSS_SFX_MODEL_ID : null,
+})
 
 /** 選んでいる効果音の AI から、作れるかを決める。お試しは効果音を作らない。 */
 export const chooseSfxModel = (tool: AiToolId, models: SfxModels): SfxModelChoice => {

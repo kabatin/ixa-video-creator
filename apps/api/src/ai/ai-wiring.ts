@@ -13,9 +13,7 @@ import {
 import { execFileCliRunner } from '@ixa/provider-core'
 import {
   ACE_STEP_IDENTITY,
-  MOSS_SFX_MODEL_ID,
   checkSfxApiHealth,
-  STABLE_AUDIO_SFX_MODEL_ID,
   aceStepMusicModel,
 } from '@ixa/provider-music'
 import { KLEIN_IDENTITY, codexCliImageModel, kleinImageModel, stubGeminiLikeImageModel } from '@ixa/provider-image'
@@ -31,7 +29,7 @@ import {
 } from '@ixa/provider-llm'
 import { checkLocalServerHealth, localVideoServerWirings } from '@ixa/provider-video'
 import { chooseMusicModel, type MusicModelChoice } from '../music/music-model.js'
-import { chooseSfxModel, type SfxModelChoice } from '../sfx/sfx-model.js'
+import { chooseSfxModel, sfxModelsFor, type SfxModelChoice } from '../sfx/sfx-model.js'
 import type { AiRoutesDeps } from '../routes/ai.js'
 import { detectAiTools, type LocalServerName, type LocalServerProbe, type WhisperModelState } from './detect-ai-tools.js'
 
@@ -109,7 +107,7 @@ const localServerProbes = (config: AppConfig): Readonly<Record<LocalServerName, 
         token: config.providers.aceStepApiToken,
       }),
   }
-  // 効果音のサーバ（ADR-0052）。1 台で Stable Audio と MOSS の 2 つを出すので、どちらの AI もこれで見つける。
+  // 効果音のサーバ（ADR-0052）。1 台で Stable Audio（Medium・Small）と MOSS を出すので、どの AI もこれで見つける。
   const sfxApi: LocalServerProbe = {
     enabled: config.providers.localSfxGenerators.includes('sfx_api'),
     enabledBy: 'LOCAL_SFX_GENERATOR',
@@ -163,11 +161,7 @@ export const createAiWiring = (config: AppConfig, db: DbClient): AiWiring => {
     ace_step: config.providers.localMusicGenerators.includes('ace_step') ? aceStepMusicModel.id : null,
   }
   // 効果音（ADR-0052）。同じ sfx-api の別の workflow。`.env` で有効にしていなければ null。
-  const sfxEnabled = config.providers.localSfxGenerators.includes('sfx_api')
-  const sfxModels = {
-    stable_audio_sfx: sfxEnabled ? STABLE_AUDIO_SFX_MODEL_ID : null,
-    moss_sfx: sfxEnabled ? MOSS_SFX_MODEL_ID : null,
-  }
+  const sfxModels = sfxModelsFor(config.providers.localSfxGenerators.includes('sfx_api'))
   return {
     settings: repository,
     defaults,

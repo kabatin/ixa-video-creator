@@ -40,7 +40,7 @@ const ProjectParams = z.object({ projectId: ProjectIdSchema.openapi({ param: { n
 const JobParams = z.object({ id: SfxJobIdSchema.openapi({ param: { name: 'id', in: 'path' } }) })
 
 /** 選べる効果音の AI。お試しは作らないので入れない（選ぶと「使う AI」の方で断る）。 */
-const SfxToolChoice = AiToolId.extract(['stable_audio_sfx', 'moss_sfx'])
+const SfxToolChoice = AiToolId.extract(['stable_audio_medium_sfx', 'stable_audio_sfx', 'moss_sfx'])
 
 const GenerateBody = z
   .object({

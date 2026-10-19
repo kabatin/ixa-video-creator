@@ -9,8 +9,10 @@ import {
   MOSS_SFX_MODEL_ID,
   SFX_API_DEFAULT_BASE_URL,
   SFX_API_PROVIDER_ID,
+  STABLE_AUDIO_MEDIUM_SFX_MODEL_ID,
   STABLE_AUDIO_SFX_MODEL_ID,
   mossSfxModel,
+  stableAudioMediumSfxModel,
   stableAudioSfxModel,
 } from '../sfx-api/descriptor.js'
 import { createSfxApiProvider } from '../sfx-api/provider.js'
@@ -101,6 +103,31 @@ describe('投入', () => {
     expect(headers.get('authorization')).toBe(`Bearer ${TOKEN}`)
     expect(headers.get('idempotency-key')).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
     expect(bodyOf(fetchMock)).toEqual({ prompt: 'cinematic impact hit', duration_sec: 1.5, count: 2, seed: 42 })
+  })
+
+  /** 「TrackType: SFX, 」の前置きはサーバが付ける。ixa が付けると二重になる。 */
+  it('Medium は stable-audio-3-medium-sfx に送る。説明は前置きを付けずにそのまま', async () => {
+    const fetchMock = mockFetch(() => Promise.resolve(json(202, { id: JOB_ID })))
+    const result = await provider(fetchMock).submit(request({ model: stableAudioMediumSfxModel, durationSec: 2.75, count: 4 }))
+    expect(result.modelId).toBe(STABLE_AUDIO_MEDIUM_SFX_MODEL_ID)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${BASE_URL}/v1/workflows/stable-audio-3-medium-sfx/jobs`)
+    expect(bodyOf(fetchMock)).toEqual({ prompt: 'cinematic impact hit', duration_sec: 2.75, count: 4, seed: 42 })
+  })
+
+  it.each([0.5, 10])('Medium は %s 秒を受ける（範囲の端）', async (durationSec) => {
+    const fetchMock = mockFetch(() => Promise.resolve(json(202, { id: JOB_ID })))
+    await provider(fetchMock).submit(request({ model: stableAudioMediumSfxModel, durationSec }))
+    expect(bodyOf(fetchMock)).toMatchObject({ duration_sec: durationSec })
+  })
+
+  it.each([
+    ['短すぎる', { durationSec: 0.49 }, /0.5〜10 秒/],
+    ['長すぎる', { durationSec: 10.01 }, /0.5〜10 秒/],
+    ['本数が多い', { count: 5 }, /1〜4/],
+  ] as const)('Medium でも %s は送る前に断る', async (_label, overrides, message) => {
+    const fetchMock = mockFetch(() => Promise.resolve(json(202, { id: JOB_ID })))
+    await expect(provider(fetchMock).submit(request({ model: stableAudioMediumSfxModel, ...overrides }))).rejects.toThrow(message)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('MOSS は moss-sfx-v2 に送る。入れたくない音を送り、種が無ければ seed を省く', async () => {
@@ -302,10 +329,19 @@ describe('取り消し', () => {
 })
 
 describe('宣言', () => {
-  it('手元の GPU を名乗る。2 つのモデル・長さ 0.5〜10 秒・4 本まで・既定の口は 8769', () => {
+  it('手元の GPU を名乗る。3 つのモデル（メインの Medium が先頭）・長さ 0.5〜10 秒・4 本まで・既定の口は 8769', () => {
     const sfx = provider(mockFetch(() => Promise.reject(new Error('呼ばない'))))
     expect(sfx.exclusiveResource).toBe('local-gpu')
-    expect(sfx.models).toEqual([stableAudioSfxModel, mossSfxModel])
+    expect(sfx.models).toEqual([stableAudioMediumSfxModel, stableAudioSfxModel, mossSfxModel])
+    expect(stableAudioMediumSfxModel).toMatchObject({
+      id: 'sfx_api/stable-audio-3-medium-sfx',
+      workflowId: 'stable-audio-3-medium-sfx',
+      durationSec: { min: 0.5, max: 10 },
+      maxCount: 4,
+      sampleRate: 44_100,
+    })
+    // 温まっていて 1 本 2 秒弱。Small と同じ上限で足りる。
+    expect(stableAudioMediumSfxModel.maxWaitSec).toBe(300)
     expect(stableAudioSfxModel).toMatchObject({ workflowId: 'stable-audio-3-sfx', durationSec: { min: 0.5, max: 10 }, maxCount: 4, sampleRate: 44_100 })
     expect(mossSfxModel).toMatchObject({ workflowId: 'moss-sfx-v2', sampleRate: 48_000 })
     // MOSS は遅い（2 秒の音で 273 秒の実測）。Stable Audio と同じ上限で待つと必ず時間切れになる。
@@ -316,6 +352,7 @@ describe('宣言', () => {
 
   /** 「使う AI」は workflow ごとに health を見る。domain が書く名前とここの名前がずれると、使えるのに灰色になる。 */
   it('使う AI の見つけ方が指す workflow は、モデルの workflow と同じ', () => {
+    expect(AI_TOOLS.stable_audio_medium_sfx.detect).toMatchObject({ workflow: stableAudioMediumSfxModel.workflowId })
     expect(AI_TOOLS.stable_audio_sfx.detect).toMatchObject({ workflow: stableAudioSfxModel.workflowId })
     expect(AI_TOOLS.moss_sfx.detect).toMatchObject({ workflow: mossSfxModel.workflowId })
   })
