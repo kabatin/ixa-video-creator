@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import type { CharacterSheetApi, WireCharacterSheetState } from '@/lib/character-sheet-api'
+import { imageJobProgressText, isImageJobActive } from '@/lib/image-check'
 
 /**
  * キャラクターシートの区画（ADR-0035。制作者 2026-10-03「動画生成に役立つ形式のキャラクターシートを 1 枚の画像から
@@ -18,7 +19,8 @@ import type { CharacterSheetApi, WireCharacterSheetState } from '@/lib/character
 
 type Job = WireCharacterSheetState['job']
 
-const isDrawing = (job: Job): boolean => job?.status === 'queued' || job?.status === 'running'
+/** 待っている・作っている・チェックしている（ADR-0055）。 */
+const isDrawing = (job: Job): boolean => isImageJobActive(job?.status)
 
 export type CharacterSheetFieldProps = {
   readonly characterId: CharacterId
@@ -65,7 +67,7 @@ export const CharacterSheetField = ({ characterId, images, version, onSheetAdded
     try {
       const { jobId } = await client.startCharacterSheet(characterId)
       watching.current = true
-      setJob({ id: jobId, status: 'queued', error: null })
+      setJob({ id: jobId, status: 'queued', error: null, attempt: 1 })
     } catch (cause) {
       setError(`頼めませんでした: ${describeForPerson(cause)}`)
     } finally {
@@ -92,7 +94,7 @@ export const CharacterSheetField = ({ characterId, images, version, onSheetAdded
       )}
       {drawing && (
         <p role="status" className="text-xs text-muted">
-          キャラクターシートを作っています（1 枚 1 分ほど）。できたら識別画像に入ります。
+          {`${imageJobProgressText(job ?? null, null, 'キャラクターシート') ?? ''}（1 枚 1 分ほど）。できたら識別画像に入ります。`}
         </p>
       )}
       {job?.status === 'failed' && (

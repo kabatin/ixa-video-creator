@@ -41,9 +41,14 @@ describe('ShotInspector の Take を作る', () => {
   it('「Take を作る…」から来たら、Take を作る欄へ送る', () => {
     const shot = aWorkbenchShot(1)
     scrollIntoView.mockClear()
-    renderInWorkbench(<ShotInspector shot={shot} isFirst />, { shots: [shot], inspectorTab: 'generate' })
+    renderInWorkbench(<ShotInspector shot={shot} isFirst />, {
+      shots: [shot],
+      inspectorTab: 'generate',
+    })
 
-    const target = screen.getByRole('heading', { name: 'Take を作る' }).closest('section')?.parentElement
+    const target = screen
+      .getByRole('heading', { name: 'Take を作る' })
+      .closest('section')?.parentElement
     expect(scrollIntoView.mock.contexts).toContain(target)
   })
 
@@ -62,8 +67,19 @@ describe('ShotInspector の Take を作る', () => {
     await userEvent.click(screen.getByRole('button', { name: `${shot.code} のその他の操作` }))
 
     // 行の名前だけ（押せない理由は名前の下に添えてある）。
-    const labels = screen.getAllByRole('menuitem').map((item) => item.firstChild?.firstChild?.textContent)
-    expect(labels).toEqual(['Take を作る…', '生成をやめる', 'Take 比較で見る', '絵コンテの画像を AI で作る', '再生位置で分割', '採用を外す', '削除…'])
+    const labels = screen
+      .getAllByRole('menuitem')
+      .map((item) => item.firstChild?.firstChild?.textContent)
+    expect(labels).toEqual([
+      'Take を作る…',
+      '生成をやめる',
+      'Take 比較で見る',
+      '効果音を作る…',
+      '絵コンテの画像を AI で作る',
+      '再生位置で分割',
+      '採用を外す',
+      '削除…',
+    ])
   })
 })
 
@@ -91,13 +107,18 @@ describe('ShotInspector: 送り直し', () => {
     } as unknown as typeof ResizeObserver
     try {
       const shot = aWorkbenchShot(1)
-      renderInWorkbench(<ShotInspector shot={shot} isFirst />, { shots: [shot], inspectorTab: 'generate' })
+      renderInWorkbench(<ShotInspector shot={shot} isFirst />, {
+        shots: [shot],
+        inspectorTab: 'generate',
+      })
       scrollIntoView.mockClear()
 
       callbacks.forEach((callback) => callback())
       expect(scrollIntoView).toHaveBeenCalledTimes(1)
 
-      const body = screen.getByRole('heading', { name: 'Take を作る' }).closest('.workbench-panel-body')
+      const body = screen
+        .getByRole('heading', { name: 'Take を作る' })
+        .closest('.workbench-panel-body')
       body?.dispatchEvent(new Event('wheel', { bubbles: true }))
       scrollIntoView.mockClear()
       callbacks.forEach((callback) => callback())
@@ -107,4 +128,3 @@ describe('ShotInspector: 送り直し', () => {
     }
   })
 })
-

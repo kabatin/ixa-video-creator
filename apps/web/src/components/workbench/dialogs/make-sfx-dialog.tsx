@@ -113,7 +113,7 @@ export const MakeSfxDialogBody = () => {
       )}
       {motion !== null && motion.energy !== null && <MotionWave range={shot} motion={motion} onSeek={seek} />}
       {rows !== null && (
-        <ul className="max-h-80 space-y-2 overflow-y-auto" aria-label="提案する効果音">
+        <ul className="relative max-h-80 space-y-2 overflow-y-auto" aria-label="提案する効果音">
           {rows.map((row) => (
             <SfxCueRowFields
               key={row.id}

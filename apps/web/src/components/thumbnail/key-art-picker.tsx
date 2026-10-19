@@ -7,6 +7,7 @@ import {
   type MediaAssetId,
 } from '@ixa/domain'
 import { useState } from 'react'
+import { ImageCheckBadge } from '@/components/image-check-badge'
 import { MediaImage } from '@/components/media-image'
 import { Button } from '@/components/ui/button'
 import type { KeyArtJobs } from '@/components/thumbnail/use-key-art-jobs'
@@ -24,11 +25,18 @@ export type KeyArtPickerProps = {
   readonly onPick: (mediaAssetId: MediaAssetId) => void
 }
 
-type Candidate = { readonly jobId: ImageGenerationJobId; readonly mediaAssetId: MediaAssetId }
+type Candidate = {
+  readonly jobId: ImageGenerationJobId
+  readonly mediaAssetId: MediaAssetId
+  /** 作った絵のチェック（ADR-0055）。 */
+  readonly check: WireKeyArtJob['check']
+}
 
 const candidatesOf = (jobs: readonly WireKeyArtJob[]): readonly Candidate[] =>
   jobs.flatMap((job) =>
-    job.status === 'succeeded' && job.mediaAssetId !== null ? [{ jobId: job.id, mediaAssetId: job.mediaAssetId }] : [],
+    job.status === 'succeeded' && job.mediaAssetId !== null
+      ? [{ jobId: job.id, mediaAssetId: job.mediaAssetId, check: job.check }]
+      : [],
   )
 
 export const KeyArtPicker = ({ keyArt, selectedAssetId, onPick }: KeyArtPickerProps) => {
@@ -106,6 +114,7 @@ export const KeyArtPicker = ({ keyArt, selectedAssetId, onPick }: KeyArtPickerPr
                   className="aspect-video w-full rounded object-cover"
                 />
               </button>
+              <ImageCheckBadge check={candidate.check} />
             </li>
           ))}
         </ul>

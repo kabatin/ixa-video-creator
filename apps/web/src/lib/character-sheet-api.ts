@@ -19,7 +19,13 @@ import type { Requester } from '@/lib/requester'
 
 export const WireCharacterSheetState = z.object({
   job: z
-    .object({ id: ImageGenerationJobId, status: ImageGenerationJobStatus, error: z.string().nullable() })
+    .object({
+      id: ImageGenerationJobId,
+      status: ImageGenerationJobStatus,
+      error: z.string().nullable(),
+      /** 何枚目の試しか（ADR-0055。1 から）。 */
+      attempt: z.number().int().default(1),
+    })
     .nullable(),
 })
 export type WireCharacterSheetState = z.infer<typeof WireCharacterSheetState>

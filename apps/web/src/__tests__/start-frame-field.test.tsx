@@ -125,7 +125,7 @@ describe('StartFrameField の AI で作る', () => {
 
   it('開き直しても、作っている間はそう言って押せない', async () => {
     show(
-      <StartFrameField shot={shot} workspaceId={WORKSPACE} api={api(null, { id: JOB, status: 'running', error: null })} />,
+      <StartFrameField shot={shot} workspaceId={WORKSPACE} api={api(null, { id: JOB, status: 'running', error: null, attempt: 1 })} />,
     )
 
     expect(await screen.findByText(/絵コンテの画像を作っています/)).toBeTruthy()
@@ -137,7 +137,7 @@ describe('StartFrameField の AI で作る', () => {
       <StartFrameField
         shot={shot}
         workspaceId={WORKSPACE}
-        api={api(null, { id: JOB, status: 'failed', error: 'Codex CLI が絵を返しませんでした。' })}
+        api={api(null, { id: JOB, status: 'failed', error: 'Codex CLI が絵を返しませんでした。', attempt: 1 })}
       />,
     )
 
@@ -176,10 +176,10 @@ describe('StartFrameField: 絵コンテが空のとき', () => {
 /** 作っている絵を止める（制作者 2026-10-04「画像生成も停められるようにしよう」）。 */
 describe('StartFrameField: 止める', () => {
   it('作っている間は「やめる」を出し、押すとこの Shot の絵だけ止める', async () => {
-    const fake = api(null, { id: JOB, status: 'queued', error: null })
+    const fake = api(null, { id: JOB, status: 'queued', error: null, attempt: 1 })
     // 止めたら、読み直した状態は「止めた」になる（実物と同じ）。
     vi.mocked(fake.cancelImages).mockImplementation(() => {
-      vi.mocked(fake.getStartFrame).mockResolvedValue({ mediaAssetId: null, job: { id: JOB, status: 'cancelled', error: null } })
+      vi.mocked(fake.getStartFrame).mockResolvedValue({ mediaAssetId: null, job: { id: JOB, status: 'cancelled', error: null, attempt: 1 } })
       return Promise.resolve({ cancelledJobIds: [JOB] })
     })
     show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} />)
@@ -191,7 +191,7 @@ describe('StartFrameField: 止める', () => {
   })
 
   it('止めたジョブは「止めました」と出す（失敗とは言わない）', async () => {
-    show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={api(null, { id: JOB, status: 'cancelled', error: null })} />)
+    show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={api(null, { id: JOB, status: 'cancelled', error: null, attempt: 1 })} />)
 
     expect(await screen.findByText('絵を作るのを止めました。')).toBeTruthy()
     expect(screen.queryByRole('alert')).toBeNull()
@@ -251,5 +251,63 @@ describe('StartFrameField: 読み直し', () => {
 
     expect(screen.getByText('読み込んでいます…')).toBeInTheDocument()
     expect(screen.queryByAltText('最初のフレーム')).toBeNull()
+  })
+})
+
+/** ADR-0055。作った絵の履歴から選び直す・やり直す。チェック中・やり直しの回数を出す。 */
+describe('StartFrameField の履歴', () => {
+  const history = (current: string) => ({
+    maxRetries: 2,
+    items: [
+      {
+        jobId: JOB,
+        status: 'succeeded' as const,
+        attempt: 1,
+        retryOfJobId: null,
+        mediaAssetId: 'asset-old' as MediaAssetId,
+        applied: false,
+        current: current === 'asset-old',
+        check: { mark: 'retry' as const, outcome: 'checked' as const, score: 0.2, issues: [{ kind: 'anatomy' as const, message: '指が 6 本' }], note: null },
+        error: null,
+        queuedAt: new Date('2026-10-19T00:00:00Z'),
+      },
+    ],
+  })
+
+  it('履歴の絵を「これを使う」で付け替える（取り消せる PUT を通す）', async () => {
+    const fake = { ...api('asset-new'), getStartFrameHistory: vi.fn(() => Promise.resolve(history('asset-new'))), retryImage: vi.fn() }
+    const onSaved = vi.fn()
+    show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} onSaved={onSaved} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: '1 枚目を拡大する' }))
+    await userEvent.click(screen.getByRole('button', { name: 'これを使う' }))
+
+    expect(fake.setStartFrame).toHaveBeenCalledWith(SHOT_ID, 'asset-old')
+    await waitFor(() => {
+      expect(onSaved).toHaveBeenCalled()
+    })
+  })
+
+  it('やり直すと同じジョブのやり直しを頼み、「やり直し 1/2」で作っていると出す', async () => {
+    const fake = {
+      ...api('asset-old', { id: JOB, status: 'succeeded', error: null, attempt: 1 }),
+      getStartFrameHistory: vi.fn(() => Promise.resolve(history('asset-old'))),
+      retryImage: vi.fn(() => Promise.resolve({ jobId: '01ARZ3NDEKTSV4RRFFQ69G5FJ9' as ImageGenerationJobId })),
+    }
+    show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: '1 枚目を拡大する' }))
+    await userEvent.click(screen.getByRole('button', { name: 'やり直す' }))
+
+    expect(fake.retryImage).toHaveBeenCalledWith(JOB)
+    expect(await screen.findByText(/やり直し 1\/2・絵コンテの画像を作っています/)).toBeTruthy()
+  })
+
+  it('チェック中は「チェックしています」と出し、作り直しを押せない', async () => {
+    const fake = { ...api('asset-old', { id: JOB, status: 'checking', error: null, attempt: 1 }) }
+    show(<StartFrameField shot={shot} workspaceId={WORKSPACE} api={fake} />)
+
+    expect(await screen.findByText(/絵コンテの画像をチェックしています/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'AI で作り直す' }).hasAttribute('disabled')).toBe(true)
   })
 })

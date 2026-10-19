@@ -40,6 +40,7 @@ import { createShotBulkApi, type ShotBulkApi } from '@/lib/shot-bulk-api'
 import { createShotEditApi, type ShotEditApi } from '@/lib/shot-edit-api'
 import { createModelsApi, type ModelsApi } from '@/lib/models-api'
 import { createShotStartFrameApi, type ShotStartFrameApi } from '@/lib/shot-start-frame-api'
+import { createImageCheckApi, type ImageCheckApi } from '@/lib/image-check'
 import { createProjectConceptApi, type ProjectConceptApi } from '@/lib/project-concept-api'
 import { createAiSettingsApi, type AiSettingsApi } from '@/lib/ai-settings-api'
 import { createGenerationActivityApi, type GenerationActivityApi } from '@/lib/generation-activity-api'
@@ -158,6 +159,7 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
   ShotEditApi &
   ModelsApi &
   ShotStartFrameApi &
+  ImageCheckApi &
   ProjectConceptApi &
   AiSettingsApi &
   GenerationActivityApi &
@@ -285,6 +287,7 @@ export const createApiClient = (
     ...createShotEditApi(requester),
     ...createModelsApi(requester),
     ...createShotStartFrameApi(requester),
+    ...createImageCheckApi(requester),
     ...createProjectConceptApi(requester),
     ...createAiSettingsApi(requester),
     ...createGenerationActivityApi(requester),

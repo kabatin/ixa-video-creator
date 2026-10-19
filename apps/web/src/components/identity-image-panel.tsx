@@ -8,7 +8,7 @@ import {
   type MediaAssetId,
   type WorkspaceId,
 } from '@ixa/domain'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ErrorPanel } from '@/components/error-panel'
 import { FourViewNotice } from '@/components/four-view-notice'
 import { IdentityImageGrid } from '@/components/identity-image-grid'
@@ -16,6 +16,7 @@ import { ImageUploader } from '@/components/image-uploader'
 import { SelectField } from '@/components/form/select-field'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import type { WireImageCheck } from '@/lib/image-check'
 import {
   DEFAULT_IDENTITY_ROLE,
   hasFourView,
@@ -40,6 +41,26 @@ export const IdentityImagePanel = ({
   const [role, setRole] = useState<IdentityImageRole>(DEFAULT_IDENTITY_ROLE)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const [checks, setChecks] = useState<ReadonlyMap<string, WireImageCheck | null>>(new Map())
+
+  /**
+   * AI で作ったキャラクターシートのチェックの印（ADR-0055）。**上乗せ。** 読めなくても一覧は使える（印を出さないだけ）。
+   */
+  useEffect(() => {
+    let alive = true
+    createApiClient()
+      .listIdentityImageChecks(characterId)
+      .then((items) => {
+        if (alive) setChecks(new Map(items.map((item) => [item.mediaAssetId, item.check] as const)))
+      })
+      .catch(() => {
+        if (alive) setChecks(new Map())
+      })
+    return () => {
+      alive = false
+    }
+  }, [characterId, images])
 
   const reload = async (): Promise<void> => {
     setImages(await createApiClient().listIdentityImages(characterId))
@@ -122,6 +143,7 @@ export const IdentityImagePanel = ({
         busy={busy}
         onSetPrimary={setPrimary}
         onRemove={remove}
+        checks={checks}
       />
     </section>
   )

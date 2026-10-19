@@ -42,7 +42,7 @@ describe('CharacterSheetField', () => {
   })
 
   it('もうシートがあれば「作り直す」。失敗した理由を出す', async () => {
-    const failed = api({ job: { id: JOB_ID, status: 'failed', error: 'Codex CLI が絵を返しませんでした。' } })
+    const failed = api({ job: { id: JOB_ID, status: 'failed', error: 'Codex CLI が絵を返しませんでした。', attempt: 1 } })
     render(
       <CharacterSheetField
         characterId={characterId}
@@ -58,14 +58,14 @@ describe('CharacterSheetField', () => {
   })
 
   it('作っていたジョブができたら、識別画像を読み直させる', async () => {
-    const client = api({ job: { id: JOB_ID, status: 'running', error: null } })
+    const client = api({ job: { id: JOB_ID, status: 'running', error: null, attempt: 1 } })
     const onSheetAdded = vi.fn()
     const { rerender } = render(
       <CharacterSheetField characterId={characterId} images={[image('full_body')]} version={0} onSheetAdded={onSheetAdded} api={client} />,
     )
     await screen.findByText(/キャラクターシートを作っています/)
 
-    client.getCharacterSheet.mockResolvedValue({ job: { id: JOB_ID, status: 'succeeded', error: null } })
+    client.getCharacterSheet.mockResolvedValue({ job: { id: JOB_ID, status: 'succeeded', error: null, attempt: 1 } })
     rerender(<CharacterSheetField characterId={characterId} images={[image('full_body')]} version={1} onSheetAdded={onSheetAdded} api={client} />)
 
     await waitFor(() => {

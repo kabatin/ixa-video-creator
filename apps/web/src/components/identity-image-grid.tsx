@@ -1,10 +1,12 @@
 'use client'
 
 import type { CharacterIdentityImage, CharacterIdentityImageId } from '@ixa/domain'
+import { ImageCheckBadge } from '@/components/image-check-badge'
 import { MediaImage } from '@/components/media-image'
 import { Button } from '@/components/ui/button'
 import { ConfirmButton } from '@/components/ui/confirm-button'
 import { identityRoleHint, identityRoleLabel, primaryImageOfRole } from '@/lib/identity-images'
+import type { WireImageCheck } from '@/lib/image-check'
 import { WORDING, deleteConfirmMessage } from '@/lib/wording'
 
 export type IdentityImageGridProps = {
@@ -12,6 +14,10 @@ export type IdentityImageGridProps = {
   readonly busy: boolean
   readonly onSetPrimary: (id: CharacterIdentityImageId) => void
   readonly onRemove: (id: CharacterIdentityImageId) => void
+  /**
+   * AI で作ったキャラクターシートのチェック（ADR-0055）。素材の ID ごと。載っていない画像（手で入れた画像）には印を出さない。
+   */
+  readonly checks?: ReadonlyMap<string, WireImageCheck | null>
 }
 
 /**
@@ -26,6 +32,7 @@ export const IdentityImageGrid = ({
   busy,
   onSetPrimary,
   onRemove,
+  checks,
 }: IdentityImageGridProps) => {
   if (images.length === 0) {
     return (
@@ -64,6 +71,7 @@ export const IdentityImageGrid = ({
                   この role の主画像
                 </span>
               )}
+              {checks?.has(image.mediaAssetId) === true && <ImageCheckBadge check={checks.get(image.mediaAssetId) ?? null} />}
             </div>
 
             <Button

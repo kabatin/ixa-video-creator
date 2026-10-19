@@ -11,6 +11,7 @@ import {
   type ThumbnailSpecInput,
 } from '@ixa/domain'
 import { z } from 'zod'
+import { isImageJobActive, WireImageCheck } from '@/lib/image-check'
 import type { Requester } from '@/lib/requester'
 
 /**
@@ -50,6 +51,8 @@ export const WireKeyArtJob = z.object({
   instruction: z.string().nullable(),
   mediaAssetId: MediaAssetId.nullable(),
   error: z.string().nullable(),
+  /** 作った絵のチェック（ADR-0055）。まだ見ていなければ null。 */
+  check: WireImageCheck.nullable().default(null),
   queuedAt: z.coerce.date(),
   finishedAt: z.coerce.date().nullable(),
 })
@@ -65,9 +68,8 @@ export const GenerateKeyArtBody = z.object({
 })
 export type GenerateKeyArtInput = z.input<typeof GenerateKeyArtBody>
 
-/** 待っている・作っているジョブ。終わったもの（成功・失敗・止めた）は外す。 */
-export const isKeyArtActive = (job: Pick<WireKeyArtJob, 'status'>): boolean =>
-  job.status === 'queued' || job.status === 'running'
+/** 待っている・作っている・チェックしているジョブ。終わったもの（成功・失敗・止めた）は外す。 */
+export const isKeyArtActive = (job: Pick<WireKeyArtJob, 'status'>): boolean => isImageJobActive(job.status)
 
 /** 書き出しが終わったか（成功・失敗）。 */
 export const isThumbnailSettled = (thumbnail: Pick<WireThumbnail, 'status'>): boolean =>
