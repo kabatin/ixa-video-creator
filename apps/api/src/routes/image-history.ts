@@ -29,7 +29,14 @@ export type ImageHistoryRoutesDeps = ImageJobStartDeps & {
   readonly shotReferences: Pick<ShotReferenceRepository, 'findByShot'>
   readonly imageJobs: Pick<
     ImageJobRepository,
-    'create' | 'markFailed' | 'findById' | 'findByShot' | 'findByMediaAssetIds' | 'findActiveByShot' | 'findActiveByCharacter'
+    | 'create'
+    | 'markFailed'
+    | 'findById'
+    | 'findByShot'
+    | 'findByMediaAssetIds'
+    | 'findActiveByShot'
+    | 'findActiveByCharacter'
+    | 'findRetryOf'
   >
   readonly imageChecks: Pick<ImageCheckRepository, 'findByJobIds'>
   /** 自動のやり直しの上限（`IMAGE_CHECK_MAX_RETRIES`）。画面の「やり直し 1/2」に使う。 */
@@ -38,6 +45,7 @@ export type ImageHistoryRoutesDeps = ImageJobStartDeps & {
 
 export const BUSY_MESSAGE = 'この絵を作っている最中です。できあがるまで待ってください。'
 export const NOT_DRAWN_MESSAGE = 'この絵はまだできていないため、やり直せません。'
+export const ALREADY_RETRIED_MESSAGE = 'この絵はもうやり直しました。新しい方の絵からやり直してください。'
 
 const pathId = <T extends z.ZodTypeAny>(schema: T) => z.object({ id: schema.openapi({ param: { name: 'id', in: 'path' } }) })
 
@@ -171,6 +179,12 @@ export const imageHistoryRoutes = (deps: ImageHistoryRoutesDeps) =>
       if (job === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       if (job.status !== 'succeeded' || job.mediaAssetId === null) return c.json(fail(NOT_DRAWN_MESSAGE), 422)
       if (await isBusy(deps, job)) return c.json(fail(BUSY_MESSAGE), 409)
+      // 1 つの絵のやり直しは 1 つだけ（DB の一意インデックス）。キーアートは持ち主の Shot が無いので、ここで連打を止める。
+      const retried = await deps.imageJobs.findRetryOf(job.id)
+      if (retried !== null) {
+        const active = retried.status === 'queued' || retried.status === 'running' || retried.status === 'checking'
+        return c.json(fail(active ? BUSY_MESSAGE : ALREADY_RETRIED_MESSAGE), 409)
+      }
       const retry = await startImageJob(deps, retryImageJobInput(job))
       return c.json(ok({ jobId: retry.id }), 202)
     })

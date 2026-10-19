@@ -119,6 +119,31 @@ describe('POST /image-jobs/{id}/retry', () => {
     })
   })
 
+  /** レビューの指摘（2026-10-19）。キーアートは持ち主の Shot が無いので、同じ絵のやり直しの連打を別に止める。 */
+  it('キーアートでも、同じ絵のやり直しが動いていれば 409（連打で重ねない）', async () => {
+    const f = build()
+    const art = await f.imageJobs.create({ kind: 'key_art', projectId: f.project.id, instruction: null, ...codex })
+    await f.imageJobs.markChecking(art.id, newId(MediaAssetIdSchema), {})
+    await f.imageJobs.finishChecking(art.id)
+
+    expect((await f.app.request(`/image-jobs/${art.id}/retry`, { method: 'POST' })).status).toBe(202)
+    expect((await f.app.request(`/image-jobs/${art.id}/retry`, { method: 'POST' })).status).toBe(409)
+    expect(f.enqueued).toHaveLength(1)
+  })
+
+  it('同じ絵のやり直しがもう済んでいれば 409（新しい方の絵からやり直す）', async () => {
+    const f = build()
+    const first = await drawnWithRetry(f)
+    const res = await f.app.request(`/image-jobs/${first.id}/retry`, { method: 'POST' })
+    const { jobId } = ((await res.json()) as Ok<{ jobId: ImageGenerationJobId }>).data
+    await f.imageJobs.markChecking(jobId, newId(MediaAssetIdSchema), {})
+    await f.imageJobs.finishChecking(jobId)
+
+    const again = await f.app.request(`/image-jobs/${first.id}/retry`, { method: 'POST' })
+    expect(again.status).toBe(409)
+    expect(f.enqueued).toHaveLength(1)
+  })
+
   it('同じ Shot で作っている最中なら 409', async () => {
     const f = build()
     const first = await drawnWithRetry(f)
