@@ -164,6 +164,21 @@ describe('チェックして当てる', () => {
     expect(await manualStartFrameOf(deps.shotReferences, shot.id)).not.toBeNull()
   })
 
+  /** レビューの指摘（2026-10-19）。絵の素材が見つからなければ、空のキーで保管庫を読まずに、素材の ID を付けて投げる。 */
+  it('絵の素材が見つからなければ、保管庫を空のキーで読まず、チェックせずに使うと残す', async () => {
+    const { job, deps } = setup()
+    await processImageJob(deps, { imageJobId: job.id })
+    const keys: string[] = []
+    const vanished = {
+      ...deps,
+      mediaAssets: { ...deps.mediaAssets, findById: () => Promise.resolve(null) },
+      storage: { ...deps.storage, get: (key: string) => (keys.push(key), deps.storage.get(key)) },
+    }
+    await processImageJob(vanished, { imageJobId: job.id, step: 'check' })
+    expect(keys).not.toContain('')
+    expect(deps.imageChecks.snapshot()).toMatchObject([{ outcome: 'failed', note: CHECK_FAILED_NOTE }])
+  })
+
   it('チェックの AI が落ちても、理由を残して当てる（合格に化けさせない）', async () => {
     const { job, deps } = setup()
     await runImageJob({ ...deps, checker: fakeImageChecker([]) }, { imageJobId: job.id })

@@ -49,7 +49,9 @@ const askChecker = async (deps: JobDeps, job: ImageGenerationJob, subjectId: Non
   withTempDir(deps.workDir, 'image-check-', async (dir) => {
     const resolve = localReferenceResolver(deps, dir)
     const subjectPath = join(dir, 'subject.png')
-    await writeFile(subjectPath, await deps.storage.get((await deps.mediaAssets.findById(subjectId))?.storageKey ?? ''))
+    const subject = await deps.mediaAssets.findById(subjectId)
+    if (subject === null) throw new Error(`チェックする絵の素材 ${subjectId} が見つかりません`)
+    await writeFile(subjectPath, await deps.storage.get(subject.storageKey))
     const references = await Promise.all(
       job.referenceAssetIds.map(async (id, index) => ({ label: `参照 ${String(index + 1)}`, path: await resolve(id) })),
     )
