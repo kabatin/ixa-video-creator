@@ -32,10 +32,13 @@ export const KeyArtInstruction = z
   .transform((value) => (value === '' ? null : value))
 
 /**
+ * `checking` は絵ができてチェックしている最中（ADR-0055）。絵（`mediaAssetId`）は持つが、まだ何にも当てていない。
+ * 動いているジョブに数える（チェック中・やり直し待ちの間に同じ Shot へ重ねて頼ませない）。
+ *
  * `cancelled` は人が止めた（制作者 2026-10-04「画像生成も停められるようにしよう」）。失敗ではないので理由を持たない。
  * **止めた行は、作っている側の書き込み（作成中・成功・失敗）で上書きしない**（リポジトリが守る）。
  */
-export const ImageGenerationJobStatus = z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled'])
+export const ImageGenerationJobStatus = z.enum(['queued', 'running', 'checking', 'succeeded', 'failed', 'cancelled'])
 export type ImageGenerationJobStatus = z.infer<typeof ImageGenerationJobStatus>
 
 export const ImageGenerationJobError = z.object({
@@ -76,6 +79,12 @@ export const ImageGenerationJob = z.object({
   error: ImageGenerationJobError.nullable(),
   /** 再現用の記録（CLI の版・終了コードなど）。**指示の本文は入れない。** */
   providerRecord: z.record(z.unknown()).nullable(),
+  /** やり直しのとき、前のジョブ（ADR-0055）。1 枚目は null。 */
+  retryOfJobId: ImageGenerationJobId.nullable().default(null),
+  /** 何枚目の試しか。1 から数える。前からある行は 1。 */
+  attempt: z.number().int().min(1).default(1),
+  /** つながりの最後に、この絵を当てた（開始フレームに差し替えた・識別画像に足した）とき。当てていなければ null。 */
+  appliedAt: z.date().nullable().default(null),
   queuedAt: z.date(),
   startedAt: z.date().nullable(),
   finishedAt: z.date().nullable(),
@@ -90,7 +99,7 @@ export type ImageGenerationJob = z.infer<typeof ImageGenerationJob>
  */
 export const imageJobViolation = (
   job: Pick<ImageGenerationJob, 'kind' | 'shotId' | 'characterId' | 'status' | 'mediaAssetId' | 'error'> &
-    Partial<Pick<ImageGenerationJob, 'instruction'>>,
+    Partial<Pick<ImageGenerationJob, 'instruction' | 'retryOfJobId' | 'attempt' | 'appliedAt'>>,
 ): string | null => {
   // 種類と持ち主: 最初のフレームは Shot だけ、キャラクターシートはキャラクターだけ、キーアートはどちらも持たない。
   if (job.kind === 'start_frame' && job.shotId === null) return '最初のフレームのジョブなのに Shot がありません'
@@ -101,9 +110,18 @@ export const imageJobViolation = (
   if (job.kind === 'key_art' && job.characterId !== null) return 'キーアートのジョブなのにキャラクターがあります'
   // 自由な指示はキーアートだけが持つ（ほかの種類は指示を Shot・キャラクターから組む）。
   if (job.kind !== 'key_art' && (job.instruction ?? null) !== null) return 'キーアート以外のジョブなのに指示があります'
+  // やり直しのつながり（ADR-0055）: 2 枚目以降だけが前のジョブを指す。
+  const attempt = job.attempt ?? 1
+  const retryOf = job.retryOfJobId ?? null
+  if (attempt === 1 && retryOf !== null) return '1 枚目なのに前のジョブがあります'
+  if (attempt > 1 && retryOf === null) return 'やり直しなのに前のジョブがありません'
   if (job.status === 'succeeded' && job.mediaAssetId === null) return '成功したのに絵がありません'
+  if (job.status === 'checking' && job.mediaAssetId === null) return 'チェック中なのに絵がありません'
   if (job.status === 'failed' && job.error === null) return '失敗したのに理由がありません'
-  if (job.status !== 'succeeded' && job.mediaAssetId !== null) return 'まだ終わっていないのに絵があります'
+  if (job.status !== 'succeeded' && job.status !== 'checking' && job.mediaAssetId !== null) {
+    return 'まだ終わっていないのに絵があります'
+  }
+  if ((job.appliedAt ?? null) !== null && job.mediaAssetId === null) return '絵が無いのに当てた記録があります'
   if (job.status !== 'failed' && job.error !== null) return '失敗していないのに理由があります'
   return null
 }

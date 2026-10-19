@@ -681,6 +681,33 @@ type ReviewFinding = {
 尺・解像度・fps・黒フレーム・ブランドカラーの有無・ビート整合は計算で判定する。
 LLM は「人物が同じ人に見えるか」「構図が指示通りか」など判断が要るものに限定する。コストと再現性のため。
 
+### 画像のチェック（ADR-0055）
+
+画像のジョブ（開始フレーム・キャラクターシート・キーアート）は、できた絵をすぐ当てずにチェックする。
+
+```ts
+type ImageCheck = {
+  id: ImageCheckId
+  imageJobId: ImageGenerationJobId        // ジョブに 1 行（追記のみ）
+  outcome: 'checked' | 'skipped' | 'failed' // 飛ばした・落ちたを「合格」に化けさせない
+  verdict: 'pass' | 'review' | 'retry' | null
+  score: number | null                    // 0..1
+  issues: { kind: 'anatomy' | 'artifact' | 'text' | 'identity' | 'prompt' | 'look'; message: string }[]
+  promptDelta: string | null              // やり直すときに指示へ足す直し方（英語）
+  note: string | null                     // 飛ばした・落ちた理由
+  costUsd: number
+}
+
+// ImageGenerationJob に足す
+//   status に 'checking'（絵はあるが、まだ当てていない）
+//   retryOfJobId: ImageGenerationJobId | null   // やり直しの前のジョブ
+//   attempt: number                              // 1 から
+//   appliedAt: Date | null                       // つながりの最後に当てた絵
+```
+
+- 自動でやり直すのは、画像の AI が手元（`local-gpu`）で `retry` のときだけ（`shouldAutoRetry`。上限は既定 2 回）
+- 当てるのはつながりの最後に 1 回だけ（`pickImageToApply`。合格した最新、無ければ 要確認 → 見ていない → やり直し の順・点・新しさ）
+
 ---
 
 ## 12. Regeneration Loop（§20）

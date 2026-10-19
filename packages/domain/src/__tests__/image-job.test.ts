@@ -121,3 +121,35 @@ describe('出来事 image_job.status', () => {
     expect(SHOT_LIST_EVENT_TYPES).toContain('image_job.status')
   })
 })
+
+/** 作った絵のチェックとやり直し（ADR-0055）。 */
+describe('チェック中・やり直しのつながり', () => {
+  it('チェック中は絵を持つ（見ている最中の絵）。絵が無ければ破れ', () => {
+    expect(imageJobViolation(aJob({ status: 'checking', mediaAssetId: assetId }))).toBeNull()
+    expect(imageJobViolation(aJob({ status: 'checking' }))).toMatch(/チェック/)
+  })
+
+  it('前からある行は 1 枚目で、つながりも当てた記録も無い', () => {
+    const job = aJob()
+    expect(job.attempt).toBe(1)
+    expect(job.retryOfJobId).toBeNull()
+    expect(job.appliedAt).toBeNull()
+  })
+
+  it('試しの番号は 1 以上の整数', () => {
+    expect(ImageGenerationJob.safeParse({ ...aJob(), attempt: 0 }).success).toBe(false)
+    expect(ImageGenerationJob.safeParse({ ...aJob(), attempt: 1.5 }).success).toBe(false)
+  })
+
+  it('やり直しは前のジョブを指し、2 枚目以降。1 枚目なのに前がある・やり直しなのに前が無い、は破れ', () => {
+    const previous = ImageGenerationJobId.parse('01ARZ3NDEKTSV4RRFFQ69G5FA0')
+    expect(imageJobViolation(aJob({ attempt: 2, retryOfJobId: previous }))).toBeNull()
+    expect(imageJobViolation(aJob({ attempt: 2 }))).toMatch(/前/)
+    expect(imageJobViolation(aJob({ attempt: 1, retryOfJobId: previous }))).toMatch(/前/)
+  })
+
+  it('当てたのは絵が仕上がったジョブだけ', () => {
+    expect(imageJobViolation(aJob({ status: 'succeeded', mediaAssetId: assetId, appliedAt: new Date() }))).toBeNull()
+    expect(imageJobViolation(aJob({ appliedAt: new Date() }))).toMatch(/当て/)
+  })
+})
