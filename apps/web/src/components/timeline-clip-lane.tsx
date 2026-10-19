@@ -22,6 +22,7 @@ import {
   TIMELINE_LANE_HEIGHT_PX,
   type TimeSpan,
 } from '@/lib/timeline-display'
+import { useSfxAssets } from '@/components/workbench/sfx-assets'
 import { assignOverlapRows, overlapRowAtOffset } from '@/lib/timeline-overlap-rows'
 import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX, type MenuPoint } from '@/components/workbench/use-context-menu'
 
@@ -96,6 +97,11 @@ export const TimelineClipLane = ({
   emptyHint,
 }: TimelineClipLaneProps) => {
   const laneRef = useRef<HTMLDivElement>(null)
+  // 音のクリップは素材ツリーの効果音と同じ名前で呼ぶ（内部 ID を出さない）。ワークベンチの外では名前が無い。
+  const sfx = useSfxAssets()
+  const mediaNames = new Map((sfx?.state === 'ready' ? sfx.value : []).map((item) => [item.mediaAssetId as string, item.label]))
+  const nameOf = (clip: TimelineClip): string | undefined =>
+    clip.content.type === 'media' ? mediaNames.get(clip.content.mediaAssetId) : undefined
   const dragRef = useRef<DragState | null>(null)
   /** 掴んでから離すまでに動いたか。動いていなければ「押した」として扱う。 */
   const movedRef = useRef(false)
@@ -260,7 +266,7 @@ export const TimelineClipLane = ({
             // 帯の下の数値の一覧を外したので、ここがキーボードの唯一の入口（レビュー 2026-10-19）。
             role="button"
             tabIndex={0}
-            aria-label={`${clipChipLabel(clip.content)} ${formatTimeSpan(span)}`}
+            aria-label={`${clipChipLabel(clip.content, nameOf(clip))} ${formatTimeSpan(span)}`}
             onKeyDown={(event) => {
               if (event.key !== 'Enter' && event.key !== ' ') return
               // Space を再生に渡さない。フォーカスがクリップにあるときは「開く」。
@@ -271,7 +277,7 @@ export const TimelineClipLane = ({
               onSelect(clip.id)
               onOpen(clip, box.left + box.width / 2, box.bottom)
             }}
-            title={`${formatTimeSpan(span)} ${describeClipContent(clip.content)}`}
+            title={`${formatTimeSpan(span)} ${describeClipContent(clip.content, nameOf(clip))}`}
             className={`absolute touch-none select-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus overflow-hidden rounded text-left text-xs ring-1 ${
               selected
                 ? 'bg-info/25 text-text ring-info/60'
@@ -298,7 +304,7 @@ export const TimelineClipLane = ({
               style={{ width: grabPx }}
             />
             <span className="pointer-events-none block cursor-grab truncate px-1 leading-6">
-              {clipChipLabel(clip.content)}
+              {clipChipLabel(clip.content, nameOf(clip))}
             </span>
           </div>
         )

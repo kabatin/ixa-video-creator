@@ -1,8 +1,11 @@
-import { ProjectId, TimelineClipId, newId, type TimelineClip } from '@ixa/domain'
+import { MediaAssetId, ProjectId, TimelineClipId, newId, type TimelineClip } from '@ixa/domain'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { TimelineTracks } from '@/components/timeline-tracks'
 import { NarrationLane } from '@/components/workbench/narration/narration-lane'
+import { SfxAssetsProvider } from '@/components/workbench/sfx-assets'
+import { WireUploadedSfx } from '@/lib/uploaded-sfx-api'
+import { renderInWorkbench } from './workbench-fixture'
 
 /**
  * タイムラインの音の帯（ADR-0038 / 0039）。ナレーションのレーン（行の投影）と、音のファイルを落として置く効果音の帯。
@@ -148,5 +151,58 @@ describe('帯の並び', () => {
       (node, index) => index === 0 || (nodes[index - 1]?.compareDocumentPosition(node) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING,
     )
     expect(ordered).toBe(true)
+  })
+})
+
+/** 効果音のクリップの札・読み上げに素材の内部 ID を出さず、素材ツリーと同じ名前を出す（CLAUDE.md の画面の言葉）。 */
+describe('効果音のクリップの名前', () => {
+  const SOUND = '01ARZ3NDEKTSV4RRFFQ69G5FA1'
+  const placed: TimelineClip = {
+    id: newId(TimelineClipId),
+    projectId: newId(ProjectId),
+    track: 'SFX',
+    startSec: 2,
+    durationSec: 1.5,
+    layer: 0,
+    content: { type: 'media', mediaAssetId: MediaAssetId.parse(SOUND), inSec: 0, outSec: 1.5, volume: 1 },
+    opacity: 1,
+    createdAt: new Date(),
+  }
+
+  it('取り込んだ効果音はファイルの名前で呼ぶ', async () => {
+    const api = {
+      listClips: vi.fn().mockResolvedValue([]),
+      listSfxJobs: vi.fn().mockResolvedValue([]),
+      listUploadedSfx: vi.fn().mockResolvedValue([
+        WireUploadedSfx.parse({ id: 'u1', mediaAssetId: SOUND, title: 'ドアの音', createdAt: new Date().toISOString() }),
+      ]),
+    }
+    renderInWorkbench(
+      <SfxAssetsProvider api={api}>
+        <TimelineTracks
+          shots={[]}
+          clips={[placed]}
+          transitionPoints={[]}
+          renderedShotIds={new Set()}
+          durationSec={10}
+          pxPerSec={40}
+          selectedClipId={null}
+          busy={false}
+          openTransitionAtSec={null}
+          clipPreviews={new Map()}
+          onSelectClip={vi.fn()}
+          onOpenTransition={vi.fn()}
+          onOpenClip={vi.fn()}
+          onInsertText={vi.fn()}
+          onClipDragBegin={vi.fn()}
+          onClipDragMove={vi.fn()}
+          onClipDragEnd={vi.fn()}
+        />
+      </SfxAssetsProvider>,
+    )
+
+    const clip = await screen.findByRole('button', { name: /^ドアの音 / })
+    expect(clip.getAttribute('aria-label')).not.toContain(SOUND)
+    expect(clip.getAttribute('title')).not.toContain(SOUND)
   })
 })

@@ -455,3 +455,18 @@ describe('transitionBarLabel', () => {
     expect(transitionBarLabel('whip_pan', 0.4)).toBe('ホイップパン 0.40s')
   })
 })
+
+/** 音・映像のクリップの文字に素材の内部 ID を出さない（CLAUDE.md の画面の言葉）。名前が分かれば名前を出す。 */
+describe('メディアのクリップの文字', () => {
+  const media = { type: 'media' as const, mediaAssetId: MediaAssetId.parse(MEDIA_ID), inSec: 0, outSec: 1.5, volume: 1 }
+
+  it('名前が無ければ「メディア」と使う範囲だけ。ID は出さない', () => {
+    expect(describeClipContent(media)).toBe('メディア（0.00s–1.50s）')
+    expect(clipChipLabel(media)).not.toContain(MEDIA_ID)
+  })
+
+  it('名前があれば名前を出す（札は名前だけ）', () => {
+    expect(describeClipContent(media, 'ドアの音')).toBe('「ドアの音」（0.00s–1.50s）')
+    expect(clipChipLabel(media, 'ドアの音')).toBe('ドアの音')
+  })
+})

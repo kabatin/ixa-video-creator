@@ -280,10 +280,16 @@ export const formatTimeSpan = (span: TimeSpan): string =>
   `${formatClock(span.startSec)} – ${formatClock(span.startSec + span.durationSec)}`
 
 /** クリップの中身の一行要約。種別ごとに「何が置かれているか」が分かる形にする。 */
-export const describeClipContent = (content: TimelineClip['content']): string => {
+/**
+ * クリップの一行要約。音・映像は素材の内部 ID を出さない（CLAUDE.md の画面の言葉）。
+ * `mediaName` は素材の名前（取り込んだ効果音のファイル名・作った効果音の指示など）。分からなければ「メディア」。
+ */
+export const describeClipContent = (content: TimelineClip['content'], mediaName?: string): string => {
   switch (content.type) {
-    case 'media':
-      return `メディア ${content.mediaAssetId}（${content.inSec.toFixed(2)}s–${content.outSec.toFixed(2)}s）`
+    case 'media': {
+      const range = `（${content.inSec.toFixed(2)}s–${content.outSec.toFixed(2)}s）`
+      return mediaName === undefined ? `メディア${range}` : `「${mediaName}」${range}`
+    }
     case 'text': {
       // 文字そのものを出す。型の名前（lower_third）では何が出るのか分からない。
       const params = parseTextClipParams(content.params)
@@ -299,10 +305,10 @@ export const describeClipContent = (content: TimelineClip['content']): string =>
  * テロップは文字そのものだけにする（帯の名前「TEXT（テロップ）」で種類は分かる。札は幅が狭く、前置きで本文が切れていた）。
  * それ以外は一行要約のまま。知らせ・一覧・ツールチップでは種類が混ざるので `describeClipContent` を使う。
  */
-export const clipChipLabel = (content: TimelineClip['content']): string => {
+export const clipChipLabel = (content: TimelineClip['content'], mediaName?: string): string => {
   // エフェクトも型の名前だけ（帯の名前「VFX（エフェクト）」で種類は分かる）。
   if (content.type === 'motion_graphics') return effectChipLabel(content)
-  if (content.type !== 'text') return describeClipContent(content)
+  if (content.type === 'media') return mediaName ?? describeClipContent(content)
   const params = parseTextClipParams(content.params)
   return params === null ? '（文字が読めません）' : params.text
 }
