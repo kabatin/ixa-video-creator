@@ -64,6 +64,7 @@ const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
     },
     renderExportDir: null,
     imageCheckMaxRetries: 2,
+    imageCheckModel: 'sonnet',
     voiceAi: {
       apiProviders: [],
       geminiApiKey: null,

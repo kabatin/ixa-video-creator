@@ -154,6 +154,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     },
     renderExportDir: parsed.RENDER_EXPORT_DIR ?? null,
     imageCheckMaxRetries: parsed.IMAGE_CHECK_MAX_RETRIES,
+    imageCheckModel: parsed.IMAGE_CHECK_MODEL,
     voiceAi: {
       apiProviders: parsed.AUDIO_API_PROVIDERS,
       geminiApiKey: parsed.GEMINI_API_KEY ?? null,

@@ -682,3 +682,19 @@ describe('IMAGE_CHECK_MAX_RETRIES', () => {
     expect(() => loadConfig({ ...requiredEnv, IMAGE_CHECK_MAX_RETRIES: '1.5' })).toThrow()
   })
 })
+
+/** 画像のチェックに使う Claude のモデル（ADR-0055 追記。制作者の了承 2026-10-19）。既定は sonnet。 */
+describe('IMAGE_CHECK_MODEL', () => {
+  it('既定は sonnet。別名やモデル ID を受ける', () => {
+    expect(loadConfig(requiredEnv).imageCheckModel).toBe('sonnet')
+    expect(loadConfig({ ...requiredEnv, IMAGE_CHECK_MODEL: 'opus' }).imageCheckModel).toBe('opus')
+    expect(loadConfig({ ...requiredEnv, IMAGE_CHECK_MODEL: 'claude-sonnet-5-5' }).imageCheckModel).toBe('claude-sonnet-5-5')
+    expect(loadConfig({ ...requiredEnv, IMAGE_CHECK_MODEL: ' sonnet ' }).imageCheckModel).toBe('sonnet')
+  })
+
+  it('空・空白入り・記号入り・長すぎる値は受けない（CLI の引数に渡すため）', () => {
+    for (const bad of ['', '   ', 'son net', 'sonnet;rm', '--model', 'a'.repeat(101)]) {
+      expect(() => loadConfig({ ...requiredEnv, IMAGE_CHECK_MODEL: bad })).toThrow()
+    }
+  })
+})
