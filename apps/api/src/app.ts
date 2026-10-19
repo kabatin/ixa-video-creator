@@ -33,6 +33,7 @@ import { loadProjectMotionEvents } from './motion/shot-motion.js'
 import { narrationRoutes } from './routes/narration.js'
 import { turnOffLineTelop } from './narration/telops.js'
 import { generationActivityRoutes, type GenerationActivityDeps } from './routes/generation-activity.js'
+import { upscaleActivityRoutes } from './routes/upscale-activity.js'
 import { generationCancelRoutes } from './routes/generation-cancel.js'
 import { takeHideRoutes } from './routes/take-hide.js'
 import { takeDownloadRoutes } from './routes/take-download.js'
@@ -292,6 +293,8 @@ export const createApp = (deps: AppDeps) => {
       }),
     )
   }
+  // 超解像の待ち・作成中（Shot の状態を変えないので、生成中とは別の口）。
+  app.route('/', upscaleActivityRoutes({ projects: deps.projects, upscaleJobs: deps.upscaleJobs }))
   // 画面がモデルの性質（fps・尺・参照の上限）を書き写さないための口。
   app.route('/', modelRoutes({ registry: deps.registry }))
   app.route(
