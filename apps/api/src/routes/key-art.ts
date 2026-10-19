@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { ImageJobRepository, ProjectRepository } from '@ixa/db'
+import type { ImageCheckRepository, ImageJobRepository, ProjectRepository } from '@ixa/db'
 import {
   ImageGenerationJobId as ImageGenerationJobIdSchema,
   ImageGenerationJobStatus as ImageGenerationJobStatusSchema,
@@ -7,6 +7,7 @@ import {
   KeyArtInstruction,
   MediaAssetId as MediaAssetIdSchema,
   ProjectId as ProjectIdSchema,
+  type ImageCheck,
   type ImageGenerationJob,
   type ImageGenerationJobId,
   type ModelId,
@@ -15,6 +16,7 @@ import {
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
+import { ImageCheckSummary, toImageCheckSummary } from './image-check-wire.js'
 import { startImageJob, type ImageJobStartDeps } from './image-job-start.js'
 
 /**
@@ -28,6 +30,8 @@ import { startImageJob, type ImageJobStartDeps } from './image-job-start.js'
 export type KeyArtRoutesDeps = ImageJobStartDeps & {
   readonly projects: Pick<ProjectRepository, 'findById'>
   readonly imageJobs: Pick<ImageJobRepository, 'create' | 'markFailed' | 'findKeyArtByProject'>
+  /** 作った絵のチェック（ADR-0055）。候補に印を付ける。 */
+  readonly imageChecks: Pick<ImageCheckRepository, 'findByJobIds'>
   /** どの口で作るか。**作るたびに呼ぶ**（「使う AI」の画像の欄。ADR-0032）。 */
   readonly imageModel: () => Promise<{ readonly providerId: ProviderId; readonly modelId: ModelId }>
 }
@@ -92,18 +96,21 @@ export const KeyArtJobResponse = z
     mediaAssetId: MediaAssetIdSchema.nullable(),
     /** 失敗したときの理由（利用者にそのまま見せる文）。 */
     error: z.string().nullable(),
+    /** 作った絵のチェックの結果（ADR-0055）。まだ見ていなければ null。 */
+    check: ImageCheckSummary.nullable(),
     queuedAt: z.string().datetime(),
     finishedAt: z.string().datetime().nullable(),
   })
   .openapi('KeyArtJob')
 export type KeyArtJobResponse = z.infer<typeof KeyArtJobResponse>
 
-export const toKeyArtJobResponse = (job: ImageGenerationJob): KeyArtJobResponse => ({
+export const toKeyArtJobResponse = (job: ImageGenerationJob, check: ImageCheck | null = null): KeyArtJobResponse => ({
   id: job.id,
   status: job.status,
   instruction: job.instruction,
   mediaAssetId: job.mediaAssetId,
   error: job.error?.message ?? null,
+  check: toImageCheckSummary(check),
   queuedAt: job.queuedAt.toISOString(),
   finishedAt: job.finishedAt === null ? null : job.finishedAt.toISOString(),
 })
@@ -153,5 +160,7 @@ export const keyArtRoutes = (deps: KeyArtRoutesDeps) =>
       const project = await deps.projects.findById(projectId)
       if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       const jobs = await deps.imageJobs.findKeyArtByProject(project.id)
-      return c.json(okList(jobs.map(toKeyArtJobResponse)), 200)
+      const checks = await deps.imageChecks.findByJobIds(jobs.map((job) => job.id))
+      const checkOf = (job: ImageGenerationJob) => checks.find((check) => check.imageJobId === job.id) ?? null
+      return c.json(okList(jobs.map((job) => toKeyArtJobResponse(job, checkOf(job)))), 200)
     })

@@ -49,6 +49,8 @@ const SheetState = z
         status: ImageGenerationJobStatusSchema,
         /** 失敗したときの理由（利用者にそのまま見せる文）。 */
         error: z.string().nullable(),
+        /** 何枚目の試しか（ADR-0055。1 から）。 */
+        attempt: z.number().int(),
       })
       .nullable(),
   })
@@ -109,6 +111,9 @@ export const characterSheetRoutes = (deps: CharacterSheetRoutesDeps) =>
       const character = await deps.characters.findById(c.req.valid('param').id)
       if (character === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       const latest = await deps.imageJobs.findLatestByCharacter(character.id)
-      const job = latest === null ? null : { id: latest.id, status: latest.status, error: latest.error?.message ?? null }
+      const job =
+        latest === null
+          ? null
+          : { id: latest.id, status: latest.status, error: latest.error?.message ?? null, attempt: latest.attempt }
       return c.json(ok({ job }), 200)
     })

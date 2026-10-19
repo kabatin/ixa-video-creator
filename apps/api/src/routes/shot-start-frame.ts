@@ -58,6 +58,8 @@ const StartFrameState = StartFrameData.extend({
       status: ImageGenerationJobStatusSchema,
       /** 失敗したときの理由（利用者にそのまま見せる文）。 */
       error: z.string().nullable(),
+      /** 何枚目の試しか（ADR-0055。1 から）。画面の「やり直し 1/2」に使う。 */
+      attempt: z.number().int(),
     })
     .nullable(),
 }).openapi('ShotStartFrameState')
@@ -106,7 +108,10 @@ export const shotStartFrameRoutes = (deps: ShotStartFrameRoutesDeps) =>
         manualStartFrameOf(deps.shotReferences, shot.id),
         deps.imageJobs.findLatestByShot(shot.id),
       ])
-      const job = latest === null ? null : { id: latest.id, status: latest.status, error: latest.error?.message ?? null }
+      const job =
+        latest === null
+          ? null
+          : { id: latest.id, status: latest.status, error: latest.error?.message ?? null, attempt: latest.attempt }
       return c.json(ok({ mediaAssetId, job }), 200)
     })
     .openapi(putRoute, async (c) => {

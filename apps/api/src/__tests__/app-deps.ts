@@ -14,6 +14,7 @@ import {
   createInMemoryMediaAssetRepository,
   createInMemoryShotCharacterRepository,
   createInMemoryShotReferenceRepository,
+  createInMemoryImageCheckRepository,
   createInMemoryImageJobRepository,
   createInMemoryShotRepository,
   createInMemoryTakeRepository,
@@ -140,6 +141,8 @@ const baseDeps = (providers: readonly VideoProvider[]): Omit<AppDeps, 'editTrans
   imageJobs: createInMemoryImageJobRepository(),
   // キューへは入れるだけ（作るのは worker）。テストでは記録もしない。
   imageQueue: { enqueue: () => Promise.resolve() },
+  imageChecks: createInMemoryImageCheckRepository(),
+  imageCheckMaxRetries: 2,
   upscaleJobs: createInMemoryUpscaleJobRepository(),
   upscaleQueue: { enqueue: () => Promise.resolve() },
   /** 上げる口は既定で無し。使う試験だけが差し替える（`available()` を呼ばせるため）。 */

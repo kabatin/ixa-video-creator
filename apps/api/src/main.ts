@@ -23,6 +23,7 @@ import {
   createLocationRepository,
   createShotCharacterRepository,
   createShotReferenceRepository,
+  createImageCheckRepository,
   createImageJobRepository,
   createUpscaleJobRepository,
   createAccessTokenRepository,
@@ -511,6 +512,8 @@ export const main = (): void => {
     generationQueue: queuePort,
     imageJobs: createImageJobRepository(db),
     imageQueue: imageQueuePort,
+    imageChecks: createImageCheckRepository(db),
+    imageCheckMaxRetries: config.imageCheckMaxRetries,
     // 解像度を上げる（ADR-0044）。口が無い機械では `upscaler` が null で、画面は押せない状態になる。
     upscaleJobs: createUpscaleJobRepository(db),
     upscaleQueue: upscaleQueuePort,

@@ -170,6 +170,7 @@ describe('/shots/:id/start-frame の直近のジョブ', () => {
       id: job.id,
       status: 'failed',
       error: 'Codex CLI が絵を返しませんでした。',
+      attempt: 1,
     })
   })
 })

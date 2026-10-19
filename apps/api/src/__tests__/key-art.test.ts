@@ -1,6 +1,6 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { ModelId, ProjectId as ProjectIdSchema, ProviderId, ShotId as ShotIdSchema, newId, type ImageGenerationJobId, type ProjectEvent } from '@ixa/domain'
-import { createInMemoryImageJobRepository } from '@ixa/generation/testing'
+import { createInMemoryImageCheckRepository, createInMemoryImageJobRepository } from '@ixa/generation/testing'
 import { describe, expect, it } from 'vitest'
 import { registerErrorHandlers } from '../errors.js'
 import { createLogger } from '../logger.js'
@@ -18,6 +18,7 @@ type Ok<T> = { success: true; data: T }
 const build = (options: { readonly failEnqueueFrom?: number } = {}) => {
   const project = aProject()
   const imageJobs = createInMemoryImageJobRepository()
+  const imageChecks = createInMemoryImageCheckRepository()
   const enqueued: ImageGenerationJobId[] = []
   const events: ProjectEvent[] = []
   const app = new OpenAPIHono()
@@ -27,6 +28,7 @@ const build = (options: { readonly failEnqueueFrom?: number } = {}) => {
     keyArtRoutes({
       projects: createInMemoryProjectRepository([project]),
       imageJobs,
+      imageChecks,
       imageQueue: {
         enqueue: (id) =>
           options.failEnqueueFrom !== undefined && enqueued.length >= options.failEnqueueFrom
@@ -44,7 +46,7 @@ const build = (options: { readonly failEnqueueFrom?: number } = {}) => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     })
-  return { app, project, imageJobs, enqueued, events, generate }
+  return { app, project, imageJobs, imageChecks, enqueued, events, generate }
 }
 
 describe('POST /projects/{projectId}/key-art/generate', () => {
@@ -137,6 +139,34 @@ describe('GET /projects/{projectId}/key-art', () => {
     expect(list.map((job) => job.id)).toEqual([second?.id, first?.id])
     expect(list[0]).toMatchObject({ status: 'queued', instruction: null, mediaAssetId: null, error: null, finishedAt: null })
     expect(typeof list[0]?.queuedAt).toBe('string')
+    expect(list[0]?.check).toBeNull()
+  })
+
+  /** ADR-0055。候補に作った絵のチェックの印を付ける。 */
+  it('チェックの結果を候補に付ける（費用は出さない）', async () => {
+    const f = build()
+    await f.generate({ count: 1 })
+    const [job] = f.imageJobs.snapshot()
+    if (job === undefined) throw new Error('ジョブがありません')
+    await f.imageChecks.create({
+      imageJobId: job.id,
+      outcome: 'checked',
+      verdict: 'review',
+      score: 0.6,
+      issues: [{ kind: 'text', message: '看板の文字が崩れています' }],
+      promptDelta: null,
+      note: null,
+      costUsd: 0.03,
+    })
+    const list = ((await (await f.app.request(`/projects/${f.project.id}/key-art`)).json()) as Ok<KeyArtJobResponse[]>).data
+    expect(list[0]?.check).toEqual({
+      mark: 'review',
+      outcome: 'checked',
+      score: 0.6,
+      issues: [{ kind: 'text', message: '看板の文字が崩れています' }],
+      note: null,
+    })
+    expect(JSON.stringify(list)).not.toContain('costUsd')
   })
 
   it('無いプロジェクトは 404', async () => {

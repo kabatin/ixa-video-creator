@@ -78,6 +78,7 @@ import { musicEditRoutes } from './routes/music-edit.js'
 import { musicTrimRoutes } from './routes/music-trim.js'
 import { storyboardDraftRoutes } from './routes/storyboard-drafts.js'
 import { imageJobCancelRoutes } from './routes/image-job-cancel.js'
+import { imageHistoryRoutes } from './routes/image-history.js'
 import { shotBulkUpscaleRoutes } from './routes/shots-bulk-upscale.js'
 import { takeUpscaleRoutes, type TakeUpscaleRoutesDeps } from './routes/take-upscale.js'
 import { storyboardRoutes } from './routes/storyboard.js'
@@ -99,6 +100,7 @@ import type {
   MusicTrackRepository,
   RenderJobRepository,
   ThumbnailRepository,
+  ImageCheckRepository,
   ReviewRepository,
   EditBatchRepository,
   EditTransaction,
@@ -148,6 +150,10 @@ export type AppDeps = {
   /** 絵コンテの画像を作るジョブ（ADR-0029）。 */
   imageJobs: StartFrameGenerateRoutesDeps['imageJobs']
   imageQueue: StartFrameGenerateRoutesDeps['imageQueue']
+  /** 作った絵のチェック（ADR-0055）。 */
+  imageChecks: ImageCheckRepository
+  /** 自動のやり直しの上限（`IMAGE_CHECK_MAX_RETRIES`）。 */
+  imageCheckMaxRetries: number
   /** どの口で作るか（`IMAGE_PROVIDER` から main.ts が決める）。 */
   imageModel: StartFrameGenerateRoutesDeps['imageModel']
   /** 解像度を上げるジョブ（ADR-0044）。 */
@@ -376,6 +382,21 @@ export const createApp = (deps: AppDeps) => {
   )
   // 絵を作るのを止める（制作者 2026-10-04）。待っている・作っている絵（最初のフレーム・キャラクターシート）。
   app.route('/', imageJobCancelRoutes({ projects, imageJobs: deps.imageJobs, events: deps.events, logger }))
+  // 作った絵の履歴と、人が押すやり直し（ADR-0055）。選び直しは上の `PUT /shots/{id}/start-frame`。
+  app.route(
+    '/',
+    imageHistoryRoutes({
+      shots: deps.shots,
+      characters: deps.characters,
+      shotReferences: deps.shotReferences,
+      imageJobs: deps.imageJobs,
+      imageChecks: deps.imageChecks,
+      imageQueue: deps.imageQueue,
+      maxRetries: deps.imageCheckMaxRetries,
+      events: deps.events,
+      logger,
+    }),
+  )
   // 解像度を上げる（ADR-0044）。順番は生成と共有するので、worker 側が整理券で待つ。
   const upscaleDeps: TakeUpscaleRoutesDeps = {
     shots: deps.shots,
@@ -408,6 +429,7 @@ export const createApp = (deps: AppDeps) => {
     keyArtRoutes({
       projects,
       imageJobs: deps.imageJobs,
+      imageChecks: deps.imageChecks,
       imageQueue: deps.imageQueue,
       imageModel: deps.imageModel,
       events: deps.events,
