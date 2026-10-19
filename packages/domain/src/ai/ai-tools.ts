@@ -291,8 +291,9 @@ const RECOMMENDATION_ORDER: Readonly<Record<AiPurpose, readonly AiToolId[]>> = O
   video: ['vpipe', 'wan', 'local'],
   voice: ['macos_say'],
   transcribe: ['whisper_cpp'],
-  // 歌える ACE-Step を先に置く。Stable Audio は歌なしだけなので控え。
-  music: ['ace_step', 'stable_audio_medium_music'],
+  // BGM の既定は Stable Audio（制作者 2026-10-19）。歌なしだけなので、歌が要るときは「使う AI」で ACE-Step を選ぶ
+  // （歌ありの頼みは黙って ACE-Step へ回さず、理由を言って断る。`musicSpecProblem`）。
+  music: ['stable_audio_medium_music', 'ace_step'],
   sfx: ['stable_audio_medium_sfx', 'stable_audio_sfx', 'moss_sfx'],
 })
 

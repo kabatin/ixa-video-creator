@@ -252,14 +252,16 @@ describe('曲', () => {
     expect(aiChoiceProblem('sfx', 'stable_audio_medium_music', ready())).toMatch(/効果音にはまだ使えません/)
   })
 
-  it('ace-step-api が応答していれば勧め、していなければお試し', () => {
+  it('ace-step-api だけが応答していれば勧め、どちらもしていなければお試し', () => {
     expect(recommendAiSettings({ ...allMissing(), ace_step: ready() }).music).toBe('ace_step')
     expect(recommendAiSettings(allMissing()).music).toBe('stub')
   })
 
-  /** 歌える ACE-Step を先に勧める。Stable Audio は ACE-Step が使えないときだけ。 */
-  it('両方使えれば ACE-Step、Stable Audio だけなら Stable Audio を勧める', () => {
-    expect(recommendAiSettings({ ...allMissing(), ace_step: ready(), stable_audio_medium_music: ready() }).music).toBe('ace_step')
+  /** BGM の既定は Stable Audio（制作者 2026-10-19）。歌が要るときは「使う AI」で ACE-Step を選ぶ。 */
+  it('両方使えれば Stable Audio、Stable Audio だけでも Stable Audio を勧める', () => {
+    expect(recommendAiSettings({ ...allMissing(), ace_step: ready(), stable_audio_medium_music: ready() }).music).toBe(
+      'stable_audio_medium_music',
+    )
     expect(recommendAiSettings({ ...allMissing(), stable_audio_medium_music: ready() }).music).toBe('stable_audio_medium_music')
   })
 
