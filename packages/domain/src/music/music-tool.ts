@@ -52,3 +52,32 @@ export const musicSpecProblem = (
   }
   return null
 }
+
+/** 歌なしだけの AI に歌ありが来たときに回す先（制作者 2026-10-19）。 */
+export const MUSIC_VOCAL_FALLBACK_TOOL: AiToolId = 'ace_step'
+
+export type MusicToolDecision =
+  | { readonly state: 'ready'; readonly tool: AiToolId; /** 選んだ AI ではなく歌える AI に回した。 */ readonly rerouted: boolean }
+  | { readonly state: 'rejected'; readonly reason: string }
+
+/**
+ * どの曲の AI で作るか。選んだ AI で作れればそのまま。**歌なしだけの AI に歌ありが来たときだけ**、
+ * 歌える AI（ACE-Step）が使えればそちらへ回す。使えなければ選んだ AI の理由で断る。
+ * 歌なしの頼み（歌詞だけ付いている・長すぎる）は回さない（回しても歌なしの頼みは変わらない）。
+ *
+ * `canUse` はこの環境でその AI を使えるか（API は `.env` で有効か、画面は常に true として先に見せる）。
+ */
+export const decideMusicTool = (
+  chosen: AiToolId,
+  spec: Pick<MusicJobSpec, 'lyrics' | 'instrumental' | 'durationSec'>,
+  canUse: (tool: AiToolId) => boolean,
+): MusicToolDecision => {
+  const problem = musicSpecProblem(chosen, spec)
+  if (problem === null) return { state: 'ready', tool: chosen, rerouted: false }
+  const reroutable = !musicToolLimits(chosen).vocals && !spec.instrumental && canUse(MUSIC_VOCAL_FALLBACK_TOOL)
+  if (!reroutable) return { state: 'rejected', reason: problem }
+  const fallbackProblem = musicSpecProblem(MUSIC_VOCAL_FALLBACK_TOOL, spec)
+  return fallbackProblem === null
+    ? { state: 'ready', tool: MUSIC_VOCAL_FALLBACK_TOOL, rerouted: true }
+    : { state: 'rejected', reason: fallbackProblem }
+}

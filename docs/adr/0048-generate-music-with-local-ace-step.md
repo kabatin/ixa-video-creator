@@ -61,13 +61,16 @@ worker の整理券（ADR-0040）に並ぶ。並び方は絵と共通の `genera
 ACE-Step は残す。**BGM の既定は Stable Audio**（制作者 2026-10-19）: 勧める順の先頭を Stable Audio にし、
 保存済みの「使う AI」の曲も Stable Audio に切り替えた。
 
-歌詞・ボーカルが要る頼みは、**黙って ACE-Step へ回さない**（選んでいない AI で作ると、待ち時間も出来も
-予想と違うものが届き、ACE-Step が止まっていれば理由も分からない）。API は 409 で「歌なしにするか、
-『使う AI』で歌える AI を選ぶ」と言い、画面は Stable Audio を選んでいる間「歌なし」を固定して歌詞の欄を閉じる。
-歌を作るときは制作者が「使う AI」の曲を ACE-Step に替える。
+新しい環境の初期値（`aiDefaultsFromEnv`）も曲は Stable Audio にする（手元・無料なので、選ぶ前でもお金は掛からない）。
 
-- **歌は作れない。** 歌あり・歌詞ありの頼みは黙って捨てずに断る。規則は domain の `musicSpecProblem` 1 か所で、
-  API は 409 で理由を返し、画面は「歌なし」を固定して歌詞の欄を閉じ、MCP の説明にも書く。Provider も送る前にもう一度止める
+**歌あり（`instrumental: false`）の頼みは、ACE-Step が使えればそちらで作る**（制作者 2026-10-19。振り分けは
+domain の `decideMusicTool` 1 か所）。「使える」は `.env` で ace-step-api を有効にしているか（health は見ない。
+止まっていれば worker がそう言って失敗する）。使えないときだけ 409 で「歌なしにするか、歌える AI を選ぶ」と言う。
+歌詞だけ付いた歌なし・190 秒を超える歌なしは回さずに断る（回しても歌なしの頼みは変わらない）。
+画面は Stable Audio を選んでいれば歌なしで始め、歌ありにすると歌詞の欄を開いて「歌ありは ACE-Step 1.5 で作ります」と出す。
+
+- **歌は作れない。** 歌を黙って捨てない。規則は domain の `musicSpecProblem` と `decideMusicTool` で、
+  MCP の説明にも書く。Provider も歌あり・歌詞ありを送る前にもう一度止める
 - 長さは 10〜190 秒（サーバは 0.5 秒から受けるが、曲のジョブの下限 10 秒に合わせる）。上限の正はサーバの `GET /v1/capabilities`
 - 本文は効果音と同じ形（説明・長さ・数・種）。「TrackType: Music, VocalType: Instrumental, 」の前置きはサーバが付ける（ixa は付けない）
 - 出力は PCM16・44.1kHz・ステレオの WAV で、頼んだ長さちょうど

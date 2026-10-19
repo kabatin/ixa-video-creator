@@ -139,8 +139,17 @@ describe('resolveAiSettings', () => {
 describe('aiDefaultsFromEnv', () => {
   const env = { storyboardDrafter: 'stub', imageProvider: 'stub' } as const
 
-  it('何も指定が無ければ全部お試し', () => {
-    expect(aiDefaultsFromEnv(env)).toEqual({ text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub' })
+  /** 曲だけは手元・無料の Stable Audio（歌なし BGM）を初期値にする（制作者 2026-10-19）。 */
+  it('何も指定が無ければ曲は Stable Audio、ほかは全部お試し', () => {
+    expect(aiDefaultsFromEnv(env)).toEqual({
+      text: 'stub',
+      image: 'stub',
+      video: 'stub',
+      voice: 'stub',
+      transcribe: 'stub',
+      music: 'stable_audio_medium_music',
+      sfx: 'stub',
+    })
   })
 
   it('テキストと画像は、環境変数で選んだ口をそのまま初期値にする', () => {
@@ -152,7 +161,7 @@ describe('aiDefaultsFromEnv', () => {
       video: 'stub',
       voice: 'stub',
       transcribe: 'stub',
-      music: 'stub',
+      music: 'stable_audio_medium_music',
       sfx: 'stub',
     })
   })

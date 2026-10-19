@@ -16,6 +16,7 @@ import {
   describeMusicJob,
   musicJobAddedTracks,
   musicJobNotice,
+  plannedMusicTool,
   validateMusicForm,
   type MusicForm,
 } from '@/lib/music-job-form'
@@ -80,13 +81,20 @@ describe('validateMusicForm', () => {
     }
   })
 
-  /** ADR-0048 追記。歌なしだけの AI では、欄の「歌なし」を外せない。長さの上限もその AI のもの。 */
-  it('歌なしだけの AI（Stable Audio）なら、歌ありのままでも歌なし・歌詞なしで頼む', () => {
+  /** 制作者 2026-10-19。歌ありは歌える AI に回るので、歌なしだけの AI の範囲でも歌ありのまま頼む。 */
+  it('歌なしだけの AI の範囲で確かめても、歌あり・歌詞は消さずに頼む', () => {
     const stableAudio = musicToolLimits('stable_audio_medium_music')
     expect(validateMusicForm(form({ instrumental: false, lyrics: '[verse]\nあ' }), stableAudio)).toEqual({
       ok: true,
-      body: { prompt: 'j-pop, upbeat', lyrics: '', durationSec: 60, instrumental: true, count: 1 },
+      body: { prompt: 'j-pop, upbeat', lyrics: '[verse]\nあ', durationSec: 60, instrumental: false, count: 1 },
     })
+  })
+
+  it('作る AI の見込み: Stable Audio でも歌ありなら ACE-Step、歌なしなら Stable Audio のまま', () => {
+    expect(plannedMusicTool('stable_audio_medium_music', false)).toBe('ace_step')
+    expect(plannedMusicTool('stable_audio_medium_music', true)).toBe('stable_audio_medium_music')
+    expect(plannedMusicTool('ace_step', true)).toBe('ace_step')
+    expect(plannedMusicTool('ace_step', false)).toBe('ace_step')
   })
 
   it('Stable Audio の長さは 10〜190 秒', () => {

@@ -47,8 +47,8 @@ export type AiWiring = AiRoutesDeps & {
   readonly imageModel: () => Promise<ImageModelRef>
   /** いま選んでいる動画の AI。AUTO はこの Provider のモデルの中から選ぶ（Provider の id は AI の id と同じ）。 */
   readonly videoProvider: () => Promise<ProviderId>
-  /** いま選んでいる曲の AI で作れるか（ADR-0048）。ジョブに記し、worker がその口で作る。 */
-  readonly musicModel: () => Promise<MusicModelChoice>
+  /** 曲の AI で作れるか（ADR-0048）。`tool` を渡せばその AI、省略すれば選んでいるもの。ジョブに記し、worker がその口で作る。 */
+  readonly musicModel: (tool?: AiToolId) => Promise<MusicModelChoice>
   /** 効果音の AI で作れるか（ADR-0052）。`tool` を渡せばその AI、省略すれば選んでいるもの。 */
   readonly sfxModel: (tool?: AiToolId) => Promise<SfxModelChoice>
 }
@@ -194,7 +194,7 @@ export const createAiWiring = (config: AppConfig, db: DbClient): AiWiring => {
     textAssistant: async () => adapterFor(assistants, (await current()).text, 'テキスト（入力の手伝い）'),
     imageModel: async () => adapterFor(imageModels, (await current()).image, '画像'),
     videoProvider: async () => ProviderIdSchema.parse((await current()).video),
-    musicModel: async () => chooseMusicModel((await current()).music, musicModels),
+    musicModel: async (tool) => chooseMusicModel(tool ?? (await current()).music, musicModels),
     sfxModel: async (tool) => chooseSfxModel(tool ?? (await current()).sfx, sfxModels),
   }
 }

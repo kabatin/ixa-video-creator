@@ -16,6 +16,7 @@ import {
   DEFAULT_MUSIC_LIMITS,
   INITIAL_MUSIC_FORM,
   durationRangeText,
+  plannedMusicTool,
   validateMusicForm,
   type MusicForm,
   type MusicFormErrors,
@@ -64,9 +65,15 @@ export const MakeMusicDialogBody = () => {
   const [formError, setFormError] = useState<string | null>(null)
   const [accepted, setAccepted] = useState(false)
   const tool = useMusicTool(music?.musicTool ?? null)
-  const limits = tool === null ? DEFAULT_MUSIC_LIMITS : musicToolLimits(tool)
-  // 歌なしだけの AI では「歌なし」を外せない（歌を黙って捨てない）。
-  const instrumentalOnly = !limits.vocals
+  // 歌なしだけの AI（既定の Stable Audio）でも歌ありにできる。そのときは歌える AI（ACE-Step）で作る。
+  const planned = tool === null ? null : plannedMusicTool(tool, form.instrumental)
+  const limits = planned === null ? DEFAULT_MUSIC_LIMITS : musicToolLimits(planned)
+  const rerouted = tool !== null && planned !== null && planned !== tool
+
+  // 歌なしだけの AI を選んでいれば、歌なしで始める（そのまま押せば選んだ AI で作る）。
+  useEffect(() => {
+    if (tool !== null && !musicToolLimits(tool).vocals) setForm((current) => ({ ...current, instrumental: true }))
+  }, [tool])
 
   const change = (patch: Partial<MusicForm>): void => {
     setForm((current) => ({ ...current, ...patch }))
@@ -111,9 +118,10 @@ export const MakeMusicDialogBody = () => {
       {tool !== null && (
         <div className="rounded-md border border-line bg-surface-2 p-2 text-xs text-text">
           <p>{`曲を作る AI: ${AI_TOOLS[tool].label}`}</p>
-          {instrumentalOnly && (
-            <p className="text-muted">歌は作れません。歌なしの BGM だけを作ります（曲調は英語で書くのがおすすめです）。</p>
+          {!musicToolLimits(tool).vocals && !rerouted && (
+            <p className="text-muted">歌なしの BGM を作ります（曲調は英語で書くのがおすすめです）。</p>
           )}
+          {rerouted && planned !== null && <p className="text-muted">{`歌ありは ${AI_TOOLS[planned].label} で作ります`}</p>}
         </div>
       )}
       <TextField
@@ -129,8 +137,7 @@ export const MakeMusicDialogBody = () => {
       <label className="flex items-center gap-2 text-sm text-text">
         <input
           type="checkbox"
-          checked={form.instrumental || instrumentalOnly}
-          disabled={instrumentalOnly}
+          checked={form.instrumental}
           onChange={(event) => {
             change({ instrumental: event.target.checked })
           }}
@@ -142,7 +149,7 @@ export const MakeMusicDialogBody = () => {
         label="歌詞（なくてもよい）"
         rows={6}
         value={form.lyrics}
-        disabled={form.instrumental || instrumentalOnly}
+        disabled={form.instrumental}
         placeholder={'[verse]\n1 番の歌詞\n[chorus]\nサビの歌詞'}
         error={errors.lyrics}
         onChange={(lyrics) => {

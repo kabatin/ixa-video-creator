@@ -7,8 +7,9 @@ import {
   MUSIC_PROMPT_MAX_LENGTH,
   MusicJobId as MusicJobIdSchema,
   MusicJobStatus,
+  MUSIC_VOCAL_FALLBACK_TOOL,
   ProjectId as ProjectIdSchema,
-  musicSpecProblem,
+  decideMusicTool,
   type MusicJob,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
@@ -79,7 +80,7 @@ const generateRoute = createRoute({
   responses: {
     202: json('頼んだ', successResponse(z.object({ jobId: z.string() }))),
     404: errorContent('作品が無い'),
-    409: errorContent('曲の AI が選ばれていない・この環境で使えない・その AI では作れない頼み方（歌なしだけの AI に歌あり）'),
+    409: errorContent('曲の AI が選ばれていない・この環境で使えない・その AI では作れない頼み方（歌なしだけの AI に歌詞・長すぎる。歌ありは歌える AI が使えなければ）'),
     422: errorContent('入力の誤り'),
   },
 })
@@ -133,13 +134,20 @@ export const musicGenerateRoutes = (deps: MusicGenerationDeps) =>
       const input = c.req.valid('json')
       const choice = await deps.musicModel()
       if (choice.state === 'unavailable') return c.json(fail(choice.reason), 409)
-      // 選んでいる AI では作れない頼み方（Stable Audio に歌あり・歌詞・190 秒超）。黙って捨てずに断る。
-      const problem = musicSpecProblem(choice.tool, input)
-      if (problem !== null) return c.json(fail(problem), 409)
+      // 歌なしだけの AI（既定の Stable Audio）に歌ありが来たら、歌える AI が使えればそちらで作る（制作者 2026-10-19）。
+      // 使えない・ほかの理由で作れない頼み方（歌詞だけ・190 秒超）は、黙って捨てずに断る。
+      const fallback = await deps.musicModel(MUSIC_VOCAL_FALLBACK_TOOL)
+      const decision = decideMusicTool(
+        choice.tool,
+        input,
+        (tool) => tool === MUSIC_VOCAL_FALLBACK_TOOL && fallback.state === 'ready',
+      )
+      if (decision.state === 'rejected') return c.json(fail(decision.reason), 409)
+      const chosen = decision.rerouted && fallback.state === 'ready' ? fallback : choice
       const job = await startMusicJob(deps, {
         projectId,
-        tool: choice.tool,
-        model: choice.model,
+        tool: chosen.tool,
+        model: chosen.model,
         spec: {
           prompt: input.prompt,
           lyrics: input.lyrics,

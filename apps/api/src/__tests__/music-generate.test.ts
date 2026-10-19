@@ -1,5 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
-import type { MusicJobId } from '@ixa/domain'
+import type { AiToolId, MusicJobId } from '@ixa/domain'
 import { createInMemoryMusicJobRepository } from '@ixa/generation/testing'
 import { describe, expect, it } from 'vitest'
 import { registerErrorHandlers, validationHook } from '../errors.js'
@@ -26,7 +26,16 @@ const STABLE_AUDIO: MusicModelChoice = {
   model: 'sfx_api/stable-audio-3-medium-music',
 }
 
-const setup = (options: { readonly choice?: MusicModelChoice; readonly enqueueFails?: boolean } = {}) => {
+const ACE_STEP_OFF: MusicModelChoice = { state: 'unavailable', reason: 'ACE-Step 1.5 はこの環境で有効になっていません。' }
+
+const setup = (
+  options: {
+    readonly choice?: MusicModelChoice
+    /** 名指しで聞かれた AI（歌ありを回す先）。省略は ACE-Step が使える。 */
+    readonly named?: Partial<Record<string, MusicModelChoice>>
+    readonly enqueueFails?: boolean
+  } = {},
+) => {
   const project = aProject()
   const enqueued: MusicJobId[] = []
   const events = createInMemoryProjectEvents()
@@ -35,7 +44,8 @@ const setup = (options: { readonly choice?: MusicModelChoice; readonly enqueueFa
   const deps = {
     projects: createInMemoryProjectRepository([project]),
     musicJobs,
-    musicModel: () => Promise.resolve(options.choice ?? READY),
+    musicModel: (tool?: AiToolId) =>
+      Promise.resolve(tool === undefined ? (options.choice ?? READY) : (options.named?.[tool] ?? (tool === 'ace_step' ? READY : ACE_STEP_OFF))),
     musicQueue: {
       enqueue: (id: MusicJobId) => {
         if (options.enqueueFails === true) return Promise.reject(new Error('Redis に繋がりません'))
@@ -144,12 +154,29 @@ describe('POST /projects/{projectId}/music/generate', () => {
     })
   })
 
-  it.each([
-    ['歌あり', { instrumental: false }, /歌なしの曲だけ/],
-    ['歌詞あり', { instrumental: true, lyrics: '[verse]\nはしれ' }, /歌詞は使えません/],
-    ['190 秒を超える', { instrumental: true, durationSec: 190.5 }, /10〜190 秒/],
-  ] as const)('Stable Audio に %s を頼むと 409 で理由を言う（頼まない）', async (_label, body, message) => {
+  /** 制作者 2026-10-19。既定の Stable Audio に歌ありが来たら、ACE-Step が使えるならそちらで作る。 */
+  it('Stable Audio に歌ありを頼むと、ACE-Step が使えればそのモデルで記す（240 秒まで）', async () => {
     const { project, enqueued, musicJobs, send } = setup({ choice: STABLE_AUDIO })
+    const response = await send('POST', `/projects/${project.id}/music/generate`, {
+      prompt: 'j-pop',
+      lyrics: '[verse]\nはしれ',
+      durationSec: 240,
+    })
+    expect(response.status).toBe(202)
+    expect(enqueued).toHaveLength(1)
+    expect(musicJobs.snapshot()[0]).toMatchObject({
+      tool: 'ace_step',
+      model: 'ace_step/ace-step-1.5',
+      spec: { instrumental: false, lyrics: '[verse]\nはしれ', durationSec: 240 },
+    })
+  })
+
+  it.each([
+    ['歌あり（ACE-Step が使えない）', { instrumental: false }, { ace_step: ACE_STEP_OFF }, /歌なしの曲だけ/],
+    ['歌詞だけ付いた歌なし', { instrumental: true, lyrics: '[verse]\nはしれ' }, {}, /歌詞は使えません/],
+    ['190 秒を超える歌なし', { instrumental: true, durationSec: 190.5 }, {}, /10〜190 秒/],
+  ] as const)('Stable Audio に %s を頼むと 409 で理由を言う（頼まない）', async (_label, body, named, message) => {
+    const { project, enqueued, musicJobs, send } = setup({ choice: STABLE_AUDIO, named })
     const response = await send('POST', `/projects/${project.id}/music/generate`, { prompt: 'x', ...body })
     expect(response.status).toBe(409)
     expect((await json<Err>(response)).error).toMatch(message)

@@ -66,17 +66,19 @@ describe('曲を作る', () => {
     expect(await screen.findByText('受け付けました。閉じても作り続けます。')).toBeInTheDocument()
   })
 
-  /** ADR-0048 追記。歌なしだけの AI を選んでいれば、歌ありは選べない（黙って捨てない）。 */
-  it('曲の AI が Stable Audio なら、そう言い、歌なしに固定して歌詞の欄を閉じ、長さは 190 秒までと出す', async () => {
+  /** 制作者 2026-10-19。既定の Stable Audio は歌なしで始め、歌ありにすれば ACE-Step で作ると言う。 */
+  it('曲の AI が Stable Audio なら、そう言い、歌なしで始めて長さは 190 秒までと出す', async () => {
     const api = fakeApi({ musicTool: vi.fn().mockResolvedValue('stable_audio_medium_music') })
     renderDialog(api)
     expect(await screen.findByText('曲を作る AI: Stable Audio 3 Medium（歌なし）')).toBeInTheDocument()
-    expect(screen.getByText(/歌は作れません/)).toBeInTheDocument()
     const instrumental = screen.getByLabelText('歌なし（歌詞は使いません）')
-    expect(instrumental).toBeChecked()
-    expect(instrumental).toBeDisabled()
+    await waitFor(() => {
+      expect(instrumental).toBeChecked()
+    })
+    expect(instrumental).toBeEnabled()
     expect(screen.getByLabelText('歌詞（なくてもよい）')).toBeDisabled()
     expect(screen.getByText('10〜190 秒')).toBeInTheDocument()
+    expect(screen.queryByText('歌ありは ACE-Step 1.5 で作ります')).not.toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('曲調'), 'lofi, piano')
     await userEvent.click(screen.getByRole('button', { name: '曲を作る' }))
@@ -86,6 +88,30 @@ describe('曲を作る', () => {
         lyrics: '',
         durationSec: 60,
         instrumental: true,
+        count: 1,
+      })
+    })
+  })
+
+  it('曲の AI が Stable Audio でも、歌ありにすれば歌詞を書け、ACE-Step で作ると言い、長さは 240 秒まで', async () => {
+    const api = fakeApi({ musicTool: vi.fn().mockResolvedValue('stable_audio_medium_music') })
+    renderDialog(api)
+    const instrumental = await screen.findByLabelText('歌なし（歌詞は使いません）')
+    await waitFor(() => {
+      expect(instrumental).toBeChecked()
+    })
+    await userEvent.click(instrumental)
+    expect(screen.getByText('歌ありは ACE-Step 1.5 で作ります')).toBeInTheDocument()
+    expect(screen.getByText('10〜240 秒')).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('曲調'), 'j-pop')
+    await userEvent.type(screen.getByLabelText('歌詞（なくてもよい）'), 'らら')
+    await userEvent.click(screen.getByRole('button', { name: '曲を作る' }))
+    await waitFor(() => {
+      expect(api.generateMusic).toHaveBeenCalledWith(PROJECT_ID, {
+        prompt: 'j-pop',
+        lyrics: 'らら',
+        durationSec: 60,
+        instrumental: false,
         count: 1,
       })
     })

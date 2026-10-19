@@ -191,10 +191,11 @@ describe('曲', () => {
   })
 
   /** ADR-0048 追記。どの曲の AI が歌なしだけかを、呼ぶ側が送る前に知れるように説明に書く。 */
-  it('generate_music の説明は、Stable Audio が歌なしだけ・190 秒までで、歌ありは断られると言う', () => {
-    expect(generateMusicTool.description).toMatch(/stable_audio_medium_music makes instrumental BGM only/)
+  it('generate_music の説明は、既定の Stable Audio が歌なしだけ・190 秒までで、歌ありは ACE-Step に回ると言う', () => {
+    expect(generateMusicTool.description).toMatch(/stable_audio_medium_music \(the default\) makes instrumental BGM only/)
     expect(generateMusicTool.description).toMatch(/10–190 s/)
-    expect(generateMusicTool.description).toMatch(/rejected with 409/)
+    expect(generateMusicTool.description).toMatch(/routed to ace_step/)
+    expect(generateMusicTool.description).toMatch(/409/)
   })
 
   it('upload_music は sign → PUT（鍵なし）→ complete（sha256）→ 曲 → 解析の順', async () => {

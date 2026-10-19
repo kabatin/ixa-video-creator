@@ -2,8 +2,10 @@ import {
   MUSIC_COUNT_MAX,
   MUSIC_LYRICS_MAX_LENGTH,
   MUSIC_PROMPT_MAX_LENGTH,
+  decideMusicTool,
   isMusicJobFinished,
   musicToolLimits,
+  type AiToolId,
   type MusicToolLimits,
   type ProjectEvent,
 } from '@ixa/domain'
@@ -74,12 +76,22 @@ const countError = (value: number | null): string | undefined =>
     : undefined
 
 /**
+ * どの AI で作られる見込みか。選んでいる AI が歌なしだけで歌ありにしたら、歌える AI（ACE-Step）に回る
+ * （振り分けは domain の `decideMusicTool`。使えるかは API が決めるので、画面では使える前提で先に見せる）。
+ */
+export const plannedMusicTool = (chosen: AiToolId, instrumental: boolean): AiToolId => {
+  const shortest = musicToolLimits(chosen).durationSec.min
+  const decision = decideMusicTool(chosen, { lyrics: '', instrumental, durationSec: shortest }, () => true)
+  return decision.state === 'ready' ? decision.tool : chosen
+}
+
+/**
  * 欄の値を確かめて、頼む本文にする。**歌なしなら歌詞は送らない**（欄に残っていても使わない）。
- * 歌なしだけの AI（`limits.vocals` が false）では、画面が「歌なし」を固定して見せているので歌なしで頼む。
+ * 長さの範囲は作る見込みの AI のもの（`limits`）。
  */
 export const validateMusicForm = (form: MusicForm, limits: MusicToolLimits = DEFAULT_MUSIC_LIMITS): MusicFormResult => {
   const prompt = form.prompt.trim()
-  const instrumental = form.instrumental || !limits.vocals
+  const { instrumental } = form
   const lyrics = instrumental ? '' : form.lyrics
   const durationSec = toNumber(form.durationSec)
   const count = toNumber(form.count)

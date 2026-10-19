@@ -291,8 +291,8 @@ const RECOMMENDATION_ORDER: Readonly<Record<AiPurpose, readonly AiToolId[]>> = O
   video: ['vpipe', 'wan', 'local'],
   voice: ['macos_say'],
   transcribe: ['whisper_cpp'],
-  // BGM の既定は Stable Audio（制作者 2026-10-19）。歌なしだけなので、歌が要るときは「使う AI」で ACE-Step を選ぶ
-  // （歌ありの頼みは黙って ACE-Step へ回さず、理由を言って断る。`musicSpecProblem`）。
+  // BGM の既定は Stable Audio（制作者 2026-10-19）。歌なしだけなので、歌ありの頼みは
+  // ACE-Step が使えればそちらで作る（`decideMusicTool`）。
   music: ['stable_audio_medium_music', 'ace_step'],
   sfx: ['stable_audio_medium_sfx', 'stable_audio_sfx', 'moss_sfx'],
 })
@@ -342,8 +342,9 @@ export const aiDefaultsFromEnv = (env: AiEnvChoices): AiSettings => ({
   // 声と文字起こしは新しい用途。選ぶまではお試し（音を作らない・外に出さない）。
   voice: 'stub',
   transcribe: 'stub',
-  // 曲も新しい用途。選ぶまではお試し（作らない）。
-  music: 'stub',
+  // 曲は手元・無料の Stable Audio（歌なし BGM）を初期値にする（制作者 2026-10-19）。
+  // 歌ありの頼みは `decideMusicTool` が ACE-Step へ回す。
+  music: 'stable_audio_medium_music',
   // 効果音も新しい用途。選ぶまではお試し（作らない）。
   sfx: 'stub',
 })
