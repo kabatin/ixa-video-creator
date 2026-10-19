@@ -35,7 +35,7 @@ import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX, type MenuPoint } from '@/components/
  */
 
 const LANE_HEIGHT_PX = TIMELINE_LANE_HEIGHT_PX
-/** 上の 12px は「段 N」の札。クリップはその下に置く（36px の段で文字が 1 行収まる高さ）。 */
+/** 上の 12px は「LayerN」の札。クリップはその下に置く（36px の段で文字が 1 行収まる高さ）。 */
 const CLIP_TOP_PX = 12
 const CLIP_HEIGHT_PX = LANE_HEIGHT_PX - CLIP_TOP_PX - 2
 
@@ -229,7 +229,7 @@ export const TimelineClipLane = ({
     >
       <span className="pointer-events-none absolute left-1 top-0 text-xs leading-3 text-muted">
         {/* 画面では 1 から数える（layer は内部の 0 始まりの番号。制作者に見せる言葉ではない）。 */}
-        {`段 ${String(layer + 1)}`}
+        {`Layer${String(layer + 1)}`}
       </span>
       {emptyHint !== undefined && clips.length === 0 && (
         <span className="pointer-events-none absolute left-16 text-xs text-muted" style={{ top: CLIP_TOP_PX }}>
