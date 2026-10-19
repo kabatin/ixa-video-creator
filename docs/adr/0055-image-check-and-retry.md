@@ -135,5 +135,7 @@ klein での実機確認で、ネオン看板の崩れた文字と、デフォ�
   （`RETRY_ISSUE_KINDS` = anatomy・artifact・identity・prompt・look）が 1 つも無い retry を review に下げる。
   worker はチェックの結果を残す前にこれを通す
 - 文字のことは、指示で禁じられていても text で挙げさせる（prompt に入れると retry に残るため）
-- チェックのモデル（費用）は、制作者に聞いてから決める
+- チェックのモデルは Sonnet にする（制作者の了承 2026-10-19）。Opus 相当の既定のモデルで 1 回 0.19〜0.84 ドルかかっていた。
+  `IMAGE_CHECK_MODEL`（既定 `sonnet`、config の zod で検査）を Claude CLI の `--model` に渡す。**チェックにだけ効かせる**
+  （動きの分析・レビュー・絵コンテの案などの呼び出しは変えない）
 
