@@ -15,9 +15,18 @@ import { ImageCheckId, ImageGenerationJobId } from '../common/ids.js'
 export const ImageCheckVerdict = z.enum(['pass', 'review', 'retry'])
 export type ImageCheckVerdict = z.infer<typeof ImageCheckVerdict>
 
-/** 破綻（anatomy・artifact・text）と矛盾（identity・prompt・look）。 */
-export const ImageCheckIssueKind = z.enum(['anatomy', 'artifact', 'text', 'identity', 'prompt', 'look'])
+/**
+ * 破綻（anatomy・artifact・text）と矛盾（identity・prompt・look・proportion）。
+ * `proportion` は頭身・等身・体型のバランスの違い。`look` は服・髪・色の違い。
+ */
+export const ImageCheckIssueKind = z.enum(['anatomy', 'artifact', 'text', 'identity', 'prompt', 'look', 'proportion'])
 export type ImageCheckIssueKind = z.infer<typeof ImageCheckIssueKind>
+
+/**
+ * やり直す理由になる種類（チームリーダー 2026-10-19）。**意味の無い文字（text）と頭身（proportion）は入れない。**
+ * klein では文字は直らず GPU を使うだけ。デフォルメの頭身は作品の画風として意図したもの。
+ */
+export const RETRY_ISSUE_KINDS: readonly ImageCheckIssueKind[] = ['anatomy', 'artifact', 'identity', 'prompt', 'look']
 
 export const IMAGE_CHECK_ISSUE_MESSAGE_MAX_LENGTH = 200
 export const IMAGE_CHECK_MAX_ISSUES = 8
@@ -168,3 +177,12 @@ export const pickImageToApply = (
 /** やり直すときの指示。前の絵の直し方を足す（無ければ元のまま）。 */
 export const appendRetryDelta = (prompt: string, promptDelta: string | null): string =>
   promptDelta === null ? prompt : `${prompt}\n\nFix from the previous attempt: ${promptDelta}`
+
+/**
+ * AI の判定を、理由の種類で決め直す。やり直す理由になる種類（`RETRY_ISSUE_KINDS`）が 1 つも無い `retry` は
+ * `review` に下げる。**指示の文章だけに頼らない**（AI は指示を守らないことがある）。上げることはしない。
+ */
+export const enforceImageCheckVerdict = (result: ImageCheckResult): ImageCheckResult =>
+  result.verdict === 'retry' && !result.issues.some((issue) => RETRY_ISSUE_KINDS.includes(issue.kind))
+    ? { ...result, verdict: 'review' }
+    : result

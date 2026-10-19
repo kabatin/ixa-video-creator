@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   appendRetryDelta,
+  enforceImageCheckVerdict,
+  RETRY_ISSUE_KINDS,
   IMAGE_CHECK_DEFAULT_MAX_RETRIES,
   ImageCheck,
   ImageCheckId,
@@ -192,5 +194,53 @@ describe('やり直しの指示（appendRetryDelta）', () => {
   it('前の絵の直し方を足す。無ければ元のまま', () => {
     expect(appendRetryDelta('a cat', 'five fingers')).toBe('a cat\n\nFix from the previous attempt: five fingers')
     expect(appendRetryDelta('a cat', null)).toBe('a cat')
+  })
+})
+
+/**
+ * やり直すかを理由の種類で決め直す（チームリーダー 2026-10-19）。
+ * 意味の無い文字（text）と、デフォルメの頭身（proportion）だけなら、やり直さない（review に下げる）。
+ * klein では文字は直らず GPU を使うだけ。頭身は作品の画風として意図したもの。
+ */
+describe('理由の種類でやり直しを決め直す（enforceImageCheckVerdict）', () => {
+  const result = (verdict: 'pass' | 'review' | 'retry', kinds: readonly string[]) =>
+    ImageCheckResult.parse({
+      verdict,
+      score: 0.4,
+      issues: kinds.map((kind) => ({ kind, message: `${kind} の問題` })),
+      promptDelta: verdict === 'pass' ? null : 'fix it',
+    })
+
+  it('文字だけ・頭身だけ・その 2 つだけのやり直しは、要確認に下げる', () => {
+    expect(enforceImageCheckVerdict(result('retry', ['text'])).verdict).toBe('review')
+    expect(enforceImageCheckVerdict(result('retry', ['proportion'])).verdict).toBe('review')
+    expect(enforceImageCheckVerdict(result('retry', ['text', 'proportion', 'text'])).verdict).toBe('review')
+  })
+
+  it('手足・顔の崩れ、溶けた物、別人、指示の欠落、服や色の違いが 1 つでもあれば、やり直しのまま', () => {
+    for (const kind of ['anatomy', 'artifact', 'identity', 'prompt', 'look']) {
+      expect(enforceImageCheckVerdict(result('retry', ['text', kind])).verdict).toBe('retry')
+    }
+  })
+
+  it('やり直しの種類は、文字と頭身を含まない', () => {
+    expect([...RETRY_ISSUE_KINDS].sort()).toEqual(['anatomy', 'artifact', 'identity', 'look', 'prompt'])
+  })
+
+  it('問題なし・要確認は変えない（上げない）', () => {
+    expect(enforceImageCheckVerdict(result('review', ['anatomy'])).verdict).toBe('review')
+    expect(enforceImageCheckVerdict(result('pass', [])).verdict).toBe('pass')
+  })
+
+  it('下げても理由・点・直し方は残す（新しい値を返し、元は変えない）', () => {
+    const original = result('retry', ['text'])
+    const enforced = enforceImageCheckVerdict(original)
+    expect(enforced).toMatchObject({ score: 0.4, promptDelta: 'fix it', issues: original.issues })
+    expect(original.verdict).toBe('retry')
+  })
+
+  it('頭身は理由の種類として読める。知らない種類は通さない', () => {
+    expect(ImageCheckResult.safeParse({ verdict: 'review', score: 0.5, issues: [{ kind: 'proportion', message: '頭身が高い' }], promptDelta: null }).success).toBe(true)
+    expect(ImageCheckResult.safeParse({ verdict: 'review', score: 0.5, issues: [{ kind: 'style', message: '画風' }], promptDelta: null }).success).toBe(false)
   })
 })
