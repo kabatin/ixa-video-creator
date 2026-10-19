@@ -63,6 +63,8 @@ import type { MusicProcessorDeps } from './music/index.js'
 import { createMusicWiring } from './music-wiring.js'
 import type { SfxProcessorDeps } from './sfx/index.js'
 import { createSfxWiring } from './sfx-wiring.js'
+import type { MotionProcessorDeps } from './motion/index.js'
+import { createMotionWiring } from './motion-wiring.js'
 import { createThumbnailWiring } from './thumbnail-wiring.js'
 import type { ThumbnailProcessorDeps } from './thumbnail/index.js'
 import { createVoiceWiring } from './voice-wiring.js'
@@ -91,6 +93,8 @@ export type GenerationWiring = {
   readonly music: MusicProcessorDeps
   /** 効果音を作る（ADR-0052）。 */
   readonly sfx: SfxProcessorDeps
+  /** Take の動きの分析（ADR-0054）。 */
+  readonly motion: MotionProcessorDeps
   /**
    * 解像度を上げる（ADR-0044）。**この機械に上げる口が無ければ null。**
    * 無いことを `undefined` ではなく `null` で表す（配線し忘れと区別するため）。
@@ -423,6 +427,7 @@ export const createGenerationWiring = (
       localGpuLease,
       sfxQueue,
     }),
+    motion: createMotionWiring({ db, storage, logger, textTool: chosenTextTool(config, db) }),
     upscale: upscaleWiring?.deps ?? null,
     thumbnail: createThumbnailWiring({ db, storage, mediaQueue: render.mediaQueue, logger }),
     queue,

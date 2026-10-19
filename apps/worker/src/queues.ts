@@ -15,6 +15,7 @@ export const QUEUE_NAMES = {
   upscale: 'upscale',
   music: 'music',
   sfx: 'sfx',
+  motion: 'motion',
   thumbnail: 'thumbnail',
 } as const
 
@@ -73,6 +74,10 @@ export const QUEUE_CONFIGS: readonly QueueConfig[] = [
    * 効果音を作る（ADR-0052）。**同時 1 つ。** 手元の GPU を使うので、増やしても整理券で待つだけ。
    */
   { name: QUEUE_NAMES.sfx, concurrency: 1 },
+  /**
+   * Take の動きの分析（ADR-0054）。**同時 1 つ。** Claude CLI は契約の利用枠を使い、1 回に数十秒かかる。
+   */
+  { name: QUEUE_NAMES.motion, concurrency: 1 },
   /**
    * YouTube のサムネイル（ADR-0051）。**同時 1 つ。** 1 枚は数秒だが、Chrome を起こすので重ねない
    * （書き出しの render と同じ考え）。

@@ -8,8 +8,8 @@ import {
 } from '../queues.js'
 
 describe('QUEUE_CONFIGS', () => {
-  it('12 のキューがすべて定義されている', () => {
-    expect(QUEUE_CONFIGS).toHaveLength(12)
+  it('13 のキューがすべて定義されている', () => {
+    expect(QUEUE_CONFIGS).toHaveLength(13)
     expect(QUEUE_CONFIGS.map((config) => config.name).sort()).toEqual(
       Object.values(QUEUE_NAMES).sort(),
     )
@@ -37,6 +37,8 @@ describe('QUEUE_CONFIGS', () => {
       music: 1,
       // 効果音を作る（ADR-0052）。手元の GPU を使うので 1 つずつ。
       sfx: 1,
+      // Take の動きの分析（ADR-0054）。Claude CLI は契約の利用枠を使うので 1 つずつ。
+      motion: 1,
       // サムネイル（ADR-0051）。Chrome を起こすので 1 つずつ。
       thumbnail: 1,
     })
@@ -102,6 +104,7 @@ describe('resolveQueueConfigs', () => {
       upscale: 1,
       music: 1,
       sfx: 1,
+      motion: 1,
       thumbnail: 1,
     })
   })
