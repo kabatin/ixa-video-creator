@@ -243,10 +243,13 @@ describe('曲', () => {
     expect(AI_PURPOSE_LABELS.music).toBe('曲')
   })
 
-  it('曲に使えるのは お試し と 手元の ACE-Step だけ', () => {
+  it('曲に使えるのは お試し と 手元の ACE-Step と Stable Audio（歌なし）だけ', () => {
     const musicTools = (Object.keys(AI_TOOLS) as AiToolId[]).filter((id) => AI_TOOLS[id].purposes.includes('music'))
-    expect([...musicTools].sort()).toEqual(['ace_step', 'stub'])
+    expect([...musicTools].sort()).toEqual(['ace_step', 'stable_audio_medium_music', 'stub'])
     expect(aiChoiceProblem('music', 'klein', ready())).toMatch(/曲にはまだ使えません/)
+    // 同じ sfx-api でも、効果音の AI は曲に使えず、曲の AI は効果音に使えない。
+    expect(aiChoiceProblem('music', 'stable_audio_medium_sfx', ready())).toMatch(/曲にはまだ使えません/)
+    expect(aiChoiceProblem('sfx', 'stable_audio_medium_music', ready())).toMatch(/効果音にはまだ使えません/)
   })
 
   it('ace-step-api が応答していれば勧め、していなければお試し', () => {
@@ -254,8 +257,24 @@ describe('曲', () => {
     expect(recommendAiSettings(allMissing()).music).toBe('stub')
   })
 
+  /** 歌える ACE-Step を先に勧める。Stable Audio は ACE-Step が使えないときだけ。 */
+  it('両方使えれば ACE-Step、Stable Audio だけなら Stable Audio を勧める', () => {
+    expect(recommendAiSettings({ ...allMissing(), ace_step: ready(), stable_audio_medium_music: ready() }).music).toBe('ace_step')
+    expect(recommendAiSettings({ ...allMissing(), stable_audio_medium_music: ready() }).music).toBe('stable_audio_medium_music')
+  })
+
   it('ACE-Step は手元のサーバ ace_step で見つける', () => {
     expect(AI_TOOLS.ace_step.detect).toEqual({ kind: 'local_server', server: 'ace_step' })
+  })
+
+  it('Stable Audio の曲は sfx-api の stable-audio-3-medium-music で見つけ、歌なしと分かる名前にする', () => {
+    expect(AI_TOOLS.stable_audio_medium_music.detect).toEqual({
+      kind: 'local_server',
+      server: 'sfx_api',
+      workflow: 'stable-audio-3-medium-music',
+    })
+    expect(AI_TOOLS.stable_audio_medium_music.label).toMatch(/歌なし/)
+    expect(AI_TOOLS.stable_audio_medium_music.notice).toMatch(/歌は作れません/)
   })
 })
 

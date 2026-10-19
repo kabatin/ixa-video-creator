@@ -16,6 +16,8 @@ export const MUSIC_LYRICS_MAX_LENGTH = 4000
 /** 曲の長さ（秒）。ace-step-api の契約と同じ。 */
 export const MUSIC_DURATION_MIN_SEC = 10
 export const MUSIC_DURATION_MAX_SEC = 240
+/** Stable Audio 3 Medium（歌なし）で作れる長さの上限。sfx-api の `GET /v1/capabilities` と同じ（ADR-0048 追記）。 */
+export const STABLE_AUDIO_MUSIC_DURATION_MAX_SEC = 190
 /** 1 つのジョブで作る曲の数。 */
 export const MUSIC_COUNT_MAX = 4
 

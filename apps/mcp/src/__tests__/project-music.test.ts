@@ -190,6 +190,13 @@ describe('曲', () => {
     expect(result).toEqual({ jobId: JOB, next: { tool: 'wait', jobs: [{ kind: 'music', id: JOB }] } })
   })
 
+  /** ADR-0048 追記。どの曲の AI が歌なしだけかを、呼ぶ側が送る前に知れるように説明に書く。 */
+  it('generate_music の説明は、Stable Audio が歌なしだけ・190 秒までで、歌ありは断られると言う', () => {
+    expect(generateMusicTool.description).toMatch(/stable_audio_medium_music makes instrumental BGM only/)
+    expect(generateMusicTool.description).toMatch(/10–190 s/)
+    expect(generateMusicTool.description).toMatch(/rejected with 409/)
+  })
+
   it('upload_music は sign → PUT（鍵なし）→ complete（sha256）→ 曲 → 解析の順', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'ixa-mcp-up-'))
     const file = join(dir, 'song.mp3')

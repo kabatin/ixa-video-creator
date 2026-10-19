@@ -57,6 +57,9 @@ export const generateMusicTool = defineTool({
   name: 'generate_music',
   description:
     'Compose a new song for the project with the local music AI (submit only; takes minutes). ' +
+    'Which AI is used comes from the user\'s AI settings (music): ace_step sings or plays instrumental (10–240 s); ' +
+    'stable_audio_medium_music makes instrumental BGM only (send instrumental:true and no lyrics; 10–190 s; English prompt) — ' +
+    'requests with vocals or lyrics are rejected with 409, never silently dropped. ' +
     'Returns a music jobId; then call wait with {kind:"music", id} — when it succeeds you get musicTrackIds. ' +
     'Pick one with set_master_track, which also starts the beat analysis. ' +
     'Track titles are shown to the user in Japanese UI, so Japanese titles are preferred.',

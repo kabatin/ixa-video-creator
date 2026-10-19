@@ -1,5 +1,6 @@
 'use client'
 
+import type { AiToolId } from '@ixa/domain'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useAssets, type Loaded } from '@/components/workbench/asset-store'
@@ -29,6 +30,8 @@ export type MusicJobsValue = {
   readonly submit: (body: MusicGenerateBody) => Promise<void>
   /** 待っている・作っているジョブをまとめて止める。 */
   readonly cancel: () => Promise<void>
+  /** 選んでいる曲の AI。窓を開くたびに読む（「使う AI」で選び直したら次に開いたときから効く）。 */
+  readonly musicTool: () => Promise<AiToolId>
 }
 
 const MusicJobsContext = createContext<MusicJobsValue | null>(null)
@@ -108,6 +111,8 @@ export const MusicJobsProvider = ({
     setLocalEpoch((epoch) => epoch + 1)
   }, [client, projectId])
 
-  const value = useMemo<MusicJobsValue>(() => ({ jobs, submit, cancel }), [jobs, submit, cancel])
+  const musicTool = useCallback(() => client.musicTool(), [client])
+
+  const value = useMemo<MusicJobsValue>(() => ({ jobs, submit, cancel, musicTool }), [jobs, submit, cancel, musicTool])
   return <MusicJobsContext.Provider value={value}>{children}</MusicJobsContext.Provider>
 }

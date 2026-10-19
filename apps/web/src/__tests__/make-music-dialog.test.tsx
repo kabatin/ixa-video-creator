@@ -30,6 +30,7 @@ const fakeApi = (patch: Partial<MusicJobApi> = {}): MusicJobApi => ({
   generateMusic: vi.fn().mockResolvedValue({ jobId: 'job-1' }),
   listMusicJobs: vi.fn().mockResolvedValue([]),
   cancelMusicJobs: vi.fn().mockResolvedValue({ cancelledJobIds: [] }),
+  musicTool: vi.fn().mockResolvedValue('ace_step'),
   ...patch,
 })
 
@@ -63,6 +64,38 @@ describe('曲を作る', () => {
       })
     })
     expect(await screen.findByText('受け付けました。閉じても作り続けます。')).toBeInTheDocument()
+  })
+
+  /** ADR-0048 追記。歌なしだけの AI を選んでいれば、歌ありは選べない（黙って捨てない）。 */
+  it('曲の AI が Stable Audio なら、そう言い、歌なしに固定して歌詞の欄を閉じ、長さは 190 秒までと出す', async () => {
+    const api = fakeApi({ musicTool: vi.fn().mockResolvedValue('stable_audio_medium_music') })
+    renderDialog(api)
+    expect(await screen.findByText('曲を作る AI: Stable Audio 3 Medium（歌なし）')).toBeInTheDocument()
+    expect(screen.getByText(/歌は作れません/)).toBeInTheDocument()
+    const instrumental = screen.getByLabelText('歌なし（歌詞は使いません）')
+    expect(instrumental).toBeChecked()
+    expect(instrumental).toBeDisabled()
+    expect(screen.getByLabelText('歌詞（なくてもよい）')).toBeDisabled()
+    expect(screen.getByText('10〜190 秒')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('曲調'), 'lofi, piano')
+    await userEvent.click(screen.getByRole('button', { name: '曲を作る' }))
+    await waitFor(() => {
+      expect(api.generateMusic).toHaveBeenCalledWith(PROJECT_ID, {
+        prompt: 'lofi, piano',
+        lyrics: '',
+        durationSec: 60,
+        instrumental: true,
+        count: 1,
+      })
+    })
+  })
+
+  it('曲の AI が ACE-Step なら、歌ありのまま選べる', async () => {
+    renderDialog(fakeApi())
+    expect(await screen.findByText('曲を作る AI: ACE-Step 1.5')).toBeInTheDocument()
+    expect(screen.getByLabelText('歌なし（歌詞は使いません）')).toBeEnabled()
+    expect(screen.getByText('10〜240 秒')).toBeInTheDocument()
   })
 
   it('欄が正しくなければ頼まず、欄ごとに理由を出す', async () => {

@@ -15,6 +15,7 @@ import {
   ACE_STEP_IDENTITY,
   checkSfxApiHealth,
   aceStepMusicModel,
+  stableAudioMusicModel,
 } from '@ixa/provider-music'
 import { KLEIN_IDENTITY, codexCliImageModel, kleinImageModel, stubGeminiLikeImageModel } from '@ixa/provider-image'
 import {
@@ -107,7 +108,7 @@ const localServerProbes = (config: AppConfig): Readonly<Record<LocalServerName, 
         token: config.providers.aceStepApiToken,
       }),
   }
-  // 効果音のサーバ（ADR-0052）。1 台で Stable Audio（Medium・Small）と MOSS を出すので、どの AI もこれで見つける。
+  // 効果音のサーバ（ADR-0052）。1 台で Stable Audio（Medium・Small）と MOSS、曲の Stable Audio を出すので、どの AI もこれで見つける。
   const sfxApi: LocalServerProbe = {
     enabled: config.providers.localSfxGenerators.includes('sfx_api'),
     enabledBy: 'LOCAL_SFX_GENERATOR',
@@ -157,8 +158,10 @@ export const createAiWiring = (config: AppConfig, db: DbClient): AiWiring => {
     klein: { providerId: kleinImageModel.providerId, modelId: kleinImageModel.id },
   }
   // 曲（ADR-0048）。`.env` で有効にしていなければ null（選べても作れない理由を言う）。
+  // Stable Audio の歌なし BGM は効果音と同じ sfx-api なので、効果音のサーバの有効・無効に従う。
   const musicModels = {
     ace_step: config.providers.localMusicGenerators.includes('ace_step') ? aceStepMusicModel.id : null,
+    stable_audio_medium_music: config.providers.localSfxGenerators.includes('sfx_api') ? stableAudioMusicModel.id : null,
   }
   // 効果音（ADR-0052）。同じ sfx-api の別の workflow。`.env` で有効にしていなければ null。
   const sfxModels = sfxModelsFor(config.providers.localSfxGenerators.includes('sfx_api'))

@@ -1,5 +1,6 @@
-import { MusicJobStatus, type ProjectId } from '@ixa/domain'
+import { MusicJobStatus, type AiToolId, type ProjectId } from '@ixa/domain'
 import { z } from 'zod'
+import { createAiSettingsApi } from '@/lib/ai-settings-api'
 import type { Requester } from '@/lib/requester'
 
 /**
@@ -47,6 +48,8 @@ export type MusicJobApi = {
   listMusicJobs: (projectId: ProjectId) => Promise<WireMusicJob[]>
   /** 待っている・作っているジョブをまとめて止める。 */
   cancelMusicJobs: (projectId: ProjectId) => Promise<WireMusicJobsCancelled>
+  /** 「使う AI」で選んでいる曲の AI（歌えるか・長さの上限が AI ごとに違う）。 */
+  musicTool: () => Promise<AiToolId>
 }
 
 const projectPath = (projectId: ProjectId, suffix: string): string =>
@@ -59,4 +62,5 @@ export const createMusicJobApi = (requester: Requester): MusicJobApi => ({
     requester.get(projectPath(projectId, '/music-jobs'), WireMusicJobList),
   cancelMusicJobs: async (projectId) =>
     requester.post(projectPath(projectId, '/music-jobs/cancel'), undefined, WireMusicJobsCancelled),
+  musicTool: async () => (await createAiSettingsApi(requester).getAiSettings()).settings.music,
 })

@@ -36,6 +36,17 @@ describe('checkSfxApiHealth', () => {
     expect(JSON.stringify(result)).not.toContain('/Users/x')
   })
 
+  it('曲の workflow（歌なし BGM）も同じ一覧で見て、使えなければ曲のモデルの名前で言う', async () => {
+    const music = { 'stable-audio-3-medium-music': { available: false, loaded: false, reason: 'weights not found' } }
+    const result = await checkSfxApiHealth({
+      baseUrl: BASE_URL,
+      token: null,
+      workflowId: 'stable-audio-3-medium-music',
+      fetch: serve(health(music)),
+    })
+    expect(result.state === 'down' ? result.reason : '').toMatch(/^Stable Audio 3 Medium（歌なし・手元）は今使えません/)
+  })
+
   it('一覧に無い workflow は使えない。一覧を返さない古いサーバは応答していれば使える', async () => {
     const missing = await checkSfxApiHealth({ baseUrl: BASE_URL, token: null, workflowId: 'moss-sfx-v2', fetch: serve(health({})) })
     expect(missing.state).toBe('down')

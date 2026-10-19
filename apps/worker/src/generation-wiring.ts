@@ -411,6 +411,11 @@ export const createGenerationWiring = (
         baseUrl: config.providers.aceStepApiUrl,
         token: config.providers.aceStepApiToken,
       },
+      sfxApi: {
+        enabled: config.providers.localSfxGenerators.includes('sfx_api'),
+        baseUrl: config.providers.sfxApiUrl,
+        token: config.providers.sfxApiToken,
+      },
       localGpuLease,
       musicQueue,
       analysisQueue,

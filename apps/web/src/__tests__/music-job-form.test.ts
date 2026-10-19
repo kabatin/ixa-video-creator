@@ -5,6 +5,7 @@ import {
   MUSIC_LYRICS_MAX_LENGTH,
   MUSIC_PROMPT_MAX_LENGTH,
   ProjectEvent,
+  musicToolLimits,
   type MusicJobStatus,
 } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
@@ -77,6 +78,22 @@ describe('validateMusicForm', () => {
     for (const bad of ['0', '5', '1.5', '']) {
       expect(errorsOf({ count: bad }).count).toBe('何曲作るかは 1〜4 で選んでください')
     }
+  })
+
+  /** ADR-0048 追記。歌なしだけの AI では、欄の「歌なし」を外せない。長さの上限もその AI のもの。 */
+  it('歌なしだけの AI（Stable Audio）なら、歌ありのままでも歌なし・歌詞なしで頼む', () => {
+    const stableAudio = musicToolLimits('stable_audio_medium_music')
+    expect(validateMusicForm(form({ instrumental: false, lyrics: '[verse]\nあ' }), stableAudio)).toEqual({
+      ok: true,
+      body: { prompt: 'j-pop, upbeat', lyrics: '', durationSec: 60, instrumental: true, count: 1 },
+    })
+  })
+
+  it('Stable Audio の長さは 10〜190 秒', () => {
+    const stableAudio = musicToolLimits('stable_audio_medium_music')
+    expect(validateMusicForm(form({ durationSec: '190' }), stableAudio).ok).toBe(true)
+    const result = validateMusicForm(form({ durationSec: '190.5' }), stableAudio)
+    expect(result.ok ? null : result.errors.durationSec).toBe('長さは 10〜190 秒で入れてください')
   })
 
   it('いくつも違反していれば、欄ごとに全部言う', () => {

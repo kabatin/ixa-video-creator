@@ -20,6 +20,11 @@ type Ok<T> = { success: true; data: T }
 type Err = { success: false; error: string; fields?: Record<string, string[]> }
 
 const READY: MusicModelChoice = { state: 'ready', tool: 'ace_step', model: 'ace_step/ace-step-1.5' }
+const STABLE_AUDIO: MusicModelChoice = {
+  state: 'ready',
+  tool: 'stable_audio_medium_music',
+  model: 'sfx_api/stable-audio-3-medium-music',
+}
 
 const setup = (options: { readonly choice?: MusicModelChoice; readonly enqueueFails?: boolean } = {}) => {
   const project = aProject()
@@ -120,6 +125,46 @@ describe('POST /projects/{projectId}/music/generate', () => {
     expect(response.status).toBe(409)
     expect((await json<Err>(response)).error).toBe(NO_MUSIC_AI_MESSAGE)
     expect(enqueued).toEqual([])
+  })
+
+  /** ADR-0048 追記。Stable Audio は歌なしの BGM だけ・190 秒まで。歌を黙って捨てない。 */
+  it('Stable Audio を選んでいれば、歌なし・歌詞なし・190 秒までをそのモデルで記す', async () => {
+    const { project, enqueued, musicJobs, send } = setup({ choice: STABLE_AUDIO })
+    const response = await send('POST', `/projects/${project.id}/music/generate`, {
+      prompt: 'lofi hip hop, mellow piano',
+      instrumental: true,
+      durationSec: 190,
+    })
+    expect(response.status).toBe(202)
+    expect(enqueued).toHaveLength(1)
+    expect(musicJobs.snapshot()[0]).toMatchObject({
+      tool: 'stable_audio_medium_music',
+      model: 'sfx_api/stable-audio-3-medium-music',
+      spec: { instrumental: true, lyrics: '', durationSec: 190 },
+    })
+  })
+
+  it.each([
+    ['歌あり', { instrumental: false }, /歌なしの曲だけ/],
+    ['歌詞あり', { instrumental: true, lyrics: '[verse]\nはしれ' }, /歌詞は使えません/],
+    ['190 秒を超える', { instrumental: true, durationSec: 190.5 }, /10〜190 秒/],
+  ] as const)('Stable Audio に %s を頼むと 409 で理由を言う（頼まない）', async (_label, body, message) => {
+    const { project, enqueued, musicJobs, send } = setup({ choice: STABLE_AUDIO })
+    const response = await send('POST', `/projects/${project.id}/music/generate`, { prompt: 'x', ...body })
+    expect(response.status).toBe(409)
+    expect((await json<Err>(response)).error).toMatch(message)
+    expect(enqueued).toEqual([])
+    expect(musicJobs.snapshot()).toEqual([])
+  })
+
+  it('ACE-Step なら歌あり・240 秒も今までどおり受ける', async () => {
+    const { project, send } = setup()
+    const response = await send('POST', `/projects/${project.id}/music/generate`, {
+      prompt: 'j-pop',
+      lyrics: '[verse]\nはしれ',
+      durationSec: 240,
+    })
+    expect(response.status).toBe(202)
   })
 
   it('無い作品は 404', async () => {

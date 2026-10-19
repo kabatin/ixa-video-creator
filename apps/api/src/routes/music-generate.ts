@@ -8,6 +8,7 @@ import {
   MusicJobId as MusicJobIdSchema,
   MusicJobStatus,
   ProjectId as ProjectIdSchema,
+  musicSpecProblem,
   type MusicJob,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
@@ -78,7 +79,7 @@ const generateRoute = createRoute({
   responses: {
     202: json('頼んだ', successResponse(z.object({ jobId: z.string() }))),
     404: errorContent('作品が無い'),
-    409: errorContent('曲の AI が選ばれていない・この環境で使えない'),
+    409: errorContent('曲の AI が選ばれていない・この環境で使えない・その AI では作れない頼み方（歌なしだけの AI に歌あり）'),
     422: errorContent('入力の誤り'),
   },
 })
@@ -132,6 +133,9 @@ export const musicGenerateRoutes = (deps: MusicGenerationDeps) =>
       const input = c.req.valid('json')
       const choice = await deps.musicModel()
       if (choice.state === 'unavailable') return c.json(fail(choice.reason), 409)
+      // 選んでいる AI では作れない頼み方（Stable Audio に歌あり・歌詞・190 秒超）。黙って捨てずに断る。
+      const problem = musicSpecProblem(choice.tool, input)
+      if (problem !== null) return c.json(fail(problem), 409)
       const job = await startMusicJob(deps, {
         projectId,
         tool: choice.tool,

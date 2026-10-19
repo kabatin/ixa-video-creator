@@ -53,3 +53,15 @@ worker の整理券（ADR-0040）に並ぶ。並び方は絵と共通の `genera
 - 種（seed）は API では受けるが画面には出さない（同じ種でも同じ曲にならないため）
 - 仕上がりを待つ上限は投入から 15 分（GPU の順番待ちは別に 2 時間まで）
 - 参照音源（似た曲を作る・続きを作る）・歌声の指定・区間の作り直しは未対応
+
+## 追記（2026-10-19）: 歌なし BGM の AI として Stable Audio 3 Medium を足す
+
+曲の AI に `stable_audio_medium_music`（モデル `sfx_api/stable-audio-3-medium-music`）を足す。
+効果音と同じ sfx-api（ADR-0052）の別の workflow で、同じ待ち行列・同じ合言葉。`LOCAL_SFX_GENERATOR=sfx_api` で有効になる。
+ACE-Step は残し、既定・勧める順の先頭も ACE-Step のまま（Stable Audio は ACE-Step が使えないときだけ勧める）。
+
+- **歌は作れない。** 歌あり・歌詞ありの頼みは黙って捨てずに断る。規則は domain の `musicSpecProblem` 1 か所で、
+  API は 409 で理由を返し、画面は「歌なし」を固定して歌詞の欄を閉じ、MCP の説明にも書く。Provider も送る前にもう一度止める
+- 長さは 10〜190 秒（サーバは 0.5 秒から受けるが、曲のジョブの下限 10 秒に合わせる）。上限の正はサーバの `GET /v1/capabilities`
+- 本文は効果音と同じ形（説明・長さ・数・種）。「TrackType: Music, VocalType: Instrumental, 」の前置きはサーバが付ける（ixa は付けない）
+- 出力は PCM16・44.1kHz・ステレオの WAV で、頼んだ長さちょうど

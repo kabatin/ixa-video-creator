@@ -1,10 +1,10 @@
 import {
   MUSIC_COUNT_MAX,
-  MUSIC_DURATION_MAX_SEC,
-  MUSIC_DURATION_MIN_SEC,
   MUSIC_LYRICS_MAX_LENGTH,
   MUSIC_PROMPT_MAX_LENGTH,
   isMusicJobFinished,
+  musicToolLimits,
+  type MusicToolLimits,
   type ProjectEvent,
 } from '@ixa/domain'
 import { formatDuration, formatLongDuration } from '@/lib/format-time'
@@ -56,9 +56,16 @@ const promptError = (prompt: string): string | undefined => {
 const lyricsError = (lyrics: string): string | undefined =>
   lyrics.length > MUSIC_LYRICS_MAX_LENGTH ? `歌詞は ${String(MUSIC_LYRICS_MAX_LENGTH)} 字までです` : undefined
 
-const durationError = (value: number | null): string | undefined =>
-  value === null || value < MUSIC_DURATION_MIN_SEC || value > MUSIC_DURATION_MAX_SEC
-    ? `長さは ${String(MUSIC_DURATION_MIN_SEC)}〜${String(MUSIC_DURATION_MAX_SEC)} 秒で入れてください`
+/** 選んでいる曲の AI が分からない間は、歌える AI（ACE-Step）の範囲で確かめる。API がもう一度確かめる。 */
+export const DEFAULT_MUSIC_LIMITS: MusicToolLimits = musicToolLimits('ace_step')
+
+/** 長さの範囲の言い方（`10〜240 秒`）。 */
+export const durationRangeText = (limits: MusicToolLimits): string =>
+  `${String(limits.durationSec.min)}〜${String(limits.durationSec.max)} 秒`
+
+const durationError = (value: number | null, limits: MusicToolLimits): string | undefined =>
+  value === null || value < limits.durationSec.min || value > limits.durationSec.max
+    ? `長さは ${durationRangeText(limits)}で入れてください`
     : undefined
 
 const countError = (value: number | null): string | undefined =>
@@ -68,16 +75,18 @@ const countError = (value: number | null): string | undefined =>
 
 /**
  * 欄の値を確かめて、頼む本文にする。**歌なしなら歌詞は送らない**（欄に残っていても使わない）。
+ * 歌なしだけの AI（`limits.vocals` が false）では、画面が「歌なし」を固定して見せているので歌なしで頼む。
  */
-export const validateMusicForm = (form: MusicForm): MusicFormResult => {
+export const validateMusicForm = (form: MusicForm, limits: MusicToolLimits = DEFAULT_MUSIC_LIMITS): MusicFormResult => {
   const prompt = form.prompt.trim()
-  const lyrics = form.instrumental ? '' : form.lyrics
+  const instrumental = form.instrumental || !limits.vocals
+  const lyrics = instrumental ? '' : form.lyrics
   const durationSec = toNumber(form.durationSec)
   const count = toNumber(form.count)
   const found: ReadonlyArray<readonly [MusicFormField, string | undefined]> = [
     ['prompt', promptError(prompt)],
     ['lyrics', lyricsError(lyrics)],
-    ['durationSec', durationError(durationSec)],
+    ['durationSec', durationError(durationSec, limits)],
     ['count', countError(count)],
   ]
   const errors: MusicFormErrors = Object.fromEntries(
@@ -86,7 +95,7 @@ export const validateMusicForm = (form: MusicForm): MusicFormResult => {
   if (Object.keys(errors).length > 0 || durationSec === null || count === null) {
     return { ok: false, errors }
   }
-  return { ok: true, body: { prompt, lyrics, durationSec, instrumental: form.instrumental, count } }
+  return { ok: true, body: { prompt, lyrics, durationSec, instrumental, count } }
 }
 
 /** まだ終わっていないジョブ（待っている・作っている）。 */

@@ -1,7 +1,7 @@
 'use client'
 
-import { MUSIC_COUNT_MAX, MUSIC_DURATION_MAX_SEC, MUSIC_DURATION_MIN_SEC } from '@ixa/domain'
-import { useState } from 'react'
+import { AI_TOOLS, MUSIC_COUNT_MAX, musicToolLimits, type AiToolId } from '@ixa/domain'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { FieldError } from '@/components/form/field-error'
 import { FIELD_CONTROL_CLASS, FIELD_HINT_CLASS, FIELD_LABEL_CLASS } from '@/components/form/field-styles'
@@ -13,7 +13,9 @@ import { MusicJobProgress } from '@/components/workbench/ui/music-job-progress'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { ApiError, describeForPerson } from '@/lib/api-error'
 import {
+  DEFAULT_MUSIC_LIMITS,
   INITIAL_MUSIC_FORM,
+  durationRangeText,
   validateMusicForm,
   type MusicForm,
   type MusicFormErrors,
@@ -28,6 +30,28 @@ const COUNT_OPTIONS = Array.from({ length: MUSIC_COUNT_MAX }, (_, index) => {
 const CONFLICT_STATUS = 409
 
 /**
+ * 選んでいる曲の AI。窓を開くたびに読む。読めなければ null（歌える AI の範囲で欄を出し、API がもう一度確かめる）。
+ */
+const useMusicTool = (load: (() => Promise<AiToolId>) | null): AiToolId | null => {
+  const [tool, setTool] = useState<AiToolId | null>(null)
+  useEffect(() => {
+    if (load === null) return
+    let alive = true
+    load()
+      .then((loaded) => {
+        if (alive) setTool(loaded)
+      })
+      .catch(() => {
+        // 案内が出ないだけ。歌なしだけの AI に歌ありを頼めば、API が理由つきで断る。
+      })
+    return () => {
+      alive = false
+    }
+  }, [load])
+  return tool
+}
+
+/**
  * 曲を作る（ADR-0048）。曲調と歌詞から、手元の AI（「使う AI」の曲）で楽曲を作る。
  * 頼んだら進み具合はこの中と素材ツリーの楽曲に出る。閉じても作り続け、できたら上の知らせで言う。
  */
@@ -39,6 +63,10 @@ export const MakeMusicDialogBody = () => {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [accepted, setAccepted] = useState(false)
+  const tool = useMusicTool(music?.musicTool ?? null)
+  const limits = tool === null ? DEFAULT_MUSIC_LIMITS : musicToolLimits(tool)
+  // 歌なしだけの AI では「歌なし」を外せない（歌を黙って捨てない）。
+  const instrumentalOnly = !limits.vocals
 
   const change = (patch: Partial<MusicForm>): void => {
     setForm((current) => ({ ...current, ...patch }))
@@ -47,7 +75,7 @@ export const MakeMusicDialogBody = () => {
 
   const submit = async (): Promise<void> => {
     if (music === null) return
-    const result = validateMusicForm(form)
+    const result = validateMusicForm(form, limits)
     if (!result.ok) {
       setErrors(result.errors)
       return
@@ -80,6 +108,14 @@ export const MakeMusicDialogBody = () => {
       <p className="text-sm text-muted">
         曲調と歌詞から楽曲を作ります。使う AI はメニュー「使う AI…」の「曲」で選びます。できた曲は楽曲に足され、解析が始まります。
       </p>
+      {tool !== null && (
+        <div className="rounded-md border border-line bg-surface-2 p-2 text-xs text-text">
+          <p>{`曲を作る AI: ${AI_TOOLS[tool].label}`}</p>
+          {instrumentalOnly && (
+            <p className="text-muted">歌は作れません。歌なしの BGM だけを作ります（曲調は英語で書くのがおすすめです）。</p>
+          )}
+        </div>
+      )}
       <TextField
         id="make-music-prompt"
         label="曲調"
@@ -93,7 +129,8 @@ export const MakeMusicDialogBody = () => {
       <label className="flex items-center gap-2 text-sm text-text">
         <input
           type="checkbox"
-          checked={form.instrumental}
+          checked={form.instrumental || instrumentalOnly}
+          disabled={instrumentalOnly}
           onChange={(event) => {
             change({ instrumental: event.target.checked })
           }}
@@ -105,7 +142,7 @@ export const MakeMusicDialogBody = () => {
         label="歌詞（なくてもよい）"
         rows={6}
         value={form.lyrics}
-        disabled={form.instrumental}
+        disabled={form.instrumental || instrumentalOnly}
         placeholder={'[verse]\n1 番の歌詞\n[chorus]\nサビの歌詞'}
         error={errors.lyrics}
         onChange={(lyrics) => {
@@ -121,8 +158,8 @@ export const MakeMusicDialogBody = () => {
             id="make-music-duration"
             type="number"
             inputMode="decimal"
-            min={MUSIC_DURATION_MIN_SEC}
-            max={MUSIC_DURATION_MAX_SEC}
+            min={limits.durationSec.min}
+            max={limits.durationSec.max}
             step={1}
             value={form.durationSec}
             aria-invalid={errors.durationSec !== undefined}
@@ -132,7 +169,7 @@ export const MakeMusicDialogBody = () => {
             }}
             className={`mt-1 ${FIELD_CONTROL_CLASS}`}
           />
-          <p className={FIELD_HINT_CLASS}>{`${String(MUSIC_DURATION_MIN_SEC)}〜${String(MUSIC_DURATION_MAX_SEC)} 秒`}</p>
+          <p className={FIELD_HINT_CLASS}>{durationRangeText(limits)}</p>
           <FieldError id="make-music-duration-error" message={errors.durationSec} />
         </div>
         <SelectField

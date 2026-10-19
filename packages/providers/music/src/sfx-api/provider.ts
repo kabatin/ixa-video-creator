@@ -45,7 +45,8 @@ import { ensureSfxApiRequest } from './request.js'
  */
 export const SFX_WORKFLOW_UNAVAILABLE_CODE = 'sfx_api_workflow_unavailable'
 
-const UnavailableEnvelope = z.object({
+/** 503 の `workflow_unavailable` の封筒。曲の口（`music-provider.ts`）も同じ形で受ける。 */
+export const SfxApiUnavailableEnvelope = z.object({
   error: z.object({ code: z.literal('workflow_unavailable'), message: z.string().default('') }),
 })
 
@@ -166,7 +167,7 @@ export const createSfxApiProvider = (options: SfxApiProviderOptions): SfxProvide
       if (response.status === 429) {
         throw new ProviderBusyError(`${identity.label}が混んでいます`, identity.providerId, retryAfterMsFrom(response.headers))
       }
-      const unavailable = response.status === 503 ? UnavailableEnvelope.safeParse(response.body) : null
+      const unavailable = response.status === 503 ? SfxApiUnavailableEnvelope.safeParse(response.body) : null
       if (unavailable?.success === true) {
         const reason = unavailable.data.error.message.trim()
         throw new LocalServerRequestError(

@@ -9,12 +9,13 @@ import {
 } from '@ixa/provider-video'
 import { z } from 'zod'
 import { SFX_API_IDENTITY, SFX_API_MODELS } from './descriptor.js'
+import { STABLE_AUDIO_MUSIC_WORKFLOW_ID, stableAudioMusicModel } from './music-descriptor.js'
 
 /**
  * sfx-api の health（ADR-0052）。サーバが応答するかに加えて、**workflow ごとに使えるか**を見る。
  * `GET /v1/health` は `workflows: { [id]: { available, loaded, reason } }` を返す。
  * `available: true, loaded: false` は待機中のふつうの状態（初回に読み込む）。
- * 1 台で 3 つの AI（Stable Audio Medium・Small・MOSS）を出すので、一部だけ使えないことがある。
+ * 1 台で複数の AI（効果音の Stable Audio Medium・Small・MOSS と、曲の Stable Audio Medium）を出すので、一部だけ使えないことがある。
  *
  * **叩くのは 1 回だけ。** 判断の仕方は動画のサーバの `checkLocalServerHealth` と同じ（合言葉・形・起こし方）。
  */
@@ -38,7 +39,10 @@ const workflowState = (body: unknown, workflowId: string, up: LocalServerHealthC
   const parsed = Workflows.safeParse(raw)
   // 一覧の形が違う。**全部使えるように見せない**（使えない方を選んで、投入で初めて断られる）。
   if (!parsed.success) return { state: 'down', reason: `${identity.serverName} の workflow の一覧の形が違います` }
-  const label = SFX_API_MODELS.find((model) => model.workflowId === workflowId)?.label ?? workflowId
+  const label =
+    workflowId === STABLE_AUDIO_MUSIC_WORKFLOW_ID
+      ? stableAudioMusicModel.label
+      : (SFX_API_MODELS.find((model) => model.workflowId === workflowId)?.label ?? workflowId)
   const workflow = parsed.data[workflowId]
   if (workflow === undefined) return { state: 'down', reason: `${label}がこの ${identity.serverName} にありません` }
   if (!workflow.available) {

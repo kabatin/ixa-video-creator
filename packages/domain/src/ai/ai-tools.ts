@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { STABLE_AUDIO_MUSIC_DURATION_MAX_SEC } from '../music/music-job.js'
 
 /**
  * 使う AI（ADR-0032）。この環境で見つかった AI から、テキスト・画像・動画・声・文字起こし・曲ごとに 1 つ選ぶ
@@ -33,6 +34,7 @@ export const AiToolId = z.enum([
   'wan',
   'klein',
   'ace_step',
+  'stable_audio_medium_music',
   // 効果音はメインの Medium を先に置く（画面の選択肢はこの並び）。
   'stable_audio_medium_sfx',
   'stable_audio_sfx',
@@ -62,7 +64,7 @@ export type AiToolDetection =
   /**
    * 手元の生成サーバが応答するか（`GET /v1/health`。ADR-0031 / 0040 / 0047 / 0048 / 0052）。
    * **どのサーバかを持つ。** 5 台（vpipe-api・wan-api・klein-api・ace-step-api・sfx-api）あるので、持たないと
-   * 1 台の起動でほかが「使える」と出てしまう。sfx-api は 1 台で 3 つのモデル（Stable Audio Medium・Small・MOSS）を出すので、
+   * 1 台の起動でほかが「使える」と出てしまう。sfx-api は 1 台で複数のモデル（Stable Audio Medium・Small・MOSS・曲の Medium）を出すので、
    * **どの workflow か**（`workflow`）も持つ。片方だけ使えないことがある（health の `workflows`）。
    */
   | {
@@ -168,6 +170,15 @@ export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
     purposes: ['music'],
     // 動画と同じ機械の GPU を使う（ADR-0048）。動画や絵を作っている間は曲も順番待ちになる。
     notice: SHARED_GPU_NOTICE,
+  }),
+  stable_audio_medium_music: tool({
+    id: 'stable_audio_medium_music',
+    label: 'Stable Audio 3 Medium（歌なし）',
+    tags: ON_THIS_MAC_FREE,
+    // 効果音と同じ sfx-api の別の workflow（ADR-0048 追記）。歌なしの BGM だけを作る。
+    detect: { kind: 'local_server', server: 'sfx_api', workflow: 'stable-audio-3-medium-music' },
+    purposes: ['music'],
+    notice: `歌は作れません（歌なしの BGM だけ。長さは ${String(STABLE_AUDIO_MUSIC_DURATION_MAX_SEC)} 秒まで）。${SHARED_GPU_NOTICE}`,
   }),
   stable_audio_medium_sfx: tool({
     id: 'stable_audio_medium_sfx',
@@ -280,7 +291,8 @@ const RECOMMENDATION_ORDER: Readonly<Record<AiPurpose, readonly AiToolId[]>> = O
   video: ['vpipe', 'wan', 'local'],
   voice: ['macos_say'],
   transcribe: ['whisper_cpp'],
-  music: ['ace_step'],
+  // 歌える ACE-Step を先に置く。Stable Audio は歌なしだけなので控え。
+  music: ['ace_step', 'stable_audio_medium_music'],
   sfx: ['stable_audio_medium_sfx', 'stable_audio_sfx', 'moss_sfx'],
 })
 
