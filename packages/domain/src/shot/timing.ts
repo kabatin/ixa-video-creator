@@ -73,3 +73,17 @@ export const takeShortfallSec = (shot: TimingShot, takeDurationSec: number | nul
   const covered = usable / shotPlaybackRate(shot, takeDurationSec)
   return Math.max(0, shot.durationSec - covered)
 }
+
+/**
+ * Take の秒をタイムラインの秒に直す（ADR-0054 §4）。
+ * `shot.startSec + (takeSec − sourceInSec) / shotPlaybackRate`。
+ * **Shot に映る範囲（`sourceInSec` 〜 `usedSourceEndSec`。終わりは排他）の外は null。**
+ */
+export const takeSecToTimelineSec = (
+  shot: TimingShot & Pick<Shot, 'startSec'>,
+  takeSec: number,
+  takeDurationSec: number | null,
+): number | null => {
+  if (takeSec < shot.sourceInSec || takeSec >= usedSourceEndSec(shot, takeDurationSec)) return null
+  return shot.startSec + (takeSec - shot.sourceInSec) / shotPlaybackRate(shot, takeDurationSec)
+}

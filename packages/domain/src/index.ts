@@ -19,6 +19,9 @@ export * from './music/beat-alignment.js'
 export * from './music/music-job.js'
 export * from './sfx/sfx-job.js'
 export * from './sfx/sfx-suggest.js'
+export * from './motion/motion-analysis.js'
+export * from './motion/motion-onsets.js'
+export * from './motion/motion-sfx.js'
 export * from './script/script.js'
 
 // Shot（中心ドメイン）

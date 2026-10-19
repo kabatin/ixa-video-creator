@@ -1,8 +1,9 @@
+import { motionEventsToSfxCues, type MotionSfxKind, type TimelineMotionEvent } from '../motion/motion-sfx.js'
 import { SFX_DURATION_MAX_SEC, SFX_DURATION_MIN_SEC, type SfxCue } from './sfx-job.js'
 
 /**
  * 効果音のきっかけの案（ADR-0052 §3）。**純粋な関数。** タイムラインのエフェクトとトランジションから、
- * どこで何が鳴るとよいかを出す。Shot の中身に合わせた音（エンジン・雨）は見ない（人かエージェントが足す）。
+ * どこで何が鳴るとよいかを出す。Shot の中身に合わせた音は、動きの分析（ADR-0054）があればその出来事から出す。
  *
  * 入力は書き出しの文書（`TimelineDocument`）でも DB のクリップでも渡せるよう、使う欄だけの形にしてある。
  */
@@ -25,14 +26,19 @@ export type SfxSuggestionInput = {
       readonly params?: Readonly<Record<string, unknown>>
     }
   }[]
+  /** 分析済みの Shot の出来事（タイムラインの秒。ADR-0054）。無ければ動きの案は出さない。 */
+  readonly motion?: readonly TimelineMotionEvent[]
 }
 
 /** どの種類の音か。近い時刻に同じ種類が重なったら 1 つにまとめる。 */
 export type SfxSoundKind = 'impact' | 'whoosh' | 'boom' | 'pass_by' | 'thud'
 
+/** 案の種類。エフェクト・トランジションからの音と、動きの出来事からの音（`motion_*`）。 */
+export type SfxSuggestionKind = SfxSoundKind | MotionSfxKind
+
 export type SfxCueSuggestion = {
   readonly cue: SfxCue
-  readonly kind: SfxSoundKind
+  readonly kind: SfxSuggestionKind
   /** なぜここか（画面とエージェントにそのまま見せる）。 */
   readonly reason: string
 }
@@ -127,6 +133,6 @@ const mergeNearby = (suggestions: readonly SfxCueSuggestion[]): readonly SfxCueS
       return duplicate ? kept : [...kept, next]
     }, [])
 
-/** タイムラインのエフェクトとトランジションから、効果音のきっかけの案を時刻順に出す。 */
+/** タイムラインのエフェクト・トランジション・動きの出来事から、効果音のきっかけの案を時刻順に出す。 */
 export const suggestSfxCues = (input: SfxSuggestionInput): readonly SfxCueSuggestion[] =>
-  mergeNearby([...fromEffects(input.clips), ...fromTransitions(input)])
+  mergeNearby([...fromEffects(input.clips), ...fromTransitions(input), ...motionEventsToSfxCues(input.motion ?? [])])

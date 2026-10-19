@@ -681,6 +681,36 @@ type ReviewFinding = {
 尺・解像度・fps・黒フレーム・ブランドカラーの有無・ビート整合は計算で判定する。
 LLM は「人物が同じ人に見えるか」「構図が指示通りか」など判断が要るものに限定する。コストと再現性のため。
 
+### Take の動きの分析（ADR-0054）
+
+効果音を映像に合わせるため、Take の中で起きることを時刻付きで残す。**時刻は Take の秒**で持ち、
+タイムラインの秒は読むときに `takeSecToTimelineSec`（`shot/timing.ts`）で直す。
+
+```ts
+type TakeMotionAnalysis = {
+  id: TakeMotionAnalysisId
+  takeId: TakeId                       // Take に何行でも（追記のみ）。いちばん新しい行が今の結果
+  analyzerVersion: string              // 'motion-v1'
+  status: 'succeeded' | 'failed'
+  energyHopSec: number                 // 強さの列のコマの間隔（1/12 秒）
+  energy: number[]                     // 隣のコマとの差の平均（0..1）
+  onsets: { atSec: Seconds; strength: number }[]   // 動きの山（strength は最強 = 1）
+  events: {
+    kind: 'moment' | 'sustained' | 'pass_by' | 'ambient'
+    takeStartSec: Seconds
+    takeDurationSec: Seconds
+    label: string                      // 日本語（「着地」）
+    sfxPrompt: string                  // 英語（効果音の AI へ）
+    confidence: number                 // 0..1
+  }[]
+  visionUsed: boolean                  // false = AI で中身を見ていない（山だけの案）
+  costUsd: number
+  failureMessage: string | null        // 失敗の行だけが持つ
+}
+```
+
+**決定: 動きの山は計算で、何が起きているかは AI で。** AI の瞬間の時刻は、近くの山に寄せる（AI はコマの粗い帯しか見ない）。
+
 ### 画像のチェック（ADR-0055）
 
 画像のジョブ（開始フレーム・キャラクターシート・キーアート）は、できた絵をすぐ当てずにチェックする。
