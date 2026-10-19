@@ -282,8 +282,9 @@ describe('投げ直し・止めた・打ち切られた', () => {
     const queue = recordingImageQueue()
     await processImageJob({ ...deps, queue }, { imageJobId: job.id, step: 'check' })
     expect(checker.calls).toHaveLength(1)
-    expect(queue.pending).toHaveLength(0)
+    // やり直しの行は増やさない。まだ待っているので、描く手順だけを積み直す。
     expect(jobsOf(deps)).toHaveLength(2)
+    expect(queue.pending).toEqual([{ imageJobId: jobsOf(deps)[1]?.id }])
     expect((await deps.imageJobs.findById(job.id))?.status).toBe('succeeded')
   })
 
@@ -331,6 +332,20 @@ describe('投げ直し・止めた・打ち切られた', () => {
     }
     await runImageJob(stopping, { imageJobId: job.id })
     expect(await manualStartFrameOf(deps.shotReferences, shot.id)).toBeNull()
+  })
+
+  /** レビューの指摘（2026-10-19）。やり直しの行を作った後、描く手順を積む前に落ちると、行が queued のまま残っていた。 */
+  it('やり直しの行が待ったまま残っていれば、描く手順を積み直す（行は増やさない）', async () => {
+    const { job, deps } = setup({ results: [RETRY(0.3), PASS] })
+    await processImageJob(deps, { imageJobId: job.id })
+    deps.queue.pending.length = 0
+    const drawn = await deps.imageJobs.findById(job.id)
+    const orphan = await deps.imageJobs.create(retryImageJobInput(drawn ?? job))
+
+    await processImageJob(deps, { imageJobId: job.id, step: 'check' })
+
+    expect(deps.queue.pending).toEqual([{ imageJobId: orphan.id }])
+    expect(jobsOf(deps)).toHaveLength(2)
   })
 
   it('描く手順を投げ直してもチェック中なら描き直さず、チェックを積み直す', async () => {

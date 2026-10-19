@@ -102,10 +102,16 @@ const runCheck = async (
   }
 }
 
-/** やり直しを積む（既にあれば積まない）。積めなければ失敗にして false（呼ぶ側が前までの絵を当てる）。 */
+/**
+ * やり直しを積む。積めなければ失敗にして false（呼ぶ側が前までの絵を当てる）。
+ * やり直しの行が既にあれば行は増やさない。その行がまだ待っている（queued）なら、描く手順を積み直す
+ * （行を作った後・積む前に落ちると、誰も拾わないまま残る。レビューの指摘 2026-10-19）。
+ * 二重に積まれても、手元の生成サーバはジョブの ID を鍵に二重には作らない（`idempotencyKey`）。
+ */
 const enqueueRetry = async (deps: ImageProcessorDeps, job: ImageGenerationJob): Promise<boolean> => {
-  if ((await deps.imageJobs.findRetryOf(job.id)) !== null) return true
-  const retry = await deps.imageJobs.create(retryImageJobInput(job))
+  const existing = await deps.imageJobs.findRetryOf(job.id)
+  if (existing !== null && existing.status !== 'queued') return true
+  const retry = existing ?? (await deps.imageJobs.create(retryImageJobInput(job)))
   try {
     await deps.queue.draw(retry.id)
     await publishImageJobStatus(deps, retry)
