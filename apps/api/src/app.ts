@@ -26,6 +26,9 @@ import type { MusicGenerationDeps } from './music/deps.js'
 import { musicGenerateRoutes } from './routes/music-generate.js'
 import type { SfxGenerationDeps } from './sfx/deps.js'
 import { sfxGenerateRoutes } from './routes/sfx-generate.js'
+import { motionAnalysisRoutes } from './routes/motion-analysis.js'
+import type { MotionAnalysisDeps } from './motion/deps.js'
+import { loadProjectMotionEvents } from './motion/shot-motion.js'
 import { narrationRoutes } from './routes/narration.js'
 import { turnOffLineTelop } from './narration/telops.js'
 import { generationActivityRoutes, type GenerationActivityDeps } from './routes/generation-activity.js'
@@ -195,6 +198,8 @@ export type AppDeps = {
   musicGeneration?: MusicGenerationDeps
   /** 効果音を作る（ADR-0052）。無ければ口を置かない（テストの多くは要らない）。 */
   sfxGeneration?: SfxGenerationDeps
+  /** Take の動きの分析（ADR-0054）。無ければ口を置かず、効果音の案は動きを見ない（テストの多くは要らない）。 */
+  motion?: Pick<MotionAnalysisDeps, 'analyses' | 'queue'>
   /** 動いている生成（順番待ち・作成中）の一覧。無ければ口を置かない。 */
   activeGenerations?: GenerationActivityDeps['activeJobs']
   storage: ObjectStorage
@@ -623,14 +628,21 @@ export const createApp = (deps: AppDeps) => {
   )
 
   app.route('/', timelineRoutes(timelineDeps))
-  // 効果音（ADR-0052）。案は書き出しと同じ組み立て（エフェクトとトランジション）から出す。
+  // 動きの分析（ADR-0054）。積むのは API、測るのは worker。
+  const motionDeps: MotionAnalysisDeps | null =
+    deps.motion === undefined ? null : { takes: deps.takes, shots: deps.shots, mediaAssets, ...deps.motion }
+  if (motionDeps !== null) app.route('/', motionAnalysisRoutes(motionDeps))
+  // 効果音（ADR-0052）。案は書き出しと同じ組み立て（エフェクトとトランジション）と、動きの分析の出来事から出す。
   if (deps.sfxGeneration !== undefined) {
     app.route(
       '/',
       sfxGenerateRoutes({
         ...deps.sfxGeneration,
-        suggestionSource: async (projectId) =>
-          (await loadTimelineDocument(timelineDeps, projectId))?.document ?? null,
+        suggestionSource: async (projectId) => {
+          const document = (await loadTimelineDocument(timelineDeps, projectId))?.document ?? null
+          if (document === null || motionDeps === null) return document
+          return { ...document, motion: await loadProjectMotionEvents(motionDeps, projectId) }
+        },
       }),
     )
   }

@@ -41,6 +41,7 @@ import {
   createVoiceJobRepository,
   createMusicJobRepository,
   createSfxJobRepository,
+  createTakeMotionAnalysisRepository,
   createProjectAudioSettingsRepository,
 } from '@ixa/db'
 import { createProviderRegistry, execFileCliRunner } from '@ixa/provider-core'
@@ -49,6 +50,7 @@ import { estimateSpeakCostUsd, estimateTranscribeCostUsd } from '@ixa/domain'
 import { VOICE_QUEUE_NAME } from './narration/voice-queue.js'
 import { MUSIC_QUEUE_NAME } from './music/deps.js'
 import { SFX_QUEUE_NAME } from './sfx/deps.js'
+import { MOTION_QUEUE_NAME, type MotionQueue } from './motion/deps.js'
 import { createGenerationContextSource } from '@ixa/generation'
 import { RENDER_QUEUE_NAME, type RenderQueue } from './routes/renders.js'
 import { THUMBNAIL_QUEUE_NAME, type ThumbnailQueue } from './routes/thumbnails.js'
@@ -288,6 +290,22 @@ export const main = (): void => {
     },
   }
 
+  // Take の動きの分析（ADR-0054）。測るのは worker（キュー motion）。Take ごとに 1 つだけ積む（同じ ID は積み増さない）。
+  const motionQueue = new Queue(MOTION_QUEUE_NAME, { connection })
+  const motionJobId = (takeId: string): string => `motion-${takeId}`
+  const motionQueuePort: MotionQueue = {
+    enqueue: async (takeId) => {
+      await motionQueue.add('motion', { takeId }, { jobId: motionJobId(takeId), removeOnComplete: true, removeOnFail: true })
+    },
+    stateOf: async (takeId) => {
+      const state = await (await motionQueue.getJob(motionJobId(takeId)))?.getState()
+      if (state === 'active') return 'running'
+      return state === 'waiting' || state === 'delayed' || state === 'prioritized' || state === 'waiting-children'
+        ? 'queued'
+        : null
+    },
+  }
+
   const mediaQueue = new Queue('media', { connection })
   const mediaIngest: MediaIngestDeps = {
     queue: {
@@ -385,6 +403,7 @@ export const main = (): void => {
       events: projectEvents.publisher,
       logger,
     },
+    motion: { analyses: createTakeMotionAnalysisRepository(db), queue: motionQueuePort },
     sfxGeneration: {
       projects: projectRepository,
       sfxJobs: createSfxJobRepository(db),
