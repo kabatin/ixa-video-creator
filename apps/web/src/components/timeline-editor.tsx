@@ -17,6 +17,7 @@ import { TimelineInlineForm, inlineFormErrors } from '@/components/timeline-inli
 import { ProgramMonitor, type ProgramMonitorProps } from '@/components/program-monitor'
 import { TimelineTracks } from '@/components/timeline-tracks'
 import { AddSfxButton, AddTextButton, TimelineToolbar } from '@/components/timeline-toolbar'
+import type { MotionMark } from '@/lib/timeline-motion-marks'
 import { AddEffectButton, EffectPicker, useEffectInsert } from '@/components/timeline-effect-insert'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
@@ -133,6 +134,8 @@ export type TimelineEditorProps = {
   readonly onOpenEffectClip?: (clipId: TimelineClipId) => void
   /** 「＋効果音」を押したとき（ADR-0054）。無ければボタンを出さない。 */
   readonly onMakeSfx?: (atSec: number) => void
+  /** 効果音の段の上に薄く出す、動きの分析の出来事の印と、押したときの再生（ADR-0054）。 */
+  readonly motionMarks?: { readonly marks: readonly MotionMark[]; readonly onPlayFrom: (sec: number) => void }
   /** 楽曲の波形の帯。`TimelineTracks` へそのまま渡す。 */
   readonly audioLane?: { readonly durationSec: number; readonly node: ReactNode }
   /** ナレーションのレーン（ADR-0038）。帯の尺度で描く。 */
@@ -183,6 +186,7 @@ export const TimelineEditor = ({
   onOpenMediaClip,
   onOpenEffectClip,
   onMakeSfx,
+  motionMarks,
   audioLane,
   narrationLane,
   onDropAudio,
@@ -616,6 +620,7 @@ export const TimelineEditor = ({
           {...(audioLane === undefined ? {} : { audioLane })}
           {...(narrationLane === undefined ? {} : { narrationLane })}
           {...(onDropAudio === undefined ? {} : { onDropAudio })}
+          {...(motionMarks === undefined ? {} : { motionMarks })}
           beatAlignment={
             beatAlignment === null
               ? undefined

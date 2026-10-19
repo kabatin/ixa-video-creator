@@ -18,6 +18,7 @@ import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
 import { useShotMenu } from '@/components/workbench/use-shot-menu'
 import { useTextClipMenu } from '@/components/workbench/use-text-clip-menu'
 import { useTimelineAudio } from '@/components/workbench/narration/use-timeline-audio'
+import { useTimelineMotionMarks } from '@/components/workbench/use-timeline-motion-marks'
 
 /**
  * タイムライン（中央下）。中身は既存の `timeline-editor`。
@@ -41,6 +42,8 @@ export const TimelinePanel = () => {
   // 材料はワークベンチに 1 つ（検査のタブと同じもの）。効果音を置いたら取り直す（サーバの読み直しを通らないため）。
   const { materials, reload } = useTimelineMaterials()
   const { narrationLane, onDropAudio } = useTimelineAudio(reload)
+  // 動きの分析の印（ADR-0054）。「効果音を作る」窓を閉じたら読み直す（そこで分析が終わっていることが多い）。
+  const motionMarks = useTimelineMotionMarks(workbench.shots, workbench.dialog === null)
 
   if (materials === null) {
     return (
@@ -120,6 +123,13 @@ export const TimelinePanel = () => {
         onMakeSfx={(atSec) => {
           const under = workbench.shots?.find((shot) => atSec >= shot.startSec && atSec < shot.startSec + shot.durationSec)
           workbench.openDialog('make-sfx', under === undefined ? {} : { shotIds: [under.id] })
+        }}
+        motionMarks={{
+          marks: motionMarks,
+          onPlayFrom: (sec) => {
+            transportControls.seekTo(sec)
+            transportControls.play('monitor')
+          },
         }}
         {...(audioLane === null ? {} : { audioLane })}
         narrationLane={narrationLane}

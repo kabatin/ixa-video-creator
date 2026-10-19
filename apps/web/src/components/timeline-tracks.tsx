@@ -4,6 +4,7 @@ import type { Shot, ShotId, TimelineClip, TimelineClipId, TimelineTrack } from '
 import { useRef, useState, type ReactNode } from 'react'
 import { TimelineFollowPlayhead, type TimelineFollow } from '@/components/timeline-follow'
 import { TimelineClipLane } from '@/components/timeline-clip-lane'
+import type { MotionMark } from '@/lib/timeline-motion-marks'
 import { TimelineShotLane } from '@/components/timeline-shot-lane'
 import type { ShotEdgeDragProps } from '@/components/use-shot-edge-drag'
 import { TimelineTransitionRow } from '@/components/timeline-transition-row'
@@ -140,6 +141,8 @@ export type TimelineTracksProps = {
   readonly narrationLane?: (pxPerSec: number) => ReactNode
   /** 効果音の帯に音のファイルを落とした（落とした秒）。渡せば効果音の帯を空でも出す。 */
   readonly onDropAudio?: (file: File, atSec: number) => void
+  /** 効果音の段の上に薄く出す、動きの分析の出来事の印（ADR-0054）。押すとそこから再生する。 */
+  readonly motionMarks?: { readonly marks: readonly MotionMark[]; readonly onPlayFrom: (sec: number) => void }
 }
 
 type RowProps = {
@@ -203,6 +206,7 @@ export const TimelineTracks = ({
   shotEdges,
   narrationLane,
   onDropAudio,
+  motionMarks,
 }: TimelineTracksProps) => {
   /** 横スクロールの箱。再生位置を追うときに送る。 */
   const scrollBoxRef = useRef<HTMLDivElement>(null)
@@ -360,6 +364,9 @@ export const TimelineTracks = ({
 
         {shownTracks.map((track) => (
           <Row key={track} label={timelineRowLabel(track)} contentWidthPx={contentWidthPx}>
+            {track === 'SFX' && motionMarks !== undefined && (
+              <MotionMarks marks={motionMarks.marks} pxPerSec={pxPerSec} onPlayFrom={motionMarks.onPlayFrom} />
+            )}
             {track === 'SFX' && onDropAudio !== undefined ? (
               <AudioDrop pxPerSec={pxPerSec} durationSec={durationSec} onDrop={onDropAudio}>
                 {renderTrack(track)}
@@ -455,4 +462,37 @@ const PlayheadLine = ({ durationSec, pxPerSec }: { readonly durationSec: number;
       left: `calc(11rem + ${String(playheadLeftPx(usePlayheadSec(), durationSec, pxPerSec))}px)`,
     }}
   />
+)
+
+/**
+ * 動きの分析の出来事の印（ADR-0054）。効果音の段の上端に薄く出す。手で置くときの目安で、押すとそこから再生する。
+ * 帯のクリップの操作を邪魔しないよう、印の細い当たりだけが押せる。
+ */
+const MotionMarks = ({
+  marks,
+  pxPerSec,
+  onPlayFrom,
+}: {
+  readonly marks: readonly MotionMark[]
+  readonly pxPerSec: number
+  readonly onPlayFrom: (sec: number) => void
+}) => (
+  <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-2" aria-label="動きの出来事の印">
+    {marks.map((mark) => (
+      <button
+        key={mark.atSec}
+        type="button"
+        title={mark.title}
+        aria-label={mark.title}
+        className="pointer-events-auto absolute top-0 h-2 w-2 -translate-x-1/2 opacity-50 hover:opacity-100"
+        style={{ left: secondsToPx(mark.atSec, pxPerSec) }}
+        onClick={(event) => {
+          event.stopPropagation()
+          onPlayFrom(mark.atSec)
+        }}
+      >
+        <span className="mx-auto block h-2 w-0.5 bg-accent" />
+      </button>
+    ))}
+  </div>
 )
