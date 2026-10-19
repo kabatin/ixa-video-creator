@@ -2,6 +2,9 @@
 
 import type { ReactNode } from 'react'
 import { AssetsPanel } from '@/components/workbench/panels/assets-panel'
+import { ChecksPanel } from '@/components/workbench/panels/checks-panel'
+import { ConsolePanel } from '@/components/workbench/panels/console-panel'
+import { HistoryPanel } from '@/components/workbench/panels/history-panel'
 import { ComparePanel } from '@/components/workbench/panels/compare-panel'
 import { CutterPanel } from '@/components/workbench/panels/cutter-panel'
 import { DraftPanel } from '@/components/workbench/panels/draft-panel'
@@ -40,6 +43,9 @@ const STACK: readonly {
    */
   { id: 'cutter', body: <CutterPanel visible />, tall: true },
   { id: 'timeline', body: <TimelinePanel />, tall: true },
+  { id: 'checks', body: <ChecksPanel />, tall: true },
+  { id: 'history', body: <HistoryPanel /> },
+  { id: 'console', body: <ConsolePanel /> },
   { id: 'assets', body: <AssetsPanel /> },
   { id: 'viewer', body: <ViewerPanel /> },
 ]

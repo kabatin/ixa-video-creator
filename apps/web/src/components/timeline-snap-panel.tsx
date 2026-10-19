@@ -40,9 +40,6 @@ export const TimelineSnapPanel = ({
   toleranceSec,
   candidates,
 }: TimelineSnapPanelProps) => {
-  const notice = describeBeatSource(beatSource)
-  const counts = countSnapCandidates(candidates)
-
   return (
     <section className="rounded-lg border border-line bg-surface p-5" aria-label="ビート吸着">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -69,6 +66,23 @@ export const TimelineSnapPanel = ({
           : '吸着を切っています。入力した秒をそのまま使います。狙った位置へ正確に置きたいときはこちらです。'}
       </p>
 
+      <SnapSourceDetail beatSource={beatSource} candidates={candidates} />
+    </section>
+  )
+}
+
+export type SnapSourceSummaryProps = {
+  readonly beatSource: BeatSource
+  /** どのクリップも除外していない状態の候補。内訳の目安として出す。 */
+  readonly candidates: readonly SnapCandidate[]
+}
+
+/** ビートの出どころと候補の内訳。 */
+const SnapSourceDetail = ({ beatSource, candidates }: SnapSourceSummaryProps) => {
+  const notice = describeBeatSource(beatSource)
+  const counts = countSnapCandidates(candidates)
+  return (
+    <>
       <div
         role={notice.tone === 'error' ? 'alert' : 'status'}
         className={`mt-3 rounded-md border p-3 ${TONE_CLASSES[notice.tone]}`}
@@ -79,7 +93,7 @@ export const TimelineSnapPanel = ({
 
       {counts.length === 0 ? (
         <p role="status" className="mt-3 text-sm text-warn">
-          吸着候補が 1 件もありません。吸着を ON にしても値は動きません。
+          吸着候補が 1 件もありません。「拍に吸着」を入れても位置は動きません。
         </p>
       ) : (
         <ul className="mt-3 flex flex-wrap gap-2">
@@ -93,9 +107,20 @@ export const TimelineSnapPanel = ({
           ))}
         </ul>
       )}
-    </section>
+    </>
   )
 }
+
+/**
+ * 吸着の候補（検査のタブ）。**入り切りは置かない。** 切り替えはタイムラインのツールバーの「拍に吸着」。
+ * ここは「なぜ吸着しないのか」を読む場所（解析が無い・楽曲が無い・読めていない）。
+ */
+export const SnapSourceSummary = (props: SnapSourceSummaryProps) => (
+  <section className="rounded-lg border border-line bg-surface p-4" aria-label="ビート吸着の候補">
+    <h2 className="text-sm font-semibold text-text">ビート吸着の候補</h2>
+    <SnapSourceDetail {...props} />
+  </section>
+)
 
 export type SnapNoticeListProps = {
   /** null は「まだ確定していない」。空配列を出すのと区別する。 */

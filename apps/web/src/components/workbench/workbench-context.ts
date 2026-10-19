@@ -13,6 +13,7 @@ import type { SeekCommand } from '@/lib/program-monitor'
 import type { ShotSelection } from '@/lib/shot-bulk'
 import type { ShotPosterMap } from '@/lib/shot-posters'
 import type { PanelId } from '@/lib/workbench-layout'
+import type { ConsoleLevel } from '@/lib/console-log'
 import type { Inspected } from '@/lib/workbench-selection'
 
 /**
@@ -147,7 +148,8 @@ export type WorkbenchContextValue = {
   readonly openInspector: (tab: InspectorTab) => void
   /** 画面上端の知らせ（1 行）。操作の結果や、取り込めなかった理由を出す。 */
   readonly notice: string | null
-  readonly notify: (message: string | null) => void
+  /** 知らせを出す（null で消す）。出したものはコンソールにも残る。`level` は既定で「情報」。 */
+  readonly notify: (message: string | null, level?: ConsoleLevel) => void
   /** 中央上の素材ビューアを前に出す（PHASE 8.2）。 */
   readonly openViewer: () => void
   /** 聴きながら切るで、いま何をしているか（区切る・歌詞を合わせる。ADR-0033）。 */

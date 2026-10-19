@@ -1,7 +1,7 @@
 'use client'
 
 import type { MusicTrackId, Shot } from '@ixa/domain'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { TimelineEditor } from '@/components/timeline-editor'
 import { WaveformCanvas } from '@/components/waveform-canvas'
 import { useFreshWaveformPeaks } from '@/lib/fresh-waveform-peaks'
@@ -10,13 +10,8 @@ import { sectionBoundaries } from '@/lib/waveform-draw'
 import { usePreferences } from '@/components/preferences-root'
 import { useTransportState, useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelFrame } from '@/components/workbench/panels/panel-frame'
-import {
-  loadTimelineMaterials,
-  renderedShotIdsOf,
-  timelineLoadErrors,
-  type TimelineMaterials,
-} from '@/lib/timeline-loader'
-import { timelineShotsKey } from '@/lib/timeline-shots-key'
+import { renderedShotIdsOf, timelineLoadErrors } from '@/lib/timeline-loader'
+import { useTimelineMaterials } from '@/components/workbench/use-timeline-materials'
 import { useContextMenuTrigger } from '@/components/workbench/use-context-menu'
 import { useShotMenu } from '@/components/workbench/use-shot-menu'
 import { useTextClipMenu } from '@/components/workbench/use-text-clip-menu'
@@ -39,7 +34,6 @@ export const TimelinePanel = () => {
   const { preferences } = usePreferences()
   const { transportControls } = workbench
   const transport = useTransportState()
-  const [materials, setMaterials] = useState<TimelineMaterials | null>(null)
   const peaks = useTrackPeaks(workbench.track?.id ?? null, workbench.analysis?.waveformPeaksUrl ?? null)
   // 効果音を置いたら帯を取り直す。
   const [clipsEpoch, setClipsEpoch] = useState(0)
@@ -47,18 +41,8 @@ export const TimelinePanel = () => {
     setClipsEpoch((epoch) => epoch + 1)
   })
 
-  // 開いたとき・サーバから読み直したとき・Take ができたとき・Shot の尺や採用を変えたとき・
-  // ナレーションが変わったとき（声・位置・テロップ）・効果音を置いたときに取り直す。
-  const shotsKey = timelineShotsKey(workbench.shots)
-  useEffect(() => {
-    let cancelled = false
-    void loadTimelineMaterials(workbench.projectId).then((loaded) => {
-      if (!cancelled) setMaterials(loaded)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [workbench.projectId, workbench.serverEpoch, workbench.posterEpoch, workbench.narrationEpoch, clipsEpoch, shotsKey])
+  // 取り直しの合図は `useTimelineMaterials` が持つ。効果音を置いたときはここから進める。
+  const materials = useTimelineMaterials(clipsEpoch)
 
   if (materials === null) {
     return (

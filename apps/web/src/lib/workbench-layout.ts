@@ -24,6 +24,9 @@ export const PANEL_IDS = [
   'narration',
   'cutter',
   'timeline',
+  'checks',
+  'history',
+  'console',
   'shots',
   'inspector',
   'assets',
@@ -57,6 +60,9 @@ export const PANEL_SPECS: Readonly<Record<PanelId, PanelSpec>> = Object.freeze({
   narration: { title: 'ナレーション', area: 'main' },
   cutter: { title: '聴きながら切る', area: 'bottom' },
   timeline: { title: 'タイムライン', area: 'bottom' },
+  checks: { title: '検査', area: 'bottom' },
+  history: { title: '変更履歴', area: 'bottom' },
+  console: { title: 'コンソール', area: 'bottom' },
   shots: { title: 'Shot 一覧', area: 'side' },
   inspector: { title: 'インスペクター', area: 'side' },
   assets: { title: '素材ツリー', area: 'left' },
@@ -99,7 +105,11 @@ const AREA_WIDTHS: Readonly<Partial<Record<DockArea, number>>> = Object.freeze({
   left: LEFT_WIDTH_PX,
 })
 
-/** 区画ごとに先頭が表、残りが裏のタブ。**この順で `addPanel` する。** */
+/**
+ * 区画ごとに先頭が表、残りが裏のタブ。**この順で `addPanel` する。**
+ * 下の区画はタイムラインが先（制作者 2026-10-19「既定のタブはタイムライン」）。
+ * 聴きながら切るは、曲を入れたとき・Shot がまだ無いときだけ前に出す（`shouldFrontCutter`）。
+ */
 const DEFAULT_ORDER: readonly PanelId[] = [
   'storyboard',
   'preview',
@@ -107,8 +117,11 @@ const DEFAULT_ORDER: readonly PanelId[] = [
   'viewer',
   'draft',
   'narration',
-  'cutter',
   'timeline',
+  'cutter',
+  'checks',
+  'history',
+  'console',
   'shots',
   'inspector',
   'assets',
@@ -166,9 +179,19 @@ export type SizableDock = {
   readonly getPanel: (
     id: string,
   ) =>
-    | { readonly group: { readonly api: { readonly setSize: (size: { width?: number }) => void } } }
+    | {
+        readonly group: {
+          readonly api: { readonly setSize: (size: { width?: number; height?: number }) => void }
+        }
+      }
     | undefined
 }
+
+/**
+ * 下の区画の高さ（ドックの高さに対する割合）。ドック任せだと半分を切り、
+ * タイムラインの帯が 2〜3 段しか見えなかった（制作者 2026-10-19「帯をできるだけ上に」）。
+ */
+export const BOTTOM_HEIGHT_RATIO = 0.45
 
 /** 区画の下限を決める口。窓が狭くなったときに、どこから先を削らせないかを決める。 */
 export type ConstrainableDock = {
@@ -210,9 +233,31 @@ export const retitlePanels = (api: RetitlableDock): void => {
  * 既定配置の幅を 左 240 / 右 320 に揃える（§3）。**置いたあとで**区画ごとに指定する。
  * 実機（1440×900）で右が 720px に広がり、中央が 1 列しか入らなかった（2026-09-19）。
  */
-export const sizeDefaultAreas = (api: SizableDock): void => {
+export const sizeDefaultAreas = (api: SizableDock, dockHeightPx?: number): void => {
   api.getPanel(firstOfArea('left'))?.group.api.setSize({ width: LEFT_WIDTH_PX })
   api.getPanel(firstOfArea('side'))?.group.api.setSize({ width: SIDE_WIDTH_PX })
+  // 高さが測れないとき（描く前など）は触らない。0 で潰すとタイムラインが消える。
+  if (dockHeightPx !== undefined && dockHeightPx > 0) {
+    api.getPanel(firstOfArea('bottom'))?.group.api.setSize({ height: Math.round(dockHeightPx * BOTTOM_HEIGHT_RATIO) })
+  }
+}
+
+/**
+ * 聴きながら切るを前に出すか。**既定はタイムラインが前**で、出すのは次の 2 つだけ。
+ *
+ * - 開いた時点（`previousTrackId` が undefined）で、楽曲があって Shot が 0 件。最初の作業は曲を聴いて区切ること。
+ * - 開いたあとでマスターの楽曲が決まった・替わった（楽曲を入れた直後）。
+ *
+ * Shot を読めていない（null）なら出さない。「0 件」と「読めていない」は別（L-015）。
+ */
+export const shouldFrontCutter = (input: {
+  readonly previousTrackId: string | null | undefined
+  readonly trackId: string | null
+  readonly shotCount: number | null
+}): boolean => {
+  if (input.trackId === null) return false
+  if (input.previousTrackId === undefined) return input.shotCount === 0
+  return input.previousTrackId !== input.trackId
 }
 
 /**
@@ -284,9 +329,11 @@ export const applyPreset = (api: DockLike, preset: Preset): void => {
 
 // 2: 素材ごとのタブをやめて「素材」ビューア 1 枚に、「自動で割る」タブを外した（PHASE 8.2）。
 //    版を上げないと、保存済みの配置が消えた部品を指して復元に失敗する（lessons L-025）。
-const LAYOUT_VERSION = 2
+// 3: 下の区画に「検査」「変更履歴」「コンソール」を足し、タイムラインを先頭にした（2026-10-19）。
+//    版を上げないと、保存済みの配置には新しいタブが出ず、メニューから開くまで在ることに気づけない。
+const LAYOUT_VERSION = 3
 
-/** 旧 `ixa:storyboard-layout:v4` と v1 は読まない（パネルの組が違う）。 */
+/** 旧 `ixa:storyboard-layout:v4` と v1・v2 は読まない（パネルの組が違う）。 */
 export const workbenchLayoutKey = (projectId: ProjectId): string =>
   `ixa:workbench-layout:v${String(LAYOUT_VERSION)}:${projectId}`
 

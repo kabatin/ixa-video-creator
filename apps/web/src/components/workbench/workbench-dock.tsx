@@ -8,9 +8,12 @@ import {
   type DockviewReadyEvent,
   type IDockviewPanelProps,
 } from 'dockview-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { FunctionComponent } from 'react'
 import { AssetsPanel } from '@/components/workbench/panels/assets-panel'
+import { ChecksPanel } from '@/components/workbench/panels/checks-panel'
+import { ConsolePanel } from '@/components/workbench/panels/console-panel'
+import { HistoryPanel } from '@/components/workbench/panels/history-panel'
 import { ComparePanel } from '@/components/workbench/panels/compare-panel'
 import { CutterPanel } from '@/components/workbench/panels/cutter-panel'
 import { DraftPanel } from '@/components/workbench/panels/draft-panel'
@@ -24,6 +27,7 @@ import { ViewerPanel } from '@/components/workbench/panels/viewer-panel'
 import {
   addDefaultPanels,
   focusPanel,
+  PANEL_SPECS,
   readStoredWorkbenchLayout,
   constrainAreas,
   retitlePanels,
@@ -65,6 +69,18 @@ const PreviewDock: FunctionComponent<IDockviewPanelProps> = ({ api }) => {
   return <PreviewPanel visible={visible} />
 }
 
+/** 検査のタブの題に指摘の件数を出す（「検査 3」）。0 件・検査できていないときは名前だけ。 */
+const ChecksDock: FunctionComponent<IDockviewPanelProps> = ({ api }) => {
+  const onIssueCount = useCallback(
+    (count: number | null): void => {
+      const title = PANEL_SPECS.checks.title
+      api.setTitle(count === null || count === 0 ? title : `${title} ${String(count)}`)
+    },
+    [api],
+  )
+  return <ChecksPanel onIssueCount={onIssueCount} />
+}
+
 /** Dockview に渡す部品。id は `workbench-layout.ts` の `PANEL_IDS` と同じ。 */
 const COMPONENTS: Readonly<Record<PanelId, FunctionComponent<IDockviewPanelProps>>> = Object.freeze(
   {
@@ -76,6 +92,9 @@ const COMPONENTS: Readonly<Record<PanelId, FunctionComponent<IDockviewPanelProps
     narration: () => <NarrationPanel />,
     cutter: CutterDock,
     timeline: () => <TimelinePanel />,
+    checks: ChecksDock,
+    history: () => <HistoryPanel />,
+    console: () => <ConsolePanel />,
     shots: () => <ShotListPanel />,
     inspector: () => <InspectorPanel />,
     assets: () => <AssetsPanel />,
@@ -107,7 +126,7 @@ export const WorkbenchDock = ({ projectId, query, onReady, onNotice }: Workbench
       } catch (error) {
         api.clear()
         addDefaultPanels(api)
-        sizeDefaultAreas(api)
+        sizeDefaultAreas(api, api.height)
         onNotice(
           `保存した配置を復元できないため初期配置で開きました: ${
             error instanceof Error ? error.message : '不明なエラー'
@@ -116,7 +135,7 @@ export const WorkbenchDock = ({ projectId, query, onReady, onNotice }: Workbench
       }
     } else {
       addDefaultPanels(api)
-      sizeDefaultAreas(api)
+      sizeDefaultAreas(api, api.height)
       if (stored.state === 'invalid') {
         onNotice(`保存した配置が壊れているため初期配置で開きました: ${stored.reason}`)
       }

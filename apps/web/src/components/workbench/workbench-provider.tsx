@@ -12,6 +12,8 @@ import {
   type WorkbenchContextValue,
 } from '@/components/workbench/workbench-context'
 import { useActiveGenerations } from '@/components/workbench/use-active-generations'
+import { ConsoleLogContext } from '@/components/workbench/console-log-context'
+import { createConsoleLog, jobEventEntry, type ConsoleLevel } from '@/lib/console-log'
 import { useProjectConcept } from '@/components/workbench/use-project-concept'
 import { isGeneratingStatus } from '@/lib/shot-display'
 import { useWorkbenchTransport } from '@/components/workbench/use-workbench-transport'
@@ -114,6 +116,16 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
   const [cutterMode, setCutterMode] = useState<CutterMode>('cut')
   const [inspectorRequest, setInspectorRequest] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
+  // この画面を開いてからの出来事（コンソールのタブ）。ワークベンチに 1 つ。
+  const [consoleLog] = useState(createConsoleLog)
+  /** 上の 1 行の知らせ。**出したものはコンソールにも残す**（次の知らせで消えても読み返せる）。 */
+  const notify = useCallback(
+    (message: string | null, level: ConsoleLevel = 'info'): void => {
+      setNotice(message)
+      if (message !== null) consoleLog.push(level, message)
+    },
+    [consoleLog],
+  )
   const { transport, controls } = useWorkbenchTransport()
   // 生成中の Shot があるあいだだけ、どのモデルで・いつから作っているかを追う（2026-09-30）。
   const activeGenerations = useActiveGenerations(
@@ -169,6 +181,9 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
     projectId,
     baseUrl: resolveApiBaseUrl(),
     onEvent: (event) => {
+      // ジョブの完了・失敗・止めたをコンソールへ。失敗は下の知らせにも出す（そちらは記録しない。二重になる）。
+      const line = jobEventEntry(event, (id) => shots?.find((shot) => shot.id === id)?.code ?? null)
+      if (line !== null) consoleLog.push(line.level, line.text)
       setShots((current) => (current === null ? current : applyProjectEvent(current, event).shots))
       // 採用が変わると表紙の絵も変わる。**別の経路の採用**（一括・別の画面・API）もここで拾う。
       // 以前は生成の成功でしか取り直さず、採用した Shot の絵が読み直すまで出なかった。
@@ -398,7 +413,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
         props.focusPanel('inspector')
       },
       notice,
-      notify: setNotice,
+      notify,
       openViewer: () => {
         props.focusPanel('viewer')
       },
@@ -443,6 +458,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       activeGenerations,
       inspected,
       notice,
+      notify,
       concept,
       conceptSaved,
       cutterMode,
@@ -451,9 +467,11 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
 
   return (
     <WorkbenchContext.Provider value={value}>
-      <WorkbenchTransportProvider transport={transport}>
-        <PosterRenewalContext.Provider value={renewPosters}>{props.children}</PosterRenewalContext.Provider>
-      </WorkbenchTransportProvider>
+      <ConsoleLogContext.Provider value={consoleLog}>
+        <WorkbenchTransportProvider transport={transport}>
+          <PosterRenewalContext.Provider value={renewPosters}>{props.children}</PosterRenewalContext.Provider>
+        </WorkbenchTransportProvider>
+      </ConsoleLogContext.Provider>
     </WorkbenchContext.Provider>
   )
 }

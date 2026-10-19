@@ -19,6 +19,7 @@ import { useWorkbench } from '@/components/workbench/workbench-context'
 import { useEditHistory } from '@/components/workbench/use-edit-history'
 import { useQueryNavigation } from '@/components/workbench/use-query-navigation'
 import { useWorkbenchKeys } from '@/components/workbench/use-workbench-keys'
+import { useCutterFront } from '@/components/workbench/use-cutter-front'
 import type { WireMusicAnalysis } from '@/lib/music-api'
 import {
   addDefaultPanels,
@@ -160,7 +161,7 @@ const WorkbenchShell = ({
     if (api !== null) {
       api.clear()
       addDefaultPanels(api)
-      sizeDefaultAreas(api)
+      sizeDefaultAreas(api, api.height)
     }
     setNotice('パネルを初期配置に戻しました。')
   }
@@ -189,6 +190,10 @@ const WorkbenchShell = ({
 
   // 「聴きながら切る」へ譲るかはフックがフォーカスから決める。可視は渡さない。
   useWorkbenchKeys({ undo })
+
+  // 既定はタイムラインが前。曲を入れたとき・Shot がまだ無いときだけ聴きながら切るを前に出す。
+  // 狭い画面（縦一列）では全部が並んでいるので、開いた時点で飛ばさない。
+  useCutterFront(wide ? dockEpoch > 0 : true, !wide || query.bottom !== null)
 
   return (
     <WorkflowProvider lyricTelopCount={lyricTelopCount} narration={narration} rendered={rendered}>

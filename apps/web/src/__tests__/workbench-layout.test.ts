@@ -8,6 +8,8 @@ import {
   addDefaultPanels,
   applyPreset,
   sizeDefaultAreas,
+  shouldFrontCutter,
+  BOTTOM_HEIGHT_RATIO,
   clearWorkbenchLayout,
   focusPanel,
   readStoredWorkbenchLayout,
@@ -72,7 +74,7 @@ describe('既定配置', () => {
   it('中央上が起点、中央下はその下、右と左は全体の端', () => {
     expect(added[0]?.id).toBe('storyboard')
     expect(byId.get('storyboard')?.position).toBeUndefined()
-    expect(byId.get('cutter')?.position).toEqual({ referencePanel: 'storyboard', direction: 'below' })
+    expect(byId.get('timeline')?.position).toEqual({ referencePanel: 'storyboard', direction: 'below' })
     expect(byId.get('shots')?.position).toEqual({ direction: 'right' })
     expect(byId.get('assets')?.position).toEqual({ direction: 'left' })
   })
@@ -87,15 +89,27 @@ describe('既定配置', () => {
   it('同じ区画のほかのパネルは先頭のタブに並び、裏に回る', () => {
     expect(byId.get('preview')?.position).toEqual({ referencePanel: 'storyboard', direction: 'within' })
     expect(byId.get('compare')?.inactive).toBe(true)
-    expect(byId.get('timeline')?.position).toEqual({ referencePanel: 'cutter', direction: 'within' })
+    expect(byId.get('cutter')?.position).toEqual({ referencePanel: 'timeline', direction: 'within' })
+    expect(byId.get('cutter')?.inactive).toBe(true)
     expect(byId.get('inspector')?.position).toEqual({ referencePanel: 'shots', direction: 'within' })
     expect(byId.get('inspector')?.inactive).toBe(true)
   })
 
-  it('区画の先頭は表に出る（構成モードの 3 枚）', () => {
+  it('区画の先頭は表に出る。下の区画はタイムラインが前（制作者 2026-10-19）', () => {
     expect(byId.get('storyboard')?.inactive).toBeUndefined()
-    expect(byId.get('cutter')?.inactive).toBeUndefined()
+    expect(byId.get('timeline')?.inactive).toBeUndefined()
     expect(byId.get('shots')?.inactive).toBeUndefined()
+  })
+
+  it('下の区画のタブは タイムライン・聴きながら切る・検査・変更履歴・コンソール の順', () => {
+    const bottom = added
+      .map((options) => options.id)
+      .filter((id) => ['timeline', 'cutter', 'checks', 'history', 'console'].includes(id))
+    expect(bottom).toEqual(['timeline', 'cutter', 'checks', 'history', 'console'])
+    ;['checks', 'history', 'console'].forEach((id) => {
+      expect(byId.get(id)?.position).toEqual({ referencePanel: 'timeline', direction: 'within' })
+      expect(byId.get(id)?.inactive).toBe(true)
+    })
   })
 
   it('参照先は必ず先に置かれている', () => {
@@ -161,8 +175,14 @@ describe('保存', () => {
     }
   }
 
-  it('鍵は ixa:workbench-layout:v2:<projectId>（PHASE 8.2 で版を上げた）', () => {
-    expect(workbenchLayoutKey(projectId)).toBe(`ixa:workbench-layout:v2:${PROJECT_ID}`)
+  it('鍵は ixa:workbench-layout:v3:<projectId>（下の区画にタブを足して版を上げた）', () => {
+    expect(workbenchLayoutKey(projectId)).toBe(`ixa:workbench-layout:v3:${PROJECT_ID}`)
+  })
+
+  it('v2 の保存は読まない（新しいタブの無い配置で開かない）', () => {
+    const storage = memory()
+    storage.setItem(`ixa:workbench-layout:v2:${PROJECT_ID}`, '{"grid":{},"panels":{}}')
+    expect(readStoredWorkbenchLayout(storage, projectId)).toEqual({ state: 'missing' })
   })
 
   it('無ければ missing', () => {
@@ -194,20 +214,65 @@ describe('保存', () => {
 })
 
 describe('sizeDefaultAreas', () => {
-  it('左 240 / 右 360 に揃える', () => {
-    const sizes = new Map<string, number | undefined>()
+  const recorder = () => {
+    const sizes = new Map<string, { width?: number; height?: number }>()
     const dock = {
       getPanel: (id: string) => ({
         group: {
           api: {
-            setSize: (size: { width?: number }) => {
-              sizes.set(id, size.width)
+            setSize: (size: { width?: number; height?: number }) => {
+              sizes.set(id, size)
             },
           },
         },
       }),
     }
+    return { sizes, dock }
+  }
+
+  it('左 240 / 右 360 に揃える', () => {
+    const { sizes, dock } = recorder()
     sizeDefaultAreas(dock)
-    expect(sizes).toEqual(new Map([['assets', 240], ['shots', 360]]))
+    expect(sizes.get('assets')).toEqual({ width: 240 })
+    expect(sizes.get('shots')).toEqual({ width: 360 })
+  })
+
+  it('下の区画はドックの高さの約 45%（高さが分かるときだけ）', () => {
+    expect(BOTTOM_HEIGHT_RATIO).toBe(0.45)
+    const { sizes, dock } = recorder()
+    sizeDefaultAreas(dock, 800)
+    expect(sizes.get('timeline')).toEqual({ height: 360 })
+
+    const unknown = recorder()
+    sizeDefaultAreas(unknown.dock)
+    expect(unknown.sizes.has('timeline')).toBe(false)
+    const zero = recorder()
+    sizeDefaultAreas(zero.dock, 0)
+    expect(zero.sizes.has('timeline')).toBe(false)
+  })
+})
+
+describe('聴きながら切るを前に出すか', () => {
+  it('開いた時点で楽曲があって Shot が 0 件なら出す', () => {
+    expect(shouldFrontCutter({ previousTrackId: undefined, trackId: 'T1', shotCount: 0 })).toBe(true)
+  })
+
+  it('開いた時点で Shot があれば出さない（タイムラインのまま）', () => {
+    expect(shouldFrontCutter({ previousTrackId: undefined, trackId: 'T1', shotCount: 3 })).toBe(false)
+  })
+
+  it('開いた時点で楽曲が無い・Shot を読めていないなら出さない', () => {
+    expect(shouldFrontCutter({ previousTrackId: undefined, trackId: null, shotCount: 0 })).toBe(false)
+    expect(shouldFrontCutter({ previousTrackId: undefined, trackId: 'T1', shotCount: null })).toBe(false)
+  })
+
+  it('開いたあとでマスターの楽曲が決まった・替わったら、Shot があっても出す', () => {
+    expect(shouldFrontCutter({ previousTrackId: null, trackId: 'T1', shotCount: 5 })).toBe(true)
+    expect(shouldFrontCutter({ previousTrackId: 'T1', trackId: 'T2', shotCount: 5 })).toBe(true)
+  })
+
+  it('同じ楽曲のまま・楽曲が外れたときは出さない', () => {
+    expect(shouldFrontCutter({ previousTrackId: 'T1', trackId: 'T1', shotCount: 0 })).toBe(false)
+    expect(shouldFrontCutter({ previousTrackId: 'T1', trackId: null, shotCount: 0 })).toBe(false)
   })
 })
