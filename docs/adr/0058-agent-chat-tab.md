@@ -60,6 +60,7 @@ MCP の annotations（readOnlyHint・destructiveHint）にも写す。
   そのタスクの旗を立てる。立てたことは会話に残り、画面の帯に出る。制作者はいつでも戻せる。
 - `approve` が API に届かないときは、読むだけなら許し、それ以外は断る（黙って許さない）。
 - 印の無いツール・ixa 以外のツールは `destructive` として扱う（確認を出す側に倒す）。
+- 会話の作品の外を触る操作（別の作品の `projectId`・`create_project`）は `destructive` として扱い、**確認なしの旗が立っていても必ず確認する**（旗は「この作品の作業」についての許しで、ほかの作品には及ばない）。
 - `approve` と `waive_confirmations` は、API が `IXA_AGENT_SESSION_ID` を渡したときだけ登録する。
 
 ### 4. 会話は作品ごとに DB に残す

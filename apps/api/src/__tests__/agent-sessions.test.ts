@@ -605,6 +605,38 @@ describe('確認の待ちと答え', () => {
     await t.until(() => t.statusOf(id) === 'interrupted', '中断')
   })
 
+  it('確認なしの旗が立っていても、作品の外（別の作品・create_project）は必ず確認する', async () => {
+    const decisions: (string | null)[] = []
+    const t = setup(async (call, app) => {
+      const sessionId = call.mcpEnv()['IXA_AGENT_SESSION_ID'] ?? ''
+      const own = call.invocation.stdin.match(/projectId: ([0-9A-Z]{26})/)?.[1] ?? ''
+      for (const [toolName, risk, input] of [
+        ['mcp__ixa__generate_sfx', 'costly', { projectId: own }],
+        ['mcp__ixa__get_project', 'read', { projectId: '01JQTHERPRJ000000000000000' }],
+        ['mcp__ixa__create_project', 'destructive', { name: '新しい作品' }],
+      ] as const) {
+        const res = (await (
+          await app.request(`/agent-sessions/${sessionId}/approvals`, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ toolName, toolUseId: `t-${toolName}`, risk, input }),
+          })
+        ).json()) as { data: { decision: string | null } }
+        decisions.push(res.data.decision)
+      }
+      await call.untilStopped()
+      return exited(143)
+    })
+    const id = await t.newTask()
+    await t.sessions.update(id, { confirmationsWaived: true })
+    await t.post(`/agent-sessions/${id}/messages`, { text: 'いろいろ' })
+    await t.until(() => decisions.length === 3, '3 回頼む')
+    expect(decisions).toEqual(['allow', null, null])
+    expect(t.sessions.messages(id).filter((m) => m.body.kind === 'approval_request')).toHaveLength(2)
+    await t.post(`/agent-sessions/${id}/stop`, {})
+    await t.until(() => t.statusOf(id) === 'interrupted', '中断')
+  })
+
   it('会話の作品と同じ projectId なら、印のまま（読むだけはすぐ許す）', async () => {
     let decision: string | null = 'unset'
     const t = setup(async (call, app) => {

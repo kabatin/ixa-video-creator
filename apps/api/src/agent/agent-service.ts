@@ -129,16 +129,21 @@ const RequestId = z.string().ulid()
 
 /** 確認なしに切り替えるツール（CLI の名前）。 */
 const WAIVE_TOOL = `${IXA_MCP_TOOL_PREFIX}waive_confirmations`
+/** 新しい作品を作るツール（会話の作品の外を触る）。 */
+const CREATE_PROJECT_TOOL = `${IXA_MCP_TOOL_PREFIX}create_project`
 
 /**
- * 会話の作品と違う `projectId` を触る操作は、印にかかわらず削除と同じ扱いにする（別の作品を黙って触らせない）。
+ * 会話の作品の外を触る操作か（別の作品の `projectId`・新しい作品を作る）。
+ * 外を触る操作は削除と同じ扱いにし、**確認なしの旗が立っていても必ず確認する**
+ * （旗は「この作品の作業」についての許しで、ほかの作品には及ばない）。
  */
-const effectiveRisk = (risk: ToolRisk, input: unknown, projectId: string): ToolRisk => {
+const touchesOutside = (toolName: string, input: unknown, projectId: string): boolean => {
+  if (toolName === CREATE_PROJECT_TOOL) return true
   const target =
     typeof input === 'object' && input !== null
       ? (input as Record<string, unknown>)['projectId']
       : undefined
-  return typeof target === 'string' && target !== projectId ? 'destructive' : risk
+  return typeof target === 'string' && target !== projectId
 }
 
 type ActiveTurn = { readonly turn: RunningTurn; readonly tokenHash: string }
@@ -415,10 +420,11 @@ export const createAgentService = (deps: AgentServiceDeps) => {
         return fail('forbidden', 'この会話のやりとりの鍵ではありません')
       const session = await deps.sessions.findById(sessionId)
       if (session === null) return fail('not_found', '会話が見つかりません')
-      const risk = effectiveRisk(request.risk, request.input, session.projectId)
+      const outside = touchesOutside(request.toolName, request.input, session.projectId)
+      const risk = outside ? 'destructive' : request.risk
       if (request.toolUseId !== null) approvals.noteRisk(sessionId, request.toolUseId, risk)
       const requestId = newId(RequestId)
-      if (!approvalNeeded(risk, session))
+      if (!outside && !approvalNeeded(risk, session))
         return okValue({ requestId, decision: 'allow', message: null })
       // 状態を先に進めてから待ちを開ける（画面が確認待ちと知る前に答えられる隙を作らない）。
       const waiting = await deps.sessions.transition(sessionId, 'awaiting_approval', deps.now())
