@@ -1,6 +1,6 @@
 {
   "name": "@ixa/mcp",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "type": "module",
   "description": "AI エージェントが ixa で動画を作るための MCP サーバ（stdio）。ixa の API を Bearer で呼ぶ薄いクライアント",
