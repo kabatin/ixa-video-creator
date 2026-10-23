@@ -465,6 +465,7 @@ const complete = async (
     raw: status.raw,
     generationTimeSec: Math.max(0, (now.getTime() - startedAt.getTime()) / 1000),
     lineage: lineageFieldsOf(lineage),
+    autoRetake: job.autoRetake,
   })
 
   /**

@@ -91,6 +91,9 @@ export const createRegenerationEnqueue = (deps: RegenerationEnqueueDeps): Regene
         routerDecision: compiled.routerDecision,
         parentTakeId: request.parentTakeId,
         regenerationReason: request.reason,
+        // 自動の作り直しは、元の Take で「NG なら自動で作り直す」を選んだときだけここへ来る（ADR-0057）。
+        // 作り直した Take も同じ選択を引き継ぐ（上限は canRegenerate が持つ）。
+        autoRetake: true,
       })
 
       await deps.queue.add('generate', { generationJobId: job.id })

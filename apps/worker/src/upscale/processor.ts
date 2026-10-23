@@ -306,6 +306,8 @@ const poll = async (
       (now.getTime() - (job.startedAt ?? job.queuedAt).getTime()) / 1000,
     ),
     lineage: { parentTakeId: source.id, regenerationReason: UPSCALE_REASON },
+    // 解像度を上げた Take は作り直しの対象にしない（元の絵のまま。ADR-0057）。
+    autoRetake: false,
   })
 
   /**

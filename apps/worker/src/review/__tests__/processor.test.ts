@@ -67,13 +67,15 @@ type HarnessOptions = {
   readonly regeneration?: FakeRegenerationQueue
   /** false にすると MediaAsset を登録しない。 */
   readonly withAsset?: boolean
+  /** 生成を頼んだときに「NG なら自動で作り直す」を選んだか（ADR-0057）。既定は選んでいない。 */
+  readonly autoRetake?: boolean
 }
 
 const harness = (options: HarnessOptions = {}): Harness => {
   const project = aProject()
   const shot = aShot(project)
   const asset = aVideoAsset(project)
-  const take = aTake(shot, asset.id)
+  const take = aTake(shot, asset.id, { autoRetake: options.autoRetake ?? false })
 
   const takes = inMemoryTakes([take])
   const vision = options.vision ?? fakeVisionReviewer()
@@ -277,14 +279,26 @@ describe('processReviewJob', () => {
   })
 
   describe('再生成キューへの投入', () => {
-    it('verdict が fail なら takeId を積む', async () => {
+    it('verdict が fail で、自動の作り直しを選んでいれば takeId を積む', async () => {
       const { deps, takeId, regeneration } = harness({
         deterministic: [reviewerReturning([finding()])],
+        autoRetake: true,
       })
 
       await processReviewJob(deps, { takeId })
 
       expect(regeneration.enqueued()).toEqual([takeId])
+    })
+
+    /** ADR-0057。既定は作り直さず、作り直しを勧めるだけ（Take は不合格のまま、理由は指摘に残る）。 */
+    it('verdict が fail でも、自動の作り直しを選んでいなければ積まない（既定）', async () => {
+      const { deps, takeId, regeneration, takes } = harness({ deterministic: [reviewerReturning([finding()])] })
+
+      const outcome = await processReviewJob(deps, { takeId })
+
+      expect(outcome).toEqual({ state: 'reviewed', verdict: 'fail' })
+      expect(regeneration.enqueued()).toHaveLength(0)
+      expect((await takes.findById(takeId))?.reviewStatus).toBe('failed')
     })
 
     it('warn では積まない（人が見る）', async () => {
@@ -319,6 +333,7 @@ describe('processReviewJob', () => {
       const { deps, takeId, reviews } = harness({
         deterministic: [reviewerReturning([finding()])],
         regeneration: fakeRegenerationQueue(new Error('Redis に繋がりません')),
+        autoRetake: true,
       })
 
       const outcome = await processReviewJob(deps, { takeId })

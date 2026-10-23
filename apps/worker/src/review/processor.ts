@@ -6,6 +6,7 @@ import type {
   TakeRepository,
 } from '@ixa/db'
 import {
+  actionAfterReview,
   DETERMINISTIC_REVIEWERS,
   TakeId as TakeIdSchema,
   aggregateVerdict,
@@ -277,8 +278,12 @@ export const processReviewJob = async (
       'レビューが完了しました',
     )
 
-    // 再生成に回すのは fail だけ。warn は人が見る（ARCHITECTURE.md §13）。
-    if (verdict === 'fail') await enqueueRegeneration(deps, takeId, run.id)
+    // 再生成に回すのは fail で、生成を頼むときに「NG なら自動で作り直す」を選んだ Take だけ（ADR-0057）。
+    // 選んでいなければ作り直しを勧めるだけ（Take は不合格のまま。理由は指摘に残り、画面が「作り直し推奨」と出す）。
+    // warn は人が見る（ARCHITECTURE.md §13）。
+    const action = actionAfterReview({ verdict, autoRetake: take.autoRetake })
+    if (action === 'regenerate') await enqueueRegeneration(deps, takeId, run.id)
+    if (action === 'recommend') deps.logger.info({ takeId, runId: run.id }, '不合格。自動の作り直しは選ばれていないので、作り直しを勧めるだけにします')
 
     return { state: 'reviewed', verdict }
   } catch (error) {

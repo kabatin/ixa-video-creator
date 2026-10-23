@@ -69,6 +69,8 @@ export type RecordTakeInput = {
    * Take は Immutable（ADR-0003）なので、ここで入れ損ねた系譜は後から足せない。
    */
   readonly lineage: TakeLineageFields
+  /** ジョブで選んだ「NG なら自動で作り直す」（ADR-0057）。Take に写す。省けない（写し忘れると作り直しが黙って止まる）。 */
+  readonly autoRetake: boolean
 }
 
 export type RecordTakeDeps = {
@@ -152,6 +154,7 @@ export const recordTake = async (deps: RecordTakeDeps, input: RecordTakeInput): 
     generationTimeSec: input.generationTimeSec,
     // 再生成なら親と理由が入る。通常の生成では両方 null。
     ...input.lineage,
+    autoRetake: input.autoRetake,
   }
 
   // 同じ内容を既に取り込んでいないか。中断した取り込みの再開もここで拾う。

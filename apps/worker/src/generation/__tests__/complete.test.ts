@@ -55,6 +55,7 @@ const buildFixture = async () => {
     raw: { id: 'provider-job-1' },
     generationTimeSec: 42,
     lineage: NO_LINEAGE,
+    autoRetake: false,
   }
 
   return { deps, input, takes, mediaAssets, download, project, shot }
@@ -122,6 +123,14 @@ describe('recordTake（系譜）', () => {
 
     expect(take.parentTakeId).toBeNull()
     expect(take.regenerationReason).toBeNull()
+  })
+
+  /** ADR-0057。頼んだときに選んだ「NG なら自動で作り直す」を Take に写す（後から全体の設定で変わらない）。 */
+  it('ジョブで選んだ自動の作り直しを Take に写す', async () => {
+    const f = await buildFixture()
+    expect((await recordTake(f.deps, f.input)).autoRetake).toBe(false)
+    const g = await buildFixture()
+    expect((await recordTake(g.deps, { ...g.input, autoRetake: true })).autoRetake).toBe(true)
   })
 
   it('再生成では親と理由を Take に入れる', async () => {
