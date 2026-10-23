@@ -5,6 +5,10 @@
  * - `doing`: 作っている間（「効果音を 3 本作っている」）
  * - `done`: 済んだ（「効果音を 3 本作った」）
  * - `ask`: 確認のカード（「効果音を 3 本作ります」）。読むだけの操作も、作品の外を触ると確認に回るので全部に書く
+ * - `askOf`: 入力で確認のカードの文が変わるとき（消す件数・戻せない・課金しない など）。合わなければ `ask`
+ *
+ * 手元のファイル（`filePath`・`imagePath`）を読む入力なら、どの道具でもカードに「この Mac のファイルを読みます」を添える
+ * （`agent-messages.ts` の `toolLabel`）。
  */
 export type ToolLabelSpec = {
   readonly doing: string
@@ -12,6 +16,29 @@ export type ToolLabelSpec = {
   readonly ask: string
   /** 数える入力の欄（配列）と単位。 */
   readonly count?: { readonly field: string; readonly unit: string }
+  readonly askOf?: (input: Readonly<Record<string, unknown>>) => string | undefined
+}
+
+const lengthOf = (value: unknown): number => (Array.isArray(value) ? value.length : 0)
+const UNDOABLE_NOT = '（戻せません）'
+
+const CHARACTER_ASKS: Readonly<Record<string, string>> = {
+  get: 'キャラクターを読みます',
+  delete: 'キャラクターを消します',
+  delete_look: `Look を消します${UNDOABLE_NOT}`,
+  remove_look_image: `Look の画像を外します${UNDOABLE_NOT}`,
+  remove_identity_image: `顔・体の参考画像を外します${UNDOABLE_NOT}`,
+  make_character_sheet: 'キャラクターシートを描きます（画像の AI を使います）',
+}
+
+const removeTelopsAsk = (input: Readonly<Record<string, unknown>>): string => {
+  const clips = lengthOf(input['clipIds'])
+  const lines = lengthOf(input['narrationLineIds'])
+  const parts = [
+    ...(clips > 0 ? [`テロップを ${String(clips)} 件`] : []),
+    ...(lines > 0 ? [`ナレーションの行を ${String(lines)} 行`] : []),
+  ]
+  return `${parts.join('と') || 'テロップを'}消します${lines > 0 ? '（行は戻せません）' : ''}`
 }
 
 export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object.freeze({
@@ -23,6 +50,7 @@ export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object
     doing: '作品の方針を直している',
     done: '作品の方針を直した',
     ask: '作品の方針を直します',
+    askOf: (input) => (input['budgetUsd'] === undefined ? undefined : '作品の予算を変えます'),
   },
   duplicate_project: {
     doing: '作品を複製している',
@@ -61,6 +89,7 @@ export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object
     doing: 'Shot を組み替えている',
     done: 'Shot を組み替えた',
     ask: 'Shot を組み替えます（割る・まとめる・消す・足す）',
+    askOf: (input) => (input['action'] === 'delete' ? `Shot を ${String(lengthOf(input['shotIds']))} 本消します` : undefined),
   },
   draft_storyboard: {
     doing: '絵コンテの案を作っている',
@@ -70,27 +99,30 @@ export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object
   create_character: {
     doing: 'キャラクターを作っている',
     done: 'キャラクターを作った',
-    ask: 'キャラクターを作ります（この Mac の画像を読みます）',
+    ask: 'キャラクターを作ります',
   },
   edit_character: {
     doing: 'キャラクターを直している',
     done: 'キャラクターを直した',
     ask: 'キャラクターを直します',
+    askOf: (input) => CHARACTER_ASKS[String(input['action'])],
   },
   create_location: {
     doing: 'ロケーションを作っている',
     done: 'ロケーションを作った',
-    ask: 'ロケーションを作ります（この Mac の画像を読みます）',
+    ask: 'ロケーションを作ります',
   },
   edit_location: {
     doing: 'ロケーションを直している',
     done: 'ロケーションを直した',
     ask: 'ロケーションを直します',
+    askOf: (input) => (input['action'] === 'delete' ? 'ロケーションを消します' : undefined),
   },
   manage_brand_assets: {
     doing: 'ブランド資産を整えている',
     done: 'ブランド資産を整えた',
     ask: 'ブランド資産を整えます',
+    askOf: (input) => (input['action'] === 'delete' ? 'ブランド資産を消します' : undefined),
   },
   draw_start_frames: {
     doing: '最初のフレームを{n}描いている',
@@ -101,7 +133,7 @@ export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object
   set_start_frame: {
     doing: '最初のフレームを決めている',
     done: '最初のフレームを決めた',
-    ask: 'この Mac の画像を最初のフレームにします',
+    ask: '最初のフレームを決めます',
   },
   list_start_frame_history: {
     doing: '最初のフレームの履歴を読んでいる',
@@ -139,12 +171,13 @@ export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object
   review_take: {
     doing: 'Take を確かめている',
     done: 'Take を確かめた',
-    ask: 'Take を確かめます（AI のレビューか、判定の記録）',
+    ask: 'Take を AI でレビューします',
+    askOf: (input) => (input['verdict'] === undefined ? undefined : 'Take の判定（OK/NG）を記録します（制作者の判定として残ります）'),
   },
   hide_takes: {
     doing: 'Take を{n}隠している',
     done: 'Take を{n}隠した',
-    ask: 'Take を{n}隠します',
+    ask: `Take を{n}隠します${UNDOABLE_NOT}`,
     count: { field: 'takeIds', unit: '本' },
   },
   upscale_takes: {
@@ -184,16 +217,24 @@ export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object
     doing: 'テロップを消している',
     done: 'テロップを消した',
     ask: 'テロップを消します',
+    askOf: removeTelopsAsk,
   },
   set_narration: {
     doing: 'ナレーションを直している',
     done: 'ナレーションを直した',
     ask: 'ナレーションを直します',
+    askOf: (input) => {
+      const readings = input['readings']
+      const removes = typeof readings === 'object' && readings !== null && lengthOf((readings as Record<string, unknown>)['remove']) > 0
+      return removes ? `読み辞書から言葉を外します${UNDOABLE_NOT}` : undefined
+    },
   },
   speak_narration: {
     doing: 'ナレーションを声にしている',
     done: 'ナレーションを声にした',
     ask: 'ナレーションを声にします（声の AI は課金）',
+    askOf: (input) =>
+      input['action'] === 'import_recording' ? '録音を取り込んで行にします（声の AI は使わないので課金されません）' : undefined,
   },
   set_lyrics: {
     doing: '歌詞を入れている',

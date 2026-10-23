@@ -161,6 +161,24 @@ describe('toolLabel', () => {
     }
   })
 
+  it('確認のカードは入力で文を選ぶ（手元のファイル・消す数と戻せないこと・課金しない取り込み）', () => {
+    const ask = (name: string, input: unknown): string => toolLabel(`mcp__ixa__${name}`, input).ask
+    expect(ask('create_character', { name: 'h', identityImage: { imagePath: '/Users/me/a.png' } })).toBe('キャラクターを作ります（この Mac のファイルを読みます）')
+    expect(ask('create_character', { name: 'h', identityImage: { mediaAssetId: 'x' } })).toBe('キャラクターを作ります')
+    expect(ask('upload_music', { filePath: '/a.mp3' })).toBe('この Mac のファイルから曲を取り込みます')
+    expect(ask('remove_telops', { clipIds: ['a', 'b'], narrationLineIds: ['c'] })).toBe('テロップを 2 件とナレーションの行を 1 行消します（行は戻せません）')
+    expect(ask('restructure_shots', { action: 'delete', shotIds: ['a', 'b', 'c'] })).toBe('Shot を 3 本消します')
+    expect(ask('hide_takes', { takeIds: ['a', 'b'] })).toBe('Take を 2 本隠します（戻せません）')
+    expect(ask('edit_character', { action: 'delete_look' })).toBe('Look を消します（戻せません）')
+    expect(ask('edit_character', { action: 'update' })).toBe('キャラクターを直します')
+    expect(ask('speak_narration', { action: 'import_recording', filePath: '/a.wav' })).toBe(
+      '録音を取り込んで行にします（声の AI は使わないので課金されません）（この Mac のファイルを読みます）',
+    )
+    expect(ask('speak_narration', { action: 'speak' })).toBe('ナレーションを声にします（声の AI は課金）')
+    expect(ask('review_take', { verdict: 'approved' })).toContain('判定（OK/NG）を記録します')
+    expect(ask('update_project', { budgetUsd: 5 })).toBe('作品の予算を変えます')
+  })
+
   it('知らないツールは名前を出さず「操作」と言う', () => {
     expect(toolLabel('Bash', {})).toEqual({ doing: '操作している', done: '操作した', ask: '操作を実行します' })
   })

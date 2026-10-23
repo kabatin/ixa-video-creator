@@ -87,6 +87,7 @@ const ApprovalCard = ({ item, handlers }: { readonly item: Extract<AgentItem, { 
   <div role={item.state === 'pending' ? 'alert' : undefined} className="rounded-md border border-warn/50 bg-warn/10 p-2 text-sm">
     <p className="font-semibold text-text">{item.title}</p>
     {RISK_NOTES[item.risk] !== '' && <p className="text-xs text-muted">{RISK_NOTES[item.risk]}</p>}
+    {item.reason !== null && <p className="text-xs text-muted">確認なしにしていても確かめます: {item.reason}</p>}
     {item.state === 'pending' ? (
       <div className="mt-2 flex flex-wrap gap-2">
         <Button tone="primary" size="sm" disabled={handlers.answering} onClick={() => handlers.onAnswer(item.requestId, 'allow', false)}>

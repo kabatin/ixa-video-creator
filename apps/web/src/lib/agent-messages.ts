@@ -44,6 +44,8 @@ export type AgentItem =
       readonly requestId: string
       readonly risk: ToolRisk
       readonly title: string
+      /** 確認なしにしていても必ず確認した理由（API が付ける）。 */
+      readonly reason: string | null
       /** `expired` は、答える前にやりとりが終わった（止めた・API の再起動）。もう押せない。 */
       readonly state: 'pending' | 'allowed' | 'denied' | 'expired' | 'timedOut'
     }
@@ -74,6 +76,18 @@ const bareName = (toolName: string): string =>
 
 const UNKNOWN_LABEL = { doing: '操作している', done: '操作した', ask: '操作を実行します' } as const
 
+/** 手元のファイルのパスを受ける欄（MCP の approve と同じ。読むなら必ず確認に回る）。 */
+const LOCAL_PATH_KEYS: ReadonlySet<string> = new Set(['filePath', 'imagePath'])
+const LOCAL_FILE_NOTE = '（この Mac のファイルを読みます）'
+
+const readsLocalFile = (value: unknown): boolean => {
+  if (Array.isArray(value)) return value.some(readsLocalFile)
+  if (typeof value !== 'object' || value === null) return false
+  return Object.entries(value as Record<string, unknown>).some(
+    ([key, inner]) => (LOCAL_PATH_KEYS.has(key) && typeof inner === 'string') || readsLocalFile(inner),
+  )
+}
+
 /** ツールの言い方（数を入れる）。知らないツールは名前を出さず「操作」と言う。 */
 export const toolLabel = (toolName: string, input: unknown): { doing: string; done: string; ask: string } => {
   const spec = AGENT_TOOL_LABELS[bareName(toolName)]
@@ -81,7 +95,10 @@ export const toolLabel = (toolName: string, input: unknown): { doing: string; do
   const field = spec.count === undefined || typeof input !== 'object' || input === null ? undefined : (input as Record<string, unknown>)[spec.count.field]
   const count = Array.isArray(field) && spec.count !== undefined ? ` ${String(field.length)} ${spec.count.unit}` : ''
   const fill = (text: string): string => text.replace('{n}', count)
-  return { doing: fill(spec.doing), done: fill(spec.done), ask: fill(spec.ask) }
+  const fields = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {}
+  const ask = fill(spec.askOf?.(fields) ?? spec.ask)
+  const withFile = readsLocalFile(input) && !ask.includes('この Mac') ? `${ask}${LOCAL_FILE_NOTE}` : ask
+  return { doing: fill(spec.doing), done: fill(spec.done), ask: withFile }
 }
 
 const isInternalKey = (key: string): boolean => /Ids?$/.test(key) || key === 'id'
@@ -165,6 +182,7 @@ export const agentItemsFrom = (messages: readonly WireAgentMessage[]): readonly 
             requestId: body.requestId,
             risk: body.risk,
             title: toolLabel(body.toolName, body.input).ask,
+            reason: body.reason ?? null,
             state: 'pending',
           })
         case 'approval_decision':
