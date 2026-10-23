@@ -149,10 +149,45 @@ const MIME_BY_EXT: Readonly<Record<string, string>> = {
 
 const Word = z.object({ word: z.string(), startOffset: z.string(), endOffset: z.string() })
 const Transcription = z.object({ words: z.array(Word) })
+const Part = z.object({ text: z.string().optional(), audioTranscription: Transcription.optional() }).passthrough()
+/**
+ * 応答の形。**実物（2026-10-23）は語の時刻を `candidates[].content.parts[].audioTranscription` に入れ、
+ * 同じ文を `parts[].text` にも入れる**（fixture: `__tests__/fixtures/gemini-transcribe-parts.json`）。
+ * 前に読んでいた上の段（`audioTranscription`・`candidates[].audioTranscription`）も残して読む。
+ */
 const TranscribeResponse = z.object({
   audioTranscription: Transcription.optional(),
-  candidates: z.array(z.object({ audioTranscription: Transcription.optional() }).passthrough()).optional(),
+  candidates: z
+    .array(
+      z
+        .object({
+          audioTranscription: Transcription.optional(),
+          content: z.object({ parts: z.array(Part).optional() }).passthrough().optional(),
+        })
+        .passthrough(),
+    )
+    .optional(),
 })
+type TranscribeResponse = z.infer<typeof TranscribeResponse>
+
+const partsOf = (response: TranscribeResponse) => (response.candidates ?? []).flatMap((c) => c.content?.parts ?? [])
+
+/** 語の時刻。どの段にも無ければ null。 */
+const wordsOf = (response: TranscribeResponse): readonly z.infer<typeof Word>[] | null =>
+  (
+    response.audioTranscription ??
+    response.candidates?.find((c) => c.audioTranscription !== undefined)?.audioTranscription ??
+    partsOf(response).find((part) => part.audioTranscription !== undefined)?.audioTranscription
+  )?.words ?? null
+
+/** 語の時刻が無いときの文（parts の text をつなげたもの）。空なら null。 */
+const plainTextOf = (response: TranscribeResponse): string | null => {
+  const text = partsOf(response)
+    .map((part) => part.text ?? '')
+    .join('')
+    .trim()
+  return text === '' ? null : text
+}
 
 /** "0.100s" → 0.1 */
 const seconds = (offset: string): number => {
@@ -191,15 +226,26 @@ export const createGeminiTranscriber = (deps: GeminiDeps & { readonly costOf: (d
       { method: 'POST', headers: headers(deps.apiKey), body: JSON.stringify(body), ...(request.signal === undefined ? {} : { signal: request.signal }) },
       TranscribeResponse,
     )
-    const words = (response.audioTranscription ?? response.candidates?.find((c) => c.audioTranscription !== undefined)?.audioTranscription)?.words
-    if (words === undefined) throw badResponse(WHO)
+    const words = wordsOf(response)
+    if (words === null) {
+      // 語の時刻が無く文だけのとき。文を受け、時刻は録音の長さに均等に割る（行は句点で分かれる。間では分けられない）。
+      const text = plainTextOf(response)
+      if (text === null) throw badResponse(WHO)
+      return {
+        text,
+        chars: spreadWord(text, 0, request.durationSec),
+        segments: [{ text, startSec: 0, endSec: request.durationSec }],
+        costUsd: deps.costOf(request.durationSec),
+        record: { tool: 'gemini_api', model: TRANSCRIBE_MODEL, words: 0, timing: 'none' },
+      }
+    }
     const segments = words.map((word) => ({ text: word.word, startSec: seconds(word.startOffset), endSec: seconds(word.endOffset) }))
     return {
       text: segments.map((segment) => segment.text).join(''),
       chars: segments.flatMap((segment) => spreadWord(segment.text, segment.startSec, segment.endSec)),
       segments,
       costUsd: deps.costOf(request.durationSec),
-      record: { tool: 'gemini_api', model: TRANSCRIBE_MODEL, words: words.length },
+      record: { tool: 'gemini_api', model: TRANSCRIBE_MODEL, words: words.length, timing: 'words' },
     }
   },
 })

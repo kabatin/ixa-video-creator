@@ -1,0 +1,80 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "こんにちは。今日はいい天気ですね。テストです。",
+            "audioTranscription": {
+              "text": "こんにちは。今日はいい天気ですね。テストです。",
+              "words": [
+                {
+                  "word": "こんにちは。",
+                  "startOffset": "0.100s",
+                  "endOffset": "0.900s"
+                },
+                {
+                  "word": "今日",
+                  "startOffset": "1.100s",
+                  "endOffset": "1.400s"
+                },
+                {
+                  "word": "は",
+                  "startOffset": "1.400s",
+                  "endOffset": "1.600s"
+                },
+                {
+                  "word": "いい",
+                  "startOffset": "1.800s",
+                  "endOffset": "2s"
+                },
+                {
+                  "word": "天気",
+                  "startOffset": "2s",
+                  "endOffset": "2.400s"
+                },
+                {
+                  "word": "です",
+                  "startOffset": "2.400s",
+                  "endOffset": "2.700s"
+                },
+                {
+                  "word": "ね。",
+                  "startOffset": "2.700s",
+                  "endOffset": "3s"
+                },
+                {
+                  "word": "テスト",
+                  "startOffset": "3.200s",
+                  "endOffset": "3.600s"
+                },
+                {
+                  "word": "です。",
+                  "startOffset": "3.600s",
+                  "endOffset": "3.800s"
+                }
+              ]
+            }
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 98,
+    "candidatesTokenCount": 10,
+    "totalTokenCount": 108,
+    "promptTokensDetails": [
+      {
+        "modality": "AUDIO",
+        "tokenCount": 98
+      }
+    ],
+    "serviceTier": "standard"
+  },
+  "modelVersion": "gemini-3.5-transcribe",
+  "responseId": "Wh7basHWGrbU1e8P8fqe6AM"
+}

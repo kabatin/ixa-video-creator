@@ -173,16 +173,47 @@ describe('createGeminiTranscriber', () => {
     expect(result.costUsd).toBeCloseTo(0.06)
   })
 
-  it('語の時刻が無い応答は、形が違うと大きく失敗する', async () => {
-    const audioPath = join(dir, 'rec.wav')
+  it('実物の形（2026-10-23）: 語の時刻は candidates[].content.parts[].audioTranscription にある', async () => {
+    const audioPath = join(dir, 'real.wav')
+    await writeFile(audioPath, Buffer.from('x'))
+    const real: unknown = JSON.parse(await readFile(join(import.meta.dirname, 'fixtures', 'gemini-transcribe-parts.json'), 'utf8'))
+    const transcriber = createGeminiTranscriber({ apiKey: KEY, fetch: () => Promise.resolve(json(real)), costOf: () => 0 })
+
+    const result = await transcriber.transcribe({ audioPath, language: 'ja', keyterms: [], workDir: dir, durationSec: 4 })
+
+    expect(result.text).toBe('こんにちは。今日はいい天気ですね。テストです。')
+    expect(result.segments[0]).toEqual({ text: 'こんにちは。', startSec: 0.1, endSec: 0.9 })
+    expect(result.segments.at(-1)).toEqual({ text: 'です。', startSec: 3.6, endSec: 3.8 })
+    expect(result.record).toMatchObject({ words: 9, timing: 'words' })
+  })
+
+  it('語の時刻が無く parts の文だけなら、文を文字起こしとして受け、時刻は録音の長さに均等に割る', async () => {
+    const audioPath = join(dir, 'text-only.wav')
     await writeFile(audioPath, Buffer.from('x'))
     const transcriber = createGeminiTranscriber({
       apiKey: KEY,
-      fetch: () => Promise.resolve(json({ candidates: [{ content: { parts: [{ text: 'こんにちは' }] } }] })),
+      fetch: () =>
+        Promise.resolve(json({ candidates: [{ content: { parts: [{ text: 'こんにちは。' }, { text: 'テストです。' }] } }] })),
       costOf: () => 0,
     })
-    await expect(
-      transcriber.transcribe({ audioPath, language: 'ja', keyterms: [], workDir: dir, durationSec: 1 }),
-    ).rejects.toMatchObject({ code: 'bad_response' })
+
+    const result = await transcriber.transcribe({ audioPath, language: 'ja', keyterms: [], workDir: dir, durationSec: 6 })
+
+    expect(result.text).toBe('こんにちは。テストです。')
+    expect(result.segments).toEqual([{ text: 'こんにちは。テストです。', startSec: 0, endSec: 6 }])
+    expect(result.chars).toHaveLength(12)
+    expect(result.chars?.[6]?.startSec).toBeCloseTo(3)
+    expect(result.record).toMatchObject({ words: 0, timing: 'none' })
+  })
+
+  it('語の時刻も文も無い応答だけ、形が違うと失敗する', async () => {
+    const audioPath = join(dir, 'rec.wav')
+    await writeFile(audioPath, Buffer.from('x'))
+    for (const body of [{ candidates: [{ content: { parts: [{ text: '  ' }] } }] }, { candidates: [] }, {}]) {
+      const transcriber = createGeminiTranscriber({ apiKey: KEY, fetch: () => Promise.resolve(json(body)), costOf: () => 0 })
+      await expect(
+        transcriber.transcribe({ audioPath, language: 'ja', keyterms: [], workDir: dir, durationSec: 1 }),
+      ).rejects.toMatchObject({ code: 'bad_response' })
+    }
   })
 })
