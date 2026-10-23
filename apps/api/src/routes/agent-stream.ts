@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type { AgentSessionRepository } from '@ixa/db'
-import { AgentSessionId as AgentSessionIdSchema } from '@ixa/domain'
+import { AgentSessionId as AgentSessionIdSchema, type AgentMessage } from '@ixa/domain'
 import { streamSSE } from 'hono/streaming'
 import type { AgentHub, AgentStreamEvent } from '../agent/agent-hub.js'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
@@ -60,14 +60,26 @@ export const agentStreamRoutes = (deps: AgentStreamRoutesDeps) =>
       let buffered: readonly AgentStreamEvent[] = []
       let writes: Promise<void> = Promise.resolve()
 
-      const write = (event: AgentStreamEvent): Promise<void> => {
+      const writeMessage = async (message: AgentMessage): Promise<void> => {
+        if (message.seq <= state.sent) return
+        state.sent = message.seq
+        await stream.writeSSE({ event: 'message', id: String(message.seq), data: JSON.stringify(toAgentMessageResponse(message)) })
+      }
+      const write = async (event: AgentStreamEvent): Promise<void> => {
         if (event.type === 'message') {
-          if (event.message.seq <= state.sent) return Promise.resolve()
-          state.sent = event.message.seq
-          return stream.writeSSE({ event: 'message', id: String(event.message.seq), data: JSON.stringify(toAgentMessageResponse(event.message)) })
+          // 後の番号が先に届いたら、飛んだ番号を DB から埋めてから送る（前の行を捨てない）。
+          if (event.message.seq > state.sent + 1) {
+            const gap = await deps.sessions.listMessages(sessionId, state.sent)
+            for (const message of gap.filter((m) => m.seq < event.message.seq)) await writeMessage(message)
+          }
+          await writeMessage(event.message)
+          return
         }
-        if (event.type === 'session') return stream.writeSSE({ event: 'session', data: JSON.stringify(toAgentSessionResponse(event.session)) })
-        return stream.writeSSE({ event: 'edited', data: '{}' })
+        if (event.type === 'session') {
+          await stream.writeSSE({ event: 'session', data: JSON.stringify(toAgentSessionResponse(event.session)) })
+          return
+        }
+        await stream.writeSSE({ event: 'edited', data: '{}' })
       }
       const enqueue = (event: AgentStreamEvent): void => {
         writes = writes

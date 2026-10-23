@@ -87,6 +87,21 @@ describe('GET /agent-sessions/{id}/stream', () => {
     expect(ids(text)).toEqual([4])
   })
 
+  it('後の番号が先に届いたら、飛んだ番号を DB から埋めてから送る（前の行を捨てない）', async () => {
+    const t = await setup()
+    const res = await t.app.request(`/agent-sessions/${t.session.id}/stream?after=3`)
+    const reading = readUntil(res, (s) => ids(s).includes(5))
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    const added = await t.sessions.appendMessages(t.session.id, [
+      { kind: 'assistant_text', text: '4' },
+      { kind: 'assistant_text', text: '5' },
+    ])
+    const fifth = added[1]
+    if (fifth !== undefined) t.hub.publish(t.session.id, { type: 'message', message: fifth })
+    const text = await reading
+    expect(ids(text)).toEqual([4, 5])
+  })
+
   it('心拍を送る', async () => {
     const t = await setup()
     const res = await t.app.request(`/agent-sessions/${t.session.id}/stream?after=3`)
