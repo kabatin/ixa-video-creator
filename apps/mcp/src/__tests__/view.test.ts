@@ -80,10 +80,12 @@ const recordingExtractor = (): FrameExtractor & { readonly calls: string[] } => 
   }
 }
 
+const LAST_FRAME = ulid('MDF')
+
 describe('view ツール', () => {
   const routes = [
     { method: 'GET', path: `/shots/${SHOT}/takes`, data: [{ ...takeRow(TAKE, null, null), mediaAssetId: MEDIA }] },
-    { method: 'GET', path: `/media/${MEDIA}`, data: { id: MEDIA, kind: 'video', mimeType: 'video/mp4' } },
+    { method: 'GET', path: `/media/${MEDIA}`, data: { id: MEDIA, kind: 'video', mimeType: 'video/mp4', lastFrameAssetId: LAST_FRAME } },
     { method: 'GET', path: `/media/${MEDIA}/url`, data: { url: '/files/clip.mp4?sig=SIGNED', expiresInSec: 600 } },
     { method: 'GET', path: '/files/clip.mp4', bytes: new Uint8Array([0, 0, 0, 1]) },
   ]
@@ -97,7 +99,8 @@ describe('view ツール', () => {
     expect(result.content.filter((c) => c.type === 'image')).toHaveLength(2)
     expect(result.content[1]).toMatchObject({ type: 'image', mimeType: 'image/jpeg' })
     const text = textOf(result)
-    expect(JSON.parse(text)).toEqual({ shotId: SHOT, takeId: TAKE, kind: 'video', frames: ['0s', '1s'] })
+    // 最後のコマは次の Shot の最初のコマに使える（set_start_frame {mediaAssetId}）。
+    expect(JSON.parse(text)).toEqual({ shotId: SHOT, takeId: TAKE, kind: 'video', frames: ['0s', '1s'], lastFrameAssetId: LAST_FRAME })
     expect(JSON.stringify(result)).not.toContain('SIGNED')
     expect(JSON.stringify(result)).not.toContain(TOKEN)
     expect(fake.callsTo('GET', '/files/clip.mp4')[0]?.headers.authorization).toBeUndefined()

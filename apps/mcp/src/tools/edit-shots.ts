@@ -1,8 +1,8 @@
-import { MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE, ShotCamera, TransitionType } from '@ixa/domain'
+import { MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE, ShotCamera, ShotContinuityMode, ShotTiming, TransitionType } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import { bulkResult, WireLook, WireShot, WireShotCharacter, WireTransition } from '../wire.js'
-import { defineTool, Id, jsonResult, mapLimited, ToolInputError } from '../tool-def.js'
+import { defineTool, describeError, Id, jsonResult, mapLimited, ToolInputError } from '../tool-def.js'
 
 /** Shot の中身をまとめて直す（説明・空気・カメラ・場所・登場人物・次へのつなぎ）。 */
 
@@ -64,6 +64,12 @@ const Edit = z.object({
     .describe('Where in the take the shot starts (seconds into the take). Use it to skip a weak start.'),
   transitionToNext: TransitionToNext.optional()
     .describe('Transition from this shot into the next shot in order. type "cut" removes any transition.'),
+  continuityMode: ShotContinuityMode.optional().describe(
+    'previous_shot: the take starts from the last frame of the previous shot\'s selected take. Adopt that take before generating.',
+  ),
+  timing: ShotTiming.optional().describe('trim: cut the take to the shot length; fit: speed the take up/down to fill it.'),
+  startSec: z.number().min(0).optional().describe('Position on the timeline. Only with a single shotId.'),
+  durationSec: z.number().positive().optional().describe('Length on the timeline. Only with a single shotId.'),
 })
 
 export const EditShotsInput = z.object({
@@ -83,6 +89,28 @@ const patchOf = (edit: EditInput) => ({
   ...(edit.speed === undefined ? {} : { speed: edit.speed }),
   ...(edit.sourceInSec === undefined ? {} : { sourceInSec: edit.sourceInSec }),
 })
+
+/** 一括の口が受けない列（ADR-0050 の時間・つなぎ方）。Shot ごとの PATCH /shots/{id} で直す。 */
+const singlePatchOf = (edit: EditInput) => ({
+  ...(edit.continuityMode === undefined ? {} : { continuityMode: edit.continuityMode }),
+  ...(edit.timing === undefined ? {} : { timing: edit.timing }),
+  ...(edit.startSec === undefined ? {} : { startSec: edit.startSec }),
+  ...(edit.durationSec === undefined ? {} : { durationSec: edit.durationSec }),
+})
+
+/** 同じ位置・尺を何本にも入れると重なりだらけになる（一括の口が時間を受けないのと同じ理由）。 */
+const timeEditProblem = (edit: EditInput): string | null =>
+  (edit.startSec !== undefined || edit.durationSec !== undefined) && edit.shotIds.length !== 1
+    ? 'startSec・durationSec は shotIds が 1 つのときだけ直せます'
+    : null
+
+const patchEach = async (api: ApiClient, shotIds: readonly string[], patch: Readonly<Record<string, unknown>>) =>
+  mapLimited(shotIds, 4, (shotId) =>
+    api.request('PATCH', `/shots/${seg(shotId)}`, WireShot, { body: patch }).then(
+      () => ({ shotId, ok: true as const }),
+      (error: unknown) => ({ shotId, ok: false as const, reason: describeError(error) }),
+    ),
+  )
 
 const defaultLookId = async (api: ApiClient, characterId: string): Promise<string> => {
   const looks = await api.get(`/characters/${seg(characterId)}/looks`, z.array(WireLook))
@@ -135,7 +163,11 @@ const applyEdit = async (api: ApiClient, projectId: string, edit: EditInput, ord
       : await api.request('PATCH', `/projects/${seg(projectId)}/shots/bulk`, BulkPatchResult, {
           body: { shotIds: edit.shotIds, patch },
         })
-  const failures = (patched?.results ?? []).flatMap((r) => (r.ok ? [] : [{ shotId: r.shotId, reason: r.reason }]))
+  const single = singlePatchOf(edit)
+  const updated = Object.keys(single).length === 0 ? null : await patchEach(api, edit.shotIds, single)
+  const failures = [...(patched?.results ?? []), ...(updated ?? [])].flatMap((r) =>
+    r.ok ? [] : [{ shotId: r.shotId, reason: r.reason }],
+  )
 
   const entries = edit.cast === undefined ? null : await castEntries(api, edit.cast)
   if (entries !== null) {
@@ -156,7 +188,8 @@ const applyEdit = async (api: ApiClient, projectId: string, edit: EditInput, ord
 
   return {
     shotIds: edit.shotIds,
-    ...(patched === null ? {} : { patched: patched.results.length - failures.length }),
+    ...(patched === null ? {} : { patched: patched.results.filter((r) => r.ok).length }),
+    ...(updated === null ? {} : { updated: updated.filter((r) => r.ok).length }),
     ...(failures.length > 0 ? { failures } : {}),
     ...(entries === null ? {} : { castSet: entries.length }),
     ...(transitions === null ? {} : { transitions }),
@@ -169,12 +202,16 @@ export const editShotsTool = defineTool({
   description:
     'Edit shots in bulk. Each edit applies the same change to its shotIds: description (Japanese, what happens on ' +
     'screen), mood, camera {size, angleH, angle, lensMm, movement, movementIntensity} (only given fields change), ' +
-    'locationId, cast (replaces the cast; characters from create_character) and transitionToNext ' +
-    '(cut|dissolve|dip_to_black|dip_to_white|wipe|whip_pan|glitch). Edits run in order.',
+    'locationId, cast (replaces the cast; characters from create_character), transitionToNext ' +
+    '(cut|dissolve|dip_to_black|dip_to_white|wipe|whip_pan|glitch), continuityMode, timing, startSec/durationSec. ' +
+    'A previous_shot shot starts from the last frame of the previous shot\'s selected take: adopt that take first, then generate. ' +
+    'Edits run in order.',
   input: EditShotsInput,
   handler: async ({ projectId, edits }, { api }) => {
     // つなぎの長さは何かを直す前に全部確かめる（途中まで直してから断らない）。
     edits.forEach((edit) => edit.transitionToNext !== undefined && transitionDurationSec(edit.transitionToNext))
+    const timeProblem = edits.map(timeEditProblem).find((p) => p !== null)
+    if (timeProblem !== undefined) throw new ToolInputError(timeProblem)
     const shots = await api.get(`/projects/${seg(projectId)}/shots`, z.array(WireShot))
     const ordered = [...shots].sort((a, b) => a.order - b.order)
     const results = await edits.reduce<Promise<readonly unknown[]>>(

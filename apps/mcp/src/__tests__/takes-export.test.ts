@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { UPSCALE_REASON } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import { exportTool } from '../tools/export.js'
-import { adoptTakeTool, generateTakesTool, listTakesTool, upscaleTakesTool } from '../tools/takes.js'
+import { adoptTakeTool, generateTakesTool, hideTakesTool, listTakesTool, upscaleTakesTool } from '../tools/takes.js'
 import { createFakeApi, depsFor, jsonOf, takeRow, textOf, ulid } from './fake-api.js'
 
 const PROJECT = ulid('PJ1')
@@ -92,16 +92,52 @@ describe('generate_takes', () => {
 })
 
 describe('list_takes / adopt_take / upscale_takes', () => {
-  it('list_takes は採用中と解像度を上げたものを印して並べる', async () => {
+  it('list_takes は採用中と解像度を上げたものを印し、最後のコマ（まだなら null）を添えて並べる', async () => {
+    const MEDIA_1 = ulid('MD1')
+    const MEDIA_2 = ulid('MD2')
+    const LAST = ulid('MDF')
     const fake = createFakeApi([
       { method: 'GET', path: `/shots/${SHOT}`, data: shotRow(SHOT, TAKE) },
-      { method: 'GET', path: `/shots/${SHOT}/takes`, data: [{ ...takeRow(TAKE_2, TAKE, UPSCALE_REASON), index: 2 }, { ...takeRow(TAKE, null, null), index: 1 }] },
+      {
+        method: 'GET',
+        path: `/shots/${SHOT}/takes`,
+        data: [{ ...takeRow(TAKE_2, TAKE, UPSCALE_REASON), index: 2, mediaAssetId: MEDIA_2 }, { ...takeRow(TAKE, null, null), index: 1, mediaAssetId: MEDIA_1 }],
+      },
+      { method: 'GET', path: `/media/${MEDIA_1}`, data: { id: MEDIA_1, kind: 'video', mimeType: 'video/mp4', lastFrameAssetId: LAST } },
+      { method: 'GET', path: `/media/${MEDIA_2}`, data: { id: MEDIA_2, kind: 'video', mimeType: 'video/mp4', lastFrameAssetId: null } },
     ])
     const result = jsonOf(await listTakesTool.run({ shotId: SHOT }, depsFor(fake))) as { takes: Record<string, unknown>[] }
-    expect(result.takes.map((t) => [t.id, t.selected, t.upscaled])).toEqual([
-      [TAKE, true, false],
-      [TAKE_2, false, true],
+    expect(result.takes.map((t) => [t.id, t.selected, t.upscaled, t.lastFrameAssetId])).toEqual([
+      [TAKE, true, false, LAST],
+      [TAKE_2, false, true, null],
     ])
+  })
+
+  it('adopt_take の unselect は 1 本なら selected-take を消し、まとめてなら一括で外す（takeId は断る）', async () => {
+    const fake = createFakeApi([
+      { method: 'DELETE', path: `/shots/${SHOT}/selected-take`, data: shotRow(SHOT, null) },
+      { method: 'POST', path: `/projects/${PROJECT}/shots/bulk/unselect-take`, data: { results: [{ shotId: SHOT, ok: false, reason: '採用していません' }] } },
+    ])
+    const deps = depsFor(fake)
+    expect(jsonOf(await adoptTakeTool.run({ shotId: SHOT, unselect: true }, deps))).toEqual({ shotId: SHOT, selectedTakeId: null, status: 'review' })
+    expect(jsonOf(await adoptTakeTool.run({ projectId: PROJECT, shotIds: [SHOT], unselect: true }, deps))).toEqual({
+      results: [{ shotId: SHOT, ok: false, reason: '採用していません' }],
+    })
+    expect(fake.calls[1]?.body).toEqual({ shotIds: [SHOT] })
+    expect(textOf(await adoptTakeTool.run({ shotId: SHOT, takeId: TAKE, unselect: true }, deps))).toContain('takeId')
+    expect(fake.calls).toHaveLength(2)
+  })
+
+  it('hide_takes は 1 本ずつ隠し、採用中で断られた分は理由つきで返す', async () => {
+    const fake = createFakeApi([
+      { method: 'DELETE', path: `/takes/${TAKE}`, status: 409, data: '採用中の Take は消せません。先に採用を外してください。' },
+      { method: 'DELETE', path: `/takes/${TAKE_2}`, data: { shot: shotRow(SHOT, TAKE) } },
+    ])
+    const result = jsonOf(await hideTakesTool.run({ takeIds: [TAKE, TAKE_2] }, depsFor(fake))) as { hidden: number; results: Record<string, unknown>[] }
+    expect(result.hidden).toBe(1)
+    expect(result.results[0]).toMatchObject({ takeId: TAKE, ok: false })
+    expect(String(result.results[0]?.reason)).toContain('採用中')
+    expect(result.results[1]).toEqual({ takeId: TAKE_2, ok: true, shotStatus: 'review' })
   })
 
   it('adopt_take は 1 本なら select-take、まとめてなら rule つきの一括', async () => {
@@ -185,6 +221,32 @@ describe('export', () => {
     ])
     const result = jsonOf(await exportTool.run({ projectId: PROJECT }, depsFor(fake)))
     expect(result).toEqual({ renderJobId: RENDER, status: 'rendering', progress: 0.4, reusedPrevious: true })
+  })
+
+  it('scope は range をそのまま、shots は最初の頭から最後の終わりまでの区間にして送る', async () => {
+    const fake = createFakeApi([
+      { method: 'POST', path: `/projects/${PROJECT}/render`, status: 202, data: { renderJobId: RENDER, warnings: [] } },
+      { method: 'GET', path: `/renders/${RENDER}`, data: renderRow('rendering', null) },
+      {
+        method: 'GET',
+        path: `/projects/${PROJECT}/shots`,
+        data: [{ ...shotRow(SHOT_B, null), startSec: 7.5, durationSec: 2.25 }, { ...shotRow(SHOT, null), startSec: 3 }],
+      },
+    ])
+    await exportTool.run({ projectId: PROJECT, scope: 'range', startSec: 1, endSec: 4.5 }, depsFor(fake))
+    await exportTool.run({ projectId: PROJECT, scope: 'shots', shotIds: [SHOT_B, SHOT] }, depsFor(fake))
+    expect(fake.callsTo('POST', `/projects/${PROJECT}/render`).map((c) => (c.body as { scope: unknown }).scope)).toEqual([
+      { type: 'range', start: 1, end: 4.5 },
+      { type: 'range', start: 3, end: 9.75 },
+    ])
+  })
+
+  it('scope の欄が足りない・逆さ・作品に無い Shot は書き出す前に断る', async () => {
+    const fake = createFakeApi([{ method: 'GET', path: `/projects/${PROJECT}/shots`, data: [shotRow(SHOT, null)] }])
+    expect(textOf(await exportTool.run({ projectId: PROJECT, scope: 'range', startSec: 4, endSec: 2 }, depsFor(fake)))).toContain('startSec < endSec')
+    expect(textOf(await exportTool.run({ projectId: PROJECT, scope: 'shots' }, depsFor(fake)))).toContain('shotIds')
+    expect(textOf(await exportTool.run({ projectId: PROJECT, scope: 'shots', shotIds: [SHOT_B] }, depsFor(fake)))).toContain('この作品に無い')
+    expect(fake.callsTo('POST', /.*/)).toHaveLength(0)
   })
 
   it('409 以外の失敗はそのまま返す', async () => {

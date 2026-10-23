@@ -149,6 +149,46 @@ describe('edit_shots', () => {
     expect(EditShotsInput.safeParse({ projectId: PROJECT, edits: [{ shotIds: [SHOT_A], speed: 3 }] }).success).toBe(false)
   })
 
+  it('つなぎ方・尺の合わせ方・位置・尺は Shot ごとの PATCH で送り、失敗は理由つきで返す', async () => {
+    const fake = createFakeApi([
+      ...baseRoutes,
+      { method: 'PATCH', path: `/shots/${SHOT_A}`, data: shotRow(SHOT_A, 0) },
+      { method: 'PATCH', path: `/shots/${SHOT_B}`, status: 422, data: '入力の検証に失敗しました' },
+    ])
+    const result = jsonOf(
+      await editShotsTool.run(
+        {
+          projectId: PROJECT,
+          edits: [
+            { shotIds: [SHOT_A, SHOT_B], continuityMode: 'previous_shot', timing: 'fit' },
+            { shotIds: [SHOT_A], startSec: 1.5, durationSec: 2.75 },
+          ],
+        },
+        depsFor(fake),
+      ),
+    ) as { results: Record<string, unknown>[] }
+    expect(fake.callsTo('PATCH', /^\/shots\//).map((c) => [c.path, c.body])).toEqual([
+      [`/shots/${SHOT_A}`, { continuityMode: 'previous_shot', timing: 'fit' }],
+      [`/shots/${SHOT_B}`, { continuityMode: 'previous_shot', timing: 'fit' }],
+      [`/shots/${SHOT_A}`, { startSec: 1.5, durationSec: 2.75 }],
+    ])
+    expect(fake.callsTo('PATCH', `/projects/${PROJECT}/shots/bulk`)).toHaveLength(0)
+    expect(result.results[0]).toMatchObject({ updated: 1, failures: [{ shotId: SHOT_B }] })
+    expect(result.results[1]).toEqual({ shotIds: [SHOT_A], updated: 1 })
+  })
+
+  it('位置・尺は Shot が 1 つのときだけ（何も直す前に断る）', async () => {
+    const fake = createFakeApi(baseRoutes)
+    const result = await editShotsTool.run(
+      { projectId: PROJECT, edits: [{ shotIds: [SHOT_A], mood: '静か' }, { shotIds: [SHOT_A, SHOT_B], durationSec: 2 }] },
+      depsFor(fake),
+    )
+    expect(textOf(result)).toContain('shotIds が 1 つ')
+    expect(fake.callsTo('PATCH', /.*/)).toHaveLength(0)
+    expect(EditShotsInput.safeParse({ projectId: PROJECT, edits: [{ shotIds: [SHOT_A], durationSec: 0 }] }).success).toBe(false)
+    expect(EditShotsInput.safeParse({ projectId: PROJECT, edits: [{ shotIds: [SHOT_A], timing: 'stretch' }] }).success).toBe(false)
+  })
+
   it('つなぎは次の Shot（order 順）へ。古い出入りを消してから作り、cut は消すだけ', async () => {
     const OLD_OUT = ulid('TN1')
     const OLD_IN = ulid('TN2')

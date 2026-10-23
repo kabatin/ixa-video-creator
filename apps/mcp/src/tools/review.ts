@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import type { CheckResult } from '../lib/wait-loop.js'
+import { WireTake } from '../wire.js'
 import { defineTool, Id, jsonResult } from '../tool-def.js'
 
 /**
@@ -36,9 +37,17 @@ export const reviewTakeTool = defineTool({
     'Run the automatic review of a take (duration/resolution/brand checks, then a vision check of identity, composition and ' +
     'prompt adherence). Generation does not review by default; use this to check a take yourself. Then wait ' +
     '{kind:"review", id: takeId}; the result has the verdict (pass/warn/fail), cost and findings with fixes. To retake, ' +
-    'call generate_takes with corrections from the fixes, parentTakeId and regenerationReason.',
-  input: z.object({ takeId: Id }),
-  handler: async ({ takeId }, { api }) => {
+    'call generate_takes with corrections from the fixes, parentTakeId and regenerationReason. ' +
+    'With verdict, only records the person\'s own OK (approved) / NG (rejected) on the take instead (no automatic review).',
+  input: z.object({
+    takeId: Id,
+    verdict: z.enum(['approved', 'rejected']).optional().describe("The person's decision. Record only what they said."),
+  }),
+  handler: async ({ takeId, verdict }, { api }) => {
+    if (verdict !== undefined) {
+      const take = await api.post(`/takes/${seg(takeId)}/verdict`, { verdict }, WireTake)
+      return jsonResult({ takeId: take.id, verdict: take.humanVerdict })
+    }
     const accepted = await api.post(`/takes/${seg(takeId)}/review`, {}, WireReviewAccepted)
     return jsonResult({ takeId, queued: accepted.queued, next: { tool: 'wait', jobs: [{ kind: 'review', id: takeId }] } })
   },

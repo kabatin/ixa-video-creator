@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { reviewTakeTool } from '../tools/review.js'
 import { waitTool } from '../tools/wait.js'
-import { createFakeApi, depsFor, jsonOf, ulid } from './fake-api.js'
+import { createFakeApi, depsFor, jsonOf, takeRow, ulid } from './fake-api.js'
 
 /**
  * Take のレビューを頼む（ADR-0057）。自動の作り直しを選んでいない Take は、エージェントが自分で確かめる口が要る。
@@ -29,6 +29,23 @@ describe('review_take', () => {
       queued: true,
       next: { tool: 'wait', jobs: [{ kind: 'review', id: TAKE }] },
     })
+  })
+})
+
+describe('review_take の verdict', () => {
+  it('人の OK / NG だけを記録し、自動のレビューは頼まない', async () => {
+    const fake = createFakeApi([
+      { method: 'POST', path: `/takes/${TAKE}/verdict`, data: { ...takeRow(TAKE, null, null), humanVerdict: 'rejected' } },
+    ])
+    expect(jsonOf(await reviewTakeTool.run({ takeId: TAKE, verdict: 'rejected' }, depsFor(fake)))).toEqual({ takeId: TAKE, verdict: 'rejected' })
+    expect(fake.calls.map((c) => [c.path, c.body])).toEqual([[`/takes/${TAKE}/verdict`, { verdict: 'rejected' }]])
+  })
+
+  it('unreviewed には戻せない（API が受けない値は送る前に断る）', async () => {
+    const fake = createFakeApi([])
+    const result = await reviewTakeTool.run({ takeId: TAKE, verdict: 'unreviewed' }, depsFor(fake))
+    expect(result.isError).toBe(true)
+    expect(fake.calls).toHaveLength(0)
   })
 })
 

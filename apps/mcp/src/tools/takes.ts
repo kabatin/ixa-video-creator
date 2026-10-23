@@ -1,6 +1,6 @@
 import { lineagePairViolation, UPSCALE_REASON } from '@ixa/domain'
 import { z } from 'zod'
-import { seg } from '../api-client.js'
+import { seg, type ApiClient } from '../api-client.js'
 import { bulkResult, WireShot, WireTake } from '../wire.js'
 import { defineTool, describeError, Id, jsonResult, mapLimited, round, SEED_MAX, ToolInputError } from '../tool-def.js'
 
@@ -109,18 +109,27 @@ export const generateTakesTool = defineTool({
   },
 })
 
+/** Take の動画の最後のコマ（media の処理が切り出す）。まだ切り出していなければ null。 */
+const WireTakeMedia = z.object({ lastFrameAssetId: z.string().nullable().default(null) })
+
+export const lastFrameOf = async (api: ApiClient, mediaAssetId: string): Promise<string | null> =>
+  (await api.get(`/media/${seg(mediaAssetId)}`, WireTakeMedia)).lastFrameAssetId
+
 export const listTakesTool = defineTool({
   name: 'list_takes',
   risk: 'read',
   description:
     'List the takes of a shot (newest last) with model, generated length, seed, cost, review state, lineage ' +
-    '(upscaled takes have reason "解像度を上げる") and which one is selected. Look at them with view {shotId, takeId}.',
+    '(upscaled takes have reason "解像度を上げる"), which one is selected and lastFrameAssetId (the final frame; ' +
+    'pass it to set_start_frame {mediaAssetId} to continue the next shot). Look at them with view {shotId, takeId}.',
   input: z.object({ shotId: Id }),
   handler: async ({ shotId }, { api }) => {
     const [shot, takes] = await Promise.all([
       api.get(`/shots/${seg(shotId)}`, WireShot),
       api.get(`/shots/${seg(shotId)}/takes`, z.array(WireTake)),
     ])
+    const sorted = [...takes].sort((a, b) => a.index - b.index)
+    const lastFrames = await mapLimited(sorted, 4, (t) => lastFrameOf(api, t.mediaAssetId))
     return jsonResult({
       shotId,
       shotDurationSec: round(shot.durationSec),
@@ -128,9 +137,7 @@ export const listTakesTool = defineTool({
       speed: shot.speed ?? 1,
       sourceInSec: round(shot.sourceInSec ?? 0),
       selectedTakeId: shot.selectedTakeId,
-      takes: [...takes]
-        .sort((a, b) => a.index - b.index)
-        .map((t) => ({
+      takes: sorted.map((t, i) => ({
           id: t.id,
           index: t.index,
           model: t.modelId,
@@ -143,6 +150,7 @@ export const listTakesTool = defineTool({
           ...(t.regenerationReason === null ? {} : { reason: t.regenerationReason }),
           upscaled: t.regenerationReason === UPSCALE_REASON,
           selected: t.id === shot.selectedTakeId,
+          lastFrameAssetId: lastFrames[i] ?? null,
           createdAt: t.createdAt,
         })),
     })
@@ -150,6 +158,7 @@ export const listTakesTool = defineTool({
 })
 
 const WireBulkSelect = z.object({ results: z.array(bulkResult({ takeId: z.string(), status: z.string() })) })
+const WireBulkUnselect = z.object({ results: z.array(bulkResult({ status: z.string() })) })
 
 export const adoptTakeTool = defineTool({
   name: 'adopt_take',
@@ -157,15 +166,32 @@ export const adoptTakeTool = defineTool({
   description:
     'Select the take used in the edit. Either {shotId, takeId} for one shot, or {projectId, shotIds, rule} for many: ' +
     'rule "latest" picks the newest take of each shot (e.g. right after an upscale), "only" picks it only when the ' +
-    'shot has exactly one take.',
+    'shot has exactly one take. unselect: true removes the selection instead ({shotId} or {projectId, shotIds}; takes are kept).',
   input: z.object({
     shotId: Id.optional(),
     takeId: Id.optional(),
     projectId: Id.optional(),
     shotIds: z.array(Id).min(1).max(200).optional(),
     rule: z.enum(['latest', 'only']).default('latest'),
+    unselect: z.boolean().default(false),
   }),
   handler: async (args, { api }) => {
+    if (args.unselect) {
+      if (args.takeId !== undefined) throw new ToolInputError('unselect のときは takeId を付けないでください')
+      if (args.shotId !== undefined) {
+        const shot = await api.request('DELETE', `/shots/${seg(args.shotId)}/selected-take`, WireShot)
+        return jsonResult({ shotId: shot.id, selectedTakeId: shot.selectedTakeId, status: shot.status })
+      }
+      if (args.projectId !== undefined && args.shotIds !== undefined) {
+        const bulk = await api.post(
+          `/projects/${seg(args.projectId)}/shots/bulk/unselect-take`,
+          { shotIds: args.shotIds },
+          WireBulkUnselect,
+        )
+        return jsonResult(bulk)
+      }
+      throw new ToolInputError('{shotId} か {projectId, shotIds} のどちらかを指定してください')
+    }
     if (args.shotId !== undefined && args.takeId !== undefined) {
       const shot = await api.post(`/shots/${seg(args.shotId)}/select-take`, { takeId: args.takeId }, WireShot)
       return jsonResult({ shotId: shot.id, selectedTakeId: shot.selectedTakeId, status: shot.status })
@@ -224,5 +250,26 @@ export const upscaleTakesTool = defineTool({
       ...bulk,
       jobs: shots.flatMap((s) => (s.selectedTakeId === null ? [] : [{ kind: 'upscale', shotId: s.id, takeId: s.selectedTakeId }])),
     })
+  },
+})
+
+const WireHidden = z.object({ shot: WireShot })
+
+export const hideTakesTool = defineTool({
+  name: 'hide_takes',
+  risk: 'destructive',
+  description:
+    'Hide unwanted takes of a shot from lists and comparisons (the file, cost and history are kept). ' +
+    'The selected take cannot be hidden: adopt_take {unselect} or adopt another first.',
+  input: z.object({ takeIds: z.array(Id).min(1).max(50) }),
+  handler: async ({ takeIds }, { api }) => {
+    // 1 本の失敗（採用中など）で残りを止めない。理由つきで返す。
+    const results = await mapLimited(takeIds, 4, (takeId) =>
+      api.request('DELETE', `/takes/${seg(takeId)}`, WireHidden).then(
+        (hidden) => ({ takeId, ok: true as const, shotStatus: hidden.shot.status }),
+        (error: unknown) => ({ takeId, ok: false as const, reason: describeError(error) }),
+      ),
+    )
+    return jsonResult({ hidden: results.filter((r) => r.ok).length, results })
   },
 })
