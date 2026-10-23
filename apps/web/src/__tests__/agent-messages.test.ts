@@ -77,6 +77,32 @@ describe('agentItemsFrom', () => {
     expect(answered[0]).toMatchObject({ kind: 'approval', state: 'denied' })
   })
 
+  it('答える前にやりとりが終わった確認（止めた・API の再起動）は、もう押せない（「終わった」）', () => {
+    const request = msg(2, {
+      kind: 'approval_request',
+      requestId: ULID,
+      toolUseId: 't1',
+      toolName: 'mcp__ixa__generate_sfx',
+      risk: 'costly',
+      input: { cues: [{}] },
+    })
+    for (const after of [
+      msg(3, { kind: 'system', event: 'interrupted', text: '途中で止まりました', raw: null }),
+      msg(3, { kind: 'turn_end', isError: false, text: null, costUsd: 0, durationSec: 1 }),
+      msg(3, { kind: 'user', text: '続き', context: null }),
+    ]) {
+      expect(agentItemsFrom([request, after])[0]).toMatchObject({ kind: 'approval', state: 'expired' })
+    }
+  })
+
+  it('結果が来ないままやりとりが終わった操作は「途中で止まった」にする（作っている、のまま残さない）', () => {
+    const [tool] = agentItemsFrom([
+      msg(1, { kind: 'tool_call', toolUseId: 't1', toolName: 'mcp__ixa__generate_sfx', input: { cues: [{}] } }),
+      msg(2, { kind: 'system', event: 'interrupted', text: '止めました', raw: null }),
+    ])
+    expect(tool).toMatchObject({ state: 'failed', title: '効果音を 1 本作っていたが、途中で止まった' })
+  })
+
   it('知らない行・CLI の始まりは出さない。確認なし・中断・失敗は知らせの行にする', () => {
     const items = agentItemsFrom([
       msg(1, { kind: 'system', event: 'cli_init', text: 'claude-sonnet-5-5', raw: null }),

@@ -71,6 +71,12 @@ const ToolLine = ({ item }: { readonly item: Extract<AgentItem, { kind: 'tool' }
   )
 }
 
+const APPROVAL_RESULTS = {
+  allowed: '実行しました',
+  denied: 'やめました',
+  expired: '答える前にやりとりが終わりました',
+} as const
+
 export type ApprovalHandlers = {
   readonly onAnswer: (requestId: string, decision: 'allow' | 'deny', waiveAfter: boolean) => void
   readonly answering: boolean
@@ -93,7 +99,7 @@ const ApprovalCard = ({ item, handlers }: { readonly item: Extract<AgentItem, { 
         </Button>
       </div>
     ) : (
-      <p className="mt-1 text-xs text-muted">{item.state === 'allowed' ? '実行しました' : 'やめました'}</p>
+      <p className="mt-1 text-xs text-muted">{APPROVAL_RESULTS[item.state]}</p>
     )}
   </div>
 )

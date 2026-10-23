@@ -44,7 +44,8 @@ export type AgentItem =
       readonly requestId: string
       readonly risk: ToolRisk
       readonly title: string
-      readonly state: 'pending' | 'allowed' | 'denied'
+      /** `expired` は、答える前にやりとりが終わった（止めた・API の再起動）。もう押せない。 */
+      readonly state: 'pending' | 'allowed' | 'denied' | 'expired'
     }
   | { readonly kind: 'notice'; readonly seq: number; readonly tone: 'info' | 'warn' | 'danger'; readonly text: string }
 
@@ -102,6 +103,19 @@ const NOTICE_TONES = {
 
 type Pending = { readonly tools: ReadonlyMap<string, number> }
 
+/**
+ * やりとりが終わった（終わりの行・止めた・失敗・次の依頼）。答えていない確認はもう押せず、
+ * 結果の来ていない操作は「途中で止まった」にする。
+ */
+const closeTurn = (items: readonly AgentItem[]): readonly AgentItem[] =>
+  items.map((item) => {
+    if (item.kind === 'approval' && item.state === 'pending') return { ...item, state: 'expired' }
+    if (item.kind === 'tool' && item.state === 'running') {
+      return { ...item, state: 'failed', title: `${item.title.replace(/ている$/, 'ていた')}が、途中で止まった` }
+    }
+    return item
+  })
+
 /** 会話の行（通し番号の順）を、画面の項目にする。 */
 export const agentItemsFrom = (messages: readonly WireAgentMessage[]): readonly AgentItem[] =>
   messages.reduce<{ readonly items: readonly AgentItem[]; readonly pending: Pending }>(
@@ -110,7 +124,10 @@ export const agentItemsFrom = (messages: readonly WireAgentMessage[]): readonly 
       const add = (item: AgentItem) => ({ items: [...items, item], pending })
       switch (body.kind) {
         case 'user':
-          return add({ kind: 'user', seq: message.seq, text: body.text, context: body.context })
+          return {
+            items: [...closeTurn(items), { kind: 'user', seq: message.seq, text: body.text, context: body.context }],
+            pending,
+          }
         case 'assistant_text':
           return body.text.trim() === '' ? { items, pending } : add({ kind: 'assistant', seq: message.seq, text: body.text })
         case 'tool_call': {
@@ -160,12 +177,13 @@ export const agentItemsFrom = (messages: readonly WireAgentMessage[]): readonly 
             pending,
           }
         case 'system': {
-          if (!(body.event in NOTICE_TONES) || body.text === null) return { items, pending }
+          const ended = body.event === 'interrupted' || body.event === 'failed' ? closeTurn(items) : items
+          if (!(body.event in NOTICE_TONES) || body.text === null) return { items: ended, pending }
           const tone = NOTICE_TONES[body.event as keyof typeof NOTICE_TONES]
-          return add({ kind: 'notice', seq: message.seq, tone, text: body.text })
+          return { items: [...ended, { kind: 'notice', seq: message.seq, tone, text: body.text }], pending }
         }
         case 'turn_end':
-          return { items, pending }
+          return { items: closeTurn(items), pending }
       }
     },
     { items: [], pending: { tools: new Map() } },
