@@ -35,6 +35,8 @@ type SetupOptions = {
   readonly agentPids?: readonly number[]
   /** 時計（確認の期限を確かめる）。 */
   readonly now?: () => Date
+  /** 作業場所の親を差し替える（作れない場所を渡して、始める途中の失敗を作る）。 */
+  readonly sessionsRoot?: string
 }
 
 const setup = (script: (call: FakeCliCall, app: OpenAPIHono) => Promise<ReturnType<typeof exited>>, opts: SetupOptions = {}) => {
@@ -64,7 +66,7 @@ const setup = (script: (call: FakeCliCall, app: OpenAPIHono) => Promise<ReturnTy
       mcpCommand: '/repo/apps/mcp/node_modules/.bin/tsx',
       mcpArgs: ['/repo/apps/mcp/src/main.ts'],
       apiUrl: 'http://127.0.0.1:3001',
-      sessionsRoot: root,
+      sessionsRoot: opts.sessionsRoot ?? root,
       baseEnv: { PATH: '/usr/bin', HOME: '/Users/me', DATABASE_URL: 'postgres://secret', FAL_API_KEY: 'secret' },
     },
     now: opts.now ?? (() => new Date()),
@@ -204,6 +206,21 @@ describe('やりとりの流れ', () => {
     expect(((await res.json()) as { error: string }).error).toBe(NOT_CLAUDE_MESSAGE)
     expect(t.cli.calls).toHaveLength(0)
     expect(t.statusOf(id)).toBe('idle')
+  })
+})
+
+describe('始める途中の失敗', () => {
+  it('鍵を発行したあとで失敗したら、鍵を取り消し、失敗にする', async () => {
+    const blocker = join(mkdtempSync(join(tmpdir(), 'ixa-agent-file-')), 'not-a-dir')
+    writeFileSync(blocker, 'x')
+    const t = setup(simpleTurn, { sessionsRoot: blocker })
+    const id = await t.newTask()
+    const res = await t.post(`/agent-sessions/${id}/messages`, { text: 'こんにちは' })
+    expect(res.status).toBe(500)
+    expect(t.tokens.rows()).toHaveLength(1)
+    expect(t.tokens.rows()[0]?.revokedAt).not.toBeNull()
+    expect(t.statusOf(id)).toBe('error')
+    expect(t.cli.calls).toHaveLength(0)
   })
 })
 

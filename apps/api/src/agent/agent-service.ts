@@ -1,5 +1,11 @@
 import { z } from 'zod'
-import { AgentSessionBusyError, type AccessTokenRepository, type AgentSessionRepository, type ProjectRepository, type ShotRepository } from '@ixa/db'
+import {
+  AgentSessionBusyError,
+  type AccessTokenRepository,
+  type AgentSessionRepository,
+  type ProjectRepository,
+  type ShotRepository,
+} from '@ixa/db'
 import {
   AGENT_SESSION_UNTITLED,
   IXA_MCP_TOOL_PREFIX,
@@ -19,11 +25,25 @@ import {
   type ToolRisk,
   type UpdateAgentSessionInput,
 } from '@ixa/domain'
-import { agentCliEnv, buildAgentCliArgs, buildAgentMcpConfig, type CliStreamRunner } from '@ixa/provider-llm'
+import {
+  agentCliEnv,
+  buildAgentCliArgs,
+  buildAgentMcpConfig,
+  type CliStreamRunner,
+} from '@ixa/provider-llm'
 import { hashToken } from '../auth/token.js'
 import type { Logger } from '../logger.js'
-import { APPROVAL_TIMED_OUT_MESSAGE, createAgentApprovals, isApprovalExpired } from './agent-approvals.js'
-import { removeCliPid, sweepAgentWorkDirs, writeCliPid, type AgentProcesses } from './agent-orphans.js'
+import {
+  APPROVAL_TIMED_OUT_MESSAGE,
+  createAgentApprovals,
+  isApprovalExpired,
+} from './agent-approvals.js'
+import {
+  removeCliPid,
+  sweepAgentWorkDirs,
+  writeCliPid,
+  type AgentProcesses,
+} from './agent-orphans.js'
 import type { AgentHub } from './agent-hub.js'
 import { buildAgentPrompt } from './agent-prompt.js'
 import { startTurn, type RunningTurn } from './agent-turn.js'
@@ -74,13 +94,22 @@ export type AgentServiceDeps = {
 
 export const NOT_CLAUDE_MESSAGE =
   'AI エージェントは、使う AI のテキストが Claude のときだけ使えます。「使う AI」でテキストを Claude にしてください'
-export const OTHER_TASK_BUSY_MESSAGE = 'この作品では別のタスクが作業中です。終わるか止めてから話してください'
+export const OTHER_TASK_BUSY_MESSAGE =
+  'この作品では別のタスクが作業中です。終わるか止めてから話してください'
 export const THIS_TASK_BUSY_MESSAGE = 'このタスクはまだ作業中です。止めてから話し直してください'
 
-export type AgentFailure = { readonly ok: false; readonly code: 'not_found' | 'conflict' | 'unavailable' | 'forbidden'; readonly message: string }
+export type AgentFailure = {
+  readonly ok: false
+  readonly code: 'not_found' | 'conflict' | 'unavailable' | 'forbidden'
+  readonly message: string
+}
 export type AgentResult<T> = { readonly ok: true; readonly value: T } | AgentFailure
 
-const fail = (code: AgentFailure['code'], message: string): AgentFailure => ({ ok: false, code, message })
+const fail = (code: AgentFailure['code'], message: string): AgentFailure => ({
+  ok: false,
+  code,
+  message,
+})
 const okValue = <T>(value: T): AgentResult<T> => ({ ok: true, value })
 
 export type ApprovalRequest = {
@@ -89,7 +118,11 @@ export type ApprovalRequest = {
   readonly risk: ToolRisk
   readonly input: unknown
 }
-export type ApprovalState = { readonly requestId: string; readonly decision: AgentApprovalDecision | null; readonly message: string | null }
+export type ApprovalState = {
+  readonly requestId: string
+  readonly decision: AgentApprovalDecision | null
+  readonly message: string | null
+}
 
 const RequestId = z.string().ulid()
 
@@ -100,7 +133,10 @@ const WAIVE_TOOL = `${IXA_MCP_TOOL_PREFIX}waive_confirmations`
  * 会話の作品と違う `projectId` を触る操作は、印にかかわらず削除と同じ扱いにする（別の作品を黙って触らせない）。
  */
 const effectiveRisk = (risk: ToolRisk, input: unknown, projectId: string): ToolRisk => {
-  const target = typeof input === 'object' && input !== null ? (input as Record<string, unknown>)['projectId'] : undefined
+  const target =
+    typeof input === 'object' && input !== null
+      ? (input as Record<string, unknown>)['projectId']
+      : undefined
   return typeof target === 'string' && target !== projectId ? 'destructive' : risk
 }
 
@@ -111,8 +147,12 @@ export const createAgentService = (deps: AgentServiceDeps) => {
   let active: ReadonlyMap<AgentSessionId, ActiveTurn> = new Map()
   const model = AgentModel.parse(deps.defaultModel)
 
-  const publishSession = (session: AgentSession): void => deps.hub.publish(session.id, { type: 'session', session })
-  const appendAndPublish = async (sessionId: AgentSessionId, bodies: readonly AgentMessageBody[]): Promise<void> => {
+  const publishSession = (session: AgentSession): void =>
+    deps.hub.publish(session.id, { type: 'session', session })
+  const appendAndPublish = async (
+    sessionId: AgentSessionId,
+    bodies: readonly AgentMessageBody[],
+  ): Promise<void> => {
     const messages = await deps.sessions.appendMessages(sessionId, bodies)
     messages.forEach((message) => deps.hub.publish(sessionId, { type: 'message', message }))
   }
@@ -152,7 +192,10 @@ export const createAgentService = (deps: AgentServiceDeps) => {
     }
   }
 
-  const launch = async (session: AgentSession, input: SendAgentMessageInput): Promise<AgentResult<AgentSession>> => {
+  const launch = async (
+    session: AgentSession,
+    input: SendAgentMessageInput,
+  ): Promise<AgentResult<AgentSession>> => {
     const context = await turnContext(session, input)
     if (context === null) return fail('not_found', '作品が見つかりません')
     const now = deps.now()
@@ -164,48 +207,79 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       {
         kind: 'user',
         text: input.text,
-        context: { shotLabel: context.prompt.shot?.label ?? null, playheadSec: context.prompt.playheadSec },
+        context: {
+          shotLabel: context.prompt.shot?.label ?? null,
+          playheadSec: context.prompt.playheadSec,
+        },
       },
     ])
     const key = await issueTurnKey(deps.tokens, titled.title, now)
     const workDir = sessionWorkDir(deps.cli.sessionsRoot, session.id)
-    const configPath = await writeMcpConfigFile(
-      workDir,
-      newId(RequestId),
-      buildAgentMcpConfig({
-        command: deps.cli.mcpCommand,
-        args: deps.cli.mcpArgs,
-        env: {
-          ...agentCliEnv(deps.cli.baseEnv),
-          IXA_API_URL: deps.cli.apiUrl,
-          IXA_API_TOKEN: key.token,
-          IXA_WORKSPACE_ID: context.project.workspaceId,
-          IXA_AGENT_SESSION_ID: session.id,
-          LOG_LEVEL: 'warn',
+    const written: { configPath: string | null } = { configPath: null }
+    // 鍵を発行したあとで失敗したら、鍵を取り消し、置いた設定ファイルを消す（残すと期限まで使える鍵が残る）。
+    const turn = await (async () => {
+      const configPath = await writeMcpConfigFile(
+        workDir,
+        newId(RequestId),
+        buildAgentMcpConfig({
+          command: deps.cli.mcpCommand,
+          args: deps.cli.mcpArgs,
+          env: {
+            ...agentCliEnv(deps.cli.baseEnv),
+            IXA_API_URL: deps.cli.apiUrl,
+            IXA_API_TOKEN: key.token,
+            IXA_WORKSPACE_ID: context.project.workspaceId,
+            IXA_AGENT_SESSION_ID: session.id,
+            LOG_LEVEL: 'warn',
+          },
+        }),
+      )
+      written.configPath = configPath
+      const cleanup = async (): Promise<void> => {
+        active = new Map([...active].filter(([id]) => id !== session.id))
+        await Promise.all([
+          removeMcpConfigFile(configPath),
+          removeCliPid(workDir),
+          deps.tokens.revoke(key.record.id, deps.now()),
+        ])
+      }
+      return startTurn(
+        {
+          sessions: deps.sessions,
+          hub: deps.hub,
+          approvals,
+          runner: deps.runner,
+          now: deps.now,
+          logger: deps.logger,
         },
-      }),
-    )
-    const cleanup = async (): Promise<void> => {
-      active = new Map([...active].filter(([id]) => id !== session.id))
+        {
+          session: titled,
+          command: deps.cli.command,
+          args: buildAgentCliArgs({
+            model: titled.model,
+            mcpConfigPath: configPath,
+            resumeCliSessionId: titled.cliSessionId,
+          }),
+          cwd: workDir,
+          prompt: buildAgentPrompt(context.prompt, input.text),
+          env: agentCliEnv(deps.cli.baseEnv),
+          maxDurationMs: TURN_KEY_TTL_MS,
+        },
+        cleanup,
+      )
+    })().catch(async (error: unknown) => {
+      const configPath = written.configPath
       await Promise.all([
-        removeMcpConfigFile(configPath),
-        removeCliPid(workDir),
+        configPath === null ? Promise.resolve() : removeMcpConfigFile(configPath),
         deps.tokens.revoke(key.record.id, deps.now()),
-      ])
-    }
-    const turn = startTurn(
-      { sessions: deps.sessions, hub: deps.hub, approvals, runner: deps.runner, now: deps.now, logger: deps.logger },
-      {
-        session: titled,
-        command: deps.cli.command,
-        args: buildAgentCliArgs({ model: titled.model, mcpConfigPath: configPath, resumeCliSessionId: titled.cliSessionId }),
-        cwd: workDir,
-        prompt: buildAgentPrompt(context.prompt, input.text),
-        env: agentCliEnv(deps.cli.baseEnv),
-        maxDurationMs: TURN_KEY_TTL_MS,
-      },
-      cleanup,
-    )
+      ]).catch((cleanupError: unknown) => {
+        deps.logger.error(
+          { err: cleanupError, agentSessionId: session.id },
+          'やりとりの鍵を片付けられませんでした',
+        )
+      })
+      throw error
+    })
     active = new Map([...active, [session.id, { turn, tokenHash: key.tokenHash }]])
     const pid = turn.handle.pid
     if (pid !== null) {
@@ -220,13 +294,24 @@ export const createAgentService = (deps: AgentServiceDeps) => {
   return {
     approvals,
 
-    create: async (projectId: ProjectId, requestedModel: string | undefined): Promise<AgentResult<AgentSession>> => {
-      if ((await deps.projects.findById(projectId)) === null) return fail('not_found', '作品が見つかりません')
-      const session = await deps.sessions.create({ projectId, title: AGENT_SESSION_UNTITLED, model: requestedModel ?? model })
+    create: async (
+      projectId: ProjectId,
+      requestedModel: string | undefined,
+    ): Promise<AgentResult<AgentSession>> => {
+      if ((await deps.projects.findById(projectId)) === null)
+        return fail('not_found', '作品が見つかりません')
+      const session = await deps.sessions.create({
+        projectId,
+        title: AGENT_SESSION_UNTITLED,
+        model: requestedModel ?? model,
+      })
       return okValue(session)
     },
 
-    send: async (sessionId: AgentSessionId, input: SendAgentMessageInput): Promise<AgentResult<AgentSession>> => {
+    send: async (
+      sessionId: AgentSessionId,
+      input: SendAgentMessageInput,
+    ): Promise<AgentResult<AgentSession>> => {
       const session = await deps.sessions.findById(sessionId)
       if (session === null) return fail('not_found', '会話が見つかりません')
       if ((await deps.textTool()) !== 'claude_cli') return fail('unavailable', NOT_CLAUDE_MESSAGE)
@@ -238,8 +323,18 @@ export const createAgentService = (deps: AgentServiceDeps) => {
         if (running === null) return fail('conflict', THIS_TASK_BUSY_MESSAGE)
         publishSession(running)
         return await launch(running, input).catch(async (error: unknown) => {
-          deps.logger.error({ err: error, agentSessionId: sessionId }, 'やりとりを始められませんでした')
-          await appendAndPublish(sessionId, [{ kind: 'system', event: 'failed', text: 'やりとりを始められませんでした。', raw: null }])
+          deps.logger.error(
+            { err: error, agentSessionId: sessionId },
+            'やりとりを始められませんでした',
+          )
+          await appendAndPublish(sessionId, [
+            {
+              kind: 'system',
+              event: 'failed',
+              text: 'やりとりを始められませんでした。',
+              raw: null,
+            },
+          ])
           const failed = await deps.sessions.transition(sessionId, 'error', deps.now())
           if (failed !== null) publishSession(failed)
           throw error
@@ -256,9 +351,17 @@ export const createAgentService = (deps: AgentServiceDeps) => {
         // 動いているやりとりが無いのに作業中のまま残った会話（後片付けの失敗など）は、ここで中断にする。
         const session = await deps.sessions.findById(sessionId)
         if (session === null) return fail('not_found', '会話が見つかりません')
-        if (!isAgentSessionBusy(session.status)) return fail('conflict', 'このタスクは作業中ではありません')
+        if (!isAgentSessionBusy(session.status))
+          return fail('conflict', 'このタスクは作業中ではありません')
         const interrupted = await deps.sessions.transition(sessionId, 'interrupted', deps.now())
-        await appendAndPublish(sessionId, [{ kind: 'system', event: 'interrupted', text: '止めました。続きから話せます。', raw: null }])
+        await appendAndPublish(sessionId, [
+          {
+            kind: 'system',
+            event: 'interrupted',
+            text: '止めました。続きから話せます。',
+            raw: null,
+          },
+        ])
         if (interrupted !== null) publishSession(interrupted)
         return okValue(null)
       }
@@ -268,15 +371,31 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       return okValue(null)
     },
 
-    update: async (sessionId: AgentSessionId, patch: UpdateAgentSessionInput): Promise<AgentResult<AgentSession>> => {
+    update: async (
+      sessionId: AgentSessionId,
+      patch: UpdateAgentSessionInput,
+    ): Promise<AgentResult<AgentSession>> => {
       const before = await deps.sessions.findById(sessionId)
       if (before === null) return fail('not_found', '会話が見つかりません')
       const after = await deps.sessions.update(sessionId, patch)
-      if (patch.confirmationsWaived !== undefined && patch.confirmationsWaived !== before.confirmationsWaived) {
+      if (
+        patch.confirmationsWaived !== undefined &&
+        patch.confirmationsWaived !== before.confirmationsWaived
+      ) {
         await appendAndPublish(sessionId, [
           patch.confirmationsWaived
-            ? { kind: 'system', event: 'confirmations_waived', text: 'このタスクでは確認を出さずに進めます。', raw: null }
-            : { kind: 'system', event: 'confirmations_restored', text: '確認を出すように戻しました。', raw: null },
+            ? {
+                kind: 'system',
+                event: 'confirmations_waived',
+                text: 'このタスクでは確認を出さずに進めます。',
+                raw: null,
+              }
+            : {
+                kind: 'system',
+                event: 'confirmations_restored',
+                text: '確認を出すように戻しました。',
+                raw: null,
+              },
         ])
       }
       publishSession(after)
@@ -289,26 +408,41 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       bearer: string | null,
       request: ApprovalRequest,
     ): Promise<AgentResult<ApprovalState>> => {
-      if (!isTurnToken(sessionId, bearer)) return fail('forbidden', 'この会話のやりとりの鍵ではありません')
+      if (!isTurnToken(sessionId, bearer))
+        return fail('forbidden', 'この会話のやりとりの鍵ではありません')
       const session = await deps.sessions.findById(sessionId)
       if (session === null) return fail('not_found', '会話が見つかりません')
       const risk = effectiveRisk(request.risk, request.input, session.projectId)
       if (request.toolUseId !== null) approvals.noteRisk(sessionId, request.toolUseId, risk)
       const requestId = newId(RequestId)
-      if (!approvalNeeded(risk, session)) return okValue({ requestId, decision: 'allow', message: null })
+      if (!approvalNeeded(risk, session))
+        return okValue({ requestId, decision: 'allow', message: null })
       approvals.open(sessionId, requestId, request.toolName, deps.now())
       await appendAndPublish(sessionId, [
-        { kind: 'approval_request', requestId, toolUseId: request.toolUseId, toolName: request.toolName, risk, input: request.input },
+        {
+          kind: 'approval_request',
+          requestId,
+          toolUseId: request.toolUseId,
+          toolName: request.toolName,
+          risk,
+          input: request.input,
+        },
       ])
       const waiting = await deps.sessions.transition(sessionId, 'awaiting_approval', deps.now())
       if (waiting !== null) publishSession(waiting)
       return okValue({ requestId, decision: null, message: null })
     },
 
-    approvalState: async (sessionId: AgentSessionId, bearer: string | null, requestId: string): Promise<AgentResult<ApprovalState>> => {
-      if (!isTurnToken(sessionId, bearer)) return fail('forbidden', 'この会話のやりとりの鍵ではありません')
+    approvalState: async (
+      sessionId: AgentSessionId,
+      bearer: string | null,
+      requestId: string,
+    ): Promise<AgentResult<ApprovalState>> => {
+      if (!isTurnToken(sessionId, bearer))
+        return fail('forbidden', 'この会話のやりとりの鍵ではありません')
       const pending = approvals.find(requestId)
-      if (pending === null || pending.sessionId !== sessionId) return fail('not_found', '確認が見つかりません')
+      if (pending === null || pending.sessionId !== sessionId)
+        return fail('not_found', '確認が見つかりません')
       if (isApprovalExpired(pending, deps.now())) await expire(sessionId, requestId)
       const latest = approvals.find(requestId) ?? pending
       return okValue({ requestId, decision: latest.decision, message: latest.message })
@@ -321,20 +455,32 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       answer: AgentApprovalAnswer,
     ): Promise<AgentResult<null>> => {
       const pending = approvals.find(requestId)
-      if (pending === null || pending.sessionId !== sessionId) return fail('not_found', '確認が見つかりません')
+      if (pending === null || pending.sessionId !== sessionId)
+        return fail('not_found', '確認が見つかりません')
       if (isApprovalExpired(pending, deps.now())) {
         await expire(sessionId, requestId)
         return fail('conflict', '確認の期限が過ぎました。実行していません')
       }
-      if (!approvals.decide(requestId, answer.decision, null)) return fail('conflict', 'この確認にはもう答えています')
+      if (!approvals.decide(requestId, answer.decision, null))
+        return fail('conflict', 'この確認にはもう答えています')
       await appendAndPublish(sessionId, [
-        { kind: 'approval_decision', requestId, decision: answer.decision, waiveAfter: answer.waiveAfter },
+        {
+          kind: 'approval_decision',
+          requestId,
+          decision: answer.decision,
+          waiveAfter: answer.waiveAfter,
+        },
       ])
       // 確認なしへの切り替え（waive_confirmations）は、画面の「実行」を受けてここで旗を立てる（MCP からは立てられない）。
       if (answer.waiveAfter || (answer.decision === 'allow' && pending.toolName === WAIVE_TOOL)) {
         const waived = await deps.sessions.update(sessionId, { confirmationsWaived: true })
         await appendAndPublish(sessionId, [
-          { kind: 'system', event: 'confirmations_waived', text: 'このタスクでは確認を出さずに進めます。', raw: null },
+          {
+            kind: 'system',
+            event: 'confirmations_waived',
+            text: 'このタスクでは確認を出さずに進めます。',
+            raw: null,
+          },
         ])
         publishSession(waived)
       }
@@ -359,7 +505,12 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       await Promise.all(
         interrupted.map((session) =>
           deps.sessions.appendMessages(session.id, [
-            { kind: 'system', event: 'interrupted', text: 'API を起動し直したため、途中で止まりました。続きから話せます。', raw: null },
+            {
+              kind: 'system',
+              event: 'interrupted',
+              text: 'API を起動し直したため、途中で止まりました。続きから話せます。',
+              raw: null,
+            },
           ]),
         ),
       )
@@ -371,7 +522,10 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       )
       await Promise.all(leftovers.map((token) => deps.tokens.revoke(token.id, now)))
       if (interrupted.length > 0 || leftovers.length > 0) {
-        deps.logger.info({ sessions: interrupted.length, keys: leftovers.length }, '途中で止まった AI エージェントの会話を片付けました')
+        deps.logger.info(
+          { sessions: interrupted.length, keys: leftovers.length },
+          '途中で止まった AI エージェントの会話を片付けました',
+        )
       }
     },
 
