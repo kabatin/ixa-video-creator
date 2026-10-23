@@ -110,6 +110,13 @@ describe('parseStreamJsonLine（失敗）', () => {
 })
 
 describe('AgentMessageBody', () => {
+  it('確認の答えは、誰が決めたか（制作者・期限切れ）を持てる。ほかの値は受けない', () => {
+    const decision = { kind: 'approval_decision', requestId: '01JABCDEFGHJKMNPQRSTVWXYZ0', decision: 'deny', waiveAfter: false }
+    expect(AgentMessageBody.safeParse(decision).success).toBe(true)
+    expect(AgentMessageBody.safeParse({ ...decision, by: 'timeout' }).success).toBe(true)
+    expect(AgentMessageBody.safeParse({ ...decision, by: 'agent' }).success).toBe(false)
+  })
+
   it('知らない種類は受けない', () => {
     expect(AgentMessageBody.safeParse({ kind: 'shell', text: 'ls' }).success).toBe(false)
   })

@@ -45,7 +45,7 @@ export type AgentItem =
       readonly risk: ToolRisk
       readonly title: string
       /** `expired` は、答える前にやりとりが終わった（止めた・API の再起動）。もう押せない。 */
-      readonly state: 'pending' | 'allowed' | 'denied' | 'expired'
+      readonly state: 'pending' | 'allowed' | 'denied' | 'expired' | 'timedOut'
     }
   | { readonly kind: 'notice'; readonly seq: number; readonly tone: 'info' | 'warn' | 'danger'; readonly text: string }
 
@@ -171,7 +171,7 @@ export const agentItemsFrom = (messages: readonly WireAgentMessage[]): readonly 
           return {
             items: items.map((item) =>
               item.kind === 'approval' && item.requestId === body.requestId
-                ? { ...item, state: body.decision === 'allow' ? 'allowed' : 'denied' }
+                ? { ...item, state: body.by === 'timeout' ? 'timedOut' : body.decision === 'allow' ? 'allowed' : 'denied' }
                 : item,
             ),
             pending,

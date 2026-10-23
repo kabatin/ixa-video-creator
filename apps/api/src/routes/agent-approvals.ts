@@ -88,9 +88,9 @@ export const agentApprovalRoutes = (deps: { readonly agent: AgentService }) =>
       if (!result.ok) return c.json(fail(result.message), AGENT_FAILURE_STATUS[result.code])
       return c.json(ok(result.value), 200)
     })
-    .openapi(stateRoute, (c) => {
+    .openapi(stateRoute, async (c) => {
       const { sessionId, requestId } = c.req.valid('param')
-      const result = deps.agent.approvalState(sessionId, bearerOf(c), requestId)
+      const result = await deps.agent.approvalState(sessionId, bearerOf(c), requestId)
       if (!result.ok) return c.json(fail(result.message), AGENT_FAILURE_STATUS[result.code])
       return c.json(ok(result.value), 200)
     })

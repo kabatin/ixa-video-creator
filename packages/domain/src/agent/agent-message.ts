@@ -57,6 +57,8 @@ export const AgentMessageBody = z.discriminatedUnion('kind', [
     requestId: z.string().ulid(),
     decision: AgentApprovalDecision,
     waiveAfter: z.boolean(),
+    /** 誰が決めたか。`timeout` は答えが無いまま期限が来た（API がやめる扱いにした）。無ければ制作者。 */
+    by: z.enum(['creator', 'timeout']).optional(),
   }),
   z.object({ kind: z.literal('system'), event: AgentSystemEvent, text: z.string().nullable(), raw: z.unknown() }),
   z.object({

@@ -22,7 +22,7 @@ import {
 import { agentCliEnv, buildAgentCliArgs, buildAgentMcpConfig, type CliStreamRunner } from '@ixa/provider-llm'
 import { hashToken } from '../auth/token.js'
 import type { Logger } from '../logger.js'
-import { createAgentApprovals } from './agent-approvals.js'
+import { APPROVAL_TIMED_OUT_MESSAGE, createAgentApprovals, isApprovalExpired } from './agent-approvals.js'
 import { removeCliPid, sweepAgentWorkDirs, writeCliPid, type AgentProcesses } from './agent-orphans.js'
 import type { AgentHub } from './agent-hub.js'
 import { buildAgentPrompt } from './agent-prompt.js'
@@ -137,6 +137,18 @@ export const createAgentService = (deps: AgentServiceDeps) => {
         shot: usableShot === null ? null : { id: usableShot.id, label: usableShot.code },
         playheadSec: input.context?.playheadSec ?? null,
       },
+    }
+  }
+
+  /** 答えの無いまま期限が来た確認を、やめる扱いにして会話に残す。 */
+  const expire = async (sessionId: AgentSessionId, requestId: string): Promise<void> => {
+    if (!approvals.decide(requestId, 'deny', APPROVAL_TIMED_OUT_MESSAGE)) return
+    await appendAndPublish(sessionId, [
+      { kind: 'approval_decision', requestId, decision: 'deny', waiveAfter: false, by: 'timeout' },
+    ])
+    if (approvals.openCount(sessionId) === 0) {
+      const resumed = await deps.sessions.transition(sessionId, 'running', deps.now())
+      if (resumed !== null) publishSession(resumed)
     }
   }
 
@@ -284,7 +296,7 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       if (request.toolUseId !== null) approvals.noteRisk(sessionId, request.toolUseId, risk)
       const requestId = newId(RequestId)
       if (!approvalNeeded(risk, session)) return okValue({ requestId, decision: 'allow', message: null })
-      approvals.open(sessionId, requestId, request.toolName)
+      approvals.open(sessionId, requestId, request.toolName, deps.now())
       await appendAndPublish(sessionId, [
         { kind: 'approval_request', requestId, toolUseId: request.toolUseId, toolName: request.toolName, risk, input: request.input },
       ])
@@ -293,11 +305,13 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       return okValue({ requestId, decision: null, message: null })
     },
 
-    approvalState: (sessionId: AgentSessionId, bearer: string | null, requestId: string): AgentResult<ApprovalState> => {
+    approvalState: async (sessionId: AgentSessionId, bearer: string | null, requestId: string): Promise<AgentResult<ApprovalState>> => {
       if (!isTurnToken(sessionId, bearer)) return fail('forbidden', 'この会話のやりとりの鍵ではありません')
       const pending = approvals.find(requestId)
       if (pending === null || pending.sessionId !== sessionId) return fail('not_found', '確認が見つかりません')
-      return okValue({ requestId, decision: pending.decision, message: pending.message })
+      if (isApprovalExpired(pending, deps.now())) await expire(sessionId, requestId)
+      const latest = approvals.find(requestId) ?? pending
+      return okValue({ requestId, decision: latest.decision, message: latest.message })
     },
 
     /** 画面の確認のカードから（実行／やめる／以後確認しない）。 */
@@ -308,6 +322,10 @@ export const createAgentService = (deps: AgentServiceDeps) => {
     ): Promise<AgentResult<null>> => {
       const pending = approvals.find(requestId)
       if (pending === null || pending.sessionId !== sessionId) return fail('not_found', '確認が見つかりません')
+      if (isApprovalExpired(pending, deps.now())) {
+        await expire(sessionId, requestId)
+        return fail('conflict', '確認の期限が過ぎました。実行していません')
+      }
       if (!approvals.decide(requestId, answer.decision, null)) return fail('conflict', 'この確認にはもう答えています')
       await appendAndPublish(sessionId, [
         { kind: 'approval_decision', requestId, decision: answer.decision, waiveAfter: answer.waiveAfter },

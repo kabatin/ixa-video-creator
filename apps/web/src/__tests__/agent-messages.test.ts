@@ -77,6 +77,19 @@ describe('agentItemsFrom', () => {
     expect(answered[0]).toMatchObject({ kind: 'approval', state: 'denied' })
   })
 
+  it('期限切れでやめた確認は、そう分かる', () => {
+    const request = msg(2, {
+      kind: 'approval_request',
+      requestId: ULID,
+      toolUseId: 't1',
+      toolName: 'mcp__ixa__export',
+      risk: 'costly',
+      input: {},
+    })
+    const items = agentItemsFrom([request, msg(3, { kind: 'approval_decision', requestId: ULID, decision: 'deny', waiveAfter: false, by: 'timeout' })])
+    expect(items[0]).toMatchObject({ kind: 'approval', state: 'timedOut' })
+  })
+
   it('答える前にやりとりが終わった確認（止めた・API の再起動）は、もう押せない（「終わった」）', () => {
     const request = msg(2, {
       kind: 'approval_request',

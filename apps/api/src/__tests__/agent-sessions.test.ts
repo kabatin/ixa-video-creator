@@ -33,6 +33,8 @@ type SetupOptions = {
   readonly wrapSessions?: (repo: InMemoryAgentSessions) => InMemoryAgentSessions
   /** 残った CLI のうち、本物のエージェントの CLI とみなす番号。 */
   readonly agentPids?: readonly number[]
+  /** 時計（確認の期限を確かめる）。 */
+  readonly now?: () => Date
 }
 
 const setup = (script: (call: FakeCliCall, app: OpenAPIHono) => Promise<ReturnType<typeof exited>>, opts: SetupOptions = {}) => {
@@ -65,7 +67,7 @@ const setup = (script: (call: FakeCliCall, app: OpenAPIHono) => Promise<ReturnTy
       sessionsRoot: root,
       baseEnv: { PATH: '/usr/bin', HOME: '/Users/me', DATABASE_URL: 'postgres://secret', FAL_API_KEY: 'secret' },
     },
-    now: () => new Date(),
+    now: opts.now ?? (() => new Date()),
     logger,
     processes: {
       isAgentCli: (pid) => Promise.resolve((opts.agentPids ?? []).includes(pid)),
@@ -405,6 +407,43 @@ describe('確認の待ちと答え', () => {
     await t.post(`/agent-sessions/${id}/messages`, { text: '読んで' })
     await t.until(() => t.statusOf(id) === 'idle', '済み')
     expect(decision).toBe('allow')
+  })
+
+  it('1 時間答えが無ければ API がやめる扱いにして会話に残し、そのあとの「実行」は 409', async () => {
+    const clock = { now: new Date('2026-10-23T00:00:00Z').getTime() }
+    const states: (string | null)[] = []
+    const t = setup(
+      async (call, app) => {
+        const sessionId = call.mcpEnv()['IXA_AGENT_SESSION_ID'] ?? ''
+        const auth = { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' }
+        const started = (await (
+          await app.request(`/agent-sessions/${sessionId}/approvals`, {
+            method: 'POST',
+            headers: auth,
+            body: JSON.stringify({ toolName: 'mcp__ixa__export', toolUseId: 't1', risk: 'costly', input: {} }),
+          })
+        ).json()) as { data: { requestId: string } }
+        clock.now += 60 * 60 * 1000 + 1
+        const state = (await (
+          await app.request(`/agent-sessions/${sessionId}/approvals/${started.data.requestId}`, { headers: auth })
+        ).json()) as { data: { decision: string | null } }
+        states.push(state.data.decision)
+        await call.untilStopped()
+        return exited(143)
+      },
+      { now: () => new Date(clock.now) },
+    )
+    const id = await t.newTask()
+    await t.post(`/agent-sessions/${id}/messages`, { text: '書き出して' })
+    await t.until(() => states.length === 1, '期限')
+    expect(states).toEqual(['deny'])
+    const decision = t.sessions.messages(id).find((m) => m.body.kind === 'approval_decision')?.body
+    expect(decision).toMatchObject({ decision: 'deny', waiveAfter: false, by: 'timeout' })
+    const request = t.sessions.messages(id).find((m) => m.body.kind === 'approval_request')?.body
+    const requestId = request?.kind === 'approval_request' ? request.requestId : ''
+    expect((await t.post(`/agent-sessions/${id}/approvals/${requestId}`, { decision: 'allow' }, { cookie: 'ixa_session=x' })).status).toBe(409)
+    await t.post(`/agent-sessions/${id}/stop`, {})
+    await t.until(() => t.statusOf(id) === 'interrupted', '中断')
   })
 
   it('このやりとりの鍵でなければ、確認の口は断る', async () => {

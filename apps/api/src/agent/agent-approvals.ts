@@ -12,12 +12,23 @@ export type PendingApproval = {
   readonly sessionId: AgentSessionId
   /** 頼まれたツール（CLI の名前）。「実行」で API が自分ですること（確認なしへの切り替え）を見分ける。 */
   readonly toolName: string
+  /** 頼まれた時刻（期限を決める）。 */
+  readonly openedAt: Date
   readonly decision: AgentApprovalDecision | null
   readonly message: string | null
 }
 
+/** 確認を待つ長さ。これより長く答えが無ければ、やめる扱いにする（MCP の approve と同じ 1 時間）。 */
+export const APPROVAL_TTL_MS = 60 * 60 * 1000
+
+export const APPROVAL_TIMED_OUT_MESSAGE = '確認の返事が 1 時間ありませんでした。実行していません。'
+
+/** 答えていない確認の期限が来たか。 */
+export const isApprovalExpired = (pending: PendingApproval, now: Date): boolean =>
+  pending.decision === null && now.getTime() - pending.openedAt.getTime() >= APPROVAL_TTL_MS
+
 export type AgentApprovals = {
-  readonly open: (sessionId: AgentSessionId, requestId: string, toolName: string) => void
+  readonly open: (sessionId: AgentSessionId, requestId: string, toolName: string, openedAt: Date) => void
   readonly find: (requestId: string) => PendingApproval | null
   /** 答える。まだ答えていない待ちだけ。答えたら true。 */
   readonly decide: (requestId: string, decision: AgentApprovalDecision, message: string | null) => boolean
@@ -40,8 +51,8 @@ export const createAgentApprovals = (): AgentApprovals => {
     pending = new Map([...pending, [requestId, next]])
   }
   return {
-    open: (sessionId, requestId, toolName) =>
-      replace(requestId, { requestId, sessionId, toolName, decision: null, message: null }),
+    open: (sessionId, requestId, toolName, openedAt) =>
+      replace(requestId, { requestId, sessionId, toolName, openedAt, decision: null, message: null }),
     find: (requestId) => pending.get(requestId) ?? null,
     decide: (requestId, decision, message) => {
       const current = pending.get(requestId)

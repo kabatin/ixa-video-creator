@@ -75,6 +75,7 @@ const APPROVAL_RESULTS = {
   allowed: '実行しました',
   denied: 'やめました',
   expired: '答える前にやりとりが終わりました',
+  timedOut: '1 時間答えが無かったので、やめました',
 } as const
 
 export type ApprovalHandlers = {
