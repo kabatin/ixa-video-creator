@@ -150,6 +150,13 @@ describe('toolLabel', () => {
     expect(Object.keys(AGENT_TOOL_LABELS).sort()).toEqual([...names].sort())
   })
 
+  it('どのツールも確認のカードの言い方（〜ます）を持つ（作品の外を触る読み取りも確認に回るため）', () => {
+    expect(toolLabel('mcp__ixa__get_project', {}).ask).toBe('作品を読みます')
+    for (const [name, spec] of Object.entries(AGENT_TOOL_LABELS)) {
+      expect(spec.ask, name).toMatch(/(ます|か)(（.*）)?$/)
+    }
+  })
+
   it('知らないツールは名前を出さず「操作」と言う', () => {
     expect(toolLabel('Bash', {})).toEqual({ doing: '操作している', done: '操作した', ask: '操作を実行します' })
   })

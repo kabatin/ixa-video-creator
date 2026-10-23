@@ -81,7 +81,7 @@ export const toolLabel = (toolName: string, input: unknown): { doing: string; do
   const field = spec.count === undefined || typeof input !== 'object' || input === null ? undefined : (input as Record<string, unknown>)[spec.count.field]
   const count = Array.isArray(field) && spec.count !== undefined ? ` ${String(field.length)} ${spec.count.unit}` : ''
   const fill = (text: string): string => text.replace('{n}', count)
-  return { doing: fill(spec.doing), done: fill(spec.done), ask: fill(spec.ask ?? `「${spec.done}」を実行します`) }
+  return { doing: fill(spec.doing), done: fill(spec.done), ask: fill(spec.ask) }
 }
 
 const isInternalKey = (key: string): boolean => /Ids?$/.test(key) || key === 'id'
