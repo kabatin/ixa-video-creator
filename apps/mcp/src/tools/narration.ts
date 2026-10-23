@@ -194,6 +194,7 @@ const WireVoiceOptions = z.object({
 export const setNarrationTool = defineTool({
   name: 'set_narration',
   risk: 'write',
+  riskOf: (args) => (args.action === 'show' ? 'read' : 'write'),
   description:
     'Narration script and voices. Actions: show; add_script (paste lines); edit_lines (text, reading, direction, ' +
     'voice, startSec, telop); reorder; arrange (place lines one after another from fromSec — do it after ' +

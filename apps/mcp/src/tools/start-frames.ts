@@ -20,11 +20,9 @@ export const drawStartFramesTool = defineTool({
   description:
     'Draw the start frame (first still image) of shots with the selected image AI, using description, camera, cast ' +
     'and location. The video is then generated from this frame, so check it with view before generate_takes. ' +
-    'onlyMissing=true skips shots that already have one; set false to redraw. Shots already drawing are skipped. ' +
-    'Each drawing is checked for obvious defects (broken hands/faces, melted objects, garbled text, wrong person, ' +
-    'missing main subject); with a local image AI a failed check is redrawn automatically (up to the limit). ' +
-    'Then wait with {kind:"start_frame", id: shotId} for each shot (or wait {projectId}); the result carries the ' +
-    'check (mark pass/review/retry/unchecked and issues). Use list_start_frame_history / use_start_frame / retry_image.',
+    'onlyMissing=false redraws; shots already drawing are skipped. Each drawing is checked for obvious defects ' +
+    '(local image AIs redraw failed ones automatically). Then wait {kind:"start_frame", id: shotId} (or {projectId}); ' +
+    'the result carries the check (mark pass/review/retry/unchecked, issues).',
   input: z.object({
     projectId: Id,
     shotIds: z.array(Id).min(1).max(100),

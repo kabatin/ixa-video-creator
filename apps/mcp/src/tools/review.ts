@@ -33,12 +33,13 @@ const WireReviewDetail = z.object({
 export const reviewTakeTool = defineTool({
   name: 'review_take',
   risk: 'costly',
+  // 制作者の OK/NG を記録するだけならふつうの書き込み（AI のレビューは走らない）。
+  riskOf: (args) => (args.verdict === undefined ? 'costly' : 'write'),
   description:
-    'Run the automatic review of a take (duration/resolution/brand checks, then a vision check of identity, composition and ' +
-    'prompt adherence). Generation does not review by default; use this to check a take yourself. Then wait ' +
-    '{kind:"review", id: takeId}; the result has the verdict (pass/warn/fail), cost and findings with fixes. To retake, ' +
-    'call generate_takes with corrections from the fixes, parentTakeId and regenerationReason. ' +
-    'With verdict, only records the person\'s own OK (approved) / NG (rejected) on the take instead (no automatic review).',
+    'Run the automatic review of a take (technical, brand and vision checks; not run by default after generation). ' +
+    'Then wait {kind:"review", id: takeId} for the verdict (pass/warn/fail), cost and findings with fixes; retake with ' +
+    'generate_takes (corrections, parentTakeId, regenerationReason). With verdict, only records the person\'s own ' +
+    'OK (approved) / NG (rejected) instead.',
   input: z.object({
     takeId: Id,
     verdict: z.enum(['approved', 'rejected']).optional().describe("The person's decision. Record only what they said."),

@@ -46,6 +46,7 @@ export const EditLocationInput = z.object({
 export const editLocationTool = defineTool({
   name: 'edit_location',
   risk: 'destructive',
+  riskOf: (args) => (args.action === 'delete' ? 'destructive' : 'write'),
   description:
     'Rename a location, change its description or replace its reference images, or delete it ' +
     '(undoable from the edit history).',
@@ -114,6 +115,7 @@ const brandPatch = async (args: BrandArgs, api: ApiClient, workspaceId: string) 
 export const manageBrandAssetsTool = defineTool({
   name: 'manage_brand_assets',
   risk: 'destructive',
+  riskOf: (args) => (args.action === 'list' ? 'read' : args.action === 'delete' ? 'destructive' : 'write'),
   description:
     'List, add, update or delete brand assets (logo, color, font, uniform, typography, texture, other). ' +
     'Images come from a media asset, a shot start frame or a local file; colors take value "#RRGGBB".',

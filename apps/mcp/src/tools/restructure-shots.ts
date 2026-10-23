@@ -121,6 +121,7 @@ const ACTIONS = { split, merge, delete: remove, insert } as const
 export const restructureShotsTool = defineTool({
   name: 'restructure_shots',
   risk: 'destructive',
+  riskOf: (args) => (args.action === 'delete' ? 'destructive' : 'write'),
   description:
     'Change the shot list: split {shotId, atSec}, merge {shotIds} (adjacent, into the first), delete {shotIds}, ' +
     'insert {code, startSec, durationSec, afterShotId?, description?, dialogue?, ...}. ' +

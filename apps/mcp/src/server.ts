@@ -1,16 +1,31 @@
 import type { ToolRisk } from '@ixa/domain'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { createApproveTool, waiveConfirmationsTool } from './tools/agent.js'
+import { alignToMusicTool } from './tools/align-music.js'
+import { editAudioTool } from './tools/audio-mix.js'
+import { cancelJobsTool } from './tools/cancel-jobs.js'
 import { createCharacterTool, createLocationTool } from './tools/cast.js'
+import { editCharacterTool } from './tools/character-edit.js'
+import { editClipsTool } from './tools/edit-clips.js'
+import { listEditsTool, undoTool } from './tools/edit-history.js'
 import { editShotsTool } from './tools/edit-shots.js'
 import { addEffectsTool, listEffectsTool, removeEffectsTool } from './tools/effects.js'
-import { generateSfxTool, listSfxTool, removeSfxTool, suggestSfxTool } from './tools/sfx.js'
 import { exportTool } from './tools/export.js'
 import { exportThumbnailTool } from './tools/export-thumbnail.js'
+import { importTakeTool } from './tools/import-take.js'
+import { editLocationTool, manageBrandAssetsTool } from './tools/library-edit.js'
+import { setLyricsTool } from './tools/lyrics.js'
+import { analyzeMotionTool } from './tools/motion.js'
 import { generateMusicTool } from './tools/music-generation.js'
 import { musicOverviewTool, setMasterTrackTool, uploadMusicTool } from './tools/music.js'
+import { setNarrationTool } from './tools/narration.js'
+import { speakNarrationTool } from './tools/narration-speak.js'
 import { planShotsTool } from './tools/plan-shots.js'
-import { createProjectTool, getProjectTool } from './tools/project.js'
+import { duplicateProjectTool, importFromProjectTool } from './tools/project-copy.js'
+import { createProjectTool, getProjectTool, updateProjectTool } from './tools/project.js'
+import { restructureShotsTool } from './tools/restructure-shots.js'
+import { reviewTakeTool } from './tools/review.js'
+import { generateSfxTool, listSfxTool, removeSfxTool, suggestSfxTool, uploadSfxTool } from './tools/sfx.js'
 import {
   drawStartFramesTool,
   listStartFrameHistoryTool,
@@ -19,49 +34,81 @@ import {
   useStartFrameTool,
 } from './tools/start-frames.js'
 import { setAiTool, statusTool } from './tools/status.js'
-import { adoptTakeTool, generateTakesTool, listTakesTool, upscaleTakesTool } from './tools/takes.js'
-import { reviewTakeTool } from './tools/review.js'
+import { draftStoryboardTool } from './tools/storyboard-draft.js'
+import { adoptTakeTool, generateTakesTool, hideTakesTool, listTakesTool, upscaleTakesTool } from './tools/takes.js'
+import { addTelopsTool, listTelopsTool, removeTelopsTool } from './tools/telops.js'
 import { viewTool } from './tools/view.js'
-import { analyzeMotionTool } from './tools/motion.js'
 import { waitTool } from './tools/wait.js'
 import type { ToolDef, ToolDeps } from './tool-def.js'
 
 /** 登録するツール（制作の順）。 */
 export const TOOLS: readonly ToolDef[] = [
+  // 作品
   statusTool,
   setAiTool,
   createProjectTool,
   getProjectTool,
+  updateProjectTool,
+  duplicateProjectTool,
+  importFromProjectTool,
+  // 曲
   generateMusicTool,
   uploadMusicTool,
   setMasterTrackTool,
   musicOverviewTool,
+  // Shot
   planShotsTool,
   editShotsTool,
+  restructureShotsTool,
+  draftStoryboardTool,
   createCharacterTool,
+  editCharacterTool,
   createLocationTool,
+  editLocationTool,
+  manageBrandAssetsTool,
+  // 絵
   drawStartFramesTool,
   setStartFrameTool,
   listStartFrameHistoryTool,
   useStartFrameTool,
   retryImageTool,
   viewTool,
+  // Take
   generateTakesTool,
+  importTakeTool,
   listTakesTool,
   adoptTakeTool,
   reviewTakeTool,
+  hideTakesTool,
   upscaleTakesTool,
   waitTool,
+  cancelJobsTool,
+  alignToMusicTool,
+  // テロップと声
+  addTelopsTool,
+  listTelopsTool,
+  editClipsTool,
+  removeTelopsTool,
+  setNarrationTool,
+  speakNarrationTool,
+  setLyricsTool,
+  // エフェクトと音
   addEffectsTool,
   listEffectsTool,
   removeEffectsTool,
   analyzeMotionTool,
   suggestSfxTool,
   generateSfxTool,
+  uploadSfxTool,
   listSfxTool,
   removeSfxTool,
+  editAudioTool,
+  // 仕上げ
   exportTool,
   exportThumbnailTool,
+  // 履歴
+  listEditsTool,
+  undoTool,
 ]
 
 /**
@@ -69,7 +116,7 @@ export const TOOLS: readonly ToolDef[] = [
  * `approve` 自身は確認に回らない（CLI が呼ばない）ので、表には自分以外を渡す。
  */
 export const AGENT_TOOLS: readonly ToolDef[] = [
-  createApproveTool(new Map([...TOOLS, waiveConfirmationsTool].map((t) => [t.name, t.risk]))),
+  createApproveTool(new Map([...TOOLS, waiveConfirmationsTool].map((t) => [t.name, t]))),
   waiveConfirmationsTool,
 ]
 

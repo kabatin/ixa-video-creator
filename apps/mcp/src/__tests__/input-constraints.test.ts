@@ -9,6 +9,7 @@ import { createFakeApi, depsFor, textOf, ulid } from './fake-api.js'
 
 const P = ulid('PJ1')
 const S = ulid('SH1')
+const P2 = ulid('PJ2')
 const long = (n: number): string => 'あ'.repeat(n)
 const many = <T>(n: number, value: T): T[] => Array.from({ length: n }, () => value)
 
@@ -300,6 +301,261 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ background: { atSec: -1 } }, 'background.atSec'],
       [{ background: { keyArt: { instruction: long(501) } } }, 'background.keyArt.instruction'],
       [{ thumbnailId: 'x' }, 'thumbnailId'],
+    ],
+  },
+  update_project: {
+    base: { projectId: P },
+    cases: [
+      [{ projectId: 'x' }, 'projectId'],
+      [{ name: '' }, 'name'],
+      [{ name: long(201) }, 'name'],
+      [{ concept: '' }, 'concept'],
+      [{ concept: long(20001) }, 'concept'],
+      [{ styleGuide: long(4001) }, 'styleGuide'],
+      [{ styleReferences: many(4, { mediaAssetId: S }) }, 'styleReferences'],
+      [{ styleReferences: [{ imagePath: 'a.png' }] }, 'styleReferences.0.imagePath'],
+      [{ durationSec: 0 }, 'durationSec'],
+      [{ budgetUsd: -1 }, 'budgetUsd'],
+      [{ status: 'archived' }, 'status'],
+    ],
+  },
+  duplicate_project: {
+    base: { projectId: P, name: '複製' },
+    cases: [
+      [{ projectId: 'x' }, 'projectId'],
+      [{ name: '  ' }, 'name'],
+      [{ name: long(201) }, 'name'],
+      [{ items: ['concept', 'concept'] }, 'items'],
+      [{ items: ['nope'] }, 'items.0'],
+    ],
+  },
+  import_from_project: {
+    base: { projectId: P, sourceProjectId: P2, action: 'list' },
+    cases: [
+      [{ action: 'copy' }, 'action'],
+      [{ sourceProjectId: 'x' }, 'sourceProjectId'],
+      [{ characterIds: many(51, S) }, 'characterIds'],
+      [{ voiceIds: ['x'] }, 'voiceIds.0'],
+      [{ sfxSounds: [{ sfxJobId: S, mediaAssetId: S, extra: 1 }] }, 'sfxSounds.0'],
+      [{ sfxSounds: many(51, { sfxJobId: S, mediaAssetId: S }) }, 'sfxSounds'],
+    ],
+  },
+  restructure_shots: {
+    base: { projectId: P, action: 'delete', shotIds: [S] },
+    cases: [
+      [{ action: 'reorder' }, 'action'],
+      [{ shotIds: [] }, 'shotIds'],
+      [{ shotIds: many(201, S) }, 'shotIds'],
+      [{ atSec: -1 }, 'atSec'],
+      [{ afterShotId: 'x' }, 'afterShotId'],
+      [{ code: ' ' }, 'code'],
+      [{ code: long(41) }, 'code'],
+      [{ durationSec: 0 }, 'durationSec'],
+      [{ mood: long(501) }, 'mood'],
+      [{ dialogue: long(2001) }, 'dialogue'],
+    ],
+  },
+  draft_storyboard: {
+    base: { projectId: P, action: 'latest' },
+    cases: [
+      [{ action: 'rewrite' }, 'action'],
+      [{ runId: 'x' }, 'runId'],
+      [{ shotIds: [] }, 'shotIds'],
+      [{ shotIds: [S, S] }, 'shotIds'],
+      [{ field: 'title' }, 'field'],
+      [{ current: long(4001) }, 'current'],
+      [{ instruction: long(301) }, 'instruction'],
+    ],
+  },
+  edit_character: {
+    base: { projectId: P, characterId: S, action: 'get' },
+    cases: [
+      [{ characterId: 'x' }, 'characterId'],
+      [{ action: 'rename' }, 'action'],
+      [{ character: { name: '' } }, 'character.name'],
+      [{ character: { identityAnchors: many(21, 'a') } }, 'character.identityAnchors'],
+      [{ look: { key: 'winter' } }, 'look.key'],
+      [{ look: { era: long(201) } }, 'look.era'],
+      [{ role: 'face_back' }, 'role'],
+      [{ image: { imagePath: 'a.png' } }, 'image.imagePath'],
+    ],
+  },
+  edit_location: {
+    base: { projectId: P, locationId: S, action: 'delete' },
+    cases: [
+      [{ locationId: 'x' }, 'locationId'],
+      [{ action: 'create' }, 'action'],
+      [{ name: '' }, 'name'],
+      [{ description: long(4001) }, 'description'],
+      [{ references: many(5, { mediaAssetId: S }) }, 'references'],
+    ],
+  },
+  manage_brand_assets: {
+    base: { projectId: P, action: 'list' },
+    cases: [
+      [{ action: 'clear' }, 'action'],
+      [{ brandAssetId: 'x' }, 'brandAssetId'],
+      [{ category: 'sound' }, 'category'],
+      [{ name: long(201) }, 'name'],
+      [{ value: '#FFF' }, 'value'],
+      [{ usageRule: long(4001) }, 'usageRule'],
+    ],
+  },
+  import_take: {
+    base: { projectId: P, shotId: S, filePath: '/a/b.mp4' },
+    cases: [
+      [{ shotId: 'x' }, 'shotId'],
+      [{ filePath: '' }, 'filePath'],
+      [{ filePath: 'b.mp4' }, 'filePath'],
+      [{ sourceModel: ' ' }, 'sourceModel'],
+      [{ sourceModel: long(121) }, 'sourceModel'],
+    ],
+  },
+  hide_takes: {
+    base: { takeIds: [S] },
+    cases: [
+      [{ takeIds: [] }, 'takeIds'],
+      [{ takeIds: ['x'] }, 'takeIds.0'],
+      [{ takeIds: many(51, S) }, 'takeIds'],
+    ],
+  },
+  cancel_jobs: {
+    base: { projectId: P, kind: 'music' },
+    cases: [
+      [{ kind: 'audio' }, 'kind'],
+      [{ shotIds: [] }, 'shotIds'],
+      [{ shotIds: many(201, S) }, 'shotIds'],
+      [{ lineIds: ['x'] }, 'lineIds.0'],
+      [{ lineIds: many(1001, S) }, 'lineIds'],
+    ],
+  },
+  align_to_music: {
+    base: { projectId: P, action: 'check' },
+    cases: [
+      [{ action: 'fix' }, 'action'],
+      [{ changes: [] }, 'changes'],
+      [{ changes: many(501, { kind: 'select', shotId: S, takeId: S, reason: '拍' }) }, 'changes'],
+      [{ changes: [{ kind: 'swap', shotId: S, reason: '拍' }] }, 'changes.0.kind'],
+      [{ changes: [{ kind: 'move', shotId: S, fromSec: -1, toSec: 1, reason: '拍' }] }, 'changes.0.fromSec'],
+      [{ changes: [{ kind: 'trim', shotId: S, fromDurationSec: 2, toDurationSec: 0, reason: '拍' }] }, 'changes.0.toDurationSec'],
+      [{ changes: [{ kind: 'select', shotId: S, takeId: S, reason: '' }] }, 'changes.0.reason'],
+    ],
+  },
+  add_telops: {
+    base: { projectId: P, telops: [{ text: '新曲', atSec: 0 }] },
+    cases: [
+      [{ telops: [] }, 'telops'],
+      [{ telops: many(101, { text: '新曲', atSec: 0 }) }, 'telops'],
+      [{ telops: [{ text: '  ', atSec: 0 }] }, 'telops.0.text'],
+      [{ telops: [{ text: long(121), atSec: 0 }] }, 'telops.0.text'],
+      [{ telops: [{ text: '新曲', atSec: -1 }] }, 'telops.0.atSec'],
+      [{ telops: [{ text: '新曲', durationSec: 0.4 }] }, 'telops.0.durationSec'],
+      [{ telops: [{ text: '新曲', durationSec: 61 }] }, 'telops.0.durationSec'],
+      [{ telops: [{ text: '新曲', template: 'center' }] }, 'telops.0.template'],
+      [{ telops: [{ text: '新曲', layer: 21 }] }, 'telops.0.layer'],
+      [{ telops: [{ text: '新曲', layer: 1.5 }] }, 'telops.0.layer'],
+    ],
+  },
+  list_telops: { base: { projectId: P }, cases: [[{ projectId: 'x' }, 'projectId']] },
+  edit_clips: {
+    base: { projectId: P, edits: [{ clipId: S }] },
+    cases: [
+      [{ edits: [] }, 'edits'],
+      [{ edits: many(201, { clipId: S }) }, 'edits'],
+      [{ edits: [{ clipId: 'x' }] }, 'edits.0.clipId'],
+      [{ edits: [{ clipId: S, startSec: -1 }] }, 'edits.0.startSec'],
+      [{ edits: [{ clipId: S, durationSec: 0 }] }, 'edits.0.durationSec'],
+      [{ edits: [{ clipId: S, durationSec: 601 }] }, 'edits.0.durationSec'],
+      [{ edits: [{ clipId: S, layer: -1 }] }, 'edits.0.layer'],
+      [{ edits: [{ clipId: S, text: ' ' }] }, 'edits.0.text'],
+      [{ edits: [{ clipId: S, volume: 2.1 }] }, 'edits.0.volume'],
+      [{ edits: [{ clipId: S, fadeInSec: 31 }] }, 'edits.0.fadeInSec'],
+      [{ edits: [{ clipId: S, unsetStyle: ['nope'] }] }, 'edits.0.unsetStyle.0'],
+    ],
+  },
+  remove_telops: {
+    base: { projectId: P, clipIds: [S] },
+    cases: [
+      [{ projectId: 'x' }, 'projectId'],
+      [{ clipIds: ['x'] }, 'clipIds.0'],
+      [{ clipIds: many(201, S) }, 'clipIds'],
+      [{ narrationLineIds: many(201, S) }, 'narrationLineIds'],
+    ],
+  },
+  set_narration: {
+    base: { projectId: P, action: 'show' },
+    cases: [
+      [{ action: 'speak' }, 'action'],
+      [{ script: long(20001) }, 'script'],
+      [{ voice: '' }, 'voice'],
+      [{ lines: [] }, 'lines'],
+      [{ lines: [{ lineId: S, text: long(201) }] }, 'lines.0.text'],
+      [{ lines: [{ lineId: S, direction: long(201) }] }, 'lines.0.direction'],
+      [{ lines: [{ lineId: S, startSec: -1 }] }, 'lines.0.startSec'],
+      [{ lineIds: many(1001, S) }, 'lineIds'],
+      [{ fromSec: -1 }, 'fromSec'],
+      [{ gapSec: 11 }, 'gapSec'],
+      [{ readings: { set: [{ written: ' ', reading: 'せんこ' }] } }, 'readings.set.0.written'],
+      [{ voiceOptionsFor: 'siri' }, 'voiceOptionsFor'],
+    ],
+  },
+  speak_narration: {
+    base: { projectId: P },
+    cases: [
+      [{ action: 'sing' }, 'action'],
+      [{ lineIds: many(1001, S) }, 'lineIds'],
+      [{ filePath: 'a.wav' }, 'filePath'],
+      [{ mediaAssetId: 'x' }, 'mediaAssetId'],
+      [{ voice: '' }, 'voice'],
+      [{ placeAtSec: -1 }, 'placeAtSec'],
+    ],
+  },
+  set_lyrics: {
+    base: { projectId: P },
+    cases: [
+      [{ lyrics: long(20001) }, 'lyrics'],
+      [{ lyricCues: [-1] }, 'lyricCues.0'],
+      [{ lyricCues: many(1001, 0) }, 'lyricCues'],
+      [{ instrumental: 'no' }, 'instrumental'],
+      [{ placeTelops: 'yes' }, 'placeTelops'],
+    ],
+  },
+  upload_sfx: {
+    base: { projectId: P, filePath: '/a/b.wav' },
+    cases: [
+      [{ filePath: 'b.wav' }, 'filePath'],
+      [{ title: ' ' }, 'title'],
+      [{ title: long(201) }, 'title'],
+      [{ placeAtSec: -1 }, 'placeAtSec'],
+      [{ volume: 2.1 }, 'volume'],
+    ],
+  },
+  edit_audio: {
+    base: { projectId: P },
+    cases: [
+      [{ music: { musicTrackId: 'x' } }, 'music.musicTrackId'],
+      [{ music: { volume: 2.1 } }, 'music.volume'],
+      [{ music: { fadeInSec: 31 } }, 'music.fadeInSec'],
+      [{ music: { endSec: 0 } }, 'music.endSec'],
+      [{ music: { title: '別名' } }, 'music'],
+      [{ ducking: { depthDb: 25 } }, 'ducking.depthDb'],
+      [{ ducking: { releaseSec: 3 } }, 'ducking.releaseSec'],
+      [{ telopHighlight: { color: 'red' } }, 'telopHighlight.color'],
+    ],
+  },
+  list_edits: {
+    base: { projectId: P },
+    cases: [
+      [{ limit: 0 }, 'limit'],
+      [{ limit: 51 }, 'limit'],
+      [{ limit: 1.5 }, 'limit'],
+    ],
+  },
+  undo: {
+    base: { projectId: P },
+    cases: [
+      [{ projectId: 'x' }, 'projectId'],
+      [{ editBatchId: 'x' }, 'editBatchId'],
     ],
   },
 }

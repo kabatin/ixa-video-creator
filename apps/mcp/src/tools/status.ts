@@ -19,10 +19,9 @@ export const statusTool = defineTool({
   description:
     'Start here. Shows whether the ixa API is up, which AI tools are available per purpose and which are selected, ' +
     'the video models you can pass to generate_takes, the projects in the workspace, and (with projectId) the video ' +
-    'generations currently queued/running. ixa is a Japanese-UI video production app: everything the user sees ' +
-    '(project names, shot descriptions, character names) should be written in Japanese unless told otherwise. ' +
-    'Workflow: create_project → generate_music or upload_music → set_master_track → music_overview → plan_shots → ' +
-    'create_character/create_location → edit_shots → draw_start_frames → view → generate_takes → wait → view → adopt_take → export.',
+    'generations currently queued/running. Write everything the user sees in Japanese unless told otherwise. ' +
+    'Workflow: create_project → music → set_master_track → plan_shots → cast → edit_shots → draw_start_frames → ' +
+    'view → generate_takes → wait → adopt_take → telops/narration/sfx → export.',
   input: z.object({ projectId: Id.optional() }),
   handler: async ({ projectId }, { api, workspaceId }) => {
     const [health, tools, settings, models, projects] = await Promise.all([

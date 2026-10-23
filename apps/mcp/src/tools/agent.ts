@@ -1,8 +1,8 @@
-import { AgentApprovalDecision, ToolRisk, toolRisk } from '@ixa/domain'
+import { AgentApprovalDecision, IXA_MCP_TOOL_PREFIX, ToolRisk, toolRisk } from '@ixa/domain'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { seg } from '../api-client.js'
-import { defineTool, describeError, errorResult, jsonResult, type ToolDeps } from '../tool-def.js'
+import { defineTool, describeError, errorResult, jsonResult, type ToolDef, type ToolDeps } from '../tool-def.js'
 
 /**
  * AI エージェントの会話の中だけで使うツール（ADR-0058）。API がエージェントの Claude CLI を起こすときに
@@ -14,7 +14,8 @@ import { defineTool, describeError, errorResult, jsonResult, type ToolDeps } fro
  *
  * `approve` は Claude CLI の `--permission-prompt-tool`。CLI はツールを使う前にこれを呼び、
  * `{behavior:"allow",updatedInput}` か `{behavior:"deny",message}` の JSON を text で受ける（CLI 2.1.289 で確かめた）。
- * **どのツールでも API に印を知らせる。** 確認が要るか（確認なしの旗を含む）は API が domain の `approvalNeeded` で決め、
+ * **どのツールでも API に印を知らせる。** 印は入力から決める（`ToolDef.riskOf`。edit_character の update は write、delete は destructive）。
+ * 確認が要るか（確認なしの旗を含む）は API が domain の `approvalNeeded` で決め、
  * 要らなければすぐ許す（読むだけ・ふつうの書き込みは待たない）。API は印から「直した数」を数える。
  */
 
@@ -85,8 +86,17 @@ export const ApproveInput = z.object({
   tool_use_id: z.string().optional(),
 })
 
-/** 危険度の表（ツール名 → 印）は server.ts が全ツールから組んで渡す（ツールの一覧を写さない）。 */
-export const createApproveTool = (risks: ReadonlyMap<string, ToolRisk>) =>
+/**
+ * CLI の名前（`mcp__ixa__edit_character`）と入力から、この呼び出しの危険度を引く。
+ * 頭の確かめ・知らないツールの扱い（`destructive`）は domain の `toolRisk` に任せる（規則を写さない）。
+ */
+const callRisk = (qualifiedName: string, input: unknown, tools: ReadonlyMap<string, ToolDef>): ToolRisk => {
+  const tool = tools.get(qualifiedName.slice(IXA_MCP_TOOL_PREFIX.length))
+  return toolRisk(qualifiedName, tool === undefined ? new Map() : new Map([[tool.name, tool.riskOf(input)]]))
+}
+
+/** ツールの表（ツール名 → 定義）は server.ts が全ツールから組んで渡す（ツールの一覧を写さない）。 */
+export const createApproveTool = (tools: ReadonlyMap<string, ToolDef>) =>
   defineTool({
     name: 'approve',
     risk: 'read',
@@ -98,7 +108,7 @@ export const createApproveTool = (risks: ReadonlyMap<string, ToolRisk>) =>
     handler: async ({ tool_name: toolName, input, tool_use_id: toolUseId }, deps) => {
       const sessionId = deps.agentSessionId
       if (sessionId === undefined) return deny('AI エージェントの会話の外では確認できません。')
-      const risk = withLocalFileRisk(toolRisk(toolName, risks), input)
+      const risk = withLocalFileRisk(callRisk(toolName, input, tools), input)
       try {
         const started = await deps.api.post(
           `/agent-sessions/${seg(sessionId)}/approvals`,

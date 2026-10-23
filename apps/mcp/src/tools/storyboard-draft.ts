@@ -112,6 +112,8 @@ export const draftStoryboardTool = defineTool({
   name: 'draft_storyboard',
   // テキストの AI（CLI の利用枠）を使う。
   risk: 'costly',
+  // 読み返すだけ・案を Shot に写すだけなら AI を使わない。
+  riskOf: (args) => (args.action === 'latest' ? 'read' : args.action === 'adopt' ? 'write' : 'costly'),
   description:
     'Storyboard proposals by the selected text AI: draft one for all shots, read the latest, adopt it for listed ' +
     'shots (overwrites their description/mood/camera; undoable), or suggest text for one field. ' +

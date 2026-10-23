@@ -83,11 +83,9 @@ export const generateSfxTool = defineTool({
   risk: 'costly',
   description:
     'Make sound effects with the local text-to-audio AI and place them on the timeline SFX track (submit only). ' +
-    'The model does NOT see the video, so decide the timing first: (1) call analyze_motion with the shotId to get ' +
-    'timed events (landings, footsteps, skids, whooshes) and cue ideas in timeline seconds, (2) edit those cues ' +
-    '(drop unwanted ones, refine the English prompt, volume, durationSec 0.5–10; long sounds are already split; ' +
-    'keep each cue\'s align field — it lines the loudest part of the sound up with the event), (3) pass them here. suggest_sfx adds effect/transition cues. Returns jobIds; then call wait with ' +
-    '{kind:"sfx", id} per job. Check placed sounds with list_sfx and remove with remove_sfx.',
+    'The model does NOT see the video: get timed cues from analyze_motion (and suggest_sfx for effects/transitions), ' +
+    'edit them (English prompt, volume, durationSec 0.5–10; keep each cue\'s align field, which lines the loudest ' +
+    'part up with the event) and pass them here. Then wait {kind:"sfx", id} per jobId.',
   input: GenerateSfxInput,
   handler: async ({ projectId, model, ...rest }, deps) => {
     const started = await deps.api.post(

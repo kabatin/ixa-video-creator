@@ -49,6 +49,12 @@ export type ToolDef = {
    * MCP の annotations（readOnlyHint・destructiveHint）にも写す。**省けない**（付け忘れは型エラー）。
    */
   readonly risk: ToolRisk
+  /**
+   * この呼び出しの危険度。action で重さが変わるツール（edit_character の update と delete など）は入力から決め、
+   * ふつうの直しのたびに確認が出ないようにする。`risk` は「いちばん重い印」のまま。
+   * 入力が読めないとき・ツールが決め方を持たないときは `risk` に倒す。
+   */
+  readonly riskOf: (rawArgs: unknown) => ToolRisk
   readonly description: string
   readonly input: z.AnyZodObject
   readonly run: (rawArgs: unknown, deps: ToolDeps) => Promise<CallToolResult>
@@ -65,12 +71,20 @@ export class ToolInputError extends Error {
 export const defineTool = <S extends z.ZodRawShape>(def: {
   readonly name: string
   readonly risk: ToolRisk
+  /** action で危険度が変わるときだけ書く。`risk` より重くしない。 */
+  readonly riskOf?: (args: z.infer<z.ZodObject<S>>) => ToolRisk
   readonly description: string
   readonly input: z.ZodObject<S>
   readonly handler: (args: z.infer<z.ZodObject<S>>, deps: ToolDeps) => Promise<CallToolResult>
 }): ToolDef => ({
   name: def.name,
   risk: def.risk,
+  riskOf: (rawArgs) => {
+    const riskOf = def.riskOf
+    if (riskOf === undefined) return def.risk
+    const parsed = def.input.safeParse(rawArgs ?? {})
+    return parsed.success ? riskOf(parsed.data) : def.risk
+  },
   description: def.description,
   input: def.input,
   run: async (rawArgs, deps) => {

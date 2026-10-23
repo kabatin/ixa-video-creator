@@ -1,4 +1,4 @@
-import { IdentityImageRole, LookImageRole } from '@ixa/domain'
+import { IdentityImageRole, LookImageRole, type ToolRisk } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import { ImageSource, resolveImage } from '../lib/image-source.js'
@@ -265,10 +265,28 @@ const HANDLERS: Readonly<Record<Args['action'], Handler>> = {
   },
 }
 
+/** action ごとの危険度。ふつうの直しは確認なし、消すのは確認、シートは画像の AI を使う。 */
+const ACTION_RISKS: Readonly<Record<Args['action'], ToolRisk>> = {
+  get: 'read',
+  update: 'write',
+  delete: 'destructive',
+  add_look: 'write',
+  update_look: 'write',
+  delete_look: 'destructive',
+  add_look_image: 'write',
+  remove_look_image: 'destructive',
+  set_canonical_frame: 'write',
+  add_identity_image: 'write',
+  remove_identity_image: 'destructive',
+  set_primary_identity_image: 'write',
+  make_character_sheet: 'costly',
+}
+
 export const editCharacterTool = defineTool({
   name: 'edit_character',
-  // 消す操作と、画像の AI で描くキャラクターシートを含む。いちばん重い印。
+  // 消す操作と、画像の AI で描くキャラクターシートを含む。いちばん重い印。呼び出しごとには action で決める。
   risk: 'destructive',
+  riskOf: (args) => ACTION_RISKS[args.action],
   description:
     'Edit or delete a character, its looks (outfits; one is the default), look images, the canonical frame, ' +
     'identity images (face/body references) and make a character sheet (4-view image drawn by the image AI). ' +

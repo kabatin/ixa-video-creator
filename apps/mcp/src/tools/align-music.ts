@@ -76,6 +76,7 @@ const withCode = <T extends { readonly shotId?: string }>(codes: ReadonlyMap<str
 export const alignToMusicTool = defineTool({
   name: 'align_to_music',
   risk: 'write',
+  riskOf: (args) => (args.action === 'check' || args.action === 'plan' ? 'read' : 'write'),
   description:
     'Fit the cut to the master track: check (issues + cuts off the beat), plan (a rough-cut proposal), apply ' +
     '(apply plan changes; stale ones are skipped with a reason), trim_music (end the song at the last shot). ' +
