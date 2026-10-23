@@ -43,7 +43,7 @@ export const waitTool = defineTool({
   risk: 'read',
   description:
     'Wait for jobs to finish, polling with backoff. jobs: [{kind:"generation"|"render"|"music"|"sfx"|"analysis"|' +
-    '"start_frame", id}] or {kind:"upscale", shotId, takeId}; or projectId to wait until nothing is generating, ' +
+    '"start_frame"|"review"|"voice", id}] or {kind:"upscale", shotId, takeId}; or projectId to wait until nothing is generating, ' +
     'drawing or rendering in the project. Returns after maxWaitSec (default 480) even if not done ' +
     '(timedOut: true) — just call wait again. Local video generation takes several minutes per take.',
   input: WaitInput,

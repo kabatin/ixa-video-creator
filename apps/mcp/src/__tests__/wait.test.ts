@@ -122,6 +122,16 @@ describe('wait ツール', () => {
     ])
   })
 
+  it('声のジョブ（speak_narration）を kind:"voice" で待つ', async () => {
+    const VOICE_JOB = ulid('VJ1')
+    const LINE = ulid('NA1')
+    const fake = createFakeApi([
+      { method: 'GET', path: `/voice-jobs/${VOICE_JOB}`, sequence: [{ data: { status: 'running', lineId: LINE, error: null } }, { data: { status: 'succeeded', lineId: LINE, error: null } }] },
+    ])
+    const result = await waitTool.run({ jobs: [{ kind: 'voice', id: VOICE_JOB }] }, depsFor(fake, { clock: fakeClock() }))
+    expect(jsonOf(result)).toMatchObject({ done: true, results: [{ kind: 'voice', id: VOICE_JOB, state: 'succeeded', lineId: LINE }] })
+  })
+
   it('作品の中で動いているものが止むまで待ち、時間切れなら timedOut で返す', async () => {
     const PROJECT = ulid('PJ1')
     const fake = createFakeApi([

@@ -6,7 +6,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web'
 import { seg, type ApiClient } from '../api-client.js'
-import { WireMediaAsset, WireSignedUpload, WireSignedUrl } from '../wire.js'
+import { WireSignedUpload, WireSignedUrl } from '../wire.js'
 import { z } from 'zod'
 
 /**
@@ -91,11 +91,6 @@ export const uploadLocalFile = async (
   )
   return done.id
 }
-
-export type MediaInfo = z.infer<typeof WireMediaAsset>
-
-export const getMediaInfo = (api: ApiClient, mediaAssetId: string): Promise<MediaInfo> =>
-  api.get(`/media/${seg(mediaAssetId)}`, WireMediaAsset)
 
 /** MediaAsset の本体を `targetPath` に書き出す。途中で落ちたら半端なファイルを残さない。 */
 export const downloadMedia = async (
