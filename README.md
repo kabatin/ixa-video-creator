@@ -1,106 +1,183 @@
 # iXA Video Creator
 
-**Start from the song. Time the lyrics, cut it, let AI draft the storyboard, the frames and the
-takes — and render a music video that matches exactly what you previewed.**
+**Make music videos from the song outward — and hand the work to an AI agent when you want to.**
+Cut against the music, let AI draft the storyboard, the frames, the takes, the score and the sound
+effects, and export exactly what you previewed. Ask for changes in plain words in the built-in
+agent tab, or let Claude Code or Codex drive the whole production over MCP.
 
 [![CI](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml/badge.svg)](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/kabatin/ixa-video-creator)](https://github.com/kabatin/ixa-video-creator/releases) [![License: MIT](https://img.shields.io/github/license/kabatin/ixa-video-creator)](./LICENSE) [![GitHub stars](https://img.shields.io/github/stars/kabatin/ixa-video-creator?style=social)](https://github.com/kabatin/ixa-video-creator/stargazers)
 
-[日本語版 README](./README.ja.md) · MIT licensed · TypeScript monorepo
+[日本語版 README](./README.ja.md) · MIT licensed · TypeScript monorepo · v0.7
 
-![Demo: drop a song onto an empty project, it is analysed, section boundaries become cuts in one click, the cuts become shots, each shot gets a take from its start frame, and the whole thing plays back in sync with the music](./docs/images/demo.webp)
-
-<sub>Drop a song → cut at its section boundaries → shots → a take for every shot → play it through. Recorded in real time on the LUNA BREW sample; only the waiting for takes is cut.</sub>
+| 🎵 Start from the song | 🤖 Or just ask |
+|---|---|
+| ![Demo: drop a song onto an empty project, it is analysed, section boundaries become cuts in one click, the cuts become shots, each shot gets a take from its start frame, and the whole thing plays back in sync with the music](./docs/images/demo.webp) | ![The AI agent tab: the creator asks for a one-line summary of every shot, the agent reads the project and answers in a list; then asks for a sound effect on the whale's tail, the agent starts a motion analysis and stops at a confirmation card with Run, Cancel and "don't ask again in this task"; the creator cancels and the agent offers two other ways](./docs/images/agent-chat.webp) |
+| Drop a song → cut at its section boundaries → shots → a take for every shot → play it through. | Ask in plain words. Reads run straight away; anything that generates, deletes or exports waits for your OK. |
 
 ---
 
+## What it is, in four lines
+
+- **The song is the timeline.** Cuts are positions in the waveform, so every shot is exactly as long as the music asks for — and that length is what the video model is told to make.
+- **An AI agent can do the work with you.** A chat tab inside the workbench, and an MCP server with 34 tools for Claude Code and Codex. Everything the agent makes shows up as ordinary shots, takes and clips you can review, change or undo with ⌘Z.
+- **One Mac can be the whole studio.** Pictures (FLUX.2 [klein]), video (MiniMax H3, Wan 2.2), songs and BGM (ACE-Step 1.5, Stable Audio 3, MiniMax-Music3) and sound effects (Stable Audio 3) can all run locally, for free. Paid APIs are optional and fenced off.
+- **It is honest about what it costs and where it falls short.** Measured numbers only, and a section on [limits](#limits-honestly) you should read before you start.
+
+## Made with it
+
+![Seven frames from "Senko's Time Travel", a vertical short: the girl Senko lit by a gaming monitor in an esports shop, on a footbridge at sunset, in an ukiyo-e castle town under cherry blossoms, raising a glowing sword in a stained-glass hall, riding a flying whale above the clouds, on a neon rooftop in 2099, and back in the shop under the title card](./docs/images/senko-stills.jpg)
+
+<sub>**戦子のタイムトラベル (Senko's Time Travel)** — a 26-second 9:16 short in seven shots. Start frames, video, music and sound effects were all made on one Mac with local models; only the narrator's voice is the Gemini API.</sub>
+
+![Nine frames from the "NIGHT RUN" trailer: a rain-soaked neon street, two sports cars idling in steam, an extreme close-up of a driver's eyes, a car streaking past in motion blur, a rear wheel spinning in tyre smoke, a car racing through a lit tunnel, the driver at the wheel in the rain, the two leads at a lookout at dawn, and the NIGHT RUN title over a wet street](./docs/images/night-run-stills.jpg)
+
+<sub>**NIGHT RUN** — a 66-second 16:9 trailer in 41 shots, with narration, effects and a sound-effect lane. Frames taken from the exported file.</sub>
+
+## Ask an AI agent
+
+There are two ways in, and they share the same tools.
+
+### In the workbench: the AI agent tab
+
+![The workbench with the AI agent tab open in the bottom dock: the storyboard and shot list above; below, the agent's bulleted summary of eight shots, the creator's request for a whale-tail sound effect, a "analysing motion" line and a highlighted confirmation card reading "Analyse motion (the AI looks at the pictures) — takes time or money" with Run, Cancel and "Don't ask again in this task"](./docs/images/agent-tab.jpg)
+
+Open **AI エージェント** in the bottom dock and type what you want — *"make the sound effects on this shot punchier"*, *"summarise the shots"*, *"put a flash on every downbeat in the chorus"*. Each request automatically carries the project, the shot you have selected and the playhead position, so "this shot" means what you think it means.
+
+- **New task / Continue.** Start a fresh conversation, or pick up an earlier one where it left off. Conversations are saved **per project**, so next week's "continue" still knows what was done.
+- **You see what it is doing.** Replies stream in as the agent works; every tool call is one line (*reading the project*, *analysing motion* …) with its elapsed time and ✓ or ✗.
+- **Confirmation cards.** Reading and ordinary edits run straight away. Anything that **generates, deletes, exports or changes settings** stops at a card: *Run*, *Cancel*, or *Don't ask again in this task*. Saying "no need to confirm" in the chat does the same. You can turn confirmations back on at any time.
+- **Pick the model per conversation.** Sonnet by default; Opus or Haiku when you want.
+- **Undo works on the agent's edits too.** They go through the same API as your own, so ⌘Z takes them back.
+
+**How it stays safe** ([ADR-0058](./docs/adr/0058-agent-chat-tab.md)). The tab starts the Claude Code CLI with only ixa's MCP tools — no shell or file tools of its own, and none of your own Claude settings or hooks. Every tool call passes through a permission check, and the answer to a confirmation is accepted **only from the screen**, never from the agent itself. Anything that touches a *different* project always asks, even after "don't ask again". The agent's access key is issued for one exchange, written only into its MCP config file (mode 600) — never to logs or the chat — and revoked when the exchange ends. Only one agent conversation runs per project at a time, so it never fights another one over the same edit.
+
+### From Claude Code or Codex: the MCP server
+
+`apps/mcp` is a stdio MCP server ([ADR-0049](./docs/adr/0049-mcp-server.md)) — a thin client of the same API — with **34 tools** that cover the whole job:
+
+| Stage | Tools |
+|---|---|
+| Set-up | `ixa_status` · `set_ai` · `create_project` · `get_project` |
+| Music | `generate_music` · `upload_music` · `set_master_track` · `music_overview` |
+| Shots and cast | `plan_shots` · `edit_shots` · `create_character` · `create_location` |
+| Start frames | `draw_start_frames` · `set_start_frame` · `list_start_frame_history` · `use_start_frame` · `retry_image` |
+| Takes | `generate_takes` · `list_takes` · `adopt_take` · `review_take` · `upscale_takes` · `wait` |
+| Effects and sound | `add_effects` · `list_effects` · `remove_effects` · `analyze_motion` · `suggest_sfx` · `generate_sfx` · `list_sfx` · `remove_sfx` |
+| Looking and delivering | `view` · `export` · `export_thumbnail` |
+
+**`view` is the agent's eyes.** It returns start frames and frames sampled from a take *as images*, so the agent can look at what it made and redraw a broken hand or a melting car before moving on. `export_thumbnail` hands back the finished JPEG the same way.
+
+> "Make a 60-second 16:9 short: a night street race, then the two drivers at dawn."
+
+The first test — a 62-second, 16-shot short made entirely through these tools, music included — took about four hours on one local GPU. Long jobs never block a call: the agent queues them and polls with `wait`, which always returns within its time limit.
+
+Register it with Claude Code (the access key comes from your shell environment; never write it into the file):
+
+```json
+{
+  "mcpServers": {
+    "ixa": {
+      "command": "/path/to/ixa-video-creator/apps/mcp/node_modules/.bin/tsx",
+      "args": ["/path/to/ixa-video-creator/apps/mcp/src/main.ts"],
+      "env": {
+        "IXA_API_URL": "http://127.0.0.1:3001",
+        "IXA_WORKSPACE_ID": "${IXA_WORKSPACE_ID}",
+        "IXA_API_TOKEN": "${IXA_API_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+`IXA_API_TOKEN` is an automation key issued on the *Access keys* page (アクセス用の鍵) ([ADR-0046](./docs/adr/0046-passphrase-and-access-tokens.md)) and revocable at any time. Codex setup and the rest: [apps/mcp/README.md](./apps/mcp/README.md).
+
 ## Music first
 
-Most AI video tools begin with a text prompt, hand you a clip, and leave you to slide music
-underneath afterwards. This one runs the other way round.
+Most AI video tools begin with a text prompt, hand you a clip, and leave you to slide music underneath afterwards. This one runs the other way round.
 
-**The finished track is the input.** You drop a song onto the window, it is analysed with
-librosa — beats, downbeats, drops, three-band RMS — and from that moment the song *is* the
-timeline:
+**The finished track is the input.** You drop a song onto the window, it is analysed with librosa — beats, downbeats, drops, three-band RMS — and from that moment the song *is* the timeline:
 
 - the film's length is the song's length; there is nothing to overrun
 - every cut is a position in the waveform, placed while listening to it
-- a shot's duration is a consequence of where you cut, not a number typed into a form
-- that duration is what gets sent to the video model, so what comes back is the length the
-  music asked for
-- if the song has lyrics, you tap the start of each line while it plays, and the lines become
-  timed captions — checked on a black screen before a single frame is generated
+- a shot's duration is a consequence of where you cut, and that duration is what gets sent to the video model
+- if the song has lyrics, you tap the start of each line while it plays, and the lines become timed captions — checked on a black screen before a single frame is generated
 
-The work is therefore *edit against the music, then fill each slot* — never *generate clips
-and hope they fit*. The first film made with it is a 1m56s music video in 27 shots.
+The work is *edit against the music, then fill each slot* — never *generate clips and hope they fit*. The first film made with it is a 1m56s music video in 27 shots.
 
-No finished song yet? *Make a song* writes one on your own Mac with ACE-Step 1.5 — a style, optional
-lyrics, a length — and it lands in the project as a track, analysed like any other.
+No song yet? **Make a song** writes one on your Mac: Stable Audio 3 for instrumental BGM (the default), ACE-Step 1.5 when you want vocals and lyrics, or MiniMax-Music3. The result lands in the project as a track and is analysed like any other.
 
 ![Cutting while listening: section boundaries placed as cuts in one click, with the cuts they make](./docs/images/cutter.jpg)
 
 ## From an empty project to the exported file
 
-A bar under the menu walks you through the whole job and always highlights the next step. Each
-step shows ✓ when it is done, or how far along it is.
+A bar under the menu walks you through the whole job and always highlights the next step. Each step shows ✓ when it is done, or how far along it is.
 
 ![The production flow bar: song, direction, lyric timing, captions, cut into shots and storyboard are done; frames are at 40 of 44 and highlighted as the next step; takes at 7 of 44; export done](./docs/images/flow-bar.png)
 
-1. **Song** — drop an audio file; it is analysed for beats, downbeats and sections.
-2. **Direction** — concept and synopsis, lyrics, and the look (style, light, texture), plus
-   things to avoid and style reference images. They are added to every generation, so you write
-   them once. Tick *instrumental* and the lyric steps are skipped.
+1. **Song** — drop an audio file, or make one; it is analysed for beats, downbeats and sections.
+2. **Direction** — concept, synopsis, lyrics and the look (style, light, texture), plus things to avoid and reference images. Added to every generation, so you write them once.
 3. **Lyric timing** — play the song and press Enter on the first syllable of each line.
-4. **Captions** — the timed lines become text clips. The preview plays the song with the
-   captions over black, so you can check timing without generating — or paying for — any
-   pictures.
-5. **Narration** (optional) — write lines and have an AI voice read them, or record your own
-   and let it be transcribed into lines and captions. The music ducks under the voice.
-6. **Cut into shots** — place cuts while listening (Enter works anywhere, cuts snap to the
-   beat), or in one click at section boundaries or lyric starts. Cuts are a draft until you
-   press *N cuts → shots*.
-7. **Storyboard** — an AI drafts a description, a mood **and a camera** (shot size, angle,
-   movement) for every shot, each with *why this picture*. It reads the lyrics sung during that
-   shot, the characters, the locations and the look. Nothing changes until you adopt a draft,
-   shot by shot; you can always write your own.
-8. **Frames** — an AI draws each shot's start frame from its storyboard, with the cast's
-   reference images. Three are drawn at a time (measured: 2.1× faster than one by one), and you
-   can stop the whole queue — or only the shots you selected — at any point.
-9. **Takes** — the video for each shot, made from its start frame. While they render you see
-   which are queued, which are waiting inside the generator and which are being made, with the
-   time elapsed and an estimate; generation can be stopped at any point.
-10. **Export** — H.264, the whole film or only the shots you selected. The file is saved into
-   `~/Movies/ixa-video-creator/<project>/`, and one button opens that folder in Finder.
+4. **Captions** — the timed lines become text clips, previewed over black so you can check timing without paying for any pictures.
+5. **Narration** (optional) — have an AI voice read your lines, or record your own and let it be transcribed into lines and captions. Noise removal is on by default and can be skipped per recording. The music ducks under the voice.
+6. **Cut into shots** — place cuts while listening (Enter works anywhere, cuts snap to the beat), or in one click at section boundaries or lyric starts.
+7. **Storyboard** — an AI drafts a description, a mood **and a camera** for every shot, each with *why this picture*. Nothing changes until you adopt a draft.
+8. **Frames** — an AI draws each shot's start frame with the cast's reference images, and checks its own work (below).
+9. **Takes** — the video for each shot, made from its start frame, with queue position, elapsed time and an estimate.
+10. **Export** — H.264, the whole film or selected shots, into `~/Movies/ixa-video-creator/<project>/`. Plus a YouTube thumbnail.
 
-Skipping a step is allowed, but you are asked first — for example, before drawing frames for
-shots that have no storyboard yet.
+Skipping a step is allowed, but you are asked first.
 
-## Or hand the whole job to an agent
+## Sound, finish and second opinions
 
-`apps/mcp` is an MCP server (ADR-0049) that lets Claude Code or Codex drive the same steps through
-22 tools — create the project, make and pick a song, cut it into shots, write the storyboard, draw
-start frames, make takes, adopt them, export, and make the YouTube thumbnail (ADR-0051). Two of the tools are the agent's eyes: `view`
-returns start frames and frames sampled from a take **as images**, so the agent can look at what it
-made and redraw a broken hand or a morphing car before it moves on.
+### Sound effects that land on the picture
 
-> "Make a 60-second 16:9 short: a night street race, then the two drivers at dawn."
+![The "make sound effects" window for one shot: a motion curve of the adopted take with peaks marked in yellow, labelled events such as "engine and road noise in the cabin", "turning the wheel", "tyre squeal" and "body lurch", and one editable row per cue with time, length, volume and an English prompt](./docs/images/sfx-from-motion.jpg)
 
-The agent works through the API with a revocable automation token (ADR-0046), so everything it makes
-appears in the workbench as ordinary shots and takes you can review and change. The first test — a
-62-second, 16-shot short made entirely through these tools, music included — took about four hours
-on one local GPU. Setup: [apps/mcp/README.md](./apps/mcp/README.md).
+*＋ Sound effect* analyses the adopted take's motion ([ADR-0054](./docs/adr/0054-motion-analysis-for-sfx.md)): how much the picture changes frame to frame, where it suddenly jumps, and — by showing Claude twelve frames from the take — *what* is happening. You get one row per event with a time, a length and an English prompt; edit them, untick what you don't want, and Stable Audio 3 makes the sounds on your Mac and places them on the SFX lane. Instant sounds are snapped to the nearest motion peak, and you can ask for a sound's loudest moment to sit exactly on the event. On a test shot, all eight hand-placed footstep landings fell within ±0.1 s of a detected peak. Warm, Stable Audio makes a 10-second sound in about half a second on an M5 ([ADR-0052](./docs/adr/0052-sound-effects-with-local-stable-audio.md)).
+
+Your own sound files can go on the SFX lane too ([ADR-0056](./docs/adr/0056-uploaded-sound-effects.md)), and voices, songs and sound effects can be imported from other projects ([ADR-0053](./docs/adr/0053-import-voices-music-sfx.md)).
+
+### A timeline with layers
+
+![The NIGHT RUN trailer in the workbench: storyboard and shot list above, and a timeline below with lanes for the music waveform, the video shots, transitions, narration, three caption layers, effects and a sound-effect lane full of clips with faint motion markers](./docs/images/workbench-layers.jpg)
+
+Music, video, transitions, narration, captions, effects and sound effects each get their own lane, in that order. Clips that overlap in time spread onto extra rows instead of hiding each other. **Effects** are eight ready-made templates — flash, light leak, speed lines, film burn, glitch, title card, shake and zoom punch — chosen by type and strength rather than written as prompts, so the preview and the export draw the same frame ([ADR-0050](./docs/adr/0050-effect-templates.md)). Almost every edit — clips, shots, transitions, captions, styles, characters, music — can be undone with **⌘Z**, and the change history sits in its own tab.
+
+### The AI checks its own pictures — and asks before re-shooting video
+
+- **Start frames** ([ADR-0055](./docs/adr/0055-image-check-and-retry.md)): Claude looks at each new picture for broken anatomy, melted objects, nonsense text, the wrong person or a missing subject. With a local image model, an obvious failure is redrawn automatically (up to twice by default); every attempt is kept, and you can go back to an earlier one. When the text AI is not Claude, the check is skipped and the frame is marked *not checked* — never silently passed.
+- **Takes** ([ADR-0057](./docs/adr/0057-video-retake-by-request.md)): a failed review marks the take *retake recommended* instead of spending another ten minutes of GPU on its own. Tick *retake automatically if NG* when you queue an overnight batch, and it reviews and re-shoots up to the limit.
+- **Upscaling** shows in the shot list and the storyboard as *waiting* or *upscaling*, so an overnight run is readable at a glance.
+
+### The thumbnail, too
+
+*File → Export thumbnail…* draws a 1280×720 JPEG under 2 MB from the same Remotion composition as the film ([ADR-0051](./docs/adr/0051-youtube-thumbnail.md)): the frame at the playhead, a shot's picture, or key art the AI paints for it, with the title placed in a 3×3 grid, sizes and colours you choose, and an optional accent bar.
+
+### Choosing which AI does what
+
+![The "which AI to use" dialog on the Music tab: on the left, the current choice for text, images, video, voice, transcription, music and sound effects; on the right, ACE-Step 1.5, MiniMax-Music3 and Stable Audio 3 Medium (instrumental, selected), each tagged "this Mac" and "free", with notes on speed and limits](./docs/images/ai-chooser.jpg)
+
+The first time you open the workbench, *使う AI* (which AI to use) looks for AI CLIs, API keys and local generation servers on this Mac and lets you pick one for each job:
+
+| Purpose | Choices |
+|---|---|
+| Text — storyboard drafts, writing help, reviews, image checks, the agent tab | Claude Code · Codex · Grok |
+| Images — start frames, character sheets, key art | Codex · FLUX.2 [klein] (local, free) |
+| Video — takes | still-motion (free) · MiniMax H3 (local, free) · Wan 2.2 5B (local, free) · Seedance via fal (paid) |
+| Voice — narration | Mac voice (free) · Gemini API · ElevenLabs (paid) |
+| Transcription — recorded narration into lines | whisper.cpp (local, free) · Gemini API · ElevenLabs (paid) |
+| Music — *Make a song* | Stable Audio 3 Medium (instrumental) · ACE-Step 1.5 · MiniMax-Music3 (all local, free) |
+| Sound effects | Stable Audio 3 · MOSS SFX v2 (local, free) |
+
+Every job also has a stub (*お試し*) that runs without any AI. Paid paths must be enabled in `.env` before they can be chosen — the screen alone never opens a billing path.
 
 ## A 30-second spot, start to finish
 
-The sample project is **LUNA BREW**, a fictional night coffee stand: a 30-second spot cut to a
-120 BPM track, nine shots, two recurring characters.
+The sample project is **LUNA BREW**, a fictional night coffee stand: a 30-second spot cut to a 120 BPM track, nine shots, two recurring characters.
 
 ![Nine stills of the LUNA BREW spot: a rainy back street, a crescent-moon neon in a puddle, the barista pulling an espresso, latte art, the rider in the rain, the handoff at the counter, steam, and the two of them on a rooftop at dawn](./docs/images/luna-brew-stills.jpg)
 
-These stills were made with an image model outside the app and brought in as each shot's
-**start frame** — which still works. Since v0.2 the app can also draw start frames itself. The
-built-in `local/still-motion` model turns a start frame into a take — a slow push, pull or pan
-that follows the shot's camera setting — for free and without an API key. Switch to another
-video model later and the same start frames carry over.
+These stills were made with an image model outside the app and brought in as each shot's **start frame** — which still works. The built-in `local/still-motion` model turns a start frame into a take — a slow push, pull or pan that follows the shot's camera setting — for free and without an API key.
 
 | | |
 |---|---|
@@ -109,83 +186,56 @@ video model later and the same start frames carry over.
 | ![The inspector: timing, camera, cast, location and start frame of a shot](./docs/images/inspector.jpg) | ![The library: a character's identity image and looks](./docs/images/library.jpg) |
 | **One shot, everything in one place** — camera, cast with looks, location, start frame. | **Characters, looks, locations, brand** — per project, importable from other projects. |
 
-
 ## Why it might interest you
 
-**The song's structure is data, not a picture of a waveform.** Beats and downbeats are
-numbers you can snap to, filter by and sort against. The tool shows where each shot sits
-relative to the beat *without calling it a mistake* — cutting to a vocal onset rather than a
-beat is a choice, and on the reference project 16 of 27 cuts are deliberately off the grid.
+**The song's structure is data, not a picture of a waveform.** Beats and downbeats are numbers you can snap to, filter by and sort against. The tool shows where each shot sits relative to the beat *without calling it a mistake* — on the reference project 16 of 27 cuts are deliberately off the grid.
 
-**Preview is the render.** The player and the exported file consume the *same*
-`TimelineDocument` through the *same* Remotion composition. There is no separate "preview
-path" that can drift from the output — a class of bug that eats hours.
+**Preview is the render.** The player, the exported file and the thumbnail consume the *same* `TimelineDocument` through the *same* Remotion composition. There is no separate preview path that can drift from the output.
 
-**You choose the AI for each job, from what is already on your machine.** Text (storyboard
-drafts and writing help) can be Claude Code, Codex or Grok; images can be Codex or local FLUX.2
-[klein]; video can be the free local models or fal; music is local ACE-Step 1.5. The CLIs run
-under your own sign-in — no API keys for them are stored in the app. **Text, pictures, video
-and music can all be made on one Mac, for free.**
+**An agent is a first-class user, not a bolt-on.** The MCP tools are coarse, production-shaped steps over the same API the screen uses, every tool declares how risky it is, and everything an agent does lands as ordinary, reviewable, undoable work.
 
-**Your footage is just files.** Everything the app makes — frames, takes, renders — is written
-to a folder on your disk (`STORAGE_DIR`, no object store in the way), and one button copies a
-project's assets into `~/Movies/ixa-video-creator/<project>/素材/` under readable names in shot
-order, so you can use a single clip somewhere else without exporting the whole film. Nothing is
-duplicated: they are hard links to the same bytes. Signed, expiring URLs are what the browser
-gets; they are issued per request and never stored.
+**Your footage is just files.** Frames, takes and renders are written to a folder on your disk (`STORAGE_DIR`), and one button copies a project's assets into `~/Movies/ixa-video-creator/<project>/素材/` under readable names in shot order — as hard links, so nothing is duplicated. The browser gets signed, expiring URLs, issued per request and never stored.
 
-**AI drafts never overwrite your work.** Storyboard drafts sit next to the current description
-with a reason for each, and a shot changes only when you adopt its draft. Bulk edits are
-recorded so they can be undone. Takes are append-only: generating again never replaces a
-previous result.
+**AI drafts never overwrite your work.** Storyboard drafts sit next to the current description with a reason for each. Takes are append-only: generating again never replaces a previous result. Start frames keep their history.
 
-**Built for keeping one character across a whole film.** Characters, looks, locations and
-brand assets resolve into each shot's reference images, rather than prompt text you retype 27
-times and get subtly wrong. A character sheet (four views) can be made from a single image, and
-storyboard drafts are told to describe only the appearance you actually wrote down — the rest
-comes from the reference images.
+**Built for keeping one character across a whole film.** Characters, looks, locations and brand assets resolve into each shot's reference images, rather than prompt text you retype 27 times and get subtly wrong.
 
-**Providers are swappable, and the swap is free to test.** `VideoProvider` is a
-three-method interface (`submit` / `poll` / `cancel`). A local FFmpeg stub implements it
-fully, so the entire pipeline — queueing, polling, failure handling, budget limits — runs
-end to end at zero cost before you ever connect a paid API.
+**Money is treated as a first-class hazard.** Per-project budgets are enforced server-side before a job is enqueued. A local FFmpeg stub implements the whole `VideoProvider` interface, so queueing, polling, failure handling and the budget guard all run end to end at zero cost before you connect a paid API.
 
-**Money is treated as a first-class hazard.** Per-project budgets are enforced server-side
-before a job is enqueued. The stub can be given a fake price so you can *prove* the budget
-guard stops a run without spending anything. Failed generations release the shot instead of
-leaving it stuck, and a transient network error never discards work you already paid for.
+## Limits, honestly
+
+- **It assumes an Apple Silicon Mac.** The free local models run through separate servers (vpipe-api, wan-api, klein-api, ace-step-api, sfx-api) built for Apple Silicon. Without them you are on stubs, Codex images, or paid APIs.
+- **Local generation is slow, and it is one at a time.** All local models share one GPU, so video, images, upscaling, music and sound effects wait in a single line. Measured on an M5: a 5-second H3 draft takes 7.4 min; on the vertical short, takes at 576×1024 took about 10 min each; MiniMax-Music3 needs about 10 min per 60 seconds of song. Plan on overnight runs for a whole film.
+- **Local models have their own limits.** Wan stops at 5 seconds. Text the model is told not to draw sometimes appears anyway. On the vertical short the local image model struggled with close-ups. Stable Audio cannot sing — vocals go to ACE-Step or MiniMax-Music3.
+- **The agent tab needs the Claude Code CLI** as the text AI; it does not work with Codex or Grok, and it uses your Claude plan's usage. One conversation per project at a time; to add instructions mid-task you stop it and say it again; images cannot be attached yet. Confirmation relies on the CLI's permission hook; enforcing it in the API as well is designed but not built.
+- **The MCP server is stdio only,** and an automation key can do anything the screen can — there are no per-key scopes yet.
+- **Image checks need Claude as well.** With Codex or Grok as the text AI, generated pictures are marked *not checked*.
+- **There is no HTTPS.** On a LAN the passphrase travels in plain text. In Safari the preview can stutter at cuts; Chrome plays them smoothly.
+- **It is a personal project.** Interfaces still move between versions.
 
 ## How it fits together
 
 ```
 apps/
-  web       Next.js workbench — dockable panels (storyboard, cutter, timeline, compare, drafts)
-  api       Hono + zod-openapi
-  worker    BullMQ consumers: video, image, voice and music generation, media probing, rendering
+  web       Next.js workbench — dockable panels (storyboard, cutter, timeline, compare, agent chat)
+  api       Hono + zod-openapi; also starts the agent's Claude CLI per conversation
+  worker    BullMQ consumers: video, image, voice, music, sound effects, motion analysis, rendering
   audio     Python service — librosa analysis (beats, downbeats, sections, waveform)
   mcp       MCP server for AI agents (stdio) — a thin client of the API
 packages/
   domain    Pure. No IO. The single source of truth for the model.
-  providers Adapters (video / image / llm / voice / music). External SDKs and CLIs stop here.
-  render    Remotion composition + FFmpeg plan
+  providers Adapters (video / image / llm / voice / music / sfx). External SDKs and CLIs stop here.
+  render    Remotion compositions (film and thumbnail) + FFmpeg plan
   db        Drizzle schema and repositories
 ```
 
 The dependency direction is always `apps → packages → domain`, never back.
 
-**Shot First.** Storyboard, generation, takes, review and the timeline all hang off one
-entity. A `Shot` owns its position on the master timeline — the position you gave it by
-cutting the song — so there is no second place where time can disagree. Time is stored in
-seconds as a float, because that is the unit the audio analysis speaks; frames and
-milliseconds never enter the domain or the database.
+**Shot First.** Storyboard, generation, takes, review and the timeline all hang off one entity. A `Shot` owns its position on the master timeline — the position you gave it by cutting the song — so there is no second place where time can disagree. Time is stored in seconds as a float; frames and milliseconds never enter the domain or the database.
 
 ## Quick start
 
-Requires Node 22, pnpm 9, Docker, FFmpeg, and [uv](https://docs.astral.sh/uv/) with
-Python 3.11+ for the audio service (`uv` installs its Python dependencies on first run).
-Optional: [Claude Code](https://docs.anthropic.com/en/docs/claude-code),
-[Codex](https://github.com/openai/codex) or Grok CLI, signed in on the same Mac, for AI text and
-images.
+Requires Node 22, pnpm 9, Docker, FFmpeg, and [uv](https://docs.astral.sh/uv/) with Python 3.11+ for the audio service. Optional: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex) or Grok CLI, signed in on the same Mac, for AI text and images — and Claude Code for the agent tab.
 
 ```bash
 git clone https://github.com/kabatin/ixa-video-creator.git
@@ -202,35 +252,9 @@ pnpm db:seed                  # creates a workspace and writes its id into .env
 pnpm dev                      # web :3000, api :3001, worker, audio :8100
 ```
 
-Open <http://localhost:3000>, create a project, and drop an audio file onto the window — the
-flow bar takes it from there. **Out of the box everything runs on local stubs — no API keys,
-no cost.**
+Open <http://localhost:3000>, create a project, and drop an audio file onto the window — the flow bar takes it from there. **Out of the box everything runs on local stubs — no API keys, no cost.**
 
-### Choosing which AI to use
-
-![The "which AI to use" dialog: a tab per job on the left showing the current choice, and the AIs found on this Mac for video on the right, tagged "this Mac" and "free"](./docs/images/ai-chooser.jpg)
-
-The first time you open the workbench, the *使う AI* (which AI to use) dialog appears. It looks
-for the AI CLIs, API keys and local generation servers on this Mac, and lets you pick one for
-each job:
-
-| Purpose | Choices |
-|---|---|
-| Text — storyboard drafts, ✦ AI writing help, automatic review | Claude Code · Codex · Grok |
-| Images — shot start frames, character sheets | Codex · FLUX.2 [klein] (local, free) |
-| Video — takes (AUTO picks among this AI's models) | still-motion (free) · MiniMax H3 (local, free) · Wan 2.2 5B (local, free) · Seedance via fal (paid) |
-| Voice — narration | Mac voice (free) · Gemini API · ElevenLabs (paid) |
-| Transcription — recorded narration into lines | whisper.cpp (local, free) · Gemini API · ElevenLabs (paid) |
-| Music — *Make a song* | ACE-Step 1.5 (local, free) |
-
-Every job also has a stub (*お試し*) that runs without any AI.
-
-Change it later from *iXA Video Creator → 使う AI…*. Until you choose, the `.env` settings apply.
-fal and the local server must be enabled in `.env` before they can be chosen — the screen alone
-never opens a billing path. Codex image generation uses your plan's usage and takes about a
-minute per frame; three are drawn at a time (`WORKER_CONCURRENCY_IMAGE`).
-
-### Connecting a real provider
+### Connecting a paid provider
 
 ```bash
 # .env
@@ -238,71 +262,43 @@ VIDEO_PROVIDER=fal            # default is `stub`
 FAL_API_KEY=...
 ```
 
-Generation now costs real money. The switch is deliberate and separate from the key: simply
-having a key present never enables billing. Choosing `fal` without a key stops the worker at
-startup rather than silently falling back to the stub.
-
-Settings → *Connections and runtime* shows which keys are set (never their values) and
-whether the billing path is open.
+The switch is deliberate and separate from the key: having a key never enables billing on its own. Choosing `fal` without a key stops the worker at startup rather than silently falling back to the stub. Settings → *Connections and runtime* shows which keys are set (never their values) and whether the billing path is open.
 
 ### Generating on this Mac (optional)
 
-Four local servers turn one Apple Silicon Mac into a free studio. Enable any of them, or all
-of them.
+Five local servers turn one Apple Silicon Mac into a free studio. Enable any of them, or all of them: **start the server, list it in `.env`, pick it under *Which AI*.**
 
-| Server | Makes | Model | Default address |
+| Server | Makes | Models | Default address |
 |---|---|---|---|
-| [vpipe-api](https://github.com/kabatin/vpipe-api) | video | MiniMax H3 Turbo | `http://127.0.0.1:8765` |
+| [vpipe-api](https://github.com/kabatin/vpipe-api) | video, upscaling | MiniMax H3 Turbo, FlashVSR | `http://127.0.0.1:8765` |
 | [wan-api](https://github.com/kabatin/wan-api) | video | Wan 2.2 TI2V-5B | `http://127.0.0.1:8766` |
 | [klein-api](https://github.com/kabatin/klein-api) | images | FLUX.2 [klein] | `http://127.0.0.1:8767` |
-| [ace-step-api](https://github.com/kabatin/ace-step-api) | music | ACE-Step 1.5 | `http://127.0.0.1:8768` |
+| [ace-step-api](https://github.com/kabatin/ace-step-api) | songs | ACE-Step 1.5, MiniMax-Music3 | `http://127.0.0.1:8768` |
+| sfx-api | sound effects, BGM | Stable Audio 3, MOSS SFX v2 | `http://127.0.0.1:8769` |
 
 ```bash
 # .env (default for each is `none`)
 LOCAL_VIDEO_GENERATOR=vpipe,wan   # comma-separated
 LOCAL_IMAGE_GENERATOR=klein
 LOCAL_MUSIC_GENERATOR=ace_step
+LOCAL_SFX_GENERATOR=sfx_api       # also enables Stable Audio BGM
 VPIPE_API_URL=http://127.0.0.1:8765
 VPIPE_API_TOKEN=                  # required only when the URL points off this machine
-# WAN_ / KLEIN_ / ACE_STEP_API_URL and _API_TOKEN work the same way
+# WAN_ / KLEIN_ / ACE_STEP_ / SFX_ API_URL and API_TOKEN work the same way
 ```
 
-Three steps: **start the server, list it in `.env`, pick it under *Which AI*.** Installing and
-running the servers is documented in their own READMEs.
+<details>
+<summary><b>Measured speeds and how each local path behaves</b></summary>
 
-**They share one GPU, so ixa never runs two local generations at the same time.** Video, images,
-upscaling and music wait in one line and finish one after another; the waiting one shows as
-*waiting in line* rather than in progress.
+**Images** ([ADR-0047](./docs/adr/0047-local-flux2-klein-images-via-klein-api.md)): about 30 s per image; a fixed seed reproduces the picture.
 
-**Images** (ADR-0047): about 30 s per image, and a fixed seed reproduces the picture.
+**Songs** ([ADR-0048](./docs/adr/0048-generate-music-with-local-ace-step.md)): ACE-Step makes a 60-second song in about 40 s (up to ~1.5 min on the first run). Stable Audio 3 Medium makes instrumental BGM of 10–190 s; a request with vocals is routed to ACE-Step when it is enabled. MiniMax-Music3 sings too, but takes about 9 s per second of song and may end early. Only the master track plays in the preview and the export — the others are candidates.
 
-**Music** (ADR-0048): *Make a song* in the music area takes a style, optional lyrics, a length
-(10–240 s), instrumental or not, and how many (1–4). About 40 s per 60-second song (up to ~1.5 min
-on the first run while the model loads). Each result becomes a music track and is sent to beat
-analysis; the first one becomes the master only when the project has none. Only the master track
-plays in the preview and the export — the others are candidates.
+**Sound effects** ([ADR-0052](./docs/adr/0052-sound-effects-with-local-stable-audio.md)): Stable Audio 3, warm on an M5, makes a 2-second sound in 0.37 s and a 10-second one in 0.53 s (3.2 s cold). MOSS is the slower fallback.
 
-**Video** (ADR-0031, ADR-0040): each listed server contributes a draft and a standard model; vpipe also publishes a **final**
-one. AUTO chooses among them only when that server is the selected video AI; otherwise it never
-picks them.
+**Draft now, final overnight** ([ADR-0031](./docs/adr/0031-local-h3-video-via-vpipe-api.md), [ADR-0040](./docs/adr/0040-local-wan-2-2-video-via-wan-api.md)). Shoot every shot with the draft model (832×480), adopt the takes you like, then *remake at final quality* (1344×768) — same prompt, seed and start frame. The final take is appended next to the draft. Measured on an M5: a 2.7 s shot took 5.1 min as a draft and 14.0 min as a final. A different size draws a different picture — it is a re-shoot, not an upscale.
 
-**Draft now, final overnight.** Shoot every shot with the draft model (832×480), adopt the take
-you like, then *remake at final quality* — one take, or every adopted shot at once from the
-bulk bar. The spec does not change: same prompt, same seed, same start frame, only the
-generation size (1344×768). The final take is appended next to the draft, never over it, and
-the screen tells you the count, how long it will take and when it will finish before you press
-it. Measured on an M5: a 2.7s shot took 5.1 min as a draft and 14.0 min as a final. Note that a
-different generation size produces a different picture — it is a re-shoot with the same
-instructions, not an upscale.
-
-**Or keep the picture and upscale it** (ADR-0044). *Upscale* runs vpipe's FlashVSR on a finished
-take: the picture stays exactly as adopted and only the detail sharpens, to 1920×1080. Do it per
-take, or for every adopted take from the bulk bar. Measured: about 5.5 min per shot, and the
-upscaled take is appended next to the original. Takes are stored at the size the model actually
-drew (ADR-0045) and scaled once, with Lanczos, at export.
-
-**Wan tops out at 5 seconds** (wan-api's contract). A 5–7.5s shot is generated at 5s and slowed to
-fit; beyond 7.5s ixa asks you to split the shot. Use MiniMax H3 (up to 10.125s) for longer cuts.
+**Or keep the picture and upscale it** ([ADR-0044](./docs/adr/0044-upscale-takes-with-flashvsr.md)): FlashVSR sharpens an adopted take to 1920×1080 in about 5.5 min per shot, appended next to the original.
 
 Measured on an M5 (10-core GPU, 32 GB), on AC power, 832×480 output, one 5-second clip:
 
@@ -311,82 +307,37 @@ Measured on an M5 (10-core GPU, 32 GB), on AC power, 832×480 output, one 5-seco
 | time | **7.4 min** | 11.3 min | 19.4 min |
 | frame 0 vs start image (SSIM) | 0.695 | **0.851** | 0.852 |
 
-**H3 is faster; Wan holds the start frame.** Which one to use is your call — nothing here scores
-how the results look. See [ADR-0031](./docs/adr/0031-local-h3-video-via-vpipe-api.md),
-[ADR-0040](./docs/adr/0040-local-wan-2-2-video-via-wan-api.md) and wan-api's
-[benchmark.md](https://github.com/kabatin/wan-api/blob/main/docs/benchmark.md).
+**H3 is faster; Wan holds the start frame.** Nothing here scores how the results look. Wan tops out at 5 seconds: a 5–7.5 s shot is generated at 5 s and slowed to fit, and beyond that ixa asks you to split the shot (H3 goes up to 10.125 s). With wan-api's `drawthings` backend a start image is rejected — use `mlx`, the default.
 
-Note: with wan-api's `drawthings` backend a start image is rejected — use the `mlx` backend
-(the default) for image-to-video.
+</details>
 
 ## Costs, honestly
 
-Everything except fal, ElevenLabs and Gemini's paid tier is free to run: the stubs,
-`local/still-motion`, the four local servers, the Mac voice and whisper.cpp. Claude Code, Codex
-and Grok use whatever plan you are already signed in with.
+Everything except fal, ElevenLabs and Gemini's paid tier is free to run: the stubs, `local/still-motion`, the five local servers, the Mac voice and whisper.cpp. Claude Code, Codex and Grok use whatever plan you are already signed in with — that includes the agent tab, image checks and motion analysis, whose cost the app records per conversation or per check.
 
-For the reference project — 27 shots, 110.9s of edited footage — Seedance 2.5 via fal.ai
-bills **140s**, because the model's minimum clip is 4 seconds and 12 of those shots are
-shorter. At $0.3024/s that is **$42 for one take each**, or **$127 for three**.
+For the reference project — 27 shots, 110.9 s of edited footage — Seedance 2.5 via fal.ai bills **140 s**, because the model's minimum clip is 4 seconds and 12 of those shots are shorter. At $0.3024/s that is **$42 for one take each**, or **$127 for three**. Short cuts and a 4-second minimum are a bad match; start with one take.
 
-Short cuts and a 4-second minimum are a bad match. Budget accordingly, and start with one
-take.
+For scale on the free side: on the vertical short, Claude Code drafted the storyboard for seven shots in 2 min 18 s, recorded at $0.62 of plan usage.
 
 ## Status
 
-Working end to end, from an empty project to an exported file: analysis → direction → lyric
-timing → captions → narration → cutting → AI storyboard drafts → AI start frames → takes →
-review → timeline → H.264 export — by hand in the workbench, or by an agent through MCP. Local
-images (klein) and local music (ACE-Step) are measured on real hardware and used for real work.
-The local video paths (still-motion, MiniMax H3 via vpipe, Wan 2.2 5B via
-wan-api) are measured on real hardware — though **no clip has been generated from ixa through
-wan-api yet**: those numbers come from wan-api's own benchmarks and the adapter is covered by
-contract tests (ADR-0040). The fal.ai / Seedance 2.5 adapter is implemented and tested against
-mocked responses, but its capability numbers — price per second, output frame rate — are
-**from documentation, not measured**, and are marked as such in the source.
-
-This is a personal project built in the open. Interfaces still move.
+Working end to end, from an empty project to an exported file and thumbnail — by hand in the workbench, by asking in the agent tab, or by an agent through MCP. Local images (klein), songs (ACE-Step, Stable Audio), sound effects (Stable Audio) and video (still-motion, MiniMax H3) are measured on real hardware and used for real work. **No clip has been generated from ixa through wan-api yet**: those numbers come from wan-api's own benchmarks and the adapter is covered by contract tests. The fal.ai / Seedance 2.5 adapter is tested against mocked responses, but its price and frame rate are **from documentation, not measured**, and are marked as such in the source.
 
 ## Security
 
-**A passphrase guards the API once you set one** (ADR-0046). Out of the box there is none and
-the screen lets you straight in; the API listens on `127.0.0.1` only. Set `IXA_PASSPHRASE`
-(12+ characters) and every endpoint answers 401 until the passphrase is entered — it is
-**required** before the API will listen beyond this machine (`API_HOST`). Automation (Claude,
-Codex) gets its own revocable access tokens. There is no HTTPS — on a LAN the passphrase and the
-session cookie travel in plain text. Do not expose it to a network you do not control — see
-[SECURITY.md](./SECURITY.md).
+**A passphrase guards the API once you set one** ([ADR-0046](./docs/adr/0046-passphrase-and-access-tokens.md)). Out of the box there is none, and the API listens on `127.0.0.1` only. Set `IXA_PASSPHRASE` (12+ characters) and every endpoint answers 401 until it is entered — it is **required** before the API will listen beyond this machine. Automation (Claude Code, Codex, the agent tab) gets its own revocable access keys. There is no HTTPS — do not expose it to a network you do not control. See [SECURITY.md](./SECURITY.md).
 
 ## Third-party licensing
 
-This project is MIT. Some dependencies carry obligations that pass to **you** as the
-operator:
+This project is MIT. Some dependencies carry obligations that pass to **you** as the operator:
 
-- **[Remotion](https://www.remotion.dev/docs/license)** is free for individuals and
-  organisations of up to three people who operate it; **four or more requires a company
-  license**, and headcount is aggregated across collaborating parties. MIT on this
-  repository does not waive that.
-- Provider APIs (fal.ai and others) bill you directly under their own terms.
-- Claude Code, Codex and Grok run under your own accounts and their own terms.
-- **MiniMax H3** (only if you enable the optional local generator) is released under the
-  MiniMax H3 Community License, which restricts where and how the weights may be used.
-  ixa does not ship the weights; check the license before enabling it.
-- **Wan 2.2** (likewise, only if you enable it) is published under Apache-2.0, which permits
-  commercial use. ixa does not ship the weights; the attribution and license-notice
-  obligations fall on you as the operator — check the model card.
-- **FLUX.2 [klein]** (only if you enable klein-api): the 4B (draft) and 9B (standard) weights
-  are published under different licenses, and the 9B's does not cover commercial use — check
-  both model cards before using the output commercially.
-- **ACE-Step 1.5** (only if you enable ace-step-api) is published under MIT.
+- **[Remotion](https://www.remotion.dev/docs/license)** is free for individuals and organisations of up to three people; **four or more requires a company license**, aggregated across collaborating parties. MIT on this repository does not waive that.
+- Provider APIs (fal.ai, Gemini, ElevenLabs) bill you directly under their own terms. Claude Code, Codex and Grok run under your own accounts.
+- The local models are not shipped with ixa; check each one before enabling it. **MiniMax H3** (MiniMax H3 Community License) restricts where and how the weights may be used. **Wan 2.2** is Apache-2.0. **FLUX.2 [klein]**: the 9B weights do not cover commercial use. **ACE-Step 1.5** is MIT. **MiniMax-Music3** (MiniMax-Music3 Community License) asks for its name to be shown prominently, which the app does. **Stable Audio 3** (Stability AI Community License) allows commercial use below US$1M annual revenue. **MOSS SFX v2** is Apache-2.0.
 
 ## Contributing
 
-Issues, [discussions](https://github.com/kabatin/ixa-video-creator/discussions) and pull requests are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md). Please read [AGENTS.md](./AGENTS.md) first — it
-documents the conventions this codebase actually enforces (immutability, zod at every
-boundary, no `any`, secrets only via env, append-only takes). `CLAUDE.md` holds the naming
-and wording rules, and [docs/LESSONS.md](./docs/LESSONS.md) collects the mistakes this
-project actually made and the rules that came out of them — mostly variations on *a green
-test suite that was checking nothing*.
+Issues, [discussions](https://github.com/kabatin/ixa-video-creator/discussions) and pull requests are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md). Please read [AGENTS.md](./AGENTS.md) first: it documents the conventions this codebase actually enforces (immutability, zod at every boundary, no `any`, secrets only via env, append-only takes). `CLAUDE.md` holds the naming and wording rules, the [ADRs](./docs/adr/) record why things are the way they are, and [docs/LESSONS.md](./docs/LESSONS.md) collects the mistakes this project actually made — mostly variations on *a green test suite that was checking nothing*.
 
 Run what CI runs before opening a PR:
 

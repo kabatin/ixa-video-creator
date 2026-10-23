@@ -1,171 +1,242 @@
 # iXA Video Creator
 
-**曲から始める。歌詞の時刻を合わせ、曲を切り、絵コンテ・絵・映像の下書きを AI に任せ、プレビューで見たままをミュージックビデオとして書き出す。**
+**曲から作るミュージックビデオの制作台。作業は、AI エージェントに頼むこともできる。**
+曲に合わせて切り、絵コンテ・絵・映像・BGM・効果音の下書きを AI に任せ、プレビューで見たままを書き出す。
+直しはワークベンチの「AI エージェント」タブにふつうの言葉で頼めるし、Claude Code や Codex から MCP で
+制作を丸ごと進めさせることもできる。
 
 [![CI](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml/badge.svg)](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/kabatin/ixa-video-creator)](https://github.com/kabatin/ixa-video-creator/releases) [![License: MIT](https://img.shields.io/github/license/kabatin/ixa-video-creator)](./LICENSE) [![GitHub stars](https://img.shields.io/github/stars/kabatin/ixa-video-creator?style=social)](https://github.com/kabatin/ixa-video-creator/stargazers)
 
-[English README](./README.md) · MIT · TypeScript モノレポ
+[English README](./README.md) · MIT · TypeScript モノレポ · v0.7
 
-![デモ。空の Project に曲を落とすと解析され、セクションの境目が一度で区切りになり、Shot になり、最初のフレームから Take ができ、曲に合わせて通しで再生される](./docs/images/demo.webp)
-
-<sub>曲を落とす → セクションの境目で切る → Shot → Shot ごとに Take → 通しで再生。LUNA BREW の作例を実際に操作して録画した（Take の生成待ちだけ切っている）。</sub>
+| 🎵 曲から作る | 🤖 頼んで作る |
+|---|---|
+| ![Demo: drop a song onto an empty project, it is analysed, section boundaries become cuts in one click, the cuts become shots, each shot gets a take from its start frame, and the whole thing plays back in sync with the music](./docs/images/demo.webp) | ![The AI agent tab: the creator asks for a one-line summary of every shot, the agent reads the project and answers in a list; then asks for a sound effect on the whale's tail, the agent starts a motion analysis and stops at a confirmation card with Run, Cancel and "don't ask again in this task"; the creator cancels and the agent offers two other ways](./docs/images/agent-chat.webp) |
+| 曲を落とす → セクションの境目で切る → Shot → Shot ごとに Take → 通しで再生。 | ふつうの言葉で頼む。読むだけならすぐ動き、生成・削除・書き出しは「実行」を押すまで待つ。 |
 
 ---
 
-## 曲が先にある
+## 4 行で言うと
 
-多くの AI 映像ツールは、プロンプトを書くところから始まってクリップが出てきて、
-音楽は後から下に敷くものになる。このツールは逆向きに作ってある。
+- **曲がそのままタイムラインになる。** カットは波形の上の位置なので、Shot の尺は曲が求める長さちょうどになり、その長さがそのまま動画の AI に渡る。
+- **AI エージェントと一緒に作れる。** ワークベンチの中のチャットのタブと、Claude Code・Codex 向けの 34 ツールの MCP サーバ。エージェントが作ったものは、ふつうの Shot・Take・クリップとして並び、見て直せて、⌘Z で戻せる。
+- **Mac 1 台がスタジオになる。** 絵（FLUX.2 [klein]）、映像（MiniMax H3・Wan 2.2）、曲と BGM（ACE-Step 1.5・Stable Audio 3・MiniMax-Music3）、効果音（Stable Audio 3）を、手元で無料で作れる。有料の API は任意で、明示しない限り開かない。
+- **費用と弱点を隠さない。** 数字は実測のものだけ。始める前に[正直な制約](#正直な制約)を読んでほしい。
 
-**入力は完成した曲。** 音源を画面に落とすと librosa で解析され（拍・小節頭・ドロップ・
-3 帯域 RMS）、その時点から**曲がそのままタイムラインになる**。
+## このツールで作ったもの
 
-- 映像の尺は曲の尺。はみ出しようがない
-- カットはすべて波形上の位置で、聴きながら置く
-- Shot の尺は「どこで切ったか」の結果であって、フォームに打ち込む数字ではない
-- その尺がそのまま映像モデルへ渡る。返ってくるのは曲が要求した長さの素材になる
-- 歌詞のある曲なら、流しながら各行の歌い出しで打つだけで時刻付きのテロップになる。絵を 1 枚も作らないうちに、黒い画面で確かめられる
+![Seven frames from "Senko's Time Travel", a vertical short: the girl Senko lit by a gaming monitor in an esports shop, on a footbridge at sunset, in an ukiyo-e castle town under cherry blossoms, raising a glowing sword in a stained-glass hall, riding a flying whale above the clouds, on a neon rooftop in 2099, and back in the shop under the title card](./docs/images/senko-stills.jpg)
 
-つまり作業は**「曲に対して編集を決め、空いた枠を埋める」**であって、
-「クリップを作ってから曲に合わせようとする」ではない。
-最初の制作物は 1 分 56 秒・27 カットのミュージックビデオ。
+<sub>**戦子のタイムトラベル** — 縦 9:16・26 秒・7 Shot のショート。最初のフレーム・映像・曲・効果音はすべて Mac 1 台の手元のモデルで作り、ナレーションの声だけ Gemini API を使った。</sub>
 
-曲がまだ無ければ、「曲を作る」で手元の Mac の ACE-Step 1.5 に作らせられる（曲調・歌詞・長さを渡すだけ）。
-できた曲はほかの楽曲と同じように解析される。
+![Nine frames from the "NIGHT RUN" trailer: a rain-soaked neon street, two sports cars idling in steam, an extreme close-up of a driver's eyes, a car streaking past in motion blur, a rear wheel spinning in tyre smoke, a car racing through a lit tunnel, the driver at the wheel in the rain, the two leads at a lookout at dawn, and the NIGHT RUN title over a wet street](./docs/images/night-run-stills.jpg)
 
-![聴きながら切る。セクションの境目に一度で区切りを置き、できるカットを確かめる](./docs/images/cutter.jpg)
+<sub>**NIGHT RUN** — 横 16:9・66 秒・41 Shot の予告編。ナレーション・エフェクト・効果音の段つき。書き出したファイルからコマを抜いた。</sub>
 
-## 空の Project から書き出しまで
+## AI エージェントに頼む
 
-メニューの下の帯が、作業の最初から最後までを案内し、次にやる段をいつも目立たせる。
-済んだ段には ✓ が付き、途中の段は進み具合（件数）が出る。
+入り口は 2 つあり、使うツールは同じ。
 
-![制作の流れの帯。楽曲・作品の方針・歌詞の時刻・テロップ・区切って Shot・絵コンテは済み、絵は 44 件中 40 件で次の段として目立っている、Take は 44 件中 7 件、書き出すは済み](./docs/images/flow-bar.png)
+### ワークベンチの中で:「AI エージェント」タブ
 
-1. **楽曲** — 音源を落とす。拍・小節頭・セクションを解析する。
-2. **作品の方針** — コンセプト・あらすじ、歌詞、ルック（画風・光・質感）。避けたいものと手本画像も。
-   全部の生成に自動で足されるので、書くのは 1 回でよい。「歌詞なし」にすると歌詞の段は飛ばす。
-3. **歌詞の時刻** — 曲を流し、各行の歌い出しで Enter を押す。
-4. **テロップ** — 時刻の付いた行がテロップになる。プレビューは曲とテロップを黒い画面で流すので、
-   絵を作らずに（お金を掛けずに）タイミングを確かめられる。
-5. **ナレーション**（任意）— 原稿を書いて AI の声に読ませるか、自分で録って聞き取らせ、行とテロップにする。
-   声の間は曲の音量が下がる。
-6. **区切って Shot** — 聴きながら区切りを置く（Enter は画面のどこでも効き、拍に吸着する）。
-   セクションの境目や歌い出しに一度で置くこともできる。区切りは下書きで、「N カットを Shot にする」で保存する。
-7. **絵コンテ** — 全 Shot の説明・雰囲気・**カメラ**（寄り引き・アングル・動き）を AI が下書きし、
-   1 件ずつ「なぜこの絵か」を添える。
-   その Shot の間に歌われる歌詞・登場人物・ロケーション・ルックを読んで書く。採用するまで Shot は変わらない。
-   自分で書いてもよい。
-8. **絵** — 各 Shot の最初のフレームを、絵コンテと登場人物の参照画像から AI が描く。同時に 3 枚ずつ作り
-   （実測で 1 枚ずつの 2.1 倍）、全部でも選んだ Shot だけでも、いつでも止められる。
-9. **Take** — 最初のフレームから、Shot ごとの映像を作る。作っている間は、順番待ち・生成先で順番待ち・作成中を
-   分けて出し、経過と目安も出す。いつでも止められる。
-10. **書き出す** — H.264。全体か、選んだ Shot だけ。`~/Movies/ixa-video-creator/<作品名>/` に置かれ、
-   ボタン 1 つで Finder で開ける。
+![The workbench with the AI agent tab open in the bottom dock: the storyboard and shot list above; below, the agent's bulleted summary of eight shots, the creator's request for a whale-tail sound effect, a "analysing motion" line and a highlighted confirmation card reading "Analyse motion (the AI looks at the pictures) — takes time or money" with Run, Cancel and "Don't ask again in this task"](./docs/images/agent-tab.jpg)
 
-段を飛ばしてもよいが、飛ばす前に確かめる（例: 絵コンテの無い Shot の絵を作る前）。
+下のドックの **AI エージェント** を開いて、したいことを書く —「この Shot の効果音を派手に」「Shot を要約して」「サビの小節頭ごとにフラッシュを入れて」。
+依頼には、作品・選んでいる Shot・再生位置が自動で添えられるので、「この Shot」は思ったとおりの Shot を指す。
 
-## エージェントに丸ごと任せる
+- **新しいタスク／作業を継続。** 新しく会話を始めるか、前の会話の続きから話す。会話は**作品ごとに**残るので、翌週の「続き」も何をしたかを覚えている。
+- **何をしているかが見える。** 返事は作業しながら流れてくる。ツールの呼び出しは 1 行ずつ（「作品を読んでいる」「動きを分析している」…）、経過時間と ✓ / ✗ つきで出る。
+- **確認のカード。** 読むだけとふつうの直しはすぐ動く。**生成・削除・書き出し・設定の変更**は、カードで止まる —「実行」「やめる」「以後このタスクでは確認しない」。チャットで「確認なしでいい」と言っても同じ。確認はいつでも戻せる。
+- **モデルは会話ごとに選べる。** 既定は Sonnet。Opus・Haiku も選べる。
+- **エージェントの直しも ⌘Z で戻せる。** 自分の操作と同じ API を通るので、取り消しも同じように効く。
 
-`apps/mcp` は MCP サーバ（ADR-0049）。Claude Code や Codex が、21 のツールで同じ段を進められる —
-作品を立てる、曲を作って選ぶ、Shot に切る、絵コンテを書く、最初のフレームを描く、Take を作る、採用する、書き出す。
-うち `view` はエージェントの目で、最初のフレームと Take のコマを**画像として**返す。エージェントは自分で見て、
-崩れた手や形の変わった車を描き直してから次へ進める。
+**安全の作り**（[ADR-0058](./docs/adr/0058-agent-chat-tab.md)）。タブは Claude Code の CLI を、ixa の MCP のツールだけで起こす — シェルやファイルを触る組み込みのツールは無く、制作者自身の Claude の設定やフックも読まない。ツールを使う前に必ず確認の関所を通り、確認の答えは**画面からだけ**受ける（エージェントが自分の確認に答えることはできない）。**ほかの作品**を触る操作は、「以後確認しない」の後でも必ず確認する。エージェントの鍵は 1 回のやりとりごとに発行し、MCP の設定ファイル（権限 600）にだけ書き（ログや会話には出さない）、やりとりが終わったら取り消す。同じ作品で動く会話は 1 つだけなので、2 つの会話が同じ直しを取り合うことはない。
+
+### Claude Code・Codex から: MCP サーバ
+
+`apps/mcp` は stdio の MCP サーバ（[ADR-0049](./docs/adr/0049-mcp-server.md)）。画面と同じ API を呼ぶ薄い層で、制作の全体を **34 のツール**で扱う:
+
+| 段 | ツール |
+|---|---|
+| 準備 | `ixa_status` · `set_ai` · `create_project` · `get_project` |
+| 曲 | `generate_music` · `upload_music` · `set_master_track` · `music_overview` |
+| Shot と登場人物 | `plan_shots` · `edit_shots` · `create_character` · `create_location` |
+| 最初のフレーム | `draw_start_frames` · `set_start_frame` · `list_start_frame_history` · `use_start_frame` · `retry_image` |
+| Take | `generate_takes` · `list_takes` · `adopt_take` · `review_take` · `upscale_takes` · `wait` |
+| エフェクトと音 | `add_effects` · `list_effects` · `remove_effects` · `analyze_motion` · `suggest_sfx` · `generate_sfx` · `list_sfx` · `remove_sfx` |
+| 見る・届ける | `view` · `export` · `export_thumbnail` |
+
+**`view` はエージェントの目。** 最初のフレームと Take のコマを**画像として**返すので、エージェントは自分で見て、崩れた手や溶けた車を描き直してから次へ進める。`export_thumbnail` も、できた JPEG を画像で返す。
 
 > 「横 16:9 で 60 秒のショートを作って。夜のストリートレースのあと、夜明けに 2 人が寄り添う」
 
-エージェントは取り消せる自動化用の鍵（ADR-0046）で API を呼ぶので、作ったものはすべてワークベンチに
-ふつうの Shot と Take として並び、あとから見て直せる。最初の試作（62 秒・16 Shot、曲づくりも含めてこのツールだけで作った）は、
-手元の GPU 1 台で約 4 時間だった。設定は [apps/mcp/README.md](./apps/mcp/README.md)。
+最初の試作（62 秒・16 Shot、曲づくりも含めてこのツールだけで作った）は、手元の GPU 1 台で約 4 時間だった。長い生成で呼び出しを止めておくことはなく、エージェントは頼んでから `wait` で待つ（`wait` は上限の時間で必ず返る）。
+
+Claude Code への登録（鍵はシェルの環境から渡す。ファイルに直に書かない）:
+
+```json
+{
+  "mcpServers": {
+    "ixa": {
+      "command": "/path/to/ixa-video-creator/apps/mcp/node_modules/.bin/tsx",
+      "args": ["/path/to/ixa-video-creator/apps/mcp/src/main.ts"],
+      "env": {
+        "IXA_API_URL": "http://127.0.0.1:3001",
+        "IXA_WORKSPACE_ID": "${IXA_WORKSPACE_ID}",
+        "IXA_API_TOKEN": "${IXA_API_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+`IXA_API_TOKEN` は「アクセス用の鍵」のページで発行する自動化用の鍵（[ADR-0046](./docs/adr/0046-passphrase-and-access-tokens.md)）で、いつでも取り消せる。Codex の設定などは [apps/mcp/README.md](./apps/mcp/README.md)。
+
+## 曲が先にある
+
+多くの AI 映像ツールは、プロンプトを書くところから始まってクリップが出てきて、音楽は後から下に敷くものになる。このツールは逆向きに作ってある。
+
+**入力は完成した曲。** 音源を画面に落とすと librosa で解析され（拍・小節頭・ドロップ・3 帯域 RMS）、その時点から**曲がそのままタイムラインになる**。
+
+- 映像の尺は曲の尺。はみ出しようがない
+- カットはすべて波形上の位置で、聴きながら置く
+- Shot の尺は「どこで切ったか」の結果で、その尺がそのまま動画の AI へ渡る
+- 歌詞のある曲なら、流しながら各行の歌い出しで打つだけで時刻付きのテロップになる。絵を 1 枚も作らないうちに、黒い画面で確かめられる
+
+つまり作業は**「曲に対して編集を決め、空いた枠を埋める」**であって、「クリップを作ってから曲に合わせようとする」ではない。最初の制作物は 1 分 56 秒・27 カットのミュージックビデオ。
+
+曲がまだ無ければ、**「曲を作る」**で手元の Mac に作らせる。歌なしの BGM は Stable Audio 3（既定）、歌と歌詞を入れるなら ACE-Step 1.5、ほかに MiniMax-Music3。できた曲は楽曲になり、ほかの楽曲と同じように解析される。
+
+![Cutting while listening: section boundaries placed as cuts in one click, with the cuts they make](./docs/images/cutter.jpg)
+
+## 空の作品から書き出しまで
+
+メニューの下の帯が、作業の最初から最後までを案内し、次にやる段をいつも目立たせる。済んだ段には ✓ が付き、途中の段は進み具合（件数）が出る。
+
+![The production flow bar: song, direction, lyric timing, captions, cut into shots and storyboard are done; frames are at 40 of 44 and highlighted as the next step; takes at 7 of 44; export done](./docs/images/flow-bar.png)
+
+1. **楽曲** — 音源を落とすか、作る。拍・小節頭・セクションを解析する。
+2. **作品の方針** — コンセプト・あらすじ・歌詞・ルック（画風・光・質感）、避けたいものと手本画像。全部の生成に自動で足されるので、書くのは 1 回でよい。
+3. **歌詞の時刻** — 曲を流し、各行の歌い出しで Enter を押す。
+4. **テロップ** — 時刻の付いた行がテロップになる。黒い画面で流すので、絵にお金を掛けずにタイミングを確かめられる。
+5. **ナレーション**（任意）— 原稿を AI の声に読ませるか、自分で録って聞き取らせ、行とテロップにする。ノイズ除去は既定で掛かり、録音ごとに外せる。声の間は曲の音量が下がる。
+6. **区切って Shot** — 聴きながら区切りを置く（Enter は画面のどこでも効き、拍に吸着する）。セクションの境目や歌い出しに一度で置くこともできる。
+7. **絵コンテ** — 全 Shot の説明・雰囲気・**カメラ**を AI が下書きし、1 件ずつ「なぜこの絵か」を添える。採用するまで Shot は変わらない。
+8. **絵** — 各 Shot の最初のフレームを、登場人物の参照画像から AI が描き、自分でチェックする（下）。
+9. **Take** — 最初のフレームから Shot ごとの映像を作る。順番待ち・経過・目安が出る。
+10. **書き出す** — H.264。全体か、選んだ Shot だけ。`~/Movies/ixa-video-creator/<作品名>/` に置かれる。YouTube のサムネイルも。
+
+段を飛ばしてもよいが、飛ばす前に確かめる。
+
+## 音・仕上げ・AI の見直し
+
+### 映像に合わせて鳴る効果音
+
+![The "make sound effects" window for one shot: a motion curve of the adopted take with peaks marked in yellow, labelled events such as "engine and road noise in the cabin", "turning the wheel", "tyre squeal" and "body lurch", and one editable row per cue with time, length, volume and an English prompt](./docs/images/sfx-from-motion.jpg)
+
+「＋ 効果音」は、採用中の Take の動きを分析する（[ADR-0054](./docs/adr/0054-motion-analysis-for-sfx.md)）。コマごとの変化の量、急に動いたところ、そして Take から抜いた 12 コマを Claude に見せて「何が起きているか」。出来事ごとに時刻・長さ・英語の指示の行が出るので、直して、要らない行のチェックを外せば、手元の Stable Audio 3 が音を作って効果音の段に置く。瞬間の音は近くの動きの山に寄せ、音の一番大きいところを出来事の時刻に合わせることもできる。試しの Shot では、手で置いた着地 8 回がすべて検出した山の ±0.1 秒以内に入った。Stable Audio は温まった M5 で、10 秒の音を約 0.5 秒で作る（[ADR-0052](./docs/adr/0052-sound-effects-with-local-stable-audio.md)）。
+
+手持ちの音のファイルも効果音の段に置ける（[ADR-0056](./docs/adr/0056-uploaded-sound-effects.md)）。声・楽曲・効果音は、ほかの作品から取り込める（[ADR-0053](./docs/adr/0053-import-voices-music-sfx.md)）。
+
+### 段に分かれたタイムライン
+
+![The NIGHT RUN trailer in the workbench: storyboard and shot list above, and a timeline below with lanes for the music waveform, the video shots, transitions, narration, three caption layers, effects and a sound-effect lane full of clips with faint motion markers](./docs/images/workbench-layers.jpg)
+
+楽曲・映像・トランジション・ナレーション・テロップ・エフェクト・効果音が、この順にそれぞれの段に並ぶ。時間が重なるクリップは行を分けて出し、隠れない。**エフェクト**は 8 つの型（フラッシュ・光漏れ・スピード線・フィルム焼け・グリッチ・タイトルカード・揺れ・寄りのパンチ）から、型と強さで選ぶ。文から絵を作らないので、プレビューと書き出しが同じコマになる（[ADR-0050](./docs/adr/0050-effect-templates.md)）。クリップ・Shot・トランジション・テロップ・スタイル・キャラクター・楽曲など、ほとんどの直しは **⌘Z** で戻せ、変更履歴は専用のタブで見られる。
+
+### 絵は AI が自分で見直し、映像の作り直しは聞いてから
+
+- **最初のフレーム**（[ADR-0055](./docs/adr/0055-image-check-and-retry.md)）: できた絵を Claude が見て、手足の崩れ・溶けた物・意味の無い文字・別人・主役の欠落を探す。手元の画像の AI なら、誰が見てもリテイクの絵は自動で描き直す（既定で 2 回まで）。描いた絵はすべて残り、前の絵に戻せる。テキストの AI が Claude でなければチェックは飛ばし、「チェックしていない」と残す（黙って合格にしない）。
+- **Take**（[ADR-0057](./docs/adr/0057-video-retake-by-request.md)）: レビューで不合格なら「作り直し推奨」と出すだけで、勝手に GPU をもう 10 分使わない。夜にまとめて頼むときは「NG なら自動で作り直す」を付ければ、上限までレビューと作り直しを繰り返す。
+- **解像度上げ**の待ち・作成中は Shot 一覧とストーリーボードに出るので、夜の作業の進み具合がひと目で分かる。
+
+### サムネイルも
+
+「ファイル > サムネイルを書き出す…」は、映像と同じ Remotion のコンポジションで 1280×720・2MB 未満の JPEG を描く（[ADR-0051](./docs/adr/0051-youtube-thumbnail.md)）。背景は再生位置のコマ・Shot の絵・AI に描かせたキーアートから選び、題名は 9 マスの位置に置き、大きさと色、差し色のバーの有無も選べる。
+
+### 用途ごとに AI を選ぶ
+
+![The "which AI to use" dialog on the Music tab: on the left, the current choice for text, images, video, voice, transcription, music and sound effects; on the right, ACE-Step 1.5, MiniMax-Music3 and Stable Audio 3 Medium (instrumental, selected), each tagged "this Mac" and "free", with notes on speed and limits](./docs/images/ai-chooser.jpg)
+
+初めてワークベンチを開くと「使う AI」が出る。この Mac にある AI の CLI・API の鍵・手元の生成サーバを探し、用途ごとに 1 つ選ぶ。
+
+| 用途 | 選べるもの |
+|---|---|
+| テキスト — 絵コンテの案・入力の手伝い・レビュー・画像のチェック・AI エージェント | Claude Code・Codex・Grok |
+| 画像 — 最初のフレーム・キャラクターシート・キーアート | Codex・FLUX.2 [klein]（手元・無料） |
+| 動画 — Take | 静止画を動かす（無料）・MiniMax H3（手元・無料）・Wan 2.2 5B（手元・無料）・Seedance（fal・有料） |
+| 声 — ナレーション | Mac の声（無料）・Gemini API・ElevenLabs（有料） |
+| 文字起こし — 録ったナレーションを行にする | whisper.cpp（手元・無料）・Gemini API・ElevenLabs（有料） |
+| 曲 — 「曲を作る」 | Stable Audio 3 Medium（歌なし）・ACE-Step 1.5・MiniMax-Music3（どれも手元・無料） |
+| 効果音 | Stable Audio 3・MOSS SFX v2（手元・無料） |
+
+どの用途にも、AI を使わない「お試し」がある。有料の口は `.env` で有効にしてからでないと選べない（画面だけでは課金の口を開けない）。
 
 ## 30 秒 CM を最初から最後まで
 
-作例は **LUNA BREW**（架空の夜のコーヒースタンド）。120 BPM の曲に合わせた 30 秒 CM で、
-9 カット、2 人の登場人物。
+作例は **LUNA BREW**（架空の夜のコーヒースタンド）。120 BPM の曲に合わせた 30 秒 CM で、9 カット、2 人の登場人物。
 
-![LUNA BREW の 9 カット。雨の路地、水たまりの三日月ネオン、エスプレッソを淹れるバリスタ、ラテアート、雨の中のライダー、カウンターでの受け渡し、湯気、夜明けの屋上の二人](./docs/images/luna-brew-stills.jpg)
+![Nine stills of the LUNA BREW spot: a rainy back street, a crescent-moon neon in a puddle, the barista pulling an espresso, latte art, the rider in the rain, the handoff at the counter, steam, and the two of them on a rooftop at dawn](./docs/images/luna-brew-stills.jpg)
 
-この絵はアプリの外で画像モデルに作らせ、各 Shot の**最初のフレーム**として持ち込んだもの（今もこの使い方はできる）。
-v0.2 からは、最初のフレームをアプリの中でも描ける。組み込みの `local/still-motion` モデルが、最初のフレームを
-Shot のカメラ指定どおりにゆっくり寄る・引く・流す動画にして Take にする。費用 0・API キー不要。
-あとで別の動画モデルに替えても、同じ最初のフレームをそのまま使える。
+この絵はアプリの外で画像モデルに作らせ、各 Shot の**最初のフレーム**として持ち込んだもの（今もこの使い方はできる）。組み込みの `local/still-motion` は、最初のフレームを Shot のカメラ指定どおりにゆっくり寄る・引く・流す動画にして Take にする。費用 0・API キー不要。
 
 | | |
 |---|---|
-| ![通しで再生。上がプレビュー、下がタイムライン](./docs/images/preview.jpg) | ![Take 比較。同じ Shot の 2 本を同じ拍の上で並べる](./docs/images/take-compare.jpg) |
+| ![Playing the cut end to end: the preview player above the timeline](./docs/images/preview.jpg) | ![Take comparison: two takes of the same shot side by side on the same beats](./docs/images/take-compare.jpg) |
 | **プレビューが書き出しそのもの** — プレイヤーと書き出しは同じコンポジション。 | **拍の上で Take を比べる** — Shot の区間を繰り返しながら 2 本を並べる。 |
-| ![インスペクター。Shot の時間・カメラ・登場人物・ロケーション・最初のフレーム](./docs/images/inspector.jpg) | ![素材。キャラクターの識別画像と Look](./docs/images/library.jpg) |
-| **1 カットのことは 1 か所で** — カメラ、登場人物と Look、ロケーション、最初のフレーム。 | **キャラクター・Look・ロケーション・ブランド** — Project ごとに持ち、ほかの Project から取り込める。 |
-
+| ![The inspector: timing, camera, cast, location and start frame of a shot](./docs/images/inspector.jpg) | ![The library: a character's identity image and looks](./docs/images/library.jpg) |
+| **1 カットのことは 1 か所で** — カメラ、登場人物と Look、ロケーション、最初のフレーム。 | **キャラクター・Look・ロケーション・ブランド** — 作品ごとに持ち、ほかの作品から取り込める。 |
 
 ## 特徴
 
-**曲の構造がデータとして扱える。** 拍と小節頭は実数として持っているので、吸着・絞り込み・
-並べ替えの対象になる。各 Shot が拍に対してどこにあるかは出すが、**それを間違いとして扱わない** —
-歌い出しに合わせて切るのは選択であって誤りではなく、参考 Project では 27 カット中 16 件が
-意図的に拍から外れている。
+**曲の構造がデータとして扱える。** 拍と小節頭は数として持っているので、吸着・絞り込み・並べ替えの対象になる。各 Shot が拍に対してどこにあるかは出すが、**それを間違いとして扱わない** — 参考の作品では 27 カット中 16 件が意図的に拍から外れている。
 
-**プレビューが書き出しそのもの。** プレイヤーと書き出しは*同じ* `TimelineDocument` を
-*同じ* Remotion コンポジションに通す。「プレビュー用の別経路」が無いので、
-見た目と出力がズレるという種類のバグが構造的に起きない。
+**プレビューが書き出しそのもの。** プレイヤー・書き出し・サムネイルは、*同じ* `TimelineDocument` を *同じ* Remotion コンポジションに通す。プレビュー用の別経路が無いので、見た目と出力がズレない。
 
-**用途ごとに AI を選べる。手元に入っているものを使う。** テキスト（絵コンテの案・入力の手伝い）は
-Claude Code・Codex・Grok、画像は Codex か手元の FLUX.2 [klein]、動画は無料のローカルモデルか fal、
-曲は手元の ACE-Step 1.5。CLI は自分のアカウントでサインインしたまま動くので、そのための API キーをアプリに置かない。
-**文章・絵・動画・曲が、Mac 1 台の中で無料で揃う。**
+**エージェントは後付けではなく、正式な使い手。** MCP のツールは制作の段ごとの粗い単位で、画面と同じ API を呼ぶ。ツールはそれぞれ危険度を名乗り、エージェントのしたことはすべて、見て直せて戻せるふつうの作業として残る。
 
-**作った素材は、ただのファイル。** 絵も Take も書き出しも、この機械のフォルダに置かれる
-（`STORAGE_DIR`。間に保管サーバを挟まない）。ボタン 1 つで作品の素材を
-`~/Movies/ixa-video-creator/<作品名>/素材/` へ、Shot の順に並ぶ読める名前で取り出せる。
-1 本だけ別の用に使いたいときに、作品全体を書き出さなくてよい。中身は同じ実体へのリンクなので二重に持たない。
-画面へ見せる URL は期限つきの署名で、**都度発行して保存しない**。
+**作った素材は、ただのファイル。** 絵も Take も書き出しも、この機械のフォルダに置かれる（`STORAGE_DIR`）。ボタン 1 つで作品の素材を `~/Movies/ixa-video-creator/<作品名>/素材/` へ、Shot の順に並ぶ読める名前で取り出せる（同じ実体へのリンクなので二重に持たない）。画面へ見せる URL は期限つきの署名で、都度発行して保存しない。
 
-**AI の下書きは作業を上書きしない。** 絵コンテの案は「いまの説明」と並べ、1 件ずつ理由を添える。
-Shot が変わるのは案を採用したときだけ。まとめて変えた操作は記録して戻せる。Take は追記のみで、
-生成し直しても前の結果を上書きしない。
+**AI の下書きは作業を上書きしない。** 絵コンテの案は「いまの説明」と並べ、1 件ずつ理由を添える。Take は追記のみで、作り直しても前の結果を上書きしない。最初のフレームも履歴が残る。
 
-**1 本の映像を通して同じ人物を出すための作り。** キャラクター・Look・ロケーション・ブランド資産は
-各 Shot の参照画像として解決される。27 回打ち直して少しずつ違えていくプロンプト文ではない。
-キャラクターシート（四面図）は画像 1 枚から作れ、絵コンテの案には、文字で書いた外見だけを使わせる
-（それ以外の見た目は参照画像が決める）。
+**1 本を通して同じ人物を出すための作り。** キャラクター・Look・ロケーション・ブランド資産は各 Shot の参照画像として解決される。27 回打ち直して少しずつ違えていくプロンプト文ではない。
 
-**Provider は差し替え可能で、差し替えの検証は無料。** `VideoProvider` は 3 メソッド
-（`submit` / `poll` / `cancel`）。ローカルの FFmpeg スタブがそれを完全に実装しているので、
-**有料 API を繋ぐ前に**キュー・ポーリング・失敗処理・予算上限まで通しで動かせる。
+**お金を第一級の危険として扱う。** 作品ごとの予算を、ジョブを積む前にサーバ側で検査する。ローカルの FFmpeg スタブが `VideoProvider` を完全に実装しているので、有料 API を繋ぐ前に、キュー・ポーリング・失敗処理・予算の歯止めまで 0 円で通しで動かせる。
 
-**お金を第一級の危険として扱う。** Project ごとの予算をサーバ側で、ジョブ投入前に検査する。
-スタブに架空の単価を付けられるので、**1 円も使わずに予算ガードが実際に止まることを確かめられる**。
-生成が失敗したら Shot を生成中から解放し、通信が一度揺れただけで課金済みの生成を捨てない。
+## 正直な制約
+
+- **Apple Silicon の Mac が前提。** 無料の手元のモデルは、Apple Silicon 向けの別のサーバ（vpipe-api・wan-api・klein-api・ace-step-api・sfx-api）で動く。無ければ、お試し・Codex の画像・有料 API になる。
+- **手元の生成は遅く、1 つずつしか動かない。** 手元のモデルは GPU を分け合うので、映像・絵・解像度上げ・曲・効果音は 1 列に並ぶ。M5 の実測で、H3 の 5 秒の試作は 7.4 分。縦のショートでは 576×1024 の Take が 1 本約 10 分、MiniMax-Music3 は 60 秒の曲に約 10 分。1 本を通して作るなら夜に回す前提で。
+- **手元のモデルにはモデルの限界がある。** Wan は 5 秒まで。「文字を描かない」と書いても文字が出ることがある。縦のショートでは、手元の画像の AI が寄りの絵を苦手にした。Stable Audio は歌えない（歌は ACE-Step か MiniMax-Music3）。
+- **AI エージェントのタブは Claude Code の CLI が要る。** テキストの AI が Codex・Grok だと使えず、Claude の契約の利用枠を使う。1 作品で動く会話は 1 つ、途中で指示を足すなら止めて話し直す、画像の添付はまだ無い。確認は CLI の関所に頼っていて、API の側でも強制する形は設計済み・未着手。
+- **MCP サーバは stdio だけ。** 自動化用の鍵は画面と同じことが全部できる（鍵ごとに範囲を絞る仕組みはまだ無い）。
+- **画像のチェックも Claude が要る。** テキストの AI が Codex・Grok だと、作った絵は「チェックしていない」になる。
+- **HTTPS は無い。** LAN では合言葉が平文で流れる。Safari ではプレビューがカットの境目でカクつくことがある（Chrome では滑らか）。
+- **個人プロジェクト。** インターフェースは版ごとにまだ動く。
 
 ## 構成
 
 ```
 apps/
-  web       Next.js のワークベンチ。ドッキング可能なパネル（ストーリーボード・聴きながら切る・タイムライン・比較・絵コンテの案）
-  api       Hono + zod-openapi
-  worker    BullMQ。動画・画像・声・曲の生成、メディア解析、書き出し
+  web       Next.js のワークベンチ。ドッキングできるパネル（ストーリーボード・聴きながら切る・タイムライン・比較・AI エージェント）
+  api       Hono + zod-openapi。AI エージェントの Claude CLI も会話ごとにここが起こす
+  worker    BullMQ。動画・画像・声・曲・効果音の生成、動きの分析、書き出し
   audio     Python。librosa による解析（拍・小節頭・セクション・波形）
   mcp       AI エージェント向けの MCP サーバ（stdio）。API を呼ぶだけの薄い層
 packages/
   domain    純粋。IO 禁止。モデルの唯一の正
-  providers アダプタ（映像 / 画像 / LLM / 声 / 曲）。外部 SDK と CLI はここで閉じる
-  render    Remotion コンポジションと FFmpeg の計画
+  providers アダプタ（映像 / 画像 / LLM / 声 / 曲 / 効果音）。外部 SDK と CLI はここで閉じる
+  render    Remotion のコンポジション（映像とサムネイル）と FFmpeg の計画
   db        Drizzle のスキーマとリポジトリ
 ```
 
 依存の向きは常に `apps → packages → domain`。逆流しない。
 
-**Shot First.** ストーリーボード・生成・Take・レビュー・タイムラインがすべて 1 つの
-エンティティにぶら下がる。`Shot` がマスタータイムライン上の位置 — 曲を切って与えた位置 —
-を所有するので、時間が食い違う第 2 の場所が存在しない。時間は秒（float）で持つ。
-音の解析が話す単位がそれだから。フレームとミリ秒はドメインにも DB にも入れない。
+**Shot First.** ストーリーボード・生成・Take・レビュー・タイムラインがすべて 1 つのエンティティにぶら下がる。`Shot` がマスタータイムライン上の位置 — 曲を切って与えた位置 — を持つので、時間が食い違う第 2 の場所が無い。時間は秒（float）で持ち、フレームとミリ秒はドメインにも DB にも入れない。
 
 ## 動かす
 
-Node 22 / pnpm 9 / Docker / FFmpeg、音声サービスに [uv](https://docs.astral.sh/uv/) と Python 3.11+ が要る
-（Python の依存は初回起動時に `uv` が入れる）。AI でテキストや絵を作るなら、
-[Claude Code](https://docs.anthropic.com/en/docs/claude-code)・[Codex](https://github.com/openai/codex)・Grok CLI の
-どれかを同じ Mac でサインインしておく（任意）。
+Node 22 / pnpm 9 / Docker / FFmpeg、音声サービスに [uv](https://docs.astral.sh/uv/) と Python 3.11+ が要る。AI でテキストや絵を作るなら [Claude Code](https://docs.anthropic.com/en/docs/claude-code)・[Codex](https://github.com/openai/codex)・Grok CLI のどれかを同じ Mac でサインインしておく（任意。AI エージェントのタブには Claude Code）。
 
 ```bash
 git clone https://github.com/kabatin/ixa-video-creator.git
@@ -182,32 +253,9 @@ pnpm db:seed                  # ワークスペースを作り、その ID を .
 pnpm dev                      # web :3000, api :3001, worker, audio :8100
 ```
 
-<http://localhost:3000> を開き、Project を作り、音声ファイルを画面に落とす。あとは流れの帯が案内する。
-**既定ではローカルのスタブだけで動く。鍵も費用も要らない。**
+<http://localhost:3000> を開き、作品を作り、音声ファイルを画面に落とす。あとは流れの帯が案内する。**既定ではローカルのスタブだけで動く。鍵も費用も要らない。**
 
-### 使う AI を選ぶ
-
-![「使う AI」の画面。左に用途ごとのタブと今選んでいる AI、右にこの Mac で見つかった動画の AI が「この Mac」「無料」の札つきで並ぶ](./docs/images/ai-chooser.jpg)
-
-初めてワークベンチを開くと「使う AI」が出る。この Mac に入っている AI の CLI・API の鍵・手元の生成サーバを探し、
-用途ごとに 1 つ選ぶ。
-
-| 用途 | 選べるもの |
-|---|---|
-| テキスト — 絵コンテの案・✦ AI（入力の手伝い）・自動レビュー | Claude Code・Codex・Grok |
-| 画像 — Shot の最初のフレーム・キャラクターシート | Codex・FLUX.2 [klein]（手元・無料） |
-| 動画 — Take（AUTO はこの AI のモデルから選ぶ） | 静止画を動かす（無料）・MiniMax H3（手元・無料）・Wan 2.2 5B（手元・無料）・Seedance（fal・従量課金） |
-| 声 — ナレーション | Mac の声（無料）・Gemini API・ElevenLabs（有料） |
-| 文字起こし — 録ったナレーションを行にする | whisper.cpp（手元・無料）・Gemini API・ElevenLabs（有料） |
-| 曲 — 「曲を作る」 | ACE-Step 1.5（手元・無料） |
-
-どの用途にも、AI を使わない「お試し」がある。
-
-あとからメニュー「iXA Video Creator > 使う AI…」で変えられる。選ぶまでは `.env` の設定のまま動く。
-お金が掛かる fal と手元の生成サーバは、下の `.env` で有効にしてから選べる（画面だけでは有料の口を開けない）。
-Codex の画像は契約の利用枠を使い、1 枚 1 分ほどかかる。同時に 3 枚ずつ作る（`WORKER_CONCURRENCY_IMAGE`）。
-
-### 実 Provider を繋ぐ
+### 有料の Provider を繋ぐ
 
 ```bash
 # .env
@@ -215,135 +263,82 @@ VIDEO_PROVIDER=fal            # 既定は stub
 FAL_API_KEY=...
 ```
 
-ここから生成に実費が掛かる。切り替えは鍵とは別に明示する形にしてある
-（鍵を置いただけでは課金経路は開かない）。`fal` にしたのに鍵が無ければ、
-黙ってスタブへ落とさず worker が起動時に止まる。
-
-設定 →「接続先と実行の設定」で、どの鍵が設定済みか（**値は出さない**）と、
-課金経路が開いているかが見える。
+切り替えは鍵とは別に明示する形にしてある（鍵を置いただけでは課金の口は開かない）。`fal` にしたのに鍵が無ければ、黙ってスタブへ落とさず worker が起動時に止まる。設定 →「接続先と実行の設定」で、どの鍵が設定済みか（値は出さない）と、課金の口が開いているかが見える。
 
 ### この Mac で作る（任意）
 
-手元の生成サーバ 4 つで、Apple Silicon の Mac 1 台が無料のスタジオになる。どれか 1 つでも、全部でも有効にできる。
+手元の生成サーバ 5 つで、Apple Silicon の Mac 1 台が無料のスタジオになる。どれか 1 つでも、全部でも有効にできる。**サーバを起動 → `.env` に書く →「使う AI」で選ぶ。**
 
 | サーバ | 作るもの | モデル | 既定の場所 |
 |---|---|---|---|
-| [vpipe-api](https://github.com/kabatin/vpipe-api) | 動画 | MiniMax H3 Turbo | `http://127.0.0.1:8765` |
+| [vpipe-api](https://github.com/kabatin/vpipe-api) | 動画・解像度上げ | MiniMax H3 Turbo・FlashVSR | `http://127.0.0.1:8765` |
 | [wan-api](https://github.com/kabatin/wan-api) | 動画 | Wan 2.2 TI2V-5B | `http://127.0.0.1:8766` |
 | [klein-api](https://github.com/kabatin/klein-api) | 画像 | FLUX.2 [klein] | `http://127.0.0.1:8767` |
-| [ace-step-api](https://github.com/kabatin/ace-step-api) | 曲 | ACE-Step 1.5 | `http://127.0.0.1:8768` |
+| [ace-step-api](https://github.com/kabatin/ace-step-api) | 曲 | ACE-Step 1.5・MiniMax-Music3 | `http://127.0.0.1:8768` |
+| sfx-api | 効果音・BGM | Stable Audio 3・MOSS SFX v2 | `http://127.0.0.1:8769` |
 
 ```bash
 # .env（どれも既定は none）
 LOCAL_VIDEO_GENERATOR=vpipe,wan   # カンマ区切り
 LOCAL_IMAGE_GENERATOR=klein
 LOCAL_MUSIC_GENERATOR=ace_step
+LOCAL_SFX_GENERATOR=sfx_api       # Stable Audio の BGM もこれで有効になる
 VPIPE_API_URL=http://127.0.0.1:8765
 VPIPE_API_TOKEN=                  # URL がこのマシンの外を指すときだけ要る
-# WAN_ / KLEIN_ / ACE_STEP_ の API_URL と API_TOKEN も同じ扱い
+# WAN_ / KLEIN_ / ACE_STEP_ / SFX_ の API_URL と API_TOKEN も同じ扱い
 ```
 
-使い方は 3 つだけ。**サーバを起動 → `.env` に書く → 「使う AI」で選ぶ。** 入れ方と動かし方は各サーバの README にある。
+<details>
+<summary><b>実測の速さと、手元の生成ごとの振る舞い</b></summary>
 
-**全部が同じ GPU を使うので、同時には作らない。** 動画・画像・高画質化・曲は 1 つの列に並んで順に仕上がり、
-待っているものは「作成中」ではなく「順番待ち」と出す。
+**画像**（[ADR-0047](./docs/adr/0047-local-flux2-klein-images-via-klein-api.md)）: 1 枚 30 秒ほど。seed を固定すれば同じ絵が出る。
 
-**画像**（ADR-0047）: 1 枚 30 秒ほど。seed を固定すれば同じ絵が出る。
+**曲**（[ADR-0048](./docs/adr/0048-generate-music-with-local-ace-step.md)）: ACE-Step は 60 秒の曲を 40 秒ほどで作る（初回は 1 分半ほど）。Stable Audio 3 Medium は 10〜190 秒の歌なしの BGM を作り、歌ありの頼みは ACE-Step が有効ならそちらへ回す。MiniMax-Music3 も歌えるが、曲 1 秒あたり約 9 秒かかり、頼んだより早く終わることがある。プレビューと書き出しで鳴るのはマスターの 1 曲だけで、ほかは候補。
 
-**曲**（ADR-0048）: 楽曲の「曲を作る」から、曲調・歌詞・長さ（10〜240 秒）・歌なし・数（1〜4）を指定して頼む。
-60 秒の曲で 1 曲 40 秒ほど（初回は読み込みで 1 分半ほど）。できた曲は楽曲になり、拍の解析に回る
-（作品にマスターが無いときだけ 1 曲目がマスターになる）。プレビューと書き出しで鳴るのはマスターの 1 曲だけで、ほかは候補。
+**効果音**（[ADR-0052](./docs/adr/0052-sound-effects-with-local-stable-audio.md)）: Stable Audio 3 は温まった M5 で、2 秒の音を 0.37 秒・10 秒の音を 0.53 秒で作る（冷えていれば 3.2 秒）。MOSS は遅い控え。
 
-**動画**（ADR-0031・ADR-0040）: 書いたサーバのモデルが、試作と標準で出る。vpipe はさらに**本番**の段も出す。
-AUTO がその中から選ぶのは、「使う AI」の動画でそのサーバを選んでいるときだけ。
+**昼は試作、夜に本番**（[ADR-0031](./docs/adr/0031-local-h3-video-via-vpipe-api.md)・[ADR-0040](./docs/adr/0040-local-wan-2-2-video-via-wan-api.md)）。まず試作（832×480）で全 Shot を撮り、気に入った Take を採用したら「本番で作り直す」（1344×768）。指示・シード・最初のフレームは同じ。本番の Take は試作の隣に積まれる。実測（M5）: 2.7 秒の Shot が試作 5.1 分・本番 14.0 分。作る大きさが変われば絵も変わる — 引き伸ばしではなく撮り直し。
 
-**昼は試作、夜に本番。** まず試作（832×480）で全 Shot を撮り、気に入った Take を採用したら
-**「本番で作り直す」**。1 本ずつでも、採用済みをまとめて積むこともできる。仕様は変えない
-（同じ指示・同じシード・同じ最初のフレーム。変えるのは作る大きさだけ＝1344×768）。
-できた本番の Take は試作の**隣に積まれ、上書きしない**。押す前に、本数・掛かる時間・終わる時刻を出す。
-実測（M5）: 2.7 秒の Shot が試作 5.1 分・本番 14.0 分。
-なお**作る大きさが変われば絵も変わる**。引き伸ばしではなく、同じ指示で撮り直すもの。
+**絵を変えずに解像度だけ上げる**（[ADR-0044](./docs/adr/0044-upscale-takes-with-flashvsr.md)）: FlashVSR で採用中の Take を 1920×1080 にする。1 本約 5.5 分で、元の隣に積まれる。
 
-**絵を変えずに解像度だけ上げることもできる**（ADR-0044）。「解像度を上げる」は出来上がった Take に
-vpipe の FlashVSR をかけ、**採用した絵のまま**細部だけをはっきりさせて 1920×1080 にする。
-1 本ずつでも、一括メニューで採用中の Take をまとめても頼める。実測 1 本約 5.5 分。上げた Take は元の隣に積まれる。
-Take の素材は AI が実際に描いた大きさのまま保管し（ADR-0045）、拡大は書き出しの直前に Lanczos で 1 回だけやる。
-
-**Wan は 5 秒までしか作れない**（wan-api の契約）。5〜7.5 秒の Shot は 5 秒で作ってゆっくり再生で埋め、
-7.5 秒を超える Shot は「分けてください」と出る。長いカットは MiniMax H3（10.125 秒まで）を使う。
-
-実測（M5 10 コア GPU・32GB・AC 電源・出力 832x480。5 秒 1 本）:
+実測（M5 10 コア GPU・32GB・AC 電源・出力 832×480。5 秒 1 本）:
 
 | | H3（draft） | Wan（draft） | Wan（standard） |
 |---|---|---|---|
 | 所要時間 | **7.4 分** | 11.3 分 | 19.4 分 |
 | 1 コマ目と開始画像の近さ（SSIM） | 0.695 | **0.851** | 0.852 |
 
-**H3 のほうが速く、Wan のほうが最初のフレームを保つ。** どちらを使うかは作る人が選ぶ
-（見た目の良し悪しは点を付けていない）。詳細は
-[ADR-0031](./docs/adr/0031-local-h3-video-via-vpipe-api.md) と
-[ADR-0040](./docs/adr/0040-local-wan-2-2-video-via-wan-api.md)、
-wan-api の [benchmark.md](https://github.com/kabatin/wan-api/blob/main/docs/benchmark.md)。
+**H3 のほうが速く、Wan のほうが最初のフレームを保つ。** 見た目の良し悪しは点を付けていない。Wan は 5 秒まで: 5〜7.5 秒の Shot は 5 秒で作ってゆっくり再生で埋め、それより長いと「分けてください」と出る（H3 は 10.125 秒まで）。wan-api の `drawthings` の口では最初のフレームが使えない（既定の `mlx` を使う）。
 
-なお wan-api の口を `drawthings` にすると最初のフレームが使えない（`mlx` の口を使う。既定は `mlx`）。
+</details>
 
 ## 費用について
 
-fal・ElevenLabs・Gemini の有料枠以外は無料で動く（スタブ・`local/still-motion`・手元の生成サーバ 4 つ・Mac の声・whisper.cpp）。
-Claude Code・Codex・Grok は、サインインしている契約の範囲で使う。
+fal・ElevenLabs・Gemini の有料枠以外は無料で動く（スタブ・`local/still-motion`・手元の生成サーバ 5 つ・Mac の声・whisper.cpp）。Claude Code・Codex・Grok は、サインインしている契約の範囲で使う — AI エージェントのタブ・画像のチェック・動きの分析も同じで、その費用は会話ごと・チェックごとに記録する。
 
-参考 Project（27 Shot・編集尺 110.9 秒）を fal.ai の Seedance 2.5 で作ると、
-課金されるのは **140 秒**になる。モデルの最短が 4 秒で、27 件のうち 12 件がそれより短いため。
-$0.3024/秒 なら **1 Take ずつで $42、3 Take で $127**。
+参考の作品（27 Shot・編集尺 110.9 秒）を fal.ai の Seedance 2.5 で作ると、課金されるのは **140 秒**。モデルの最短が 4 秒で、27 件のうち 12 件がそれより短いため。$0.3024/秒 なら **1 Take ずつで $42、3 Take で $127**。短いカットと 4 秒の下限は相性が悪い。まず 1 Take から。
 
-短いカットが多い作りと 4 秒の下限は相性が悪い。まず 1 Take から始めるとよい。
+無料の側の目安: 縦のショートでは、Claude Code が 7 Shot の絵コンテの案を 2 分 18 秒で書いた（記録上 $0.62 の利用枠）。
 
 ## 現状
 
-空の Project から書き出しまで通しで動く（解析 → 作品の方針 → 歌詞の時刻 → テロップ → ナレーション → 切る →
-AI の絵コンテの案 → AI の最初のフレーム → Take → レビュー → タイムライン → H.264 書き出し）。
-ワークベンチで手で進めても、MCP 経由でエージェントに任せてもよい。手元の画像（klein）と曲（ACE-Step）は実機で測り、実際の制作に使っている。
-ローカルの動画（静止画を動かす・vpipe 経由の MiniMax H3・wan-api 経由の Wan 2.2 5B）は実機で測ってある。
-ただし **Wan はまだ ixa から 1 本も作っていない**（計測は wan-api 側で取った。アダプタは契約テストまで。ADR-0040）。fal.ai / Seedance 2.5 の
-アダプタは実装済みでモック応答に対する契約テストも通っているが、**秒単価と出力 fps はドキュメント由来で未実測**であり、
-ソースにもその旨を明記してある。
-
-個人プロジェクトを公開しているもの。インターフェースはまだ動く。
+空の作品から書き出しとサムネイルまで通しで動く — ワークベンチで手で進めても、AI エージェントのタブで頼んでも、MCP 経由でエージェントに任せてもよい。手元の画像（klein）・曲（ACE-Step・Stable Audio）・効果音（Stable Audio）・映像（静止画を動かす・MiniMax H3）は実機で測り、実際の制作に使っている。**Wan はまだ ixa から 1 本も作っていない**（数字は wan-api 側の計測。アダプタは契約テストまで）。fal.ai / Seedance 2.5 のアダプタはモック応答に対する契約テストまでで、**秒単価と出力 fps はドキュメント由来で未実測**（ソースにも明記してある）。
 
 ## セキュリティ
 
-**合言葉を決めると API が守られる**（ADR-0046）。既定では決めておらず、画面は聞かずに入れる
-（待ち受けは `127.0.0.1` だけ）。`IXA_PASSPHRASE`（12 文字以上）を決めると、入れるまで全部 401 を返す。
-**この Mac の外（`API_HOST`）に開くなら必須**で、無いと API は起動しない。
-自動化（Claude・Codex）には取り消せる「アクセス用の鍵」を別に発行する。
-**HTTPS は無い**ので、LAN では合言葉とクッキーが平文で流れる。自分の管理下にないネットワークへ公開しないこと。
-[SECURITY.md](./SECURITY.md) を参照。
+**合言葉を決めると API が守られる**（[ADR-0046](./docs/adr/0046-passphrase-and-access-tokens.md)）。既定では決めておらず、待ち受けは `127.0.0.1` だけ。`IXA_PASSPHRASE`（12 文字以上）を決めると、入れるまで全部 401 を返す。**この Mac の外に開くなら必須**。自動化（Claude Code・Codex・AI エージェントのタブ）には、取り消せる「アクセス用の鍵」を別に発行する。HTTPS は無いので、自分の管理下にないネットワークへ公開しないこと。[SECURITY.md](./SECURITY.md) を参照。
 
 ## 第三者ライセンス
 
 このリポジトリは MIT だが、依存のいくつかは**動かす人**に義務が及ぶ。
 
-- **[Remotion](https://www.remotion.dev/docs/license)** は、操作する人数が 3 人までなら
-  無償。**4 人以上は有償ライセンスが要る**。共同で開発・運用する当事者の人数は合算される。
-  このリポジトリが MIT であることはその義務を免除しない。
-- Provider の API（fal.ai ほか）は、各社の条件で利用者に直接課金される。
-- Claude Code・Codex・Grok は、利用者自身のアカウントと各社の条件で動く。
-- **MiniMax H3**（手元の生成を有効にした場合だけ）の重みは MiniMax H3 Community License で、
-  利用できる地域・用途に制限がある。ixa は重みを同梱しない。有効にする前に条件を確かめること。
-- **Wan 2.2**（同じく、有効にした場合だけ）の重みは Apache-2.0 で公開されている（商用可）。
-  ixa は重みを同梱しない。配布の条件（著作権表示とライセンス文の保持）は動かす人に及ぶので、
-  モデルカードを確かめること。
-- **FLUX.2 [klein]**（klein-api を有効にした場合だけ）は、4B（試作）と 9B（標準）で重みのライセンスが違い、
-  9B のほうは商用利用を含まない。出力を商用に使う前に、両方のモデルカードを確かめること。
-- **ACE-Step 1.5**（ace-step-api を有効にした場合だけ）の重みは MIT で公開されている。
+- **[Remotion](https://www.remotion.dev/docs/license)** は、操作する人数が 3 人までなら無償。**4 人以上は有償ライセンスが要る**（共同で開発・運用する当事者の人数は合算）。このリポジトリが MIT であることはその義務を免除しない。
+- Provider の API（fal.ai・Gemini・ElevenLabs）は、各社の条件で利用者に直接課金される。Claude Code・Codex・Grok は利用者自身のアカウントで動く。
+- 手元のモデルの重みは ixa に同梱しない。有効にする前にそれぞれ確かめること。**MiniMax H3**（MiniMax H3 Community License）は利用できる地域・用途に制限がある。**Wan 2.2** は Apache-2.0。**FLUX.2 [klein]** は 9B の重みが商用利用を含まない。**ACE-Step 1.5** は MIT。**MiniMax-Music3**（MiniMax-Music3 Community License）は名前を目立つように出すことを求める（画面に出している）。**Stable Audio 3**（Stability AI Community License）は年商 100 万ドル未満なら商用可。**MOSS SFX v2** は Apache-2.0。
 
 ## 貢献
 
-Issue・[Discussions](https://github.com/kabatin/ixa-video-creator/discussions)・Pull Request を歓迎する（[CONTRIBUTING.md](./CONTRIBUTING.md)）。まず [AGENTS.md](./AGENTS.md) を読んでほしい。
-このコードベースが実際に守らせている規約（イミュータビリティ・境界すべてで zod・`any` 禁止・
-シークレットは env のみ・Take は追記のみ）が書いてある。命名と画面の言葉は `CLAUDE.md`。
-[docs/LESSONS.md](./docs/LESSONS.md) には、このプロジェクトで実際に踏んだ失敗と、そこで
-決めた規則をまとめてある（ほとんどが「テストは緑なのに何も確かめていなかった」の変種）。
+Issue・[Discussions](https://github.com/kabatin/ixa-video-creator/discussions)・Pull Request を歓迎する（[CONTRIBUTING.md](./CONTRIBUTING.md)）。まず [AGENTS.md](./AGENTS.md) を読んでほしい。このコードベースが実際に守らせている規約（イミュータビリティ・境界すべてで zod・`any` 禁止・シークレットは env のみ・Take は追記のみ）が書いてある。命名と画面の言葉は `CLAUDE.md`、なぜそうしたかは [ADR](./docs/adr/)、[docs/LESSONS.md](./docs/LESSONS.md) には実際に踏んだ失敗をまとめてある（ほとんどが「テストは緑なのに何も確かめていなかった」の変種）。
 
 PR を出す前に CI と同じものを回す:
 
