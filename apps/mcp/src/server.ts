@@ -1,4 +1,6 @@
+import type { ToolRisk } from '@ixa/domain'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { createApproveTool, waiveConfirmationsTool } from './tools/agent.js'
 import { createCharacterTool, createLocationTool } from './tools/cast.js'
 import { editShotsTool } from './tools/edit-shots.js'
 import { addEffectsTool, listEffectsTool, removeEffectsTool } from './tools/effects.js'
@@ -62,6 +64,18 @@ export const TOOLS: readonly ToolDef[] = [
   exportThumbnailTool,
 ]
 
+/**
+ * AI エージェントの会話の中だけで足すツール（ADR-0058）。`approve` は CLI の `--permission-prompt-tool`。
+ * `approve` 自身は確認に回らない（CLI が呼ばない）ので、表には自分以外を渡す。
+ */
+export const AGENT_TOOLS: readonly ToolDef[] = [
+  createApproveTool(new Map([...TOOLS, waiveConfirmationsTool].map((t) => [t.name, t.risk]))),
+  waiveConfirmationsTool,
+]
+
+/** 全ツールの危険度（ツール名 → 印）。 */
+export const TOOL_RISKS: ReadonlyMap<string, ToolRisk> = new Map([...TOOLS, ...AGENT_TOOLS].map((t) => [t.name, t.risk]))
+
 export const SERVER_INFO = { name: 'ixa', version: '0.6.0' } as const
 
 /** MCP サーバを組み立てる。接続（stdio）は main.ts が行う。 */
@@ -72,10 +86,15 @@ export const createServer = (deps: ToolDeps): McpServer => {
       'Generation is slow and runs on local GPUs: submit, then use wait (it returns within maxWaitSec), and use view ' +
       'to look at start frames and takes before adopting them.',
   })
-  TOOLS.forEach((tool) => {
+  const tools = deps.agentSessionId === undefined ? TOOLS : [...TOOLS, ...AGENT_TOOLS]
+  tools.forEach((tool) => {
     server.registerTool(
       tool.name,
-      { description: tool.description, inputSchema: tool.input },
+      {
+        description: tool.description,
+        inputSchema: tool.input,
+        annotations: { readOnlyHint: tool.risk === 'read', destructiveHint: tool.risk === 'destructive' },
+      },
       async (args, extra) => {
         const token = extra._meta?.progressToken
         const progress =

@@ -15,6 +15,7 @@ const durationsText = (d: z.infer<typeof WireModel>['durations']): string =>
 
 export const statusTool = defineTool({
   name: 'ixa_status',
+  risk: 'read',
   description:
     'Start here. Shows whether the ixa API is up, which AI tools are available per purpose and which are selected, ' +
     'the video models you can pass to generate_takes, the projects in the workspace, and (with projectId) the video ' +
@@ -74,6 +75,7 @@ export const statusTool = defineTool({
 
 export const setAiTool = defineTool({
   name: 'set_ai',
+  risk: 'settings',
   description:
     'Choose which AI tool ixa uses for one purpose (text = storyboard/assist, image = start frames, video = takes, ' +
     'voice, transcribe, music, sfx = sound effects). Check ixa_status first: only tools listed as usableFor that purpose are accepted. ' +

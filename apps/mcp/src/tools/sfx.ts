@@ -76,6 +76,7 @@ export const sfxJobCheck = async (api: ApiClient, jobId: string): Promise<CheckR
 
 export const generateSfxTool = defineTool({
   name: 'generate_sfx',
+  risk: 'costly',
   description:
     'Make sound effects with the local text-to-audio AI and place them on the timeline SFX track (submit only). ' +
     'The model does NOT see the video, so decide the timing first: (1) call analyze_motion with the shotId to get ' +
@@ -111,6 +112,7 @@ const WireSuggestion = z.object({
 
 export const suggestSfxTool = defineTool({
   name: 'suggest_sfx',
+  risk: 'read',
   description:
     'Suggest sound-effect cues from the timeline effects and transitions (flash/zoom_punch → impact, whip_pan → ' +
     'whoosh, title_card → low boom, speed_lines → pass-by whoosh, shake → thud) and from the motion events of shots ' +
@@ -137,6 +139,7 @@ const isSfxClip = (clip: WireSfxClip): boolean => clip.track === 'SFX' && clip.c
 
 export const listSfxTool = defineTool({
   name: 'list_sfx',
+  risk: 'read',
   description:
     'List the sound clips on the timeline SFX track (id, startSec, durationSec, volume, and seedUsed when ixa made ' +
     'it — send that seed with count 1 to get the same sound elsewhere), ordered by time. Use the ids with remove_sfx.',
@@ -172,6 +175,7 @@ const failureReason = (error: unknown): string => {
 
 export const removeSfxTool = defineTool({
   name: 'remove_sfx',
+  risk: 'destructive',
   description: 'Remove sound clips from the SFX track by id (from list_sfx or a finished sfx job). Other clips are refused with a reason.',
   input: z.object({ projectId: Id, clipIds: z.array(Id).min(1).max(200) }),
   handler: async ({ projectId, clipIds }, { api }) => {

@@ -1,4 +1,5 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { ToolRisk } from '@ixa/domain'
 import { z } from 'zod'
 import { IxaApiError, IxaUnreachableError, type ApiClient } from './api-client.js'
 import type { FrameExtractor } from './lib/frames.js'
@@ -24,6 +25,11 @@ export type ToolDeps = {
    * 待つツールが使う。
    */
   readonly progress?: (done: number, total: number, message: string) => Promise<void>
+  /**
+   * AI エージェントの会話の中で起こされたときの会話（ADR-0058。env の `IXA_AGENT_SESSION_ID`）。
+   * あるときだけ、会話の中で使うツール（approve・waive_confirmations）を登録する。
+   */
+  readonly agentSessionId?: string
 }
 
 export type Clock = {
@@ -38,6 +44,11 @@ export const realClock: Clock = {
 
 export type ToolDef = {
   readonly name: string
+  /**
+   * 危険度（ADR-0058）。AI エージェントのタブは、これで実行の前に制作者に確認するかを決める。
+   * MCP の annotations（readOnlyHint・destructiveHint）にも写す。**省けない**（付け忘れは型エラー）。
+   */
+  readonly risk: ToolRisk
   readonly description: string
   readonly input: z.AnyZodObject
   readonly run: (rawArgs: unknown, deps: ToolDeps) => Promise<CallToolResult>
@@ -53,11 +64,13 @@ export class ToolInputError extends Error {
 
 export const defineTool = <S extends z.ZodRawShape>(def: {
   readonly name: string
+  readonly risk: ToolRisk
   readonly description: string
   readonly input: z.ZodObject<S>
   readonly handler: (args: z.infer<z.ZodObject<S>>, deps: ToolDeps) => Promise<CallToolResult>
 }): ToolDef => ({
   name: def.name,
+  risk: def.risk,
   description: def.description,
   input: def.input,
   run: async (rawArgs, deps) => {

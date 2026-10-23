@@ -40,6 +40,7 @@ export const waitWith = (deps: ToolDeps, args: z.infer<typeof WaitInput>) => {
 
 export const waitTool = defineTool({
   name: 'wait',
+  risk: 'read',
   description:
     'Wait for jobs to finish, polling with backoff. jobs: [{kind:"generation"|"render"|"music"|"sfx"|"analysis"|' +
     '"start_frame", id}] or {kind:"upscale", shotId, takeId}; or projectId to wait until nothing is generating, ' +

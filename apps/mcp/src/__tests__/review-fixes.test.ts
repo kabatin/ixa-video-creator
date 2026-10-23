@@ -195,6 +195,7 @@ describe('6. 失敗のログは原因の連なりを残し、置き場の失敗�
     const { logger, lines } = captureLogger()
     const tool = defineTool({
       name: 'boom',
+      risk: 'read',
       description: 'x',
       input: z.object({}),
       handler: () => Promise.reject(new Error('外側', { cause: new Error('内側の原因') })),

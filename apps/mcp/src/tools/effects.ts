@@ -134,6 +134,7 @@ const placeOne = async (api: ApiClient, projectId: string, planned: Planned) => 
 
 export const addEffectsTool = defineTool({
   name: 'add_effects',
+  risk: 'write',
   description:
     'Layer visual effect templates on the timeline (VFX track) to add speed and punch. Pick a template and its ' +
     'strength; do not describe effects in prose. Place by atSec (timeline seconds) or shotCode+offsetSec. Good spots: ' +
@@ -162,6 +163,7 @@ export const ListEffectsInput = z.object({ projectId: Id })
 
 export const listEffectsTool = defineTool({
   name: 'list_effects',
+  risk: 'read',
   description:
     'List the effect clips on the timeline (VFX track): id, template, startSec, durationSec and params, ordered by ' +
     'time. Use the ids with remove_effects.',
@@ -190,6 +192,7 @@ const isEffectClip = (clip: z.infer<typeof WireEffectClip>): boolean =>
 
 export const removeEffectsTool = defineTool({
   name: 'remove_effects',
+  risk: 'destructive',
   description:
     'Remove effect clips of a project by id (ids from list_effects or add_effects). Only effect clips (VFX track) are ' +
     'removed; other ids are refused with a reason. Returns removed ids and failures.',

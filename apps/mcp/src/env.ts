@@ -30,6 +30,11 @@ export const McpEnv = z.object({
     .min(1)
     .default('~/Movies/ixa-mcp')
     .transform(expandHome),
+  /**
+   * AI エージェントの会話の中で起こされたときの会話（ADR-0058）。API が渡す。
+   * あるときだけ、会話の中で使うツール（approve・waive_confirmations）を登録する。
+   */
+  IXA_AGENT_SESSION_ID: z.string().ulid('IXA_AGENT_SESSION_ID は ULID で設定してください').optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 })
 export type McpEnv = z.infer<typeof McpEnv>

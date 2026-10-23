@@ -21,6 +21,7 @@ const main = async (): Promise<void> => {
     logger,
     frames: createFfmpegFrameExtractor(),
     clock: realClock,
+    ...(env.IXA_AGENT_SESSION_ID === undefined ? {} : { agentSessionId: env.IXA_AGENT_SESSION_ID }),
   })
   await server.connect(new StdioServerTransport())
   logger.info({ apiUrl: env.IXA_API_URL }, 'ixa MCP サーバを stdio で起動しました')

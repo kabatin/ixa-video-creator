@@ -55,6 +55,7 @@ export const musicJobCheck = async (api: ApiClient, jobId: string): Promise<Chec
 
 export const generateMusicTool = defineTool({
   name: 'generate_music',
+  risk: 'costly',
   description:
     'Compose a new song for the project with the local music AI (submit only; takes minutes). ' +
     'Which AI is used comes from the user\'s AI settings (music): stable_audio_medium_music (the default) makes instrumental BGM only ' +

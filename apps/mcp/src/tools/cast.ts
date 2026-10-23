@@ -27,6 +27,7 @@ export const CreateCharacterInput = z.object({
 
 export const createCharacterTool = defineTool({
   name: 'create_character',
+  risk: 'write',
   description:
     'Create a character (a default Look is created automatically) and optionally attach an identity image from ' +
     'a media asset, a shot start frame or a local file. Use the returned characterId in edit_shots cast.',
@@ -76,6 +77,7 @@ export const CreateLocationInput = z.object({
 
 export const createLocationTool = defineTool({
   name: 'create_location',
+  risk: 'write',
   description:
     'Create a location with optional reference images (media asset ids, shot start frames or local files). ' +
     'Assign it to shots with edit_shots locationId.',

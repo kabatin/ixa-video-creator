@@ -50,6 +50,7 @@ export const GenerateTakesInput = z.object({
 
 export const generateTakesTool = defineTool({
   name: 'generate_takes',
+  risk: 'costly',
   description:
     'Generate video takes for shots (queues jobs; local models take minutes per take and run one at a time). ' +
     'Shots usually need a start frame first (draw_start_frames). Returns generation jobIds for wait ' +
@@ -110,6 +111,7 @@ export const generateTakesTool = defineTool({
 
 export const listTakesTool = defineTool({
   name: 'list_takes',
+  risk: 'read',
   description:
     'List the takes of a shot (newest last) with model, generated length, seed, cost, review state, lineage ' +
     '(upscaled takes have reason "解像度を上げる") and which one is selected. Look at them with view {shotId, takeId}.',
@@ -151,6 +153,7 @@ const WireBulkSelect = z.object({ results: z.array(bulkResult({ takeId: z.string
 
 export const adoptTakeTool = defineTool({
   name: 'adopt_take',
+  risk: 'write',
   description:
     'Select the take used in the edit. Either {shotId, takeId} for one shot, or {projectId, shotIds, rule} for many: ' +
     'rule "latest" picks the newest take of each shot (e.g. right after an upscale), "only" picks it only when the ' +
@@ -188,6 +191,7 @@ const WireBulkUpscale = z.object({
 
 export const upscaleTakesTool = defineTool({
   name: 'upscale_takes',
+  risk: 'costly',
   description:
     'Raise the resolution of takes on the local generation server (only if supported). {shotId, takeId} for one take, ' +
     'or {projectId, shotIds} for the SELECTED take of each shot (dryRun previews). The result is a new take; wait with ' +

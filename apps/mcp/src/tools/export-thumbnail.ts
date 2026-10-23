@@ -155,6 +155,7 @@ const finish = async (
 
 export const exportThumbnailTool = defineTool({
   name: 'export_thumbnail',
+  risk: 'costly',
   description:
     'Make a YouTube thumbnail (1280x720 JPEG under 2 MB) with a big title. Background: a timeline frame {atSec}, ' +
     'an image {mediaAssetId}, or {keyArt:{instruction?}} which draws 2 AI candidates and uses candidateIndex (default 0). ' +

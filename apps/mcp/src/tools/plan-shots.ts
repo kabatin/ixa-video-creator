@@ -66,6 +66,7 @@ const inputOf = (args: z.infer<typeof PlanShotsInput>): PlanInput => {
 
 export const planShotsTool = defineTool({
   name: 'plan_shots',
+  risk: 'write',
   description:
     'Create shots from cut points (appended after existing shots; must not overlap them). Give boundariesSec ' +
     '(absolute cut times incl. start and end) or durationsSec. snap="downbeat" aligns cuts to bar starts of the master ' +

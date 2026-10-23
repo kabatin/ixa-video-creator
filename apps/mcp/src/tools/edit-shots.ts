@@ -165,6 +165,7 @@ const applyEdit = async (api: ApiClient, projectId: string, edit: EditInput, ord
 
 export const editShotsTool = defineTool({
   name: 'edit_shots',
+  risk: 'write',
   description:
     'Edit shots in bulk. Each edit applies the same change to its shotIds: description (Japanese, what happens on ' +
     'screen), mood, camera {size, angleH, angle, lensMm, movement, movementIntensity} (only given fields change), ' +

@@ -12,6 +12,7 @@ stdio で話す MCP サーバ。ixa の API（`pnpm dev` の API、既定 `http:
 | `IXA_WORKSPACE_ID` | ○ | web の `NEXT_PUBLIC_WORKSPACE_ID` と同じ値 |
 | `IXA_API_URL` | | 既定 `http://127.0.0.1:3001` |
 | `IXA_MCP_OUTPUT_DIR` | | 書き出した mp4 の置き場。既定 `~/Movies/ixa-mcp` |
+| `IXA_AGENT_SESSION_ID` | | 画面の「AI エージェント」の会話から起こされたときだけ API が渡す（ADR-0058）。あると、確認の `approve`（CLI の `--permission-prompt-tool`）と `waive_confirmations` を足す。手で設定しない |
 | `LOG_LEVEL` | | 既定 `info`。ログは stderr に出る（stdout は MCP 専用） |
 
 鍵はシェルの環境に置く（例: `~/.zshrc` に `export IXA_API_TOKEN=...`、またはキーチェーンから読む）。

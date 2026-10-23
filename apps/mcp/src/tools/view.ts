@@ -72,6 +72,7 @@ const render = async (deps: ToolDeps, args: ViewArgs, target: Target, dir: strin
 
 export const viewTool = defineTool({
   name: 'view',
+  risk: 'read',
   description:
     "Look at the actual pictures to judge quality: a shot's start frame ({shotId}), frames of a take " +
     '({shotId, takeId}; default 3 frames = start/middle/end), an export ({renderJobId}) or any media asset. ' +

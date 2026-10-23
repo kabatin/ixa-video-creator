@@ -15,6 +15,7 @@ const startAnalysis = (api: ApiClient, trackId: string) =>
 
 export const uploadMusicTool = defineTool({
   name: 'upload_music',
+  risk: 'write',
   description:
     'Upload a local audio file (mp3/wav/m4a/aac/flac/ogg) as a music track of the project and start the beat analysis. ' +
     'By default it becomes the master track (the song the video is cut to). ' +
@@ -53,6 +54,7 @@ export const uploadMusicTool = defineTool({
 
 export const setMasterTrackTool = defineTool({
   name: 'set_master_track',
+  risk: 'settings',
   description:
     'Make a music track the master (the song the video follows) and (re)start its beat analysis unless it already exists. ' +
     'Use after generate_music succeeds (pick one of its musicTrackIds).',
@@ -100,6 +102,7 @@ export const resolveTrackId = (api: ApiClient, projectId: string, trackId: strin
 
 export const musicOverviewTool = defineTool({
   name: 'music_overview',
+  risk: 'read',
   description:
     'Summarized structure of the master track (or musicTrackId): duration, BPM, bar length, sections with times ' +
     '(section labels are often unreliable — beats/downbeats are accurate), energy peaks, drops, and phrase starts ' +

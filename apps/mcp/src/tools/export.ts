@@ -74,6 +74,7 @@ const saveOutput = async (deps: ToolDeps, projectId: string, job: z.infer<typeof
 
 export const exportTool = defineTool({
   name: 'export',
+  risk: 'costly',
   description:
     'Render the whole project (selected takes on the music) to one video. Starts a render (or reuses the previous ' +
     'one if nothing changed, unless force), optionally waits up to waitSec, and when finished saves the mp4 locally ' +

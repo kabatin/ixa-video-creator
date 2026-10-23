@@ -16,6 +16,7 @@ const WireDrawStarted = z.object({
 
 export const drawStartFramesTool = defineTool({
   name: 'draw_start_frames',
+  risk: 'costly',
   description:
     'Draw the start frame (first still image) of shots with the selected image AI, using description, camera, cast ' +
     'and location. The video is then generated from this frame, so check it with view before generate_takes. ' +
@@ -45,6 +46,7 @@ export const drawStartFramesTool = defineTool({
 
 export const setStartFrameTool = defineTool({
   name: 'set_start_frame',
+  risk: 'write',
   description:
     "Use an existing image as a shot's start frame: a media asset id, another shot's start frame " +
     '(for visual continuity) or a local image file.',
@@ -61,6 +63,7 @@ export const setStartFrameTool = defineTool({
 
 export const listStartFrameHistoryTool = defineTool({
   name: 'list_start_frame_history',
+  risk: 'read',
   description:
     'List every start frame drawn for a shot, oldest first, with its check (mark pass/review/retry/unchecked, issues), ' +
     'whether it is the one in use (current), and the attempt number. View one with view {mediaAssetId}; switch with ' +
@@ -78,6 +81,7 @@ export const listStartFrameHistoryTool = defineTool({
 
 export const useStartFrameTool = defineTool({
   name: 'use_start_frame',
+  risk: 'write',
   description:
     "Switch a shot's start frame to one from its history (jobId from list_start_frame_history). It is recorded as an " +
     'edit, so the user can undo it.',
@@ -97,6 +101,7 @@ export const useStartFrameTool = defineTool({
 
 export const retryImageTool = defineTool({
   name: 'retry_image',
+  risk: 'costly',
   description:
     'Redraw an image job (start frame, character sheet or key art) with the same image AI, adding the check\'s fix to ' +
     'the instruction. Use it when a check says retry/review and the image AI did not retry automatically (cloud AIs ' +

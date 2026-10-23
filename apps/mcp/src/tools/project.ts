@@ -46,6 +46,7 @@ export const CreateProjectInput = z.object({
 
 export const createProjectTool = defineTool({
   name: 'create_project',
+  risk: 'write',
   description:
     'Create a new ixa project (a video). Defaults: 16:9, 1920x1080, 24 fps. Optional concept/synopsis, styleGuide ' +
     'and avoid text steer every generated image/video. Write user-visible text in Japanese.',
@@ -109,6 +110,7 @@ const compactCamera = (camera: z.infer<typeof WireShot>['camera']) =>
 
 export const getProjectTool = defineTool({
   name: 'get_project',
+  risk: 'read',
   description:
     'Everything about a project in one compact JSON: settings, concept, music tracks (which one is master), ' +
     'characters, locations, and every shot in order with start/duration, description, mood, camera, location, cast, ' +

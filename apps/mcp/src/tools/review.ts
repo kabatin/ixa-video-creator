@@ -31,6 +31,7 @@ const WireReviewDetail = z.object({
 
 export const reviewTakeTool = defineTool({
   name: 'review_take',
+  risk: 'costly',
   description:
     'Run the automatic review of a take (duration/resolution/brand checks, then a vision check of identity, composition and ' +
     'prompt adherence). Generation does not review by default; use this to check a take yourself. Then wait ' +

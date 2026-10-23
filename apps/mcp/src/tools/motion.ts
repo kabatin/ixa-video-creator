@@ -53,6 +53,7 @@ const cuesOf = (body: WireState): unknown[] => {
 
 export const analyzeMotionTool = defineTool({
   name: 'analyze_motion',
+  risk: 'costly',
   description:
     'Analyze what happens in a take (motion strength peaks + Claude looking at the frames) and return timed events ' +
     '(moment: impacts, landings, footsteps; sustained: skids, engines, splashes; pass_by: whooshes; ambient) and ' +
