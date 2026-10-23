@@ -720,3 +720,20 @@ describe('MOTION_ANALYSIS_MODEL', () => {
     }
   })
 })
+
+/**
+ * AI エージェントのタブ（ADR-0058）の既定のモデル。画面で会話ごとに選び直せる。
+ * **モデル ID だけを受ける。** 別名は設定によって別のモデルに向く（IMAGE_CHECK_MODEL の教訓）。
+ */
+describe('AGENT_MODEL_DEFAULT', () => {
+  it('既定は Sonnet のモデル ID。ほかのモデル ID も受ける', () => {
+    expect(loadConfig(requiredEnv).agentModelDefault).toBe('claude-sonnet-5-5')
+    expect(loadConfig({ ...requiredEnv, AGENT_MODEL_DEFAULT: 'claude-opus-5-5' }).agentModelDefault).toBe('claude-opus-5-5')
+  })
+
+  it('別名・空・空白入り・記号入り・長すぎる値は受けない（CLI の引数に渡すため）', () => {
+    for (const bad of ['sonnet', 'opus', '', '   ', 'claude son', 'claude-x;rm', '--model', `claude-${'a'.repeat(100)}`]) {
+      expect(() => loadConfig({ ...requiredEnv, AGENT_MODEL_DEFAULT: bad }), bad).toThrow()
+    }
+  })
+})

@@ -156,6 +156,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
     imageCheckMaxRetries: parsed.IMAGE_CHECK_MAX_RETRIES,
     imageCheckModel: parsed.IMAGE_CHECK_MODEL,
     motionAnalysisModel: parsed.MOTION_ANALYSIS_MODEL,
+    agentModelDefault: parsed.AGENT_MODEL_DEFAULT,
     voiceAi: {
       apiProviders: parsed.AUDIO_API_PROVIDERS,
       geminiApiKey: parsed.GEMINI_API_KEY ?? null,

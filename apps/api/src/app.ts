@@ -91,6 +91,10 @@ import { clipSpanRoutes } from './routes/clip-spans.js'
 import { clipTextStyleRoutes } from './routes/clip-text-style.js'
 import { textStyleRoutes } from './routes/text-styles.js'
 import { eventRoutes } from './routes/events.js'
+import { agentSessionRoutes } from './routes/agent-sessions.js'
+import { agentApprovalRoutes } from './routes/agent-approvals.js'
+import { agentStreamRoutes } from './routes/agent-stream.js'
+import type { AgentWiring } from './agent/agent-wiring.js'
 import type { StoryboardDrafter, TextAssistant } from '@ixa/provider-llm'
 import { STUB_PROVIDER_IDS } from '@ixa/provider-video'
 import type {
@@ -214,6 +218,8 @@ export type AppDeps = {
     readonly analyses: MotionAnalysisDeps['analyses'] & Pick<TakeMotionAnalysisRepository, 'create'>
     readonly queue: MotionAnalysisDeps['queue']
   }
+  /** AI エージェントのタブ（ADR-0058）。無ければ口を置かない（テストの多くは要らない）。 */
+  agent?: AgentWiring
   /** 動いている生成（順番待ち・作成中）の一覧。無ければ口を置かない。 */
   activeGenerations?: GenerationActivityDeps['activeJobs']
   storage: ObjectStorage
@@ -471,6 +477,11 @@ export const createApp = (deps: AppDeps) => {
     }),
   )
   app.route('/', eventRoutes({ projects, events: deps.events, logger }))
+  if (deps.agent !== undefined) {
+    app.route('/', agentSessionRoutes({ agent: deps.agent.service, sessions: deps.agent.sessions, projects }))
+    app.route('/', agentApprovalRoutes({ agent: deps.agent.service }))
+    app.route('/', agentStreamRoutes({ sessions: deps.agent.sessions, hub: deps.agent.hub, logger }))
+  }
 
   /** Timeline と Render は同じ依存を使う。組み立てを 1 箇所にまとめる。 */
   const timelineDeps = {

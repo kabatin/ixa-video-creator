@@ -233,6 +233,18 @@ export const EnvSchema = z.object({
     .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, '英数字と . - _ だけで書いてください')
     .default('claude-sonnet-5-5'),
   /**
+   * AI エージェントのタブ（ADR-0058）で、会話を始めるときの既定の Claude のモデル。画面で会話ごとに選び直せる。
+   * **モデル ID だけを受ける（`claude-` で始まる）。** 別名は設定によって別のモデルに向く（`IMAGE_CHECK_MODEL` の注記）。
+   * 形は domain の `AgentModel` と同じ（config は domain に依存しないので、API が起動時に `AgentModel` でも通す）。
+   */
+  AGENT_MODEL_DEFAULT: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .regex(/^claude-[A-Za-z0-9._-]+$/, 'モデル ID（claude- で始まる）で書いてください')
+    .default('claude-sonnet-5-5'),
+  /**
    * 手元の生成サーバで曲を作るか（ADR-0048）。**既定は `none`（使わない）。**
    *
    * - `ace_step` … ace-step-api の ACE-Step 1.5
@@ -464,6 +476,8 @@ export interface AppConfig {
   imageCheckModel: string
   /** 動きの分析に使う Claude のモデル（ADR-0054 追記）。 */
   motionAnalysisModel: string
+  /** AI エージェントのタブの既定のモデル（ADR-0058）。 */
+  agentModelDefault: string
   /** 声と文字起こしの AI（ADR-0038）。 */
   voiceAi: {
     /** 使ってよい外部の API。ここに無いものは鍵があっても選べない。 */

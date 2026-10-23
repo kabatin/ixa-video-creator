@@ -66,6 +66,7 @@ const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
     imageCheckMaxRetries: 2,
     imageCheckModel: 'claude-sonnet-5-5',
     motionAnalysisModel: 'claude-sonnet-5-5',
+    agentModelDefault: 'claude-sonnet-5-5',
     voiceAi: {
       apiProviders: [],
       geminiApiKey: null,

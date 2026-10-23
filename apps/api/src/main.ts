@@ -1,3 +1,4 @@
+import { createAgentWiring } from './agent/agent-wiring.js'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { serve, type ServerType } from '@hono/node-server'
@@ -350,15 +351,30 @@ export const main = (): void => {
   const timelineClips = createTimelineClipRepository(db)
   const textStyles = createTextStyleRepository(db)
   // 門（認証）。合言葉が無ければ聞かずに入れる。**ただし外に開くのに無ければここで止まる。**
+  const accessTokens = createAccessTokenRepository(db)
   const auth = createAuth({
     passphrase: config.api.passphrase,
     host: config.api.host,
-    tokens: createAccessTokenRepository(db),
+    tokens: accessTokens,
     allowedOrigins: config.corsOrigins,
     logger,
   })
+  // AI エージェントのタブ（ADR-0058）。起動時に、途中で止まった会話を中断にし、取り消し忘れの鍵を取り消す。
+  const agent = createAgentWiring({
+    db,
+    config,
+    projects: projectRepository,
+    shots,
+    tokens: accessTokens,
+    textTool: async () => (await ai.current()).text,
+    logger,
+  })
+  agent.service.recoverAfterRestart().catch((error: unknown) => {
+    logger.error({ err: error }, '途中で止まった AI エージェントの会話を片付けられませんでした')
+  })
   const app = createApp({
     auth,
+    agent,
     narration: {
       projects: projectRepository,
       voices: createVoiceProfileRepository(db),
@@ -554,7 +570,10 @@ export const main = (): void => {
     },
   )
 
-  registerShutdownHandlers(server, db, generationQueue, logger, () => projectEvents.close())
+  registerShutdownHandlers(server, db, generationQueue, logger, async () => {
+    await agent.service.shutdown()
+    await projectEvents.close()
+  })
 }
 
 try {
