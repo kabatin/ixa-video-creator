@@ -87,6 +87,8 @@ export const GenerateTakesBody = z.object({
   regenerationReason: z.string().trim().min(1).optional(),
   /** 使うシード。**省略は Provider に任せる**（0 は正当なシードなので 0 と省略を混ぜない）。 */
   seed: z.number().int().nonnegative().optional(),
+  /** レビューで NG なら自動で作り直すか（ADR-0057）。**省けば作り直しを勧めるだけ**（サーバの既定 false）。 */
+  autoRetake: z.boolean().optional(),
 })
 export type GenerateTakesBody = z.input<typeof GenerateTakesBody>
 

@@ -127,7 +127,8 @@ export type BulkActionBarProps = {
    */
   readonly finalPreview: RemakeFinalPreview | null
   readonly onPreviewRemakeFinal: () => void
-  readonly onRemakeFinal: () => void
+  /** `autoRetake`: レビューで NG なら自動で作り直すか（ADR-0057）。 */
+  readonly onRemakeFinal: (autoRetake: boolean) => void
   /**
    * 採用中の Take をまとめて解像度を上げる（ADR-0044）。下見の持ち方は作り直しと同じ。
    */
@@ -297,10 +298,10 @@ export const BulkActionBar = ({
               preview={finalPreview}
               busy={busy}
               onPreview={onPreviewRemakeFinal}
-              onRemake={() => {
+              onRemake={(autoRetake) => {
                 // 積んだら閉じる。開いたままだと同じ選択に二重に頼める（API も断るが、押させない）。
                 close()
-                onRemakeFinal()
+                onRemakeFinal(autoRetake)
               }}
             />
           )}

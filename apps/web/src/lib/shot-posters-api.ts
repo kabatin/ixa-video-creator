@@ -30,6 +30,8 @@ export const WireShotPoster = z
     hasStartFrame: z.boolean(),
     /** 絵コンテの画像を作っているか（採用 Take があっても）。一覧で絵と動画の作業中を分けて出す。 */
     drawing: z.boolean(),
+    /** 採用中の Take がレビューで不合格で、自動の作り直しを選んでいない（ADR-0057）。前の API には無いので省ける（無ければ出さない）。 */
+    retakeRecommended: z.boolean().optional(),
   })
   .refine((entry) => (entry.thumbnailUrl === null) !== (entry.reason === null), {
     message:

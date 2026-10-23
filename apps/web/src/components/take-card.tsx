@@ -1,11 +1,11 @@
 'use client'
 
-import type { MediaAssetId, Take, TakeId } from '@ixa/domain'
+import { isRetakeRecommended, type MediaAssetId, type Take, type TakeId } from '@ixa/domain'
 import { useCallback, useEffect, useState } from 'react'
 import { createApiClient } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
 import { useRenewableMediaSrc } from '@/lib/use-renewable-media-src'
-import { reviewStatusClassName, reviewStatusLabel } from '@/lib/shot-display'
+import { RETAKE_RECOMMENDED_HINT, RETAKE_RECOMMENDED_LABEL, reviewStatusClassName, reviewStatusLabel } from '@/lib/shot-display'
 import type { MediaInfo } from '@/lib/take-display'
 import {
   takeBytesLabel,
@@ -187,6 +187,12 @@ export const TakeCard = ({
         >
           {reviewStatusLabel(take.reviewStatus)}
         </span>
+        {/* 不合格でも既定では自動で作り直さない（ADR-0057）。作り直すかは人が決める。 */}
+        {isRetakeRecommended(take) && (
+          <span title={RETAKE_RECOMMENDED_HINT} className="rounded-full bg-danger px-2 py-0.5 text-xs font-semibold text-bg">
+            {RETAKE_RECOMMENDED_LABEL}
+          </span>
+        )}
         {/* 「人手未確認 / 人手承認」は出さない。採用が決定で、別の承認は無い（ADR-0023）。 */}
       </div>
 

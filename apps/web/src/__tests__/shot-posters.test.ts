@@ -53,8 +53,23 @@ describe('posterByShotId', () => {
       reason: null,
       hasStartFrame: false, drawing: false,
       pending: false,
+      retakeRecommended: false,
     })
-    expect(map.get(otherShotId)).toEqual({ url: null, reason: 'no_take', hasStartFrame: false, drawing: false, pending: false })
+    expect(map.get(otherShotId)).toEqual({
+      url: null,
+      reason: 'no_take',
+      hasStartFrame: false,
+      drawing: false,
+      pending: false,
+      retakeRecommended: false,
+    })
+  })
+
+  /** ADR-0057。採用中の Take が不合格なら、一覧に「作り直し推奨」の印を出すために運ぶ。前の API が返さなければ false。 */
+  it('作り直し推奨の印を運ぶ（返さない API なら false）', () => {
+    const map = posterByShotId([{ ...withPoster(SHOT_ID, 'https://example.invalid/a.jpg'), retakeRecommended: true }])
+    expect(map.get(shotId)?.retakeRecommended).toBe(true)
+    expect(posterByShotId([withoutPoster(OTHER_SHOT_ID, 'no_take')]).get(otherShotId)?.retakeRecommended).toBe(false)
   })
 
   it('作っている最中か（待てば出るか）を運ぶ。サムネに回る印を出すのに使う', () => {

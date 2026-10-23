@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { describeRemakePlan } from '@/lib/remake-final-plan'
 import type { RemakeFinalPreview } from '@/components/workbench/use-bulk-actions'
@@ -11,6 +11,7 @@ import type { RemakeFinalPreview } from '@/components/workbench/use-bulk-actions
  * **押す前に下見を出す。** 一晩かかる操作なので、本数と終わる時刻を見てから押させる。
  * 下見は開いたときに 1 回だけ引く（投入はしない）。
  * **飛ばす Shot は理由ごと並べる**（件数に畳まない。L-015）。
+ * 夜間に自走させるなら「NG なら自動で作り直す」を選べる（ADR-0057）。**既定は選ばない**。
  */
 export const BulkRemakeFinalForm = ({
   preview,
@@ -22,8 +23,10 @@ export const BulkRemakeFinalForm = ({
   readonly preview: RemakeFinalPreview | null
   readonly busy: boolean
   readonly onPreview: () => void
-  readonly onRemake: () => void
+  /** `autoRetake`: レビューで NG なら自動で作り直すか（ADR-0057）。 */
+  readonly onRemake: (autoRetake: boolean) => void
 }) => {
+  const [autoRetake, setAutoRetake] = useState(false)
   /**
    * 開いたら下見を引く。選択を変えて開き直せば、また引き直す。
    *
@@ -67,7 +70,22 @@ export const BulkRemakeFinalForm = ({
           </ul>
         </div>
       )}
-      <Button size="sm" tone="primary" disabled={busy || plan.targetCount === 0} onClick={onRemake}>
+      <label className="flex items-start gap-2 text-xs text-text">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={autoRetake}
+          disabled={busy}
+          onChange={(event) => setAutoRetake(event.target.checked)}
+        />
+        <span>
+          NG なら自動で作り直す
+          <span className="block text-muted">
+            自動レビューで不合格の Take を、上限まで作り直します。時間と AI の利用枠を多く使うので、夜間に任せるとき向けです。
+          </span>
+        </span>
+      </label>
+      <Button size="sm" tone="primary" disabled={busy || plan.targetCount === 0} onClick={() => onRemake(autoRetake)}>
         {`${String(plan.targetCount)} 本を積む`}
       </Button>
     </div>

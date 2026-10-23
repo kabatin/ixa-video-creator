@@ -80,6 +80,12 @@ const REVIEW_STATUS_CLASSES: Readonly<Record<ReviewStatus, string>> = {
 
 export const reviewStatusLabel = (status: ReviewStatus): string => REVIEW_STATUS_LABELS[status]
 
+/** 不合格で、自動の作り直しを選んでいない Take の印（ADR-0057）。 */
+export const RETAKE_RECOMMENDED_LABEL = '作り直し推奨'
+/** 印の説明。どこで理由を見て、どう作り直すか。 */
+export const RETAKE_RECOMMENDED_HINT =
+  '自動レビューで不合格でした。自動では作り直しません。理由は自動レビューの指摘にあり、指摘を選んで直しを付けて作り直せます。'
+
 export const reviewStatusClassName = (status: ReviewStatus): string => REVIEW_STATUS_CLASSES[status]
 
 

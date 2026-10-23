@@ -120,6 +120,8 @@ export const ShotGenerateSection = ({
     hasStartFrame,
   )
   const [count, setCount] = useState('1')
+  /** レビューで NG なら自動で作り直すか（ADR-0057）。**既定は選ばない**（作り直しを勧めるだけ）。 */
+  const [autoRetake, setAutoRetake] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<WireGenerateResult | null>(null)
@@ -175,7 +177,8 @@ export const ShotGenerateSection = ({
     setBusy(true)
     setError(null)
     try {
-      const body = GenerateTakesBody.parse({ model, count: Number(count) })
+      // 選んだときだけ送る（省けばサーバの既定 false）。
+      const body = GenerateTakesBody.parse({ model, count: Number(count), ...(autoRetake ? { autoRetake: true } : {}) })
       /**
        * 投入前の本数を控える。**取れなくても生成は止めない。**
        * 数えられなくなるのは「何本終わったか」だけで、生成そのものは進む。
@@ -248,6 +251,21 @@ export const ShotGenerateSection = ({
           ))}
         </select>
       </FieldRow>
+      <label className="flex items-start gap-2 text-xs text-text">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={autoRetake}
+          disabled={busy || generating}
+          onChange={(event) => setAutoRetake(event.target.checked)}
+        />
+        <span>
+          NG なら自動で作り直す
+          <span className="block text-muted">
+            自動レビューで不合格なら、上限まで作り直します。時間と AI の利用枠を多く使うので、任せて離れるとき向けです。
+          </span>
+        </span>
+      </label>
       <p className="text-xs text-muted" title={cost.view?.provenance}>
         {costLabel(cost)}
       </p>

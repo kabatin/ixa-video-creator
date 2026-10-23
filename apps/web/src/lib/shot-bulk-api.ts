@@ -317,7 +317,12 @@ export type ShotBulkApi = {
    */
   bulkRemakeFinal: (
     projectId: ProjectId,
-    input: { readonly shotIds: readonly ShotId[]; readonly dryRun: boolean },
+    input: {
+      readonly shotIds: readonly ShotId[]
+      readonly dryRun: boolean
+      /** レビューで NG なら自動で作り直すか（ADR-0057）。省けば作り直しを勧めるだけ。 */
+      readonly autoRetake?: boolean
+    },
   ) => Promise<WireBulkRemakeFinalResult>
   /**
    * 選んだ Shot の採用 Take を、まとめて解像度を上げる（ADR-0044）。
@@ -361,7 +366,8 @@ export const createShotBulkApi = (requester: Requester): ShotBulkApi => ({
   bulkRemakeFinal: async (projectId, input) =>
     requester.post(
       bulkPath(projectId, '/remake-final'),
-      { shotIds: [...input.shotIds], dryRun: input.dryRun },
+      // 選んだときだけ送る（省けばサーバの既定 false）。
+      { shotIds: [...input.shotIds], dryRun: input.dryRun, ...(input.autoRetake === true ? { autoRetake: true } : {}) },
       WireBulkRemakeFinalResult,
     ),
 

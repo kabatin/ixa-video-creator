@@ -12,7 +12,7 @@ import {
   type ShotBeatAlignmentView,
 } from '@/lib/beat-alignment-view'
 import { formatDuration } from '@/lib/format-time'
-import { shotStatusClassName, shotStatusLabel } from '@/lib/shot-display'
+import { RETAKE_RECOMMENDED_HINT, RETAKE_RECOMMENDED_LABEL, shotStatusClassName, shotStatusLabel } from '@/lib/shot-display'
 import type { HeaderCheckboxState, ShotSelection } from '@/lib/shot-bulk'
 import type { ShotSortKey, SortDirection } from '@/lib/shot-list-view'
 import { posterViewFor, type ShotPosterMap } from '@/lib/shot-posters'
@@ -258,6 +258,12 @@ export const ShotListCompact = ({
                   video={activityOf?.(shot.id) ?? null}
                   upscale={upscaleOf?.(shot.id) ?? null}
                 />
+                {/* 採用中の Take が不合格（ADR-0057）。自動では作り直さないので、人が気付けるよう一覧に出す。 */}
+                {posters.get(shot.id)?.retakeRecommended === true && (
+                  <span title={RETAKE_RECOMMENDED_HINT} className="mt-0.5 block whitespace-nowrap text-xs font-semibold text-danger">
+                    {RETAKE_RECOMMENDED_LABEL}
+                  </span>
+                )}
               </td>
             </tr>
           )

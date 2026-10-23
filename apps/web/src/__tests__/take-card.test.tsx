@@ -27,6 +27,20 @@ const renderCard = (take: Take) =>
   render(<TakeCard take={take} selected={false} busy={false} onSelect={() => undefined} />)
 
 describe('TakeCard', () => {
+  /** ADR-0057。不合格でも既定では自動で作り直さない。代わりに「作り直し推奨」を出す。 */
+  it('不合格で自動の作り直しを選んでいなければ「作り直し推奨」を出す', () => {
+    renderCard(aTake({ reviewStatus: 'failed', autoRetake: false }))
+    expect(screen.getByText('作り直し推奨')).toBeTruthy()
+  })
+
+  it('自動の作り直しを選んだ Take・不合格でない Take には出さない', () => {
+    const { unmount } = renderCard(aTake({ reviewStatus: 'failed', autoRetake: true }))
+    expect(screen.queryByText('作り直し推奨')).toBeNull()
+    unmount()
+    renderCard(aTake({ reviewStatus: 'passed', autoRetake: false }))
+    expect(screen.queryByText('作り直し推奨')).toBeNull()
+  })
+
   it('持ち込んだ Take は「持ち込み: モデル」と「アプリの外」', () => {
     renderCard(
       aTake({

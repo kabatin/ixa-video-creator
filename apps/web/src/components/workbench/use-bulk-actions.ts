@@ -335,12 +335,14 @@ export const useBulkActions = (): BulkActions => {
     })()
   }
 
-  const remakeFinal = (): void => {
+  /** `autoRetake`: レビューで NG なら自動で作り直すか（ADR-0057）。既定は作り直しを勧めるだけ。 */
+  const remakeFinal = (autoRetake = false): void => {
     const plan = planBulkOperation('remake-final', workbench.checked, shots)
     void run(plan, async () => {
       const result = await api.bulkRemakeFinal(workbench.projectId, {
         shotIds: [...plan.targetIds],
         dryRun: false,
+        autoRetake,
       })
       const summary = summarizeBulkResult('remake-final', result.results, shots)
       // 投入できた Shot は生成中へ。サーバと同じ遷移を先回りして映す。

@@ -24,7 +24,12 @@ export type ShotPosterCell = PosterView & { readonly pending: boolean }
  * Shot の 1 枠。絵に加えて、最初のフレームが付いているか（流れの帯・説明も絵も無い Shot の確認）と、
  * 絵コンテの画像を作っているか（採用 Take があっても。一覧で絵と動画の作業中を分けて出す）。
  */
-export type ShotPosterView = ShotPosterCell & { readonly hasStartFrame: boolean; readonly drawing: boolean }
+export type ShotPosterView = ShotPosterCell & {
+  readonly hasStartFrame: boolean
+  readonly drawing: boolean
+  /** 採用中の Take が「作り直し推奨」（ADR-0057）。省けば出さない。 */
+  readonly retakeRecommended?: boolean
+}
 
 export type ShotPosterMap = ReadonlyMap<ShotId, ShotPosterView>
 
@@ -94,6 +99,7 @@ export const posterByShotId = (list: readonly WireShotPoster[]): ShotPosterMap =
         hasStartFrame: entry.hasStartFrame,
         pending: entry.pending,
         drawing: entry.drawing,
+        retakeRecommended: entry.retakeRecommended ?? false,
       },
     ]),
   )
