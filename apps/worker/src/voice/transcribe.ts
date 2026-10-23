@@ -5,6 +5,7 @@ import {
   alignTimedText,
   charTimesFromSegments,
   linesFromTranscript,
+  recordingDenoise,
   type CharTime,
   type MediaAssetId,
   type VoiceJob,
@@ -80,7 +81,8 @@ export const runTranscribe = async (deps: VoiceProcessorDeps, job: VoiceJob, dir
   await start(deps, job)
 
   const cleanedPath = join(dir, 'cleaned.m4a')
-  const loudness = await deps.audio.normalize(input, cleanedPath, { denoise: true })
+  // ノイズ除去は頼んだときの選択に従う（加工済み・合成の音には掛けない。音量の調整はどちらでも掛ける）。
+  const loudness = await deps.audio.normalize(input, cleanedPath, { denoise: recordingDenoise(job) })
   const durationSec = await deps.audio.durationSec(cleanedPath)
   const peaks = await deps.audio.peaks(cleanedPath, join(dir, 'peaks.raw'), Math.min(MAX_FILE_PEAKS, Math.max(10, Math.round(durationSec * PEAKS_PER_SEC))))
   const settings = await deps.audioSettings.get(job.projectId)

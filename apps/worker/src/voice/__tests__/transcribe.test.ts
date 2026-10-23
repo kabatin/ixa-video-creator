@@ -100,12 +100,21 @@ const setup = async (transcriber: Transcriber | null) => {
 }
 
 describe('録音を取り込む（transcribe）', () => {
+  it('ジョブに「ノイズ除去をしない」と残っていれば、ノイズ除去を飛ばす（音量の調整は掛ける）', async () => {
+    const { deps, recording, normalized } = await setup(transcriberReturning({ text: '進め。', chars: said('進め。', 1) }, []))
+    const job = await deps.voiceJobs.create({ kind: 'transcribe', projectId: project.id, inputMediaAssetId: recording.id, voiceProfileId: null, placeAtSec: 0, denoise: false, tool: 'stub', model: null })
+
+    expect((await processVoiceJob(deps, { voiceJobId: job.id })).state).toBe('succeeded')
+
+    expect(normalized).toEqual([{ denoise: false }])
+  })
+
   it('ノイズ除去して素材にし、文字起こしを行に分けて、置く位置からの秒で並べる。各行の Take は同じ音の区間を指す', async () => {
     const seen: string[] = []
     const { deps, recording, normalized } = await setup(
       transcriberReturning({ text: '進め。勝負だ', chars: [...said('進め。', 1), ...said('勝負だ', 3)] }, seen),
     )
-    const job = await deps.voiceJobs.create({ kind: 'transcribe', projectId: project.id, inputMediaAssetId: recording.id, voiceProfileId: null, placeAtSec: 2, tool: 'stub', model: null })
+    const job = await deps.voiceJobs.create({ kind: 'transcribe', projectId: project.id, inputMediaAssetId: recording.id, voiceProfileId: null, placeAtSec: 2, denoise: true, tool: 'stub', model: null })
 
     expect((await processVoiceJob(deps, { voiceJobId: job.id })).state).toBe('succeeded')
 
@@ -136,7 +145,7 @@ describe('録音を取り込む（transcribe）', () => {
     const { deps, recording } = await setup(
       transcriberReturning({ text: 'はい', segments: [{ text: 'はい', startSec: 0.5, endSec: 1.5 }] }),
     )
-    const job = await deps.voiceJobs.create({ kind: 'transcribe', projectId: project.id, inputMediaAssetId: recording.id, voiceProfileId: null, placeAtSec: 0, tool: 'stub', model: null })
+    const job = await deps.voiceJobs.create({ kind: 'transcribe', projectId: project.id, inputMediaAssetId: recording.id, voiceProfileId: null, placeAtSec: 0, denoise: true, tool: 'stub', model: null })
 
     await processVoiceJob(deps, { voiceJobId: job.id })
 
@@ -146,7 +155,7 @@ describe('録音を取り込む（transcribe）', () => {
 
   it('何も聞き取れなければ、理由を付けて失敗にする（行を作らない）', async () => {
     const { deps, recording } = await setup(transcriberReturning({ text: '' }))
-    const job = await deps.voiceJobs.create({ kind: 'transcribe', projectId: project.id, inputMediaAssetId: recording.id, voiceProfileId: null, placeAtSec: 0, tool: 'stub', model: null })
+    const job = await deps.voiceJobs.create({ kind: 'transcribe', projectId: project.id, inputMediaAssetId: recording.id, voiceProfileId: null, placeAtSec: 0, denoise: true, tool: 'stub', model: null })
 
     expect((await processVoiceJob(deps, { voiceJobId: job.id })).state).toBe('failed')
     expect(deps.voiceJobs.snapshot()[0]?.error?.code).toBe('no_speech')
@@ -155,7 +164,7 @@ describe('録音を取り込む（transcribe）', () => {
 
   it('文字起こしの AI の口が無ければ、理由を付けて失敗にする', async () => {
     const { deps, recording } = await setup(null)
-    const job = await deps.voiceJobs.create({ kind: 'transcribe', projectId: project.id, inputMediaAssetId: recording.id, voiceProfileId: null, placeAtSec: 0, tool: 'whisper_cpp', model: null })
+    const job = await deps.voiceJobs.create({ kind: 'transcribe', projectId: project.id, inputMediaAssetId: recording.id, voiceProfileId: null, placeAtSec: 0, denoise: true, tool: 'whisper_cpp', model: null })
 
     await processVoiceJob(deps, { voiceJobId: job.id })
 

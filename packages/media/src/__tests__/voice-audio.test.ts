@@ -27,6 +27,13 @@ describe('voiceNormalizeArgs', () => {
     ])
   })
 
+  it('ノイズ除去をしないとき（加工済み・合成の音）は highpass と afftdn を掛けず、音量の調整だけ掛ける', () => {
+    const args = voiceNormalizeArgs('/clean.wav', '/out.m4a', { gainDb: 2, denoise: false })
+    const filters = args[args.indexOf('-af') + 1] ?? ''
+    expect(filters).not.toMatch(/afftdn|highpass/)
+    expect(filters).toBe('volume=2dB,alimiter=limit=0.8:level=false')
+  })
+
   it('録音は低い雑音を切り、軽いノイズ除去を先に掛ける', () => {
     expect(voiceNormalizeArgs('/rec.wav', '/out.m4a', { gainDb: 0, denoise: true })).toContain(
       'highpass=f=70,afftdn=nf=-25,volume=0dB,alimiter=limit=0.8:level=false',

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api-error'
-import { retryWhileMeasuring } from '@/lib/narration-import'
+import { recordingImportBody, retryWhileMeasuring } from '@/lib/narration-import'
 
 /**
  * 録音を取り込む（ADR-0038）。上げた直後は音の長さをまだ測っている（409）ので、少し待って頼み直す。
@@ -32,5 +32,22 @@ describe('retryWhileMeasuring', () => {
 
     await expect(retryWhileMeasuring(run, { sleep: () => Promise.resolve(), attempts: 3 })).rejects.toBeInstanceOf(ApiError)
     expect(run).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('recordingImportBody', () => {
+  const asset = '01JABCDEFGHJKMNPQRSTVWXYZ0' as Parameters<typeof recordingImportBody>[0]['mediaAssetId']
+
+  it('既定はノイズ除去をする（マイクの録音）', () => {
+    expect(recordingImportBody({ mediaAssetId: asset, atSec: 3.5, skipDenoise: false })).toEqual({
+      mediaAssetId: asset,
+      voiceProfileId: null,
+      placeAtSec: 3.5,
+      denoise: true,
+    })
+  })
+
+  it('「ノイズ除去をしない」を選べば denoise: false で頼む（加工済み・合成の音）', () => {
+    expect(recordingImportBody({ mediaAssetId: asset, atSec: 0, skipDenoise: true }).denoise).toBe(false)
   })
 })

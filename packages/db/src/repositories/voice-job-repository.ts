@@ -36,6 +36,8 @@ export type CreateVoiceJobInput = {
       /** 分けた行に付ける声（無ければ未定）。 */
       readonly voiceProfileId: VoiceProfileId | null
       readonly placeAtSec: number
+      /** 録音にノイズ除去を掛けるか（加工済み・合成の音には掛けない）。 */
+      readonly denoise: boolean
     }
   | {
       readonly kind: 'char_timing'
@@ -89,6 +91,7 @@ export const voiceJobRowToDomain = (row: VoiceJobRow): VoiceJob => {
     inputMediaAssetId: row.inputMediaAssetId,
     resultMediaAssetId: row.resultMediaAssetId,
     placeAtSec: row.placeAtSec,
+    denoise: row.denoise,
     tool: row.tool,
     model: row.model,
     spec: row.spec,
@@ -115,7 +118,13 @@ const valuesOf = (input: CreateVoiceJobInput) => {
     case 'preview':
       return { ...base, voiceProfileId: input.voiceProfileId, spec: input.spec }
     case 'transcribe':
-      return { ...base, inputMediaAssetId: input.inputMediaAssetId, voiceProfileId: input.voiceProfileId, placeAtSec: input.placeAtSec }
+      return {
+        ...base,
+        inputMediaAssetId: input.inputMediaAssetId,
+        voiceProfileId: input.voiceProfileId,
+        placeAtSec: input.placeAtSec,
+        denoise: input.denoise,
+      }
     case 'char_timing':
       return { ...base, lineId: input.lineId, takeId: input.takeId, inputMediaAssetId: input.inputMediaAssetId }
   }

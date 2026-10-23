@@ -111,6 +111,7 @@ describe('voice_jobs', () => {
     inputMediaAssetId: newId(MediaAssetId),
     resultMediaAssetId: null,
     placeAtSec: 0,
+    denoise: false,
     tool: 'whisper_cpp',
     model: null,
     spec: null,
@@ -125,6 +126,11 @@ describe('voice_jobs', () => {
 
   it('行をジョブにする', () => {
     expect(voiceJobRowToDomain(row)).toMatchObject({ kind: 'transcribe', status: 'queued', tool: 'whisper_cpp' })
+  })
+
+  it('録音のノイズ除去の選択を読む（前の取り込みは null）', () => {
+    expect(voiceJobRowToDomain(row).denoise).toBe(false)
+    expect(voiceJobRowToDomain({ ...row, denoise: null }).denoise).toBeNull()
   })
 
   it('種類に要るものが無い行は、壊れていると言って失敗する', () => {

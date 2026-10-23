@@ -1,4 +1,6 @@
+import type { MediaAssetId } from '@ixa/domain'
 import { ApiError } from '@/lib/api-error'
+import type { RecordingImportBody } from '@/lib/narration-api'
 
 /** API が「音の長さをまだ測っています」と返したか（上げた直後。少し待てば通る）。 */
 const stillMeasuring = (error: unknown): boolean =>
@@ -21,3 +23,15 @@ export const retryWhileMeasuring = async <T>(
     }
   }
 }
+
+/** 録音を取り込む頼み。既定はノイズ除去をする（マイクの録音）。加工済み・合成の音は外す（声がこもるため）。 */
+export const recordingImportBody = (input: {
+  readonly mediaAssetId: MediaAssetId
+  readonly atSec: number
+  readonly skipDenoise: boolean
+}): RecordingImportBody => ({
+  mediaAssetId: input.mediaAssetId,
+  voiceProfileId: null,
+  placeAtSec: input.atSec,
+  denoise: !input.skipDenoise,
+})

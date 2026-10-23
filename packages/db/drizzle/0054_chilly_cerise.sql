@@ -1,0 +1,1 @@
+ALTER TABLE "voice_jobs" ADD COLUMN "denoise" boolean;

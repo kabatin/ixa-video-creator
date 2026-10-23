@@ -46,6 +46,19 @@ describe('録音を取り込む', () => {
     expect(setup.enqueued).toEqual([job?.id])
   })
 
+  it('ノイズ除去をするかを選べる。既定はする（マイクの録音）。選んだ値はジョブに残す', async () => {
+    const plain = setupNarration({ assets: (project) => [audio(project)] })
+    expect((await importRecording(plain)).status).toBe(202)
+    expect(plain.deps.voiceJobs.snapshot()[0]).toMatchObject({ denoise: true })
+
+    const processed = setupNarration({ assets: (project) => [audio(project)] })
+    expect((await importRecording(processed, { denoise: false })).status).toBe(202)
+    expect(processed.deps.voiceJobs.snapshot()[0]).toMatchObject({ denoise: false })
+
+    const bad = setupNarration({ assets: (project) => [audio(project)] })
+    expect((await importRecording(bad, { denoise: 'no' })).status).toBe(422)
+  })
+
   it('音のファイルでない・別の場所の素材は 422、長さをまだ測っていない音は 409', async () => {
     const image = setupNarration({ assets: (project) => [audio(project, { kind: 'image', mimeType: 'image/png' })] })
     const elsewhere = setupNarration({ assets: (project) => [audio(project, { workspaceId: newId(WorkspaceId) })] })

@@ -11,7 +11,7 @@ import {
 import { CreateNarrationLineInput, NARRATION_TEXT_MAX, NarrationLine, lineReading } from '../narration/narration-line.js'
 import { NarrationTake, takeDurationSec } from '../narration/narration-take.js'
 import { CreateVoiceProfileInput, VoiceProfile } from '../narration/voice-profile.js'
-import { voiceJobViolation, type VoiceJob } from '../narration/voice-job.js'
+import { VoiceJob, recordingDenoise, voiceJobViolation } from '../narration/voice-job.js'
 import { voiceSpecHash, voiceSpecOf } from '../narration/voice-spec.js'
 
 /**
@@ -201,6 +201,7 @@ describe('voiceJobViolation', () => {
     inputMediaAssetId: null,
     resultMediaAssetId: null,
     placeAtSec: null,
+    denoise: null,
     tool: 'macos_say',
     model: null,
     spec: voiceSpecOf(aVoice({ tool: 'macos_say', voiceName: 'Kyoko', model: null }), aLine(), 'すすめ'),
@@ -228,6 +229,17 @@ describe('voiceJobViolation', () => {
     expect(voiceJobViolation(transcribe)).toMatch(/音/)
     expect(voiceJobViolation({ ...transcribe, inputMediaAssetId: newId(MediaAssetId) })).toMatch(/位置/)
     expect(voiceJobViolation({ ...transcribe, inputMediaAssetId: newId(MediaAssetId), placeAtSec: 0 })).toBeNull()
+  })
+
+  it('録音のノイズ除去は、ジョブに残した値に従う。残っていない（前の取り込み）なら掛ける', () => {
+    const transcribe = { ...base, kind: 'transcribe' as const, lineId: null, spec: null, voiceProfileId: null }
+    expect(recordingDenoise({ ...transcribe, denoise: false })).toBe(false)
+    expect(recordingDenoise({ ...transcribe, denoise: true })).toBe(true)
+    expect(recordingDenoise({ ...transcribe, denoise: null })).toBe(true)
+  })
+
+  it('ノイズ除去の値は真偽か null だけ', () => {
+    expect(VoiceJob.safeParse({ ...base, denoise: 'yes' }).success).toBe(false)
   })
 
   it('字の時刻を取る（char_timing）は Take が要る', () => {

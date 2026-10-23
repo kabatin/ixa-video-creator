@@ -104,6 +104,14 @@ export type UpdateNarrationLineBody = z.input<typeof UpdateNarrationLineBody>
 
 export type SaveAudioSettingsBody = Omit<WireAudioSettings, 'projectId'>
 
+/** 録音を取り込む頼み。`denoise` は既定 true（マイクの録音）。加工済み・合成の音は false。 */
+export type RecordingImportBody = {
+  readonly mediaAssetId: MediaAssetId
+  readonly voiceProfileId: VoiceProfileId | null
+  readonly placeAtSec: number
+  readonly denoise: boolean
+}
+
 export type NarrationApi = {
   listVoices: (projectId: ProjectId) => Promise<WireVoice[]>
   createVoice: (projectId: ProjectId, body: CreateVoiceBody) => Promise<WireVoice>
@@ -131,10 +139,10 @@ export type NarrationApi = {
   /** まとめて声にする（行を渡さなければ全部）。 */
   speakLines: (projectId: ProjectId, lineIds?: readonly NarrationLineId[]) => Promise<WireBulkSpeakResult>
   cancelVoiceJobs: (projectId: ProjectId, lineIds?: readonly NarrationLineId[]) => Promise<{ cancelledJobIds: string[] }>
-  /** 録音を取り込む（文字起こしして行と Take にする）。 */
+  /** 録音を取り込む（選べばノイズ除去して文字起こしし、行と Take にする）。 */
   importRecording: (
     projectId: ProjectId,
-    body: { readonly mediaAssetId: MediaAssetId; readonly voiceProfileId: VoiceProfileId | null; readonly placeAtSec: number },
+    body: RecordingImportBody,
   ) => Promise<{ jobId: string }>
   /** 声の Take の字の時刻を取る（話している字の強調に使う）。 */
   requestCharTiming: (takeId: NarrationTakeId) => Promise<{ jobId: string }>

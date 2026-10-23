@@ -164,6 +164,7 @@ export const createInMemoryVoiceJobRepository = (): VoiceJobRepository & { reado
         inputMediaAssetId: 'inputMediaAssetId' in input ? input.inputMediaAssetId : null,
         resultMediaAssetId: null,
         placeAtSec: 'placeAtSec' in input ? input.placeAtSec : null,
+        denoise: 'denoise' in input ? input.denoise : null,
         tool: input.tool,
         model: input.model,
         spec: 'spec' in input ? input.spec : null,

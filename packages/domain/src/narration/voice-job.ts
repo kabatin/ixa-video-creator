@@ -41,6 +41,12 @@ export const VoiceJob = z.object({
   resultMediaAssetId: MediaAssetId.nullable(),
   /** 録音を置く位置（文字起こし。タイムラインの秒）。ほかの種類では null。 */
   placeAtSec: Seconds.nullable(),
+  /**
+   * 録音にノイズ除去（highpass・afftdn）を掛けるか（文字起こしだけ）。頼んだときに選び、ここに残す
+   * （後から設定で変わらない）。加工済み・合成の音に掛けると 3〜8kHz が削られて声がこもる。
+   * null は選べるようになる前の取り込み（掛けていた）。ほかの種類では null。
+   */
+  denoise: z.boolean().nullable(),
   /** 使う AI（声または文字起こしの AI）。 */
   tool: z.string().min(1),
   model: z.string().nullable(),
@@ -56,6 +62,9 @@ export const VoiceJob = z.object({
   finishedAt: z.date().nullable(),
 })
 export type VoiceJob = z.infer<typeof VoiceJob>
+
+/** 録音にノイズ除去を掛けるか。ジョブに残した値に従い、残っていなければ掛ける（選べるようになる前と同じ）。 */
+export const recordingDenoise = (job: Pick<VoiceJob, 'denoise'>): boolean => job.denoise ?? true
 
 /** 種類ごとに要るものが揃っているか。揃っていれば null。 */
 export const voiceJobViolation = (job: VoiceJob): string | null => {

@@ -143,6 +143,8 @@ export const voiceJobs = pgTable(
     resultMediaAssetId: ulidRef('result_media_asset_id').references(() => mediaAssets.id),
     /** 録音を置く位置（文字起こしだけ）。 */
     placeAtSec: seconds('place_at_sec'),
+    /** 録音にノイズ除去を掛けるか（文字起こしだけ）。null は選べるようになる前の取り込み（掛けていた）。 */
+    denoise: boolean('denoise'),
     tool: text('tool').notNull(),
     model: text('model'),
     spec: jsonb('spec').$type<VoiceSpec>(),

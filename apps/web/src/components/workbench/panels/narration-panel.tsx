@@ -12,7 +12,7 @@ import { useWorkbench } from '@/components/workbench/workbench-context'
 import { Button } from '@/components/ui/button'
 import { describeForPerson } from '@/lib/api-error'
 import { formatClock } from '@/lib/format-time'
-import { retryWhileMeasuring } from '@/lib/narration-import'
+import { recordingImportBody, retryWhileMeasuring } from '@/lib/narration-import'
 import { bulkSpeakSummary, narrationLengthNote } from '@/lib/narration-view'
 import { usePlayheadSec } from '@/lib/playhead-sec'
 
@@ -53,11 +53,11 @@ export const NarrationPanel = () => {
       })
   }
 
-  const importRecording = (file: File, at: number): void => {
+  const importRecording = (file: File, at: number, skipDenoise: boolean): void => {
     run('録音を取り込んでいます', async () => {
       const asset = await api.uploadMedia(file, { workspaceId: workbench.project.workspaceId, projectId, kind: 'audio' })
       // 上げた直後は音の長さをまだ測っている。測り終わるまで待って頼み直す。
-      await retryWhileMeasuring(() => api.importRecording(projectId, { mediaAssetId: asset.id, voiceProfileId: null, placeAtSec: at }), {
+      await retryWhileMeasuring(() => api.importRecording(projectId, recordingImportBody({ mediaAssetId: asset.id, atSec: at, skipDenoise })), {
         sleep,
         attempts: MEASURE_ATTEMPTS,
       })
@@ -91,7 +91,7 @@ export const NarrationPanel = () => {
           })
         }}
       />
-      <RecordingButton onFile={(file, at) => importRecording(file, at)} />
+      <RecordingButton onFile={(file, at, skipDenoise) => importRecording(file, at, skipDenoise)} />
     </>
   )
 
@@ -172,12 +172,20 @@ const AtPlayhead = ({ label, disabled = false, onPress }: { readonly label: stri
   )
 }
 
-/** 録音のファイルを選ぶ。選んだときの再生位置に置く。 */
-const RecordingButton = ({ onFile }: { readonly onFile: (file: File, atSec: number) => void }) => {
+/**
+ * 録音のファイルを選ぶ。選んだときの再生位置に置く。
+ * 加工済み・合成の音はノイズ除去を外せる（掛けると 3〜8kHz が削られて声がこもる。NIGHT RUN で実測）。
+ */
+const RecordingButton = ({ onFile }: { readonly onFile: (file: File, atSec: number, skipDenoise: boolean) => void }) => {
   const playheadSec = usePlayheadSec()
   const input = useRef<HTMLInputElement>(null)
+  const [skipDenoise, setSkipDenoise] = useState(false)
   return (
     <>
+      <label className="flex items-center gap-1 text-xs text-muted">
+        <input type="checkbox" checked={skipDenoise} onChange={(event) => setSkipDenoise(event.target.checked)} />
+        ノイズ除去をしない（加工済み・合成の音）
+      </label>
       <Button
         size="sm"
         onClick={() => {
@@ -196,7 +204,7 @@ const RecordingButton = ({ onFile }: { readonly onFile: (file: File, atSec: numb
         onChange={(event) => {
           const file = event.target.files?.[0]
           event.target.value = ''
-          if (file !== undefined) onFile(file, playheadSec)
+          if (file !== undefined) onFile(file, playheadSec, skipDenoise)
         }}
       />
     </>

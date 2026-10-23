@@ -30,6 +30,11 @@ const RecordingBody = z
     voiceProfileId: VoiceProfileIdSchema.nullable().default(null),
     /** 録音を置く位置（タイムラインの秒）。 */
     placeAtSec: Seconds.default(0),
+    /**
+     * ノイズ除去（highpass・afftdn）を掛けるか。既定は掛ける（マイクの録音）。加工済み・合成の音は false にする
+     * （掛けると 3〜8kHz が削られて声がこもる）。音量の調整はどちらでも掛ける。
+     */
+    denoise: z.boolean().default(true),
   })
   .openapi('ImportNarrationRecording')
 
@@ -43,7 +48,7 @@ const accepted = json('頼んだ', successResponse(z.object({ jobId: z.string() 
 
 const recordingRoute = createRoute({
   method: 'post', path: '/projects/{projectId}/narration/recordings', tags: ['narration'],
-  summary: '録音を取り込む（ノイズ除去して文字起こしし、行と Take にする）',
+  summary: '録音を取り込む（選べばノイズ除去して文字起こしし、行と Take にする）',
   request: { params: ProjectParams, body: { required: true, content: { 'application/json': { schema: RecordingBody } } } },
   responses: { 202: accepted, ...errors },
 })
@@ -71,7 +76,7 @@ export const narrationRecordingRoutes = (deps: NarrationDeps) =>
       const { projectId } = c.req.valid('param')
       const project = await deps.projects.findById(projectId)
       if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
-      const { mediaAssetId, voiceProfileId, placeAtSec } = c.req.valid('json')
+      const { mediaAssetId, voiceProfileId, placeAtSec, denoise } = c.req.valid('json')
       const asset = await deps.mediaAssets.findById(mediaAssetId)
       if (asset === null || asset.kind !== 'audio' || asset.workspaceId !== project.workspaceId) {
         const message = '取り込めるのは、この作品の場所にある音のファイルだけです'
@@ -92,6 +97,7 @@ export const narrationRecordingRoutes = (deps: NarrationDeps) =>
         inputMediaAssetId: mediaAssetId,
         voiceProfileId,
         placeAtSec,
+        denoise,
         tool: chosen.tool,
         model: null,
       })
