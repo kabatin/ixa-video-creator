@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 
 /**
  * CLI を起こし、**標準出力を 1 行ずつ受け取る**口（ADR-0058。AI エージェントのタブ）。
@@ -25,6 +25,8 @@ export type CliStreamExit =
   | { readonly kind: 'spawn_failed'; readonly reason: string }
 
 export type CliStreamHandle = {
+  /** 子のプロセス番号（＝プロセスグループの番号）。起こせなければ null。作業場所に書いて、API が落ちたあとに片付ける。 */
+  readonly pid: number | null
   /** 子が終わったら解決する（失敗も kind で返す。投げない）。 */
   readonly exited: Promise<CliStreamExit>
   /** 止める。SIGTERM を送り、残っていれば少し待って SIGKILL。何度呼んでもよい。 */
@@ -41,6 +43,23 @@ const KILL_GRACE_MS = 5000
 const nodeErrorCode = (error: Error): string | undefined =>
   'code' in error && typeof error.code === 'string' ? error.code : undefined
 
+/** プロセスグループにシグナルを送る。もう終わっていれば何もしない。 */
+export const signalProcessGroup = (pid: number, signal: NodeJS.Signals): void => {
+  try {
+    process.kill(-pid, signal)
+  } catch {
+    // もう終わっている（ESRCH）。止めることが目的なので、それで足りる。
+  }
+}
+
+/** プロセスのコマンド行（`ps`）。無ければ null。番号の使い回しで別のプロセスを止めないための確かめに使う。 */
+export const processCommandOf = (pid: number): Promise<string | null> =>
+  new Promise((resolve) => {
+    execFile('ps', ['-o', 'command=', '-p', String(pid)], (error, stdout) => {
+      resolve(error === null && stdout.trim() !== '' ? stdout.trim() : null)
+    })
+  })
+
 export const spawnCliStreamRunner: CliStreamRunner = (invocation, onLine) => {
   const child = spawn(invocation.command, [...invocation.args], {
     cwd: invocation.cwd,
@@ -52,12 +71,7 @@ export const spawnCliStreamRunner: CliStreamRunner = (invocation, onLine) => {
   const state = { buffered: '', stderr: '', finished: false }
 
   const signalGroup = (signal: NodeJS.Signals): void => {
-    if (child.pid === undefined) return
-    try {
-      process.kill(-child.pid, signal)
-    } catch {
-      // もう終わっている（ESRCH）。止めることが目的なので、それで足りる。
-    }
+    if (child.pid !== undefined) signalProcessGroup(child.pid, signal)
   }
 
   const exited = new Promise<CliStreamExit>((resolve) => {
@@ -75,6 +89,8 @@ export const spawnCliStreamRunner: CliStreamRunner = (invocation, onLine) => {
       state.finished = true
       if (state.buffered !== '') onLine(state.buffered)
       state.buffered = ''
+      // 子が終わっても、子が起こした MCP が残ることがある。グループごと止める。
+      signalGroup('SIGTERM')
       resolve({ kind: 'exited', exitCode, signal, stderrTail: state.stderr })
     })
   })
@@ -94,6 +110,7 @@ export const spawnCliStreamRunner: CliStreamRunner = (invocation, onLine) => {
   child.stdin.end(invocation.stdin)
 
   return {
+    pid: child.pid ?? null,
     exited,
     stop: () => {
       if (state.finished) return

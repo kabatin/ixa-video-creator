@@ -162,6 +162,30 @@ process.stdin.on('end', () => {
     expect(exit.kind).toBe('exited')
   })
 
+  it('子が終わったら、残った孫（CLI が起こした MCP）もグループごと止める', async () => {
+    const path = script(
+      'grandchild.mjs',
+      `import { spawn } from 'node:child_process'
+const g = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })
+process.stdout.write(String(g.pid) + '\\n')
+setTimeout(() => process.exit(0), 100)`,
+    )
+    const { lines, handle } = run(path)
+    expect(handle.pid).toEqual(expect.any(Number))
+    await handle.exited
+    const grandchild = Number(lines[0])
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    const alive = (() => {
+      try {
+        process.kill(grandchild, 0)
+        return true
+      } catch {
+        return false
+      }
+    })()
+    expect(alive).toBe(false)
+  })
+
   it('コマンドが無ければ not_found', async () => {
     const handle = spawnCliStreamRunner(
       { command: join(dir, 'no-such-cli'), args: [], cwd: dir, stdin: '', env: {} },

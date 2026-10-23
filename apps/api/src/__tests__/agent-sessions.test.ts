@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { OpenAPIHono } from '@hono/zod-openapi'
@@ -31,6 +31,8 @@ type SetupOptions = {
   readonly textTool?: AiToolId
   /** 会話の表の口を差し替える（後片付けの失敗を作る）。 */
   readonly wrapSessions?: (repo: InMemoryAgentSessions) => InMemoryAgentSessions
+  /** 残った CLI のうち、本物のエージェントの CLI とみなす番号。 */
+  readonly agentPids?: readonly number[]
 }
 
 const setup = (script: (call: FakeCliCall, app: OpenAPIHono) => Promise<ReturnType<typeof exited>>, opts: SetupOptions = {}) => {
@@ -45,6 +47,7 @@ const setup = (script: (call: FakeCliCall, app: OpenAPIHono) => Promise<ReturnTy
   roots.push(root)
   const app = new OpenAPIHono()
   const cli = createFakeCli((call) => script(call, app))
+  const killed: number[] = []
   const agent = createAgentService({
     sessions,
     projects,
@@ -64,6 +67,12 @@ const setup = (script: (call: FakeCliCall, app: OpenAPIHono) => Promise<ReturnTy
     },
     now: () => new Date(),
     logger,
+    processes: {
+      isAgentCli: (pid) => Promise.resolve((opts.agentPids ?? []).includes(pid)),
+      killGroup: (pid) => {
+        killed.push(pid)
+      },
+    },
   })
   registerErrorHandlers(app, logger)
   app.route('/', agentSessionRoutes({ agent, sessions, projects }))
@@ -83,7 +92,7 @@ const setup = (script: (call: FakeCliCall, app: OpenAPIHono) => Promise<ReturnTy
       await new Promise((resolve) => setTimeout(resolve, 5))
     }
   }
-  return { app, agent, project, shot, sessions, tokens, cli, root, post, newTask, statusOf, until }
+  return { app, agent, project, shot, sessions, tokens, cli, root, post, newTask, statusOf, until, killed }
 }
 
 const simpleTurn = (call: FakeCliCall) => {
@@ -479,6 +488,36 @@ describe('確認なしへの切り替え', () => {
     expect(t.sessions.messages(id).some((m) => m.body.kind === 'system' && m.body.event === 'confirmations_waived')).toBe(true)
     await t.post(`/agent-sessions/${id}/stop`, {})
     await t.until(() => t.statusOf(id) === 'interrupted', '中断')
+  })
+})
+
+describe('残ったプロセスの後片付け', () => {
+  it('やりとりの間は作業場所に CLI の番号を書き、終わったら消す', async () => {
+    let seen: string | null = null
+    const t = setup(async (call) => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      seen = readFileSync(join(call.invocation.cwd, 'cli.pid'), 'utf8')
+      return simpleTurn(call)
+    })
+    const id = await t.newTask()
+    await t.post(`/agent-sessions/${id}/messages`, { text: 'こんにちは' })
+    await t.until(() => t.statusOf(id) === 'idle', '済み')
+    await t.until(() => !existsSync(join(t.root, id, 'cli.pid')), '番号を消す')
+    expect(seen).toBe('4242')
+  })
+
+  it('起動時に、残った番号のうちエージェントの CLI だけをグループごと止め、MCP の設定ファイルを消す', async () => {
+    const t = setup(simpleTurn, { agentPids: [111] })
+    for (const [dir, pid] of [['01JAAAAAAAAAAAAAAAAAAAAAAA', '111'], ['01JBBBBBBBBBBBBBBBBBBBBBBB', '222']] as const) {
+      mkdirSync(join(t.root, dir), { recursive: true })
+      writeFileSync(join(t.root, dir, 'cli.pid'), pid)
+      writeFileSync(join(t.root, dir, 'mcp-x.json'), '{}')
+    }
+    await t.agent.recoverAfterRestart()
+    expect(t.killed).toEqual([111])
+    expect(existsSync(join(t.root, '01JAAAAAAAAAAAAAAAAAAAAAAA', 'mcp-x.json'))).toBe(false)
+    expect(existsSync(join(t.root, '01JBBBBBBBBBBBBBBBBBBBBBBB', 'mcp-x.json'))).toBe(false)
+    expect(existsSync(join(t.root, '01JAAAAAAAAAAAAAAAAAAAAAAA', 'cli.pid'))).toBe(false)
   })
 })
 

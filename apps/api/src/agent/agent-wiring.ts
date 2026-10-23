@@ -10,7 +10,7 @@ import {
   type ShotRepository,
 } from '@ixa/db'
 import type { AiToolId } from '@ixa/domain'
-import { spawnCliStreamRunner } from '@ixa/provider-llm'
+import { processCommandOf, signalProcessGroup, spawnCliStreamRunner } from '@ixa/provider-llm'
 import type { Logger } from '../logger.js'
 import { createAgentHub, type AgentHub } from './agent-hub.js'
 import { createAgentService, type AgentService } from './agent-service.js'
@@ -60,6 +60,14 @@ export const createAgentWiring = (deps: {
       apiUrl: `http://127.0.0.1:${String(deps.config.api.port)}`,
       sessionsRoot: join(homedir(), '.ixa', 'agent-sessions'),
       baseEnv: process.env,
+    },
+    processes: {
+      // 番号は使い回されるので、エージェントの CLI（確認の口が approve）のときだけ止める。
+      isAgentCli: async (pid) => {
+        const command = await processCommandOf(pid)
+        return command !== null && command.includes('claude') && command.includes('mcp__ixa__approve')
+      },
+      killGroup: (pid) => signalProcessGroup(pid, 'SIGTERM'),
     },
     now: () => new Date(),
     logger: deps.logger,

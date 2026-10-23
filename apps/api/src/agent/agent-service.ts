@@ -23,6 +23,7 @@ import { agentCliEnv, buildAgentCliArgs, buildAgentMcpConfig, type CliStreamRunn
 import { hashToken } from '../auth/token.js'
 import type { Logger } from '../logger.js'
 import { createAgentApprovals } from './agent-approvals.js'
+import { removeCliPid, sweepAgentWorkDirs, writeCliPid, type AgentProcesses } from './agent-orphans.js'
 import type { AgentHub } from './agent-hub.js'
 import { buildAgentPrompt } from './agent-prompt.js'
 import { startTurn, type RunningTurn } from './agent-turn.js'
@@ -65,6 +66,8 @@ export type AgentServiceDeps = {
     /** CLI に渡してよい env の元（`process.env`）。`agentCliEnv` が要るものだけに絞る。 */
     readonly baseEnv: Readonly<Record<string, string | undefined>>
   }
+  /** 残った CLI を確かめて止める口（起動時の後片付け）。 */
+  readonly processes: AgentProcesses
   readonly now: () => Date
   readonly logger: Logger
 }
@@ -172,7 +175,11 @@ export const createAgentService = (deps: AgentServiceDeps) => {
     )
     const cleanup = async (): Promise<void> => {
       active = new Map([...active].filter(([id]) => id !== session.id))
-      await Promise.all([removeMcpConfigFile(configPath), deps.tokens.revoke(key.record.id, deps.now())])
+      await Promise.all([
+        removeMcpConfigFile(configPath),
+        removeCliPid(workDir),
+        deps.tokens.revoke(key.record.id, deps.now()),
+      ])
     }
     const turn = startTurn(
       { sessions: deps.sessions, hub: deps.hub, approvals, runner: deps.runner, now: deps.now, logger: deps.logger },
@@ -188,6 +195,13 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       cleanup,
     )
     active = new Map([...active, [session.id, { turn, tokenHash: key.tokenHash }]])
+    const pid = turn.handle.pid
+    if (pid !== null) {
+      // API が落ちたときに起動時に止められるよう、番号を作業場所に残す。書けなくてもやりとりは続ける。
+      writeCliPid(workDir, pid).catch((error: unknown) => {
+        deps.logger.warn({ err: error, agentSessionId: session.id }, 'CLI の番号を書けませんでした')
+      })
+    }
     return okValue(titled)
   }
 
@@ -316,6 +330,10 @@ export const createAgentService = (deps: AgentServiceDeps) => {
     /** API の起動時。作業中のまま残った会話を中断にし、取り消し忘れの鍵を取り消す。 */
     recoverAfterRestart: async (): Promise<void> => {
       const now = deps.now()
+      const swept = await sweepAgentWorkDirs(deps.cli.sessionsRoot, deps.processes)
+      if (swept.killed > 0 || swept.removedConfigs > 0) {
+        deps.logger.info(swept, '残った AI エージェントの CLI と設定ファイルを片付けました')
+      }
       const interrupted = await deps.sessions.interruptAllBusy(now)
       await Promise.all(
         interrupted.map((session) =>

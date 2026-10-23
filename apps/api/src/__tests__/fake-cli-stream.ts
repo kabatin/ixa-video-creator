@@ -47,6 +47,7 @@ export const createFakeCli = (script: (call: FakeCliCall) => Promise<CliStreamEx
     }
     calls.push(call)
     return {
+      pid: 4242,
       exited: Promise.resolve().then(() => script(call)),
       stop: () => {
         state.stopped = true
