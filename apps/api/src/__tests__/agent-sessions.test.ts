@@ -513,7 +513,7 @@ describe('残ったプロセスの後片付け', () => {
       writeFileSync(join(t.root, dir, 'cli.pid'), pid)
       writeFileSync(join(t.root, dir, 'mcp-x.json'), '{}')
     }
-    await t.agent.recoverAfterRestart()
+    await t.agent.recoverAfterRestart(new Date(Date.now() + 1000))
     expect(t.killed).toEqual([111])
     expect(existsSync(join(t.root, '01JAAAAAAAAAAAAAAAAAAAAAAA', 'mcp-x.json'))).toBe(false)
     expect(existsSync(join(t.root, '01JBBBBBBBBBBBBBBBBBBBBBBB', 'mcp-x.json'))).toBe(false)
@@ -528,7 +528,7 @@ describe('起動時の後片付け', () => {
     await t.sessions.transition(id, 'running', new Date())
     await t.tokens.create({ kind: 'automation', label: `${AGENT_KEY_LABEL_PREFIX}A）`, tokenHash: 'h1', expiresAt: null })
     await t.tokens.create({ kind: 'automation', label: '制作者の MCP', tokenHash: 'h2', expiresAt: null })
-    await t.agent.recoverAfterRestart()
+    await t.agent.recoverAfterRestart(new Date(Date.now() + 1000))
     expect(t.statusOf(id)).toBe('interrupted')
     expect(t.sessions.messages(id).at(-1)?.body).toMatchObject({ kind: 'system', event: 'interrupted' })
     const revoked = t.tokens.rows().map((row) => [row.label, row.revokedAt !== null])
@@ -536,6 +536,10 @@ describe('起動時の後片付け', () => {
       [`${AGENT_KEY_LABEL_PREFIX}A）`, true],
       ['制作者の MCP', false],
     ])
+    // 起動したあとに作った鍵（いま動いているやりとりの鍵）は取り消さない。
+    await t.tokens.create({ kind: 'automation', label: `${AGENT_KEY_LABEL_PREFIX}B）`, tokenHash: 'h3', expiresAt: null })
+    await t.agent.recoverAfterRestart(new Date(Date.now() - 60_000))
+    expect(t.tokens.rows().find((row) => row.tokenHash === 'h3')?.revokedAt).toBeNull()
     // 中断した会話は続きから話せる。
     expect((await t.post(`/agent-sessions/${id}/messages`, { text: '続き' })).status).toBe(202)
     await t.until(() => t.statusOf(id) === 'idle', '済み')

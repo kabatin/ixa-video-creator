@@ -360,6 +360,7 @@ export const main = (): void => {
     logger,
   })
   // AI エージェントのタブ（ADR-0058）。起動時に、途中で止まった会話を中断にし、取り消し忘れの鍵を取り消す。
+  const startedAt = new Date()
   const agent = createAgentWiring({
     db,
     config,
@@ -368,9 +369,6 @@ export const main = (): void => {
     tokens: accessTokens,
     textTool: async () => (await ai.current()).text,
     logger,
-  })
-  agent.service.recoverAfterRestart().catch((error: unknown) => {
-    logger.error({ err: error }, '途中で止まった AI エージェントの会話を片付けられませんでした')
   })
   const app = createApp({
     auth,
@@ -554,26 +552,38 @@ export const main = (): void => {
    * **既定は `127.0.0.1`。** この API には認証が無いので、既定で外に開かない。
    * LAN から触るときだけ `API_HOST=0.0.0.0` にし、終わったら戻す。
    */
-  const server = serve(
-    { fetch: app.fetch, port: config.api.port, hostname: config.api.host },
-    (info) => {
-      logger.info({ port: info.port, host: config.api.host }, 'api を起動しました')
-      if (!isLoopbackHost(config.api.host)) {
-        logger.warn(
-          { host: config.api.host },
-          'API をこのマシンの外へ公開している。http なので合言葉とクッキーは平文で流れる。使わないときは API_HOST を戻すこと',
-        )
-      }
-      // 外から使える形なのに素材の URL だけ手元を指していると、別の端末では素材が 1 つも出ない。
-      const assetUrlWarning = loopbackAssetUrlWarning(config.api.host, config.storage.publicBaseUrl)
-      if (assetUrlWarning !== null) logger.warn({ host: config.api.host }, assetUrlWarning)
-    },
-  )
+  /**
+   * 口を開く前に、AI エージェントの後片付けを待つ（ADR-0058）。待たずに開くと、起動直後に始まった
+   * やりとりを「残っていた」と取り違えて中断にしかねない。片付けに失敗しても API は開く（ログに残す）。
+   */
+  const listen = (): void => {
+    const server = serve(
+      { fetch: app.fetch, port: config.api.port, hostname: config.api.host },
+      (info) => {
+        logger.info({ port: info.port, host: config.api.host }, 'api を起動しました')
+        if (!isLoopbackHost(config.api.host)) {
+          logger.warn(
+            { host: config.api.host },
+            'API をこのマシンの外へ公開している。http なので合言葉とクッキーは平文で流れる。使わないときは API_HOST を戻すこと',
+          )
+        }
+        // 外から使える形なのに素材の URL だけ手元を指していると、別の端末では素材が 1 つも出ない。
+        const assetUrlWarning = loopbackAssetUrlWarning(config.api.host, config.storage.publicBaseUrl)
+        if (assetUrlWarning !== null) logger.warn({ host: config.api.host }, assetUrlWarning)
+      },
+    )
 
-  registerShutdownHandlers(server, db, generationQueue, logger, async () => {
-    await agent.service.shutdown()
-    await projectEvents.close()
-  })
+    registerShutdownHandlers(server, db, generationQueue, logger, async () => {
+      await agent.service.shutdown()
+      await projectEvents.close()
+    })
+  }
+  agent.service
+    .recoverAfterRestart(startedAt)
+    .catch((error: unknown) => {
+      logger.error({ err: error }, '途中で止まった AI エージェントの会話を片付けられませんでした')
+    })
+    .finally(listen)
 }
 
 try {

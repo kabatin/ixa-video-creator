@@ -327,8 +327,11 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       return okValue(null)
     },
 
-    /** API の起動時。作業中のまま残った会話を中断にし、取り消し忘れの鍵を取り消す。 */
-    recoverAfterRestart: async (): Promise<void> => {
+    /**
+     * API の起動時。作業中のまま残った会話を中断にし、取り消し忘れの鍵を取り消す。
+     * 取り消すのは起動より前に作った鍵だけ（起動のあとに始まったやりとりの鍵を巻き込まない）。
+     */
+    recoverAfterRestart: async (startedAt: Date): Promise<void> => {
       const now = deps.now()
       const swept = await sweepAgentWorkDirs(deps.cli.sessionsRoot, deps.processes)
       if (swept.killed > 0 || swept.removedConfigs > 0) {
@@ -343,7 +346,10 @@ export const createAgentService = (deps: AgentServiceDeps) => {
         ),
       )
       const leftovers = (await deps.tokens.listAutomation()).filter(
-        (token) => token.revokedAt === null && token.label.startsWith(AGENT_KEY_LABEL_PREFIX),
+        (token) =>
+          token.revokedAt === null &&
+          token.label.startsWith(AGENT_KEY_LABEL_PREFIX) &&
+          token.createdAt.getTime() < startedAt.getTime(),
       )
       await Promise.all(leftovers.map((token) => deps.tokens.revoke(token.id, now)))
       if (interrupted.length > 0 || leftovers.length > 0) {
