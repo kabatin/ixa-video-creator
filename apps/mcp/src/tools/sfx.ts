@@ -1,6 +1,9 @@
-import { SFX_COUNT_MAX, SfxCue, SfxCueAlign, SfxJobStatus } from '@ixa/domain'
+import { basename, extname, isAbsolute } from 'node:path'
+import { SFX_COUNT_MAX, SfxCue, SfxCueAlign, SfxJobStatus, UploadedSfxTitle } from '@ixa/domain'
 import { z } from 'zod'
 import { IxaApiError, seg } from '../api-client.js'
+import { uploadLocalFile } from '../lib/media-io.js'
+import { waitForDuration } from '../lib/media-probe.js'
 import type { CheckResult } from '../lib/wait-loop.js'
 import { defineTool, Id, jsonResult, mapLimited, round, SEED_MAX } from '../tool-def.js'
 import type { ApiClient } from '../api-client.js'
@@ -11,6 +14,7 @@ import type { ApiClient } from '../api-client.js'
  *   POST /projects/{projectId}/sfx/generate { cues[], count 1–4, seed?, tool? } → 202 { jobIds }
  *   GET  /sfx-jobs/{id} → { status, error, timelineClipId, mediaAssetIds }
  *   GET  /projects/{projectId}/sfx/suggestions → [{ kind, reason, cue }]
+ *   POST /projects/{projectId}/uploaded-sfx { mediaAssetId, title } → 手元のファイルの効果音（ADR-0056。段には置かない）
  *
  * きっかけの範囲は domain の `SfxCue` を読む（写さない）。置いた音は SFX の段の media クリップ。
  */
@@ -194,5 +198,46 @@ export const removeSfxTool = defineTool({
     })
     const failures = results.flatMap((r) => (r.ok ? [] : [{ id: r.id, reason: r.reason }]))
     return jsonResult({ removed: results.flatMap((r) => (r.ok ? [r.id] : [])), ...(failures.length > 0 ? { failures } : {}) })
+  },
+})
+
+/** 手元の効果音を段に置くときの既定の音量（作った効果音と同じ）。 */
+const UPLOADED_SFX_VOLUME = 0.8
+
+export const uploadSfxTool = defineTool({
+  name: 'upload_sfx',
+  risk: 'write',
+  description:
+    'Import a local sound-effect file (mp3/wav/m4a/aac/flac/ogg) into the project sound effects, and place it on the ' +
+    'SFX track at placeAtSec if given (the whole file, volume default 0.8). Adjust later with edit_clips.',
+  input: z.object({
+    projectId: Id,
+    filePath: z.string().min(1).refine(isAbsolute, 'absolute path required'),
+    title: UploadedSfxTitle.optional().describe('Defaults to the file name.'),
+    placeAtSec: z.number().min(0).optional().describe('Timeline seconds. Omit to only import it.'),
+    volume: z.number().min(0).max(2).default(UPLOADED_SFX_VOLUME),
+  }),
+  handler: async (args, { api, workspaceId, clock }) => {
+    const title = UploadedSfxTitle.parse(args.title ?? basename(args.filePath, extname(args.filePath)))
+    const mediaAssetId = await uploadLocalFile(api, args.filePath, { workspaceId, projectId: args.projectId, kind: 'audio' })
+    const sound = await api.post(`/projects/${seg(args.projectId)}/uploaded-sfx`, { mediaAssetId, title }, z.object({ id: z.string() }))
+    if (args.placeAtSec === undefined) return jsonResult({ uploadedSfxId: sound.id, mediaAssetId })
+    // 段に置くには長さが要る（トリムの終わり = 長さ）。測るのは取り込みジョブなので少し待つ。
+    const durationSec = await waitForDuration(api, clock, mediaAssetId)
+    if (durationSec === null) {
+      return jsonResult({ uploadedSfxId: sound.id, mediaAssetId, placed: false, reason: '音の長さをまだ測れていないので段には置いていません' })
+    }
+    const length = round(durationSec)
+    const clip = await api.post(
+      `/projects/${seg(args.projectId)}/clips`,
+      {
+        track: 'SFX',
+        startSec: round(args.placeAtSec),
+        durationSec: length,
+        content: { type: 'media', mediaAssetId, inSec: 0, outSec: length, volume: args.volume },
+      },
+      z.object({ id: z.string() }),
+    )
+    return jsonResult({ uploadedSfxId: sound.id, mediaAssetId, placed: true, clipId: clip.id, durationSec: length })
   },
 })
