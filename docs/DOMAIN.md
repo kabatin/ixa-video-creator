@@ -759,6 +759,8 @@ type RegenerationPolicy = {
 **既定では回さない（ADR-0057）。** `fail` の Take は作り直しを勧めるだけ（`isRetakeRecommended`）。ループに入るのは、
 生成を頼むときに「NG なら自動で作り直す」を選んだ Take だけ（`GenerationJob.autoRetake` → `Take.autoRetake`。
 判定は `actionAfterReview`）。作り直したジョブは選択を引き継ぐ。
+選んだ Take は取り込みが済んだら自動でレビューする（`shouldAutoReview`）。上限で止まったら（Shot が `blocked`）、
+最後の Take に作り直しを勧める（`isRetakeRecommended(take, shotStatus)`）。
 policy のいずれかに抵触したら Shot を `blocked` にして人間に渡す。**無限ループを作らないこと。**
 
 ---

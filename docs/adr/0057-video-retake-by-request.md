@@ -54,3 +54,20 @@ Decider: Claude（Architect）
 
 - 一括の生成（`bulk/generate`）の口への `autoRetake`。MCP は `autoRetake` を付けたら Shot ごとの口で頼む
 - 前からある Take は `auto_retake = false` になる（前の既定の「必ず作り直す」には戻さない）
+
+## 追記（2026-10-23）: 自動の作り直しを選んだ Take は、自動でレビューもする（案 A）
+
+レビューは人が頼んだときにしか走らないため、「NG なら自動で作り直す」を選んでも、夜間の自走では何も起きなかった。決めたこと:
+
+- **旗オフ（既定）**: 生成の後に自動でレビューしない（今どおり）。人が頼んだレビューが NG なら、作り直さずに勧めるだけ
+- **旗オン**: Take の取り込み（ポスターフレーム）が済んだら、worker がレビューを積む（`shouldAutoReview`。media の
+  取り込みの後に積むのは、レビューがポスターフレームを見るため）。NG なら上限まで作り直し、作り直した Take も同じことを繰り返す。
+  レビューは Take ごとに 1 つにまとめる（BullMQ のジョブ ID `auto-review-<Take>`）
+- **上限まで全部 NG なら、最後の Take に「作り直し推奨」を残す。** 自動の作り直しが止まると Shot は `blocked` になる
+  （既存）。`isRetakeRecommended(take, shotStatus)` は、旗オンでも Shot が `blocked` なら勧める。Take の一覧の API
+  （`GET /shots/{id}/takes`）と Shot の絵の一覧が、Shot の状態と合わせて `retakeRecommended` を返す
+- 画面の「生成のあとに自動レビューをするか聞く」は、旗オンの Take を数えない（worker が積むので、重ねて払わない）
+- **MCP に `review_take` を足す。** 旗オフのとき、エージェントが自分で確かめられるように。結果は `wait {kind:"review", id: takeId}`
+  で、判定・費用・指摘（直し方つき）を返す
+- レビューの費用は今の記録（`ReviewRun.costUsd`）のまま
+
