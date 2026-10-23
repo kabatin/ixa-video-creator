@@ -27,6 +27,7 @@ const baseRow = (): GenerationJobRow => ({
   regenerationReason: null,
   corrections: [],
     seed: null,
+  autoRetake: false,
   queuedAt: new Date('2026-09-17T00:00:00Z'),
   startedAt: null,
   providerStartedAt: null,
@@ -34,6 +35,12 @@ const baseRow = (): GenerationJobRow => ({
 })
 
 describe('generationJobRowToDomain', () => {
+  /** ADR-0057。頼んだときに選んだ「NG なら自動で作り直す」を、そのまま読む。 */
+  it('自動の作り直しを選んだかを読む', () => {
+    expect(generationJobRowToDomain(baseRow()).autoRetake).toBe(false)
+    expect(generationJobRowToDomain({ ...baseRow(), autoRetake: true }).autoRetake).toBe(true)
+  })
+
   it('通常の生成のジョブは系譜を持たない', () => {
     const job = generationJobRowToDomain(baseRow())
 

@@ -1,4 +1,4 @@
-import { doublePrecision, index, integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import { boolean, doublePrecision, index, integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import type {
   GenerationJob, GenerationJobStatus, HumanVerdict, ProviderParams, ReviewStatus,
@@ -71,6 +71,12 @@ export const generationJobs = pgTable(
      */
     seed: integer('seed'),
 
+    /**
+     * 「NG なら自動で作り直す」を選んだか（ADR-0057）。**頼んだ時点で決まり、後から変わらない。** 既定は false
+     * （作り直しを勧めるだけ）。worker は Take を作るときにこれを Take へ写す。
+     */
+    autoRetake: boolean('auto_retake').notNull().default(false),
+
     queuedAt: timestampTz('queued_at').notNull().defaultNow(),
     startedAt: timestampTz('started_at'),
     /** 生成先が作り始めた時刻（送った後、生成先の中で順番を待つことがある）。 */
@@ -132,6 +138,9 @@ export const takes = pgTable(
      * **外部キーは付けない。** 元を物理削除したときに null へ落ちると、複製が黙って「この作品で払った」ことになる。
      */
     copiedFromTakeId: ulidRef('copied_from_take_id'),
+
+    /** 作ったジョブで「NG なら自動で作り直す」を選んでいたか（ADR-0057）。作るときにジョブから写し、後から変えない。 */
+    autoRetake: boolean('auto_retake').notNull().default(false),
 
     // 作成後に変更してよいのはこの 2 列だけ
     reviewStatus: text('review_status', { enum: ReviewStatusSchema.options })

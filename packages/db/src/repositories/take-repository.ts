@@ -79,6 +79,7 @@ export const takeRowToDomain = (row: TakeRow): Take =>
     reviewStatus: row.reviewStatus,
     humanVerdict: row.humanVerdict,
     copiedFromTakeId: row.copiedFromTakeId,
+    autoRetake: row.autoRetake,
     createdAt: row.createdAt,
   })
 
