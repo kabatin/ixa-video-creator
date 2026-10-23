@@ -42,8 +42,9 @@ export const GenerateTakesInput = z.object({
     .boolean()
     .default(false)
     .describe(
-      'If a review fails, regenerate automatically (with the review fixes, up to the project limit). Default false: a failed ' +
-        'take is only marked "retake recommended" for the user. Use true for unattended overnight runs; it costs time and tokens.',
+      'Review each take automatically when it is ready, and if the review fails regenerate with the review fixes, up to the ' +
+        'project limit (regenerated takes keep doing so). Default false: no automatic review; check takes yourself with ' +
+        'review_take, and a failed take is only marked "retake recommended". Use true for unattended overnight runs; it costs time and tokens.',
     ),
 })
 
@@ -53,7 +54,7 @@ export const generateTakesTool = defineTool({
     'Generate video takes for shots (queues jobs; local models take minutes per take and run one at a time). ' +
     'Shots usually need a start frame first (draw_start_frames). Returns generation jobIds for wait ' +
     '{kind:"generation", id}. corrections/seed/parentTakeId/autoRetake send one request per shot. ' +
-    'By default a take that fails review is not regenerated (only marked for the user); set autoRetake for unattended runs.',
+    'By default takes are not reviewed or regenerated automatically (use review_take); set autoRetake for unattended runs.',
   input: GenerateTakesInput,
   handler: async (args, { api }) => {
     if (args.parentTakeId !== undefined && args.shotIds.length !== 1) {

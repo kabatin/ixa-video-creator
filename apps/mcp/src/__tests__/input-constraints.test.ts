@@ -187,6 +187,7 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
     ],
   },
   list_takes: { base: { shotId: S }, cases: [[{ shotId: 'x' }, 'shotId']] },
+  review_take: { base: { takeId: S }, cases: [[{ takeId: 'x' }, 'takeId']] },
   adopt_take: {
     base: { shotId: S, takeId: S },
     cases: [

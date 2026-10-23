@@ -2,6 +2,7 @@ import { UPSCALE_REASON } from '@ixa/domain'
 import { z } from 'zod'
 import { IxaApiError, seg, type ApiClient } from '../api-client.js'
 import { musicJobCheck } from '../tools/music-generation.js'
+import { reviewCheck } from '../tools/review.js'
 import { sfxJobCheck } from '../tools/sfx.js'
 import {
   WireActiveGeneration,
@@ -26,6 +27,7 @@ export const JobRef = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('sfx'), id: z.string().ulid().describe('sfx jobId from generate_sfx') }),
   z.object({ kind: z.literal('analysis'), id: z.string().ulid().describe('musicTrackId') }),
   z.object({ kind: z.literal('start_frame'), id: z.string().ulid().describe('shotId') }),
+  z.object({ kind: z.literal('review'), id: z.string().ulid().describe('takeId from review_take') }),
   z.object({
     kind: z.literal('upscale'),
     shotId: z.string().ulid(),
@@ -108,6 +110,8 @@ export const checkFor = (api: ApiClient, ref: JobRef): Check => {
       return { label: ref, poll: () => analysisCheck(api, ref.id) }
     case 'start_frame':
       return { label: ref, poll: () => startFrameCheck(api, ref.id) }
+    case 'review':
+      return { label: ref, poll: () => reviewCheck(api, ref.id) }
     case 'upscale':
       return { label: ref, poll: () => upscaleCheck(api, ref.shotId, ref.takeId) }
   }

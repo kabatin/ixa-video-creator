@@ -18,6 +18,7 @@ import {
 } from './tools/start-frames.js'
 import { setAiTool, statusTool } from './tools/status.js'
 import { adoptTakeTool, generateTakesTool, listTakesTool, upscaleTakesTool } from './tools/takes.js'
+import { reviewTakeTool } from './tools/review.js'
 import { viewTool } from './tools/view.js'
 import { analyzeMotionTool } from './tools/motion.js'
 import { waitTool } from './tools/wait.js'
@@ -46,6 +47,7 @@ export const TOOLS: readonly ToolDef[] = [
   generateTakesTool,
   listTakesTool,
   adoptTakeTool,
+  reviewTakeTool,
   upscaleTakesTool,
   waitTool,
   addEffectsTool,

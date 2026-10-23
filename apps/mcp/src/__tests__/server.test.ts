@@ -14,11 +14,11 @@ const connect = async (fake: ReturnType<typeof createFakeApi>) => {
 }
 
 describe('MCP サーバ', () => {
-  it('33 のツールを JSON Schema つきで出す', async () => {
+  it('34 のツールを JSON Schema つきで出す', async () => {
     const client = await connect(createFakeApi([]))
     const { tools } = await client.listTools()
     expect(tools.map((t) => t.name)).toEqual(TOOLS.map((t) => t.name))
-    expect(tools).toHaveLength(33)
+    expect(tools).toHaveLength(34)
     const plan = tools.find((t) => t.name === 'plan_shots')
     expect(plan?.inputSchema.properties).toHaveProperty('boundariesSec')
     expect(plan?.inputSchema.required).toEqual(['projectId'])
