@@ -129,16 +129,21 @@ const RequestId = z.string().ulid()
 
 /** 確認なしに切り替えるツール（CLI の名前）。 */
 const WAIVE_TOOL = `${IXA_MCP_TOOL_PREFIX}waive_confirmations`
-/** 新しい作品を作るツール（会話の作品の外を触る）。 */
-const CREATE_PROJECT_TOOL = `${IXA_MCP_TOOL_PREFIX}create_project`
+/**
+ * 入力の `projectId` に関わらず、いつも会話の作品の外を触るツール（CLI の名前）。
+ * 新しい作品を作る（create_project・duplicate_project）・ほかの作品を読む（import_from_project）。
+ */
+const ALWAYS_OUTSIDE_TOOLS: ReadonlySet<string> = new Set(
+  ['create_project', 'duplicate_project', 'import_from_project'].map((name) => `${IXA_MCP_TOOL_PREFIX}${name}`),
+)
 
 /**
- * 会話の作品の外を触る操作か（別の作品の `projectId`・新しい作品を作る）。
+ * 会話の作品の外を触る操作か（別の作品の `projectId`・新しい作品を作る・ほかの作品を読む）。
  * 外を触る操作は削除と同じ扱いにし、**確認なしの旗が立っていても必ず確認する**
  * （旗は「この作品の作業」についての許しで、ほかの作品には及ばない）。
  */
 const touchesOutside = (toolName: string, input: unknown, projectId: string): boolean => {
-  if (toolName === CREATE_PROJECT_TOOL) return true
+  if (ALWAYS_OUTSIDE_TOOLS.has(toolName)) return true
   const target =
     typeof input === 'object' && input !== null
       ? (input as Record<string, unknown>)['projectId']

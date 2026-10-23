@@ -1,4 +1,4 @@
-import { AspectRatio, Fps } from '@ixa/domain'
+import { AspectRatio, Fps, MAX_STYLE_REFERENCES, ProjectStatus } from '@ixa/domain'
 import { z } from 'zod'
 import { IxaApiError, seg, type ApiClient } from '../api-client.js'
 import {
@@ -13,7 +13,8 @@ import {
   WireShotPoster,
   WireTransition,
 } from '../wire.js'
-import { defineTool, Id, jsonResult, mapLimited, round } from '../tool-def.js'
+import { ImageSource, resolveImage } from '../lib/image-source.js'
+import { defineTool, Id, jsonResult, mapLimited, round, ToolInputError } from '../tool-def.js'
 
 /** 作品を作る・全体を見る。 */
 
@@ -79,6 +80,62 @@ export const createProjectTool = defineTool({
       )
     }
     return jsonResult({ project: compactProject(project) })
+  },
+})
+
+export const UpdateProjectInput = z.object({
+  projectId: Id,
+  name: z.string().min(1).max(200).optional(),
+  concept: z
+    .string()
+    .min(1)
+    .max(20000)
+    .optional()
+    .describe('New concept / synopsis (Japanese). Appended as a new script version; the storyboard AI reads it.'),
+  styleGuide: z.string().max(4000).optional().describe('Visual style for every shot prompt. "" clears it.'),
+  avoid: z.string().max(4000).optional().describe('Things to avoid in every shot. "" clears it.'),
+  styleReferences: z
+    .array(ImageSource)
+    .max(MAX_STYLE_REFERENCES)
+    .optional()
+    .describe('Replaces the mood-board images sent as style references with every shot. [] clears them.'),
+  durationSec: z.number().positive().nullable().optional().describe('Target length of the piece in seconds; null clears.'),
+  budgetUsd: z.number().min(0).nullable().optional(),
+  instrumental: z.boolean().optional().describe('true = no lyrics (skips the lyric steps).'),
+  status: ProjectStatus.optional(),
+})
+
+export const updateProjectTool = defineTool({
+  name: 'update_project',
+  risk: 'write',
+  description:
+    'Change project settings: name, concept (new script version), styleGuide, avoid, style reference images ' +
+    '(replaces all, max 3), target duration, budget, instrumental, status. Only the given fields change.',
+  input: UpdateProjectInput,
+  handler: async ({ projectId, concept, styleReferences, ...fields }, { api, workspaceId }) => {
+    const styleReferenceAssetIds =
+      styleReferences === undefined
+        ? undefined
+        : await mapLimited(styleReferences, 2, (source) => resolveImage(api, source, { workspaceId, projectId }))
+    const patch = Object.fromEntries(
+      Object.entries({ ...fields, styleReferenceAssetIds }).filter(([, value]) => value !== undefined),
+    )
+    if (Object.keys(patch).length === 0 && concept === undefined) {
+      throw new ToolInputError('変える項目を 1 つ以上指定してください')
+    }
+    const base = `/projects/${seg(projectId)}`
+    const project =
+      Object.keys(patch).length === 0
+        ? await api.get(base, WireProject)
+        : await api.request('PATCH', base, WireProject, { body: patch })
+    if (concept !== undefined) {
+      await api.post(`${base}/script/versions`, { content: concept, authoredBy: 'ai' }, WireAppendedScript)
+    }
+    return jsonResult({
+      project: compactProject(project),
+      ...(styleReferenceAssetIds === undefined ? {} : { styleReferenceAssetIds }),
+      ...(concept === undefined ? {} : { conceptUpdated: true }),
+    })
   },
 })
 
