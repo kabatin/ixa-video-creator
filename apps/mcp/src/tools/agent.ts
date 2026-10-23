@@ -61,6 +61,24 @@ const waitForAnswer = async (
   return poll(POLL_START_MS)
 }
 
+/** 手元のファイルのパスを受ける欄（upload_music の filePath、絵の imagePath）。 */
+const LOCAL_PATH_KEYS: ReadonlySet<string> = new Set(['filePath', 'imagePath'])
+
+const readsLocalFile = (value: unknown): boolean => {
+  if (Array.isArray(value)) return value.some(readsLocalFile)
+  if (typeof value !== 'object' || value === null) return false
+  return Object.entries(value as Record<string, unknown>).some(
+    ([key, inner]) => (LOCAL_PATH_KEYS.has(key) && typeof inner === 'string') || readsLocalFile(inner),
+  )
+}
+
+/**
+ * 手元のファイルのパスを受けるときは、費用が掛かるものとして確認に回す（ADR-0058。レビュー 2026-10-23）。
+ * パスを渡すと、この Mac のファイルを読んで API に上げる。誘導されて手元のファイルを読ませないように。
+ */
+const withLocalFileRisk = (risk: ToolRisk, input: unknown): ToolRisk =>
+  (risk === 'read' || risk === 'write') && readsLocalFile(input) ? 'costly' : risk
+
 export const ApproveInput = z.object({
   tool_name: z.string().min(1),
   input: z.unknown(),
@@ -80,7 +98,7 @@ export const createApproveTool = (risks: ReadonlyMap<string, ToolRisk>) =>
     handler: async ({ tool_name: toolName, input, tool_use_id: toolUseId }, deps) => {
       const sessionId = deps.agentSessionId
       if (sessionId === undefined) return deny('AI エージェントの会話の外では確認できません。')
-      const risk = toolRisk(toolName, risks)
+      const risk = withLocalFileRisk(toolRisk(toolName, risks), input)
       try {
         const started = await deps.api.post(
           `/agent-sessions/${seg(sessionId)}/approvals`,

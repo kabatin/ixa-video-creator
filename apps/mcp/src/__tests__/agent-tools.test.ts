@@ -38,6 +38,24 @@ describe('approve', () => {
     expect(decisionOf(textOf(result))).toEqual({ behavior: 'allow', updatedInput: {} })
   })
 
+  it('手元のファイルのパスを受けるときは、費用が掛かるものとして確認に回す（ローカルのファイルを読ませない）', async () => {
+    const fake = createFakeApi([
+      { method: 'POST', path: `/agent-sessions/${SESSION}/approvals`, data: { requestId: REQUEST, decision: 'allow', message: null } },
+    ])
+    const deps = depsFor(fake, { agentSessionId: SESSION })
+    await approveTool.run({ tool_name: 'mcp__ixa__upload_music', input: { projectId: ulid('PJ1'), filePath: '/etc/hosts' } }, deps)
+    await approveTool.run(
+      { tool_name: 'mcp__ixa__create_location', input: { projectId: ulid('PJ1'), references: [{ imagePath: '/Users/me/a.png' }] } },
+      deps,
+    )
+    await approveTool.run({ tool_name: 'mcp__ixa__set_start_frame', input: { shotId: ulid('SH1'), mediaAssetId: ulid('MD1') } }, deps)
+    expect(fake.callsTo('POST', `/agent-sessions/${SESSION}/approvals`).map((c) => (c.body as { risk: string }).risk)).toEqual([
+      'costly',
+      'costly',
+      'write',
+    ])
+  })
+
   it('費用が掛かるものは API に確認を頼み、制作者の答えが来るまで待つ', async () => {
     const fake = createFakeApi([
       { method: 'POST', path: `/agent-sessions/${SESSION}/approvals`, data: { requestId: REQUEST, decision: null, message: null } },
