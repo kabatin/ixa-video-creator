@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { AssetsPanel } from '@/components/workbench/panels/assets-panel'
 import { ChecksPanel } from '@/components/workbench/panels/checks-panel'
 import { ConsolePanel } from '@/components/workbench/panels/console-panel'
+import { AgentPanel } from '@/components/workbench/panels/agent-panel'
 import { HistoryPanel } from '@/components/workbench/panels/history-panel'
 import { ComparePanel } from '@/components/workbench/panels/compare-panel'
 import { CutterPanel } from '@/components/workbench/panels/cutter-panel'
@@ -47,6 +48,7 @@ const STACK: readonly {
   // 縦一列では全部が見えているので、表にあるものとして扱う。
   { id: 'history', body: <HistoryPanel visible /> },
   { id: 'console', body: <ConsolePanel /> },
+  { id: 'agent', body: <AgentPanel />, tall: true },
   { id: 'assets', body: <AssetsPanel /> },
   { id: 'viewer', body: <ViewerPanel /> },
 ]

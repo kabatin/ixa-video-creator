@@ -27,6 +27,7 @@ export const PANEL_IDS = [
   'checks',
   'history',
   'console',
+  'agent',
   'shots',
   'inspector',
   'assets',
@@ -63,6 +64,7 @@ export const PANEL_SPECS: Readonly<Record<PanelId, PanelSpec>> = Object.freeze({
   checks: { title: '検査', area: 'bottom' },
   history: { title: '変更履歴', area: 'bottom' },
   console: { title: 'コンソール', area: 'bottom' },
+  agent: { title: 'AI エージェント', area: 'bottom' },
   shots: { title: 'Shot 一覧', area: 'side' },
   inspector: { title: 'インスペクター', area: 'side' },
   assets: { title: '素材ツリー', area: 'left' },
@@ -122,6 +124,7 @@ const DEFAULT_ORDER: readonly PanelId[] = [
   'checks',
   'history',
   'console',
+  'agent',
   'shots',
   'inspector',
   'assets',
@@ -336,40 +339,52 @@ export const applyPreset = (api: DockLike, preset: Preset): void => {
 //    版を上げないと、保存済みの配置が消えた部品を指して復元に失敗する（lessons L-025）。
 // 3: 下の区画に「検査」「変更履歴」「コンソール」を足し、タイムラインを先頭にした（2026-10-19）。
 //    版を上げないと、保存済みの配置には新しいタブが出ず、メニューから開くまで在ることに気づけない。
-const LAYOUT_VERSION = 3
+// 4: 下の区画に「AI エージェント」を足した（ADR-0058。2026-10-23）。
+const LAYOUT_VERSION = 4
 
-/** 旧 `ixa:storyboard-layout:v4` と v1・v2 は読まない（パネルの組が違う）。v2 は `migrateLegacyLayout` が移す。 */
+/** 旧 `ixa:storyboard-layout:v4` と v1 は読まない（パネルの組が違う）。v2・v3 は `migrateLegacyLayout` が移す。 */
 export const workbenchLayoutKey = (projectId: ProjectId): string =>
   `ixa:workbench-layout:v${String(LAYOUT_VERSION)}:${projectId}`
 
-const legacyLayoutKey = (projectId: ProjectId): string => `ixa:workbench-layout:v2:${projectId}`
+/**
+ * 移す古い版（新しい順）と、その版のあとで足したパネル。移すときは、これだけを下の区画の裏に足す
+ * （閉じていたほかのパネルは戻さない）。
+ */
+const LEGACY_LAYOUTS: readonly { readonly version: number; readonly added: readonly PanelId[] }[] = [
+  { version: 3, added: ['agent'] },
+  { version: 2, added: ['checks', 'history', 'console', 'agent'] },
+]
 
-/** v3 で足したパネル。v2 の配置を移すとき、これだけを下の区画の裏に足す（閉じていたほかのパネルは戻さない）。 */
-const PANELS_ADDED_IN_V3: readonly PanelId[] = ['checks', 'history', 'console']
+const legacyLayoutKey = (projectId: ProjectId, version: number): string =>
+  `ixa:workbench-layout:v${String(version)}:${projectId}`
 
 export type LegacyMigration =
   | { readonly state: 'none' }
-  | { readonly state: 'migrated' }
+  | { readonly state: 'migrated'; readonly added: readonly PanelId[] }
   | { readonly state: 'unreadable'; readonly reason: string }
 
 /**
- * v2 の配置を移す。**利用者が組んだ配置を黙って捨てない**（レビュー 2026-10-19）。
+ * 古い版（v3・v2）の配置を移す。**利用者が組んだ配置を黙って捨てない**（レビュー 2026-10-19）。
  *
- * - v2 が無ければ何もしない（`none`）
- * - 戻せたら、v3 で足したパネルを下の区画の裏に足す（`migrated`）
+ * - 古い版が無ければ何もしない（`none`）
+ * - 戻せたら、その版のあとで足したパネルを下の区画の裏に足す（`migrated`。足したパネルを返す）
  * - 読めない・戻せないならドックを空にして `unreadable`。呼び出し側が既定の配置で開いて知らせる
  *
- * どの場合も v2 は消す。知らせは 1 回きりになる。v3 への書き込みは呼び出し側（配置が変わるたびに書く）。
+ * どの場合も移した版は消す。知らせは 1 回きりになる。新しい版への書き込みは呼び出し側（配置が変わるたびに書く）。
  */
 export const migrateLegacyLayout = (
   api: DockLike & { readonly fromJSON: (layout: SerializedDockview) => void; readonly clear: () => void },
   storage: Pick<Storage, 'getItem' | 'removeItem'>,
   projectId: ProjectId,
 ): LegacyMigration => {
-  const legacy = readLayoutAt(storage, legacyLayoutKey(projectId))
+  const found = LEGACY_LAYOUTS.map((entry) => ({ ...entry, layout: readLayoutAt(storage, legacyLayoutKey(projectId, entry.version)) })).find(
+    (entry) => entry.layout.state !== 'missing',
+  )
+  if (found === undefined) return { state: 'none' }
+  const legacy = found.layout
   if (legacy.state === 'missing') return { state: 'none' }
   try {
-    storage.removeItem(legacyLayoutKey(projectId))
+    storage.removeItem(legacyLayoutKey(projectId, found.version))
   } catch {
     // 消せなくても移す。次に開いたときにもう一度移すだけ。
   }
@@ -380,10 +395,9 @@ export const migrateLegacyLayout = (
     api.clear()
     return { state: 'unreadable', reason: error instanceof Error ? error.message : '不明なエラー' }
   }
-  PANELS_ADDED_IN_V3.forEach((id) => {
-    if (api.getPanel(id) === undefined) addToArea(api, id, true)
-  })
-  return { state: 'migrated' }
+  const added = found.added.filter((id) => api.getPanel(id) === undefined)
+  added.forEach((id) => addToArea(api, id, true))
+  return { state: 'migrated', added }
 }
 
 const SerializedLayout = z.custom<SerializedDockview>(

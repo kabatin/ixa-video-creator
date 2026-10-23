@@ -28,9 +28,9 @@ describe('メニューの項目名とパネル名', () => {
   const menus = buildMenus(state)
   const items = viewItems(menus)
 
-  it('パネルを開く項目が 14 枚ぶんある', () => {
+  it('パネルを開く項目が 15 枚ぶんある', () => {
     expect(items.map((entry) => entry.panel).sort()).toEqual([...PANEL_IDS].sort())
-    expect(items).toHaveLength(14)
+    expect(items).toHaveLength(15)
   })
 
   it('項目名がタブ名と一致する', () => {

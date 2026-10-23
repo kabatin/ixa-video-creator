@@ -102,12 +102,12 @@ describe('既定配置', () => {
     expect(byId.get('shots')?.inactive).toBeUndefined()
   })
 
-  it('下の区画のタブは タイムライン・聴きながら切る・検査・変更履歴・コンソール の順', () => {
+  it('下の区画のタブは タイムライン・聴きながら切る・検査・変更履歴・コンソール・AI エージェント の順', () => {
     const bottom = added
       .map((options) => options.id)
-      .filter((id) => ['timeline', 'cutter', 'checks', 'history', 'console'].includes(id))
-    expect(bottom).toEqual(['timeline', 'cutter', 'checks', 'history', 'console'])
-    ;['checks', 'history', 'console'].forEach((id) => {
+      .filter((id) => ['timeline', 'cutter', 'checks', 'history', 'console', 'agent'].includes(id))
+    expect(bottom).toEqual(['timeline', 'cutter', 'checks', 'history', 'console', 'agent'])
+    ;['checks', 'history', 'console', 'agent'].forEach((id) => {
       expect(byId.get(id)?.position).toEqual({ referencePanel: 'timeline', direction: 'within' })
       expect(byId.get(id)?.inactive).toBe(true)
     })
@@ -176,13 +176,14 @@ describe('保存', () => {
     }
   }
 
-  it('鍵は ixa:workbench-layout:v3:<projectId>（下の区画にタブを足して版を上げた）', () => {
-    expect(workbenchLayoutKey(projectId)).toBe(`ixa:workbench-layout:v3:${PROJECT_ID}`)
+  it('鍵は ixa:workbench-layout:v4:<projectId>（下の区画に AI エージェントを足して版を上げた）', () => {
+    expect(workbenchLayoutKey(projectId)).toBe(`ixa:workbench-layout:v4:${PROJECT_ID}`)
   })
 
-  it('v2 の保存は読まない（新しいタブの無い配置で開かない）', () => {
+  it('v2・v3 の保存は読まない（新しいタブの無い配置で開かない。移すのは migrateLegacyLayout）', () => {
     const storage = memory()
     storage.setItem(`ixa:workbench-layout:v2:${PROJECT_ID}`, '{"grid":{},"panels":{}}')
+    storage.setItem(`ixa:workbench-layout:v3:${PROJECT_ID}`, '{"grid":{},"panels":{}}')
     expect(readStoredWorkbenchLayout(storage, projectId)).toEqual({ state: 'missing' })
   })
 
@@ -278,11 +279,12 @@ describe('聴きながら切るを前に出すか', () => {
   })
 })
 
-describe('v2 の配置の移行', () => {
+describe('古い版（v2・v3）の配置の移行', () => {
   const projectId = ProjectId.parse(PROJECT_ID)
   const legacyKey = `ixa:workbench-layout:v2:${PROJECT_ID}`
-  const storageWith = (raw: string | null) => {
-    const store = new Map<string, string>(raw === null ? [] : [[legacyKey, raw]])
+  const v3Key = `ixa:workbench-layout:v3:${PROJECT_ID}`
+  const storageWith = (raw: string | null, key = legacyKey) => {
+    const store = new Map<string, string>(raw === null ? [] : [[key, raw]])
     return {
       store,
       getItem: (key: string) => store.get(key) ?? null,
@@ -291,9 +293,10 @@ describe('v2 の配置の移行', () => {
       },
     }
   }
-  /** v2 にあった 11 枚を戻す偽物。`fromJSON` で置かれたことにする。 */
-  const V2_PANELS = PANEL_IDS.filter((id) => !['checks', 'history', 'console'].includes(id))
-  const migratableDock = (options: { readonly throws?: boolean } = {}) => {
+  /** v2 にあった 11 枚・v3 にあった 14 枚を戻す偽物。`fromJSON` で置かれたことにする。 */
+  const V2_PANELS = PANEL_IDS.filter((id) => !['checks', 'history', 'console', 'agent'].includes(id))
+  const V3_PANELS = PANEL_IDS.filter((id) => id !== 'agent')
+  const migratableDock = (options: { readonly throws?: boolean; readonly panels?: readonly string[] } = {}) => {
     const base = fakeDock()
     const restored: unknown[] = []
     let cleared = 0
@@ -302,7 +305,7 @@ describe('v2 の配置の移行', () => {
       fromJSON: (layout: unknown) => {
         if (options.throws === true) throw new Error('部品が足りません')
         restored.push(layout)
-        V2_PANELS.forEach((id) => base.api.addPanel({ id, component: id }))
+        ;(options.panels ?? V2_PANELS).forEach((id) => base.api.addPanel({ id, component: id }))
         base.added.length = 0
       },
       clear: () => {
@@ -318,12 +321,24 @@ describe('v2 の配置の移行', () => {
     expect(dock.restored).toEqual([])
   })
 
-  it('v2 を戻し、足りない 3 枚を下の区画の裏に足して、v2 を消す', () => {
+  it('v3 を戻し、AI エージェントを下の区画の裏に足して、v3 を消す', () => {
+    const dock = migratableDock({ panels: V3_PANELS })
+    const storage = storageWith('{"grid":{},"panels":{}}', v3Key)
+    expect(migrateLegacyLayout(dock.api, storage, projectId)).toEqual({ state: 'migrated', added: ['agent'] })
+    expect(dock.added.map((options) => options.id)).toEqual(['agent'])
+    expect(dock.added[0]?.position).toEqual({ referencePanel: 'timeline', direction: 'within' })
+    expect(storage.store.has(v3Key)).toBe(false)
+  })
+
+  it('v2 を戻し、足りない 4 枚を下の区画の裏に足して、v2 を消す', () => {
     const dock = migratableDock()
     const storage = storageWith('{"grid":{},"panels":{}}')
-    expect(migrateLegacyLayout(dock.api, storage, projectId)).toEqual({ state: 'migrated' })
+    expect(migrateLegacyLayout(dock.api, storage, projectId)).toEqual({
+      state: 'migrated',
+      added: ['checks', 'history', 'console', 'agent'],
+    })
     expect(dock.restored).toHaveLength(1)
-    expect(dock.added.map((options) => options.id)).toEqual(['checks', 'history', 'console'])
+    expect(dock.added.map((options) => options.id)).toEqual(['checks', 'history', 'console', 'agent'])
     dock.added.forEach((options) => {
       expect(options.position).toEqual({ referencePanel: 'timeline', direction: 'within' })
       expect(options.inactive).toBe(true)

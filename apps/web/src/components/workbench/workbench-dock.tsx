@@ -14,6 +14,7 @@ import type { FunctionComponent } from 'react'
 import { AssetsPanel } from '@/components/workbench/panels/assets-panel'
 import { ChecksPanel } from '@/components/workbench/panels/checks-panel'
 import { ConsolePanel } from '@/components/workbench/panels/console-panel'
+import { AgentPanel } from '@/components/workbench/panels/agent-panel'
 import { HistoryPanel } from '@/components/workbench/panels/history-panel'
 import { ComparePanel } from '@/components/workbench/panels/compare-panel'
 import { CutterPanel } from '@/components/workbench/panels/cutter-panel'
@@ -103,6 +104,7 @@ const COMPONENTS: Readonly<Record<PanelId, FunctionComponent<IDockviewPanelProps
     checks: ChecksDock,
     history: HistoryDock,
     console: () => <ConsolePanel />,
+    agent: () => <AgentPanel />,
     shots: () => <ShotListPanel />,
     inspector: () => <InspectorPanel />,
     assets: () => <AssetsPanel />,
@@ -147,7 +149,9 @@ export const WorkbenchDock = ({ projectId, query, onReady, onNotice }: Workbench
       const legacy = stored.state === 'missing' ? migrateLegacyLayout(api, window.localStorage, projectId) : null
       if (legacy?.state === 'migrated') {
         writeWorkbenchLayout(window.localStorage, projectId, api.toJSON())
-        onNotice('配置を新しくしました。下の区画に「検査」「変更履歴」「コンソール」のタブを足しています。')
+        if (legacy.added.length > 0) {
+          onNotice(`配置を新しくしました。下の区画に${legacy.added.map((id) => `「${PANEL_SPECS[id].title}」`).join('')}のタブを足しています。`)
+        }
       } else {
         addDefaultPanels(api)
         sizeDefaultAreas(api, api.height)

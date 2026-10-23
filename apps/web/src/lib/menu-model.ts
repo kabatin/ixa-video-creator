@@ -253,6 +253,7 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
         item('view-checks', '検査', panel('checks')),
         item('view-history', '変更履歴', panel('history')),
         item('view-console', 'コンソール', panel('console')),
+        item('view-agent', 'AI エージェント', panel('agent')),
         item('view-shots', 'Shot 一覧', panel('shots')),
         item('view-inspector', 'インスペクター', panel('inspector')),
         item('view-assets', '素材ツリー', panel('assets')),
