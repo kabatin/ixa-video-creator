@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { seg } from '../api-client.js'
+import { assertListed } from '../lib/project-scope.js'
 import { defineTool, Id, jsonResult, ToolInputError } from '../tool-def.js'
 
 /** 直しの履歴と取り消し（画面の ⌘Z と同じ記録）。 */
@@ -50,8 +51,9 @@ export const undoTool = defineTool({
   input: z.object({ projectId: Id, editBatchId: Id.optional() }),
   handler: async ({ projectId, editBatchId }, { api }) => {
     const base = `/projects/${seg(projectId)}/edit-batches`
-    const target =
-      editBatchId ?? (await api.get(base, z.array(WireEditBatch))).find((b) => b.canUndo)?.id
+    // 指定された記録も、この作品の履歴にあるかを先に確かめる（別の作品の記録を ID だけで戻させない）。
+    const batches = await assertListed(api, base, editBatchId === undefined ? [] : [editBatchId], '直しの記録', WireEditBatch)
+    const target = editBatchId ?? batches.find((b) => b.canUndo)?.id
     if (target === undefined) throw new ToolInputError('取り消せる直しがありません')
     const { batch, ...rest } = await api.post(`${base}/${seg(target)}/undo`, undefined, UndoResult)
     return jsonResult({ editBatchId: batch.id, summary: batch.summary, ...nonEmpty(rest) })

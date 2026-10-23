@@ -10,6 +10,7 @@ import {
 } from '@ixa/domain'
 import { z } from 'zod'
 import { IxaApiError, seg, type ApiClient } from '../api-client.js'
+import { assertListed, assertNarrationLinesInProject } from '../lib/project-scope.js'
 import { WireShot } from '../wire.js'
 import { defineTool, Id, jsonResult, mapLimited, round, ToolInputError } from '../tool-def.js'
 
@@ -216,8 +217,6 @@ export const listTelopsTool = defineTool({
   },
 })
 
-const WireNarrationLineIds = z.object({ lines: z.array(z.object({ id: z.string() })) })
-
 export const RemoveTelopsInput = z
   .object({
     projectId: Id,
@@ -243,7 +242,8 @@ export const removeTelopsTool = defineTool({
   risk: 'destructive',
   description:
     'Remove telops (TEXT track clips) and/or narration lines by id. Other clips (effects, sounds) are refused — use ' +
-    'remove_effects / remove_sfx. Removing a narration caption keeps the line but stops captioning it.',
+    'remove_effects / remove_sfx. Removing a narration caption keeps the line but stops captioning it. Deleting ' +
+    'narration lines is not undoable.',
   input: RemoveTelopsInput,
   refine: ({ clipIds = [], narrationLineIds = [] }, ctx) => {
     if (clipIds.length + narrationLineIds.length === 0) {
@@ -251,24 +251,19 @@ export const removeTelopsTool = defineTool({
     }
   },
   handler: async ({ projectId, clipIds = [], narrationLineIds = [] }, { api }) => {
-    const [clips, narration] = await Promise.all([
-      clipIds.length > 0 ? listClips(api, projectId) : Promise.resolve([]),
-      narrationLineIds.length > 0
-        ? api.get(`/projects/${seg(projectId)}/narration`, WireNarrationLineIds)
-        : Promise.resolve({ lines: [] }),
+    // 作品の外の ID が 1 つでもあれば、何も消さずに断る。
+    const [clips] = await Promise.all([
+      clipIds.length > 0 ? assertListed(api, `/projects/${seg(projectId)}/clips`, clipIds, 'クリップ', WireClip) : Promise.resolve([]),
+      narrationLineIds.length > 0 ? assertNarrationLinesInProject(api, projectId, narrationLineIds) : Promise.resolve(),
     ])
     const byId = new Map(clips.map((clip) => [clip.id, clip]))
-    const lineIds = new Set(narration.lines.map((line) => line.id))
     const clipResults = await mapLimited(clipIds, 4, async (id) => {
       const clip = byId.get(id)
-      if (clip === undefined) return { ok: false as const, id, reason: 'この作品にそのクリップはありません' }
-      if (clip.content.type !== 'text') return { ok: false as const, id, reason: 'テロップではないクリップは消しません（エフェクト・効果音など）' }
+      if (clip?.content.type !== 'text') return { ok: false as const, id, reason: 'テロップではないクリップは消しません（エフェクト・効果音など）' }
       return deleteOne(api, `/clips/${seg(id)}`, id)
     })
     // 行は順に消す（消すたびにテロップを作り直すので、並べて投げない）。
-    const lineResults = await mapLimited(narrationLineIds, 1, async (id) =>
-      lineIds.has(id) ? deleteOne(api, `/narration-lines/${seg(id)}`, id) : { ok: false as const, id, reason: 'この作品にその行はありません' },
-    )
+    const lineResults = await mapLimited(narrationLineIds, 1, (id) => deleteOne(api, `/narration-lines/${seg(id)}`, id))
     const failures = [...clipResults, ...lineResults].flatMap((r) => (r.ok ? [] : [{ id: r.id, reason: r.reason }]))
     return jsonResult({
       removedClips: clipResults.flatMap((r) => (r.ok ? [r.id] : [])),

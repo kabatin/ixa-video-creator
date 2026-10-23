@@ -3,6 +3,7 @@ import { Seconds, VoiceJobStatus } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import { uploadLocalFile } from '../lib/media-io.js'
+import { assertMediaInProject, assertNarrationLinesInProject } from '../lib/project-scope.js'
 import { waitForDuration } from '../lib/media-probe.js'
 import type { CheckResult } from '../lib/wait-loop.js'
 import { defineTool, Id, jsonResult, round, ToolInputError } from '../tool-def.js'
@@ -62,6 +63,7 @@ export const speakNarrationTool = defineTool({
   handler: async (args, { api, workspaceId, clock }) => {
     const { projectId } = args
     if (args.action === 'speak') {
+      if (args.lineIds !== undefined) await assertNarrationLinesInProject(api, projectId, args.lineIds)
       const spoken = await api.post(
         `/projects/${seg(projectId)}/narration/speak`,
         args.lineIds === undefined ? {} : { lineIds: args.lineIds },
@@ -78,6 +80,7 @@ export const speakNarrationTool = defineTool({
     if ((args.filePath === undefined) === (args.mediaAssetId === undefined)) {
       throw new ToolInputError('import_recording には filePath か mediaAssetId のどちらか 1 つが要ります')
     }
+    if (args.mediaAssetId !== undefined) await assertMediaInProject(api, projectId, [args.mediaAssetId])
     const voiceProfileId = args.voice === undefined ? null : findVoice(await listVoices(api, projectId), args.voice, 'voice').id
     const mediaAssetId =
       args.mediaAssetId ?? (await uploadLocalFile(api, args.filePath ?? '', { workspaceId, projectId, kind: 'audio' }))

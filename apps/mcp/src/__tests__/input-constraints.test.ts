@@ -70,7 +70,7 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ title: long(201) }, 'title'],
     ],
   },
-  set_master_track: { base: { musicTrackId: S }, cases: [[{ musicTrackId: 'x' }, 'musicTrackId']] },
+  set_master_track: { base: { projectId: P, musicTrackId: S }, cases: [[{ musicTrackId: 'x' }, 'musicTrackId']] },
   music_overview: { base: { projectId: P }, cases: [[{ musicTrackId: 'x' }, 'musicTrackId']] },
   plan_shots: {
     base: { projectId: P, boundariesSec: [0, 2], dryRun: true },
@@ -149,19 +149,23 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ shotIds: many(101, S) }, 'shotIds'],
     ],
   },
-  set_start_frame: { base: { shotId: S, mediaAssetId: S }, cases: [[{ shotId: 'x' }, 'shotId']] },
-  list_start_frame_history: { base: { shotId: S }, cases: [[{ shotId: 'x' }, 'shotId']] },
+  set_start_frame: { base: { projectId: P, shotId: S, mediaAssetId: S }, cases: [[{ shotId: 'x' }, 'shotId']] },
+  list_start_frame_history: { base: { projectId: P, shotId: S }, cases: [[{ shotId: 'x' }, 'shotId']] },
   use_start_frame: {
-    base: { shotId: S, jobId: S },
+    base: { projectId: P, shotId: S, jobId: S },
     cases: [
       [{ shotId: 'x' }, 'shotId'],
       [{ jobId: 'x' }, 'jobId'],
     ],
   },
-  retry_image: { base: { jobId: S }, cases: [[{ jobId: 'x' }, 'jobId']] },
+  retry_image: {
+    base: { projectId: P, jobId: S },
+    cases: [[{ jobId: 'x' }, 'jobId'], [{ shotId: 'x' }, 'shotId'], [{ characterId: 'x' }, 'characterId']],
+  },
   view: {
-    base: { mediaAssetId: S },
+    base: { projectId: P, mediaAssetId: S },
     cases: [
+      [{ projectId: undefined }, 'projectId'],
       [{ frames: 0 }, 'frames'],
       [{ frames: 9 }, 'frames'],
       [{ frames: 1.5 }, 'frames'],
@@ -189,19 +193,35 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ autoRetake: 'yes' }, 'autoRetake'],
     ],
   },
-  list_takes: { base: { shotId: S }, cases: [[{ shotId: 'x' }, 'shotId']] },
-  review_take: { base: { takeId: S }, cases: [[{ takeId: 'x' }, 'takeId']] },
-  adopt_take: {
-    base: { shotId: S, takeId: S },
+  list_takes: {
+    base: { projectId: P, shotId: S },
     cases: [
+      [{ shotId: 'x' }, 'shotId'],
+      [{ projectId: undefined }, 'projectId'],
+      [{ includeLastFrame: 'yes' }, 'includeLastFrame'],
+    ],
+  },
+  review_take: {
+    base: { projectId: P, shotId: S, takeId: S },
+    cases: [
+      [{ takeId: 'x' }, 'takeId'],
+      [{ shotId: undefined }, 'shotId'],
+      [{ projectId: undefined }, 'projectId'],
+    ],
+  },
+  adopt_take: {
+    base: { projectId: P, shotId: S, takeId: S },
+    cases: [
+      [{ projectId: undefined }, 'projectId'],
       [{ shotIds: [] }, 'shotIds'],
       [{ shotIds: many(201, S) }, 'shotIds'],
       [{ rule: 'first' }, 'rule'],
     ],
   },
   upscale_takes: {
-    base: { shotId: S, takeId: S },
+    base: { projectId: P, shotId: S, takeId: S },
     cases: [
+      [{ projectId: undefined }, 'projectId'],
       [{ shotIds: [] }, 'shotIds'],
       [{ shotIds: many(201, S) }, 'shotIds'],
     ],
@@ -244,8 +264,10 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
     ],
   },
   analyze_motion: {
-    base: { shotId: S },
+    base: { projectId: P, shotId: S },
     cases: [
+      [{ shotId: undefined }, 'shotId'],
+      [{ projectId: undefined }, 'projectId'],
       [{ shotId: 'x' }, 'shotId'],
       [{ takeId: 'x' }, 'takeId'],
       [{ maxWaitSec: 0 }, 'maxWaitSec'],
@@ -425,8 +447,9 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
     ],
   },
   hide_takes: {
-    base: { takeIds: [S] },
+    base: { projectId: P, shotId: S, takeIds: [S] },
     cases: [
+      [{ shotId: undefined }, 'shotId'],
       [{ takeIds: [] }, 'takeIds'],
       [{ takeIds: ['x'] }, 'takeIds.0'],
       [{ takeIds: many(51, S) }, 'takeIds'],

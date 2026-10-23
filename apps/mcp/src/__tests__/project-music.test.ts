@@ -259,11 +259,21 @@ describe('曲', () => {
 
   it('set_master_track は主役にしてから解析を始める', async () => {
     const fake = createFakeApi([
+      { method: 'GET', path: `/projects/${PROJECT}/music-tracks`, data: [{ id: TRACK, mediaAssetId: ulid('MD1'), title: '曲' }] },
       { method: 'POST', path: `/music-tracks/${TRACK}/set-master`, data: [{ id: TRACK, mediaAssetId: ulid('MD1'), title: '曲', isMaster: true }] },
       { method: 'POST', path: `/music-tracks/${TRACK}/analysis`, status: 202, data: { musicTrackId: TRACK, queued: true } },
     ])
-    const result = jsonOf(await setMasterTrackTool.run({ musicTrackId: TRACK }, depsFor(fake)))
+    const result = jsonOf(await setMasterTrackTool.run({ projectId: PROJECT, musicTrackId: TRACK }, depsFor(fake)))
     expect(result).toMatchObject({ analysisQueued: true, next: { jobs: [{ kind: 'analysis', id: TRACK }] } })
+  })
+
+  it('set_master_track・music_overview は別の作品の曲を断る（主役にも解析にも触らない）', async () => {
+    const fake = createFakeApi([{ method: 'GET', path: `/projects/${PROJECT}/music-tracks`, data: [] }])
+    const set = await setMasterTrackTool.run({ projectId: PROJECT, musicTrackId: TRACK }, depsFor(fake))
+    expect(textOf(set)).toContain('この作品に無い曲')
+    const overview = await musicOverviewTool.run({ projectId: PROJECT, musicTrackId: TRACK }, depsFor(fake))
+    expect(textOf(overview)).toContain('この作品に無い曲')
+    expect(fake.calls.filter((c) => c.path.startsWith('/music-tracks/'))).toHaveLength(0)
   })
 
   it('music_overview は master track を探し、解析がまだならそう言う', async () => {

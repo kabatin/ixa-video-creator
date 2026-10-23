@@ -44,6 +44,22 @@ describe('list_edits / undo', () => {
     expect(result).toEqual({ editBatchId: OLD, summary: batch(OLD, false).summary, restored: [SHOT] })
   })
 
+  it('この作品の履歴に無い記録は戻さない', async () => {
+    const fake = createFakeApi([listRoute])
+    const result = await undoTool.run({ projectId: PROJECT, editBatchId: ulid('EB9') }, depsFor(fake))
+    expect(textOf(result)).toContain('この作品に無い直しの記録')
+    expect(fake.callsTo('POST', /undo$/)).toHaveLength(0)
+  })
+
+  it('指定した記録がこの作品の履歴にあれば、それを戻す', async () => {
+    const fake = createFakeApi([
+      listRoute,
+      { method: 'POST', path: `/projects/${PROJECT}/edit-batches/${NEW}/undo`, data: { batch: batch(NEW, false) } },
+    ])
+    jsonOf(await undoTool.run({ projectId: PROJECT, editBatchId: NEW }, depsFor(fake)))
+    expect(fake.callsTo('POST', /undo$/)).toHaveLength(1)
+  })
+
   it('取り消せる直しが無ければそう言う', async () => {
     const fake = createFakeApi([{ ...listRoute, data: [batch(NEW, false)] }])
     expect(textOf(await undoTool.run({ projectId: PROJECT }, depsFor(fake)))).toContain('取り消せる直しがありません')

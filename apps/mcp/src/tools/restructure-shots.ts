@@ -1,6 +1,7 @@
 import { Seconds, ShotCamera } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
+import { assertListed, assertShotsInProject } from '../lib/project-scope.js'
 import { bulkResult, WireShot } from '../wire.js'
 import { defineTool, Id, jsonResult, ToolInputError } from '../tool-def.js'
 
@@ -32,15 +33,9 @@ export const RestructureShotsInput = z.object({
 })
 type RestructureArgs = z.infer<typeof RestructureShotsInput>
 
-const orderedShots = async (api: ApiClient, projectId: string) =>
-  [...(await api.get(`/projects/${seg(projectId)}/shots`, z.array(WireShot)))].sort((a, b) => a.order - b.order)
-
-/** 渡した Shot がこの作品のものか（別の作品の Shot を触らない）。 */
-const assertInProject = (shots: readonly WireShot[], ids: readonly string[]): void => {
-  const known = new Set(shots.map((s) => s.id))
-  const foreign = ids.filter((id) => !known.has(id))
-  if (foreign.length > 0) throw new ToolInputError(`この作品に無い Shot です: ${foreign.join(', ')}`)
-}
+/** 渡した Shot がこの作品のものかを確かめ（別の作品の Shot を触らない）、作品の Shot を並び順で返す。 */
+const orderedShotsOwning = async (api: ApiClient, projectId: string, ids: readonly string[]) =>
+  [...(await assertShotsInProject(api, projectId, ids))].sort((a, b) => a.order - b.order)
 
 /** 差し込む位置の order。直後の Shot との間に隙間が無ければ断る（並べ替えの口が無いので詰め直せない）。 */
 export const insertOrder = (shots: readonly WireShot[], afterShotId: string | undefined): number => {
@@ -57,14 +52,14 @@ export const insertOrder = (shots: readonly WireShot[], afterShotId: string | un
 
 const split = async (api: ApiClient, args: RestructureArgs) => {
   if (args.shotId === undefined || args.atSec === undefined) throw new ToolInputError('split には shotId と atSec が要ります')
-  assertInProject(await orderedShots(api, args.projectId), [args.shotId])
+  await orderedShotsOwning(api, args.projectId, [args.shotId])
   const result = await api.post(`/shots/${seg(args.shotId)}/split`, { atSec: args.atSec }, z.object({ first: WireShot, second: WireShot }))
   return { first: result.first.id, second: result.second.id }
 }
 
 const merge = async (api: ApiClient, args: RestructureArgs) => {
   if (args.shotIds === undefined) throw new ToolInputError('merge には隣り合う shotIds を 2 つ以上')
-  assertInProject(await orderedShots(api, args.projectId), args.shotIds)
+  await orderedShotsOwning(api, args.projectId, args.shotIds)
   const result = await api.post(
     `/projects/${seg(args.projectId)}/shots/merge`,
     { shotIds: args.shotIds },
@@ -75,10 +70,10 @@ const merge = async (api: ApiClient, args: RestructureArgs) => {
 
 const WireBulkDelete = z.object({ results: z.array(bulkResult({})), deletedCount: z.number() })
 
-/** 1 本なら取り消しの記録が残る口、2 本以上はまとめて消す口（記録は残らない）。 */
+/** 1 本なら Shot の口、2 本以上はまとめて消す口。どちらも取り消しの記録が残る。 */
 const remove = async (api: ApiClient, args: RestructureArgs) => {
   if (args.shotIds === undefined) throw new ToolInputError('delete には shotIds が要ります')
-  assertInProject(await orderedShots(api, args.projectId), args.shotIds)
+  await orderedShotsOwning(api, args.projectId, args.shotIds)
   const [only] = args.shotIds
   if (args.shotIds.length === 1 && only !== undefined) {
     await api.request('DELETE', `/shots/${seg(only)}`, z.unknown())
@@ -86,14 +81,18 @@ const remove = async (api: ApiClient, args: RestructureArgs) => {
   }
   const bulk = await api.post(`/projects/${seg(args.projectId)}/shots/bulk/delete`, { shotIds: args.shotIds }, WireBulkDelete)
   const failures = bulk.results.flatMap((r) => (r.ok ? [] : [{ shotId: r.shotId, reason: r.reason }]))
-  return { deletedCount: bulk.deletedCount, undoable: false, ...(failures.length > 0 ? { failures } : {}) }
+  return { deletedCount: bulk.deletedCount, undoable: true, ...(failures.length > 0 ? { failures } : {}) }
 }
 
 const insert = async (api: ApiClient, args: RestructureArgs) => {
   if (args.code === undefined || args.startSec === undefined || args.durationSec === undefined) {
     throw new ToolInputError('insert には code・startSec・durationSec が要ります')
   }
-  const order = insertOrder(await orderedShots(api, args.projectId), args.afterShotId)
+  const [shots] = await Promise.all([
+    orderedShotsOwning(api, args.projectId, args.afterShotId === undefined ? [] : [args.afterShotId]),
+    args.locationId === undefined ? null : assertListed(api, `/projects/${seg(args.projectId)}/locations`, [args.locationId], '場所'),
+  ])
+  const order = insertOrder(shots, args.afterShotId)
   const created = await api.post(
     `/projects/${seg(args.projectId)}/shots`,
     {
@@ -125,7 +124,7 @@ export const restructureShotsTool = defineTool({
   description:
     'Change the shot list: split {shotId, atSec}, merge {shotIds} (adjacent, into the first), delete {shotIds}, ' +
     'insert {code, startSec, durationSec, afterShotId?, description?, dialogue?, ...}. ' +
-    'Split and merge only work on shots without takes. Deleting one shot can be undone (undo); deleting several cannot.',
+    'Split and merge only work on shots without takes. All actions can be undone (undo).',
   input: RestructureShotsInput,
   refine: (args, ctx) => {
     if (args.action === 'merge' && (args.shotIds === undefined || args.shotIds.length < 2)) {

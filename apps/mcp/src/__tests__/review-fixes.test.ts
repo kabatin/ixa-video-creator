@@ -10,7 +10,7 @@ import { generateMusicTool } from '../tools/music-generation.js'
 import { setAiTool } from '../tools/status.js'
 import { generateTakesTool } from '../tools/takes.js'
 import { waitTool } from '../tools/wait.js'
-import { BASE, createFakeApi, depsFor, fakeClock, jsonOf, textOf, TOKEN, ulid } from './fake-api.js'
+import { BASE, createFakeApi, depsFor, fakeClock, jsonOf, ownedShots, takeRow, textOf, TOKEN, ulid } from './fake-api.js'
 
 /** 独立レビュー（2026-10-17）で見つかった問題ごとの試験。 */
 
@@ -51,12 +51,16 @@ describe('1. 親 Take には作り直しの理由が要る', () => {
   })
 
   it('理由を親と一緒に送る', async () => {
-    const fake = createFakeApi([{ method: 'POST', path: `/shots/${SHOT_A}/generate`, status: 202, data: started(ulid('JB1')) }])
+    const fake = createFakeApi([
+      ownedShots(PROJECT, [SHOT_A]),
+      { method: 'GET', path: `/shots/${SHOT_A}/takes`, data: [takeRow(TAKE, null, null, SHOT_A)] },
+      { method: 'POST', path: `/shots/${SHOT_A}/generate`, status: 202, data: started(ulid('JB1')) },
+    ])
     await generateTakesTool.run(
       { projectId: PROJECT, shotIds: [SHOT_A], model: MODEL, parentTakeId: TAKE, regenerationReason: ' 本番で作り直す ' },
       depsFor(fake),
     )
-    expect(fake.calls[0]?.body).toEqual({ model: MODEL, count: 1, parentTakeId: TAKE, regenerationReason: '本番で作り直す' })
+    expect(fake.callsTo('POST', /.*/)[0]?.body).toEqual({ model: MODEL, count: 1, parentTakeId: TAKE, regenerationReason: '本番で作り直す' })
   })
 })
 
@@ -106,8 +110,9 @@ describe('2. 曲の API（main の music-generate.ts）と揃える', () => {
           finishedAt: '2026-10-17T00:01:00.000Z',
         },
       },
+      { method: 'GET', path: `/projects/${PROJECT}/music-jobs`, data: [{ id: JOB }] },
     ])
-    const outcome = jsonOf(await waitTool.run({ jobs: [{ kind: 'music', id: JOB }] }, depsFor(fake)))
+    const outcome = jsonOf(await waitTool.run({ projectId: PROJECT, jobs: [{ kind: 'music', id: JOB }] }, depsFor(fake)))
     expect(outcome).toMatchObject({ done: true, results: [{ state: 'succeeded', musicTrackIds: [TRACK] }] })
   })
 })
@@ -115,6 +120,7 @@ describe('2. 曲の API（main の music-generate.ts）と揃える', () => {
 describe('3. Shot ごとの生成は 1 本の失敗で他を失わない', () => {
   it('失敗した Shot は理由つきで返し、積めたジョブは残す', async () => {
     const fake = createFakeApi([
+      ownedShots(PROJECT, [SHOT_A, SHOT_B]),
       { method: 'POST', path: `/shots/${SHOT_A}/generate`, status: 202, data: started(ulid('JB1')) },
       { method: 'POST', path: `/shots/${SHOT_B}/generate`, status: 422, data: '最初のコマがありません' },
     ])
@@ -156,9 +162,13 @@ describe('4. 1 つの問い合わせが落ちても待ちを止めない', () =>
 
 describe('5. 解像度上げは失敗が見えないので、時間切れに手がかりを付ける', () => {
   it('upscale がまだのまま時間切れなら list_takes を見るよう促す', async () => {
-    const fake = createFakeApi([{ method: 'GET', path: `/shots/${SHOT_A}/takes`, data: [] }])
+    // 元の Take はある（作品のもの）が、解像度を上げた Take はまだ無い。
+    const fake = createFakeApi([
+      ownedShots(PROJECT, [SHOT_A]),
+      { method: 'GET', path: `/shots/${SHOT_A}/takes`, data: [takeRow(TAKE, null, null, SHOT_A)] },
+    ])
     const outcome = jsonOf(
-      await waitTool.run({ jobs: [{ kind: 'upscale', shotId: SHOT_A, takeId: TAKE }], maxWaitSec: 10 }, depsFor(fake)),
+      await waitTool.run({ projectId: PROJECT, jobs: [{ kind: 'upscale', shotId: SHOT_A, takeId: TAKE }], maxWaitSec: 10 }, depsFor(fake)),
     ) as Record<string, unknown>
     expect(outcome.timedOut).toBe(true)
     expect(String(outcome.hint)).toContain('list_takes')
@@ -172,8 +182,9 @@ describe('5. 解像度上げは失敗が見えないので、時間切れに手�
         path: `/renders/${RENDER}`,
         data: { id: RENDER, status: 'rendering', progress: 0.1, outputAssetId: null, error: null, preset: 'master_1080p', scope: { type: 'full' }, createdAt: 'x' },
       },
+      { method: 'GET', path: `/projects/${PROJECT}/renders`, data: [{ id: RENDER }] },
     ])
-    const outcome = jsonOf(await waitTool.run({ jobs: [{ kind: 'render', id: RENDER }], maxWaitSec: 10 }, depsFor(fake))) as Record<string, unknown>
+    const outcome = jsonOf(await waitTool.run({ projectId: PROJECT, jobs: [{ kind: 'render', id: RENDER }], maxWaitSec: 10 }, depsFor(fake))) as Record<string, unknown>
     expect(outcome.timedOut).toBe(true)
     expect(outcome.hint).toBeUndefined()
   })

@@ -1,6 +1,7 @@
 import { AssistField } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
+import { assertListed, assertLookInProject, assertShotsInProject } from '../lib/project-scope.js'
 import { WireShot } from '../wire.js'
 import { defineTool, Id, jsonResult, ToolInputError } from '../tool-def.js'
 
@@ -90,8 +91,21 @@ const compactDraft = (draft: z.infer<typeof WireDraft>, codes: ReadonlyMap<strin
   })),
 })
 
+/** 手伝いの文は渡した Shot・キャラクター・Look・場所の中身を読んで書く。どれもこの作品のものか。 */
+const assertSuggestTargets = async (api: ApiClient, args: Args): Promise<void> => {
+  const listed = (kind: string, id: string | undefined, label: string) =>
+    id === undefined ? null : assertListed(api, `/projects/${seg(args.projectId)}/${kind}`, [id], label)
+  await Promise.all([
+    args.shotId === undefined ? null : assertShotsInProject(api, args.projectId, [args.shotId]),
+    listed('characters', args.characterId, 'キャラクター'),
+    listed('locations', args.locationId, '場所'),
+    args.lookId === undefined ? null : assertLookInProject(api, args.projectId, args.lookId),
+  ])
+}
+
 const suggest = async (api: ApiClient, args: Args) => {
   if (args.field === undefined) throw new ToolInputError('suggest には field が要ります')
+  await assertSuggestTargets(api, args)
   const result = await api.post(
     `/projects/${seg(args.projectId)}/assist`,
     {
@@ -126,6 +140,7 @@ export const draftStoryboardTool = defineTool({
       if (args.runId === undefined || args.shotIds === undefined) {
         throw new ToolInputError('adopt には runId と shotIds が要ります')
       }
+      await assertShotsInProject(api, args.projectId, args.shotIds)
       const adopted = await api.post(`${base}/${seg(args.runId)}/adopt`, { shotIds: args.shotIds }, WireAdopted)
       return jsonResult({
         adopted: adopted.shots.map((s) => ({ shotId: s.id, code: s.code, description: s.description ?? '', mood: s.mood })),

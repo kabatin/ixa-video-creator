@@ -13,6 +13,7 @@ const SOUND = ulid('SD1')
 const EFFECT = ulid('FX1')
 const LINE = ulid('NN1')
 const MEDIA = ulid('MD1')
+const FOREIGN = ulid('ZZ9')
 
 const styles = [{ id: STYLE, name: '歌詞', style: { color: '#FFCC00', size: 0.08 } }]
 const clips = [
@@ -137,6 +138,16 @@ describe('edit_clips', () => {
     expect(fake.callsTo('PATCH', /\/clips\//)).toHaveLength(0)
   })
 
+  it('この作品に無いクリップが 1 つでもあれば、1 件も送らない', async () => {
+    const fake = createFakeApi([...routes, { method: 'PATCH', path: /\/clips\//, data: clips[0] }])
+    const result = await editClipsTool.run(
+      { projectId: PROJECT, edits: [{ clipId: TEXT, startSec: 4 }, { clipId: FOREIGN, startSec: 1 }] },
+      depsFor(fake),
+    )
+    expect(textOf(result)).toContain(`この作品に無いクリップです: ${FOREIGN}`)
+    expect(fake.callsTo('PATCH', /\/clips\//)).toHaveLength(0)
+  })
+
   it('音量 3 は範囲外で断る', async () => {
     const fake = createFakeApi(routes)
     const result = await editClipsTool.run({ projectId: PROJECT, edits: [{ clipId: SOUND, volume: 3 }] }, depsFor(fake))
@@ -160,6 +171,19 @@ describe('remove_telops', () => {
     expect(result.removedLines).toEqual([LINE])
     expect(result.failures.map((f) => f.id)).toEqual([SOUND])
     expect(fake.callsTo('DELETE', `/clips/${SOUND}`)).toHaveLength(0)
+  })
+
+  it('この作品に無いクリップ・行が 1 つでもあれば、何も消さずに断る', async () => {
+    const fake = createFakeApi([
+      ...routes,
+      { method: 'GET', path: `/projects/${PROJECT}/narration`, data: { lines: [{ id: LINE }] } },
+      { method: 'DELETE', path: /.*/, status: 204 },
+    ])
+    const clip = await removeTelopsTool.run({ projectId: PROJECT, clipIds: [TEXT, FOREIGN] }, depsFor(fake))
+    const line = await removeTelopsTool.run({ projectId: PROJECT, clipIds: [TEXT], narrationLineIds: [LINE, FOREIGN] }, depsFor(fake))
+    expect(textOf(clip)).toContain(`この作品に無いクリップです: ${FOREIGN}`)
+    expect(textOf(line)).toContain(`この作品に無いナレーションの行です: ${FOREIGN}`)
+    expect(fake.callsTo('DELETE', /.*/)).toHaveLength(0)
   })
 
   it('何も指定しなければ断る', async () => {

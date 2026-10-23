@@ -2,7 +2,7 @@ import { UPSCALE_REASON } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import { waitForChecks, type Check, type CheckResult } from '../lib/wait-loop.js'
 import { waitTool } from '../tools/wait.js'
-import { createFakeApi, depsFor, fakeClock, jsonOf, takeRow, textOf, ulid } from './fake-api.js'
+import { createFakeApi, depsFor, fakeClock, jsonOf, ownedShots, takeRow, textOf, ulid } from './fake-api.js'
 
 const sequenceCheck = (states: readonly CheckResult['state'][]): Check & { readonly polls: () => number } => {
   const counter = { n: 0 }
@@ -56,6 +56,7 @@ const SHOT = ulid('SH1')
 const TAKE = ulid('TK1')
 const TRACK = ulid('TR1')
 const JOB = ulid('JB1')
+const PROJECT = ulid('PJ1')
 
 describe('wait ツール', () => {
   it('種類ごとの口を読み、終わったかへ揃える', async () => {
@@ -88,12 +89,16 @@ describe('wait ツール', () => {
       {
         method: 'GET',
         path: `/shots/${SHOT}/takes`,
-        data: [takeRow(ulid('TK2'), TAKE, UPSCALE_REASON, SHOT)],
+        data: [takeRow(TAKE, null, null, SHOT), takeRow(ulid('TK2'), TAKE, UPSCALE_REASON, SHOT)],
       },
       { method: 'GET', path: `/music-jobs/${JOB}`, data: { status: 'succeeded', error: null, musicTrackIds: [TRACK] } },
+      ownedShots(PROJECT, [SHOT]),
+      { method: 'GET', path: `/projects/${PROJECT}/music-jobs`, data: [{ id: JOB }] },
+      { method: 'GET', path: `/projects/${PROJECT}/music-tracks`, data: [{ id: TRACK }] },
     ])
     const result = await waitTool.run(
       {
+        projectId: PROJECT,
         jobs: [
           { kind: 'generation', id: JOB },
           { kind: 'analysis', id: TRACK },
@@ -127,13 +132,13 @@ describe('wait ツール', () => {
     const LINE = ulid('NA1')
     const fake = createFakeApi([
       { method: 'GET', path: `/voice-jobs/${VOICE_JOB}`, sequence: [{ data: { status: 'running', lineId: LINE, error: null } }, { data: { status: 'succeeded', lineId: LINE, error: null } }] },
+      { method: 'GET', path: `/projects/${PROJECT}/narration`, data: { lines: [{ id: LINE }] } },
     ])
-    const result = await waitTool.run({ jobs: [{ kind: 'voice', id: VOICE_JOB }] }, depsFor(fake, { clock: fakeClock() }))
+    const result = await waitTool.run({ projectId: PROJECT, jobs: [{ kind: 'voice', id: VOICE_JOB }] }, depsFor(fake, { clock: fakeClock() }))
     expect(jsonOf(result)).toMatchObject({ done: true, results: [{ kind: 'voice', id: VOICE_JOB, state: 'succeeded', lineId: LINE }] })
   })
 
   it('作品の中で動いているものが止むまで待ち、時間切れなら timedOut で返す', async () => {
-    const PROJECT = ulid('PJ1')
     const fake = createFakeApi([
       {
         method: 'GET',
@@ -150,9 +155,20 @@ describe('wait ツール', () => {
     ])
   })
 
-  it('jobs と projectId の両方・どちらも無しは断る', async () => {
-    const deps = depsFor(createFakeApi([]))
-    expect(textOf(await waitTool.run({}, deps))).toContain('どちらか一方')
-    expect(textOf(await waitTool.run({ projectId: ulid('PJ1'), jobs: [{ kind: 'render', id: JOB }] }, deps))).toContain('どちらか一方')
+  it('projectId が無ければ断る', async () => {
+    expect(textOf(await waitTool.run({ jobs: [{ kind: 'render', id: JOB }] }, depsFor(createFakeApi([]))))).toContain('projectId')
+  })
+
+  it('別の作品のジョブ・Shot・Take は待たない（状態も中身も返さない）', async () => {
+    const fake = createFakeApi([
+      { method: 'GET', path: `/projects/${PROJECT}/renders`, data: [] },
+      ownedShots(PROJECT, []),
+      { method: 'GET', path: /^\/(renders|shots)\//, data: {} },
+    ])
+    const deps = depsFor(fake)
+    expect(textOf(await waitTool.run({ projectId: PROJECT, jobs: [{ kind: 'render', id: JOB }] }, deps))).toContain(JOB)
+    expect(textOf(await waitTool.run({ projectId: PROJECT, jobs: [{ kind: 'start_frame', id: SHOT }] }, deps))).toContain(SHOT)
+    expect(textOf(await waitTool.run({ projectId: PROJECT, jobs: [{ kind: 'upscale', shotId: SHOT, takeId: TAKE }] }, deps))).toContain(SHOT)
+    expect(fake.callsTo('GET', /^\/(renders|shots)\//)).toHaveLength(0)
   })
 })

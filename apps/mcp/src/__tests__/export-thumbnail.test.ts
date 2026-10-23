@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { exportThumbnailTool } from '../tools/export-thumbnail.js'
-import { createFakeApi, depsFor, jsonOf, textOf, ulid, type Route } from './fake-api.js'
+import { createFakeApi, depsFor, jsonOf, ownedMedia, textOf, ulid, type Route } from './fake-api.js'
 
 /** サムネイルの書き出し（ADR-0051）。偽の API で、頼み方・待ち方・保存と画像の返し方を確かめる。 */
 
@@ -84,7 +84,7 @@ describe('export_thumbnail', () => {
   })
 
   it('素材の画像を背景にできる', async () => {
-    const fake = createFakeApi(doneRoutes)
+    const fake = createFakeApi([...doneRoutes, ownedMedia(PROJECT)])
     jsonOf(
       await exportThumbnailTool.run(
         { projectId: PROJECT, background: { mediaAssetId: ASSET }, title: '新曲', zoom: 1.5, focusX: 0.2 },
@@ -158,6 +158,7 @@ describe('export_thumbnail', () => {
     const fake = createFakeApi([
       ...doneRoutes,
       { method: 'GET', path: `/thumbnails/${THUMB_2}`, data: second },
+      { method: 'GET', path: `/projects/${PROJECT}/thumbnails`, data: [{ id: THUMB }, { id: THUMB_2 }] },
       { method: 'GET', path: `/media/${OUTPUT_2}/url`, data: { url: '/files/thumb2.jpg?sig=T', expiresInSec: 600 } },
       { method: 'GET', path: '/files/thumb2.jpg', bytes: JPEG_2 },
     ])
@@ -231,7 +232,10 @@ describe('export_thumbnail', () => {
     const first = jsonOf(await exportThumbnailTool.run({ projectId: PROJECT, background: { atSec: 0 }, title: '新曲', waitSec: 10 }, deps))
     expect(first).toMatchObject({ thumbnailId: THUMB, status: 'rendering', timedOut: true })
 
-    const again = createFakeApi([{ method: 'GET', path: `/thumbnails/${THUMB}`, data: thumbRow('failed', null, '描けませんでした') }])
+    const again = createFakeApi([
+      { method: 'GET', path: `/thumbnails/${THUMB}`, data: thumbRow('failed', null, '描けませんでした') },
+      { method: 'GET', path: `/projects/${PROJECT}/thumbnails`, data: [{ id: THUMB }] },
+    ])
     const second = jsonOf(await exportThumbnailTool.run({ projectId: PROJECT, thumbnailId: THUMB, waitSec: 0 }, depsFor(again)))
     expect(second).toMatchObject({ thumbnailId: THUMB, status: 'failed', error: '描けませんでした' })
     expect(again.callsTo('POST', /thumbnails/)).toHaveLength(0)
@@ -247,5 +251,18 @@ describe('export_thumbnail', () => {
     )
     expect(result).toMatchObject({ timedOut: true, keyArtJobIds: [JOB_A, JOB_B], keyArtCandidates: [] })
     expect(fake.callsTo('POST', `/projects/${PROJECT}/thumbnails`)).toHaveLength(0)
+  })
+
+  it('別の作品のサムネイル・素材は読まず・作らずに断る', async () => {
+    const fake = createFakeApi([
+      { method: 'GET', path: `/projects/${PROJECT}/thumbnails`, data: [] },
+      ownedMedia(ulid('PJ2')),
+      { method: 'GET', path: /^\/thumbnails\//, data: thumbRow('done', OUTPUT) },
+    ])
+    const deps = depsFor(fake, { outputDir: dir })
+    expect(textOf(await exportThumbnailTool.run({ projectId: PROJECT, thumbnailId: THUMB }, deps))).toContain(THUMB)
+    expect(textOf(await exportThumbnailTool.run({ projectId: PROJECT, background: { mediaAssetId: ASSET }, title: '新曲' }, deps))).toContain(ASSET)
+    expect(fake.callsTo('GET', /^\/thumbnails\//)).toHaveLength(0)
+    expect(fake.callsTo('POST', /.*/)).toHaveLength(0)
   })
 })

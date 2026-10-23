@@ -1,6 +1,7 @@
 import { DUPLICATION_ITEMS, DuplicationItem, PROJECT_NAME_MAX_LENGTH } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
+import { assertListed } from '../lib/project-scope.js'
 import { WireCharacter, WireLocation, WireMusicTrack, WireProject } from '../wire.js'
 import { defineTool, Id, jsonResult, ToolInputError } from '../tool-def.js'
 
@@ -108,6 +109,37 @@ const listSource = async (api: ApiClient, sourceProjectId: string) => {
   }
 }
 
+type Selection = Omit<z.infer<typeof ImportFromProjectInput>, 'projectId' | 'sourceProjectId' | 'action'>
+
+/** 一覧の口の名前と、断るときの名前。 */
+const SOURCE_LISTS = [
+  ['characterIds', 'characters', 'キャラクター'],
+  ['locationIds', 'locations', '場所'],
+  ['brandAssetIds', 'brand-assets', 'ブランド資産'],
+  ['voiceIds', 'voices', '声'],
+  ['musicTrackIds', 'music-tracks', '曲'],
+] as const
+
+/**
+ * 選んだものが全部、取り込み元（sourceProjectId）の作品のものか。
+ * API はワークスペースが同じかしか見ないので、確かめないと取り込み元を名乗りながら第三の作品から写せてしまう。
+ */
+const assertInSource = async (api: ApiClient, sourceProjectId: string, selection: Selection): Promise<void> => {
+  const base = `/projects/${seg(sourceProjectId)}`
+  await Promise.all(
+    SOURCE_LISTS.filter(([field]) => selection[field].length > 0).map(([field, path, label]) =>
+      assertListed(api, `${base}/${path}`, selection[field], `${label}（取り込み元）`),
+    ),
+  )
+  if (selection.sfxSounds.length === 0) return
+  const jobs = await api.get(`${base}/sfx-jobs`, z.array(WireSfxJob))
+  const known = new Set(jobs.flatMap((job) => job.mediaAssetIds.map((mediaAssetId) => `${job.id}/${mediaAssetId}`)))
+  const foreign = selection.sfxSounds.filter((s) => !known.has(`${s.sfxJobId}/${s.mediaAssetId}`))
+  if (foreign.length > 0) {
+    throw new ToolInputError(`この作品に無い効果音（取り込み元）です: ${foreign.map((s) => s.mediaAssetId).join(', ')}`)
+  }
+}
+
 export const importFromProjectTool = defineTool({
   name: 'import_from_project',
   // ほかの作品を読む（会話の作品の外を触る。create_project と同じく確認する）。
@@ -122,6 +154,7 @@ export const importFromProjectTool = defineTool({
     if (action === 'list') return jsonResult({ sourceProjectId, ...(await listSource(api, sourceProjectId)) })
     const count = Object.values(selection).reduce((sum, ids) => sum + ids.length, 0)
     if (count === 0) throw new ToolInputError('取り込むものを 1 つ以上指定してください（action:"list" で一覧）')
+    await assertInSource(api, sourceProjectId, selection)
     const imported = await api.post(`/projects/${seg(projectId)}/library-imports`, selection, WireImported)
     return jsonResult({
       characters: imported.characters.map((c) => ({ id: c.id, displayName: c.displayName })),

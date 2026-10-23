@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
+import { assertShotsInProject, assertTakePairs } from '../lib/project-scope.js'
 import { WireShot } from '../wire.js'
 import { defineTool, Id, jsonResult, round, ToolInputError } from '../tool-def.js'
 
@@ -95,6 +96,9 @@ export const alignToMusicTool = defineTool({
     }
     if (action === 'apply') {
       if (changes === undefined) throw new ToolInputError('apply には changes（plan の結果）が要ります')
+      // 当てる前に、Shot と選ぶ Take がこの作品のものか確かめる。
+      await assertShotsInProject(api, projectId, changes.map((c) => c.shotId))
+      await assertTakePairs(api, projectId, changes.flatMap((c) => (c.kind === 'select' ? [{ shotId: c.shotId, takeId: c.takeId }] : [])))
       const [codes, result] = await Promise.all([
         codesOf(api, projectId),
         api.post(`${base}/timeline/rough-cut/apply`, { changes, summary: 'AI エージェントの粗編集' }, WireApplied),

@@ -2,6 +2,7 @@ import { DuckingSettings, MusicEndSec, ReadingEntry, TelopHighlightSettings, Upd
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import { defineTool, Id, jsonResult, ToolInputError } from '../tool-def.js'
+import { assertListed } from '../lib/project-scope.js'
 import { resolveTrackId } from './music.js'
 
 /**
@@ -63,12 +64,14 @@ export const editAudioTool = defineTool({
   risk: 'write',
   description:
     'Mix settings: the music track (volume, offsetSec, fades, endSec) and the project audio settings (ducking under ' +
-    'narration, highlighting the spoken caption character). Send only what changes; with nothing, it shows the current values.',
+    'narration, highlighting the spoken caption character). Send only what changes; with nothing, it shows the current ' +
+    'values. Ducking and telopHighlight changes are not undoable.',
   input: EditAudioInput,
   handler: async ({ projectId, music, ducking, telopHighlight }, { api }) => {
     if (music !== undefined) {
       const { musicTrackId, ...patch } = music
       if (Object.keys(patch).length === 0) throw new ToolInputError('music: 変える欄がありません')
+      if (musicTrackId !== undefined) await assertListed(api, `/projects/${seg(projectId)}/music-tracks`, [musicTrackId], '曲')
       const trackId = await resolveTrackId(api, projectId, musicTrackId)
       await api.request('PATCH', `/music-tracks/${seg(trackId)}`, WireTrack, { body: patch })
     }

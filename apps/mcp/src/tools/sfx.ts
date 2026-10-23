@@ -5,7 +5,8 @@ import { IxaApiError, seg } from '../api-client.js'
 import { uploadLocalFile } from '../lib/media-io.js'
 import { waitForDuration } from '../lib/media-probe.js'
 import type { CheckResult } from '../lib/wait-loop.js'
-import { defineTool, Id, jsonResult, mapLimited, round, SEED_MAX } from '../tool-def.js'
+import { assertListed } from '../lib/project-scope.js'
+import { defineTool, Id, jsonResult, mapLimited, round, SEED_MAX, ToolInputError } from '../tool-def.js'
 import type { ApiClient } from '../api-client.js'
 
 /**
@@ -181,12 +182,12 @@ export const removeSfxTool = defineTool({
   description: 'Remove sound clips from the SFX track by id (from list_sfx or a finished sfx job). Other clips are refused with a reason.',
   input: z.object({ projectId: Id, clipIds: z.array(Id).min(1).max(200) }),
   handler: async ({ projectId, clipIds }, { api }) => {
-    const clips = await api.get(`/projects/${seg(projectId)}/clips`, z.array(WireSfxClip))
+    // 作品の外のクリップが 1 つでもあれば、何も消さずに断る。
+    const clips = await assertListed(api, `/projects/${seg(projectId)}/clips`, clipIds, 'クリップ', WireSfxClip)
     const byId = new Map(clips.map((clip) => [clip.id, clip]))
     const results = await mapLimited(clipIds, 4, async (id) => {
       const clip = byId.get(id)
-      if (clip === undefined) return { ok: false as const, id, reason: 'この作品にそのクリップはありません' }
-      if (!isSfxClip(clip)) return { ok: false as const, id, reason: '効果音ではないクリップは消しません（エフェクト・テロップなど）' }
+      if (clip === undefined || !isSfxClip(clip)) return { ok: false as const, id, reason: '効果音ではないクリップは消しません（エフェクト・テロップなど）' }
       try {
         await api.request('DELETE', `/clips/${seg(id)}`, z.unknown())
         return { ok: true as const, id }
@@ -216,7 +217,12 @@ export const uploadSfxTool = defineTool({
     volume: z.number().min(0).max(2).default(UPLOADED_SFX_VOLUME),
   }),
   handler: async (args, { api, workspaceId, clock }) => {
-    const title = UploadedSfxTitle.parse(args.title ?? basename(args.filePath, extname(args.filePath)))
+    // 既定の名前（ファイル名）は入力の検査を通っていないので、ここで確かめる（上げる前に）。
+    const parsedTitle = UploadedSfxTitle.safeParse(args.title ?? basename(args.filePath, extname(args.filePath)))
+    if (!parsedTitle.success) {
+      throw new ToolInputError(`title: ${parsedTitle.error.issues[0]?.message ?? '効果音の名前が読めません'}（title で名前を指定してください）`)
+    }
+    const title = parsedTitle.data
     const mediaAssetId = await uploadLocalFile(api, args.filePath, { workspaceId, projectId: args.projectId, kind: 'audio' })
     const sound = await api.post(`/projects/${seg(args.projectId)}/uploaded-sfx`, { mediaAssetId, title }, z.object({ id: z.string() }))
     if (args.placeAtSec === undefined) return jsonResult({ uploadedSfxId: sound.id, mediaAssetId })

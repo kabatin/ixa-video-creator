@@ -3,7 +3,7 @@ import { createCharacterTool, createLocationTool } from '../tools/cast.js'
 import { EditShotsInput, editShotsTool } from '../tools/edit-shots.js'
 import { planShotsTool } from '../tools/plan-shots.js'
 import { drawStartFramesTool, setStartFrameTool } from '../tools/start-frames.js'
-import { createFakeApi, depsFor, jsonOf, textOf, ulid } from './fake-api.js'
+import { createFakeApi, depsFor, jsonOf, ownedMedia, ownedShots, textOf, ulid } from './fake-api.js'
 
 const PROJECT = ulid('PJ1')
 const TRACK = ulid('TR1')
@@ -90,6 +90,16 @@ describe('plan_shots', () => {
     expect(fake.calls).toHaveLength(0)
   })
 
+  it('別の作品の曲に寄せようとすると、何も作らずに断る', async () => {
+    const fake = createFakeApi([...masterRoutes, { method: 'POST', path: `/projects/${PROJECT}/storyboard/cuts`, status: 201, data: { shots: [], warnings: [] } }])
+    const result = await planShotsTool.run(
+      { projectId: PROJECT, boundariesSec: [0, 2], snap: 'beat', musicTrackId: ulid('TR9') },
+      depsFor(fake),
+    )
+    expect(textOf(result)).toContain('この作品に無い曲')
+    expect(fake.calls.filter((c) => c.method !== 'GET')).toHaveLength(0)
+  })
+
   it('知らないモデルは断る', async () => {
     const fake = createFakeApi([{ method: 'GET', path: '/models', data: [] }])
     const result = await planShotsTool.run({ projectId: PROJECT, boundariesSec: [0, 2], model: 'nope' }, depsFor(fake))
@@ -110,6 +120,7 @@ describe('edit_shots', () => {
         path: `/projects/${PROJECT}/shots/bulk`,
         data: { results: [{ shotId: SHOT_A, ok: true, shot: shotRow(SHOT_A, 0) }, { shotId: SHOT_B, ok: false, reason: 'ロック中' }] },
       },
+      { method: 'GET', path: `/projects/${PROJECT}/characters`, data: [{ id: CHAR }] },
       { method: 'GET', path: `/characters/${CHAR}/looks`, data: [{ id: ulid('LK0'), key: 'X', name: 'x' }, { id: LOOK, key: 'DEFAULT', name: '既定', isDefault: true }] },
       { method: 'PUT', path: /^\/shots\/.+\/characters$/, data: [] },
     ])
@@ -133,6 +144,23 @@ describe('edit_shots', () => {
     expect(result).toEqual({
       results: [{ shotIds: [SHOT_A, SHOT_B], patched: 1, failures: [{ shotId: SHOT_B, reason: 'ロック中' }], castSet: 1 }],
     })
+  })
+
+  it('別の作品の Shot・場所・キャラクター・別のキャラクターの Look は、何も書かずに断る', async () => {
+    const OTHER = ulid('SX9')
+    const fake = createFakeApi([
+      ...baseRoutes,
+      { method: 'GET', path: `/projects/${PROJECT}/locations`, data: [{ id: ulid('AR1') }] },
+      { method: 'GET', path: `/projects/${PROJECT}/characters`, data: [{ id: CHAR }] },
+      { method: 'GET', path: `/characters/${CHAR}/looks`, data: [{ id: LOOK, key: 'DEFAULT', name: '既定', isDefault: true }] },
+    ])
+    const run = (edit: Record<string, unknown>) =>
+      editShotsTool.run({ projectId: PROJECT, edits: [{ shotIds: [SHOT_A], description: 'ok' }, { shotIds: [SHOT_A], ...edit }] }, depsFor(fake))
+    expect(textOf(await run({ shotIds: [SHOT_A, OTHER] }))).toContain('この作品に無い Shot')
+    expect(textOf(await run({ locationId: ulid('AR9') }))).toContain('この作品に無い場所')
+    expect(textOf(await run({ cast: [{ characterId: ulid('CH9') }] }))).toContain('この作品に無いキャラクター')
+    expect(textOf(await run({ cast: [{ characterId: CHAR, lookId: ulid('KK9') }] }))).toContain('そのキャラクターに無い Look')
+    expect(fake.calls.filter((c) => c.method !== 'GET')).toHaveLength(0)
   })
 
   /** 速さと Take の使い始め（ADR-0050）。予告編の速い編集。 */
@@ -231,6 +259,7 @@ describe('登場人物・場所・最初のコマ', () => {
     const FRAME = ulid('MD2')
     const fake = createFakeApi([
       { method: 'POST', path: `/projects/${PROJECT}/characters`, status: 201, data: { id: CHAR, name: 'hero', displayName: '主人公' } },
+      ownedShots(PROJECT, [SHOT_A]),
       { method: 'GET', path: `/shots/${SHOT_A}/start-frame`, data: { mediaAssetId: FRAME, job: null } },
       { method: 'POST', path: `/characters/${CHAR}/identity-images`, status: 201, data: { id: ulid('ID1'), mediaAssetId: FRAME, role: 'face_front' } },
       { method: 'GET', path: `/characters/${CHAR}/looks`, data: [{ id: LOOK, key: 'DEFAULT', name: '既定', isDefault: true }] },
@@ -259,28 +288,52 @@ describe('登場人物・場所・最初のコマ', () => {
     const LOC = ulid('LC1')
     const fake = createFakeApi([
       { method: 'POST', path: `/projects/${PROJECT}/locations`, status: 201, data: { id: LOC, name: '海', referenceAssetIds: [ulid('MD1')] } },
+      ownedMedia(PROJECT),
     ])
     await createLocationTool.run({ projectId: PROJECT, name: '海', references: [{ mediaAssetId: ulid('MD1') }] }, depsFor(fake))
-    expect(fake.calls[0]?.body).toEqual({ name: '海', referenceAssetIds: [ulid('MD1')] })
+    expect(fake.callsTo('POST', `/projects/${PROJECT}/locations`)[0]?.body).toEqual({ name: '海', referenceAssetIds: [ulid('MD1')] })
+  })
+
+  it('create_character・create_location は別の作品の素材なら何も作らずに断る', async () => {
+    const fake = createFakeApi([ownedMedia(ulid('PJ2'))])
+    const character = await createCharacterTool.run(
+      { projectId: PROJECT, name: 'hero', identityImage: { mediaAssetId: ulid('MD1') } },
+      depsFor(fake),
+    )
+    expect(textOf(character)).toContain('この作品に無い素材')
+    const location = await createLocationTool.run({ projectId: PROJECT, name: '海', references: [{ mediaAssetId: ulid('MD1') }] }, depsFor(fake))
+    expect(textOf(location)).toContain('この作品に無い素材')
+    expect(fake.calls.filter((c) => c.method !== 'GET')).toHaveLength(0)
   })
 
   it('draw_start_frames は onlyMissing を送り、待つ手がかりを Shot ごとに返す', async () => {
     const fake = createFakeApi([
+      ownedShots(PROJECT, [SHOT_A, SHOT_B]),
       { method: 'POST', path: `/projects/${PROJECT}/start-frames/generate`, status: 202, data: { jobIds: [ulid('JB1')], skipped: { drawing: 1, hasFrame: 0 } } },
     ])
     const result = jsonOf(await drawStartFramesTool.run({ projectId: PROJECT, shotIds: [SHOT_A, SHOT_B], onlyMissing: false }, depsFor(fake)))
-    expect(fake.calls[0]?.body).toEqual({ shotIds: [SHOT_A, SHOT_B], onlyMissing: false })
+    expect(fake.callsTo('POST', `/projects/${PROJECT}/start-frames/generate`)[0]?.body).toEqual({ shotIds: [SHOT_A, SHOT_B], onlyMissing: false })
     expect(result).toMatchObject({ started: 1, skipped: { drawing: 1 }, next: { jobs: [{ kind: 'start_frame', id: SHOT_A }, { kind: 'start_frame', id: SHOT_B }] } })
   })
 
   it('set_start_frame は素材の ID を PUT する', async () => {
     const MEDIA = ulid('MD3')
     const fake = createFakeApi([
-      { method: 'GET', path: `/shots/${SHOT_A}`, data: { ...shotRow(SHOT_A, 0), projectId: PROJECT } },
+      ownedShots(PROJECT, [SHOT_A]),
       { method: 'PUT', path: `/shots/${SHOT_A}/start-frame`, data: { mediaAssetId: MEDIA } },
+      ownedMedia(PROJECT),
     ])
-    const result = jsonOf(await setStartFrameTool.run({ shotId: SHOT_A, mediaAssetId: MEDIA }, depsFor(fake)))
+    const result = jsonOf(await setStartFrameTool.run({ projectId: PROJECT, shotId: SHOT_A, mediaAssetId: MEDIA }, depsFor(fake)))
     expect(fake.callsTo('PUT', `/shots/${SHOT_A}/start-frame`)[0]?.body).toEqual({ mediaAssetId: MEDIA })
     expect(result).toEqual({ shotId: SHOT_A, mediaAssetId: MEDIA })
+  })
+
+  it('draw_start_frames・set_start_frame は別の作品の Shot なら何も書かずに断る', async () => {
+    const fake = createFakeApi([ownedShots(PROJECT, [SHOT_A]), ownedMedia(PROJECT)])
+    const draw = await drawStartFramesTool.run({ projectId: PROJECT, shotIds: [SHOT_A, ulid('SX9')] }, depsFor(fake))
+    expect(textOf(draw)).toContain('この作品に無い Shot')
+    const set = await setStartFrameTool.run({ projectId: PROJECT, shotId: ulid('SX9'), mediaAssetId: ulid('MD3') }, depsFor(fake))
+    expect(textOf(set)).toContain('この作品に無い Shot')
+    expect(fake.calls.filter((c) => c.method !== 'GET')).toHaveLength(0)
   })
 })

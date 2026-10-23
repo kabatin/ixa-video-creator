@@ -6,6 +6,7 @@ import { createFakeApi, depsFor, jsonOf, textOf, ulid } from './fake-api.js'
 const PROJECT = ulid('PJ1')
 const CLIP_A = ulid('CA1')
 const CLIP_B = ulid('CB1')
+const FOREIGN = ulid('ZZ9')
 
 const shotRow = (order: number, startSec: number) => ({
   id: ulid(`S${String(order)}A`),
@@ -141,7 +142,7 @@ describe('list_effects / remove_effects', () => {
     expect(result.failures).toEqual([{ id: CLIP_B, reason: '404: 対象が存在しません' }])
   })
 
-  it('エフェクトではないクリップ・この作品に無いクリップは消さない', async () => {
+  it('エフェクトではないクリップは理由を添えて消さない', async () => {
     const TEXT_ID = ulid('TX1')
     const fake = createFakeApi([
       {
@@ -150,10 +151,20 @@ describe('list_effects / remove_effects', () => {
         data: [{ id: TEXT_ID, track: 'TEXT', startSec: 0, durationSec: 1, content: { type: 'text', templateKey: 'plain', params: { text: 'x' } } }],
       },
     ])
-    const result = jsonOf(await removeEffectsTool.run({ projectId: PROJECT, effectIds: [TEXT_ID, CLIP_A] }, depsFor(fake))) as { removed: string[]; failures: { id: string; reason: string }[] }
+    const result = jsonOf(await removeEffectsTool.run({ projectId: PROJECT, effectIds: [TEXT_ID] }, depsFor(fake))) as { removed: string[]; failures: { id: string; reason: string }[] }
     expect(result.removed).toEqual([])
-    expect(result.failures.map((f) => f.id)).toEqual([TEXT_ID, CLIP_A])
+    expect(result.failures.map((f) => f.id)).toEqual([TEXT_ID])
     expect(result.failures[0]?.reason).toContain('エフェクトではない')
+    expect(fake.callsTo('DELETE', /\/clips\//)).toEqual([])
+  })
+
+  it('この作品に無いクリップが 1 つでもあれば、何も消さずに断る', async () => {
+    const fake = createFakeApi([
+      { method: 'GET', path: `/projects/${PROJECT}/clips`, data: [clipRow(CLIP_A, 1, 'flash')] },
+      { method: 'DELETE', path: /\/clips\//, status: 204 },
+    ])
+    const result = await removeEffectsTool.run({ projectId: PROJECT, effectIds: [CLIP_A, FOREIGN] }, depsFor(fake))
+    expect(textOf(result)).toContain(`この作品に無いクリップです: ${FOREIGN}`)
     expect(fake.callsTo('DELETE', /\/clips\//)).toEqual([])
   })
 })

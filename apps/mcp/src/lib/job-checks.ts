@@ -5,6 +5,7 @@ import { musicJobCheck } from '../tools/music-generation.js'
 import { voiceJobCheck } from '../tools/narration-speak.js'
 import { reviewCheck } from '../tools/review.js'
 import { sfxJobCheck } from '../tools/sfx.js'
+import { ToolInputError } from '../tool-def.js'
 import {
   WireActiveGeneration,
   WireAnalysisFailure,
@@ -15,6 +16,7 @@ import {
   WireStartFrameHistory,
   WireTake,
 } from '../wire.js'
+import { assertListed, assertNarrationLinesInProject, assertShotsInProject, assertTakePairs } from './project-scope.js'
 import type { Check, CheckResult } from './wait-loop.js'
 
 /**
@@ -28,7 +30,7 @@ export const JobRef = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('sfx'), id: z.string().ulid().describe('sfx jobId from generate_sfx') }),
   z.object({ kind: z.literal('analysis'), id: z.string().ulid().describe('musicTrackId') }),
   z.object({ kind: z.literal('start_frame'), id: z.string().ulid().describe('shotId') }),
-  z.object({ kind: z.literal('review'), id: z.string().ulid().describe('takeId from review_take') }),
+  z.object({ kind: z.literal('review'), id: z.string().ulid().describe('takeId from review_take'), shotId: z.string().ulid() }),
   z.object({ kind: z.literal('voice'), id: z.string().ulid().describe('voice jobId from speak_narration') }),
   z.object({
     kind: z.literal('upscale'),
@@ -145,3 +147,39 @@ export const projectActivityCheck = (api: ApiClient, projectId: string): Check =
     return generations.length + drawing + rendering === 0 ? { state: 'succeeded', detail } : pending(detail)
   },
 })
+
+const idsOf = <K extends JobRef['kind']>(refs: readonly JobRef[], kind: K): readonly Extract<JobRef, { kind: K }>[] =>
+  refs.filter((r): r is Extract<JobRef, { kind: K }> => r.kind === kind)
+
+const WireVoiceJobLine = z.object({ lineId: z.string().nullable() })
+
+/**
+ * 待つジョブがどれもこの作品のものか（待つと中身＝状態・素材・指摘を返すので、作品の外のものは待たない）。
+ * ジョブの口の多くは作品を返さないので、持ち主（Shot・Take・行）か作品の一覧で引く。
+ * 曲・効果音は作品の最近のジョブの一覧（曲 20 件・効果音 50 件）にあるものだけを通す。
+ */
+export const assertJobsInProject = async (api: ApiClient, projectId: string, refs: readonly JobRef[]): Promise<void> => {
+  const project = `/projects/${seg(projectId)}`
+  const listed = async (kind: 'render' | 'music' | 'sfx' | 'analysis', path: string, label: string): Promise<void> => {
+    const ids = idsOf(refs, kind).map((r) => r.id)
+    if (ids.length > 0) await assertListed(api, `${project}/${path}`, ids, label)
+  }
+  const [generationShots, voiceLines] = await Promise.all([
+    Promise.all(idsOf(refs, 'generation').map(async (r) => (await api.get(`/generation-jobs/${seg(r.id)}`, WireGenerationJob)).shotId)),
+    Promise.all(idsOf(refs, 'voice').map(async (r) => ({ id: r.id, lineId: (await api.get(`/voice-jobs/${seg(r.id)}`, WireVoiceJobLine)).lineId }))),
+  ])
+  const unowned = voiceLines.filter((v) => v.lineId === null).map((v) => v.id)
+  if (unowned.length > 0) throw new ToolInputError(`作品の行に結び付かない声のジョブは待てません: ${unowned.join(', ')}`)
+  const shotIds = [...generationShots, ...idsOf(refs, 'start_frame').map((r) => r.id)]
+  if (shotIds.length > 0) await assertShotsInProject(api, projectId, shotIds)
+  const lineIds = voiceLines.flatMap((v) => (v.lineId === null ? [] : [v.lineId]))
+  if (lineIds.length > 0) await assertNarrationLinesInProject(api, projectId, lineIds)
+  await assertTakePairs(api, projectId, [
+    ...idsOf(refs, 'review').map((r) => ({ shotId: r.shotId, takeId: r.id })),
+    ...idsOf(refs, 'upscale').map((r) => ({ shotId: r.shotId, takeId: r.takeId })),
+  ])
+  await listed('render', 'renders', '書き出し')
+  await listed('music', 'music-jobs', '曲のジョブ（最近のもの）')
+  await listed('sfx', 'sfx-jobs', '効果音のジョブ（最近のもの）')
+  await listed('analysis', 'music-tracks', '楽曲')
+}

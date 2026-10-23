@@ -290,7 +290,8 @@ export const editCharacterTool = defineTool({
   description:
     'Edit or delete a character, its looks (outfits; one is the default), look images, the canonical frame, ' +
     'identity images (face/body references) and make a character sheet (4-view image drawn by the image AI). ' +
-    'Start with action="get" to see the ids.',
+    'Start with action="get" to see the ids. Only update/delete of the character itself is undoable; look and image ' +
+    'changes are not undoable.',
   input: EditCharacterInput,
   handler: async (args, { api, workspaceId }) => {
     await ownedCharacter(api, args)

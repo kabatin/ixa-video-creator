@@ -5,8 +5,9 @@ import { z } from 'zod'
 import { IxaApiError, seg, type ApiClient } from '../api-client.js'
 import { checkFor } from '../lib/job-checks.js'
 import { downloadMedia } from '../lib/media-io.js'
+import { assertListed, assertShotsInProject } from '../lib/project-scope.js'
 import { waitForChecks } from '../lib/wait-loop.js'
-import { WireProject, WireRenderJob, WireShot } from '../wire.js'
+import { WireProject, WireRenderJob } from '../wire.js'
 import { defineTool, Id, jsonResult, ToolInputError, type ToolDeps } from '../tool-def.js'
 import { MAX_WAIT_SEC } from './wait.js'
 
@@ -52,8 +53,7 @@ export const scopeOf = async (api: ApiClient, args: ExportArgs): Promise<WireSco
   }
   const wanted = new Set(args.shotIds ?? [])
   if (wanted.size === 0) throw new ToolInputError('scope "shots" には shotIds を指定してください')
-  const shots = (await api.get(`/projects/${seg(args.projectId)}/shots`, z.array(WireShot))).filter((s) => wanted.has(s.id))
-  if (shots.length !== wanted.size) throw new ToolInputError('この作品に無い Shot が shotIds に含まれています')
+  const shots = (await assertShotsInProject(api, args.projectId, [...wanted])).filter((s) => wanted.has(s.id))
   return {
     type: 'range',
     start: Math.min(...shots.map((s) => s.startSec)),
@@ -113,6 +113,10 @@ export const exportTool = defineTool({
     'Shots without a selected take are reported in warnings.',
   input: ExportInput,
   handler: async (args, deps) => {
+    // 別の作品の書き出しを ID だけで読ませない・落とさせない。
+    if (args.renderJobId !== undefined) {
+      await assertListed(deps.api, `/projects/${seg(args.projectId)}/renders`, [args.renderJobId], '書き出し')
+    }
     const started: Started =
       args.renderJobId === undefined
         ? await start(deps.api, args)

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { alignToMusicTool } from '../tools/align-music.js'
 import { editCharacterTool } from '../tools/character-edit.js'
 import { draftStoryboardTool } from '../tools/storyboard-draft.js'
-import { createFakeApi, depsFor, jsonOf, textOf, ulid, type Route } from './fake-api.js'
+import { createFakeApi, depsFor, jsonOf, textOf, ulid, type Route, ownedMedia } from './fake-api.js'
 
 const PROJECT = ulid('PJ1')
 const CHAR = ulid('CH1')
@@ -78,6 +78,7 @@ describe('edit_character', () => {
     const path = `/characters/${CHAR}/identity-images`
     const fake = createFakeApi([
       owned(),
+      ownedMedia(PROJECT),
       { method: 'GET', path, data: [{ id: IMG, mediaAssetId: ulid('MD2'), role: 'face_front', isPrimary: true }] },
       { method: 'POST', path, status: 201, data: { id: ulid('IM2'), mediaAssetId: ASSET, role: 'full_body', isPrimary: true } },
     ])
@@ -94,6 +95,27 @@ describe('edit_character', () => {
     )
     expect(textOf(lookRole)).toContain('role は')
     expect(fake.callsTo('POST', path)).toHaveLength(1)
+  })
+
+  it('別の作品の素材は顔の画像・Look の画像・正のコマに付けない', async () => {
+    const fake = createFakeApi([
+      owned(),
+      ownedMedia(ulid('PJ2')),
+      { method: 'GET', path: `/looks/${LOOK}`, data: lookRow() },
+      { method: 'GET', path: /\/(identity-images|images)$/, data: [] },
+    ])
+    for (const action of ['add_identity_image', 'add_look_image', 'set_canonical_frame'] as const) {
+      const result = await editCharacterTool.run(
+        { projectId: PROJECT, characterId: CHAR, action, lookId: LOOK, image: { mediaAssetId: ASSET } },
+        depsFor(fake),
+      )
+      expect(textOf(result)).toContain('この作品に無い素材')
+    }
+    expect(fake.calls.filter((c) => c.method !== 'GET')).toHaveLength(0)
+  })
+
+  it('説明は、履歴で戻せない操作をそう言う', () => {
+    expect(editCharacterTool.description).toContain('not undoable')
   })
 
   it('一覧に無い識別用画像は消さない', async () => {
@@ -179,6 +201,20 @@ describe('align_to_music', () => {
     expect(fake.callsTo('POST', `/projects/${PROJECT}/timeline/rough-cut/apply`)[0]?.body).toMatchObject({ changes: [move] })
   })
 
+  it('apply は別の作品の Shot・その Shot に無い Take を当てずに断る', async () => {
+    const fake = createFakeApi([
+      shotsRoute,
+      { method: 'GET', path: `/shots/${SHOT}/takes`, data: [] },
+      { method: 'POST', path: `/projects/${PROJECT}/timeline/rough-cut/apply`, data: { applied: [], skipped: [] } },
+    ])
+    const deps = depsFor(fake)
+    const other = ulid('SX1')
+    expect(textOf(await alignToMusicTool.run({ projectId: PROJECT, action: 'apply', changes: [{ ...move, shotId: other }] }, deps))).toContain(other)
+    const select = { kind: 'select', shotId: SHOT, takeId: ulid('TX1'), reason: '良い方' }
+    expect(textOf(await alignToMusicTool.run({ projectId: PROJECT, action: 'apply', changes: [select] }, deps))).toContain(ulid('TX1'))
+    expect(fake.callsTo('POST', /.*/)).toHaveLength(0)
+  })
+
   it('apply に changes が無い・知らない種類・負の秒は断る', async () => {
     const fake = createFakeApi([])
     for (const changes of [undefined, [{ ...move, kind: 'swap' }], [{ ...move, toSec: -1 }], [{ kind: 'select', shotId: SHOT, takeId: TAKE, reason: '' }]]) {
@@ -224,24 +260,39 @@ describe('draft_storyboard', () => {
   })
 
   it('adopt は列挙した Shot だけを送り、空・重複は断る', async () => {
-    const fake = createFakeApi([
-      {
-        method: 'POST',
-        path: `/projects/${PROJECT}/storyboard/drafts/${RUN}/adopt`,
-        data: { adopted: [item], shots: shotsRoute.data },
-      },
-    ])
+    const adoptPath = `/projects/${PROJECT}/storyboard/drafts/${RUN}/adopt`
+    const fake = createFakeApi([shotsRoute, { method: 'POST', path: adoptPath, data: { adopted: [item], shots: shotsRoute.data } }])
     jsonOf(await draftStoryboardTool.run({ projectId: PROJECT, action: 'adopt', runId: RUN, shotIds: [SHOT] }, depsFor(fake)))
-    expect(fake.calls[0]?.body).toEqual({ shotIds: [SHOT] })
+    expect(fake.callsTo('POST', adoptPath)[0]?.body).toEqual({ shotIds: [SHOT] })
     for (const shotIds of [undefined, [], [SHOT, SHOT]]) {
       const result = await draftStoryboardTool.run({ projectId: PROJECT, action: 'adopt', runId: RUN, shotIds }, depsFor(fake))
       expect(result.isError).toBe(true)
     }
-    expect(fake.calls).toHaveLength(1)
+    expect(fake.callsTo('POST', adoptPath)).toHaveLength(1)
+  })
+
+  it('adopt・suggest は別の作品の Shot・キャラクター・Look・場所を断る（書かず、AI も使わない）', async () => {
+    const fake = createFakeApi([
+      shotsRoute,
+      { method: 'GET', path: `/projects/${PROJECT}/characters`, data: [{ id: CHAR }] },
+      { method: 'GET', path: `/projects/${PROJECT}/locations`, data: [] },
+      { method: 'GET', path: `/looks/${LOOK}`, data: lookRow({ characterId: ulid('CX9') }) },
+    ])
+    const foreignShot = ulid('SX9')
+    const adopt = await draftStoryboardTool.run({ projectId: PROJECT, action: 'adopt', runId: RUN, shotIds: [SHOT, foreignShot] }, depsFor(fake))
+    expect(textOf(adopt)).toContain('この作品に無い Shot')
+    const suggest = (target: Record<string, unknown>) =>
+      draftStoryboardTool.run({ projectId: PROJECT, action: 'suggest', field: 'concept', ...target }, depsFor(fake))
+    expect(textOf(await suggest({ shotId: foreignShot }))).toContain('この作品に無い Shot')
+    expect(textOf(await suggest({ characterId: ulid('CX9') }))).toContain('この作品に無いキャラクター')
+    expect(textOf(await suggest({ lookId: LOOK }))).toContain('この作品に無い Look')
+    expect(textOf(await suggest({ locationId: ulid('AR9') }))).toContain('この作品に無い場所')
+    expect(fake.calls.filter((c) => c.method !== 'GET')).toHaveLength(0)
   })
 
   it('suggest は欄と対象を送り、指示の空は null にする', async () => {
-    const fake = createFakeApi([{ method: 'POST', path: `/projects/${PROJECT}/assist`, data: { text: '雨の街', costUsd: 0 } }])
+    const assistPath = `/projects/${PROJECT}/assist`
+    const fake = createFakeApi([shotsRoute, { method: 'POST', path: assistPath, data: { text: '雨の街', costUsd: 0 } }])
     const result = jsonOf(
       await draftStoryboardTool.run(
         { projectId: PROJECT, action: 'suggest', field: 'shot_description', shotId: SHOT, instruction: '' },
@@ -249,7 +300,7 @@ describe('draft_storyboard', () => {
       ),
     )
     expect(result).toEqual({ field: 'shot_description', text: '雨の街', costUsd: 0 })
-    expect(fake.calls[0]?.body).toEqual({ field: 'shot_description', current: '', instruction: null, shotId: SHOT })
+    expect(fake.callsTo('POST', assistPath)[0]?.body).toEqual({ field: 'shot_description', current: '', instruction: null, shotId: SHOT })
     const tooLong = await draftStoryboardTool.run(
       { projectId: PROJECT, action: 'suggest', field: 'concept', instruction: 'あ'.repeat(301) },
       depsFor(fake),

@@ -11,6 +11,7 @@ import {
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import { defineTool, Id, jsonResult, mapLimited, round, ToolInputError } from '../tool-def.js'
+import { assertListed, assertNarrationLinesInProject } from '../lib/project-scope.js'
 import { getAudioSettings, putAudioSettings } from './audio-mix.js'
 
 /**
@@ -133,6 +134,24 @@ const summarize = (narration: WireNarration, voices: readonly WireVoice[]) => {
 
 const narrationPath = (projectId: string, rest = '') => `/projects/${seg(projectId)}/narration${rest}`
 
+/** 書く前に、行・キャラクターの ID がこの作品のものかを確かめる（`PATCH /narration-lines/{id}` は ID だけで動く）。 */
+const assertInProject = async (api: ApiClient, args: SetNarrationArgs): Promise<void> => {
+  const lineIds =
+    args.action === 'edit_lines'
+      ? (args.lines ?? []).map((l) => l.lineId)
+      : args.action === 'reorder' || args.action === 'arrange'
+        ? (args.lineIds ?? [])
+        : []
+  const characterId =
+    args.action === 'add_voice' ? args.newVoice?.characterId : args.action === 'edit_voice' ? args.voiceChange?.characterId : null
+  await Promise.all([
+    lineIds.length > 0 ? assertNarrationLinesInProject(api, args.projectId, lineIds) : Promise.resolve(),
+    characterId === undefined || characterId === null
+      ? Promise.resolve()
+      : assertListed(api, `/projects/${seg(args.projectId)}/characters`, [characterId], 'キャラクター'),
+  ])
+}
+
 const runAction = async (api: ApiClient, args: SetNarrationArgs, voices: readonly WireVoice[]): Promise<void> => {
   const { projectId, action } = args
   switch (action) {
@@ -194,16 +213,22 @@ const WireVoiceOptions = z.object({
 
 export const setNarrationTool = defineTool({
   name: 'set_narration',
-  risk: 'write',
-  riskOf: (args) => (args.action === 'show' ? 'read' : 'write'),
+  risk: 'destructive',
+  riskOf: (args) =>
+    args.action === 'show'
+      ? 'read'
+      : args.action === 'readings' && (args.readings?.remove ?? []).length > 0
+        ? 'destructive'
+        : 'write',
   description:
     'Narration script and voices. Actions: show; add_script (paste lines); edit_lines (text, reading, direction, ' +
     'voice, startSec, telop); reorder; arrange (place lines one after another from fromSec — do it after ' +
     'speak_narration so real lengths are used); add_voice / edit_voice; readings (dictionary for words the voice ' +
-    'misreads). Captions follow the lines automatically. Delete lines with remove_telops.',
+    'misreads). Captions follow the lines automatically. Delete lines with remove_telops. Not undoable: add_script, ' +
+    'reorder, readings, and edit_lines changes other than startSec/telop.',
   input: SetNarrationInput,
   handler: async (args, { api }) => {
-    const voicesBefore = await listVoices(api, args.projectId)
+    const [voicesBefore] = await Promise.all([listVoices(api, args.projectId), assertInProject(api, args)])
     await runAction(api, args, voicesBefore)
     const voiceChanged = args.action === 'add_voice' || args.action === 'edit_voice'
     const [narration, voices, settings, options] = await Promise.all([

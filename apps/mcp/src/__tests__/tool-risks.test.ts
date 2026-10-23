@@ -14,7 +14,8 @@ const EXPECTED: Readonly<Record<string, string>> = {
   // 会話の作品の外を触る。別の作品を触るのと同じく確認する（レビュー 2026-10-23）。
   create_project: 'destructive',
   get_project: 'read',
-  update_project: 'write',
+  // 予算を変えるときは設定として確認する（呼び出しごとには riskOf。予算を含まなければ write）。
+  update_project: 'settings',
   duplicate_project: 'destructive',
   import_from_project: 'destructive',
   generate_music: 'costly',
@@ -50,7 +51,8 @@ const EXPECTED: Readonly<Record<string, string>> = {
   list_telops: 'read',
   edit_clips: 'write',
   remove_telops: 'destructive',
-  set_narration: 'write',
+  // 読み辞書から外すのは戻せないので確認する（呼び出しごとには riskOf）。
+  set_narration: 'destructive',
   speak_narration: 'costly',
   set_lyrics: 'write',
   add_effects: 'write',
@@ -87,8 +89,8 @@ const CALLS: readonly (readonly [string, Record<string, unknown>, string])[] = [
   ['manage_brand_assets', { projectId: PJ, action: 'list' }, 'read'],
   ['manage_brand_assets', { projectId: PJ, action: 'update', brandAssetId: ulid('BA1'), name: 'ロゴ' }, 'write'],
   ['manage_brand_assets', { projectId: PJ, action: 'delete', brandAssetId: ulid('BA1') }, 'destructive'],
-  ['review_take', { takeId: ulid('TK1') }, 'costly'],
-  ['review_take', { takeId: ulid('TK1'), verdict: 'approved' }, 'write'],
+  ['review_take', { projectId: PJ, shotId: ulid('SH1'), takeId: ulid('TK1') }, 'costly'],
+  ['review_take', { projectId: PJ, shotId: ulid('SH1'), takeId: ulid('TK1'), verdict: 'approved' }, 'write'],
   ['restructure_shots', { projectId: PJ, action: 'delete', shotIds: [ulid('SH1')] }, 'destructive'],
   ['restructure_shots', { projectId: PJ, action: 'insert', code: 'CUT12', startSec: 1, durationSec: 2 }, 'write'],
   ['restructure_shots', { projectId: PJ, action: 'split', shotId: ulid('SH1'), atSec: 1.5 }, 'write'],
@@ -100,6 +102,10 @@ const CALLS: readonly (readonly [string, Record<string, unknown>, string])[] = [
   ['align_to_music', { projectId: PJ, action: 'trim_music' }, 'write'],
   ['set_narration', { projectId: PJ, action: 'show' }, 'read'],
   ['set_narration', { projectId: PJ, action: 'reorder', lineIds: [ulid('NA1')] }, 'write'],
+  ['set_narration', { projectId: PJ, action: 'readings', readings: { set: [{ written: '戦子', reading: 'せんこ' }] } }, 'write'],
+  ['set_narration', { projectId: PJ, action: 'readings', readings: { remove: ['戦子'] } }, 'destructive'],
+  ['update_project', { projectId: PJ, name: '新曲' }, 'write'],
+  ['update_project', { projectId: PJ, budgetUsd: 10 }, 'settings'],
   // 入力が読めなければ静的な印に倒す（確認が出る側）。
   ['edit_character', { action: 'update' }, 'destructive'],
   ['review_take', { takeId: 'not-an-id', verdict: 'approved' }, 'costly'],

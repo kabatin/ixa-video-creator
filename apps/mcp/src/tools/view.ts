@@ -5,7 +5,8 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import { downloadMedia, extensionFor } from '../lib/media-io.js'
-import { WireMediaAsset, WireRenderJob, WireStartFrame, WireTake } from '../wire.js'
+import { assertListed, assertMediaInProject, assertShotsInProject, assertTakesOfShot } from '../lib/project-scope.js'
+import { WireMediaAsset, WireRenderJob, WireStartFrame } from '../wire.js'
 import { defineTool, Id, ToolInputError, type ToolDeps } from '../tool-def.js'
 
 /**
@@ -14,6 +15,7 @@ import { defineTool, Id, ToolInputError, type ToolDeps } from '../tool-def.js'
  */
 
 export const ViewInput = z.object({
+  projectId: Id,
   shotId: Id.optional().describe('Alone: the start frame of this shot. With takeId: that take.'),
   takeId: Id.optional(),
   renderJobId: Id.optional().describe('A finished export.'),
@@ -30,19 +32,25 @@ const targetOf = async (api: ApiClient, args: ViewArgs): Promise<Target> => {
   if (chosen.length !== 1) {
     throw new ToolInputError('shotId（+takeId）・renderJobId・mediaAssetId のどれか 1 つを指定してください')
   }
-  if (args.mediaAssetId !== undefined) return { mediaAssetId: args.mediaAssetId, what: { mediaAssetId: args.mediaAssetId } }
+  // 別の作品の絵・動画は取り出さない（素材の URL を引く前に確かめる）。
+  if (args.mediaAssetId !== undefined) {
+    await assertMediaInProject(api, args.projectId, [args.mediaAssetId])
+    return { mediaAssetId: args.mediaAssetId, what: { mediaAssetId: args.mediaAssetId } }
+  }
   if (args.renderJobId !== undefined) {
+    await assertListed(api, `/projects/${seg(args.projectId)}/renders`, [args.renderJobId], '書き出し')
     const job = await api.get(`/renders/${seg(args.renderJobId)}`, WireRenderJob)
     if (job.outputAssetId === null) throw new ToolInputError(`書き出しはまだ終わっていません（${job.status}）`)
     return { mediaAssetId: job.outputAssetId, what: { renderJobId: args.renderJobId } }
   }
   const shotId = args.shotId as string
   if (args.takeId !== undefined) {
-    const takes = await api.get(`/shots/${seg(shotId)}/takes`, z.array(WireTake))
+    const takes = await assertTakesOfShot(api, args.projectId, shotId, [args.takeId])
     const take = takes.find((t) => t.id === args.takeId)
     if (take === undefined) throw new ToolInputError('その Take はこの Shot にありません')
     return { mediaAssetId: take.mediaAssetId, what: { shotId, takeId: take.id } }
   }
+  await assertShotsInProject(api, args.projectId, [shotId])
   const frame = await api.get(`/shots/${seg(shotId)}/start-frame`, WireStartFrame)
   if (frame.mediaAssetId === null) {
     throw new ToolInputError('この Shot には最初のコマがありません（draw_start_frames で描く。Take を見るなら takeId も）')

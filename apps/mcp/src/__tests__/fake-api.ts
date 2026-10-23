@@ -143,3 +143,28 @@ export const takeRow = (id: string, parentTakeId: string | null, reason: string 
   humanVerdict: 'unreviewed',
   createdAt: '2026-10-17T00:00:00Z',
 })
+
+/** 作品の Shot の一覧の口（lib/project-scope.ts の確かめに使う）。行は Shot の応答の最小の形。 */
+export const ownedShots = (projectId: string, shotIds: readonly string[]): Route => ({
+  method: 'GET',
+  path: `/projects/${projectId}/shots`,
+  data: shotIds.map((id, order) => ({
+    id,
+    order,
+    code: `CUT${String(order + 1)}`,
+    startSec: order * 2,
+    durationSec: 2,
+    mood: null,
+    camera: { size: 'wide', angleH: null, angle: null, lensMm: null, movement: null, movementIntensity: null },
+    locationId: null,
+    selectedTakeId: null,
+    status: 'draft',
+  })),
+})
+
+/** どの素材も `projectId` の作品のものとして答える `GET /media/{id}`。 */
+export const ownedMedia = (projectId: string | null): Route => ({
+  method: 'GET',
+  path: /^\/media\/[0-9A-HJKMNP-TV-Z]{26}$/,
+  data: { id: ulid('MD0'), projectId },
+})

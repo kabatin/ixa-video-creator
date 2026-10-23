@@ -9,6 +9,7 @@ import {
 } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
+import { assertListed, assertLooksOfCharacter, assertShotsInProject } from '../lib/project-scope.js'
 import { bulkResult, WireLook, WireShot, WireShotCharacter, WireTransition } from '../wire.js'
 import { defineTool, describeError, Id, jsonResult, mapLimited, ToolInputError } from '../tool-def.js'
 
@@ -120,17 +121,40 @@ const patchEach = async (api: ApiClient, shotIds: readonly string[], patch: Read
     ),
   )
 
-const defaultLookId = async (api: ApiClient, characterId: string): Promise<string> => {
-  const looks = await api.get(`/characters/${seg(characterId)}/looks`, z.array(WireLook))
-  const look = looks.find((l) => l.isDefault === true) ?? looks[0]
+type LooksByCharacter = ReadonlyMap<string, readonly z.infer<typeof WireLook>[]>
+type CastEntries = readonly { characterId: string; lookId: string; prominence: string; order: number }[]
+
+/**
+ * 書く前に、全部の edit の ID がこの作品のものかを確かめる（途中まで直してから断らない）。
+ * 作品の Shot の一覧と、登場人物のキャラクターごとの Look の一覧を返す。
+ */
+const assertEditsInProject = async (api: ApiClient, projectId: string, edits: readonly EditInput[]) => {
+  const locationIds = edits.flatMap((e) => (e.locationId === undefined || e.locationId === null ? [] : [e.locationId]))
+  const cast = edits.flatMap((e) => e.cast ?? [])
+  const characterIds = [...new Set(cast.map((c) => c.characterId))]
+  const [shots] = await Promise.all([
+    assertShotsInProject(api, projectId, edits.flatMap((e) => e.shotIds)),
+    locationIds.length === 0 ? null : assertListed(api, `/projects/${seg(projectId)}/locations`, locationIds, '場所'),
+    characterIds.length === 0 ? null : assertListed(api, `/projects/${seg(projectId)}/characters`, characterIds, 'キャラクター'),
+  ])
+  const looks = await mapLimited(characterIds, 4, async (characterId) => {
+    const lookIds = cast.flatMap((c) => (c.characterId === characterId && c.lookId !== undefined ? [c.lookId] : []))
+    return [characterId, await assertLooksOfCharacter(api, characterId, lookIds, WireLook)] as const
+  })
+  return { shots, looks: new Map(looks) as LooksByCharacter }
+}
+
+const defaultLookId = (looks: LooksByCharacter, characterId: string): string => {
+  const own = looks.get(characterId) ?? []
+  const look = own.find((l) => l.isDefault === true) ?? own[0]
   if (look === undefined) throw new ToolInputError(`キャラクター ${characterId} に Look がありません`)
   return look.id
 }
 
-const castEntries = async (api: ApiClient, cast: NonNullable<EditInput['cast']>) =>
-  mapLimited(cast, 4, async (entry, i) => ({
+const castEntries = (looks: LooksByCharacter, cast: NonNullable<EditInput['cast']>): CastEntries =>
+  cast.map((entry, i) => ({
     characterId: entry.characterId,
-    lookId: entry.lookId ?? (await defaultLookId(api, entry.characterId)),
+    lookId: entry.lookId ?? defaultLookId(looks, entry.characterId),
     prominence: entry.prominence ?? (i === 0 ? 'primary' : 'secondary'),
     order: i,
   }))
@@ -163,7 +187,13 @@ const replaceTransition = async (
   return transition.type
 }
 
-const applyEdit = async (api: ApiClient, projectId: string, edit: EditInput, ordered: readonly z.infer<typeof WireShot>[]) => {
+const applyEdit = async (
+  api: ApiClient,
+  projectId: string,
+  edit: EditInput,
+  entries: CastEntries | null,
+  ordered: readonly z.infer<typeof WireShot>[],
+) => {
   const patch = patchOf(edit)
   const patched =
     Object.keys(patch).length === 0
@@ -177,7 +207,6 @@ const applyEdit = async (api: ApiClient, projectId: string, edit: EditInput, ord
     r.ok ? [] : [{ shotId: r.shotId, reason: r.reason }],
   )
 
-  const entries = edit.cast === undefined ? null : await castEntries(api, edit.cast)
   if (entries !== null) {
     await mapLimited(edit.shotIds, 4, (shotId) =>
       api.request('PUT', `/shots/${seg(shotId)}/characters`, z.array(WireShotCharacter), { body: { entries } }),
@@ -220,10 +249,11 @@ export const editShotsTool = defineTool({
     edits.forEach((edit) => edit.transitionToNext !== undefined && transitionDurationSec(edit.transitionToNext))
     const timeProblem = edits.map(timeEditProblem).find((p) => p !== null)
     if (timeProblem !== undefined) throw new ToolInputError(timeProblem)
-    const shots = await api.get(`/projects/${seg(projectId)}/shots`, z.array(WireShot))
+    const { shots, looks } = await assertEditsInProject(api, projectId, edits)
+    const casts = edits.map((edit) => (edit.cast === undefined ? null : castEntries(looks, edit.cast)))
     const ordered = [...shots].sort((a, b) => a.order - b.order)
     const results = await edits.reduce<Promise<readonly unknown[]>>(
-      async (done, edit) => [...(await done), await applyEdit(api, projectId, edit, ordered)],
+      async (done, edit, i) => [...(await done), await applyEdit(api, projectId, edit, casts[i] ?? null, ordered)],
       Promise.resolve([]),
     )
     return jsonResult({ results })

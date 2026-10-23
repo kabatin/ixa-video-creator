@@ -8,6 +8,7 @@ import {
 } from '@ixa/domain'
 import { z } from 'zod'
 import { IxaApiError, seg, type ApiClient } from '../api-client.js'
+import { assertListed } from '../lib/project-scope.js'
 import { WireShot } from '../wire.js'
 import { defineTool, Id, jsonResult, mapLimited, round, ToolInputError } from '../tool-def.js'
 
@@ -205,12 +206,12 @@ export const removeEffectsTool = defineTool({
     'removed; other ids are refused with a reason. Returns removed ids and failures.',
   input: RemoveEffectsInput,
   handler: async ({ projectId, effectIds }, { api }) => {
-    const clips = await api.get(`/projects/${seg(projectId)}/clips`, z.array(WireEffectClip))
+    // 作品の外のクリップが 1 つでもあれば、何も消さずに断る。
+    const clips = await assertListed(api, `/projects/${seg(projectId)}/clips`, effectIds, 'クリップ', WireEffectClip)
     const byId = new Map(clips.map((clip) => [clip.id, clip]))
     const results = await mapLimited(effectIds, 4, async (id) => {
       const clip = byId.get(id)
-      if (clip === undefined) return { ok: false as const, id, reason: 'この作品にそのクリップはありません' }
-      if (!isEffectClip(clip)) return { ok: false as const, id, reason: 'エフェクトではないクリップは消しません（テロップ・効果音など）' }
+      if (clip === undefined || !isEffectClip(clip)) return { ok: false as const, id, reason: 'エフェクトではないクリップは消しません（テロップ・効果音など）' }
       try {
         await api.request('DELETE', `/clips/${seg(id)}`, z.unknown())
         return { ok: true as const, id }

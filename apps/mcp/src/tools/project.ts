@@ -107,10 +107,12 @@ export const UpdateProjectInput = z.object({
 
 export const updateProjectTool = defineTool({
   name: 'update_project',
-  risk: 'write',
+  // 予算（budgetUsd）は使えるお金の上限を変えるので設定として確認する。それ以外の直しはふつうの書き込み。
+  risk: 'settings',
+  riskOf: (args) => (args.budgetUsd === undefined ? 'write' : 'settings'),
   description:
-    'Change project settings: name, concept (new script version), styleGuide, avoid, style reference images ' +
-    '(replaces all, max 3), target duration, budget, instrumental, status. Only the given fields change.',
+    'Change project settings: name, concept (new script version; not undoable), styleGuide, avoid, style reference ' +
+    'images (replaces all, max 3), target duration, budget, instrumental, status. Only the given fields change.',
   input: UpdateProjectInput,
   handler: async ({ projectId, concept, styleReferences, ...fields }, { api, workspaceId }) => {
     const styleReferenceAssetIds =

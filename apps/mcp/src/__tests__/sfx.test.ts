@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { waitWith } from '../tools/wait.js'
 import { GenerateSfxInput, generateSfxTool, listSfxTool, removeSfxTool, suggestSfxTool } from '../tools/sfx.js'
-import { createFakeApi, depsFor, jsonOf, ulid } from './fake-api.js'
+import { createFakeApi, depsFor, jsonOf, textOf, ulid } from './fake-api.js'
 
 /** 効果音（ADR-0052）。きっかけは domain の `SfxCue` で確かめ、置いた音は SFX の段の media クリップ。 */
 
@@ -10,6 +10,7 @@ const JOB_A = ulid('SJA')
 const JOB_B = ulid('SJB')
 const CLIP_A = ulid('CA1')
 const CLIP_B = ulid('CB1')
+const FOREIGN = ulid('ZZ9')
 
 describe('generate_sfx', () => {
   it('きっかけをそのまま送り（音量は既定 0.8）、モデルは tool として渡す。待つ先を返す', async () => {
@@ -112,6 +113,16 @@ describe('list_sfx / remove_sfx', () => {
     expect(result.failures[0]?.reason).toMatch(/効果音ではない/)
     expect(fake.callsTo('DELETE', `/clips/${ulid('FX1')}`)).toEqual([])
   })
+
+  it('この作品に無いクリップが 1 つでもあれば、何も消さずに断る', async () => {
+    const fake = createFakeApi([
+      { method: 'GET', path: `/projects/${PROJECT}/clips`, data: clips },
+      { method: 'DELETE', path: /\/clips\//, status: 204 },
+    ])
+    const result = await removeSfxTool.run({ projectId: PROJECT, clipIds: [CLIP_A, FOREIGN] }, depsFor(fake))
+    expect(textOf(result)).toContain(`この作品に無いクリップです: ${FOREIGN}`)
+    expect(fake.callsTo('DELETE', /\/clips\//)).toEqual([])
+  })
 })
 
 describe('wait（kind: sfx）', () => {
@@ -126,8 +137,10 @@ describe('wait（kind: sfx）', () => {
         ],
       },
       { method: 'GET', path: `/sfx-jobs/${JOB_B}`, data: { status: 'failed', error: '効果音を作れませんでした', timelineClipId: null, mediaAssetIds: [], seedsUsed: [] } },
+      { method: 'GET', path: `/projects/${PROJECT}/sfx-jobs`, data: [{ id: JOB_A }, { id: JOB_B }] },
     ])
     const outcome = await waitWith(depsFor(fake), {
+      projectId: PROJECT,
       jobs: [
         { kind: 'sfx', id: JOB_A },
         { kind: 'sfx', id: JOB_B },

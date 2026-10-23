@@ -5,7 +5,7 @@ import { runFfmpeg } from '@ixa/media'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createFfmpegFrameExtractor, framePositions, type FrameExtractor } from '../lib/frames.js'
 import { viewTool } from '../tools/view.js'
-import { createFakeApi, depsFor, takeRow, textOf, TOKEN, ulid } from './fake-api.js'
+import { createFakeApi, depsFor, ownedMedia, ownedShots, takeRow, textOf, TOKEN, ulid } from './fake-api.js'
 
 const JPEG_MAGIC = [0xff, 0xd8, 0xff]
 
@@ -59,9 +59,11 @@ describe('ffmpeg での切り出し（本物の ffmpeg）', () => {
   })
 })
 
+const PROJECT = ulid('PJ1')
 const SHOT = ulid('SH1')
 const TAKE = ulid('TK1')
 const MEDIA = ulid('MD9')
+const owned = ownedShots(PROJECT, [SHOT])
 
 const recordingExtractor = (): FrameExtractor & { readonly calls: string[] } => {
   const calls: string[] = []
@@ -84,6 +86,7 @@ const LAST_FRAME = ulid('MDF')
 
 describe('view ツール', () => {
   const routes = [
+    owned,
     { method: 'GET', path: `/shots/${SHOT}/takes`, data: [{ ...takeRow(TAKE, null, null), mediaAssetId: MEDIA }] },
     { method: 'GET', path: `/media/${MEDIA}`, data: { id: MEDIA, kind: 'video', mimeType: 'video/mp4', lastFrameAssetId: LAST_FRAME } },
     { method: 'GET', path: `/media/${MEDIA}/url`, data: { url: '/files/clip.mp4?sig=SIGNED', expiresInSec: 600 } },
@@ -93,7 +96,7 @@ describe('view ツール', () => {
   it('Take の動画を取り出し、指定の枚数を image content で返す（URL・鍵は返さない）', async () => {
     const fake = createFakeApi(routes)
     const frames = recordingExtractor()
-    const result = await viewTool.run({ shotId: SHOT, takeId: TAKE, frames: 2, width: 512 }, depsFor(fake, { frames }))
+    const result = await viewTool.run({ projectId: PROJECT, shotId: SHOT, takeId: TAKE, frames: 2, width: 512 }, depsFor(fake, { frames }))
     expect(result.isError).toBeUndefined()
     expect(frames.calls).toEqual(['video mp4 2 512'])
     expect(result.content.filter((c) => c.type === 'image')).toHaveLength(2)
@@ -109,26 +112,47 @@ describe('view ツール', () => {
   it('shotId だけなら最初のコマを 1 枚', async () => {
     const IMAGE = ulid('MDA')
     const fake = createFakeApi([
+      owned,
       { method: 'GET', path: `/shots/${SHOT}/start-frame`, data: { mediaAssetId: IMAGE, job: null } },
       { method: 'GET', path: `/media/${IMAGE}`, data: { id: IMAGE, kind: 'image', mimeType: 'image/png' } },
       { method: 'GET', path: `/media/${IMAGE}/url`, data: { url: '/files/a.png', expiresInSec: 600 } },
       { method: 'GET', path: '/files/a.png', bytes: new Uint8Array([1]) },
     ])
     const frames = recordingExtractor()
-    const result = await viewTool.run({ shotId: SHOT }, depsFor(fake, { frames }))
+    const result = await viewTool.run({ projectId: PROJECT, shotId: SHOT }, depsFor(fake, { frames }))
     expect(frames.calls).toEqual(['image 768'])
     expect(result.content).toHaveLength(2)
   })
 
   it('最初のコマが無ければ描くよう促す', async () => {
-    const fake = createFakeApi([{ method: 'GET', path: `/shots/${SHOT}/start-frame`, data: { mediaAssetId: null, job: null } }])
-    const result = await viewTool.run({ shotId: SHOT }, depsFor(fake))
+    const fake = createFakeApi([owned, { method: 'GET', path: `/shots/${SHOT}/start-frame`, data: { mediaAssetId: null, job: null } }])
+    const result = await viewTool.run({ projectId: PROJECT, shotId: SHOT }, depsFor(fake))
     expect(result.isError).toBe(true)
     expect(textOf(result)).toContain('draw_start_frames')
   })
 
   it('見る対象は 1 つだけ', async () => {
-    const result = await viewTool.run({ shotId: SHOT, mediaAssetId: MEDIA }, depsFor(createFakeApi([])))
+    const result = await viewTool.run({ projectId: PROJECT, shotId: SHOT, mediaAssetId: MEDIA }, depsFor(createFakeApi([])))
     expect(textOf(result)).toContain('どれか 1 つ')
+  })
+
+  /** 別の作品の絵・動画は取り出さない（素材の URL を引く前に断る）。 */
+  it('別の作品の Shot・その Shot に無い Take・別の作品の書き出しや素材は見せない', async () => {
+    const OTHER = ulid('SX1')
+    const RENDER = ulid('RN1')
+    const fake = createFakeApi([
+      owned,
+      { method: 'GET', path: `/shots/${SHOT}/takes`, data: [{ ...takeRow(TAKE, null, null), mediaAssetId: MEDIA }] },
+      { method: 'GET', path: `/projects/${PROJECT}/renders`, data: [] },
+      ownedMedia(ulid('PJ2')),
+    ])
+    const deps = depsFor(fake)
+    expect(textOf(await viewTool.run({ projectId: PROJECT, shotId: OTHER }, deps))).toContain(OTHER)
+    expect(textOf(await viewTool.run({ projectId: PROJECT, shotId: OTHER, takeId: TAKE }, deps))).toContain(OTHER)
+    expect(textOf(await viewTool.run({ projectId: PROJECT, shotId: SHOT, takeId: ulid('TX1') }, deps))).toContain(ulid('TX1'))
+    expect(textOf(await viewTool.run({ projectId: PROJECT, renderJobId: RENDER }, deps))).toContain(RENDER)
+    expect(textOf(await viewTool.run({ projectId: PROJECT, mediaAssetId: MEDIA }, deps))).toContain(MEDIA)
+    expect(fake.callsTo('GET', /\/(url|start-frame)$/)).toHaveLength(0)
+    expect(fake.callsTo('GET', `/renders/${RENDER}`)).toHaveLength(0)
   })
 })

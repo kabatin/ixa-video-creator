@@ -48,16 +48,18 @@ export const setLyricsTool = defineTool({
     'turn timed lines into lyric telops (placeTelops). Lyric telops use the saved style named 歌詞 if it exists.',
   input: SetLyricsInput,
   handler: async ({ projectId, lyrics, lyricCues, instrumental, placeTelops }, { api }) => {
+    // 送るのは丸めた秒なので、確かめも丸めた後の値で（丸めて重なる・逆転する時刻を通さない）。
+    const cues = lyricCues?.map((cue) => round(cue))
     const patch = {
       ...(lyrics === undefined ? {} : { lyrics }),
-      ...(lyricCues === undefined ? {} : { lyricCues: lyricCues.map((cue) => round(cue)) }),
+      ...(cues === undefined ? {} : { lyricCues: cues }),
       ...(instrumental === undefined ? {} : { instrumental }),
     }
     if (Object.keys(patch).length === 0 && !placeTelops) {
       throw new ToolInputError('lyrics・lyricCues・instrumental のどれかを送るか、placeTelops: true にしてください')
     }
-    if (lyricCues !== undefined) {
-      const problem = lyricCuesProblem(lyricCues)
+    if (cues !== undefined) {
+      const problem = lyricCuesProblem(cues)
       if (problem !== null) throw new ToolInputError(`lyricCues: ${problem}`)
     }
     const project =

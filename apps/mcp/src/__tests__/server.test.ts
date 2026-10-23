@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { describe, expect, it } from 'vitest'
 import { createServer, TOOLS } from '../server.js'
-import { createFakeApi, depsFor, TOKEN, ulid } from './fake-api.js'
+import { createFakeApi, depsFor, ownedShots, TOKEN, ulid } from './fake-api.js'
 
 /** MCP の手順（初期化 → 一覧 → 呼び出し）を、本物の SDK のクライアントで通す。 */
 const connect = async (fake: ReturnType<typeof createFakeApi>) => {
@@ -29,6 +29,7 @@ describe('MCP サーバ', () => {
   it('呼び出しを API へ通し、短い JSON の text を返す', async () => {
     const PROJECT = ulid('PJ1')
     const fake = createFakeApi([
+      ownedShots(PROJECT, [ulid('SH1')]),
       { method: 'POST', path: `/projects/${PROJECT}/start-frames/generate`, status: 202, data: { jobIds: [], skipped: { drawing: 0, hasFrame: 1 } } },
     ])
     const client = await connect(fake)

@@ -1,8 +1,9 @@
 import { z } from 'zod'
 import { seg } from '../api-client.js'
 import { ImageSource, resolveImage } from '../lib/image-source.js'
-import { WireShot, WireStartFrameHistory } from '../wire.js'
-import { defineTool, Id, jsonResult } from '../tool-def.js'
+import { assertImageJobInProject, assertShotsInProject } from '../lib/project-scope.js'
+import { WireStartFrameHistory } from '../wire.js'
+import { defineTool, Id, jsonResult, ToolInputError } from '../tool-def.js'
 
 /**
  * 最初のコマ（動画を作る前の 1 枚）。画像の AI で描くか、手持ちの画像を使う。
@@ -22,13 +23,15 @@ export const drawStartFramesTool = defineTool({
     'and location. The video is then generated from this frame, so check it with view before generate_takes. ' +
     'onlyMissing=false redraws; shots already drawing are skipped. Each drawing is checked for obvious defects ' +
     '(local image AIs redraw failed ones automatically). Then wait {kind:"start_frame", id: shotId} (or {projectId}); ' +
-    'the result carries the check (mark pass/review/retry/unchecked, issues).',
+    'the result carries the check (mark pass/review/retry/unchecked, issues). The new frame is not undoable ' +
+    '(switch back with use_start_frame).',
   input: z.object({
     projectId: Id,
     shotIds: z.array(Id).min(1).max(100),
     onlyMissing: z.boolean().default(true),
   }),
   handler: async ({ projectId, shotIds, onlyMissing }, { api }) => {
+    await assertShotsInProject(api, projectId, shotIds)
     const started = await api.post(
       `/projects/${seg(projectId)}/start-frames/generate`,
       { shotIds, onlyMissing },
@@ -48,10 +51,10 @@ export const setStartFrameTool = defineTool({
   description:
     "Use an existing image as a shot's start frame: a media asset id, another shot's start frame " +
     '(for visual continuity) or a local image file.',
-  input: ImageSource.extend({ shotId: Id }),
-  handler: async ({ shotId, ...source }, { api, workspaceId }) => {
-    const shot = await api.get(`/shots/${seg(shotId)}`, WireShot.extend({ projectId: z.string() }))
-    const mediaAssetId = await resolveImage(api, source, { workspaceId, projectId: shot.projectId })
+  input: ImageSource.extend({ projectId: Id, shotId: Id }),
+  handler: async ({ projectId, shotId, ...source }, { api, workspaceId }) => {
+    await assertShotsInProject(api, projectId, [shotId])
+    const mediaAssetId = await resolveImage(api, source, { workspaceId, projectId })
     const saved = await api.request('PUT', `/shots/${seg(shotId)}/start-frame`, z.object({ mediaAssetId: z.string().nullable() }), {
       body: { mediaAssetId },
     })
@@ -66,8 +69,9 @@ export const listStartFrameHistoryTool = defineTool({
     'List every start frame drawn for a shot, oldest first, with its check (mark pass/review/retry/unchecked, issues), ' +
     'whether it is the one in use (current), and the attempt number. View one with view {mediaAssetId}; switch with ' +
     'use_start_frame.',
-  input: z.object({ shotId: Id }),
-  handler: async ({ shotId }, { api }) => {
+  input: z.object({ projectId: Id, shotId: Id }),
+  handler: async ({ projectId, shotId }, { api }) => {
+    await assertShotsInProject(api, projectId, [shotId])
     const history = await api.get(`/shots/${seg(shotId)}/start-frame/history`, WireStartFrameHistory)
     const drawn = history.items
       .filter((item) => item.mediaAssetId !== null)
@@ -83,8 +87,9 @@ export const useStartFrameTool = defineTool({
   description:
     "Switch a shot's start frame to one from its history (jobId from list_start_frame_history). It is recorded as an " +
     'edit, so the user can undo it.',
-  input: z.object({ shotId: Id, jobId: Id }),
-  handler: async ({ shotId, jobId }, { api }) => {
+  input: z.object({ projectId: Id, shotId: Id, jobId: Id }),
+  handler: async ({ projectId, shotId, jobId }, { api }) => {
+    await assertShotsInProject(api, projectId, [shotId])
     const history = await api.get(`/shots/${seg(shotId)}/start-frame/history`, WireStartFrameHistory)
     const chosen = history.items.find((item) => item.jobId === jobId)
     if (chosen?.mediaAssetId === undefined || chosen.mediaAssetId === null) {
@@ -103,9 +108,19 @@ export const retryImageTool = defineTool({
   description:
     'Redraw an image job (start frame, character sheet or key art) with the same image AI, adding the check\'s fix to ' +
     'the instruction. Use it when a check says retry/review and the image AI did not retry automatically (cloud AIs ' +
-    'with usage limits never retry on their own). For a start frame, then wait {kind:"start_frame", id: shotId}.',
-  input: z.object({ jobId: Id }),
-  handler: async ({ jobId }, { api }) => {
+    'with usage limits never retry on their own). Give the owner: shotId for a start frame, characterId for a character ' +
+    'sheet, neither for key art. For a start frame, then wait {kind:"start_frame", id: shotId}. The new image is not undoable.',
+  input: z.object({
+    projectId: Id,
+    jobId: Id,
+    shotId: Id.optional().describe('The shot of a start frame job.'),
+    characterId: Id.optional().describe('The character of a character sheet job.'),
+  }),
+  handler: async ({ projectId, jobId, shotId, characterId }, { api }) => {
+    if (shotId !== undefined && characterId !== undefined) {
+      throw new ToolInputError('shotId と characterId はどちらか一方だけ（キーアートはどちらも無し）')
+    }
+    await assertImageJobInProject(api, projectId, jobId, { shotId, characterId })
     const started = await api.post(`/image-jobs/${seg(jobId)}/retry`, {}, z.object({ jobId: z.string() }))
     return jsonResult({ retryOf: jobId, jobId: started.jobId })
   },

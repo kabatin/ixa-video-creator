@@ -4,6 +4,7 @@ import { seg, type ApiClient } from '../api-client.js'
 import { ToolInputError } from '../tool-def.js'
 import { WireStartFrame } from '../wire.js'
 import { uploadLocalFile } from './media-io.js'
+import { assertMediaInProject, assertShotsInProject } from './project-scope.js'
 
 /**
  * 画像の出どころ。素材の ID・ある Shot の最初のコマ・手元のファイルのどれか 1 つ。
@@ -30,8 +31,13 @@ export const resolveImage = async (
   if (given.length !== 1) {
     throw new ToolInputError('画像は mediaAssetId・fromShotStartFrame・imagePath のどれか 1 つで指定してください')
   }
-  if (source.mediaAssetId !== undefined) return source.mediaAssetId
+  // 別の作品の素材・Shot を ID で持ち込ませない（lib/project-scope.ts）。
+  if (source.mediaAssetId !== undefined) {
+    await assertMediaInProject(api, context.projectId, [source.mediaAssetId])
+    return source.mediaAssetId
+  }
   if (source.fromShotStartFrame !== undefined) {
+    await assertShotsInProject(api, context.projectId, [source.fromShotStartFrame])
     const frame = await api.get(`/shots/${seg(source.fromShotStartFrame)}/start-frame`, WireStartFrame)
     if (frame.mediaAssetId === null) throw new ToolInputError('その Shot には最初のコマがありません')
     return frame.mediaAssetId

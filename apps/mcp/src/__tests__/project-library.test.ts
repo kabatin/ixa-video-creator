@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { importFromProjectTool, duplicateProjectTool } from '../tools/project-copy.js'
 import { updateProjectTool } from '../tools/project.js'
 import { editLocationTool, manageBrandAssetsTool } from '../tools/library-edit.js'
-import { createFakeApi, depsFor, jsonOf, textOf, ulid, WORKSPACE } from './fake-api.js'
+import { createFakeApi, depsFor, jsonOf, textOf, ulid, WORKSPACE, ownedMedia } from './fake-api.js'
 
 const PROJECT = ulid('PJ1')
 const OTHER = ulid('PJ2')
@@ -26,6 +26,7 @@ describe('update_project', () => {
   it('渡した項目だけを PATCH し、手本画像は素材の ID に直し、コンセプトは脚本の版を積む', async () => {
     const fake = createFakeApi([
       { method: 'PATCH', path: `/projects/${PROJECT}`, data: projectRow({ styleGuide: '水彩', durationSec: 116 }) },
+      ownedMedia(PROJECT),
       { method: 'POST', path: `/projects/${PROJECT}/script/versions`, status: 201, data: { version: { content: 'c' } } },
     ])
     const result = jsonOf(
@@ -64,6 +65,24 @@ describe('update_project', () => {
       expect(result.isError).toBe(true)
     }
     expect(fake.calls).toHaveLength(0)
+  })
+})
+
+describe('update_project の確かめと危険度', () => {
+  it('別の作品の素材を手本画像にしようとしたら PATCH しない', async () => {
+    const fake = createFakeApi([ownedMedia(OTHER)])
+    const result = await updateProjectTool.run({ projectId: PROJECT, styleReferences: [{ mediaAssetId: ASSET }] }, depsFor(fake))
+    expect(textOf(result)).toContain('この作品に無い素材')
+    expect(fake.calls.filter((c) => c.method !== 'GET')).toHaveLength(0)
+  })
+
+  it('予算を含むときだけ設定として確認し、ほかの直しはふつうの書き込み', () => {
+    expect(updateProjectTool.risk).toBe('settings')
+    expect(updateProjectTool.riskOf({ projectId: PROJECT, budgetUsd: 20 })).toBe('settings')
+    expect(updateProjectTool.riskOf({ projectId: PROJECT, budgetUsd: null })).toBe('settings')
+    expect(updateProjectTool.riskOf({ projectId: PROJECT, name: '新しい名前' })).toBe('write')
+    // 読めない入力は重い方に倒す。
+    expect(updateProjectTool.riskOf({ projectId: PROJECT, budgetUsd: -1 })).toBe('settings')
   })
 })
 
@@ -114,6 +133,7 @@ describe('import_from_project', () => {
 
   it('import は取り込み先の口へ選んだものを送る', async () => {
     const fake = createFakeApi([
+      { method: 'GET', path: `/projects/${OTHER}/characters`, data: [{ id: ulid('CH1'), name: 'hero', displayName: '戦子' }] },
       {
         method: 'POST',
         path: `/projects/${PROJECT}/library-imports`,
@@ -141,6 +161,25 @@ describe('import_from_project', () => {
     })
   })
 
+  it('取り込み元の作品に無いものは取り込まない', async () => {
+    const base = `/projects/${OTHER}`
+    const fake = createFakeApi([
+      { method: 'GET', path: `${base}/characters`, data: [{ id: ulid('CH1'), name: 'hero', displayName: '戦子' }] },
+      { method: 'GET', path: `${base}/sfx-jobs`, data: [{ id: ulid('SJ1'), prompt: '剣', mediaAssetIds: [ulid('MA1')] }] },
+    ])
+    const character = await importFromProjectTool.run(
+      { projectId: PROJECT, sourceProjectId: OTHER, action: 'import', characterIds: [ulid('CH1'), ulid('CH3')] },
+      depsFor(fake),
+    )
+    expect(textOf(character)).toContain(ulid('CH3'))
+    const sound = await importFromProjectTool.run(
+      { projectId: PROJECT, sourceProjectId: OTHER, action: 'import', sfxSounds: [{ sfxJobId: ulid('SJ1'), mediaAssetId: ulid('MA2') }] },
+      depsFor(fake),
+    )
+    expect(textOf(sound)).toContain('効果音')
+    expect(fake.calls.filter((c) => c.method !== 'GET')).toHaveLength(0)
+  })
+
   it('何も選ばない・取り込み元と先が同じなら断る', async () => {
     const fake = createFakeApi([])
     const empty = await importFromProjectTool.run({ projectId: PROJECT, sourceProjectId: OTHER, action: 'import' }, depsFor(fake))
@@ -157,6 +196,7 @@ describe('edit_location', () => {
   it('参考画像を差し替え、渡した項目だけ PATCH する', async () => {
     const fake = createFakeApi([
       listed,
+      ownedMedia(PROJECT),
       { method: 'PATCH', path: `/locations/${LOC}`, data: { id: LOC, name: '夜の校庭', referenceAssetIds: [ASSET] } },
     ])
     jsonOf(
@@ -171,7 +211,7 @@ describe('edit_location', () => {
   it('この作品の一覧に無い場所は消さない', async () => {
     const fake = createFakeApi([{ ...listed, data: [] }])
     const result = await editLocationTool.run({ projectId: PROJECT, locationId: LOC, action: 'delete' }, depsFor(fake))
-    expect(textOf(result)).toContain('この作品のものではありません')
+    expect(textOf(result)).toContain('この作品に無い場所')
     expect(fake.callsTo('DELETE', `/locations/${LOC}`)).toHaveLength(0)
   })
 })

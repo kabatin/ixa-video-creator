@@ -2,12 +2,13 @@ import { BrandCategory } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import { ImageSource, resolveImage } from '../lib/image-source.js'
+import { assertListed } from '../lib/project-scope.js'
 import { WireLocation } from '../wire.js'
 import { defineTool, Id, jsonResult, mapLimited, ToolInputError } from '../tool-def.js'
 
 /**
  * 場所とブランド資産（ロゴ・色・フォントなど）を直す・消す。
- * ID だけで別の作品のものを触らないよう、先に `projectId` の一覧にあるかを確かめる。
+ * ID だけで別の作品のものを触らないよう、先に `projectId` の一覧にあるかを確かめる（lib/project-scope.ts）。
  */
 
 const Deleted = z.unknown()
@@ -21,18 +22,6 @@ const WireBrandAsset = z.object({
   usageRule: z.string().optional(),
 })
 type WireBrandAsset = z.infer<typeof WireBrandAsset>
-
-const ensureListed = async <T extends { readonly id: string }>(
-  api: ApiClient,
-  path: string,
-  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
-  id: string,
-  message: string,
-): Promise<T> => {
-  const found = (await api.get(path, z.array(schema))).find((row) => row.id === id)
-  if (found === undefined) throw new ToolInputError(message)
-  return found
-}
 
 export const EditLocationInput = z.object({
   projectId: Id,
@@ -52,7 +41,7 @@ export const editLocationTool = defineTool({
     '(undoable from the edit history).',
   input: EditLocationInput,
   handler: async ({ projectId, locationId, action, references, ...fields }, { api, workspaceId }) => {
-    await ensureListed(api, `/projects/${seg(projectId)}/locations`, WireLocation, locationId, 'その場所はこの作品のものではありません')
+    await assertListed(api, `/projects/${seg(projectId)}/locations`, [locationId], '場所')
     if (action === 'delete') {
       await api.request('DELETE', `/locations/${seg(locationId)}`, Deleted)
       return jsonResult({ deleted: locationId })
@@ -136,7 +125,7 @@ export const manageBrandAssetsTool = defineTool({
       return jsonResult({ brandAsset: compactBrand(created) })
     }
     if (args.brandAssetId === undefined) throw new ToolInputError('brandAssetId を指定してください')
-    await ensureListed(api, listPath, WireBrandAsset, args.brandAssetId, 'そのブランド資産はこの作品のものではありません')
+    await assertListed(api, listPath, [args.brandAssetId], 'ブランド資産')
     const path = `/brand-assets/${seg(args.brandAssetId)}`
     if (args.action === 'delete') {
       await api.request('DELETE', path, Deleted)

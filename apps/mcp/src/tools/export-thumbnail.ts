@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import { pickCandidate, startKeyArt, waitForKeyArt, type KeyArtCandidate } from '../lib/key-art-candidates.js'
 import { downloadMedia } from '../lib/media-io.js'
+import { assertListed, assertMediaInProject } from '../lib/project-scope.js'
 import { waitForChecks, type CheckResult } from '../lib/wait-loop.js'
 import { WireProject, WireThumbnail } from '../wire.js'
 import { defineTool, Id, jsonResult, ToolInputError, type ToolDeps } from '../tool-def.js'
@@ -98,6 +99,7 @@ const chooseBackground = async (
   if (chosen.length !== 1) throw new ToolInputError('background は atSec・mediaAssetId・keyArt のどれか 1 つを指定してください')
   if (given.atSec !== undefined) return { kind: 'ready', background: { kind: 'timeline_frame', atSec: given.atSec }, candidates: null }
   if (given.mediaAssetId !== undefined) {
+    await assertMediaInProject(deps.api, args.projectId, [given.mediaAssetId])
     return { kind: 'ready', background: { kind: 'image', mediaAssetId: MediaAssetId.parse(given.mediaAssetId) }, candidates: null }
   }
   const keyArt = given.keyArt ?? {}
@@ -177,7 +179,11 @@ export const exportThumbnailTool = defineTool({
   handler: async (args, deps) => {
     const startedAt = deps.clock.now()
     const remaining = (): number => Math.max(0, args.waitSec - Math.floor((deps.clock.now() - startedAt) / 1000))
-    if (args.thumbnailId !== undefined) return finish(deps, args, args.thumbnailId, null, remaining())
+    if (args.thumbnailId !== undefined) {
+      // 別の作品のサムネイルを ID だけで読ませない・落とさせない。
+      await assertListed(deps.api, `/projects/${seg(args.projectId)}/thumbnails`, [args.thumbnailId], 'サムネイル')
+      return finish(deps, args, args.thumbnailId, null, remaining())
+    }
 
     // 背景を決める前（キーアートを頼む前）に、題名や色の誤りを断る。背景は仮の値で確かめる。
     specOf(args, { kind: 'timeline_frame', atSec: 0 })

@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { analyzeMotionTool } from '../tools/motion.js'
 import { generateSfxTool, suggestSfxTool } from '../tools/sfx.js'
-import { createFakeApi, depsFor, jsonOf, textOf, ulid } from './fake-api.js'
+import { createFakeApi, depsFor, jsonOf, ownedShots, takeRow, textOf, ulid, type Route } from './fake-api.js'
 
 /** 動きの分析（ADR-0054）。積んで、終わるまで待ち、出来事と効果音のきっかけの案を返す。 */
 
 const SHOT = ulid('SH1')
 const TAKE = ulid('TK1')
+const PROJECT_ID = ulid('PJ1')
+/** 作品の Shot は SHOT 1 本。その Take は TAKE 1 本。 */
+const scope: readonly Route[] = [
+  ownedShots(PROJECT_ID, [SHOT]),
+  { method: 'GET', path: `/shots/${SHOT}/takes`, data: [takeRow(TAKE, null, null)] },
+]
 
 const shotBody = (state: string) => ({
   shotId: SHOT,
@@ -30,6 +36,7 @@ const shotBody = (state: string) => ({
 describe('analyze_motion', () => {
   it('Shot を積み、終わるまで待って、出来事ときっかけを返す', async () => {
     const fake = createFakeApi([
+      ...scope,
       { method: 'POST', path: `/shots/${SHOT}/motion-analysis`, status: 202, data: { state: 'queued' } },
       {
         method: 'GET',
@@ -37,7 +44,7 @@ describe('analyze_motion', () => {
         sequence: [{ data: shotBody('queued') }, { data: shotBody('running') }, { data: shotBody('succeeded') }],
       },
     ])
-    const result = jsonOf(await analyzeMotionTool.run({ shotId: SHOT }, depsFor(fake))) as {
+    const result = jsonOf(await analyzeMotionTool.run({ projectId: PROJECT_ID, shotId: SHOT }, depsFor(fake))) as {
       state: string
       events: unknown[]
       cues: { startSec: number }[]
@@ -52,6 +59,7 @@ describe('analyze_motion', () => {
 
   it('Take を渡せば Take の口を使う', async () => {
     const fake = createFakeApi([
+      ...scope,
       { method: 'POST', path: `/takes/${TAKE}/motion-analysis`, status: 202, data: { state: 'queued' } },
       {
         method: 'GET',
@@ -59,25 +67,31 @@ describe('analyze_motion', () => {
         data: { takeId: TAKE, state: 'succeeded', failureMessage: null, analysis: null },
       },
     ])
-    const result = jsonOf(await analyzeMotionTool.run({ takeId: TAKE }, depsFor(fake))) as { state: string }
+    const result = jsonOf(await analyzeMotionTool.run({ projectId: PROJECT_ID, shotId: SHOT, takeId: TAKE }, depsFor(fake))) as {
+      state: string
+      cues?: unknown
+    }
     expect(result.state).toBe('succeeded')
+    expect(result.cues).toBeUndefined()
   })
 
   it('失敗なら理由を返す', async () => {
     const fake = createFakeApi([
+      ...scope,
       { method: 'POST', path: `/shots/${SHOT}/motion-analysis`, status: 202, data: { state: 'queued' } },
       { method: 'GET', path: `/shots/${SHOT}/motion-analysis`, data: shotBody('failed') },
     ])
-    const result = jsonOf(await analyzeMotionTool.run({ shotId: SHOT }, depsFor(fake))) as { failureMessage: string }
+    const result = jsonOf(await analyzeMotionTool.run({ projectId: PROJECT_ID, shotId: SHOT }, depsFor(fake))) as { failureMessage: string }
     expect(result.failureMessage).toContain('動き')
   })
 
   it('待ち切れなければ timedOut で返し、もう一度呼ぶよう言う', async () => {
     const fake = createFakeApi([
+      ...scope,
       { method: 'POST', path: `/shots/${SHOT}/motion-analysis`, status: 202, data: { state: 'queued' } },
       { method: 'GET', path: `/shots/${SHOT}/motion-analysis`, data: shotBody('running') },
     ])
-    const result = jsonOf(await analyzeMotionTool.run({ shotId: SHOT, maxWaitSec: 10 }, depsFor(fake))) as {
+    const result = jsonOf(await analyzeMotionTool.run({ projectId: PROJECT_ID, shotId: SHOT, maxWaitSec: 10 }, depsFor(fake))) as {
       timedOut: boolean
       hint: string
     }
@@ -85,10 +99,18 @@ describe('analyze_motion', () => {
     expect(result.hint).toMatch(/analyze_motion again/)
   })
 
-  it('Shot と Take の両方・どちらも無い入力は断る', async () => {
+  it('Shot が無い入力は断る（Take だけでは作品のものか確かめられない）', async () => {
     const fake = createFakeApi([])
-    expect(textOf(await analyzeMotionTool.run({ shotId: SHOT, takeId: TAKE }, depsFor(fake)))).toMatch(/shotId か takeId/)
-    expect(textOf(await analyzeMotionTool.run({}, depsFor(fake)))).toMatch(/shotId か takeId/)
+    expect(textOf(await analyzeMotionTool.run({ projectId: PROJECT_ID, takeId: TAKE }, depsFor(fake)))).toMatch(/shotId/)
+    expect(fake.calls).toHaveLength(0)
+  })
+
+  it('別の作品の Shot・その Shot に無い Take は分析を積まずに断る', async () => {
+    const fake = createFakeApi([...scope, { method: 'POST', path: /motion-analysis$/, status: 202, data: { state: 'queued' } }])
+    const deps = depsFor(fake)
+    expect(textOf(await analyzeMotionTool.run({ projectId: PROJECT_ID, shotId: ulid('SX1') }, deps))).toContain(ulid('SX1'))
+    expect(textOf(await analyzeMotionTool.run({ projectId: PROJECT_ID, shotId: SHOT, takeId: ulid('TX1') }, deps))).toContain(ulid('TX1'))
+    expect(fake.callsTo('POST', /.*/)).toHaveLength(0)
   })
 })
 

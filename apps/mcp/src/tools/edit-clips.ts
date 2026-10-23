@@ -11,7 +11,8 @@ import {
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import { defineTool, Id, jsonResult, mapLimited, round, ToolInputError } from '../tool-def.js'
-import { failureReason, findTextStyle, listClips, listTextStyles, WireClip, type WireTextStylePreset } from './telops.js'
+import { assertListed } from '../lib/project-scope.js'
+import { failureReason, findTextStyle, listTextStyles, WireClip, type WireTextStylePreset } from './telops.js'
 
 /**
  * タイムラインのクリップ（テロップ・効果音・エフェクト）を直す。`PATCH /clips/{id}` を 1 件ずつ。
@@ -129,8 +130,9 @@ export const editClipsTool = defineTool({
   input: EditClipsInput,
   handler: async ({ projectId, edits }, { api }) => {
     const needsStyles = edits.some((e) => e.styleName !== undefined)
+    // 作品の外のクリップが 1 つでもあれば、何も変えずに断る。
     const [clips, presets] = await Promise.all([
-      listClips(api, projectId),
+      assertListed(api, `/projects/${seg(projectId)}/clips`, edits.map((e) => e.clipId), 'クリップ', WireClip),
       needsStyles ? listTextStyles(api, projectId) : Promise.resolve([]),
     ])
     const byId = new Map(clips.map((clip) => [clip.id, clip]))

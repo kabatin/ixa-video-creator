@@ -2,6 +2,7 @@ import { basename, extname, isAbsolute } from 'node:path'
 import { z } from 'zod'
 import { IxaApiError, seg, type ApiClient } from '../api-client.js'
 import { uploadLocalFile } from '../lib/media-io.js'
+import { assertListed } from '../lib/project-scope.js'
 import { summarizeAnalysis } from '../lib/music-summary.js'
 import { WireAnalysis, WireAnalysisFailure, WireMusicTrack } from '../wire.js'
 import { defineTool, Id, jsonResult, ToolInputError } from '../tool-def.js'
@@ -57,9 +58,10 @@ export const setMasterTrackTool = defineTool({
   risk: 'settings',
   description:
     'Make a music track the master (the song the video follows) and (re)start its beat analysis unless it already exists. ' +
-    'Use after generate_music succeeds (pick one of its musicTrackIds).',
-  input: z.object({ musicTrackId: Id, analyze: z.boolean().default(true) }),
-  handler: async ({ musicTrackId, analyze }, { api }) => {
+    'Use after generate_music succeeds (pick one of its musicTrackIds). Not undoable when the project had no master yet.',
+  input: z.object({ projectId: Id, musicTrackId: Id, analyze: z.boolean().default(true) }),
+  handler: async ({ projectId, musicTrackId, analyze }, { api }) => {
+    await assertTrackInProject(api, projectId, musicTrackId)
     const tracks = await api.post(`/music-tracks/${seg(musicTrackId)}/set-master`, undefined, z.array(WireMusicTrack))
     const analysisQueued = analyze ? (await startAnalysis(api, musicTrackId)).queued : false
     return jsonResult({
@@ -70,8 +72,15 @@ export const setMasterTrackTool = defineTool({
   },
 })
 
+const projectTracks = (api: ApiClient, projectId: string) =>
+  api.get(`/projects/${seg(projectId)}/music-tracks`, z.array(WireMusicTrack))
+
+/** 曲がこの作品のものか（`/music-tracks/{id}` の口は ID だけで動く）。 */
+const assertTrackInProject = (api: ApiClient, projectId: string, trackId: string) =>
+  assertListed(api, `/projects/${seg(projectId)}/music-tracks`, [trackId], '曲', WireMusicTrack)
+
 const masterTrackId = async (api: ApiClient, projectId: string): Promise<string> => {
-  const tracks = await api.get(`/projects/${seg(projectId)}/music-tracks`, z.array(WireMusicTrack))
+  const tracks = await projectTracks(api, projectId)
   const master = tracks.find((t) => t.isMaster === true) ?? (tracks.length === 1 ? tracks[0] : undefined)
   if (master === undefined) {
     throw new ToolInputError(
@@ -97,8 +106,12 @@ export const fetchAnalysis = async (
   return { analysis: null, failure: failure?.message ?? null }
 }
 
-export const resolveTrackId = (api: ApiClient, projectId: string, trackId: string | undefined): Promise<string> =>
-  trackId === undefined ? masterTrackId(api, projectId) : Promise.resolve(trackId)
+/** 指定が無ければ主役の曲。指定があれば、この作品の曲かを確かめてから。 */
+export const resolveTrackId = async (api: ApiClient, projectId: string, trackId: string | undefined): Promise<string> => {
+  if (trackId === undefined) return masterTrackId(api, projectId)
+  await assertTrackInProject(api, projectId, trackId)
+  return trackId
+}
 
 export const musicOverviewTool = defineTool({
   name: 'music_overview',

@@ -43,7 +43,7 @@ describe('restructure_shots', () => {
     expect(result).toEqual({ action: 'merge', shotId: SHOT_A, durationSec: 4, removedShotIds: [SHOT_B] })
   })
 
-  it('delete は 1 本なら取り消せる口、2 本以上はまとめて消す口（失敗は理由つき）', async () => {
+  it('delete は 1 本なら Shot の口、2 本以上はまとめて消す口。どちらも取り消せる（失敗は理由つき）', async () => {
     const fake = createFakeApi([
       listRoute,
       { method: 'DELETE', path: `/shots/${SHOT_A}`, status: 204 },
@@ -56,14 +56,19 @@ describe('restructure_shots', () => {
     const one = jsonOf(await restructureShotsTool.run({ projectId: PROJECT, action: 'delete', shotIds: [SHOT_A] }, depsFor(fake)))
     expect(one).toEqual({ action: 'delete', deletedCount: 1, undoable: true })
     const many = jsonOf(await restructureShotsTool.run({ projectId: PROJECT, action: 'delete', shotIds: [SHOT_A, SHOT_B] }, depsFor(fake)))
-    expect(many).toEqual({ action: 'delete', deletedCount: 1, undoable: false, failures: [{ shotId: SHOT_B, reason: 'ロック中' }] })
+    expect(many).toEqual({ action: 'delete', deletedCount: 1, undoable: true, failures: [{ shotId: SHOT_B, reason: 'ロック中' }] })
   })
 
-  it('別の作品の Shot は API に送る前に断る', async () => {
-    const fake = createFakeApi([listRoute])
-    const result = await restructureShotsTool.run({ projectId: PROJECT, action: 'delete', shotIds: [FOREIGN] }, depsFor(fake))
-    expect(textOf(result)).toContain('この作品に無い Shot')
-    expect(fake.callsTo('DELETE', /.*/)).toHaveLength(0)
+  it('別の作品の Shot・場所は API に書く前に断る', async () => {
+    const fake = createFakeApi([listRoute, { method: 'GET', path: `/projects/${PROJECT}/locations`, data: [] }])
+    const run = (args: Record<string, unknown>) => restructureShotsTool.run({ projectId: PROJECT, ...args }, depsFor(fake))
+    const insert = { action: 'insert', code: 'X', startSec: 0, durationSec: 1 }
+    expect(textOf(await run({ action: 'delete', shotIds: [FOREIGN] }))).toContain('この作品に無い Shot')
+    expect(textOf(await run({ action: 'split', shotId: FOREIGN, atSec: 1 }))).toContain('この作品に無い Shot')
+    expect(textOf(await run({ action: 'merge', shotIds: [SHOT_A, FOREIGN] }))).toContain('この作品に無い Shot')
+    expect(textOf(await run({ ...insert, afterShotId: FOREIGN }))).toContain('この作品に無い Shot')
+    expect(textOf(await run({ ...insert, locationId: ulid('AR9') }))).toContain('この作品に無い場所')
+    expect(fake.calls.filter((c) => c.method !== 'GET')).toHaveLength(0)
   })
 
   it('insert は直後の Shot との間の order で、台詞つきで作る', async () => {

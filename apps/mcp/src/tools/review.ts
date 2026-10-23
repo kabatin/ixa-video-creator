@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
+import { assertTakesOfShot } from '../lib/project-scope.js'
 import type { CheckResult } from '../lib/wait-loop.js'
 import { WireTake } from '../wire.js'
 import { defineTool, Id, jsonResult } from '../tool-def.js'
@@ -37,20 +38,24 @@ export const reviewTakeTool = defineTool({
   riskOf: (args) => (args.verdict === undefined ? 'costly' : 'write'),
   description:
     'Run the automatic review of a take (technical, brand and vision checks; not run by default after generation). ' +
-    'Then wait {kind:"review", id: takeId} for the verdict (pass/warn/fail), cost and findings with fixes; retake with ' +
+    'Then wait {kind:"review", id: takeId, shotId} for the verdict (pass/warn/fail), cost and findings with fixes; retake with ' +
     'generate_takes (corrections, parentTakeId, regenerationReason). With verdict, only records the person\'s own ' +
     'OK (approved) / NG (rejected) instead.',
   input: z.object({
+    projectId: Id,
+    shotId: Id,
     takeId: Id,
     verdict: z.enum(['approved', 'rejected']).optional().describe("The person's decision. Record only what they said."),
   }),
-  handler: async ({ takeId, verdict }, { api }) => {
+  handler: async ({ projectId, shotId, takeId, verdict }, { api }) => {
+    // 別の作品の Take を ID だけでレビューさせない・判定を記録させない。
+    await assertTakesOfShot(api, projectId, shotId, [takeId])
     if (verdict !== undefined) {
       const take = await api.post(`/takes/${seg(takeId)}/verdict`, { verdict }, WireTake)
       return jsonResult({ takeId: take.id, verdict: take.humanVerdict })
     }
     const accepted = await api.post(`/takes/${seg(takeId)}/review`, {}, WireReviewAccepted)
-    return jsonResult({ takeId, queued: accepted.queued, next: { tool: 'wait', jobs: [{ kind: 'review', id: takeId }] } })
+    return jsonResult({ takeId, queued: accepted.queued, next: { tool: 'wait', jobs: [{ kind: 'review', id: takeId, shotId }] } })
   },
 })
 

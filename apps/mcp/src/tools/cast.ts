@@ -33,6 +33,14 @@ export const createCharacterTool = defineTool({
     'a media asset, a shot start frame or a local file. Use the returned characterId in edit_shots cast.',
   input: CreateCharacterInput,
   handler: async (args, { api, workspaceId }) => {
+    // 画像は作る前に確かめる（別の作品の素材なら、キャラクターだけが残らないよう何も作らずに断る）。
+    const identity =
+      args.identityImage === undefined
+        ? null
+        : {
+            mediaAssetId: await resolveImage(api, args.identityImage, { workspaceId, projectId: args.projectId }),
+            role: args.identityImage.role,
+          }
     const character = await api.post(
       `/projects/${seg(args.projectId)}/characters`,
       {
@@ -45,13 +53,12 @@ export const createCharacterTool = defineTool({
       WireCharacter,
     )
     const image =
-      args.identityImage === undefined
+      identity === null
         ? null
         : await api.post(
             `/characters/${seg(character.id)}/identity-images`,
             {
-              mediaAssetId: await resolveImage(api, args.identityImage, { workspaceId, projectId: args.projectId }),
-              role: args.identityImage.role,
+              ...identity,
               isPrimary: true,
               order: 0,
             },

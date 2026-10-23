@@ -8,7 +8,7 @@ import { setNarrationTool } from '../tools/narration.js'
 import { speakNarrationTool, voiceJobCheck } from '../tools/narration-speak.js'
 import { uploadSfxTool } from '../tools/sfx.js'
 import { createApiClient } from '../api-client.js'
-import { BASE, createFakeApi, depsFor, jsonOf, textOf, TOKEN, ulid, type Route } from './fake-api.js'
+import { BASE, createFakeApi, depsFor, jsonOf, ownedMedia, textOf, TOKEN, ulid, type Route } from './fake-api.js'
 
 /** ナレーション・歌詞・音の仕上げ・手元の効果音。 */
 
@@ -18,6 +18,8 @@ const LINE = ulid('NN1')
 const TRACK = ulid('TR1')
 const MEDIA = ulid('MD1')
 const JOB = ulid('JB1')
+const FOREIGN = ulid('ZZ9')
+const OTHER_PROJECT = ulid('PJ2')
 
 const line = {
   id: LINE, order: 0, text: '戦子が走る', reading: 'せんこがはしる', readingIsManual: false, voiceProfileId: VOICE,
@@ -78,6 +80,34 @@ describe('set_narration', () => {
     })
   })
 
+  it('この作品に無い行・キャラクターは、何も書かずに断る', async () => {
+    const fake = createFakeApi([
+      ...narrationRoutes,
+      { method: 'GET', path: `/projects/${PROJECT}/characters`, data: [{ id: ulid('CH1') }] },
+      { method: 'PATCH', path: /.*/, data: {} },
+      { method: 'POST', path: /.*/, data: {} },
+    ])
+    const calls = [
+      { projectId: PROJECT, action: 'edit_lines', lines: [{ lineId: LINE, telop: false }, { lineId: FOREIGN, telop: false }] },
+      { projectId: PROJECT, action: 'reorder', lineIds: [FOREIGN] },
+      { projectId: PROJECT, action: 'arrange', fromSec: 0, lineIds: [FOREIGN] },
+      { projectId: PROJECT, action: 'add_voice', newVoice: { name: '別', tool: 'macos_say', voiceName: 'Kyoko', characterId: FOREIGN } },
+      { projectId: PROJECT, action: 'edit_voice', voice: VOICE, voiceChange: { characterId: FOREIGN } },
+    ]
+    for (const args of calls) {
+      expect(textOf(await setNarrationTool.run(args, depsFor(fake))), args.action).toContain(FOREIGN)
+    }
+    expect(fake.calls.filter((c) => c.method !== 'GET')).toHaveLength(0)
+  })
+
+  it('読み辞書から外す呼び出しだけを destructive にする', () => {
+    const readings = (r: object) => setNarrationTool.riskOf({ projectId: PROJECT, action: 'readings', readings: r })
+    expect(setNarrationTool.risk).toBe('destructive')
+    expect(readings({ remove: ['古い'] })).toBe('destructive')
+    expect(readings({ set: [{ written: '戦子', reading: 'せんこ' }] })).toBe('write')
+    expect(setNarrationTool.riskOf({ projectId: PROJECT, action: 'show' })).toBe('read')
+  })
+
   it('arrange は fromSec が無ければ断る', async () => {
     const fake = createFakeApi(narrationRoutes)
     const result = await setNarrationTool.run({ projectId: PROJECT, action: 'arrange' }, depsFor(fake))
@@ -88,6 +118,7 @@ describe('set_narration', () => {
 describe('speak_narration', () => {
   it('speak は行を渡して頼み、声のジョブを待つ先を返す', async () => {
     const fake = createFakeApi([
+      ...narrationRoutes,
       {
         method: 'POST', path: `/projects/${PROJECT}/narration/speak`, status: 202,
         data: { jobIds: [JOB], reusedTakeIds: [], skipped: { noVoice: 1, active: 0, upToDate: 0 } },
@@ -104,17 +135,34 @@ describe('speak_narration', () => {
 
   it('import_recording は上げた素材の長さを待ってから取り込む（ノイズ除去の旗も渡す）', async () => {
     const fake = createFakeApi([
-      { method: 'GET', path: `/media/${MEDIA}`, sequence: [{ data: { probe: null } }, { data: { probe: { durationSec: 12.5 } } }] },
+      {
+        method: 'GET',
+        path: `/media/${MEDIA}`,
+        sequence: [
+          { data: { id: MEDIA, projectId: PROJECT, probe: null } },
+          { data: { id: MEDIA, projectId: PROJECT, probe: null } },
+          { data: { id: MEDIA, projectId: PROJECT, probe: { durationSec: 12.5 } } },
+        ],
+      },
       { method: 'POST', path: `/projects/${PROJECT}/narration/recordings`, status: 202, data: { jobId: JOB } },
     ])
     const result = jsonOf(
       await speakNarrationTool.run({ projectId: PROJECT, action: 'import_recording', mediaAssetId: MEDIA, placeAtSec: 3, denoise: false }, depsFor(fake)),
     ) as { jobIds: string[] }
-    expect(fake.callsTo('GET', `/media/${MEDIA}`)).toHaveLength(2)
+    expect(fake.callsTo('GET', `/media/${MEDIA}`)).toHaveLength(3)
     expect(fake.callsTo('POST', `/projects/${PROJECT}/narration/recordings`)[0]?.body).toEqual({
       mediaAssetId: MEDIA, voiceProfileId: null, placeAtSec: 3, denoise: false,
     })
     expect(result.jobIds).toEqual([JOB])
+  })
+
+  it('この作品に無い行・別の作品の録音は、頼まずに断る', async () => {
+    const fake = createFakeApi([...narrationRoutes, ownedMedia(OTHER_PROJECT), { method: 'POST', path: /.*/, status: 202, data: {} }])
+    const speak = await speakNarrationTool.run({ projectId: PROJECT, lineIds: [LINE, FOREIGN] }, depsFor(fake))
+    const imported = await speakNarrationTool.run({ projectId: PROJECT, action: 'import_recording', mediaAssetId: MEDIA }, depsFor(fake))
+    expect(textOf(speak)).toContain(`この作品に無いナレーションの行です: ${FOREIGN}`)
+    expect(textOf(imported)).toContain(`この作品に無い素材です: ${MEDIA}`)
+    expect(fake.callsTo('POST', /.*/)).toHaveLength(0)
   })
 
   it('import_recording は filePath と mediaAssetId のどちらも無ければ断る', async () => {
@@ -147,6 +195,9 @@ describe('set_lyrics', () => {
     const fake = createFakeApi([])
     const backwards = await setLyricsTool.run({ projectId: PROJECT, lyricCues: [2, 1] }, depsFor(fake))
     const empty = await setLyricsTool.run({ projectId: PROJECT }, depsFor(fake))
+    // 丸めると同じ秒（1.000）になる 2 つは、丸めた後の値で断る。
+    const collapsed = await setLyricsTool.run({ projectId: PROJECT, lyricCues: [1.0001, 1.0004] }, depsFor(fake))
+    expect(textOf(collapsed)).toContain('後ろへ進む')
     expect(textOf(backwards)).toContain('後ろへ進む')
     expect(empty.isError).toBe(true)
     expect(fake.calls).toHaveLength(0)
@@ -168,6 +219,13 @@ describe('edit_audio', () => {
       ...settings,
       ducking: { ...settings.ducking, depthDb: 16 },
     })
+  })
+
+  it('この作品に無い曲は、何も書かずに断る', async () => {
+    const fake = createFakeApi(routes)
+    const result = await editAudioTool.run({ projectId: PROJECT, music: { musicTrackId: FOREIGN, volume: 0.5 } }, depsFor(fake))
+    expect(textOf(result)).toContain(`この作品に無い曲です: ${FOREIGN}`)
+    expect(fake.calls.filter((c) => c.method !== 'GET')).toHaveLength(0)
   })
 
   it('何も変えなければ読むだけ。範囲外（depthDb 30・音量 3）は断る', async () => {
@@ -209,6 +267,16 @@ describe('upload_sfx', () => {
     })
     expect(result.placed).toBe(true)
     expect(JSON.stringify(result)).not.toContain('sig=S')
+  })
+
+  it('ファイル名が名前の上限（200 字）を超えるなら、上げる前に日本語で断る', async () => {
+    const longPath = join(dir.path, `${'あ'.repeat(201)}.wav`)
+    await writeFile(longPath, Buffer.from('RIFF fake'))
+    const fake = createFakeApi([])
+    const result = await uploadSfxTool.run({ projectId: PROJECT, filePath: longPath }, depsFor(fake))
+    expect(result.isError).toBe(true)
+    expect(textOf(result)).toContain('title: 効果音の名前は 200 文字までです（title で名前を指定してください）')
+    expect(fake.calls).toHaveLength(0)
   })
 
   it('音ではないファイルは上げる前に断る', async () => {

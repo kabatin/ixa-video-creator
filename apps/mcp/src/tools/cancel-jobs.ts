@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
-import { WireShot } from '../wire.js'
+import { assertNarrationLinesInProject, assertShotsInProject } from '../lib/project-scope.js'
 import { defineTool, describeError, Id, jsonResult, mapLimited, ToolInputError } from '../tool-def.js'
 
 /** 待っている・作っている仕事を止める。種類ごとに API の止める口が違うので、ここで振り分ける。 */
@@ -17,10 +17,7 @@ const Cancelled = z.object({ cancelledJobIds: z.array(z.string()) })
 
 /** 動画は Shot ごとの口しか無い。指定が無ければ生成中の Shot だけを止めに行く。 */
 const cancelVideo = async (api: ApiClient, args: CancelArgs) => {
-  const shots = await api.get(`/projects/${seg(args.projectId)}/shots`, z.array(WireShot))
-  const known = new Set(shots.map((s) => s.id))
-  const foreign = (args.shotIds ?? []).filter((id) => !known.has(id))
-  if (foreign.length > 0) throw new ToolInputError(`この作品に無い Shot です: ${foreign.join(', ')}`)
+  const shots = await assertShotsInProject(api, args.projectId, args.shotIds ?? [])
   const targets = args.shotIds ?? shots.filter((s) => s.status === 'generating').map((s) => s.id)
   const results = await mapLimited(targets, 4, (shotId) =>
     api.post(`/shots/${seg(shotId)}/generations/cancel`, undefined, Cancelled).then(
@@ -61,6 +58,9 @@ export const cancelJobsTool = defineTool({
       throw new ToolInputError('shotIds は video と image のときだけ使えます')
     }
     if (args.lineIds !== undefined && args.kind !== 'voice') throw new ToolInputError('lineIds は voice のときだけ使えます')
+    // 止める前に、渡された Shot・行がこの作品のものか確かめる（video は止める先を選ぶときに確かめる）。
+    if (args.kind === 'image' && args.shotIds !== undefined) await assertShotsInProject(api, args.projectId, args.shotIds)
+    if (args.lineIds !== undefined) await assertNarrationLinesInProject(api, args.projectId, args.lineIds)
     const result = await CANCELLERS[args.kind](api, args)
     return jsonResult({ kind: args.kind, cancelled: result.cancelledJobIds.length, ...result })
   },

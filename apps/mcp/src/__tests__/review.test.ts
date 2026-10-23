@@ -1,15 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import { reviewTakeTool } from '../tools/review.js'
 import { waitTool } from '../tools/wait.js'
-import { createFakeApi, depsFor, jsonOf, takeRow, ulid } from './fake-api.js'
+import { createFakeApi, depsFor, jsonOf, ownedShots, takeRow, textOf, ulid, type Route } from './fake-api.js'
 
 /**
  * Take のレビューを頼む（ADR-0057）。自動の作り直しを選んでいない Take は、エージェントが自分で確かめる口が要る。
- * 結果は wait {kind:"review", id: takeId} で、判定・費用・指摘（直し方つき）を受け取る。
+ * 結果は wait {kind:"review", id: takeId, shotId} で、判定・費用・指摘（直し方つき）を受け取る。
  */
 
 const TAKE = ulid('TK1')
 const RUN = ulid('RR1')
+const PROJECT = ulid('PJ1')
+const SHOT = ulid('SH1')
+const OTHER_TAKE = ulid('TX1')
+/** 作品の Shot は SHOT 1 本。その Take は TAKE 1 本。 */
+const scope: readonly Route[] = [
+  ownedShots(PROJECT, [SHOT]),
+  { method: 'GET', path: `/shots/${SHOT}/takes`, data: [takeRow(TAKE, null, null)] },
+]
+const writes = (fake: ReturnType<typeof createFakeApi>) => fake.calls.filter((c) => c.method !== 'GET')
 
 const run = (status: string, verdict: string | null) => ({
   id: RUN,
@@ -23,27 +32,36 @@ const run = (status: string, verdict: string | null) => ({
 
 describe('review_take', () => {
   it('レビューを頼み、wait の手がかりを返す', async () => {
-    const fake = createFakeApi([{ method: 'POST', path: `/takes/${TAKE}/review`, status: 202, data: { takeId: TAKE, queued: true } }])
-    expect(jsonOf(await reviewTakeTool.run({ takeId: TAKE }, depsFor(fake)))).toEqual({
+    const fake = createFakeApi([...scope, { method: 'POST', path: `/takes/${TAKE}/review`, status: 202, data: { takeId: TAKE, queued: true } }])
+    expect(jsonOf(await reviewTakeTool.run({ projectId: PROJECT, shotId: SHOT, takeId: TAKE }, depsFor(fake)))).toEqual({
       takeId: TAKE,
       queued: true,
-      next: { tool: 'wait', jobs: [{ kind: 'review', id: TAKE }] },
+      next: { tool: 'wait', jobs: [{ kind: 'review', id: TAKE, shotId: SHOT }] },
     })
+  })
+
+  it('その Shot に無い Take（別の作品のもの）はレビューも OK/NG も記録せずに断る', async () => {
+    const fake = createFakeApi([...scope, { method: 'POST', path: /^\/takes\//, data: {} }])
+    const deps = depsFor(fake)
+    expect(textOf(await reviewTakeTool.run({ projectId: PROJECT, shotId: SHOT, takeId: OTHER_TAKE }, deps))).toContain(OTHER_TAKE)
+    expect(textOf(await reviewTakeTool.run({ projectId: PROJECT, shotId: ulid('SX1'), takeId: TAKE, verdict: 'approved' }, deps))).toContain(ulid('SX1'))
+    expect(writes(fake)).toHaveLength(0)
   })
 })
 
 describe('review_take の verdict', () => {
   it('人の OK / NG だけを記録し、自動のレビューは頼まない', async () => {
     const fake = createFakeApi([
+      ...scope,
       { method: 'POST', path: `/takes/${TAKE}/verdict`, data: { ...takeRow(TAKE, null, null), humanVerdict: 'rejected' } },
     ])
-    expect(jsonOf(await reviewTakeTool.run({ takeId: TAKE, verdict: 'rejected' }, depsFor(fake)))).toEqual({ takeId: TAKE, verdict: 'rejected' })
-    expect(fake.calls.map((c) => [c.path, c.body])).toEqual([[`/takes/${TAKE}/verdict`, { verdict: 'rejected' }]])
+    expect(jsonOf(await reviewTakeTool.run({ projectId: PROJECT, shotId: SHOT, takeId: TAKE, verdict: 'rejected' }, depsFor(fake)))).toEqual({ takeId: TAKE, verdict: 'rejected' })
+    expect(writes(fake).map((c) => [c.path, c.body])).toEqual([[`/takes/${TAKE}/verdict`, { verdict: 'rejected' }]])
   })
 
   it('unreviewed には戻せない（API が受けない値は送る前に断る）', async () => {
     const fake = createFakeApi([])
-    const result = await reviewTakeTool.run({ takeId: TAKE, verdict: 'unreviewed' }, depsFor(fake))
+    const result = await reviewTakeTool.run({ projectId: PROJECT, shotId: SHOT, takeId: TAKE, verdict: 'unreviewed' }, depsFor(fake))
     expect(result.isError).toBe(true)
     expect(fake.calls).toHaveLength(0)
   })
@@ -52,6 +70,7 @@ describe('review_take の verdict', () => {
 describe('wait {kind:"review"}', () => {
   it('走っている間は待ち、終わったら判定・費用・指摘を返す', async () => {
     const fake = createFakeApi([
+      ...scope,
       { method: 'GET', path: `/takes/${TAKE}/reviews`, sequence: [{ data: [run('running', null)] }, { data: [run('done', 'fail')] }] },
       {
         method: 'GET',
@@ -73,13 +92,14 @@ describe('wait {kind:"review"}', () => {
         },
       },
     ])
-    const result = jsonOf(await waitTool.run({ jobs: [{ kind: 'review', id: TAKE }], maxWaitSec: 30 }, depsFor(fake))) as {
+    const result = jsonOf(await waitTool.run({ projectId: PROJECT, jobs: [{ kind: 'review', id: TAKE, shotId: SHOT }], maxWaitSec: 30 }, depsFor(fake))) as {
       results: Record<string, unknown>[]
     }
     expect(result.results).toEqual([
       {
         kind: 'review',
         id: TAKE,
+        shotId: SHOT,
         state: 'succeeded',
         verdict: 'fail',
         costUsd: 0.03,
@@ -89,8 +109,8 @@ describe('wait {kind:"review"}', () => {
   })
 
   it('まだ頼んでいなければ、頼んでいないと返す（待たない）', async () => {
-    const fake = createFakeApi([{ method: 'GET', path: `/takes/${TAKE}/reviews`, data: [] }])
-    const result = jsonOf(await waitTool.run({ jobs: [{ kind: 'review', id: TAKE }], maxWaitSec: 30 }, depsFor(fake))) as {
+    const fake = createFakeApi([...scope, { method: 'GET', path: `/takes/${TAKE}/reviews`, data: [] }])
+    const result = jsonOf(await waitTool.run({ projectId: PROJECT, jobs: [{ kind: 'review', id: TAKE, shotId: SHOT }], maxWaitSec: 30 }, depsFor(fake))) as {
       results: Record<string, unknown>[]
     }
     expect(result.results[0]).toMatchObject({ kind: 'review', id: TAKE, state: 'failed' })
