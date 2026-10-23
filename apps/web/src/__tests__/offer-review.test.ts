@@ -43,6 +43,16 @@ describe('offerReviewAfterGeneration', () => {
     expect(d.notify).toHaveBeenCalledWith(expect.stringContaining('2 本'))
   })
 
+  /** ADR-0057。「NG なら自動で作り直す」で作った Take は worker が自動でレビューする。重ねて頼まない（二重に払わない）。 */
+  it('自動の作り直しを選んだ Take は頼まない（worker が自動でレビューする）', async () => {
+    const auto = { ...take('t3', 'pending'), autoRetake: true } as Take
+    const d = deps(true, { [shotA]: [take('t1', 'pending'), auto] })
+
+    await offerReviewAfterGeneration({ shotIds: [shotA], ...d })
+
+    expect(d.api.requestReview.mock.calls.map(([id]) => id)).toEqual(['t1'])
+  })
+
   it('聞くときに、何本をレビューするかを言う', async () => {
     const d = deps(true, { [shotA]: [take('t1', 'pending'), take('t2', 'pending')] })
 

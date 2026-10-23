@@ -51,7 +51,8 @@ export const offerReviewAfterGeneration = async ({
   notify,
 }: OfferReviewDeps): Promise<void> => {
   const lists = await Promise.all(shotIds.map((shotId) => api.listTakes(shotId)))
-  const pending = lists.flat().filter((take) => take.reviewStatus === 'pending')
+  // 「NG なら自動で作り直す」で作った Take は worker が自動でレビューする（ADR-0057）。重ねて頼まない。
+  const pending = lists.flat().filter((take) => take.reviewStatus === 'pending' && !take.autoRetake)
   if (pending.length === 0) return
 
   if (!(await confirm(askMessage(pending.length)))) {

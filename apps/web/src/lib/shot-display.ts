@@ -84,7 +84,7 @@ export const reviewStatusLabel = (status: ReviewStatus): string => REVIEW_STATUS
 export const RETAKE_RECOMMENDED_LABEL = '作り直し推奨'
 /** 印の説明。どこで理由を見て、どう作り直すか。 */
 export const RETAKE_RECOMMENDED_HINT =
-  '自動レビューで不合格でした。自動では作り直しません。理由は自動レビューの指摘にあり、指摘を選んで直しを付けて作り直せます。'
+  '自動レビューで不合格でした（自動の作り直しを選んでいないか、上限まで作り直して止まりました）。理由は自動レビューの指摘にあり、指摘を選んで直しを付けて作り直せます。'
 
 export const reviewStatusClassName = (status: ReviewStatus): string => REVIEW_STATUS_CLASSES[status]
 

@@ -262,7 +262,7 @@ export const ShotGenerateSection = ({
         <span>
           NG なら自動で作り直す
           <span className="block text-muted">
-            自動レビューで不合格なら、上限まで作り直します。時間と AI の利用枠を多く使うので、任せて離れるとき向けです。
+            できたら自動でレビューし、不合格なら上限まで作り直します。時間と AI の利用枠を多く使うので、任せて離れるとき向けです。
           </span>
         </span>
       </label>

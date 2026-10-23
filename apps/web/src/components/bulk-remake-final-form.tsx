@@ -81,7 +81,7 @@ export const BulkRemakeFinalForm = ({
         <span>
           NG なら自動で作り直す
           <span className="block text-muted">
-            自動レビューで不合格の Take を、上限まで作り直します。時間と AI の利用枠を多く使うので、夜間に任せるとき向けです。
+            できたら自動でレビューし、不合格なら上限まで作り直します。時間と AI の利用枠を多く使うので、夜間に任せるとき向けです。
           </span>
         </span>
       </label>

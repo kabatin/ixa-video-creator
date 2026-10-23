@@ -1,12 +1,12 @@
 'use client'
 
 import type { Take, TakeId } from '@ixa/domain'
-import { TakeCard } from '@/components/take-card'
+import { TakeCard, type TakeView } from '@/components/take-card'
 import type { ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
 import type { ContextMenuItem } from '@/components/workbench/ui/context-menu'
 
 export type TakeGridProps = {
-  readonly takes: readonly Take[]
+  readonly takes: readonly TakeView[]
   readonly selectedTakeId: TakeId | null
   readonly busy: boolean
   readonly onSelect: (takeId: TakeId) => void

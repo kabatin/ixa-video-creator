@@ -33,6 +33,19 @@ describe('TakeCard', () => {
     expect(screen.getByText('作り直し推奨')).toBeTruthy()
   })
 
+  /** 自動の作り直しが上限などで止まったら、API が Shot の状態と合わせて決めた値で、選んでいた Take にも出す。 */
+  it('API が作り直し推奨と決めた Take には、自動の作り直しを選んでいても出す', () => {
+    render(
+      <TakeCard
+        take={{ ...aTake({ reviewStatus: 'failed', autoRetake: true }), retakeRecommended: true }}
+        selected={false}
+        busy={false}
+        onSelect={() => undefined}
+      />,
+    )
+    expect(screen.getByText('作り直し推奨')).toBeTruthy()
+  })
+
   it('自動の作り直しを選んだ Take・不合格でない Take には出さない', () => {
     const { unmount } = renderCard(aTake({ reviewStatus: 'failed', autoRetake: true }))
     expect(screen.queryByText('作り直し推奨')).toBeNull()

@@ -34,7 +34,14 @@ export type WireShot = z.infer<typeof WireShot>
 
 export const WireShotList = z.array(WireShot)
 
-export const WireTake = Take.extend({ createdAt: z.coerce.date() })
+export const WireTake = Take.extend({
+  createdAt: z.coerce.date(),
+  /**
+   * 「作り直し推奨」か（ADR-0057）。API が Shot の状態と合わせて決める（自動の作り直しが止まったら、選んでいた Take にも出す）。
+   * 前の API には無いので省ける。無ければ画面が Take だけで決める。
+   */
+  retakeRecommended: z.boolean().optional(),
+})
 export type WireTake = z.infer<typeof WireTake>
 
 export const WireTakeList = z.array(WireTake)

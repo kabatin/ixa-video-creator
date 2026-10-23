@@ -18,8 +18,11 @@ import type { ContextMenuTriggerProps } from '@/components/workbench/use-context
 import type { ContextMenuItem } from '@/components/workbench/ui/context-menu'
 import { MenuButton } from '@/components/workbench/ui/more-menu'
 
+/** 画面に出す Take。API が決めた「作り直し推奨」を持てる（ADR-0057）。 */
+export type TakeView = Take & { readonly retakeRecommended?: boolean }
+
 export type TakeCardProps = {
-  readonly take: Take
+  readonly take: TakeView
   readonly selected: boolean
   readonly busy: boolean
   readonly onSelect: (takeId: TakeId) => void
@@ -188,7 +191,7 @@ export const TakeCard = ({
           {reviewStatusLabel(take.reviewStatus)}
         </span>
         {/* 不合格でも既定では自動で作り直さない（ADR-0057）。作り直すかは人が決める。 */}
-        {isRetakeRecommended(take) && (
+        {(take.retakeRecommended ?? isRetakeRecommended(take, null)) && (
           <span title={RETAKE_RECOMMENDED_HINT} className="rounded-full bg-danger px-2 py-0.5 text-xs font-semibold text-bg">
             {RETAKE_RECOMMENDED_LABEL}
           </span>
