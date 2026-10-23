@@ -224,6 +224,30 @@ describe('processMediaJob', () => {
     expect(repo.updateCount()).toBe(afterFirst)
   }, FFMPEG_TIMEOUT_MS)
 
+  /** ADR-0057。取り込み（ポスターフレーム）が済んでから、自動のレビューを積めるようにする口。 */
+  it('取り込みが済んだら、取り込んだ素材を渡して知らせる。取り込み済みなら知らせない', async () => {
+    const asset = await seedAsset(repo, storage, { kind: 'video', ext: 'mp4', mimeType: 'video/mp4', body: videoBytes })
+    const seen: string[] = []
+    const withHook = { ...deps(), afterIngested: (ingested: { id: string; posterKeys: readonly string[] }) => {
+      seen.push(`${ingested.id}:${String(ingested.posterKeys.length)}`)
+      return Promise.resolve()
+    } }
+
+    await processMediaJob(withHook, { mediaAssetId: asset.id })
+    await processMediaJob(withHook, { mediaAssetId: asset.id })
+
+    expect(seen).toEqual([`${asset.id}:${String(DEFAULT_POSTER_COUNT)}`])
+  }, FFMPEG_TIMEOUT_MS)
+
+  it('知らせる先が落ちても、取り込みは成功のまま', async () => {
+    const asset = await seedAsset(repo, storage, { kind: 'video', ext: 'mp4', mimeType: 'video/mp4', body: videoBytes })
+    const outcome = await processMediaJob(
+      { ...deps(), afterIngested: () => Promise.reject(new Error('Redis に繋がりません')) },
+      { mediaAssetId: asset.id },
+    )
+    expect(outcome.state).toBe('processed')
+  }, FFMPEG_TIMEOUT_MS)
+
   it('MediaAsset が無ければ throw する', async () => {
     await expect(
       processMediaJob(deps(), { mediaAssetId: '01JQ0000000000000000000000' }),

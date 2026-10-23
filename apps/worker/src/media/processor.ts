@@ -46,6 +46,11 @@ export type MediaProcessorDeps = {
   readonly logger: Logger
   /** 既定 DEFAULT_POSTER_COUNT。 */
   readonly posterCount?: number
+  /**
+   * 取り込みが済んだ素材を知らせる先（ADR-0057）。自動の作り直しを選んだ Take のレビューは、ポスターフレームが
+   * できてからでないと見られないので、ここから積む。**落ちても取り込みは成功のまま**（ログに残す）。
+   */
+  readonly afterIngested?: (asset: MediaAsset) => Promise<void>
 }
 
 export type MediaOutcome =
@@ -163,6 +168,17 @@ const ingest = async (
   return { state: 'processed', probe, posterCount: keys.posterKeys.length }
 }
 
+/** 取り込みが済んだことを知らせる。**投げない**（取り込みは済んでいる）。 */
+const notifyIngested = async (deps: MediaProcessorDeps, mediaAssetId: MediaAsset['id']): Promise<void> => {
+  if (deps.afterIngested === undefined) return
+  try {
+    const ingested = await deps.mediaAssets.findById(mediaAssetId)
+    if (ingested !== null) await deps.afterIngested(ingested)
+  } catch (error) {
+    deps.logger.error({ mediaAssetId, err: error }, '取り込みが済んだことを知らせられませんでした（自動のレビューが積まれていません）')
+  }
+}
+
 /**
  * media ジョブを 1 件処理する。
  * MediaAsset が無い場合だけ throw する（ジョブデータが壊れている＝再試行しても直らない
@@ -191,9 +207,11 @@ export const processMediaJob = async (
   const posterCount = PosterCount.parse(deps.posterCount ?? DEFAULT_POSTER_COUNT)
 
   try {
-    return await withTempDir(deps.workDir, TEMP_DIR_PREFIX, (jobDir) =>
+    const outcome = await withTempDir(deps.workDir, TEMP_DIR_PREFIX, (jobDir) =>
       ingest(deps, asset, posterCount, jobDir),
     )
+    await notifyIngested(deps, mediaAssetId)
+    return outcome
   } catch (error) {
     const code = errorCodeOf(error)
     deps.logger.error({ mediaAssetId, code, err: error }, 'MediaAsset の取り込みに失敗しました')

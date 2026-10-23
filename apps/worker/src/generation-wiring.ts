@@ -54,6 +54,7 @@ import type { MediaProcessorDeps } from './media/index.js'
 import type { RenderProcessorDeps } from './render/index.js'
 import { createMediaPreparer } from './render/prepare-media.js'
 import { createReviewWiring, type ReviewWiring } from './review-wiring.js'
+import { reviewWhenAutoRetake } from './review/auto-review.js'
 import { createImageWiring } from './image-wiring.js'
 import { createUpscaleWiring } from './upscale-wiring.js'
 import type { UpscaleProcessorDeps } from './upscale/index.js'
@@ -174,6 +175,8 @@ export const createGenerationWiring = (
   const analysisQueue = new Queue(QUEUE_NAMES.analysis, { connection })
   /** 順番待ちの効果音を積み直す先（ADR-0052）。 */
   const sfxQueue = new Queue(QUEUE_NAMES.sfx, { connection })
+  /** 自動の作り直しを選んだ Take のレビューを積む先（ADR-0057）。 */
+  const reviewQueue = new Queue(QUEUE_NAMES.review, { connection })
 
   /** ポーリングの再スケジュールは BullMQ の delay で行う。repeatable job は使わない。 */
   const scheduler: PollScheduler = {
@@ -298,6 +301,16 @@ export const createGenerationWiring = (
     storage,
     workDir: process.env.MEDIA_WORK_DIR ?? '/tmp/ixa-media-work',
     logger,
+    // 自動の作り直しを選んだ Take は、取り込みが済んだらレビューを積む（ADR-0057）。Take ごとに 1 つにまとめる。
+    afterIngested: reviewWhenAutoRetake({
+      takes: createTakeRepository(db),
+      reviewQueue: {
+        enqueue: async (takeId) => {
+          await reviewQueue.add('review', { takeId }, { jobId: `auto-review-${takeId}`, removeOnComplete: true, removeOnFail: true })
+        },
+      },
+      logger,
+    }),
   }
 
   const renderMediaAssets = createMediaAssetRepository(db)
@@ -453,6 +466,7 @@ export const createGenerationWiring = (
       await imageQueue.close()
       await musicQueue.close()
       await sfxQueue.close()
+      await reviewQueue.close()
       await analysisQueue.close()
       await regenerationQueue.close()
       await db.$client.end()
