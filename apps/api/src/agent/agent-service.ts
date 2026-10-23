@@ -117,6 +117,8 @@ export type ApprovalRequest = {
   readonly toolName: string
   readonly toolUseId: string | null
   readonly risk: ToolRisk
+  /** 確認なしの旗でも必ず確認する理由。作品の外を触る操作と同じく、旗に関わらず確認に回す。 */
+  readonly alwaysConfirm: { readonly reason: string } | null
   readonly input: unknown
 }
 export type ApprovalState = {
@@ -429,7 +431,8 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       const risk = outside ? 'destructive' : request.risk
       if (request.toolUseId !== null) approvals.noteRisk(sessionId, request.toolUseId, risk)
       const requestId = newId(RequestId)
-      if (!outside && !approvalNeeded(risk, session))
+      const mustConfirm = outside || request.alwaysConfirm !== null
+      if (!mustConfirm && !approvalNeeded(risk, session))
         return okValue({ requestId, decision: 'allow', message: null })
       // 状態を先に進めてから待ちを開ける（画面が確認待ちと知る前に答えられる隙を作らない）。
       const waiting = await deps.sessions.transition(sessionId, 'awaiting_approval', deps.now())
@@ -443,6 +446,7 @@ export const createAgentService = (deps: AgentServiceDeps) => {
           toolName: request.toolName,
           risk,
           input: capJson(request.input),
+          reason: request.alwaysConfirm?.reason ?? null,
         },
       ])
       return okValue({ requestId, decision: null, message: null })

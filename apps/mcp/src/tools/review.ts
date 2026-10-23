@@ -36,6 +36,8 @@ export const reviewTakeTool = defineTool({
   risk: 'costly',
   // 制作者の OK/NG を記録するだけならふつうの書き込み（AI のレビューは走らない）。
   riskOf: (args) => (args.verdict === undefined ? 'costly' : 'write'),
+  // 判定は人のもの。AI が代わりに記録するときは、確認なしの旗でも必ず制作者に確かめる。
+  alwaysConfirm: (args) => (args.verdict === undefined ? null : '制作者の判定（OK/NG）として記録します'),
   description:
     'Run the automatic review of a take (technical, brand and vision checks; not run by default after generation). ' +
     'Then wait {kind:"review", id: takeId, shotId} for the verdict (pass/warn/fail), cost and findings with fixes; retake with ' +

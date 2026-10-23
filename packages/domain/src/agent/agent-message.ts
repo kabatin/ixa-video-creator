@@ -51,6 +51,8 @@ export const AgentMessageBody = z.discriminatedUnion('kind', [
     toolName: z.string(),
     risk: ToolRisk,
     input: z.unknown(),
+    /** 確認なしの旗でも必ず確認した理由（手元のファイルを読む・人の判定を記録する など）。無ければ印で決めた確認。 */
+    reason: z.string().nullable().optional(),
   }),
   z.object({
     kind: z.literal('approval_decision'),

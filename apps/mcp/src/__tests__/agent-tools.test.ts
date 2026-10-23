@@ -48,11 +48,47 @@ describe('approve', () => {
       { tool_name: 'mcp__ixa__create_location', input: { projectId: ulid('PJ1'), references: [{ imagePath: '/Users/me/a.png' }] } },
       deps,
     )
-    await approveTool.run({ tool_name: 'mcp__ixa__set_start_frame', input: { shotId: ulid('SH1'), mediaAssetId: ulid('MD1') } }, deps)
-    expect(fake.callsTo('POST', `/agent-sessions/${SESSION}/approvals`).map((c) => (c.body as { risk: string }).risk)).toEqual([
-      'costly',
-      'costly',
-      'write',
+    await approveTool.run(
+      { tool_name: 'mcp__ixa__set_start_frame', input: { projectId: ulid('PJ1'), shotId: ulid('SH1'), mediaAssetId: ulid('MD1') } },
+      deps,
+    )
+    const bodies = fake.callsTo('POST', `/agent-sessions/${SESSION}/approvals`).map((c) => c.body as { risk: string; alwaysConfirm: unknown })
+    expect(bodies.map((b) => b.risk)).toEqual(['costly', 'costly', 'write'])
+    // 手元のファイルを読むなら、確認なしの旗が立っていても必ず確認する（API に理由つきで知らせる）。
+    expect(bodies.map((b) => b.alwaysConfirm)).toEqual([{ reason: 'この Mac のファイルを読みます' }, { reason: 'この Mac のファイルを読みます' }, null])
+  })
+
+  it('action ごとの印と手元のファイルの組: 軽い action でもファイルを読むなら費用・必ず確認、重い action はそのまま', async () => {
+    const fake = createFakeApi([
+      { method: 'POST', path: `/agent-sessions/${SESSION}/approvals`, data: { requestId: REQUEST, decision: 'allow', message: null } },
+    ])
+    const deps = depsFor(fake, { agentSessionId: SESSION })
+    const base = { projectId: ulid('PJ1'), characterId: ulid('CH1') }
+    const calls = [
+      { ...base, action: 'add_identity_image', image: { imagePath: '/Users/me/face.png' } },
+      { ...base, action: 'add_identity_image', image: { mediaAssetId: ulid('MD1') } },
+      { ...base, action: 'delete', image: { imagePath: '/Users/me/face.png' } },
+    ]
+    for (const input of calls) await approveTool.run({ tool_name: 'mcp__ixa__edit_character', input }, deps)
+    const bodies = fake.callsTo('POST', `/agent-sessions/${SESSION}/approvals`).map((c) => c.body as { risk: string; alwaysConfirm: unknown })
+    expect(bodies.map((b) => [b.risk, b.alwaysConfirm !== null])).toEqual([
+      ['costly', true],
+      ['write', false],
+      ['destructive', true],
+    ])
+  })
+
+  it('人の判定（review_take の verdict）を記録するときは、印は書き込みでも必ず確認する', async () => {
+    const fake = createFakeApi([
+      { method: 'POST', path: `/agent-sessions/${SESSION}/approvals`, data: { requestId: REQUEST, decision: 'allow', message: null } },
+    ])
+    const deps = depsFor(fake, { agentSessionId: SESSION })
+    const take = { projectId: ulid('PJ1'), shotId: ulid('SH1'), takeId: ulid('TK1') }
+    await approveTool.run({ tool_name: 'mcp__ixa__review_take', input: { ...take, verdict: 'approved' } }, deps)
+    await approveTool.run({ tool_name: 'mcp__ixa__review_take', input: take }, deps)
+    expect(fake.callsTo('POST', `/agent-sessions/${SESSION}/approvals`).map((c) => c.body)).toMatchObject([
+      { risk: 'write', alwaysConfirm: { reason: '制作者の判定（OK/NG）として記録します' } },
+      { risk: 'costly', alwaysConfirm: null },
     ])
   })
 
@@ -78,6 +114,7 @@ describe('approve', () => {
       toolName: 'mcp__ixa__generate_sfx',
       toolUseId: 'toolu_9',
       risk: 'costly',
+      alwaysConfirm: null,
       input,
     })
     expect(fake.callsTo('GET', `/agent-sessions/${SESSION}/approvals/${REQUEST}`)).toHaveLength(3)

@@ -29,6 +29,8 @@ const ApprovalRequestBody = z
     toolName: z.string().min(1).max(200),
     toolUseId: z.string().min(1).max(200).nullable(),
     risk: ToolRisk,
+    /** 確認なしの旗が立っていても必ず確認する理由（MCP の approve が決める）。無ければ null。 */
+    alwaysConfirm: z.object({ reason: z.string().min(1).max(200) }).strict().nullable().default(null),
     input: z.unknown(),
   })
   .strict()
@@ -83,6 +85,7 @@ export const agentApprovalRoutes = (deps: { readonly agent: AgentService }) =>
         toolName: body.toolName,
         toolUseId: body.toolUseId,
         risk: body.risk,
+        alwaysConfirm: body.alwaysConfirm,
         input: body.input,
       })
       if (!result.ok) return c.json(fail(result.message), AGENT_FAILURE_STATUS[result.code])

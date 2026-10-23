@@ -8,7 +8,7 @@ import { defineTool, describeError, errorResult, jsonResult, type ToolDef, type 
  * AI エージェントの会話の中だけで使うツール（ADR-0058）。API がエージェントの Claude CLI を起こすときに
  * env の `IXA_AGENT_SESSION_ID` を渡し、あるときだけ登録する（server.ts）。
  *
- *   POST  /agent-sessions/{id}/approvals { toolName, toolUseId, risk, input } → { requestId, decision|null, message }
+ *   POST  /agent-sessions/{id}/approvals { toolName, toolUseId, risk, alwaysConfirm, input } → { requestId, decision|null, message }
  *   GET   /agent-sessions/{id}/approvals/{requestId} → { decision|null, message }
  *   PATCH /agent-sessions/{id} { confirmationsWaived: true }
  *
@@ -80,6 +80,19 @@ const readsLocalFile = (value: unknown): boolean => {
 const withLocalFileRisk = (risk: ToolRisk, input: unknown): ToolRisk =>
   (risk === 'read' || risk === 'write') && readsLocalFile(input) ? 'costly' : risk
 
+const LOCAL_FILE_REASON = 'この Mac のファイルを読みます'
+
+/**
+ * 確認なしの旗が立っていても必ず確認する理由（API は作品の外を触る操作と同じく、旗に関わらず確認に回す）。
+ * 手元のファイルを読む入力（誘導されて読ませない）と、道具が名乗る理由（review_take の verdict など）。
+ */
+const alwaysConfirmOf = (toolName: string, input: unknown, tools: ReadonlyMap<string, ToolDef>): { readonly reason: string } | null => {
+  if (readsLocalFile(input)) return { reason: LOCAL_FILE_REASON }
+  const tool = toolName.startsWith(IXA_MCP_TOOL_PREFIX) ? tools.get(toolName.slice(IXA_MCP_TOOL_PREFIX.length)) : undefined
+  const reason = tool?.alwaysConfirm(input) ?? null
+  return reason === null ? null : { reason }
+}
+
 export const ApproveInput = z.object({
   tool_name: z.string().min(1),
   input: z.unknown(),
@@ -109,10 +122,11 @@ export const createApproveTool = (tools: ReadonlyMap<string, ToolDef>) =>
       const sessionId = deps.agentSessionId
       if (sessionId === undefined) return deny('AI エージェントの会話の外では確認できません。')
       const risk = withLocalFileRisk(callRisk(toolName, input, tools), input)
+      const alwaysConfirm = alwaysConfirmOf(toolName, input, tools)
       try {
         const started = await deps.api.post(
           `/agent-sessions/${seg(sessionId)}/approvals`,
-          { toolName, toolUseId: toolUseId ?? null, risk, input },
+          { toolName, toolUseId: toolUseId ?? null, risk, alwaysConfirm, input },
           WireApprovalStarted,
         )
         if (started.decision !== null) return decide(started.decision, started.message, input)
@@ -120,7 +134,7 @@ export const createApproveTool = (tools: ReadonlyMap<string, ToolDef>) =>
       } catch (error) {
         deps.logger.warn({ tool: 'approve', err: error }, '確認を頼めませんでした')
         // 読むだけなら止める理由が無い。それ以外は、確かめられなければ実行させない（黙って許さない）。
-        if (risk === 'read') return allow(input)
+        if (risk === 'read' && alwaysConfirm === null) return allow(input)
         return deny(`確認を頼めなかったので実行していません — ${describeError(error)}`)
       }
     },

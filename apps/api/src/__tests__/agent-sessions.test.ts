@@ -640,6 +640,38 @@ describe('確認の待ちと答え', () => {
     await t.until(() => t.statusOf(id) === 'interrupted', '中断')
   })
 
+  it('必ず確認する印（alwaysConfirm）は、確認なしの旗が立っていても書き込みでも確認に回し、理由を残す', async () => {
+    const decisions: (string | null)[] = []
+    const t = setup(async (call, app) => {
+      const sessionId = call.mcpEnv()['IXA_AGENT_SESSION_ID'] ?? ''
+      const own = call.invocation.stdin.match(/projectId: ([0-9A-Z]{26})/)?.[1] ?? ''
+      for (const [toolName, alwaysConfirm] of [
+        ['mcp__ixa__edit_shots', null],
+        ['mcp__ixa__review_take', { reason: '制作者の判定（OK/NG）として記録します' }],
+      ] as const) {
+        const res = (await (
+          await app.request(`/agent-sessions/${sessionId}/approvals`, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ toolName, toolUseId: `t-${toolName}`, risk: 'write', alwaysConfirm, input: { projectId: own } }),
+          })
+        ).json()) as { data: { decision: string | null } }
+        decisions.push(res.data.decision)
+      }
+      await call.untilStopped()
+      return exited(143)
+    })
+    const id = await t.newTask()
+    await t.sessions.update(id, { confirmationsWaived: true })
+    await t.post(`/agent-sessions/${id}/messages`, { text: '判定して' })
+    await t.until(() => decisions.length === 2, '2 回頼む')
+    expect(decisions).toEqual(['allow', null])
+    const requests = t.sessions.messages(id).filter((m) => m.body.kind === 'approval_request').map((m) => m.body)
+    expect(requests).toMatchObject([{ toolName: 'mcp__ixa__review_take', risk: 'write', reason: '制作者の判定（OK/NG）として記録します' }])
+    await t.post(`/agent-sessions/${id}/stop`, {})
+    await t.until(() => t.statusOf(id) === 'interrupted', '中断')
+  })
+
   it('会話の作品と同じ projectId なら、印のまま（読むだけはすぐ許す）', async () => {
     let decision: string | null = 'unset'
     const t = setup(async (call, app) => {

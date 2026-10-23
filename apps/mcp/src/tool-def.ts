@@ -55,6 +55,11 @@ export type ToolDef = {
    * 入力が読めないとき・ツールが決め方を持たないときは `risk` に倒す。
    */
   readonly riskOf: (rawArgs: unknown) => ToolRisk
+  /**
+   * 確認なしの旗が立っていても必ず確認する呼び出しなら、その理由（日本語）。それ以外は null。
+   * 人の判定を AI が代わりに記録する（review_take の verdict）など。入力が読めないときは null（印で決まる）。
+   */
+  readonly alwaysConfirm: (rawArgs: unknown) => string | null
   readonly description: string
   readonly input: z.AnyZodObject
   readonly run: (rawArgs: unknown, deps: ToolDeps) => Promise<CallToolResult>
@@ -73,6 +78,8 @@ export const defineTool = <S extends z.ZodRawShape>(def: {
   readonly risk: ToolRisk
   /** action で危険度が変わるときだけ書く。`risk` より重くしない。 */
   readonly riskOf?: (args: z.infer<z.ZodObject<S>>) => ToolRisk
+  /** 確認なしの旗でも必ず確認する呼び出しの理由。書くのはそういう呼び出しがある道具だけ。 */
+  readonly alwaysConfirm?: (args: z.infer<z.ZodObject<S>>) => string | null
   readonly description: string
   readonly input: z.ZodObject<S>
   /**
@@ -89,6 +96,12 @@ export const defineTool = <S extends z.ZodRawShape>(def: {
     if (riskOf === undefined) return def.risk
     const parsed = def.input.safeParse(rawArgs ?? {})
     return parsed.success ? riskOf(parsed.data) : def.risk
+  },
+  alwaysConfirm: (rawArgs) => {
+    const alwaysConfirm = def.alwaysConfirm
+    if (alwaysConfirm === undefined) return null
+    const parsed = def.input.safeParse(rawArgs ?? {})
+    return parsed.success ? alwaysConfirm(parsed.data) : null
   },
   description: def.description,
   input: def.input,
