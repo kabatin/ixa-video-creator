@@ -224,9 +224,18 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       }
     },
 
-    stop: (sessionId: AgentSessionId): AgentResult<null> => {
+    stop: async (sessionId: AgentSessionId): Promise<AgentResult<null>> => {
       const turn = active.get(sessionId)
-      if (turn === undefined) return fail('conflict', 'このタスクは作業中ではありません')
+      if (turn === undefined) {
+        // 動いているやりとりが無いのに作業中のまま残った会話（後片付けの失敗など）は、ここで中断にする。
+        const session = await deps.sessions.findById(sessionId)
+        if (session === null) return fail('not_found', '会話が見つかりません')
+        if (!isAgentSessionBusy(session.status)) return fail('conflict', 'このタスクは作業中ではありません')
+        const interrupted = await deps.sessions.transition(sessionId, 'interrupted', deps.now())
+        await appendAndPublish(sessionId, [{ kind: 'system', event: 'interrupted', text: '止めました。続きから話せます。', raw: null }])
+        if (interrupted !== null) publishSession(interrupted)
+        return okValue(null)
+      }
       turn.turn.markStopped()
       approvals.denyAll(sessionId, '制作者が止めました。')
       turn.turn.handle.stop()

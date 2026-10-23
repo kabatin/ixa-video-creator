@@ -1,6 +1,7 @@
 import type { AgentSessionRepository } from '@ixa/db'
 import {
   countsAsEdit,
+  isAgentSessionBusy,
   parseStreamJsonLine,
   summaryLineFrom,
   type AgentMessageBody,
@@ -80,6 +81,28 @@ const transitionFinal = async (
   if (current?.status !== 'awaiting_approval') return null
   await sessions.transition(sessionId, 'running', at)
   return sessions.transition(sessionId, status, at)
+}
+
+const SETTLE_ATTEMPTS = 3
+const SETTLE_RETRY_MS = 500
+
+/**
+ * 後片付けで投げても、作業中のまま残さない（残ると同じ作品で次の会話を始められない）。
+ * まだ作業中なら失敗に落とす。DB が一時的に落ちていることがあるので、少し待って何度か試す。
+ */
+const settleIfStillBusy = async (deps: TurnDeps, sessionId: AgentSession['id']): Promise<void> => {
+  for (let attempt = 1; attempt <= SETTLE_ATTEMPTS; attempt += 1) {
+    try {
+      const current = await deps.sessions.findById(sessionId)
+      if (current === null || !isAgentSessionBusy(current.status)) return
+      const failed = await transitionFinal(deps.sessions, sessionId, 'error', deps.now())
+      if (failed !== null) deps.hub.publish(sessionId, { type: 'session', session: failed })
+      return
+    } catch (error) {
+      deps.logger.error({ err: error, agentSessionId: sessionId, attempt }, '作業中のまま残った会話を失敗にできませんでした')
+      await new Promise((resolve) => setTimeout(resolve, SETTLE_RETRY_MS * attempt))
+    }
+  }
 }
 
 export const startTurn = (deps: TurnDeps, spec: TurnSpec, cleanup: () => Promise<void>): RunningTurn => {
@@ -163,6 +186,7 @@ export const startTurn = (deps: TurnDeps, spec: TurnSpec, cleanup: () => Promise
       deps.logger.error({ err: error, agentSessionId: sessionId }, 'やりとりの後片付けに失敗しました')
     })
     .finally(async () => {
+      await settleIfStillBusy(deps, sessionId)
       deps.approvals.forget(sessionId)
       await cleanup().catch((error: unknown) => {
         deps.logger.error({ err: error, agentSessionId: sessionId }, 'やりとりの鍵と設定ファイルを片付けられませんでした')

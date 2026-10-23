@@ -15,7 +15,7 @@ import { agentSessionRoutes } from '../routes/agent-sessions.js'
 import { createFakeCli, cliLines, exited, type FakeCliCall } from './fake-cli-stream.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryAccessTokens } from './in-memory-access-token-repository.js'
-import { createInMemoryAgentSessions } from './in-memory-agent-sessions.js'
+import { createInMemoryAgentSessions, type InMemoryAgentSessions } from './in-memory-agent-sessions.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 
 /**
@@ -27,11 +27,17 @@ const CLI_SESSION = '6a4a65e2-1d81-49ef-add0-13d11b944480'
 const roots: string[] = []
 afterAll(() => roots.forEach((root) => rmSync(root, { recursive: true, force: true })))
 
-const setup = (script: (call: FakeCliCall, app: OpenAPIHono) => Promise<ReturnType<typeof exited>>, opts: { textTool?: AiToolId } = {}) => {
+type SetupOptions = {
+  readonly textTool?: AiToolId
+  /** 会話の表の口を差し替える（後片付けの失敗を作る）。 */
+  readonly wrapSessions?: (repo: InMemoryAgentSessions) => InMemoryAgentSessions
+}
+
+const setup = (script: (call: FakeCliCall, app: OpenAPIHono) => Promise<ReturnType<typeof exited>>, opts: SetupOptions = {}) => {
   const project = aProject()
   const shot = aShot(project.id, { code: 'CUT-07' })
   const projects = createInMemoryProjectRepository([project])
-  const sessions = createInMemoryAgentSessions()
+  const sessions = (opts.wrapSessions ?? ((repo) => repo))(createInMemoryAgentSessions())
   const tokens = createInMemoryAccessTokens()
   const logger = createLogger('silent')
   const hub = createAgentHub(() => undefined)
@@ -408,6 +414,27 @@ describe('確認の待ちと答え', () => {
     expect(res.status).toBe(403)
     await t.post(`/agent-sessions/${id}/stop`, {})
     await t.until(() => t.statusOf(id) === 'interrupted', '中断')
+  })
+})
+
+describe('後片付けの失敗', () => {
+  it('やりとりの後片付けで投げても、作業中のまま残さず失敗にする', async () => {
+    const t = setup(simpleTurn, {
+      wrapSessions: (repo) => ({ ...repo, recordTurn: () => Promise.reject(new Error('DB が落ちました')) }),
+    })
+    const id = await t.newTask()
+    await t.post(`/agent-sessions/${id}/messages`, { text: 'こんにちは' })
+    await t.until(() => t.statusOf(id) === 'error', '失敗')
+    expect(t.tokens.rows()[0]?.revokedAt).not.toBeNull()
+  })
+
+  it('動いているやりとりが無いのに作業中のまま残った会話は、止めると中断にできる', async () => {
+    const t = setup(simpleTurn)
+    const id = await t.newTask()
+    await t.sessions.transition(id, 'running', new Date())
+    expect((await t.post(`/agent-sessions/${id}/stop`, {})).status).toBe(202)
+    expect(t.statusOf(id)).toBe('interrupted')
+    expect(t.sessions.messages(id).at(-1)?.body).toMatchObject({ kind: 'system', event: 'interrupted' })
   })
 })
 

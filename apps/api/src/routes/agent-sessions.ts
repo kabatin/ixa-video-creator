@@ -132,8 +132,8 @@ export const agentSessionRoutes = (deps: AgentSessionRoutesDeps) =>
       if (!result.ok) return c.json(fail(result.message), AGENT_FAILURE_STATUS[result.code])
       return c.json(ok(toAgentSessionResponse(result.value)), 202)
     })
-    .openapi(stopRoute, (c) => {
-      const result = deps.agent.stop(c.req.valid('param').sessionId)
+    .openapi(stopRoute, async (c) => {
+      const result = await deps.agent.stop(c.req.valid('param').sessionId)
       if (!result.ok) return c.json(fail(result.message), AGENT_FAILURE_STATUS[result.code])
       return c.json(ok(null), 202)
     })
