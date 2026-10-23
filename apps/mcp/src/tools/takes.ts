@@ -38,6 +38,13 @@ export const GenerateTakesInput = z.object({
     .max(200)
     .optional()
     .describe('Why this take is remade (Japanese, shown to the user). Required with parentTakeId.'),
+  autoRetake: z
+    .boolean()
+    .default(false)
+    .describe(
+      'If a review fails, regenerate automatically (with the review fixes, up to the project limit). Default false: a failed ' +
+        'take is only marked "retake recommended" for the user. Use true for unattended overnight runs; it costs time and tokens.',
+    ),
 })
 
 export const generateTakesTool = defineTool({
@@ -45,7 +52,8 @@ export const generateTakesTool = defineTool({
   description:
     'Generate video takes for shots (queues jobs; local models take minutes per take and run one at a time). ' +
     'Shots usually need a start frame first (draw_start_frames). Returns generation jobIds for wait ' +
-    '{kind:"generation", id}. corrections/seed/parentTakeId send one request per shot.',
+    '{kind:"generation", id}. corrections/seed/parentTakeId/autoRetake send one request per shot. ' +
+    'By default a take that fails review is not regenerated (only marked for the user); set autoRetake for unattended runs.',
   input: GenerateTakesInput,
   handler: async (args, { api }) => {
     if (args.parentTakeId !== undefined && args.shotIds.length !== 1) {
@@ -57,7 +65,8 @@ export const generateTakesTool = defineTool({
       regenerationReason: args.regenerationReason ?? null,
     })
     if (lineage !== null) throw new ToolInputError(`regenerationReason: ${lineage}`)
-    const perShot = args.corrections !== undefined || args.seed !== undefined || args.parentTakeId !== undefined
+    const perShot =
+      args.corrections !== undefined || args.seed !== undefined || args.parentTakeId !== undefined || args.autoRetake
     if (!perShot) {
       const bulk = await api.post(
         `/projects/${seg(args.projectId)}/shots/bulk/generate`,
@@ -82,6 +91,7 @@ export const generateTakesTool = defineTool({
           ...(args.seed === undefined ? {} : { seed: args.seed }),
           ...(args.parentTakeId === undefined ? {} : { parentTakeId: args.parentTakeId }),
           ...(args.regenerationReason === undefined ? {} : { regenerationReason: args.regenerationReason }),
+          ...(args.autoRetake ? { autoRetake: true } : {}),
         },
         WireGenerateStarted,
       )

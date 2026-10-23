@@ -183,6 +183,7 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ parentTakeId: 'x' }, 'parentTakeId'],
       [{ regenerationReason: ' ' }, 'regenerationReason'],
       [{ regenerationReason: long(201) }, 'regenerationReason'],
+      [{ autoRetake: 'yes' }, 'autoRetake'],
     ],
   },
   list_takes: { base: { shotId: S }, cases: [[{ shotId: 'x' }, 'shotId']] },

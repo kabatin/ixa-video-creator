@@ -71,6 +71,20 @@ describe('generate_takes', () => {
     expect(result).toMatchObject({ jobs: [{ kind: 'generation', id: ulid('JB3') }] })
   })
 
+  /** ADR-0057。夜間に自走させるときだけ「NG なら自動で作り直す」を付ける。付けたら Shot ごとの口で頼む。 */
+  it('autoRetake を付ければ Shot ごとの口へ autoRetake: true で頼む（付けなければ送らない）', async () => {
+    const started = { jobIds: [ulid('JB4')], specHash: 'x'.repeat(64), resolvedModel: MODEL, duplicateOfTakeId: null, stretchedToFit: false }
+    const fake = createFakeApi([
+      { method: 'POST', path: `/shots/${SHOT}/generate`, status: 202, data: started },
+      { method: 'POST', path: `/shots/${SHOT_B}/generate`, status: 202, data: started },
+    ])
+    await generateTakesTool.run({ projectId: PROJECT, shotIds: [SHOT, SHOT_B], model: MODEL, autoRetake: true }, depsFor(fake))
+    expect(fake.calls.map((call) => call.body)).toEqual([
+      { model: MODEL, count: 1, autoRetake: true },
+      { model: MODEL, count: 1, autoRetake: true },
+    ])
+  })
+
   it('親 Take は Shot が 1 つのときだけ', async () => {
     const result = await generateTakesTool.run({ projectId: PROJECT, shotIds: [SHOT, SHOT_B], model: MODEL, parentTakeId: TAKE }, depsFor(createFakeApi([])))
     expect(textOf(result)).toContain('parentTakeId')
