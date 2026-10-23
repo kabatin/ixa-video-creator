@@ -71,7 +71,8 @@ describe('export_thumbnail', () => {
       depsFor(fake, { outputDir: dir }),
     )
     expect(fake.callsTo('POST', `/projects/${PROJECT}/thumbnails`)[0]?.body).toMatchObject({
-      spec: { background: { kind: 'timeline_frame', atSec: 12.5 }, title: '新曲', layout: 'bottom', accentColor: '#ff0000' },
+      // 3 マスだった頃の bottom は今の bottom_left に読み替えて送る。
+      spec: { background: { kind: 'timeline_frame', atSec: 12.5 }, title: '新曲', layout: 'bottom_left', accentColor: '#ff0000' },
     })
     const data = jsonOf(result) as Record<string, string>
     expect(data).toMatchObject({ thumbnailId: THUMB, status: 'done', outputAssetId: OUTPUT, fileName: FILE_NAME })
@@ -166,6 +167,38 @@ describe('export_thumbnail', () => {
     expect(other.filePath).not.toBe(first.filePath)
     expect([...(await readFile(other.filePath ?? ''))]).toEqual([...JPEG_2])
     expect([...(await readFile(first.filePath ?? ''))]).toEqual([...JPEG])
+  })
+
+  it('大きさ・副題の色・差し色のバー・9 マスの配置をそのまま送る', async () => {
+    const fake = createFakeApi(doneRoutes)
+    jsonOf(
+      await exportThumbnailTool.run(
+        {
+          projectId: PROJECT,
+          background: { atSec: 1 },
+          title: '新曲',
+          layout: 'top_center',
+          titleSize: 160,
+          subtitleSize: 90,
+          accentBar: false,
+          colors: { subtitle: '#00ff88' },
+        },
+        depsFor(fake, { outputDir: dir }),
+      ),
+    )
+    expect(fake.callsTo('POST', `/projects/${PROJECT}/thumbnails`)[0]?.body).toMatchObject({
+      spec: { layout: 'top_center', titleSize: 160, subtitleSize: 90, accentBar: false, subtitleColor: '#00ff88' },
+    })
+  })
+
+  it('範囲の外の大きさ・形の違う副題の色は、API を呼ぶ前に項目の名前つきで断る', async () => {
+    for (const patch of [{ titleSize: 27 }, { titleSize: 201 }, { subtitleSize: 19 }, { subtitleSize: 121 }, { colors: { subtitle: 'white' } }]) {
+      const fake = createFakeApi(doneRoutes)
+      const result = await exportThumbnailTool.run({ projectId: PROJECT, background: { atSec: 1 }, title: '新曲', ...patch }, depsFor(fake, { outputDir: dir }))
+      expect(result.isError).toBe(true)
+      expect(textOf(result)).toMatch(/titleSize|subtitleSize|subtitleColor/)
+      expect(fake.calls).toHaveLength(0)
+    }
   })
 
   it('41 字の題名は API を呼ぶ前に断る（キーアートも頼まない）', async () => {

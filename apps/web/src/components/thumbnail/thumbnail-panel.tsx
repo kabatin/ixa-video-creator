@@ -1,6 +1,7 @@
 'use client'
 
 import type { ProjectId, Shot, TimelineDocument } from '@ixa/domain'
+import { fitThumbnailText } from '@ixa/render/composition'
 import { useMemo, useState } from 'react'
 import { useRenderFolder } from '@/components/render-folder'
 import { BackgroundPicker } from '@/components/thumbnail/background-picker'
@@ -60,6 +61,14 @@ export const ThumbnailPanel = ({
     setMessages([])
   }
   const spec = useMemo(() => previewSpec(form), [form])
+  // 「自動」の大きさは、プレビューが描く大きさと同じ計算で見せる。
+  const autoSizes = useMemo(() => {
+    if (spec === null) return null
+    // 片方だけを自動にしたときの大きさ。もう片方は決めた値のまま（副題の自動は題名の大きさで変わる）。
+    const title = fitThumbnailText({ ...spec, titleSize: null }).title.size
+    const subtitle = fitThumbnailText({ ...spec, subtitleSize: null }).subtitle?.size ?? null
+    return { title, subtitle }
+  }, [spec])
   // 追いかけている間だけ押せない（諦めたら押せる。`use-thumbnail-export.ts`）。
   const busy = exporting.busy
 
@@ -83,7 +92,7 @@ export const ThumbnailPanel = ({
           keyArt={keyArt}
         />
         <FramingFields form={form} onChange={update} />
-        <TextFields form={form} onChange={update} />
+        <TextFields form={form} onChange={update} autoSizes={autoSizes} />
       </section>
 
       <section aria-label="プレビュー" className="flex flex-col gap-4 lg:min-h-0 lg:overflow-y-auto lg:border-l lg:border-line lg:pl-6">

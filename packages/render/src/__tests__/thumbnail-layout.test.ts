@@ -83,7 +83,53 @@ describe('thumbnailMetadata', () => {
 
 describe('文字の塊', () => {
   it('左の配置は左の 3 分の 1 ほどに収まる（人物の側へ出ない）', () => {
-    const block = TEXT_BLOCKS.left
+    const block = TEXT_BLOCKS.middle_left
     expect(block.left + block.width).toBeLessThanOrEqual(Math.round(1280 / 3) + 40)
+  })
+
+  it('右の配置は左の鏡写し（右の 3 分の 1・右寄せ）', () => {
+    const left = TEXT_BLOCKS.middle_left
+    const right = TEXT_BLOCKS.middle_right
+    expect(right.width).toBe(left.width)
+    expect(1280 - (right.left + right.width)).toBe(left.left)
+    expect(right.left).toBeGreaterThanOrEqual(1280 - Math.round(1280 / 3) - 40)
+    expect(right.align).toBe('right')
+  })
+
+  it('左下は 3 マスだった頃の「下の帯」と同じ形（見た目を変えない）', () => {
+    expect(TEXT_BLOCKS.bottom_left).toEqual({
+      left: 64,
+      top: 432,
+      width: 1152,
+      height: 248,
+      vertical: 'end',
+      align: 'left',
+      accent: 'band_top',
+      maxTitleSize: 110,
+      maxTitleLines: 2,
+      maxSubtitleLines: 2,
+    })
+  })
+
+  it('上の帯は下の帯を上下に返した位置で、上に寄せる。差し色は帯の下端', () => {
+    for (const align of ['left', 'center', 'right'] as const) {
+      const top = TEXT_BLOCKS[`top_${align}`]
+      const bottom = TEXT_BLOCKS[`bottom_${align}`]
+      expect(top.top).toBe(720 - (bottom.top + bottom.height))
+      expect(top.height).toBe(bottom.height)
+      expect(top.vertical).toBe('start')
+      expect(top.align).toBe(align)
+      expect(bottom.align).toBe(align)
+      expect(top.accent).toBe('band_bottom')
+    }
+  })
+
+  it('どの塊もキャンバスの中', () => {
+    for (const block of Object.values(TEXT_BLOCKS)) {
+      expect(block.left).toBeGreaterThanOrEqual(0)
+      expect(block.top).toBeGreaterThanOrEqual(0)
+      expect(block.left + block.width).toBeLessThanOrEqual(1280)
+      expect(block.top + block.height).toBeLessThanOrEqual(720)
+    }
   })
 })

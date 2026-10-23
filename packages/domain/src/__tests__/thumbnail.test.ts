@@ -4,7 +4,12 @@ import {
   MediaOrigin,
   ProjectId,
   THUMBNAIL_SUBTITLE_MAX_LENGTH,
+  THUMBNAIL_LAYOUTS,
+  THUMBNAIL_SUBTITLE_SIZE_MAX,
+  THUMBNAIL_SUBTITLE_SIZE_MIN,
   THUMBNAIL_TITLE_MAX_LENGTH,
+  THUMBNAIL_TITLE_SIZE_MAX,
+  THUMBNAIL_TITLE_SIZE_MIN,
   Thumbnail,
   ThumbnailId,
   ThumbnailJobData,
@@ -33,11 +38,48 @@ describe('ThumbnailSpec', () => {
       focusY: 0.5,
       title: '新曲',
       subtitle: null,
-      layout: 'left',
+      layout: 'middle_left',
+      titleSize: null,
+      subtitleSize: null,
       titleColor: '#ffffff',
+      subtitleColor: '#ffffff',
+      accentBar: true,
       accentColor: '#ffcc00',
       font: 'gothic',
     })
+  })
+
+  it('3 マスだった頃の配置は 9 マスの値に読み替える（保存済みの spec・古い入力）', () => {
+    expect(ThumbnailSpec.parse({ background: frame, title: '新曲', layout: 'left' }).layout).toBe('middle_left')
+    expect(ThumbnailSpec.parse({ background: frame, title: '新曲', layout: 'center' }).layout).toBe('middle_center')
+    expect(ThumbnailSpec.parse({ background: frame, title: '新曲', layout: 'bottom' }).layout).toBe('bottom_left')
+  })
+
+  it('9 マスの配置はそのまま通す', () => {
+    for (const layout of THUMBNAIL_LAYOUTS) {
+      expect(ThumbnailSpec.parse({ background: frame, title: '新曲', layout }).layout).toBe(layout)
+    }
+  })
+
+  it('題名の大きさは 28〜200 の整数か null（自動）。外は落とす', () => {
+    expect(parse({ titleSize: THUMBNAIL_TITLE_SIZE_MIN }).success).toBe(true)
+    expect(parse({ titleSize: THUMBNAIL_TITLE_SIZE_MAX }).success).toBe(true)
+    expect(parse({ titleSize: null }).success).toBe(true)
+    expect(parse({ titleSize: 27 }).success).toBe(false)
+    expect(parse({ titleSize: 201 }).success).toBe(false)
+    expect(parse({ titleSize: 80.5 }).success).toBe(false)
+  })
+
+  it('副題の大きさは 20〜120 の整数か null（自動）。外は落とす', () => {
+    expect(parse({ subtitleSize: THUMBNAIL_SUBTITLE_SIZE_MIN }).success).toBe(true)
+    expect(parse({ subtitleSize: THUMBNAIL_SUBTITLE_SIZE_MAX }).success).toBe(true)
+    expect(parse({ subtitleSize: 19 }).success).toBe(false)
+    expect(parse({ subtitleSize: 121 }).success).toBe(false)
+  })
+
+  it('差し色のバーは真偽値だけ', () => {
+    expect(ThumbnailSpec.parse({ background: frame, title: '新曲', accentBar: false }).accentBar).toBe(false)
+    expect(parse({ accentBar: 'no' }).success).toBe(false)
   })
 
   it('背景は素材の画像でもよい', () => {
@@ -80,10 +122,14 @@ describe('ThumbnailSpec', () => {
     expect(parse({ titleColor: '#A1b2C3', accentColor: '#000000' }).success).toBe(true)
     expect(parse({ titleColor: 'red' }).success).toBe(false)
     expect(parse({ accentColor: '#fff' }).success).toBe(false)
+    expect(parse({ subtitleColor: '#00ff88' }).success).toBe(true)
+    expect(parse({ subtitleColor: 'white' }).success).toBe(false)
+    expect(parse({ subtitleColor: '#ffff' }).success).toBe(false)
   })
 
   it('知らない配置・書体・背景は落とす', () => {
     expect(parse({ layout: 'right' }).success).toBe(false)
+    expect(parse({ layout: 'middle' }).success).toBe(false)
     expect(parse({ font: 'comic' }).success).toBe(false)
     expect(parse({ background: { kind: 'video', mediaAssetId: assetId } }).success).toBe(false)
     expect(parse({ background: { kind: 'timeline_frame', atSec: -1 } }).success).toBe(false)

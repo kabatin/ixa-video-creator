@@ -23,6 +23,11 @@ export const THUMBNAIL_TITLE_MAX_LENGTH = 40
 export const THUMBNAIL_SUBTITLE_MAX_LENGTH = 60
 export const THUMBNAIL_ZOOM_MIN = 1
 export const THUMBNAIL_ZOOM_MAX = 2
+/** 題名・副題の大きさ（字の高さ）を決めるときの範囲。null は自動（入る中でいちばん大きく）。 */
+export const THUMBNAIL_TITLE_SIZE_MIN = 28
+export const THUMBNAIL_TITLE_SIZE_MAX = 200
+export const THUMBNAIL_SUBTITLE_SIZE_MIN = 20
+export const THUMBNAIL_SUBTITLE_SIZE_MAX = 120
 
 const HexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, '色は #RRGGBB の形で指定してください')
 
@@ -33,13 +38,33 @@ export const ThumbnailBackground = z.discriminatedUnion('kind', [
 export type ThumbnailBackground = z.infer<typeof ThumbnailBackground>
 
 /**
- * 文字の置き方。どれも顔の上に文字を重ねにくい形にする。
- * - `left`: 左の 3 分の 1 に文字の塊（人物は右に置く絵向け）
- * - `center`: 真ん中に大きく
- * - `bottom`: 下の帯に題名（人物が上半分にいる絵向け）
+ * 文字の置き方。3×3 のマスのどこに文字の塊を置くか（縦 top/middle/bottom × 横 left/center/right）。
+ * - `middle_left` / `middle_right`: 左（右）の 3 分の 1 の列（人物は反対側に置く絵向け）
+ * - `middle_center`: 真ん中に大きく
+ * - `top_*` / `bottom_*`: 上（下）の横長の帯。横の寄せだけが違う
  */
-export const ThumbnailLayout = z.enum(['left', 'center', 'bottom'])
+export const THUMBNAIL_LAYOUTS = [
+  'top_left',
+  'top_center',
+  'top_right',
+  'middle_left',
+  'middle_center',
+  'middle_right',
+  'bottom_left',
+  'bottom_center',
+  'bottom_right',
+] as const
+export const ThumbnailLayout = z.enum(THUMBNAIL_LAYOUTS)
 export type ThumbnailLayout = z.infer<typeof ThumbnailLayout>
+
+/** 3 マスだった頃（ADR-0051 の初版）の値。保存済みの spec と古い API・MCP の入力を読み替える。 */
+const LEGACY_LAYOUTS = Object.freeze({ left: 'middle_left', center: 'middle_center', bottom: 'bottom_left' } as const)
+
+/** 配置の入力。今の 9 つに加えて旧値も受け、今の値に直して返す。 */
+export const ThumbnailLayoutInput = z.union([
+  ThumbnailLayout,
+  z.enum(['left', 'center', 'bottom']).transform((legacy): ThumbnailLayout => LEGACY_LAYOUTS[legacy]),
+])
 
 const Fraction = z.number().finite().min(0).max(1)
 
@@ -70,8 +95,15 @@ export const ThumbnailSpec = z.object({
   focusY: Fraction.default(0.5),
   title: Title,
   subtitle: Subtitle.nullable().default(null),
-  layout: ThumbnailLayout.default('left'),
+  layout: ThumbnailLayoutInput.default('middle_left'),
+  /** 指定しても、入りきらないときは縮める（はみ出しは作らない）。 */
+  titleSize: z.number().int().min(THUMBNAIL_TITLE_SIZE_MIN).max(THUMBNAIL_TITLE_SIZE_MAX).nullable().default(null),
+  /** 指定したときは「題名の半分まで」の上限を掛けない。 */
+  subtitleSize: z.number().int().min(THUMBNAIL_SUBTITLE_SIZE_MIN).max(THUMBNAIL_SUBTITLE_SIZE_MAX).nullable().default(null),
   titleColor: HexColor.default('#ffffff'),
+  subtitleColor: HexColor.default('#ffffff'),
+  /** false なら差し色の線も帯も描かない。 */
+  accentBar: z.boolean().default(true),
   accentColor: HexColor.default('#ffcc00'),
   font: TextFont.default('gothic'),
 })

@@ -1,7 +1,7 @@
 import { access, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import { MediaAssetId, TextFont, ThumbnailLayout, ThumbnailSpec, renderExportFolderName, type ThumbnailBackground } from '@ixa/domain'
+import { MediaAssetId, TextFont, ThumbnailLayoutInput, ThumbnailSpec, renderExportFolderName, type ThumbnailBackground } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import { pickCandidate, startKeyArt, waitForKeyArt, type KeyArtCandidate } from '../lib/key-art-candidates.js'
@@ -38,11 +38,18 @@ export const ExportThumbnailInput = z.object({
   candidateIndex: z.number().int().min(0).default(0).describe('Which finished key art candidate to use (0-based).'),
   title: z.string().optional().describe('Big title, 1-40 characters. Required unless thumbnailId.'),
   subtitle: z.string().optional().describe('Smaller line, up to 60 characters.'),
-  layout: ThumbnailLayout.optional().describe('left = text in the left third, center, bottom = band at the bottom.'),
+  layout: ThumbnailLayoutInput.optional().describe(
+    'Where the text block goes on a 3x3 grid: top_/middle_/bottom_ + left/center/right (default middle_left). ' +
+      'middle_left / middle_right = a column in the left / right third, middle_center = big in the middle, ' +
+      'top_* / bottom_* = a wide band at the top / bottom. Old values left / center / bottom still work.',
+  ),
+  titleSize: z.number().optional().describe('Title size, integer 28-200. Omit for automatic (largest that fits). Shrinks only if it does not fit.'),
+  subtitleSize: z.number().optional().describe('Subtitle size, integer 20-120. Omit for automatic (at most half the title).'),
+  accentBar: z.boolean().optional().describe('false = no accent line / band at all (default true).'),
   colors: z
-    .object({ title: z.string().optional(), accent: z.string().optional() })
+    .object({ title: z.string().optional(), subtitle: z.string().optional(), accent: z.string().optional() })
     .optional()
-    .describe('#RRGGBB colors for the title and the accent bar.'),
+    .describe('#RRGGBB colors for the title, the subtitle and the accent bar.'),
   font: TextFont.optional(),
   zoom: z.number().optional().describe('1-2. Zoom into the background.'),
   focusX: z.number().optional().describe('0-1. Which part of the background to keep (0.5 = center).'),
@@ -58,7 +65,11 @@ const specOf = (args: ExportThumbnailArgs, background: ThumbnailBackground): Thu
     title: args.title ?? '',
     ...(args.subtitle === undefined ? {} : { subtitle: args.subtitle }),
     ...(args.layout === undefined ? {} : { layout: args.layout }),
+    ...(args.titleSize === undefined ? {} : { titleSize: args.titleSize }),
+    ...(args.subtitleSize === undefined ? {} : { subtitleSize: args.subtitleSize }),
+    ...(args.accentBar === undefined ? {} : { accentBar: args.accentBar }),
     ...(args.colors?.title === undefined ? {} : { titleColor: args.colors.title }),
+    ...(args.colors?.subtitle === undefined ? {} : { subtitleColor: args.colors.subtitle }),
     ...(args.colors?.accent === undefined ? {} : { accentColor: args.colors.accent }),
     ...(args.font === undefined ? {} : { font: args.font }),
     ...(args.zoom === undefined ? {} : { zoom: args.zoom }),

@@ -20,7 +20,8 @@ export { THUMBNAIL_COMPOSITION_ID, TIMELINE_COMPOSITION_ID } from './composition
 
 // サムネイル（ADR-0051）。画面の Player と worker の renderStill が同じコンポジションと同じ大きさの決め方を使う。
 export { ThumbnailComposition } from './compositions/Thumbnail.js'
-export { thumbnailMetadata } from './compositions/thumbnail-layout.js'
+// 画面は「自動」の大きさを数で見せ、自分で決めるときの出発点にする。
+export { fitThumbnailText, thumbnailMetadata } from './compositions/thumbnail-layout.js'
 export type { ThumbnailBackgroundSource, ThumbnailCompositionProps } from './compositions/thumbnail-props.js'
 
 export { TimelineComposition, ClipBody, ClipMedia, PREMOUNT_SEC } from './compositions/Timeline.js'

@@ -7,12 +7,14 @@ import {
   SUBTITLE_LINE_HEIGHT,
   TEXT_BLOCKS,
   TITLE_LINE_HEIGHT,
+  accentThickness,
   coverBox,
   fitThumbnailText,
   textGap,
   thumbnailFrameOf,
   zoomTransform,
   type Focus,
+  type TextBlock,
 } from './thumbnail-layout.js'
 import type { FittedText } from './thumbnail-text-fit.js'
 import type { ThumbnailBackgroundSource, ThumbnailCompositionProps } from './thumbnail-props.js'
@@ -81,11 +83,20 @@ const Background: React.FC<ThumbnailCompositionProps> = ({ spec, source }) => {
   return <AbsoluteFill style={MISMATCH_STYLE}>背景の材料が仕様と合っていません</AbsoluteFill>
 }
 
+const SIDE_SCRIM = 'rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.38) 34%, rgba(0,0,0,0) 56%'
+const BAND_SCRIM = 'rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.5) 30%, rgba(0,0,0,0) 48%'
+
 /** 文字の下に敷く暗がり。明るい背景でも題名が読めるようにする（配置ごとに文字の側だけ暗くする）。 */
 const SCRIMS: Readonly<Record<ThumbnailSpec['layout'], string>> = Object.freeze({
-  left: 'linear-gradient(to right, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.38) 34%, rgba(0,0,0,0) 56%)',
-  center: 'radial-gradient(ellipse at center, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 70%, rgba(0,0,0,0) 100%)',
-  bottom: 'linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.5) 30%, rgba(0,0,0,0) 48%)',
+  top_left: `linear-gradient(to bottom, ${BAND_SCRIM})`,
+  top_center: `linear-gradient(to bottom, ${BAND_SCRIM})`,
+  top_right: `linear-gradient(to bottom, ${BAND_SCRIM})`,
+  middle_left: `linear-gradient(to right, ${SIDE_SCRIM})`,
+  middle_center: 'radial-gradient(ellipse at center, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 70%, rgba(0,0,0,0) 100%)',
+  middle_right: `linear-gradient(to left, ${SIDE_SCRIM})`,
+  bottom_left: `linear-gradient(to top, ${BAND_SCRIM})`,
+  bottom_center: `linear-gradient(to top, ${BAND_SCRIM})`,
+  bottom_right: `linear-gradient(to top, ${BAND_SCRIM})`,
 })
 
 const titleStyle = (spec: ThumbnailSpec, size: number): React.CSSProperties => ({
@@ -106,7 +117,7 @@ const subtitleStyle = (spec: ThumbnailSpec, size: number): React.CSSProperties =
   fontSize: size,
   fontWeight: 700,
   lineHeight: SUBTITLE_LINE_HEIGHT,
-  color: '#ffffff',
+  color: spec.subtitleColor,
   textShadow: TEXT_SHADOWS.strong,
   margin: 0,
 })
@@ -125,21 +136,44 @@ const Lines: React.FC<{ readonly fitted: FittedText; readonly style: React.CSSPr
   </p>
 )
 
-/** 差し色の帯。left・center は題名の上の短い線、bottom は帯の上端いっぱい。 */
-const AccentBar: React.FC<{ readonly spec: ThumbnailSpec; readonly titleSize: number }> = ({ spec, titleSize }) => {
-  const thickness = Math.max(10, Math.round(titleSize * 0.1))
-  if (spec.layout === 'bottom') return null
-  return (
-    <div
-      style={{
-        width: Math.round(titleSize * 1.6),
-        height: thickness,
-        backgroundColor: spec.accentColor,
-        boxShadow: `0 2px 10px ${rgba('#000000', 0.6)}`,
-        alignSelf: spec.layout === 'center' ? 'center' : 'flex-start',
-      }}
-    />
-  )
+const ALIGN_SELF: Readonly<Record<TextBlock['align'], 'flex-start' | 'center' | 'flex-end'>> = Object.freeze({
+  left: 'flex-start',
+  center: 'center',
+  right: 'flex-end',
+})
+
+const JUSTIFY: Readonly<Record<TextBlock['vertical'], 'flex-start' | 'center' | 'flex-end'>> = Object.freeze({
+  start: 'flex-start',
+  center: 'center',
+  end: 'flex-end',
+})
+
+/** 題名の上の短い差し色の線（`short` の塊）。寄せは文字の寄せに揃える。 */
+const ShortAccent: React.FC<{ readonly color: string; readonly block: TextBlock; readonly titleSize: number }> = ({
+  color,
+  block,
+  titleSize,
+}) => (
+  <div
+    style={{
+      width: Math.round(titleSize * 1.6),
+      height: accentThickness(titleSize),
+      backgroundColor: color,
+      boxShadow: `0 2px 10px ${rgba('#000000', 0.6)}`,
+      alignSelf: ALIGN_SELF[block.align],
+    }}
+  />
+)
+
+/** 帯の差し色の線。下の帯は帯の上端、上の帯は帯の下端に、横いっぱいに引く。 */
+const BandAccent: React.FC<{ readonly color: string; readonly block: TextBlock; readonly titleSize: number }> = ({
+  color,
+  block,
+  titleSize,
+}) => {
+  const thickness = accentThickness(titleSize)
+  const top = block.accent === 'band_top' ? block.top - 24 : block.top + block.height + 24 - thickness
+  return <div style={{ position: 'absolute', left: 0, right: 0, top, height: thickness, backgroundColor: color }} />
 }
 
 const TextLayer: React.FC<{ readonly spec: ThumbnailSpec }> = ({ spec }) => {
@@ -148,18 +182,7 @@ const TextLayer: React.FC<{ readonly spec: ThumbnailSpec }> = ({ spec }) => {
   const titleSize = fitted.title.size
   return (
     <AbsoluteFill style={{ backgroundImage: SCRIMS[spec.layout] }}>
-      {spec.layout === 'bottom' && (
-        <div
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: block.top - 24,
-            height: Math.max(10, Math.round(titleSize * 0.1)),
-            backgroundColor: spec.accentColor,
-          }}
-        />
-      )}
+      {spec.accentBar && block.accent !== 'short' && <BandAccent color={spec.accentColor} block={block} titleSize={titleSize} />}
       <div
         style={{
           position: 'absolute',
@@ -169,12 +192,12 @@ const TextLayer: React.FC<{ readonly spec: ThumbnailSpec }> = ({ spec }) => {
           height: block.height,
           display: 'flex',
           flexDirection: 'column',
-          justifyContent: block.vertical === 'center' ? 'center' : 'flex-end',
+          justifyContent: JUSTIFY[block.vertical],
           textAlign: block.align,
           gap: textGap(titleSize),
         }}
       >
-        <AccentBar spec={spec} titleSize={titleSize} />
+        {spec.accentBar && block.accent === 'short' && <ShortAccent color={spec.accentColor} block={block} titleSize={titleSize} />}
         <Lines fitted={fitted.title} style={titleStyle(spec, titleSize)} />
         {fitted.subtitle !== null && <Lines fitted={fitted.subtitle} style={subtitleStyle(spec, fitted.subtitle.size)} />}
       </div>

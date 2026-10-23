@@ -1,10 +1,12 @@
-import type { ThumbnailLayout } from '@ixa/domain'
+import { THUMBNAIL_LAYOUTS, type ThumbnailLayout } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import {
   MIN_TITLE_SIZE,
+  SUBTITLE_LINE_HEIGHT,
   TEXT_BLOCKS,
   TITLE_LINE_HEIGHT,
   fitThumbnailText,
+  type ThumbnailTextSpec,
 } from '../compositions/thumbnail-layout.js'
 import { textWidthEm, tokenizeTitle, wrapAtoms } from '../compositions/thumbnail-text-fit.js'
 
@@ -13,7 +15,16 @@ import { textWidthEm, tokenizeTitle, wrapAtoms } from '../compositions/thumbnail
  * 「NIGHT RUN（試作）」が「NIGH / T / RUN / （試 / 作）」と切れ、字も列に対して大きすぎた。
  */
 
-const LAYOUTS: readonly ThumbnailLayout[] = ['left', 'center', 'bottom']
+const LAYOUTS: readonly ThumbnailLayout[] = THUMBNAIL_LAYOUTS
+
+/** 省いた項目は既定（自動の大きさ・差し色あり）。 */
+const textSpec = (patch: Pick<ThumbnailTextSpec, 'title' | 'layout'> & Partial<ThumbnailTextSpec>): ThumbnailTextSpec => ({
+  subtitle: null,
+  titleSize: null,
+  subtitleSize: null,
+  accentBar: true,
+  ...patch,
+})
 
 const TITLES = {
   shortJp: '新曲',
@@ -47,12 +58,12 @@ describe('wrapAtoms', () => {
   })
 })
 
-describe('fitThumbnailText（3 つの配置 × 短い・長い × 和文・英文）', () => {
+describe('fitThumbnailText（9 つの配置 × 短い・長い × 和文・英文）', () => {
   for (const layout of LAYOUTS) {
     for (const [name, title] of Object.entries(TITLES)) {
       it(`${layout} / ${name}: 行数・幅・高さが列に収まる`, () => {
         const block = TEXT_BLOCKS[layout]
-        const { title: fitted } = fitThumbnailText({ title, subtitle: null, layout })
+        const { title: fitted } = fitThumbnailText(textSpec({ title, subtitle: null, layout }))
         expect(fitted.lines.length).toBeLessThanOrEqual(block.maxTitleLines)
         for (const line of fitted.lines) expect(textWidthEm(line) * fitted.size).toBeLessThanOrEqual(block.width)
         expect(fitted.lines.length * fitted.size * TITLE_LINE_HEIGHT).toBeLessThanOrEqual(block.height)
@@ -63,7 +74,7 @@ describe('fitThumbnailText（3 つの配置 × 短い・長い × 和文・英�
 
       if (name !== 'longWord') {
         it(`${layout} / ${name}: 英単語を途中で切らない`, () => {
-          const { title: fitted } = fitThumbnailText({ title, subtitle: null, layout })
+          const { title: fitted } = fitThumbnailText(textSpec({ title, subtitle: null, layout }))
           const words = new Set(fitted.lines.flatMap((line) => allWords(line)))
           for (const word of allWords(title)) expect(words.has(word)).toBe(true)
         })
@@ -72,27 +83,27 @@ describe('fitThumbnailText（3 つの配置 × 短い・長い × 和文・英�
   }
 
   it('左の「NIGHT RUN（試作）」は NIGHT を切らず、左の列に収まる大きさまで縮める', () => {
-    const { title } = fitThumbnailText({ title: 'NIGHT RUN（試作）', subtitle: null, layout: 'left' })
+    const { title } = fitThumbnailText(textSpec({ title: 'NIGHT RUN（試作）', subtitle: null, layout: 'middle_left' }))
     expect(title.lines.some((line) => line.includes('NIGHT'))).toBe(true)
-    expect(title.size).toBeLessThan(TEXT_BLOCKS.left.maxTitleSize)
+    expect(title.size).toBeLessThan(TEXT_BLOCKS.middle_left.maxTitleSize)
   })
 
   it('短い題名は配置の上限まで大きい', () => {
     for (const layout of LAYOUTS) {
-      expect(fitThumbnailText({ title: '新曲', subtitle: null, layout }).title.size).toBe(TEXT_BLOCKS[layout].maxTitleSize)
+      expect(fitThumbnailText(textSpec({ title: '新曲', subtitle: null, layout })).title.size).toBe(TEXT_BLOCKS[layout].maxTitleSize)
     }
   })
 
   it('長い題名ほど小さい', () => {
-    const short = fitThumbnailText({ title: '新曲', subtitle: null, layout: 'center' }).title.size
-    const long = fitThumbnailText({ title: TITLES.longJp, subtitle: null, layout: 'center' }).title.size
+    const short = fitThumbnailText(textSpec({ title: '新曲', subtitle: null, layout: 'middle_center' })).title.size
+    const long = fitThumbnailText(textSpec({ title: TITLES.longJp, subtitle: null, layout: 'middle_center' })).title.size
     expect(long).toBeLessThan(short)
   })
 
   it('副題があれば題名はその分だけ低く収め、副題も列に収める', () => {
     for (const layout of LAYOUTS) {
       const block = TEXT_BLOCKS[layout]
-      const fitted = fitThumbnailText({ title: TITLES.longEn, subtitle: 'い'.repeat(60), layout })
+      const fitted = fitThumbnailText(textSpec({ title: TITLES.longEn, subtitle: 'い'.repeat(60), layout }))
       expect(fitted.subtitle).not.toBeNull()
       const subtitle = fitted.subtitle ?? { size: 0, lines: [] }
       expect(subtitle.lines.length).toBeLessThanOrEqual(block.maxSubtitleLines)
@@ -102,7 +113,50 @@ describe('fitThumbnailText（3 つの配置 × 短い・長い × 和文・英�
   })
 
   it('同じ入力なら同じ行（画面と書き出しが同じ切れ目になる）', () => {
-    const spec = { title: TITLES.mixed, subtitle: '2026 秋', layout: 'left' } as const
+    const spec = textSpec({ title: TITLES.mixed, subtitle: '2026 秋', layout: 'middle_left' })
     expect(fitThumbnailText(spec)).toEqual(fitThumbnailText(spec))
+  })
+})
+
+describe('fitThumbnailText（大きさを決めたとき・差し色なし）', () => {
+  it('題名の大きさを決めれば、入る限りその大きさにする（配置の上限を超えてもよい）', () => {
+    expect(fitThumbnailText(textSpec({ title: '新曲', layout: 'middle_left', titleSize: 60 })).title.size).toBe(60)
+    expect(fitThumbnailText(textSpec({ title: '新曲', layout: 'middle_center', titleSize: 200 })).title.size).toBe(200)
+  })
+
+  it('決めた大きさで入らない題名だけ縮め、塊からはみ出さない', () => {
+    for (const layout of LAYOUTS) {
+      const block = TEXT_BLOCKS[layout]
+      const { title } = fitThumbnailText(textSpec({ title: TITLES.longJp, layout, titleSize: 200 }))
+      expect(title.size).toBeLessThan(200)
+      expect(title.lines.length).toBeLessThanOrEqual(block.maxTitleLines)
+      expect(title.lines.length * title.size * TITLE_LINE_HEIGHT).toBeLessThanOrEqual(block.height)
+    }
+  })
+
+  it('副題の大きさを決めれば、題名の半分の上限を掛けない', () => {
+    const auto = fitThumbnailText(textSpec({ title: 'MV', subtitle: '2026 秋', layout: 'bottom_left' }))
+    expect(auto.subtitle?.size).toBeLessThanOrEqual(Math.round(auto.title.size / 2))
+    const fixed = fitThumbnailText(textSpec({ title: 'MV', subtitle: '2026 秋', layout: 'bottom_left', subtitleSize: 80 }))
+    expect(fixed.subtitle?.size).toBe(80)
+  })
+
+  it('大きな副題でも、題名と合わせて塊の高さに収める', () => {
+    for (const [layout, text] of LAYOUTS.flatMap((layout) => ['い'.repeat(12), 'い'.repeat(60)].map((text) => [layout, text] as const))) {
+      const block = TEXT_BLOCKS[layout]
+      const fitted = fitThumbnailText(textSpec({ title: '新曲', subtitle: text, layout, subtitleSize: 120 }))
+      const subtitle = fitted.subtitle ?? { size: 0, lines: [] }
+      const total =
+        fitted.title.lines.length * fitted.title.size * TITLE_LINE_HEIGHT + subtitle.lines.length * subtitle.size * SUBTITLE_LINE_HEIGHT
+      expect(total).toBeLessThanOrEqual(block.height)
+      expect(fitted.title.size).toBeGreaterThanOrEqual(MIN_TITLE_SIZE)
+    }
+  })
+
+  it('差し色のバーを消せば、題名の上の線の高さを取らない（高さで詰まる題名がそのぶん大きくなれる）', () => {
+    const base = { title: 'あ'.repeat(8), subtitle: 'い'.repeat(30), layout: 'middle_center', titleSize: 200 } as const
+    const withBar = fitThumbnailText(textSpec(base)).title.size
+    const withoutBar = fitThumbnailText(textSpec({ ...base, accentBar: false })).title.size
+    expect(withoutBar).toBeGreaterThan(withBar)
   })
 })

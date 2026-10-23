@@ -80,7 +80,7 @@ describe.skipIf(!RUN)('サムネイルの renderStill（実 Remotion）', () => 
     const spec = ThumbnailSpec.parse({
       background: { kind: 'image', mediaAssetId: MediaAssetId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAW') },
       title: 'キーアート',
-      layout: 'bottom',
+      layout: 'bottom_left',
     })
     const result = await renderThumbnailStill({
       props: { spec, source: { kind: 'image', url: media.urlFor(join(workDir, 'green.png')) } },
@@ -97,7 +97,7 @@ describe.skipIf(!RUN)('サムネイルの renderStill（実 Remotion）', () => 
       background: { kind: 'image', mediaAssetId: MediaAssetId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAW') },
       title: 'NIGHT RUN（試作）',
       subtitle: '2026 秋 iXA CUP',
-      layout: 'left',
+      layout: 'middle_left',
     })
     const result = await renderThumbnailStill({
       props: { spec, source: { kind: 'image', url: media.urlFor(join(workDir, 'green.png')) } },

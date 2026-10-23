@@ -56,6 +56,34 @@ describe('ThumbnailComposition', () => {
     expect(html).toContain('scale(1.5)')
   })
 
+  it('副題の色を写す', () => {
+    const html = markup({ subtitle: '2026 秋', subtitleColor: '#123456' }, { kind: 'image', url: URL })
+    expect(html).toContain('color:#123456')
+  })
+
+  it('差し色のバーを消せば、線も帯も描かない', () => {
+    for (const layout of ['middle_left', 'middle_center', 'bottom_left', 'top_center'] as const) {
+      expect(markup({ layout, accentColor: '#00ff00' }, { kind: 'image', url: URL })).toContain('background-color:#00ff00')
+      expect(markup({ layout, accentColor: '#00ff00', accentBar: false }, { kind: 'image', url: URL })).not.toContain(
+        'background-color:#00ff00',
+      )
+    }
+  })
+
+  it('右・真ん中の配置は文字と差し色の線を同じ側へ寄せる', () => {
+    const right = markup({ layout: 'middle_right' }, { kind: 'image', url: URL })
+    expect(right).toContain('text-align:right')
+    expect(right).toContain('align-self:flex-end')
+    expect(right).toContain('to left')
+    const top = markup({ layout: 'top_center' }, { kind: 'image', url: URL })
+    expect(top).toContain('text-align:center')
+    expect(top).toContain('to bottom')
+  })
+
+  it('3 マスだった頃の spec（layout: left）も描ける', () => {
+    expect(markup({ layout: 'left' }, { kind: 'image', url: URL })).toContain('text-align:left')
+  })
+
   it('背景の種類と材料が食い違えば、黙って黒くせず赤く知らせる', () => {
     const html = markup({}, { kind: 'timeline_frame', doc: makeDocument({}) })
     expect(html).toContain('背景の材料が仕様と合っていません')

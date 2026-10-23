@@ -23,8 +23,12 @@ const thumbnailJson = {
     focusY: 0.5,
     title: '新曲',
     subtitle: null,
-    layout: 'left',
+    layout: 'middle_left',
+    titleSize: null,
+    subtitleSize: null,
     titleColor: '#ffffff',
+    subtitleColor: '#ffffff',
+    accentBar: true,
     accentColor: '#ffcc00',
     font: 'gothic',
   },
@@ -67,7 +71,7 @@ describe('サムネイルの書き出し', () => {
     const id = await api().startThumbnail(projectId, { background: { kind: 'timeline_frame', atSec: 2 }, title: ' 新曲 ' })
     expect(id).toBe(THUMBNAIL_ID)
     expect(urlOf(0)).toBe(`${BASE_URL}/projects/${PROJECT_ID}/thumbnails`)
-    expect(bodyOf(0)).toMatchObject({ spec: { title: '新曲', zoom: 1, layout: 'left', subtitle: null } })
+    expect(bodyOf(0)).toMatchObject({ spec: { title: '新曲', zoom: 1, layout: 'middle_left', subtitle: null } })
   })
 
   it('破れた仕様は送らない（題名が長すぎる）', async () => {

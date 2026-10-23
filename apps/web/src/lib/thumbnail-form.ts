@@ -1,4 +1,5 @@
 import {
+  THUMBNAIL_LAYOUTS,
   ThumbnailSpec,
   type Shot,
   type ShotId,
@@ -22,7 +23,12 @@ export type ThumbnailForm = {
   readonly title: string
   readonly subtitle: string
   readonly layout: ThumbnailLayout
+  /** null は自動（入る中でいちばん大きく）。 */
+  readonly titleSize: number | null
+  readonly subtitleSize: number | null
   readonly titleColor: string
+  readonly subtitleColor: string
+  readonly accentBar: boolean
   readonly accentColor: string
   readonly font: TextFont
 }
@@ -38,15 +44,32 @@ export const initialThumbnailForm = (title: string): ThumbnailForm => ({
   title,
   subtitle: '',
   layout: DEFAULTS.layout,
+  titleSize: DEFAULTS.titleSize,
+  subtitleSize: DEFAULTS.subtitleSize,
   titleColor: DEFAULTS.titleColor,
+  subtitleColor: DEFAULTS.subtitleColor,
+  accentBar: DEFAULTS.accentBar,
   accentColor: DEFAULTS.accentColor,
   font: DEFAULTS.font,
 })
 
+/** 3×3 のマスの名前。並びは domain の `THUMBNAIL_LAYOUTS`（上の段の左から）。 */
 export const LAYOUT_LABELS: Readonly<Record<ThumbnailLayout, string>> = {
-  left: '左に文字',
-  center: '真ん中',
-  bottom: '下の帯',
+  top_left: '左上',
+  top_center: '上',
+  top_right: '右上',
+  middle_left: '左',
+  middle_center: '真ん中',
+  middle_right: '右',
+  bottom_left: '左下',
+  bottom_center: '下',
+  bottom_right: '右下',
+}
+
+/** マスの縦・横の位置（0〜2）。配置の図に使う。 */
+export const layoutCell = (layout: ThumbnailLayout): { readonly row: number; readonly column: number } => {
+  const index = THUMBNAIL_LAYOUTS.indexOf(layout)
+  return { row: Math.floor(index / 3), column: index % 3 }
 }
 
 export const FONT_LABELS: Readonly<Record<TextFont, string>> = {

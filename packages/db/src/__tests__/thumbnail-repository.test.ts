@@ -17,21 +17,27 @@ import { thumbnails } from '../schema/thumbnail.js'
 
 const ASSET = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
 
+/**
+ * 3 マスの配置だった頃に保存した spec（大きさ・副題の色・差し色のバーの項目が無く、配置は left）。
+ * 列の型は今の形なので、実際の jsonb に残っている古い形を型の外から入れる。
+ */
+const LEGACY_SPEC = {
+  background: { kind: 'timeline_frame', atSec: 3.5 },
+  zoom: 1,
+  focusX: 0.5,
+  focusY: 0.5,
+  title: '新曲',
+  subtitle: null,
+  layout: 'left',
+  titleColor: '#ffffff',
+  accentColor: '#ffcc00',
+  font: 'gothic',
+} as unknown as ThumbnailRow['spec']
+
 const row = (patch: Partial<ThumbnailRow> = {}): ThumbnailRow => ({
   id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
   projectId: '01ARZ3NDEKTSV4RRFFQ69G5FAX',
-  spec: {
-    background: { kind: 'timeline_frame', atSec: 3.5 },
-    zoom: 1,
-    focusX: 0.5,
-    focusY: 0.5,
-    title: '新曲',
-    subtitle: null,
-    layout: 'left',
-    titleColor: '#ffffff',
-    accentColor: '#ffcc00',
-    font: 'gothic',
-  },
+  spec: LEGACY_SPEC,
   status: 'queued',
   outputAssetId: null,
   fileName: 'a サムネ 2026-10-17 10.00.00.jpg',
@@ -71,6 +77,16 @@ describe('thumbnails', () => {
   it('行を domain の型にする', () => {
     expect(thumbnailRowToDomain(row())).toMatchObject({ status: 'queued', spec: { title: '新曲' } })
     expect(thumbnailRowToDomain(row({ status: 'done', outputAssetId: ASSET })).outputAssetId).toBe(ASSET)
+  })
+
+  it('3 マスだった頃の行も、今の形（9 マスの配置・既定の新しい項目）で読む', () => {
+    expect(thumbnailRowToDomain(row()).spec).toMatchObject({
+      layout: 'middle_left',
+      titleSize: null,
+      subtitleSize: null,
+      subtitleColor: '#ffffff',
+      accentBar: true,
+    })
   })
 
   it('終わったのに JPEG が無い・失敗なのに理由が無い行は通さない', () => {

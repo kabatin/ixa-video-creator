@@ -138,7 +138,26 @@ describe('POST /projects/{projectId}/thumbnails', () => {
     const f = build()
     expect((await f.post({ ...frameSpec(1), title: 'あ'.repeat(41) })).status).toBe(422)
     expect((await f.post({ ...frameSpec(1), zoom: 2.5 })).status).toBe(422)
+    expect((await f.post({ ...frameSpec(1), titleSize: 201 })).status).toBe(422)
+    expect((await f.post({ ...frameSpec(1), subtitleSize: 19 })).status).toBe(422)
+    expect((await f.post({ ...frameSpec(1), subtitleColor: 'white' })).status).toBe(422)
     expect(f.thumbnails.snapshot()).toEqual([])
+  })
+
+  it('3 マスだった頃の配置（bottom）も受け、今の値（bottom_left）にして書く。新しい項目もそのまま書く', async () => {
+    const f = build()
+    expect((await f.post({ ...frameSpec(1), layout: 'bottom' })).status).toBe(202)
+    expect(
+      (await f.post({ ...frameSpec(1), layout: 'top_right', titleSize: 160, subtitleSize: 90, subtitleColor: '#00ff88', accentBar: false }))
+        .status,
+    ).toBe(202)
+    const specs = f.thumbnails.snapshot().map((row) => row.spec)
+    expect(specs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ layout: 'bottom_left', titleSize: null, accentBar: true }),
+        expect.objectContaining({ layout: 'top_right', titleSize: 160, subtitleSize: 90, subtitleColor: '#00ff88', accentBar: false }),
+      ]),
+    )
   })
 
   it('無いプロジェクトは 404', async () => {

@@ -294,6 +294,7 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ waitSec: 901 }, 'waitSec'],
       [{ candidateIndex: -1 }, 'candidateIndex'],
       [{ layout: 'right' }, 'layout'],
+      [{ accentBar: 'no' }, 'accentBar'],
       [{ font: 'comic' }, 'font'],
       [{ background: { mediaAssetId: 'x' } }, 'background.mediaAssetId'],
       [{ background: { atSec: -1 } }, 'background.atSec'],

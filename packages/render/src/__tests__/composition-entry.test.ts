@@ -113,6 +113,7 @@ describe('composition-entry の輸出', () => {
       'ThumbnailComposition',
       'TimelineComposition',
       'buildTimelinePlan',
+      'fitThumbnailText',
       'frameRange',
       'letterboxFit',
       'peakMountedAudio',
