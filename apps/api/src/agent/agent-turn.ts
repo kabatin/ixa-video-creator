@@ -180,17 +180,23 @@ export const startTurn = (deps: TurnDeps, spec: TurnSpec, cleanup: () => Promise
     if (latest !== null) deps.hub.publish(sessionId, { type: 'session', session: latest })
   }
 
+  /**
+   * 鍵の取り消しと設定ファイルの片付けは、**状態を「済み」にする前に**行う
+   * （済みと見えたあとに、まだ使える鍵が残る隙を作らない）。
+   */
   const finished = handle.exited
-    .then(finish)
+    .then(async (exit) => {
+      await cleanup().catch((error: unknown) => {
+        deps.logger.error({ err: error, agentSessionId: sessionId }, 'やりとりの鍵と設定ファイルを片付けられませんでした')
+      })
+      await finish(exit)
+    })
     .catch((error: unknown) => {
       deps.logger.error({ err: error, agentSessionId: sessionId }, 'やりとりの後片付けに失敗しました')
     })
     .finally(async () => {
       await settleIfStillBusy(deps, sessionId)
       deps.approvals.forget(sessionId)
-      await cleanup().catch((error: unknown) => {
-        deps.logger.error({ err: error, agentSessionId: sessionId }, 'やりとりの鍵と設定ファイルを片付けられませんでした')
-      })
     })
 
   return {
