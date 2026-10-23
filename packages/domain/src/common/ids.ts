@@ -58,6 +58,8 @@ export const UploadedSfxId = brandedId('UploadedSfxId')
 export const TakeMotionAnalysisId = brandedId('TakeMotionAnalysisId')
 /** 合言葉で入った端末の鍵・自動化用の鍵（認証）。**鍵そのものではなく、表の行の番号。** */
 export const AccessTokenId = brandedId('AccessTokenId')
+/** AI エージェントの会話（タスク）（ADR-0058）。 */
+export const AgentSessionId = brandedId('AgentSessionId')
 
 export type WorkspaceId = z.infer<typeof WorkspaceId>
 export type ProjectId = z.infer<typeof ProjectId>
@@ -100,6 +102,7 @@ export type SfxJobId = z.infer<typeof SfxJobId>
 export type UploadedSfxId = z.infer<typeof UploadedSfxId>
 export type TakeMotionAnalysisId = z.infer<typeof TakeMotionAnalysisId>
 export type AccessTokenId = z.infer<typeof AccessTokenId>
+export type AgentSessionId = z.infer<typeof AgentSessionId>
 
 /**
  * ID の発行器。**同じミリ秒でも必ず増える**（`monotonicFactory`）。
