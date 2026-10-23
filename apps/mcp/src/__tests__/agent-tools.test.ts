@@ -120,13 +120,22 @@ describe('approve', () => {
 })
 
 describe('waive_confirmations', () => {
-  it('そのタスクの確認なしの旗を立てる', async () => {
+  it('設定の変更として確認に回す（旗を立てるのは、画面の「実行」を受けた API）', async () => {
     const fake = createFakeApi([
-      { method: 'PATCH', path: `/agent-sessions/${SESSION}`, data: { id: SESSION, confirmationsWaived: true } },
+      { method: 'POST', path: `/agent-sessions/${SESSION}/approvals`, data: { requestId: REQUEST, decision: null, message: null } },
+      { method: 'GET', path: `/agent-sessions/${SESSION}/approvals/${REQUEST}`, data: { decision: 'allow', message: null } },
+    ])
+    await approveTool.run({ tool_name: 'mcp__ixa__waive_confirmations', input: {} }, depsFor(fake, { agentSessionId: SESSION }))
+    expect(fake.callsTo('POST', `/agent-sessions/${SESSION}/approvals`)[0]?.body).toMatchObject({ risk: 'settings' })
+  })
+
+  it('自分では旗を立てない（PATCH しない）。会話の旗を読んで返す', async () => {
+    const fake = createFakeApi([
+      { method: 'GET', path: `/agent-sessions/${SESSION}`, data: { id: SESSION, confirmationsWaived: true } },
     ])
     const result = await waiveConfirmationsTool.run({}, depsFor(fake, { agentSessionId: SESSION }))
     expect(jsonOf(result)).toEqual({ confirmationsWaived: true })
-    expect(fake.callsTo('PATCH', `/agent-sessions/${SESSION}`)[0]?.body).toEqual({ confirmationsWaived: true })
+    expect(fake.callsTo('PATCH', /agent-sessions/)).toHaveLength(0)
   })
 
   it('会話の外（agentSessionId が無い）では使えない', async () => {

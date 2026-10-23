@@ -44,7 +44,7 @@ const EXPECTED: Readonly<Record<string, string>> = {
   export: 'costly',
   export_thumbnail: 'costly',
   approve: 'read',
-  waive_confirmations: 'write',
+  waive_confirmations: 'settings',
 }
 
 describe('ツールの危険度', () => {

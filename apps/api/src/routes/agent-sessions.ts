@@ -10,6 +10,7 @@ import {
 import type { AgentSessionRepository } from '@ixa/db'
 import type { AgentFailure, AgentService } from '../agent/agent-service.js'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
+import { presentedToken } from '../auth/gate.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 import { AgentSessionResponse, json, toAgentSessionResponse } from './agent-wire.js'
 
@@ -90,6 +91,8 @@ export type AgentSessionRoutesDeps = {
   readonly projects: { readonly findById: (id: z.infer<typeof ProjectIdSchema>) => Promise<unknown> }
 }
 
+export const WAIVE_NEEDS_BROWSER_MESSAGE = '確認なしへの切り替えは画面からだけできます'
+
 /** 失敗の種類 → 状態コード。 */
 export const AGENT_FAILURE_STATUS = { not_found: 404, conflict: 409, unavailable: 422, forbidden: 403 } as const satisfies Record<
   AgentFailure['code'],
@@ -116,6 +119,10 @@ export const agentSessionRoutes = (deps: AgentSessionRoutesDeps) =>
       return c.json(ok(toAgentSessionResponse(session)), 200)
     })
     .openapi(updateRoute, async (c) => {
+      // 確認なしへの切り替えは画面（クッキー）からだけ。エージェント（Bearer）が自分で旗を立てられないように。
+      if (c.req.valid('json').confirmationsWaived === true && presentedToken(c)?.via !== 'cookie') {
+        return c.json(fail(WAIVE_NEEDS_BROWSER_MESSAGE), 403)
+      }
       const result = await deps.agent.update(c.req.valid('param').sessionId, c.req.valid('json'))
       if (!result.ok) return c.json(fail(result.message), AGENT_FAILURE_STATUS[result.code])
       return c.json(ok(toAgentSessionResponse(result.value)), 200)

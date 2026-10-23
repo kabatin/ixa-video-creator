@@ -98,20 +98,23 @@ export const createApproveTool = (risks: ReadonlyMap<string, ToolRisk>) =>
     },
   })
 
+/**
+ * 確認なしに切り替える。**設定の変更として確認に回る**（ツールの結果に混ざった文に誘導されても、
+ * 制作者がカードで「実行」しない限り旗は立たない）。旗を立てるのは「実行」を受けた API で、ここは旗を読むだけ。
+ */
 export const waiveConfirmationsTool = defineTool({
   name: 'waive_confirmations',
-  risk: 'write',
+  risk: 'settings',
   description:
     'Stop asking the creator before generation, deletion, export and settings changes, for this chat task only. ' +
     'Call it ONLY when the creator clearly says so (e.g. 「確認なしでいい」「いちいち聞かなくていい」). ' +
-    'The screen shows a banner and the creator can turn confirmations back on at any time.',
+    'The creator is asked to confirm on screen first. The screen shows a banner and the creator can turn ' +
+    'confirmations back on at any time.',
   input: z.object({}),
   handler: async (_args, deps) => {
     const sessionId = deps.agentSessionId
     if (sessionId === undefined) return errorResult('AI エージェントの会話の外では使えません。')
-    await deps.api.request('PATCH', `/agent-sessions/${seg(sessionId)}`, z.unknown(), {
-      body: { confirmationsWaived: true },
-    })
-    return jsonResult({ confirmationsWaived: true })
+    const session = await deps.api.get(`/agent-sessions/${seg(sessionId)}`, z.object({ confirmationsWaived: z.boolean() }))
+    return jsonResult({ confirmationsWaived: session.confirmationsWaived })
   },
 })

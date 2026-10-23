@@ -10,12 +10,14 @@ import type { AgentApprovalDecision, AgentSessionId, ToolRisk } from '@ixa/domai
 export type PendingApproval = {
   readonly requestId: string
   readonly sessionId: AgentSessionId
+  /** 頼まれたツール（CLI の名前）。「実行」で API が自分ですること（確認なしへの切り替え）を見分ける。 */
+  readonly toolName: string
   readonly decision: AgentApprovalDecision | null
   readonly message: string | null
 }
 
 export type AgentApprovals = {
-  readonly open: (sessionId: AgentSessionId, requestId: string) => void
+  readonly open: (sessionId: AgentSessionId, requestId: string, toolName: string) => void
   readonly find: (requestId: string) => PendingApproval | null
   /** 答える。まだ答えていない待ちだけ。答えたら true。 */
   readonly decide: (requestId: string, decision: AgentApprovalDecision, message: string | null) => boolean
@@ -38,7 +40,8 @@ export const createAgentApprovals = (): AgentApprovals => {
     pending = new Map([...pending, [requestId, next]])
   }
   return {
-    open: (sessionId, requestId) => replace(requestId, { requestId, sessionId, decision: null, message: null }),
+    open: (sessionId, requestId, toolName) =>
+      replace(requestId, { requestId, sessionId, toolName, decision: null, message: null }),
     find: (requestId) => pending.get(requestId) ?? null,
     decide: (requestId, decision, message) => {
       const current = pending.get(requestId)

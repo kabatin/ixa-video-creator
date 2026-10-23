@@ -362,6 +362,50 @@ describe('確認の待ちと答え', () => {
   })
 })
 
+describe('確認なしへの切り替え', () => {
+  it('Bearer の鍵（エージェント）からは旗を立てられない（403）。戻すのはよい', async () => {
+    const t = setup(simpleTurn)
+    const id = await t.newTask()
+    const patch = (body: unknown) =>
+      t.app.request(`/agent-sessions/${id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer some-agent-key' },
+        body: JSON.stringify(body),
+      })
+    expect((await patch({ confirmationsWaived: true })).status).toBe(403)
+    expect(t.sessions.all()[0]?.confirmationsWaived).toBe(false)
+    expect((await patch({ confirmationsWaived: false })).status).toBe(200)
+  })
+
+  it('waive_confirmations の確認に「実行」と答えると、API が旗を立てて会話に残す', async () => {
+    const t = setup(async (call, app) => {
+      const sessionId = call.mcpEnv()['IXA_AGENT_SESSION_ID'] ?? ''
+      const auth = { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' }
+      const started = (await (
+        await app.request(`/agent-sessions/${sessionId}/approvals`, {
+          method: 'POST',
+          headers: auth,
+          body: JSON.stringify({ toolName: 'mcp__ixa__waive_confirmations', toolUseId: 'toolu_w', risk: 'settings', input: {} }),
+        })
+      ).json()) as { data: { requestId: string; decision: string | null } }
+      expect(started.data.decision).toBeNull()
+      await call.untilStopped()
+      return exited(143)
+    })
+    const id = await t.newTask()
+    await t.post(`/agent-sessions/${id}/messages`, { text: '確認なしでいい' })
+    await t.until(() => t.statusOf(id) === 'awaiting_approval', '確認待ち')
+    const request = t.sessions.messages(id).find((m) => m.body.kind === 'approval_request')?.body
+    const requestId = request?.kind === 'approval_request' ? request.requestId : ''
+    expect(t.sessions.all()[0]?.confirmationsWaived).toBe(false)
+    await t.post(`/agent-sessions/${id}/approvals/${requestId}`, { decision: 'allow' }, { cookie: 'ixa_session=x' })
+    expect(t.sessions.all()[0]?.confirmationsWaived).toBe(true)
+    expect(t.sessions.messages(id).some((m) => m.body.kind === 'system' && m.body.event === 'confirmations_waived')).toBe(true)
+    await t.post(`/agent-sessions/${id}/stop`, {})
+    await t.until(() => t.statusOf(id) === 'interrupted', '中断')
+  })
+})
+
 describe('起動時の後片付け', () => {
   it('作業中・確認待ちのまま残った会話を中断にし、取り消し忘れのエージェントの鍵を取り消す', async () => {
     const t = setup(simpleTurn)
@@ -389,7 +433,11 @@ describe('直す・一覧', () => {
     const a = await t.newTask()
     const b = await t.newTask()
     const patch = (body: unknown) =>
-      t.app.request(`/agent-sessions/${a}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      t.app.request(`/agent-sessions/${a}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', cookie: 'ixa_session=x' },
+        body: JSON.stringify(body),
+      })
     expect((await patch({ confirmationsWaived: true })).status).toBe(200)
     expect((await patch({ confirmationsWaived: false })).status).toBe(200)
     expect((await patch({})).status).toBe(422)

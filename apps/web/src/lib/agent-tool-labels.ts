@@ -74,5 +74,9 @@ export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object
   },
   export: { doing: '書き出している', done: '書き出した', ask: '動画を書き出します' },
   export_thumbnail: { doing: 'サムネイルを作っている', done: 'サムネイルを作った', ask: 'サムネイルを作ります' },
-  waive_confirmations: { doing: '確認を出さないようにしている', done: '確認を出さないようにした' },
+  waive_confirmations: {
+    doing: '確認を出さないようにしている',
+    done: '確認を出さないようにした',
+    ask: 'このタスクを確認なしに切り替えますか',
+  },
 })

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { AgentSessionBusyError, type AccessTokenRepository, type AgentSessionRepository, type ProjectRepository, type ShotRepository } from '@ixa/db'
 import {
   AGENT_SESSION_UNTITLED,
+  IXA_MCP_TOOL_PREFIX,
   AgentModel,
   approvalNeeded,
   isAgentSessionBusy,
@@ -88,6 +89,9 @@ export type ApprovalRequest = {
 export type ApprovalState = { readonly requestId: string; readonly decision: AgentApprovalDecision | null; readonly message: string | null }
 
 const RequestId = z.string().ulid()
+
+/** 確認なしに切り替えるツール（CLI の名前）。 */
+const WAIVE_TOOL = `${IXA_MCP_TOOL_PREFIX}waive_confirmations`
 
 type ActiveTurn = { readonly turn: RunningTurn; readonly tokenHash: string }
 
@@ -248,7 +252,7 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       if (request.toolUseId !== null) approvals.noteRisk(sessionId, request.toolUseId, request.risk)
       const requestId = newId(RequestId)
       if (!approvalNeeded(request.risk, session)) return okValue({ requestId, decision: 'allow', message: null })
-      approvals.open(sessionId, requestId)
+      approvals.open(sessionId, requestId, request.toolName)
       await appendAndPublish(sessionId, [
         { kind: 'approval_request', requestId, toolUseId: request.toolUseId, toolName: request.toolName, risk: request.risk, input: request.input },
       ])
@@ -276,7 +280,8 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       await appendAndPublish(sessionId, [
         { kind: 'approval_decision', requestId, decision: answer.decision, waiveAfter: answer.waiveAfter },
       ])
-      if (answer.waiveAfter) {
+      // 確認なしへの切り替え（waive_confirmations）は、画面の「実行」を受けてここで旗を立てる（MCP からは立てられない）。
+      if (answer.waiveAfter || (answer.decision === 'allow' && pending.toolName === WAIVE_TOOL)) {
         const waived = await deps.sessions.update(sessionId, { confirmationsWaived: true })
         await appendAndPublish(sessionId, [
           { kind: 'system', event: 'confirmations_waived', text: 'このタスクでは確認を出さずに進めます。', raw: null },
