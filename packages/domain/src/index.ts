@@ -52,6 +52,7 @@ export * from './generation/cost-meter.js'
 export * from './generation/take.js'
 export * from './generation/image-job.js'
 export * from './generation/image-check.js'
+export * from './generation/auto-retake.js'
 
 // ストーリーボード（音楽セクション → Shot 割り）
 export * from './storyboard/shot-allocation.js'

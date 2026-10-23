@@ -71,6 +71,12 @@ export const Take = z.object({
    * **払ったのは元の作品なので、この作品の費用・予算・自動の作り直しの回数に数えない**（`countsAsSpend`）。
    */
   copiedFromTakeId: TakeId.nullable(),
+  /**
+   * 作ったジョブで「NG なら自動で作り直す」を選んでいたか（ADR-0057）。作ったときにジョブから写し、後から変えない。
+   * レビューが NG のとき、これが true なら作り直し、false なら作り直しを勧めるだけ（`actionAfterReview`）。
+   * 前からある行には無いので、無ければ false。
+   */
+  autoRetake: z.boolean().default(false),
   createdAt: z.date(),
 })
 export type Take = z.infer<typeof Take>
@@ -215,6 +221,12 @@ export const GenerationJob = z.object({
    */
   seed: z.number().int().nullable(),
 
+  /**
+   * 「NG なら自動で作り直す」を選んだか（ADR-0057）。**頼んだ時点で決まり、後から変わらない**（全体の設定で変わらない）。
+   * 既定は false（作り直しを勧めるだけ）。前からある行には無いので、無ければ false。
+   */
+  autoRetake: z.boolean().default(false),
+
   queuedAt: z.date(),
   /** 生成先へ送った時刻。 */
   startedAt: z.date().nullable(),
@@ -254,6 +266,7 @@ export const CreateGenerationJobInput = GenerationJob.omit({
     /** 直しは添えないのが既定。上限は `spec.ts` の `Corrections` が持つ（写さない）。 */
     corrections: Corrections.default([]),
     seed: z.number().int().nullable().default(null),
+    autoRetake: z.boolean().default(false),
   })
   .refine(hasReasonWhenParented, lineagePairIssue())
 export type CreateGenerationJobInput = z.input<typeof CreateGenerationJobInput>
