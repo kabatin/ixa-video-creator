@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { OpenAPIHono } from '@hono/zod-openapi'
@@ -6,7 +14,11 @@ import { aShot } from '@ixa/generation/testing'
 import type { AgentSession, AiToolId } from '@ixa/domain'
 import { afterAll, describe, expect, it } from 'vitest'
 import { createAgentHub } from '../agent/agent-hub.js'
-import { createAgentService, NOT_CLAUDE_MESSAGE, OTHER_TASK_BUSY_MESSAGE } from '../agent/agent-service.js'
+import {
+  createAgentService,
+  NOT_CLAUDE_MESSAGE,
+  OTHER_TASK_BUSY_MESSAGE,
+} from '../agent/agent-service.js'
 import { AGENT_KEY_LABEL_PREFIX } from '../agent/agent-turn-setup.js'
 import { registerErrorHandlers } from '../errors.js'
 import { createLogger } from '../logger.js'
@@ -15,7 +27,10 @@ import { agentSessionRoutes } from '../routes/agent-sessions.js'
 import { createFakeCli, cliLines, exited, type FakeCliCall } from './fake-cli-stream.js'
 import { aProject } from './fixtures.js'
 import { createInMemoryAccessTokens } from './in-memory-access-token-repository.js'
-import { createInMemoryAgentSessions, type InMemoryAgentSessions } from './in-memory-agent-sessions.js'
+import {
+  createInMemoryAgentSessions,
+  type InMemoryAgentSessions,
+} from './in-memory-agent-sessions.js'
 import { createInMemoryProjectRepository } from './in-memory-project-repository.js'
 
 /**
@@ -39,7 +54,10 @@ type SetupOptions = {
   readonly sessionsRoot?: string
 }
 
-const setup = (script: (call: FakeCliCall, app: OpenAPIHono) => Promise<ReturnType<typeof exited>>, opts: SetupOptions = {}) => {
+const setup = (
+  script: (call: FakeCliCall, app: OpenAPIHono) => Promise<ReturnType<typeof exited>>,
+  opts: SetupOptions = {},
+) => {
   const project = aProject()
   const shot = aShot(project.id, { code: 'CUT-07' })
   const projects = createInMemoryProjectRepository([project])
@@ -67,7 +85,12 @@ const setup = (script: (call: FakeCliCall, app: OpenAPIHono) => Promise<ReturnTy
       mcpArgs: ['/repo/apps/mcp/src/main.ts'],
       apiUrl: 'http://127.0.0.1:3001',
       sessionsRoot: opts.sessionsRoot ?? root,
-      baseEnv: { PATH: '/usr/bin', HOME: '/Users/me', DATABASE_URL: 'postgres://secret', FAL_API_KEY: 'secret' },
+      baseEnv: {
+        PATH: '/usr/bin',
+        HOME: '/Users/me',
+        DATABASE_URL: 'postgres://secret',
+        FAL_API_KEY: 'secret',
+      },
     },
     now: opts.now ?? (() => new Date()),
     logger,
@@ -82,7 +105,11 @@ const setup = (script: (call: FakeCliCall, app: OpenAPIHono) => Promise<ReturnTy
   app.route('/', agentSessionRoutes({ agent, sessions, projects }))
   app.route('/', agentApprovalRoutes({ agent }))
   const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
-    app.request(path, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) })
+    app.request(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+    })
   const newTask = async (): Promise<AgentSession['id']> => {
     const res = await post(`/projects/${project.id}/agent-sessions`, {})
     expect(res.status).toBe(201)
@@ -96,7 +123,21 @@ const setup = (script: (call: FakeCliCall, app: OpenAPIHono) => Promise<ReturnTy
       await new Promise((resolve) => setTimeout(resolve, 5))
     }
   }
-  return { app, agent, project, shot, sessions, tokens, cli, root, post, newTask, statusOf, until, killed }
+  return {
+    app,
+    agent,
+    project,
+    shot,
+    sessions,
+    tokens,
+    cli,
+    root,
+    post,
+    newTask,
+    statusOf,
+    until,
+    killed,
+  }
 }
 
 const simpleTurn = (call: FakeCliCall) => {
@@ -125,7 +166,13 @@ describe('やりとりの流れ', () => {
       costUsd: 0.25,
       lastSummary: '直しました',
     })
-    expect(t.sessions.messages(id).map((m) => m.body.kind)).toEqual(['user', 'system', 'system', 'assistant_text', 'turn_end'])
+    expect(t.sessions.messages(id).map((m) => m.body.kind)).toEqual([
+      'user',
+      'system',
+      'system',
+      'assistant_text',
+      'turn_end',
+    ])
     expect(t.sessions.messages(id)[0]?.body).toEqual({
       kind: 'user',
       text: 'この Shot のテロップを「優勝」に',
@@ -242,6 +289,93 @@ describe('1 作品 1 動作', () => {
   })
 })
 
+describe('取り違え・同時の要求', () => {
+  it('同じ会話へ同時に 2 回話すと、片方は 409', async () => {
+    const t = setup(async (call) => {
+      await call.untilStopped()
+      return exited(143)
+    })
+    const id = await t.newTask()
+    const statuses = (
+      await Promise.all([
+        t.post(`/agent-sessions/${id}/messages`, { text: 'A' }),
+        t.post(`/agent-sessions/${id}/messages`, { text: 'B' }),
+      ])
+    ).map((res) => res.status)
+    expect([...statuses].sort()).toEqual([202, 409])
+    expect(t.cli.calls).toHaveLength(1)
+    await t.post(`/agent-sessions/${id}/stop`, {})
+    await t.until(() => t.statusOf(id) === 'interrupted', '中断')
+  })
+
+  it('別の会話の確認には答えられない（404）', async () => {
+    const t = setup(async (call, app) => {
+      const sessionId = call.mcpEnv()['IXA_AGENT_SESSION_ID'] ?? ''
+      await app.request(`/agent-sessions/${sessionId}/approvals`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          toolName: 'mcp__ixa__export',
+          toolUseId: 't1',
+          risk: 'costly',
+          input: {},
+        }),
+      })
+      await call.untilStopped()
+      return exited(143)
+    })
+    const a = await t.newTask()
+    const b = await t.newTask()
+    await t.post(`/agent-sessions/${a}/messages`, { text: '書き出して' })
+    await t.until(() => t.statusOf(a) === 'awaiting_approval', '確認待ち')
+    const request = t.sessions.messages(a).find((m) => m.body.kind === 'approval_request')?.body
+    const requestId = request?.kind === 'approval_request' ? request.requestId : ''
+    const res = await t.post(
+      `/agent-sessions/${b}/approvals/${requestId}`,
+      { decision: 'allow' },
+      { cookie: 'ixa_session=x' },
+    )
+    expect(res.status).toBe(404)
+    expect(t.statusOf(a)).toBe('awaiting_approval')
+    await t.post(`/agent-sessions/${a}/stop`, {})
+    await t.until(() => t.statusOf(a) === 'interrupted', '中断')
+  })
+
+  it('確認の答えを Bearer の鍵で送ると 403（エージェントは自分の確認に答えられない）', async () => {
+    const t = setup(async (call, app) => {
+      const sessionId = call.mcpEnv()['IXA_AGENT_SESSION_ID'] ?? ''
+      await app.request(`/agent-sessions/${sessionId}/approvals`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          toolName: 'mcp__ixa__export',
+          toolUseId: 't1',
+          risk: 'costly',
+          input: {},
+        }),
+      })
+      await call.untilStopped()
+      return exited(143)
+    })
+    const id = await t.newTask()
+    await t.post(`/agent-sessions/${id}/messages`, { text: '書き出して' })
+    await t.until(() => t.statusOf(id) === 'awaiting_approval', '確認待ち')
+    const request = t.sessions.messages(id).find((m) => m.body.kind === 'approval_request')?.body
+    const requestId = request?.kind === 'approval_request' ? request.requestId : ''
+    const res = await t.post(
+      `/agent-sessions/${id}/approvals/${requestId}`,
+      { decision: 'allow' },
+      {
+        authorization: `Bearer ${t.cli.calls[0]?.mcpToken() ?? ''}`,
+      },
+    )
+    expect(res.status).toBe(403)
+    expect(t.statusOf(id)).toBe('awaiting_approval')
+    await t.post(`/agent-sessions/${id}/stop`, {})
+    await t.until(() => t.statusOf(id) === 'interrupted', '中断')
+  })
+})
+
 describe('止める', () => {
   it('止めると CLI を止め、中断にして、そのことを会話に残す。鍵も取り消す', async () => {
     const t = setup(async (call) => {
@@ -255,7 +389,10 @@ describe('止める', () => {
     expect((await t.post(`/agent-sessions/${id}/stop`, {})).status).toBe(202)
     await t.until(() => t.statusOf(id) === 'interrupted', '中断')
     expect(t.cli.calls[0]?.stopped()).toBe(true)
-    expect(t.sessions.messages(id).at(-1)?.body).toMatchObject({ kind: 'system', event: 'interrupted' })
+    expect(t.sessions.messages(id).at(-1)?.body).toMatchObject({
+      kind: 'system',
+      event: 'interrupted',
+    })
     expect(t.tokens.rows()[0]?.revokedAt).not.toBeNull()
     // 作業中でなければ止められない。
     expect((await t.post(`/agent-sessions/${id}/stop`, {})).status).toBe(409)
@@ -264,16 +401,27 @@ describe('止める', () => {
 
 describe('確認の待ちと答え', () => {
   /** MCP の approve の代わり。そのやりとりの鍵で確認の口を呼び、答えが来るまで待つ。 */
-  const approveVia = async (app: OpenAPIHono, call: FakeCliCall, sessionId: string, body: unknown): Promise<string> => {
+  const approveVia = async (
+    app: OpenAPIHono,
+    call: FakeCliCall,
+    sessionId: string,
+    body: unknown,
+  ): Promise<string> => {
     const auth = { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' }
     const started = (await (
-      await app.request(`/agent-sessions/${sessionId}/approvals`, { method: 'POST', headers: auth, body: JSON.stringify(body) })
+      await app.request(`/agent-sessions/${sessionId}/approvals`, {
+        method: 'POST',
+        headers: auth,
+        body: JSON.stringify(body),
+      })
     ).json()) as { data: { requestId: string; decision: string | null } }
     let decision = started.data.decision
     while (decision === null) {
       await new Promise((resolve) => setTimeout(resolve, 5))
       const state = (await (
-        await app.request(`/agent-sessions/${sessionId}/approvals/${started.data.requestId}`, { headers: auth })
+        await app.request(`/agent-sessions/${sessionId}/approvals/${started.data.requestId}`, {
+          headers: auth,
+        })
       ).json()) as { data: { decision: string | null } }
       decision = state.data.decision
     }
@@ -291,7 +439,14 @@ describe('確認の待ちと答え', () => {
       input: { cues: [] },
     })
     decisions.push(decision)
-    call.emit(cliLines.toolResult(CLI_SESSION, 'toolu_1', decision === 'allow' ? '置きました' : '制作者がやめました', decision !== 'allow'))
+    call.emit(
+      cliLines.toolResult(
+        CLI_SESSION,
+        'toolu_1',
+        decision === 'allow' ? '置きました' : '制作者がやめました',
+        decision !== 'allow',
+      ),
+    )
     call.emit(cliLines.result(CLI_SESSION, 0.1))
     return exited(0)
   }
@@ -303,23 +458,44 @@ describe('確認の待ちと答え', () => {
     await t.post(`/agent-sessions/${id}/messages`, { text: '効果音を 1 本' })
     await t.until(() => t.statusOf(id) === 'awaiting_approval', '確認待ち')
     const request = t.sessions.messages(id).find((m) => m.body.kind === 'approval_request')?.body
-    expect(request).toMatchObject({ kind: 'approval_request', toolName: 'mcp__ixa__generate_sfx', risk: 'costly', toolUseId: 'toolu_1' })
+    expect(request).toMatchObject({
+      kind: 'approval_request',
+      toolName: 'mcp__ixa__generate_sfx',
+      risk: 'costly',
+      toolUseId: 'toolu_1',
+    })
     const requestId = request?.kind === 'approval_request' ? request.requestId : ''
 
     // エージェント自身（Bearer）は答えられない。
-    const byBearer = await t.post(`/agent-sessions/${id}/approvals/${requestId}`, { decision: 'allow' }, {
-      authorization: `Bearer ${t.cli.calls[0]?.mcpToken() ?? ''}`,
-    })
+    const byBearer = await t.post(
+      `/agent-sessions/${id}/approvals/${requestId}`,
+      { decision: 'allow' },
+      {
+        authorization: `Bearer ${t.cli.calls[0]?.mcpToken() ?? ''}`,
+      },
+    )
     expect(byBearer.status).toBe(403)
 
-    const answer = await t.post(`/agent-sessions/${id}/approvals/${requestId}`, { decision: 'allow' }, { cookie: 'ixa_session=x' })
+    const answer = await t.post(
+      `/agent-sessions/${id}/approvals/${requestId}`,
+      { decision: 'allow' },
+      { cookie: 'ixa_session=x' },
+    )
     expect(answer.status).toBe(200)
     await t.until(() => t.statusOf(id) === 'idle', '済み')
     expect(decisions).toEqual(['allow'])
     expect(t.sessions.all()[0]?.editCount).toBe(1)
     expect(t.sessions.messages(id).map((m) => m.body.kind)).toContain('approval_decision')
     // 2 度は答えられない（もう待ちが無い）。
-    expect((await t.post(`/agent-sessions/${id}/approvals/${requestId}`, { decision: 'deny' }, { cookie: 'ixa_session=x' })).status).toBe(404)
+    expect(
+      (
+        await t.post(
+          `/agent-sessions/${id}/approvals/${requestId}`,
+          { decision: 'deny' },
+          { cookie: 'ixa_session=x' },
+        )
+      ).status,
+    ).toBe(404)
   })
 
   it('「やめる」と答えると断る。直した数に数えない', async () => {
@@ -330,7 +506,11 @@ describe('確認の待ちと答え', () => {
     await t.until(() => t.statusOf(id) === 'awaiting_approval', '確認待ち')
     const request = t.sessions.messages(id).find((m) => m.body.kind === 'approval_request')?.body
     const requestId = request?.kind === 'approval_request' ? request.requestId : ''
-    await t.post(`/agent-sessions/${id}/approvals/${requestId}`, { decision: 'deny' }, { cookie: 'ixa_session=x' })
+    await t.post(
+      `/agent-sessions/${id}/approvals/${requestId}`,
+      { decision: 'deny' },
+      { cookie: 'ixa_session=x' },
+    )
     await t.until(() => t.statusOf(id) === 'idle', '済み')
     expect(decisions).toEqual(['deny'])
     expect(t.sessions.all()[0]?.editCount).toBe(0)
@@ -344,15 +524,25 @@ describe('確認の待ちと答え', () => {
     await t.until(() => t.statusOf(id) === 'awaiting_approval', '確認待ち')
     const request = t.sessions.messages(id).find((m) => m.body.kind === 'approval_request')?.body
     const requestId = request?.kind === 'approval_request' ? request.requestId : ''
-    await t.post(`/agent-sessions/${id}/approvals/${requestId}`, { decision: 'allow', waiveAfter: true }, { cookie: 'ixa_session=x' })
+    await t.post(
+      `/agent-sessions/${id}/approvals/${requestId}`,
+      { decision: 'allow', waiveAfter: true },
+      { cookie: 'ixa_session=x' },
+    )
     await t.until(() => t.statusOf(id) === 'idle', '1 回目が済み')
     expect(t.sessions.all()[0]?.confirmationsWaived).toBe(true)
-    expect(t.sessions.messages(id).some((m) => m.body.kind === 'system' && m.body.event === 'confirmations_waived')).toBe(true)
+    expect(
+      t.sessions
+        .messages(id)
+        .some((m) => m.body.kind === 'system' && m.body.event === 'confirmations_waived'),
+    ).toBe(true)
 
     await t.post(`/agent-sessions/${id}/messages`, { text: '2 本目' })
     await t.until(() => t.cli.calls.length === 2 && t.statusOf(id) === 'idle', '2 回目が済み')
     expect(decisions).toEqual(['allow', 'allow'])
-    expect(t.sessions.messages(id).filter((m) => m.body.kind === 'approval_request')).toHaveLength(1)
+    expect(t.sessions.messages(id).filter((m) => m.body.kind === 'approval_request')).toHaveLength(
+      1,
+    )
   })
 
   it('読むだけ・ふつうの書き込みは待たない。ふつうの書き込みは直した数に数え、読むだけは数えない', async () => {
@@ -364,7 +554,9 @@ describe('確認の待ちと答え', () => {
         ['toolu_w', 'mcp__ixa__edit_shots', 'write'],
       ] as const) {
         call.emit(cliLines.toolUse(CLI_SESSION, toolUseId, toolName, {}))
-        expect(await approveVia(app, call, sessionId, { toolName, toolUseId, risk, input: {} })).toBe('allow')
+        expect(
+          await approveVia(app, call, sessionId, { toolName, toolUseId, risk, input: {} }),
+        ).toBe('allow')
         call.emit(cliLines.toolResult(CLI_SESSION, toolUseId, 'ok'))
       }
       call.emit(cliLines.result(CLI_SESSION, 0.1))
@@ -381,13 +573,21 @@ describe('確認の待ちと答え', () => {
     const results: (string | null)[] = []
     const t = setup(async (call, app) => {
       const sessionId = call.mcpEnv()['IXA_AGENT_SESSION_ID'] ?? ''
-      const auth = { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' }
+      const auth = {
+        authorization: `Bearer ${call.mcpToken()}`,
+        'content-type': 'application/json',
+      }
       for (const projectId of ['01JQTHERPRJ000000000000000']) {
         const res = (await (
           await app.request(`/agent-sessions/${sessionId}/approvals`, {
             method: 'POST',
             headers: auth,
-            body: JSON.stringify({ toolName: 'mcp__ixa__get_project', toolUseId: `t-${projectId}`, risk: 'read', input: { projectId } }),
+            body: JSON.stringify({
+              toolName: 'mcp__ixa__get_project',
+              toolUseId: `t-${projectId}`,
+              risk: 'read',
+              input: { projectId },
+            }),
           })
         ).json()) as { data: { decision: string | null } }
         results.push(res.data.decision)
@@ -413,8 +613,16 @@ describe('確認の待ちと答え', () => {
       const res = (await (
         await app.request(`/agent-sessions/${sessionId}/approvals`, {
           method: 'POST',
-          headers: { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' },
-          body: JSON.stringify({ toolName: 'mcp__ixa__get_project', toolUseId: 't1', risk: 'read', input: { projectId } }),
+          headers: {
+            authorization: `Bearer ${call.mcpToken()}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            toolName: 'mcp__ixa__get_project',
+            toolUseId: 't1',
+            risk: 'read',
+            input: { projectId },
+          }),
         })
       ).json()) as { data: { decision: string | null } }
       decision = res.data.decision
@@ -432,17 +640,27 @@ describe('確認の待ちと答え', () => {
     const t = setup(
       async (call, app) => {
         const sessionId = call.mcpEnv()['IXA_AGENT_SESSION_ID'] ?? ''
-        const auth = { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' }
+        const auth = {
+          authorization: `Bearer ${call.mcpToken()}`,
+          'content-type': 'application/json',
+        }
         const started = (await (
           await app.request(`/agent-sessions/${sessionId}/approvals`, {
             method: 'POST',
             headers: auth,
-            body: JSON.stringify({ toolName: 'mcp__ixa__export', toolUseId: 't1', risk: 'costly', input: {} }),
+            body: JSON.stringify({
+              toolName: 'mcp__ixa__export',
+              toolUseId: 't1',
+              risk: 'costly',
+              input: {},
+            }),
           })
         ).json()) as { data: { requestId: string } }
         clock.now += 60 * 60 * 1000 + 1
         const state = (await (
-          await app.request(`/agent-sessions/${sessionId}/approvals/${started.data.requestId}`, { headers: auth })
+          await app.request(`/agent-sessions/${sessionId}/approvals/${started.data.requestId}`, {
+            headers: auth,
+          })
         ).json()) as { data: { decision: string | null } }
         states.push(state.data.decision)
         await call.untilStopped()
@@ -458,7 +676,15 @@ describe('確認の待ちと答え', () => {
     expect(decision).toMatchObject({ decision: 'deny', waiveAfter: false, by: 'timeout' })
     const request = t.sessions.messages(id).find((m) => m.body.kind === 'approval_request')?.body
     const requestId = request?.kind === 'approval_request' ? request.requestId : ''
-    expect((await t.post(`/agent-sessions/${id}/approvals/${requestId}`, { decision: 'allow' }, { cookie: 'ixa_session=x' })).status).toBe(409)
+    expect(
+      (
+        await t.post(
+          `/agent-sessions/${id}/approvals/${requestId}`,
+          { decision: 'allow' },
+          { cookie: 'ixa_session=x' },
+        )
+      ).status,
+    ).toBe(409)
     await t.post(`/agent-sessions/${id}/stop`, {})
     await t.until(() => t.statusOf(id) === 'interrupted', '中断')
   })
@@ -466,44 +692,61 @@ describe('確認の待ちと答え', () => {
   it('状態を先に進めてから待ちを開ける（頼んだ直後は確認待ち、許しが見えた時は作業中）', async () => {
     const seen: { afterRequest?: string; afterAllow?: string } = {}
     const holder: { statusOf?: (id: AgentSession['id']) => string | undefined } = {}
-    const t = setup(async (call, app) => {
-      const sessionId = call.mcpEnv()['IXA_AGENT_SESSION_ID'] ?? ''
-      const auth = { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' }
-      const started = (await (
-        await app.request(`/agent-sessions/${sessionId}/approvals`, {
-          method: 'POST',
-          headers: auth,
-          body: JSON.stringify({ toolName: 'mcp__ixa__export', toolUseId: 't1', risk: 'costly', input: {} }),
-        })
-      ).json()) as { data: { requestId: string } }
-      seen.afterRequest = holder.statusOf?.(sessionId as AgentSession['id'])
-      for (;;) {
-        const state = (await (
-          await app.request(`/agent-sessions/${sessionId}/approvals/${started.data.requestId}`, { headers: auth })
-        ).json()) as { data: { decision: string | null } }
-        if (state.data.decision !== null) break
-        await new Promise((resolve) => setTimeout(resolve, 2))
-      }
-      seen.afterAllow = holder.statusOf?.(sessionId as AgentSession['id'])
-      call.emit(cliLines.result(CLI_SESSION, 0))
-      return exited(0)
-    }, {
-      // 本物の DB と同じく、状態の書き込みに時間が掛かる。
-      wrapSessions: (repo) => ({
-        ...repo,
-        transition: async (...args) => {
-          await new Promise((resolve) => setTimeout(resolve, 30))
-          return repo.transition(...args)
-        },
-      }),
-    })
+    const t = setup(
+      async (call, app) => {
+        const sessionId = call.mcpEnv()['IXA_AGENT_SESSION_ID'] ?? ''
+        const auth = {
+          authorization: `Bearer ${call.mcpToken()}`,
+          'content-type': 'application/json',
+        }
+        const started = (await (
+          await app.request(`/agent-sessions/${sessionId}/approvals`, {
+            method: 'POST',
+            headers: auth,
+            body: JSON.stringify({
+              toolName: 'mcp__ixa__export',
+              toolUseId: 't1',
+              risk: 'costly',
+              input: {},
+            }),
+          })
+        ).json()) as { data: { requestId: string } }
+        seen.afterRequest = holder.statusOf?.(sessionId as AgentSession['id'])
+        for (;;) {
+          const state = (await (
+            await app.request(`/agent-sessions/${sessionId}/approvals/${started.data.requestId}`, {
+              headers: auth,
+            })
+          ).json()) as { data: { decision: string | null } }
+          if (state.data.decision !== null) break
+          await new Promise((resolve) => setTimeout(resolve, 2))
+        }
+        seen.afterAllow = holder.statusOf?.(sessionId as AgentSession['id'])
+        call.emit(cliLines.result(CLI_SESSION, 0))
+        return exited(0)
+      },
+      {
+        // 本物の DB と同じく、状態の書き込みに時間が掛かる。
+        wrapSessions: (repo) => ({
+          ...repo,
+          transition: async (...args) => {
+            await new Promise((resolve) => setTimeout(resolve, 30))
+            return repo.transition(...args)
+          },
+        }),
+      },
+    )
     holder.statusOf = t.statusOf
     const id = await t.newTask()
     await t.post(`/agent-sessions/${id}/messages`, { text: '書き出して' })
     await t.until(() => t.statusOf(id) === 'awaiting_approval', '確認待ち')
     const request = t.sessions.messages(id).find((m) => m.body.kind === 'approval_request')?.body
     const requestId = request?.kind === 'approval_request' ? request.requestId : ''
-    await t.post(`/agent-sessions/${id}/approvals/${requestId}`, { decision: 'allow' }, { cookie: 'ixa_session=x' })
+    await t.post(
+      `/agent-sessions/${id}/approvals/${requestId}`,
+      { decision: 'allow' },
+      { cookie: 'ixa_session=x' },
+    )
     await t.until(() => t.statusOf(id) === 'idle', '済み')
     expect(seen).toEqual({ afterRequest: 'awaiting_approval', afterAllow: 'running' })
   })
@@ -514,7 +757,12 @@ describe('確認の待ちと答え', () => {
       await app.request(`/agent-sessions/${sessionId}/approvals`, {
         method: 'POST',
         headers: { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ toolName: 'mcp__ixa__export', toolUseId: 't1', risk: 'costly', input: { note: 'x'.repeat(10_000) } }),
+        body: JSON.stringify({
+          toolName: 'mcp__ixa__export',
+          toolUseId: 't1',
+          risk: 'costly',
+          input: { note: 'x'.repeat(10_000) },
+        }),
       })
       await call.untilStopped()
       return exited(143)
@@ -551,7 +799,10 @@ describe('確認の待ちと答え', () => {
 describe('後片付けの失敗', () => {
   it('やりとりの後片付けで投げても、作業中のまま残さず失敗にする', async () => {
     const t = setup(simpleTurn, {
-      wrapSessions: (repo) => ({ ...repo, recordTurn: () => Promise.reject(new Error('DB が落ちました')) }),
+      wrapSessions: (repo) => ({
+        ...repo,
+        recordTurn: () => Promise.reject(new Error('DB が落ちました')),
+      }),
     })
     const id = await t.newTask()
     await t.post(`/agent-sessions/${id}/messages`, { text: 'こんにちは' })
@@ -565,7 +816,10 @@ describe('後片付けの失敗', () => {
     await t.sessions.transition(id, 'running', new Date())
     expect((await t.post(`/agent-sessions/${id}/stop`, {})).status).toBe(202)
     expect(t.statusOf(id)).toBe('interrupted')
-    expect(t.sessions.messages(id).at(-1)?.body).toMatchObject({ kind: 'system', event: 'interrupted' })
+    expect(t.sessions.messages(id).at(-1)?.body).toMatchObject({
+      kind: 'system',
+      event: 'interrupted',
+    })
   })
 })
 
@@ -587,12 +841,20 @@ describe('確認なしへの切り替え', () => {
   it('waive_confirmations の確認に「実行」と答えると、API が旗を立てて会話に残す', async () => {
     const t = setup(async (call, app) => {
       const sessionId = call.mcpEnv()['IXA_AGENT_SESSION_ID'] ?? ''
-      const auth = { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' }
+      const auth = {
+        authorization: `Bearer ${call.mcpToken()}`,
+        'content-type': 'application/json',
+      }
       const started = (await (
         await app.request(`/agent-sessions/${sessionId}/approvals`, {
           method: 'POST',
           headers: auth,
-          body: JSON.stringify({ toolName: 'mcp__ixa__waive_confirmations', toolUseId: 'toolu_w', risk: 'settings', input: {} }),
+          body: JSON.stringify({
+            toolName: 'mcp__ixa__waive_confirmations',
+            toolUseId: 'toolu_w',
+            risk: 'settings',
+            input: {},
+          }),
         })
       ).json()) as { data: { requestId: string; decision: string | null } }
       expect(started.data.decision).toBeNull()
@@ -605,9 +867,17 @@ describe('確認なしへの切り替え', () => {
     const request = t.sessions.messages(id).find((m) => m.body.kind === 'approval_request')?.body
     const requestId = request?.kind === 'approval_request' ? request.requestId : ''
     expect(t.sessions.all()[0]?.confirmationsWaived).toBe(false)
-    await t.post(`/agent-sessions/${id}/approvals/${requestId}`, { decision: 'allow' }, { cookie: 'ixa_session=x' })
+    await t.post(
+      `/agent-sessions/${id}/approvals/${requestId}`,
+      { decision: 'allow' },
+      { cookie: 'ixa_session=x' },
+    )
     expect(t.sessions.all()[0]?.confirmationsWaived).toBe(true)
-    expect(t.sessions.messages(id).some((m) => m.body.kind === 'system' && m.body.event === 'confirmations_waived')).toBe(true)
+    expect(
+      t.sessions
+        .messages(id)
+        .some((m) => m.body.kind === 'system' && m.body.event === 'confirmations_waived'),
+    ).toBe(true)
     await t.post(`/agent-sessions/${id}/stop`, {})
     await t.until(() => t.statusOf(id) === 'interrupted', '中断')
   })
@@ -630,7 +900,10 @@ describe('残ったプロセスの後片付け', () => {
 
   it('起動時に、残った番号のうちエージェントの CLI だけをグループごと止め、MCP の設定ファイルを消す', async () => {
     const t = setup(simpleTurn, { agentPids: [111] })
-    for (const [dir, pid] of [['01JAAAAAAAAAAAAAAAAAAAAAAA', '111'], ['01JBBBBBBBBBBBBBBBBBBBBBBB', '222']] as const) {
+    for (const [dir, pid] of [
+      ['01JAAAAAAAAAAAAAAAAAAAAAAA', '111'],
+      ['01JBBBBBBBBBBBBBBBBBBBBBBB', '222'],
+    ] as const) {
       mkdirSync(join(t.root, dir), { recursive: true })
       writeFileSync(join(t.root, dir, 'cli.pid'), pid)
       writeFileSync(join(t.root, dir, 'mcp-x.json'), '{}')
@@ -648,18 +921,36 @@ describe('起動時の後片付け', () => {
     const t = setup(simpleTurn)
     const id = await t.newTask()
     await t.sessions.transition(id, 'running', new Date())
-    await t.tokens.create({ kind: 'automation', label: `${AGENT_KEY_LABEL_PREFIX}A）`, tokenHash: 'h1', expiresAt: null })
-    await t.tokens.create({ kind: 'automation', label: '制作者の MCP', tokenHash: 'h2', expiresAt: null })
+    await t.tokens.create({
+      kind: 'automation',
+      label: `${AGENT_KEY_LABEL_PREFIX}A）`,
+      tokenHash: 'h1',
+      expiresAt: null,
+    })
+    await t.tokens.create({
+      kind: 'automation',
+      label: '制作者の MCP',
+      tokenHash: 'h2',
+      expiresAt: null,
+    })
     await t.agent.recoverAfterRestart(new Date(Date.now() + 1000))
     expect(t.statusOf(id)).toBe('interrupted')
-    expect(t.sessions.messages(id).at(-1)?.body).toMatchObject({ kind: 'system', event: 'interrupted' })
+    expect(t.sessions.messages(id).at(-1)?.body).toMatchObject({
+      kind: 'system',
+      event: 'interrupted',
+    })
     const revoked = t.tokens.rows().map((row) => [row.label, row.revokedAt !== null])
     expect(revoked).toEqual([
       [`${AGENT_KEY_LABEL_PREFIX}A）`, true],
       ['制作者の MCP', false],
     ])
     // 起動したあとに作った鍵（いま動いているやりとりの鍵）は取り消さない。
-    await t.tokens.create({ kind: 'automation', label: `${AGENT_KEY_LABEL_PREFIX}B）`, tokenHash: 'h3', expiresAt: null })
+    await t.tokens.create({
+      kind: 'automation',
+      label: `${AGENT_KEY_LABEL_PREFIX}B）`,
+      tokenHash: 'h3',
+      expiresAt: null,
+    })
     await t.agent.recoverAfterRestart(new Date(Date.now() - 60_000))
     expect(t.tokens.rows().find((row) => row.tokenHash === 'h3')?.revokedAt).toBeNull()
     // 中断した会話は続きから話せる。
@@ -682,12 +973,13 @@ describe('直す・一覧', () => {
     expect((await patch({ confirmationsWaived: true })).status).toBe(200)
     expect((await patch({ confirmationsWaived: false })).status).toBe(200)
     expect((await patch({})).status).toBe(422)
-    expect(t.sessions.messages(a).map((m) => (m.body.kind === 'system' ? m.body.event : m.body.kind))).toEqual([
-      'confirmations_waived',
-      'confirmations_restored',
-    ])
+    expect(
+      t.sessions.messages(a).map((m) => (m.body.kind === 'system' ? m.body.event : m.body.kind)),
+    ).toEqual(['confirmations_waived', 'confirmations_restored'])
     await t.sessions.transition(a, 'running', new Date('2020-01-01T00:00:00Z'))
-    const list = (await (await t.app.request(`/projects/${t.project.id}/agent-sessions`)).json()) as { data: { id: string }[] }
+    const list = (await (
+      await t.app.request(`/projects/${t.project.id}/agent-sessions`)
+    ).json()) as { data: { id: string }[] }
     expect(list.data.map((s) => s.id)).toEqual([a, b])
     expect(JSON.stringify(list)).not.toContain('cliSessionId')
   })
