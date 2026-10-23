@@ -162,7 +162,8 @@ IXA_API_TOKEN=... IXA_WORKSPACE_ID=... pnpm --filter @ixa/mcp --silent start
 
 API に口が無いので、画面で直す。
 
-- Shot の台詞・シーケンス・ロックを後から直す（台詞は `restructure_shots` の `insert` で足すときだけ）
+- シーケンス（章立て）を扱う（作る・Shot を入れ直す）
+- Shot の台詞・ロックを後から直す（台詞は `restructure_shots` の `insert` で足すときだけ）
 - Shot の並べ替え
 - 画像のクリップ（ロゴなど）をタイムラインに置く
 
