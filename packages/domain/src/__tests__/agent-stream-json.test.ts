@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AgentMessageBody, parseStreamJsonLine, type AgentMessageBody as Body } from '../index.js'
+import { AgentMessageBody, capJson, parseStreamJsonLine, type AgentMessageBody as Body } from '../index.js'
 import { ALLOW_AND_DENY, RESUME, UNKNOWN_MODEL } from './fixtures/claude-stream-json.js'
 
 /**
@@ -106,6 +106,29 @@ describe('parseStreamJsonLine（失敗）', () => {
       message: { role: 'assistant', content: [{ type: 'thinking', thinking: '…' }, { type: 'text', text: 'はい' }] },
     })
     expect(parseStreamJsonLine(line).bodies.map((b) => b.kind)).toEqual(['system', 'assistant_text'])
+  })
+})
+
+describe('長い中身を切る', () => {
+  it('知らない行の raw とツールの入力は、JSON で 2000 字を超えたら切った形で残す', () => {
+    const big = 'x'.repeat(5000)
+    const unknown = parseStreamJsonLine(JSON.stringify({ type: 'rate_limit_event', session_id: 's', blob: big })).bodies[0]
+    expect(JSON.stringify(unknown).length).toBeLessThan(2300)
+    expect(unknown).toMatchObject({ kind: 'system', event: 'unknown_line', raw: { truncated: true } })
+    const call = parseStreamJsonLine(
+      JSON.stringify({
+        type: 'assistant',
+        session_id: 's',
+        message: { content: [{ type: 'tool_use', id: 't', name: 'mcp__ixa__edit_shots', input: { description: big } }] },
+      }),
+    ).bodies[0]
+    expect(JSON.stringify(call).length).toBeLessThan(2300)
+    expect(call).toMatchObject({ kind: 'tool_call', input: { truncated: true } })
+  })
+
+  it('短い中身はそのまま', () => {
+    expect(capJson({ a: 1 })).toEqual({ a: 1 })
+    expect(capJson('x'.repeat(10))).toBe('x'.repeat(10))
   })
 })
 

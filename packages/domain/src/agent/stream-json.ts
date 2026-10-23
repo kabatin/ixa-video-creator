@@ -25,6 +25,18 @@ export const TOOL_RESULT_TEXT_MAX = 2000
 
 const truncate = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max)}…` : text)
 
+/** 会話の行に残す JSON の上限（字数）。ツールの結果と同じ。 */
+export const STORED_JSON_MAX = TOOL_RESULT_TEXT_MAX
+
+/**
+ * 長い中身（知らない行・ツールの入力）を、JSON の長さで切る。超えたら `{ truncated: true, preview }` にする
+ * （会話の行を太らせない。何が来たかは先頭で分かる）。
+ */
+export const capJson = (value: unknown, max: number = STORED_JSON_MAX): unknown => {
+  const json = JSON.stringify(value) ?? ''
+  return json.length <= max ? value : { truncated: true, preview: json.slice(0, max) }
+}
+
 const Envelope = z.object({ type: z.string(), session_id: z.string().optional() }).passthrough()
 
 const InitLine = z.object({ type: z.literal('system'), subtype: z.literal('init'), model: z.string().optional() })
@@ -52,7 +64,7 @@ const ResultLine = z.object({
   duration_ms: z.number().min(0).optional(),
 })
 
-const unknownBody = (raw: unknown): AgentMessageBody => ({ kind: 'system', event: 'unknown_line', text: null, raw })
+const unknownBody = (raw: unknown): AgentMessageBody => ({ kind: 'system', event: 'unknown_line', text: null, raw: capJson(raw) })
 
 const toolResultText = (content: z.infer<typeof ToolResultBlock>['content']): string =>
   typeof content === 'string' ? content : content.map((part) => part.text ?? `[${part.type}]`).join('\n')
@@ -62,7 +74,7 @@ const blockBody = (block: unknown): AgentMessageBody => {
   if (text.success) return { kind: 'assistant_text', text: text.data.text }
   const toolUse = ToolUseBlock.safeParse(block)
   if (toolUse.success) {
-    return { kind: 'tool_call', toolUseId: toolUse.data.id, toolName: toolUse.data.name, input: toolUse.data.input ?? {} }
+    return { kind: 'tool_call', toolUseId: toolUse.data.id, toolName: toolUse.data.name, input: capJson(toolUse.data.input ?? {}) }
   }
   const result = ToolResultBlock.safeParse(block)
   if (result.success) {

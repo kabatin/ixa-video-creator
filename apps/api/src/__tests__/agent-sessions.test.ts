@@ -508,6 +508,27 @@ describe('確認の待ちと答え', () => {
     expect(seen).toEqual({ afterRequest: 'awaiting_approval', afterAllow: 'running' })
   })
 
+  it('確認に添えられた入力が長ければ、切って会話に残す', async () => {
+    const t = setup(async (call, app) => {
+      const sessionId = call.mcpEnv()['IXA_AGENT_SESSION_ID'] ?? ''
+      await app.request(`/agent-sessions/${sessionId}/approvals`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ toolName: 'mcp__ixa__export', toolUseId: 't1', risk: 'costly', input: { note: 'x'.repeat(10_000) } }),
+      })
+      await call.untilStopped()
+      return exited(143)
+    })
+    const id = await t.newTask()
+    await t.post(`/agent-sessions/${id}/messages`, { text: '書き出して' })
+    await t.until(() => t.statusOf(id) === 'awaiting_approval', '確認待ち')
+    const request = t.sessions.messages(id).find((m) => m.body.kind === 'approval_request')?.body
+    expect(JSON.stringify(request).length).toBeLessThan(2600)
+    expect(request).toMatchObject({ input: { truncated: true } })
+    await t.post(`/agent-sessions/${id}/stop`, {})
+    await t.until(() => t.statusOf(id) === 'interrupted', '中断')
+  })
+
   it('このやりとりの鍵でなければ、確認の口は断る', async () => {
     const t = setup(async (call) => {
       await call.untilStopped()

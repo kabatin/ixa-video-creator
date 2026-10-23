@@ -11,6 +11,7 @@ import {
   IXA_MCP_TOOL_PREFIX,
   AgentModel,
   approvalNeeded,
+  capJson,
   isAgentSessionBusy,
   newId,
   sessionTitleFrom,
@@ -430,7 +431,7 @@ export const createAgentService = (deps: AgentServiceDeps) => {
           toolUseId: request.toolUseId,
           toolName: request.toolName,
           risk,
-          input: request.input,
+          input: capJson(request.input),
         },
       ])
       return okValue({ requestId, decision: null, message: null })
