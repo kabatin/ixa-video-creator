@@ -2,7 +2,9 @@
 
 stdio で話す MCP サーバ。ixa の API（`pnpm dev` の API、既定 `http://127.0.0.1:3001`）を
 自動化用の鍵（Bearer）で呼ぶ薄いクライアントで、曲作り → Shot 割り → 最初のコマ → 動画 → 書き出しまでを
-29 のツールで扱う（ADR-0049。エフェクトの 3 本は ADR-0050、サムネイルは ADR-0051、効果音の 4 本は ADR-0052）。
+34 のツールで扱う（ADR-0049。エフェクトの 3 本は ADR-0050、サムネイルは ADR-0051、効果音は ADR-0052・ADR-0054、
+最初のコマの履歴とやり直しは ADR-0055、Take のレビューは ADR-0057）。各ツールには危険度の印（読むだけ・書く・消す・費用・設定）があり、
+MCP の annotations にも写している（ADR-0058）。
 
 ## 用意するもの
 
@@ -73,8 +75,10 @@ IXA_API_TOKEN=... IXA_WORKSPACE_ID=... pnpm --filter @ixa/mcp --silent start
 `ixa_status` · `set_ai` · `create_project` · `get_project` · `generate_music` · `upload_music` ·
 `set_master_track` · `music_overview` · `plan_shots` · `edit_shots` · `create_character` · `create_location` ·
 `draw_start_frames` · `set_start_frame` · `list_start_frame_history` · `use_start_frame` · `retry_image` · `view` · `generate_takes` · `list_takes` · `adopt_take` ·
-`review_take` · `upscale_takes` · `wait` · `add_effects` · `list_effects` · `remove_effects` · `suggest_sfx` · `generate_sfx` ·
+`review_take` · `upscale_takes` · `wait` · `add_effects` · `list_effects` · `remove_effects` · `analyze_motion` · `suggest_sfx` · `generate_sfx` ·
 `list_sfx` · `remove_sfx` · `export` · `export_thumbnail`
+
+画面の「AI エージェント」の会話から起こされたときだけ、`approve`（実行の前の確認）と `waive_confirmations`（以後確認しない）の 2 本が加わる。
 
 生成は手元の GPU で数分かかる。投げたら `wait`（`maxWaitSec` で必ず返る。終わっていなければもう一度呼ぶ）、
 出来は `view` の画像で確かめてから `adopt_take` する。
