@@ -1,11 +1,12 @@
 import {
   CLIP_FADE_MAX_SEC,
   MAX_TEXT_CLIP_LENGTH,
+  mergeTextStyle,
+  narrationLineOf,
+  Seconds,
   TextStyle,
   TextStyleKey,
   TextTemplateKey,
-  mergeTextStyle,
-  narrationLineOf,
 } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
@@ -22,7 +23,7 @@ import { failureReason, findTextStyle, listClips, listTextStyles, WireClip, type
 
 const ClipEdit = z.object({
   clipId: Id,
-  startSec: z.number().min(0).optional(),
+  startSec: Seconds.optional(),
   durationSec: z.number().positive().max(600).optional(),
   layer: z.number().int().min(0).max(20).optional(),
   text: z.string().trim().min(1).max(MAX_TEXT_CLIP_LENGTH).optional().describe('Telops only.'),

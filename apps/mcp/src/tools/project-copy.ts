@@ -49,7 +49,11 @@ const WireBrandAsset = z.object({ id: z.string(), category: z.string(), name: z.
 const WireVoice = z.object({ id: z.string(), name: z.string(), tool: z.string() })
 const WireSfxJob = z.object({ id: z.string(), prompt: z.string(), mediaAssetIds: z.array(z.string()) })
 
-const Ids = z.array(Id).max(MAX_IMPORT_ITEMS).default([])
+const Ids = z
+  .array(Id)
+  .max(MAX_IMPORT_ITEMS)
+  .refine((ids) => new Set(ids).size === ids.length, 'duplicate ids')
+  .default([])
 
 export const ImportFromProjectInput = z.object({
   projectId: Id.describe('The project to import into (usually the current one).'),
@@ -65,6 +69,10 @@ export const ImportFromProjectInput = z.object({
   sfxSounds: z
     .array(z.object({ sfxJobId: Id, mediaAssetId: Id }).strict())
     .max(MAX_IMPORT_ITEMS)
+    .refine(
+      (sounds) => new Set(sounds.map((s) => `${s.sfxJobId}/${s.mediaAssetId}`)).size === sounds.length,
+      'duplicate sounds',
+    )
     .default([])
     .describe('One sound effect = a job and one of its media assets (from list).'),
 })

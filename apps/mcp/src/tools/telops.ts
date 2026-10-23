@@ -1,11 +1,12 @@
 import {
+  lyricLineOf,
   MAX_TEXT_CLIP_LENGTH,
+  mergeTextStyle,
   MIN_TEXT_CLIP_DURATION_SEC,
+  narrationLineOf,
+  Seconds,
   TextStyle,
   TextTemplateKey,
-  lyricLineOf,
-  mergeTextStyle,
-  narrationLineOf,
 } from '@ixa/domain'
 import { z } from 'zod'
 import { IxaApiError, seg, type ApiClient } from '../api-client.js'
@@ -83,9 +84,9 @@ export const failureReason = (error: unknown): string => {
 
 const Telop = z.object({
   text: z.string().trim().min(1).max(MAX_TEXT_CLIP_LENGTH).describe('Shown text (Japanese is fine).'),
-  atSec: z.number().min(0).optional().describe('Timeline seconds where it appears. Give this OR shotCode.'),
+  atSec: Seconds.optional().describe('Timeline seconds where it appears. Give this OR shotCode.'),
   shotCode: z.string().min(1).optional().describe('Appear at the head of this shot (e.g. "CUT3"), plus offsetSec.'),
-  offsetSec: z.number().optional().describe('Seconds from the shot head (with shotCode). Default 0.'),
+  offsetSec: Seconds.optional().describe('Seconds from the shot head (with shotCode). Default 0.'),
   durationSec: z.number().min(MIN_TEXT_CLIP_DURATION_SEC).max(MAX_TELOP_SEC).default(DEFAULT_TELOP_SEC),
   template: TextTemplateKey.default('plain').describe('plain = centered text; lower_third = bottom band.'),
   styleName: z.string().min(1).optional().describe('A saved text style by name (see list_telops styles).'),
@@ -244,8 +245,12 @@ export const removeTelopsTool = defineTool({
     'Remove telops (TEXT track clips) and/or narration lines by id. Other clips (effects, sounds) are refused — use ' +
     'remove_effects / remove_sfx. Removing a narration caption keeps the line but stops captioning it.',
   input: RemoveTelopsInput,
+  refine: ({ clipIds = [], narrationLineIds = [] }, ctx) => {
+    if (clipIds.length + narrationLineIds.length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['clipIds'], message: 'clipIds か narrationLineIds を 1 つ以上指定してください' })
+    }
+  },
   handler: async ({ projectId, clipIds = [], narrationLineIds = [] }, { api }) => {
-    if (clipIds.length + narrationLineIds.length === 0) throw new ToolInputError('clipIds か narrationLineIds を 1 つ以上指定してください')
     const [clips, narration] = await Promise.all([
       clipIds.length > 0 ? listClips(api, projectId) : Promise.resolve([]),
       narrationLineIds.length > 0

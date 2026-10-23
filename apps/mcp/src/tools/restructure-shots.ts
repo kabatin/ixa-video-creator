@@ -1,4 +1,4 @@
-import { ShotCamera } from '@ixa/domain'
+import { Seconds, ShotCamera } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import { bulkResult, WireShot } from '../wire.js'
@@ -18,12 +18,12 @@ export const RestructureShotsInput = z.object({
   projectId: Id,
   action: z.enum(['split', 'merge', 'delete', 'insert']),
   shotId: Id.optional().describe('split: the shot to split.'),
-  atSec: z.number().min(0).optional().describe('split: timeline position (seconds) of the cut.'),
+  atSec: Seconds.optional().describe('split: timeline position (seconds) of the cut.'),
   shotIds: z.array(Id).min(1).max(200).optional().describe('merge: 2+ adjacent shots (into the first); delete: shots to delete.'),
   afterShotId: Id.optional().describe('insert: place the new shot right after this one. Default: at the end.'),
   code: z.string().trim().min(1).max(40).optional().describe('insert: unique shot code, e.g. "CUT12".'),
-  startSec: z.number().min(0).optional().describe('insert'),
-  durationSec: z.number().positive().optional().describe('insert'),
+  startSec: Seconds.optional().describe('insert'),
+  durationSec: Seconds.positive().optional().describe('insert'),
   description: z.string().max(4000).optional().describe('insert (Japanese).'),
   mood: z.string().max(500).optional().describe('insert'),
   dialogue: z.string().max(2000).optional().describe('insert: spoken line, if any.'),
@@ -63,7 +63,7 @@ const split = async (api: ApiClient, args: RestructureArgs) => {
 }
 
 const merge = async (api: ApiClient, args: RestructureArgs) => {
-  if (args.shotIds === undefined || args.shotIds.length < 2) throw new ToolInputError('merge には隣り合う shotIds を 2 つ以上')
+  if (args.shotIds === undefined) throw new ToolInputError('merge には隣り合う shotIds を 2 つ以上')
   assertInProject(await orderedShots(api, args.projectId), args.shotIds)
   const result = await api.post(
     `/projects/${seg(args.projectId)}/shots/merge`,
@@ -127,5 +127,10 @@ export const restructureShotsTool = defineTool({
     'insert {code, startSec, durationSec, afterShotId?, description?, dialogue?, ...}. ' +
     'Split and merge only work on shots without takes. Deleting one shot can be undone (undo); deleting several cannot.',
   input: RestructureShotsInput,
+  refine: (args, ctx) => {
+    if (args.action === 'merge' && (args.shotIds === undefined || args.shotIds.length < 2)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['shotIds'], message: 'merge には隣り合う shotIds を 2 つ以上' })
+    }
+  },
   handler: async (args, { api }) => jsonResult({ action: args.action, ...(await ACTIONS[args.action](api, args)) }),
 })

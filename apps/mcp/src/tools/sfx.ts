@@ -1,5 +1,5 @@
 import { basename, extname, isAbsolute } from 'node:path'
-import { SFX_COUNT_MAX, SfxCue, SfxCueAlign, SfxJobStatus, UploadedSfxTitle } from '@ixa/domain'
+import { Seconds, SFX_COUNT_MAX, SfxCue, SfxCueAlign, SfxJobStatus, UploadedSfxTitle } from '@ixa/domain'
 import { z } from 'zod'
 import { IxaApiError, seg } from '../api-client.js'
 import { uploadLocalFile } from '../lib/media-io.js'
@@ -212,7 +212,7 @@ export const uploadSfxTool = defineTool({
     projectId: Id,
     filePath: z.string().min(1).refine(isAbsolute, 'absolute path required'),
     title: UploadedSfxTitle.optional().describe('Defaults to the file name.'),
-    placeAtSec: z.number().min(0).optional().describe('Timeline seconds. Omit to only import it.'),
+    placeAtSec: Seconds.optional().describe('Timeline seconds. Omit to only import it.'),
     volume: z.number().min(0).max(2).default(UPLOADED_SFX_VOLUME),
   }),
   handler: async (args, { api, workspaceId, clock }) => {

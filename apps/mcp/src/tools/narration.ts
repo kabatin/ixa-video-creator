@@ -4,6 +4,7 @@ import {
   NARRATION_READING_MAX,
   NARRATION_TEXT_MAX,
   ReadingEntry,
+  Seconds,
   UpdateVoiceProfilePatch,
   VoiceToolId,
 } from '@ixa/domain'
@@ -76,7 +77,7 @@ const LineEdit = z.object({
   reading: z.string().trim().min(1).max(NARRATION_READING_MAX).nullable().optional().describe('How to read it (kana); null = from the reading dictionary.'),
   direction: z.string().max(NARRATION_DIRECTION_MAX).optional().describe('Delivery note for this line, e.g. 囁くように.'),
   voice: VoiceRef.nullable().optional(),
-  startSec: z.number().min(0).nullable().optional().describe('Timeline seconds; null = not placed.'),
+  startSec: Seconds.nullable().optional().describe('Timeline seconds; null = not placed.'),
   telop: z.boolean().optional().describe('Show a caption for this line.'),
 })
 
@@ -90,7 +91,7 @@ export const SetNarrationInput = z.object({
   voice: VoiceRef.optional().describe('add_script: voice for the new lines. edit_voice: the voice to change.'),
   lines: z.array(LineEdit).min(1).max(200).optional().describe('edit_lines.'),
   lineIds: z.array(Id).max(1000).optional().describe('reorder: every line once, in the new order. arrange: lines to place (default all).'),
-  fromSec: z.number().min(0).optional().describe('arrange: where the first line starts.'),
+  fromSec: Seconds.optional().describe('arrange: where the first line starts.'),
   gapSec: z.number().min(0).max(10).optional().describe('arrange: silence between lines (default 0.3).'),
   newVoice: NewVoice.optional().describe('add_voice: name, tool (gemini_api|elevenlabs|macos_say), voiceName (e.g. Kore for Gemini), model, styleNote, speed 0.5–2, volume, language, characterId.'),
   voiceChange: VoiceChange.optional().describe('edit_voice: fields to change.'),

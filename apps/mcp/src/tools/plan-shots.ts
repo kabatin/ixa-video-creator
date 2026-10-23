@@ -1,4 +1,4 @@
-import { MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE } from '@ixa/domain'
+import { MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE, Seconds } from '@ixa/domain'
 import { z } from 'zod'
 import { seg } from '../api-client.js'
 import {
@@ -13,8 +13,6 @@ import { fetchAnalysis, resolveTrackId } from './music.js'
 import { defineTool, Id, jsonResult, round, ToolInputError } from '../tool-def.js'
 
 /** Shot 割り（カット点 → Shot）。 */
-
-const Seconds = z.number().min(0)
 
 export const PlanShotsInput = z.object({
   projectId: Id,

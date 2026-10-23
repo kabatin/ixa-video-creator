@@ -75,6 +75,7 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
   plan_shots: {
     base: { projectId: P, boundariesSec: [0, 2], dryRun: true },
     cases: [
+      [{ boundariesSec: [0, Infinity] }, 'boundariesSec.1'],
       [{ boundariesSec: [0] }, 'boundariesSec'],
       [{ boundariesSec: many(201, 1) }, 'boundariesSec'],
       [{ boundariesSec: [-1, 2] }, 'boundariesSec.0'],
@@ -94,6 +95,7 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
   edit_shots: {
     base: { projectId: P, edits: [{ shotIds: [S] }] },
     cases: [
+      [{ edits: [{ shotIds: [S], startSec: Infinity }] }, 'edits.0.startSec'],
       [{ edits: [] }, 'edits'],
       [{ edits: many(101, { shotIds: [S] }) }, 'edits'],
       [{ edits: [{ shotIds: [] }] }, 'edits.0.shotIds'],
@@ -220,6 +222,8 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
   add_effects: {
     base: { projectId: P, effects: [{ template: 'flash', atSec: 0 }] },
     cases: [
+      [{ effects: [{ template: 'flash', shotCode: 'CUT1', offsetSec: -0.1 }] }, 'effects.0.offsetSec'],
+      [{ effects: [{ template: 'flash', atSec: Infinity }] }, 'effects.0.atSec'],
       [{ effects: [] }, 'effects'],
       [{ effects: many(101, { template: 'flash', atSec: 0 }) }, 'effects'],
       [{ effects: [{ template: 'ink_splash', atSec: 0 }] }, 'effects.0.template'],
@@ -283,6 +287,8 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
   export: {
     base: { projectId: P },
     cases: [
+      [{ startSec: Infinity }, 'startSec'],
+      [{ endSec: Infinity }, 'endSec'],
       [{ preset: 'master_8k' }, 'preset'],
       [{ waitSec: -1 }, 'waitSec'],
       [{ waitSec: 901 }, 'waitSec'],
@@ -332,6 +338,8 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
   import_from_project: {
     base: { projectId: P, sourceProjectId: P2, action: 'list' },
     cases: [
+      [{ characterIds: [S, S] }, 'characterIds'],
+      [{ sfxSounds: [{ sfxJobId: S, mediaAssetId: S }, { sfxJobId: S, mediaAssetId: S }] }, 'sfxSounds'],
       [{ action: 'copy' }, 'action'],
       [{ sourceProjectId: 'x' }, 'sourceProjectId'],
       [{ characterIds: many(51, S) }, 'characterIds'],
@@ -343,6 +351,11 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
   restructure_shots: {
     base: { projectId: P, action: 'delete', shotIds: [S] },
     cases: [
+      [{ action: 'merge', shotIds: [S] }, 'shotIds'],
+      [{ action: 'merge', shotIds: undefined }, 'shotIds'],
+      [{ atSec: Infinity }, 'atSec'],
+      [{ startSec: Infinity }, 'startSec'],
+      [{ durationSec: Infinity }, 'durationSec'],
       [{ action: 'reorder' }, 'action'],
       [{ shotIds: [] }, 'shotIds'],
       [{ shotIds: many(201, S) }, 'shotIds'],
@@ -444,6 +457,9 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
   add_telops: {
     base: { projectId: P, telops: [{ text: '新曲', atSec: 0 }] },
     cases: [
+      [{ telops: [{ text: '新曲', shotCode: 'CUT1', offsetSec: -0.5 }] }, 'telops.0.offsetSec'],
+      [{ telops: [{ text: '新曲', shotCode: 'CUT1', offsetSec: Infinity }] }, 'telops.0.offsetSec'],
+      [{ telops: [{ text: '新曲', atSec: Infinity }] }, 'telops.0.atSec'],
       [{ telops: [] }, 'telops'],
       [{ telops: many(101, { text: '新曲', atSec: 0 }) }, 'telops'],
       [{ telops: [{ text: '  ', atSec: 0 }] }, 'telops.0.text'],
@@ -460,6 +476,7 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
   edit_clips: {
     base: { projectId: P, edits: [{ clipId: S }] },
     cases: [
+      [{ edits: [{ clipId: S, startSec: Infinity }] }, 'edits.0.startSec'],
       [{ edits: [] }, 'edits'],
       [{ edits: many(201, { clipId: S }) }, 'edits'],
       [{ edits: [{ clipId: 'x' }] }, 'edits.0.clipId'],
@@ -476,6 +493,8 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
   remove_telops: {
     base: { projectId: P, clipIds: [S] },
     cases: [
+      [{ clipIds: [] }, 'clipIds'],
+      [{ clipIds: undefined }, 'clipIds'],
       [{ projectId: 'x' }, 'projectId'],
       [{ clipIds: ['x'] }, 'clipIds.0'],
       [{ clipIds: many(201, S) }, 'clipIds'],
@@ -485,6 +504,7 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
   set_narration: {
     base: { projectId: P, action: 'show' },
     cases: [
+      [{ fromSec: Infinity }, 'fromSec'],
       [{ action: 'speak' }, 'action'],
       [{ script: long(20001) }, 'script'],
       [{ voice: '' }, 'voice'],
@@ -502,6 +522,7 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
   speak_narration: {
     base: { projectId: P },
     cases: [
+      [{ placeAtSec: Infinity }, 'placeAtSec'],
       [{ action: 'sing' }, 'action'],
       [{ lineIds: many(1001, S) }, 'lineIds'],
       [{ filePath: 'a.wav' }, 'filePath'],
@@ -523,6 +544,7 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
   upload_sfx: {
     base: { projectId: P, filePath: '/a/b.wav' },
     cases: [
+      [{ placeAtSec: Infinity }, 'placeAtSec'],
       [{ filePath: 'b.wav' }, 'filePath'],
       [{ title: ' ' }, 'title'],
       [{ title: long(201) }, 'title'],

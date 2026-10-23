@@ -1,5 +1,5 @@
 import { isAbsolute } from 'node:path'
-import { VoiceJobStatus } from '@ixa/domain'
+import { Seconds, VoiceJobStatus } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import { uploadLocalFile } from '../lib/media-io.js'
@@ -47,7 +47,7 @@ export const SpeakNarrationInput = z.object({
   filePath: z.string().min(1).refine(isAbsolute, 'absolute path required').optional().describe('import_recording: a local audio file (mp3/wav/m4a/aac/flac/ogg).'),
   mediaAssetId: Id.optional().describe('import_recording: an already uploaded recording (instead of filePath).'),
   voice: z.string().min(1).optional().describe('import_recording: voice name/id to assign to the transcribed lines.'),
-  placeAtSec: z.number().min(0).default(0).describe('import_recording: timeline seconds where the recording starts.'),
+  placeAtSec: Seconds.default(0).describe('import_recording: timeline seconds where the recording starts.'),
   denoise: z.boolean().default(true).describe('import_recording: false for already-processed or synthetic audio (denoise muffles it).'),
 })
 

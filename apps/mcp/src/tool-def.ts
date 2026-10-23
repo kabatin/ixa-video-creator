@@ -75,6 +75,11 @@ export const defineTool = <S extends z.ZodRawShape>(def: {
   readonly riskOf?: (args: z.infer<z.ZodObject<S>>) => ToolRisk
   readonly description: string
   readonly input: z.ZodObject<S>
+  /**
+   * 欄をまたぐ制約（「どちらか 1 つ以上」など）。`input` は MCP の JSON Schema に写すので ZodObject のまま置き、
+   * ここに分ける。`run` は API を呼ぶ前にこれも通す。
+   */
+  readonly refine?: (args: z.infer<z.ZodObject<S>>, ctx: z.RefinementCtx) => void
   readonly handler: (args: z.infer<z.ZodObject<S>>, deps: ToolDeps) => Promise<CallToolResult>
 }): ToolDef => ({
   name: def.name,
@@ -88,7 +93,9 @@ export const defineTool = <S extends z.ZodRawShape>(def: {
   description: def.description,
   input: def.input,
   run: async (rawArgs, deps) => {
-    const parsed = def.input.safeParse(rawArgs ?? {})
+    const refine = def.refine
+    const schema = refine === undefined ? def.input : def.input.superRefine(refine)
+    const parsed = schema.safeParse(rawArgs ?? {})
     if (!parsed.success) {
       const issues = parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
       return errorResult(`入力が不正です — ${issues.join(' / ')}`)

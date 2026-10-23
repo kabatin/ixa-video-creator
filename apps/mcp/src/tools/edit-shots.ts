@@ -1,4 +1,12 @@
-import { MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE, ShotCamera, ShotContinuityMode, ShotTiming, TransitionType } from '@ixa/domain'
+import {
+  MAX_PLAYBACK_RATE,
+  MIN_PLAYBACK_RATE,
+  Seconds,
+  ShotCamera,
+  ShotContinuityMode,
+  ShotTiming,
+  TransitionType,
+} from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import { bulkResult, WireLook, WireShot, WireShotCharacter, WireTransition } from '../wire.js'
@@ -68,8 +76,8 @@ const Edit = z.object({
     'previous_shot: the take starts from the last frame of the previous shot\'s selected take. Adopt that take before generating.',
   ),
   timing: ShotTiming.optional().describe('trim: cut the take to the shot length; fit: speed the take up/down to fill it.'),
-  startSec: z.number().min(0).optional().describe('Position on the timeline. Only with a single shotId.'),
-  durationSec: z.number().positive().optional().describe('Length on the timeline. Only with a single shotId.'),
+  startSec: Seconds.optional().describe('Position on the timeline. Only with a single shotId.'),
+  durationSec: Seconds.positive().optional().describe('Length on the timeline. Only with a single shotId.'),
 })
 
 export const EditShotsInput = z.object({

@@ -1,6 +1,6 @@
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
-import { RenderPreset, renderExportFileName, renderExportFolderName } from '@ixa/domain'
+import { renderExportFileName, renderExportFolderName, RenderPreset, Seconds } from '@ixa/domain'
 import { z } from 'zod'
 import { IxaApiError, seg, type ApiClient } from '../api-client.js'
 import { checkFor } from '../lib/job-checks.js'
@@ -20,8 +20,8 @@ export const ExportInput = z.object({
     .enum(['full', 'range', 'shots'])
     .default('full')
     .describe('full: whole project; range: startSec..endSec; shots: from the first to the last of shotIds (with everything between).'),
-  startSec: z.number().min(0).optional().describe('With scope "range".'),
-  endSec: z.number().positive().optional().describe('With scope "range".'),
+  startSec: Seconds.optional().describe('With scope "range".'),
+  endSec: Seconds.positive().optional().describe('With scope "range".'),
   shotIds: z.array(Id).min(1).max(200).optional().describe('With scope "shots".'),
   normalizeLoudness: z.boolean().default(true),
   force: z.boolean().default(false).describe('Render again even if nothing changed since the last successful export.'),

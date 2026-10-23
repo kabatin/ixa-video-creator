@@ -1,4 +1,4 @@
-import { AspectRatio, Fps, MAX_STYLE_REFERENCES, ProjectStatus } from '@ixa/domain'
+import { AspectRatio, Fps, MAX_STYLE_REFERENCES, ProjectStatus, Seconds } from '@ixa/domain'
 import { z } from 'zod'
 import { IxaApiError, seg, type ApiClient } from '../api-client.js'
 import {
@@ -99,7 +99,7 @@ export const UpdateProjectInput = z.object({
     .max(MAX_STYLE_REFERENCES)
     .optional()
     .describe('Replaces the mood-board images sent as style references with every shot. [] clears them.'),
-  durationSec: z.number().positive().nullable().optional().describe('Target length of the piece in seconds; null clears.'),
+  durationSec: Seconds.positive().nullable().optional().describe('Target length of the piece in seconds; null clears.'),
   budgetUsd: z.number().min(0).nullable().optional(),
   instrumental: z.boolean().optional().describe('true = no lyrics (skips the lyric steps).'),
   status: ProjectStatus.optional(),

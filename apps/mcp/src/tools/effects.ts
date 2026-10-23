@@ -1,4 +1,11 @@
-import { EFFECT_TEMPLATES, EffectTemplateKey, effectFieldsOf, parseEffectParams, type EffectField } from '@ixa/domain'
+import {
+  EFFECT_TEMPLATES,
+  type EffectField,
+  effectFieldsOf,
+  EffectTemplateKey,
+  parseEffectParams,
+  Seconds,
+} from '@ixa/domain'
 import { z } from 'zod'
 import { IxaApiError, seg, type ApiClient } from '../api-client.js'
 import { WireShot } from '../wire.js'
@@ -49,9 +56,9 @@ export const effectCatalog = (): string =>
 
 const Placement = z.object({
   template: EffectTemplateKey,
-  atSec: z.number().min(0).optional().describe('Timeline seconds where the effect starts. Give this OR shotCode.'),
+  atSec: Seconds.optional().describe('Timeline seconds where the effect starts. Give this OR shotCode.'),
   shotCode: z.string().min(1).optional().describe('Start at the head of this shot (e.g. "CUT3"), plus offsetSec.'),
-  offsetSec: z.number().optional().describe('Seconds from the shot head (with shotCode). Default 0.'),
+  offsetSec: Seconds.optional().describe('Seconds from the shot head (with shotCode). Default 0.'),
   durationSec: z.number().positive().max(MAX_EFFECT_SEC).optional().describe('Default: the template default.'),
   params: z.record(z.unknown()).optional().describe('Template params; omitted ones take defaults. Out-of-range values are rejected.'),
 })
