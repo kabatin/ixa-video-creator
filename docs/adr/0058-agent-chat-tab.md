@@ -88,3 +88,15 @@ MCP の annotations（readOnlyHint・destructiveHint）にも写す。
 - 確認のカードに、生成の時間や費用の見積りは出さない（危険度の説明だけ）。
 - エージェントの鍵は、画面の「アクセス用の鍵」の一覧に取り消し済みとして残る。
 - エージェントの Claude は契約の利用枠を使う。費用は会話ごとに記録する。
+
+## 次の段（案。まだ作らない）: 確認を API の側で強制する
+
+いまの確認は、CLI が `--permission-prompt-tool` で `approve` を必ず呼ぶことに頼っている（CLI 任せ）。
+引数は試験（`claude-agent-cli.test.ts`）で固定し、確認を飛ばす引数（`--allowedTools`・`--dangerously-skip-permissions`・
+bypass 系）が無いことを表明しているが、CLI の版が上がって振る舞いが変わると素通りしうる。
+
+案: やりとりの鍵に「エージェントの鍵」の印を付け、API の破壊・費用・設定の口（ツールの印が `destructive` /
+`costly` / `settings` の口）では、その鍵の要求に**直前に allow された requestId**（ヘッダ）を求める。
+- requestId は 1 回だけ使える。ツール名と入力のハッシュで結び、別の操作に使い回せない。
+- 確認なしの旗が立っている会話では、API が allow を記した requestId をその場で発行する。
+- 口ごとに印を持たせる表は、MCP の `ToolDef.risk` から作る（写さない）。

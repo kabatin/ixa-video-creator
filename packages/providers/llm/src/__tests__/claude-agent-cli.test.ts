@@ -47,6 +47,23 @@ describe('buildAgentCliArgs', () => {
     expect(args[1]).toBe('--output-format')
   })
 
+  it('確認を飛ばす引数を付けない（--allowedTools・--dangerously-skip-permissions・bypass 系）。権限の型は manual だけ', () => {
+    // 付けたツールは --permission-prompt-tool を通らずに走る（CLI 2.1.289 の実測）。CLI の版が上がっても外れないよう固定する。
+    for (const resume of [null, 'abc-123']) {
+      const args = buildAgentCliArgs({ model: 'claude-sonnet-5-5', mcpConfigPath: '/s/mcp.json', resumeCliSessionId: resume })
+      const joined = args.join(' ')
+      expect(joined).not.toMatch(/allowed-?tools/i)
+      expect(joined).not.toMatch(/dangerously/i)
+      expect(joined).not.toMatch(/bypass/i)
+      expect(joined).not.toMatch(/--permission-prompts\b/)
+      expect(args.filter((arg) => arg === '--permission-mode')).toHaveLength(1)
+      expect(args[args.indexOf('--permission-mode') + 1]).toBe('manual')
+      expect(args[args.indexOf('--permission-prompt-tool') + 1]).toBe('mcp__ixa__approve')
+      expect(args[args.indexOf('--tools') + 1]).toBe('')
+      expect(args[args.indexOf('--setting-sources') + 1]).toBe('')
+    }
+  })
+
   it('モデル ID でない値・引数に化ける会話 ID は受けない', () => {
     expect(() => buildAgentCliArgs({ model: 'sonnet', mcpConfigPath: '/s', resumeCliSessionId: null })).toThrow()
     expect(() => buildAgentCliArgs({ model: '--x', mcpConfigPath: '/s', resumeCliSessionId: null })).toThrow()
