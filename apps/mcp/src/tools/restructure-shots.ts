@@ -27,7 +27,6 @@ export const RestructureShotsInput = z.object({
   description: z.string().max(4000).optional().describe('insert (Japanese).'),
   mood: z.string().max(500).optional().describe('insert'),
   dialogue: z.string().max(2000).optional().describe('insert: spoken line, if any.'),
-  sequenceId: Id.optional().describe('insert: chapter from manage_sequences.'),
   camera: ShotCamera.partial().optional().describe('insert. Default size medium.'),
   locationId: Id.optional().describe('insert'),
 })
@@ -95,14 +94,10 @@ const insert = async (api: ApiClient, args: RestructureArgs) => {
     throw new ToolInputError('insert には code・startSec・durationSec が要ります')
   }
   const order = insertOrder(await orderedShots(api, args.projectId), args.afterShotId)
-  if (args.sequenceId !== undefined) {
-    const sequences = await api.get(`/projects/${seg(args.projectId)}/sequences`, z.array(z.object({ id: z.string() })))
-    if (!sequences.some((q) => q.id === args.sequenceId)) throw new ToolInputError('sequenceId がこの作品にありません')
-  }
   const created = await api.post(
     `/projects/${seg(args.projectId)}/shots`,
     {
-      sequenceId: args.sequenceId ?? null,
+      sequenceId: null,
       order,
       code: args.code,
       startSec: args.startSec,
@@ -128,7 +123,7 @@ export const restructureShotsTool = defineTool({
   risk: 'destructive',
   description:
     'Change the shot list: split {shotId, atSec}, merge {shotIds} (adjacent, into the first), delete {shotIds}, ' +
-    'insert {code, startSec, durationSec, afterShotId?, description?, dialogue?, sequenceId?, ...}. ' +
+    'insert {code, startSec, durationSec, afterShotId?, description?, dialogue?, ...}. ' +
     'Split and merge only work on shots without takes. Deleting one shot can be undone (undo); deleting several cannot.',
   input: RestructureShotsInput,
   handler: async (args, { api }) => jsonResult({ action: args.action, ...(await ACTIONS[args.action](api, args)) }),

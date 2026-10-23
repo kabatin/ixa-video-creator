@@ -6,7 +6,6 @@ const PROJECT = ulid('PJ1')
 const SHOT_A = ulid('SA1')
 const SHOT_B = ulid('SB1')
 const FOREIGN = ulid('SF1')
-const SEQ = ulid('SQ1')
 
 const shotRow = (id: string, order: number) => ({
   id,
@@ -67,11 +66,10 @@ describe('restructure_shots', () => {
     expect(fake.callsTo('DELETE', /.*/)).toHaveLength(0)
   })
 
-  it('insert は直後の Shot との間の order で、台詞とシーケンスつきで作る', async () => {
+  it('insert は直後の Shot との間の order で、台詞つきで作る', async () => {
     const created = ulid('SN2')
     const fake = createFakeApi([
       listRoute,
-      { method: 'GET', path: `/projects/${PROJECT}/sequences`, data: [{ id: SEQ, order: 0, name: 'サビ', musicSectionLabel: null }] },
       { method: 'POST', path: `/projects/${PROJECT}/shots`, status: 201, data: { ...shotRow(created, 1500), code: 'CUT1B' } },
     ])
     const result = jsonOf(
@@ -84,14 +82,13 @@ describe('restructure_shots', () => {
           startSec: 2,
           durationSec: 1.5,
           dialogue: 'いくぞ',
-          sequenceId: SEQ,
           camera: { size: 'closeup' },
         },
         depsFor(fake),
       ),
     )
     expect(fake.callsTo('POST', `/projects/${PROJECT}/shots`)[0]?.body).toEqual({
-      sequenceId: SEQ,
+      sequenceId: null,
       order: 1500,
       code: 'CUT1B',
       startSec: 2,
@@ -106,16 +103,6 @@ describe('restructure_shots', () => {
       status: 'draft',
     })
     expect(result).toEqual({ action: 'insert', shotId: created, code: 'CUT1B', order: 1500 })
-  })
-
-  it('insert の別の作品のシーケンスは断る', async () => {
-    const fake = createFakeApi([listRoute, { method: 'GET', path: `/projects/${PROJECT}/sequences`, data: [] }])
-    const result = await restructureShotsTool.run(
-      { projectId: PROJECT, action: 'insert', code: 'X', startSec: 0, durationSec: 1, sequenceId: SEQ },
-      depsFor(fake),
-    )
-    expect(textOf(result)).toContain('sequenceId')
-    expect(fake.callsTo('POST', /.*/)).toHaveLength(0)
   })
 
   it('insertOrder: 末尾は +1000、隙間が無ければ断る', () => {
