@@ -145,6 +145,10 @@ describe('toolLabel', () => {
       'set_start_frame', 'list_start_frame_history', 'use_start_frame', 'retry_image', 'view', 'generate_takes',
       'list_takes', 'adopt_take', 'review_take', 'upscale_takes', 'wait', 'add_effects', 'list_effects', 'remove_effects',
       'analyze_motion', 'suggest_sfx', 'generate_sfx', 'list_sfx', 'remove_sfx', 'export', 'export_thumbnail',
+      'update_project', 'duplicate_project', 'import_from_project', 'restructure_shots', 'draft_storyboard',
+      'edit_character', 'edit_location', 'manage_brand_assets', 'import_take', 'hide_takes', 'cancel_jobs',
+      'align_to_music', 'add_telops', 'list_telops', 'edit_clips', 'remove_telops', 'set_narration', 'speak_narration',
+      'set_lyrics', 'upload_sfx', 'edit_audio', 'list_edits', 'undo',
       'waive_confirmations',
     ]
     expect(Object.keys(AGENT_TOOL_LABELS).sort()).toEqual([...names].sort())

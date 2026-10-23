@@ -19,6 +19,21 @@ export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object
   set_ai: { doing: '使う AI を変えている', done: '使う AI を変えた', ask: '使う AI を変えます' },
   create_project: { doing: '作品を作っている', done: '作品を作った', ask: '新しい作品を作ります' },
   get_project: { doing: '作品を読んでいる', done: '作品を読んだ', ask: '作品を読みます' },
+  update_project: {
+    doing: '作品の方針を直している',
+    done: '作品の方針を直した',
+    ask: '作品の方針を直します',
+  },
+  duplicate_project: {
+    doing: '作品を複製している',
+    done: '作品を複製した',
+    ask: '作品を複製します',
+  },
+  import_from_project: {
+    doing: 'ほかの作品から取り込んでいる',
+    done: 'ほかの作品から取り込んだ',
+    ask: 'ほかの作品から取り込みます',
+  },
   generate_music: { doing: '曲を作っている', done: '曲を作った', ask: '曲を作ります' },
   upload_music: {
     doing: '曲を取り込んでいる',
@@ -42,15 +57,40 @@ export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object
     done: 'Shot を{n}直した',
     count: { field: 'edits', unit: '件' },
   },
+  restructure_shots: {
+    doing: 'Shot を組み替えている',
+    done: 'Shot を組み替えた',
+    ask: 'Shot を組み替えます（割る・まとめる・消す・足す）',
+  },
+  draft_storyboard: {
+    doing: '絵コンテの案を作っている',
+    done: '絵コンテの案を作った',
+    ask: '絵コンテの案を作ります',
+  },
   create_character: {
     doing: 'キャラクターを作っている',
     done: 'キャラクターを作った',
     ask: 'キャラクターを作ります（この Mac の画像を読みます）',
   },
+  edit_character: {
+    doing: 'キャラクターを直している',
+    done: 'キャラクターを直した',
+    ask: 'キャラクターを直します',
+  },
   create_location: {
     doing: 'ロケーションを作っている',
     done: 'ロケーションを作った',
     ask: 'ロケーションを作ります（この Mac の画像を読みます）',
+  },
+  edit_location: {
+    doing: 'ロケーションを直している',
+    done: 'ロケーションを直した',
+    ask: 'ロケーションを直します',
+  },
+  manage_brand_assets: {
+    doing: 'ブランド資産を整えている',
+    done: 'ブランド資産を整えた',
+    ask: 'ブランド資産を整えます',
   },
   draw_start_frames: {
     doing: '最初のフレームを{n}描いている',
@@ -81,16 +121,31 @@ export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object
     ask: 'Take を{n}作ります',
     count: { field: 'shotIds', unit: '本' },
   },
+  import_take: {
+    doing: '動画を Take に取り込んでいる',
+    done: '動画を Take に取り込んだ',
+    ask: 'この Mac の動画を Take に取り込みます',
+  },
   list_takes: {
     doing: 'Take の一覧を読んでいる',
     done: 'Take の一覧を読んだ',
     ask: 'Take の一覧を読みます',
   },
-  adopt_take: { doing: 'Take を採用している', done: 'Take を採用した', ask: 'Take を採用します' },
+  adopt_take: {
+    doing: 'Take の採用を決めている',
+    done: 'Take の採用を決めた',
+    ask: 'Take の採用を決めます（採用を外すこともあります）',
+  },
   review_take: {
-    doing: 'Take をレビューしている',
-    done: 'Take をレビューした',
-    ask: 'Take をレビューします',
+    doing: 'Take を確かめている',
+    done: 'Take を確かめた',
+    ask: 'Take を確かめます（AI のレビューか、判定の記録）',
+  },
+  hide_takes: {
+    doing: 'Take を{n}隠している',
+    done: 'Take を{n}隠した',
+    ask: 'Take を{n}隠します',
+    count: { field: 'takeIds', unit: '本' },
   },
   upscale_takes: {
     doing: 'Take の解像度を上げている',
@@ -98,6 +153,53 @@ export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object
     ask: 'Take の解像度を上げます',
   },
   wait: { doing: '終わるのを待っている', done: '待ち終えた', ask: '終わるのを待ちます' },
+  cancel_jobs: {
+    doing: '作っている途中の仕事を止めている',
+    done: '作っている途中の仕事を止めた',
+    ask: '作っている途中の仕事を止めます',
+  },
+  align_to_music: {
+    doing: '曲に合わせて整えている',
+    done: '曲に合わせて整えた',
+    ask: '曲に合わせて整えます',
+  },
+  add_telops: {
+    doing: 'テロップを{n}置いている',
+    done: 'テロップを{n}置いた',
+    ask: 'テロップを{n}置きます',
+    count: { field: 'telops', unit: '件' },
+  },
+  list_telops: {
+    doing: 'テロップを読んでいる',
+    done: 'テロップを読んだ',
+    ask: 'テロップを読みます',
+  },
+  edit_clips: {
+    doing: 'クリップを{n}直している',
+    done: 'クリップを{n}直した',
+    ask: 'クリップを{n}直します',
+    count: { field: 'edits', unit: '件' },
+  },
+  remove_telops: {
+    doing: 'テロップを消している',
+    done: 'テロップを消した',
+    ask: 'テロップを消します',
+  },
+  set_narration: {
+    doing: 'ナレーションを直している',
+    done: 'ナレーションを直した',
+    ask: 'ナレーションを直します',
+  },
+  speak_narration: {
+    doing: 'ナレーションを声にしている',
+    done: 'ナレーションを声にした',
+    ask: 'ナレーションを声にします（声の AI は課金）',
+  },
+  set_lyrics: {
+    doing: '歌詞を入れている',
+    done: '歌詞を入れた',
+    ask: '歌詞を入れます',
+  },
   add_effects: {
     doing: 'エフェクトを{n}置いている',
     ask: 'エフェクトを{n}置きます',
@@ -131,6 +233,11 @@ export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object
     ask: '効果音を{n}作ります',
     count: { field: 'cues', unit: '本' },
   },
+  upload_sfx: {
+    doing: '効果音を取り込んでいる',
+    done: '効果音を取り込んだ',
+    ask: 'この Mac のファイルから効果音を取り込みます',
+  },
   list_sfx: {
     doing: '効果音の一覧を読んでいる',
     done: '効果音の一覧を読んだ',
@@ -142,11 +249,26 @@ export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object
     ask: '効果音を{n}消します',
     count: { field: 'clipIds', unit: '本' },
   },
+  edit_audio: {
+    doing: '音を整えている',
+    done: '音を整えた',
+    ask: '音を整えます',
+  },
   export: { doing: '書き出している', done: '書き出した', ask: '動画を書き出します' },
   export_thumbnail: {
     doing: 'サムネイルを作っている',
     done: 'サムネイルを作った',
     ask: 'サムネイルを作ります',
+  },
+  list_edits: {
+    doing: '直しの履歴を読んでいる',
+    done: '直しの履歴を読んだ',
+    ask: '直しの履歴を読みます',
+  },
+  undo: {
+    doing: '直しを取り消している',
+    done: '直しを取り消した',
+    ask: '直しを取り消します',
   },
   waive_confirmations: {
     doing: '確認を出さないようにしている',
