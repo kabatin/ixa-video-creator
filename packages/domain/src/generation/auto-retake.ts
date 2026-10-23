@@ -1,4 +1,5 @@
 import type { Verdict } from '../review/review.js'
+import type { ShotStatus } from '../shot/shot.js'
 import type { ReviewStatus } from './take.js'
 
 /**
@@ -23,8 +24,23 @@ export const actionAfterReview = (input: {
 }
 
 /**
- * 画面に「作り直し推奨」と出すか（ADR-0057）。レビューが不合格で、自動の作り直しを選んでいない Take。
- * 自動の作り直しを選んだ Take は作り直しが走る（上限に触れたら Shot が止まり、そちらで分かる）。
+ * 画面に「作り直し推奨」と出すか（ADR-0057）。レビューが不合格で、次のどちらか。
+ * - 自動の作り直しを選んでいない（既定）
+ * - 選んでいたが、自動の作り直しが止まった（上限・予算・人の判断が要る。Shot が `blocked`）。最後の Take に勧めを残す
+ *
+ * 自動の作り直しが続いている間は勧めない（次の Take が来る）。Shot の状態が分からなければ `null`（選んでいない Take だけ勧める）。
  */
-export const isRetakeRecommended = (take: { readonly reviewStatus: ReviewStatus; readonly autoRetake: boolean }): boolean =>
-  take.reviewStatus === 'failed' && !take.autoRetake
+export const isRetakeRecommended = (
+  take: { readonly reviewStatus: ReviewStatus; readonly autoRetake: boolean },
+  shotStatus: ShotStatus | null,
+): boolean => take.reviewStatus === 'failed' && (!take.autoRetake || shotStatus === 'blocked')
+
+/**
+ * Take ができたら自動でレビューを積むか（ADR-0057）。自動の作り直しを選んだ Take で、まだレビューしていないものだけ。
+ * 選んでいなければ積まない（既定。レビューは人が頼む）。複製で写した Take も積まない（この作品で作っていない）。
+ */
+export const shouldAutoReview = (take: {
+  readonly autoRetake: boolean
+  readonly reviewStatus: ReviewStatus
+  readonly copiedFromTakeId: string | null
+}): boolean => take.autoRetake && take.reviewStatus === 'pending' && take.copiedFromTakeId === null
