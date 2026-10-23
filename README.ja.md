@@ -19,7 +19,7 @@
 ## 4 行で言うと
 
 - **曲がそのままタイムラインになる。** カットは波形の上の位置なので、Shot の尺は曲が求める長さちょうどになり、その長さがそのまま動画の AI に渡る。
-- **AI エージェントと一緒に作れる。** ワークベンチの中のチャットのタブと、Claude Code・Codex 向けの 34 ツールの MCP サーバ。エージェントが作ったものは、ふつうの Shot・Take・クリップとして並び、見て直せて、⌘Z で戻せる。
+- **AI エージェントと一緒に作れる。** ワークベンチの中のチャットのタブと、Claude Code・Codex 向けの 57 ツールの MCP サーバ。エージェントが作ったものは、ふつうの Shot・Take・クリップとして並び、見て直せて、⌘Z で戻せる。
 - **Mac 1 台がスタジオになる。** 絵（FLUX.2 [klein]）、映像（MiniMax H3・Wan 2.2）、曲と BGM（ACE-Step 1.5・Stable Audio 3・MiniMax-Music3）、効果音（Stable Audio 3）を、手元で無料で作れる。有料の API は任意で、明示しない限り開かない。
 - **費用と弱点を隠さない。** 数字は実測のものだけ。始める前に[正直な制約](#正直な制約)を読んでほしい。
 
@@ -54,17 +54,19 @@
 
 ### Claude Code・Codex から: MCP サーバ
 
-`apps/mcp` は stdio の MCP サーバ（[ADR-0049](./docs/adr/0049-mcp-server.md)）。画面と同じ API を呼ぶ薄い層で、制作の全体を **34 のツール**で扱う:
+`apps/mcp` は stdio の MCP サーバ（[ADR-0049](./docs/adr/0049-mcp-server.md)）。画面と同じ API を呼ぶ薄い層で、曲からテロップ・ナレーション・歌詞・音の仕上げ・書き出しまで、制作の全体を **57 のツール**で扱う:
 
 | 段 | ツール |
 |---|---|
-| 準備 | `ixa_status` · `set_ai` · `create_project` · `get_project` |
+| 作品 | `ixa_status` · `set_ai` · `create_project` · `get_project` · `update_project` · `duplicate_project` · `import_from_project` |
 | 曲 | `generate_music` · `upload_music` · `set_master_track` · `music_overview` |
-| Shot と登場人物 | `plan_shots` · `edit_shots` · `create_character` · `create_location` |
-| 最初のフレーム | `draw_start_frames` · `set_start_frame` · `list_start_frame_history` · `use_start_frame` · `retry_image` |
-| Take | `generate_takes` · `list_takes` · `adopt_take` · `review_take` · `upscale_takes` · `wait` |
-| エフェクトと音 | `add_effects` · `list_effects` · `remove_effects` · `analyze_motion` · `suggest_sfx` · `generate_sfx` · `list_sfx` · `remove_sfx` |
-| 見る・届ける | `view` · `export` · `export_thumbnail` |
+| Shot と登場人物 | `plan_shots` · `edit_shots` · `restructure_shots` · `draft_storyboard` · `create_character` · `edit_character` · `create_location` · `edit_location` · `manage_brand_assets` |
+| 最初のフレーム | `draw_start_frames` · `set_start_frame` · `list_start_frame_history` · `use_start_frame` · `retry_image` · `view` |
+| Take | `generate_takes` · `import_take` · `list_takes` · `adopt_take` · `review_take` · `hide_takes` · `upscale_takes` · `wait` · `cancel_jobs` · `align_to_music` |
+| テロップと声 | `add_telops` · `list_telops` · `edit_clips` · `remove_telops` · `set_narration` · `speak_narration` · `set_lyrics` |
+| エフェクトと音 | `add_effects` · `list_effects` · `remove_effects` · `analyze_motion` · `suggest_sfx` · `generate_sfx` · `upload_sfx` · `list_sfx` · `remove_sfx` · `edit_audio` |
+| 届ける | `export` · `export_thumbnail` |
+| 履歴 | `list_edits` · `undo` |
 
 **`view` はエージェントの目。** 最初のフレームと Take のコマを**画像として**返すので、エージェントは自分で見て、崩れた手や溶けた車を描き直してから次へ進める。`export_thumbnail` も、できた JPEG を画像で返す。
 
@@ -210,6 +212,7 @@ Claude Code への登録（鍵はシェルの環境から渡す。ファイル�
 - **手元のモデルにはモデルの限界がある。** Wan は 5 秒まで。「文字を描かない」と書いても文字が出ることがある。縦のショートでは、手元の画像の AI が寄りの絵を苦手にした。Stable Audio は歌えない（歌は ACE-Step か MiniMax-Music3）。
 - **AI エージェントのタブは Claude Code の CLI が要る。** テキストの AI が Codex・Grok だと使えず、Claude の契約の利用枠を使う。1 作品で動く会話は 1 つ、途中で指示を足すなら止めて話し直す、画像の添付はまだ無い。確認は CLI の関所に頼っていて、API の側でも強制する形は設計済み・未着手。
 - **MCP サーバは stdio だけ。** 自動化用の鍵は画面と同じことが全部できる（鍵ごとに範囲を絞る仕組みはまだ無い）。
+- **画面でしかできない直しがまだある。** MCP からは、Shot の台詞・シーケンス・ロックを後から直す、Shot を並べ替える、画像のクリップ（ロゴ）をタイムラインに置く、ができない。
 - **画像のチェックも Claude が要る。** テキストの AI が Codex・Grok だと、作った絵は「チェックしていない」になる。
 - **HTTPS は無い。** LAN では合言葉が平文で流れる。Safari ではプレビューがカットの境目でカクつくことがある（Chrome では滑らか）。
 - **個人プロジェクト。** インターフェースは版ごとにまだ動く。

@@ -19,7 +19,7 @@ agent tab, or let Claude Code or Codex drive the whole production over MCP.
 ## What it is, in four lines
 
 - **The song is the timeline.** Cuts are positions in the waveform, so every shot is exactly as long as the music asks for — and that length is what the video model is told to make.
-- **An AI agent can do the work with you.** A chat tab inside the workbench, and an MCP server with 34 tools for Claude Code and Codex. Everything the agent makes shows up as ordinary shots, takes and clips you can review, change or undo with ⌘Z.
+- **An AI agent can do the work with you.** A chat tab inside the workbench, and an MCP server with 57 tools for Claude Code and Codex. Everything the agent makes shows up as ordinary shots, takes and clips you can review, change or undo with ⌘Z.
 - **One Mac can be the whole studio.** Pictures (FLUX.2 [klein]), video (MiniMax H3, Wan 2.2), songs and BGM (ACE-Step 1.5, Stable Audio 3, MiniMax-Music3) and sound effects (Stable Audio 3) can all run locally, for free. Paid APIs are optional and fenced off.
 - **It is honest about what it costs and where it falls short.** Measured numbers only, and a section on [limits](#limits-honestly) you should read before you start.
 
@@ -53,17 +53,19 @@ Open **AI エージェント** in the bottom dock and type what you want — *"m
 
 ### From Claude Code or Codex: the MCP server
 
-`apps/mcp` is a stdio MCP server ([ADR-0049](./docs/adr/0049-mcp-server.md)) — a thin client of the same API — with **34 tools** that cover the whole job:
+`apps/mcp` is a stdio MCP server ([ADR-0049](./docs/adr/0049-mcp-server.md)) — a thin client of the same API — with **57 tools** that cover the whole job, from the song to telops, narration, lyrics, the sound mix and the exported file:
 
 | Stage | Tools |
 |---|---|
-| Set-up | `ixa_status` · `set_ai` · `create_project` · `get_project` |
+| Project | `ixa_status` · `set_ai` · `create_project` · `get_project` · `update_project` · `duplicate_project` · `import_from_project` |
 | Music | `generate_music` · `upload_music` · `set_master_track` · `music_overview` |
-| Shots and cast | `plan_shots` · `edit_shots` · `create_character` · `create_location` |
-| Start frames | `draw_start_frames` · `set_start_frame` · `list_start_frame_history` · `use_start_frame` · `retry_image` |
-| Takes | `generate_takes` · `list_takes` · `adopt_take` · `review_take` · `upscale_takes` · `wait` |
-| Effects and sound | `add_effects` · `list_effects` · `remove_effects` · `analyze_motion` · `suggest_sfx` · `generate_sfx` · `list_sfx` · `remove_sfx` |
-| Looking and delivering | `view` · `export` · `export_thumbnail` |
+| Shots and cast | `plan_shots` · `edit_shots` · `restructure_shots` · `draft_storyboard` · `create_character` · `edit_character` · `create_location` · `edit_location` · `manage_brand_assets` |
+| Start frames | `draw_start_frames` · `set_start_frame` · `list_start_frame_history` · `use_start_frame` · `retry_image` · `view` |
+| Takes | `generate_takes` · `import_take` · `list_takes` · `adopt_take` · `review_take` · `hide_takes` · `upscale_takes` · `wait` · `cancel_jobs` · `align_to_music` |
+| Telops and voice | `add_telops` · `list_telops` · `edit_clips` · `remove_telops` · `set_narration` · `speak_narration` · `set_lyrics` |
+| Effects and sound | `add_effects` · `list_effects` · `remove_effects` · `analyze_motion` · `suggest_sfx` · `generate_sfx` · `upload_sfx` · `list_sfx` · `remove_sfx` · `edit_audio` |
+| Delivering | `export` · `export_thumbnail` |
+| History | `list_edits` · `undo` |
 
 **`view` is the agent's eyes.** It returns start frames and frames sampled from a take *as images*, so the agent can look at what it made and redraw a broken hand or a melting car before moving on. `export_thumbnail` hands back the finished JPEG the same way.
 
@@ -209,6 +211,7 @@ These stills were made with an image model outside the app and brought in as eac
 - **Local models have their own limits.** Wan stops at 5 seconds. Text the model is told not to draw sometimes appears anyway. On the vertical short the local image model struggled with close-ups. Stable Audio cannot sing — vocals go to ACE-Step or MiniMax-Music3.
 - **The agent tab needs the Claude Code CLI** as the text AI; it does not work with Codex or Grok, and it uses your Claude plan's usage. One conversation per project at a time; to add instructions mid-task you stop it and say it again; images cannot be attached yet. Confirmation relies on the CLI's permission hook; enforcing it in the API as well is designed but not built.
 - **The MCP server is stdio only,** and an automation key can do anything the screen can — there are no per-key scopes yet.
+- **Some edits are screen-only for now.** Over MCP you cannot yet change a shot's dialogue, sequence or lock after it is made, reorder shots, or place an image clip (a logo) on the timeline.
 - **Image checks need Claude as well.** With Codex or Grok as the text AI, generated pictures are marked *not checked*.
 - **There is no HTTPS.** On a LAN the passphrase travels in plain text. In Safari the preview can stutter at cuts; Chrome plays them smoothly.
 - **It is a personal project.** Interfaces still move between versions.
