@@ -46,7 +46,8 @@ export const CreateProjectInput = z.object({
 
 export const createProjectTool = defineTool({
   name: 'create_project',
-  risk: 'write',
+  // 会話の作品の外を触る。別の作品を触るのと同じく確認する（ADR-0058。レビュー 2026-10-23）。
+  risk: 'destructive',
   description:
     'Create a new ixa project (a video). Defaults: 16:9, 1920x1080, 24 fps. Optional concept/synopsis, styleGuide ' +
     'and avoid text steer every generated image/video. Write user-visible text in Japanese.',

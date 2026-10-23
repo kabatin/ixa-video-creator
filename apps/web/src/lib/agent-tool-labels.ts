@@ -17,7 +17,7 @@ export type ToolLabelSpec = {
 export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object.freeze({
   ixa_status: { doing: '状態を確かめている', done: '状態を確かめた' },
   set_ai: { doing: '使う AI を変えている', done: '使う AI を変えた', ask: '使う AI を変えます' },
-  create_project: { doing: '作品を作っている', done: '作品を作った' },
+  create_project: { doing: '作品を作っている', done: '作品を作った', ask: '新しい作品を作ります' },
   get_project: { doing: '作品を読んでいる', done: '作品を読んだ' },
   generate_music: { doing: '曲を作っている', done: '曲を作った', ask: '曲を作ります' },
   upload_music: { doing: '曲を取り込んでいる', done: '曲を取り込んだ' },

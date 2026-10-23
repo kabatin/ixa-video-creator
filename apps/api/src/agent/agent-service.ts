@@ -93,6 +93,14 @@ const RequestId = z.string().ulid()
 /** 確認なしに切り替えるツール（CLI の名前）。 */
 const WAIVE_TOOL = `${IXA_MCP_TOOL_PREFIX}waive_confirmations`
 
+/**
+ * 会話の作品と違う `projectId` を触る操作は、印にかかわらず削除と同じ扱いにする（別の作品を黙って触らせない）。
+ */
+const effectiveRisk = (risk: ToolRisk, input: unknown, projectId: string): ToolRisk => {
+  const target = typeof input === 'object' && input !== null ? (input as Record<string, unknown>)['projectId'] : undefined
+  return typeof target === 'string' && target !== projectId ? 'destructive' : risk
+}
+
 type ActiveTurn = { readonly turn: RunningTurn; readonly tokenHash: string }
 
 export const createAgentService = (deps: AgentServiceDeps) => {
@@ -249,12 +257,13 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       if (!isTurnToken(sessionId, bearer)) return fail('forbidden', 'この会話のやりとりの鍵ではありません')
       const session = await deps.sessions.findById(sessionId)
       if (session === null) return fail('not_found', '会話が見つかりません')
-      if (request.toolUseId !== null) approvals.noteRisk(sessionId, request.toolUseId, request.risk)
+      const risk = effectiveRisk(request.risk, request.input, session.projectId)
+      if (request.toolUseId !== null) approvals.noteRisk(sessionId, request.toolUseId, risk)
       const requestId = newId(RequestId)
-      if (!approvalNeeded(request.risk, session)) return okValue({ requestId, decision: 'allow', message: null })
+      if (!approvalNeeded(risk, session)) return okValue({ requestId, decision: 'allow', message: null })
       approvals.open(sessionId, requestId, request.toolName)
       await appendAndPublish(sessionId, [
-        { kind: 'approval_request', requestId, toolUseId: request.toolUseId, toolName: request.toolName, risk: request.risk, input: request.input },
+        { kind: 'approval_request', requestId, toolUseId: request.toolUseId, toolName: request.toolName, risk, input: request.input },
       ])
       const waiting = await deps.sessions.transition(sessionId, 'awaiting_approval', deps.now())
       if (waiting !== null) publishSession(waiting)

@@ -11,7 +11,8 @@ import { createFakeApi, depsFor, ulid } from './fake-api.js'
 const EXPECTED: Readonly<Record<string, string>> = {
   ixa_status: 'read',
   set_ai: 'settings',
-  create_project: 'write',
+  // 会話の作品の外を触る。別の作品を触るのと同じく確認する（レビュー 2026-10-23）。
+  create_project: 'destructive',
   get_project: 'read',
   generate_music: 'costly',
   upload_music: 'write',

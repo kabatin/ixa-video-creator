@@ -343,6 +343,55 @@ describe('確認の待ちと答え', () => {
     expect(t.sessions.messages(id).some((m) => m.body.kind === 'approval_request')).toBe(false)
   })
 
+  it('会話の作品と違う projectId を触る操作は、印が読むだけでも削除と同じ扱いで確認する', async () => {
+    const results: (string | null)[] = []
+    const t = setup(async (call, app) => {
+      const sessionId = call.mcpEnv()['IXA_AGENT_SESSION_ID'] ?? ''
+      const auth = { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' }
+      for (const projectId of ['01JQTHERPRJ000000000000000']) {
+        const res = (await (
+          await app.request(`/agent-sessions/${sessionId}/approvals`, {
+            method: 'POST',
+            headers: auth,
+            body: JSON.stringify({ toolName: 'mcp__ixa__get_project', toolUseId: `t-${projectId}`, risk: 'read', input: { projectId } }),
+          })
+        ).json()) as { data: { decision: string | null } }
+        results.push(res.data.decision)
+      }
+      await call.untilStopped()
+      return exited(143)
+    })
+    const id = await t.newTask()
+    await t.post(`/agent-sessions/${id}/messages`, { text: '読んで' })
+    await t.until(() => t.statusOf(id) === 'awaiting_approval', '確認待ち')
+    expect(results).toEqual([null])
+    const request = t.sessions.messages(id).find((m) => m.body.kind === 'approval_request')?.body
+    expect(request).toMatchObject({ risk: 'destructive', toolName: 'mcp__ixa__get_project' })
+    await t.post(`/agent-sessions/${id}/stop`, {})
+    await t.until(() => t.statusOf(id) === 'interrupted', '中断')
+  })
+
+  it('会話の作品と同じ projectId なら、印のまま（読むだけはすぐ許す）', async () => {
+    let decision: string | null = 'unset'
+    const t = setup(async (call, app) => {
+      const sessionId = call.mcpEnv()['IXA_AGENT_SESSION_ID'] ?? ''
+      const projectId = call.invocation.stdin.match(/projectId: ([0-9A-Z]{26})/)?.[1] ?? ''
+      const res = (await (
+        await app.request(`/agent-sessions/${sessionId}/approvals`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ toolName: 'mcp__ixa__get_project', toolUseId: 't1', risk: 'read', input: { projectId } }),
+        })
+      ).json()) as { data: { decision: string | null } }
+      decision = res.data.decision
+      return simpleTurn(call)
+    })
+    const id = await t.newTask()
+    await t.post(`/agent-sessions/${id}/messages`, { text: '読んで' })
+    await t.until(() => t.statusOf(id) === 'idle', '済み')
+    expect(decision).toBe('allow')
+  })
+
   it('このやりとりの鍵でなければ、確認の口は断る', async () => {
     const t = setup(async (call) => {
       await call.untilStopped()

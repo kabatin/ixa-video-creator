@@ -16,7 +16,7 @@ const RISK_NOTES: Readonly<Record<ToolRisk, string>> = Object.freeze({
   read: '',
   write: '',
   costly: '時間か費用が掛かります。',
-  destructive: '消します。元に戻せないことがあります。',
+  destructive: '消す、またはこの作品の外を触る操作です。元に戻せないことがあります。',
   settings: '設定を変えます。',
 })
 
