@@ -7,6 +7,7 @@ import type {
   TakeRepository,
 } from '@ixa/db'
 import {
+  isRetakeRecommended,
   GenerationJobId as GenerationJobIdSchema,
   ModelId as ModelIdSchema,
   ProjectId as ProjectIdSchema,
@@ -25,6 +26,7 @@ import {
   type ProviderId,
   type Shot,
   type ShotId,
+  type ShotStatus,
   type Take,
   CostLimits as CostLimitsSchema,
   type ProjectEventPublisher,
@@ -99,13 +101,19 @@ export const toShotResponse = (shot: Shot): ShotResponse => ({
 })
 
 export const TakeResponse = TakeSchema.omit({ createdAt: true })
-  .extend({ createdAt: z.string().datetime() })
+  .extend({
+    createdAt: z.string().datetime(),
+    /** 画面に「作り直し推奨」を出すか（ADR-0057。`isRetakeRecommended`）。Shot の状態が分からない口では、選んでいない Take だけ。 */
+    retakeRecommended: z.boolean(),
+  })
   .openapi('Take')
 export type TakeResponse = z.infer<typeof TakeResponse>
 
-export const toTakeResponse = (take: Take): TakeResponse => ({
+/** `shotStatus` は自動の作り直しが止まったか（`blocked`）を見るため。分からなければ null。 */
+export const toTakeResponse = (take: Take, shotStatus: ShotStatus | null = null): TakeResponse => ({
   ...take,
   createdAt: take.createdAt.toISOString(),
+  retakeRecommended: isRetakeRecommended(take, shotStatus),
 })
 
 const GenerateBody = z
@@ -547,7 +555,7 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
       const shot = await deps.shots.findById(c.req.valid('param').id)
       if (shot === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       const found = await deps.takes.findByShot(shot.id)
-      return c.json(okList(found.map(toTakeResponse)), 200)
+      return c.json(okList(found.map((take) => toTakeResponse(take, shot.status))), 200)
     })
     .openapi(generateRoute, async (c) => {
       const shot = await deps.shots.findById(c.req.valid('param').id)

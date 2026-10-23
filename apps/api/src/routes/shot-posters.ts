@@ -128,7 +128,7 @@ export type ShotPosterEntry = ShotPoster & {
 /** 採用中の Take が「作り直し推奨」か。採用していなければ付けない（どの Take を勧めるかが決まらない）。 */
 const adoptedRetakeRecommended = (shot: Shot, takesById: ReadonlyMap<TakeId, Take>): boolean => {
   const adopted = shot.selectedTakeId === null ? undefined : takesById.get(shot.selectedTakeId)
-  return adopted !== undefined && isRetakeRecommended(adopted)
+  return adopted !== undefined && isRetakeRecommended(adopted, shot.status)
 }
 
 const isPending = (poster: ShotPoster): boolean =>

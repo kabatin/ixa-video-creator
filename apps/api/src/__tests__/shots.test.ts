@@ -277,6 +277,27 @@ describe('GET /shots/:id/takes', () => {
     const json = (await res.json()) as { data: { id: string; index: number }[] }
     expect(json.data.map((t) => t.index)).toEqual([1, 2])
   })
+
+  /** ADR-0057。不合格の Take に「作り直し推奨」。自動の作り直しが止まった（Shot が blocked）ら、選んでいた Take にも。 */
+  it('作り直し推奨かを Shot の状態と合わせて返す', async () => {
+    const f = buildFixture()
+    const manual = aTake(f.shot, 'c'.repeat(64), { index: 1, reviewStatus: 'failed', autoRetake: false })
+    const auto = aTake(f.shot, 'd'.repeat(64), { index: 2, reviewStatus: 'failed', autoRetake: true })
+    const passed = aTake(f.shot, 'e'.repeat(64), { index: 3, reviewStatus: 'passed', autoRetake: false })
+    const request = async (status: 'review' | 'blocked') => {
+      const shots = createInMemoryShotRepository([{ ...f.shot, status }])
+      const app = createTestApp({
+        ...baseAppDeps(),
+        projects: createInMemoryProjectRepository([f.project]),
+        shots,
+        takes: createInMemoryTakeRepository([manual, auto, passed]),
+      })
+      const json = (await (await app.request(`/shots/${f.shot.id}/takes`)).json()) as { data: { retakeRecommended: boolean }[] }
+      return json.data.map((t) => t.retakeRecommended)
+    }
+    expect(await request('review')).toEqual([true, false, false])
+    expect(await request('blocked')).toEqual([true, true, false])
+  })
 })
 
 describe('Take の追記のみ制約（ADR-0003）', () => {
