@@ -463,6 +463,51 @@ describe('確認の待ちと答え', () => {
     await t.until(() => t.statusOf(id) === 'interrupted', '中断')
   })
 
+  it('状態を先に進めてから待ちを開ける（頼んだ直後は確認待ち、許しが見えた時は作業中）', async () => {
+    const seen: { afterRequest?: string; afterAllow?: string } = {}
+    const holder: { statusOf?: (id: AgentSession['id']) => string | undefined } = {}
+    const t = setup(async (call, app) => {
+      const sessionId = call.mcpEnv()['IXA_AGENT_SESSION_ID'] ?? ''
+      const auth = { authorization: `Bearer ${call.mcpToken()}`, 'content-type': 'application/json' }
+      const started = (await (
+        await app.request(`/agent-sessions/${sessionId}/approvals`, {
+          method: 'POST',
+          headers: auth,
+          body: JSON.stringify({ toolName: 'mcp__ixa__export', toolUseId: 't1', risk: 'costly', input: {} }),
+        })
+      ).json()) as { data: { requestId: string } }
+      seen.afterRequest = holder.statusOf?.(sessionId as AgentSession['id'])
+      for (;;) {
+        const state = (await (
+          await app.request(`/agent-sessions/${sessionId}/approvals/${started.data.requestId}`, { headers: auth })
+        ).json()) as { data: { decision: string | null } }
+        if (state.data.decision !== null) break
+        await new Promise((resolve) => setTimeout(resolve, 2))
+      }
+      seen.afterAllow = holder.statusOf?.(sessionId as AgentSession['id'])
+      call.emit(cliLines.result(CLI_SESSION, 0))
+      return exited(0)
+    }, {
+      // 本物の DB と同じく、状態の書き込みに時間が掛かる。
+      wrapSessions: (repo) => ({
+        ...repo,
+        transition: async (...args) => {
+          await new Promise((resolve) => setTimeout(resolve, 30))
+          return repo.transition(...args)
+        },
+      }),
+    })
+    holder.statusOf = t.statusOf
+    const id = await t.newTask()
+    await t.post(`/agent-sessions/${id}/messages`, { text: '書き出して' })
+    await t.until(() => t.statusOf(id) === 'awaiting_approval', '確認待ち')
+    const request = t.sessions.messages(id).find((m) => m.body.kind === 'approval_request')?.body
+    const requestId = request?.kind === 'approval_request' ? request.requestId : ''
+    await t.post(`/agent-sessions/${id}/approvals/${requestId}`, { decision: 'allow' }, { cookie: 'ixa_session=x' })
+    await t.until(() => t.statusOf(id) === 'idle', '済み')
+    expect(seen).toEqual({ afterRequest: 'awaiting_approval', afterAllow: 'running' })
+  })
+
   it('このやりとりの鍵でなければ、確認の口は断る', async () => {
     const t = setup(async (call) => {
       await call.untilStopped()

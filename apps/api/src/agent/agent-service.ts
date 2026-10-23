@@ -145,6 +145,8 @@ type ActiveTurn = { readonly turn: RunningTurn; readonly tokenHash: string }
 export const createAgentService = (deps: AgentServiceDeps) => {
   const approvals = createAgentApprovals()
   let active: ReadonlyMap<AgentSessionId, ActiveTurn> = new Map()
+  /** 答えている途中の確認（同時に 2 回答えても、1 回だけ効かせる）。 */
+  let answering: ReadonlySet<string> = new Set()
   const model = AgentModel.parse(deps.defaultModel)
 
   const publishSession = (session: AgentSession): void =>
@@ -417,6 +419,9 @@ export const createAgentService = (deps: AgentServiceDeps) => {
       const requestId = newId(RequestId)
       if (!approvalNeeded(risk, session))
         return okValue({ requestId, decision: 'allow', message: null })
+      // 状態を先に進めてから待ちを開ける（画面が確認待ちと知る前に答えられる隙を作らない）。
+      const waiting = await deps.sessions.transition(sessionId, 'awaiting_approval', deps.now())
+      if (waiting !== null) publishSession(waiting)
       approvals.open(sessionId, requestId, request.toolName, deps.now())
       await appendAndPublish(sessionId, [
         {
@@ -428,8 +433,6 @@ export const createAgentService = (deps: AgentServiceDeps) => {
           input: request.input,
         },
       ])
-      const waiting = await deps.sessions.transition(sessionId, 'awaiting_approval', deps.now())
-      if (waiting !== null) publishSession(waiting)
       return okValue({ requestId, decision: null, message: null })
     },
 
@@ -461,32 +464,39 @@ export const createAgentService = (deps: AgentServiceDeps) => {
         await expire(sessionId, requestId)
         return fail('conflict', '確認の期限が過ぎました。実行していません')
       }
-      if (!approvals.decide(requestId, answer.decision, null))
+      if (pending.decision !== null || answering.has(requestId))
         return fail('conflict', 'この確認にはもう答えています')
-      await appendAndPublish(sessionId, [
-        {
-          kind: 'approval_decision',
-          requestId,
-          decision: answer.decision,
-          waiveAfter: answer.waiveAfter,
-        },
-      ])
-      // 確認なしへの切り替え（waive_confirmations）は、画面の「実行」を受けてここで旗を立てる（MCP からは立てられない）。
-      if (answer.waiveAfter || (answer.decision === 'allow' && pending.toolName === WAIVE_TOOL)) {
-        const waived = await deps.sessions.update(sessionId, { confirmationsWaived: true })
+      answering = new Set([...answering, requestId])
+      try {
         await appendAndPublish(sessionId, [
           {
-            kind: 'system',
-            event: 'confirmations_waived',
-            text: 'このタスクでは確認を出さずに進めます。',
-            raw: null,
+            kind: 'approval_decision',
+            requestId,
+            decision: answer.decision,
+            waiveAfter: answer.waiveAfter,
           },
         ])
-        publishSession(waived)
-      }
-      if (approvals.openCount(sessionId) === 0) {
-        const resumed = await deps.sessions.transition(sessionId, 'running', deps.now())
-        if (resumed !== null) publishSession(resumed)
+        // 確認なしへの切り替え（waive_confirmations）は、画面の「実行」を受けてここで旗を立てる（MCP からは立てられない）。
+        if (answer.waiveAfter || (answer.decision === 'allow' && pending.toolName === WAIVE_TOOL)) {
+          const waived = await deps.sessions.update(sessionId, { confirmationsWaived: true })
+          await appendAndPublish(sessionId, [
+            {
+              kind: 'system',
+              event: 'confirmations_waived',
+              text: 'このタスクでは確認を出さずに進めます。',
+              raw: null,
+            },
+          ])
+          publishSession(waived)
+        }
+        // 状態を先に進めてから待ちを解く（CLI が続きを始めた時には作業中になっているように）。
+        if (approvals.openCount(sessionId) === 1) {
+          const resumed = await deps.sessions.transition(sessionId, 'running', deps.now())
+          if (resumed !== null) publishSession(resumed)
+        }
+        approvals.decide(requestId, answer.decision, null)
+      } finally {
+        answering = new Set([...answering].filter((id) => id !== requestId))
       }
       return okValue(null)
     },
