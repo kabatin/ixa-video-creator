@@ -1063,6 +1063,8 @@ image_generation_jobs        (絵コンテの画像を作るジョブ。Shot の
 image_checks                 (作った絵のチェック。ジョブに 1 行。やり直すか・どれを当てるかの材料 / ADR-0055。追記のみ)
 upscale_jobs                 (出来た Take の解像度を上げるジョブ / ADR-0044。仕様を持たないので generation_jobs と別。追記のみ)
 access_tokens                (API に入る鍵 / 合言葉で入った端末と自動化用の鍵。鍵はハッシュだけ。取り消しは revoked_at、行は消さない)
+agent_sessions               (AI エージェントの会話（タスク）。作品ごと。同じ作品で作業中は 1 つだけ / ADR-0058)
+agent_messages               (会話の行。会話ごとの通し番号 seq で並ぶ。JSONB: body。追記のみ / ADR-0058)
 review_runs
 review_findings
 storyboard_draft_runs        (絵コンテ下書きの実行 1 回分)
