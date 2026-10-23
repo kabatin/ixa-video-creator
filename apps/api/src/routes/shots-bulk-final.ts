@@ -59,6 +59,11 @@ const RemakeFinalBody = z
      * 画面はこれで「何本・どれくらい掛かる・何が飛ぶ」を出してから押させる。
      */
     dryRun: z.boolean().default(false),
+    /**
+     * レビューで NG なら自動で作り直すか（ADR-0057）。**既定は false**（作り直しを勧めるだけ）。
+     * 夜間に本番をまとめて作らせるときだけ true にする。
+     */
+    autoRetake: z.boolean().default(false),
   })
   .openapi('BulkRemakeFinalInput')
 
@@ -221,7 +226,7 @@ export const shotBulkFinalRoutes = (deps: ShotBulkFinalDeps) =>
     const project = await deps.projects.findById(projectId)
     if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
 
-    const { shotIds, dryRun } = c.req.valid('json')
+    const { shotIds, dryRun, autoRetake } = c.req.valid('json')
 
     /** まず全件を段取りする。**ここでは 1 件も投入しない。** */
     const plan: PlanEntry[] = []
@@ -262,6 +267,7 @@ export const shotBulkFinalRoutes = (deps: ShotBulkFinalDeps) =>
              * ここで落とすと、その Take は永久に「何の作り直しか」を持たない。
              */
             lineage: { parentTakeId: take.id, regenerationReason: REMAKE_FINAL_REASON },
+            autoRetake,
           })),
         )
 

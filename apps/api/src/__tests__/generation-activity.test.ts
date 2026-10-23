@@ -46,6 +46,7 @@ const aJob = (patch: Partial<GenerationJob> = {}): GenerationJob => ({
   regenerationReason: null,
   corrections: [],
     seed: null,
+  autoRetake: false,
   queuedAt: new Date('2026-09-30T10:00:00Z'),
   startedAt: new Date('2026-09-30T10:00:05Z'),
   providerStartedAt: new Date('2026-09-30T10:00:10Z'),

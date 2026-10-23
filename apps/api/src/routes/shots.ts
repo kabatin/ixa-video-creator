@@ -136,6 +136,11 @@ const GenerateBody = z
      * **その Provider が断る**。ここでは「負でない整数」だけを見る。
      */
     seed: z.number().int().nonnegative().optional(),
+    /**
+     * レビューで NG なら自動で作り直すか（ADR-0057）。**既定は false**（作り直しを勧めるだけ）。
+     * 夜間に自走させるときだけ true にする。頼んだ時点でジョブに残し、後から全体の設定で変わらない。
+     */
+    autoRetake: z.boolean().default(false),
   })
   .openapi('GenerateShotInput')
 
@@ -377,6 +382,8 @@ export const enqueueJobs = async (
    * ここで落とすとその Take は永久に系譜を持たない（`generation/lineage.ts`）。
    */
   lineage: { readonly parentTakeId: TakeId; readonly regenerationReason: string } | null = null,
+  /** レビューで NG なら自動で作り直すか（ADR-0057）。既定は作り直しを勧めるだけ。 */
+  autoRetake = false,
 ): Promise<GenerationJobId[]> => {
   const created: GenerationJobId[] = []
   for (let i = 0; i < count; i += 1) {
@@ -397,6 +404,7 @@ export const enqueueJobs = async (
        */
       seed: compiled.spec.seed,
       ...(lineage === null ? {} : lineage),
+      autoRetake,
     })
     await deps.queue.enqueue(job.id)
     created.push(job.id)
@@ -548,7 +556,7 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
       const project = await deps.projects.findById(shot.projectId)
       if (project === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
 
-      const { model, count, corrections, parentTakeId, regenerationReason, seed } = c.req.valid('json')
+      const { model, count, corrections, parentTakeId, regenerationReason, seed, autoRetake } = c.req.valid('json')
 
       /**
        * 作り直しの系譜（ADR-0042）。**組み立ての前に確かめる。**
@@ -599,7 +607,7 @@ export const shotRoutes = (deps: ShotRoutesDeps) =>
       const duplicate = existing.find((t) => t.specHash === compiled.specHash) ?? null
 
       const stretchedToFit = await fitTimingWhenStretched(deps, shot, compiled)
-      const jobIds = await enqueueJobs(deps, shot, compiled, model, count, corrections, lineage.value)
+      const jobIds = await enqueueJobs(deps, shot, compiled, model, count, corrections, lineage.value, autoRetake)
       const generating = await deps.shots.updateStatus(shot.id, 'generating')
       await publishShotStatus(deps, generating)
 

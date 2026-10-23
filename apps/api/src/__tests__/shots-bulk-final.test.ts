@@ -151,6 +151,19 @@ describe('POST /projects/:projectId/shots/bulk/remake-final', () => {
     expect(job?.regenerationReason).toBe(REMAKE_FINAL_REASON)
   })
 
+  /** ADR-0057。夜間に自走させるときは「NG なら自動で作り直す」を選べる。既定は選ばない。 */
+  it('「NG なら自動で作り直す」を選べば、本番のジョブに残す（既定は残さない）', async () => {
+    const project = aProject()
+    const first = adoptedDraft(project)
+    const f = buildFixture({ project, shots: [first.shot], takes: [first.take] })
+    await post(f.app, `/projects/${project.id}/shots/bulk/remake-final`, { shotIds: [first.shot.id] })
+    expect(f.generationJobs.snapshot()[0]?.autoRetake).toBe(false)
+
+    const g = buildFixture({ project, shots: [first.shot], takes: [first.take] })
+    await post(g.app, `/projects/${project.id}/shots/bulk/remake-final`, { shotIds: [first.shot.id], autoRetake: true })
+    expect(g.generationJobs.snapshot()[0]?.autoRetake).toBe(true)
+  })
+
   /** 「作り直す必要が無い」を押させない。押すと同じ画質の Take が 1 本増えるだけ。 */
   it('採用中が既に本番なら飛ばす', async () => {
     const project = aProject()

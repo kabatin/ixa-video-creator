@@ -187,6 +187,21 @@ describe('GET /projects/:projectId/shot-posters', () => {
    * 以前は生成が終わった瞬間に 1 回取るだけで、サムネイルがその後にできても出なかった
    * （読み直すまで「作られていません」のまま。デモの録画で実測）。
    */
+  /** ADR-0057。採用中の Take がレビューで不合格で、自動の作り直しを選んでいなければ、一覧に「作り直し推奨」の印。 */
+  it('採用中の Take が不合格なら retakeRecommended。自動の作り直しを選んでいれば付けない', async () => {
+    const fixture = await mixedFixture()
+    const [pendingTake, readyTake] = fixture.takes
+    const takes = [
+      { ...(pendingTake as Take), reviewStatus: 'failed' as const },
+      { ...(readyTake as Take), reviewStatus: 'failed' as const, autoRetake: true },
+    ]
+
+    const res = await buildApp({ ...fixture, takes }).request(`/projects/${fixture.project.id}/shot-posters`)
+    const rows = ((await res.json()) as ListBody).data as { retakeRecommended?: boolean }[]
+
+    expect(rows.map((row) => row.retakeRecommended)).toEqual([false, true, false])
+  })
+
   it('サムネイルを作っている行だけ pending が true', async () => {
     const fixture = await mixedFixture()
 
@@ -239,6 +254,7 @@ describe('GET /projects/:projectId/shot-posters', () => {
       pending: false,
       hasStartFrame: false,
       drawing: false,
+      retakeRecommended: false,
     }
 
     expect(

@@ -98,6 +98,8 @@ export type PlannedEnqueue = {
    * Take は作る瞬間にしか親を持てないので、ここで落とすと永久に系譜を持たない。
    */
   readonly lineage?: { readonly parentTakeId: TakeId; readonly regenerationReason: string } | null
+  /** レビューで NG なら自動で作り直すか（ADR-0057）。省けば作り直しを勧めるだけ。 */
+  readonly autoRetake?: boolean
 }
 
 /**
@@ -122,6 +124,7 @@ export const enqueuePlanned = async (
         entry.count,
         [],
         entry.lineage ?? null,
+        entry.autoRetake ?? false,
       ),
     )
     const generating = await deps.shots.updateStatus(entry.shot.id, 'generating')

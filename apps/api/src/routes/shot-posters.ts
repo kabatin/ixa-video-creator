@@ -9,6 +9,7 @@ import type {
 } from '@ixa/db'
 import { manualStartFrameOf } from '@ixa/generation'
 import {
+  isRetakeRecommended,
   ProjectId as ProjectIdSchema,
   ShotId as ShotIdSchema,
   TakeId as TakeIdSchema,
@@ -90,6 +91,10 @@ export const ShotPosterResponse = z
     drawing: z.boolean().openapi({
       description: '絵コンテの画像を作っているか。採用 Take があっても見る（一覧で絵と動画の作業中を分けて出す）',
     }),
+    retakeRecommended: z.boolean().openapi({
+      description:
+        '採用中の Take がレビューで不合格で、自動の作り直しを選んでいないか（ADR-0057）。一覧に「作り直し推奨」の印を出す',
+    }),
   })
   .refine((entry) => (entry.thumbnailUrl === null) !== (entry.reason === null), {
     message: URL_AND_REASON_PAIR_MESSAGE,
@@ -116,6 +121,14 @@ export type ShotPosterEntry = ShotPoster & {
   readonly hasStartFrame: boolean
   /** 絵コンテの画像を作っているか（採用 Take があっても）。 */
   readonly drawing: boolean
+  /** 採用中の Take が「作り直し推奨」か（ADR-0057。`isRetakeRecommended`）。 */
+  readonly retakeRecommended: boolean
+}
+
+/** 採用中の Take が「作り直し推奨」か。採用していなければ付けない（どの Take を勧めるかが決まらない）。 */
+const adoptedRetakeRecommended = (shot: Shot, takesById: ReadonlyMap<TakeId, Take>): boolean => {
+  const adopted = shot.selectedTakeId === null ? undefined : takesById.get(shot.selectedTakeId)
+  return adopted !== undefined && isRetakeRecommended(adopted)
 }
 
 const isPending = (poster: ShotPoster): boolean =>
@@ -338,6 +351,7 @@ export const buildShotPosters = async (
       pending: isPending(poster),
       hasStartFrame: (frameOf.get(shot.id) ?? null) !== null,
       drawing: drawing.has(shot.id),
+      retakeRecommended: adoptedRetakeRecommended(shot, takesById),
     }
   })
 }

@@ -26,6 +26,21 @@ import {
 } from './shot-test-support.js'
 
 describe('POST /shots/:id/generate', () => {
+  /** ADR-0057。既定は作り直しを勧めるだけ。頼むときに選んだときだけ、NG で自動に作り直す。 */
+  it('「NG なら自動で作り直す」は、省けば false、選べば true でジョブに残る', async () => {
+    const f = buildFixture()
+    await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/cheap' })
+    await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/cheap', autoRetake: true })
+    expect(f.generationJobs.snapshot().map((job) => job.autoRetake)).toEqual([false, true])
+  })
+
+  it('「NG なら自動で作り直す」に真偽値以外を渡すと 422', async () => {
+    const f = buildFixture()
+    const res = await postJson(f.app, `/shots/${f.shot.id}/generate`, { model: 'test/cheap', autoRetake: 'yes' })
+    expect(res.status).toBe(422)
+    expect(f.generationJobs.snapshot()).toHaveLength(0)
+  })
+
   /**
    * 作り直しの系譜（ADR-0042 の「本番で作り直す」）。
    *
