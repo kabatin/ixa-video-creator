@@ -21,12 +21,13 @@ type TimingShot = Pick<Shot, 'timing' | 'durationSec' | 'sourceInSec'> & { reado
 const speedOf = (shot: TimingShot): number => shot.speed ?? 1
 
 /**
- * AI に頼む長さの元（切り上げる前。ADR-0050）。`trim` は尺 × 速さ、`fit` は尺のまま
- * （`fit` は出来た Take の長さから速さを決めるので、頼む長さは変えない）。
+ * AI に頼む長さの元（切り上げる前。ADR-0050）。**`trim` も `fit` も尺 × 速さ。**
+ * `fit` の再生の速さは出来た Take の長さから決まるので、尺 × 速さを頼めば、ほぼ選んだ速さで流れる。
+ * 以前の `fit` は尺のままを頼み、速めた Shot を `fit` に替えると速さが黙って消えていた
+ * （終わりの画像を付けると `fit` になる。2026-10-24）。
  * **速さ 1 なら今までと同じ値**（仕様のハッシュが変わらない）。
  */
-export const requestedSourceSec = (shot: TimingShot): number =>
-  shot.timing === 'fit' ? shot.durationSec : shot.durationSec * speedOf(shot)
+export const requestedSourceSec = (shot: TimingShot): number => shot.durationSec * speedOf(shot)
 
 /**
  * Take の使える長さ（切り出し位置より後ろ）。

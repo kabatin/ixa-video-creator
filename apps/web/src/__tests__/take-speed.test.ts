@@ -32,7 +32,8 @@ describe('speedHint', () => {
     expect(speedHint(shot(2), 1.5)).toContain('2.40s')
   })
 
-  it('尺に合わせる間は速さを使わないと言う', () => {
-    expect(speedHint(shot(2, 'fit'), 1.5)).toContain('Take の長さで決まります')
+  it('尺に合わせる間も、尺 × 速さで頼み、Take 全体を尺に収めて流すと言う（2026-10-24）', () => {
+    expect(speedHint(shot(2, 'fit'), 1.5)).toBe('AI には 2.40s で頼みます。Take 全体が尺に収まる速さで流れます。')
+    expect(speedHint(shot(1, 'fit'), 1.5)).toBe('「Take を尺に合わせる」の間は、Take 全体が尺に収まる速さで流れます。')
   })
 })

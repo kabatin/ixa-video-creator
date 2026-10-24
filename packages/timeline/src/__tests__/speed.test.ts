@@ -85,7 +85,8 @@ describe('速さ', () => {
 describe('requestedSourceSec（AI に頼む長さの元）', () => {
   it('trim は尺 × 速さ、fit は尺のまま、速さ 1 は尺のまま', () => {
     expect(requestedSourceSec({ timing: 'trim', durationSec: 1.2, sourceInSec: 0, speed: 1.5 })).toBeCloseTo(1.8, 9)
-    expect(requestedSourceSec({ timing: 'fit', durationSec: 1.2, sourceInSec: 0, speed: 1.5 })).toBe(1.2)
+    // fit も尺 × 速さを頼む（替えても速さが消えない。2026-10-24）。
+    expect(requestedSourceSec({ timing: 'fit', durationSec: 1.2, sourceInSec: 0, speed: 1.5 })).toBeCloseTo(1.8, 9)
     expect(requestedSourceSec({ timing: 'trim', durationSec: 1.2, sourceInSec: 0 })).toBe(1.2)
   })
 })

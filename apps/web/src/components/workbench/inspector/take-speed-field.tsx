@@ -11,7 +11,7 @@ import { parseClockInput } from '@/lib/time-input'
 
 /**
  * Shot の速さと、Take のどこから使うか（ADR-0050）。予告編の速い編集のため、畳まずに出す。
- * 速さは `trim` の Shot だけが使う（`fit` の間は選べない）。
+ * `fit` の間も選べる。AI に頼む長さが尺 × 速さになり、再生はその Take が尺に収まる速さになる（2026-10-24）。
  */
 export type TakeSpeedFieldProps = {
   readonly shot: Pick<Shot, 'timing' | 'durationSec' | 'sourceInSec' | 'speed'>
@@ -37,7 +37,7 @@ export const TakeSpeedField = ({ shot, adopted, disabled = false, onSave, api }:
         label="速さ"
         value={String(shot.speed)}
         options={speedOptions(shot.speed)}
-        disabled={disabled || shot.timing === 'fit'}
+        disabled={disabled}
         onSave={async (raw) => {
           const speed = parseSpeed(raw)
           if (speed !== null) await onSave({ speed })

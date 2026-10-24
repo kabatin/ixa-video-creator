@@ -30,8 +30,12 @@ const rate = (value: number): string => `${value.toFixed(2)} 倍`
 
 /** 速さの欄の下に出す一言。 */
 export const speedHint = (shot: SpeedShot, takeDurationSec: number | null): string => {
-  if (shot.timing === 'fit') return '「Take を尺に合わせる」の間は、速さは Take の長さで決まります。'
   const asks = `AI には ${formatDuration(requestedSourceSec(shot))} で頼みます。`
+  if (shot.timing === 'fit') {
+    return shot.speed === 1
+      ? '「Take を尺に合わせる」の間は、Take 全体が尺に収まる速さで流れます。'
+      : `${asks}Take 全体が尺に収まる速さで流れます。`
+  }
   if (shot.speed === 1) return '1 倍より速くすると、短いカットでも動きが詰まって見えます。'
   if (takeDurationSec === null) return asks
   const actual = shotPlaybackRate(shot, takeDurationSec)
