@@ -5,6 +5,11 @@ import { PRESET_SETTINGS } from './presets.js'
 
 /** ffmpeg のフィルタ式に指数表記を渡さない。秒は固定小数で書く。 */
 const sec = (value: number): string => value.toFixed(6)
+/**
+ * 切り出し位置は切り捨てで書く（2026-10-24）。trim は位置より前のコマを落とすので、
+ * コマの境目ちょうど（1/24 = 0.0416666…）を丸めて 0.041667 にすると、そのコマまで落ちていた。
+ */
+const startSec = (value: number): string => (Math.floor(value * 1e6) / 1e6).toFixed(6)
 
 const ms = (value: number): string => String(Math.round(value * 1000))
 
@@ -55,7 +60,7 @@ const videoFilters = (
         : `setpts=(PTS-STARTPTS)/${sec(rate)}+${sec(start)}/TB`
 
     filters.push(
-      `[${input}:v]trim=start=${sec(shot.inSec)}:duration=${sec(shot.durationSec * rate)},` +
+      `[${input}:v]trim=start=${startSec(shot.inSec)}:duration=${sec(shot.durationSec * rate)},` +
         `${timing},${fitFilter(width, height)},fps=${doc.fps}[v${index}]`,
     )
     filters.push(

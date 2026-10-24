@@ -49,6 +49,15 @@ describe('buildFfmpegArgs', () => {
     expect(graph).toContain("enable='between(t,2.000000,5.000000)'")
   })
 
+  /**
+   * 切り出し位置がコマの境目ちょうど（1/24 秒）でも、そのコマから出す（2026-10-24）。
+   * 6 桁に丸めると 0.041667 になり、0.0416666… のコマが trim で落ちて、プレビューより 1 コマ多く切れていた。
+   */
+  it('切り出し位置は切り捨てで書き、境目のコマを落とさない', () => {
+    const doc = makeDocument({ video1: [makeVideo1Shot(1, 2, 3, 1 / 24)] })
+    expect(filterGraph(buildFfmpegArgs(doc, 'preview_720p', OUT))).toContain('trim=start=0.041666:')
+  })
+
   /** 尺に合わせた速度（ADR-0026）。Remotion の合成と同じ結果になるよう、切り出す長さと時間を揃える。 */
   it('再生速度があれば、素材を尺 × 速度だけ切り出し、時間を伸び縮みさせる', () => {
     const doc = makeDocument({ video1: [{ ...makeVideo1Shot(1, 2, 3, 1.5), playbackRate: 0.5 }] })
