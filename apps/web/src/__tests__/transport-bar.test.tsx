@@ -24,7 +24,7 @@ import { STOPPED, workbenchValue } from './workbench-fixture'
 const renderBar = (
   owner: 'cutter' | 'monitor',
   patch: Partial<WorkbenchContextValue> & { readonly transport?: WorkbenchTransport } = {},
-  loop?: TransportBarProps['loop'],
+  toggles?: TransportBarProps['toggles'],
 ): WorkbenchContextValue => {
   const { transport = STOPPED, ...rest } = patch
   const value = { ...workbenchValue(), ...rest }
@@ -32,7 +32,7 @@ const renderBar = (
     <PreferencesWrapper>
       <WorkbenchContext.Provider value={value}>
         <WorkbenchTransportProvider transport={transport}>
-          <TransportBar owner={owner} durationSec={120} loop={loop} />
+          <TransportBar owner={owner} durationSec={120} toggles={toggles} />
         </WorkbenchTransportProvider>
       </WorkbenchContext.Provider>
     </PreferencesWrapper>,
@@ -104,9 +104,13 @@ describe('TransportBar', () => {
 
   it('ループ再生のチェックは渡したパネルだけに出し、押すと知らせる', () => {
     const onChange = vi.fn()
-    renderBar('monitor', withHost('monitor'), { checked: false, onChange })
+    renderBar('monitor', withHost('monitor'), [
+      { label: 'ループ再生', checked: false, onChange },
+      { label: '音楽を消す', checked: true, onChange: vi.fn() },
+    ])
     screen.getByRole('checkbox', { name: 'ループ再生' }).click()
     expect(onChange).toHaveBeenCalledWith(true)
+    expect(screen.getByRole<HTMLInputElement>('checkbox', { name: '音楽を消す' }).checked).toBe(true)
   })
 
   it('渡さなければループ再生のチェックは出さない', () => {

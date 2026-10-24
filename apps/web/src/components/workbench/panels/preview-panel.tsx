@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ProgramMonitor } from '@/components/program-monitor'
 import { useSelectedShot, useTransport, useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelFrame, PanelNotice } from '@/components/workbench/panels/panel-frame'
 import { TransportBar } from '@/components/workbench/transport-bar'
 import { loadTimelineDocument, type Part } from '@/lib/timeline-loader'
+import { muteMusic } from '@/lib/mute-music'
 import type { WireTimelineDocument } from '@/lib/timeline-api'
 import { timelineShotsKey } from '@/lib/timeline-shots-key'
 import { TIMELINE_URL_LIFETIME_SEC } from '@/lib/signed-url-renewal'
@@ -38,6 +39,8 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
   const [monitorError, setMonitorError] = useState<string | null>(null)
   /** 終わりまで来たら頭へ戻って鳴らし続ける（2026-10-24、制作者の提案。ループ作品の確認用）。 */
   const [loop, setLoop] = useState(false)
+  /** 曲だけ消す（2026-10-24、制作者「効果音だけ確認しやすいように」）。書き出しには効かない。 */
+  const [musicMuted, setMusicMuted] = useState(false)
 
   // Take ができた・サーバから読み直した・Shot の尺や採用を変えた・ナレーションが変わったときに組み立て直す。
   // ナレーション（ADR-0038）は声の位置が組み立て結果の音に入る。入れ忘れると、帯では動いたのに鳴る位置が変わらない。
@@ -108,6 +111,7 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
   }, [shot, transport.playing, transportControls])
 
   const loaded = document?.value ?? null
+  const shown = useMemo(() => (loaded !== null && musicMuted ? muteMusic(loaded) : loaded), [loaded, musicMuted])
   const loadError = document?.error ?? null
   const mine = transport.owner === 'monitor'
   const playing = transport.playing && mine
@@ -125,7 +129,7 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
         )}
         <div className="min-h-0 flex-1">
           <ProgramMonitor
-            document={loaded}
+            document={shown}
             currentSec={transport.currentSec}
             seek={transport.seek}
             playing={playing}
@@ -152,7 +156,10 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
         <TransportBar
           owner="monitor"
           durationSec={loaded?.durationSec ?? null}
-          loop={{ checked: loop, onChange: setLoop }}
+          toggles={[
+            { label: 'ループ再生', checked: loop, onChange: setLoop },
+            { label: '音楽を消す', checked: musicMuted, onChange: setMusicMuted },
+          ]}
         />
       </div>
     </PanelFrame>
