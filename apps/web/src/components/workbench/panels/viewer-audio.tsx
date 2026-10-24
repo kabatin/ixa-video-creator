@@ -4,6 +4,7 @@ import type { MediaAssetId, MusicTrackId, VoiceProfileId } from '@ixa/domain'
 import { useEffect, useMemo, useState } from 'react'
 import { AudioTransport } from '@/components/audio-transport'
 import { WaveformCanvas } from '@/components/waveform-canvas'
+import { WaveformPlayhead } from '@/components/waveform-playhead'
 import { readyOr, useAssets } from '@/components/workbench/asset-store'
 import { PanelEmpty } from '@/components/workbench/panels/panel-frame'
 import { useSfxAssets } from '@/components/workbench/sfx-assets'
@@ -81,6 +82,7 @@ export const TrackView = ({ id }: { readonly id: MusicTrackId }) => {
   const track = (tracks.state === 'ready' ? tracks.value : []).find((item) => item.id === id)
   const [analysis, setAnalysis] = useState<WireMusicAnalysis | null | 'loading'>('loading')
   const [peaks, setPeaks] = useState<WaveformPeaksResult>({ status: 'empty' })
+  const solo = useSoloAudio()
 
   useEffect(() => {
     let cancelled = false
@@ -127,7 +129,16 @@ export const TrackView = ({ id }: { readonly id: MusicTrackId }) => {
             drops={analysis.drops}
             sectionBoundarySec={sectionBoundaries(analysis.sections)}
             heightPx={120}
-          />
+          >
+            {/* 鳴らしている音源がこの楽曲のときだけ線を引く（再生器はワークベンチに 1 つで、別の音のこともある）。 */}
+            {solo !== null && solo.loadedId === track.mediaAssetId && (
+              <WaveformPlayhead
+                currentSec={solo.playback.currentSec}
+                durationSec={analysis.durationSec}
+                onSeek={solo.playback.seekTo}
+              />
+            )}
+          </WaveformCanvas>
           <p className="text-sm text-muted">
             {`BPM ${analysis.bpm.toFixed(1)}（信頼度 ${analysis.bpmConfidence.toFixed(2)}）・拍 ${String(analysis.beats.length)}・小節 ${String(analysis.downbeats.length)}・セクション ${String(analysis.sections.length)}・ドロップ ${String(analysis.drops.length)}`}
           </p>
