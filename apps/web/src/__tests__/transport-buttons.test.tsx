@@ -32,10 +32,29 @@ const renderButtons = (transport: WorkbenchTransport) => {
 }
 
 describe('TransportButtons', () => {
-  it('5 つを一般的な順に並べる', () => {
+  it('7 つを一般的な順に並べる', () => {
     renderButtons(at(0))
     const names = screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))
-    expect(names).toEqual(['前の境目へ', '1コマ戻る', '再生', '1コマ進む', '次の境目へ'])
+    expect(names).toEqual([
+      '先頭のカットへ',
+      '前の境目へ',
+      '1コマ戻る',
+      '再生',
+      '1コマ進む',
+      '次の境目へ',
+      '最後のカットへ',
+    ])
+  })
+
+  it('先頭・最後のカットへは、最初・最後の Shot の頭へ飛ぶ（再生は止めない）', async () => {
+    const value = renderButtons(at(10, true))
+
+    await userEvent.click(screen.getByRole('button', { name: '先頭のカットへ' }))
+    await userEvent.click(screen.getByRole('button', { name: '最後のカットへ' }))
+
+    expect(value.transportControls.seekTo).toHaveBeenNthCalledWith(1, 4)
+    expect(value.transportControls.seekTo).toHaveBeenNthCalledWith(2, 8)
+    expect(value.transportControls.pause).not.toHaveBeenCalled()
   })
 
   it('1 コマ進むと、止めてから 1/fps 秒先へ飛ぶ', async () => {

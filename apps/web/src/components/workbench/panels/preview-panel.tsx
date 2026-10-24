@@ -36,6 +36,8 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
   const shot = useSelectedShot()
   const [document, setDocument] = useState<Part<WireTimelineDocument> | null>(null)
   const [monitorError, setMonitorError] = useState<string | null>(null)
+  /** 終わりまで来たら頭へ戻って鳴らし続ける（2026-10-24、制作者の提案。ループ作品の確認用）。 */
+  const [loop, setLoop] = useState(false)
 
   // Take ができた・サーバから読み直した・Shot の尺や採用を変えた・ナレーションが変わったときに組み立て直す。
   // ナレーション（ADR-0038）は声の位置が組み立て結果の音に入る。入れ忘れると、帯では動いたのに鳴る位置が変わらない。
@@ -133,6 +135,7 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
             fit="contain"
             // 絵がまだ無くても、音とテロップは黒い画面で流す（制作者 2026-10-03「テロップだけ確認は必須かも」）。
             withoutPictures
+            loop={loop}
             // 位置を返すのは自分が鳴らしている間だけ。両方が返すと位置が往復する（L-023）。
             onFrame={(sec) => {
               if (mine) transportControls.setCurrentSec(sec)
@@ -146,7 +149,11 @@ export const PreviewPanel = ({ visible = true }: { readonly visible?: boolean })
           />
         </div>
         {/* 再生の操作はプレイヤーの直下。画面にひとつだけ（`transport-bar.tsx`）。 */}
-        <TransportBar owner="monitor" durationSec={loaded?.durationSec ?? null} />
+        <TransportBar
+          owner="monitor"
+          durationSec={loaded?.durationSec ?? null}
+          loop={{ checked: loop, onChange: setLoop }}
+        />
       </div>
     </PanelFrame>
   )

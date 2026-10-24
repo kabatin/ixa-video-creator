@@ -59,3 +59,19 @@ export const NextEditIcon = (props: IconProps) => (
     <rect x="12.5" y="3" width="2" height="10" rx="0.5" />
   </Icon>
 )
+
+/** 先頭のカットへ（|◀）。 */
+export const FirstCutIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <rect x="2.5" y="2.5" width="2.5" height="11" rx="0.5" />
+    <path d="M13.5 2.5 5.5 8l8 5.5Z" />
+  </Icon>
+)
+
+/** 最後のカットへ（▶|）。 */
+export const LastCutIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M2.5 2.5 10.5 8l-8 5.5Z" />
+    <rect x="11" y="2.5" width="2.5" height="11" rx="0.5" />
+  </Icon>
+)

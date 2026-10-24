@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   editPointsOf,
+  firstCutSec,
   frameStepTarget,
+  lastCutSec,
   nextEditPoint,
   previousEditPoint,
 } from '@/lib/transport-steps'
@@ -88,5 +90,18 @@ describe('前の境目へ・次の境目へ', () => {
   it('頭より前・最後より後ろは無い（null）', () => {
     expect(previousEditPoint(points, 0, FPS)).toBeNull()
     expect(nextEditPoint(points, 12, FPS)).toBeNull()
+  })
+})
+
+describe('firstCutSec / lastCutSec', () => {
+  it('最初と最後の Shot の頭。並びが前後していても位置で決める', () => {
+    const shots = [{ startSec: 8 }, { startSec: 2 }, { startSec: 5 }]
+    expect(firstCutSec(shots)).toBe(2)
+    expect(lastCutSec(shots)).toBe(8)
+  })
+
+  it('Shot が無ければ null（飛ばない）', () => {
+    expect(firstCutSec([])).toBeNull()
+    expect(lastCutSec([])).toBeNull()
   })
 })

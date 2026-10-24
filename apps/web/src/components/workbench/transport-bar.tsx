@@ -24,9 +24,14 @@ export type TransportBarProps = {
   readonly owner: 'cutter' | 'monitor'
   /** 尺。分かっていれば「位置 / 尺」で出す。 */
   readonly durationSec?: number | null
+  /**
+   * ループ再生のチェック（2026-10-24、制作者の提案）。渡したパネルだけに出す。
+   * 鳴らす相手はそのパネルのプレイヤーなので、状態もそのパネルが持つ。
+   */
+  readonly loop?: { readonly checked: boolean; readonly onChange: (checked: boolean) => void }
 }
 
-export const TransportBar = ({ owner, durationSec = null }: TransportBarProps) => {
+export const TransportBar = ({ owner, durationSec = null, loop }: TransportBarProps) => {
   const { transportControls } = useWorkbench()
   const transport = useTransport()
   if (transportControls.host !== owner) return null
@@ -44,9 +49,20 @@ export const TransportBar = ({ owner, durationSec = null }: TransportBarProps) =
   return (
     <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-line bg-surface px-2 py-1">
       {/* 鳴らしているのが別のパネルなら言う。無言だと壊れていると読まれる。 */}
-      <span className="justify-self-start text-xs text-accent">
-        {elsewhere === null ? '' : `${elsewhere} が再生中`}
-      </span>
+      <div className="flex items-center gap-3 justify-self-start">
+        {loop !== undefined && (
+          <label className="flex items-center gap-1.5 text-xs text-muted">
+            <input
+              type="checkbox"
+              checked={loop.checked}
+              onChange={(event) => loop.onChange(event.target.checked)}
+              className="accent-accent"
+            />
+            ループ再生
+          </label>
+        )}
+        <span className="text-xs text-accent">{elsewhere === null ? '' : `${elsewhere} が再生中`}</span>
+      </div>
       <TransportButtons owner={owner} durationSec={durationSec} />
       <span className="justify-self-end font-mono text-sm tabular-nums text-text">
         {formatClock(transport.currentSec)}

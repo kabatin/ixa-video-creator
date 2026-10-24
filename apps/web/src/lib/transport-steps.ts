@@ -71,3 +71,15 @@ export const nextEditPoint = (
   currentSec: number,
   fps: number,
 ): number | null => points.find((sec) => sec > currentSec + onPointSec(fps)) ?? null
+
+/**
+ * 先頭のカット・最後のカットの頭（2026-10-24、制作者の提案）。Shot が無ければ null。
+ * **最後は終端ではなく最後の Shot の頭。** 終端へ飛んでも何も映らない。
+ */
+export const firstCutSec = (
+  shots: readonly { readonly startSec: number }[],
+): number | null => (shots.length === 0 ? null : Math.min(...shots.map((shot) => shot.startSec)))
+
+export const lastCutSec = (
+  shots: readonly { readonly startSec: number }[],
+): number | null => (shots.length === 0 ? null : Math.max(...shots.map((shot) => shot.startSec)))

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
-import { TransportBar } from '@/components/workbench/transport-bar'
+import { describe, expect, it, vi } from 'vitest'
+import { TransportBar, type TransportBarProps } from '@/components/workbench/transport-bar'
 import {
   WorkbenchContext,
   type WorkbenchContextValue,
@@ -24,6 +24,7 @@ import { STOPPED, workbenchValue } from './workbench-fixture'
 const renderBar = (
   owner: 'cutter' | 'monitor',
   patch: Partial<WorkbenchContextValue> & { readonly transport?: WorkbenchTransport } = {},
+  loop?: TransportBarProps['loop'],
 ): WorkbenchContextValue => {
   const { transport = STOPPED, ...rest } = patch
   const value = { ...workbenchValue(), ...rest }
@@ -31,7 +32,7 @@ const renderBar = (
     <PreferencesWrapper>
       <WorkbenchContext.Provider value={value}>
         <WorkbenchTransportProvider transport={transport}>
-          <TransportBar owner={owner} durationSec={120} />
+          <TransportBar owner={owner} durationSec={120} loop={loop} />
         </WorkbenchTransportProvider>
       </WorkbenchContext.Provider>
     </PreferencesWrapper>,
@@ -99,5 +100,17 @@ describe('TransportBar', () => {
     })
     expect(screen.getByText(/1:05\.50/)).toBeTruthy()
     expect(screen.getByText(/2:00\.00/)).toBeTruthy()
+  })
+
+  it('ループ再生のチェックは渡したパネルだけに出し、押すと知らせる', () => {
+    const onChange = vi.fn()
+    renderBar('monitor', withHost('monitor'), { checked: false, onChange })
+    screen.getByRole('checkbox', { name: 'ループ再生' }).click()
+    expect(onChange).toHaveBeenCalledWith(true)
+  })
+
+  it('渡さなければループ再生のチェックは出さない', () => {
+    renderBar('cutter', withHost('cutter'))
+    expect(screen.queryByRole('checkbox', { name: 'ループ再生' })).toBeNull()
   })
 })
