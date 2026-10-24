@@ -130,6 +130,11 @@ export const AGENT_TOOL_LABELS: Readonly<Record<string, ToolLabelSpec>> = Object
     ask: '最初のフレームを{n}描きます',
     count: { field: 'shotIds', unit: '枚' },
   },
+  set_end_frame: {
+    doing: '終わりの画像を決めている',
+    done: '終わりの画像を決めた',
+    ask: '終わりの画像を決めます',
+  },
   set_start_frame: {
     doing: '最初のフレームを決めている',
     done: '最初のフレームを決めた',

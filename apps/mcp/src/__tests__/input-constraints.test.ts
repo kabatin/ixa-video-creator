@@ -150,6 +150,13 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
     ],
   },
   set_start_frame: { base: { projectId: P, shotId: S, mediaAssetId: S }, cases: [[{ shotId: 'x' }, 'shotId']] },
+  set_end_frame: {
+    base: { projectId: P, shotId: S, fromShotStartFrame: S },
+    cases: [
+      [{ shotId: 'x' }, 'shotId'],
+      [{ fromShotStartFrame: 'x' }, 'fromShotStartFrame'],
+    ],
+  },
   list_start_frame_history: { base: { projectId: P, shotId: S }, cases: [[{ shotId: 'x' }, 'shotId']] },
   use_start_frame: {
     base: { projectId: P, shotId: S, jobId: S },

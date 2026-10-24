@@ -35,7 +35,9 @@ import type {
   TimelineClipRepository,
 } from '@ixa/db'
 import {
+  clearManualEndFrame,
   clearManualStartFrame,
+  replaceManualEndFrame,
   replaceManualStartFrame,
   syncNarrationTelops,
   type NarrationTelopSyncDeps,
@@ -326,10 +328,10 @@ const restoreProjectEntry = async (
   }
 }
 
-export const ATTACHMENTS_UNAVAILABLE_REASON = '登場人物・開始フレームを戻す口がありません'
+export const ATTACHMENTS_UNAVAILABLE_REASON = '登場人物・開始フレーム・終わりの画像を戻す口がありません'
 
 /**
- * 登場人物・開始フレーム（欄があるときだけ）を戻す。登場人物は丸ごと、開始フレームは付いていた素材に戻す。
+ * 登場人物・開始フレーム・終わりの画像（欄があるときだけ）を戻す。登場人物は丸ごと、画像は付いていた素材に戻す。
  *
  * **開始フレームの参照は、同じ素材を指す新しい行として作り直す（参照の行の ID は戻らない）。** 参照は
  * `ShotReferenceRepository` の約束どおり更新口を持たず、付け替えはいつも「消して作る」で表す。参照の行を ID で
@@ -347,6 +349,11 @@ const restoreAttachments = async (
     if (deps.shotReferences === undefined) return ATTACHMENTS_UNAVAILABLE_REASON
     if (entry.startFrame === null) await clearManualStartFrame(deps.shotReferences, entry.shotId)
     else await replaceManualStartFrame(deps.shotReferences, entry.shotId, entry.startFrame)
+  }
+  if (entry.endFrame !== undefined) {
+    if (deps.shotReferences === undefined) return ATTACHMENTS_UNAVAILABLE_REASON
+    if (entry.endFrame === null) await clearManualEndFrame(deps.shotReferences, entry.shotId)
+    else await replaceManualEndFrame(deps.shotReferences, entry.shotId, entry.endFrame)
   }
   return null
 }

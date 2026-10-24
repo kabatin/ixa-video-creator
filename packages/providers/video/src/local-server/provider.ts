@@ -41,6 +41,7 @@ import {
 import {
   ensurePromptAndSeed,
   fetchStartImage,
+  selectEndReference,
   selectStartReference,
   type LocalServerImage,
 } from './request.js'
@@ -79,6 +80,8 @@ export type LocalServerBodyInput<Q extends string> = {
    * 以前はこれが無く、H3 は開始画像を送っていても「画像なし」の文面で組んでいた（h3-official-v1）。
    */
   readonly hasStartImage: boolean
+  /** 共通の層が `end_image` を足すか（終わりの画像。H3 の 1 行目が変わる）。 */
+  readonly hasEndImage: boolean
 }
 
 /** サーバ 1 台分のモデルの宣言と、投入の本文の組み立て。 */
@@ -214,11 +217,13 @@ export const createLocalServerVideoProvider = <Q extends string>(
     ensurePromptAndSeed(identity, request.spec)
     // **どの画像を使うかを先に決める。** 文面が「開始画像があるか」で変わるので、本文より先に要る。
     const { chosen, ignored } = selectStartReference(request.spec.references)
+    const endChosen = selectEndReference(request.spec.references)
     const bodyWithoutImage = binding.buildBody({
       spec: request.spec,
       model,
       quality,
       hasStartImage: chosen !== null,
+      hasEndImage: endChosen !== null,
     })
 
     // 満杯なら、開始画像を取り寄せる前に断る（`ProviderBusyError`）。
@@ -233,7 +238,22 @@ export const createLocalServerVideoProvider = <Q extends string>(
             await request.resolveReference(chosen.mediaAssetId),
             timeoutMs,
           )
-    const body = { ...bodyWithoutImage, start_image: startImage }
+    const endImage: LocalServerImage | null =
+      endChosen === null
+        ? null
+        : await fetchStartImage(
+            identity,
+            http.fetch,
+            await request.resolveReference(endChosen.mediaAssetId),
+            timeoutMs,
+            '終わりの画像',
+          )
+    // 終わりの画像は**あるときだけ**足す。受けないサーバ（Wan）の本文に欄を増やさない。
+    const body = {
+      ...bodyWithoutImage,
+      start_image: startImage,
+      ...(endImage === null ? {} : { end_image: endImage }),
+    }
     const jobId = await postJob(http, body, idempotencyKey, settings.serverErrorRetryDelayMs)
 
     const ref = encodeLocalServerJobRef(identity, jobId)
@@ -246,6 +266,10 @@ export const createLocalServerVideoProvider = <Q extends string>(
               mediaAssetId: chosen.mediaAssetId,
               mediaType: startImage.media_type,
             },
+      endImage:
+        endChosen === null || endImage === null
+          ? null
+          : { role: endChosen.role, mediaAssetId: endChosen.mediaAssetId, mediaType: endImage.media_type },
       ignoredReferences: ignored.map((reference) => ({
         role: reference.role,
         mediaAssetId: reference.mediaAssetId,
@@ -431,6 +455,7 @@ export const createLocalServerVideoProvider = <Q extends string>(
         timings: job.timings ?? null,
         /** 投入時の控え。null は「控えが読めず分からない」（推測で埋めない）。 */
         startImage: note === null ? null : note.startImage,
+        endImage: note === null ? null : note.endImage,
         ignoredReferences: note === null ? null : note.ignoredReferences,
         ...(binding.extraRecord === undefined ? {} : binding.extraRecord({ model, quality })),
       },

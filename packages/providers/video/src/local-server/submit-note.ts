@@ -21,6 +21,8 @@ const NotedReference = z.object({
 
 export const LocalServerSubmitNote = z.object({
   startImage: NotedReference.extend({ mediaType: z.string().min(1) }).nullable(),
+  /** 終わりの画像（2026-10-24）。前の版の控えには無いので、無ければ「付けていない」（null）。 */
+  endImage: NotedReference.extend({ mediaType: z.string().min(1) }).nullable().default(null),
   ignoredReferences: z.array(NotedReference),
 })
 export type LocalServerSubmitNote = z.infer<typeof LocalServerSubmitNote>

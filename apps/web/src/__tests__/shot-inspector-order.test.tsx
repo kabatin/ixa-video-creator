@@ -11,6 +11,7 @@ import { aWorkbenchShot, renderInWorkbench } from './workbench-fixture'
 
 vi.mock('@/components/workbench/inspector/shot-generate-section', () => ({ ShotGenerateSection: () => null }))
 vi.mock('@/components/workbench/inspector/start-frame-field', () => ({ StartFrameField: () => null }))
+vi.mock('@/components/workbench/inspector/end-frame-field', () => ({ EndFrameField: () => null }))
 vi.mock('@/components/workbench/inspector/shot-cast-section', () => ({ ShotCastSection: () => null }))
 vi.mock('@/components/workbench/inspector/footage-import-form', () => ({ FootageImportForm: () => null }))
 vi.mock('@/components/workbench/inspector/take-timing-field', () => ({ TakeTimingField: () => null }))

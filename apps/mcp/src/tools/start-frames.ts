@@ -62,6 +62,39 @@ export const setStartFrameTool = defineTool({
   },
 })
 
+const WireEndFrameSaved = z.object({ mediaAssetId: z.string(), timing: z.enum(['trim', 'fit']) })
+
+export const setEndFrameTool = defineTool({
+  name: 'set_end_frame',
+  risk: 'write',
+  description:
+    "Set (or clear with clear=true) a shot's end frame: the image its video must end on, e.g. the first shot's start " +
+    'frame (fromShotStartFrame) to make the film loop. Give a media asset id, another shot\'s start frame or a local ' +
+    'image file. Setting it also switches the shot to fit timing, so the whole take plays and its last frame lands on ' +
+    'the shot\'s last frame. Only video AIs that accept an end frame use it (local MiniMax H3 does). Then ' +
+    'generate_takes. Recorded as an edit, so the user can undo it.',
+  input: ImageSource.extend({
+    projectId: Id,
+    shotId: Id,
+    clear: z.boolean().default(false).describe('Remove the end frame instead (give no image).'),
+  }),
+  handler: async ({ projectId, shotId, clear, ...source }, { api, workspaceId }) => {
+    await assertShotsInProject(api, projectId, [shotId])
+    if (clear) {
+      if ([source.mediaAssetId, source.fromShotStartFrame, source.imagePath].some((v) => v !== undefined)) {
+        throw new ToolInputError('clear=true のときは画像を指定しないでください')
+      }
+      await api.request('DELETE', `/shots/${seg(shotId)}/end-frame`, z.unknown())
+      return jsonResult({ shotId, mediaAssetId: null })
+    }
+    const mediaAssetId = await resolveImage(api, source, { workspaceId, projectId })
+    const saved = await api.request('PUT', `/shots/${seg(shotId)}/end-frame`, WireEndFrameSaved, {
+      body: { mediaAssetId },
+    })
+    return jsonResult({ shotId, mediaAssetId: saved.mediaAssetId, timing: saved.timing })
+  },
+})
+
 export const listStartFrameHistoryTool = defineTool({
   name: 'list_start_frame_history',
   risk: 'read',

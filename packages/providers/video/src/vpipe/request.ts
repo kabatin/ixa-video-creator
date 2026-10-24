@@ -4,7 +4,7 @@ import {
   ensurePromptLength,
   type LocalServerImage,
 } from '../local-server/request.js'
-import { VPIPE_IDENTITY, type VpipeQuality } from './descriptor.js'
+import { VPIPE_FPS, VPIPE_IDENTITY, type VpipeQuality } from './descriptor.js'
 import { buildH3Prompt } from './h3-prompt.js'
 
 /**
@@ -30,8 +30,11 @@ export type VpipeJobBody = {
   readonly seed: number | null
   readonly steps: number
   readonly start_image: LocalServerImage | null
-  /** **常に null。** 最後のフレームを付ける画面がまだ無い（ADR-0031 の次の段階）。 */
-  readonly end_image: null
+  /**
+   * 終わりの画像（2026-10-24）。**本文を組む時点では null**。画像は共通の層が取り寄せてから足す
+   * （`start_image` と同じ）。
+   */
+  readonly end_image: LocalServerImage | null
   /**
    * **常に true（ADR-0045 段 4）。** サーバは生成サイズを `output` の比へ中央で切り抜くだけで、
    * 引き伸ばさない（final・16:9 なら 1344×756 が返る）。拡大は書き出しの直前に ixa が Lanczos でやる。
@@ -50,6 +53,8 @@ export type BuildVpipeBody = {
    * 投入では画像を取り寄せる前に本文を組むので、`startImage` は null でも画像は送られることがある。
    */
   readonly hasStartImage: boolean
+  /** 終わりの画像を送るか（プロンプトの 1 行目が変わる）。 */
+  readonly hasEndImage: boolean
 }
 
 /**
@@ -60,7 +65,7 @@ export type BuildVpipeBody = {
  * （検査が片方にしか無いと、どちらを通ったかで通る値が変わる）。
  */
 export const buildVpipeBody = (input: BuildVpipeBody): VpipeJobBody => {
-  const { spec, quality, frames, startImage, hasStartImage } = input
+  const { spec, quality, frames, startImage, hasStartImage, hasEndImage } = input
   // 画像を渡しておきながら「画像なし」の文面で組むのは、h3-official-v1 で起きた取り違え。黙って通さない。
   if (startImage !== null && !hasStartImage) {
     throw new Error('開始画像を渡しているのに、文面を「画像なし」で組もうとしています')
@@ -75,8 +80,9 @@ export const buildVpipeBody = (input: BuildVpipeBody): VpipeJobBody => {
   const prompt = buildH3Prompt({
     spec,
     hasStartImage,
-    // 最後の画像を付ける画面がまだ無い（`end_image` は常に null）。
-    hasEndImage: false,
+    hasEndImage,
+    // 終わりの画像は作る動画の最後に合わせる（仕様の尺ではなく、切り上げたコマ数の長さ）。
+    videoSec: frames / VPIPE_FPS,
   })
   ensurePromptLength(VPIPE_IDENTITY, prompt)
 

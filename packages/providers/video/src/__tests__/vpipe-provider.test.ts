@@ -159,6 +159,36 @@ describe('submit', () => {
     )
   })
 
+  it('終わりの画像（2026-10-24）は end_image で送り、1 行目を最初と最後に合わせる文にする', async () => {
+    const request = vpipeRequestFor(
+      spec({
+        references: [
+          { mediaAssetId: 'asset-prev' as MediaAssetId, role: 'previous_shot_last_frame', weight: 0.8 },
+          { mediaAssetId: 'asset-end' as MediaAssetId, role: 'end_frame', weight: 1 },
+        ],
+      }),
+    )
+    const { calls } = await submitWith(
+      serverRoutes({
+        submit: () => jsonResponse(202, SUBMIT_BODY),
+        image: () => bytesResponse(PNG_BYTES, 'image/png'),
+      }),
+      request,
+    )
+
+    const imageUrls = calls.filter((c) => c.url.startsWith(SIGNED_URL_PREFIX)).map((c) => c.url)
+    expect(imageUrls.some((url) => url.includes('asset-prev'))).toBe(true)
+    expect(imageUrls.some((url) => url.includes('asset-end'))).toBe(true)
+    const image = { data: Buffer.from(PNG_BYTES).toString('base64'), media_type: 'image/png' }
+    expect(posted(calls).start_image).toEqual(image)
+    expect(posted(calls).end_image).toEqual(image)
+    // 4 秒は 107 コマ（4.458 秒）に切り上がる。終わりの画像はその最後に合わせる。
+    expect(String(posted(calls).prompt).split('\n')[0]).toBe(
+      'How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark ' +
+        'of the target video; Picture 2 (from Shot 1) aligns with the 4.46-second mark of the target video.',
+    )
+  })
+
   it('開始画像が無ければ、定型文を入れない', async () => {
     const { calls } = await submitWith(ACCEPTING, vpipeRequestFor(spec()))
 
@@ -278,9 +308,9 @@ describe('submit — 能力の外の要求は投入前に弾く（HTTP を 1 回
     { name: '15.2 秒', overrides: { durationSec: 15.2 } },
     { name: 'negative prompt', overrides: { negativePrompt: 'blurry' } },
     {
-      name: '最後のフレーム',
+      name: '受けない参照（人物）',
       overrides: {
-        references: [{ mediaAssetId: 'a' as MediaAssetId, role: 'end_frame', weight: 1 }],
+        references: [{ mediaAssetId: 'a' as MediaAssetId, role: 'subject', weight: 1 }],
       },
     },
   ]

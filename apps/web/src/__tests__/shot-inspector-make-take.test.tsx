@@ -15,6 +15,9 @@ vi.mock('@/components/workbench/inspector/shot-generate-section', () => ({
 vi.mock('@/components/workbench/inspector/start-frame-field', () => ({
   StartFrameField: () => null,
 }))
+vi.mock('@/components/workbench/inspector/end-frame-field', () => ({
+  EndFrameField: () => null,
+}))
 vi.mock('@/components/workbench/inspector/shot-cast-section', () => ({
   ShotCastSection: () => null,
 }))

@@ -47,8 +47,17 @@ export const selectStartReference = (references: readonly SpecReference[]): Star
     START_IMAGE_ROLES.map((role) => references.find((reference) => reference.role === role)).find(
       (reference): reference is SpecReference => reference !== undefined,
     ) ?? null
-  return { chosen, ignored: references.filter((reference) => reference !== chosen) }
+  const end = selectEndReference(references)
+  return { chosen, ignored: references.filter((reference) => reference !== chosen && reference !== end) }
 }
+
+/**
+ * 終わりの画像（`end_frame`）を 1 枚選ぶ（2026-10-24）。最初の 1 枚を使う。
+ * **モデルが `end_frame` を宣言していなければ、仕様に入ってこない**（`resolveReferences` が落とす）ので、
+ * 受けないサーバ（Wan）へ送ることはない。
+ */
+export const selectEndReference = (references: readonly SpecReference[]): SpecReference | null =>
+  references.find((reference) => reference.role === 'end_frame') ?? null
 
 export const localServerInputError = (
   identity: LocalServerIdentity,
@@ -92,8 +101,8 @@ export const imageMediaTypeOf = (contentType: string | null): LocalServerImageMe
   return LOCAL_SERVER_IMAGE_MEDIA_TYPES.find((type) => type === normalized) ?? null
 }
 
-const START_IMAGE_UNREADABLE = '最初のフレームの画像を読み込めませんでした'
-const TOO_LARGE = '最初のフレームの画像が大きすぎます（20MB まで）'
+/** どの画像か（例外の文面に出す）。終わりの画像も同じ口で取りに行く（2026-10-24）。 */
+export type LocalServerImageLabel = '最初のフレーム' | '終わりの画像'
 
 /**
  * 開始画像を取りに行き、base64 にする。
@@ -106,7 +115,10 @@ export const fetchStartImage = async (
   fetch: LocalServerFetch,
   url: string,
   timeoutMs: number,
+  label: LocalServerImageLabel = '最初のフレーム',
 ): Promise<LocalServerImage> => {
+  const START_IMAGE_UNREADABLE = `${label}の画像を読み込めませんでした`
+  const TOO_LARGE = `${label}の画像が大きすぎます（20MB まで）`
   const signal = AbortSignal.timeout(timeoutMs)
   const response = await (async (): Promise<Response> => {
     try {
@@ -134,9 +146,9 @@ export const fetchStartImage = async (
     throw localServerInputError(identity, message)
   }
   if (mediaType === null)
-    return reject('最初のフレームの画像は PNG・JPEG・WebP のどれかにしてください')
+    return reject(`${label}の画像は PNG・JPEG・WebP のどれかにしてください`)
   if (declaresTooLarge(response.headers, LOCAL_SERVER_MAX_IMAGE_BYTES)) return reject(TOO_LARGE)
-  if (body === null) return reject('最初のフレームの画像が空です')
+  if (body === null) return reject(`${label}の画像が空です`)
 
   const bytes = await (async (): Promise<Uint8Array> => {
     try {
@@ -149,6 +161,6 @@ export const fetchStartImage = async (
   })()
 
   if (bytes.byteLength === 0)
-    throw localServerInputError(identity, '最初のフレームの画像が空です')
+    throw localServerInputError(identity, `${label}の画像が空です`)
   return { data: Buffer.from(bytes).toString('base64'), media_type: mediaType }
 }

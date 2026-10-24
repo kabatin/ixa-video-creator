@@ -33,6 +33,7 @@ const EXPECTED: Readonly<Record<string, string>> = {
   manage_brand_assets: 'destructive',
   draw_start_frames: 'costly',
   set_start_frame: 'write',
+  set_end_frame: 'write',
   list_start_frame_history: 'read',
   use_start_frame: 'write',
   retry_image: 'costly',

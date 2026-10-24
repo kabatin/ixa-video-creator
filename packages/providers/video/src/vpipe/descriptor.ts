@@ -128,7 +128,10 @@ export const VPIPE_RESOLUTIONS: readonly Resolution[] = Object.freeze([
   { width: 864, height: 1080 },
 ])
 
-/** 最初のフレームとして受け取れる参照の枠。どちらも「開始画像」1 枚へ落ちる（ADR-0016）。 */
+/**
+ * 受け取れる参照の枠。開始画像 1 枚（`start_frame` か前の Shot のコマ。どちらも「開始画像」に落ちるので
+ * 両方は入らない。ADR-0016）と、終わりの画像 1 枚。
+ */
 export const VPIPE_MAX_REFERENCE_IMAGES = 2
 
 const capabilities: VideoModelDescriptor['capabilities'] = {
@@ -139,10 +142,10 @@ const capabilities: VideoModelDescriptor['capabilities'] = {
   referenceImages: {
     max: VPIPE_MAX_REFERENCE_IMAGES,
     /**
-     * 開始画像にだけ使う。**end_frame は宣言しない。** vpipe-api は最後のフレームも受けるが、
-     * ixa にはまだ最後のフレームを付ける画面が無い（次の段階。ADR-0031）。
+     * 開始画像（どちらか 1 枚）と、終わりの画像（`end_frame`。2026-10-24）。
+     * vpipe-api は `start_image` と `end_image` を 1 枚ずつ受ける。
      */
-    roles: ['start_frame', 'previous_shot_last_frame'],
+    roles: ['start_frame', 'previous_shot_last_frame', 'end_frame'],
   },
   seed: true,
   /** ガイダンス蒸留済みのモデルで、negative prompt は効かない。効かない口を開けない。 */

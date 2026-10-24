@@ -142,7 +142,7 @@ describe('toolLabel', () => {
     const names = [
       'ixa_status', 'set_ai', 'create_project', 'get_project', 'generate_music', 'upload_music', 'set_master_track',
       'music_overview', 'plan_shots', 'edit_shots', 'create_character', 'create_location', 'draw_start_frames',
-      'set_start_frame', 'list_start_frame_history', 'use_start_frame', 'retry_image', 'view', 'generate_takes',
+      'set_start_frame', 'set_end_frame', 'list_start_frame_history', 'use_start_frame', 'retry_image', 'view', 'generate_takes',
       'list_takes', 'adopt_take', 'review_take', 'upscale_takes', 'wait', 'add_effects', 'list_effects', 'remove_effects',
       'analyze_motion', 'suggest_sfx', 'generate_sfx', 'list_sfx', 'remove_sfx', 'export', 'export_thumbnail',
       'update_project', 'duplicate_project', 'import_from_project', 'restructure_shots', 'draft_storyboard',

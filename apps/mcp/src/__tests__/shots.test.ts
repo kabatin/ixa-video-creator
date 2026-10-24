@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createCharacterTool, createLocationTool } from '../tools/cast.js'
 import { EditShotsInput, editShotsTool } from '../tools/edit-shots.js'
 import { planShotsTool } from '../tools/plan-shots.js'
-import { drawStartFramesTool, setStartFrameTool } from '../tools/start-frames.js'
+import { drawStartFramesTool, setEndFrameTool, setStartFrameTool } from '../tools/start-frames.js'
 import { createFakeApi, depsFor, jsonOf, ownedMedia, ownedShots, textOf, ulid } from './fake-api.js'
 
 const PROJECT = ulid('PJ1')
@@ -326,6 +326,32 @@ describe('登場人物・場所・最初のコマ', () => {
     const result = jsonOf(await setStartFrameTool.run({ projectId: PROJECT, shotId: SHOT_A, mediaAssetId: MEDIA }, depsFor(fake)))
     expect(fake.callsTo('PUT', `/shots/${SHOT_A}/start-frame`)[0]?.body).toEqual({ mediaAssetId: MEDIA })
     expect(result).toEqual({ shotId: SHOT_A, mediaAssetId: MEDIA })
+  })
+
+  it('set_end_frame は別の Shot の最初のフレームを終わりの画像に PUT し、尺に合わせる再生になったことを返す', async () => {
+    const MEDIA = ulid('MD4')
+    const fake = createFakeApi([
+      ownedShots(PROJECT, [SHOT_A, SHOT_B]),
+      { method: 'GET', path: `/shots/${SHOT_A}/start-frame`, data: { mediaAssetId: MEDIA, job: null } },
+      { method: 'PUT', path: `/shots/${SHOT_B}/end-frame`, data: { mediaAssetId: MEDIA, timing: 'fit' } },
+    ])
+    const result = jsonOf(
+      await setEndFrameTool.run({ projectId: PROJECT, shotId: SHOT_B, fromShotStartFrame: SHOT_A }, depsFor(fake)),
+    )
+    expect(fake.callsTo('PUT', `/shots/${SHOT_B}/end-frame`)[0]?.body).toEqual({ mediaAssetId: MEDIA })
+    expect(result).toEqual({ shotId: SHOT_B, mediaAssetId: MEDIA, timing: 'fit' })
+  })
+
+  it('set_end_frame の clear は DELETE し、画像と一緒には受けない', async () => {
+    const fake = createFakeApi([
+      ownedShots(PROJECT, [SHOT_A]),
+      { method: 'DELETE', path: `/shots/${SHOT_A}/end-frame`, status: 204, data: null },
+    ])
+    const cleared = jsonOf(await setEndFrameTool.run({ projectId: PROJECT, shotId: SHOT_A, clear: true }, depsFor(fake)))
+    expect(cleared).toEqual({ shotId: SHOT_A, mediaAssetId: null })
+    const both = await setEndFrameTool.run({ projectId: PROJECT, shotId: SHOT_A, clear: true, mediaAssetId: ulid('MD5') }, depsFor(fake))
+    expect(textOf(both)).toContain('clear=true のときは画像を指定しないでください')
+    expect(fake.callsTo('DELETE', `/shots/${SHOT_A}/end-frame`)).toHaveLength(1)
   })
 
   it('draw_start_frames・set_start_frame は別の作品の Shot なら何も書かずに断る', async () => {

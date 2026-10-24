@@ -1,6 +1,13 @@
 import { MediaAssetId as MediaAssetIdSchema, ShotId as ShotIdSchema, newId } from '@ixa/domain'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { clearManualStartFrame, manualStartFrameOf, replaceManualStartFrame } from '../start-frame.js'
+import {
+  clearManualEndFrame,
+  clearManualStartFrame,
+  manualEndFrameOf,
+  manualStartFrameOf,
+  replaceManualEndFrame,
+  replaceManualStartFrame,
+} from '../start-frame.js'
 import { createInMemoryShotReferenceRepository, type InMemoryShotReferenceRepository } from '../testing.js'
 
 /**
@@ -40,5 +47,29 @@ describe('最初のフレーム', () => {
     await clearManualStartFrame(references, shotId)
 
     expect(await manualStartFrameOf(references, shotId)).toBeNull()
+  })
+})
+
+describe('終わりの画像', () => {
+  it('最初のフレームとは別の 1 枚として付け替え・外しができる', async () => {
+    await replaceManualStartFrame(references, shotId, first)
+    await replaceManualEndFrame(references, shotId, first)
+    await replaceManualEndFrame(references, shotId, second)
+
+    expect(await manualEndFrameOf(references, shotId)).toBe(second)
+    expect(await manualStartFrameOf(references, shotId)).toBe(first)
+    expect(references.snapshot().filter((reference) => reference.role === 'end_frame')).toHaveLength(1)
+
+    await clearManualEndFrame(references, shotId)
+    expect(await manualEndFrameOf(references, shotId)).toBeNull()
+    expect(await manualStartFrameOf(references, shotId)).toBe(first)
+  })
+
+  it('最初のフレームを外しても終わりの画像は残る', async () => {
+    await replaceManualEndFrame(references, shotId, second)
+    await replaceManualStartFrame(references, shotId, first)
+    await clearManualStartFrame(references, shotId)
+
+    expect(await manualEndFrameOf(references, shotId)).toBe(second)
   })
 })

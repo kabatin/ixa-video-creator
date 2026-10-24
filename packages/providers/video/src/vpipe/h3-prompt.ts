@@ -58,6 +58,13 @@ const IMAGE_TO_VIDEO_LINE =
   'For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.'
 
 /** 1 行目（開始画像と最後の画像）。`S.SS` は動画の長さ。 */
+/**
+ * 1 行目（最後の画像だけ。開始画像も前の Shot のコマも無いとき）。2026-10-24 に足した。
+ * 書き方は上の 2 つに揃える（公式ガイドに単独の例は無い）。
+ */
+const lastOnlyLine = (durationSec: number): string =>
+  `For the target video, at ${durationSec.toFixed(2)} seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.`
+
 const firstLastLine = (durationSec: number): string =>
   'How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the ' +
   `0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the ${durationSec.toFixed(2)}-second mark ` +
@@ -152,8 +159,13 @@ export type H3PromptInput = {
   readonly spec: ShotGenerationSpec
   /** 開始画像を付けて投げるか（`chooseStartImage` の結果）。 */
   readonly hasStartImage: boolean
-  /** 最後の画像を付けて投げるか。**いまは常に false**（付ける画面がまだ無い）。 */
+  /** 最後の画像（終わりの画像。2026-10-24）を付けて投げるか。 */
   readonly hasEndImage: boolean
+  /**
+   * 作る動画の長さ（秒。コマ数 ÷ 24）。最後の画像を合わせる位置に使う。
+   * **仕様の尺ではない。** H3 は 17n+5 コマしか作れず、仕様の尺より長くなる。省くと仕様の尺。
+   */
+  readonly videoSec?: number
   /** 組み直すときの版。省くといまの版（`H3_PROMPT_FORMAT`）。 */
   readonly format?: H3PromptFormat
 }
@@ -167,9 +179,12 @@ export type H3PromptInput = {
 export const buildH3Prompt = (input: H3PromptInput): string => {
   const { spec, hasStartImage, hasEndImage, format = H3_PROMPT_FORMAT } = input
   const parts = spec.promptParts
+  const videoSec = input.videoSec ?? spec.durationSec
 
   const referenceLine = hasEndImage
-    ? firstLastLine(spec.durationSec)
+    ? hasStartImage
+      ? firstLastLine(videoSec)
+      : lastOnlyLine(videoSec)
     : hasStartImage
       ? IMAGE_TO_VIDEO_LINE
       : null

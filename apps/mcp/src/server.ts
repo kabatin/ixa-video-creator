@@ -30,6 +30,7 @@ import {
   drawStartFramesTool,
   listStartFrameHistoryTool,
   retryImageTool,
+  setEndFrameTool,
   setStartFrameTool,
   useStartFrameTool,
 } from './tools/start-frames.js'
@@ -69,6 +70,7 @@ export const TOOLS: readonly ToolDef[] = [
   // 絵
   drawStartFramesTool,
   setStartFrameTool,
+  setEndFrameTool,
   listStartFrameHistoryTool,
   useStartFrameTool,
   retryImageTool,

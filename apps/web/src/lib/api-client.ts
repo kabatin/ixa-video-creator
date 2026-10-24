@@ -41,6 +41,7 @@ import { createShotBulkApi, type ShotBulkApi } from '@/lib/shot-bulk-api'
 import { createShotEditApi, type ShotEditApi } from '@/lib/shot-edit-api'
 import { createModelsApi, type ModelsApi } from '@/lib/models-api'
 import { createShotStartFrameApi, type ShotStartFrameApi } from '@/lib/shot-start-frame-api'
+import { createShotEndFrameApi, type ShotEndFrameApi } from '@/lib/shot-end-frame-api'
 import { createImageCheckApi, type ImageCheckApi } from '@/lib/image-check'
 import { createProjectConceptApi, type ProjectConceptApi } from '@/lib/project-concept-api'
 import { createAiSettingsApi, type AiSettingsApi } from '@/lib/ai-settings-api'
@@ -162,6 +163,7 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
   ShotEditApi &
   ModelsApi &
   ShotStartFrameApi &
+  ShotEndFrameApi &
   ImageCheckApi &
   ProjectConceptApi &
   AiSettingsApi &
@@ -292,6 +294,7 @@ export const createApiClient = (
     ...createShotEditApi(requester),
     ...createModelsApi(requester),
     ...createShotStartFrameApi(requester),
+    ...createShotEndFrameApi(requester),
     ...createImageCheckApi(requester),
     ...createProjectConceptApi(requester),
     ...createAiSettingsApi(requester),

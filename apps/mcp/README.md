@@ -2,7 +2,7 @@
 
 stdio で話す MCP サーバ。ixa の API（`pnpm dev` の API、既定 `http://127.0.0.1:3001`）を
 自動化用の鍵（Bearer）で呼ぶ薄いクライアントで、曲作り → Shot 割り → 最初のコマ → 動画 → テロップ・ナレーション・歌詞・音 →
-書き出しまでを 57 のツールで扱う（ADR-0049。エフェクトの 3 本は ADR-0050、サムネイルは ADR-0051、効果音は ADR-0052・ADR-0054、
+書き出しまでを 58 のツールで扱う（ADR-0049。エフェクトの 3 本は ADR-0050、サムネイルは ADR-0051、効果音は ADR-0052・ADR-0054、
 最初のコマの履歴とやり直しは ADR-0055、Take のレビューは ADR-0057）。各ツールには危険度の印（読むだけ・書く・消す・費用・設定）があり、
 MCP の annotations にも写している（ADR-0058）。印はツールのいちばん重い操作に合わせる。`action` で重さが変わるツール
 （`edit_character` の `update` と `delete` など）は、AI エージェントの会話の確認では呼び出しごとの印（`riskOf`）で決める。
@@ -78,7 +78,7 @@ IXA_API_TOKEN=... IXA_WORKSPACE_ID=... pnpm --filter @ixa/mcp --silent start
 | 作品 | `ixa_status` · `set_ai` · `create_project` · `get_project` · `update_project` · `duplicate_project` · `import_from_project` |
 | 曲 | `generate_music` · `upload_music` · `set_master_track` · `music_overview` |
 | Shot | `plan_shots` · `edit_shots` · `restructure_shots` · `draft_storyboard` · `create_character` · `edit_character` · `create_location` · `edit_location` · `manage_brand_assets` |
-| 絵 | `draw_start_frames` · `set_start_frame` · `list_start_frame_history` · `use_start_frame` · `retry_image` · `view` |
+| 絵 | `draw_start_frames` · `set_start_frame` · `set_end_frame` · `list_start_frame_history` · `use_start_frame` · `retry_image` · `view` |
 | Take | `generate_takes` · `import_take` · `list_takes` · `adopt_take` · `review_take` · `hide_takes` · `upscale_takes` · `wait` · `cancel_jobs` · `align_to_music` |
 | テロップと声 | `add_telops` · `list_telops` · `edit_clips` · `remove_telops` · `set_narration` · `speak_narration` · `set_lyrics` |
 | エフェクトと音 | `add_effects` · `list_effects` · `remove_effects` · `analyze_motion` · `suggest_sfx` · `generate_sfx` · `upload_sfx` · `list_sfx` · `remove_sfx` · `edit_audio` |
@@ -145,7 +145,7 @@ IXA_API_TOKEN=... IXA_WORKSPACE_ID=... pnpm --filter @ixa/mcp --silent start
 
 `ixa_status` · `set_ai` · `create_project` · `get_project` · `generate_music` · `upload_music` ·
 `set_master_track` · `music_overview` · `plan_shots` · `edit_shots` · `create_character` · `create_location` ·
-`draw_start_frames` · `set_start_frame` · `list_start_frame_history` · `use_start_frame` · `retry_image` · `view` · `generate_takes` · `list_takes` · `adopt_take` ·
+`draw_start_frames` · `set_start_frame` · `set_end_frame` · `list_start_frame_history` · `use_start_frame` · `retry_image` · `view` · `generate_takes` · `list_takes` · `adopt_take` ·
 `review_take` · `upscale_takes` · `wait` · `add_effects` · `list_effects` · `remove_effects` · `analyze_motion` · `suggest_sfx` · `generate_sfx` ·
 `list_sfx` · `remove_sfx` · `export` · `export_thumbnail`
 

@@ -52,6 +52,7 @@ import { shotBulkRoutes } from './routes/shots-bulk.js'
 import { shotBulkFinalRoutes } from './routes/shots-bulk-final.js'
 import { shotEditRoutes } from './routes/shot-edits.js'
 import { shotStartFrameRoutes } from './routes/shot-start-frame.js'
+import { shotEndFrameRoutes } from './routes/shot-end-frame.js'
 import { shotStartFrameGenerateRoutes, type StartFrameGenerateRoutesDeps } from './routes/shot-start-frame-generate.js'
 import { shotTakeImportRoutes } from './routes/shot-take-import.js'
 import { shotPosterRoutes } from './routes/shot-posters.js'
@@ -379,6 +380,17 @@ export const createApp = (deps: AppDeps) => {
       mediaAssets,
       shotReferences: deps.shotReferences,
       imageJobs: deps.imageJobs,
+      transaction: deps.editTransaction,
+    }),
+  )
+  // 終わりの画像（2026-10-24）。付けると Shot は「Take を尺に合わせる」になる。
+  app.route(
+    '/',
+    shotEndFrameRoutes({
+      shots: deps.shots,
+      projects,
+      mediaAssets,
+      shotReferences: deps.shotReferences,
       transaction: deps.editTransaction,
     }),
   )

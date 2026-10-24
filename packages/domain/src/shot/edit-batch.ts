@@ -120,6 +120,8 @@ export const EditBatchEntry = z.object({
   cast: z.array(ShotCharacter.omit({ shotId: true })).optional(),
   /** 手で付けた開始フレームを変えたときだけ持つ（2026-10-19）。**`null` は「付けていなかった」、欄が無いのは「触っていない」。** */
   startFrame: MediaAssetId.nullable().optional(),
+  /** 手で付けた終わりの画像を変えたときだけ持つ（2026-10-24）。意味は `startFrame` と同じ。 */
+  endFrame: MediaAssetId.nullable().optional(),
 })
 export type EditBatchEntry = z.infer<typeof EditBatchEntry>
 
@@ -280,4 +282,5 @@ export const hasChanges = (entry: EditBatchEntry): boolean =>
   undoTouchesSelectedTake(entry) ||
   undoTouchesStatus(entry) ||
   entry.cast !== undefined ||
-  entry.startFrame !== undefined
+  entry.startFrame !== undefined ||
+  entry.endFrame !== undefined

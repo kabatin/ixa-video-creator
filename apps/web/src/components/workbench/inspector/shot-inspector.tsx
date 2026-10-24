@@ -9,6 +9,7 @@ import { FootageImportForm } from '@/components/workbench/inspector/footage-impo
 import { ShotCastSection } from '@/components/workbench/inspector/shot-cast-section'
 import { ShotGenerateSection } from '@/components/workbench/inspector/shot-generate-section'
 import { StartFrameField } from '@/components/workbench/inspector/start-frame-field'
+import { EndFrameField, type EndFrameCandidate } from '@/components/workbench/inspector/end-frame-field'
 import { TakeSpeedField } from '@/components/workbench/inspector/take-speed-field'
 import { TakeTimingField } from '@/components/workbench/inspector/take-timing-field'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
@@ -33,6 +34,7 @@ import {
 } from '@/lib/camera-options'
 import { formatClock, formatDuration, formatSpan } from '@/lib/format-time'
 import { isGeneratingStatus } from '@/lib/shot-display'
+import { startFrameKnownFor } from '@/lib/shot-posters'
 import { parseClockInput, parseDurationInput } from '@/lib/time-input'
 
 /** 上の欄が読み込まれて背が伸びる間、頼まれた区切りへ送り直す時間。 */
@@ -58,6 +60,14 @@ export const ShotInspector = ({
   /** 最初のフレームが付いているか（ADR-0025）。生成欄が押せるかの判定に渡す。 */
   const [hasStartFrame, setHasStartFrame] = useState(false)
   const sections = useRef<Partial<Record<InspectorTab, HTMLDivElement | null>>>({})
+  /** 終わりの画像に使える、最初のフレームが付いているほかの Shot（ループの終わりに最初の Shot の絵を使う）。 */
+  const endFrameCandidates = useMemo<readonly EndFrameCandidate[]>(
+    () =>
+      (workbench.shots ?? [])
+        .filter((other) => other.id !== shot.id && startFrameKnownFor(workbench.posters, other.id) === true)
+        .map((other) => ({ id: other.id, code: other.code })),
+    [workbench.shots, workbench.posters, shot.id],
+  )
 
   /**
    * メニュー「生成」や「Take を作る」から来たら、その区切りまで送る（同じタブをもう一度頼まれても送り直す）。
@@ -143,6 +153,16 @@ export const ShotInspector = ({
               onSaved={workbench.refresh}
               // 絵ができたとき（出来事で posterEpoch が進む）にも読み直す。どちらも増えるだけなので和で足りる。
               version={workbench.serverEpoch + workbench.posterEpoch}
+            />
+            <EndFrameField
+              shot={shot}
+              workspaceId={workbench.project.workspaceId}
+              candidates={endFrameCandidates}
+              disabled={generating}
+              // 付けるとサーバが「Take を尺に合わせる」に替えるので、Shot を読み直して時間の合わせ方の欄を追いつかせる。
+              onSaved={workbench.refresh}
+              // 取り消し（⌘Z）で戻ったときも読み直す。最初のフレームの欄と同じ。
+              version={workbench.serverEpoch}
             />
           </Section>
 

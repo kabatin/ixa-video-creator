@@ -127,10 +127,9 @@ describe('capability 宣言', () => {
     expect(vpipeH3TurboModel.capabilities.fps).toEqual([24])
   })
 
-  it('参照は開始画像の 2 つの role だけ。end_frame はまだ宣言しない', () => {
+  it('参照は開始画像の 2 つの role と、終わりの画像（end_frame。2026-10-24）', () => {
     const { referenceImages } = vpipeH3TurboModel.capabilities
-    expect(referenceImages).toEqual({ max: 2, roles: ['start_frame', 'previous_shot_last_frame'] })
-    expect(referenceImages.roles).not.toContain('end_frame')
+    expect(referenceImages).toEqual({ max: 2, roles: ['start_frame', 'previous_shot_last_frame', 'end_frame'] })
   })
 
   it('negative prompt と音は宣言しない。最初のフレームは必須にしない', () => {
@@ -204,14 +203,30 @@ describe('本文の組み立て: 開始画像の有無と文面（h3-official-v2
   const IMAGE = { data: 'AAAA', media_type: 'image/png' as const }
 
   it('画像を後から足す投入でも、足すと伝えれば 1 行目が入る', () => {
-    const body = buildVpipeBody({ spec: spec(), quality: 'draft', frames: 56, startImage: null, hasStartImage: true })
+    const body = buildVpipeBody({ spec: spec(), quality: 'draft', frames: 56, startImage: null, hasStartImage: true, hasEndImage: false })
     expect(body.prompt.startsWith('For the target video, at 0.00 seconds')).toBe(true)
     expect(body.start_image).toBeNull()
   })
 
+  it('終わりの画像を足すと伝えれば、最初と最後を作る動画の長さ（コマ数 ÷ 24）に合わせる 1 行目になる', () => {
+    const body = buildVpipeBody({ spec: spec(), quality: 'draft', frames: 124, startImage: null, hasStartImage: true, hasEndImage: true })
+    expect(body.prompt.split('\n')[0]).toBe(
+      'How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark ' +
+        'of the target video; Picture 2 (from Shot 1) aligns with the 5.17-second mark of the target video.',
+    )
+    expect(body.end_image).toBeNull()
+  })
+
+  it('終わりの画像だけなら、最後の位置にだけ合わせる 1 行目になる', () => {
+    const body = buildVpipeBody({ spec: spec(), quality: 'draft', frames: 124, startImage: null, hasStartImage: false, hasEndImage: true })
+    expect(body.prompt.split('\n')[0]).toBe(
+      'For the target video, at 5.17 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.',
+    )
+  })
+
   it('画像を渡しながら「画像なし」で組もうとしたら投げる（v1 の取り違えを黙って通さない）', () => {
     expect(() =>
-      buildVpipeBody({ spec: spec(), quality: 'draft', frames: 56, startImage: IMAGE, hasStartImage: false }),
+      buildVpipeBody({ spec: spec(), quality: 'draft', frames: 56, startImage: IMAGE, hasStartImage: false, hasEndImage: false }),
     ).toThrow(/画像なし/)
   })
 })
@@ -224,9 +239,10 @@ describe('本文の組み立て', () => {
       frames: 107,
       startImage: null,
       hasStartImage: false,
+      hasEndImage: false,
     })
 
-  it('契約どおりの形になる（出力は Project の解像度そのもの・最後のフレームは常に null）', () => {
+  it('契約どおりの形になる（出力は Project の解像度そのもの・終わりの画像は組む時点では null）', () => {
     expect(build({ seed: 42 })).toEqual({
       // 公式の書き方へ組み直してから送る（ADR-0042）。文面は `h3-prompt.test.ts` が版ごと凍結している。
       prompt: [

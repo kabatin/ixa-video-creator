@@ -73,28 +73,49 @@ const castKey = (cast: readonly NonNullable<EditBatchEntry['cast']>[number][]): 
   JSON.stringify(cast.map(({ characterId, lookId, prominence, order }) => [characterId, lookId, prominence, order]))
 
 /**
- * 登場人物・開始フレームを変える前の記録（2026-10-19）。**変わらないなら作らない**（`null`）。
- * 登場人物は丸ごと、開始フレームは付いていた素材（無ければ `null`）を控える。
+ * 登場人物・開始フレーム・終わりの画像を変える前の記録（2026-10-19）。**変わらないなら作らない**（`null`）。
+ * 登場人物は丸ごと、開始フレームと終わりの画像は付いていた素材（無ければ `null`）を控える。
+ * 終わりの画像は Shot の欄（`timing`）も一緒に変えることがあるので、その前の値を `patch` に控える。
  */
 export const recordShotAttachments = (
   recorder: EditBatchRecorder,
   shot: Shot,
   change:
     | { readonly kind: 'cast'; readonly before: NonNullable<EditBatchEntry['cast']>; readonly after: NonNullable<EditBatchEntry['cast']> }
-    | { readonly kind: 'startFrame'; readonly before: MediaAssetId | null; readonly after: MediaAssetId | null },
+    | { readonly kind: 'startFrame'; readonly before: MediaAssetId | null; readonly after: MediaAssetId | null }
+    | {
+        readonly kind: 'endFrame'
+        readonly before: MediaAssetId | null
+        readonly after: MediaAssetId | null
+        /** 一緒に変える Shot の欄の、変える前の値。 */
+        readonly patch: EditBatchEntry['patch']
+      },
 ): Promise<EditBatch | null> => {
-  const unchanged = change.kind === 'cast' ? castKey(change.before) === castKey(change.after) : change.before === change.after
+  const unchanged =
+    change.kind === 'cast'
+      ? castKey(change.before) === castKey(change.after)
+      : change.before === change.after && (change.kind === 'startFrame' || Object.keys(change.patch).length === 0)
   if (unchanged) return Promise.resolve(null)
   return recordEditBatch(recorder, {
     projectId: shot.projectId,
     kind: 'shot_edit',
-    summarize: () => (change.kind === 'cast' ? `${shot.code} の登場人物を変える` : `${shot.code} の開始フレームを変える`),
-    entries: [
-      {
-        shotId: shot.id,
-        patch: {},
-        ...(change.kind === 'cast' ? { cast: [...change.before] } : { startFrame: change.before }),
-      },
-    ],
+    summarize: () => `${shot.code} の${ATTACHMENT_LABELS[change.kind]}を変える`,
+    entries: [attachmentEntry(shot, change)],
   })
+}
+
+const ATTACHMENT_LABELS = { cast: '登場人物', startFrame: '開始フレーム', endFrame: '終わりの画像' } as const
+
+const attachmentEntry = (
+  shot: Shot,
+  change: Parameters<typeof recordShotAttachments>[2],
+): EditBatchEntry => {
+  switch (change.kind) {
+    case 'cast':
+      return { shotId: shot.id, patch: {}, cast: [...change.before] }
+    case 'startFrame':
+      return { shotId: shot.id, patch: {}, startFrame: change.before }
+    case 'endFrame':
+      return { shotId: shot.id, patch: change.patch, endFrame: change.before }
+  }
 }

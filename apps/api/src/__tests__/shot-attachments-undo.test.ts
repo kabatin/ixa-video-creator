@@ -7,7 +7,7 @@ import {
   createInMemoryShotReferenceRepository,
   createInMemoryShotRepository,
 } from '@ixa/generation/testing'
-import { manualStartFrameOf } from '@ixa/generation'
+import { manualEndFrameOf, manualStartFrameOf } from '@ixa/generation'
 import { describe, expect, it } from 'vitest'
 import type { EditBatchSummaryResponse } from '../routes/edit-batches.js'
 import { baseAppDeps, createTestApp } from './app-deps.js'
@@ -29,6 +29,7 @@ const build = async (options: { readonly recordFails?: boolean } = {}) => {
   const looks = createInMemoryCharacterLookRepository()
   const shotCharacters = createInMemoryShotCharacterRepository()
   const shotReferences = createInMemoryShotReferenceRepository()
+  const shots = createInMemoryShotRepository([shot])
   const editBatches = createInMemoryEditBatchRepository()
   const recorder =
     options.recordFails === true ? { ...editBatches, create: () => Promise.reject(new Error('記録を作れません')) } : editBatches
@@ -39,7 +40,7 @@ const build = async (options: { readonly recordFails?: boolean } = {}) => {
   const app = createTestApp({
     ...baseAppDeps(),
     projects: createInMemoryProjectRepository([project]),
-    shots: createInMemoryShotRepository([shot]),
+    shots,
     characters,
     looks,
     shotCharacters,
@@ -57,7 +58,7 @@ const build = async (options: { readonly recordFails?: boolean } = {}) => {
     ((await (await app.request(`/projects/${project.id}/edit-batches`)).json()) as { data: EditBatchSummaryResponse[] }).data[0]
   const undo = (id: string) => send('POST', `/projects/${project.id}/edit-batches/${id}/undo`)
   const cast = [{ characterId: hero.id, lookId: look.id, prominence: 'primary', order: 0 }]
-  return { shot, shotCharacters, shotReferences, image, other, send, latest, undo, cast, hero }
+  return { shot, shots, shotCharacters, shotReferences, image, other, send, latest, undo, cast, hero }
 }
 
 describe('登場人物', () => {
@@ -113,5 +114,27 @@ describe('開始フレーム', () => {
     const f = await build({ recordFails: true })
     expect((await f.send('PUT', `/shots/${f.shot.id}/start-frame`, { mediaAssetId: f.image.id })).status).toBe(500)
     expect(await manualStartFrameOf(f.shotReferences, f.shot.id)).toBeNull()
+  })
+})
+
+describe('終わりの画像', () => {
+  it('付けると尺に合わせる再生になり、戻すと画像も再生の仕方も前に戻る', async () => {
+    const f = await build()
+    expect((await f.send('PUT', `/shots/${f.shot.id}/end-frame`, { mediaAssetId: f.image.id })).status).toBe(200)
+    expect((await f.shots.findById(f.shot.id))?.timing).toBe('fit')
+    const batch = await f.latest()
+    expect(batch?.summary).toBe('CUT-05 の終わりの画像を変える')
+
+    expect((await f.undo(batch!.id)).status).toBe(200)
+    expect(await manualEndFrameOf(f.shotReferences, f.shot.id)).toBeNull()
+    expect((await f.shots.findById(f.shot.id))?.timing).toBe('trim')
+  })
+
+  it('外したのを戻すと、前の画像が付き直る', async () => {
+    const f = await build()
+    await f.send('PUT', `/shots/${f.shot.id}/end-frame`, { mediaAssetId: f.image.id })
+    expect((await f.send('DELETE', `/shots/${f.shot.id}/end-frame`)).status).toBe(204)
+    await f.undo((await f.latest())!.id)
+    expect(await manualEndFrameOf(f.shotReferences, f.shot.id)).toBe(f.image.id)
   })
 })
