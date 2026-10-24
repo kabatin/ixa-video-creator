@@ -201,3 +201,19 @@ export const extractLastFrame = async (
   const position = clampSeekSec(durationSec - LAST_FRAME_BACKOFF_SEC, durationSec, fps)
   await writeSingleFrame(inputPath, outputPath, position, [], runOptions)
 }
+
+/**
+ * 番号（0 始まり）でコマを 1 枚切り出す。**「前の Shot から続ける」の元のコマ**に使う（2026-10-24）。
+ *
+ * 秒で狙う `-ss` は速さを取るため、キーフレーム送りや丸めで隣のコマが出ることがある。
+ * 繋ぎ目は 1 コマずれると戻り・飛びとして見えるので、デコードして番号で選ぶ。
+ */
+export const extractFrameByIndex = async (
+  inputPath: string,
+  outputPath: string,
+  frameIndex: number,
+  runOptions?: RunOptions,
+): Promise<void> => {
+  const index = z.number().int().nonnegative().parse(frameIndex)
+  await writeSingleFrame(inputPath, outputPath, 0, ['-vf', `select=eq(n\\,${index})`, '-fps_mode', 'passthrough'], runOptions)
+}

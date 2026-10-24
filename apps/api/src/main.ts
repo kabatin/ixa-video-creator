@@ -54,7 +54,8 @@ import { VOICE_QUEUE_NAME } from './narration/voice-queue.js'
 import { MUSIC_QUEUE_NAME } from './music/deps.js'
 import { SFX_QUEUE_NAME } from './sfx/deps.js'
 import { MOTION_QUEUE_NAME, type MotionQueue } from './motion/deps.js'
-import { createGenerationContextSource } from '@ixa/generation'
+import { createContinuityFrameSource, createGenerationContextSource } from '@ixa/generation'
+import { extractFrameByIndex } from '@ixa/media'
 import { RENDER_QUEUE_NAME, type RenderQueue } from './routes/renders.js'
 import { THUMBNAIL_QUEUE_NAME, type ThumbnailQueue } from './routes/thumbnails.js'
 import { ANALYSIS_QUEUE_NAME, type AnalysisQueue } from './routes/music.js'
@@ -66,7 +67,7 @@ import {
   createStubVideoProvider,
   createLocalVideoProviders,
 } from '@ixa/provider-video'
-import { createStorage } from '@ixa/storage'
+import { continuityFrameKey, createStorage } from '@ixa/storage'
 import type { FileRoutesDeps } from './routes/files.js'
 import { Queue } from 'bullmq'
 import IORedis from 'ioredis'
@@ -524,6 +525,13 @@ export const main = (): void => {
       shots,
       takes,
       mediaAssets,
+      // 前の Shot が画面に出す最後のコマ（2026-10-24）。**worker と同じ口を配線する**（違うと spec_drift）。
+      continuityFrames: createContinuityFrameSource({
+        mediaAssets,
+        storage,
+        extractFrame: (input, output, index) => extractFrameByIndex(input, output, index),
+        frameKey: continuityFrameKey,
+      }),
     }),
     generationQueue: queuePort,
     imageJobs: createImageJobRepository(db),

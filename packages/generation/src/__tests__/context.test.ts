@@ -6,7 +6,7 @@ import {
   type Character, type CharacterLook, type GenerationContextSource,
   type IdentityImageRole, type Location, type ReferenceRole, type Shot,
 } from '@ixa/domain'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createGenerationContextSource, GenerationContextError, type GenerationContextDeps,
 } from '../context.js'
@@ -414,6 +414,59 @@ describe('previousShotLastFrame', () => {
     const context = buildContext({ shots: createInMemoryShotRepository([first, second]) })
 
     await expect(context.previousShotLastFrame(second.id)).resolves.toBeNull()
+  })
+
+  /**
+   * 前の Shot が**画面に出す最後のコマ**から続ける（制作者 2026-10-24）。ファイル末尾から作ると、
+   * 3.75 秒の Take を 3.333 秒に切った前の Shot との間で 10 コマ飛んでいた。
+   */
+  it('繋ぎ目のコマの口があれば、前の Shot が画面に出す最後のコマを番号で頼む', async () => {
+    const video = await mediaAssets.create({
+      workspaceId, projectId: null, kind: 'video', storageKey: 'cut.mp4',
+      mimeType: 'video/mp4', bytes: 4096, checksumSha256: '7'.repeat(64),
+      origin: { type: 'upload', uploadedBy: 'tester' },
+      probe: { durationSec: 3.75, videoDurationSec: 3.75, width: 1024, height: 576, fps: 24, hasAudio: false, codec: 'h264' },
+    })
+    const first = aShot(projectId, { order: 1000, code: 'CUT-01', startSec: 0, durationSec: 3.333 })
+    const take = aTake(first, '8'.repeat(64), { mediaAssetId: video.id })
+    const second = aShot(projectId, {
+      order: 2000, code: 'CUT-02', startSec: 3.333, durationSec: 3.333, continuityMode: 'previous_shot',
+    })
+    const continuityId = newId(MediaAssetIdSchema)
+    const frameAt = vi.fn().mockResolvedValue(continuityId)
+    const context = buildContext({
+      shots: createInMemoryShotRepository([{ ...first, selectedTakeId: take.id }, second]),
+      takes: createInMemoryTakeRepository([take]),
+      continuityFrames: { frameAt },
+    })
+
+    await expect(context.previousShotLastFrame(second.id)).resolves.toBe(continuityId)
+    expect(frameAt).toHaveBeenCalledWith(expect.objectContaining({ id: video.id }), 79)
+  })
+
+  it('長さか速さが分からない Take では、今までどおり最終フレームを使う', async () => {
+    const lastFrame = await mediaAssets.create({
+      workspaceId, projectId: null, kind: 'image', storageKey: 'noprobe-last.png',
+      mimeType: 'image/png', bytes: 1024, checksumSha256: '5'.repeat(64),
+      origin: { type: 'upload', uploadedBy: 'tester' },
+    })
+    const video = await mediaAssets.create({
+      workspaceId, projectId: null, kind: 'video', storageKey: 'noprobe.mp4',
+      mimeType: 'video/mp4', bytes: 4096, checksumSha256: '6'.repeat(64),
+      origin: { type: 'upload', uploadedBy: 'tester' }, lastFrameAssetId: lastFrame.id,
+    })
+    const first = aShot(projectId, { order: 1000, code: 'CUT-01' })
+    const take = aTake(first, '9'.repeat(64), { mediaAssetId: video.id })
+    const second = aShot(projectId, { order: 2000, code: 'CUT-02', continuityMode: 'previous_shot' })
+    const frameAt = vi.fn()
+    const context = buildContext({
+      shots: createInMemoryShotRepository([{ ...first, selectedTakeId: take.id }, second]),
+      takes: createInMemoryTakeRepository([take]),
+      continuityFrames: { frameAt },
+    })
+
+    await expect(context.previousShotLastFrame(second.id)).resolves.toBe(lastFrame.id)
+    expect(frameAt).not.toHaveBeenCalled()
   })
 
   it('独立した Shot は前に採用 Take があっても最終フレームを使わない（ADR-0019）', async () => {

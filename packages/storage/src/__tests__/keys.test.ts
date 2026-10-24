@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mediaKey, posterKey, proxyKey, renderKey, thumbnailKey, waveformKey } from '../keys.js'
+import { continuityFrameKey, mediaKey, posterKey, proxyKey, renderKey, thumbnailKey, waveformKey } from '../keys.js'
 
 const WORKSPACE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const MEDIA_ASSET_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
@@ -89,5 +89,17 @@ describe('renderKey', () => {
 
   it('不正な入力は throw する', () => {
     expect(() => renderKey(PROJECT_ID, '..', 'mp4')).toThrow()
+  })
+})
+
+describe('continuityFrameKey', () => {
+  it('素材の下にコマの番号で置く', () => {
+    expect(continuityFrameKey(WORKSPACE_ID, MEDIA_ASSET_ID, 79)).toBe(`media/${WORKSPACE_ID}/${MEDIA_ASSET_ID}/continuity-79.jpg`)
+  })
+
+  it('負の番号・小数・不正な ID は断る', () => {
+    expect(() => continuityFrameKey(WORKSPACE_ID, MEDIA_ASSET_ID, -1)).toThrow()
+    expect(() => continuityFrameKey(WORKSPACE_ID, MEDIA_ASSET_ID, 1.5)).toThrow()
+    expect(() => continuityFrameKey(WORKSPACE_ID, '../x', 1)).toThrow()
   })
 })

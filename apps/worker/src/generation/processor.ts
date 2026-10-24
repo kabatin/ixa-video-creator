@@ -16,6 +16,7 @@ import {
   type TakeId,
   generationSecFor,
   settledShotStatus,
+  continuitySourceInFor,
 } from '@ixa/domain'
 import { ProviderBusyError, ProviderError } from '@ixa/provider-core'
 import type {
@@ -467,6 +468,15 @@ const complete = async (
     lineage: lineageFieldsOf(lineage),
     autoRetake: job.autoRetake,
   })
+
+  /**
+   * 前の Shot のコマから作った Take は、頭の写しと動き出しのコマを捨てる（制作者 2026-10-24）。
+   * 捨てないと繋ぎ目で一瞬戻って見える。制作者が既にそれ以上切っていれば触らない。
+   */
+  const sourceInSec = continuitySourceInFor(shot, spec)
+  if (sourceInSec !== null) {
+    await deps.shots.update(shot.id, { sourceInSec })
+  }
 
   /**
    * **投入の失敗でジョブを落とさない。**

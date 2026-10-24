@@ -1,14 +1,14 @@
-import { normalizeProgramLoudness, upscaleForRender } from '@ixa/media'
+import { extractFrameByIndex, normalizeProgramLoudness, upscaleForRender } from '@ixa/media'
 import { join } from 'node:path'
 import { createProviderRegistry } from '@ixa/provider-core'
-import { createGenerationContextSource } from '@ixa/generation'
+import { createContinuityFrameSource, createGenerationContextSource } from '@ixa/generation'
 import {
   createFalVideoProvider,
   createLocalImageToVideoProvider,
   createLocalVideoProviders,
   createStubVideoProvider,
 } from '@ixa/provider-video'
-import { createStorage } from '@ixa/storage'
+import { continuityFrameKey, createStorage } from '@ixa/storage'
 import {
   createAiSettingsRepository,
   createDbClient,
@@ -284,6 +284,13 @@ export const createGenerationWiring = (
       shots: createShotRepository(db),
       takes: createTakeRepository(db),
       mediaAssets: createMediaAssetRepository(db),
+      // 前の Shot が画面に出す最後のコマ（2026-10-24）。**API と同じ口を配線する**（違うと spec_drift）。
+      continuityFrames: createContinuityFrameSource({
+        mediaAssets: createMediaAssetRepository(db),
+        storage,
+        extractFrame: (input, output, index) => extractFrameByIndex(input, output, index),
+        frameKey: continuityFrameKey,
+      }),
     }),
     scheduler,
     mediaQueue: mediaQueuePort,

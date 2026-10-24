@@ -18,6 +18,8 @@ import type {
   ShotId,
   ShotReference,
 } from '@ixa/domain'
+import { continuityFrameIndex } from '@ixa/domain'
+import type { ContinuityFrameSource } from './continuity-frames.js'
 
 /**
  * `GenerationContextSource` の実実装（ARCHITECTURE.md §8）。
@@ -36,6 +38,12 @@ export type GenerationContextDeps = {
   readonly shots: ShotRepository
   readonly takes: TakeRepository
   readonly mediaAssets: MediaAssetRepository
+  /**
+   * 前の Shot が画面に出す最後のコマを切り出す口（2026-10-24）。
+   * 無ければ今までどおり Take の最終フレーム（末尾の 0.1 秒手前）を使う。
+   * **api と worker の両方に配線すること**（片方だけだと参照が食い違い spec_drift で落ちる）。
+   */
+  readonly continuityFrames?: ContinuityFrameSource
 }
 
 /**
@@ -154,6 +162,9 @@ export const createGenerationContextSource = (
     /**
      * 連続性のために前 Shot の最終フレームを返す。
      *
+     * **繋ぎ目のコマの口があれば、前の Shot が画面に出す最後のコマを使う**（制作者 2026-10-24）。
+     * Take の末尾から作ると、前の Shot を短く切ったぶんコマが飛ぶ。長さか速さが分からない Take だけ末尾に戻る。
+     *
      * **posterKeys ではなく MediaAsset.lastFrameAssetId を使う。** posterKeys は
      * ストレージキーの配列でレビュー表示用であり、参照として渡せない
      * （`ShotGenerationSpec.references` は MediaAssetId を要求する）。
@@ -171,7 +182,14 @@ export const createGenerationContextSource = (
       if (take === null) return null
 
       const asset = await deps.mediaAssets.findById(take.mediaAssetId)
-      return asset?.lastFrameAssetId ?? null
+      if (asset === null) return null
+      // 映像の尺で数える（音声が長い素材でコマの外を指さない）。
+      const durationSec = asset.probe?.videoDurationSec ?? asset.probe?.durationSec ?? null
+      const fps = asset.probe?.fps ?? null
+      if (deps.continuityFrames === undefined || durationSec === null || fps === null) {
+        return asset.lastFrameAssetId
+      }
+      return deps.continuityFrames.frameAt(asset, continuityFrameIndex(previous, { durationSec, fps }))
     },
 
     async startFrame(shotId: ShotId): Promise<MediaAssetId | null> {

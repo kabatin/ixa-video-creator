@@ -68,3 +68,13 @@ export const lastFrameKey = (workspaceId: string, mediaAssetId: string): Storage
   assertValidSegment(mediaAssetId, 'mediaAssetId')
   return `media/${workspaceId}/${mediaAssetId}/last-frame.jpg`
 }
+
+/** 「前の Shot から続ける」の元のコマ（番号は 0 始まり。2026-10-24）。 */
+export const continuityFrameKey = (workspaceId: string, mediaAssetId: string, frameIndex: number): StorageKey => {
+  assertValidSegment(workspaceId, 'workspaceId')
+  assertValidSegment(mediaAssetId, 'mediaAssetId')
+  if (!Number.isInteger(frameIndex) || frameIndex < 0) {
+    throw new Error(`コマの番号は 0 以上の整数です: ${frameIndex}`)
+  }
+  return `media/${workspaceId}/${mediaAssetId}/continuity-${frameIndex}.jpg`
+}

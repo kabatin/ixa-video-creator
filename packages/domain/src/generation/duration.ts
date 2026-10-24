@@ -1,6 +1,7 @@
 import type { Seconds } from '../common/time.js'
 import type { Shot } from '../shot/shot.js'
 import { requestedSourceSec } from '../shot/timing.js'
+import { CONTINUITY_HEAD_MARGIN_SEC } from '../shot/continuity.js'
 
 /**
  * モデルが出せる尺の表現。
@@ -113,10 +114,15 @@ export const defaultSourceInSec = (
  * 尺そのものが最長を超えるときは、今までどおり `quantizeDuration` の伸ばす・断る規則に任せる。
  */
 export const generationSecFor = (
-  shot: Pick<Shot, 'timing' | 'durationSec' | 'sourceInSec'> & { readonly speed?: number },
+  shot: Pick<Shot, 'timing' | 'durationSec' | 'sourceInSec'> & {
+    readonly speed?: number
+    readonly continuityMode?: Shot['continuityMode']
+  },
   support: DurationSupport,
 ): Seconds => {
-  const wanted = requestedSourceSec(shot)
+  // 前の Shot から続ける Shot は頭の数コマを捨てる（`continuity.ts`）。そのぶん長めに頼む。
+  const wanted =
+    requestedSourceSec(shot) + (shot.continuityMode === 'previous_shot' ? CONTINUITY_HEAD_MARGIN_SEC : 0)
   const capped = Math.min(wanted, Math.max(shot.durationSec, longestDuration(support)))
   return quantizeDuration(capped, support)
 }
