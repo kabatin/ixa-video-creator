@@ -470,7 +470,7 @@ const complete = async (
   })
 
   /**
-   * 前の Shot のコマから作った Take は、頭の写しと動き出しのコマを捨てる（制作者 2026-10-24）。
+   * 前の Shot のコマから作った Take は、頭の写しのコマを捨てる（制作者 2026-10-24）。
    * 捨てないと繋ぎ目で一瞬戻って見える。制作者が既にそれ以上切っていれば触らない。
    */
   const sourceInSec = continuitySourceInFor(shot, spec)

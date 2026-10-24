@@ -322,10 +322,10 @@ describe('processGenerationJob', () => {
   })
 
   /**
-   * 前の Shot のコマから作った Take は、頭の写しと動き出しの 2 コマを捨てる（制作者 2026-10-24）。
+   * 前の Shot のコマから作った Take は、頭の写しの 1 コマを捨てる（制作者 2026-10-24）。
    * 捨てないと繋ぎ目で一瞬戻って見える。
    */
-  it('前の Shot のコマから作ったら、Shot の切り出し位置を 2 コマ目の終わりにする', async () => {
+  it('前の Shot のコマから作ったら、Shot の切り出し位置を 1 コマ目の終わりにする', async () => {
     const frameId = MediaAssetIdSchema.parse('01M5MT6JYQSJTCWJWZW9ABXEG7')
     const context: GenerationContextSource = {
       ...createPhase1EmptyContextSource(),
@@ -336,7 +336,7 @@ describe('processGenerationJob', () => {
     await runToCompletion(f)
 
     expect(f.takes.snapshot()[0]?.spec.references.map((r) => r.role)).toContain('previous_shot_last_frame')
-    expect(f.shots.snapshot()[0]?.sourceInSec).toBeCloseTo(2 / 30, 9)
+    expect(f.shots.snapshot()[0]?.sourceInSec).toBeCloseTo(1 / 30, 9)
   })
 
   it('前の Shot のコマを使わない生成では、切り出し位置を触らない', async () => {

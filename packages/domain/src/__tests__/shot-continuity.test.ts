@@ -44,9 +44,9 @@ describe('continuityFrameIndex（前の Shot が画面に出す最後のコマ�
 })
 
 describe('continuityHeadSkipSec（次の Shot の頭で捨てる長さ）', () => {
-  it('元のコマの写しと、動き出しの遅いコマを捨てる', () => {
-    expect(CONTINUITY_HEAD_SKIP_FRAMES).toBe(2)
-    expect(continuityHeadSkipSec(24)).toBeCloseTo(2 / 24, 9)
+  it('元のコマの写しの 1 コマだけ捨てる（2 コマ捨てると普通の素材で飛んだ）', () => {
+    expect(CONTINUITY_HEAD_SKIP_FRAMES).toBe(1)
+    expect(continuityHeadSkipSec(24)).toBeCloseTo(1 / 24, 9)
   })
 })
 
@@ -64,17 +64,17 @@ describe('generationSecFor（前の Shot から続ける Shot は、頭で捨て
     expect(generationSecFor({ ...shot(3.333), continuityMode: 'previous_shot' }, vpipe)).toBe(3.75)
   })
 
-  it('捨てる余裕は 16fps の 2 コマ分（遅いモデルでも足りる）', () => {
-    expect(CONTINUITY_HEAD_MARGIN_SEC).toBeCloseTo(2 / 16, 9)
+  it('捨てる余裕は 16fps の 1 コマ分（遅いモデルでも足りる）', () => {
+    expect(CONTINUITY_HEAD_MARGIN_SEC).toBeCloseTo(1 / 16, 9)
   })
 })
 
 describe('continuitySourceInFor（続けて作った Take の頭を捨てる切り出し位置）', () => {
   const ref = (role: 'previous_shot_last_frame' | 'style') => ({ mediaAssetId: 'x', role, weight: 0.8 })
 
-  it('前の Shot のコマから作った Take なら、2 コマ目の終わりから使う', async () => {
+  it('前の Shot のコマから作った Take なら、1 コマ目の終わりから使う', async () => {
     const { continuitySourceInFor } = await import('../shot/continuity.js')
-    expect(continuitySourceInFor(shot(3.333), { fps: 24, references: [ref('previous_shot_last_frame')] })).toBeCloseTo(2 / 24, 9)
+    expect(continuitySourceInFor(shot(3.333), { fps: 24, references: [ref('previous_shot_last_frame')] })).toBeCloseTo(1 / 24, 9)
   })
 
   it('前の Shot のコマを使っていなければ触らない', async () => {
@@ -85,6 +85,6 @@ describe('continuitySourceInFor（続けて作った Take の頭を捨てる切�
   it('制作者が既にそれ以上切っていれば触らない', async () => {
     const { continuitySourceInFor } = await import('../shot/continuity.js')
     expect(continuitySourceInFor(shot(3.333, 0.25), { fps: 24, references: [ref('previous_shot_last_frame')] })).toBeNull()
-    expect(continuitySourceInFor(shot(3.333, 2 / 24), { fps: 24, references: [ref('previous_shot_last_frame')] })).toBeNull()
+    expect(continuitySourceInFor(shot(3.333, 1 / 24), { fps: 24, references: [ref('previous_shot_last_frame')] })).toBeNull()
   })
 })
