@@ -270,7 +270,8 @@ describe('upload_sfx', () => {
   })
 
   it('ファイル名が名前の上限（200 字）を超えるなら、上げる前に日本語で断る', async () => {
-    const longPath = join(dir.path, `${'あ'.repeat(201)}.wav`)
+    // Linux はファイル名を 255 バイトで切る。全角だと 3 バイト／字で作れないので半角にする
+    const longPath = join(dir.path, `${'a'.repeat(201)}.wav`)
     await writeFile(longPath, Buffer.from('RIFF fake'))
     const fake = createFakeApi([])
     const result = await uploadSfxTool.run({ projectId: PROJECT, filePath: longPath }, depsFor(fake))
