@@ -20,6 +20,7 @@ import { VolumeControl } from '@/components/workbench/volume-control'
 import { Button } from '@/components/ui/button'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeError } from '@/lib/api-error'
+import { copyText } from '@/lib/copy-text'
 import { assetFolderNotice, createAssetFolderApi } from '@/lib/asset-folder-api'
 import { createRequester } from '@/lib/requester'
 import { buildMenus, type MenuCommand, type MenuItem } from '@/lib/menu-model'
@@ -106,8 +107,7 @@ export const WorkbenchMenu = ({
       side: visibleOf(dock.current, SIDE_TABS),
     })
     const url = `${window.location.origin}${href}`
-    navigator.clipboard
-      .writeText(url)
+    copyText(url)
       .then(() => {
         onNotice(`リンクをコピーしました: ${url}`)
       })

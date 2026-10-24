@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
+import { copyText } from '@/lib/copy-text'
 import {
   createEnvironmentApi,
   type WireEnvironment,
@@ -105,8 +106,7 @@ export const EnvironmentPanel = () => {
             type="button"
             onClick={() => {
               const text = missing.map((secret) => `${secret.envName}=`).join('\n')
-              void navigator.clipboard
-                ?.writeText(text)
+              void copyText(text)
                 .then(() => {
                   setCopied('コピーしました')
                 })

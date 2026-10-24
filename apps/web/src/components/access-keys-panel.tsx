@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { accessKeyState, formatWhen } from '@/lib/access-key-display'
 import { resolveApiBaseUrl } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
+import { copyText } from '@/lib/copy-text'
 import { createAuthApi, type WireAccessToken } from '@/lib/auth-api'
 import { LOGIN_PATH } from '@/lib/http'
 import { createRequester } from '@/lib/requester'
@@ -22,6 +23,7 @@ export const AccessKeysPanel = () => {
   const [label, setLabel] = useState('')
   const [issued, setIssued] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
 
   const reload = useCallback(() => {
     api
@@ -40,6 +42,7 @@ export const AccessKeysPanel = () => {
     try {
       const result = await api.issueAccessToken(label)
       setIssued(result.token)
+      setCopied(null)
       setLabel('')
       reload()
     } catch (cause: unknown) {
@@ -104,10 +107,16 @@ export const AccessKeysPanel = () => {
             <Button
               size="sm"
               onClick={() => {
-                void navigator.clipboard.writeText(issued)
+                copyText(issued)
+                  .then(() => {
+                    setCopied('コピーしました')
+                  })
+                  .catch((cause: unknown) => {
+                    setCopied(describeForPerson(cause))
+                  })
               }}
             >
-              写す
+              コピー
             </Button>
             <Button
               size="sm"
@@ -117,6 +126,7 @@ export const AccessKeysPanel = () => {
             >
               控えた
             </Button>
+            {copied !== null && <span className="self-center text-xs text-muted">{copied}</span>}
           </div>
         </section>
       )}
