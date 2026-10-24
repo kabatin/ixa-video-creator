@@ -64,10 +64,11 @@ export const PANEL_SPECS: Readonly<Record<PanelId, PanelSpec>> = Object.freeze({
   checks: { title: '検査', area: 'bottom' },
   history: { title: '変更履歴', area: 'bottom' },
   console: { title: 'コンソール', area: 'bottom' },
-  agent: { title: 'AI エージェント', area: 'bottom' },
   shots: { title: 'Shot 一覧', area: 'side' },
   inspector: { title: 'インスペクター', area: 'side' },
   assets: { title: '素材ツリー', area: 'left' },
+  // 左に置く（制作者 2026-10-24）。作品を見ながら話すので、中央と下を塞がない。
+  agent: { title: 'AI エージェント', area: 'left' },
 })
 
 /**
@@ -124,10 +125,10 @@ const DEFAULT_ORDER: readonly PanelId[] = [
   'checks',
   'history',
   'console',
-  'agent',
   'shots',
   'inspector',
   'assets',
+  'agent',
 ]
 
 /** テストから差し替えられるよう、使う口だけに絞る。 */
@@ -340,19 +341,26 @@ export const applyPreset = (api: DockLike, preset: Preset): void => {
 // 3: 下の区画に「検査」「変更履歴」「コンソール」を足し、タイムラインを先頭にした（2026-10-19）。
 //    版を上げないと、保存済みの配置には新しいタブが出ず、メニューから開くまで在ることに気づけない。
 // 4: 下の区画に「AI エージェント」を足した（ADR-0058。2026-10-23）。
-const LAYOUT_VERSION = 4
+// 5: 「AI エージェント」を下から左の区画へ移した（2026-10-24）。
+const LAYOUT_VERSION = 5
 
-/** 旧 `ixa:storyboard-layout:v4` と v1 は読まない（パネルの組が違う）。v2・v3 は `migrateLegacyLayout` が移す。 */
+/** 旧 `ixa:storyboard-layout:v4` と v1 は読まない（パネルの組が違う）。v2〜v4 は `migrateLegacyLayout` が移す。 */
 export const workbenchLayoutKey = (projectId: ProjectId): string =>
   `ixa:workbench-layout:v${String(LAYOUT_VERSION)}:${projectId}`
 
 /**
- * 移す古い版（新しい順）と、その版のあとで足したパネル。移すときは、これだけを下の区画の裏に足す
- * （閉じていたほかのパネルは戻さない）。
+ * 移す古い版（新しい順）と、その版のあとで足したパネル・区画を替えたパネル。
+ * 足すものは住む区画の裏に足す（閉じていたほかのパネルは戻さない）。
+ * 区画を替えたものは、開いていたときだけ外して新しい区画の裏に置き直す。
  */
-const LEGACY_LAYOUTS: readonly { readonly version: number; readonly added: readonly PanelId[] }[] = [
-  { version: 3, added: ['agent'] },
-  { version: 2, added: ['checks', 'history', 'console', 'agent'] },
+const LEGACY_LAYOUTS: readonly {
+  readonly version: number
+  readonly added: readonly PanelId[]
+  readonly moved: readonly PanelId[]
+}[] = [
+  { version: 4, added: [], moved: ['agent'] },
+  { version: 3, added: ['agent'], moved: [] },
+  { version: 2, added: ['checks', 'history', 'console', 'agent'], moved: [] },
 ]
 
 const legacyLayoutKey = (projectId: ProjectId, version: number): string =>
@@ -360,20 +368,25 @@ const legacyLayoutKey = (projectId: ProjectId, version: number): string =>
 
 export type LegacyMigration =
   | { readonly state: 'none' }
-  | { readonly state: 'migrated'; readonly added: readonly PanelId[] }
+  | { readonly state: 'migrated'; readonly added: readonly PanelId[]; readonly moved: readonly PanelId[] }
   | { readonly state: 'unreadable'; readonly reason: string }
 
 /**
- * 古い版（v3・v2）の配置を移す。**利用者が組んだ配置を黙って捨てない**（レビュー 2026-10-19）。
+ * 古い版（v4〜v2）の配置を移す。**利用者が組んだ配置を黙って捨てない**（レビュー 2026-10-19）。
  *
  * - 古い版が無ければ何もしない（`none`）
- * - 戻せたら、その版のあとで足したパネルを下の区画の裏に足す（`migrated`。足したパネルを返す）
+ * - 戻せたら、その版のあとで足したパネルを住む区画の裏に足し、区画を替えたパネルを置き直す（`migrated`）
  * - 読めない・戻せないならドックを空にして `unreadable`。呼び出し側が既定の配置で開いて知らせる
  *
  * どの場合も移した版は消す。知らせは 1 回きりになる。新しい版への書き込みは呼び出し側（配置が変わるたびに書く）。
  */
-export const migrateLegacyLayout = (
-  api: DockLike & { readonly fromJSON: (layout: SerializedDockview) => void; readonly clear: () => void },
+export const migrateLegacyLayout = <P extends NonNullable<ReturnType<DockLike['getPanel']>>>(
+  api: Pick<DockLike, 'addPanel'> & {
+    readonly getPanel: (id: string) => P | undefined
+    readonly fromJSON: (layout: SerializedDockview) => void
+    readonly clear: () => void
+    readonly removePanel: (panel: P) => void
+  },
   storage: Pick<Storage, 'getItem' | 'removeItem'>,
   projectId: ProjectId,
 ): LegacyMigration => {
@@ -397,7 +410,14 @@ export const migrateLegacyLayout = (
   }
   const added = found.added.filter((id) => api.getPanel(id) === undefined)
   added.forEach((id) => addToArea(api, id, true))
-  return { state: 'migrated', added }
+  const moved = found.moved.flatMap((id) => {
+    const panel = api.getPanel(id)
+    if (panel === undefined) return []
+    api.removePanel(panel)
+    addToArea(api, id, true)
+    return [id]
+  })
+  return { state: 'migrated', added, moved }
 }
 
 const SerializedLayout = z.custom<SerializedDockview>(

@@ -149,9 +149,12 @@ export const WorkbenchDock = ({ projectId, query, onReady, onNotice }: Workbench
       const legacy = stored.state === 'missing' ? migrateLegacyLayout(api, window.localStorage, projectId) : null
       if (legacy?.state === 'migrated') {
         writeWorkbenchLayout(window.localStorage, projectId, api.toJSON())
-        if (legacy.added.length > 0) {
-          onNotice(`配置を新しくしました。下の区画に${legacy.added.map((id) => `「${PANEL_SPECS[id].title}」`).join('')}のタブを足しています。`)
-        }
+        const titles = (ids: readonly PanelId[]): string => ids.map((id) => `「${PANEL_SPECS[id].title}」`).join('')
+        const changes = [
+          ...(legacy.added.length > 0 ? [`${titles(legacy.added)}のタブを足しています。`] : []),
+          ...(legacy.moved.length > 0 ? [`${titles(legacy.moved)}を左の区画へ移しています。`] : []),
+        ]
+        if (changes.length > 0) onNotice(`配置を新しくしました。${changes.join('')}`)
       } else {
         addDefaultPanels(api)
         sizeDefaultAreas(api, api.height)

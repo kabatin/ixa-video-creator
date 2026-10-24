@@ -102,15 +102,20 @@ describe('既定配置', () => {
     expect(byId.get('shots')?.inactive).toBeUndefined()
   })
 
-  it('下の区画のタブは タイムライン・聴きながら切る・検査・変更履歴・コンソール・AI エージェント の順', () => {
+  it('下の区画のタブは タイムライン・聴きながら切る・検査・変更履歴・コンソール の順', () => {
     const bottom = added
       .map((options) => options.id)
-      .filter((id) => ['timeline', 'cutter', 'checks', 'history', 'console', 'agent'].includes(id))
-    expect(bottom).toEqual(['timeline', 'cutter', 'checks', 'history', 'console', 'agent'])
-    ;['checks', 'history', 'console', 'agent'].forEach((id) => {
+      .filter((id) => ['timeline', 'cutter', 'checks', 'history', 'console'].includes(id))
+    expect(bottom).toEqual(['timeline', 'cutter', 'checks', 'history', 'console'])
+    ;['checks', 'history', 'console'].forEach((id) => {
       expect(byId.get(id)?.position).toEqual({ referencePanel: 'timeline', direction: 'within' })
       expect(byId.get(id)?.inactive).toBe(true)
     })
+  })
+
+  it('AI エージェントは左の区画で、素材ツリーの裏（制作者 2026-10-24）', () => {
+    expect(byId.get('agent')?.position).toEqual({ referencePanel: 'assets', direction: 'within' })
+    expect(byId.get('agent')?.inactive).toBe(true)
   })
 
   it('参照先は必ず先に置かれている', () => {
@@ -176,14 +181,15 @@ describe('保存', () => {
     }
   }
 
-  it('鍵は ixa:workbench-layout:v4:<projectId>（下の区画に AI エージェントを足して版を上げた）', () => {
-    expect(workbenchLayoutKey(projectId)).toBe(`ixa:workbench-layout:v4:${PROJECT_ID}`)
+  it('鍵は ixa:workbench-layout:v5:<projectId>（AI エージェントを左の区画へ移して版を上げた）', () => {
+    expect(workbenchLayoutKey(projectId)).toBe(`ixa:workbench-layout:v5:${PROJECT_ID}`)
   })
 
-  it('v2・v3 の保存は読まない（新しいタブの無い配置で開かない。移すのは migrateLegacyLayout）', () => {
+  it('v2〜v4 の保存は読まない（古い配置のまま開かない。移すのは migrateLegacyLayout）', () => {
     const storage = memory()
     storage.setItem(`ixa:workbench-layout:v2:${PROJECT_ID}`, '{"grid":{},"panels":{}}')
     storage.setItem(`ixa:workbench-layout:v3:${PROJECT_ID}`, '{"grid":{},"panels":{}}')
+    storage.setItem(`ixa:workbench-layout:v4:${PROJECT_ID}`, '{"grid":{},"panels":{}}')
     expect(readStoredWorkbenchLayout(storage, projectId)).toEqual({ state: 'missing' })
   })
 
@@ -279,10 +285,11 @@ describe('聴きながら切るを前に出すか', () => {
   })
 })
 
-describe('古い版（v2・v3）の配置の移行', () => {
+describe('古い版（v2〜v4）の配置の移行', () => {
   const projectId = ProjectId.parse(PROJECT_ID)
   const legacyKey = `ixa:workbench-layout:v2:${PROJECT_ID}`
   const v3Key = `ixa:workbench-layout:v3:${PROJECT_ID}`
+  const v4Key = `ixa:workbench-layout:v4:${PROJECT_ID}`
   const storageWith = (raw: string | null, key = legacyKey) => {
     const store = new Map<string, string>(raw === null ? [] : [[key, raw]])
     return {
@@ -299,9 +306,27 @@ describe('古い版（v2・v3）の配置の移行', () => {
   const migratableDock = (options: { readonly throws?: boolean; readonly panels?: readonly string[] } = {}) => {
     const base = fakeDock()
     const restored: unknown[] = []
+    const removed: string[] = []
+    const gone = new Set<string>()
+    const ids = new WeakMap<object, string>()
     let cleared = 0
     const api = {
-      ...base.api,
+      addPanel: (options: AddPanelOptions) => {
+        gone.delete(options.id)
+        return base.api.addPanel(options)
+      },
+      getPanel: (id: string) => {
+        if (gone.has(id)) return undefined
+        const panel = base.api.getPanel(id)
+        if (panel !== undefined) ids.set(panel, id)
+        return panel
+      },
+      removePanel: (panel: object) => {
+        const id = ids.get(panel)
+        if (id === undefined) throw new Error('知らないパネルを外そうとした')
+        gone.add(id)
+        removed.push(id)
+      },
       fromJSON: (layout: unknown) => {
         if (options.throws === true) throw new Error('部品が足りません')
         restored.push(layout)
@@ -312,7 +337,7 @@ describe('古い版（v2・v3）の配置の移行', () => {
         cleared += 1
       },
     }
-    return { api, added: base.added, restored, cleared: () => cleared }
+    return { api, added: base.added, restored, removed, cleared: () => cleared }
   }
 
   it('v2 が無ければ何もしない', () => {
@@ -321,12 +346,30 @@ describe('古い版（v2・v3）の配置の移行', () => {
     expect(dock.restored).toEqual([])
   })
 
-  it('v3 を戻し、AI エージェントを下の区画の裏に足して、v3 を消す', () => {
+  it('v4 を戻し、下の区画にあった AI エージェントを左の区画の裏へ移して、v4 を消す', () => {
+    const dock = migratableDock({ panels: PANEL_IDS })
+    const storage = storageWith('{"grid":{},"panels":{}}', v4Key)
+    expect(migrateLegacyLayout(dock.api, storage, projectId)).toEqual({ state: 'migrated', added: [], moved: ['agent'] })
+    expect(dock.removed).toEqual(['agent'])
+    expect(dock.added.map((options) => options.id)).toEqual(['agent'])
+    expect(dock.added[0]?.position).toEqual({ referencePanel: 'assets', direction: 'within' })
+    expect(storage.store.has(v4Key)).toBe(false)
+  })
+
+  it('v4 で AI エージェントを閉じていたなら、移さない（閉じたものは戻さない）', () => {
+    const dock = migratableDock({ panels: V3_PANELS })
+    const storage = storageWith('{"grid":{},"panels":{}}', v4Key)
+    expect(migrateLegacyLayout(dock.api, storage, projectId)).toEqual({ state: 'migrated', added: [], moved: [] })
+    expect(dock.removed).toEqual([])
+    expect(dock.added).toEqual([])
+  })
+
+  it('v3 を戻し、AI エージェントを左の区画の裏に足して、v3 を消す', () => {
     const dock = migratableDock({ panels: V3_PANELS })
     const storage = storageWith('{"grid":{},"panels":{}}', v3Key)
-    expect(migrateLegacyLayout(dock.api, storage, projectId)).toEqual({ state: 'migrated', added: ['agent'] })
+    expect(migrateLegacyLayout(dock.api, storage, projectId)).toEqual({ state: 'migrated', added: ['agent'], moved: [] })
     expect(dock.added.map((options) => options.id)).toEqual(['agent'])
-    expect(dock.added[0]?.position).toEqual({ referencePanel: 'timeline', direction: 'within' })
+    expect(dock.added[0]?.position).toEqual({ referencePanel: 'assets', direction: 'within' })
     expect(storage.store.has(v3Key)).toBe(false)
   })
 
@@ -336,11 +379,13 @@ describe('古い版（v2・v3）の配置の移行', () => {
     expect(migrateLegacyLayout(dock.api, storage, projectId)).toEqual({
       state: 'migrated',
       added: ['checks', 'history', 'console', 'agent'],
+      moved: [],
     })
     expect(dock.restored).toHaveLength(1)
     expect(dock.added.map((options) => options.id)).toEqual(['checks', 'history', 'console', 'agent'])
     dock.added.forEach((options) => {
-      expect(options.position).toEqual({ referencePanel: 'timeline', direction: 'within' })
+      const sibling = options.id === 'agent' ? 'assets' : 'timeline'
+      expect(options.position).toEqual({ referencePanel: sibling, direction: 'within' })
       expect(options.inactive).toBe(true)
     })
     expect(storage.store.has(legacyKey)).toBe(false)
