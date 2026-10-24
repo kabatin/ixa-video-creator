@@ -64,6 +64,11 @@ export const AudioClipInspector = ({ id }: { readonly id: TimelineClipId }) => {
     setLoaded({ kind: 'ready', clip: updated })
     workbench.refresh()
   }
+  /**
+   * 音量・フェードは中身（content）ごと送る。**今の尺も一緒に送る。** API は中身だけの更新を
+   * 「トリムの長さを比べる相手が無い」として弾く（2026-10-24、音量を変えると保存できなかった）。
+   */
+  const saveContent = (next: typeof content): Promise<void> => save({ content: next, durationSec: clip.durationSec })
 
   return (
     <div className="flex h-full flex-col">
@@ -89,19 +94,19 @@ export const AudioClipInspector = ({ id }: { readonly id: TimelineClipId }) => {
               const value = Number.parseFloat(next)
               return Number.isFinite(value) && value >= 0 && value <= 200 ? null : '0〜200% で入れてください'
             }}
-            onSave={(next) => save({ content: { ...content, volume: Number.parseFloat(next) / 100 } })}
+            onSave={(next) => saveContent({ ...content, volume: Number.parseFloat(next) / 100 })}
           />
           <AutoSaveField
             label="フェードイン"
             value={formatDuration(content.fadeInSec ?? 0)}
             validate={fadeProblem}
-            onSave={(next) => save({ content: { ...content, fadeInSec: parseFadeInput(next) ?? 0 } })}
+            onSave={(next) => saveContent({ ...content, fadeInSec: parseFadeInput(next) ?? 0 })}
           />
           <AutoSaveField
             label="フェードアウト"
             value={formatDuration(content.fadeOutSec ?? 0)}
             validate={fadeProblem}
-            onSave={(next) => save({ content: { ...content, fadeOutSec: parseFadeInput(next) ?? 0 } })}
+            onSave={(next) => saveContent({ ...content, fadeOutSec: parseFadeInput(next) ?? 0 })}
           />
           <p className="text-xs text-muted">長さは落とした音の長さのままです。帯の上でつかんで動かすこともできます。</p>
           <Button
