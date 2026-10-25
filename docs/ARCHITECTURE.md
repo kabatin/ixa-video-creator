@@ -1034,7 +1034,7 @@ PostgreSQL 16 + Drizzle（ADR-0007）。
 workspaces
 projects
 media_assets                 (checksum_sha256 に UNIQUE 部分インデックス)
-characters
+characters                   ((project_id, speaker_no) に UNIQUE。話し手の番号は消しても詰めない / ADR-0059)
 character_identity_images
 character_looks
 character_look_images
@@ -1050,7 +1050,7 @@ uploaded_sfx_sounds          (手元のファイルから取り込んだ効果�
 scripts
 script_versions
 sequences
-shots                        (project_id, order) に複合インデックス
+shots                        (project_id, order) に複合インデックス。JSONB: dialogue（セリフの行 / ADR-0059）
 shot_characters
 shot_references
 transitions
