@@ -38,6 +38,8 @@ export const createInMemoryMusicJobRepository = (): MusicJobRepository & { reado
       Promise.resolve([...store].reverse().filter((job) => job.projectId === projectId).slice(0, limit)),
     findActiveByProject: (projectId) =>
       Promise.resolve([...store].reverse().filter((job) => job.projectId === projectId && active(job))),
+    findSucceededByProject: (projectId) =>
+      Promise.resolve([...store].reverse().filter((job) => job.projectId === projectId && job.status === 'succeeded')),
     cancelActive: (projectId) => {
       const targets = store.filter((job) => job.projectId === projectId && active(job)).map((job) => job.id)
       store = store.map((job) => (targets.includes(job.id) ? { ...job, status: 'cancelled' as const, finishedAt: new Date() } : job))

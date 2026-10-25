@@ -180,6 +180,7 @@ export const createInMemoryVoiceJobRepository = (): VoiceJobRepository & { reado
       return Promise.resolve(created)
     },
     findById: (id) => Promise.resolve(store.find((job) => job.id === id) ?? null),
+    findByIds: (ids) => Promise.resolve(store.filter((job) => ids.includes(job.id))),
     findActiveByProject: (projectId) => Promise.resolve(store.filter((job) => job.projectId === projectId && active(job))),
     findLatestByLines: (lineIds) =>
       Promise.resolve(

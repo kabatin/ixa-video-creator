@@ -597,6 +597,7 @@ export const createApp = (deps: AppDeps) => {
       mediaAssets,
       storage,
       queue: deps.analysisQueue,
+      ...(deps.musicGeneration === undefined ? {} : { musicJobs: deps.musicGeneration.musicJobs }),
     }),
   )
   // 楽曲の欄の直しとマスターの切り替え。取り消せるよう、書く前に記録する。

@@ -245,6 +245,9 @@ describe('ジョブの状態・記録・取り消し', () => {
       id: created.data.jobId,
       status: 'queued',
       prompt: 'x',
+      // 送った歌詞と種もそのまま返す（プロンプトビューア）。
+      lyrics: '',
+      seed: null,
       count: 2,
       musicTrackIds: [],
       error: null,

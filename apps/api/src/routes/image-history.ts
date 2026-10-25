@@ -13,6 +13,7 @@ import { manualStartFrameOf } from '@ixa/generation'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
 import { ImageCheckSummary, toImageCheckSummary } from './image-check-wire.js'
+import { ImagePromptFields, imagePromptFieldsOf } from './image-prompt-wire.js'
 import { startImageJob, type ImageJobStartDeps } from './image-job-start.js'
 
 /**
@@ -67,6 +68,7 @@ export const ImageHistoryEntry = z
     /** 失敗したときの理由（利用者にそのまま見せる文）。 */
     error: z.string().nullable(),
     queuedAt: z.string().datetime(),
+    ...ImagePromptFields,
   })
   .openapi('ImageHistoryEntry')
 export type ImageHistoryEntry = z.infer<typeof ImageHistoryEntry>
@@ -140,6 +142,7 @@ export const toHistoryEntry = (
   check: toImageCheckSummary(check),
   error: job.error?.message ?? null,
   queuedAt: job.queuedAt.toISOString(),
+  ...imagePromptFieldsOf(job),
 })
 
 /** 同じ持ち主で作っている最中か（重ねて頼ませない）。 */

@@ -66,6 +66,8 @@ export type VoiceJobOutcome = {
 export type VoiceJobRepository = {
   create(input: CreateVoiceJobInput): Promise<VoiceJob>
   findById(id: VoiceJobId): Promise<VoiceJob | null>
+  /** ID で引く（ナレーションの Take から、作ったジョブの指定と送った指示を引くため）。並びは決めない。 */
+  findByIds(ids: readonly VoiceJobId[]): Promise<VoiceJob[]>
   /** 作品の中で待っている・動いているジョブ。 */
   findActiveByProject(projectId: ProjectId): Promise<VoiceJob[]>
   /** 作品の行ごとの最後のジョブ（状態と失敗の理由を画面に出すため）。 */
@@ -163,6 +165,12 @@ export const createVoiceJobRepository = (db: DbExecutor): VoiceJobRepository => 
     },
 
     findById: async (id) => first(await db.select().from(voiceJobs).where(eq(voiceJobs.id, id))),
+
+    async findByIds(ids) {
+      if (ids.length === 0) return []
+      const rows = await db.select().from(voiceJobs).where(inArray(voiceJobs.id, [...ids]))
+      return rows.map(voiceJobRowToDomain)
+    },
 
     async findActiveByProject(projectId) {
       const rows = await db

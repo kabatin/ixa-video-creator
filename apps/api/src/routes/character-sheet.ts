@@ -11,6 +11,7 @@ import {
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
+import { ImagePromptFields, imagePromptFieldsOf } from './image-prompt-wire.js'
 import { startImageJob, type ImageJobStartDeps } from './image-job-start.js'
 
 /**
@@ -51,6 +52,8 @@ const SheetState = z
         error: z.string().nullable(),
         /** 何枚目の試しか（ADR-0055。1 から）。 */
         attempt: z.number().int(),
+        queuedAt: z.string().datetime(),
+        ...ImagePromptFields,
       })
       .nullable(),
   })
@@ -114,6 +117,13 @@ export const characterSheetRoutes = (deps: CharacterSheetRoutesDeps) =>
       const job =
         latest === null
           ? null
-          : { id: latest.id, status: latest.status, error: latest.error?.message ?? null, attempt: latest.attempt }
+          : {
+              id: latest.id,
+              status: latest.status,
+              error: latest.error?.message ?? null,
+              attempt: latest.attempt,
+              queuedAt: latest.queuedAt.toISOString(),
+              ...imagePromptFieldsOf(latest),
+            }
       return c.json(ok({ job }), 200)
     })

@@ -17,6 +17,7 @@ import {
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
 import { ImageCheckSummary, toImageCheckSummary } from './image-check-wire.js'
+import { ImagePromptFields, imagePromptFieldsOf } from './image-prompt-wire.js'
 import { startImageJob, type ImageJobStartDeps } from './image-job-start.js'
 
 /**
@@ -100,6 +101,7 @@ export const KeyArtJobResponse = z
     check: ImageCheckSummary.nullable(),
     queuedAt: z.string().datetime(),
     finishedAt: z.string().datetime().nullable(),
+    ...ImagePromptFields,
   })
   .openapi('KeyArtJob')
 export type KeyArtJobResponse = z.infer<typeof KeyArtJobResponse>
@@ -113,6 +115,7 @@ export const toKeyArtJobResponse = (job: ImageGenerationJob, check: ImageCheck |
   check: toImageCheckSummary(check),
   queuedAt: job.queuedAt.toISOString(),
   finishedAt: job.finishedAt === null ? null : job.finishedAt.toISOString(),
+  ...imagePromptFieldsOf(job),
 })
 
 const generateRoute = createRoute({

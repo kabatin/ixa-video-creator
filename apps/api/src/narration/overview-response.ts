@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi'
-import { NarrationLine, NarrationTake, VoiceJob } from '@ixa/domain'
+import { NarrationLine, NarrationTake, VoiceJob, VoiceSpec } from '@ixa/domain'
 import type { NarrationOverview } from './overview.js'
 
 /** ナレーションの一覧の応答（日時は ISO 文字列）。 */
@@ -8,7 +8,14 @@ const iso = z.string().datetime()
 
 const TakeResponse = NarrationTake.innerType()
   .omit({ createdAt: true })
-  .extend({ createdAt: iso, durationSec: z.number() })
+  .extend({
+    createdAt: iso,
+    durationSec: z.number(),
+    /** 作ったジョブの指定（声・演技指示・速さ）。AI で作った Take だけ。 */
+    voiceSpec: VoiceSpec.nullable(),
+    /** 声の AI へ実際に送った読み方の指示。送らない AI・記録する前の Take は null。 */
+    sentStyle: z.string().nullable(),
+  })
   .openapi('NarrationTake')
 
 const JobResponse = VoiceJob.pick({ id: true, kind: true, status: true, error: true, tool: true, costUsd: true })

@@ -24,7 +24,9 @@ import { aProject } from './fixtures.js'
 
 type Ok<T> = { success: true; data: T }
 type Err = { success: false; error: string; fields?: Record<string, string[]> }
-type SheetState = { job: { id: string; status: string; error: string | null } | null }
+type SheetState = {
+  job: { id: string; status: string; error: string | null; sentPrompt: string | null; modelId: string } | null
+}
 
 const project = aProject()
 const CODEX = { providerId: ProviderId.parse('codex-cli'), modelId: ModelId.parse('codex-cli/image-gen') }
@@ -144,5 +146,18 @@ describe('GET /characters/{id}/character-sheet', () => {
     const state = ((await (await f.request('GET')).json()) as Ok<SheetState>).data
 
     expect(state.job).toMatchObject({ status: 'queued', error: null })
+  })
+
+  it('描いたジョブは送った指示の本文と使った AI を返す。描く前は null（プロンプトビューア）', async () => {
+    const f = await build()
+    await f.request('POST', {})
+    expect(((await (await f.request('GET')).json()) as Ok<SheetState>).data.job?.sentPrompt).toBeNull()
+
+    const [job] = f.imageJobs.snapshot()
+    if (job === undefined) throw new Error('ジョブがありません')
+    await f.imageJobs.markChecking(job.id, newId(MediaAssetIdSchema), {}, '四面図。正面・横・後ろ・斜め')
+    const state = ((await (await f.request('GET')).json()) as Ok<SheetState>).data
+
+    expect(state.job).toMatchObject({ sentPrompt: '四面図。正面・横・後ろ・斜め', modelId: CODEX.modelId })
   })
 })

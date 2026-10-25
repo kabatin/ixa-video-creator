@@ -38,6 +38,11 @@ export type MusicJobRepository = {
   findRecentByProject(projectId: ProjectId, limit: number): Promise<MusicJob[]>
   /** 作品の中で待っている・動いているジョブ。 */
   findActiveByProject(projectId: ProjectId): Promise<MusicJob[]>
+  /**
+   * 作品の成功したジョブ（新しい順）。楽曲の一覧で、各曲を作ったジョブ（`music_track_ids`）を引くため。
+   * 楽曲の側はジョブを指していないので、こちらから引く。
+   */
+  findSucceededByProject(projectId: ProjectId): Promise<MusicJob[]>
   /** 作品の待っている・動いているジョブを止める。止めたものを返す。 */
   cancelActive(projectId: ProjectId): Promise<MusicJob[]>
   markRunning(id: MusicJobId): Promise<MusicJob>
@@ -121,6 +126,15 @@ export const createMusicJobRepository = (db: DbExecutor): MusicJobRepository => 
         .select()
         .from(musicJobs)
         .where(and(eq(musicJobs.projectId, projectId), ACTIVE))
+        .orderBy(desc(musicJobs.id))
+      return rows.map(musicJobRowToDomain)
+    },
+
+    async findSucceededByProject(projectId) {
+      const rows = await db
+        .select()
+        .from(musicJobs)
+        .where(and(eq(musicJobs.projectId, projectId), eq(musicJobs.status, 'succeeded')))
         .orderBy(desc(musicJobs.id))
       return rows.map(musicJobRowToDomain)
     },

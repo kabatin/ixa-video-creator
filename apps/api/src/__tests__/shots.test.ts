@@ -278,6 +278,23 @@ describe('GET /shots/:id/takes', () => {
     expect(json.data.map((t) => t.index)).toEqual([1, 2])
   })
 
+  it('実際に送った文を返す。記録する前の Take は null（プロンプトビューア）', async () => {
+    const f = buildFixture()
+    const sent = aTake(f.shot, 'c'.repeat(64), { index: 1, sentPrompt: { prompt: 'integrated_multimodal_description: [Shot 1] 走る' } })
+    const old = aTake(f.shot, 'd'.repeat(64), { index: 2 })
+    const app = createTestApp({
+      ...baseAppDeps(),
+      projects: createInMemoryProjectRepository([f.project]),
+      shots: f.shots,
+      takes: createInMemoryTakeRepository([sent, old]),
+    })
+
+    const json = (await (await app.request(`/shots/${f.shot.id}/takes`)).json()) as {
+      data: { sentPrompt: { prompt: string } | null }[]
+    }
+    expect(json.data.map((t) => t.sentPrompt)).toEqual([{ prompt: 'integrated_multimodal_description: [Shot 1] 走る' }, null])
+  })
+
   /** ADR-0057。不合格の Take に「作り直し推奨」。自動の作り直しが止まった（Shot が blocked）ら、選んでいた Take にも。 */
   it('作り直し推奨かを Shot の状態と合わせて返す', async () => {
     const f = buildFixture()

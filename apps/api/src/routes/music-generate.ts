@@ -55,6 +55,10 @@ const MusicJobResponse = z
     id: z.string(),
     status: MusicJobStatus,
     prompt: z.string(),
+    /** 歌詞（送った文そのもの）。歌詞なしは空。 */
+    lyrics: z.string(),
+    /** 頼んだ種。null は毎回違う曲。 */
+    seed: z.number().int().nullable(),
     durationSec: z.number(),
     instrumental: z.boolean(),
     count: z.number().int(),
@@ -120,6 +124,8 @@ const toResponse = (job: MusicJob) => ({
   id: job.id,
   status: job.status,
   prompt: job.spec.prompt,
+  lyrics: job.spec.lyrics,
+  seed: job.spec.seed,
   durationSec: job.spec.durationSec,
   instrumental: job.spec.instrumental,
   count: job.spec.count,

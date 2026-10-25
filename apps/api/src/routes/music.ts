@@ -2,6 +2,7 @@ import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type {
   MediaAssetRepository,
   MusicAnalysisRepository,
+  MusicJobRepository,
   MusicTrackRepository,
   ProjectRepository,
   MusicAnalysisFailureRepository,
@@ -20,6 +21,7 @@ import {
 import type { ObjectStorage } from '@ixa/storage'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, listResponse, ok, okList, successResponse } from '../response.js'
+import { MusicTrackSource, musicTrackSourceOf } from '../music/track-source.js'
 
 /**
  * 楽曲の登録と音楽解析の起動・参照（ADR-0009 / docs/ARCHITECTURE.md §15）。
@@ -46,6 +48,14 @@ export type AnalysisQueue = {
 }
 
 export const MusicTrackResponse = MusicTrackSchema.openapi('MusicTrack')
+
+/**
+ * 一覧の 1 曲。AI で作った曲には、作ったときの頼み方（`source`）を添える（プロンプトビューア）。
+ * 持ち込んだ曲・頼み方を引けない曲は null。
+ */
+export const MusicTrackListItem = MusicTrackSchema.extend({ source: MusicTrackSource.nullable() }).openapi(
+  'MusicTrackListItem',
+)
 
 /**
  * API が返す MusicAnalysis。日時は ISO8601 文字列にし、
@@ -122,7 +132,7 @@ const listMusicTracksRoute = createRoute({
   summary: 'Project の楽曲一覧',
   request: { params: ProjectParams },
   responses: {
-    200: jsonContent('楽曲一覧', listResponse(MusicTrackResponse)),
+    200: jsonContent('楽曲一覧', listResponse(MusicTrackListItem)),
     ...commonErrors,
   },
 })
@@ -209,6 +219,10 @@ export type MusicRoutesDeps = {
   mediaAssets: Pick<MediaAssetRepository, 'findById'>
   storage: ObjectStorage
   queue: AnalysisQueue
+  /**
+   * 曲を作ったジョブ（一覧に頼み方を添えるため）。曲を作る口を配線していない環境では無く、頼み方は null。
+   */
+  musicJobs?: Pick<MusicJobRepository, 'findSucceededByProject'>
 }
 
 export const musicRoutes = (deps: MusicRoutesDeps) => {
@@ -221,7 +235,11 @@ export const musicRoutes = (deps: MusicRoutesDeps) => {
     .openapi(listMusicTracksRoute, async (c) => {
       const { projectId } = c.req.valid('param')
       if (await projectMissing(projectId)) return c.json(fail(NOT_FOUND_MESSAGE), 404)
-      return c.json(okList(await deps.musicTracks.findByProject(projectId)), 200)
+      const [tracks, jobs] = await Promise.all([
+        deps.musicTracks.findByProject(projectId),
+        deps.musicJobs?.findSucceededByProject(projectId) ?? Promise.resolve([]),
+      ])
+      return c.json(okList(tracks.map((track) => ({ ...track, source: musicTrackSourceOf(track.id, jobs) }))), 200)
     })
     .openapi(createMusicTrackRoute, async (c) => {
       const { projectId } = c.req.valid('param')

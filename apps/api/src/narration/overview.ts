@@ -9,7 +9,9 @@ import {
   type ProjectId,
   type ReadingEntry,
   type VoiceJob,
+  type VoiceJobId,
   type VoiceProfile,
+  type VoiceSpec,
 } from '@ixa/domain'
 import type { NarrationDeps } from './deps.js'
 
@@ -17,6 +19,24 @@ import type { NarrationDeps } from './deps.js'
  * ナレーションの一覧（ADR-0038）。行に、読み（辞書から）・話す長さの見積もり・声の Take・作り直しが要るか・
  * 最後のジョブを添える。画面はこれを 1 回取れば描ける。
  */
+
+/**
+ * 声の Take に、作ったジョブの指定と、声の AI へ実際に送った読み方の指示を添える（プロンプトビューア）。
+ * AI で作った Take だけが持つ。録音・複製・ジョブが引けない Take は両方 null。
+ */
+export type NarrationTakeView = NarrationTake & {
+  readonly voiceSpec: VoiceSpec | null
+  readonly sentStyle: string | null
+}
+
+export const narrationTakeViewOf = (take: NarrationTake, jobs: readonly VoiceJob[]): NarrationTakeView => {
+  const { source } = take
+  const job = source.type === 'generated' ? jobs.find((candidate) => candidate.id === source.voiceJobId) : undefined
+  return { ...take, voiceSpec: job?.spec ?? null, sentStyle: job?.sentStyle ?? null }
+}
+
+const generatedJobIds = (takes: readonly NarrationTake[]): readonly VoiceJobId[] =>
+  takes.flatMap((take) => (take.source.type === 'generated' ? [take.source.voiceJobId] : []))
 
 export type NarrationLineView = NarrationLine & {
   /** 声の AI に渡す読み（手で入れた読み、無ければ辞書から）。 */
@@ -28,7 +48,7 @@ export type NarrationLineView = NarrationLine & {
   readonly durationSec: number | null
   /** 選んだ Take を作ったときと、読み・声・設定が変わったか（作り直しが要る）。 */
   readonly stale: boolean
-  readonly takes: readonly NarrationTake[]
+  readonly takes: readonly NarrationTakeView[]
   /** 最後の声のジョブ（状態と失敗の理由）。 */
   readonly job: VoiceJob | null
 }
@@ -48,7 +68,7 @@ const viewOf = async (
   line: NarrationLine,
   context: {
     readonly voices: ReadonlyMap<string, VoiceProfile>
-    readonly takes: readonly NarrationTake[]
+    readonly takes: readonly NarrationTakeView[]
     readonly job: VoiceJob | null
     readonly dictionary: readonly ReadingEntry[]
   },
@@ -77,7 +97,9 @@ export const buildNarrationOverview = async (deps: NarrationDeps, projectId: Pro
     deps.audioSettings.get(projectId),
   ])
   const lineIds = lines.map((line) => line.id)
-  const [takes, jobs] = await Promise.all([deps.takes.findByLines(lineIds), deps.voiceJobs.findLatestByLines(lineIds)])
+  const [rawTakes, jobs] = await Promise.all([deps.takes.findByLines(lineIds), deps.voiceJobs.findLatestByLines(lineIds)])
+  const takeJobs = await deps.voiceJobs.findByIds(generatedJobIds(rawTakes))
+  const takes = rawTakes.map((take) => narrationTakeViewOf(take, takeJobs))
   const voiceMap = new Map(voices.map((voice) => [voice.id as string, voice]))
   const views = await Promise.all(
     lines.map((line) =>

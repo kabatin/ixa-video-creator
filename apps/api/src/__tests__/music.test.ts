@@ -9,7 +9,7 @@ import {
   type MusicAnalysis,
   type MusicTrackId,
 } from '@ixa/domain'
-import { createInMemoryMediaAssetRepository } from '@ixa/generation/testing'
+import { createInMemoryMediaAssetRepository, createInMemoryMusicJobRepository } from '@ixa/generation/testing'
 import { createMemoryStorage } from '@ixa/storage'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { registerErrorHandlers, validationHook } from '../errors.js'
@@ -230,6 +230,49 @@ describe('楽曲の一覧', () => {
 
   it('存在しない Project は 404', async () => {
     expect((await send('GET', `/projects/${aProject().id}/music-tracks`)).status).toBe(404)
+  })
+
+  it('AI で作った曲には作ったときの頼み方（曲調・歌詞・種・AI）を添える。持ち込んだ曲は null（プロンプトビューア）', async () => {
+    const made = await createTrack({ title: '作った曲' })
+    const brought = await createTrack({ title: '持ち込んだ曲', isMaster: false })
+    const musicJobs = createInMemoryMusicJobRepository()
+    const job = await musicJobs.create({
+      projectId: project.id,
+      tool: 'ace_step',
+      model: 'acestep-v15-turbo',
+      spec: { prompt: 'j-pop, upbeat', lyrics: '[chorus]\nいけ', durationSec: 60, instrumental: false, seed: 42, count: 1, title: null },
+    })
+    await musicJobs.markSucceeded(job.id, { musicTrackIds: [made.id as MusicTrackId], providerRecord: {} })
+    const withJobs = buildApp({
+      musicTracks,
+      musicAnalyses,
+      analysisFailures,
+      projects: createInMemoryProjectRepository([project, otherProject]),
+      mediaAssets: createInMemoryMediaAssetRepository([audioAsset]),
+      storage: createMemoryStorage(),
+      queue,
+      musicJobs,
+    })
+
+    const res = await withJobs.request(`/projects/${project.id}/music-tracks`)
+    const body = await json<ListBody<TrackBody & { source: Record<string, unknown> | null }>>(res)
+    const byTitle = new Map(body.data.map((track) => [track.id, track.source]))
+    expect(byTitle.get(made.id)).toMatchObject({
+      prompt: 'j-pop, upbeat',
+      lyrics: '[chorus]\nいけ',
+      seed: 42,
+      instrumental: false,
+      durationSec: 60,
+      tool: 'ace_step',
+      model: 'acestep-v15-turbo',
+    })
+    expect(byTitle.get(brought.id)).toBeNull()
+  })
+
+  it('曲を作る口を配線していなければ、頼み方は null', async () => {
+    await createTrack()
+    const body = await json<ListBody<TrackBody & { source: unknown }>>(await send('GET', `/projects/${project.id}/music-tracks`))
+    expect(body.data[0]?.source).toBeNull()
   })
 })
 

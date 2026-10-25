@@ -48,10 +48,10 @@ const build = () => {
     }),
   )
   /** 描き終えた開始フレームのジョブを 1 つ足す（つながりも作れる）。 */
-  const drawn = async (retryOf?: { jobId: ImageGenerationJobId; attempt: number }) => {
+  const drawn = async (retryOf?: { jobId: ImageGenerationJobId; attempt: number }, sentPrompt: string | null = null) => {
     const job = await imageJobs.create({ kind: 'start_frame', projectId: project.id, shotId: shot.id, ...codex, ...(retryOf === undefined ? {} : { retryOf }) })
     const mediaAssetId: MediaAssetId = newId(MediaAssetIdSchema)
-    await imageJobs.markChecking(job.id, mediaAssetId, {}, null)
+    await imageJobs.markChecking(job.id, mediaAssetId, {}, sentPrompt)
     return imageJobs.finishChecking(job.id)
   }
   return { app, project, shot, imageJobs, imageChecks, shotReferences, characters, enqueued, drawn }
@@ -76,6 +76,17 @@ describe('GET /shots/{id}/start-frame/history', () => {
     expect(items[1]?.check).toMatchObject({ mark: 'retry', issues: [{ kind: 'anatomy', message: '指が 6 本' }] })
     expect(items[0]?.check).toBeNull()
     expect(items[0]?.retryOfJobId).toBe(first.id)
+  })
+
+  it('各絵に、送った指示の本文と使った AI を添える。記録する前の絵は null（プロンプトビューア）', async () => {
+    const f = build()
+    const old = await f.drawn()
+    await f.drawn({ jobId: old.id, attempt: 2 }, '暗いガレージ。作業台にヘルメット')
+
+    const res = await f.app.request(`/shots/${f.shot.id}/start-frame/history`)
+    const { items } = ((await res.json()) as Ok<{ items: ImageHistoryEntry[] }>).data
+    expect(items.map((item) => item.sentPrompt)).toEqual(['暗いガレージ。作業台にヘルメット', null])
+    expect(items[0]?.modelId).toBe('codex-cli/image-gen')
   })
 
   it('無い Shot は 404', async () => {

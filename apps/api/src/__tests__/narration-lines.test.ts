@@ -201,3 +201,46 @@ describe('作り直しが要るか', () => {
     expect((await overview(setup)).lines[0]?.stale).toBe(true)
   })
 })
+
+describe('声の Take の頼み方（プロンプトビューア）', () => {
+  it('AI で作った Take に、作ったジョブの指定と送った読み方の指示を添える。ジョブが無い Take は null', async () => {
+    const setup = setupNarration()
+    const voice = await setup.deps.voices.create({ projectId: setup.project.id, name: 'ナレーター', tool: 'stub', voiceName: 'stub' })
+    await paste(setup, '進め', { voiceProfileId: voice.id })
+    const [line] = setup.deps.lines.snapshot()
+    if (line === undefined) throw new Error('行がありません')
+    const spec = { ...voiceSpecOf(voice, line, '進め'), styleNote: '落ち着いた声', direction: '囁くように' }
+    const job = await setup.deps.voiceJobs.create({
+      kind: 'speak',
+      projectId: setup.project.id,
+      lineId: line.id,
+      voiceProfileId: voice.id,
+      spec,
+      tool: 'stub',
+      model: null,
+    })
+    await setup.deps.voiceJobs.markSucceeded(job.id, { costUsd: 0, providerRecord: {}, sentStyle: '落ち着いた声。囁くように' })
+    const takeOf = (voiceJobId: VoiceJobId) =>
+      setup.deps.takes.create({
+        lineId: line.id,
+        source: { type: 'generated', voiceJobId, tool: 'stub', model: null, voiceName: 'stub' },
+        mediaAssetId: newId(MediaAssetId),
+        inSec: 0,
+        outSec: 1.5,
+        spokenText: '進め',
+        displayText: '進め',
+        specHash: null,
+        charTimes: null,
+        loudnessLufs: null,
+        peaks: null,
+        costUsd: 0,
+      })
+    await takeOf(job.id)
+    await takeOf(newId(VoiceJobId))
+
+    type TakeView = { voiceSpec: { styleNote: string; direction: string } | null; sentStyle: string | null }
+    const takes = (await overview(setup)).lines[0]?.takes as unknown as TakeView[]
+    expect(takes[0]).toMatchObject({ voiceSpec: { styleNote: '落ち着いた声', direction: '囁くように' }, sentStyle: '落ち着いた声。囁くように' })
+    expect(takes[1]).toMatchObject({ voiceSpec: null, sentStyle: null })
+  })
+})

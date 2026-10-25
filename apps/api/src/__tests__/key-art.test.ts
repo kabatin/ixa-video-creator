@@ -1,5 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
-import { ModelId, ProjectId as ProjectIdSchema, ProviderId, ShotId as ShotIdSchema, newId, type ImageGenerationJobId, type ProjectEvent } from '@ixa/domain'
+import { MediaAssetId as MediaAssetIdSchema, ModelId, ProjectId as ProjectIdSchema, ProviderId, ShotId as ShotIdSchema, newId, type ImageGenerationJobId, type ProjectEvent } from '@ixa/domain'
 import { createInMemoryImageCheckRepository, createInMemoryImageJobRepository } from '@ixa/generation/testing'
 import { describe, expect, it } from 'vitest'
 import { registerErrorHandlers } from '../errors.js'
@@ -167,6 +167,18 @@ describe('GET /projects/{projectId}/key-art', () => {
       note: null,
     })
     expect(JSON.stringify(list)).not.toContain('costUsd')
+  })
+
+  it('送った指示の本文と使った AI を候補に付ける。まだ描いていなければ null（プロンプトビューア）', async () => {
+    const f = build()
+    await f.generate({ count: 2 })
+    const [first] = [...f.imageJobs.snapshot()].sort((a, b) => a.id.localeCompare(b.id))
+    if (first === undefined) throw new Error('ジョブがありません')
+    await f.imageJobs.markChecking(first.id, newId(MediaAssetIdSchema), {}, 'iXA のサムネイルの背景。夜の街')
+
+    const list = ((await (await f.app.request(`/projects/${f.project.id}/key-art`)).json()) as Ok<KeyArtJobResponse[]>).data
+    expect(list.map((job) => job.sentPrompt)).toEqual([null, 'iXA のサムネイルの背景。夜の街'])
+    expect(list[1]?.modelId).toBe('codex-cli/image-gen')
   })
 
   it('無いプロジェクトは 404', async () => {
