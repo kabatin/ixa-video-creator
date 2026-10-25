@@ -1,4 +1,5 @@
-import { Character, CharacterId, ProjectId, WorkspaceId, newId } from '@ixa/domain'
+import { Character, CharacterId, ProjectId, WorkspaceId, newId, type DialogueLine, type Shot } from '@ixa/domain'
+import { useState } from 'react'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -73,5 +74,32 @@ describe('ShotDialogueSection', () => {
     const lines = Array.from({ length: 5 }, () => ({ speakerId: cat.id, text: 'あ', offscreen: false, translation: null }))
     render(aWorkbenchShot(1, { dialogue: lines }))
     expect(screen.getByText('長すぎます（10 秒に 3〜4 行まで）')).toBeTruthy()
+  })
+
+  /**
+   * 打っている途中に、ほかの欄の保存などで Shot が読み直されても（中身が同じ・参照だけ新しい）、下書きを消さない。
+   * サーバの値そのものが変わったとき（MCP・取り消し）だけ写す。
+   */
+  it('サーバの値が変わっていなければ、読み直しで書きかけを消さない。変わったら写す', async () => {
+    const saved: DialogueLine = { speakerId: cat.id, text: 'ねえ', offscreen: false, translation: null }
+    const Harness = () => {
+      const [shot, setShot] = useState<Shot>(aWorkbenchShot(1, { dialogue: [saved] }))
+      return (
+        <>
+          <button type="button" onClick={() => { setShot({ ...shot, dialogue: [{ ...saved }] }) }}>同じ中身で読み直す</button>
+          <button type="button" onClick={() => { setShot({ ...shot, dialogue: [{ ...saved, text: 'ほかで直した' }] }) }}>ほかで直す</button>
+          <ShotDialogueSection shot={shot} version={0} disabled={false} onSave={() => Promise.resolve()} />
+        </>
+      )
+    }
+    renderInWorkbench(<Harness />, {}, assetStoreValue({ characters: { state: 'ready', value: [cat, mouse] } }))
+    const text = screen.getByRole('textbox', { name: '1 行目のセリフ' })
+    await userEvent.type(text, '、ネズミくん')
+
+    await userEvent.click(screen.getByRole('button', { name: '同じ中身で読み直す' }))
+    expect(screen.getByRole('textbox', { name: '1 行目のセリフ' })).toHaveProperty('value', 'ねえ、ネズミくん')
+
+    await userEvent.click(screen.getByRole('button', { name: 'ほかで直す' }))
+    expect(screen.getByRole('textbox', { name: '1 行目のセリフ' })).toHaveProperty('value', 'ほかで直した')
   })
 })

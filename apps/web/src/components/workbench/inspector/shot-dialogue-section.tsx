@@ -7,7 +7,7 @@ import {
   type DialogueLine,
   type Shot,
 } from '@ixa/domain'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAssets } from '@/components/workbench/asset-store'
 import { INPUT_CLASS, TEXTAREA_CLASS } from '@/components/workbench/ui/section'
 import { createApiClient } from '@/lib/api-client'
@@ -52,10 +52,18 @@ export const ShotDialogueSection = ({
   const [castIds, setCastIds] = useState<readonly CharacterId[]>([])
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
 
-  // ほかの場所（MCP・取り消し）で直したら写す。手元の書きかけ（空の行）だけの違いなら残す。
+  /**
+   * ほかの場所（MCP・取り消し）で直したら写す。**サーバの値が前のサーバの値から変わったときだけ**
+   * （下書きと比べない）。ほかの欄の保存で Shot が読み直されると参照だけが新しくなり、打っている途中の
+   * セリフが消えていた（レビューの指摘）。
+   */
+  const serverJson = JSON.stringify(shot.dialogue)
+  const lastServerJson = useRef(serverJson)
   useEffect(() => {
+    if (lastServerJson.current === serverJson) return
+    lastServerJson.current = serverJson
     setDrafts((current) => (sameSavedLines(current, shot.dialogue) ? current : draftsFrom(shot.dialogue)))
-  }, [shot.dialogue])
+  }, [serverJson, shot.dialogue])
 
   useEffect(() => {
     let cancelled = false
