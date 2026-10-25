@@ -28,6 +28,11 @@ export const LocalServerSubmitNote = z.object({
   prompt: z.string().nullable().default(null),
   /** 音付きで頼んだか（ADR-0059）。前の版の控えには無いが、そのころは音を頼んでいないので false。 */
   audio: z.boolean().default(false),
+  /**
+   * 文面の組み立ての版（H3。ADR-0059）。**投入の時点で仕様から決めて控える**（`poll` には仕様が来ない）。
+   * 版を持たないサーバ（Wan）と前の版の控えでは null。
+   */
+  promptFormat: z.string().min(1).nullable().default(null),
 })
 export type LocalServerSubmitNote = z.infer<typeof LocalServerSubmitNote>
 

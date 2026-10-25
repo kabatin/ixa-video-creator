@@ -101,6 +101,8 @@ export type LocalServerBinding<Q extends string> = {
    * Take の記録に足す、そのサーバだけの項目（明示して送った設定など）。
    * **送った本文は `Take.spec` から組み直せる**ので、組み直しで分からないものだけを足す。
    */
+  /** 投入の時点で仕様から決める、文面の組み立ての版（控えに残す）。版を持たないサーバは省く。 */
+  readonly promptFormatOf?: (spec: ShotGenerationSpec) => string
   readonly extraRecord?: (input: {
     readonly model: VideoModelDescriptor
     readonly quality: Q
@@ -280,6 +282,7 @@ export const createLocalServerVideoProvider = <Q extends string>(
       prompt: body.prompt,
       // 音付きで頼んだか（ADR-0059）。`poll` には仕様が来ないので、ここで控える。
       audio: body.audio === true,
+      promptFormat: binding.promptFormatOf === undefined ? null : binding.promptFormatOf(request.spec),
     }
     await writeSubmitNote(outputDir, ref, note, warn)
 

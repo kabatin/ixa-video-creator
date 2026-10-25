@@ -1,3 +1,5 @@
+import { rm } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { ShotGenerationSpec } from '@ixa/domain'
 import type { ProviderJobStatus } from '@ixa/provider-core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -71,10 +73,12 @@ describe('記録の audio と版', () => {
           : jsonResponse(200, SUCCEEDED_JOB),
   })
 
-  const run = async (spec: ShotGenerationSpec) => {
+  const run = async (spec: ShotGenerationSpec, options: { loseNote?: boolean } = {}) => {
     const { calls, fetch } = createFetch(handler)
     const provider = makeVpipeProvider(fetch, outputDir)
     const handle = await provider.submit(vpipeRequestFor(spec))
+    // 控えが消えた（書けなかった・掃除された）場合
+    if (options.loseNote === true) await rm(join(outputDir, '.jobs'), { recursive: true, force: true })
     const status: ProviderJobStatus = await provider.poll(handle)
     if (status.state !== 'succeeded') throw new Error('成功していない')
     const posted = JSON.parse(calls.find((call) => call.method === 'POST')?.body ?? '{}') as Record<string, unknown>
@@ -91,5 +95,11 @@ describe('記録の audio と版', () => {
     const { raw, posted } = await run(makeSpec({ resolution: { width: 1920, height: 1080 } }))
     expect('audio' in posted).toBe(false)
     expect(raw).toMatchObject({ audio: false, promptFormat: 'h3-official-v3' })
+  })
+
+  /** 控えが無ければ版は分からない。v3 と書くと、セリフの Take を v3 で組み直してしまう（推測で埋めない）。 */
+  it('控えが無ければ、版を推測せず null にする', async () => {
+    const { raw } = await run(spoken(), { loseNote: true })
+    expect(raw).toMatchObject({ promptFormat: null })
   })
 })
