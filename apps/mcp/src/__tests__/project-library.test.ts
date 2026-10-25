@@ -44,6 +44,17 @@ describe('update_project', () => {
     expect(result.styleReferenceAssetIds).toEqual([ASSET])
   })
 
+  it('画面の向きを変えると、その向きの既定の大きさも一緒に PATCH する', async () => {
+    const fake = createFakeApi([
+      { method: 'PATCH', path: `/projects/${PROJECT}`, data: projectRow({ aspectRatio: '9:16', resolution: { width: 1080, height: 1920 } }) },
+    ])
+    jsonOf(await updateProjectTool.run({ projectId: PROJECT, aspectRatio: '9:16' }, depsFor(fake)))
+    expect(fake.callsTo('PATCH', `/projects/${PROJECT}`)[0]?.body).toEqual({
+      aspectRatio: '9:16',
+      resolution: { width: 1080, height: 1920 },
+    })
+  })
+
   it('コンセプトだけなら PATCH しない', async () => {
     const fake = createFakeApi([
       { method: 'GET', path: `/projects/${PROJECT}`, data: projectRow() },
@@ -60,6 +71,7 @@ describe('update_project', () => {
       { projectId: PROJECT },
       { projectId: PROJECT, styleReferences: four },
       { projectId: PROJECT, status: 'archived' },
+      { projectId: PROJECT, aspectRatio: '3:2' },
     ]) {
       const result = await updateProjectTool.run(args, depsFor(fake))
       expect(result.isError).toBe(true)

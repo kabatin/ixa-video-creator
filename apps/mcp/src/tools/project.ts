@@ -100,6 +100,7 @@ export const UpdateProjectInput = z.object({
     .optional()
     .describe('Replaces the mood-board images sent as style references with every shot. [] clears them.'),
   durationSec: Seconds.positive().nullable().optional().describe('Target length of the piece in seconds; null clears.'),
+  aspectRatio: AspectRatio.optional().describe('Screen shape (e.g. 9:16 for shorts). The resolution follows it. Change it before drawing frames.'),
   budgetUsd: z.number().min(0).nullable().optional(),
   instrumental: z.boolean().optional().describe('true = no lyrics (skips the lyric steps).'),
   status: ProjectStatus.optional(),
@@ -111,16 +112,21 @@ export const updateProjectTool = defineTool({
   risk: 'settings',
   riskOf: (args) => (args.budgetUsd === undefined ? 'write' : 'settings'),
   description:
-    'Change project settings: name, concept (new script version; not undoable), styleGuide, avoid, style reference ' +
+    'Change project settings: name, concept (new script version; not undoable), styleGuide, avoid, aspect ratio, style reference ' +
     'images (replaces all, max 3), target duration, budget, instrumental, status. Only the given fields change.',
   input: UpdateProjectInput,
-  handler: async ({ projectId, concept, styleReferences, ...fields }, { api, workspaceId }) => {
+  handler: async ({ projectId, concept, styleReferences, aspectRatio, ...fields }, { api, workspaceId }) => {
     const styleReferenceAssetIds =
       styleReferences === undefined
         ? undefined
         : await mapLimited(styleReferences, 2, (source) => resolveImage(api, source, { workspaceId, projectId }))
     const patch = Object.fromEntries(
-      Object.entries({ ...fields, styleReferenceAssetIds }).filter(([, value]) => value !== undefined),
+      Object.entries({
+        ...fields,
+        styleReferenceAssetIds,
+        // 向きを変えたら大きさも揃える（web の作品の設定と同じく、その向きの先頭の大きさ）。
+        ...(aspectRatio === undefined ? {} : { aspectRatio, resolution: DEFAULT_RESOLUTION[aspectRatio] }),
+      }).filter(([, value]) => value !== undefined),
     )
     if (Object.keys(patch).length === 0 && concept === undefined) {
       throw new ToolInputError('変える項目を 1 つ以上指定してください')
