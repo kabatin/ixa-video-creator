@@ -185,6 +185,9 @@ const DialogueRow = ({
   readonly onRemove: () => void
 }) => {
   const label = `${String(index + 1)} 行目`
+  // 消したキャラクターが話し手の行。選択肢に無い値だと先頭の人を選んだように見えるので、その旨の選択肢を出す。
+  const missing =
+    draft.speakerId !== null && ![...choices.cast, ...choices.others].some((c) => c.id === draft.speakerId)
   return (
     <div className="space-y-1 rounded border border-line p-1">
       <div className="flex items-center gap-1">
@@ -198,6 +201,7 @@ const DialogueRow = ({
           className={INPUT_CLASS}
         >
           {draft.speakerId === null && <option value="">話し手を選ぶ</option>}
+          {missing && <option value={draft.speakerId ?? ''}>見つからない話し手（選び直してください）</option>}
           {choices.cast.length > 0 && (
             <optgroup label="登場人物">
               {choices.cast.map((c) => (

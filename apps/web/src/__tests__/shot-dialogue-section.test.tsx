@@ -102,4 +102,12 @@ describe('ShotDialogueSection', () => {
     await userEvent.click(screen.getByRole('button', { name: 'ほかで直す' }))
     expect(screen.getByRole('textbox', { name: '1 行目のセリフ' })).toHaveProperty('value', 'ほかで直した')
   })
+
+  it('消したキャラクターが話し手の行は、ほかの人を選んだように見せず「見つからない話し手」と出す', async () => {
+    const gone = newId(CharacterId)
+    render(aWorkbenchShot(1, { dialogue: [{ speakerId: gone, text: 'だれ？', offscreen: false, translation: null }] }))
+    const speaker = await screen.findByRole('combobox', { name: '1 行目の話し手' })
+    expect(speaker).toHaveProperty('value', gone)
+    expect(screen.getByRole('option', { name: '見つからない話し手（選び直してください）' })).toBeTruthy()
+  })
 })
