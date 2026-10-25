@@ -58,6 +58,10 @@ export const copyCharacter = async (
     identityAnchors: source.identityAnchors,
     styleTokens: source.styleTokens,
     colorPalette: source.colorPalette,
+    // セリフの声（ADR-0059）。落とすと、写した作品のセリフのある Shot が「呼び名が無い」で作れなくなる。
+    // 話し手の番号は写した先の作品で振り直す（作品の中で作った順）。
+    speechName: source.speechName,
+    voiceDescription: source.voiceDescription,
   })
   for (const image of await deps.characters.listIdentityImages(source.id)) {
     await deps.characters.addIdentityImage({

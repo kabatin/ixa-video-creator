@@ -98,10 +98,16 @@ const seed = async () => {
   await deps.scripts.appendVersion({ scriptId: script.id, content: '開店前の商店街で戦子が奮闘する', authoredBy: 'human' })
   const track = await deps.musicTracks.create({ projectId: source.id, mediaAssetId: newId(MediaAssetId), title: '曲', isMaster: true, offsetSec: 0, volume: 1 })
   await deps.musicAnalyses.create(analysisOf(track.id))
-  const character = await deps.characters.create({ workspaceId: source.workspaceId, projectId: source.id, name: 'senko', displayName: '戦子' })
+  const character = await deps.characters.create({
+    workspaceId: source.workspaceId, projectId: source.id, name: 'senko', displayName: '戦子',
+    speechName: 'The girl', voiceDescription: 'a bright, brave young woman\'s voice',
+  })
   const look = await deps.looks.create({ characterId: character.id, key: 'BASE', name: '基本', isDefault: true })
   const location = await deps.locations.create({ workspaceId: source.workspaceId, projectId: source.id, name: '店', description: '' })
-  await deps.shots.update(shotA.id, { locationId: location.id })
+  await deps.shots.update(shotA.id, {
+    locationId: location.id,
+    dialogue: [{ speakerId: character.id, text: 'いらっしゃい！' }],
+  })
   await deps.shotCharacters.replaceAll(shotA.id, [{ characterId: character.id, lookId: look.id, prominence: 'primary', order: 0 }])
   await deps.shotReferences.create({ shotId: shotA.id, mediaAssetId: newId(MediaAssetId), role: 'start_frame', weight: 1, order: 0, sourceKind: 'manual' })
   const style = await deps.textStyles.create(source.id, { name: '歌詞', style: { size: 0.08 } })
@@ -212,6 +218,10 @@ describe('POST /projects/:id/duplicate（全部）', () => {
     expect(a?.locationId).not.toBe(f.location.id)
     const [cast] = await f.deps.shotCharacters.findByShot(a!.id)
     expect(cast?.characterId).not.toBe(f.character.id)
+    // セリフの話し手は写したキャラクターへ。呼び名と声の説明も持っていく（ADR-0059）
+    const [copiedCharacter] = await f.deps.characters.findByProject(project.id as Project['id'])
+    expect(copiedCharacter).toMatchObject({ speechName: 'The girl', voiceDescription: "a bright, brave young woman's voice" })
+    expect(a?.dialogue).toEqual([{ speakerId: copiedCharacter?.id, text: 'いらっしゃい！', offscreen: false, translation: null }])
     expect((await f.deps.shotReferences.findByShot(a!.id)).map((r) => r.role)).toEqual(['start_frame'])
 
     // Take: 番号・外した Take・採用・系譜・レビュー・印・生成の記録

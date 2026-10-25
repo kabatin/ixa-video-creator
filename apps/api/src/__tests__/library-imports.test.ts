@@ -85,6 +85,8 @@ const takepi = async (owner: Project = source) => {
     name: 'takepi',
     displayName: '藤本タケピ',
     identityAnchors: ['切れ長の目'],
+    speechName: 'Takepi',
+    voiceDescription: 'a calm young man\'s voice',
   })
   const fourView = image()
   await characters.addIdentityImage({ characterId: character.id, mediaAssetId: fourView, role: 'four_view', isPrimary: true, order: 0 })
@@ -111,6 +113,8 @@ describe('POST /projects/{projectId}/library-imports', () => {
     expect(res.status).toBe(201)
     const [copy] = ((await res.json()) as ImportBody).data.characters
     expect(copy).toMatchObject({ projectId: target.id, workspaceId: target.workspaceId, displayName: '藤本タケピ' })
+    // セリフの声も持っていく（ADR-0059）
+    expect(copy).toMatchObject({ speechName: 'Takepi', voiceDescription: "a calm young man's voice" })
     expect(copy?.id).not.toBe(original.character.id)
     const copyId = CharacterIdSchema.parse(copy?.id)
     expect((await characters.listIdentityImages(copyId)).map((i) => [i.mediaAssetId, i.role, i.isPrimary])).toEqual([
