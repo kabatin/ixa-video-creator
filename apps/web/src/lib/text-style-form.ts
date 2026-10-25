@@ -17,7 +17,7 @@ import { formatDuration } from '@/lib/format-time'
 
 /**
  * テロップの見た目の欄（ADR-0028）。**React を含まない。**
- * 画面の言葉と保存する値（割合）を行き来する。画面には px を出さない（大きさは画面の高さの %）。
+ * 画面の言葉と保存する値（割合）を行き来する。画面には px を出さない（大きさは画面の短い辺の %）。
  */
 
 type Option<T extends string> = { readonly value: T; readonly label: string }
@@ -108,7 +108,7 @@ const percent = (ratio: number): string => String(Math.round(ratio * 1000) / 10)
 /** % を割合へ。小数の割り算の端数を残さない（5.2 → 0.052）。 */
 const fromPercent = (value: number): number => Math.round(value * 100) / 10000
 
-/** 大きさ（画面の高さの %）。空欄は自動。 */
+/** 大きさ（画面の短い辺の %）。空欄は自動。 */
 export const parseSizePercent = (raw: string): Parsed => {
   if (raw.trim() === '') return { ok: true, value: null }
   const value = toNumber(raw)

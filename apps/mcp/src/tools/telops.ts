@@ -92,7 +92,7 @@ const Telop = z.object({
   template: TextTemplateKey.default('plain').describe('plain = centered text; lower_third = bottom band.'),
   styleName: z.string().min(1).optional().describe('A saved text style by name (see list_telops styles).'),
   style: TextStyle.optional().describe(
-    'Look overrides (applied on top of styleName): font gothic|mincho|rounded, size 0.02–0.2 of screen height ' +
+    'Look overrides (applied on top of styleName): font gothic|mincho|rounded, size 0.02–0.2 of the shorter screen side ' +
       '(null = auto), weight, color #RRGGBB, stroke {color,width}, shadow, background {color,opacity}, align, ' +
       'anchor (9 positions like "top-center"), offset {x,y} −0.5–0.5, fadeInSec/fadeOutSec 0–2.',
   ),

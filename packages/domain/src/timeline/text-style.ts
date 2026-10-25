@@ -33,7 +33,7 @@ export const TextAnchor = z.enum([
 ])
 export type TextAnchor = z.infer<typeof TextAnchor>
 
-/** 文字の大きさ（画面の高さに対する割合）。これより小さいと読めず、大きいと 1 行も入らない。 */
+/** 文字の大きさ（画面の縦横の短い辺に対する割合。横長なら高さ）。これより小さいと読めず、大きいと 1 行も入らない。 */
 export const MIN_TEXT_SIZE = 0.02
 export const MAX_TEXT_SIZE = 0.2
 /** 縁取りの太さ（文字の大きさに対する割合）。 */

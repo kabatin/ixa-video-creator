@@ -11,6 +11,7 @@ import {
   textClipBlockHeight,
   textClipFontSize,
   textClipLayout,
+  textClipSizedFontSize,
 } from '../compositions/text-clip.js'
 import { buildTimelinePlan, type ClipPlan } from '../plan.js'
 import { letterboxFit } from '../presets.js'
@@ -209,8 +210,33 @@ describe('長い文字が画面からはみ出さない', () => {
     },
   )
 
-  it('短い文字は大きくしすぎない（映像の高さの上限で頭打ちにする）', () => {
-    expect(textClipFontSize('plain', 'あ', VIDEO)).toBeLessThanOrEqual(VIDEO.height * 0.12)
+  it('短い文字は大きくしすぎない（映像の短い辺の上限で頭打ちにする）', () => {
+    expect(textClipFontSize('plain', 'あ', VIDEO)).toBeLessThanOrEqual(VIDEO.height * 0.09)
+  })
+})
+
+/**
+ * 縦長（9:16）で字幕が画面を覆った（2026-10-25、高さ 1920 を基準にして横長の 1.8 倍になった）。
+ * 大きさは**縦横の短い辺**を基準にする。横長は今までと同じ（短い辺 = 高さ）。
+ */
+describe('縦長の作品でも文字が大きくなりすぎない', () => {
+  const PORTRAIT = letterboxFit({ width: 1080, height: 1920 }, { width: 1080, height: 1920 })
+  const LANDSCAPE = VIDEO
+
+  it('自動の大きさは、同じ文字なら横長と縦長で同じ', () => {
+    for (const template of ['plain', 'lower_third'] as const) {
+      expect(textClipFontSize(template, 'なんでじゃ！', PORTRAIT)).toBe(textClipFontSize(template, 'なんでじゃ！', LANDSCAPE))
+    }
+  })
+
+  it('指定した大きさ（割合）も短い辺に掛ける', () => {
+    expect(textClipSizedFontSize(0.07, PORTRAIT)).toBe(Math.round(0.07 * 1080))
+    expect(textClipSizedFontSize(0.07, LANDSCAPE)).toBe(Math.round(0.07 * 1080))
+  })
+
+  it('縦長の 6 文字の字幕が 1 行に収まる', () => {
+    const size = textClipFontSize('plain', 'なんでじゃ！', PORTRAIT)
+    expect(size * 6).toBeLessThanOrEqual(PORTRAIT.width * textClipLayout('plain').widthRatio)
   })
 })
 

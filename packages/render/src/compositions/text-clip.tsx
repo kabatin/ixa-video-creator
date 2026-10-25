@@ -169,11 +169,11 @@ const TEXT_TEMPLATES: Readonly<
   Record<TextTemplateKey, { readonly layout: TextLayout; readonly decor: TemplateDecor }>
 > = Object.freeze({
   plain: {
-    layout: { widthRatio: 0.8, maxLines: 3, maxSizeRatio: 0.12 },
+    layout: { widthRatio: 0.8, maxLines: 3, maxSizeRatio: 0.09 },
     decor: { width: 'fit', leftBar: false },
   },
   lower_third: {
-    layout: { widthRatio: 0.9, maxLines: 2, maxSizeRatio: 0.07 },
+    layout: { widthRatio: 0.9, maxLines: 2, maxSizeRatio: 0.06 },
     decor: { width: 'full', leftBar: true },
   },
 })
@@ -200,8 +200,20 @@ export const textClipFontSize = (
   const boxWidth = video.width * layout.widthRatio
   const charCount = Math.max(text.length, 1)
   const fits = Math.floor((boxWidth * layout.maxLines) / charCount)
-  return Math.max(1, Math.min(Math.floor(video.height * layout.maxSizeRatio), fits))
+  return Math.max(1, Math.min(Math.floor(textClipBaseLength(video) * layout.maxSizeRatio), fits))
 }
+
+/**
+ * 文字の大きさの基準になる長さ。**縦横の短い辺。**
+ * 高さを基準にすると、縦長（9:16）では横長の 1.8 倍になり字幕が画面を覆った（2026-10-25）。
+ * 横長では短い辺 = 高さなので、今までと同じ大きさになる。
+ */
+export const textClipBaseLength = (video: { readonly width: number; readonly height: number }): number =>
+  Math.min(video.width, video.height)
+
+/** 大きさを割合で指定したテロップの文字の大きさ（px）。 */
+export const textClipSizedFontSize = (size: number, video: { readonly width: number; readonly height: number }): number =>
+  Math.max(1, Math.round(size * textClipBaseLength(video)))
 
 /** テンプレートの置き場所。テストが実際の寸法から収まるかを計算するのに使う。 */
 export const textClipLayout = (template: TextTemplateKey): TextLayout =>
@@ -331,7 +343,7 @@ export const TextClip: React.FC<{
   const fontSize =
     style.size === null
       ? textClipFontSize(template, params.text, video)
-      : Math.max(1, Math.round(style.size * video.height))
+      : textClipSizedFontSize(style.size, video)
   const draw: DrawProps = { text: params.text, video, layout, decor, style, fontSize, template }
   const body =
     params.highlight !== undefined && timing !== undefined ? (

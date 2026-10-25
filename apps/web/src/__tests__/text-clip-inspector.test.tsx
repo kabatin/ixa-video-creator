@@ -173,7 +173,7 @@ describe('TextClipInspector', () => {
     })
   })
 
-  it('大きさは画面の高さの %（空欄で自動に戻る）', async () => {
+  it('大きさは画面の短い辺の %（空欄で自動に戻る）', async () => {
     await open()
     const size = screen.getByLabelText('大きさ（%）')
     expect((size as HTMLInputElement).value).toBe('5')

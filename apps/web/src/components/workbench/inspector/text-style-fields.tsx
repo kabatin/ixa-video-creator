@@ -70,7 +70,7 @@ export const TextStyleFields = ({
             return set({ size: parsed.ok ? parsed.value : undefined })
           }}
         />
-        <p className="text-xs text-muted">大きさは画面の高さに対する %。空欄は文字数から自動で決めます。</p>
+        <p className="text-xs text-muted">大きさは画面の短い辺（横長なら高さ、縦長なら幅）に対する %。空欄は文字数から自動で決めます。</p>
         <AutoSaveSelect label="太さ" value={resolved.weight} options={WEIGHT_OPTIONS} disabled={disabled} onSave={(next) => set({ weight: next })} />
         <AutoSaveColor label="色" value={resolved.color} disabled={disabled} onSave={(next) => set({ color: next })} />
         <AutoSaveSelect label="影" value={resolved.shadow} options={SHADOW_OPTIONS} disabled={disabled} onSave={(next) => set({ shadow: next })} />
