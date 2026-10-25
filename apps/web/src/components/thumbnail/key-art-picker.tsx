@@ -10,7 +10,9 @@ import { useState } from 'react'
 import { ImageCheckBadge } from '@/components/image-check-badge'
 import { MediaImage } from '@/components/media-image'
 import { Button } from '@/components/ui/button'
+import { PromptButton } from '@/components/prompt/prompt-button'
 import type { KeyArtJobs } from '@/components/thumbnail/use-key-art-jobs'
+import { promptViewFromImageJob, type PromptView } from '@/lib/prompt-view'
 import type { WireKeyArtJob } from '@/lib/thumbnail-api'
 
 /**
@@ -30,12 +32,21 @@ type Candidate = {
   readonly mediaAssetId: MediaAssetId
   /** 作った絵のチェック（ADR-0055）。 */
   readonly check: WireKeyArtJob['check']
+  /** 描かせたときに送った指示（プロンプトビューア）。 */
+  readonly prompt: PromptView
 }
 
 const candidatesOf = (jobs: readonly WireKeyArtJob[]): readonly Candidate[] =>
-  jobs.flatMap((job) =>
+  jobs.flatMap((job, index) =>
     job.status === 'succeeded' && job.mediaAssetId !== null
-      ? [{ jobId: job.id, mediaAssetId: job.mediaAssetId, check: job.check }]
+      ? [
+          {
+            jobId: job.id,
+            mediaAssetId: job.mediaAssetId,
+            check: job.check,
+            prompt: promptViewFromImageJob(job, `キーアート ${String(index + 1)}`),
+          },
+        ]
       : [],
   )
 
@@ -114,7 +125,10 @@ export const KeyArtPicker = ({ keyArt, selectedAssetId, onPick }: KeyArtPickerPr
                   className="aspect-video w-full rounded object-cover"
                 />
               </button>
-              <ImageCheckBadge check={candidate.check} />
+              <div className="flex flex-wrap items-center gap-1">
+                <ImageCheckBadge check={candidate.check} />
+                <PromptButton view={candidate.prompt} />
+              </div>
             </li>
           ))}
         </ul>

@@ -252,6 +252,7 @@ export const ComparePanel = () => {
               }}
               takeContextMenu={takeMenu}
               takeMenuItems={takeMenuItems}
+              shotCode={shot.code}
             />
           </section>
         </div>

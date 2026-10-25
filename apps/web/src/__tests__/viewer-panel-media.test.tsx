@@ -24,6 +24,8 @@ const api = vi.hoisted(() => ({
   mediaUrl: vi.fn(),
   previewVoice: vi.fn(),
   getVoiceJob: vi.fn(),
+  // 楽曲の頼み方（プロンプトビューア）。この試験では持ち込んだ曲だけ。
+  listMusicTrackSources: vi.fn().mockResolvedValue(new Map()),
 }))
 vi.mock('@/lib/api-client', () => ({ createApiClient: () => api }))
 

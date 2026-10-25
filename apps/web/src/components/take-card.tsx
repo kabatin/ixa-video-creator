@@ -17,6 +17,8 @@ import {
 import type { ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
 import type { ContextMenuItem } from '@/components/workbench/ui/context-menu'
 import { MenuButton } from '@/components/workbench/ui/more-menu'
+import { PromptButton } from '@/components/prompt/prompt-button'
+import { promptViewFromTake } from '@/lib/prompt-view'
 
 /** 画面に出す Take。API が決めた「作り直し推奨」を持てる（ADR-0057）。 */
 export type TakeView = Take & { readonly retakeRecommended?: boolean }
@@ -30,6 +32,8 @@ export type TakeCardProps = {
   readonly contextMenu?: ContextMenuTriggerProps
   /** 「…」で開くメニューの行（右クリックと同じ中身）。渡さなければ「…」を出さない。 */
   readonly menuItems?: () => readonly ContextMenuItem[]
+  /** プロンプトの見出しに使う Shot の番号（「CUT-03 の Take #2」）。分からなければ省く。 */
+  readonly shotCode?: string
 }
 
 type UrlState =
@@ -139,6 +143,7 @@ export const TakeCard = ({
   onSelect,
   contextMenu,
   menuItems,
+  shotCode,
 }: TakeCardProps) => {
   const urlState = useSignedUrl(take.mediaAssetId)
   const mediaInfo = useMediaInfo(take.mediaAssetId)
@@ -154,6 +159,7 @@ export const TakeCard = ({
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-text">Take {take.index}</h3>
         <span className="flex items-center gap-1">
+          <PromptButton view={promptViewFromTake(take, shotCode ?? null)} />
           {selected && (
             <span className="rounded-full bg-ok px-2.5 py-0.5 text-xs font-semibold text-bg">
               採用中

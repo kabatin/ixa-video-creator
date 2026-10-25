@@ -3,10 +3,12 @@
 import { pickSheetReference, type CharacterId, type CharacterIdentityImage } from '@ixa/domain'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { PromptButton } from '@/components/prompt/prompt-button'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import type { CharacterSheetApi, WireCharacterSheetState } from '@/lib/character-sheet-api'
 import { imageJobProgressText, isImageJobActive } from '@/lib/image-check'
+import { promptViewFromImageJob } from '@/lib/prompt-view'
 
 /**
  * キャラクターシートの区画（ADR-0035。制作者 2026-10-03「動画生成に役立つ形式のキャラクターシートを 1 枚の画像から
@@ -78,6 +80,8 @@ export const CharacterSheetField = ({ characterId, images, version, onSheetAdded
   const hasReference = images !== null && pickSheetReference(images) !== null
   const hasSheet = images?.some((image) => image.role === 'four_view') ?? false
   const drawing = isDrawing(job ?? null)
+  // 最後に作れたシートのプロンプト。作っている最中・失敗したときは出さない。
+  const sheetPrompt = job?.status === 'succeeded' ? promptViewFromImageJob(job, 'キャラクターシート（四面図）') : null
 
   return (
     <section className="space-y-2 rounded-md border border-line p-2">
@@ -88,9 +92,12 @@ export const CharacterSheetField = ({ characterId, images, version, onSheetAdded
         </p>
       )}
       {hasReference && job !== undefined && (
-        <Button size="sm" disabled={busy || drawing} onClick={() => void start()}>
-          {hasSheet ? 'キャラクターシートを作り直す' : 'キャラクターシートを作る'}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" disabled={busy || drawing} onClick={() => void start()}>
+            {hasSheet ? 'キャラクターシートを作り直す' : 'キャラクターシートを作る'}
+          </Button>
+          <PromptButton view={sheetPrompt} />
+        </div>
       )}
       {drawing && (
         <p role="status" className="text-xs text-muted">

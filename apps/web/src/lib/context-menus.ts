@@ -116,7 +116,10 @@ export const shotMenuEntries = (input: {
 ]
 
 export type AssetMenuAction =
-  'open-viewer' | 'inspect' | 'set-default-look' | 'set-master' | 'reanalyze' | 'delete'
+  'open-viewer' | 'inspect' | 'view-prompt' | 'set-default-look' | 'set-master' | 'reanalyze' | 'delete'
+
+/** プロンプトビューアを開く項目（制作者 2026-10-25）。楽曲と効果音の右クリックが同じ名前を使う。 */
+export const VIEW_PROMPT_LABEL = 'プロンプトを見る'
 
 export type AssetMenuKind = 'character' | 'look' | 'location' | 'brand-asset' | 'track' | 'voice' | 'project'
 
@@ -163,9 +166,12 @@ export const assetMenuEntries = (input: {
   readonly where: 'tree' | 'inspector'
   readonly isDefaultLook?: boolean
   readonly isMaster?: boolean
+  /** AI で作った曲で、作ったときの頼み方がある。無ければ「プロンプトを見る」を出さない。 */
+  readonly hasPrompt?: boolean
 }): readonly ContextMenuEntry<AssetMenuAction>[] => {
   const inspect =
     input.where === 'tree' ? [item<AssetMenuAction>('inspect', 'インスペクターで直す')] : []
+  const prompt = input.hasPrompt === true ? [item<AssetMenuAction>('view-prompt', VIEW_PROMPT_LABEL)] : []
   if (input.kind === 'project') return inspect
   const kind = input.kind
   const extra: readonly ContextMenuEntry<AssetMenuAction>[] =
@@ -188,6 +194,7 @@ export const assetMenuEntries = (input: {
   return [
     ...viewer,
     ...inspect,
+    ...prompt,
     ...(extra.length === 0 ? [] : [SEPARATOR, ...extra]),
     SEPARATOR,
     item('delete', `${ASSET_KIND_LABELS[kind]}を削除`, {
@@ -195,6 +202,15 @@ export const assetMenuEntries = (input: {
     }),
   ]
 }
+
+export type SfxMenuAction = 'view-prompt'
+
+/**
+ * 効果音の素材のメニュー（素材ツリーの右クリック）。消すのは置いたクリップなので、ここは見るだけ。
+ * AI で作った音でなければ何も並ばない（メニューを開かない）。
+ */
+export const sfxMenuEntries = (input: { readonly hasPrompt: boolean }): readonly ContextMenuEntry<SfxMenuAction>[] =>
+  input.hasPrompt ? [item('view-prompt', VIEW_PROMPT_LABEL)] : []
 
 export type TakeMenuAction = 'adopt' | 'unadopt' | 'hide' | 'remake_final' | 'upscale' | 'download'
 

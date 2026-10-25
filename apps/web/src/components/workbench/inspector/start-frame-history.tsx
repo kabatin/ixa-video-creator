@@ -5,7 +5,9 @@ import { useState } from 'react'
 import { ImageCheckBadge } from '@/components/image-check-badge'
 import { MediaImage } from '@/components/media-image'
 import { Button } from '@/components/ui/button'
+import { PromptButton } from '@/components/prompt/prompt-button'
 import { imageCheckReason, type WireImageHistoryEntry } from '@/lib/image-check'
+import { promptViewFromImageJob } from '@/lib/prompt-view'
 
 /**
  * 開始フレームとして作った絵の履歴の帯（ADR-0055）。作った順にサムネイルを並べ、チェックの印と理由を付ける。
@@ -14,6 +16,8 @@ import { imageCheckReason, type WireImageHistoryEntry } from '@/lib/image-check'
  */
 
 export type StartFrameHistoryProps = {
+  /** プロンプトの見出しに使う Shot の番号。省けば何枚目かだけ。 */
+  readonly shotCode?: string
   readonly entries: readonly WireImageHistoryEntry[]
   /** 押せない（作っている最中・保存中）。 */
   readonly disabled: boolean
@@ -28,10 +32,12 @@ const drawnOf = (entries: readonly WireImageHistoryEntry[]): readonly Drawn[] =>
     .flatMap((entry) => (entry.mediaAssetId === null ? [] : [{ ...entry, mediaAssetId: entry.mediaAssetId }]))
     .sort((a, b) => a.queuedAt.getTime() - b.queuedAt.getTime())
 
-export const StartFrameHistory = ({ entries, disabled, onUse, onRetry }: StartFrameHistoryProps) => {
+export const StartFrameHistory = ({ shotCode, entries, disabled, onUse, onRetry }: StartFrameHistoryProps) => {
   const drawn = drawnOf(entries)
   const [openJobId, setOpenJobId] = useState<ImageGenerationJobId | null>(null)
   const open = drawn.find((entry) => entry.jobId === openJobId) ?? null
+  const openNumber = open === null ? 0 : drawn.indexOf(open) + 1
+  const openTitle = `${shotCode === undefined ? '' : `${shotCode} の`}開始画像（${String(openNumber)} 枚目）`
   if (drawn.length === 0) return null
 
   return (
@@ -73,6 +79,7 @@ export const StartFrameHistory = ({ entries, disabled, onUse, onRetry }: StartFr
           <div className="flex flex-wrap items-center gap-2">
             <ImageCheckBadge check={open.check} />
             {open.attempt > 1 && <span className="text-xs text-muted">{`やり直し ${String(open.attempt - 1)} 回目`}</span>}
+            <PromptButton view={promptViewFromImageJob(open, openTitle)} />
           </div>
           {imageCheckReason(open.check) !== null && <p className="text-xs text-text">{imageCheckReason(open.check)}</p>}
           <div className="flex flex-wrap gap-2">

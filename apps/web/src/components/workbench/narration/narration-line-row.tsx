@@ -4,11 +4,13 @@ import { NarrationTakeId, VoiceProfileId } from '@ixa/domain'
 import { useState } from 'react'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { Button } from '@/components/ui/button'
+import { PromptButton } from '@/components/prompt/prompt-button'
 import { describeForPerson } from '@/lib/api-error'
 import type { ApiClient } from '@/lib/api-client'
 import { formatApproxDuration, formatClock, formatDuration } from '@/lib/format-time'
 import type { UpdateNarrationLineBody, WireNarrationLine, WireNarrationOverview, WireVoice } from '@/lib/narration-api'
 import { lineStatus } from '@/lib/narration-view'
+import { promptViewFromVoice } from '@/lib/prompt-view'
 import { parseClockInput } from '@/lib/time-input'
 import type { Segment } from './use-segment-player'
 
@@ -111,6 +113,8 @@ export const NarrationLineRow = ({ line, index, voices, api, apply, reload, play
             ))}
           </span>
         )}
+        {/* 選んだ Take を作ったときの読みと演技指示。AI で作った Take だけ（録音には出さない）。 */}
+        {selected !== null && <PromptButton view={promptViewFromVoice(selected, number)} />}
         {selected !== null && (
           <Button
             size="sm"

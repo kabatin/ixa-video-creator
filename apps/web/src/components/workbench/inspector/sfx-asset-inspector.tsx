@@ -8,6 +8,8 @@ import { AudioSoloButton } from '@/components/workbench/ui/audio-solo-button'
 import { ObjectHeader } from '@/components/workbench/ui/object-header'
 import { Section } from '@/components/workbench/ui/section'
 import { useWorkbench } from '@/components/workbench/workbench-context'
+import { PromptButton } from '@/components/prompt/prompt-button'
+import { promptViewFromSfx } from '@/lib/prompt-view'
 import { formatSpan } from '@/lib/format-time'
 
 /**
@@ -29,7 +31,10 @@ export const SfxAssetInspector = ({ id }: { readonly id: MediaAssetId }) => {
       <ObjectHeader kind="効果音" title={item.label} />
       <div className="workbench-panel-body relative min-h-0 flex-1 overflow-auto">
         <Section title="効果音">
-          <AudioSoloButton mediaAssetId={item.mediaAssetId} label={item.label} />
+          <div className="flex flex-wrap items-center gap-2">
+            <AudioSoloButton mediaAssetId={item.mediaAssetId} label={item.label} />
+            <PromptButton view={promptViewFromSfx(item.label, item.source ?? null)} />
+          </div>
         </Section>
         <Section title="置いた位置">
           {item.placements.length === 0 ? (

@@ -87,7 +87,8 @@ export type ImageJobLike = {
   /** 送った指示の本文。記録する前の絵・古い API は null か無し。 */
   readonly sentPrompt?: string | null
   readonly modelId?: string | null
-  readonly queuedAt: Date
+  /** 頼んだ日時。古い API は返さないことがある。 */
+  readonly queuedAt?: Date | null
 }
 
 /** 絵（開始画像・キーアート・四面図）。記録する前に作った絵は本文の代わりに注記を出す。 */
@@ -96,7 +97,7 @@ export const promptViewFromImageJob = (job: ImageJobLike, title: string): Prompt
   return {
     title,
     tool: job.modelId ?? null,
-    createdAt: job.queuedAt,
+    createdAt: job.queuedAt ?? null,
     sections: sent === null ? [] : [{ label: 'プロンプト', text: sent, mono: true }],
     facts: [],
     ...(sent === null ? { note: UNRECORDED_IMAGE_NOTE } : {}),

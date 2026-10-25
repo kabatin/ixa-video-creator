@@ -14,6 +14,8 @@ export type TakeGridProps = {
   readonly takeContextMenu?: (take: Take) => ContextMenuTriggerProps
   /** カードの「…」で開くメニューの行（右クリックと同じ中身）。 */
   readonly takeMenuItems?: (take: Take) => readonly ContextMenuItem[]
+  /** プロンプトの見出しに使う Shot の番号。 */
+  readonly shotCode?: string
 }
 
 /** Take は横並びで比較する。縦積みにすると隣の Take と見比べられない。 */
@@ -24,6 +26,7 @@ export const TakeGrid = ({
   onSelect,
   takeContextMenu,
   takeMenuItems,
+  shotCode,
 }: TakeGridProps) => {
   if (takes.length === 0) {
     return (
@@ -44,6 +47,7 @@ export const TakeGrid = ({
           onSelect={onSelect}
           {...(takeContextMenu === undefined ? {} : { contextMenu: takeContextMenu(take) })}
           {...(takeMenuItems === undefined ? {} : { menuItems: () => takeMenuItems(take) })}
+          {...(shotCode === undefined ? {} : { shotCode })}
         />
       ))}
     </ul>

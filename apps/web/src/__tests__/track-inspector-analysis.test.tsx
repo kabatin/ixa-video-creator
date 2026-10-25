@@ -12,7 +12,7 @@ import { renderInWorkbench } from './workbench-fixture'
  * サーバを読み直したら読み直し、マスターの曲が解析中なら「解析しています」と言う。
  */
 
-const api = vi.hoisted(() => ({ getAnalysis: vi.fn() }))
+const api = vi.hoisted(() => ({ getAnalysis: vi.fn(), listMusicTrackSources: vi.fn().mockResolvedValue(new Map()) }))
 vi.mock('@/lib/api-client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/lib/api-client')>()
   return { ...original, createApiClient: () => api }

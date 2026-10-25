@@ -10,6 +10,9 @@ import { PanelEmpty } from '@/components/workbench/panels/panel-frame'
 import { useSfxAssets } from '@/components/workbench/sfx-assets'
 import { useSoloAudio } from '@/components/workbench/solo-audio'
 import { VoicePreview } from '@/components/workbench/voice-preview'
+import { useMusicTrackSources } from '@/components/workbench/use-music-track-sources'
+import { PromptButton } from '@/components/prompt/prompt-button'
+import { promptViewFromMusic, promptViewFromSfx } from '@/lib/prompt-view'
 import { createApiClient } from '@/lib/api-client'
 import { formatSpan } from '@/lib/format-time'
 import type { WireMusicAnalysis } from '@/lib/music-api'
@@ -80,6 +83,7 @@ export const TrackView = ({ id }: { readonly id: MusicTrackId }) => {
   const api = useMemo(() => createApiClient(), [])
   const { tracks } = useAssets()
   const track = (tracks.state === 'ready' ? tracks.value : []).find((item) => item.id === id)
+  const sources = useMusicTrackSources()
   const [analysis, setAnalysis] = useState<WireMusicAnalysis | null | 'loading'>('loading')
   const [peaks, setPeaks] = useState<WaveformPeaksResult>({ status: 'empty' })
   const solo = useSoloAudio()
@@ -108,10 +112,13 @@ export const TrackView = ({ id }: { readonly id: MusicTrackId }) => {
   if (track === undefined) return <PanelEmpty title="この楽曲は見つかりません" />
   return (
     <div className="space-y-2">
-      <h2 className="text-lg font-semibold text-text">
-        {track.title}
-        {track.isMaster && <span className="ml-2 text-xs text-muted">マスター</span>}
-      </h2>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-lg font-semibold text-text">
+          {track.title}
+          {track.isMaster && <span className="ml-2 text-xs text-muted">マスター</span>}
+        </h2>
+        <PromptButton view={promptViewFromMusic(track.title, sources.get(track.id) ?? null)} />
+      </div>
       <AudioPreview mediaAssetId={track.mediaAssetId} label={track.title} />
       {analysis === 'loading' && <p className="text-sm text-muted">解析を読み込んでいます…</p>}
       {analysis === null && (
@@ -170,7 +177,10 @@ export const SfxView = ({ id }: { readonly id: MediaAssetId }) => {
   if (item === undefined) return <PanelEmpty title="この効果音は見つかりません" />
   return (
     <div className="space-y-2">
-      <h2 className="text-lg font-semibold text-text">{item.label}</h2>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-lg font-semibold text-text">{item.label}</h2>
+        <PromptButton view={promptViewFromSfx(item.label, item.source ?? null)} />
+      </div>
       <AudioPreview mediaAssetId={item.mediaAssetId} label={item.label} />
       <p className="text-sm text-muted">
         {item.placements.length === 0

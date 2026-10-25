@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   assetMenuEntries,
+  sfxMenuEntries,
   takeMenuEntries,
   textClipMenuEntries,
   placeContextMenu,
@@ -138,6 +139,18 @@ describe('assetMenuEntries', () => {
       'インスペクターで直す',
       'キャラクターを削除',
     ])
+  })
+
+  it('AI で作った曲（プロンプトの記録がある）にだけ「プロンプトを見る」を出す', () => {
+    expect(labels(assetMenuEntries({ kind: 'track', name: '作った曲', where: 'tree', hasPrompt: true }))).toContain(
+      'プロンプトを見る',
+    )
+    expect(labels(assetMenuEntries({ kind: 'track', name: '持ち込み', where: 'tree' }))).not.toContain('プロンプトを見る')
+  })
+
+  it('効果音は AI で作った音にだけ「プロンプトを見る」。ほかは何も並ばない', () => {
+    expect(sfxMenuEntries({ hasPrompt: true })).toMatchObject([{ kind: 'item', action: 'view-prompt', label: 'プロンプトを見る' }])
+    expect(sfxMenuEntries({ hasPrompt: false })).toEqual([])
   })
 
   it('インスペクターの「…」では、直す（いま開いている）は出さない', () => {

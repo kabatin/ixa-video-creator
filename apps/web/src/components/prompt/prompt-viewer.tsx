@@ -87,7 +87,7 @@ const PromptViewerBody = ({
               {copied?.key === key && <span role="status" className="text-xs text-muted">{copied.message}</span>}
             </div>
             <pre
-              className={`max-h-64 overflow-auto whitespace-pre-wrap break-words rounded border border-line bg-surface-2 p-2 text-sm text-text ${
+              className={`relative max-h-64 overflow-auto whitespace-pre-wrap break-words rounded border border-line bg-surface-2 p-2 text-sm text-text ${
                 section.mono ? 'font-mono' : ''
               }`}
             >

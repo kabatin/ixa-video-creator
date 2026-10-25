@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SFX_LABEL_MAX_CHARS, sfxTreeItems } from '@/lib/sfx-tree'
+import { SFX_LABEL_MAX_CHARS, sfxTreeItems, type SfxSource } from '@/lib/sfx-tree'
 import { WireSfxJob } from '@/lib/sfx-job-api'
 import { WireTimelineClip } from '@/lib/timeline-api'
 import { WireUploadedSfx } from '@/lib/uploaded-sfx-api'
@@ -39,6 +39,31 @@ const job = (prompt: string, mediaAssetIds: readonly string[], status = 'succeed
 
 const uploaded = (title: string, mediaAssetId: string, id = '01ARZ3NDEKTSV4RRFFQ69G5FD0') =>
   WireUploadedSfx.parse({ id, mediaAssetId, title, createdAt: new Date().toISOString() })
+
+describe('sfxTreeItems: 作ったときの頼み方（プロンプトビューア）', () => {
+  it('AI で作った音には、きっかけ・その音の種・AI を添える。取り込んだ音には無い', () => {
+    const made = WireSfxJob.parse({
+      id: '01ARZ3NDEKTSV4RRFFQ69G5FB0',
+      status: 'succeeded',
+      tool: 'stable_audio',
+      cue: { startSec: 2, durationSec: 1, prompt: 'door slam', negativePrompt: 'music', volume: 1 },
+      mediaAssetIds: [SOUND_A, SOUND_C],
+      seedsUsed: [11, 12],
+      timelineClipId: null,
+      finishedAt: '2026-10-25T03:00:00.000Z',
+    })
+    const items = sfxTreeItems([], [made], [uploaded('ドアの音', SOUND_B)])
+    const byId = new Map<string, SfxSource | undefined>(items.map((item) => [item.mediaAssetId, item.source]))
+    expect(byId.get(SOUND_A)).toMatchObject({ cue: { prompt: 'door slam', negativePrompt: 'music' }, seed: 11, tool: 'stable_audio' })
+    expect(byId.get(SOUND_C)?.seed).toBe(12)
+    expect(byId.get(SOUND_B)).toBeUndefined()
+  })
+
+  it('前の API（種・AI を返さない）でも、きっかけだけで頼み方を持つ', () => {
+    const [item] = sfxTreeItems([], [job('door slam', [SOUND_A])])
+    expect(item?.source).toMatchObject({ cue: { prompt: 'door slam' }, seed: null, tool: null, createdAt: null })
+  })
+})
 
 describe('sfxTreeItems: 取り込んだ音（制作者 2026-10-19）', () => {
   it('置いていない取り込んだ音も候補として出し、ファイルの名前で呼ぶ', () => {

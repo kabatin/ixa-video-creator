@@ -5,6 +5,9 @@ import { useContextMenuHost, type ContextMenuItem } from '@/components/workbench
 import type { MenuPoint } from '@/components/workbench/use-context-menu'
 import { toMenuItems } from '@/components/workbench/use-shot-menu'
 import { useWorkbench } from '@/components/workbench/workbench-context'
+import { useMusicTrackSources } from '@/components/workbench/use-music-track-sources'
+import { usePromptViewer } from '@/components/prompt/prompt-viewer-provider'
+import { promptViewFromMusic, type PromptView } from '@/lib/prompt-view'
 import { assetMenuEntries, type AssetMenuAction } from '@/lib/context-menus'
 import type { Inspected } from '@/lib/workbench-selection'
 
@@ -15,6 +18,8 @@ type Resolved = {
   readonly name: string
   readonly isDefaultLook?: boolean
   readonly isMaster?: boolean
+  /** 作ったときのプロンプト（AI で作った曲だけ）。 */
+  readonly prompt?: PromptView
 }
 
 /**
@@ -25,6 +30,8 @@ export const useAssetMenu = () => {
   const workbench = useWorkbench()
   const host = useContextMenuHost()
   const { characters, looks, locations, brandAssets, tracks, voices, actions } = useAssets()
+  const trackSources = useMusicTrackSources()
+  const promptViewer = usePromptViewer()
 
   /** 名前と状態。見つからなければ null（消えた・まだ読めていない）。 */
   const resolve = (target: AssetTarget): Resolved | null => {
@@ -47,7 +54,9 @@ export const useAssetMenu = () => {
       }
       case 'track': {
         const found = readyOr(tracks).find((item) => item.id === target.id)
-        return found === undefined ? null : { name: found.title, isMaster: found.isMaster }
+        if (found === undefined) return null
+        const prompt = promptViewFromMusic(found.title, trackSources.get(found.id) ?? null)
+        return { name: found.title, isMaster: found.isMaster, ...(prompt === null ? {} : { prompt }) }
       }
       case 'voice': {
         const found = readyOr(voices).find((item) => item.id === target.id)
@@ -102,6 +111,9 @@ export const useAssetMenu = () => {
         workbench.inspect(target)
         workbench.focusPanel('inspector')
       },
+      'view-prompt': () => {
+        if (resolved.prompt !== undefined) promptViewer?.open(resolved.prompt)
+      },
       'set-default-look': async () => {
         if (target.kind === 'look') await actions.updateLook(target.id, { isDefault: true })
       },
@@ -119,6 +131,8 @@ export const useAssetMenu = () => {
       where,
       ...(resolved.isDefaultLook === undefined ? {} : { isDefaultLook: resolved.isDefaultLook }),
       ...(resolved.isMaster === undefined ? {} : { isMaster: resolved.isMaster }),
+      // 共通のビューアがある所（作業画面）でだけ出す。
+      hasPrompt: resolved.prompt !== undefined && promptViewer !== null,
     })
     return toMenuItems(entries, run)
   }

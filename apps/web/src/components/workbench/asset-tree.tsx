@@ -16,6 +16,7 @@ import { isAssetSelection, sameSelection, type Inspected } from '@/lib/workbench
 import { MusicJobProgress } from '@/components/workbench/ui/music-job-progress'
 import { useSfxAssets } from '@/components/workbench/sfx-assets'
 import { useAssetMenu, type AssetTarget } from '@/components/workbench/use-asset-menu'
+import { useSfxMenu } from '@/components/workbench/use-sfx-menu'
 import { useContextMenuTrigger, type ContextMenuTriggerProps } from '@/components/workbench/use-context-menu'
 
 const ITEM =
@@ -51,6 +52,8 @@ export const AssetTree = () => {
   const assetMenuTrigger = useContextMenuTrigger<AssetTarget>((target, at, origin) => {
     assetMenu.open(target, at, origin)
   })
+  // 効果音の右クリック（AI で作った音だけ「プロンプトを見る」）。
+  const sfxMenu = useSfxMenu()
   const projectSelection: AssetTarget = { kind: 'project', id: workbench.projectId }
   const inspectProject = (): void => {
     workbench.inspect(projectSelection)
@@ -146,6 +149,7 @@ export const AssetTree = () => {
                   label={item.label}
                   badge={sfxBadge(item.placements.length)}
                   drag={{ kind: 'sfx', id: item.mediaAssetId }}
+                  {...(sfxMenu.has(item) ? { contextMenu: sfxMenu.trigger(item) } : {})}
                   selected={sameSelection(workbench.inspected, { kind: 'sfx', id: item.mediaAssetId })}
                   onSelect={() => {
                     select({ kind: 'sfx', id: item.mediaAssetId })

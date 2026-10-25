@@ -25,12 +25,23 @@ export type SfxPlacement = {
   readonly durationSec: number
 }
 
+/** AI で作った音を作ったときの頼み方（プロンプトビューア）。 */
+export type SfxSource = {
+  readonly cue: WireSfxJob['cue']
+  /** この音の種。分からなければ null。 */
+  readonly seed: number | null
+  readonly tool: string | null
+  readonly createdAt: Date | null
+}
+
 export type SfxTreeItem = {
   readonly mediaAssetId: MediaAssetId
   /** 画面に出す名前。作った音はきっかけの文、取り込んだ音はファイルの名前、段に直に落とした音は置いた位置。 */
   readonly label: string
   /** 置いた位置（早い順）。まだ置いていない候補は空。 */
   readonly placements: readonly SfxPlacement[]
+  /** AI で作った音の頼み方。取り込んだ音・段に直に落とした音には無い。 */
+  readonly source?: SfxSource
 }
 
 /** 名前の長さの上限（文字）。きっかけの文は長いことがある。 */
@@ -55,6 +66,26 @@ const jobLabels = (jobs: readonly WireSfxJob[]): ReadonlyMap<MediaAssetId, strin
     .flatMap((job) => job.mediaAssetIds.map((id, index) => ({ id, label: sfxSoundLabel(job.cue.prompt, index) })))
     .reduce<ReadonlyMap<MediaAssetId, string>>(
       (acc, { id, label }) => (acc.has(id) ? acc : new Map([...acc, [id, label]])),
+      new Map(),
+    )
+
+/** 作った音の頼み方。名前と同じく、同じ素材が複数のジョブにあれば新しいジョブのものを使う。 */
+const jobSources = (jobs: readonly WireSfxJob[]): ReadonlyMap<MediaAssetId, SfxSource> =>
+  jobs
+    .filter((job) => job.status === 'succeeded')
+    .flatMap((job) =>
+      job.mediaAssetIds.map((id, index) => ({
+        id,
+        source: {
+          cue: job.cue,
+          seed: job.seedsUsed?.[index] ?? null,
+          tool: job.tool ?? null,
+          createdAt: job.finishedAt ?? null,
+        },
+      })),
+    )
+    .reduce<ReadonlyMap<MediaAssetId, SfxSource>>(
+      (acc, { id, source }) => (acc.has(id) ? acc : new Map([...acc, [id, source]])),
       new Map(),
     )
 
@@ -103,12 +134,14 @@ export const sfxTreeItems = (
   uploads: readonly WireUploadedSfx[] = [],
 ): readonly SfxTreeItem[] => {
   const labels = withUploadLabels(jobLabels(jobs), uploads)
+  const sources = jobSources(jobs)
   const placements = placementsOf(clips)
   const unplaced = [...labels.keys()].filter((id) => !placements.has(id))
   return [...placements.keys(), ...unplaced].map((id) => {
     const placed = placements.get(id) ?? []
     const first = placed[0]
     const label = labels.get(id) ?? (first === undefined ? '効果音' : `効果音（${formatClock(first.startSec)}）`)
-    return { mediaAssetId: id, label, placements: placed }
+    const source = sources.get(id)
+    return { mediaAssetId: id, label, placements: placed, ...(source === undefined ? {} : { source }) }
   })
 }

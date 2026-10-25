@@ -12,6 +12,8 @@ import type { ShotStartFrameApi, WireStartFrameState } from '@/lib/shot-start-fr
 import { DRAW_ANYWAY_LABEL, drawWithoutStoryboardWarning } from '@/lib/step-guards'
 import { useContextMenuHost } from '@/components/workbench/ui/context-menu'
 import { StartFrameHistory } from '@/components/workbench/inspector/start-frame-history'
+import { PromptButton } from '@/components/prompt/prompt-button'
+import { promptViewFromImageJob } from '@/lib/prompt-view'
 
 /**
  * Shot の最初のフレーム（ADR-0025）。
@@ -211,6 +213,10 @@ export const StartFrameField = ({
     }
   }
 
+  // いま付いている絵を作ったジョブ（履歴の「使用中」）。手で付けた絵は AI で作っていないので、プロンプトを出さない。
+  const currentEntry = history?.items.find((entry) => entry.current) ?? null
+  const currentPrompt = currentEntry === null ? null : promptViewFromImageJob(currentEntry, `${shot.code} の開始画像`)
+
   return (
     <div className="space-y-2">
       <p className="text-xs font-semibold text-muted">最初のフレーム</p>
@@ -232,9 +238,12 @@ export const StartFrameField = ({
             alt="最初のフレーム"
             className="aspect-video w-full rounded object-cover ring-1 ring-line"
           />
-          <Button size="sm" disabled={disabled || busy} onClick={() => void detach()}>
-            外す
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" disabled={disabled || busy} onClick={() => void detach()}>
+              外す
+            </Button>
+            <PromptButton view={currentPrompt} />
+          </div>
         </div>
       )}
       {state.kind === 'ready' && (
@@ -259,6 +268,7 @@ export const StartFrameField = ({
       )}
       {history !== null && (
         <StartFrameHistory
+          shotCode={shot.code}
           entries={history.items}
           disabled={disabled || busy || drawing}
           onUse={pickFromHistory}

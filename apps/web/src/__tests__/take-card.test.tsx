@@ -54,6 +54,31 @@ describe('TakeCard', () => {
     expect(screen.queryByText('作り直し推奨')).toBeNull()
   })
 
+  it('作った Take には「プロンプト」のボタンを出し、押すと送った文が出る（プロンプトビューア）', async () => {
+    render(
+      <TakeCard
+        take={aTake({ sentPrompt: { prompt: 'integrated_multimodal_description: [Shot 1] 走る' } })}
+        selected={false}
+        busy={false}
+        onSelect={() => undefined}
+        shotCode="CUT-03"
+      />,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'プロンプト' }))
+    expect(screen.getByText('integrated_multimodal_description: [Shot 1] 走る')).toBeTruthy()
+    expect(screen.getByText(/CUT-03 の Take #/)).toBeTruthy()
+  })
+
+  it('持ち込んだ Take（プロンプトで作っていない）には「プロンプト」のボタンを出さない', () => {
+    renderCard(
+      aTake({
+        modelId: 'import/footage' as Take['modelId'],
+        providerParams: { kind: 'import', sourceModel: null, fileName: null },
+      }),
+    )
+    expect(screen.queryByRole('button', { name: 'プロンプト' })).toBeNull()
+  })
+
   it('持ち込んだ Take は「持ち込み: モデル」と「アプリの外」', () => {
     renderCard(
       aTake({
