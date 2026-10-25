@@ -4,6 +4,7 @@ import { cameraToPromptFragment } from '../shot/camera.js'
 import type { CharacterBundle, ResolvedReference } from './reference-resolver.js'
 import type { ShotGenerationSpec } from './spec.js'
 import { canonicalJson } from './spec.js'
+import { compileSpecDialogue, type DialogueSpeaker } from './spec-dialogue.js'
 
 export type CompileInput = {
   readonly project: Pick<Project, 'aspectRatio' | 'resolution' | 'fps' | 'styleGuide'>
@@ -19,6 +20,11 @@ export type CompileInput = {
    * 空・未指定なら仕様にキーを置かない。置くとハッシュが変わり、重複検知が壊れる。
    */
   readonly corrections?: readonly string[]
+  /**
+   * セリフの話し手（ADR-0059。画面外の人を含む）。`GenerationContextSource.speakersForShot` の結果。
+   * セリフのある Shot で話し手が欠けていれば `DialogueSpeakerError` で止める。
+   */
+  readonly speakers?: readonly DialogueSpeaker[]
 }
 
 /** 空白のみを落とし、trim して並べ直す。順序は呼び出し側の指定を保つ。 */
@@ -59,6 +65,11 @@ export const compileSpec = (input: CompileInput): ShotGenerationSpec => {
     cameraFragment,
     moodFragment,
   }
+  const dialogue = compileSpecDialogue({
+    lines: shot.dialogue,
+    speakers: input.speakers ?? [],
+    onScreen: input.characters.map((c) => c.character),
+  })
 
   const corrections = normalizeCorrections(input.corrections)
 
@@ -72,7 +83,8 @@ export const compileSpec = (input: CompileInput): ShotGenerationSpec => {
      */
     prompt: [assemblePrompt(promptParts), ...corrections].join('. '),
     negativePrompt: input.negativePrompt,
-    promptParts,
+    /** **セリフがあるときだけキーを置く**（`corrections` と同じ理由。無い Shot の specHash を動かさない）。 */
+    promptParts: dialogue === null ? promptParts : { ...promptParts, dialogue },
     durationSec: input.generationDurationSec,
     aspectRatio: project.aspectRatio,
     resolution: project.resolution,

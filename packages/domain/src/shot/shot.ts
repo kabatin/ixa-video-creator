@@ -5,6 +5,7 @@ import {
 } from '../common/ids.js'
 import { Seconds } from '../common/time.js'
 import { ShotCamera } from './camera.js'
+import { DialogueLines } from './dialogue.js'
 import { ShotSourceType } from './source-type.js'
 
 export const ShotStatus = z.enum([
@@ -61,7 +62,8 @@ export const Shot = z.object({
 
   // 演出
   description: z.string().default(''),
-  dialogue: z.string().nullable(),
+  /** セリフの行（ADR-0059）。無ければ空の配列。並びがしゃべる順。 */
+  dialogue: DialogueLines.default([]),
   camera: ShotCamera,
   mood: z.string().nullable(),
 

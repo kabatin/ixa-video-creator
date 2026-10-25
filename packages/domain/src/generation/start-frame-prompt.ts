@@ -27,6 +27,8 @@ export const compileStartFramePrompt = (input: StartFramePromptInput): string =>
   const still = {
     ...input.shot,
     camera: { ...input.shot.camera, movement: null, movementIntensity: null },
+    // 静止画に声は無い。セリフを渡すと話し手の欄がそろうまで絵も作れなくなる（ADR-0059）。
+    dialogue: [],
   }
   const spec = compileSpec({
     ...input,

@@ -23,7 +23,7 @@ const shot = (overrides: Partial<Shot> = {}): Shot => ({
   timing: 'trim',
   speed: 1,
   description: 'iXA CUP 決勝で takepi が勝利する',
-  dialogue: null,
+  dialogue: [],
   camera: {
     size: 'medium_closeup', angleH: 'front_left', angle: 'low',
     lensMm: 50, movement: 'push_in', movementIntensity: 'subtle',

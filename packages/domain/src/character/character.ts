@@ -17,6 +17,19 @@ export type IdentityImageRole = z.infer<typeof IdentityImageRole>
 export const LookImageRole = z.enum(['wardrobe', 'hair', 'full_body', 'reference_still'])
 export type LookImageRole = z.infer<typeof LookImageRole>
 
+export const MAX_SPEECH_NAME_LENGTH = 60
+export const MAX_VOICE_DESCRIPTION_LENGTH = 300
+
+/** 空白だけは「未設定」（null）に揃える。H3 の文に空の呼び名を入れないため。 */
+const OptionalEnglishText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .default(null)
+    .transform((value) => (value === null || value === '' ? null : value))
+
 /**
  * Character は「同一性」だけを持つ。時系列で変わる外見は CharacterLook が持つ。
  * プロンプト断片を役割ごとに分けるのは、再生成時に部分調整できるようにするため。
@@ -33,6 +46,17 @@ export const Character = z.object({
   identityAnchors: z.array(z.string()).default([]),
   styleTokens: z.array(z.string()).default([]),
   colorPalette: z.array(z.string()).default([]),
+
+  /**
+   * 話し手の番号（ADR-0059）。作品の中で作った順に 1, 2… と振る固定の番号で、**消しても詰めない**。
+   * H3 のセリフの話し手の印（S1, S2…）になる。番号が Shot ごとに変わると声が入れ替わるため、
+   * 振るのはリポジトリだけ（作成の入力にも PATCH にも無い）。
+   */
+  speakerNo: z.number().int().positive(),
+  /** 英語の呼び名（例 The cat）。H3 のセリフの文に**一字一句そのまま**入る。未設定は null。 */
+  speechName: OptionalEnglishText(MAX_SPEECH_NAME_LENGTH),
+  /** 声の説明（英語。例 a calm, deep, refined elderly gentleman's voice）。全 Shot で同じ文になる。 */
+  voiceDescription: OptionalEnglishText(MAX_VOICE_DESCRIPTION_LENGTH),
 
   createdAt: z.date(),
 })
@@ -90,13 +114,15 @@ export type CharacterLookImage = z.infer<typeof CharacterLookImage>
 // リポジトリの入力型（ADR-0007: 契約は Domain が定義する）
 // ---------------------------------------------------------------------------
 
-export const CreateCharacterInput = Character.omit({ id: true, createdAt: true })
+/** `speakerNo` はリポジトリが振る（作品の中の固定の番号。入力では受けない）。 */
+export const CreateCharacterInput = Character.omit({ id: true, createdAt: true, speakerNo: true })
 export type CreateCharacterInput = z.input<typeof CreateCharacterInput>
 
 /** workspaceId・projectId は変更できない。別のプロジェクトで使うときは取り込み（複製）にする（ADR-0034）。 */
 export const UpdateCharacterPatch = Character.pick({
   name: true, displayName: true, description: true,
   identityAnchors: true, styleTokens: true, colorPalette: true,
+  speechName: true, voiceDescription: true,
 }).partial()
 export type UpdateCharacterPatch = z.input<typeof UpdateCharacterPatch>
 

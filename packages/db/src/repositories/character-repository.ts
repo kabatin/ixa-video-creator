@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, isNull, sql } from 'drizzle-orm'
 import type {
   Character, CharacterId, CharacterIdentityImage, CharacterIdentityImageId,
   CreateCharacterIdentityImageInput, CreateCharacterInput, IdentityImageRole,
@@ -69,6 +69,9 @@ export const characterRowToDomain = (row: CharacterRow): Character =>
     identityAnchors: row.identityAnchors,
     styleTokens: row.styleTokens,
     colorPalette: row.colorPalette,
+    speakerNo: row.speakerNo,
+    speechName: row.speechName,
+    voiceDescription: row.voiceDescription,
     createdAt: row.createdAt,
   })
 
@@ -81,6 +84,14 @@ export const identityImageRowToDomain = (row: CharacterIdentityImageRow): Charac
     isPrimary: row.isPrimary,
     order: row.order,
   })
+
+/**
+ * 作品の中の次の話し手の番号（ADR-0059）。**論理削除の行も数える**（消しても番号を詰めない・使い回さない）。
+ * INSERT の中で数えるので、読んでから書くまでの間に別の行が入り込む隙を小さくする。
+ * それでも同時に作れば一意索引（`characters_project_speaker_no_uq`）が片方を落とす（黙って重ねない）。
+ */
+const nextSpeakerNo = (projectId: ProjectId) =>
+  sql<number>`(select coalesce(max(${characters.speakerNo}), 0) + 1 from ${characters} where ${characters.projectId} = ${projectId})`
 
 const liveById = (id: CharacterId) => and(eq(characters.id, id), isNull(characters.deletedAt))
 
@@ -104,7 +115,12 @@ export const createCharacterRepository = (db: DbExecutor): CharacterRepository =
     const validated = CreateCharacterInputSchema.parse(input)
     const rows = await db
       .insert(characters)
-      .values({ ...validated, id: input.id === undefined ? newId(CharacterIdSchema) : CharacterIdSchema.parse(input.id), createdAt: new Date() })
+      .values({
+        ...validated,
+        id: input.id === undefined ? newId(CharacterIdSchema) : CharacterIdSchema.parse(input.id),
+        speakerNo: nextSpeakerNo(validated.projectId),
+        createdAt: new Date(),
+      })
       .returning()
     const row = rows[0]
     if (!row) throw new Error('characters への INSERT が行を返しませんでした')

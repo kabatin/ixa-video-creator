@@ -62,7 +62,7 @@ const aShot = (patch: Partial<Shot> = {}): Shot =>
     sourceInSec: 0,
     timing: 'fit',
     description: '店の前に立つ戦子',
-    dialogue: null,
+    dialogue: [],
     camera: { size: 'medium', angleH: null, angle: null, lensMm: null, movement: null, movementIntensity: null },
     mood: '気合い',
     continuityMode: 'previous_shot',
@@ -103,7 +103,7 @@ describe('copyShotInput', () => {
   })
 
   it('絵コンテを持っていかなければ、説明と雰囲気を空にする', () => {
-    const { input } = copyShotInput(aShot({ dialogue: 'いくよ' }), {
+    const { input } = copyShotInput(aShot({ dialogue: [{ speakerId: newId(CharacterId), text: 'いくよ', offscreen: false, translation: null }] }), {
       projectId: TARGET_PROJECT,
       keepStoryboard: false,
       locations: new Map(),
@@ -112,7 +112,7 @@ describe('copyShotInput', () => {
       status: 'draft',
     })
 
-    expect(input).toMatchObject({ description: '', mood: null, dialogue: null })
+    expect(input).toMatchObject({ description: '', mood: null, dialogue: [] })
   })
 
   it('ロケーションは写した先へ付け替え、写していなければ外して知らせる', () => {

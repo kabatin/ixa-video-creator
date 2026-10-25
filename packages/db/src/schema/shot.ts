@@ -4,7 +4,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import type {
-  ReferenceRole, ReferenceSourceKind, ShotCamera, ShotCharacter, ShotSourceType,
+  DialogueLine, ReferenceRole, ReferenceSourceKind, ShotCamera, ShotCharacter, ShotSourceType,
   ShotContinuityMode, ShotStatus, TransitionType,
 } from '@ixa/domain'
 import {
@@ -51,7 +51,8 @@ export const shots = pgTable(
 
     // 演出
     description: text('description').notNull().default(''),
-    dialogue: text('dialogue'),
+    /** セリフの行（ADR-0059）。並びがしゃべる順。無ければ空の配列。 */
+    dialogue: jsonb('dialogue').$type<DialogueLine[]>().notNull().default([]),
     camera: jsonb('camera').$type<ShotCamera>().notNull(),
     mood: text('mood'),
     continuityMode: text('continuity_mode', { enum: ['independent', 'previous_shot'] })

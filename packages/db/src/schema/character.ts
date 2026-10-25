@@ -28,12 +28,24 @@ export const characters = pgTable(
     styleTokens: text('style_tokens').array().notNull().default([]),
     colorPalette: text('color_palette').array().notNull().default([]),
 
+    /**
+     * 話し手の番号（ADR-0059）。作品の中で作った順に 1, 2…。**消しても詰めない**（論理削除の行も数える）。
+     * 振るのはリポジトリの `create` だけ。
+     */
+    speakerNo: integer('speaker_no').notNull(),
+    /** 英語の呼び名（H3 のセリフの文に一字一句入る）。 */
+    speechName: text('speech_name'),
+    /** 声の説明（英語）。 */
+    voiceDescription: text('voice_description'),
+
     createdAt: createdAt(),
     deletedAt: deletedAt(),
   },
   (t) => [
     index('characters_workspace_id_idx').on(t.workspaceId),
     index('characters_project_id_idx').on(t.projectId),
+    // 同じ作品で番号が重なると、2 人が同じ声の印（S1）になる。
+    uniqueIndex('characters_project_speaker_no_uq').on(t.projectId, t.speakerNo),
   ],
 )
 

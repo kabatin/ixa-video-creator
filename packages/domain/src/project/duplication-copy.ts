@@ -76,7 +76,7 @@ export const copyShotInput = (
       timing: shot.timing,
       speed: shot.speed,
       description: ctx.keepStoryboard ? shot.description : '',
-      dialogue: ctx.keepStoryboard ? shot.dialogue : null,
+      dialogue: ctx.keepStoryboard ? shot.dialogue : [],
       camera: shot.camera,
       mood: ctx.keepStoryboard ? shot.mood : null,
       continuityMode: shot.continuityMode,

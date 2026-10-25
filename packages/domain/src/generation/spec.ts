@@ -5,6 +5,24 @@ import { ShotCamera } from '../shot/camera.js'
 import { ReferenceRole } from '../shot/reference.js'
 import { SourceTypeName } from '../shot/source-type.js'
 
+/** 仕様に入るセリフ 1 行。話し手の呼び名と声の説明は、キャラクターの欄を**一字一句そのまま**写す。 */
+export const SpecDialogueLine = z.object({
+  /** 話し手の印（S1, S2…）。キャラクターの `speakerNo` から作る。 */
+  speakerTag: z.string().regex(/^S[1-9]\d*$/),
+  speechName: z.string().min(1),
+  voiceDescription: z.string().min(1),
+  text: z.string().min(1),
+  offscreen: z.boolean(),
+})
+export type SpecDialogueLine = z.infer<typeof SpecDialogueLine>
+
+export const SpecDialogue = z.object({
+  lines: z.array(SpecDialogueLine).min(1),
+  /** 映っている人（Shot の配役のうち、英語の呼び名がある人）。しゃべっていない人の口を閉じさせるのに使う。 */
+  onScreen: z.array(z.object({ speakerTag: z.string().regex(/^S[1-9]\d*$/), speechName: z.string().min(1) })),
+})
+export type SpecDialogue = z.infer<typeof SpecDialogue>
+
 /**
  * Domain と Provider の境界。Provider 非依存の生成仕様。
  * Take に丸ごとスナップショットされる。これが再現性の中核（ADR-0003）。
@@ -27,6 +45,11 @@ export const ShotGenerationSpec = z.object({
     wardrobeTokens: z.array(z.string()),
     cameraFragment: z.string(),
     moodFragment: z.string().nullable(),
+    /**
+     * セリフ（ADR-0059）。**セリフのある Shot だけがキーを持つ**（`corrections` と同じ理由で、
+     * 無い Shot に空の値を置くと既存の Take と specHash が一致しなくなる）。
+     */
+    dialogue: SpecDialogue.optional(),
   }),
 
   /** 生成尺。編集尺をモデルの対応値へ切り上げた値（ADR-0011）。 */

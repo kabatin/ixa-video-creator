@@ -200,6 +200,11 @@ type Character = {
   styleTokens: string[]             // 描写のトーン '硬質な光', 'シネマティック'
   colorPalette: string[]            // 人物に紐づく配色 '#1A1A1A', '#FFD200'
 
+  // セリフの話し手（ADR-0059）
+  speakerNo: number                 // 作品の中で作った順に 1, 2…。消しても詰めない。H3 の話し手の印 S1, S2…
+  speechName: string | null         // 英語の呼び名 'The cat'。全 Shot で一字一句同じ文になる
+  voiceDescription: string | null   // 声の説明（英語）"a soft, sly, teasing young woman's voice"
+
   createdAt: Date
 }
 
@@ -407,7 +412,7 @@ type Shot = {
 
   // 演出
   description: string               // 'iXA CUP決勝で takepi が勝利'
-  dialogue: string | null
+  dialogue: DialogueLine[]          // セリフの行（ADR-0059）。並びがしゃべる順。無ければ []
   camera: ShotCamera
   mood: string | null
 
@@ -487,6 +492,20 @@ type Transition = {
 }
 ```
 
+### Shot のセリフ（ADR-0059）
+
+```ts
+type DialogueLine = {
+  speakerId: CharacterId            // 作品のキャラクター。配役にいなくてよい（画面外の声）
+  text: string                      // 1〜200 文字
+  offscreen: boolean                // 画面外の声。映っている人の口は閉じたまま
+  translation: string | null        // 訳文（2 段字幕の下の段。段 3 で使う）
+}
+```
+
+- 1 Shot 20 行まで（止める上限）。5 行以上は「長すぎます」と警告するだけで止めない。
+- 話し手に英語の呼び名か声の説明が無いと、Take を作る前に止める。
+
 ### Shot と Character / Look
 
 ```ts
@@ -552,6 +571,11 @@ type ShotGenerationSpec = {
     wardrobeTokens: string[]
     cameraFragment: string
     moodFragment: string | null
+    // セリフのある Shot だけがキーを持つ（無い Shot の specHash を動かさない。ADR-0059）
+    dialogue?: {
+      lines: { speakerTag: string; speechName: string; voiceDescription: string; text: string; offscreen: boolean }[]
+      onScreen: { speakerTag: string; speechName: string }[]   // 映っている人（配役のうち呼び名のある人）
+    }
   }
   // 制約
   durationSec: Seconds              // 生成尺。編集尺をモデルの対応値へ切り上げた値（ADR-0011）

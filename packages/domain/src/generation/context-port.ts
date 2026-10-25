@@ -2,6 +2,7 @@ import type { MediaAssetId, ShotId } from '../common/ids.js'
 import type { Location } from '../asset/library.js'
 import type { ShotReference } from '../shot/reference.js'
 import type { CharacterBundle } from './reference-resolver.js'
+import type { DialogueSpeaker } from './spec-dialogue.js'
 
 /**
  * 生成に必要な参照情報を読み出す Port。
@@ -21,6 +22,11 @@ export interface GenerationContextSource {
   previousShotLastFrame(shotId: ShotId): Promise<MediaAssetId | null>
   /** ai_image_to_video のキーフレーム。無ければ null。 */
   startFrame(shotId: ShotId): Promise<MediaAssetId | null>
+  /**
+   * セリフの話し手（ADR-0059）。配役にいない画面外の人も含む。セリフが無ければ空。
+   * **api と worker が同じものを読む**（片方だけ違うと仕様が食い違い spec_drift で落ちる）。
+   */
+  speakersForShot(shotId: ShotId): Promise<readonly DialogueSpeaker[]>
 }
 
 /**
@@ -34,4 +40,5 @@ export const createPhase1EmptyContextSource = (): GenerationContextSource => ({
   manualReferencesForShot: () => Promise.resolve([]),
   previousShotLastFrame: () => Promise.resolve(null),
   startFrame: () => Promise.resolve(null),
+  speakersForShot: () => Promise.resolve([]),
 })

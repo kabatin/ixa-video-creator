@@ -27,7 +27,7 @@ const shot = (overrides: Record<string, unknown> = {}): Shot =>
     durationSec: 8,
     sourceInSec: 0,
     description: '',
-    dialogue: null,
+    dialogue: [],
     mood: null,
     locationId: null,
     selectedTakeId: null,
