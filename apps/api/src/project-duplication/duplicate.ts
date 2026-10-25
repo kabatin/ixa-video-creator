@@ -48,7 +48,7 @@ export const duplicateProject = async (
       styles,
       narrationLines,
     })
-    const { castDropped, locationDropped } = await writeShots(deps, project, snapshot, items, library)
+    const { castDropped, locationDropped, dialogueLinesDropped } = await writeShots(deps, project, snapshot, items, library)
     return {
       project,
       notes: duplicationNotes({
@@ -57,6 +57,7 @@ export const duplicateProject = async (
         lyricLinksDropped,
         narrationLinksDropped,
         characterVoicesDropped,
+        dialogueLinesDropped,
       }),
     }
   } catch (error) {

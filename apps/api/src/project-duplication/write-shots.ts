@@ -30,9 +30,10 @@ import type { LibraryMaps } from './write-project.js'
 export type ShotDrops = {
   readonly castDropped: number
   readonly locationDropped: number
+  readonly dialogueLinesDropped: number
 }
 
-const NO_DROPS: ShotDrops = { castDropped: 0, locationDropped: 0 }
+const NO_DROPS: ShotDrops = { castDropped: 0, locationDropped: 0, dialogueLinesDropped: 0 }
 
 /** 写した Take のうち、外していない Take があるか（状態を決めるのに使う）。 */
 const visibleTakes = (shot: SourceShot): readonly Take[] => shot.takes.filter((take) => !shot.hiddenTakeIds.has(take.id))
@@ -111,6 +112,7 @@ export const writeShots = async (
       locations: library.locations,
       sequences,
       takes: takeMap,
+      characters: library.characters,
       status: shotStatusAfterCancel({ hasSelectedTake, hasTakes: visible.length > 0 }),
     })
   })
@@ -147,5 +149,9 @@ export const writeShots = async (
   await sequentially(copyTransitionInputs(source.transitions, { projectId: target.id, shots: shotMap }), (input) =>
     deps.transitions.create(input),
   )
-  return { castDropped, locationDropped: copies.filter((copy) => copy.locationDropped).length }
+  return {
+    castDropped,
+    locationDropped: copies.filter((copy) => copy.locationDropped).length,
+    dialogueLinesDropped: copies.reduce((sum, copy) => sum + copy.dialogueLinesDropped, 0),
+  }
 }

@@ -54,6 +54,8 @@ export type ShotCopyContext = {
   readonly sequences: IdMap<SequenceId>
   /** 写す Take（新しい ID を先に決めておく）。持っていかなければ空。 */
   readonly takes: IdMap<TakeId>
+  /** 写したキャラクター（セリフの話し手を付け替える。ADR-0059）。持っていかなければ空。 */
+  readonly characters: IdMap<CharacterId>
   /** 写した中身から決め直した状態（元の状態は写さない）。 */
   readonly status: ShotStatus
 }
@@ -62,8 +64,19 @@ export type ShotCopyContext = {
 export const copyShotInput = (
   shot: Shot,
   ctx: ShotCopyContext,
-): { readonly input: CreateShotInput; readonly locationDropped: boolean } => {
+): {
+  readonly input: CreateShotInput
+  readonly locationDropped: boolean
+  /** 話し手を持っていかなかったので外したセリフの行の数。 */
+  readonly dialogueLinesDropped: number
+} => {
   const locationId = remapOrNull(shot.locationId, ctx.locations)
+  const source = ctx.keepStoryboard ? shot.dialogue : []
+  // 話し手は写したキャラクターへ付け替える。元の作品のキャラクターを指したままにしない（ADR-0059）。
+  const dialogue = source.flatMap((line) => {
+    const speakerId = ctx.characters.get(line.speakerId)
+    return speakerId === undefined ? [] : [{ ...line, speakerId }]
+  })
   return {
     input: {
       projectId: ctx.projectId,
@@ -76,7 +89,7 @@ export const copyShotInput = (
       timing: shot.timing,
       speed: shot.speed,
       description: ctx.keepStoryboard ? shot.description : '',
-      dialogue: ctx.keepStoryboard ? shot.dialogue : [],
+      dialogue,
       camera: shot.camera,
       mood: ctx.keepStoryboard ? shot.mood : null,
       continuityMode: shot.continuityMode,
@@ -85,6 +98,7 @@ export const copyShotInput = (
       status: ctx.status,
     },
     locationDropped: shot.locationId !== null && locationId === null,
+    dialogueLinesDropped: source.length - dialogue.length,
   }
 }
 
@@ -308,6 +322,8 @@ export type DuplicationDrops = {
   readonly narrationLinksDropped: number
   /** 声を持っていかなかったので、キャラクターから外した声の数。 */
   readonly characterVoicesDropped: number
+  /** 話し手のキャラクターを持っていかなかったので外したセリフの行の数（ADR-0059）。 */
+  readonly dialogueLinesDropped?: number
 }
 
 /**
@@ -355,5 +371,8 @@ export const duplicationNotes = (drops: DuplicationDrops): readonly string[] => 
     : []),
   ...(drops.characterVoicesDropped > 0
     ? [`声を持っていかなかったので、キャラクター ${String(drops.characterVoicesDropped)} 人の声を外しました`]
+    : []),
+  ...((drops.dialogueLinesDropped ?? 0) > 0
+    ? [`キャラクターを持っていかなかったので、セリフ ${String(drops.dialogueLinesDropped)} 行を外しました`]
     : []),
 ]

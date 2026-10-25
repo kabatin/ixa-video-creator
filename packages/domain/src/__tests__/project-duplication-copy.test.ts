@@ -77,6 +77,27 @@ const aShot = (patch: Partial<Shot> = {}): Shot =>
   })
 
 describe('copyShotInput', () => {
+  it('セリフの話し手を写したキャラクターへ付け替え、写していない話し手の行は外して数える', () => {
+    const cat = newId(CharacterId)
+    const copiedCat = newId(CharacterId)
+    const mouse = newId(CharacterId)
+    const line = (speakerId: CharacterId, text: string) => ({ speakerId, text, offscreen: false, translation: null })
+    const { input, dialogueLinesDropped } = copyShotInput(
+      aShot({ dialogue: [line(cat, 'ねえ'), line(mouse, 'なに'), line(cat, 'あのね')] }),
+      {
+        projectId: TARGET_PROJECT,
+        keepStoryboard: true,
+        locations: new Map(),
+        sequences: new Map(),
+        takes: new Map(),
+        characters: new Map([[cat, copiedCat]]),
+        status: 'draft',
+      },
+    )
+    expect(input.dialogue).toEqual([line(copiedCat, 'ねえ'), line(copiedCat, 'あのね')])
+    expect(dialogueLinesDropped).toBe(1)
+  })
+
   it('位置・カメラ・つなぎ方を写し、新しい作品の Shot にする（状態は呼び出し側が決める）', () => {
     const shot = aShot()
     const { input } = copyShotInput(shot, {
@@ -85,6 +106,7 @@ describe('copyShotInput', () => {
       locations: new Map(),
       sequences: new Map(),
       takes: new Map(),
+      characters: new Map(),
       status: 'draft',
     })
 
@@ -109,6 +131,7 @@ describe('copyShotInput', () => {
       locations: new Map(),
       sequences: new Map(),
       takes: new Map(),
+      characters: new Map(),
       status: 'draft',
     })
 
@@ -118,7 +141,7 @@ describe('copyShotInput', () => {
   it('ロケーションは写した先へ付け替え、写していなければ外して知らせる', () => {
     const before = newId(LocationId)
     const after = newId(LocationId)
-    const base = { projectId: TARGET_PROJECT, keepStoryboard: true, sequences: new Map(), takes: new Map(), status: 'draft' as const }
+    const base = { projectId: TARGET_PROJECT, keepStoryboard: true, sequences: new Map(), takes: new Map(), characters: new Map(), status: 'draft' as const }
 
     const kept = copyShotInput(aShot({ locationId: before }), { ...base, locations: new Map([[before, after]]) })
     const dropped = copyShotInput(aShot({ locationId: before }), { ...base, locations: new Map() })
@@ -133,7 +156,7 @@ describe('copyShotInput', () => {
     const sequence = newId(SequenceId)
     const copiedSequence = newId(SequenceId)
     const sourceType: ShotSourceType = { type: 'ai_image_to_video', keyframeTakeId: keyframe }
-    const base = { projectId: TARGET_PROJECT, keepStoryboard: true, locations: new Map(), status: 'draft' as const }
+    const base = { projectId: TARGET_PROJECT, keepStoryboard: true, locations: new Map(), characters: new Map(), status: 'draft' as const }
 
     const kept = copyShotInput(aShot({ sourceType, sequenceId: sequence }), {
       ...base,
@@ -388,6 +411,7 @@ describe('duplicationNotes', () => {
         lyricLinksDropped: 20,
         narrationLinksDropped: 4,
         characterVoicesDropped: 2,
+        dialogueLinesDropped: 3,
       }),
     ).toEqual([
       'キャラクターを持っていかなかったので、Shot 12 件の登場人物を外しました',
@@ -395,6 +419,7 @@ describe('duplicationNotes', () => {
       '作品の方針を持っていかなかったので、テロップ 20 件の歌詞との結び付きを外しました（文字は残っています）',
       'ナレーションを持っていかなかったので、テロップ 4 件のナレーションとの結び付きを外しました（文字は残り、作り直しで消えません）',
       '声を持っていかなかったので、キャラクター 2 人の声を外しました',
+      'キャラクターを持っていかなかったので、セリフ 3 行を外しました',
     ])
   })
 
