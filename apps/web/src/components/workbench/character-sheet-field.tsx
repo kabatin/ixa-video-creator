@@ -20,6 +20,7 @@ import { promptViewFromImageJob } from '@/lib/prompt-view'
  */
 
 type Job = WireCharacterSheetState['job']
+type Applied = NonNullable<WireCharacterSheetState['applied']>
 
 /** 待っている・作っている・チェックしている（ADR-0055）。 */
 const isDrawing = (job: Job): boolean => isImageJobActive(job?.status)
@@ -38,6 +39,7 @@ export type CharacterSheetFieldProps = {
 export const CharacterSheetField = ({ characterId, images, version, onSheetAdded, api }: CharacterSheetFieldProps) => {
   const client = useMemo(() => api ?? createApiClient(), [api])
   const [job, setJob] = useState<Job | undefined>(undefined)
+  const [applied, setApplied] = useState<Applied | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   /** 作っている最中を見ていたか。見ていたジョブが仕上がったときだけ識別画像を読み直させる。 */
@@ -54,6 +56,7 @@ export const CharacterSheetField = ({ characterId, images, version, onSheetAdded
         if (watching.current && state.job?.status === 'succeeded') added.current()
         watching.current = isDrawing(state.job)
         setJob(state.job)
+        setApplied(state.applied ?? null)
       })
       .catch((cause: unknown) => {
         if (alive) setError(`キャラクターシートの状態を読めませんでした: ${describeForPerson(cause)}`)
@@ -80,8 +83,8 @@ export const CharacterSheetField = ({ characterId, images, version, onSheetAdded
   const hasReference = images !== null && pickSheetReference(images) !== null
   const hasSheet = images?.some((image) => image.role === 'four_view') ?? false
   const drawing = isDrawing(job ?? null)
-  // 最後に作れたシートのプロンプト。作っている最中・失敗したときは出さない。
-  const sheetPrompt = job?.status === 'succeeded' ? promptViewFromImageJob(job, 'キャラクターシート（四面図）') : null
+  // いま識別画像に当てているシートのプロンプト（直近のジョブではない。やり直しが失敗しても前の絵が当たっていることがある）。
+  const sheetPrompt = applied === null ? null : promptViewFromImageJob(applied, 'キャラクターシート（四面図）')
 
   return (
     <section className="space-y-2 rounded-md border border-line p-2">

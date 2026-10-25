@@ -6,6 +6,7 @@ import {
   ImageGenerationJobId as ImageGenerationJobIdSchema,
   ImageGenerationJobStatus as ImageGenerationJobStatusSchema,
   pickSheetReference,
+  type ImageGenerationJob,
   type ModelId,
   type ProviderId,
 } from '@ixa/domain'
@@ -24,7 +25,10 @@ import { startImageJob, type ImageJobStartDeps } from './image-job-start.js'
 
 export type CharacterSheetRoutesDeps = ImageJobStartDeps & {
   readonly characters: Pick<CharacterRepository, 'findById' | 'listIdentityImages'>
-  readonly imageJobs: Pick<ImageJobRepository, 'create' | 'markFailed' | 'findActiveByCharacter' | 'findLatestByCharacter'>
+  readonly imageJobs: Pick<
+    ImageJobRepository,
+    'create' | 'markFailed' | 'findActiveByCharacter' | 'findLatestByCharacter' | 'findByMediaAssetIds'
+  >
   /** どの口で作るか。**作るたびに呼ぶ**（「使う AI」の画像の欄。ADR-0032）。 */
   readonly imageModel: () => Promise<{ readonly providerId: ProviderId; readonly modelId: ModelId }>
 }
@@ -52,9 +56,14 @@ const SheetState = z
         error: z.string().nullable(),
         /** 何枚目の試しか（ADR-0055。1 から）。 */
         attempt: z.number().int(),
-        queuedAt: z.string().datetime(),
-        ...ImagePromptFields,
       })
+      .nullable(),
+    /**
+     * いま識別画像に入っているシートのうち、最後に当てたものを作ったジョブ（プロンプトビューア）。
+     * 当てる絵はチェックで選ぶ（やり直しの後でも 1 枚目を当てることがある）ので、直近のジョブとは限らない。
+     */
+    applied: z
+      .object({ jobId: ImageGenerationJobIdSchema, queuedAt: z.string().datetime(), ...ImagePromptFields })
       .nullable(),
   })
   .openapi('CharacterSheetState')
@@ -86,6 +95,13 @@ const stateRoute = createRoute({
     500: errorContent('サーバ内部エラー'),
   },
 })
+
+/** 当てた印のあるジョブのうち、最後に当てたもの。無ければ null。 */
+export const latestApplied = (jobs: readonly ImageGenerationJob[]): ImageGenerationJob | null =>
+  jobs.reduce<ImageGenerationJob | null>((latest, candidate) => {
+    if (candidate.appliedAt === null) return latest
+    return latest === null || (latest.appliedAt?.getTime() ?? 0) < candidate.appliedAt.getTime() ? candidate : latest
+  }, null)
 
 export const characterSheetRoutes = (deps: CharacterSheetRoutesDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })
@@ -122,8 +138,16 @@ export const characterSheetRoutes = (deps: CharacterSheetRoutesDeps) =>
               status: latest.status,
               error: latest.error?.message ?? null,
               attempt: latest.attempt,
-              queuedAt: latest.queuedAt.toISOString(),
-              ...imagePromptFieldsOf(latest),
             }
-      return c.json(ok({ job }), 200)
+      const sheets = (await deps.characters.listIdentityImages(character.id)).filter((image) => image.role === 'four_view')
+      const appliedJob = latestApplied(
+        (await deps.imageJobs.findByMediaAssetIds(sheets.map((image) => image.mediaAssetId))).filter(
+          (candidate) => candidate.kind === 'character_sheet' && candidate.characterId === character.id,
+        ),
+      )
+      const applied =
+        appliedJob === null
+          ? null
+          : { jobId: appliedJob.id, queuedAt: appliedJob.queuedAt.toISOString(), ...imagePromptFieldsOf(appliedJob) }
+      return c.json(ok({ job, applied }), 200)
     })

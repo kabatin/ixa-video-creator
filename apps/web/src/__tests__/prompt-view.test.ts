@@ -59,6 +59,11 @@ describe('promptViewFromImageJob', () => {
     expect(view.tool).toBe('klein/flux-2-klein')
   })
 
+  it('前置きを足して送る AI（Codex）の絵は、本文が足す前の文だと添える', () => {
+    const view = promptViewFromImageJob({ sentPrompt: '暗いガレージ', sentWithPreamble: true, queuedAt: AT }, '開始画像')
+    expect(view.note).toBe('この AI には決まった前置きを足して送っています')
+  })
+
   it('記録する前に作った絵は、本文の代わりに「記録していません」と出す', () => {
     const view = promptViewFromImageJob({ sentPrompt: null, queuedAt: AT }, 'キーアート')
     expect(view.sections).toEqual([])
@@ -154,6 +159,12 @@ describe('promptViewFromVoice', () => {
     const view = promptViewFromVoice({ index: 1, voiceSpec: spec, sentStyle: null, createdAt: AT }, '1 行目')
     expect(view?.sections.map((section) => section.label)).toEqual(['読み', '声のイメージ', '演出'])
     expect(view?.note).toBe(UNRECORDED_VOICE_NOTE)
+  })
+
+  it('読み方の指示を送らない AI では、読みだけを出す（演技指示を送ったように見せない・注記も付けない）', () => {
+    const view = promptViewFromVoice({ index: 1, voiceSpec: { ...spec, tool: 'elevenlabs' }, sentStyle: null, createdAt: AT }, '1 行目')
+    expect(view?.sections.map((section) => section.label)).toEqual(['読み'])
+    expect(view?.note).toBeUndefined()
   })
 
   it('録音・複製の Take（指定が無い）は出さない', () => {

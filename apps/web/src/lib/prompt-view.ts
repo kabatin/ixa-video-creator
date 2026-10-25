@@ -38,6 +38,7 @@ export type PromptView = {
 export const REBUILT_TAKE_NOTE = '送った文と細部が違うことがあります'
 export const UNRECORDED_IMAGE_NOTE = 'この絵は送った文を記録していません'
 export const UNRECORDED_VOICE_NOTE = '送った指示は記録していません。声の設定から出しています'
+export const PREAMBLE_IMAGE_NOTE = 'この AI には決まった前置きを足して送っています'
 
 const SEED_UNSET = '決めずに作った（毎回違う）'
 
@@ -87,6 +88,8 @@ export type ImageJobLike = {
   /** 送った指示の本文。記録する前の絵・古い API は null か無し。 */
   readonly sentPrompt?: string | null
   readonly modelId?: string | null
+  /** AI が送る前に決まった前置きを足すか（Codex）。本文は足す前の文。 */
+  readonly sentWithPreamble?: boolean
   /** 頼んだ日時。古い API は返さないことがある。 */
   readonly queuedAt?: Date | null
 }
@@ -100,7 +103,11 @@ export const promptViewFromImageJob = (job: ImageJobLike, title: string): Prompt
     createdAt: job.queuedAt ?? null,
     sections: sent === null ? [] : [{ label: 'プロンプト', text: sent, mono: true }],
     facts: [],
-    ...(sent === null ? { note: UNRECORDED_IMAGE_NOTE } : {}),
+    ...(sent === null
+      ? { note: UNRECORDED_IMAGE_NOTE }
+      : job.sentWithPreamble === true
+        ? { note: PREAMBLE_IMAGE_NOTE }
+        : {}),
   }
 }
 
@@ -178,15 +185,25 @@ const styleSections = (spec: VoiceSpec): readonly PromptSection[] => [
   ...(spec.direction.trim() === '' ? [] : [{ label: '演出', text: spec.direction, mono: false }]),
 ]
 
+/** 読み方の指示を文で送る声の AI。ほかの AI には声のイメージ・演出を送っていない。 */
+const STYLE_SENDING_TOOLS: ReadonlySet<VoiceToolId> = new Set(['gemini_api'])
+
 /**
  * ナレーションの Take。AI で作った Take だけ（録音・複製は null）。
- * 送った読み方の指示があればそれを、無ければ声の設定（声のイメージ・演出）を注記つきで出す。
+ * 送った読み方の指示があればそれを出す。指示を送る AI（Gemini）で記録が無い古い Take は、声の設定を注記つきで出す。
+ * 指示を送らない AI では、送ったのは読みだけなので読みだけを出す。
  */
 export const promptViewFromVoice = (take: VoiceTakeLike, lineLabel: string): PromptView | null => {
   const spec = take.voiceSpec ?? null
   if (spec === null) return null
   const sentStyle = take.sentStyle ?? null
-  const style = sentStyle === null ? styleSections(spec) : [{ label: '声の演技指示', text: sentStyle, mono: true }]
+  const sendsStyle = STYLE_SENDING_TOOLS.has(spec.tool)
+  const style =
+    sentStyle !== null
+      ? [{ label: '声の演技指示', text: sentStyle, mono: true }]
+      : sendsStyle
+        ? styleSections(spec)
+        : []
   return {
     title: `${lineLabel} の Take #${String(take.index)}`,
     tool: voiceToolLabel(spec.tool, spec.model),
@@ -196,7 +213,7 @@ export const promptViewFromVoice = (take: VoiceTakeLike, lineLabel: string): Pro
       { label: '声', value: spec.voiceName },
       { label: '速さ', value: `×${spec.speed.toFixed(2)}` },
     ],
-    ...(sentStyle === null && style.length > 0 ? { note: UNRECORDED_VOICE_NOTE } : {}),
+    ...(sentStyle === null && sendsStyle && style.length > 0 ? { note: UNRECORDED_VOICE_NOTE } : {}),
   }
 }
 

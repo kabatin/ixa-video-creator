@@ -59,6 +59,8 @@ export const WireKeyArtJob = z.object({
   sentPrompt: z.string().nullable().optional(),
   /** 使った AI（モデル）。 */
   modelId: z.string().nullable().optional(),
+  /** AI が送る前に決まった前置きを足すか（Codex）。`sentPrompt` は足す前の文。 */
+  sentWithPreamble: z.boolean().optional(),
 })
 export type WireKeyArtJob = z.infer<typeof WireKeyArtJob>
 

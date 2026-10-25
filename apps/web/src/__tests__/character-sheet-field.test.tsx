@@ -57,6 +57,46 @@ describe('CharacterSheetField', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/絵を返しませんでした/)
   })
 
+  it('プロンプトは当てているシートのもの。最後のやり直しが失敗しても、前に当てた絵のプロンプトを出す', async () => {
+    const client = api({
+      job: { id: JOB_ID, status: 'failed', error: '時間切れ', attempt: 2 },
+      applied: {
+        jobId: ImageGenerationJobId.parse('01ARZ3NDEKTSV4RRFFQ69G5FB9'),
+        queuedAt: new Date('2026-10-25T03:00:00Z'),
+        sentPrompt: '四面図。正面・横・後ろ・斜め',
+        modelId: 'codex-cli/image-gen',
+        sentWithPreamble: true,
+      },
+    })
+    render(
+      <CharacterSheetField
+        characterId={characterId}
+        images={[image('full_body'), image('four_view')]}
+        version={0}
+        onSheetAdded={vi.fn()}
+        api={client}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'プロンプト' }))
+    expect(screen.getByText('四面図。正面・横・後ろ・斜め')).toBeTruthy()
+    expect(screen.getByText('この AI には決まった前置きを足して送っています')).toBeTruthy()
+  })
+
+  it('当てたシートが無ければプロンプトのボタンを出さない（直近のジョブが成功していても）', async () => {
+    render(
+      <CharacterSheetField
+        characterId={characterId}
+        images={[image('full_body')]}
+        version={0}
+        onSheetAdded={vi.fn()}
+        api={api({ job: { id: JOB_ID, status: 'succeeded', error: null, attempt: 1 }, applied: null })}
+      />,
+    )
+    await screen.findByRole('button', { name: 'キャラクターシートを作る' })
+    expect(screen.queryByRole('button', { name: 'プロンプト' })).toBeNull()
+  })
+
   it('作っていたジョブができたら、識別画像を読み直させる', async () => {
     const client = api({ job: { id: JOB_ID, status: 'running', error: null, attempt: 1 } })
     const onSheetAdded = vi.fn()

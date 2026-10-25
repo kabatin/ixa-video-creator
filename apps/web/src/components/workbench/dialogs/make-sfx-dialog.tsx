@@ -30,8 +30,10 @@ const PROGRESS: Readonly<Record<WireShotMotion['state'], string>> = {
 export const MakeSfxDialogBody = ({ initialRows }: { readonly initialRows?: readonly SfxCueRow[] } = {}) => {
   const workbench = useWorkbench()
   const client = useMemo(() => createApiClient(), [])
-  const shotId = workbench.dialogShotIds?.[0] ?? workbench.selectedShotId
-  const shot = workbench.shots?.find((candidate) => candidate.id === shotId) ?? null
+  // 前の音を元に作るときは Shot に結び付けない（動きの分析を頼まない。分析は AI で絵を見るので費用が掛かることがある）。
+  const reusing = initialRows !== undefined
+  const shotId = reusing ? null : (workbench.dialogShotIds?.[0] ?? workbench.selectedShotId)
+  const shot = shotId === null ? null : (workbench.shots?.find((candidate) => candidate.id === shotId) ?? null)
   const load = useShotMotion(shot?.id ?? null)
   const [rows, setRows] = useState<readonly SfxCueRow[] | null>(initialRows ?? null)
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({})
@@ -47,7 +49,7 @@ export const MakeSfxDialogBody = ({ initialRows }: { readonly initialRows?: read
     }
   }, [motion, rows])
 
-  if (shot === null && initialRows === undefined) {
+  if (shot === null && !reusing) {
     return <p className="text-sm text-muted">効果音を作る Shot を選んでから開いてください。</p>
   }
 
@@ -97,8 +99,8 @@ export const MakeSfxDialogBody = ({ initialRows }: { readonly initialRows?: read
           ? '前に作った効果音のきっかけを入れてあります。時刻・長さ・指示（英語）・音量を直して、チェックした行を作ります。使う AI はメニュー「使う AI…」の「効果音」です。'
           : `${shot.code} の採用中の Take の動きから、効果音の案を出します。時刻・長さ・指示（英語）・音量を直して、チェックした行を作ります。使う AI はメニュー「使う AI…」の「効果音」です。`}
       </p>
-      {load.state === 'loading' && <p className="text-sm text-muted">読み込んでいます…</p>}
-      {load.state === 'error' && (
+      {!reusing && load.state === 'loading' && <p className="text-sm text-muted">読み込んでいます…</p>}
+      {!reusing && load.state === 'error' && (
         <p role="alert" className="text-sm text-danger">
           {load.message}
         </p>

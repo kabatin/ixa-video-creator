@@ -15,6 +15,12 @@ import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
 import { characterSheetRoutes } from '../routes/character-sheet.js'
 import { aProject } from './fixtures.js'
+import { retryImageJobInput } from '@ixa/db'
+
+const must = <T>(value: T | null): T => {
+  if (value === null) throw new Error('見つかりません')
+  return value
+}
 
 /**
  * 1 枚の画像からキャラクターシート（四面図）を作る口（ADR-0035。制作者 2026-10-03「動画生成に役立つ形式の
@@ -25,7 +31,8 @@ import { aProject } from './fixtures.js'
 type Ok<T> = { success: true; data: T }
 type Err = { success: false; error: string; fields?: Record<string, string[]> }
 type SheetState = {
-  job: { id: string; status: string; error: string | null; sentPrompt: string | null; modelId: string } | null
+  job: { id: string; status: string; error: string | null } | null
+  applied: { jobId: string; sentPrompt: string | null; modelId: string; sentWithPreamble: boolean } | null
 }
 
 const project = aProject()
@@ -148,16 +155,29 @@ describe('GET /characters/{id}/character-sheet', () => {
     expect(state.job).toMatchObject({ status: 'queued', error: null })
   })
 
-  it('描いたジョブは送った指示の本文と使った AI を返す。描く前は null（プロンプトビューア）', async () => {
+  it('プロンプトは、いま識別画像に当てているシートを作ったジョブのもの（最後のやり直しが失敗しても）', async () => {
     const f = await build()
     await f.request('POST', {})
-    expect(((await (await f.request('GET')).json()) as Ok<SheetState>).data.job?.sentPrompt).toBeNull()
+    expect(((await (await f.request('GET')).json()) as Ok<SheetState>).data.applied).toBeNull()
 
-    const [job] = f.imageJobs.snapshot()
-    if (job === undefined) throw new Error('ジョブがありません')
-    await f.imageJobs.markChecking(job.id, newId(MediaAssetIdSchema), {}, '四面図。正面・横・後ろ・斜め')
+    const [first] = f.imageJobs.snapshot()
+    if (first === undefined) throw new Error('ジョブがありません')
+    const sheet = newId(MediaAssetIdSchema)
+    await f.imageJobs.markChecking(first.id, sheet, {}, '四面図。正面・横・後ろ・斜め')
+    await f.imageJobs.finishChecking(first.id)
+    // やり直しを 1 回積み、それは失敗した。チェックは 1 枚目を当てた（識別画像に入った）。
+    const retry = await f.imageJobs.create({ ...retryImageJobInput(await f.imageJobs.findById(first.id).then(must)) })
+    await f.imageJobs.markFailed(retry.id, { code: 'timeout', message: '時間切れ', retryable: true }, null)
+    await f.imageJobs.markApplied(first.id)
+    await f.characters.addIdentityImage({ characterId: f.character.id, mediaAssetId: sheet, role: 'four_view', isPrimary: false, order: 9 })
+
     const state = ((await (await f.request('GET')).json()) as Ok<SheetState>).data
-
-    expect(state.job).toMatchObject({ sentPrompt: '四面図。正面・横・後ろ・斜め', modelId: CODEX.modelId })
+    expect(state.job?.id).toBe(retry.id)
+    expect(state.applied).toMatchObject({
+      jobId: first.id,
+      sentPrompt: '四面図。正面・横・後ろ・斜め',
+      modelId: CODEX.modelId,
+      sentWithPreamble: true,
+    })
   })
 })
