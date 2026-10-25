@@ -68,6 +68,7 @@ export const WorkbenchDialogs = ({
 }) => {
   const workbench = useWorkbench()
   const dialog = workbench.dialog
+  const payload = workbench.dialogPayload
   return (
     <WorkbenchDialog
       open={dialog !== null}
@@ -88,8 +89,10 @@ export const WorkbenchDialogs = ({
       {dialog === 'align-lyrics' && <AlignLyricsDialogBody />}
       {dialog === 'library-import' && <LibraryImportDialogBody />}
       {dialog === 'project-duplicate' && <ProjectDuplicateDialogBody />}
-      {dialog === 'make-music' && <MakeMusicDialogBody />}
-      {dialog === 'make-sfx' && <MakeSfxDialogBody />}
+      {dialog === 'make-music' && (
+        <MakeMusicDialogBody {...(payload?.kind === 'music' ? { initialForm: payload.form } : {})} />
+      )}
+      {dialog === 'make-sfx' && <MakeSfxDialogBody {...(payload?.kind === 'sfx' ? { initialRows: payload.rows } : {})} />}
       {dialog === 'thumbnail' && <ThumbnailDialogBody />}
     </WorkbenchDialog>
   )

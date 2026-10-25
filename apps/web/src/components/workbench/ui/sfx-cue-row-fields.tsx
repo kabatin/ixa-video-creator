@@ -69,6 +69,9 @@ export const SfxCueRowFields = ({
         />
       </label>
       {row.reason !== '' && <span className="text-xs text-muted">{row.reason}</span>}
+      {row.negativePrompt !== undefined && (
+        <span className="text-xs text-muted">{`除外する内容: ${row.negativePrompt}`}</span>
+      )}
       {row.align !== null && (
         <span className="text-xs text-muted" title="できた音の一番大きいところがこの時刻に来るよう、少し前から鳴らします">
           音の山を時刻に合わせる

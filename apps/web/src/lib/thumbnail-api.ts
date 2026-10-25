@@ -55,6 +55,10 @@ export const WireKeyArtJob = z.object({
   check: WireImageCheck.nullable().default(null),
   queuedAt: z.coerce.date(),
   finishedAt: z.coerce.date().nullable(),
+  /** 実際に送った指示の本文（プロンプトビューア）。記録する前の絵は null。 */
+  sentPrompt: z.string().nullable().optional(),
+  /** 使った AI（モデル）。 */
+  modelId: z.string().nullable().optional(),
 })
 export type WireKeyArtJob = z.infer<typeof WireKeyArtJob>
 

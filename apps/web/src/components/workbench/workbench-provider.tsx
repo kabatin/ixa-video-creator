@@ -31,6 +31,7 @@ import { posterByShotId, postersStale, posterRetryDelayMs, type ShotPosterMap } 
 import { useProjectEvents } from '@/lib/use-project-events'
 import { musicJobAddedTracks, musicJobNotice } from '@/lib/music-job-form'
 import { imageJobFailureNotice } from '@/lib/image-job-notice'
+import type { DialogPayload } from '@/lib/dialog-payload'
 import type { LibraryImportSection } from '@/lib/library-import-sections'
 import { voiceJobNotice } from '@/lib/voice-job-notice'
 import { POSTER_URL_LIFETIME_SEC, renewDelayMs } from '@/lib/signed-url-renewal'
@@ -113,6 +114,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
   const [dialog, setDialog] = useState<WorkbenchDialog | null>(props.initialDialog)
   const [dialogShotIds, setDialogShotIds] = useState<readonly ShotId[] | null>(null)
   const [dialogImportSection, setDialogImportSection] = useState<LibraryImportSection | null>(null)
+  const [dialogPayload, setDialogPayload] = useState<DialogPayload | null>(null)
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('settings')
   const [cutterMode, setCutterMode] = useState<CutterMode>('cut')
   const [inspectorRequest, setInspectorRequest] = useState(0)
@@ -407,14 +409,17 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
         controls.pause()
         setDialogShotIds(options?.shotIds ?? null)
         setDialogImportSection(options?.importSection ?? null)
+        setDialogPayload(options?.payload ?? null)
         setDialog(next)
       },
       dialogShotIds,
       dialogImportSection,
+      dialogPayload,
       closeDialog: () => {
         setDialog(null)
         setDialogShotIds(null)
         setDialogImportSection(null)
+        setDialogPayload(null)
       },
       focusPanel: props.focusPanel,
       inspectorTab,
@@ -466,6 +471,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       dialog,
       dialogShotIds,
       dialogImportSection,
+      dialogPayload,
       inspectorTab,
       inspectorRequest,
       activeGenerations,

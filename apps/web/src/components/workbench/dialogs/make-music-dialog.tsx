@@ -55,11 +55,12 @@ const useMusicTool = (load: (() => Promise<AiToolId>) | null): AiToolId | null =
 /**
  * 曲を作る（ADR-0048）。曲調と歌詞から、手元の AI（「使う AI」の曲）で楽曲を作る。
  * 頼んだら進み具合はこの中と素材ツリーの楽曲に出る。閉じても作り続け、できたら上の知らせで言う。
+ * `initialForm` は最初に入れておく値（プロンプトビューアの「これを元に作る」）。省けば空の欄で開く。
  */
-export const MakeMusicDialogBody = () => {
+export const MakeMusicDialogBody = ({ initialForm = INITIAL_MUSIC_FORM }: { readonly initialForm?: MusicForm } = {}) => {
   const workbench = useWorkbench()
   const music = useMusicJobs()
-  const [form, setForm] = useState<MusicForm>(INITIAL_MUSIC_FORM)
+  const [form, setForm] = useState<MusicForm>(initialForm)
   const [errors, setErrors] = useState<MusicFormErrors>({})
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)

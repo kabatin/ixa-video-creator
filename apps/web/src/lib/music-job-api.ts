@@ -15,6 +15,9 @@ export const WireMusicJob = z.object({
   id: z.string(),
   status: MusicJobStatus,
   prompt: z.string(),
+  /** 送った歌詞（プロンプトビューア）。前の API には無い。 */
+  lyrics: z.string().optional(),
+  seed: z.number().int().nullable().optional(),
   durationSec: z.number(),
   instrumental: z.boolean(),
   count: z.number().int(),

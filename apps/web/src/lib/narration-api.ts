@@ -9,6 +9,7 @@ import {
   VoiceJobKind,
   VoiceJobStatus,
   VoiceProfile,
+  VoiceSpec,
   type MediaAssetId,
   type NarrationLineId,
   type NarrationTakeId,
@@ -34,7 +35,13 @@ export const WireVoiceOptions = z.object({
 })
 export type WireVoiceOptions = z.infer<typeof WireVoiceOptions>
 
-export const WireNarrationTake = NarrationTake.innerType().extend({ createdAt: z.coerce.date(), durationSec: z.number() })
+export const WireNarrationTake = NarrationTake.innerType().extend({
+  createdAt: z.coerce.date(),
+  durationSec: z.number(),
+  /** 作ったジョブの指定と、声の AI へ送った読み方の指示（プロンプトビューア）。AI で作った Take だけ。 */
+  voiceSpec: VoiceSpec.nullable().optional(),
+  sentStyle: z.string().nullable().optional(),
+})
 export type WireNarrationTake = z.infer<typeof WireNarrationTake>
 
 const WireLineJob = VoiceJob.pick({ id: true, kind: true, status: true, error: true, tool: true, costUsd: true }).extend({

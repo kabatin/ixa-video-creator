@@ -1,4 +1,4 @@
-import { MediaAssetId, SfxJobStatus, type ProjectId, type SfxCueInput } from '@ixa/domain'
+import { MediaAssetId, SfxCueAlign, SfxJobStatus, type ProjectId, type SfxCueInput } from '@ixa/domain'
 import { z } from 'zod'
 import type { Requester } from '@/lib/requester'
 
@@ -11,7 +11,10 @@ const WireSfxCue = z.object({
   startSec: z.number(),
   durationSec: z.number(),
   prompt: z.string(),
+  /** 除外する内容（送った文そのもの）。送っていなければ無い。 */
+  negativePrompt: z.string().optional(),
   volume: z.number(),
+  align: SfxCueAlign.optional(),
 })
 
 /** 画面で使う欄だけを読む（ほかの欄は捨てる）。 */
@@ -22,6 +25,10 @@ export const WireSfxJob = z.object({
   /** 素材の ID の形でなければ読み込みごと失敗させる（黙って行を落とさない）。 */
   mediaAssetIds: z.array(MediaAssetId),
   timelineClipId: z.string().nullable(),
+  /** 使った AI・できた音ごとの種・作り終えた日時（プロンプトビューア）。 */
+  tool: z.string().optional(),
+  seedsUsed: z.array(z.number().int().nullable()).optional(),
+  finishedAt: z.coerce.date().nullable().optional(),
 })
 export type WireSfxJob = z.infer<typeof WireSfxJob>
 

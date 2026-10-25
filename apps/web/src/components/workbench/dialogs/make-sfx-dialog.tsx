@@ -23,14 +23,17 @@ const PROGRESS: Readonly<Record<WireShotMotion['state'], string>> = {
  * 効果音を作る（ADR-0054）。Shot の採用中の Take の動きを分析し（まだなら開いたときに頼む）、
  * 動きの強さの波と出来事の印、提案する効果音の一覧を出す。直した行のうちチェックしたものを作る。
  * 使う AI はメニュー「使う AI…」の効果音。本数は 1。できた音は効果音の段に置かれる。
+ *
+ * `initialRows` は最初に入れておく行（プロンプトビューアの「これを元に作る」）。渡したら案では上書きせず、
+ * Shot を選んでいなくても開ける（動きの分析は Shot があるときだけ出す）。
  */
-export const MakeSfxDialogBody = () => {
+export const MakeSfxDialogBody = ({ initialRows }: { readonly initialRows?: readonly SfxCueRow[] } = {}) => {
   const workbench = useWorkbench()
   const client = useMemo(() => createApiClient(), [])
   const shotId = workbench.dialogShotIds?.[0] ?? workbench.selectedShotId
   const shot = workbench.shots?.find((candidate) => candidate.id === shotId) ?? null
   const load = useShotMotion(shot?.id ?? null)
-  const [rows, setRows] = useState<readonly SfxCueRow[] | null>(null)
+  const [rows, setRows] = useState<readonly SfxCueRow[] | null>(initialRows ?? null)
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -44,7 +47,9 @@ export const MakeSfxDialogBody = () => {
     }
   }, [motion, rows])
 
-  if (shot === null) return <p className="text-sm text-muted">効果音を作る Shot を選んでから開いてください。</p>
+  if (shot === null && initialRows === undefined) {
+    return <p className="text-sm text-muted">効果音を作る Shot を選んでから開いてください。</p>
+  }
 
   const change = (id: string, patch: Partial<SfxCueRow>): void => {
     setRows((current) => (current ?? []).map((row) => (row.id === id ? { ...row, ...patch } : row)))
@@ -64,7 +69,8 @@ export const MakeSfxDialogBody = () => {
     try {
       const jobIds = await client.generateSfx(workbench.projectId, result.cues)
       setAccepted(jobIds.length)
-      workbench.notify(`${shot.code} の効果音を ${String(jobIds.length)} 個作り始めました。できたら効果音の段に置かれます。`)
+      const what = shot === null ? '効果音' : `${shot.code} の効果音`
+      workbench.notify(`${what}を ${String(jobIds.length)} 個作り始めました。できたら効果音の段に置かれます。`)
     } catch (cause) {
       setFormError(`効果音を作り始められませんでした: ${describeForPerson(cause)}`)
     } finally {
@@ -87,7 +93,9 @@ export const MakeSfxDialogBody = () => {
       }}
     >
       <p className="text-sm text-muted">
-        {`${shot.code} の採用中の Take の動きから、効果音の案を出します。時刻・長さ・指示（英語）・音量を直して、チェックした行を作ります。使う AI はメニュー「使う AI…」の「効果音」です。`}
+        {shot === null
+          ? '前に作った効果音のきっかけを入れてあります。時刻・長さ・指示（英語）・音量を直して、チェックした行を作ります。使う AI はメニュー「使う AI…」の「効果音」です。'
+          : `${shot.code} の採用中の Take の動きから、効果音の案を出します。時刻・長さ・指示（英語）・音量を直して、チェックした行を作ります。使う AI はメニュー「使う AI…」の「効果音」です。`}
       </p>
       {load.state === 'loading' && <p className="text-sm text-muted">読み込んでいます…</p>}
       {load.state === 'error' && (
@@ -111,7 +119,7 @@ export const MakeSfxDialogBody = () => {
       {motion?.visionUsed === false && (
         <p className="text-sm text-warn">AI で中身を見ていません（「使う AI」の文章が Claude ではないため）。動きの山だけから出した案です。</p>
       )}
-      {motion !== null && motion.energy !== null && <MotionWave range={shot} motion={motion} onSeek={seek} />}
+      {shot !== null && motion !== null && motion.energy !== null && <MotionWave range={shot} motion={motion} onSeek={seek} />}
       {rows !== null && (
         <ul className="relative max-h-80 space-y-2 overflow-y-auto" aria-label="提案する効果音">
           {rows.map((row) => (

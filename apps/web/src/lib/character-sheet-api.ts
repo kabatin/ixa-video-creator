@@ -25,6 +25,11 @@ export const WireCharacterSheetState = z.object({
       error: z.string().nullable(),
       /** 何枚目の試しか（ADR-0055。1 から）。 */
       attempt: z.number().int().default(1),
+      queuedAt: z.coerce.date().optional(),
+      /** 実際に送った指示の本文（プロンプトビューア）。記録する前の絵は null。 */
+      sentPrompt: z.string().nullable().optional(),
+      /** 使った AI（モデル）。 */
+      modelId: z.string().nullable().optional(),
     })
     .nullable(),
 })

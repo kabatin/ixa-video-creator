@@ -20,18 +20,27 @@ export type SfxCueRow = {
   readonly reason: string
   /** 音の一番大きいところを時刻に合わせる印（ADR-0054 追記）。手で足した行・印の無い案は null。 */
   readonly align: SfxCueAlign | null
+  /**
+   * 除外する内容（英語）。前に作った音を元に作るとき（プロンプトビューアの「これを元に作る」）だけ持つ。
+   * 窓に打つ欄は無いので、持っていれば行に見せてそのまま送る（黙って落とさない）。
+   */
+  readonly negativePrompt?: string
+}
+
+/** 行にできるきっかけ（案・前に作った音のきっかけ）。 */
+export type SfxCueLike = {
+  readonly startSec: number
+  readonly durationSec: number
+  readonly prompt: string
+  readonly volume: number
+  readonly align?: SfxCueAlign
+  readonly negativePrompt?: string
 }
 
 export type SfxSuggestionLike = {
   readonly kind: string
   readonly reason: string
-  readonly cue: {
-    readonly startSec: number
-    readonly durationSec: number
-    readonly prompt: string
-    readonly volume: number
-    readonly align?: SfxCueAlign
-  }
+  readonly cue: SfxCueLike
 }
 
 /** 下に敷く音。案に出しても最初はチェックを外す（足すかは人が決める）。 */
@@ -54,6 +63,19 @@ export const cueRowsFromSuggestions = (suggestions: readonly SfxSuggestionLike[]
     reason: s.reason,
     align: s.cue.align ?? null,
   }))
+
+/** 前に作った音のきっかけを 1 行にする（「これを元に作る」）。チェックを付け、除外する内容も持つ。 */
+export const cueRowFromCue = (cue: SfxCueLike): SfxCueRow => ({
+  id: nextRowId(),
+  checked: true,
+  start: formatClock(cue.startSec),
+  duration: cue.durationSec.toFixed(2),
+  prompt: cue.prompt,
+  volume: String(cue.volume),
+  reason: '',
+  align: cue.align ?? null,
+  ...(cue.negativePrompt === undefined || cue.negativePrompt === '' ? {} : { negativePrompt: cue.negativePrompt }),
+})
 
 export const blankCueRow = (atSec: number): SfxCueRow => ({
   id: nextRowId(),
@@ -93,6 +115,7 @@ const rowToCue = (row: SfxCueRow): { readonly cue: SfxCueInput } | { readonly er
     prompt: row.prompt,
     volume: Number(row.volume),
     ...(row.align === null ? {} : { align: row.align }),
+    ...(row.negativePrompt === undefined || row.negativePrompt === '' ? {} : { negativePrompt: row.negativePrompt }),
   })
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? '入力を確かめてください。' }
   return { cue: parsed.data }

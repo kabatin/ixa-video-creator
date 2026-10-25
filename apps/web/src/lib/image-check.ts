@@ -43,6 +43,10 @@ export const WireImageHistoryEntry = z.object({
   check: WireImageCheck.nullable(),
   error: z.string().nullable(),
   queuedAt: z.coerce.date(),
+  /** 実際に送った指示の本文（プロンプトビューア）。記録する前の絵は null。 */
+  sentPrompt: z.string().nullable().optional(),
+  /** 使った AI（モデル）。 */
+  modelId: z.string().nullable().optional(),
 })
 export type WireImageHistoryEntry = z.infer<typeof WireImageHistoryEntry>
 

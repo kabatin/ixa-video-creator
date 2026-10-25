@@ -29,6 +29,7 @@ import { createLibraryImportApi, type LibraryImportApi } from '@/lib/library-imp
 import { createLocationApi, type LocationApi } from '@/lib/location-api'
 import { createMusicApi, type MusicApi } from '@/lib/music-api'
 import { createMusicJobApi, type MusicJobApi } from '@/lib/music-job-api'
+import { createMusicSourceApi, type MusicSourceApi } from '@/lib/music-source-api'
 import { createSfxJobApi, type SfxJobApi } from '@/lib/sfx-job-api'
 import { createUploadedSfxApi, type UploadedSfxApi } from '@/lib/uploaded-sfx-api'
 import { createMotionApi, type MotionApi } from '@/lib/motion-api'
@@ -149,6 +150,7 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
   LocationApi &
   MusicApi &
   MusicJobApi &
+  MusicSourceApi &
   SfxJobApi &
   UploadedSfxApi &
   MotionApi &
@@ -286,6 +288,7 @@ export const createApiClient = (
     ...createTimelineApi(requester),
     ...createNarrationApi(requester),
     ...createMusicJobApi(requester),
+    ...createMusicSourceApi(requester),
     ...createSfxJobApi(requester),
     ...createUploadedSfxApi(requester),
     ...createMotionApi(requester),
