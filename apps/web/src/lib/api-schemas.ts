@@ -68,6 +68,8 @@ export const UpdateShotBody = UpdateShotPatch.pick({
   speed: true,
   // 場所は後から決められる。null を送れば外す（ADR-0015）。
   locationId: true,
+  // セリフの行（ADR-0059）。丸ごと置き換える。
+  dialogue: true,
 })
 export type UpdateShotBody = z.input<typeof UpdateShotBody>
 

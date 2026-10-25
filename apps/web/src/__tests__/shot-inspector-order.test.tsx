@@ -6,13 +6,14 @@ import { aWorkbenchShot, renderInWorkbench } from './workbench-fixture'
 /**
  * Shot のインスペクターの並び（制作者 2026-10-03「データの並びが雑なので整理したい。普段触らないような詳細設定は
  * 下のほうで、たとえば Take 作成より先にやるべき画像生成を上のほうに持ってくるとか、順序に応じて並び替えたり整理」）。
- * 作業の順（絵コンテ → 参照 → 絵 → Take を作る → Take）に並べ、時間は下、普段触らないものは畳む。
+ * 作業の順（絵コンテ → 参照 → セリフ → 絵 → Take を作る → Take）に並べ、時間は下、普段触らないものは畳む。
  */
 
 vi.mock('@/components/workbench/inspector/shot-generate-section', () => ({ ShotGenerateSection: () => null }))
 vi.mock('@/components/workbench/inspector/start-frame-field', () => ({ StartFrameField: () => null }))
 vi.mock('@/components/workbench/inspector/end-frame-field', () => ({ EndFrameField: () => null }))
 vi.mock('@/components/workbench/inspector/shot-cast-section', () => ({ ShotCastSection: () => null }))
+vi.mock('@/components/workbench/inspector/shot-dialogue-section', () => ({ ShotDialogueSection: () => null }))
 vi.mock('@/components/workbench/inspector/footage-import-form', () => ({ FootageImportForm: () => null }))
 vi.mock('@/components/workbench/inspector/take-timing-field', () => ({ TakeTimingField: () => null }))
 vi.mock('@/components/workbench/inspector/shot-storyboard-section', () => ({ ShotStoryboardSection: () => null }))
@@ -24,13 +25,15 @@ beforeAll(() => {
 })
 
 describe('ShotInspector の並び', () => {
-  it('作業の順に並べる: 絵コンテ → 参照 → 絵 → Take を作る → Take → 時間', () => {
+  it('作業の順に並べる: 絵コンテ → 参照 → セリフ → 絵 → Take を作る → Take → 時間', () => {
     const shot = aWorkbenchShot(1)
     renderInWorkbench(<ShotInspector shot={shot} isFirst />, { shots: [shot] })
 
     expect(screen.getAllByRole('heading').map((heading) => heading.textContent)).toEqual([
       '絵コンテ',
       '参照',
+      // セリフは配役の次（話し手を配役から選ぶ。ADR-0059）
+      'セリフ',
       '絵',
       'Take を作る',
       'Take',

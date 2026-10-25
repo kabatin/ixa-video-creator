@@ -26,7 +26,7 @@ describe('validateShotForm', () => {
     expect(result.input.durationSec).toBe(4.25)
     expect(result.input.order).toBe(ORDER)
     expect(result.input.sequenceId).toBeNull()
-    expect(result.input.dialogue).toBeNull()
+    expect(result.input.dialogue).toEqual([])
     expect(result.input.sourceType).toEqual({ type: 'ai_video' })
   })
 

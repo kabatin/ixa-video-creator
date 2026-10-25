@@ -36,6 +36,7 @@ const senko = Character.parse({
   projectId: ProjectId.parse(PROJECT_ID),
   name: '戦子',
   displayName: '戦子',
+  speakerNo: 1,
   createdAt: new Date('2026-10-03T00:00:00.000Z'),
 })
 

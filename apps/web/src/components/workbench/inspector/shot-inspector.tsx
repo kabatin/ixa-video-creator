@@ -7,6 +7,7 @@ import { ShotStatusBadge } from '@/components/shot-status-badge'
 import { useAssets } from '@/components/workbench/asset-store'
 import { FootageImportForm } from '@/components/workbench/inspector/footage-import-form'
 import { ShotCastSection } from '@/components/workbench/inspector/shot-cast-section'
+import { ShotDialogueSection } from '@/components/workbench/inspector/shot-dialogue-section'
 import { ShotGenerateSection } from '@/components/workbench/inspector/shot-generate-section'
 import { StartFrameField } from '@/components/workbench/inspector/start-frame-field'
 import { EndFrameField, type EndFrameCandidate } from '@/components/workbench/inspector/end-frame-field'
@@ -141,6 +142,16 @@ export const ShotInspector = ({
           <Section title="参照">
             <LocationField shot={shot} disabled={generating} onSave={save} />
             <ShotCastSection shot={shot} version={workbench.serverEpoch} />
+          </Section>
+
+          <Section title="セリフ">
+            <ShotDialogueSection
+              key={shot.id}
+              shot={shot}
+              version={workbench.serverEpoch}
+              disabled={generating}
+              onSave={save}
+            />
           </Section>
 
           <Section title="絵">

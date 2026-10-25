@@ -80,7 +80,7 @@ const makeShot = (
   timing: 'trim',
   speed: 1,
   description: '',
-  dialogue: null,
+  dialogue: [],
   camera,
       mood: null,
       continuityMode: 'independent',

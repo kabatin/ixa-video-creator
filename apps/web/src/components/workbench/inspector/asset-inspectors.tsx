@@ -126,6 +126,25 @@ export const CharacterInspector = ({ id }: { readonly id: CharacterId }) => {
           識別画像と Look を詳しく編集…
         </Link>
       </Section>
+      {/* セリフの話し手（ADR-0059）。H3 のセリフの文に一字一句そのまま入る。どの Shot でも同じ声になる。 */}
+      <Section title="セリフの声">
+        <AutoSaveField
+          label="英語の呼び名"
+          value={character.speechName ?? ''}
+          placeholder="The cat"
+          onSave={(next) => save({ speechName: next.trim() === '' ? null : next.trim() })}
+        />
+        <AutoSaveField
+          label="声の説明（英語）"
+          multiline
+          value={character.voiceDescription ?? ''}
+          placeholder="a calm, deep, refined elderly gentleman's voice"
+          onSave={(next) => save({ voiceDescription: next.trim() === '' ? null : next.trim() })}
+        />
+        <p className="text-xs text-muted">
+          セリフのある Shot の Take は、この 2 つで話し手と声を伝えます。全部の Shot で同じ文を使います。
+        </p>
+      </Section>
       <Section title={`Look（${String((looks.get(id) ?? []).length)}）`}>
         {(looks.get(id) ?? []).map((look) => (
           <button

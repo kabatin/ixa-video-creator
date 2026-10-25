@@ -30,7 +30,7 @@ export const shotJson = {
   durationSec: 4,
   sourceInSec: 0,
   description: '夜のスタジアム',
-  dialogue: null,
+  dialogue: [],
   camera: cameraJson,
   mood: 'tense',
   continuityMode: 'independent',
@@ -115,6 +115,9 @@ export const characterJson = {
   identityAnchors: ['20代日本人男性', '細身'],
   styleTokens: ['硬質な光'],
   colorPalette: ['#1A1A1A'],
+  speakerNo: 1,
+  speechName: null,
+  voiceDescription: null,
   createdAt: '2026-09-16T01:02:03.000Z',
 }
 

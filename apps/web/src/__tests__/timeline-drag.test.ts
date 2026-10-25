@@ -542,7 +542,7 @@ const makeShot = (suffix: string, startSec: number, durationSec: number): Shot =
   timing: 'trim',
   speed: 1,
   description: '',
-  dialogue: null,
+  dialogue: [],
   camera,
   mood: null,
   continuityMode: 'independent',

@@ -147,7 +147,7 @@ export const validateShotForm = ({ values, order }: BuildShotInput): ShotFormVal
     durationSec,
     sourceInSec: 0,
     description: values.description.trim(),
-    dialogue: null,
+    dialogue: [],
     camera: camera.data,
     mood: values.mood.trim() === '' ? null : values.mood.trim(),
     // ULID かどうかの検証は zod（LocationId）に委ねる。UI 側で形を二重に持たない。

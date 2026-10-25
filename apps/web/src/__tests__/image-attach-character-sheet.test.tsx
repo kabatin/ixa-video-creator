@@ -30,6 +30,7 @@ const character = Character.parse({
   projectId: aProject.id,
   name: 'takepi',
   displayName: 'takepi',
+  speakerNo: 1,
   createdAt: new Date(),
 })
 
