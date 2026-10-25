@@ -16,6 +16,7 @@ import {
 } from '@ixa/domain'
 import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
+import { isUniqueViolation } from '../unique-violation.js'
 import { characterIdentityImages, characters } from '../schema/character.js'
 
 /** drizzle の row 型。パッケージ外へは出さない。 */
@@ -113,15 +114,21 @@ export const createCharacterRepository = (db: DbExecutor): CharacterRepository =
 
   async create(input) {
     const validated = CreateCharacterInputSchema.parse(input)
-    const rows = await db
-      .insert(characters)
-      .values({
-        ...validated,
-        id: input.id === undefined ? newId(CharacterIdSchema) : CharacterIdSchema.parse(input.id),
-        speakerNo: nextSpeakerNo(validated.projectId),
-        createdAt: new Date(),
-      })
-      .returning()
+    const values = {
+      ...validated,
+      id: input.id === undefined ? newId(CharacterIdSchema) : CharacterIdSchema.parse(input.id),
+      speakerNo: nextSpeakerNo(validated.projectId),
+      createdAt: new Date(),
+    }
+    const insert = () => db.insert(characters).values(values).returning()
+    /**
+     * 同じ作品で同時に作ると、話し手の番号が重なって一意索引が片方を落とす。**1 回だけ**数え直して入れ直す
+     * （番号は INSERT の中で数えるので、入れ直せば次の番号になる）。2 回続けて重なれば投げる。
+     */
+    const rows = await insert().catch((error: unknown) => {
+      if (!isUniqueViolation(error)) throw error
+      return insert()
+    })
     const row = rows[0]
     if (!row) throw new Error('characters への INSERT が行を返しませんでした')
     return characterRowToDomain(row)
