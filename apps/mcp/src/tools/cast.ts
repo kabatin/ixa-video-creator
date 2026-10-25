@@ -1,6 +1,7 @@
 import { IdentityImageRole } from '@ixa/domain'
 import { z } from 'zod'
 import { seg } from '../api-client.js'
+import { SpeechFields } from '../lib/dialogue-input.js'
 import { ImageSource, resolveImage } from '../lib/image-source.js'
 import { WireCharacter, WireLocation, WireLook } from '../wire.js'
 import { defineTool, Id, jsonResult, mapLimited } from '../tool-def.js'
@@ -20,6 +21,8 @@ export const CreateCharacterInput = z.object({
     .optional()
     .describe('Short visual traits always put into prompts, e.g. "silver short hair", "red scarf".'),
   styleTokens: z.array(z.string().min(1).max(200)).max(20).optional(),
+  // セリフの声（ADR-0059）。会話劇の話し手は、Take を作る前にこの 2 つが要る。
+  ...SpeechFields,
   identityImage: ImageSource.extend({ role: IdentityImageRole.default('face_front') })
     .optional()
     .describe('Reference image of the character (face or full body).'),
@@ -49,6 +52,8 @@ export const createCharacterTool = defineTool({
         ...(args.description === undefined ? {} : { description: args.description }),
         ...(args.identityAnchors === undefined ? {} : { identityAnchors: args.identityAnchors }),
         ...(args.styleTokens === undefined ? {} : { styleTokens: args.styleTokens }),
+        ...(args.speechName === undefined ? {} : { speechName: args.speechName }),
+        ...(args.voiceDescription === undefined ? {} : { voiceDescription: args.voiceDescription }),
       },
       WireCharacter,
     )

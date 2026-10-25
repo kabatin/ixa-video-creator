@@ -52,6 +52,8 @@ export const WireShot = z.object({
   locationId: nullableString,
   selectedTakeId: nullableString,
   status: z.string(),
+  /** セリフの警告（ADR-0059）。古い API は返さないので省略可。 */
+  dialogueWarnings: z.array(z.object({ code: z.string(), message: z.string() })).optional(),
 })
 export type WireShot = z.infer<typeof WireShot>
 

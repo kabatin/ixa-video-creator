@@ -1,5 +1,6 @@
 import { Seconds, ShotCamera } from '@ixa/domain'
 import { z } from 'zod'
+import { DialogueInput } from '../lib/dialogue-input.js'
 import { seg, type ApiClient } from '../api-client.js'
 import { assertListed, assertShotsInProject } from '../lib/project-scope.js'
 import { bulkResult, WireShot } from '../wire.js'
@@ -27,7 +28,7 @@ export const RestructureShotsInput = z.object({
   durationSec: Seconds.positive().optional().describe('insert'),
   description: z.string().max(4000).optional().describe('insert (Japanese).'),
   mood: z.string().max(500).optional().describe('insert'),
-  dialogue: z.string().max(2000).optional().describe('insert: spoken line, if any.'),
+  dialogue: DialogueInput.optional().describe('insert: spoken lines (same shape as edit_shots dialogue).'),
   camera: ShotCamera.partial().optional().describe('insert. Default size medium.'),
   locationId: Id.optional().describe('insert'),
 })
@@ -103,7 +104,7 @@ const insert = async (api: ApiClient, args: RestructureArgs) => {
       durationSec: args.durationSec,
       sourceInSec: 0,
       description: args.description ?? '',
-      dialogue: args.dialogue ?? null,
+      dialogue: args.dialogue ?? [],
       camera: { ...DEFAULT_CAMERA, ...args.camera },
       mood: args.mood ?? null,
       locationId: args.locationId ?? null,

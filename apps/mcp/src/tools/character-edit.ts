@@ -1,6 +1,7 @@
 import { IdentityImageRole, LookImageRole, type ToolRisk } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
+import { SpeechFields } from '../lib/dialogue-input.js'
 import { ImageSource, resolveImage } from '../lib/image-source.js'
 import { defineTool, Id, jsonResult, mapLimited, ToolInputError } from '../tool-def.js'
 
@@ -17,6 +18,9 @@ const WireOwnedCharacter = z.object({
   description: z.string().optional(),
   identityAnchors: z.array(z.string()).optional(),
   styleTokens: z.array(z.string()).optional(),
+  speakerNo: z.number().optional(),
+  speechName: z.string().nullable().optional(),
+  voiceDescription: z.string().nullable().optional(),
 })
 const WireFullLook = z.object({
   id: z.string(),
@@ -42,6 +46,8 @@ const CharacterFields = z.object({
   identityAnchors: Tokens.optional(),
   styleTokens: Tokens.optional(),
   colorPalette: Tokens.optional(),
+  // セリフの声（ADR-0059）
+  ...SpeechFields,
 })
 
 const LookFields = z.object({
@@ -148,6 +154,9 @@ const describeCharacter = async (api: ApiClient, characterId: string) => {
       description: character.description ?? '',
       identityAnchors: character.identityAnchors ?? [],
       styleTokens: character.styleTokens ?? [],
+      speakerTag: character.speakerNo === undefined ? null : `S${String(character.speakerNo)}`,
+      speechName: character.speechName ?? null,
+      voiceDescription: character.voiceDescription ?? null,
     },
     identityImages: identityImages.map((i) => ({ id: i.id, mediaAssetId: i.mediaAssetId, role: i.role, isPrimary: i.isPrimary ?? false })),
     looks: looks.map((look, index) => ({

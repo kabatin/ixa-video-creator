@@ -9,6 +9,7 @@ import {
 } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
+import { DialogueInput, speakerIdsOf } from '../lib/dialogue-input.js'
 import { assertListed, assertLooksOfCharacter, assertShotsInProject } from '../lib/project-scope.js'
 import { bulkResult, WireLook, WireShot, WireShotCharacter, WireTransition } from '../wire.js'
 import { defineTool, describeError, Id, jsonResult, mapLimited, ToolInputError } from '../tool-def.js'
@@ -79,6 +80,7 @@ const Edit = z.object({
   timing: ShotTiming.optional().describe('trim: cut the take to the shot length; fit: speed the take up/down to fill it.'),
   startSec: Seconds.optional().describe('Position on the timeline. Only with a single shotId.'),
   durationSec: Seconds.positive().optional().describe('Length on the timeline. Only with a single shotId.'),
+  dialogue: DialogueInput.optional(),
 })
 
 export const EditShotsInput = z.object({
@@ -105,6 +107,8 @@ const singlePatchOf = (edit: EditInput) => ({
   ...(edit.timing === undefined ? {} : { timing: edit.timing }),
   ...(edit.startSec === undefined ? {} : { startSec: edit.startSec }),
   ...(edit.durationSec === undefined ? {} : { durationSec: edit.durationSec }),
+  // セリフ（ADR-0059）は一括の口が受けない。Shot ごとに丸ごと置き換える。
+  ...(edit.dialogue === undefined ? {} : { dialogue: edit.dialogue }),
 })
 
 /** 同じ位置・尺を何本にも入れると重なりだらけになる（一括の口が時間を受けないのと同じ理由）。 */
@@ -116,7 +120,7 @@ const timeEditProblem = (edit: EditInput): string | null =>
 const patchEach = async (api: ApiClient, shotIds: readonly string[], patch: Readonly<Record<string, unknown>>) =>
   mapLimited(shotIds, 4, (shotId) =>
     api.request('PATCH', `/shots/${seg(shotId)}`, WireShot, { body: patch }).then(
-      () => ({ shotId, ok: true as const }),
+      (shot) => ({ shotId, ok: true as const, dialogueWarnings: (shot.dialogueWarnings ?? []).map((w) => w.message) }),
       (error: unknown) => ({ shotId, ok: false as const, reason: describeError(error) }),
     ),
   )
@@ -132,10 +136,12 @@ const assertEditsInProject = async (api: ApiClient, projectId: string, edits: re
   const locationIds = edits.flatMap((e) => (e.locationId === undefined || e.locationId === null ? [] : [e.locationId]))
   const cast = edits.flatMap((e) => e.cast ?? [])
   const characterIds = [...new Set(cast.map((c) => c.characterId))]
+  const speakerIds = speakerIdsOf(edits.flatMap((e) => e.dialogue ?? []))
   const [shots] = await Promise.all([
     assertShotsInProject(api, projectId, edits.flatMap((e) => e.shotIds)),
     locationIds.length === 0 ? null : assertListed(api, `/projects/${seg(projectId)}/locations`, locationIds, '場所'),
     characterIds.length === 0 ? null : assertListed(api, `/projects/${seg(projectId)}/characters`, characterIds, 'キャラクター'),
+    speakerIds.length === 0 ? null : assertListed(api, `/projects/${seg(projectId)}/characters`, speakerIds, '話し手'),
   ])
   const looks = await mapLimited(characterIds, 4, async (characterId) => {
     const lookIds = cast.flatMap((c) => (c.characterId === characterId && c.lookId !== undefined ? [c.lookId] : []))
@@ -206,6 +212,10 @@ const applyEdit = async (
   const failures = [...(patched?.results ?? []), ...(updated ?? [])].flatMap((r) =>
     r.ok ? [] : [{ shotId: r.shotId, reason: r.reason }],
   )
+  // セリフの警告（5 行以上など）。保存は通っているので失敗にはしない。
+  const dialogueWarnings = (updated ?? []).flatMap((r) =>
+    r.ok && r.dialogueWarnings.length > 0 ? [{ shotId: r.shotId, warnings: r.dialogueWarnings }] : [],
+  )
 
   if (entries !== null) {
     await mapLimited(edit.shotIds, 4, (shotId) =>
@@ -228,6 +238,7 @@ const applyEdit = async (
     ...(patched === null ? {} : { patched: patched.results.filter((r) => r.ok).length }),
     ...(updated === null ? {} : { updated: updated.filter((r) => r.ok).length }),
     ...(failures.length > 0 ? { failures } : {}),
+    ...(dialogueWarnings.length > 0 ? { dialogueWarnings } : {}),
     ...(entries === null ? {} : { castSet: entries.length }),
     ...(transitions === null ? {} : { transitions }),
   }
@@ -240,7 +251,8 @@ export const editShotsTool = defineTool({
     'Edit shots in bulk. Each edit applies the same change to its shotIds: description (Japanese, what happens on ' +
     'screen), mood, camera {size, angleH, angle, lensMm, movement, movementIntensity} (only given fields change), ' +
     'locationId, cast (replaces the cast; characters from create_character), transitionToNext ' +
-    '(cut|dissolve|dip_to_black|dip_to_white|wipe|whip_pan|glitch), continuityMode, timing, startSec/durationSec. ' +
+    '(cut|dissolve|dip_to_black|dip_to_white|wipe|whip_pan|glitch), continuityMode, timing, startSec/durationSec, ' +
+    'dialogue (spoken lines; replaces all lines; speakers need speechName/voiceDescription via edit_character). ' +
     'A previous_shot shot starts from the last frame of the previous shot\'s selected take: adopt that take first, then generate. ' +
     'Edits run in order.',
   input: EditShotsInput,

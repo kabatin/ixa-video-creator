@@ -394,7 +394,8 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ code: long(41) }, 'code'],
       [{ durationSec: 0 }, 'durationSec'],
       [{ mood: long(501) }, 'mood'],
-      [{ dialogue: long(2001) }, 'dialogue'],
+      [{ dialogue: [{ speakerId: S, text: long(201) }] }, 'dialogue.0.text'],
+      [{ dialogue: [{ speakerId: 'x', text: 'a' }] }, 'dialogue.0.speakerId'],
     ],
   },
   draft_storyboard: {

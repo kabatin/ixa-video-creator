@@ -1,6 +1,8 @@
 import { MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE, Seconds } from '@ixa/domain'
 import { z } from 'zod'
 import { seg } from '../api-client.js'
+import { DialogueInput, speakerIdsOf } from '../lib/dialogue-input.js'
+import { assertListed } from '../lib/project-scope.js'
 import {
   boundariesFrom,
   boundaryProblem,
@@ -51,6 +53,11 @@ export const PlanShotsInput = z.object({
   musicTrackId: Id.optional(),
   codePrefix: z.string().regex(/^[A-Za-z0-9]{1,16}$/).optional().describe('Shot code prefix, default CUT.'),
   dryRun: z.boolean().default(false).describe('Only compute the plan, create nothing.'),
+  dialogues: z
+    .array(DialogueInput)
+    .max(199)
+    .optional()
+    .describe('Spoken lines per created shot, in shot order (one array per shot; [] for none). Length = number of shots.'),
 })
 
 const inputOf = (args: z.infer<typeof PlanShotsInput>): PlanInput => {
@@ -70,7 +77,8 @@ export const planShotsTool = defineTool({
     '(absolute cut times incl. start and end) or durationsSec. snap="downbeat" aligns cuts to bar starts of the master ' +
     'track. Video model lengths matter: local vpipe MiniMax H3 makes 17n+5 frames at 24 fps, i.e. 2.333…10.125 s ' +
     '(n=3..14); a shot longer than the model maximum is generated at the maximum and slowed down (up to 1.5x), longer ' +
-    'than that is rejected — split it. Pass model to see the generated length per shot. Use dryRun to preview.',
+    'than that is rejected — split it. Pass model to see the generated length per shot. Use dryRun to preview. ' +
+    'dialogues gives each created shot its spoken lines (see edit_shots dialogue).',
   input: PlanShotsInput,
   handler: async (args, { api }) => {
     const raw = boundariesFrom(inputOf(args))
@@ -100,6 +108,14 @@ export const planShotsTool = defineTool({
           })()
 
     const plan = plannedShots(snapped.boundariesSec, support, args.speed)
+    const shotCount = snapped.boundariesSec.length - 1
+    if (args.dialogues !== undefined && args.dialogues.length !== shotCount) {
+      throw new ToolInputError(`dialogues は Shot の数（${String(shotCount)}）と同じだけ並べてください`)
+    }
+    const speakers = speakerIdsOf((args.dialogues ?? []).flat())
+    if (speakers.length > 0) {
+      await assertListed(api, `/projects/${seg(args.projectId)}/characters`, speakers, '話し手')
+    }
     const summary = {
       boundariesSec: snapped.boundariesSec,
       ...(snapped.dropped.length > 0 ? { droppedBySnap: snapped.dropped } : {}),
@@ -112,6 +128,7 @@ export const planShotsTool = defineTool({
       {
         boundariesSec: snapped.boundariesSec,
         ...(args.codePrefix === undefined ? {} : { codePrefix: args.codePrefix }),
+        ...(args.dialogues === undefined ? {} : { dialogues: args.dialogues }),
       },
       z.object({ shots: z.array(WireShot), warnings: z.array(z.string()) }),
     )
@@ -123,7 +140,10 @@ export const planShotsTool = defineTool({
         startSec: round(s.startSec),
         durationSec: round(s.durationSec),
       })),
-      warnings: created.warnings,
+      warnings: [
+        ...created.warnings,
+        ...created.shots.flatMap((s) => (s.dialogueWarnings ?? []).map((w) => `${s.code}: ${w.message}`)),
+      ],
     })
   },
 })
