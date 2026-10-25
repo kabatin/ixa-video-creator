@@ -561,12 +561,20 @@ describe('speakersForShot', () => {
     expect(speakers.map((s) => [s.displayName, s.speakerNo])).toEqual([['nezumi', 2], ['neko', 1]])
   })
 
-  it('消したキャラクターを話し手にしていれば黙って落とさず止める', async () => {
-    const { character } = await registerCharacter('neko')
-    await characters.softDelete(character.id)
-    shot = aShot(projectId, { dialogue: [line(character.id)] })
+  /**
+   * 消した・ほかの作品の話し手は返さない（例外にすると内部の ID が画面に出る）。
+   * 欠けた話し手は buildGeneration の `dialogueSpeakerProblems` が日本語の理由で止める。
+   */
+  it('消したキャラクター・ほかの作品のキャラクターは話し手として返さない', async () => {
+    const { character: gone } = await registerCharacter('neko')
+    await characters.softDelete(gone.id)
+    const stranger = await characters.create({ workspaceId, projectId: newId(ProjectIdSchema), name: 'yoso', displayName: 'よそ' })
+    const { character: mouse } = await registerCharacter('nezumi')
+    shot = aShot(projectId, { dialogue: [line(gone.id), line(stranger.id), line(mouse.id)] })
 
-    await expect(buildContext().speakersForShot(shot.id)).rejects.toBeInstanceOf(GenerationContextError)
+    const speakers = await buildContext().speakersForShot(shot.id)
+
+    expect(speakers.map((s) => s.displayName)).toEqual(['nezumi'])
   })
 
   it('消しても番号は詰めない（次に作る人は 3）', async () => {
