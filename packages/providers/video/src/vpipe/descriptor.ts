@@ -151,8 +151,11 @@ const capabilities: VideoModelDescriptor['capabilities'] = {
   /** ガイダンス蒸留済みのモデルで、negative prompt は効かない。効かない口を開けない。 */
   negativePrompt: false,
   cameraControl: 'prompt',
-  /** vpipe-api は音を捨てる（出力に音声トラックが無い）。 */
-  audioGeneration: false,
+  /**
+   * **セリフのある Shot だけ**音付きで作る（ADR-0059。本文に `audio: true`）。
+   * セリフの無い Shot は今まで通り音を捨てる（出力に音声トラックが無い）。
+   */
+  audioGeneration: true,
 }
 
 /**

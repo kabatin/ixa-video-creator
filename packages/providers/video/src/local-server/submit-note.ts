@@ -26,6 +26,8 @@ export const LocalServerSubmitNote = z.object({
   ignoredReferences: z.array(NotedReference),
   /** 実際に送った文（プロンプトビューア 2026-10-25）。前の版の控えには無いので、無ければ null（分からない）。 */
   prompt: z.string().nullable().default(null),
+  /** 音付きで頼んだか（ADR-0059）。前の版の控えには無いが、そのころは音を頼んでいないので false。 */
+  audio: z.boolean().default(false),
 })
 export type LocalServerSubmitNote = z.infer<typeof LocalServerSubmitNote>
 

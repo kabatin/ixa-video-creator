@@ -96,7 +96,7 @@ export type LocalServerBinding<Q extends string> = {
    * 仕様から投入の本文を組む**純関数**。`start_image` は含めない（共通の層が足す）。
    * 画像の取得もしない（取得は `fetchStartImage`）。
    */
-  readonly buildBody: (input: LocalServerBodyInput<Q>) => { readonly prompt: string }
+  readonly buildBody: (input: LocalServerBodyInput<Q>) => { readonly prompt: string; readonly audio?: boolean }
   /**
    * Take の記録に足す、そのサーバだけの項目（明示して送った設定など）。
    * **送った本文は `Take.spec` から組み直せる**ので、組み直しで分からないものだけを足す。
@@ -104,6 +104,8 @@ export type LocalServerBinding<Q extends string> = {
   readonly extraRecord?: (input: {
     readonly model: VideoModelDescriptor
     readonly quality: Q
+    /** 投入時の控え。読めなければ null。 */
+    readonly note: LocalServerSubmitNote | null
   }) => Record<string, unknown>
 }
 
@@ -276,6 +278,8 @@ export const createLocalServerVideoProvider = <Q extends string>(
       })),
       // 送った文そのもの（H3 は組み直した後）。`poll` には仕様が来ないので、ここで控える。
       prompt: body.prompt,
+      // 音付きで頼んだか（ADR-0059）。`poll` には仕様が来ないので、ここで控える。
+      audio: body.audio === true,
     }
     await writeSubmitNote(outputDir, ref, note, warn)
 
@@ -444,8 +448,11 @@ export const createLocalServerVideoProvider = <Q extends string>(
         },
         /** サーバが実際に生成した大きさ（切り抜く前。出力の大きさは上の `output`。ADR-0045 §2）。 */
         generation: result.details?.generation ?? null,
-        /** 手元の生成サーバは音を捨てる。出力に音声トラックは無い。 */
-        audio: false,
+        /**
+         * 音付きで頼んだか（ADR-0059。セリフのある Shot だけ true）。頼まなければサーバは音を捨てる。
+         * 控えが無いときは false（音を頼めるようになる前の記録と同じ扱い。音の有無は素材の probe が正）。
+         */
+        audio: note?.audio ?? false,
         /**
          * 生成そのものに掛かった時間（送った後の順番待ちを含めない）。
          * **サーバが測った値を正とし**（wan-api の `timings`）、返さないサーバでは時刻の差から出す。
@@ -461,7 +468,7 @@ export const createLocalServerVideoProvider = <Q extends string>(
         startImage: note === null ? null : note.startImage,
         endImage: note === null ? null : note.endImage,
         ignoredReferences: note === null ? null : note.ignoredReferences,
-        ...(binding.extraRecord === undefined ? {} : binding.extraRecord({ model, quality })),
+        ...(binding.extraRecord === undefined ? {} : binding.extraRecord({ model, quality, note })),
       },
     }
   }

@@ -132,10 +132,10 @@ describe('capability 宣言', () => {
     expect(referenceImages).toEqual({ max: 2, roles: ['start_frame', 'previous_shot_last_frame', 'end_frame'] })
   })
 
-  it('negative prompt と音は宣言しない。最初のフレームは必須にしない', () => {
+  it('negative prompt は宣言しない。音はセリフのある Shot だけ作れる（ADR-0059）。最初のフレームは必須にしない', () => {
     const caps = vpipeH3TurboModel.capabilities
     expect(caps.negativePrompt).toBe(false)
-    expect(caps.audioGeneration).toBe(false)
+    expect(caps.audioGeneration).toBe(true)
     expect(caps.seed).toBe(true)
     expect(caps.requiresStartFrame).toBeUndefined()
   })

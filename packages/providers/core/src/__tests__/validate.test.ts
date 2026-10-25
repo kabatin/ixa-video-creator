@@ -88,4 +88,23 @@ describe('requiresStartFrame', () => {
   it('宣言していないモデルは、最初のフレームが無くても通す（既定は要らない）', () => {
     expect(validateAgainstCapabilities(makeSpec(), makeModel({ id: 'plain' }))).toEqual([])
   })
+
+  it('セリフのある Shot は、音を作れるモデルでしか作らない（ADR-0059）', () => {
+    const base = makeSpec()
+    const spoken = {
+      ...base,
+      promptParts: {
+        ...base.promptParts,
+        dialogue: {
+          lines: [{ speakerTag: 'S1', speechName: 'The cat', voiceDescription: 'a calm voice', text: 'ねえ', offscreen: false }],
+          onScreen: [],
+        },
+      },
+    }
+    expect(validateAgainstCapabilities(spoken, makeModel({ id: 'mute' }))).toEqual(['セリフ（声）を作れない'])
+    const voiced = makeModel({ id: 'voiced', capabilities: { audioGeneration: true } as never })
+    expect(validateAgainstCapabilities(spoken, voiced)).toEqual([])
+    // セリフの無い Shot は音を作れないモデルでも今まで通り
+    expect(validateAgainstCapabilities(base, makeModel({ id: 'mute' }))).toEqual([])
+  })
 })

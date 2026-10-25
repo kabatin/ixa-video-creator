@@ -40,6 +40,11 @@ export type VpipeJobBody = {
    * 引き伸ばさない（final・16:9 なら 1344×756 が返る）。拡大は書き出しの直前に ixa が Lanczos でやる。
    */
   readonly native: true
+  /**
+   * 音付きで頼む（ADR-0059）。**セリフのある Shot だけ付ける。** 無い Shot の本文は前と 1 バイトも変えない
+   * （キーごと省く）。セリフの無い Shot は今まで通り音を捨てた mp4 が返る。
+   */
+  readonly audio?: true
 }
 
 export type BuildVpipeBody = {
@@ -97,5 +102,6 @@ export const buildVpipeBody = (input: BuildVpipeBody): VpipeJobBody => {
     start_image: startImage,
     end_image: null,
     native: true,
+    ...(spec.promptParts.dialogue === undefined ? {} : { audio: true as const }),
   }
 }

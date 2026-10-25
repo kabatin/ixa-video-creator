@@ -61,6 +61,11 @@ export const validateAgainstCapabilities = (
     violations.push('negative prompt に非対応')
   }
 
+  // セリフのある Shot（ADR-0059）を音を作れないモデルで作ると、声の無い口パクの Take が黙ってできる。
+  if (spec.promptParts.dialogue !== undefined && !caps.audioGeneration) {
+    violations.push('セリフ（声）を作れない')
+  }
+
   return violations
 }
 

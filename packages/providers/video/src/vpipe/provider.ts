@@ -15,7 +15,7 @@ import {
   vpipeVideoModels,
   type VpipeQuality,
 } from './descriptor.js'
-import { H3_PROMPT_FORMAT } from './h3-prompt.js'
+import { H3_DIALOGUE_PROMPT_FORMAT, H3_PROMPT_FORMAT } from './h3-prompt.js'
 import { buildVpipeBody, VPIPE_STEPS } from './request.js'
 
 /**
@@ -54,8 +54,14 @@ const binding: LocalServerBinding<VpipeQuality> = {
    * 送ったステップ数と、**本文の組み立ての版**を記録に残す。
    * 文面そのものは持たない（`poll` はジョブ ID しか受け取らない）。
    * 版を残しておけば、仕様（`Take.spec`）と合わせて**いつでも同じ文面を組み直せる**。
+   *
+   * v4（セリフ）と音付きは同じ条件（`promptParts.dialogue` がある）で決まる（`buildVpipeBody`）。
+   * `poll` には仕様が来ないので、控えの「音付きで頼んだか」から版を引く。
    */
-  extraRecord: () => ({ steps: VPIPE_STEPS, promptFormat: H3_PROMPT_FORMAT }),
+  extraRecord: ({ note }) => ({
+    steps: VPIPE_STEPS,
+    promptFormat: note?.audio === true ? H3_DIALOGUE_PROMPT_FORMAT : H3_PROMPT_FORMAT,
+  }),
 }
 
 export const createVpipeVideoProvider = (options: VpipeVideoProviderOptions): VideoProvider =>
