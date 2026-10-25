@@ -138,7 +138,12 @@ export const runSpeak = async (deps: VoiceProcessorDeps, job: VoiceJob, dir: str
   // 作り直したら新しい声を選ぶ（前の声に戻すのは Take を選び直せばよい）。
   await deps.lines.update(line.id, { selectedTakeId: take.id })
   await syncTelopsAfterVoice(deps, job)
-  const succeeded = await deps.voiceJobs.markSucceeded(job.id, { costUsd: spoken.result.costUsd, providerRecord: { ...spoken.result.record } })
+  const succeeded = await deps.voiceJobs.markSucceeded(job.id, {
+    costUsd: spoken.result.costUsd,
+    providerRecord: { ...spoken.result.record },
+    // 声の AI へ実際に送った読み方の指示（プロンプトビューア）。送らない AI は null。
+    sentStyle: spoken.result.sentStyle ?? null,
+  })
   await publishVoiceJobStatus(deps, succeeded)
 }
 
@@ -150,6 +155,7 @@ export const runPreview = async (deps: VoiceProcessorDeps, job: VoiceJob, dir: s
   const succeeded = await deps.voiceJobs.markSucceeded(job.id, {
     costUsd: spoken.result.costUsd,
     providerRecord: { ...spoken.result.record },
+    sentStyle: spoken.result.sentStyle ?? null,
     resultMediaAssetId: mediaAssetId,
   })
   await publishVoiceJobStatus(deps, succeeded)

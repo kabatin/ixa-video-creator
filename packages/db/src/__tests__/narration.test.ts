@@ -119,6 +119,7 @@ describe('voice_jobs', () => {
     costUsd: null,
     error: null,
     providerRecord: null,
+    sentStyle: null,
     queuedAt: NOW,
     startedAt: null,
     finishedAt: null,

@@ -51,7 +51,7 @@ const build = () => {
   const drawn = async (retryOf?: { jobId: ImageGenerationJobId; attempt: number }) => {
     const job = await imageJobs.create({ kind: 'start_frame', projectId: project.id, shotId: shot.id, ...codex, ...(retryOf === undefined ? {} : { retryOf }) })
     const mediaAssetId: MediaAssetId = newId(MediaAssetIdSchema)
-    await imageJobs.markChecking(job.id, mediaAssetId, {})
+    await imageJobs.markChecking(job.id, mediaAssetId, {}, null)
     return imageJobs.finishChecking(job.id)
   }
   return { app, project, shot, imageJobs, imageChecks, shotReferences, characters, enqueued, drawn }
@@ -123,7 +123,7 @@ describe('POST /image-jobs/{id}/retry', () => {
   it('キーアートでも、同じ絵のやり直しが動いていれば 409（連打で重ねない）', async () => {
     const f = build()
     const art = await f.imageJobs.create({ kind: 'key_art', projectId: f.project.id, instruction: null, ...codex })
-    await f.imageJobs.markChecking(art.id, newId(MediaAssetIdSchema), {})
+    await f.imageJobs.markChecking(art.id, newId(MediaAssetIdSchema), {}, null)
     await f.imageJobs.finishChecking(art.id)
 
     expect((await f.app.request(`/image-jobs/${art.id}/retry`, { method: 'POST' })).status).toBe(202)
@@ -136,7 +136,7 @@ describe('POST /image-jobs/{id}/retry', () => {
     const first = await drawnWithRetry(f)
     const res = await f.app.request(`/image-jobs/${first.id}/retry`, { method: 'POST' })
     const { jobId } = ((await res.json()) as Ok<{ jobId: ImageGenerationJobId }>).data
-    await f.imageJobs.markChecking(jobId, newId(MediaAssetIdSchema), {})
+    await f.imageJobs.markChecking(jobId, newId(MediaAssetIdSchema), {}, null)
     await f.imageJobs.finishChecking(jobId)
 
     const again = await f.app.request(`/image-jobs/${first.id}/retry`, { method: 'POST' })
@@ -165,7 +165,7 @@ describe('GET /characters/{id}/identity-images/checks', () => {
     const character = await f.characters.create({ workspaceId: f.project.workspaceId, projectId: f.project.id, name: 'a', displayName: 'A' })
     const job = await f.imageJobs.create({ kind: 'character_sheet', projectId: f.project.id, characterId: character.id, referenceAssetIds: [], ...codex })
     const sheet: MediaAssetId = newId(MediaAssetIdSchema)
-    await f.imageJobs.markChecking(job.id, sheet, {})
+    await f.imageJobs.markChecking(job.id, sheet, {}, null)
     await f.imageChecks.create({ imageJobId: job.id, outcome: 'skipped', verdict: null, score: null, issues: [], promptDelta: null, note: '見ていません', costUsd: 0 })
     const uploaded: MediaAssetId = newId(MediaAssetIdSchema)
     await f.characters.addIdentityImage({ characterId: character.id, mediaAssetId: uploaded, role: 'face_front', isPrimary: true, order: 0 })

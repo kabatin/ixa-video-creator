@@ -202,6 +202,7 @@ export const createInMemoryVoiceJobRepository = (): VoiceJobRepository & { reado
         finishedAt: new Date(),
         costUsd: outcome.costUsd,
         providerRecord: outcome.providerRecord,
+        sentStyle: outcome.sentStyle ?? null,
         ...(outcome.resultMediaAssetId === undefined ? {} : { resultMediaAssetId: outcome.resultMediaAssetId }),
       }),
     markFailed: (id, error, costUsd) => replace(id, { status: 'failed', finishedAt: new Date(), error, costUsd }),

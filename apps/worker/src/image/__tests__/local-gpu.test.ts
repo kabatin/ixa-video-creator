@@ -38,6 +38,7 @@ const aJob = (): ImageGenerationJob => ({
   mediaAssetId: null,
   error: null,
   providerRecord: null,
+  sentPrompt: null,
   retryOfJobId: null,
   attempt: 1,
   appliedAt: null,

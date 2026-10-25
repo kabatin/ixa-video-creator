@@ -296,6 +296,27 @@ describe('完成', () => {
     )
   })
 
+  it('返す sentPrompt は、投入で送った本文の prompt と同じ文字列（プロンプトビューア）', async () => {
+    const { calls, fetch } = createFetch(
+      wanServerRoutes({
+        submit: (url, init) =>
+          init.method === 'POST'
+            ? jsonResponse(202, WAN_SUBMIT_BODY)
+            : url === WAN_OUTPUT_URL
+              ? bytesResponse(MP4_BYTES, 'video/mp4')
+              : jsonResponse(200, WAN_SUCCEEDED_JOB),
+      }),
+    )
+    const provider = makeWanProvider(fetch, outputDir)
+    const submitted = await provider.submit(wanRequestFor(draftSpec()))
+    const status = await provider.poll(submitted)
+
+    if (status.state !== 'succeeded') throw new Error('succeeded ではない')
+    const sent = JSON.parse(wanSubmitCallOf(calls)?.body ?? '{}') as { prompt?: string }
+    expect(sent.prompt).toBe('takepi が勝利する')
+    expect(status.sentPrompt).toEqual({ prompt: sent.prompt })
+  })
+
   it('同じジョブを 2 度問い合わせても、出力は 1 度しか取り寄せない', async () => {
     const { fetch, calls } = createFetch((url) =>
       url === WAN_OUTPUT_URL

@@ -301,6 +301,8 @@ const poll = async (
     seedUsed: null,
     costUsd: 0,
     raw: { ...status.raw, sourceTakeId: source.id },
+    // 高画質化は文を送らない。中身は元の Take と同じ動画なので、元に送った文をそのまま持つ。
+    sentPrompt: source.sentPrompt,
     generationTimeSec: Math.max(
       0,
       (now.getTime() - (job.startedAt ?? job.queuedAt).getTime()) / 1000,

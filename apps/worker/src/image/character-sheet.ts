@@ -51,9 +51,11 @@ export const generateCharacterSheet = async (deps: JobDeps, job: ImageGeneration
   await publishImageJobStatus(deps, running)
 
   const shape = requestShapeFor(deps.model, SHEET_ASPECT)
+  // 送る文そのもの（やり直しの直し方を足した後）。できた絵の記録に残す（プロンプトビューア）。
+  const sentPrompt = await withRetryDelta(deps, job, prompt)
   const handle = await deps.provider.submit({
     model: deps.model,
-    prompt: await withRetryDelta(deps, job, prompt),
+    prompt: sentPrompt,
     negativePrompt: null,
     resolution: shape.resolution,
     aspectRatio: shape.aspectRatio,
@@ -83,5 +85,5 @@ export const generateCharacterSheet = async (deps: JobDeps, job: ImageGeneration
   })()
   // 届いた後に止められたら、取り込まない（識別画像にも足さない）。
   await throwIfCancelled(deps, job.id)
-  await finishDrawing(deps, job, await ingest(deps, project, job, sheetPath), raw)
+  await finishDrawing(deps, job, await ingest(deps, project, job, sheetPath), raw, sentPrompt)
 }

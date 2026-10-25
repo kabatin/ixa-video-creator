@@ -173,8 +173,10 @@ export const finishDrawing = async (
   job: ImageGenerationJob,
   mediaAssetId: MediaAssetId,
   raw: Record<string, unknown>,
+  /** Provider へ渡した指示の本文（Codex は包む前）。`raw` には入れない約束なので別に渡す。 */
+  sentPrompt: string,
 ): Promise<void> => {
-  const checking = await deps.imageJobs.markChecking(job.id, mediaAssetId, raw)
+  const checking = await deps.imageJobs.markChecking(job.id, mediaAssetId, raw, sentPrompt)
   if (checking.status === 'cancelled') throw new ImageJobCancelled(job.id)
   await deps.mediaQueue.enqueue(mediaAssetId)
   await publishImageJobStatus(deps, checking)

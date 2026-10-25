@@ -36,6 +36,7 @@ const jobRow = (patch: Partial<ImageJobRow> = {}): ImageJobRow => ({
   mediaAssetId: '01ARZ3NDEKTSV4RRFFQ69G5FAZ',
   error: null,
   providerRecord: {},
+  sentPrompt: null,
   retryOfJobId: null,
   attempt: 1,
   appliedAt: null,

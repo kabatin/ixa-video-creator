@@ -464,6 +464,7 @@ const complete = async (
     seedUsed: status.seedUsed,
     costUsd: status.costUsd,
     raw: status.raw,
+    sentPrompt: status.sentPrompt ?? null,
     generationTimeSec: Math.max(0, (now.getTime() - startedAt.getTime()) / 1000),
     lineage: lineageFieldsOf(lineage),
     autoRetake: job.autoRetake,

@@ -155,9 +155,11 @@ const generateStartFrame = async (deps: JobDeps, job: ImageGenerationJob, dir: s
   await publishImageJobStatus(deps, running)
 
   const shape = requestShapeFor(deps.model, project.aspectRatio)
+  // 送る文そのもの（やり直しの直し方を足した後）。できた絵の記録に残す（プロンプトビューア）。
+  const sentPrompt = await withRetryDelta(deps, job, prompt)
   const handle = await deps.provider.submit({
     model: deps.model,
-    prompt: await withRetryDelta(deps, job, prompt),
+    prompt: sentPrompt,
     negativePrompt: null,
     resolution: shape.resolution,
     aspectRatio: shape.aspectRatio,
@@ -185,7 +187,7 @@ const generateStartFrame = async (deps: JobDeps, job: ImageGenerationJob, dir: s
   })()
   // 絵が届いた後に止められたら、取り込まず差し替えない（止めたのに絵が変わらないように）。
   await throwIfCancelled(deps, job.id)
-  await finishDrawing(deps, job, await ingest(deps, project, job, cropped), raw)
+  await finishDrawing(deps, job, await ingest(deps, project, job, cropped), raw, sentPrompt)
 }
 
 const describeUnexpected = (error: unknown): ImageGenerationJobError => ({

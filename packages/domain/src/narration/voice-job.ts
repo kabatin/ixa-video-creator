@@ -57,6 +57,11 @@ export const VoiceJob = z.object({
   error: VoiceJobError.nullable(),
   /** 調べるための記録（使った量・モデル）。鍵と原稿は入れない。 */
   providerRecord: z.record(z.unknown()).nullable(),
+  /**
+   * 声の AI へ実際に送った読み方の指示（Gemini の style。プロンプトビューア 2026-10-25）。
+   * 送らない AI・記録する前のジョブ・まだ終わっていないジョブは null。
+   */
+  sentStyle: z.string().nullable().default(null),
   queuedAt: z.date(),
   startedAt: z.date().nullable(),
   finishedAt: z.date().nullable(),

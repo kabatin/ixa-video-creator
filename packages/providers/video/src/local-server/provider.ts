@@ -96,7 +96,7 @@ export type LocalServerBinding<Q extends string> = {
    * 仕様から投入の本文を組む**純関数**。`start_image` は含めない（共通の層が足す）。
    * 画像の取得もしない（取得は `fetchStartImage`）。
    */
-  readonly buildBody: (input: LocalServerBodyInput<Q>) => object
+  readonly buildBody: (input: LocalServerBodyInput<Q>) => { readonly prompt: string }
   /**
    * Take の記録に足す、そのサーバだけの項目（明示して送った設定など）。
    * **送った本文は `Take.spec` から組み直せる**ので、組み直しで分からないものだけを足す。
@@ -274,6 +274,8 @@ export const createLocalServerVideoProvider = <Q extends string>(
         role: reference.role,
         mediaAssetId: reference.mediaAssetId,
       })),
+      // 送った文そのもの（H3 は組み直した後）。`poll` には仕様が来ないので、ここで控える。
+      prompt: body.prompt,
     }
     await writeSubmitNote(outputDir, ref, note, warn)
 
@@ -420,6 +422,8 @@ export const createLocalServerVideoProvider = <Q extends string>(
     const result: LocalServerJobResult = job.result
     const { output } = result
     return {
+      // 送った文は投入の控えから。控えが無い（古い・書けなかった）ときは省く（組み直して推測しない）。
+      ...(note === null || note.prompt === null ? {} : { sentPrompt: { prompt: note.prompt } }),
       seedUsed: result.seed_used,
       // 手元の GPU で動くので実際にかかった額は 0。スタブの 0 とは意味が違う（ADR-0025 / 0030）。
       costUsd: 0,

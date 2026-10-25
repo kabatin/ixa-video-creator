@@ -24,6 +24,8 @@ export const LocalServerSubmitNote = z.object({
   /** 終わりの画像（2026-10-24）。前の版の控えには無いので、無ければ「付けていない」（null）。 */
   endImage: NotedReference.extend({ mediaType: z.string().min(1) }).nullable().default(null),
   ignoredReferences: z.array(NotedReference),
+  /** 実際に送った文（プロンプトビューア 2026-10-25）。前の版の控えには無いので、無ければ null（分からない）。 */
+  prompt: z.string().nullable().default(null),
 })
 export type LocalServerSubmitNote = z.infer<typeof LocalServerSubmitNote>
 

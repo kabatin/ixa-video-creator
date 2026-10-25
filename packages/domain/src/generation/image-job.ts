@@ -79,6 +79,11 @@ export const ImageGenerationJob = z.object({
   error: ImageGenerationJobError.nullable(),
   /** 再現用の記録（CLI の版・終了コードなど）。**指示の本文は入れない。** */
   providerRecord: z.record(z.unknown()).nullable(),
+  /**
+   * 実際に送った指示の本文（組み立てとやり直しの直し方を足した後。Codex は包む前。プロンプトビューア 2026-10-25）。
+   * 絵ができたときに 1 度だけ書く。記録する前に作った絵・まだできていないジョブは null。
+   */
+  sentPrompt: z.string().nullable().default(null),
   /** やり直しのとき、前のジョブ（ADR-0055）。1 枚目は null。 */
   retryOfJobId: ImageGenerationJobId.nullable().default(null),
   /** 何枚目の試しか。1 から数える。前からある行は 1。 */

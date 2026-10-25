@@ -2,7 +2,7 @@ import { boolean, doublePrecision, index, integer, jsonb, pgTable, text, uniqueI
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import type {
   GenerationJob, GenerationJobStatus, HumanVerdict, ProviderParams, ReviewStatus,
-  RouterDecision, ShotGenerationSpec,
+  RouterDecision, SentPrompt, ShotGenerationSpec,
 } from '@ixa/domain'
 import {
   GenerationJobStatus as GenerationJobStatusSchema,
@@ -141,6 +141,8 @@ export const takes = pgTable(
 
     /** 作ったジョブで「NG なら自動で作り直す」を選んでいたか（ADR-0057）。作るときにジョブから写し、後から変えない。 */
     autoRetake: boolean('auto_retake').notNull().default(false),
+    /** 実際に送った文（作ったときに 1 度だけ書く）。記録する前の Take・取り込み・送った文を返さない Provider は null。 */
+    sentPrompt: jsonb('sent_prompt').$type<SentPrompt>(),
 
     // 作成後に変更してよいのはこの 2 列だけ
     reviewStatus: text('review_status', { enum: ReviewStatusSchema.options })

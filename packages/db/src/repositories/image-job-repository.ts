@@ -107,11 +107,15 @@ export type ImageJobRepository = {
     mediaAssetId: MediaAssetId,
     providerRecord: Record<string, unknown>,
   ): Promise<ImageGenerationJob>
-  /** 絵ができた。まだ当てずにチェックへ回す（ADR-0055）。 */
+  /**
+   * 絵ができた。まだ当てずにチェックへ回す（ADR-0055）。`sentPrompt` は実際に送った指示の本文
+   * （`provider_record` には本文を入れない約束なので別の列に書く）。
+   */
   markChecking(
     id: ImageGenerationJobId,
     mediaAssetId: MediaAssetId,
     providerRecord: Record<string, unknown>,
+    sentPrompt: string | null,
   ): Promise<ImageGenerationJob>
   /** チェックが済んだ（やり直しを積んだ・当てる絵を決めた）。チェック中の行だけを終える。 */
   finishChecking(id: ImageGenerationJobId): Promise<ImageGenerationJob>
@@ -330,8 +334,8 @@ export const createImageJobRepository = (db: DbExecutor): ImageJobRepository => 
     markSucceeded: (id, mediaAssetId, providerRecord) =>
       transition(id, { status: 'succeeded', mediaAssetId, providerRecord, finishedAt: new Date() }),
 
-    markChecking: (id, mediaAssetId, providerRecord) =>
-      transition(id, { status: 'checking', mediaAssetId, providerRecord }),
+    markChecking: (id, mediaAssetId, providerRecord, sentPrompt) =>
+      transition(id, { status: 'checking', mediaAssetId, providerRecord, sentPrompt }),
 
     async finishChecking(id) {
       const rows = await db

@@ -132,6 +132,8 @@ export const createGeminiVoice = (
       charTimes: null,
       costUsd: deps.costOf({ model, outputTokens }),
       record: { tool: 'gemini_api', model, voice: request.voiceName, outputTokens, mimeType: audio.mimeType },
+      // 送った読み方の指示そのもの（プロンプトビューア）。送っていなければ省く。
+      ...(style === '' ? {} : { sentStyle: style }),
     }
   },
 })

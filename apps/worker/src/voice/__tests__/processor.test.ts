@@ -215,6 +215,21 @@ describe('processVoiceJob（読む）', () => {
     expect(deps.voiceJobs.snapshot()[0]?.status).toBe('cancelled')
   })
 
+  it('声の AI が返した読み方の指示（送った文）をジョブに残す。返さなければ null', async () => {
+    const stub = createStubVoice()
+    const styled: VoiceAdapter = {
+      ...stub,
+      speak: async (request) => ({ ...(await stub.speak(request)), sentStyle: '落ち着いた声。ゆっくり話す' }),
+    }
+    const withStyle = await setup({ adapter: styled })
+    await processVoiceJob(withStyle.deps, { voiceJobId: withStyle.job.id })
+    expect(withStyle.deps.voiceJobs.snapshot()[0]?.sentStyle).toBe('落ち着いた声。ゆっくり話す')
+
+    const plain = await setup()
+    await processVoiceJob(plain.deps, { voiceJobId: plain.job.id })
+    expect(plain.deps.voiceJobs.snapshot()[0]?.sentStyle).toBeNull()
+  })
+
   it('この環境に口の無い AI なら、理由を付けて失敗にする', async () => {
     const { deps, job } = await setup({ adapter: null })
 

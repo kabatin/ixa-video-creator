@@ -32,6 +32,11 @@ export type SpeakResult = {
   readonly costUsd: number
   /** 調べるための記録（鍵や原稿は入れない）。 */
   readonly record: Readonly<Record<string, unknown>>
+  /**
+   * 実際に送った読み方の指示（Gemini の style。プロンプトビューア 2026-10-25）。送った文字列そのもの。
+   * 読み方の指示を文で送らない AI と、送る指示が空だったときは省く。
+   */
+  readonly sentStyle?: string
 }
 
 /** 選べる声。 */

@@ -102,8 +102,8 @@ export const createInMemoryImageJobRepository = (
       Promise.resolve(transition(id, { status: 'running', referenceAssetIds: [...referenceAssetIds], startedAt: new Date() })),
     markSucceeded: (id, mediaAssetId, providerRecord) =>
       Promise.resolve(transition(id, { status: 'succeeded', mediaAssetId, providerRecord, finishedAt: new Date() })),
-    markChecking: (id, mediaAssetId, providerRecord) =>
-      Promise.resolve(transition(id, { status: 'checking', mediaAssetId, providerRecord })),
+    markChecking: (id, mediaAssetId, providerRecord, sentPrompt) =>
+      Promise.resolve(transition(id, { status: 'checking', mediaAssetId, providerRecord, sentPrompt })),
     finishChecking: (id) => {
       const current = get(id)
       return Promise.resolve(current.status === 'checking' ? save({ ...current, status: 'succeeded', finishedAt: new Date() }) : current)

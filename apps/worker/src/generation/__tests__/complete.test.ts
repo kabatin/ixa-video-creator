@@ -53,6 +53,7 @@ const buildFixture = async () => {
     seedUsed: 4242,
     costUsd: 0.4,
     raw: { id: 'provider-job-1' },
+    sentPrompt: null,
     generationTimeSec: 42,
     lineage: NO_LINEAGE,
     autoRetake: false,
@@ -131,6 +132,14 @@ describe('recordTake（系譜）', () => {
     expect((await recordTake(f.deps, f.input)).autoRetake).toBe(false)
     const g = await buildFixture()
     expect((await recordTake(g.deps, { ...g.input, autoRetake: true })).autoRetake).toBe(true)
+  })
+
+  it('Provider が返した送った文を Take に残す（返さなければ null）', async () => {
+    const f = await buildFixture()
+    expect((await recordTake(f.deps, f.input)).sentPrompt).toBeNull()
+    const g = await buildFixture()
+    const sentPrompt = { prompt: 'integrated_multimodal_description: [Shot 1] 走る' }
+    expect((await recordTake(g.deps, { ...g.input, sentPrompt })).sentPrompt).toEqual(sentPrompt)
   })
 
   it('再生成では親と理由を Take に入れる', async () => {

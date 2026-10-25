@@ -78,7 +78,7 @@ describe.skipIf(url === undefined)('やり直しと取り込んだ効果音の�
         providerId: ProviderId.parse('klein'),
         modelId: ModelId.parse('klein/flux-2-klein'),
       })
-      await jobs.markChecking(first.id, await anAsset(tx, workspaceId, projectId, 'image'), {})
+      await jobs.markChecking(first.id, await anAsset(tx, workspaceId, projectId, 'image'), {}, null)
       const drawn = await jobs.finishChecking(first.id)
 
       const a = await jobs.create(retryImageJobInput(drawn))

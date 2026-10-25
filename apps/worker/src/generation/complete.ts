@@ -9,6 +9,7 @@ import {
   type Project,
   type ProviderId,
   type ModelId,
+  type SentPrompt,
   type Shot,
   type ShotGenerationSpec,
   type Take,
@@ -62,6 +63,8 @@ export type RecordTakeInput = {
   readonly seedUsed: number | null
   readonly costUsd: number
   readonly raw: Record<string, unknown>
+  /** 実際に送った文（Provider が返したもの）。返さない Provider は null（組み直して推測しない）。 */
+  readonly sentPrompt: SentPrompt | null
   readonly generationTimeSec: number
   /**
    * 何の作り直しなのか（DOMAIN.md §10）。通常の生成は `NO_LINEAGE` を明示して渡す。
@@ -149,6 +152,7 @@ export const recordTake = async (deps: RecordTakeDeps, input: RecordTakeInput): 
     providerId: input.providerId,
     modelId: input.modelId,
     providerParams: { kind: 'http', request: input.raw } as const,
+    sentPrompt: input.sentPrompt,
     seedUsed: input.seedUsed,
     costUsd: input.costUsd,
     generationTimeSec: input.generationTimeSec,

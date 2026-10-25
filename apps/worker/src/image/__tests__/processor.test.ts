@@ -66,6 +66,7 @@ const queuedJob = (): ImageGenerationJob => ({
   mediaAssetId: null,
   error: null,
   providerRecord: null,
+  sentPrompt: null,
   retryOfJobId: null,
   attempt: 1,
   appliedAt: null,
@@ -252,6 +253,18 @@ describe('processImageJob', () => {
     expect(await manualStartFrameOf(deps.shotReferences, shot.id)).toBe(assetId)
     // サムネイルは既存の media キューが作る。
     expect(deps.mediaQueue.enqueued()).toContain(assetId)
+  })
+
+  it('Provider へ渡した文をそのままジョブに残す（記録には入れない。プロンプトビューア）', async () => {
+    const { job, deps, provider } = setup()
+
+    await runImageJob(deps, { imageJobId: job.id })
+
+    const done = await deps.imageJobs.findById(job.id)
+    const sent = provider.requests[0]?.prompt
+    expect(sent).toContain('暗いガレージ')
+    expect(done?.sentPrompt).toBe(sent)
+    expect(JSON.stringify(done?.providerRecord ?? {})).not.toContain('暗いガレージ')
   })
 
   it('Shot の説明から、比に合わせた形で 1 枚だけ頼む', async () => {

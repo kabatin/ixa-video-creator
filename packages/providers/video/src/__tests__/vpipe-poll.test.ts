@@ -303,6 +303,30 @@ describe('投入から完了まで — 使った参照と捨てた参照を raw 
     expect(status.raw.startImage).toBeNull()
     expect(status.raw.ignoredReferences).toBeNull()
   })
+
+  it('返す sentPrompt は、投入で送った本文の prompt と同じ文字列（組み直した H3 の文。プロンプトビューア）', async () => {
+    const { calls, fetch } = createFetch(handler)
+    const provider = makeVpipeProvider(fetch, outputDir)
+    const handle = await provider.submit(
+      vpipeRequestFor(
+        makeSpec({
+          resolution: { width: 1920, height: 1080 },
+          references: [{ mediaAssetId: START, role: 'start_frame', weight: 1 }],
+        }),
+      ),
+    )
+
+    const status = succeeded(await provider.poll(handle))
+    const posted = calls.find((call) => call.method === 'POST')
+    const sentBody = JSON.parse(posted?.body ?? '{}') as { prompt?: string }
+    expect(sentBody.prompt).toContain('integrated_multimodal_description')
+    expect(status.sentPrompt).toEqual({ prompt: sentBody.prompt })
+  })
+
+  it('控えが無ければ sentPrompt を返さない（推測で組み直さない）', async () => {
+    const status = succeeded((await pollWith(serving(SUCCEEDED_JOB))).result)
+    expect(status.sentPrompt).toBeUndefined()
+  })
 })
 
 describe('cancel', () => {

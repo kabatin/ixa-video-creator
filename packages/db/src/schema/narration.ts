@@ -153,6 +153,8 @@ export const voiceJobs = pgTable(
     error: jsonb('error').$type<VoiceJobError>(),
     /** 調べるための記録（使った量・モデル）。鍵と原稿は入れない。 */
     providerRecord: jsonb('provider_record').$type<Record<string, unknown>>(),
+    /** 声の AI へ実際に送った読み方の指示（Gemini の style）。送らない AI・記録する前のジョブは null。 */
+    sentStyle: text('sent_style'),
     queuedAt: timestampTz('queued_at').notNull().defaultNow(),
     startedAt: timestampTz('started_at'),
     finishedAt: timestampTz('finished_at'),

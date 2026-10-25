@@ -54,6 +54,11 @@ export const imageGenerationJobs = pgTable(
     /** 再現用の記録（CLI の版・終了コードなど）。指示の本文は入れない。 */
     providerRecord: jsonb('provider_record').$type<Record<string, unknown>>(),
     /**
+     * 実際に送った指示の本文（組み立てとやり直しの直し方を足した後。Codex は包む前）。絵ができたときに 1 度だけ書く。
+     * 記録する前に作った絵は null。`provider_record` には本文を入れない約束なので、ここに分けて持つ。
+     */
+    sentPrompt: text('sent_prompt'),
+    /**
      * やり直しのとき、前のジョブ（ADR-0055）。1 枚目は null。**1 つのジョブのやり直しは 1 行だけ**（一意。チェックの手順が
      * 2 度走っても、やり直しを 2 つ積まない）。前のジョブを消したら、やり直しも消す（宙に浮いた `attempt > 1` は
      * domain の検査で壊れた行になるため。レビューの指摘 2026-10-19）。

@@ -58,6 +58,8 @@ export type VoiceJobOutcome = {
   readonly providerRecord: Record<string, unknown>
   /** できた音（試しに読む）。 */
   readonly resultMediaAssetId?: MediaAssetId
+  /** 声の AI へ実際に送った読み方の指示。送らない AI は省く（null のまま）。 */
+  readonly sentStyle?: string | null
 }
 
 /** 声のジョブの読み書き（ADR-0038）。戻り値は必ず `@ixa/domain` の型。 */
@@ -99,6 +101,7 @@ export const voiceJobRowToDomain = (row: VoiceJobRow): VoiceJob => {
     costUsd: row.costUsd,
     error: row.error,
     providerRecord: row.providerRecord,
+    sentStyle: row.sentStyle,
     queuedAt: row.queuedAt,
     startedAt: row.startedAt,
     finishedAt: row.finishedAt,
@@ -204,6 +207,7 @@ export const createVoiceJobRepository = (db: DbExecutor): VoiceJobRepository => 
         finishedAt: new Date(),
         costUsd: outcome.costUsd,
         providerRecord: outcome.providerRecord,
+        sentStyle: outcome.sentStyle ?? null,
         ...(outcome.resultMediaAssetId === undefined ? {} : { resultMediaAssetId: outcome.resultMediaAssetId }),
       }),
 

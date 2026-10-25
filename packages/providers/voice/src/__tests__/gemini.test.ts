@@ -79,6 +79,27 @@ describe('createGeminiVoice', () => {
     expect(JSON.stringify(sentJson(calls[0]))).not.toContain('speech_metadata')
   })
 
+  it('返す sentStyle は、送った speech_metadata.style と同じ文字列（プロンプトビューア）', async () => {
+    const { calls, fetch } = createFetch(() => audioResponse('audio/wav', Buffer.from('x')))
+    const voice = createGeminiVoice({ apiKey: KEY, fetch, costOf: () => 0 })
+
+    const result = await voice.speak(request({ speed: 0.8 }))
+
+    const sent = sentJson(calls[0]) as { contents: { parts: { speech_metadata?: { style: string } }[] }[] }
+    const style = sent.contents[0]?.parts[0]?.speech_metadata?.style
+    expect(style).toBe('落ち着いた低めの声。囁くように。ゆっくり話す')
+    expect(result.sentStyle).toBe(style)
+  })
+
+  it('読み方の指示を送らなかったら sentStyle を返さない', async () => {
+    const { fetch } = createFetch(() => audioResponse('audio/wav', Buffer.from('x')))
+    const voice = createGeminiVoice({ apiKey: KEY, fetch, costOf: () => 0 })
+
+    const result = await voice.speak(request({ styleNote: '', direction: '' }))
+
+    expect(result.sentStyle).toBeUndefined()
+  })
+
   it('WAV はそのまま書き、費用は出力のトークン数から（字の時刻は返さない）', async () => {
     const wav = Buffer.from('RIFF-wav-bytes')
     const costOf = vi.fn(() => 0.00225)

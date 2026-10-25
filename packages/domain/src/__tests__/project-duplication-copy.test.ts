@@ -360,6 +360,17 @@ describe('copyTakeInput', () => {
     expect(dropped).toMatchObject({ parentTakeId: null, regenerationReason: '顔が崩れた' })
   })
 
+  it('送った文は元の Take のまま写す（同じ動画なので。記録が無ければ null のまま）', async () => {
+    const shots = new Map([[shotId, newId(ShotId)]])
+    const sent = await aTake({ sentPrompt: { prompt: 'integrated_multimodal_description: [Shot 1] 店の前' } })
+    const old = await aTake()
+
+    expect((await copyTakeInput(sent, { shots, takes: new Map([[sent.id, newId(TakeId)]]) })).sentPrompt).toEqual({
+      prompt: 'integrated_multimodal_description: [Shot 1] 店の前',
+    })
+    expect((await copyTakeInput(old, { shots, takes: new Map([[old.id, newId(TakeId)]]) })).sentPrompt).toBeNull()
+  })
+
   it('Take か Shot の付け替え先が無ければ、作り損ねとして投げる（黙って元の ID で作らない）', async () => {
     const take = await aTake()
 

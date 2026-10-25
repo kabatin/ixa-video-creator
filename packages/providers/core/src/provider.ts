@@ -3,6 +3,7 @@ import type {
   ModelId,
   ProviderId,
   QualityTier,
+  SentPrompt,
   ShotGenerationSpec,
 } from '@ixa/domain'
 import type { ModelEconomics, ModelQualities, VideoModelCapabilities } from './capabilities.js'
@@ -48,6 +49,11 @@ export type ProviderJobStatus =
       readonly seedUsed: number | null
       readonly costUsd: number
       readonly raw: Record<string, unknown>
+      /**
+       * 実際に AI へ送った文（プロンプトビューア 2026-10-25）。**送った文字列そのもの**（組み直した後）。
+       * 文を送らない Provider（高画質化・手元の動き）と、投入の控えが読めず分からないときは省く（Take は null）。
+       */
+      readonly sentPrompt?: SentPrompt
     }
   | {
       readonly state: 'failed'

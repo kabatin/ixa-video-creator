@@ -41,6 +41,17 @@ export const ProviderParams = z.discriminatedUnion('kind', [
 export type ProviderParams = z.infer<typeof ProviderParams>
 
 /**
+ * 実際に AI へ送った文（プロンプトビューア。制作者 2026-10-25）。**送った文字列そのもの**で、組み直さない。
+ * `spec.prompt` は材料から組んだ文で、Provider によっては送る直前にさらに組み直す（vpipe の H3・fal の凡例）。
+ * 除外する内容を送らない Provider では `negativePrompt` を持たない。
+ */
+export const SentPrompt = z.object({
+  prompt: z.string(),
+  negativePrompt: z.string().optional(),
+})
+export type SentPrompt = z.infer<typeof SentPrompt>
+
+/**
  * 生成結果。Immutable（ADR-0003）。
  * reviewStatus と humanVerdict 以外を作成後に更新しないこと。
  */
@@ -77,6 +88,11 @@ export const Take = z.object({
    * 前からある行には無いので、無ければ false。
    */
   autoRetake: z.boolean().default(false),
+  /**
+   * 実際に送った文（作ったときに 1 度だけ書く）。記録する前に作った Take・取り込んだ Take・
+   * 送った文を返さない Provider では null（画面は `spec.prompt` で代わりにし、細部が違うことを添える）。
+   */
+  sentPrompt: SentPrompt.nullable().default(null),
   createdAt: z.date(),
 })
 export type Take = z.infer<typeof Take>
