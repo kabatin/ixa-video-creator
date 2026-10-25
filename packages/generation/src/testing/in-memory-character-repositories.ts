@@ -61,9 +61,14 @@ export const createInMemoryCharacterRepository = (
 
     create: (input) => {
       const validated = CreateCharacterInputSchema.parse(input)
+      // 話し手の番号は作品の中で作った順。消したものも数える（DB の repository と同じ。ADR-0059）。
+      const used = [...store, ...deleted]
+        .filter((c) => c.projectId === validated.projectId)
+        .map((c) => c.speakerNo)
       const created = CharacterSchema.parse({
         ...validated,
         id: input.id ?? newId(CharacterIdSchema),
+        speakerNo: Math.max(0, ...used) + 1,
         createdAt: new Date(),
       })
       store = [...store, created]

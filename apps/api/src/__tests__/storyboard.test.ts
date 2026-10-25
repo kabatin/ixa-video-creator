@@ -10,7 +10,7 @@ import {
   type MusicSection,
   type MusicTrack,
 } from '@ixa/domain'
-import { createInMemoryShotRepository } from '@ixa/generation/testing'
+import { createInMemoryCharacterRepository, createInMemoryShotRepository } from '@ixa/generation/testing'
 import { TIMELINE_ISSUE_CODES, validateTimeline } from '@ixa/timeline'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { registerErrorHandlers, validationHook } from '../errors.js'
@@ -130,7 +130,7 @@ const aShotInput = (overrides: { code: string; order: number }) => ({
   durationSec: 4,
   sourceInSec: 0,
   description: '',
-  dialogue: null,
+  dialogue: [],
   camera: {
     size: 'medium' as const, angleH: null, angle: null,
     lensMm: null, movement: null, movementIntensity: null,
@@ -163,6 +163,7 @@ beforeEach(async () => {
     musicAnalyses,
     sequences: createInMemorySequenceRepository(),
     projects: createInMemoryProjectRepository([project, otherProject]),
+    characters: createInMemoryCharacterRepository(),
   }
   app = buildApp(deps)
 })
@@ -215,7 +216,7 @@ describe('セクションから Shot を割る', () => {
       durationSec: 4,
       sourceInSec: 0,
       description: '',
-      dialogue: null,
+      dialogue: [],
       camera: {
         size: 'medium', angleH: null, angle: null,
         lensMm: null, movement: null, movementIntensity: null,
@@ -259,7 +260,7 @@ describe('セクションから Shot を割る', () => {
       durationSec: 4,
       sourceInSec: 0,
       description: '',
-      dialogue: null,
+      dialogue: [],
       camera: {
         size: 'medium', angleH: null, angle: null,
         lensMm: null, movement: null, movementIntensity: null,

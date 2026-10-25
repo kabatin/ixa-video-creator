@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import type { EditTransaction } from '@ixa/db'
+import type { CharacterRepository, EditTransaction } from '@ixa/db'
 import {
   CreateShotInput as CreateShotInputSchema,
   ProjectId as ProjectIdSchema,
@@ -10,7 +10,7 @@ import {
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
-import { locationProblem } from './library-ownership.js'
+import { dialogueSpeakerProblem, locationProblem } from './library-ownership.js'
 import { isUniqueViolation } from './unique-violation.js'
 import { recordShotEdits, recordShotPatch, recordTakeChoice } from './shot-edit-recording.js'
 import {
@@ -62,6 +62,8 @@ const UpdateShotBody = UpdateShotPatchSchema.pick({
   speed: true,
   // 場所は後から決められる。null を送れば外す（ADR-0015）。
   locationId: true,
+  // セリフの行（ADR-0059）。丸ごと置き換える。[] で消す。
+  dialogue: true,
 }).openapi('UpdateShotPatch')
 
 /** `(project_id, code)` は UNIQUE。衝突は利用者の入力ミスなので 422 で返す。 */
@@ -136,6 +138,8 @@ const unselectTakeRoute = createRoute({
 })
 
 export type ShotSingleEditDeps = Pick<ShotRoutesDeps, 'shots' | 'takes' | 'locations' | 'events' | 'logger'> & {
+  /** セリフの話し手が同じプロジェクトのキャラクターかを確かめる（ADR-0059）。 */
+  readonly characters: Pick<CharacterRepository, 'findById'>
   /** 記録と書き込みを同じトランザクションで行う口。**省けない。** */
   readonly transaction: EditTransaction
 }
@@ -147,6 +151,8 @@ export const shotSingleEditRoutes = (deps: ShotSingleEditDeps) =>
       const input = c.req.valid('json')
       const problem = await locationProblem(deps.locations, projectId, input.locationId)
       if (problem !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, { locationId: [problem] }), 422)
+      const speaker = await dialogueSpeakerProblem(deps.characters, projectId, input.dialogue)
+      if (speaker !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, { dialogue: [speaker] }), 422)
       // 記録は書く前に、同じトランザクションで。作る Shot の ID を先に決めて記録に入れる。
       const id = newId(ShotIdSchema)
       const created = await deps.transaction(async (tx) => {
@@ -167,6 +173,8 @@ export const shotSingleEditRoutes = (deps: ShotSingleEditDeps) =>
         const problem = await locationProblem(deps.locations, shot.projectId, patch.locationId)
         if (problem !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, { locationId: [problem] }), 422)
       }
+      const speaker = await dialogueSpeakerProblem(deps.characters, shot.projectId, patch.dialogue)
+      if (speaker !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, { dialogue: [speaker] }), 422)
 
       /**
        * コードの重複は `(project_id, code)` の UNIQUE が弾く。

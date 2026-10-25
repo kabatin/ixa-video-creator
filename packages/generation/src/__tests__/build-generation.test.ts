@@ -1,4 +1,5 @@
 import {
+  CharacterId as CharacterIdSchema,
   DurationNotSupportedError,
   MediaAssetId as MediaAssetIdSchema,
   ModelId as ModelIdSchema,
@@ -85,6 +86,7 @@ const emptyContext: GenerationContextSource = {
   manualReferencesForShot: () => Promise.resolve([]),
   previousShotLastFrame: () => Promise.resolve(null),
   startFrame: () => Promise.resolve(null),
+  speakersForShot: () => Promise.resolve([]),
 }
 
 const contextWith = (parts: Partial<GenerationContextSource>): GenerationContextSource => ({
@@ -354,7 +356,7 @@ describe('buildGeneration — 能力検査', () => {
 })
 
 describe('buildGeneration — 参照と specHash', () => {
-  it('context の 5 つの口をすべて読み、参照を仕様に載せる', async () => {
+  it('context の 6 つの口をすべて読み、参照を仕様に載せる', async () => {
     const shot = aShot(projectId)
     const called: string[] = []
     const previousFrameId = newId(MediaAssetIdSchema)
@@ -379,6 +381,10 @@ describe('buildGeneration — 参照と specHash', () => {
         called.push('startFrame')
         return Promise.resolve(null)
       },
+      speakersForShot: () => {
+        called.push('speakers')
+        return Promise.resolve([])
+      },
     }
     const { deps } = depsOf([modelA], context)
 
@@ -389,6 +395,7 @@ describe('buildGeneration — 参照と specHash', () => {
       'locations',
       'manual',
       'previousFrame',
+      'speakers',
       'startFrame',
     ])
     expect(compiled.spec.references.map((r) => r.role)).toEqual([
@@ -515,5 +522,40 @@ describe('シード', () => {
 
     expect(a.specHash).not.toBe(b.specHash)
     expect(again.specHash).toBe(a.specHash)
+  })
+})
+
+/** セリフ（ADR-0059）。話し手がそろっていなければ、Take を作る前に日本語の理由で止める。 */
+describe('buildGeneration — セリフ', () => {
+  const speaker = {
+    id: newId(CharacterIdSchema),
+    displayName: 'ネコ',
+    speakerNo: 2,
+    speechName: 'The cat' as string | null,
+    voiceDescription: "a soft, sly, teasing young woman's voice" as string | null,
+  }
+  const spokenShot = () =>
+    aShot(projectId, { dialogue: [{ speakerId: speaker.id, text: 'ねえ', offscreen: false, translation: null }] })
+
+  it('話し手がそろえば、仕様にセリフが載る', async () => {
+    const { deps } = depsOf([modelA], contextWith({ speakersForShot: () => Promise.resolve([speaker]) }))
+    const compiled = await buildGeneration(deps, spokenShot(), aProject(), modelA.id)
+    expect(compiled.spec.promptParts.dialogue?.lines).toEqual([
+      { speakerTag: 'S2', speechName: 'The cat', voiceDescription: "a soft, sly, teasing young woman's voice", text: 'ねえ', offscreen: false },
+    ])
+  })
+
+  it('話し手に呼び名が無ければ SpecCompilationError（作る前に止める）', async () => {
+    const bare = { ...speaker, speechName: null }
+    const { deps } = depsOf([modelA], contextWith({ speakersForShot: () => Promise.resolve([bare]) }))
+    await expect(buildGeneration(deps, spokenShot(), aProject(), modelA.id)).rejects.toThrow(
+      new SpecCompilationError('セリフの話し手「ネコ」に英語の呼び名がありません'),
+    )
+  })
+
+  it('AUTO でも同じ理由で止める（下書きの仕様を組む前に）', async () => {
+    const bare = { ...speaker, voiceDescription: null }
+    const { deps } = depsOf([modelA, modelB], contextWith({ speakersForShot: () => Promise.resolve([bare]) }))
+    await expect(buildGeneration(deps, spokenShot(), aProject(), 'AUTO')).rejects.toBeInstanceOf(SpecCompilationError)
   })
 })

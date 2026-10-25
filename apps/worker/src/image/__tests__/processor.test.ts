@@ -78,6 +78,7 @@ const queuedJob = (): ImageGenerationJob => ({
 
 const contextWithManual = (references: readonly Pick<ShotReference, 'mediaAssetId' | 'role'>[] = []): GenerationContextSource => ({
   charactersForShot: () => Promise.resolve([]),
+  speakersForShot: () => Promise.resolve([]),
   locationsForShot: () => Promise.resolve([]),
   manualReferencesForShot: () =>
     Promise.resolve(

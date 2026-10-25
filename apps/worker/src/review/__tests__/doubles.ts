@@ -78,7 +78,7 @@ export const aShot = (project: Project, overrides: Partial<Shot> = {}): Shot =>
     durationSec: 3.75,
     sourceInSec: 0,
     description: 'ステージ中央でボーカルが歌い出す',
-    dialogue: null,
+    dialogue: [],
     camera: {
       size: 'medium',
       angleH: 'front',

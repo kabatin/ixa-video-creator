@@ -13,6 +13,7 @@ import {
   WorkspaceId as WorkspaceIdSchema,
   newId,
   type CharacterBundle,
+  type DialogueSpeaker,
   type GenerationContextSource,
   type Location,
   type MediaAssetId,
@@ -51,6 +52,7 @@ export type ContextParts = {
   readonly manualReferences?: readonly ShotReference[]
   readonly previousShotLastFrameId?: MediaAssetId | null
   readonly startFrameId?: MediaAssetId | null
+  readonly speakers?: readonly DialogueSpeaker[]
 }
 
 export const createTestContextSource = (parts: ContextParts): GenerationContextSource => ({
@@ -59,6 +61,7 @@ export const createTestContextSource = (parts: ContextParts): GenerationContextS
   manualReferencesForShot: () => Promise.resolve(parts.manualReferences ?? []),
   previousShotLastFrame: () => Promise.resolve(parts.previousShotLastFrameId ?? null),
   startFrame: () => Promise.resolve(parts.startFrameId ?? null),
+  speakersForShot: () => Promise.resolve(parts.speakers ?? []),
 })
 
 /** 参照画像を 3 枚持つキャラクター束（canonical frame / 顔正面 / 衣装）。 */
@@ -75,6 +78,7 @@ export const aCharacterBundle = (projectId = newId(ProjectIdSchema)): CharacterB
     identityAnchors: ['teal twin tails', 'slender build'],
     styleTokens: ['anime', 'cel shaded'],
     colorPalette: ['#39C5BB'],
+    speakerNo: 1,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
   })
 

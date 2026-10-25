@@ -10,6 +10,7 @@ import type {
 } from '@ixa/db'
 import type {
   CharacterBundle,
+  DialogueSpeaker,
   GenerationContextSource,
   Location,
   MediaAssetId,
@@ -190,6 +191,25 @@ export const createGenerationContextSource = (
         return asset.lastFrameAssetId
       }
       return deps.continuityFrames.frameAt(asset, continuityFrameIndex(previous, { durationSec, fps }))
+    },
+
+    /**
+     * セリフの話し手（ADR-0059）。配役にいない画面外の人も含むので、配役ではなく行から引く。
+     * 消したキャラクターを指していれば**黙って落とさず**止める（声の印がずれて別人の声になる）。
+     */
+    async speakersForShot(shotId: ShotId): Promise<readonly DialogueSpeaker[]> {
+      const shot = await deps.shots.findById(shotId)
+      if (shot === null || shot.dialogue.length === 0) return []
+      const ids = [...new Set(shot.dialogue.map((line) => line.speakerId))]
+      const found = await Promise.all(ids.map((id) => deps.characters.findById(id)))
+      return found.map((character, index) => {
+        if (character === null) {
+          throw new GenerationContextError(
+            `Shot ${shotId} のセリフが存在しない Character ${String(ids[index])} を話し手にしています`,
+          )
+        }
+        return character
+      })
     },
 
     async startFrame(shotId: ShotId): Promise<MediaAssetId | null> {

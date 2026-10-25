@@ -3,6 +3,7 @@ import type { Shot } from '@ixa/domain'
 import {
   aShot,
   aTake,
+  createInMemoryCharacterRepository,
   createInMemoryLocationRepository,
   createInMemoryShotRepository,
   createInMemoryTakeRepository,
@@ -37,6 +38,7 @@ const build = (shots: readonly Shot[], takes = createInMemoryTakeRepository()) =
     shotSingleEditRoutes({
       shots: shotRepo,
       locations: createInMemoryLocationRepository(),
+      characters: createInMemoryCharacterRepository(),
       takes,
       events: createInMemoryProjectEvents(),
       logger: createLogger('silent'),

@@ -111,6 +111,7 @@ const setup = (options: Options = {}) => {
     storage: createMemoryStorage(),
     context: {
       charactersForShot: () => Promise.resolve([]),
+      speakersForShot: () => Promise.resolve([]),
       locationsForShot: () => Promise.resolve([]),
       manualReferencesForShot: () => Promise.resolve([]),
       previousShotLastFrame: () => Promise.resolve(null),

@@ -99,6 +99,8 @@ const importSpec = (project: Project, shot: Shot, asset: MediaAsset) => {
     shot: {
       ...shot,
       sourceType: { type: 'existing_footage', mediaAssetId: asset.id, inSec: 0, outSec: durationSec },
+      // 持ち込みの動画は声も含めてそのまま使う。AI に頼むセリフの文は無い（ADR-0059）。
+      dialogue: [],
     },
     characters: [],
     references: [],

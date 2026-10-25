@@ -9,6 +9,7 @@ import {
   ProviderId,
 } from '@ixa/domain'
 import {
+  createInMemoryCharacterRepository,
   createInMemoryLocationRepository,
   aShot,
   aTake,
@@ -86,7 +87,7 @@ const buildFixture = (options: FixtureOptions = {}) => {
   const app = new OpenAPIHono({ defaultHook: validationHook })
   registerErrorHandlers(app, createLogger('silent'))
   app.route('/', shotRoutes(deps))
-  app.route('/', shotSingleEditRoutes({ ...deps, transaction }))
+  app.route('/', shotSingleEditRoutes({ ...deps, characters: createInMemoryCharacterRepository(), transaction }))
   app.route('/', shotBulkRoutes({ ...deps, transaction }))
 
   return { app, project, events, shots }

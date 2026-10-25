@@ -1,4 +1,5 @@
 import type {
+  CharacterRepository,
   MediaAssetRepository,
   ProjectRepository,
   ReviewRepository,
@@ -10,7 +11,9 @@ import {
   DETERMINISTIC_REVIEWERS,
   TakeId as TakeIdSchema,
   aggregateVerdict,
+  type CharacterId,
   type CreateReviewFindingInput,
+  type Shot,
   type MusicAnalysis,
   type ProjectId,
   type ReviewRunId,
@@ -76,6 +79,8 @@ export type BrandColorLookup = (projectId: ProjectId) => Promise<readonly BrandC
 export type ReviewProcessorDeps = {
   readonly takes: Pick<TakeRepository, 'findById' | 'updateReview'>
   readonly shots: Pick<ShotRepository, 'findById'>
+  /** セリフの話し手の名前を引く（ADR-0059）。無ければ判定基準の話し手は「話し手不明」。 */
+  readonly characters?: Pick<CharacterRepository, 'findById'>
   readonly projects: Pick<ProjectRepository, 'findById'>
   readonly mediaAssets: Pick<MediaAssetRepository, 'findById'>
   readonly musicAnalyses: MusicAnalysisLookup
@@ -100,6 +105,19 @@ export type ReviewProcessorDeps = {
   readonly brandColors?: BrandColorLookup
   /** 測定器。既定は ffmpeg 実装。テストは実バイナリを起動せずに差し替える。 */
   readonly measurer?: TakeMeasurer
+}
+
+/** セリフの話し手の名前を先に引いておく（判定基準は同期で組むため）。消した人は引けず「話し手不明」。 */
+const speakerNamesOf = async (
+  deps: ReviewProcessorDeps,
+  shot: Shot,
+): Promise<(id: CharacterId) => string | null> => {
+  const characters = deps.characters
+  if (characters === undefined || shot.dialogue.length === 0) return () => null
+  const ids = [...new Set(shot.dialogue.map((line) => line.speakerId))]
+  const found = await Promise.all(ids.map((id) => characters.findById(id)))
+  const names = new Map(found.flatMap((c) => (c === null ? [] : [[c.id, c.displayName] as const])))
+  return (id) => names.get(id) ?? null
 }
 
 export type ReviewOutcome =
@@ -255,6 +273,7 @@ export const processReviewJob = async (
       ? { findings: [] as readonly CreateReviewFindingInput[], costUsd: 0 }
       : await runVisionStage({
           shot,
+          speakerName: await speakerNamesOf(deps, shot),
           asset,
           reviewers: deps.visionReviewers,
           storage: deps.storage,

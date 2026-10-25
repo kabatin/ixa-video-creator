@@ -98,7 +98,7 @@ export const makeShot = (overrides: Partial<Shot> = {}): Shot => ({
   timing: 'trim',
   speed: 1,
   description: '',
-  dialogue: null,
+  dialogue: [],
   camera: CAMERA,
   mood: null,
   continuityMode: 'independent',

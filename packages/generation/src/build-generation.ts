@@ -1,6 +1,7 @@
 import {
   compileSpec,
   computeSpecHash,
+  dialogueSpeakerProblems,
   generationSecFor,
   resolveReferences,
   type DurationSupport,
@@ -141,14 +142,19 @@ export const buildGeneration = async <M extends GenerationModel>(
   // 候補ゼロを既定値で埋めない。モデルが 1 つも無いのは設定の欠落であり、生成を止める。
   if (first === undefined) throw new SpecCompilationError('利用できるモデルがありません')
 
-  const [characters, locations, manualReferences, previousShotLastFrameId, startFrameId] =
+  const [characters, locations, manualReferences, previousShotLastFrameId, startFrameId, speakers] =
     await Promise.all([
       deps.context.charactersForShot(shot.id),
       deps.context.locationsForShot(shot.id),
       deps.context.manualReferencesForShot(shot.id),
       deps.context.previousShotLastFrame(shot.id),
       deps.context.startFrame(shot.id),
+      deps.context.speakersForShot(shot.id),
     ])
+
+  // セリフの話し手がそろっていなければ、Take を作る前に理由を添えて止める（ADR-0059）。
+  const speakerProblems = dialogueSpeakerProblems(shot.dialogue, speakers)
+  if (speakerProblems.length > 0) throw new SpecCompilationError(speakerProblems.join(' / '))
 
   const compileFor = (
     maxReferences: number,
@@ -175,6 +181,7 @@ export const buildGeneration = async <M extends GenerationModel>(
       seed,
       negativePrompt: null,
       corrections,
+      speakers,
     })
   }
 

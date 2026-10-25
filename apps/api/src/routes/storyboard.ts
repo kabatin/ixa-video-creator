@@ -1,5 +1,6 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type {
+  CharacterRepository,
   MusicAnalysisRepository,
   MusicTrackRepository,
   ProjectRepository,
@@ -11,7 +12,9 @@ import {
   ProjectId as ProjectIdSchema,
   SequenceId as SequenceIdSchema,
   allocateShots,
+  DialogueLines,
   type CreateShotInput,
+  type DialogueLine,
   type MusicAnalysis,
   type ProjectId,
   type ShotSlot,
@@ -19,7 +22,10 @@ import {
 import { overlapsRange } from '@ixa/timeline'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
+import { dialogueSpeakerProblem } from './library-ownership.js'
 import { ShotResponse, toShotResponse } from './shots.js'
+
+export const DIALOGUES_LENGTH_MESSAGE = 'セリフはカットの数（区切りの数 − 1）と同じだけ並べてください'
 
 /** 重なる Shot の名前を 3 つまで挙げる。 */
 const overlapMessage = (codes: readonly string[]): string =>
@@ -114,7 +120,16 @@ const CutsBody = z
       .string()
       .regex(/^[A-Za-z0-9]{1,16}$/, CODE_PREFIX_INVALID_MESSAGE)
       .default(DEFAULT_CUT_CODE_PREFIX),
+    /**
+     * 各カットのセリフ（ADR-0059）。**カットの数（印の数 − 1）と同じ長さ**。セリフの無いカットは []。
+     * 省けばどのカットもセリフ無し。
+     */
+    dialogues: z.array(DialogueLines).optional(),
   })
+  .refine(
+    (input) => input.dialogues === undefined || input.dialogues.length === input.boundariesSec.length - 1,
+    { message: DIALOGUES_LENGTH_MESSAGE, path: ['dialogues'] },
+  )
   .openapi('CreateCutsInput')
 
 /**
@@ -225,6 +240,7 @@ const toCreateInput = (
   code: string,
   slot: ShotSlot,
   order: number,
+  dialogue: readonly DialogueLine[] = [],
 ): CreateShotInput => ({
   projectId,
   sequenceId,
@@ -234,7 +250,7 @@ const toCreateInput = (
   durationSec: slot.durationSec,
   sourceInSec: 0,
   description: '',
-  dialogue: null,
+  dialogue: [...dialogue],
   camera: {
     size: 'medium',
     angleH: null,
@@ -256,6 +272,8 @@ export type StoryboardRoutesDeps = {
   sequences: SequenceRepository
   /** Project の実在確認だけに使う。 */
   projects: ProjectRepository
+  /** セリフの話し手が同じプロジェクトのキャラクターかを確かめる（ADR-0059）。 */
+  characters: Pick<CharacterRepository, 'findById'>
 }
 
 /**
@@ -372,13 +390,16 @@ export const storyboardRoutes = (deps: StoryboardRoutesDeps) =>
           422,
         )
       }
+      const speaker = await dialogueSpeakerProblem(deps.characters, projectId, input.dialogues?.flat())
+      if (speaker !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, { dialogues: [speaker] }), 422)
 
       // 既存の Shot の後ろに積む。order は Project 内で連続させる。
       const existing = await deps.shots.findByProject(projectId)
       // 今ある Shot と重なる区間は作らない（端で触れるだけは通す）。重なった Shot は書き出しを止める。
       // 区切りを残したまま「Shot にする」を 2 回押して、同じ区間に Shot がもう 1 組できていた（制作者 2026-10-03）。
       // 画面は曲の頭から終わりまでの区切りを送る（`cutBoundaries`）ので、区間ごとに見て、重なるものだけ飛ばす。
-      const all = toSlots(input.boundariesSec)
+      // セリフはカットの並びに付く。重なって飛ばすカットがあっても、残ったカットに正しい行が付くよう先に組にする。
+      const all = toSlots(input.boundariesSec).map((slot, index) => ({ ...slot, dialogue: input.dialogues?.[index] ?? [] }))
       const clashes = (slot: ShotSlot) =>
         existing.filter((shot) => overlapsRange(shot, { startSec: slot.startSec, endSec: slot.startSec + slot.durationSec }))
       const slots = all.filter((slot) => clashes(slot).length === 0)
@@ -403,6 +424,7 @@ export const storyboardRoutes = (deps: StoryboardRoutesDeps) =>
             codes[index] as string,
             slot,
             nextOrder + index,
+            slot.dialogue,
           ),
         ),
       )

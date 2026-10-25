@@ -8,6 +8,7 @@ import type {
 } from '@ixa/db'
 import {
   isRetakeRecommended,
+  dialogueWarnings,
   GenerationJobId as GenerationJobIdSchema,
   ModelId as ModelIdSchema,
   ProjectId as ProjectIdSchema,
@@ -84,11 +85,15 @@ export type GenerationQueue = {
   enqueue(generationJobId: GenerationJobId): Promise<void>
 }
 
+/** セリフの警告（ADR-0059）。保存は通るが、作る前に知らせたいこと。画面と MCP が同じものを出す。 */
+const DialogueWarningResponse = z.object({ code: z.literal('too_many_lines'), message: z.string() })
+
 export const ShotResponse = ShotSchema.omit({ createdAt: true, updatedAt: true, lockedAt: true })
   .extend({
     lockedAt: z.string().datetime().nullable(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
+    dialogueWarnings: z.array(DialogueWarningResponse),
   })
   .openapi('Shot')
 export type ShotResponse = z.infer<typeof ShotResponse>
@@ -98,6 +103,7 @@ export const toShotResponse = (shot: Shot): ShotResponse => ({
   lockedAt: shot.lockedAt === null ? null : shot.lockedAt.toISOString(),
   createdAt: shot.createdAt.toISOString(),
   updatedAt: shot.updatedAt.toISOString(),
+  dialogueWarnings: [...dialogueWarnings(shot.dialogue)],
 })
 
 export const TakeResponse = TakeSchema.omit({ createdAt: true })

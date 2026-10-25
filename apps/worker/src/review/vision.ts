@@ -1,6 +1,13 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
-import { cameraToPromptFragment, type CreateReviewFindingInput, type MediaAsset, type Shot } from '@ixa/domain'
+import {
+  cameraToPromptFragment,
+  formatDialogueForReview,
+  type CharacterId,
+  type CreateReviewFindingInput,
+  type MediaAsset,
+  type Shot,
+} from '@ixa/domain'
 import { posterFramePositions } from '@ixa/media'
 import type { ReviewImage, VisionReviewResult, VisionReviewer } from '@ixa/provider-llm'
 import type { ObjectStorage } from '@ixa/storage'
@@ -28,6 +35,8 @@ export type VisionStageInput = {
   readonly logger: Logger
   /** 判定用のフレームを落とす場所の親。判定のたびに中に置き場を作って片付ける。 */
   readonly workDir: string
+  /** セリフの話し手の名前（ADR-0059）。引けなければ「話し手不明」になる。 */
+  readonly speakerName?: (id: CharacterId) => string | null
 }
 
 export type VisionStageResult = {
@@ -103,13 +112,18 @@ const toImages = async (
  * 判定基準の文。Shot の演出指示をそのまま渡す。
  * 空文字を渡すと `VisionReviewRequest` の検証に落ちるため、最低でも Shot コードを入れる。
  */
-export const buildCriteria = (shot: Shot): string => {
+export const buildCriteria = (
+  shot: Shot,
+  speakerName: (id: CharacterId) => string | null = () => null,
+): string => {
+  const dialogue = formatDialogueForReview(shot.dialogue, speakerName)
   const lines = [
     `shot ${shot.code}`,
     shot.description === '' ? null : `description: ${shot.description}`,
     `camera: ${cameraToPromptFragment(shot.camera)}`,
     shot.mood === null ? null : `mood: ${shot.mood}`,
-    shot.dialogue === null ? null : `dialogue: ${shot.dialogue}`,
+    // 行の配列を「話し手: セリフ」の形にして渡す（ADR-0059）。
+    dialogue === null ? null : `dialogue:\n${dialogue}`,
   ].filter((line): line is string => line !== null)
   return lines.join('\n')
 }
@@ -195,7 +209,7 @@ const reviewAll = async (
   subjects: readonly ReviewImage[],
   imageDir: string,
 ): Promise<VisionStageResult> => {
-  const criteria = buildCriteria(input.shot)
+  const criteria = buildCriteria(input.shot, input.speakerName)
   const findings: CreateReviewFindingInput[] = []
   let costUsd = 0
 

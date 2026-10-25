@@ -4,6 +4,7 @@ import { MusicTrack, MusicTrackId, TimelineClip, TimelineClipId, newId, type Sho
 import {
   aShot,
   aTake,
+  createInMemoryCharacterRepository,
   createInMemoryLocationRepository,
   createInMemoryMediaAssetRepository,
   createInMemoryShotRepository,
@@ -143,6 +144,7 @@ describe('Shot 1 件', () => {
           shots,
           takes: createInMemoryTakeRepository([take, selectedTake]),
           locations: createInMemoryLocationRepository(),
+          characters: createInMemoryCharacterRepository(),
           events: createInMemoryProjectEvents(),
           logger: createLogger('silent'),
           transaction,

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { VisionReviewer } from '@ixa/provider-llm'
 import { createMemoryStorage, type ObjectStorage } from '@ixa/storage'
 import { describe, expect, it } from 'vitest'
-import { aggregateVerdict } from '@ixa/domain'
+import { aggregateVerdict, CharacterId as CharacterIdSchema, newId } from '@ixa/domain'
 import {
   MAX_SUBJECT_FRAMES,
   NO_FRAMES_MESSAGE,
@@ -29,6 +29,15 @@ describe('buildCriteria', () => {
     expect(criteria).toContain('shot_001')
     expect(criteria).toContain('ステージ中央でボーカルが歌い出す')
     expect(criteria).toContain('medium')
+  })
+
+  it('セリフは「話し手: セリフ」の行にして渡す（ADR-0059）', () => {
+    const cat = newId(CharacterIdSchema)
+    const spoken = aShot(project, {
+      dialogue: [{ speakerId: cat, text: 'ねえ、ネズミくん。', offscreen: false, translation: null }],
+    })
+    expect(buildCriteria(spoken, (id) => (id === cat ? 'ネコ' : null))).toContain('dialogue:\nネコ: ねえ、ネズミくん。')
+    expect(buildCriteria(shot)).not.toContain('dialogue')
   })
 
   it('description が空でも空文字にはならない', () => {

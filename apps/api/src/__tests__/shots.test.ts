@@ -150,7 +150,7 @@ describe('Shot CRUD', () => {
       startSec: 0,
       durationSec: 3.75,
       camera: f.shot.camera,
-      dialogue: null,
+      dialogue: [],
       mood: null,
       sourceType: { type: 'ai_video' },
     })

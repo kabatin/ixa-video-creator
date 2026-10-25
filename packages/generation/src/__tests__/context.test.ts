@@ -542,3 +542,38 @@ describe('resolveReferences との統合（ARCHITECTURE.md §8）', () => {
     expect(resolved[0]?.mediaAssetId).toBe(look.canonicalFrameAssetId)
   })
 })
+
+/** セリフの話し手（ADR-0059）。配役にいない画面外の人も、行から引く。 */
+describe('speakersForShot', () => {
+  const line = (speakerId: Character['id']) => ({ speakerId, text: 'ねえ', offscreen: true, translation: null })
+
+  it('セリフが無ければ空', async () => {
+    expect(await buildContext().speakersForShot(shot.id)).toEqual([])
+  })
+
+  it('配役にいない話し手も返し、同じ人は 1 回だけ。番号は作品の中で作った順', async () => {
+    const { character: cat } = await registerCharacter('neko')
+    const { character: mouse } = await registerCharacter('nezumi')
+    shot = aShot(projectId, { dialogue: [line(mouse.id), line(cat.id), line(mouse.id)] })
+
+    const speakers = await buildContext().speakersForShot(shot.id)
+
+    expect(speakers.map((s) => [s.displayName, s.speakerNo])).toEqual([['nezumi', 2], ['neko', 1]])
+  })
+
+  it('消したキャラクターを話し手にしていれば黙って落とさず止める', async () => {
+    const { character } = await registerCharacter('neko')
+    await characters.softDelete(character.id)
+    shot = aShot(projectId, { dialogue: [line(character.id)] })
+
+    await expect(buildContext().speakersForShot(shot.id)).rejects.toBeInstanceOf(GenerationContextError)
+  })
+
+  it('消しても番号は詰めない（次に作る人は 3）', async () => {
+    const { character: first } = await registerCharacter('a')
+    await registerCharacter('b')
+    await characters.softDelete(first.id)
+    const { character: third } = await registerCharacter('c')
+    expect(third.speakerNo).toBe(3)
+  })
+})

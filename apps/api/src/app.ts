@@ -341,7 +341,7 @@ export const createApp = (deps: AppDeps) => {
   }
   app.route('/', shotRoutes(shotDeps))
   // Shot 1 件の作成・直し・削除と採用 Take の決定・外し（取り消しの記録と同じトランザクションで書く）。
-  app.route('/', shotSingleEditRoutes({ ...shotDeps, transaction: deps.editTransaction }))
+  app.route('/', shotSingleEditRoutes({ ...shotDeps, characters: deps.characters, transaction: deps.editTransaction }))
   app.route('/', generationCancelRoutes(shotDeps))
   app.route('/', takeHideRoutes(shotDeps))
   app.route('/', takeDownloadRoutes({ shots: deps.shots, takes: deps.takes, projects, mediaAssets, storage }))
@@ -638,6 +638,7 @@ export const createApp = (deps: AppDeps) => {
       musicAnalyses: deps.musicAnalyses,
       sequences: deps.sequences,
       projects,
+      characters: deps.characters,
     }),
   )
 

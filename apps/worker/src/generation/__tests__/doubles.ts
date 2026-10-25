@@ -88,7 +88,7 @@ export const aShot = (project: Project, overrides: Partial<Shot> = {}): Shot =>
     durationSec: 3.75,
     sourceInSec: 0,
     description: 'ステージ中央でボーカルが歌い出す',
-    dialogue: null,
+    dialogue: [],
     camera: {
       size: 'medium', angleH: 'front', angle: 'eye', lensMm: 35,
       movement: 'push_in', movementIntensity: 'subtle',
@@ -405,6 +405,7 @@ export const contextWith = (
   characters: readonly CharacterBundle[] = [],
 ): GenerationContextSource => ({
   charactersForShot: () => Promise.resolve(characters),
+  speakersForShot: () => Promise.resolve([]),
   locationsForShot: () => Promise.resolve([]),
   manualReferencesForShot: () => Promise.resolve([]),
   previousShotLastFrame: () => Promise.resolve(null),
@@ -424,6 +425,7 @@ export const aCharacterBundle = (): CharacterBundle => {
     identityAnchors: ['teal twin tails'],
     styleTokens: ['anime'],
     colorPalette: ['#39C5BB'],
+    speakerNo: 1,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
   })
   const look = CharacterLookSchema.parse({

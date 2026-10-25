@@ -1,5 +1,6 @@
 import {
   createBrandAssetRepository,
+  createCharacterRepository,
   createMediaAssetRepository,
   createMusicAnalysisRepository,
   createMusicTrackRepository,
@@ -137,6 +138,7 @@ export const createReviewWiring = (
       takes,
       shots,
       projects,
+      characters: createCharacterRepository(db),
       mediaAssets: createMediaAssetRepository(db),
       musicAnalyses: createMusicAnalysisLookup(db),
       reviews,

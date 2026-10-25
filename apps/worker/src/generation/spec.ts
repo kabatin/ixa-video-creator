@@ -39,13 +39,15 @@ export const rebuildSpec = async (
    */
   seed: number | null = null,
 ): Promise<RebuiltSpec> => {
-  const [characters, locations, manualReferences, previousShotLastFrameId, startFrameId] =
+  const [characters, locations, manualReferences, previousShotLastFrameId, startFrameId, speakers] =
     await Promise.all([
       context.charactersForShot(shot.id),
       context.locationsForShot(shot.id),
       context.manualReferencesForShot(shot.id),
       context.previousShotLastFrame(shot.id),
       context.startFrame(shot.id),
+      // セリフの話し手（ADR-0059）。api と同じ口から読む（違うと spec_drift で落ちる）。
+      context.speakersForShot(shot.id),
     ])
 
   const caps = model.capabilities
@@ -75,6 +77,7 @@ export const rebuildSpec = async (
      * 同じ値をここでも渡さないと `specHash` が一致せず `spec_drift` で落ちる（L-012）。
      */
     corrections,
+    speakers,
   })
 
   return { spec, specHash: await computeSpecHash(spec) }
