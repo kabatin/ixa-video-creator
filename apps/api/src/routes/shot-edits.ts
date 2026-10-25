@@ -140,7 +140,8 @@ export const shotEditRoutes = (deps: ShotEditRoutesDeps) =>
           timing: shot.timing,
           speed: shot.speed,
           description: shot.description,
-          dialogue: shot.dialogue,
+          // セリフは前半に残す（両方に写すと同じセリフを 2 度しゃべる。ADR-0059）。後半で言わせるなら移し替える。
+          dialogue: [],
           camera: shot.camera,
           mood: shot.mood,
           continuityMode: shot.continuityMode,

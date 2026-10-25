@@ -93,6 +93,19 @@ describe('POST /shots/:id/split', () => {
     expect(cast.map((c) => c.characterId)).toEqual([characterId])
   })
 
+  it('セリフは前半に残し、後半は空で始める（同じセリフを 2 度しゃべらせない。ADR-0059）', async () => {
+    const project = aProject()
+    const line = { speakerId: newId(CharacterIdSchema), text: 'ねえ', offscreen: false, translation: null }
+    const target = aShot(project.id, { code: 'CUT-01', order: 1000, startSec: 0, durationSec: 6, dialogue: [line] })
+    const f = build(project, [target])
+
+    const res = await post(f.app, `/shots/${target.id}/split`, { atSec: 3 })
+    const body = (await res.json()) as Ok<{ first: WireShot; second: WireShot }>
+
+    expect((await f.shots.findById(target.id))?.dialogue).toEqual([line])
+    expect((await f.shots.findById(body.data.second.id as Shot['id']))?.dialogue).toEqual([])
+  })
+
   it('Take が 1 本でもあれば割らない（状態が下書きでも件数で確かめる）', async () => {
     const project = aProject()
     const shots = cuts(project)
