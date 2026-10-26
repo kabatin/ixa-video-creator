@@ -32,3 +32,6 @@ pnpm-lock.yaml.bak
 
 # 社内向けの当初の仕様書（公開しない）
 /spec.md
+
+# pnpm ixa update の途中の印（ADR-0063）
+/.ixa-update-pending.json

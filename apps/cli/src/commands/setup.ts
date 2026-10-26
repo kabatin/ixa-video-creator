@@ -42,7 +42,7 @@ export const setupCommand = async (system: System, repo: RepoPaths, out: Output,
     async (c) => seedStep(c, await readEnv(c.system, c.repo)),
     audioDepsStep,
   ]
-  const results = await runSteps(ctx, steps, out)
+  const results = await runSteps(ctx, steps, out, 'pnpm -s ixa setup')
   const stopped = results.some(isStopping)
   const checks = stopped ? [] : await finalDoctor(system, repo, out)
   const ok = !stopped && !hasFailure(checks)

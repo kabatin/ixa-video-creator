@@ -17,6 +17,7 @@ const Options = z.object({
   check: z.boolean(),
   main: z.boolean(),
   afterFetch: z.boolean(),
+  resume: z.boolean(),
   from: z
     .string()
     .regex(/^\d+\.\d+\.\d+$/, '--from は 0.8.0 の形で書きます')
@@ -32,7 +33,8 @@ export const HELP = `使い方: pnpm ixa <コマンド> [オプション]
   setup    初めての導入（何度実行しても壊れない）。--yes で途中の質問をしない
   doctor   今の状態を ✓ / ! / ✗ で出す（読むだけ）。✗ があれば終了コード 1
   update   最新のリリースへ上げる。--main で main の先頭へ、--check で確かめるだけ、
-           --force で「動いているジョブ」の確認を外す、--while-running で dev を動かしたまま進める
+           --force で「動いているジョブ」の確認を外す、--while-running で dev を動かしたまま進める、
+           --resume で途中で止まった更新の続きをする
   mcp      Claude Code / Codex に MCP を登録する 1 行を出す。--claude / --codex、--write で実際に登録
   infra    up | down。この clone の postgres・redis を起こす・止める（pnpm infra:up / infra:down もこれ。ボリュームは消さない）
 
@@ -54,6 +56,7 @@ export const parseCliArgs = (argv: readonly string[]): Options => {
       check: { type: 'boolean', default: false },
       main: { type: 'boolean', default: false },
       'after-fetch': { type: 'boolean', default: false },
+      resume: { type: 'boolean', default: false },
       from: { type: 'string' },
       claude: { type: 'boolean', default: false },
       codex: { type: 'boolean', default: false },
@@ -77,6 +80,7 @@ export const parseCliArgs = (argv: readonly string[]): Options => {
     check: values.check,
     main: values.main,
     afterFetch: values['after-fetch'],
+    resume: values.resume,
     from: values.from,
     claude: values.claude,
     codex: values.codex,

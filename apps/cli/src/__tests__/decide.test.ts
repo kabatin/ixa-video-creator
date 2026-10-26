@@ -11,7 +11,7 @@ import {
   releaseTarget,
   updateBlockers,
 } from '../update/decide.js'
-import { releaseNotesUrl } from '../commands/update.js'
+import { releaseNotesUrl } from '../update/after-fetch.js'
 
 const v = (text: string): Version => {
   const parsed = parseVersion(text)

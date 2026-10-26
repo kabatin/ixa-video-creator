@@ -9,6 +9,7 @@ export const fakeSystem = (
   httpGet: () => Promise.resolve({ ok: false, reason: 'つながりません' }),
   readText: () => Promise.resolve(null),
   writeText: () => Promise.resolve(),
+  remove: () => Promise.resolve(),
   exists: () => Promise.resolve(false),
   realpath: (p) => Promise.resolve(p),
   canWrite: () => Promise.resolve(true),

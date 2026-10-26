@@ -40,6 +40,8 @@ export type System = {
   /** 無ければ null。 */
   readonly readText: (path: string) => Promise<string | null>
   readonly writeText: (path: string, content: string) => Promise<void>
+  /** 無ければ何もしない。 */
+  readonly remove: (path: string) => Promise<void>
   readonly exists: (path: string) => Promise<boolean>
   /** シンボリックリンクをたどった場所。無ければそのまま返す（clone の場所の比べ合わせに使う）。 */
   readonly realpath: (path: string) => Promise<string>

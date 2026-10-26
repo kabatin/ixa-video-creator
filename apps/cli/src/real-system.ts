@@ -1,7 +1,7 @@
 import { spawn, type StdioOptions } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { constants } from 'node:fs'
-import { access, readFile, realpath, statfs, writeFile } from 'node:fs/promises'
+import { access, readFile, realpath, rm, statfs, writeFile } from 'node:fs/promises'
 import { connect } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -176,6 +176,7 @@ export const createRealSystem = (): System => ({
   httpGet,
   readText,
   writeText: (file, content) => writeFile(file, content, 'utf8'),
+  remove: (file) => rm(file, { force: true }),
   exists,
   realpath: async (file) => {
     try {

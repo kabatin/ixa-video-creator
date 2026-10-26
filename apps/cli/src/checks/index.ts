@@ -7,6 +7,7 @@ import { gatherEnv, judgeEnv } from './env.js'
 import { gatherLocalAi, judgeLocalAi } from './local-ai.js'
 import { gatherOptional, judgeOptional } from './optional.js'
 import { gatherRuntime, judgeRuntime } from './runtime.js'
+import { pendingCheck, readMarker } from '../update/marker.js'
 import { gatherTools, judgeTools } from './tools.js'
 
 /** 表示の順番（道具 → 設定 → DB → 動いているもの → 手元の AI → 任意）。 */
@@ -31,6 +32,7 @@ export const runChecks = async (system: System, repo: RepoPaths): Promise<readon
   ])
   return byGroup([
     ...judgeTools(tools),
+    pendingCheck(await readMarker(system, repo)),
     ...judgeEnv(envFacts),
     ...judgeDb(db),
     ...judgeRuntime(runtime),

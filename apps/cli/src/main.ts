@@ -1,4 +1,5 @@
 import { HELP, parseCliArgs } from './args.js'
+import { errorMessage, errorPayload } from './lib/errors.js'
 import { doctorCommand } from './commands/doctor.js'
 import { infraCommand } from './commands/infra.js'
 import { mcpCommand } from './commands/mcp.js'
@@ -36,11 +37,20 @@ const main = async (): Promise<number> => {
   }
 }
 
+/**
+ * 書き終えてから明示的に終える。postgres.js はつながらなかった接続の再試行の時計を残すので、
+ * 待っていると DB が止まっている Mac で doctor が返らなかった（実測）。
+ */
+const exitAfterFlush = (code: number): void => {
+  process.stdout.write('', () => process.exit(code))
+}
+
 main()
-  .then((code) => {
-    process.exitCode = code
-  })
+  .then(exitAfterFlush)
   .catch((error: unknown) => {
-    process.stderr.write(`ixa: ${error instanceof Error ? error.message : String(error)}\n`)
-    process.exitCode = 1
+    // どこで投げても、--json なら JSON を 1 つだけ出す（合言葉は伏せる）。
+    const argv = process.argv.slice(2)
+    if (argv.includes('--json')) process.stdout.write(`${JSON.stringify(errorPayload(argv, error), null, 2)}\n`)
+    else process.stderr.write(`ixa: ${errorMessage(error)}\n`)
+    exitAfterFlush(1)
   })
