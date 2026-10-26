@@ -5,7 +5,7 @@ import { measureLoudness } from '../audio.js'
 import { atempoChain, stretchChunks } from '../dub/stretch-chunks.js'
 import { DUB_TARGET_LUFS, mixDub, muteExpression } from '../dub/mix-dub.js'
 import { matchLevelGainDb, voicedLevelOfPcm } from '../dub/match-level.js'
-import { DUB_PCM_RATE, readPcm16k, readRmsFrames, rmsFramesFromPcm } from '../dub/rms-frames.js'
+import { DUB_PCM_RATE, pcmFromBytes, readPcm16k, readRmsFrames, rmsFramesFromPcm } from '../dub/rms-frames.js'
 import { probeMedia } from '../probe.js'
 import { runFfmpeg } from '../ffmpeg-runner.js'
 import { createTempDir, removeTempDir } from './fixtures.js'
@@ -76,6 +76,13 @@ describe('rmsFrames と声の区間', () => {
     expect(frames[0]).toBeCloseTo(-3.01, 1)
     expect(rmsFramesFromPcm(new Int16Array(400))[0]).toBe(Number.NEGATIVE_INFINITY)
   })
+
+  it('奇数の位置から始まるバッファでも読める（Int16Array に揃えて写す）', () => {
+    const bytes = Buffer.alloc(801)
+    bytes.writeInt16LE(1000, 1)
+    expect(pcmFromBytes(bytes.subarray(1))[0]).toBe(1000)
+    expect(pcmFromBytes(bytes.subarray(1))).toHaveLength(400)
+  })
 })
 
 describe('stretchChunks', () => {
@@ -108,13 +115,18 @@ describe('matchLevel', () => {
     expect(matchLevelGainDb({ sourceLevelDb: source, voiceLevelDb: voice, levelDb: -9.5 })).toBeCloseTo(-3.48, 1)
     expect(matchLevelGainDb({ sourceLevelDb: null, voiceLevelDb: voice, levelDb: -2 })).toBe(-2)
   })
+
+  it('掛ける dB は ±20 dB まで（ほぼ無音の読み上げを持ち上げすぎない）', () => {
+    expect(matchLevelGainDb({ sourceLevelDb: -10, voiceLevelDb: -60, levelDb: 0 })).toBe(20)
+    expect(matchLevelGainDb({ sourceLevelDb: -60, voiceLevelDb: -10, levelDb: -6 })).toBe(-20)
+  })
 })
 
 describe('mixDub', () => {
-  it('消す式は範囲の中だけ 0', () => {
+  it('消す式は範囲の中だけ 0 で、範囲の外側 15ms で滑らかに戻す', () => {
     expect(muteExpression([])).toBe('1')
     expect(muteExpression([{ startSec: 0.45, endSec: 1.1 }, { startSec: 2, endSec: 2.5 }])).toBe(
-      'if(between(t,0.4500,1.1000)+between(t,2.0000,2.5000),0,1)',
+      '1-max(clip(min(t-0.4350,1.1150-t)/0.0150,0,1),clip(min(t-1.9850,2.5150-t)/0.0150,0,1))',
     )
   })
 

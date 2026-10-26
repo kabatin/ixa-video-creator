@@ -14,8 +14,10 @@ import { loudnormLinearFilter, loudnormMeasureFilter, parseLoudnormJson } from '
 
 export const DUB_TARGET_LUFS = -16
 const AUDIO_BITRATE = '192k'
-/** 消す範囲を決める音の刻み（10ms。volume は区切りごとに式を見る）。 */
-const MUTE_STEP_SAMPLES = 480
+/** 消す式を見る音の刻み（1ms。volume は区切りごとに式を見るので、細かくしないと戻りが段になる）。 */
+const MUTE_STEP_SAMPLES = 48
+/** 消す範囲の外側で、0 から 1 へ戻す長さ（ぷつっと切れる音を出さない）。 */
+export const DUB_MUTE_RAMP_SEC = 0.015
 const MIX_FORMAT = 'aformat=sample_rates=48000:channel_layouts=stereo'
 /** 声（モノラル）を左右に同じ大きさで写す（音量合わせの基準の左右の平均と同じ大きさになる）。 */
 const VOICE_TO_STEREO = 'aformat=channel_layouts=mono,pan=stereo|c0=c0|c1=c0'
@@ -36,9 +38,18 @@ export type MixDubInput = {
 
 const fmt = (sec: number): string => sec.toFixed(4)
 
-/** 範囲の中だけ 0 にする式。範囲が無ければ元の音のまま。 */
-export const muteExpression = (ranges: readonly DubChunk[]): string =>
-  ranges.length === 0 ? '1' : `if(${ranges.map((r) => `between(t,${fmt(r.startSec)},${fmt(r.endSec)})`).join('+')},0,1)`
+/** 1 つの範囲の消し具合（範囲の中は 1、外側 15ms で 0 へ）。 */
+const attenuation = (range: DubChunk): string =>
+  `clip(min(t-${fmt(range.startSec - DUB_MUTE_RAMP_SEC)},${fmt(range.endSec + DUB_MUTE_RAMP_SEC)}-t)/${fmt(DUB_MUTE_RAMP_SEC)},0,1)`
+
+/** 範囲の中だけ 0 にし、範囲の外側 15ms で元の大きさへ戻す式。範囲が無ければ元の音のまま。 */
+export const muteExpression = (ranges: readonly DubChunk[]): string => {
+  if (ranges.length === 0) return '1'
+  const nested = ranges
+    .map(attenuation)
+    .reduceRight((inner, outer) => (inner === '' ? outer : `max(${outer},${inner})`), '')
+  return `1-${nested}`
+}
 
 /** 混ぜるまでの filter_complex（最後のラベルは `[mix]`）。 */
 export const dubMixGraph = (input: MixDubInput): string => {

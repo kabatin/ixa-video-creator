@@ -35,8 +35,18 @@ export const rmsFramesFromPcm = (samples: Int16Array, shape: FrameShape = SPEECH
 /** 音を 16kHz・モノラルの生の PCM（s16le）に書き出して読む。`rawPath` は作業用のファイル。 */
 export const readPcm16k = async (inputPath: string, rawPath: string): Promise<Int16Array> => {
   await runFfmpeg(['-y', '-i', inputPath, '-vn', '-map', '0:a:0', '-ac', '1', '-ar', String(DUB_PCM_RATE), '-f', 's16le', '-c:a', 'pcm_s16le', rawPath])
-  const raw = await readFile(rawPath)
-  return new Int16Array(raw.buffer, raw.byteOffset, Math.floor(raw.byteLength / 2))
+  return pcmFromBytes(await readFile(rawPath))
+}
+
+/**
+ * s16le のバイト列を Int16Array にする。Buffer は奇数の位置から始まることがあり、そのまま重ねると例外になるので
+ * 揃った新しいバッファに写す。
+ */
+export const pcmFromBytes = (bytes: Uint8Array): Int16Array => {
+  const length = Math.floor(bytes.byteLength / 2)
+  const aligned = new Uint8Array(length * 2)
+  aligned.set(bytes.subarray(0, length * 2))
+  return new Int16Array(aligned.buffer, 0, length)
 }
 
 /** 秒の区間の PCM（16kHz）。区間の外は切る。 */
