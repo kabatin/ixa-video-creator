@@ -6,7 +6,7 @@ import { readyOr, useAssets } from '@/components/workbench/asset-store'
 import { VoiceDesignForm } from '@/components/workbench/inspector/voice-design-form'
 import { AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
-import { Section } from '@/components/workbench/ui/section'
+import { CollapsibleSection } from '@/components/workbench/ui/collapsible-section'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { Button } from '@/components/ui/button'
 import { describeForPerson } from '@/lib/api-error'
@@ -50,7 +50,8 @@ export const CharacterVoices = ({
   }
 
   return (
-    <Section title={`声（${String(mine.length)}）`}>
+    // Shot と同じ畳める見出しの行（2026-10-26。インスペクターの区切りの見た目を揃える）。
+    <CollapsibleSection scope="character" id="voices" title={`声（${String(mine.length)}）`} defaultOpen>
       {mine.map((voice) => (
         <button
           key={voice.id}
@@ -127,6 +128,6 @@ export const CharacterVoices = ({
         声は 1 人にいくつでも持てます（ふだん・叫び など）。「声を差し替える」は、セリフの声でこの人の行を読み直します。
         距離は元の声と同じ大きさにしてから足します（奥なら -9.5 など）。
       </p>
-    </Section>
+    </CollapsibleSection>
   )
 }

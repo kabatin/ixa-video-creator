@@ -21,6 +21,7 @@ import { useAssetMenu } from '@/components/workbench/use-asset-menu'
 import { CharacterVoices } from '@/components/workbench/inspector/character-voices'
 import { ObjectHeader } from '@/components/workbench/ui/object-header'
 import { Section } from '@/components/workbench/ui/section'
+import { CollapsibleSection } from '@/components/workbench/ui/collapsible-section'
 import { characterDetailHref } from '@/lib/character-links'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { PanelEmpty } from '@/components/workbench/panels/panel-frame'
@@ -93,7 +94,7 @@ export const CharacterInspector = ({ id }: { readonly id: CharacterId }) => {
         />
       }
     >
-      <Section title="同一性">
+      <CollapsibleSection scope="character" id="identity" title="同一性" defaultOpen>
         <AutoSaveField
           label="表示名"
           value={character.displayName}
@@ -125,9 +126,15 @@ export const CharacterInspector = ({ id }: { readonly id: CharacterId }) => {
         <Link href={characterDetailHref(id)} className="text-xs text-muted underline hover:text-text">
           識別画像と Look を詳しく編集…
         </Link>
-      </Section>
+      </CollapsibleSection>
       {/* セリフの話し手（ADR-0059）。H3 のセリフの文に一字一句そのまま入る。どの Shot でも同じ声になる。 */}
-      <Section title="話し手の伝え方">
+      <CollapsibleSection
+        scope="character"
+        id="speech"
+        title="話し手の伝え方"
+        summary={character.speechName ?? 'まだ空'}
+        defaultOpen
+      >
         <AutoSaveField
           label="英語の呼び名"
           value={character.speechName ?? ''}
@@ -144,8 +151,13 @@ export const CharacterInspector = ({ id }: { readonly id: CharacterId }) => {
         <p className="text-xs text-muted">
           セリフのある Shot の Take は、この 2 つで話し手と声を伝えます。全部の Shot で同じ文を使います。
         </p>
-      </Section>
-      <Section title={`Look（${String((looks.get(id) ?? []).length)}）`}>
+      </CollapsibleSection>
+      <CollapsibleSection
+        scope="character"
+        id="looks"
+        title={`Look（${String((looks.get(id) ?? []).length)}）`}
+        defaultOpen
+      >
         {(looks.get(id) ?? []).map((look) => (
           <button
             key={look.id}
@@ -162,7 +174,7 @@ export const CharacterInspector = ({ id }: { readonly id: CharacterId }) => {
         <p className="text-xs text-muted">
           Look を足すのはツリーの「＋ Look を追加」から。画像は中央の素材ビューアへ落とします。
         </p>
-      </Section>
+      </CollapsibleSection>
       <CharacterVoices character={character} />
     </Frame>
   )
