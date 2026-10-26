@@ -1,5 +1,8 @@
+import { ASSIGN_AMBIGUITY_MARGIN, assignByLength, type LengthLine } from './assign-by-length.js'
+import { DUB_MAX_TEMPO, DUB_MIN_TEMPO } from './chunk-tempo.js'
 import type { DialogueDub } from './dialogue-dub.js'
-import { mergeChunksTo, spanOf } from './pair-chunks.js'
+import type { DubWarning } from './dub-record.js'
+import { mergeChunksTo, spanOf, type ChunkGroup } from './pair-chunks.js'
 import type { DubChunk } from './speech-chunks.js'
 
 /**
@@ -7,7 +10,10 @@ import type { DubChunk } from './speech-chunks.js'
  *
  * - 足す行（`added`）は数えない（H3 は話していない）
  * - 行の手の区間（`startSec`/`endSec`）があればそれを使う。その区間に掛かる声の区間は他の行に回さない
- * - 残りの行には、残りの声の区間を、すき間の短い所からつないで行の数にそろえて順に割り当てる
+ * - 読み上げの長さ（`ttsSec`）があれば、残りの行に続いた区間の並びを、読み上げの長さに合うように割り当てる
+ *   （`assignByLength`。クリック・環境音の区間は飛ばす）。どの割り当てでも 0.8〜1.6 倍に収まらなければ止める。
+ *   次に良い割り当てとほとんど差が無ければ、良い方を使い、その行に迷いの警告を付ける
+ * - 読み上げの長さが無い並びは、残りの声の区間を、すき間の短い所からつないで行の数にそろえて順に割り当てる
  * - 区間が行より少なければ、理由を付けて止める（手の区間を入れてもらう）
  *
  * 2 人のセリフが続けて 1 つの区間になると、つなぐだけでは分けられない（分かっている不足）。
@@ -25,9 +31,23 @@ export type LineSpan = {
 /** 行の手の区間の案（ADR-0062 段 5b）。まとまった声の区間を、行の文字数の比で割ったもの。画面が各行に先に入れておく。 */
 export type LineSpanSuggestion = { readonly lineIndex: number; readonly startSec: number; readonly endSec: number }
 
+/** 行の区間に付ける警告（記録の行の警告に入れる）。 */
+export type LineSpanWarning = { readonly lineIndex: number; readonly warning: DubWarning }
+
+/** 行ごとの読み上げの声の長さ（読み方ごと、秒）。鍵は行の番号。 */
+export type LineTtsLengths = ReadonlyMap<number, readonly number[]>
+
 export type AssignResult =
-  | { readonly ok: true; readonly spans: readonly LineSpan[] }
-  | { readonly ok: false; readonly reason: string; readonly suggestions: readonly LineSpanSuggestion[] }
+  | { readonly ok: true; readonly spans: readonly LineSpan[]; readonly warnings: readonly LineSpanWarning[] }
+  | {
+      readonly ok: false
+      /** `shortage` は区間が行より少ない、`no_fit` は読み上げの長さに合う割り当てが無い（読み方を増やせば収まることがある）。 */
+      readonly cause: 'shortage' | 'no_fit'
+      /** 理由で名指しした行（`no_fit` は収まらない行。読み方を増やして読み直す行）。 */
+      readonly lineIndices: readonly number[]
+      readonly reason: string
+      readonly suggestions: readonly LineSpanSuggestion[]
+    }
 
 type LineInput = { readonly dub?: DialogueDub | undefined; readonly text?: string | undefined }
 
@@ -41,7 +61,14 @@ const clip = (chunk: DubChunk, span: DubChunk): DubChunk => ({
 const manualSpanOf = (line: LineInput): DubChunk | null =>
   line.dub?.startSec !== undefined && line.dub.endSec !== undefined ? { startSec: line.dub.startSec, endSec: line.dub.endSec } : null
 
-type SpokenLine = { readonly lineIndex: number; readonly manual: DubChunk | null; readonly weight: number }
+type SpokenLine = {
+  readonly lineIndex: number
+  readonly manual: DubChunk | null
+  readonly weight: number
+  readonly ttsSec: readonly number[] | null
+  /** 口に合わせる行か（置く時刻・収める長さ・切る長さ・元の声のままの行でない）。 */
+  readonly lip: boolean
+}
 
 /** 手の区間で区切った並び。手の区間の行 1 つか、その間のふつうの行の並び（と、使ってよい時刻の窓）。 */
 type Run =
@@ -89,13 +116,78 @@ const shortageReason = (lines: readonly SpokenLine[], found: number): string =>
   `セリフの ${lineNumbers(lines)} 行目に割り当てる元の声の区間が足りません（見つかったのは ${found} つ。2 人のセリフが続けて 1 つになっている可能性があります）。` +
   '行ごとに「行の区間」を入れてください'
 
+const misfitReason = (lines: readonly SpokenLine[]): string =>
+  `セリフの ${lineNumbers(lines)} 行目に、読み上げの長さに合う元の声の区間が見つかりません` +
+  `（どの区間に割り当てても、どの読み方でも ${String(DUB_MIN_TEMPO)}〜${String(DUB_MAX_TEMPO)} 倍の伸び縮みに収まりません）。` +
+  '読み方の指示を直すか、行ごとに「行の区間」を入れてください'
+
+const ambiguousWarning = (lineIndex: number): LineSpanWarning => ({
+  lineIndex,
+  warning: {
+    code: 'line_span_ambiguous',
+    message: `セリフの ${String(lineIndex + 1)} 行目: 元の声のどの区間か決めきれませんでした（ほぼ同じくらい合う区間が別にあります）。ずれていたら「行の区間」を入れてください`,
+  },
+})
+
+const isLip = (dub: DialogueDub | undefined): boolean =>
+  dub?.keepOriginal !== true && dub?.placeAtSec === undefined && dub?.fitSec === undefined && dub?.cutSec === undefined
+
+type AutoResult =
+  | { readonly ok: true; readonly groups: readonly ChunkGroup[]; readonly warnings: readonly LineSpanWarning[] }
+  | Extract<AssignResult, { ok: false }>
+
+const shortage = (window: readonly DubChunk[], lines: readonly SpokenLine[]): Extract<AssignResult, { ok: false }> => ({
+  ok: false,
+  cause: 'shortage',
+  lineIndices: lines.map((line) => line.lineIndex),
+  reason: shortageReason(lines, window.length),
+  suggestions: suggestLineSpans(window, lines),
+})
+
+/** 読み上げの長さで割り当てる。迷えば警告、収まらなければ止める。 */
+const autoByLength = (window: readonly DubChunk[], lines: readonly SpokenLine[]): AutoResult => {
+  const lengthLines: readonly LengthLine[] = lines.map((line) => ({ lineIndex: line.lineIndex, ttsSec: line.ttsSec, lip: line.lip }))
+  const [best, second] = assignByLength(window, lengthLines)
+  if (best === undefined) return shortage(window, lines)
+  if (best.misfits.length > 0) {
+    const misfits = lines.filter((line) => best.misfits.includes(line.lineIndex))
+    const suggestions = suggestLineSpans(window, lines)
+    return { ok: false, cause: 'no_fit', lineIndices: best.misfits, reason: misfitReason(misfits), suggestions }
+  }
+  const close = second !== undefined && second.cost - best.cost < ASSIGN_AMBIGUITY_MARGIN
+  const warnings = close
+    ? lines.flatMap((line, k) => {
+        const a = best.runs[k]
+        const b = second.runs[k]
+        return a?.[0] === b?.[0] && a?.[1] === b?.[1] ? [] : [ambiguousWarning(line.lineIndex)]
+      })
+    : []
+  return { ok: true, groups: best.runs.map(([from, to]) => window.slice(from, to)), warnings }
+}
+
+const autoAssign = (window: readonly DubChunk[], lines: readonly SpokenLine[]): AutoResult => {
+  if (window.length < lines.length) {
+    return shortage(window, lines)
+  }
+  if (lines.some((line) => line.ttsSec !== null)) return autoByLength(window, lines)
+  return { ok: true, groups: mergeChunksTo(window, lines.length), warnings: [] }
+}
+
 /**
  * 手の区間の行で並びを区切り、その間のふつうの行には、その間の時刻にある声の区間だけを割り当てる
  * （**手の区間をまたいでつながない**。またぐと、ふつうの行の区間が手の区間に重なる）。
  */
-export const assignLines = (chunks: readonly DubChunk[], lines: readonly LineInput[]): AssignResult => {
+export const assignLines = (chunks: readonly DubChunk[], lines: readonly LineInput[], ttsSec?: LineTtsLengths): AssignResult => {
   const spoken = lines
-    .map((line, lineIndex) => ({ lineIndex, manual: manualSpanOf(line), weight: Math.max(1, [...(line.text ?? '')].length) }))
+    .map(
+      (line, lineIndex): SpokenLine => ({
+        lineIndex,
+        manual: manualSpanOf(line),
+        weight: Math.max(1, [...(line.text ?? '')].length),
+        ttsSec: ttsSec?.get(lineIndex) ?? null,
+        lip: isLip(line.dub),
+      }),
+    )
     .filter((_, i) => lines[i]?.dub?.added !== true)
   const manualSpans = spoken.flatMap((line) => (line.manual === null ? [] : [line.manual]))
   const free = chunks.filter((chunk) => !manualSpans.some((span) => overlaps(chunk, span)))
@@ -105,19 +197,17 @@ export const assignLines = (chunks: readonly DubChunk[], lines: readonly LineInp
       if (run.kind === 'manual') {
         const manual = run.line.manual
         const inside = chunks.filter((chunk) => overlaps(chunk, manual)).map((chunk) => clip(chunk, manual))
-        return { ok: true, spans: [...acc.spans, { lineIndex: run.line.lineIndex, ...manual, source: 'manual', chunks: inside }] }
+        return { ...acc, spans: [...acc.spans, { lineIndex: run.line.lineIndex, ...manual, source: 'manual', chunks: inside }] }
       }
       const window = free.filter((chunk) => chunk.startSec >= run.fromSec && chunk.endSec <= run.toSec)
-      if (window.length < run.lines.length) {
-        return { ok: false, reason: shortageReason(run.lines, window.length), suggestions: suggestLineSpans(window, run.lines) }
-      }
-      const groups = mergeChunksTo(window, run.lines.length)
+      const auto = autoAssign(window, run.lines)
+      if (!auto.ok) return auto
       const spans = run.lines.map((line, k): LineSpan => {
-        const group = groups[k] ?? []
+        const group = auto.groups[k] ?? []
         return { lineIndex: line.lineIndex, ...spanOf(group), source: 'chunks', chunks: group }
       })
-      return { ok: true, spans: [...acc.spans, ...spans] }
+      return { ok: true, spans: [...acc.spans, ...spans], warnings: [...acc.warnings, ...auto.warnings] }
     },
-    { ok: true, spans: [] },
+    { ok: true, spans: [], warnings: [] },
   )
 }

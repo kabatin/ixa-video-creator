@@ -16,6 +16,7 @@ describe('assignLines', () => {
         { lineIndex: 0, startSec: 0.2, endSec: 0.9, source: 'chunks', chunks: [c(0.2, 0.5), c(0.55, 0.9)] },
         { lineIndex: 1, startSec: 1.6, endSec: 2.2, source: 'chunks', chunks: [c(1.6, 2.2)] },
       ],
+      warnings: [],
     })
   })
 
@@ -58,6 +59,8 @@ describe('assignLines', () => {
     const result = assignLines([c(0.2, 2.0)], [{}, {}])
     expect(result).toEqual({
       ok: false,
+      cause: 'shortage',
+      lineIndices: [0, 1],
       reason:
         'セリフの 1・2 行目に割り当てる元の声の区間が足りません（見つかったのは 1 つ。2 人のセリフが続けて 1 つになっている可能性があります）。' +
         '行ごとに「行の区間」を入れてください',
