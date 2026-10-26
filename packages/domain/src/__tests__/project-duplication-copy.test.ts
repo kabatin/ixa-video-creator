@@ -541,6 +541,7 @@ describe('声とナレーション', () => {
       tuning: {},
       textStyleId: TARGET_STYLE,
       characterId: TARGET_CHARACTER,
+      designedVoice: null,
     })
   })
 

@@ -61,6 +61,10 @@ describe('assignLines', () => {
       reason:
         'セリフの 1・2 行目に割り当てる元の声の区間が足りません（見つかったのは 1 つ。2 人のセリフが続けて 1 つになっている可能性があります）。' +
         '行ごとに「行の区間」を入れてください',
+      suggestions: [
+        { lineIndex: 0, startSec: 0.2, endSec: 1.1 },
+        { lineIndex: 1, startSec: 1.1, endSec: 2 },
+      ],
     })
   })
 })

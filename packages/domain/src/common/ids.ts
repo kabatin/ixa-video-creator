@@ -60,6 +60,10 @@ export const TakeMotionAnalysisId = brandedId('TakeMotionAnalysisId')
 export const AccessTokenId = brandedId('AccessTokenId')
 /** AI エージェントの会話（タスク）（ADR-0058）。 */
 export const AgentSessionId = brandedId('AgentSessionId')
+/** 声の差し替えのジョブ（ADR-0062）。 */
+export const DubJobId = brandedId('DubJobId')
+/** 保存した読み上げ（ADR-0062。声・読み方・文が同じなら使い回す）。 */
+export const TtsClipId = brandedId('TtsClipId')
 
 export type WorkspaceId = z.infer<typeof WorkspaceId>
 export type ProjectId = z.infer<typeof ProjectId>
@@ -103,6 +107,8 @@ export type UploadedSfxId = z.infer<typeof UploadedSfxId>
 export type TakeMotionAnalysisId = z.infer<typeof TakeMotionAnalysisId>
 export type AccessTokenId = z.infer<typeof AccessTokenId>
 export type AgentSessionId = z.infer<typeof AgentSessionId>
+export type DubJobId = z.infer<typeof DubJobId>
+export type TtsClipId = z.infer<typeof TtsClipId>
 
 /**
  * ID の発行器。**同じミリ秒でも必ず増える**（`monotonicFactory`）。

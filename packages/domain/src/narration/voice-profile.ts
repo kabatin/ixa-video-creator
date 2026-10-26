@@ -28,6 +28,34 @@ export const VoiceTuning = z
   .strict()
 export type VoiceTuning = z.infer<typeof VoiceTuning>
 
+/** 作った声の性別（Voice Design の `gender`）。 */
+export const DesignedVoiceGender = z.enum(['female', 'male'])
+export type DesignedVoiceGender = z.infer<typeof DesignedVoiceGender>
+
+/** 作った鍵の名札の形（例 key2-2026-10-14）。**鍵そのものではない**（秘密ではない設定値 `GEMINI_KEY_LABEL`）。 */
+export const GeminiKeyLabel = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z0-9._-]+$/, '鍵の名札は英数字と . _ - だけにしてください')
+export type GeminiKeyLabel = z.infer<typeof GeminiKeyLabel>
+
+export const MAX_DESIGNED_VOICE_DESCRIPTION = 1000
+
+/**
+ * 説明から作った声（Voice Design。ADR-0062）。**作った鍵のプロジェクトでしか使えない**ので、作った鍵の名札を一緒に持つ。
+ * 今の鍵の名札と違えば、使う前に理由を出して止める。
+ */
+export const DesignedVoice = z
+  .object({
+    description: z.string().trim().min(1).max(MAX_DESIGNED_VOICE_DESCRIPTION),
+    gender: DesignedVoiceGender,
+    keyLabel: GeminiKeyLabel,
+  })
+  .strict()
+export type DesignedVoice = z.infer<typeof DesignedVoice>
+
 const fields = {
   projectId: ProjectId,
   /** 画面での呼び名（例: ナレーター・戦子の声）。 */
@@ -57,6 +85,8 @@ const fields = {
 export const VoiceProfile = z.object({
   id: VoiceProfileId,
   ...fields,
+  /** 説明から作った声なら、その説明と作った鍵の名札（ADR-0062）。既製の声は null。画面・API の直す口では変えない。 */
+  designedVoice: DesignedVoice.nullable().default(null),
   createdAt: z.date(),
   updatedAt: z.date(),
 })
@@ -72,6 +102,7 @@ export const CreateVoiceProfileInput = z.object({
   tuning: fields.tuning.default({}),
   textStyleId: fields.textStyleId.default(null),
   characterId: fields.characterId.default(null),
+  designedVoice: DesignedVoice.nullable().default(null),
 })
 export type CreateVoiceProfileInput = z.input<typeof CreateVoiceProfileInput>
 

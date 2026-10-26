@@ -16,7 +16,7 @@ const bundle = (opts: { fourView?: boolean; canonical?: boolean } = {}): Charact
     projectId: MediaAssetId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAY') as never,
     name: 'takepi', displayName: 'takepi', description: '',
     identityAnchors: ['細身'], styleTokens: [], colorPalette: [],
-    speakerNo: 1, speechName: null, voiceDescription: null, createdAt: new Date(),
+    speakerNo: 1, speechName: null, voiceDescription: null, dialogueVoiceProfileId: null, dialogueLevelDb: 0, createdAt: new Date(),
   },
   look: {
     id: CharacterLookId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAX'),

@@ -233,6 +233,8 @@ export const copyVoiceInput = (
   tuning: voice.tuning,
   textStyleId: remapOrNull(voice.textStyleId, ctx.styles),
   characterId: remapOrNull(voice.characterId, ctx.characters),
+  // 作った声（ADR-0062）は同じ鍵なら写した先でも読める。名札ごと写す（違う鍵なら使う前に止まる）。
+  designedVoice: voice.designedVoice,
 })
 
 /** 原稿の行を新しい作品の行にする。話す声は写した先へ。写していなければ「声が未定」。 */

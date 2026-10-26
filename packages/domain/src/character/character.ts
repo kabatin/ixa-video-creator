@@ -1,8 +1,9 @@
 import { z } from 'zod'
 import {
   CharacterId, CharacterIdentityImageId, CharacterLookId,
-  CharacterLookImageId, MediaAssetId, ProjectId, WorkspaceId,
+  CharacterLookImageId, MediaAssetId, ProjectId, VoiceProfileId, WorkspaceId,
 } from '../common/ids.js'
+import { MAX_DUB_LEVEL_DB, MIN_DUB_LEVEL_DB } from '../dub/dialogue-dub.js'
 
 /**
  * 四面図（正面/側面/背面/斜めを 1 枚に集約したターンアラウンドシート）。
@@ -57,6 +58,13 @@ export const Character = z.object({
   speechName: OptionalEnglishText(MAX_SPEECH_NAME_LENGTH),
   /** 声の説明（英語。例 a calm, deep, refined elderly gentleman's voice）。全 Shot で同じ文になる。 */
   voiceDescription: OptionalEnglishText(MAX_VOICE_DESCRIPTION_LENGTH),
+  /**
+   * セリフの声（ADR-0062）。声の差し替えで、この人の行を読み直す声（同じ作品の声のプロファイル）。
+   * null は未設定（差し替えの前に理由を出して止める）。声を消すと null に戻る。
+   */
+  dialogueVoiceProfileId: VoiceProfileId.nullable().default(null),
+  /** 距離の既定（dB。ADR-0062）。差し替えた声を、元の声と同じ大きさにしてから足す。行ごとの `dub.levelDb` が優先。 */
+  dialogueLevelDb: z.number().finite().min(MIN_DUB_LEVEL_DB).max(MAX_DUB_LEVEL_DB).default(0),
 
   createdAt: z.date(),
 })
@@ -123,6 +131,7 @@ export const UpdateCharacterPatch = Character.pick({
   name: true, displayName: true, description: true,
   identityAnchors: true, styleTokens: true, colorPalette: true,
   speechName: true, voiceDescription: true,
+  dialogueVoiceProfileId: true, dialogueLevelDb: true,
 }).partial()
 export type UpdateCharacterPatch = z.input<typeof UpdateCharacterPatch>
 

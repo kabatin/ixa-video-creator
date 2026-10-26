@@ -75,6 +75,7 @@ describe('VoiceProfile', () => {
       tuning: {},
       textStyleId: null,
       characterId: null,
+      designedVoice: null,
     })
   })
 

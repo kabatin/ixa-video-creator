@@ -22,9 +22,14 @@ export type LineSpan = {
   readonly chunks: readonly DubChunk[]
 }
 
-export type AssignResult = { readonly ok: true; readonly spans: readonly LineSpan[] } | { readonly ok: false; readonly reason: string }
+/** 行の手の区間の案（ADR-0062 段 5b）。まとまった声の区間を、行の文字数の比で割ったもの。画面が各行に先に入れておく。 */
+export type LineSpanSuggestion = { readonly lineIndex: number; readonly startSec: number; readonly endSec: number }
 
-type LineInput = { readonly dub?: DialogueDub | undefined }
+export type AssignResult =
+  | { readonly ok: true; readonly spans: readonly LineSpan[] }
+  | { readonly ok: false; readonly reason: string; readonly suggestions: readonly LineSpanSuggestion[] }
+
+type LineInput = { readonly dub?: DialogueDub | undefined; readonly text?: string | undefined }
 
 const overlaps = (a: DubChunk, b: DubChunk): boolean => a.startSec < b.endSec && b.startSec < a.endSec
 
@@ -36,7 +41,7 @@ const clip = (chunk: DubChunk, span: DubChunk): DubChunk => ({
 const manualSpanOf = (line: LineInput): DubChunk | null =>
   line.dub?.startSec !== undefined && line.dub.endSec !== undefined ? { startSec: line.dub.startSec, endSec: line.dub.endSec } : null
 
-type SpokenLine = { readonly lineIndex: number; readonly manual: DubChunk | null }
+type SpokenLine = { readonly lineIndex: number; readonly manual: DubChunk | null; readonly weight: number }
 
 /** 手の区間で区切った並び。手の区間の行 1 つか、その間のふつうの行の並び（と、使ってよい時刻の窓）。 */
 type Run =
@@ -60,6 +65,26 @@ const runsOf = (spoken: readonly SpokenLine[]): readonly Run[] => {
 
 const lineNumbers = (lines: readonly SpokenLine[]): string => lines.map((line) => line.lineIndex + 1).join('・')
 
+const roundMs = (sec: number): number => Math.round(sec * 1000) / 1000
+
+/**
+ * 区間が足りない並びの、行ごとの手の区間の案。並びの声の区間の頭から尻までを、行の文字数の比で割る。
+ * 声の区間が 1 つも無ければ案は出さない（どこを割るか決められない）。
+ */
+const suggestLineSpans = (window: readonly DubChunk[], lines: readonly SpokenLine[]): readonly LineSpanSuggestion[] => {
+  const head = window[0]
+  const tail = window[window.length - 1]
+  if (head === undefined || tail === undefined || lines.length === 0) return []
+  const total = lines.reduce((sum, line) => sum + line.weight, 0)
+  const length = tail.endSec - head.startSec
+  const edges = lines.reduce<readonly number[]>((acc, line) => [...acc, (acc[acc.length - 1] ?? 0) + line.weight], [0])
+  return lines.map((line, k) => ({
+    lineIndex: line.lineIndex,
+    startSec: roundMs(head.startSec + ((edges[k] ?? 0) / total) * length),
+    endSec: roundMs(head.startSec + ((edges[k + 1] ?? total) / total) * length),
+  }))
+}
+
 const shortageReason = (lines: readonly SpokenLine[], found: number): string =>
   `セリフの ${lineNumbers(lines)} 行目に割り当てる元の声の区間が足りません（見つかったのは ${found} つ。2 人のセリフが続けて 1 つになっている可能性があります）。` +
   '行ごとに「行の区間」を入れてください'
@@ -69,7 +94,9 @@ const shortageReason = (lines: readonly SpokenLine[], found: number): string =>
  * （**手の区間をまたいでつながない**。またぐと、ふつうの行の区間が手の区間に重なる）。
  */
 export const assignLines = (chunks: readonly DubChunk[], lines: readonly LineInput[]): AssignResult => {
-  const spoken = lines.map((line, lineIndex) => ({ lineIndex, manual: manualSpanOf(line) })).filter((_, i) => lines[i]?.dub?.added !== true)
+  const spoken = lines
+    .map((line, lineIndex) => ({ lineIndex, manual: manualSpanOf(line), weight: Math.max(1, [...(line.text ?? '')].length) }))
+    .filter((_, i) => lines[i]?.dub?.added !== true)
   const manualSpans = spoken.flatMap((line) => (line.manual === null ? [] : [line.manual]))
   const free = chunks.filter((chunk) => !manualSpans.some((span) => overlaps(chunk, span)))
   return runsOf(spoken).reduce<AssignResult>(
@@ -81,7 +108,9 @@ export const assignLines = (chunks: readonly DubChunk[], lines: readonly LineInp
         return { ok: true, spans: [...acc.spans, { lineIndex: run.line.lineIndex, ...manual, source: 'manual', chunks: inside }] }
       }
       const window = free.filter((chunk) => chunk.startSec >= run.fromSec && chunk.endSec <= run.toSec)
-      if (window.length < run.lines.length) return { ok: false, reason: shortageReason(run.lines, window.length) }
+      if (window.length < run.lines.length) {
+        return { ok: false, reason: shortageReason(run.lines, window.length), suggestions: suggestLineSpans(window, run.lines) }
+      }
       const groups = mergeChunksTo(window, run.lines.length)
       const spans = run.lines.map((line, k): LineSpan => {
         const group = groups[k] ?? []

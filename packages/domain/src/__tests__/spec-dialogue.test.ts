@@ -32,6 +32,8 @@ const character = (overrides: Partial<Character> = {}): Character => ({
   speakerNo: 2,
   speechName: 'The cat',
   voiceDescription: "a soft, sly, teasing young woman's voice",
+  dialogueVoiceProfileId: null,
+  dialogueLevelDb: 0,
   createdAt: new Date(0),
   ...overrides,
 })

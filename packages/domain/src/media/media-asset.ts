@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  DubJobId,
   ImageGenerationJobId,
   MediaAssetId,
   MusicJobId,
@@ -9,6 +10,7 @@ import {
   TakeId,
   ThumbnailId,
   VoiceJobId,
+  VoiceProfileId,
   WorkspaceId,
 } from '../common/ids.js'
 import { Seconds } from '../common/time.js'
@@ -61,6 +63,10 @@ export const MediaOrigin = z.discriminatedUnion('type', [
   z.object({ type: z.literal('generated_music'), musicJobId: MusicJobId }),
   /** AI で作った効果音（ADR-0052）。1 本目はタイムラインの効果音の段に置き、残りは差し替えの候補。 */
   z.object({ type: z.literal('generated_sfx'), sfxJobId: SfxJobId }),
+  /** 声の差し替え（ADR-0062）で読み上げた声（`tts_clips` が指す。同じ声・読み方・文なら次のジョブも使い回す）。 */
+  z.object({ type: z.literal('generated_dub'), dubJobId: DubJobId }),
+  /** 説明から作った声（Voice Design。ADR-0062）の試し聞き。 */
+  z.object({ type: z.literal('voice_design'), voiceProfileId: VoiceProfileId }),
   z.object({ type: z.literal('rendered'), renderJobId: RenderJobId }),
   /** 書き出したサムネイル（ADR-0051）。書き出しジョブではないので `rendered` と分ける。 */
   z.object({ type: z.literal('thumbnail'), thumbnailId: ThumbnailId }),

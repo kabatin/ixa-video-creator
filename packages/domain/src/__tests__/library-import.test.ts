@@ -90,6 +90,7 @@ describe('importVoiceInput', () => {
       tuning: {},
       textStyleId: null,
       characterId: null,
+      designedVoice: null,
     })
   })
 
