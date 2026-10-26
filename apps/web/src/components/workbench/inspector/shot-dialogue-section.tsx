@@ -8,10 +8,10 @@ import {
   type DubLineSpanSuggestion,
   type Shot,
 } from '@ixa/domain'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useAssets } from '@/components/workbench/asset-store'
 import { DialogueDubFields } from '@/components/workbench/inspector/dialogue-dub-fields'
-import { INPUT_CLASS, TEXTAREA_CLASS } from '@/components/workbench/ui/section'
+import { INPUT_CLASS } from '@/components/workbench/ui/section'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import {
@@ -29,7 +29,24 @@ import {
 
 type Status = { readonly kind: 'idle' | 'saving' | 'saved' } | { readonly kind: 'error'; readonly message: string }
 
-const ICON_BUTTON = 'h-6 w-6 rounded text-muted hover:bg-surface-2 hover:text-text disabled:opacity-40'
+const ICON_BUTTON = 'h-6 w-6 shrink-0 rounded text-muted hover:bg-surface-2 hover:text-text disabled:opacity-40'
+
+/** セリフと訳文の欄。1 行から中身に合わせて伸びる（2026-10-26。2 段の大きな欄で 1 行が背を取っていた）。 */
+const LINE_FIELD_CLASS =
+  'block w-full resize-none overflow-hidden rounded border border-line-strong bg-bg px-2 py-0.5 text-text ' +
+  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus disabled:text-muted'
+
+/** 中身に合わせて欄の背を伸ばす。描く前に測る（伸びる前の 1 行が一瞬見えない）。 */
+const useAutoHeight = (value: string) => {
+  const ref = useRef<HTMLTextAreaElement | null>(null)
+  useLayoutEffect(() => {
+    const element = ref.current
+    if (element === null) return
+    element.style.height = 'auto'
+    element.style.height = `${String(element.scrollHeight + 2)}px`
+  }, [value])
+  return ref
+}
 
 /**
  * Shot のセリフ（ADR-0059）。行を足す・直す・消す・並べ替える。**変えた時点で保存する**（セリフは欄を離れたとき）。
@@ -199,11 +216,14 @@ const DialogueRow = ({
   readonly onRemove: () => void
 }) => {
   const label = `${String(index + 1)} 行目`
+  const textRef = useAutoHeight(draft.text)
+  const translationRef = useAutoHeight(draft.translation ?? '')
   // 消したキャラクターが話し手の行。選択肢に無い値だと先頭の人を選んだように見えるので、その旨の選択肢を出す。
   const missing =
     draft.speakerId !== null && ![...choices.cast, ...choices.others].some((c) => c.id === draft.speakerId)
   return (
     <div className="space-y-1 rounded border border-line p-1">
+      {/* 1 列目: 話し手・画面外・並べ替え・消す（2026-10-26。以前は 4 段に分かれていた）。 */}
       <div className="flex items-center gap-1">
         <select
           aria-label={`${label}の話し手`}
@@ -212,7 +232,7 @@ const DialogueRow = ({
           onChange={(event) => {
             onChange({ speakerId: CharacterId.parse(event.target.value) })
           }}
-          className={INPUT_CLASS}
+          className={`${INPUT_CLASS} min-w-0 flex-1`}
         >
           {draft.speakerId === null && <option value="">話し手を選ぶ</option>}
           {missing && <option value={draft.speakerId ?? ''}>見つからない話し手（選び直してください）</option>}
@@ -235,6 +255,22 @@ const DialogueRow = ({
             </optgroup>
           )}
         </select>
+        {/* 見えるのは「画面外」だけ。意味の全文は読み上げと title に渡す。 */}
+        <label
+          title="画面外の声（映っている人の口は閉じたまま）"
+          className="flex shrink-0 items-center gap-1 whitespace-nowrap text-xs text-muted"
+        >
+          <input
+            type="checkbox"
+            aria-label="画面外の声（映っている人の口は閉じたまま）"
+            checked={draft.offscreen}
+            disabled={disabled}
+            onChange={(event) => {
+              onChange({ offscreen: event.target.checked })
+            }}
+          />
+          <span aria-hidden="true">画面外</span>
+        </label>
         <button type="button" aria-label={`${label}を上へ`} disabled={disabled || index === 0} onClick={() => { onMove(-1) }} className={ICON_BUTTON}>
           ↑
         </button>
@@ -246,6 +282,8 @@ const DialogueRow = ({
         </button>
       </div>
       <textarea
+        ref={textRef}
+        rows={1}
         aria-label={`${label}のセリフ`}
         value={draft.text}
         placeholder="ねえ、ネズミくん。"
@@ -256,12 +294,14 @@ const DialogueRow = ({
         onBlur={(event) => {
           onChange({ text: event.target.value })
         }}
-        className={TEXTAREA_CLASS}
+        className={`${LINE_FIELD_CLASS} text-sm`}
       />
       <textarea
+        ref={translationRef}
+        rows={1}
         aria-label={`${label}の訳文`}
         value={draft.translation ?? ''}
-        placeholder="訳文（英語の字幕。2 段目に小さく出す）"
+        placeholder="英語の字幕（任意）"
         disabled={disabled}
         onChange={(event) => {
           onDraft({ translation: event.target.value })
@@ -269,19 +309,8 @@ const DialogueRow = ({
         onBlur={(event) => {
           onChange({ translation: translationFromInput(event.target.value) })
         }}
-        className={TEXTAREA_CLASS}
+        className={`${LINE_FIELD_CLASS} text-xs`}
       />
-      <label className="flex items-center gap-1 text-xs text-muted">
-        <input
-          type="checkbox"
-          checked={draft.offscreen}
-          disabled={disabled}
-          onChange={(event) => {
-            onChange({ offscreen: event.target.checked })
-          }}
-        />
-        画面外の声（映っている人の口は閉じたまま）
-      </label>
       <DialogueDubFields
         label={label}
         index={index}

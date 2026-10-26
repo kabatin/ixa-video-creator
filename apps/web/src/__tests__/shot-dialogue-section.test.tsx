@@ -75,6 +75,27 @@ describe('ShotDialogueSection', () => {
     })
   })
 
+  /**
+   * 1 行を詰める（制作者 2026-10-26「インスペクターが縦長」）。話し手・画面外・並べ替え・消すを 1 列に並べ、
+   * その下にセリフと訳文（1 行から伸びる）。
+   */
+  it('話し手・画面外・並べ替え・消すを 1 列に並べ、画面外を押すと保存する', async () => {
+    const saved: DialogueLine = { speakerId: cat.id, text: 'ねえ', offscreen: false, translation: null }
+    const onSave = render(aWorkbenchShot(1, { dialogue: [saved] }))
+    const speaker = screen.getByRole('combobox', { name: '1 行目の話し手' })
+    const offscreen = screen.getByRole('checkbox', { name: '画面外の声（映っている人の口は閉じたまま）' })
+    const row = speaker.parentElement as HTMLElement
+    expect(row.contains(offscreen)).toBe(true)
+    expect(row.contains(screen.getByRole('button', { name: '1 行目を消す' }))).toBe(true)
+    expect(screen.getByRole('textbox', { name: '1 行目の訳文' })).toHaveAttribute('placeholder', '英語の字幕（任意）')
+    expect(screen.getByRole('textbox', { name: '1 行目のセリフ' })).toHaveAttribute('rows', '1')
+
+    await userEvent.click(offscreen)
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith({ dialogue: [{ ...saved, offscreen: true }] })
+    })
+  })
+
   it('呼び名と声の説明が無い話し手を知らせる', () => {
     render(aWorkbenchShot(1, { dialogue: [{ speakerId: mouse.id, text: 'なに？', offscreen: false, translation: null }] }))
     expect(screen.getByText('セリフの話し手「ネズミ」に英語の呼び名がありません')).toBeTruthy()
