@@ -44,6 +44,13 @@ export const DubLineRecord = z
     warnings: z.array(DubWarning).max(8),
   })
   .strict()
+  .superRefine((line, ctx) => {
+    const issue = (path: string, message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message })
+    if (line.placedEndSec < line.placedStartSec) issue('placedEndSec', '置いた声の終わりが始まりより前です')
+    if (line.tempoMin > line.tempoMax) issue('tempoMin', '伸縮の幅の最小が最大より大きいです')
+    if ((line.sourceStartSec === null) !== (line.sourceEndSec === null)) issue('sourceEndSec', '元の区間は始まりと終わりを両方持ちます')
+    if (line.added !== (line.sourceStartSec === null)) issue('sourceStartSec', '足す行だけが元の区間を持ちません')
+  })
 export type DubLineRecord = z.infer<typeof DubLineRecord>
 
 export const DubParams = z

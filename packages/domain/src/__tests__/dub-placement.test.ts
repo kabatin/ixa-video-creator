@@ -33,7 +33,7 @@ describe('chunkTempo', () => {
 describe('planLipPair', () => {
   it('組の中の間を詰め（語頭 0.04・語尾 0.06 残す）、倍率は中身の長さ ÷ 元の区間', () => {
     // 読み上げ 0.2〜0.6 と 0.9〜1.3（中身 0.8 秒）。残す分を足して 0.16〜0.66 + 0.86〜1.36 = 1.0 秒。
-    const plan = planLipPair({ tts: [c(0.2, 0.6), c(0.9, 1.3)], source: c(2, 2.8) }, { ttsDurationSec: 2, nextSourceStartSec: null })
+    const plan = planLipPair({ tts: [c(0.2, 0.6), c(0.9, 1.3)], source: c(2, 2.8) }, { ttsDurationSec: 2, nextSourceStartSec: null, shotDurationSec: 10 })
     expect(plan.ok).toBe(true)
     if (!plan.ok) return
     expect(plan.pieces).toEqual([c(0.16, 0.66), c(0.86, 1.36)])
@@ -44,25 +44,31 @@ describe('planLipPair', () => {
   })
 
   it('残す分が重なる短い間は 1 つにつなぐ', () => {
-    const plan = planLipPair({ tts: [c(0.2, 0.6), c(0.65, 1.0)], source: c(1, 1.8) }, { ttsDurationSec: 2, nextSourceStartSec: null })
+    const plan = planLipPair({ tts: [c(0.2, 0.6), c(0.65, 1.0)], source: c(1, 1.8) }, { ttsDurationSec: 2, nextSourceStartSec: null, shotDurationSec: 10 })
     expect(plan.ok && plan.pieces).toEqual([c(0.16, 1.06)])
   })
 
   it('次の区間に 0.03 秒を残して切る', () => {
-    const plan = planLipPair({ tts: [c(0.1, 0.9)], source: c(1, 1.6) }, { ttsDurationSec: 1, nextSourceStartSec: 1.65 })
+    const plan = planLipPair({ tts: [c(0.1, 0.9)], source: c(1, 1.6) }, { ttsDurationSec: 1, nextSourceStartSec: 1.65, shotDurationSec: 10 })
     expect(plan.ok).toBe(true)
     if (!plan.ok) return
     expect(plan.placedEndSec).toBeCloseTo(1.62, 6)
     expect(plan.warnings.map((w) => w.code)).toContain('cut_by_next')
   })
 
+  it('最後の組は Shot の尺で切る', () => {
+    const plan = planLipPair({ tts: [c(0.1, 0.9)], source: c(1, 1.6) }, { ttsDurationSec: 1, nextSourceStartSec: null, shotDurationSec: 1.6 })
+    expect(plan.ok && plan.placedEndSec).toBe(1.6)
+    expect(plan.ok && plan.warnings.map((w) => w.code)).toContain('cut_by_next')
+  })
+
   it('頭は 0 秒より前に出ない', () => {
-    const plan = planLipPair({ tts: [c(0.1, 0.5)], source: c(0.02, 0.42) }, { ttsDurationSec: 1, nextSourceStartSec: null })
+    const plan = planLipPair({ tts: [c(0.1, 0.5)], source: c(0.02, 0.42) }, { ttsDurationSec: 1, nextSourceStartSec: null, shotDurationSec: 10 })
     expect(plan.ok && plan.placedStartSec).toBe(0)
   })
 
   it('1.6 倍を超える組は止める', () => {
-    const plan = planLipPair({ tts: [c(0, 2)], source: c(1, 1.5) }, { ttsDurationSec: 2, nextSourceStartSec: null })
+    const plan = planLipPair({ tts: [c(0, 2)], source: c(1, 1.5) }, { ttsDurationSec: 2, nextSourceStartSec: null, shotDurationSec: 10 })
     expect(plan.ok).toBe(false)
   })
 })
@@ -88,5 +94,9 @@ describe('cutPlan', () => {
 
   it('切る長さより短ければそのまま（フェードもしない）', () => {
     expect(cutPlan(1, 1.2)).toEqual({ durationSec: 1, fadeOutSec: 0 })
+  })
+
+  it('切る長さが 0.15 秒より短ければ、フェードは切る長さまで', () => {
+    expect(cutPlan(1, 0.1)).toEqual({ durationSec: 0.1, fadeOutSec: 0.1 })
   })
 })

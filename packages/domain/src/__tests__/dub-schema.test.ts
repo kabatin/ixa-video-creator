@@ -45,6 +45,10 @@ describe('DialogueLine の dub', () => {
     ['足す行でないのに音量を合わせる行', { levelLikeIndex: 0 }],
     ['音量を合わせる行の番号が上限を超える', { added: true, placeAtSec: 1, levelLikeIndex: MAX_DIALOGUE_LINES }],
     ['音量を合わせる行の番号が小数', { added: true, placeAtSec: 1, levelLikeIndex: 0.5 }],
+    ['元の声のままで置く時刻', { keepOriginal: true, placeAtSec: 1 }],
+    ['元の声のままで収める長さ', { keepOriginal: true, fitSec: 1 }],
+    ['元の声のままで切る長さ', { keepOriginal: true, cutSec: 1 }],
+    ['元の声のままで読み方の指示', { keepOriginal: true, style: '叱るように' }],
   ])('%s は拒む', (_label, dub) => {
     expect(DialogueDub.safeParse(dub).success).toBe(false)
   })
@@ -102,8 +106,18 @@ describe('ProviderParams の dub', () => {
     ['倍率が 0', { ...params, lines: [{ ...record, tempoMin: 0 }] }],
     ['知らない読み方', { ...params, lines: [{ ...record, reading: 'shout' }] }],
     ['元の Take が無い', { ...params, sourceTakeId: undefined }],
+    ['置いた終わりが始まりより前', { ...params, lines: [{ ...record, placedStartSec: 1, placedEndSec: 0.5 }] }],
+    ['伸縮の最小が最大より大きい', { ...params, lines: [{ ...record, tempoMin: 1.3, tempoMax: 1.1 }] }],
+    ['足す行なのに元の区間がある', { ...params, lines: [{ ...record, added: true }] }],
+    ['足す行でないのに元の区間が無い', { ...params, lines: [{ ...record, sourceStartSec: null, sourceEndSec: null }] }],
+    ['元の区間の片方だけ', { ...params, lines: [{ ...record, sourceEndSec: null }] }],
   ])('%s は拒む', (_label, value) => {
     expect(ProviderParams.safeParse(value).success).toBe(false)
+  })
+
+  it('足す行は元の区間が null', () => {
+    const added = { ...record, added: true, mode: 'place_at', sourceStartSec: null, sourceEndSec: null, agreement: null }
+    expect(ProviderParams.safeParse({ ...params, lines: [added] }).success).toBe(true)
   })
 
   it('前からの種類（http・import）はそのまま通る', () => {

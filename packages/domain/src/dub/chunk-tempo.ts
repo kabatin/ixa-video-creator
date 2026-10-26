@@ -16,7 +16,7 @@ export const DUB_WARN_TEMPO = 1.4
 export const DUB_ONSET_KEEP_SEC = 0.04
 /** 語尾の後に残す長さ。 */
 export const DUB_OFFSET_KEEP_SEC = 0.06
-/** 次の区間との間に必ず残す長さ（声を重ねない）。 */
+/** 次の区間との間に必ず残す長さ（声を重ねない）。最後の組は Shot の尺で切る。 */
 export const DUB_NEXT_GAP_SEC = 0.03
 /** `cutSec` で切るときの最後のフェード。 */
 export const DUB_CUT_FADE_SEC = 0.15
@@ -87,7 +87,12 @@ export type LipPlan =
 /** 口に合わせる 1 組の置き方。倍率 = （詰めた長さ − 残した分）÷ 元の区間の長さ。 */
 export const planLipPair = (
   pair: ChunkPair,
-  context: { readonly ttsDurationSec: number; readonly nextSourceStartSec: number | null },
+  context: {
+    readonly ttsDurationSec: number
+    readonly nextSourceStartSec: number | null
+    /** Shot（元の Take の音）の尺。最後の組はここで切る。 */
+    readonly shotDurationSec: number
+  },
 ): LipPlan => {
   const pieces = piecesOf(pair.tts, context.ttsDurationSec)
   const ttsLenSec = pieces.reduce((sum, piece) => sum + (piece.endSec - piece.startSec), 0)
@@ -96,7 +101,7 @@ export const planLipPair = (
   if (!tempo.ok) return tempo
   const placedStartSec = roundMs(Math.max(0, pair.source.startSec - DUB_ONSET_KEEP_SEC))
   const naturalEnd = placedStartSec + ttsLenSec / tempo.tempo
-  const limit = context.nextSourceStartSec === null ? Number.POSITIVE_INFINITY : context.nextSourceStartSec - DUB_NEXT_GAP_SEC
+  const limit = context.nextSourceStartSec === null ? context.shotDurationSec : context.nextSourceStartSec - DUB_NEXT_GAP_SEC
   const cut = naturalEnd > limit + EPS
   return {
     ok: true,
@@ -108,7 +113,7 @@ export const planLipPair = (
     cut,
     warnings: [
       ...tempo.warnings,
-      ...(cut ? [{ code: 'cut_by_next' as const, message: '次の声に重なる所を切りました' }] : []),
+      ...(cut ? [{ code: 'cut_by_next' as const, message: '次の声か Shot の終わりに掛かる所を切りました' }] : []),
     ],
   }
 }
@@ -121,4 +126,4 @@ export const fitTempo = (lengthSec: number, fitSec: number): TempoResult => {
 
 /** `cutSec`: 縮めずに切る。切るときだけ最後をフェードする。 */
 export const cutPlan = (lengthSec: number, cutSec: number): { readonly durationSec: number; readonly fadeOutSec: number } =>
-  lengthSec <= cutSec + EPS ? { durationSec: lengthSec, fadeOutSec: 0 } : { durationSec: cutSec, fadeOutSec: DUB_CUT_FADE_SEC }
+  lengthSec <= cutSec + EPS ? { durationSec: lengthSec, fadeOutSec: 0 } : { durationSec: cutSec, fadeOutSec: Math.min(DUB_CUT_FADE_SEC, cutSec) }

@@ -65,6 +65,10 @@ const conflictsOf = (dub: DialogueDubShape): readonly { readonly path: string; r
   ...(dub.added === true && dub.startSec !== undefined
     ? [{ path: 'startSec', message: '足す行には元の声が無いので、行の区間は入れられません' }]
     : []),
+  ...(dub.keepOriginal === true &&
+  (dub.placeAtSec !== undefined || dub.fitSec !== undefined || dub.cutSec !== undefined || dub.style !== undefined)
+    ? [{ path: 'keepOriginal', message: '元の声のままの行には、置く時刻・収める長さ・切る長さ・読み方の指示は入れられません' }]
+    : []),
   ...(dub.added !== true && dub.levelLikeIndex !== undefined
     ? [{ path: 'levelLikeIndex', message: '音量を合わせる行は、足す行にだけ指定できます' }]
     : []),
