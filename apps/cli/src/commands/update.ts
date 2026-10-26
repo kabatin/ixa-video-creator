@@ -108,7 +108,13 @@ const fetchStage = async (system: System, repo: RepoPaths, out: Output, options:
     return finish(out, true, [], { from, to: from, upToDate: true })
   }
   const to = formatVersion(target.version)
-  const ff = fastForwardBlocker(fastForwardOf(await git.ancestry(target.ref)), target.ref)
+  const relation = fastForwardOf(await git.ancestry(target.ref))
+  // タグの名前は新しいが中身は今と同じ（package.json の版を上げ忘れたタグなど）。取り込むものが無い。
+  if (relation === 'same') {
+    out.line(`✓ 最新です（${target.ref} と同じコミット）`)
+    return finish(out, true, [], { from, to: from, upToDate: true })
+  }
+  const ff = fastForwardBlocker(relation, target.ref)
   const allBlockers = [...blockers, ...(ff === null ? [] : [ff])]
   out.line(`新しい版があります: ${describeMove(current, target.version)}`)
   if (options.check) return finish(out, true, allBlockers, { check: true, from, to })
