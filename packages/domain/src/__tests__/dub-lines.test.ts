@@ -109,4 +109,12 @@ describe('shouldStopTrying / pickReading', () => {
     expect(pickReading(tries)?.kind).toBe('pause')
     expect(pickReading([])).toBeNull()
   })
+
+  it('どれも一致率が測れなければ、最初に試したもの', () => {
+    const tries = [
+      { kind: 'plain', agreement: null },
+      { kind: 'pause', agreement: null },
+    ] as const
+    expect(pickReading(tries)?.kind).toBe('plain')
+  })
 })

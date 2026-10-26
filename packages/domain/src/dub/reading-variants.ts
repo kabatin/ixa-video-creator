@@ -31,6 +31,12 @@ export const readingVariants = (text: string): readonly ReadingVariant[] => {
 export const shouldStopTrying = (attempt: { readonly countsMatched: boolean; readonly agreement: number | null }): boolean =>
   attempt.countsMatched && attempt.agreement !== null && attempt.agreement >= DUB_GOOD_AGREEMENT
 
-/** 一致率の一番高いもの（同じなら先に試したもの）。試していなければ null。 */
+/**
+ * 一致率の一番高いもの（同じなら先に試したもの）。どれも測れなければ最初に試したもの。試していなければ null。
+ * 測れない一致率（null）は、測れたどの値よりも低いとみなす。
+ */
 export const pickReading = <T extends { readonly agreement: number | null }>(attempts: readonly T[]): T | null =>
-  attempts.reduce<T | null>((best, attempt) => ((attempt.agreement ?? -1) > (best?.agreement ?? -1) ? attempt : best), null)
+  attempts.reduce<T | null>(
+    (best, attempt) => (best === null || (attempt.agreement ?? -1) > (best.agreement ?? -1) ? attempt : best),
+    null,
+  )
