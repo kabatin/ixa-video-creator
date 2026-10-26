@@ -103,6 +103,14 @@ export const createInMemoryShotRepository = (
 
     selectTake: (shotId, takeId) => replace(shotId, { selectedTakeId: takeId }),
 
+    // 実物は 1 回の UPDATE で確かめて書く。偽物は Take の持ち主までは見ない（Take の表を持たない）。
+    selectTakeIfCurrent: (shotId, expected, takeId) => {
+      const current = store.find((shot) => shot.id === shotId)
+      return current === undefined || current.selectedTakeId !== expected
+        ? Promise.resolve(null)
+        : replace(shotId, { selectedTakeId: takeId })
+    },
+
     updateStatus: (shotId, status) => replace(shotId, { status }),
   }
 }

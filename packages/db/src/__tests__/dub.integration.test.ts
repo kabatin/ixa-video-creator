@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto'
-import { MediaAssetId, WorkspaceId, newId, type ProjectId } from '@ixa/domain'
+import { MediaAssetId, ShotId, TakeId, WorkspaceId, newId, type ProjectId } from '@ixa/domain'
+import { sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { closeDbClient, createDbClient, type DbExecutor } from '../client.js'
 import { createCharacterRepository } from '../repositories/character-repository.js'
 import { createProjectRepository } from '../repositories/project-repository.js'
+import { createShotRepository } from '../repositories/shot-repository.js'
 import { createTtsClipRepository } from '../repositories/tts-clip-repository.js'
 import { createVoiceProfileRepository } from '../repositories/voice-profile-repository.js'
 import { mediaAssets } from '../schema/media.js'
@@ -65,7 +67,36 @@ const anAudio = async (tx: DbExecutor, workspaceId: WorkspaceId, projectId: Proj
   return id
 }
 
+const CAMERA = JSON.stringify({ size: 'medium', angleH: 'front', angle: 'eye', lensMm: 35, movement: 'push_in', movementIntensity: 'subtle' })
+
+/** 作品・Shot・素材・Take を最小の値で作る（中身は使わない）。 */
+const insertShotWithTake = async (tx: DbExecutor, projectId: ProjectId, workspaceId: WorkspaceId, code: string) => {
+  const shotId = newId(ShotId)
+  const takeId = newId(TakeId)
+  const assetId = await anAudio(tx, workspaceId, projectId)
+  await tx.execute(sql`insert into shots (id, project_id, "order", code, start_sec, duration_sec, camera, source_type, status)
+    values (${shotId}, ${projectId}, ${code === 'IT-A' ? 1000 : 2000}, ${code}, 0, 4, ${CAMERA}::jsonb, '{"type":"ai_video"}'::jsonb, 'draft')`)
+  await tx.execute(sql`insert into takes (id, shot_id, index, media_asset_id, spec, spec_hash, provider_id, model_id, provider_params, cost_usd, generation_time_sec)
+    values (${takeId}, ${shotId}, 1, ${assetId}, '{}'::jsonb, 'h', 'stub', 'stub', '{}'::jsonb, 0, 0)`)
+  return { shotId, takeId }
+}
+
 describe.skipIf(url === undefined)('声の差し替えの表（実際の DB）', () => {
+  it('採用できるのはその Shot の Take だけ。採用が変わっていれば「元のときだけ採用」は何も書かない', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const { projectId, workspaceId } = await aProject(tx)
+      const a = await insertShotWithTake(tx, projectId, workspaceId, 'IT-A')
+      const b = await insertShotWithTake(tx, projectId, workspaceId, 'IT-B')
+      const shots = createShotRepository(tx)
+      await expect(shots.selectTake(a.shotId, b.takeId)).rejects.toThrow(/この Shot/)
+      expect((await shots.selectTake(a.shotId, a.takeId)).selectedTakeId).toBe(a.takeId)
+      expect(await shots.selectTakeIfCurrent(a.shotId, b.takeId, a.takeId)).toBeNull()
+      expect(await shots.selectTakeIfCurrent(b.shotId, b.takeId, b.takeId)).toBeNull()
+      expect((await shots.selectTakeIfCurrent(a.shotId, a.takeId, a.takeId))?.selectedTakeId).toBe(a.takeId)
+      expect(await shots.selectTakeIfCurrent(a.shotId, a.takeId, b.takeId)).toBeNull()
+    })
+  })
+
   it('同じ鍵の読み上げは 1 行で、2 度目は先の行を返す', async () => {
     await inRolledBackTransaction(async (tx) => {
       const { projectId, workspaceId } = await aProject(tx)

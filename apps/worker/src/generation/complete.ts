@@ -80,6 +80,12 @@ export type RecordTakeInput = {
    * 声の差し替え（ADR-0062）は行ごとの記録（`kind: 'dub'`）を渡す。
    */
   readonly providerParams?: ProviderParams
+  /**
+   * 同じ中身の素材が既にあったとき。省けば `reuse_take`（その素材の Take を返す。中断した取り込みの再開を拾う）。
+   * `new_take` は**前の Take を使い回さず**、その素材を指す新しい Take をこの Shot に作る（声の差し替え。ADR-0062）。
+   * 使い回すと、見えなくした Take・別の Shot・複製で写した別の作品の Take を返して採用してしまう。
+   */
+  readonly onDuplicateMedia?: 'reuse_take' | 'new_take'
 }
 
 export type RecordTakeDeps = {
@@ -169,6 +175,10 @@ export const recordTake = async (deps: RecordTakeDeps, input: RecordTakeInput): 
 
   // 同じ内容を既に取り込んでいないか。中断した取り込みの再開もここで拾う。
   const duplicate = await deps.mediaAssets.findByChecksum(downloaded.checksumSha256)
+  if (duplicate !== null && input.onDuplicateMedia === 'new_take') {
+    // 素材は 1 つ（同じ中身の素材は 2 つ作れない）。Take はこの Shot に新しく作る。
+    return deps.takes.create({ ...takeFields, id: takeId, mediaAssetId: duplicate.id })
+  }
   if (duplicate !== null && duplicate.origin.type === 'generated') {
     // 見えなくした Take でも行はある。無いとみなして同じ ID で作り直すと主キーがぶつかる。
     const previous = await deps.takes.findById(duplicate.origin.takeId, { includeHidden: true })

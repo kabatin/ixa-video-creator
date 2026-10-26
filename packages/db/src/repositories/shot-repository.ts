@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, isNull, sql } from 'drizzle-orm'
 import type {
   CreateShotInput, ProjectId, Shot, ShotId, ShotStatus, TakeId, UpdateShotPatch,
 } from '@ixa/domain'
@@ -49,6 +49,11 @@ export type ShotRepository = {
    * nullable なので、外せないのは口の側の制限でしかなかった。
    */
   selectTake(shotId: ShotId, takeId: TakeId | null): Promise<Shot>
+  /**
+   * いまの採用が `expected` のときだけ `takeId` を採用する（1 回の UPDATE で確かめて書く）。
+   * 採用が変わっていれば何も書かずに null（人が待つ間に選んだ Take を奪わない。ADR-0062）。
+   */
+  selectTakeIfCurrent(shotId: ShotId, expected: TakeId, takeId: TakeId): Promise<Shot | null>
   updateStatus(shotId: ShotId, status: ShotStatus): Promise<Shot>
 }
 
@@ -84,6 +89,13 @@ export const shotRowToDomain = (row: ShotRow): Shot =>
 const liveById = (id: ShotId) => and(eq(shots.id, id), isNull(shots.deletedAt))
 
 export const createShotRepository = (db: DbExecutor): ShotRepository => {
+  /**
+   * その Take がこの Shot のものか（UPDATE の条件に入れる）。takes の表は写さないので、型の import をせず SQL で引く
+   * （このファイルが写す列の検査は shots だけを見る）。
+   */
+  const ownTake = (shotId: ShotId, takeId: TakeId) =>
+    sql`exists (select 1 from takes where takes.id = ${takeId} and takes.shot_id = ${shotId})`
+
   /** 生存行を 1 件更新して Domain 型で返す。対象が無ければ DbNotFoundError。 */
   const updateLive = async (
     id: ShotId,
@@ -184,7 +196,31 @@ export const createShotRepository = (db: DbExecutor): ShotRepository => {
       return row === undefined ? null : shotRowToDomain(row)
     },
 
-    selectTake: async (shotId, takeId) => updateLive(shotId, { selectedTakeId: takeId }),
+    /** **その Shot の Take だけを採用する**（別の Shot・別の作品の Take を指させない。同じ UPDATE の中で確かめる）。 */
+    async selectTake(shotId, takeId) {
+      if (takeId === null) return updateLive(shotId, { selectedTakeId: null })
+      const rows = await db
+        .update(shots)
+        .set({ selectedTakeId: takeId, updatedAt: new Date() })
+        .where(and(liveById(shotId), ownTake(shotId, takeId)))
+        .returning()
+      const row = rows[0]
+      if (row !== undefined) return shotRowToDomain(row)
+      if ((await db.select({ id: shots.id }).from(shots).where(liveById(shotId)).limit(1)).length === 0) {
+        throw new DbNotFoundError('Shot', shotId)
+      }
+      throw new Error(`この Shot（${shotId}）の Take ではないので採用できません: ${takeId}`)
+    },
+
+    async selectTakeIfCurrent(shotId, expected, takeId) {
+      const rows = await db
+        .update(shots)
+        .set({ selectedTakeId: takeId, updatedAt: new Date() })
+        .where(and(liveById(shotId), eq(shots.selectedTakeId, expected), ownTake(shotId, takeId)))
+        .returning()
+      const row = rows[0]
+      return row === undefined ? null : shotRowToDomain(row)
+    },
 
     updateStatus: async (shotId, status) => updateLive(shotId, { status }),
   }

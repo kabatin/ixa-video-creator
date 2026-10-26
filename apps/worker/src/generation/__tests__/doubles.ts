@@ -269,6 +269,8 @@ export const inMemoryShots = (seed: readonly Shot[]): InMemoryShots => {
     // worker は Shot を戻さない（取り消しは API だけ）。
     restore: () => Promise.resolve(null),
     selectTake: (shotId, takeId) => replace(shotId, { selectedTakeId: takeId }),
+    selectTakeIfCurrent: (shotId, expected, takeId) =>
+      store.find((s) => s.id === shotId)?.selectedTakeId === expected ? replace(shotId, { selectedTakeId: takeId }) : Promise.resolve(null),
     updateStatus: (shotId, status) => replace(shotId, { status }),
   }
 }

@@ -19,7 +19,7 @@ import type { RecordTakeDeps } from '../generation/complete.js'
 export type DubProcessorDeps = RecordTakeDeps & {
   readonly dubJobs: DubJobRepository
   readonly ttsClips: TtsClipRepository
-  readonly shots: Pick<ShotRepository, 'findById' | 'findByProject' | 'selectTake'>
+  readonly shots: Pick<ShotRepository, 'findById' | 'findByProject' | 'selectTakeIfCurrent'>
   readonly projects: Pick<ProjectRepository, 'findById'>
   readonly characters: Pick<CharacterRepository, 'findById'>
   readonly voices: Pick<VoiceProfileRepository, 'findById'>

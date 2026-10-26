@@ -114,6 +114,7 @@ export type DubWorld = {
   readonly ttsClips: ReturnType<typeof createInMemoryTtsClipRepository>
   readonly timelineClips: ReturnType<typeof createInMemoryTimelineClipRepository>
   readonly mediaQueue: ReturnType<typeof createRecordingMediaQueue>
+  readonly mediaAssets: ReturnType<typeof createInMemoryMediaAssetRepository>
   readonly newJob: () => Promise<DubJob>
 }
 
@@ -141,6 +142,8 @@ export const createDubWorld = async (input: {
   readonly dialogue?: (ids: { readonly cat: CharacterId; readonly mouse: CharacterId }) => readonly DialogueLine[]
   readonly designedKeyLabel?: string
   readonly mouseHasVoice?: boolean
+  /** 前からある素材と Take（作品の複製で写したものなど。別の Shot・別の作品のもの）。 */
+  readonly seed?: { readonly assets: readonly MediaAsset[]; readonly takes: readonly Take[] }
 }): Promise<DubWorld> => {
   const project = { ...aProject(), id: newId(ProjectId), workspaceId: newId(WorkspaceId) }
   const storage = createMemoryStorage()
@@ -184,8 +187,8 @@ export const createDubWorld = async (input: {
   })
   const shot = { ...baseShot, selectedTakeId: source.id, status: 'review' as const }
   const shots = createInMemoryShotRepository([shot])
-  const takes = createInMemoryTakeRepository([source])
-  const mediaAssets = createInMemoryMediaAssetRepository([asset])
+  const takes = createInMemoryTakeRepository([source, ...(input.seed?.takes ?? [])])
+  const mediaAssets = createInMemoryMediaAssetRepository([asset, ...(input.seed?.assets ?? [])])
   const timelineClips = createInMemoryTimelineClipRepository([])
   const dubJobs = createInMemoryDubJobRepository()
   const ttsClips = createInMemoryTtsClipRepository()
@@ -223,6 +226,7 @@ export const createDubWorld = async (input: {
     ttsClips,
     timelineClips,
     mediaQueue,
+    mediaAssets,
     newJob: () => dubJobs.create({ projectId: project.id, shotId: shot.id, sourceTakeId: source.id }),
   }
 }

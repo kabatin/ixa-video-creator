@@ -147,9 +147,8 @@ const recordsOf = (
 
 /** 出来た Take を採用する。**人が待つ間に別の Take を選んでいたら、その選びを奪わない。** */
 const selectIfStillSource = async (deps: DubProcessorDeps, loaded: Loaded, take: Take): Promise<void> => {
-  const latest = await deps.shots.findById(loaded.shot.id)
-  if (latest === null || latest.selectedTakeId !== loaded.source.id) return
-  const selected = await deps.shots.selectTake(latest.id, take.id)
+  const selected = await deps.shots.selectTakeIfCurrent(loaded.shot.id, loaded.source.id, take.id)
+  if (selected === null) return
   try {
     await deps.events.publish({
       type: 'shot.status',
@@ -219,6 +218,7 @@ const run = async (deps: DubProcessorDeps, job: DubJob, workDir: string): Promis
     lineage: { parentTakeId: loaded.source.id, regenerationReason: DUB_REASON },
     autoRetake: false,
     providerParams: record,
+    onDuplicateMedia: 'new_take',
   })
   const succeeded = await deps.dubJobs.markSucceeded(job.id, { takeId: take.id, costUsd, record })
   // 書き込みの直前に止められていたら、出来た Take は残すが採用しない（追記のみ）。

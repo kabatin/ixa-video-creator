@@ -98,9 +98,34 @@ describe('processDubJob（通し）', () => {
     const again = await world.dubJobs.create({ projectId: world.project.id, shotId: world.shot.id, sourceTakeId: world.source.id })
     const second = await processDubJob(world.deps, { dubJobId: again.id })
     expect(second.state).toBe('succeeded')
+    // 同じ中身の音でも、前の Take を使い回さず、この Shot に新しい Take を作る（親は元の Take）。
+    if (second.state !== 'succeeded') return
+    expect(second.takeId).not.toBe(take.id)
+    const secondTake = (await world.takes.findByShot(world.shot.id)).find((t) => t.id === second.takeId)
+    expect(secondTake).toMatchObject({ shotId: world.shot.id, parentTakeId: world.source.id })
+    expect((await world.shots.findById(world.shot.id))?.selectedTakeId).toBe(take.id)
     expect(world.tts.calls()).toHaveLength(calls)
     expect((await world.dubJobs.findById(again.id))?.costUsd).toBe(0)
     expect(world.ttsClips.snapshot()).toHaveLength(2)
+  }, 60_000)
+
+  it('同じ中身の素材が別の作品の Take（複製で写したもの）にあっても、その Take を採用せず、この Shot に新しい Take を作る', async () => {
+    const first = await createDubWorld({ workDir: join(dir, 'dup-a'), video })
+    const done = await processDubJob(first.deps, { dubJobId: (await first.newJob()).id })
+    if (done.state !== 'succeeded') throw new Error('1 本目が作れませんでした')
+    const theirs = (await first.takes.findByShot(first.shot.id)).find((t) => t.id === done.takeId)
+    const theirAsset = theirs === undefined ? null : await first.mediaAssets.findById(theirs.mediaAssetId)
+    if (theirs === undefined || theirAsset === null) throw new Error('1 本目の素材がありません')
+
+    const world = await createDubWorld({ workDir: join(dir, 'dup-b'), video, seed: { assets: [theirAsset], takes: [theirs] } })
+    await world.storage.put(theirAsset.storageKey, await first.storage.get(theirAsset.storageKey), { contentType: 'video/mp4' })
+    const outcome = await processDubJob(world.deps, { dubJobId: (await world.newJob()).id })
+    expect(outcome.state).toBe('succeeded')
+    if (outcome.state !== 'succeeded') return
+    expect(outcome.takeId).not.toBe(theirs.id)
+    const mine = (await world.takes.findByShot(world.shot.id)).find((t) => t.id === outcome.takeId)
+    expect(mine).toMatchObject({ shotId: world.shot.id, parentTakeId: world.source.id })
+    expect((await world.shots.findById(world.shot.id))?.selectedTakeId).toBe(outcome.takeId)
   }, 60_000)
 
   it('元の声のままの行は消さず読み直さない。記録の置いた時刻は元の区間', async () => {
