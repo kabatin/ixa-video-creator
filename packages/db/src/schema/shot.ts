@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
-  doublePrecision, index, integer, jsonb, pgTable, primaryKey, text, uniqueIndex,
+  boolean, doublePrecision, index, integer, jsonb, pgTable, primaryKey, text, uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import type {
@@ -48,6 +48,12 @@ export const shots = pgTable(
     timing: text('timing', { enum: ['trim', 'fit'] }).notNull().default('trim'),
     /** 再生の速さ（ADR-0050）。`trim` の Shot だけが使う。 */
     speed: doublePrecision('speed').notNull().default(1),
+    /**
+     * 採用 Take の音（ADR-0060）。大きさ 0〜2 と消音。新しい Shot は音あり。
+     * **前からある Shot はマイグレーション 0057 で消音にした**（今まで鳴らなかった MV は鳴らないまま）。
+     */
+    takeAudioVolume: doublePrecision('take_audio_volume').notNull().default(1),
+    takeAudioMuted: boolean('take_audio_muted').notNull().default(false),
 
     // 演出
     description: text('description').notNull().default(''),

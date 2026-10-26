@@ -19,6 +19,7 @@ const baseRow = (): ProjectRow => ({
   lyrics: '夜明けの屋上で\n君を待ってた',
   lyricCues: [12.5],
   instrumental: true,
+  masteringMode: 'peak',
   status: 'planning',
   createdAt: new Date('2026-09-16T00:00:00Z'),
   updatedAt: new Date('2026-09-16T00:00:00Z'),
@@ -47,6 +48,8 @@ describe('projectRowToDomain', () => {
       lyricCues: [12.5],
       // 歌詞なし（制作者 2026-10-04）。既定値ではなく行の値を写す。
       instrumental: true,
+      // 仕上げの音量（ADR-0060）。行の値を写す。
+      masteringMode: 'peak',
       status: 'planning',
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -55,8 +58,9 @@ describe('projectRowToDomain', () => {
   })
 
   it('null 許容列を保持する', () => {
-    const project = projectRowToDomain({ ...baseRow(), durationSec: null, budgetUsd: null })
+    const project = projectRowToDomain({ ...baseRow(), durationSec: null, budgetUsd: null, masteringMode: null })
     expect(project.durationSec).toBeNull()
+    expect(project.masteringMode).toBeNull()
     expect(project.budgetUsd).toBeNull()
   })
 

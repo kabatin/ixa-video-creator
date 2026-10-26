@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { MediaAssetId, ProjectId, RenderJobId, ShotId } from '../common/ids.js'
 import { Seconds } from '../common/time.js'
+import { MasteringMode } from '../audio/mastering.js'
 import { TimelineDocument } from '../timeline/timeline.js'
 
 export const RenderPreset = z.enum([
@@ -28,6 +29,11 @@ export const RenderJob = z.object({
   error: z.string().nullable(),
   /** 書き出しの音量を YouTube・SNS の基準（-14 LUFS）に揃えるか（ADR-0039）。既定は揃える。 */
   normalizeLoudness: z.boolean().default(true),
+  /**
+   * 揃えるときの仕上げ（ADR-0060）。投入の時点で作品の設定から決めて控える（あとで作品の設定を変えても、
+   * 書いた書き出しの音は変わらない）。前からのジョブは `loudnorm`。
+   */
+  masteringMode: MasteringMode.default('loudnorm'),
   /** 揃えた後に測った大きさ（LUFS）。揃えていない・音が無ければ null。 */
   loudnessLufs: z.number().nullable().default(null),
   createdAt: z.date(),

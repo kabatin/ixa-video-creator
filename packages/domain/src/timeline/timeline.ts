@@ -142,6 +142,11 @@ export const TimelineDocument = z.object({
        * Shot の尺だけ止めて映す（制作者 2026-10-02。プレビューにも書き出しにも出す）。省略可能にして version は 1 のまま。
        */
       kind: z.enum(['video', 'image']).optional(),
+      /**
+       * 採用 Take の音を鳴らす（ADR-0060）。**鳴らす Shot だけが持つ**（Take に音があり、消音していない）。
+       * 無ければ鳴らさない。省略可能にして version は 1 のまま（前からの書き出しの記録も、鳴らさない Shot も同じ形）。
+       */
+      audio: z.object({ volume: z.number().min(0).max(2) }).optional(),
     }),
   ),
   transitions: z.array(Transition),

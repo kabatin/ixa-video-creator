@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { MediaAssetId, ProjectId, WorkspaceId } from '../common/ids.js'
 import { AspectRatio, Fps, Resolution, Seconds } from '../common/time.js'
+import { ProjectMasteringMode } from '../audio/mastering.js'
 
 /** 手本画像（ムードボード）の上限（ADR-0030）。参照の上限（Codex は 4 枚）に人物や場所の分を残す。 */
 export const MAX_STYLE_REFERENCES = 3
@@ -50,6 +51,11 @@ export const Project = z.object({
    * チェックボックスとかあるといいかも」）。true なら作業の流れで歌詞の時刻とテロップの段を飛ばす。既定は歌詞あり。
    */
   instrumental: z.boolean().default(false),
+  /**
+   * 書き出しの仕上げの音量（ADR-0060）。**null は制作者がまだ選んでいない**（自動。セリフがあれば山だけ抑える）。
+   * 決め方は `resolveMasteringMode`。
+   */
+  masteringMode: ProjectMasteringMode.default(null),
 
   status: ProjectStatus,
   createdAt: z.date(),

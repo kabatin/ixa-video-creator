@@ -44,6 +44,7 @@ export const renderJobRowToDomain = (row: RenderJobRow): RenderJob =>
     outputAssetId: row.outputAssetId,
     error: row.error,
     normalizeLoudness: row.normalizeLoudness,
+    masteringMode: row.masteringMode,
     loudnessLufs: row.loudnessLufs,
     createdAt: row.createdAt,
     finishedAt: row.finishedAt,

@@ -21,6 +21,8 @@ const shot = (overrides: Partial<Shot> = {}): Shot => ({
   sourceInSec: 0,
   timing: 'trim',
   speed: 1,
+  takeAudioVolume: 1,
+  takeAudioMuted: false,
   description: '暗いガレージ。作業台にマットブラックのヘルメット',
   dialogue: [],
   camera: {

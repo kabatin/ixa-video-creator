@@ -22,6 +22,8 @@ const shot = (overrides: Partial<Shot> = {}): Shot => ({
   sourceInSec: 0,
   timing: 'trim',
   speed: 1,
+  takeAudioVolume: 1,
+  takeAudioMuted: false,
   description: 'iXA CUP 決勝で takepi が勝利する',
   dialogue: [],
   camera: {

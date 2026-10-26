@@ -1,6 +1,6 @@
 import { boolean, doublePrecision, index, integer, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
-import type { AspectRatio, Fps, ProjectStatus, Resolution } from '@ixa/domain'
-import { AspectRatio as AspectRatioSchema, ProjectStatus as ProjectStatusSchema } from '@ixa/domain'
+import type { AspectRatio, Fps, MasteringMode, ProjectStatus, Resolution } from '@ixa/domain'
+import { AspectRatio as AspectRatioSchema, MasteringMode as MasteringModeSchema, ProjectStatus as ProjectStatusSchema } from '@ixa/domain'
 import { createdAt, deletedAt, seconds, ulidPk, ulidRef, updatedAt } from './columns.js'
 
 /**
@@ -42,6 +42,8 @@ export const projects = pgTable(
     lyricCues: doublePrecision('lyric_cues').array().notNull().default([]),
     // 歌詞なしの作品か（制作者 2026-10-04）。作業の流れで歌詞の段を飛ばす。
     instrumental: boolean('instrumental').notNull().default(false),
+    // 書き出しの仕上げの音量（ADR-0060）。null は制作者がまだ選んでいない（自動。セリフがあれば山だけ抑える）。
+    masteringMode: text('mastering_mode', { enum: MasteringModeSchema.options }).$type<MasteringMode>(),
 
     status: text('status', { enum: ProjectStatusSchema.options }).$type<ProjectStatus>().notNull(),
     createdAt: createdAt(),

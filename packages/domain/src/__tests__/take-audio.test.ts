@@ -1,0 +1,86 @@
+import { describe, expect, it } from 'vitest'
+import { MasteringMode, resolveMasteringMode } from '../audio/mastering.js'
+import { CreateShotInput, MAX_TAKE_AUDIO_VOLUME, UpdateShotPatch } from '../shot/shot.js'
+import { Project } from '../project/project.js'
+import { RenderJob } from '../render/render.js'
+import { TimelineDocument } from '../timeline/timeline.js'
+
+/** ADR-0060: Take の音の大きさと消音、書き出しの仕上げ。 */
+
+describe('Shot の Take の音', () => {
+  it(`大きさは 0〜${String(MAX_TAKE_AUDIO_VOLUME)}`, () => {
+    expect(UpdateShotPatch.safeParse({ takeAudioVolume: 0 }).success).toBe(true)
+    expect(UpdateShotPatch.safeParse({ takeAudioVolume: MAX_TAKE_AUDIO_VOLUME }).success).toBe(true)
+    expect(UpdateShotPatch.safeParse({ takeAudioVolume: -0.01 }).success).toBe(false)
+    expect(UpdateShotPatch.safeParse({ takeAudioVolume: MAX_TAKE_AUDIO_VOLUME + 0.01 }).success).toBe(false)
+  })
+
+  it('消音は真偽だけ', () => {
+    expect(UpdateShotPatch.safeParse({ takeAudioMuted: true }).success).toBe(true)
+    expect(UpdateShotPatch.safeParse({ takeAudioMuted: 'yes' }).success).toBe(false)
+  })
+
+  it('新しい Shot は音あり・大きさ 1 で始まる', () => {
+    const created = CreateShotInput.parse({
+      projectId: '01ARZ3NDEKTSV4RRFFQ69G5FAW',
+      sequenceId: null,
+      order: 1000,
+      code: 'shot_001',
+      startSec: 0,
+      durationSec: 2,
+      camera: { size: 'wide', angleH: null, angle: null, lensMm: null, movement: null, movementIntensity: null },
+      mood: null,
+      sourceType: { type: 'ai_video' },
+    })
+    expect(created).toMatchObject({ takeAudioVolume: 1, takeAudioMuted: false })
+  })
+})
+
+describe('書き出しの仕上げ', () => {
+  const silent = { dialogue: [] }
+  const talking = { dialogue: [{ text: 'ねえ' }] }
+
+  it('選んでいなければ、セリフのある Shot があれば山だけ抑える', () => {
+    expect(resolveMasteringMode(null, [silent, talking])).toBe('peak')
+    expect(resolveMasteringMode(null, [silent, silent])).toBe('loudnorm')
+    expect(resolveMasteringMode(null, [])).toBe('loudnorm')
+  })
+
+  it('制作者が選んだら、セリフの有無で変えない', () => {
+    expect(resolveMasteringMode('loudnorm', [talking])).toBe('loudnorm')
+    expect(resolveMasteringMode('peak', [silent])).toBe('peak')
+  })
+
+  it('知らない仕上げを拒む', () => {
+    expect(MasteringMode.safeParse('limiter').success).toBe(false)
+    expect(Project.shape.masteringMode.safeParse('limiter').success).toBe(false)
+    expect(Project.shape.masteringMode.parse(undefined)).toBeNull()
+  })
+
+  it('前からの書き出しのジョブは全体をそろえた扱い', () => {
+    expect(RenderJob.shape.masteringMode.parse(undefined)).toBe('loudnorm')
+  })
+})
+
+describe('タイムラインの Take の音', () => {
+  const doc = (audio: unknown) => ({
+    version: 1,
+    fps: 24,
+    resolution: { width: 1920, height: 1080 },
+    durationSec: 2,
+    video1: [{ shotId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', startSec: 0, durationSec: 2, mediaUrl: 'a.mp4', inSec: 0, ...(audio === undefined ? {} : { audio }) }],
+    transitions: [],
+    clips: [],
+    audio: [],
+  })
+
+  it('鳴らす Shot だけが音を持つ。無ければ前と同じ形', () => {
+    expect(TimelineDocument.safeParse(doc(undefined)).success).toBe(true)
+    expect(TimelineDocument.safeParse(doc({ volume: 1.5 })).success).toBe(true)
+  })
+
+  it('大きさは 0〜2', () => {
+    expect(TimelineDocument.safeParse(doc({ volume: -0.1 })).success).toBe(false)
+    expect(TimelineDocument.safeParse(doc({ volume: 2.1 })).success).toBe(false)
+  })
+})

@@ -88,6 +88,8 @@ export const copyShotInput = (
       sourceInSec: shot.sourceInSec,
       timing: shot.timing,
       speed: shot.speed,
+      takeAudioVolume: shot.takeAudioVolume,
+      takeAudioMuted: shot.takeAudioMuted,
       description: ctx.keepStoryboard ? shot.description : '',
       dialogue,
       camera: shot.camera,

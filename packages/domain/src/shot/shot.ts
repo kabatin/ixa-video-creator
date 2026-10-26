@@ -42,6 +42,9 @@ export type ShotTiming = z.infer<typeof ShotTiming>
 export const MIN_PLAYBACK_RATE = 0.5
 export const MAX_PLAYBACK_RATE = 2.5
 
+/** Take の音の大きさの上限（ADR-0060）。効果音・曲の音量と同じ 0〜2。 */
+export const MAX_TAKE_AUDIO_VOLUME = 2
+
 export const Shot = z.object({
   id: ShotId,
   projectId: ProjectId,
@@ -59,6 +62,12 @@ export const Shot = z.object({
    * 1.5 なら Take を 1.5 倍で流し、AI には尺 × 1.5 の長さで頼む。予告編の速い編集のため。
    */
   speed: z.number().min(MIN_PLAYBACK_RATE).max(MAX_PLAYBACK_RATE).default(1),
+  /**
+   * 採用 Take の音（ADR-0060）。鳴るのは Take に音があり、消音していないときだけ。
+   * 新しい Shot は音あり。**前からある Shot はマイグレーションで消音**にした（今まで鳴らなかった MV は鳴らないまま）。
+   */
+  takeAudioVolume: z.number().min(0).max(MAX_TAKE_AUDIO_VOLUME).default(1),
+  takeAudioMuted: z.boolean().default(false),
 
   // 演出
   description: z.string().default(''),
@@ -161,6 +170,7 @@ export const UpdateShotPatch = Shot.pick({
   startSec: true, durationSec: true, sourceInSec: true,
   description: true, dialogue: true, camera: true, mood: true,
   continuityMode: true, timing: true, speed: true,
+  takeAudioVolume: true, takeAudioMuted: true,
   locationId: true, sourceType: true, lockedAt: true,
 }).partial()
 export type UpdateShotPatch = z.input<typeof UpdateShotPatch>
