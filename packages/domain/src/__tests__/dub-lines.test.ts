@@ -32,6 +32,23 @@ describe('assignLines', () => {
     ])
   })
 
+  it('手の区間をまたいで区間をつながない（手の区間の前と後の行は、それぞれの側の区間だけを使う）', () => {
+    // すき間が一番短いのは手の区間をまたぐ 0.9〜1.4 だが、そこはつながない。
+    const chunks = [c(0.1, 0.3), c(0.9, 1.0), c(1.1, 1.2), c(1.4, 1.6)]
+    const result = assignLines(chunks, [{}, { dub: { startSec: 1.05, endSec: 1.3 } }, {}])
+    expect(result.ok && result.spans).toEqual([
+      { lineIndex: 0, startSec: 0.1, endSec: 1, source: 'chunks', chunks: [c(0.1, 0.3), c(0.9, 1)] },
+      { lineIndex: 1, startSec: 1.05, endSec: 1.3, source: 'manual', chunks: [c(1.1, 1.2)] },
+      { lineIndex: 2, startSec: 1.4, endSec: 1.6, source: 'chunks', chunks: [c(1.4, 1.6)] },
+    ])
+  })
+
+  it('手の区間の前の行に区間が無ければ、後ろの区間を回さずに止める', () => {
+    const chunks = [c(1.0, 1.4), c(2.0, 2.3), c(2.4, 2.6)]
+    const result = assignLines(chunks, [{}, { dub: { startSec: 0.9, endSec: 1.5 } }, {}])
+    expect(result.ok).toBe(false)
+  })
+
   it('区間が足りなければ、全部の行に手の区間があれば通る', () => {
     const result = assignLines([c(0.2, 2.0)], [{ dub: { startSec: 0.2, endSec: 1.0 } }, { dub: { startSec: 1.0, endSec: 2.0 } }])
     expect(result.ok && result.spans.map((span) => span.source)).toEqual(['manual', 'manual'])
@@ -41,7 +58,9 @@ describe('assignLines', () => {
     const result = assignLines([c(0.2, 2.0)], [{}, {}])
     expect(result).toEqual({
       ok: false,
-      reason: '元の声の区間が 1 つしか見つからず、セリフの 2 行に割り当てられません。行ごとに「行の区間」を入れてください',
+      reason:
+        'セリフの 1・2 行目に割り当てる元の声の区間が足りません（見つかったのは 1 つ。2 人のセリフが続けて 1 つになっている可能性があります）。' +
+        '行ごとに「行の区間」を入れてください',
     })
   })
 })
