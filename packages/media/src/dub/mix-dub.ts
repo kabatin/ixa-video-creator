@@ -17,6 +17,8 @@ const AUDIO_BITRATE = '192k'
 /** 消す範囲を決める音の刻み（10ms。volume は区切りごとに式を見る）。 */
 const MUTE_STEP_SAMPLES = 480
 const MIX_FORMAT = 'aformat=sample_rates=48000:channel_layouts=stereo'
+/** 声（モノラル）を左右に同じ大きさで写す（音量合わせの基準の左右の平均と同じ大きさになる）。 */
+const VOICE_TO_STEREO = 'aformat=channel_layouts=mono,pan=stereo|c0=c0|c1=c0'
 
 export type DubVoice = {
   readonly path: string
@@ -43,7 +45,7 @@ export const dubMixGraph = (input: MixDubInput): string => {
   const original = `[0:a]${MIX_FORMAT},asetnsamples=n=${MUTE_STEP_SAMPLES}:p=0,volume='${muteExpression(input.muteRanges)}':eval=frame[orig]`
   const voices = input.voices.map((voice, index) => {
     const delayMs = Math.max(0, Math.round(voice.startSec * 1000))
-    return `[${index + 1}:a]${MIX_FORMAT},volume=${voice.gainDb.toFixed(3)}dB,adelay=${delayMs}:all=1[v${index}]`
+    return `[${index + 1}:a]${VOICE_TO_STEREO},${MIX_FORMAT},volume=${voice.gainDb.toFixed(3)}dB,adelay=${delayMs}:all=1[v${index}]`
   })
   const labels = ['[orig]', ...input.voices.map((_, index) => `[v${index}]`)].join('')
   return [original, ...voices, `${labels}amix=inputs=${input.voices.length + 1}:normalize=0:duration=first[mix]`].join(';')

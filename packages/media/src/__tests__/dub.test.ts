@@ -147,3 +147,28 @@ describe('mixDub', () => {
     expect(toneLevel(pcm, 500, 0.52, 0.6)).toBeGreaterThan(0.02)
   }, 30_000)
 })
+
+describe('mixDub（ステレオの元の音）', () => {
+  it('音量合わせで決めた dB のとおりの大きさで鳴る（モノラルの声をステレオにして 3 dB 下げない）', async () => {
+    // 元の声: 300Hz を 0.5〜1.0 秒と 1.8〜2.4 秒に、左右同じ大きさで。読み上げ: 500Hz（大きさは元の半分）。
+    const stereo = '0.2*sin(2*PI*300*t)*(between(t,0.5,1.0)+between(t,1.8,2.4))'
+    await runFfmpeg([
+      '-y', '-f', 'lavfi', '-i', 'testsrc=size=160x120:rate=24:duration=3',
+      '-f', 'lavfi', '-i', `aevalsrc='${stereo}|${stereo}':s=48000:d=3`,
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-shortest', at('stereo.mp4'),
+    ])
+    await makeAudio(at('half.wav'), '0.1*sin(2*PI*500*t)', 0.5)
+
+    const source = voicedLevelOfPcm(await readPcm16k(at('stereo.mp4'), at('stereo.raw')), { startSec: 1.8, endSec: 2.4 })
+    const voice = voicedLevelOfPcm(await readPcm16k(at('half.wav'), at('half.raw')))
+    const gainDb = matchLevelGainDb({ sourceLevelDb: source, voiceLevelDb: voice, levelDb: 0 })
+
+    await mixDub(
+      { videoPath: at('stereo.mp4'), voices: [{ path: at('half.wav'), startSec: 0.5, gainDb }], muteRanges: [{ startSec: 0.45, endSec: 1.1 }] },
+      at('stereo-dubbed.mp4'),
+    )
+    const pcm = await readPcm16k(at('stereo-dubbed.mp4'), at('stereo-dubbed.raw'))
+    const ratioDb = 20 * Math.log10(toneLevel(pcm, 500, 0.6, 0.9) / toneLevel(pcm, 300, 1.9, 2.3))
+    expect(Math.abs(ratioDb)).toBeLessThan(0.5)
+  }, 30_000)
+})
