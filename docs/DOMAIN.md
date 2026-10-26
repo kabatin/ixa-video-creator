@@ -509,6 +509,20 @@ type DialogueLine = {
   text: string                      // 1〜200 文字
   offscreen: boolean                // 画面外の声。映っている人の口は閉じたまま
   translation: string | null        // 訳文（2 段字幕の下の段。ADR-0061）。セリフの字幕の訳文の正
+  dub?: DialogueDub                 // 声の差し替えの指定（ADR-0062）。無い行は鍵ごと無い
+}
+
+type DialogueDub = {                // すべて任意。strict
+  style?: string                    // 読み方の指示（1〜200 字）
+  placeAtSec?: number               // 口に合わせず、この時刻から話させる（0〜120）
+  fitSec?: number                   // この長さに収める（長いときだけ縮める。cutSec とどちらか）
+  cutSec?: number                   // 縮めずにこの長さで切る（最後 0.15 秒でフェード）
+  levelDb?: number                  // 距離（-40〜12 dB）。無ければキャラクターの既定
+  keepOriginal?: boolean            // 元の H3 の声のまま（読み直さない・消さない）
+  snap?: boolean                    // false なら、消す範囲を近くの声の区間まで広げない
+  added?: boolean                   // H3 が話していない所に足す行。placeAtSec が必須
+  levelLikeIndex?: number           // 足す行の音量を合わせる行（足す行ではない別の行）
+  startSec?: number; endSec?: number // 行の手の区間（両方そろえる）
 }
 ```
 
@@ -665,7 +679,7 @@ type Take = {
   specHash: string
   providerId: ProviderId
   modelId: ModelId
-  providerParams: Record<string, unknown>   // 実際に送った Provider 固有パラメータ
+  providerParams: Record<string, unknown>   // 実際に送った Provider 固有パラメータ（http / cli / import / dub。dub は声を差し替えた Take の記録。ADR-0062）
   seedUsed: number | null
   // 計測
   costUsd: number

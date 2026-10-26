@@ -1,0 +1,100 @@
+# ADR-0062: H3 の声を、キャラクターの Gemini の声で読み直して口に合わせて差し替える
+
+Status: Draft（段 5a。段 5b で書き足す）
+Date: 2026-10-26
+Decider: Claude（Architect）
+
+## 背景
+
+会話劇の計画の段 5。段 1〜4 で、セリフのある Shot は H3 に音付きで頼み（ADR-0059）、Take の音を書き出しまで残し（ADR-0060）、
+2 段字幕を出せるようになった（ADR-0061）。H3 の声は口に合っているが、声質がキャラクターごとにそろわない。
+
+AnimalVideo（新 Mac）では、Gemini の声に差し替えて口に合わせる仕組みが実際に動いている。作りと値はそこから聞いた（2026-10-26）。
+**コードは写していない**（値と形だけ）。
+
+段 5a は計算と Provider だけ（画面・ジョブ・DB は段 5b）。
+
+## 決めたこと（段 5a）
+
+### 1. セリフの行の「差し替えの指定」（`DialogueLine.dub`）
+
+任意の `dub: { style?, placeAtSec?, fitSec?, cutSec?, levelDb?, keepOriginal?, snap?, added?, levelLikeIndex?, startSec?, endSec? }`。
+
+- **strict のまま**足した（知らない欄は今も弾く）。上限つき（時刻 0〜120 秒・長さ 0.1 秒以上・距離 -40〜12 dB・指示 200 字）。
+- 1 行の中の食い違いは保存の時点で止める: 収める長さと切る長さの両方／区間の片方だけ・逆さ／足す行に置く時刻が無い／
+  足す行で元の声のまま／足す行に行の区間／足す行でないのに `levelLikeIndex`。
+- 行の並びの中: `levelLikeIndex` は**足す行ではない別の行**を指す（`DialogueLines` の検査）。
+- 指定の無い行は鍵ごと無い。前からの行・spec・specHash は 1 バイトも変わらない（spec はセリフの行を欄ごとに写すので、`dub` は spec に入らない）。
+
+### 2. 差し替えた Take の記録（`ProviderParams` の `dub`）
+
+`{ kind: 'dub', sourceTakeId, voiceTool: 'gemini_api', model, integratedLufs, lines: DubLineRecord[] }`。
+行ごとに `mode`（lip / place_at / fit / cut / keep_original）・`added`・元の区間・置いた区間（**字幕の時刻の正**）・
+一致率・伸縮の幅（最小・最大）・使った読み方・警告（コードと文）。strict・上限つき。
+
+### 3. 計算（`@ixa/domain` の `dub/`。純粋）
+
+| 関数 | 値 |
+|---|---|
+| `speechChunks` | 10ms 刻みの RMS（dB）で、最大 -30 dB より上を声。0.12 秒未満の途切れはつなぎ、0.06 秒未満は捨てる |
+| `trimBounds` | 読み上げの頭と尻の -45 dB 未満を落とし、0.15 秒ずつ残す |
+| `pairChunks` | 1 対 1 に組む。数が違えば多い方を、すき間の短い所からつなぐ |
+| `planLipPair` | 組の中の間を詰め（語頭 0.04・語尾 0.06 秒残す）、倍率 =（詰めた長さ − 0.1）÷ 元の区間。元の区間の頭 -0.04 秒に置き、次の区間に 0.03 秒残して切る |
+| `chunkTempo` | 0.8〜1.6。**1.6 を超えたら止める**（AnimalVideo の 1.8 までの詰め込みは使わない）。1.4 超は「早口に聞こえます」の警告。0.8 未満は 0.8 にして警告 |
+| `fitTempo` / `cutPlan` | 収める: 長いときだけ 長さ ÷ fitSec（1.6 超は止める）。切る: 縮めずに切り最後 0.15 秒でフェード |
+| `agreement` | 「話す／黙る」を 10ms ごとに比べた割合。比べる区切りが無ければ null |
+| `muteRanges` | 行の [始まり -0.05, 終わり +0.1]、前後 0.3 秒以内の声の区間まで広げる。重なりはまとめる |
+| `assignLines` | 足す行を除いた行に区間を割り当てる。手の区間はそのまま使い、残りの区間を残りの行の数につなぐ。足りなければ日本語の理由で止める |
+| `readingVariants` | 素の文／句読点の後に `<short pause>`／読点を外した文（同じ文になるものは省く）。頭の「……」は読まない。数が合い一致率 0.9 以上で打ち切り、一番高いものを使う |
+| `voicedLevelDb` | 声のある所（最大 -25 dB より上）の力の平均 |
+
+決めたこと（計画に書いていなかった細部）:
+
+- **1.6 倍を超えたら、口に合わせる行も止める**（計画の冒頭の「1.6 倍を超える行は止めて理由を出す」に従った。丸めて置くと次の区間に重なって切れる）。
+  読み方を変えれば収まることがあるので、止めるかどうかは段 5b で 3 通り試した後に決める。
+- `snap: false` は「消す範囲を広げない」の意味にした（行の範囲 [-0.05, +0.1] は消す）。`keepOriginal` の行は消さず、
+  その行の区間に掛かる声の区間へは、他の行の消す範囲も広げない（残す声を消さない）。
+- 一致率は比べる窓を呼ぶ側が決める（`voicedMask(chunks, start, end)`）。Shot 全体で比べると黙っている所が一致率を水増しするので、段 5b は行の消す範囲で比べる。
+
+### 4. 音（`@ixa/media` の `dub/`）
+
+- `rmsFramesFromPcm` / `readRmsFrames`: 16kHz・モノラルの PCM、窓 400・刻み 160（10ms）。音量合わせは窓 1024・刻み 256。
+- `stretchChunks`: 切り出してつなぎ（つなぎ目 8ms フェード）、一定の倍率の atempo（0.5〜2.0 を外れたら段を重ねる）。
+- `matchLevelGainDb`: 元の H3 の声（行の区間）と同じ大きさ + 距離の dB。どちらかが測れなければ距離だけ。響き・EQ は掛けない。
+- `mixDub`: 元の音を 10ms の区切りにして `volume='if(between…)':eval=frame` で範囲だけ 0 → 声を `volume`・`adelay` →
+  `amix normalize=0 duration=first` → loudnorm 2 パス（-16・TP -1.5・LRA 11・linear）→ 映像は copy・AAC 192k。
+  loudnorm の文は `program-loudness.ts` の口（`loudnormMeasureFilter`・`loudnormLinearFilter`・`parseLoudnormJson`）を使い回す
+  （書き出しの -14 の引数は前と同じ）。混ぜた音が測れなければ失敗にする（黙って元の音を使わない）。
+
+### 5. Gemini
+
+- **429**: 返答の頭 600 字の `retry in 48.3s` / `retry in 19h22m6s` の秒数 +2 秒待つ（無ければ 30 秒）。最大 4 回。
+  待つのが 90 秒を超えるなら、待たずに「もう一度頼めるまで約 19 時間 22 分待つ必要があるため止めました」で止める。
+- **500 以上**: 2・5・10 秒待って 3 回（AnimalVideo には無かったが計画どおり入れた）。**1 回 180 秒で打ち切る**（打ち切りは送り直さない）。
+- 読み上げ（ナレーションも）と Voice Design に効く。文字起こしは今まで通り。待つ口（`sleep`）と打ち切りの長さは差し替えられる。
+- **作った声（`voice_…`）だけ `v1beta/interactions` で読む**。形は AnimalVideo（`tools/dub/gemini.py`）の実物から写し、
+  `gemini-interactions.ts` の 1 ファイルに閉じた（`input[].content[].annotations` の `speech_metadata`、
+  応答は `steps[]` の `model_output` の `audio` の最後の 1 つ）。応答に使った量が無いので、費用は音の長さ × 25 トークン/秒で見積もる
+  （記録に `outputTokensEstimated: true`）。
+- **既製の声は `generateContent` のまま**。送る本文は前と同じ（前からのテストがそのまま通る）。
+- 計画の「`voice_…` を `generateContent` で読めるか 1 回だけ実際に呼んで確かめる」は、段 5a ではしなかった（実の Gemini は呼ばない指示）。
+  AnimalVideo が interactions で読んでいるので、その形にした。
+- **Voice Design**: `designVoice({ description, gender, displayName, languageCode: 'ja-JP' })` → `POST v1beta/voices`
+  `{ store: true, voice: { model, type: 'prompted', display_name, gender, language_code, prompted: { input } } }` →
+  `{ voiceId, sampleWav }`。`voice_` で始まらない ID は形が違うと失敗にする。試し聞きが無ければ null。
+- 鍵はヘッダーだけ。エラーの文には鍵・原稿・返答の本文を入れない（AnimalVideo は本文の頭 600 字をエラーに入れているが、ixa の決まりに合わせた）。
+
+## 確かめたこと（段 5a）
+
+- domain: 合成の dB の列で区間・つなぐ・捨てる・組・倍率の丸めと止め方・一致率・消す範囲・行の区間・読み方。
+  上限・食い違いを破る値のテストを置き、検査を外すと落ちることを確かめた。
+- media（実 ffmpeg）: 300Hz の元の声・3000Hz の環境音・500Hz の読み上げを合成し、消す範囲の中だけ元の声と環境音が消え、
+  範囲の外は残り、読み上げが置いた時刻から鳴り、-16 LUFS ±0.5 になること。伸縮の長さ・切る長さ。
+- Gemini: 偽の fetch で、429 の秒数の読み方・90 秒の境目・4 回まで・500 の 2/5/10 秒・打ち切り・interactions と voices の送る形と受け取る形。
+
+## 分かっている不足（段 5a の時点）
+
+- 行の区間は声の区間をつなぐだけ。2 人のセリフが続けて 1 つの区間になると合わない（手の区間を入れてもらう）。
+- 一致率は「話す／黙る」だけで、口の形までは見ない。
+- 作った声は作った鍵のプロジェクトでしか使えず、最後に使ってから 1 年で消える（名札の照合と消えたときの止め方は段 5b）。
+- ジョブ・DB・API・画面・MCP・字幕の時刻は段 5b。
