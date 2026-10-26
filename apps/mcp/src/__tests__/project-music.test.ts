@@ -162,7 +162,11 @@ describe('ixa_status / set_ai', () => {
       {
         method: 'GET',
         path: '/models',
-        data: [{ id: 'vpipe/minimax-h3-turbo', label: 'H3', durations: { mode: 'enum', values: [2.333, 10.125] }, costPerSecondUsd: 0, requiresStartFrame: true, routable: true }],
+        data: [
+          { id: 'vpipe/minimax-h3-turbo', label: 'H3', durations: { mode: 'enum', values: [2.333, 10.125] }, costPerSecondUsd: 0, requiresStartFrame: true, routable: true, audioGeneration: true },
+          // 古い API は audioGeneration を返さない（音を作れないと読む）
+          { id: 'wan/old', label: 'Wan', durations: { mode: 'enum', values: [5] }, costPerSecondUsd: 0, requiresStartFrame: true, routable: true },
+        ],
       },
       { method: 'GET', path: '/projects', data: [projectRow()] },
       { method: 'GET', path: `/projects/${PROJECT}/generations/active`, data: [] },
@@ -172,7 +176,10 @@ describe('ixa_status / set_ai', () => {
     expect(result).toMatchObject({
       api: 'ok',
       aiTools: [{ id: 'vpipe', ready: true, usableFor: ['video'] }],
-      videoModels: [{ id: 'vpipe/minimax-h3-turbo', durations: '2.333–10.125s (2 fixed lengths)' }],
+      videoModels: [
+        { id: 'vpipe/minimax-h3-turbo', durations: '2.333–10.125s (2 fixed lengths)', audioGeneration: true },
+        { id: 'wan/old', audioGeneration: false },
+      ],
       projects: [{ id: PROJECT, name: 'テスト' }],
       activeGenerations: [],
     })

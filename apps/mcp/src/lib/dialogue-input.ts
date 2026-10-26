@@ -24,7 +24,10 @@ export const DialogueLineInput = z.object({
     .max(MAX_DIALOGUE_TRANSLATION_LENGTH)
     .nullable()
     .optional()
-    .describe('English subtitle line (optional, used for two-line subtitles later).'),
+    .describe(
+      'English subtitle line (optional). Shown as the smaller second line of the automatic dialogue subtitle; ' +
+        'editing the subtitle translation with edit_clips writes back here.',
+    ),
 })
 
 export const DialogueInput = z

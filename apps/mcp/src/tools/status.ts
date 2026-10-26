@@ -21,7 +21,10 @@ export const statusTool = defineTool({
     'the video models you can pass to generate_takes, the projects in the workspace, and (with projectId) the video ' +
     'generations currently queued/running. Write everything the user sees in Japanese unless told otherwise. ' +
     'Workflow: create_project → music → set_master_track → plan_shots → cast → edit_shots → draw_start_frames → ' +
-    'view → generate_takes → wait → adopt_take → telops/narration/sfx → export.',
+    'view → generate_takes → wait → adopt_take → telops/narration/sfx → export. ' +
+    'Dialogue (talking characters): give each speaker speechName + voiceDescription (create_character, or edit_character ' +
+    'update with character: {...}), write lines with plan_shots dialogues or edit_shots dialogue, generate with an ' +
+    'audioGeneration model; dialogue subtitles are made automatically (add English with the line translation).',
   input: z.object({ projectId: Id.optional() }),
   handler: async ({ projectId }, { api, workspaceId }) => {
     const [health, tools, settings, models, projects] = await Promise.all([
@@ -51,6 +54,8 @@ export const statusTool = defineTool({
         label: m.label,
         durations: durationsText(m.durations),
         requiresStartFrame: m.requiresStartFrame,
+        // セリフのある Shot は、声を作れるモデルでしか作れない（ADR-0059）。
+        audioGeneration: m.audioGeneration ?? false,
         costPerSecondUsd: m.costPerSecondUsd,
         ...(m.qualityTier === undefined || m.qualityTier === null ? {} : { qualityTier: m.qualityTier }),
       })),

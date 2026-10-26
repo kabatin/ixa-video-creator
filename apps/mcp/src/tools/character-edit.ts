@@ -85,7 +85,10 @@ export const EditCharacterInput = z.object({
   projectId: Id,
   characterId: Id,
   action: z.enum(EDIT_CHARACTER_ACTIONS),
-  character: CharacterFields.optional().describe('update: fields to change.'),
+  character: CharacterFields.optional().describe(
+    'update: fields to change, nested here — e.g. {"speechName":"The cat","voiceDescription":"a soft, sly voice"}. ' +
+      'Fields placed next to action are ignored.',
+  ),
   lookId: Id.optional().describe('Look actions (except add_look).'),
   look: LookFields.optional().describe('add_look / update_look fields.'),
   image: ImageSource.optional().describe('add_look_image / set_canonical_frame / add_identity_image.'),
@@ -100,6 +103,11 @@ export const EditCharacterInput = z.object({
   referenceIdentityImageId: Id.optional().describe('make_character_sheet: which identity image to draw from.'),
 })
 type Args = z.infer<typeof EditCharacterInput>
+
+/** update で character を包み忘れたとき（上に置いた項目は入力の形に無いので落ちる）に、正しい形を例で示す。 */
+export const CHARACTER_UPDATE_SHAPE_MESSAGE =
+  'character に変える項目を入れてください。項目は character の中に書きます' +
+  '（例: {"action":"update","character":{"speechName":"The cat","voiceDescription":"a soft, sly voice"}}）'
 
 const need = <T>(value: T | undefined, message: string): T => {
   if (value === undefined) throw new ToolInputError(message)
@@ -180,8 +188,8 @@ type Handler = (args: Args, api: ApiClient, workspaceId: string) => Promise<unkn
 const HANDLERS: Readonly<Record<Args['action'], Handler>> = {
   get: async (args, api) => describeCharacter(api, args.characterId),
   update: async (args, api) => {
-    const patch = need(args.character, 'character に変える項目を入れてください')
-    if (Object.keys(patch).length === 0) throw new ToolInputError('character に変える項目を入れてください')
+    const patch = need(args.character, CHARACTER_UPDATE_SHAPE_MESSAGE)
+    if (Object.keys(patch).length === 0) throw new ToolInputError(CHARACTER_UPDATE_SHAPE_MESSAGE)
     await api.request('PATCH', `/characters/${seg(args.characterId)}`, WireOwnedCharacter, { body: patch })
     return describeCharacter(api, args.characterId)
   },
@@ -299,7 +307,9 @@ export const editCharacterTool = defineTool({
   description:
     'Edit or delete a character, its looks (outfits; one is the default), look images, the canonical frame, ' +
     'identity images (face/body references) and make a character sheet (4-view image drawn by the image AI). ' +
-    'Start with action="get" to see the ids. Only update/delete of the character itself is undoable; look and image ' +
+    'Start with action="get" to see the ids. action="update" takes the fields inside character, e.g. the dialogue voice ' +
+    'character: {speechName, voiceDescription} (English; every dialogue speaker needs both before generate_takes). ' +
+    'Only update/delete of the character itself is undoable; look and image ' +
     'changes are not undoable.',
   input: EditCharacterInput,
   handler: async (args, { api, workspaceId }) => {

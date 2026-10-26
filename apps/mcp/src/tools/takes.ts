@@ -54,7 +54,9 @@ export const generateTakesTool = defineTool({
   risk: 'costly',
   description:
     'Generate video takes for shots (queues jobs; local models take minutes per take and run one at a time). ' +
-    'Shots usually need a start frame first (draw_start_frames). Returns generation jobIds for wait ' +
+    'Shots usually need a start frame first (draw_start_frames). Shots with dialogue need a model that makes sound ' +
+    '(ixa_status videoModels audioGeneration: true, e.g. vpipe MiniMax H3; AUTO picks one): other models refuse them, and every ' +
+    'speaker needs speechName/voiceDescription. Returns generation jobIds for wait ' +
     '{kind:"generation", id}. corrections/seed/parentTakeId/autoRetake send one request per shot. ' +
     'By default takes are not reviewed or regenerated automatically (use review_take); set autoRetake for unattended runs.',
   input: GenerateTakesInput,

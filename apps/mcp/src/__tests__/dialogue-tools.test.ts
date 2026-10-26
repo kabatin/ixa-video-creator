@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createCharacterTool } from '../tools/cast.js'
-import { editCharacterTool } from '../tools/character-edit.js'
+import { EditCharacterInput, editCharacterTool } from '../tools/character-edit.js'
 import { editShotsTool } from '../tools/edit-shots.js'
 import { planShotsTool } from '../tools/plan-shots.js'
 import { createFakeApi, depsFor, jsonOf, ownedShots, textOf, ulid } from './fake-api.js'
@@ -137,6 +137,22 @@ describe('キャラクターの声', () => {
 
     expect(fake.callsTo('PATCH', `/characters/${CAT}`)[0]?.body).toEqual({ speechName: 'The cat', voiceDescription: 'a soft voice' })
     expect(result.character).toMatchObject({ speakerTag: 'S2', speechName: 'The cat', voiceDescription: 'a soft voice' })
+  })
+
+  it('update で character を包まずに呼び名を渡したら、何も送らずに正しい形を例で示す', async () => {
+    const fake = createFakeApi([{ method: 'GET', path: `/characters/${CAT}`, data: character }])
+    // 上に置いた speechName は入力の形に無いので落ちる。届くのは character の無い update。
+    const result = await editCharacterTool.run(
+      { projectId: PROJECT, characterId: CAT, action: 'update', speechName: 'The cat' },
+      depsFor(fake),
+    )
+    expect(textOf(result)).toContain('"character":{"speechName"')
+    expect(fake.callsTo('PATCH', `/characters/${CAT}`)).toHaveLength(0)
+  })
+
+  it('edit_character の説明と character の欄が、呼び名と声の説明を character の中に書くと教える', () => {
+    expect(editCharacterTool.description).toContain('character: {speechName, voiceDescription}')
+    expect(EditCharacterInput.shape.character.description).toContain('speechName')
   })
 
   it('create_character でも呼び名と声の説明を付けて作れる', async () => {

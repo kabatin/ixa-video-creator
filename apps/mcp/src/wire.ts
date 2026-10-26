@@ -266,6 +266,8 @@ export const WireModel = z.object({
   requiresStartFrame: z.boolean(),
   routable: z.boolean(),
   qualityTier: z.string().nullable().optional(),
+  /** セリフのある Shot の声を作れるか（ADR-0059）。古い API は返さないので省略可（作れないと読む）。 */
+  audioGeneration: z.boolean().optional(),
 })
 
 export const WireAiTools = z.object({
