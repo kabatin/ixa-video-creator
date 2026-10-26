@@ -7,6 +7,7 @@ import {
   RenderPreset as RenderPresetSchema,
   RenderScope as RenderScopeSchema,
   ShotId as ShotIdSchema,
+  resolveMasteringMode,
   type RenderJob,
   type RenderJobId,
 } from '@ixa/domain'
@@ -91,6 +92,7 @@ export const toRenderJobResponse = (job: RenderJob): RenderJobResponse => ({
   outputAssetId: job.outputAssetId,
   error: job.error,
   normalizeLoudness: job.normalizeLoudness,
+  masteringMode: job.masteringMode,
   loudnessLufs: job.loudnessLufs,
   createdAt: job.createdAt.toISOString(),
   finishedAt: job.finishedAt === null ? null : job.finishedAt.toISOString(),
@@ -153,7 +155,7 @@ const commonErrors = {
 
 /**
  * 前回うまくいった書き出しのうち、**同じ中身になるもの**（新しい順に最初の 1 つ）。
- * 比べるのは書き出しの設定（プリセット・範囲・音量）と文書。文書は署名だけが違うものを同じとみなす。
+ * 比べるのは書き出しの設定（プリセット・範囲・音量と仕上げ）と文書。文書は署名だけが違うものを同じとみなす。
  */
 const findSameRender = async (
   renderJobs: Pick<RenderJobRepository, 'findByProject'>,
@@ -162,6 +164,7 @@ const findSameRender = async (
     readonly preset: RenderJob['preset']
     readonly scope: RenderJob['scope']
     readonly normalizeLoudness: boolean
+    readonly masteringMode: RenderJob['masteringMode']
     readonly timelineSnapshot: RenderJob['timelineSnapshot']
   },
 ): Promise<RenderJob | null> => {
@@ -169,6 +172,7 @@ const findSameRender = async (
     preset: wanted.preset,
     scope: wanted.scope,
     normalizeLoudness: wanted.normalizeLoudness,
+    masteringMode: wanted.masteringMode,
     timeline: wanted.timelineSnapshot,
   })
   const jobs = await renderJobs.findByProject(wanted.projectId)
@@ -182,6 +186,7 @@ const findSameRender = async (
             preset: job.preset,
             scope: job.scope,
             normalizeLoudness: job.normalizeLoudness,
+            masteringMode: job.masteringMode,
             timeline: job.timelineSnapshot,
           }) === wantedKey,
       ) ?? null
@@ -283,6 +288,9 @@ export const renderRoutes = (deps: RenderRoutesDeps) =>
       // 何をレンダリングしたかが常に分かるよう、投入時点の TimelineDocument を保存する
       // （ARCHITECTURE.md §16）。worker はこのスナップショットだけを使う。一部だけなら切った後のもの。
       const timelineSnapshot = range === null ? loaded.document : sliceTimelineDocument(loaded.document, range)
+      // 仕上げの音量（ADR-0060）。投入の時点の作品の設定（選んでいなければセリフの有無）で決めて控える。
+      // 一部だけの書き出しでも作品全体で決める（同じ作品の書き出しの音の作りを揃える）。
+      const masteringMode = resolveMasteringMode(loaded.project.masteringMode, loaded.source.shots)
 
       // **始める前に知らせる。** 同じ中身を書き出し直すと、時間をかけたうえ同じものができるだけ。
       if (!force) {
@@ -291,6 +299,7 @@ export const renderRoutes = (deps: RenderRoutesDeps) =>
           preset,
           scope,
           normalizeLoudness,
+          masteringMode,
           timelineSnapshot,
         })
         if (previous !== null) {
@@ -310,6 +319,7 @@ export const renderRoutes = (deps: RenderRoutesDeps) =>
         scope,
         preset,
         normalizeLoudness,
+        masteringMode,
         timelineSnapshot,
       })
       await deps.queue.enqueue(job.id)

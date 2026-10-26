@@ -122,6 +122,8 @@ type ResolvedMedia = {
   readonly durationSec: number
   /** probe の尺そのもの。**分からなければ null**（Take の速度に使うので 0 と区別する）。 */
   readonly probedSec: number | null
+  /** 音のトラックがあるか（probe の `hasAudio`。ADR-0060）。未解析は false（鳴らさない）。 */
+  readonly hasAudio: boolean
 }
 
 /**
@@ -147,7 +149,13 @@ const resolveMediaAssets = async (
       )
       return [
         id,
-        { url, kind, durationSec: asset.probe?.durationSec ?? 0, probedSec: asset.probe?.durationSec ?? null },
+        {
+          url,
+          kind,
+          durationSec: asset.probe?.durationSec ?? 0,
+          probedSec: asset.probe?.durationSec ?? null,
+          hasAudio: asset.probe?.hasAudio === true,
+        },
       ] as const
     }),
   )
@@ -276,6 +284,11 @@ export const loadTimelineSource = async (
     resolveShotMediaDurationSec: (shot) => {
       const assetId = shotAssetIds.get(shot.id)
       return assetId === undefined ? null : (media.get(assetId)?.probedSec ?? null)
+    },
+    // 採用 Take の音を鳴らすか（ADR-0060）。音のトラックがあり、Shot が消音していないものだけ（決めるのは @ixa/timeline）。
+    resolveShotMediaHasAudio: (shot) => {
+      const assetId = shotAssetIds.get(shot.id)
+      return assetId !== undefined && media.get(assetId)?.hasAudio === true
     },
     // 画像でない素材（動画を最初のフレームにした等）は絵として映さない。
     resolveShotStill: (shot) => {

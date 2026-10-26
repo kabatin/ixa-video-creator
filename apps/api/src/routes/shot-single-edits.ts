@@ -64,6 +64,9 @@ const UpdateShotBody = UpdateShotPatchSchema.pick({
   locationId: true,
   // セリフの行（ADR-0059）。丸ごと置き換える。[] で消す。
   dialogue: true,
+  // 採用 Take の音の大きさ（0〜2）と消音（ADR-0060）。
+  takeAudioVolume: true,
+  takeAudioMuted: true,
 }).openapi('UpdateShotPatch')
 
 /** `(project_id, code)` は UNIQUE。衝突は利用者の入力ミスなので 422 で返す。 */

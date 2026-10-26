@@ -197,6 +197,8 @@ export const EditBatchProjectEntry = z.object({
       lyrics: project.lyrics.removeDefault().optional(),
       lyricCues: project.lyricCues.removeDefault().optional(),
       instrumental: project.instrumental.removeDefault().optional(),
+      // 仕上げの音量（ADR-0060）。null は「選んでいなかった」（自動）。
+      masteringMode: project.masteringMode.removeDefault().optional(),
       status: project.status.optional(),
     })
     .strict(),

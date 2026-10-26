@@ -139,6 +139,9 @@ export const shotEditRoutes = (deps: ShotEditRoutesDeps) =>
           // 合わせ方と速さ（ADR-0026・0050）も引き継ぐ。割っただけで後半が 1 倍に戻らない。
           timing: shot.timing,
           speed: shot.speed,
+          // Take の音の大きさと消音（ADR-0060）も引き継ぐ。消音の Shot を割って後半だけ鳴り出さない。
+          takeAudioVolume: shot.takeAudioVolume,
+          takeAudioMuted: shot.takeAudioMuted,
           description: shot.description,
           // セリフは前半に残す（両方に写すと同じセリフを 2 度しゃべる。ADR-0059）。後半で言わせるなら移し替える。
           dialogue: [],

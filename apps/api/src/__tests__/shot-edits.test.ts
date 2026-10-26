@@ -106,6 +106,17 @@ describe('POST /shots/:id/split', () => {
     expect((await f.shots.findById(body.data.second.id as Shot['id']))?.dialogue).toEqual([])
   })
 
+  it('Take の音の大きさと消音も後半に引き継ぐ（消音の Shot を割って後半だけ鳴り出さない。ADR-0060）', async () => {
+    const project = aProject()
+    const target = aShot(project.id, { code: 'CUT-01', order: 1000, startSec: 0, durationSec: 6, takeAudioMuted: true, takeAudioVolume: 0.6 })
+    const f = build(project, [target])
+
+    const res = await post(f.app, `/shots/${target.id}/split`, { atSec: 3 })
+    const body = (await res.json()) as Ok<{ second: WireShot }>
+
+    expect(await f.shots.findById(body.data.second.id as Shot['id'])).toMatchObject({ takeAudioMuted: true, takeAudioVolume: 0.6 })
+  })
+
   it('Take が 1 本でもあれば割らない（状態が下書きでも件数で確かめる）', async () => {
     const project = aProject()
     const shots = cuts(project)

@@ -54,6 +54,8 @@ export const createDuplicateProject = async (
           styleReferenceAssetIds: source.styleReferenceAssetIds,
           lyrics: source.lyrics,
           instrumental: source.instrumental,
+          // 仕上げの音量（ADR-0060）。選んでいなければ null（自動）のまま。
+          masteringMode: source.masteringMode,
         }
       : {}),
     // 尺は曲から決まる。曲を持っていくときだけ引き継ぐ。
