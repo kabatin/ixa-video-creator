@@ -11,6 +11,7 @@ import {
   type ContainerState,
   type InfraOwner,
 } from '../lib/compose.js'
+import { dbErrorReason } from '../lib/db-error.js'
 import { isBlank, type EnvValues } from '../lib/env-file.js'
 import type { System } from '../system.js'
 import type { CheckResult, Fix } from '../types.js'
@@ -153,8 +154,8 @@ const readDb = async (system: System, url: string): Promise<DbRead | string> => 
       return { pending, workspaceIds }
     })
   } catch (error) {
-    // 文に URL（合言葉入り）を入れない。postgres.js の文は接続先を含むことがあるので、種類だけ言う。
-    return error instanceof Error && /ECONNREFUSED|connect|timeout/i.test(error.message) ? 'つながりません' : '読めません'
+    // 文に URL（合言葉入り）を入れない。postgres.js の文は接続先を含むことがあるので、code だけ言う。
+    return dbErrorReason(error)
   }
 }
 

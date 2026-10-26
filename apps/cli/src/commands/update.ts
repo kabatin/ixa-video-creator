@@ -1,7 +1,6 @@
-import { countActiveJobs, type ActiveJobs } from '@ixa/db'
 import type { Options } from '../args.js'
 import { devIsRunning, gatherRuntime } from '../checks/runtime.js'
-import { isBlank, missingEnvKeys, type EnvValues } from '../lib/env-file.js'
+import { missingEnvKeys } from '../lib/env-file.js'
 import { parseRootPackage, RELEASES_URL, type RepoPaths } from '../lib/repo.js'
 import { formatVersion, type Version } from '../lib/semver.js'
 import { formatStep, type Output } from '../printer.js'
@@ -15,10 +14,10 @@ import {
   fastForwardOf,
   parseVersionOrThrow,
   releaseTarget,
-  staleJobsNotice,
   updateBlockers,
 } from '../update/decide.js'
 import { createGit, type Git } from '../update/git.js'
+import { checkActiveJobs, jobsGuard } from '../update/jobs.js'
 import { finalDoctor } from './doctor.js'
 
 /**
@@ -30,16 +29,6 @@ import { finalDoctor } from './doctor.js'
 
 const currentVersion = async (system: System, repo: RepoPaths): Promise<Version> =>
   parseVersionOrThrow(parseRootPackage((await system.readText(repo.rootPackage)) ?? '{}').version, 'package.json')
-
-const activeJobsOf = async (system: System, env: EnvValues): Promise<ActiveJobs | null> => {
-  if (isBlank(env, 'DATABASE_URL')) return null
-  try {
-    return await system.withDb(env['DATABASE_URL'] ?? '', (db) => countActiveJobs(db))
-  } catch {
-    // DB につながらない＝worker も動けない。動いているジョブは無いとみなす（そう表示する）。
-    return null
-  }
-}
 
 type Resolved =
   | { readonly kind: 'move'; readonly ref: string; readonly version: Version }
@@ -94,34 +83,36 @@ const moveAndHandOff = async (system: System, repo: RepoPaths, out: Output, opti
 const fetchStage = async (system: System, repo: RepoPaths, out: Output, options: Options): Promise<number> => {
   const git = createGit(system, repo)
   const current = await currentVersion(system, repo)
-  const activeJobs = await activeJobsOf(system, await readEnv(system, repo))
-  if (activeJobs === null) out.line('- DB につながらないので、動いているジョブは無いとみなします')
-  const stale = activeJobs === null ? null : staleJobsNotice(activeJobs.stale)
-  if (stale !== null) out.line(formatStep(stale))
-  const blockers = updateBlockers({ dirty: await git.dirty(), branch: await git.branch(), activeJobs: activeJobs?.counts ?? null, force: options.force })
+  const jobs = jobsGuard(await checkActiveJobs(system, await readEnv(system, repo)), options.force)
+  jobs.steps.filter((s) => !isStopping(s)).forEach((s) => out.line(formatStep(s)))
+  const jobsJson = { activeJobs: jobs.counts, activeJobsReason: jobs.reason }
+  const blockers = [
+    ...jobs.steps.filter(isStopping),
+    ...updateBlockers({ dirty: await git.dirty(), branch: await git.branch(), activeJobs: jobs.counts, force: options.force }),
+  ]
   system.progress('新しい版を確かめています（git fetch --tags）…')
   await git.fetch()
   const target = await resolveTarget(git, current, options.main)
   const from = formatVersion(current)
   if (target.kind === 'no-release') {
-    return finish(out, false, [{ id: 'update.target', status: 'failed', message: 'リリースのタグ（vX.Y.Z）が見つかりません' }], { from })
+    return finish(out, false, [{ id: 'update.target', status: 'failed', message: 'リリースのタグ（vX.Y.Z）が見つかりません' }], { from, ...jobsJson })
   }
   if (target.kind === 'up-to-date') {
     out.line(`✓ 最新です（${from}）`)
-    return finish(out, true, [], { from, to: from, upToDate: true })
+    return finish(out, true, [], { from, to: from, upToDate: true, ...jobsJson })
   }
   const to = formatVersion(target.version)
   const relation = fastForwardOf(await git.ancestry(target.ref))
   // タグの名前は新しいが中身は今と同じ（package.json の版を上げ忘れたタグなど）。取り込むものが無い。
   if (relation === 'same') {
     out.line(`✓ 最新です（${target.ref} と同じコミット）`)
-    return finish(out, true, [], { from, to: from, upToDate: true })
+    return finish(out, true, [], { from, to: from, upToDate: true, ...jobsJson })
   }
   const ff = fastForwardBlocker(relation, target.ref)
   const allBlockers = [...blockers, ...(ff === null ? [] : [ff])]
   out.line(`新しい版があります: ${describeMove(current, target.version)}`)
-  if (options.check) return finish(out, true, allBlockers, { check: true, from, to })
-  if (allBlockers.length > 0) return finish(out, false, allBlockers, { from, to })
+  if (options.check) return finish(out, true, allBlockers, { check: true, from, to, ...jobsJson })
+  if (allBlockers.length > 0) return finish(out, false, allBlockers, { from, to, ...jobsJson })
   return moveAndHandOff(system, repo, out, options, git, current, target.ref)
 }
 
