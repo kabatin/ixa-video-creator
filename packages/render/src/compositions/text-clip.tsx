@@ -64,6 +64,8 @@ type DrawProps = {
   readonly style: ResolvedTextStyle
   readonly fontSize: number
   readonly template: TextTemplateKey
+  /** 2 段目の訳文と、その文字の大きさ（ADR-0061）。無ければ 1 段だけ描く（今までと同じ絵）。 */
+  readonly translation?: { readonly text: string; readonly fontSize: number }
 }
 
 /** 映像の矩形に重ねる箱。レターボックスの黒帯に文字がはみ出さないようにする。 */
@@ -157,6 +159,11 @@ const StyledText: React.FC<DrawProps> = (props) => (
       <div style={bodyStyle(props.style, props.fontSize)}>
         {props.spoken === undefined ? props.text : <SpokenText split={props.spoken.split} color={props.spoken.color} />}
       </div>
+      {props.translation === undefined ? null : (
+        <div data-telop-translation="" style={bodyStyle(props.style, props.translation.fontSize)}>
+          {props.translation.text}
+        </div>
+      )}
     </div>
   </div>
 )
@@ -214,6 +221,22 @@ export const textClipBaseLength = (video: { readonly width: number; readonly hei
 /** 大きさを割合で指定したテロップの文字の大きさ（px）。 */
 export const textClipSizedFontSize = (size: number, video: { readonly width: number; readonly height: number }): number =>
   Math.max(1, Math.round(size * textClipBaseLength(video)))
+
+/**
+ * 2 段目（訳文）の文字の大きさ（ADR-0061）。本文の大きさ（短い辺が基準）に `scale` を掛ける。
+ * 長い訳文は、本文と同じ流し込み幅・行数に収まるまで縮める（全角 1 字を 1em と数えるので、英字には余裕がある）。
+ */
+export const textClipTranslationFontSize = (input: {
+  readonly template: TextTemplateKey
+  readonly mainFontSize: number
+  readonly scale: number
+  readonly translation: string
+  readonly video: FitRect
+}): number => {
+  const { layout } = TEXT_TEMPLATES[input.template]
+  const fits = Math.floor((input.video.width * layout.widthRatio * layout.maxLines) / Math.max(input.translation.length, 1))
+  return Math.max(1, Math.min(Math.round(input.mainFontSize * input.scale), fits))
+}
 
 /** テンプレートの置き場所。テストが実際の寸法から収まるかを計算するのに使う。 */
 export const textClipLayout = (template: TextTemplateKey): TextLayout =>
@@ -344,7 +367,22 @@ export const TextClip: React.FC<{
     style.size === null
       ? textClipFontSize(template, params.text, video)
       : textClipSizedFontSize(style.size, video)
-  const draw: DrawProps = { text: params.text, video, layout, decor, style, fontSize, template }
+  const translation =
+    params.translation === undefined
+      ? {}
+      : {
+          translation: {
+            text: params.translation,
+            fontSize: textClipTranslationFontSize({
+              template,
+              mainFontSize: fontSize,
+              scale: style.translationScale,
+              translation: params.translation,
+              video,
+            }),
+          },
+        }
+  const draw: DrawProps = { text: params.text, video, layout, decor, style, fontSize, template, ...translation }
   const body =
     params.highlight !== undefined && timing !== undefined ? (
       <Spoken timing={timing} highlight={params.highlight} draw={draw} />

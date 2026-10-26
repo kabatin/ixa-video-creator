@@ -42,6 +42,13 @@ export const MAX_TEXT_STROKE_WIDTH = 0.25
 export const MAX_TEXT_OFFSET = 0.5
 /** フェードの長さ（秒）。 */
 export const MAX_TEXT_FADE_SEC = 2
+/**
+ * 2 段字幕の下の段（訳文）の大きさ（上の段の文字の大きさに対する割合。ADR-0061）。
+ * 上の段より大きくはしない（下の段は添え物）。小さすぎると縦長の画面で読めない。
+ */
+export const DEFAULT_TRANSLATION_SCALE = 0.6
+export const MIN_TRANSLATION_SCALE = 0.3
+export const MAX_TRANSLATION_SCALE = 1
 
 const HexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, '色は #RRGGBB の形で指定してください')
 
@@ -77,6 +84,8 @@ export const TextStyle = z
     offset: z.object({ x: Offset, y: Offset }).optional(),
     fadeInSec: z.number().min(0).max(MAX_TEXT_FADE_SEC).optional(),
     fadeOutSec: z.number().min(0).max(MAX_TEXT_FADE_SEC).optional(),
+    /** 下の段（訳文）の大きさ。訳文の無いテロップでは効かない（ADR-0061）。 */
+    translationScale: z.number().min(MIN_TRANSLATION_SCALE).max(MAX_TRANSLATION_SCALE).optional(),
   })
   .strict()
 export type TextStyle = z.infer<typeof TextStyle>
@@ -99,6 +108,7 @@ export const TEXT_STYLE_KEY_LABELS: Readonly<Record<TextStyleKey, string>> = Obj
   offset: 'ずらし',
   fadeInSec: 'フェードイン',
   fadeOutSec: 'フェードアウト',
+  translationScale: '訳の大きさ',
 })
 
 /**
@@ -153,6 +163,8 @@ export type ResolvedTextStyle = {
   readonly offset: { readonly x: number; readonly y: number }
   readonly fadeInSec: number
   readonly fadeOutSec: number
+  /** 下の段（訳文）の大きさ（上の段に対する割合）。 */
+  readonly translationScale: number
 }
 
 const COMMON_DEFAULTS = {
@@ -164,6 +176,7 @@ const COMMON_DEFAULTS = {
   offset: { x: 0, y: 0 },
   fadeInSec: 0,
   fadeOutSec: 0,
+  translationScale: DEFAULT_TRANSLATION_SCALE,
 } as const
 
 /**

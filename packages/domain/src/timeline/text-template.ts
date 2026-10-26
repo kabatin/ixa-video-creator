@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { NarrationLineId, TextStyleId } from '../common/ids.js'
+import { MAX_DIALOGUE_TRANSLATION_LENGTH } from '../shot/dialogue.js'
 import { TextStyle } from './text-style.js'
 
 /**
@@ -55,6 +56,15 @@ const TextClipText = z
  */
 export const MIN_TEXT_CLIP_DURATION_SEC = 0.5
 
+/**
+ * 訳文（2 段字幕の下の段。ADR-0061）の上限。セリフの行の訳文（`MAX_DIALOGUE_TRANSLATION_LENGTH`）と同じ
+ * （セリフの字幕は行の訳文をそのまま写すので、行に書ける訳文がテロップで弾かれないように）。
+ */
+export const MAX_TEXT_CLIP_TRANSLATION_LENGTH = MAX_DIALOGUE_TRANSLATION_LENGTH
+
+/** 訳文。空のときは鍵ごと持たない（空の下の段を描かない）。 */
+const TextClipTranslation = z.string().trim().min(1, '訳文が空です').max(MAX_TEXT_CLIP_TRANSLATION_LENGTH)
+
 /** 話している字を強調する（ADR-0038）。 */
 export const TextHighlight = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, '色は #RRGGBB の形で指定してください'),
@@ -82,6 +92,8 @@ export const TextClipParams = z.object({
   narrationLineId: NarrationLineId.optional(),
   /** 話している字を強調する（ADR-0038）。字の時刻（このテロップの頭からの秒）と色。 */
   highlight: TextHighlight.optional(),
+  /** 訳文（ADR-0061）。あれば本文の下に小さめの 2 段目として描く。 */
+  translation: TextClipTranslation.optional(),
 })
 export type TextClipParams = z.infer<typeof TextClipParams>
 
@@ -126,6 +138,8 @@ export const parseTextClipParams = (params: unknown): TextClipParams | null => {
   const narrationLineId = narrationLineOf(params)
   const highlight = (params as { readonly highlight?: unknown }).highlight
   const parsedHighlight = highlight === undefined ? null : TextHighlight.safeParse(highlight)
+  const translation = (params as { readonly translation?: unknown }).translation
+  const parsedTranslation = translation === undefined ? null : TextClipTranslation.safeParse(translation)
   return {
     text: textOnly.data.text,
     ...(style?.success === true ? { style: style.data } : {}),
@@ -134,5 +148,7 @@ export const parseTextClipParams = (params: unknown): TextClipParams | null => {
     ...(narrationLineId === null ? {} : { narrationLineId }),
     // 読めない強調は捨てる（文字は普通に出す）。
     ...(parsedHighlight?.success === true ? { highlight: parsedHighlight.data } : {}),
+    // 読めない訳文は捨てる（本文は普通に出す）。
+    ...(parsedTranslation?.success === true ? { translation: parsedTranslation.data } : {}),
   }
 }
