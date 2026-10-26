@@ -184,6 +184,15 @@ export const isTakeAudioMuted = (
   shot: { readonly takeAudioMuted: boolean | null; readonly dialogue: readonly unknown[] },
 ): boolean => shot.takeAudioMuted ?? shot.dialogue.length === 0
 
+/**
+ * 採用 Take の音を鳴らすか（ADR-0060）。Take に音があり、消音しておらず（自動ならセリフのある Shot だけ）、大きさが 0 でないときだけ。
+ * プレビュー・書き出し（`@ixa/timeline`）と、セリフの字幕の時刻（話している区間を使うか。ADR-0061）が同じ規則を読む。
+ */
+export const takeAudioPlays = (
+  shot: { readonly takeAudioMuted: boolean | null; readonly takeAudioVolume: number; readonly dialogue: readonly unknown[] },
+  hasAudio: boolean,
+): boolean => hasAudio && !isTakeAudioMuted(shot) && shot.takeAudioVolume > 0
+
 export const shotEndSec = (shot: Pick<Shot, 'startSec' | 'durationSec'>): Seconds =>
   shot.startSec + shot.durationSec
 

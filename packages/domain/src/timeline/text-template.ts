@@ -1,6 +1,7 @@
 import { z } from 'zod'
-import { NarrationLineId, TextStyleId } from '../common/ids.js'
-import { MAX_DIALOGUE_TRANSLATION_LENGTH } from '../shot/dialogue.js'
+import { NarrationLineId, ShotId, TextStyleId } from '../common/ids.js'
+import { Seconds } from '../common/time.js'
+import { MAX_DIALOGUE_LINES, MAX_DIALOGUE_TRANSLATION_LENGTH } from '../shot/dialogue.js'
 import { TextStyle } from './text-style.js'
 
 /**
@@ -65,6 +66,17 @@ export const MAX_TEXT_CLIP_TRANSLATION_LENGTH = MAX_DIALOGUE_TRANSLATION_LENGTH
 /** 訳文。空のときは鍵ごと持たない（空の下の段を描かない）。 */
 const TextClipTranslation = z.string().trim().min(1, '訳文が空です').max(MAX_TEXT_CLIP_TRANSLATION_LENGTH)
 
+/**
+ * セリフから作ったテロップの印（ADR-0061）。どの Shot の何行目か。
+ * `placed` は同期が最後に置いた時刻。**今の時刻がこれと違えば、手で直した**とみなし、次の同期でも手の値を保つ。
+ */
+export const DialogueTelopMark = z.object({
+  shotId: ShotId,
+  lineIndex: z.number().int().nonnegative().max(MAX_DIALOGUE_LINES - 1),
+  placed: z.object({ startSec: Seconds, durationSec: z.number().positive() }),
+})
+export type DialogueTelopMark = z.infer<typeof DialogueTelopMark>
+
 /** 話している字を強調する（ADR-0038）。 */
 export const TextHighlight = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, '色は #RRGGBB の形で指定してください'),
@@ -94,6 +106,8 @@ export const TextClipParams = z.object({
   highlight: TextHighlight.optional(),
   /** 訳文（ADR-0061）。あれば本文の下に小さめの 2 段目として描く。 */
   translation: TextClipTranslation.optional(),
+  /** セリフから作ったテロップの印（ADR-0061）。手で置いたテロップには付けない。 */
+  dialogue: DialogueTelopMark.optional(),
 })
 export type TextClipParams = z.infer<typeof TextClipParams>
 
@@ -103,6 +117,14 @@ const NarrationLineMark = z.object({ narrationLineId: NarrationLineId })
 export const narrationLineOf = (params: unknown): NarrationLineId | null => {
   const parsed = NarrationLineMark.safeParse(params)
   return parsed.success ? parsed.data.narrationLineId : null
+}
+
+const DialogueMarkHolder = z.object({ dialogue: DialogueTelopMark })
+
+/** セリフから作ったテロップなら、どの Shot の何行目か（と最後に置いた時刻）。手で置いたテロップ・読めない印は null。 */
+export const dialogueTelopOf = (params: unknown): DialogueTelopMark | null => {
+  const parsed = DialogueMarkHolder.safeParse(params)
+  return parsed.success ? parsed.data.dialogue : null
 }
 
 const LyricLineMark = z.object({ lyricLine: z.number().int().nonnegative() })
@@ -136,6 +158,7 @@ export const parseTextClipParams = (params: unknown): TextClipParams | null => {
   const styleId = raw.styleId === undefined ? null : TextStyleId.nullable().safeParse(raw.styleId)
   const lyricLine = lyricLineOf(params)
   const narrationLineId = narrationLineOf(params)
+  const dialogue = dialogueTelopOf(params)
   const highlight = (params as { readonly highlight?: unknown }).highlight
   const parsedHighlight = highlight === undefined ? null : TextHighlight.safeParse(highlight)
   const translation = (params as { readonly translation?: unknown }).translation
@@ -146,6 +169,7 @@ export const parseTextClipParams = (params: unknown): TextClipParams | null => {
     ...(styleId?.success === true ? { styleId: styleId.data } : {}),
     ...(lyricLine === null ? {} : { lyricLine }),
     ...(narrationLineId === null ? {} : { narrationLineId }),
+    ...(dialogue === null ? {} : { dialogue }),
     // 読めない強調は捨てる（文字は普通に出す）。
     ...(parsedHighlight?.success === true ? { highlight: parsedHighlight.data } : {}),
     // 読めない訳文は捨てる（本文は普通に出す）。

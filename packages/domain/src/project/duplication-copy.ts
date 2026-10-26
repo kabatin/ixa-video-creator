@@ -8,6 +8,7 @@ import type {
   TakeId,
 } from '../common/ids.js'
 import { NarrationLineId, TextStyleId } from '../common/ids.js'
+import { dialogueTelopOf } from '../timeline/text-template.js'
 import type { VoiceProfileId } from '../common/ids.js'
 import type { CreateNarrationLineInput, NarrationLine } from '../narration/narration-line.js'
 import type { NarrationTake } from '../narration/narration-take.js'
@@ -130,6 +131,11 @@ export type ClipCopyContext = {
   readonly keepLyricLink: boolean
   /** 写したナレーションの行（ADR-0038）。写していない行への印は外す（手で置いたテロップになり、作り直しで消えない）。 */
   readonly narrationLines: IdMap<NarrationLineId>
+  /**
+   * 写した Shot（ADR-0061）。セリフの字幕の印は写した先の Shot へ指し直す（見た目・手で直した時刻を残す）。
+   * 写していない Shot への印は外す。
+   */
+  readonly shots: IdMap<ShotId>
 }
 
 /** 保存した見た目の付け替え。写していない・読めない印は null（上書きの見た目は残るので見た目は変わらない）。 */
@@ -147,7 +153,9 @@ const copyTextParams = (
   readonly lyricLinkDropped: boolean
   readonly narrationLinkDropped: boolean
 } => {
-  const { lyricLine, styleId, narrationLineId, ...rest } = params
+  const { lyricLine, styleId, narrationLineId, dialogue, ...rest } = params
+  const dialogueMark = dialogueTelopOf({ dialogue })
+  const movedShot = dialogueMark === null ? undefined : ctx.shots.get(dialogueMark.shotId)
   const style = styleId === undefined ? {} : { styleId: remapStyleId(styleId, ctx.styles) }
   const keepLine = ctx.keepLyricLink && lyricLine !== undefined
   const parsedLine = NarrationLineId.safeParse(narrationLineId)
@@ -158,6 +166,7 @@ const copyTextParams = (
       ...style,
       ...(keepLine ? { lyricLine } : {}),
       ...(movedLine === null ? {} : { narrationLineId: movedLine }),
+      ...(dialogueMark === null || movedShot === undefined ? {} : { dialogue: { ...dialogueMark, shotId: movedShot } }),
     },
     lyricLinkDropped: !ctx.keepLyricLink && lyricLine !== undefined,
     narrationLinkDropped: movedLine === null && narrationLineId !== undefined,

@@ -210,6 +210,7 @@ describe('copyClipInput', () => {
       styles: new Map([[style, copiedStyle]]),
       keepLyricLink: true,
       narrationLines: new Map(),
+      shots: new Map(),
     })
 
     expect(input).toMatchObject({ projectId: TARGET_PROJECT, track: 'TEXT', startSec: 3, durationSec: 2 })
@@ -227,6 +228,7 @@ describe('copyClipInput', () => {
       styles: new Map(),
       keepLyricLink: false,
       narrationLines: new Map(),
+      shots: new Map(),
     })
 
     expect(input.content).toEqual({
@@ -250,7 +252,7 @@ describe('copyClipInput', () => {
       content: { type: 'text', templateKey: 'plain', params: { text: '勝負の時が来た。', narrationLineId: sourceLine } },
       createdAt: AT,
     })
-    const ctx = { projectId: TARGET_PROJECT, styles: new Map(), keepLyricLink: true }
+    const ctx = { projectId: TARGET_PROJECT, styles: new Map(), keepLyricLink: true, shots: new Map() }
 
     const moved = copyClipInput(narrationTelop, { ...ctx, narrationLines: new Map([[sourceLine, targetLine]]) })
     expect(moved.input.content).toMatchObject({ params: { narrationLineId: targetLine } })
@@ -259,6 +261,30 @@ describe('copyClipInput', () => {
     const dropped = copyClipInput(narrationTelop, { ...ctx, narrationLines: new Map() })
     expect(dropped.input.content).toEqual({ type: 'text', templateKey: 'plain', params: { text: '勝負の時が来た。' } })
     expect(dropped.narrationLinkDropped).toBe(true)
+  })
+
+  it('セリフの字幕の印は、写した Shot へ指し直す（見た目・手で直した時刻を残す）。写していない Shot なら外す', () => {
+    const sourceShot = newId(ShotId)
+    const targetShot = newId(ShotId)
+    const placed = { startSec: 3, durationSec: 2 }
+    const telop = TimelineClip.parse({
+      id: newId(TimelineClipId),
+      projectId: SOURCE_PROJECT,
+      track: 'TEXT',
+      startSec: 3.5,
+      durationSec: 1,
+      layer: 2,
+      content: { type: 'text', templateKey: 'plain', params: { text: 'ねえ', dialogue: { shotId: sourceShot, lineIndex: 0, placed } } },
+      createdAt: AT,
+    })
+    const ctx = { projectId: TARGET_PROJECT, styles: new Map(), keepLyricLink: true, narrationLines: new Map() }
+
+    const moved = copyClipInput(telop, { ...ctx, shots: new Map([[sourceShot, targetShot]]) })
+    expect(moved.input).toMatchObject({ startSec: 3.5, durationSec: 1 })
+    expect(moved.input.content).toMatchObject({ params: { dialogue: { shotId: targetShot, lineIndex: 0, placed } } })
+
+    const dropped = copyClipInput(telop, { ...ctx, shots: new Map() })
+    expect(dropped.input.content).toEqual({ type: 'text', templateKey: 'plain', params: { text: 'ねえ' } })
   })
 
   it('重ね素材（画像・動画・音）は同じファイルを指したまま写す', () => {
@@ -277,6 +303,7 @@ describe('copyClipInput', () => {
       styles: new Map(),
       keepLyricLink: false,
       narrationLines: new Map(),
+      shots: new Map(),
     })
 
     expect(input.content).toEqual(media.content)

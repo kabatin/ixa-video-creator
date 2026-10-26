@@ -38,17 +38,19 @@ export const duplicateProject = async (
     await writeConcept(deps, project, snapshot.concept)
     await writeMusic(deps, project, snapshot)
     const library = await writeLibrary(deps, project, snapshot)
-    // 見た目 → 声 → ナレーション → テロップ の順。声はテロップの見た目を指し、テロップはナレーションの行を指す。
+    // 見た目 → 声 → ナレーション → Shot → テロップ の順。声はテロップの見た目を指し、テロップはナレーションの行と
+    // （セリフの字幕は）Shot を指す（ADR-0061）。
     const styles = await writeTextStyles(deps, project, snapshot)
     const { narrationLines, characterVoicesDropped } = await writeNarration(deps, project, snapshot, items, {
       characters: library.characters,
       styles,
     })
+    const { castDropped, locationDropped, dialogueLinesDropped, shotMap } = await writeShots(deps, project, snapshot, items, library)
     const { lyricLinksDropped, narrationLinksDropped } = await writeClips(deps, project, snapshot, items, {
       styles,
       narrationLines,
+      shots: shotMap,
     })
-    const { castDropped, locationDropped, dialogueLinesDropped } = await writeShots(deps, project, snapshot, items, library)
     return {
       project,
       notes: duplicationNotes({

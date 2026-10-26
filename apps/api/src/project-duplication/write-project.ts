@@ -10,6 +10,7 @@ import {
   type LocationId,
   type NarrationLineId,
   type Project,
+  type ShotId,
   type TextStyleId,
   type VoiceProfileId,
 } from '@ixa/domain'
@@ -190,6 +191,7 @@ export const writeClips = async (
   maps: {
     readonly styles: ReadonlyMap<TextStyleId, TextStyleId>
     readonly narrationLines: ReadonlyMap<NarrationLineId, NarrationLineId>
+    readonly shots: ReadonlyMap<ShotId, ShotId>
   },
 ): Promise<{ readonly lyricLinksDropped: number; readonly narrationLinksDropped: number }> => {
   const copies = source.clips.map((clip) =>
@@ -198,6 +200,7 @@ export const writeClips = async (
       styles: maps.styles,
       keepLyricLink: items.has('concept'),
       narrationLines: maps.narrationLines,
+      shots: maps.shots,
     }),
   )
   if (copies.length > 0) await deps.timelineClips.replace([], copies.map((copy) => copy.input))
