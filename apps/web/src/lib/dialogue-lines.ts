@@ -1,4 +1,4 @@
-import type { Character, CharacterId, DialogueLine } from '@ixa/domain'
+import type { Character, CharacterId, DialogueDub, DialogueLine } from '@ixa/domain'
 
 /**
  * Shot のセリフの欄の下書き（ADR-0059）。**画面の中の書きかけ**で、保存する形（`DialogueLine`）とは別に持つ。
@@ -10,6 +10,8 @@ export type DraftLine = {
   readonly text: string
   readonly offscreen: boolean
   readonly translation: string | null
+  /** 差し替えの指定（ADR-0062）。無い行は鍵ごと無い（前からの行を 1 バイトも変えない）。 */
+  readonly dub?: DialogueDub | undefined
 }
 
 export const draftsFrom = (lines: readonly DialogueLine[]): readonly DraftLine[] =>
@@ -18,6 +20,7 @@ export const draftsFrom = (lines: readonly DialogueLine[]): readonly DraftLine[]
     text: line.text,
     offscreen: line.offscreen,
     translation: line.translation,
+    ...(line.dub === undefined ? {} : { dub: line.dub }),
   }))
 
 /** 話し手とセリフのある行だけを保存する形にする（書きかけの行は送らない）。 */
@@ -26,7 +29,15 @@ export const savableLines = (drafts: readonly DraftLine[]): DialogueLine[] =>
     const text = draft.text.trim()
     return draft.speakerId === null || text === ''
       ? []
-      : [{ speakerId: draft.speakerId, text, offscreen: draft.offscreen, translation: translationFromInput(draft.translation ?? '') }]
+      : [
+          {
+            speakerId: draft.speakerId,
+            text,
+            offscreen: draft.offscreen,
+            translation: translationFromInput(draft.translation ?? ''),
+            ...(draft.dub === undefined ? {} : { dub: draft.dub }),
+          },
+        ]
   })
 
 /** 保存した行が同じか（書きかけの行は比べない）。サーバの値で下書きを上書きするかの判断に使う。 */

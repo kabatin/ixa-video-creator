@@ -151,6 +151,7 @@ export const assetStoreValue = (patch: Partial<AssetStoreValue> = {}): AssetStor
     importLibrary: vi.fn(),
     createVoice: vi.fn(),
     updateVoice: vi.fn(),
+    designVoice: vi.fn(),
     deleteVoice: vi.fn(),
   },
   ...patch,

@@ -33,6 +33,7 @@ import { defaultLook, lookKeyFromName } from '@/lib/asset-actions'
 import type { LibraryImportRequest, WireLibraryImportResult } from '@/lib/library-import-api'
 import { deriveTrackTitle } from '@/lib/music-upload'
 import type { WireVoice } from '@/lib/narration-api'
+import type { DesignVoiceBody, WireDesignedVoice } from '@/lib/dub-api'
 import { newVoiceDefaults } from '@/lib/voice-defaults'
 
 /**
@@ -90,6 +91,11 @@ export type AssetActions = {
   /** 声を名前だけで作る（「使う AI」の声の AI と、その最初の声。ADR-0038）。 */
   readonly createVoice: (name: string) => Promise<WireVoice>
   readonly updateVoice: (id: VoiceProfileId, patch: UpdateVoiceProfilePatch) => Promise<WireVoice>
+  /**
+   * 説明から声を作る（Voice Design。ADR-0062）。**作った時点で、その人の声として保存される**（一覧に足す）。
+   * 試し聞きの素材を一緒に返す（返らなければ null）。
+   */
+  readonly designVoice: (characterId: CharacterId, body: DesignVoiceBody) => Promise<WireDesignedVoice>
   /** 消すと、その声で話す行は「声が未定」に戻る（ナレーションの一覧は呼び出し側が取り直す）。 */
   readonly deleteVoice: (id: VoiceProfileId) => Promise<void>
   /**
@@ -415,6 +421,11 @@ export const AssetStoreProvider = ({
         const updated = await api.updateVoice(id, patch)
         setVoices((current) => mapReady(current, (items) => replaceIn(items, updated)))
         return updated
+      },
+      designVoice: async (characterId, body) => {
+        const designed = await api.designVoice(characterId, body)
+        setVoices((current) => mapReady(current, (items) => [...items, designed.voice]))
+        return designed
       },
       deleteVoice: async (id) => {
         await api.deleteVoice(id)

@@ -122,3 +122,64 @@ describe('ShotDialogueSection', () => {
     expect(screen.getByRole('option', { name: '見つからない話し手（選び直してください）' })).toBeTruthy()
   })
 })
+
+/** セリフの行の「差し替えの指定」（ADR-0062）。欄を離れたときに行の dub として保存する。規則に合わない値は送らない。 */
+describe('ShotDialogueSection の差し替えの指定', () => {
+  const saved: DialogueLine = { speakerId: cat.id, text: 'ねえ', offscreen: false, translation: null }
+
+  it('距離を入れると、行の dub として保存する', async () => {
+    const onSave = render(aWorkbenchShot(1, { dialogue: [saved] }))
+    await userEvent.click(screen.getByText('差し替えの指定'))
+    await userEvent.type(screen.getByRole('textbox', { name: '1 行目の距離（dB）' }), '-9.5')
+    await userEvent.tab()
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith({ dialogue: [{ ...saved, dub: { levelDb: -9.5 } }] })
+    })
+  })
+
+  it('範囲の外の距離・収める長さと切る長さの両方は保存せず、理由を出す', async () => {
+    const onSave = render(aWorkbenchShot(1, { dialogue: [{ ...saved, dub: { fitSec: 1.2 } }] }))
+    await userEvent.click(screen.getByText('差し替えの指定（あり）'))
+    await userEvent.type(screen.getByRole('textbox', { name: '1 行目の距離（dB）' }), '13')
+    await userEvent.tab()
+    expect((await screen.findByRole('alert')).textContent).toBe('距離は -40〜12 dB で入れてください')
+    await userEvent.type(screen.getByRole('textbox', { name: '1 行目の切る長さ' }), '0.8')
+    await userEvent.tab()
+    expect((await screen.findByRole('alert')).textContent).toBe('収める長さと切る長さは、どちらか 1 つだけにしてください')
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('足す行は、置く時刻と音量を合わせる行を入れて保存する', async () => {
+    const other: DialogueLine = { speakerId: mouse.id, text: 'ふふ', offscreen: true, translation: null }
+    const onSave = render(aWorkbenchShot(1, { dialogue: [saved, { ...other, dub: { added: true, placeAtSec: 2 } }] }))
+    await userEvent.click(screen.getByText('差し替えの指定（あり）'))
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: '2 行目の音量を合わせる行' }), '0')
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith({ dialogue: [saved, { ...other, dub: { added: true, placeAtSec: 2, levelLikeIndex: 0 } }] })
+    })
+  })
+
+  it('前の差し替えが止まったときの行の区間の案を出し、「案を入れる」で保存する', async () => {
+    const second: DialogueLine = { speakerId: mouse.id, text: 'なに？', offscreen: false, translation: null }
+    const onSave = vi.fn(() => Promise.resolve())
+    renderInWorkbench(
+      <ShotDialogueSection
+        shot={aWorkbenchShot(1, { dialogue: [saved, second] })}
+        version={0}
+        disabled={false}
+        suggestedSpans={[
+          { lineIndex: 0, startSec: 0.2, endSec: 0.65 },
+          { lineIndex: 1, startSec: 0.65, endSec: 2 },
+        ]}
+        onSave={onSave}
+      />,
+      {},
+      assetStoreValue({ characters: { state: 'ready', value: [cat, mouse] } }),
+    )
+    expect(screen.getByText('行の区間の案: 0:00.20〜0:00.65')).toBeTruthy()
+    await userEvent.click(screen.getAllByRole('button', { name: '案を入れる' })[0] as HTMLElement)
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith({ dialogue: [{ ...saved, dub: { startSec: 0.2, endSec: 0.65 } }, second] })
+    })
+  })
+})

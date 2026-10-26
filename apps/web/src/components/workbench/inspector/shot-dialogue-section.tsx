@@ -5,10 +5,12 @@ import {
   dialogueSpeakerProblems,
   dialogueWarnings,
   type DialogueLine,
+  type DubLineSpanSuggestion,
   type Shot,
 } from '@ixa/domain'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAssets } from '@/components/workbench/asset-store'
+import { DialogueDubFields } from '@/components/workbench/inspector/dialogue-dub-fields'
 import { INPUT_CLASS, TEXTAREA_CLASS } from '@/components/workbench/ui/section'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
@@ -40,11 +42,14 @@ export const ShotDialogueSection = ({
   shot,
   version,
   disabled,
+  suggestedSpans = [],
   onSave,
 }: {
   readonly shot: Shot
   readonly version: number
   readonly disabled: boolean
+  /** 前の声の差し替えが止まったときの、行ごとの区間の案（ADR-0062）。 */
+  readonly suggestedSpans?: readonly DubLineSpanSuggestion[]
   readonly onSave: (patch: { readonly dialogue: DialogueLine[] }) => Promise<void>
 }) => {
   const api = useMemo(() => createApiClient(), [])
@@ -103,6 +108,8 @@ export const ShotDialogueSection = ({
 
   const busy = disabled || status.kind === 'saving'
   const firstSpeaker = choices.cast[0]?.id ?? choices.others[0]?.id ?? null
+  /** 音量を合わせる行に選べる行（足す行でない行）。 */
+  const levelLikeChoices = drafts.flatMap((draft, index) => (draft.dub?.added === true ? [] : [{ index, text: draft.text }]))
 
   if (all.length === 0) {
     return <p className="text-xs text-muted">キャラクターを作ると、セリフを書けます。</p>
@@ -118,6 +125,8 @@ export const ShotDialogueSection = ({
           count={drafts.length}
           draft={draft}
           choices={choices}
+          levelLikeChoices={levelLikeChoices}
+          suggestion={suggestedSpans.find((span) => span.lineIndex === index) ?? null}
           disabled={busy}
           onChange={(patch) => {
             commit(updateDraftLine(drafts, index, patch))
@@ -167,6 +176,8 @@ const DialogueRow = ({
   count,
   draft,
   choices,
+  levelLikeChoices,
+  suggestion,
   disabled,
   onChange,
   onDraft,
@@ -177,6 +188,8 @@ const DialogueRow = ({
   readonly count: number
   readonly draft: DraftLine
   readonly choices: Choices
+  readonly levelLikeChoices: readonly { readonly index: number; readonly text: string }[]
+  readonly suggestion: DubLineSpanSuggestion | null
   readonly disabled: boolean
   /** 保存する変更（話し手・画面外の印・セリフの確定）。 */
   readonly onChange: (patch: Partial<DraftLine>) => void
@@ -269,6 +282,17 @@ const DialogueRow = ({
         />
         画面外の声（映っている人の口は閉じたまま）
       </label>
+      <DialogueDubFields
+        label={label}
+        index={index}
+        dub={draft.dub}
+        otherLines={levelLikeChoices}
+        suggestion={suggestion}
+        disabled={disabled}
+        onChange={(dub) => {
+          onChange({ dub })
+        }}
+      />
     </div>
   )
 }

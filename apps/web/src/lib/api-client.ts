@@ -33,6 +33,7 @@ import { createMusicSourceApi, type MusicSourceApi } from '@/lib/music-source-ap
 import { createSfxJobApi, type SfxJobApi } from '@/lib/sfx-job-api'
 import { createUploadedSfxApi, type UploadedSfxApi } from '@/lib/uploaded-sfx-api'
 import { createMotionApi, type MotionApi } from '@/lib/motion-api'
+import { createDubApi, type DubApi } from '@/lib/dub-api'
 import { createSequenceApi, type SequenceApi } from '@/lib/sequence-api'
 import { createReviewApi, type ReviewApi } from '@/lib/review-api'
 import { createNarrationApi, type NarrationApi } from '@/lib/narration-api'
@@ -154,6 +155,7 @@ export type ApiClient = { readonly baseUrl: string } & ProjectApi &
   SfxJobApi &
   UploadedSfxApi &
   MotionApi &
+  DubApi &
   LibraryApi &
   LibraryImportApi &
   CharacterSheetApi &
@@ -292,6 +294,7 @@ export const createApiClient = (
     ...createSfxJobApi(requester),
     ...createUploadedSfxApi(requester),
     ...createMotionApi(requester),
+    ...createDubApi(requester),
     ...createRenderApi(requester),
     ...createShotBulkApi(requester),
     ...createShotEditApi(requester),

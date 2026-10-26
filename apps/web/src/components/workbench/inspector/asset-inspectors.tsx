@@ -127,7 +127,7 @@ export const CharacterInspector = ({ id }: { readonly id: CharacterId }) => {
         </Link>
       </Section>
       {/* セリフの話し手（ADR-0059）。H3 のセリフの文に一字一句そのまま入る。どの Shot でも同じ声になる。 */}
-      <Section title="セリフの声">
+      <Section title="話し手の伝え方">
         <AutoSaveField
           label="英語の呼び名"
           value={character.speechName ?? ''}
@@ -163,7 +163,7 @@ export const CharacterInspector = ({ id }: { readonly id: CharacterId }) => {
           Look を足すのはツリーの「＋ Look を追加」から。画像は中央の素材ビューアへ落とします。
         </p>
       </Section>
-      <CharacterVoices characterId={id} displayName={character.displayName} />
+      <CharacterVoices character={character} />
     </Frame>
   )
 }

@@ -8,6 +8,8 @@ import { useAssets } from '@/components/workbench/asset-store'
 import { FootageImportForm } from '@/components/workbench/inspector/footage-import-form'
 import { ShotCastSection } from '@/components/workbench/inspector/shot-cast-section'
 import { ShotDialogueSection } from '@/components/workbench/inspector/shot-dialogue-section'
+import { ShotDubSection } from '@/components/workbench/inspector/shot-dub-section'
+import { useShotDub } from '@/components/workbench/use-shot-dub'
 import { ShotGenerateSection } from '@/components/workbench/inspector/shot-generate-section'
 import { StartFrameField } from '@/components/workbench/inspector/start-frame-field'
 import { EndFrameField, type EndFrameCandidate } from '@/components/workbench/inspector/end-frame-field'
@@ -59,6 +61,10 @@ export const ShotInspector = ({
     await workbench.saveShot(shot.id, patch)
   }
   const generating = isGeneratingStatus(shot.status)
+  // 声の差し替え（ADR-0062）。終わったら採用が新しい Take に移るので、Shot を読み直す。
+  const dub = useShotDub(shot, workbench.serverEpoch, workbench.refresh)
+  const dubTakes = useShotTakes(shot, workbench.posterEpoch).takes
+  const failedDub = dub.state?.latestJob?.status === 'failed' ? dub.state.latestJob : null
   /** 最初のフレームが付いているか（ADR-0025）。生成欄が押せるかの判定に渡す。 */
   const [hasStartFrame, setHasStartFrame] = useState(false)
   const sections = useRef<Partial<Record<InspectorTab, HTMLDivElement | null>>>({})
@@ -151,6 +157,7 @@ export const ShotInspector = ({
               shot={shot}
               version={workbench.serverEpoch}
               disabled={generating}
+              suggestedSpans={failedDub?.error?.suggestedSpans ?? []}
               onSave={save}
             />
           </Section>
@@ -195,6 +202,12 @@ export const ShotInspector = ({
           >
             <TakeSection shot={shot} />
           </div>
+
+          {shot.dialogue.length > 0 && (
+            <Section title="声の差し替え">
+              <ShotDubSection shot={shot} dub={dub} takes={dubTakes} />
+            </Section>
+          )}
 
           <Section title="時間">
             <AutoSaveField
