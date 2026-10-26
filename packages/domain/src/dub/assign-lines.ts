@@ -1,4 +1,5 @@
 import { ASSIGN_AMBIGUITY_MARGIN, assignByLength, type LengthLine } from './assign-by-length.js'
+import { assignByText, type TranscriptWord } from './assign-by-text.js'
 import { DUB_MAX_TEMPO } from './chunk-tempo.js'
 import type { DialogueDub } from './dialogue-dub.js'
 import type { DubWarning } from './dub-record.js'
@@ -10,6 +11,9 @@ import type { DubChunk } from './speech-chunks.js'
  *
  * - 足す行（`added`）は数えない（H3 は話していない）
  * - 行の手の区間（`startSec`/`endSec`）があればそれを使う。その区間に掛かる声の区間は他の行に回さない
+ * - 文字起こしの語（`transcript`）があれば、まずそれで残りの行に声の区間を割り当てる（`assignByText`）。
+ *   決められない並び（語が行と合わない・語が足りない）と、文字起こしが使えなかった（null）並びは、
+ *   下の読み上げの長さで割り当て、その行に `line_span_by_length` の警告を付ける（黙って長さに頼らない）
  * - 読み上げの長さ（`ttsSec`）があれば、残りの行に続いた区間の並びを、読み上げの長さに合うように割り当てる
  *   （`assignByLength`。クリック・環境音の区間は飛ばす）。どの割り当てでも 1.6 倍を超えるなら止める（0.8 倍未満は止めない）。
  *   次に良い割り当てとほとんど差が無ければ、良い方を使い、その行に迷いの警告を付ける
@@ -51,6 +55,9 @@ export type AssignResult =
 
 type LineInput = { readonly dub?: DialogueDub | undefined; readonly text?: string | undefined }
 
+/** 文字起こしの語。`null` は使えなかった（口が無い・失敗した）、`undefined` は頼んでいない。 */
+export type LineTranscript = readonly TranscriptWord[] | null | undefined
+
 const overlaps = (a: DubChunk, b: DubChunk): boolean => a.startSec < b.endSec && b.startSec < a.endSec
 
 const clip = (chunk: DubChunk, span: DubChunk): DubChunk => ({
@@ -63,6 +70,7 @@ const manualSpanOf = (line: LineInput): DubChunk | null =>
 
 type SpokenLine = {
   readonly lineIndex: number
+  readonly text: string
   readonly manual: DubChunk | null
   readonly weight: number
   readonly ttsSec: readonly number[] | null
@@ -129,6 +137,17 @@ const ambiguousWarning = (lineIndex: number): LineSpanWarning => ({
   },
 })
 
+const byLengthWarning = (lineIndex: number, transcript: readonly TranscriptWord[] | null): LineSpanWarning => ({
+  lineIndex,
+  warning: {
+    code: 'line_span_by_length',
+    message:
+      `セリフの ${String(lineIndex + 1)} 行目: ` +
+      (transcript === null ? '文字起こしが使えなかったので' : '文字起こしが行の文と合わなかったので') +
+      '、元の声の区間を読み上げの長さで決めました。ずれていたら「行の区間」を入れてください',
+  },
+})
+
 const isLip = (dub: DialogueDub | undefined): boolean =>
   dub?.keepOriginal !== true && dub?.placeAtSec === undefined && dub?.fitSec === undefined && dub?.cutSec === undefined
 
@@ -165,23 +184,56 @@ const autoByLength = (window: readonly DubChunk[], lines: readonly SpokenLine[])
   return { ok: true, groups: best.runs.map(([from, to]) => window.slice(from, to)), warnings }
 }
 
-const autoAssign = (window: readonly DubChunk[], lines: readonly SpokenLine[]): AutoResult => {
+const autoWithoutText = (window: readonly DubChunk[], lines: readonly SpokenLine[]): AutoResult =>
+  lines.some((line) => line.ttsSec !== null) ? autoByLength(window, lines) : { ok: true, groups: mergeChunksTo(window, lines.length), warnings: [] }
+
+/** 並びの時刻に入る語（語の真ん中で決める）。 */
+const wordsIn = (transcript: readonly TranscriptWord[], fromSec: number, toSec: number): readonly TranscriptWord[] =>
+  transcript.filter((word) => {
+    const middle = (word.startSec + word.endSec) / 2
+    return middle >= fromSec && middle < toSec
+  })
+
+const autoAssign = (
+  window: readonly DubChunk[],
+  lines: readonly SpokenLine[],
+  transcript: LineTranscript,
+  range: { readonly fromSec: number; readonly toSec: number },
+): AutoResult => {
   if (window.length < lines.length) {
     return shortage(window, lines)
   }
-  if (lines.some((line) => line.ttsSec !== null)) return autoByLength(window, lines)
-  return { ok: true, groups: mergeChunksTo(window, lines.length), warnings: [] }
+  if (transcript === undefined) return autoWithoutText(window, lines)
+  const byText =
+    transcript === null
+      ? null
+      : assignByText(
+          window,
+          wordsIn(transcript, range.fromSec, range.toSec),
+          lines.map((line) => ({ lineIndex: line.lineIndex, text: line.text, ttsSec: line.ttsSec })),
+        )
+  if (byText !== null) return { ok: true, groups: byText.groups, warnings: byText.ambiguous.map(ambiguousWarning) }
+  const fallback = autoWithoutText(window, lines)
+  return fallback.ok
+    ? { ...fallback, warnings: [...lines.map((line) => byLengthWarning(line.lineIndex, transcript)), ...fallback.warnings] }
+    : fallback
 }
 
 /**
  * 手の区間の行で並びを区切り、その間のふつうの行には、その間の時刻にある声の区間だけを割り当てる
  * （**手の区間をまたいでつながない**。またぐと、ふつうの行の区間が手の区間に重なる）。
  */
-export const assignLines = (chunks: readonly DubChunk[], lines: readonly LineInput[], ttsSec?: LineTtsLengths): AssignResult => {
+export const assignLines = (
+  chunks: readonly DubChunk[],
+  lines: readonly LineInput[],
+  ttsSec?: LineTtsLengths,
+  transcript?: LineTranscript,
+): AssignResult => {
   const spoken = lines
     .map(
       (line, lineIndex): SpokenLine => ({
         lineIndex,
+        text: line.text ?? '',
         manual: manualSpanOf(line),
         weight: Math.max(1, [...(line.text ?? '')].length),
         ttsSec: ttsSec?.get(lineIndex) ?? null,
@@ -200,7 +252,7 @@ export const assignLines = (chunks: readonly DubChunk[], lines: readonly LineInp
         return { ...acc, spans: [...acc.spans, { lineIndex: run.line.lineIndex, ...manual, source: 'manual', chunks: inside }] }
       }
       const window = free.filter((chunk) => chunk.startSec >= run.fromSec && chunk.endSec <= run.toSec)
-      const auto = autoAssign(window, run.lines)
+      const auto = autoAssign(window, run.lines, transcript, run)
       if (!auto.ok) return auto
       const spans = run.lines.map((line, k): LineSpan => {
         const group = auto.groups[k] ?? []

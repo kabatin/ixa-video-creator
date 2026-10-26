@@ -13,7 +13,7 @@ const spansOf = (result: ReturnType<typeof assignLines>) =>
   result.ok ? result.spans.map((span) => [span.lineIndex, span.startSec, span.endSec, span.source]) : result.reason
 
 describe('assignLines（読み上げの長さで割り当てる）', () => {
-  it('実際の H3 の Take: 頭のクリックと尻の環境音を飛ばし、行 1 と行 2 に話した区間を割り当てる', () => {
+  it('実際の H3 の Take、文字起こしが無いとき: 頭のクリックを飛ばし、長さの合う区間を選ぶ（本当の区間は 1 行目 1.57〜4.13・2 行目 4.86〜6.28。長さだけでは外れるので文字起こしで正す。dub-assign-text.test.ts）', () => {
     const chunks = [c(0.0, 0.15), c(1.57, 2.45), c(2.97, 3.69), c(3.76, 4.13), c(4.86, 5.0), c(5.46, 6.03), c(6.07, 6.28)]
     const result = assignLines(chunks, [{ text: 'ねえ、ネズミくん。' }, { text: 'な、なんですか。' }], tts([[0, [1.39]], [1, [1.16]]]))
     expect(result).toEqual({

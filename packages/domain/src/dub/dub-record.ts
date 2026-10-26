@@ -15,7 +15,7 @@ export type DubLineMode = z.infer<typeof DubLineMode>
 export const DubReading = z.enum(['plain', 'pause', 'no_comma'])
 export type DubReading = z.infer<typeof DubReading>
 
-export const DubWarningCode = z.enum(['fast_tempo', 'slow_tempo_clamped', 'cut_by_next', 'chunk_count_mismatch', 'line_span_ambiguous'])
+export const DubWarningCode = z.enum(['fast_tempo', 'slow_tempo_clamped', 'cut_by_next', 'chunk_count_mismatch', 'line_span_ambiguous', 'line_span_by_length'])
 export type DubWarningCode = z.infer<typeof DubWarningCode>
 
 export const DubWarning = z.object({ code: DubWarningCode, message: z.string().min(1).max(200) }).strict()
