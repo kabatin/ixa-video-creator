@@ -103,7 +103,13 @@ export const EnvSchema = z.object({
    * 素材の URL を使うのは画面なので、**画面が API を呼ぶ場所と同じでなければ届かない**。
    * 2026-10-07 に、ここが `127.0.0.1` のままで LAN の別の端末から素材が 1 つも見えなくなった。
    */
-  STORAGE_PUBLIC_BASE_URL: urlString.optional(),
+  // **空は「書いていない」と同じ。** `.env.example` は `STORAGE_PUBLIC_BASE_URL=` と空で配るので、
+  // そのまま写した .env で API が「形式が不正」で起動しなかった（pnpm ixa setup の検査で見つけた）。
+  STORAGE_PUBLIC_BASE_URL: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v.trim()))
+    .pipe(urlString.optional())
+    .optional(),
   /**
    * 画面から見た API の場所（`apps/web` が使う変数）。**API 側はこれを既定の決定にだけ使う。**
    *
