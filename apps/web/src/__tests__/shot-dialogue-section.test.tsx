@@ -64,6 +64,17 @@ describe('ShotDialogueSection', () => {
     })
   })
 
+  it('訳文（英語の字幕）を書くと、欄を離れたときに行の訳文として保存する。空にすると訳文なし', async () => {
+    const saved: DialogueLine = { speakerId: cat.id, text: 'ねえ', offscreen: false, translation: null }
+    const onSave = render(aWorkbenchShot(1, { dialogue: [saved] }))
+    const field = screen.getByRole('textbox', { name: '1 行目の訳文' })
+    await userEvent.type(field, '  Hey.  ')
+    await userEvent.tab()
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith({ dialogue: [{ ...saved, translation: 'Hey.' }] })
+    })
+  })
+
   it('呼び名と声の説明が無い話し手を知らせる', () => {
     render(aWorkbenchShot(1, { dialogue: [{ speakerId: mouse.id, text: 'なに？', offscreen: false, translation: null }] }))
     expect(screen.getByText('セリフの話し手「ネズミ」に英語の呼び名がありません')).toBeTruthy()

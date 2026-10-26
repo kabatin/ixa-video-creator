@@ -26,12 +26,18 @@ export const savableLines = (drafts: readonly DraftLine[]): DialogueLine[] =>
     const text = draft.text.trim()
     return draft.speakerId === null || text === ''
       ? []
-      : [{ speakerId: draft.speakerId, text, offscreen: draft.offscreen, translation: draft.translation }]
+      : [{ speakerId: draft.speakerId, text, offscreen: draft.offscreen, translation: translationFromInput(draft.translation ?? '') }]
   })
 
 /** 保存した行が同じか（書きかけの行は比べない）。サーバの値で下書きを上書きするかの判断に使う。 */
 export const sameSavedLines = (drafts: readonly DraftLine[], saved: readonly DialogueLine[]): boolean =>
   JSON.stringify(savableLines(drafts)) === JSON.stringify(saved)
+
+/** 訳文の欄の値（ADR-0061。2 段字幕の下の段）。前後の空白を落とし、空なら訳文なし。 */
+export const translationFromInput = (value: string): string | null => {
+  const trimmed = value.trim()
+  return trimmed === '' ? null : trimmed
+}
 
 export const addDraftLine = (
   drafts: readonly DraftLine[],

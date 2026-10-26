@@ -20,6 +20,7 @@ import {
   sameSavedLines,
   savableLines,
   speakerChoices,
+  translationFromInput,
   updateDraftLine,
   type DraftLine,
 } from '@/lib/dialogue-lines'
@@ -241,6 +242,19 @@ const DialogueRow = ({
         }}
         onBlur={(event) => {
           onChange({ text: event.target.value })
+        }}
+        className={TEXTAREA_CLASS}
+      />
+      <textarea
+        aria-label={`${label}の訳文`}
+        value={draft.translation ?? ''}
+        placeholder="訳文（英語の字幕。2 段目に小さく出す）"
+        disabled={disabled}
+        onChange={(event) => {
+          onDraft({ translation: event.target.value })
+        }}
+        onBlur={(event) => {
+          onChange({ translation: translationFromInput(event.target.value) })
         }}
         className={TEXTAREA_CLASS}
       />

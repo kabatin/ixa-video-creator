@@ -8,9 +8,18 @@ import {
   savableLines,
   sameSavedLines,
   speakerChoices,
+  translationFromInput,
   updateDraftLine,
   type DraftLine,
 } from '@/lib/dialogue-lines'
+
+describe('translationFromInput（訳文の欄。ADR-0061）', () => {
+  it('前後の空白を落とし、空なら訳文なし（null）', () => {
+    expect(translationFromInput('  Hey.  ')).toBe('Hey.')
+    expect(translationFromInput('   ')).toBeNull()
+    expect(translationFromInput('')).toBeNull()
+  })
+})
 
 const CAT = CharacterId.parse('01ARZ3NDEKTSV4RRFFQ69G5FB1')
 const MOUSE = CharacterId.parse('01ARZ3NDEKTSV4RRFFQ69G5FB2')

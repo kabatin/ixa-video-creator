@@ -1,9 +1,18 @@
 'use client'
 
-import { TextTemplateKey, narrationLineOf, textStyleChangeSummary, type TextStyle, type TextStyleKey, type TimelineClipId } from '@ixa/domain'
+import {
+  TextTemplateKey,
+  dialogueTelopOf,
+  narrationLineOf,
+  textStyleChangeSummary,
+  type TextStyle,
+  type TextStyleKey,
+  type TimelineClipId,
+} from '@ixa/domain'
 import { useEffect, useMemo, useState } from 'react'
 import { TextStyleFields, type TextStylePatch } from '@/components/workbench/inspector/text-style-fields'
 import { TextStylePresets } from '@/components/workbench/inspector/text-style-presets'
+import { TextTranslationFields } from '@/components/workbench/inspector/text-translation-fields'
 import { PanelEmpty } from '@/components/workbench/panels/panel-frame'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
@@ -257,6 +266,13 @@ export const TextClipInspector = ({
       />
       <div className="workbench-panel-body relative min-h-0 flex-1 overflow-auto">
         <Section title="文字">
+          {dialogueTelopOf(content.params) !== null && (
+            // セリフの字幕は Shot のセリフから導かれる（ADR-0061）。訳文は Shot の行へ書き戻る。
+            <p role="note" className="text-xs text-warn">
+              Shot のセリフから作った字幕です。字は Shot の「セリフ」で直してください（ここで直しても作り直されます）。
+              訳文はここで直すと Shot の行にも残ります。時刻と見た目はここで直したものが残ります。
+            </p>
+          )}
           {narrationLineOf(content.params) !== null && (
             // ナレーションのテロップは行から導かれる（ADR-0038）。ここで直しても、行を直すと作り直される。
             <p role="note" className="text-xs text-warn">
@@ -271,6 +287,10 @@ export const TextClipInspector = ({
             value={params?.text ?? ''}
             validate={(next) => (next.trim() === '' ? '文字を入れてください' : null)}
             onSave={(next) => save({ params: { ...content.params, text: next.trim() } })}
+          />
+          <TextTranslationFields
+            params={content.params}
+            onSave={(params) => save({ params })}
           />
           {template.success ? (
             <AutoSaveSelect
