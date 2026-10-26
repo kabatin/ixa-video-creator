@@ -43,25 +43,49 @@ Docker（postgres・redis を起動して healthy まで待つ）→ DB の更�
 初期データ（ワークスペース。ID を `.env` の空欄に書く）→ `uv sync --locked`（`--check` で揃っていれば飛ばす）→ doctor。
 止まる手順が出たらそこで止め、それより先は回さない。`--yes` は途中の質問（Docker Desktop を起動するか）に「はい」で答える。
 
-- **別の clone のコンテナを見つけたら止める。** 同じ Mac の 2 つ目の clone は、既定のままだと 1 つ目の `ixa-postgres` に
-  つながり、setup がその DB に更新と初期データを書いてしまう。コンテナの `com.docker.compose.project.working_dir` で見分け、
-  分ける（`.env` の `IXA_COMPOSE_PROJECT`・`IXA_COMPOSE_PREFIX`・`POSTGRES_PORT`・`REDIS_PORT`）か共有する（`IXA_COMPOSE_SHARED=true`）かを人に聞く。
+- **別の clone の DB を見つけたら止める**（`setup/infra-guard.ts`）。同じ Mac の 2 つ目の clone は、既定のままだと 1 つ目の
+  `ixa-postgres` につながり、setup がその DB に更新と初期データを書いてしまう。見張りは次の 2 つを compose の場所の印
+  （`com.docker.compose.project.working_dir`。シンボリックリンクはたどって比べる）で見る。
+  - 名前（`<prefix>-postgres`・`<prefix>-redis`）のコンテナ
+  - `.env` の `DATABASE_URL`・`REDIS_URL` のポートを公開しているコンテナ（`docker ps --filter publish=`）。名前だけ替えて URL が
+    5432 のままだと、Docker の外とみなして 1 つ目の clone の DB に書けたため（レビューの指摘）
+  別の clone のものなら、分ける（`.env` の `IXA_COMPOSE_PROJECT`・`IXA_COMPOSE_PREFIX`・`POSTGRES_PORT`・`REDIS_PORT`）か共有する
+  （`IXA_COMPOSE_SHARED=true`）かを人に聞く。**見張りは起動・DB の更新・初期データのどれも最初に通す**（update の 2 段目の DB の更新も）。
+- 書いたのに形が違う `IXA_COMPOSE_*`・ポート、`POSTGRES_PORT` と `DATABASE_URL` のポートの食い違い（`REDIS_*` も）は設定の問題にする
+  （`composeProblems`）。**黙って既定に戻さない**（既定は 1 つ目の clone の名前）。doctor は ✗、setup・infra は止まる。
 - `infra/docker-compose.yml` の名前とポートは `.env` で替えられる（既定は今までと同じ。`docker compose config` の展開結果が変更前と一致）。
   プロジェクト名は CLI が `-p` で渡す（この Mac の compose v2.2 は compose ファイルの `name:` を読めない）。
+- **`pnpm infra:up` / `infra:down` は `pnpm ixa infra up | down` を通す。** 直に `docker compose` を打つと `-p` が渡らず、
+  2 つ目の clone の `infra:down` が 1 つ目の clone のスタックを止め、`infra:up` が同じボリュームで作り直した。
+  down は別の clone のものなら共有の設定でも止めない。`-v` は決して付けない。既定のプロジェクトは今までと同じ `infra`（ボリュームもそのまま）。
 
 ### 4. update（2 段）
 
-1 段目（今の版の CLI）: 止める条件（追跡しているファイルの未コミットの変更・`main` 以外・動いているジョブ）→ `git fetch --tags` →
-いちばん新しい `vX.Y.Z`（`--main` なら `origin/main`）→ fast-forward できるか → `git merge --ff-only` → `pnpm install --frozen-lockfile` →
-**新しい版の CLI を `pnpm -s ixa update --after-fetch --from <前の版>` で起こし直す**。
-2 段目（新しい版の CLI）: `uv sync` → Docker → DB の更新 → 新しく増えた `.env` の項目（名前だけ。値は書かない）→ 変更点の URL → doctor →
-dev が動いていれば「起動し直して」。
+1 段目（今の版の CLI）: 止める条件（追跡しているファイルの未コミットの変更・`main` 以外・動いているジョブ・この clone の dev）→
+`git fetch --tags` → いちばん新しい `vX.Y.Z`（`--main` なら `origin/main`）→ 取り込むか（版と祖先の両方で決める）→ `git merge --ff-only` →
+途中の印を置く → `pnpm install --frozen-lockfile` → **新しい版の CLI を `pnpm -s ixa update --after-fetch --from <前の版>` で起こし直す**。
+2 段目（新しい版の CLI）: `uv sync` → Docker → DB の更新 → 新しく増えた `.env` の項目（名前だけ。値は書かない）→ 印を消す →
+変更点の URL → doctor → dev が動いていれば「起動し直して」。
 
-- 動いているジョブ: 9 つの表（generation・render・image_generation・music・sfx・upscale・dub・voice の終わっていない状態と、
-  `isAgentSessionBusy` の会話）を `countActiveJobs`（`packages/db`）で数える。`--force` はこの確認だけを外す。
-  DB につながらなければ worker も動けないので、無いとみなす（そう表示する）。
-- `pnpm install` は 1 段目でやる（計画では 2 段目だったが、依存が入らないと新しい版の CLI を起こせない）。
-- タグの名前は新しいが中身が今と同じなら「最新です」。
+- 動いているジョブ: 12 の表を `countActiveJobs`（`packages/db`）で数える。表ごとに「動いている状態」を名前で持つ
+  （generation・music・sfx・upscale・dub・voice・storyboard_draft_runs・review_runs は queued・running、render_jobs は queued・rendering・encoding、
+  image_generation_jobs は queued・running・checking、thumbnails は queued・rendering、会話は `isAgentSessionBusy`）。
+  終わりの状態は表で違う（succeeded と done がある）ので、終わりの側では決めない。
+  - **24 時間より前から動いたままの行は数えない**（取り残し。生きている DB にも 2026-10-07 から running の絵コンテの案が 1 行ある）。
+    数えると更新がいつまでも止まるので、`update.stale-jobs` で ID と日付を並べて知らせるだけにする。
+  - `--force` はジョブの確認だけを外す。
+  - 0 件とみなすのは DB が動いていないとき（code が ECONNREFUSED・CONNECT_TIMEOUT・ETIMEDOUT・ECONNRESET）だけ。それ以外の失敗
+    （合言葉違いなど）は止める。JSON に `activeJobs`（数えなければ null）と `activeJobsReason` を残す。
+- **この clone の dev が動いていれば取り込む前に止める**（tsx watch と next dev が途中の版を読み込み直し、DB の更新の前に新しいコードが
+  古い DB に当たる）。動かしたまま進めるのは `--while-running`（`--force` とは別の同意）。
+- `pnpm install` は 1 段目の後半でやる（計画では 2 段目だったが、依存が入らないと新しい版の CLI を起こせない）。
+- **途中で止まったら続きから。** 取り込んだ直後に `.ixa-update-pending.json`（.gitignore 済み）を置き、2 段目の手順が止まらずに済んだら消す。
+  途中で落ちるとコードの版は新しいので、版の比べ合わせでは「最新です」に見えてしまう。印があれば update は `pnpm -s ixa update --resume`
+  を勧め（`update.pending`）、doctor も ✗（`tools.update-pending`）にする。`--resume` は pnpm install から 2 段目までをやり直す。
+- 取り込むか: 版が新しくても中身が今と同じ（祖先が同じ）なら「最新です」。版が同じでもタグが先にあれば取り込む。
+- 手順が投げたら `failed` の手順にして止め、続きの 1 行（`setup` / `update --resume`）を付ける。最上位で投げたら `--json` では
+  `{command, ok:false, error}` を 1 つだけ出す。文の中の URL の合言葉は伏せる。
+- 終わったら明示的に終える（postgres.js はつながらなかった接続の再試行の時計を残すので、DB が止まっていると doctor が返らなかった）。
 
 ### 5. mcp
 

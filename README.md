@@ -265,7 +265,7 @@ pnpm ixa update           # to the latest release (--main for the tip of main)
 pnpm ixa update --check   # only tell me whether there is one
 ```
 
-It refuses to run with uncommitted changes, off `main`, or while jobs (generation, export, images, music, sound effects, voices, upscaling, the agent) are running — `--force` lifts only the jobs check. It fast-forwards to the release tag and installs dependencies, then hands over to the **new** version of itself to run `uv sync` and the DB migrations, list any `.env` items the new version added (it never writes values), link the release notes and run `doctor`. Restart `pnpm dev` afterwards.
+It refuses to run with uncommitted changes, off `main`, while `pnpm dev` is running (stop it first, or `--while-running`), or while jobs (generation, export, images, music, sound effects, voices, upscaling, storyboard drafts, reviews, thumbnails, the agent) are running — `--force` lifts only the jobs check. If it stops halfway, fix the cause and run `pnpm ixa update --resume`. It fast-forwards to the release tag and installs dependencies, then hands over to the **new** version of itself to run `uv sync` and the DB migrations, list any `.env` items the new version added (it never writes values), link the release notes and run `doctor`. Restart `pnpm dev` afterwards.
 
 ### Connecting a paid provider
 

@@ -91,6 +91,8 @@ Homebrew が無ければ、`brew` の 1 行の代わりに Homebrew（https://br
 - 入っていない → 人に Docker Desktop（https://www.docker.com/products/docker-desktop/）を入れてもらう。
 - 止まっている → `open -a Docker` で起動して 1 分ほど待つ（`setup --yes` は自分で起動して待つ）。
 - `infra` が `failed` → `docker logs <名前>-postgres` を見る。ポート（既定 5432・6379）がほかで使われていないか。
+- postgres・redis だけを起こす・止めるのは `pnpm ixa infra up` / `pnpm ixa infra down`（`pnpm infra:up` / `infra:down` も同じ）。
+  **`docker compose` を直に打たない**（別の clone のスタックを止めてしまう）。`down` はデータを消さない。`-v` は付けない。
 
 ## 設定
 
@@ -110,7 +112,10 @@ Homebrew が無ければ、`brew` の 1 行の代わりに Homebrew（https://br
 ## 2 つ目の clone
 
 同じ Mac で ixa がもう動いている（別の場所に clone がある）と、`.env.example` の既定のままでは**その clone の DB**
-（`ixa-postgres`・5432）につながる。setup はそれを見つけると `infra` で `needs_human` で止まる。**どちらにするか人に聞く**:
+（`ixa-postgres`・5432）につながる。setup はそれを見つけると `infra`（DB の更新・初期データ・update でも）で `needs_human` で止まる。
+名前だけ替えても、`DATABASE_URL`・`REDIS_URL` のポートを別の clone のコンテナが持っていれば止まる。
+`POSTGRES_PORT` と `DATABASE_URL` のポートが違う（`REDIS_*` も）・`IXA_COMPOSE_*` の形が違うときは `env.valid` で止まる。
+**どちらにするか人に聞く**:
 
 - **分ける**（ふつうはこちら）: `.env` に書き、URL のポートも揃えてから setup をやり直す。
   ```bash
@@ -172,9 +177,15 @@ pnpm -s ixa update --json           # 最新のリリースへ（--main で main
 ```
 
 - 止まる条件（`needs_human`）: 未コミットの変更がある（`update.dirty`）／ main 以外にいる（`update.branch`）／
-  動いているジョブがある（`update.active-jobs`）／ main がタグより先・枝分かれ（`update.fast-forward`）。どれも人に聞く。
-  `--force` はジョブの確認だけを外す。**人の許可なしに付けない**。
-- 中で起きること: `git fetch --tags` → タグへ fast-forward → `pnpm install --frozen-lockfile` →
-  **新しい版の CLI** が `uv sync` → DB の更新 → 新しく増えた `.env` の項目の一覧（値は書かない）→ doctor。
+  動いているジョブがある（`update.active-jobs`）／ この clone の dev が動いている（`update.dev-running`）／
+  main がタグより先・枝分かれ（`update.fast-forward`）。どれも人に聞く。
+  - `--force` はジョブの確認だけを外す。`--while-running` は dev を動かしたまま進める（別の同意）。**どちらも人の許可なしに付けない**。
+  - ジョブを数えられなかった（`update.active-jobs` が `failed`。合言葉違いなど）→ `pnpm -s ixa doctor` で DB を見る。
+    DB が動いていないだけなら 0 件とみなして進む（JSON の `activeJobsReason` に理由）。
+  - `update.stale-jobs`（`notice`）→ 24 時間より前から「動いている」のままの行（取り残し）。数えていない。消すかどうかは人が決める。
+- 中で起きること: `git fetch --tags` → タグへ fast-forward → 途中の印を置く → `pnpm install --frozen-lockfile` →
+  **新しい版の CLI** が `uv sync` → DB の更新 → 新しく増えた `.env` の項目の一覧（値は書かない）→ 印を消す → doctor。
+- **途中で止まったら**（`update.pending`・doctor の `tools.update-pending`）→ 原因を直して `pnpm -s ixa update --resume`。
+  「最新です」と出ても、印があるうちは更新が済んでいない。
 - `update.new-keys`（`notice`）→ 新しい項目を人に伝える。`devRestartNeeded: true` → 「dev を起動し直してください」と伝える（勝手に止めない）。
 - 変更点は `releaseNotes` の URL。
