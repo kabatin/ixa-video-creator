@@ -169,6 +169,9 @@ type MediaProbe = {
   fps: number | null
   hasAudio: boolean
   codec: string | null
+  // 話している区間（素材の頭からの秒。ADR-0061）。取り込みで、音のある動画だけ silencedetect で測る。
+  // 無い = 測っていない（前からの素材・音の無い素材・測れなかった素材）。[] = 測ったが無音
+  speechSegments?: Array<{ startSec: Seconds; endSec: Seconds }>
 }
 
 type MediaOrigin =
@@ -505,12 +508,18 @@ type DialogueLine = {
   speakerId: CharacterId            // 作品のキャラクター。配役にいなくてよい（画面外の声）
   text: string                      // 1〜200 文字
   offscreen: boolean                // 画面外の声。映っている人の口は閉じたまま
-  translation: string | null        // 訳文（2 段字幕の下の段。段 3 で使う）
+  translation: string | null        // 訳文（2 段字幕の下の段。ADR-0061）。セリフの字幕の訳文の正
 }
 ```
 
 - 1 Shot 20 行まで（止める上限）。5 行以上は「長すぎます」と警告するだけで止めない。
 - 話し手に英語の呼び名か声の説明が無いと、Take を作る前に止める。
+- **セリフの字幕（ADR-0061）は導かれるもの。** 行ごとに 1 枚の TEXT のテロップ（層 2）で、`params.dialogue = { shotId, lineIndex, placed }` が付く。
+  - 時刻: 採用 Take の音を鳴らす Shot（`takeAudioPlays`）で、話している区間（`MediaProbe.speechSegments`）の数が行の数と同じなら行の順に当てる。
+    それ以外は Shot の尺を行の文字数で割り振る（`dialogueTelopClips`）。
+  - `placed` は作り直しが最後に置いた時刻。**今の時刻と違えば手で直したとみなし、手の値を保つ。**
+  - 字と訳文の正は行。字幕の訳文を直すと api が行へ書き戻す（取り消しも行ごと戻る）。
+  - 作り直すのは `syncDialogueTelops` 1 か所（api の Shot を変える口の後・worker の取り込みの後）。セリフの無い作品は書かない。
 
 ### 書き出しの仕上げの音量（ADR-0060）
 
@@ -978,6 +987,7 @@ type ProjectAudioSettings = {
 
 - ナレーションのレーンは `NarrationLine.startSec` の投影。TimelineClip にしない（VIDEO1 と同じ考え）
 - ナレーションのテロップは**導かれるもの**。`params.narrationLineId` が付き、行から作り直される（`syncNarrationTelops` 1 か所）
+- テロップは `params.translation`（訳文）を持てる。あれば本文の下に小さめの 2 段目として描く（大きさは本文 × `style.translationScale`、既定 0.6。ADR-0061）
 - 字の時刻は読みに付く。表示へ写し戻してからテロップに使う（字数が合わなければ使わない）
 - 声・文字起こしは**頼む前に予算を確かめる**。費用はジョブに持つ（Take には持たない）
 

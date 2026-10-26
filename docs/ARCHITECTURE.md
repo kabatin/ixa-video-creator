@@ -894,6 +894,7 @@ Stage 1: 素材の正規化（FFmpeg）
 Stage 2: コンポジット（Remotion）
    TimelineDocument → Remotion composition props
    Shot / Transition / Text / Motion Graphics / VFX をすべて React で合成
+   （テロップは Remotion だけが描く。訳文があれば本文の下に 2 段目。ffmpeg の退避用の書き出しはテロップを描かない。ADR-0061）
    → 連番フレーム or 中間動画を出力
    ▼
 Stage 3: 音声ミックス（FFmpeg）
