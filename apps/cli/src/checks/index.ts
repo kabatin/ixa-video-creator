@@ -24,7 +24,7 @@ export const runChecks = async (system: System, repo: RepoPaths): Promise<readon
   const env = envFacts.envContent === null ? {} : parseEnvFile(envFacts.envContent)
   const [tools, db, runtime, localAi, optional] = await Promise.all([
     gatherTools(system, expectedPnpm),
-    gatherDb(system, env),
+    gatherDb(system, env, repo.root),
     gatherRuntime(system, env, repo.root),
     gatherLocalAi(system, env),
     gatherOptional(system, env, repo),

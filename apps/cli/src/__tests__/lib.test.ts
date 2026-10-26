@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseCliArgs } from '../args.js'
-import { composeSettingsOf, composeUpCommand, containerStateOf } from '../lib/compose.js'
+import { composeSettingsOf, composeUpCommand, containerInfoOf, containerStateOf, infraOwnerOf } from '../lib/compose.js'
 import { appendEnvLine, envKeysOf, missingEnvKeys, parseEnvFile, webLocalOverrides } from '../lib/env-file.js'
 import { appendCodexSection, claudeAddCommand, codexHasIxa, codexTomlSection, shellQuote } from '../lib/mcp-config.js'
 import { compareVersions, latestVersionTag, majorOf, parseVersion } from '../lib/semver.js'
@@ -58,10 +58,18 @@ describe('compose', () => {
   })
 
   it('docker inspect の答えを状態に読む', () => {
-    expect(containerStateOf({ exitCode: 0, stdout: 'running healthy\n' })).toBe('healthy')
-    expect(containerStateOf({ exitCode: 0, stdout: 'running starting' })).toBe('starting')
-    expect(containerStateOf({ exitCode: 0, stdout: 'exited ' })).toBe('stopped')
+    expect(containerStateOf({ exitCode: 0, stdout: 'running|healthy|/r/infra\n' })).toBe('healthy')
+    expect(containerStateOf({ exitCode: 0, stdout: 'running|starting|/r/infra' })).toBe('starting')
+    expect(containerStateOf({ exitCode: 0, stdout: 'exited||' })).toBe('stopped')
     expect(containerStateOf({ exitCode: 1, stdout: '' })).toBe('missing')
+  })
+
+  it('コンテナを起こした clone を見分ける（場所に空白があっても）', () => {
+    const info = containerInfoOf({ exitCode: 0, stdout: 'running|healthy|/Users/me/My Repo/infra\n' })
+    expect(info.composeDir).toBe('/Users/me/My Repo/infra')
+    expect(infraOwnerOf([info], '/Users/me/My Repo')).toEqual({ kind: 'mine' })
+    expect(infraOwnerOf([info], '/tmp/clone')).toEqual({ kind: 'other', dir: '/Users/me/My Repo' })
+    expect(infraOwnerOf([containerInfoOf(null)], '/tmp/clone')).toEqual({ kind: 'none' })
   })
 })
 

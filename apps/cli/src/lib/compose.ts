@@ -1,3 +1,4 @@
+import path from 'node:path'
 import type { EnvValues } from './env-file.js'
 import type { RepoPaths } from './repo.js'
 
@@ -47,15 +48,47 @@ export const composeUpCommand = (settings: ComposeSettings): string =>
     ? 'pnpm infra:up'
     : `docker compose -p ${settings.project} --env-file .env -f infra/docker-compose.yml up -d`
 
-/** `docker inspect` の答え（`running healthy` など）を状態に読む。 */
+/** `docker inspect` の答え（`running|healthy|/path/infra`）を状態に読む。 */
 export type ContainerState = 'healthy' | 'starting' | 'unhealthy' | 'stopped' | 'missing'
 
-export const containerStateOf = (inspect: { readonly exitCode: number; readonly stdout: string } | null): ContainerState => {
+export type ContainerInfo = {
+  readonly state: ContainerState
+  /** compose が起動したときの場所（`…/infra`）。compose で起動したものでなければ null。 */
+  readonly composeDir: string | null
+}
+
+type Inspect = { readonly exitCode: number; readonly stdout: string } | null
+
+export const containerStateOf = (inspect: Inspect): ContainerState => {
   if (inspect === null || inspect.exitCode !== 0) return 'missing'
-  const [status, health] = inspect.stdout.trim().split(/\s+/)
+  const [status, health] = inspect.stdout.trim().split('|')
   if (status !== 'running') return 'stopped'
   if (health === undefined || health === '' || health === 'healthy') return 'healthy'
   return health === 'starting' ? 'starting' : 'unhealthy'
 }
 
-export const INSPECT_FORMAT = '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}'
+export const containerInfoOf = (inspect: Inspect): ContainerInfo => {
+  const dir = inspect === null || inspect.exitCode !== 0 ? '' : (inspect.stdout.trim().split('|')[2] ?? '')
+  return { state: containerStateOf(inspect), composeDir: dir === '' ? null : dir }
+}
+
+/** 区切りは `|`（場所に空白があっても割れない）。 */
+export const INSPECT_FORMAT =
+  '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}|{{index .Config.Labels "com.docker.compose.project.working_dir"}}'
+
+/**
+ * そのコンテナはこの clone のものか。**同じ名前で別の clone が起こしたコンテナを使うと DB を共有する**
+ * （別の作品・別のワークスペースが混ざる）。共有してよいかは人が決める（`.env` の IXA_COMPOSE_SHARED=true）。
+ */
+export type InfraOwner = { readonly kind: 'mine' | 'none' } | { readonly kind: 'other'; readonly dir: string }
+
+export const infraOwnerOf = (infos: readonly ContainerInfo[], repoRoot: string): InfraOwner => {
+  const mine = path.resolve(repoRoot, 'infra')
+  const dirs = infos.map((i) => i.composeDir).filter((d): d is string => d !== null)
+  const other = dirs.find((d) => path.resolve(d) !== mine)
+  if (other !== undefined) return { kind: 'other', dir: path.dirname(other) }
+  return dirs.length > 0 ? { kind: 'mine' } : { kind: 'none' }
+}
+
+/** 別の clone のコンテナを共有してよいと `.env` で決めてあるか。 */
+export const infraSharedOf = (env: EnvValues): boolean => (env['IXA_COMPOSE_SHARED'] ?? '').trim() === 'true'

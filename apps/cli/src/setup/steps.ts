@@ -1,8 +1,16 @@
 import { configProblems } from '@ixa/config'
 import { applyMigrations, ensureDefaultWorkspace, fillEmptyEnvValue, listWorkspaces, pendingMigrations, readMigrationJournal } from '@ixa/db'
-import { inspectContainer } from '../checks/db.js'
+import { FOREIGN_INFRA_FIX, inspectContainer } from '../checks/db.js'
 import { gatherTools, judgeTools } from '../checks/tools.js'
-import { composeSettingsOf, composeUpArgs, composeUpCommand } from '../lib/compose.js'
+import {
+  composeSettingsOf,
+  composeUpArgs,
+  composeUpCommand,
+  infraOwnerOf,
+  infraSharedOf,
+  type ComposeSettings,
+  type ContainerState,
+} from '../lib/compose.js'
 import { appendEnvLine, isBlank, parseEnvFile, type EnvValues } from '../lib/env-file.js'
 import type { RepoPaths } from '../lib/repo.js'
 import type { System } from '../system.js'
@@ -118,35 +126,61 @@ const canConnect = async (system: System, url: string): Promise<boolean> => {
   }
 }
 
+type ContainerPair = readonly [ContainerState, ContainerState]
+
+const containerStates = async (system: System, compose: ComposeSettings): Promise<ContainerPair> => {
+  const [p, r] = await Promise.all([
+    inspectContainer(system, compose.postgresContainer),
+    inspectContainer(system, compose.redisContainer),
+  ])
+  return [p.state, r.state]
+}
+
+/** 同じ名前のコンテナが別の clone のもの。そのまま進むと、その clone の DB に更新や初期データを書く。 */
+const foreignInfra = async (system: System, compose: ComposeSettings, repo: RepoPaths, env: EnvValues): Promise<StepResult | null> => {
+  const infos = await Promise.all([
+    inspectContainer(system, compose.postgresContainer),
+    inspectContainer(system, compose.redisContainer),
+  ])
+  const owner = infraOwnerOf(infos, repo.root)
+  if (owner.kind !== 'other' || infraSharedOf(env)) return null
+  return {
+    id: 'infra',
+    status: 'needs_human',
+    message: `${compose.postgresContainer}・${compose.redisContainer} は別の場所の ixa（${owner.dir}）のものです。このまま進むとその DB を使います`,
+    fix: FOREIGN_INFRA_FIX,
+    docs: 'INSTALL.md#2-つ目の-clone',
+  }
+}
+
+const composeUp = async (system: System, compose: ComposeSettings, repo: RepoPaths): Promise<StepResult | null> => {
+  system.progress('postgres・redis を起動しています…')
+  const up = await system.run('docker', composeUpArgs(compose, repo), { cwd: repo.root, timeoutMs: 300_000 })
+  if (up.kind === 'completed' && up.exitCode === 0) return null
+  const detail = up.kind === 'completed' ? up.stderr.trim().split('\n').slice(-2).join(' ') : up.kind
+  return {
+    id: 'infra',
+    status: 'failed',
+    message: `Docker で起動できませんでした（${detail}）`,
+    fix: { hint: 'Docker Desktop が動いているか、ポートが空いているかを見る', command: composeUpCommand(compose), needsHuman: false },
+    docs: 'INSTALL.md#docker',
+  }
+}
+
 /** 5. postgres・redis を Docker で起動し、使えるまで待つ。 */
 export const infraStep = async ({ system, repo }: SetupContext, env: EnvValues): Promise<StepResult> => {
   const id = 'infra'
   const compose = composeSettingsOf(env)
-  const states = async () =>
-    Promise.all([inspectContainer(system, compose.postgresContainer), inspectContainer(system, compose.redisContainer)])
-  const [postgres, redis] = await states()
+  const foreign = await foreignInfra(system, compose, repo, env)
+  if (foreign !== null) return foreign
+  const [postgres, redis] = await containerStates(system, compose)
   const action = infraAction(postgres, redis, await reachable(system, env))
   if (action === 'already') return { id, status: 'already', message: 'postgres・redis は動いています' }
   if (action === 'external') return { id, status: 'already', message: 'postgres・redis は Docker の外で動いています（触りません）' }
-  if (action === 'start') {
-    system.progress('postgres・redis を起動しています…')
-    const up = await system.run('docker', composeUpArgs(compose, repo), { cwd: repo.root, timeoutMs: 300_000 })
-    if (up.kind !== 'completed' || up.exitCode !== 0) {
-      const detail = up.kind === 'completed' ? up.stderr.trim().split('\n').slice(-2).join(' ') : up.kind
-      return {
-        id,
-        status: 'failed',
-        message: `Docker で起動できませんでした（${detail}）`,
-        fix: { hint: 'Docker Desktop が動いているか、ポートが空いているかを見る', command: composeUpCommand(compose), needsHuman: false },
-        docs: 'INSTALL.md#docker',
-      }
-    }
-  }
-  const settled = await waitFor(system, INFRA_WAIT_MS, async () => {
-    const [p, r] = await states()
-    return infraSettled(p, r) !== 'pending'
-  })
-  const [p, r] = await states()
+  const upFailed = action === 'start' ? await composeUp(system, compose, repo) : null
+  if (upFailed !== null) return upFailed
+  const settled = await waitFor(system, INFRA_WAIT_MS, async () => infraSettled(...(await containerStates(system, compose))) !== 'pending')
+  const [p, r] = await containerStates(system, compose)
   return settled && infraSettled(p, r) === 'ready'
     ? { id, status: 'done', message: 'postgres・redis を起動しました' }
     : {

@@ -55,6 +55,8 @@ const healthy: DbFacts = {
   compose: composeSettingsOf({}),
   postgresContainer: 'healthy',
   redisContainer: 'healthy',
+  owner: { kind: 'mine' },
+  shared: false,
   postgres: true,
   redis: true,
   pending: [],
@@ -90,6 +92,12 @@ describe('judgeDb（DB の判定）', () => {
 
   it('コンテナが無くてもつながれば（Docker の外）✓', () => {
     expect(byId(judgeDb({ ...healthy, postgresContainer: 'missing' }), 'db.postgres-container')?.level).toBe('ok')
+  })
+
+  it('別の clone のコンテナなら !（DB を共有している）。共有すると決めてあれば ✓', () => {
+    const other = { kind: 'other', dir: '/Users/me/ixa-video-creator' } as const
+    expect(byId(judgeDb({ ...healthy, owner: other }), 'db.infra-owner')).toMatchObject({ level: 'warn', fix: { needsHuman: true } })
+    expect(byId(judgeDb({ ...healthy, owner: other, shared: true }), 'db.infra-owner')?.level).toBe('ok')
   })
 
   it('.env の ID が空なら setup、DB に無い ID なら人に聞く（書き換えない）', () => {
