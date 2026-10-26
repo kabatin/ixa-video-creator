@@ -3,6 +3,7 @@ import {
   MediaAsset,
   MediaAssetId,
   ProjectId,
+  TakeId,
   WorkspaceId,
   dialogueTelopOf,
   newId,
@@ -82,6 +83,76 @@ const dialogueClips = (clips: readonly TimelineClip[]) =>
     .sort((a, b) => a.startSec - b.startSec)
 
 const spans = (clips: readonly TimelineClip[]) => dialogueClips(clips).map((clip) => [clip.startSec, clip.durationSec])
+
+/** 声を差し替えた Take（ADR-0062）。置いた時刻が字幕の時刻の正。 */
+describe('syncDialogueTelops（声を差し替えた Take）', () => {
+  const dubSetup = (probe: MediaProbe | null, shotPatch: Partial<Shot> = {}) => {
+    const baseShot = aShot(PROJECT, { startSec: 10, durationSec: 6, dialogue: [line('あいう'), line('かきくけこさ')], ...shotPatch })
+    const media = asset(probe)
+    const record = {
+      kind: 'dub' as const,
+      sourceTakeId: newId(TakeId),
+      voiceTool: 'gemini_api' as const,
+      model: 'gemini-3.8-flash-tts',
+      integratedLufs: -16,
+      lines: [0, 1].map((lineIndex) => ({
+        lineIndex,
+        mode: 'lip' as const,
+        added: false,
+        sourceStartSec: lineIndex === 0 ? 0.5 : 2.5,
+        sourceEndSec: lineIndex === 0 ? 1.5 : 4,
+        placedStartSec: lineIndex === 0 ? 0.46 : 2.46,
+        placedEndSec: lineIndex === 0 ? 1.66 : 4.26,
+        agreement: 0.9,
+        tempoMin: 1,
+        tempoMax: 1,
+        reading: 'plain' as const,
+        warnings: [],
+      })),
+    }
+    const take = aTake(baseShot, 'a'.repeat(64), { mediaAssetId: media.id, providerParams: record })
+    const shot = { ...baseShot, selectedTakeId: take.id }
+    const timelineClips = createInMemoryTimelineClipRepository([])
+    return {
+      shots: createInMemoryShotRepository([shot]),
+      takes: createInMemoryTakeRepository([take]),
+      mediaAssets: createInMemoryMediaAssetRepository([media]),
+      lock: createInMemoryProjectClipLock(timelineClips),
+      timelineClips,
+    }
+  }
+
+  it('話している区間より、記録の置いた時刻を使う', async () => {
+    const deps = dubSetup(probeWith({ speechSegments: [{ startSec: 0.1, endSec: 5.5 }] }))
+    await syncDialogueTelops(deps, PROJECT)
+    expect(spans(deps.timelineClips.snapshot())).toEqual([
+      [10.46, 1.2],
+      [12.46, 1.8],
+    ])
+  })
+
+  it('まだ測っていない素材でも記録の時刻を使う（差し替えた Take には必ず音がある）', async () => {
+    const deps = dubSetup(null)
+    await syncDialogueTelops(deps, PROJECT)
+    expect(spans(deps.timelineClips.snapshot())).toEqual([
+      [10.46, 1.2],
+      [12.46, 1.8],
+    ])
+  })
+
+  it('消音した Shot・行の数が記録と違う Shot は割り振りに戻る', async () => {
+    const muted = dubSetup(probeWith({}), { takeAudioMuted: true })
+    await syncDialogueTelops(muted, PROJECT)
+    expect(spans(muted.timelineClips.snapshot())).toEqual([
+      [10, 2],
+      [12, 4],
+    ])
+    const more = dubSetup(probeWith({}), { dialogue: [line('あいう'), line('かきくけこさ'), line('たち')] })
+    await syncDialogueTelops(more, PROJECT)
+    expect(spans(more.timelineClips.snapshot())).toHaveLength(3)
+    expect(spans(more.timelineClips.snapshot())[0]).toEqual([10, 1.636])
+  })
+})
 
 describe('syncDialogueTelops', () => {
   it('Take が無い（音が無い）Shot は、尺を文字数で割り振る', async () => {

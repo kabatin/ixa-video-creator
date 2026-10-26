@@ -2,6 +2,7 @@ import type { LockedProjectClips, MediaAssetRepository, ProjectClipLock, ShotRep
 import {
   dialogueTelopClips,
   dialogueTelopOf,
+  dubRecordOf,
   isEmptyDialogueTelopPlan,
   planDialogueTelopSync,
   shotPlaybackRate,
@@ -11,6 +12,7 @@ import {
   type DialogueTelopShot,
   type ProjectId,
   type Shot,
+  type SpeechSegment,
   type TimelineClip,
 } from '@ixa/domain'
 
@@ -37,17 +39,30 @@ type SyncResult = { readonly changed: boolean; readonly count: number }
 const isDialogueTelop = (clip: TimelineClip): boolean =>
   clip.content.type === 'text' && dialogueTelopOf(clip.content.params) !== null
 
+/**
+ * 声を差し替えた Take（ADR-0062）の、行ごとの置いた時刻（Take の頭からの秒）。行の順に並べる。
+ * 置いた時刻は無音の検出より正確なので、これを話している区間の代わりにする。区間が空の行は数を合わせないよう残す。
+ */
+const placedSpeech = (record: NonNullable<ReturnType<typeof dubRecordOf>>): readonly SpeechSegment[] =>
+  [...record.lines]
+    .sort((a, b) => a.lineIndex - b.lineIndex)
+    .map((line) => ({ startSec: line.placedStartSec, endSec: Math.max(line.placedEndSec, line.placedStartSec + 0.001) }))
+
 /** 時刻を決めるのに要る、採用 Take の速さと話している区間。Take が無い・素材が読めなければ「音なし・速さ 1」。 */
 const timingOf = async (deps: DialogueTelopSyncDeps, shot: Shot): Promise<DialogueTelopShot> => {
   const take = shot.selectedTakeId === null ? null : await deps.takes.findById(shot.selectedTakeId)
   const asset = take === null ? null : await deps.mediaAssets.findById(take.mediaAssetId)
   const probe = asset?.probe ?? null
+  const dub = take === null ? null : dubRecordOf(take)
+  // 差し替えた Take には必ず音がある（測る前でも、記録の時刻を使う）。
+  const hasAudio = probe?.hasAudio === true || (dub !== null && probe === null)
   // 鳴らす Take の声にだけ合わせる（消音した Shot の声は観客に聞こえないので、区間に合わせても意味が無い）。
-  const plays = takeAudioPlays(shot, probe?.hasAudio === true)
+  const plays = takeAudioPlays(shot, hasAudio)
+  const speech = dub !== null ? placedSpeech(dub) : (probe?.speechSegments ?? null)
   return {
     shot,
     playbackRate: take === null ? 1 : shotPlaybackRate(shot, probe?.durationSec ?? null),
-    speech: plays ? (probe?.speechSegments ?? null) : null,
+    speech: plays ? speech : null,
   }
 }
 
