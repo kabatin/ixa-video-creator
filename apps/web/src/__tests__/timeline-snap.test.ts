@@ -45,6 +45,8 @@ const makeShot = (suffix: string, startSec: number, durationSec: number): Shot =
   sourceInSec: 0,
   timing: 'trim',
   speed: 1,
+  takeAudioVolume: 1,
+  takeAudioMuted: false,
   description: '',
   dialogue: [],
   camera,

@@ -70,6 +70,9 @@ export const UpdateShotBody = UpdateShotPatch.pick({
   locationId: true,
   // セリフの行（ADR-0059）。丸ごと置き換える。
   dialogue: true,
+  // 採用 Take の音の大きさと消音（ADR-0060）。
+  takeAudioVolume: true,
+  takeAudioMuted: true,
 })
 export type UpdateShotBody = z.input<typeof UpdateShotBody>
 

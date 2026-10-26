@@ -3,6 +3,7 @@
 import { EnvironmentPanel } from '@/components/environment-panel'
 import { ProjectDeleteSection } from '@/components/project-delete-section'
 import { ProjectSettingsForm } from '@/components/project-settings-form'
+import { MasteringModeSection } from '@/components/workbench/dialogs/mastering-mode-section'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 
 /**
@@ -10,13 +11,22 @@ import { useWorkbench } from '@/components/workbench/workbench-context'
  * 保存前の入力があるときは背景クリックで閉じない（殻の `guardUnsaved`）。
  */
 export const SettingsDialogBody = () => {
-  const { project } = useWorkbench()
+  const { project, shots, refresh } = useWorkbench()
   return (
     <div className="mx-auto w-full max-w-3xl">
       <p className="mb-4 text-sm text-muted">
         画面の形・大きさ・なめらかさと、制作の制約を変えます。作り終えた Take には効きません。
       </p>
       <ProjectSettingsForm project={project} />
+
+      <hr className="my-6 border-line" />
+
+      <h2 className="mb-2 text-base font-semibold text-text">書き出しの音</h2>
+      <MasteringModeSection
+        project={project}
+        hasDialogue={(shots ?? []).some((shot) => shot.dialogue.length > 0)}
+        onSaved={refresh}
+      />
 
       <hr className="my-6 border-line" />
 

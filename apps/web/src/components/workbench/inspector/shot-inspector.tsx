@@ -11,6 +11,7 @@ import { ShotDialogueSection } from '@/components/workbench/inspector/shot-dialo
 import { ShotGenerateSection } from '@/components/workbench/inspector/shot-generate-section'
 import { StartFrameField } from '@/components/workbench/inspector/start-frame-field'
 import { EndFrameField, type EndFrameCandidate } from '@/components/workbench/inspector/end-frame-field'
+import { TakeAudioField } from '@/components/workbench/inspector/take-audio-field'
 import { TakeSpeedField } from '@/components/workbench/inspector/take-speed-field'
 import { TakeTimingField } from '@/components/workbench/inspector/take-timing-field'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
@@ -433,6 +434,13 @@ const TakeSection = ({ shot }: { readonly shot: Shot }) => {
       <TakeSpeedField
         shot={shot}
         adopted={adopted}
+        disabled={isGeneratingStatus(shot.status)}
+        onSave={async (patch) => {
+          await workbench.saveShot(shot.id, patch)
+        }}
+      />
+      <TakeAudioField
+        shot={shot}
         disabled={isGeneratingStatus(shot.status)}
         onSave={async (patch) => {
           await workbench.saveShot(shot.id, patch)
