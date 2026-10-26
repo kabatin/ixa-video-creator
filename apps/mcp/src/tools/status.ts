@@ -1,6 +1,7 @@
 import { AiPurpose, AiToolId } from '@ixa/domain'
 import { z } from 'zod'
 import { seg } from '../api-client.js'
+import { activeDubsOf } from '../lib/job-checks.js'
 import { WireActiveGeneration, WireAiSettings, WireAiTools, WireModel, WireProject } from '../wire.js'
 import { defineTool, Id, jsonResult } from '../tool-def.js'
 
@@ -24,7 +25,8 @@ export const statusTool = defineTool({
     'view → generate_takes → wait → adopt_take → telops/narration/sfx → export. ' +
     'Dialogue (talking characters): give each speaker speechName + voiceDescription (create_character, or edit_character ' +
     'update with character: {...}), write lines with plan_shots dialogues or edit_shots dialogue, generate with an ' +
-    'audioGeneration model; dialogue subtitles are made automatically (add English with the line translation).',
+    'audioGeneration model; dialogue subtitles are made automatically (add English with the line translation). ' +
+    'To give each character a consistent voice, set character.dialogueVoiceProfileId (edit_character) and dub_takes the shots.',
   input: z.object({ projectId: Id.optional() }),
   handler: async ({ projectId }, { api, workspaceId }) => {
     const [health, tools, settings, models, projects] = await Promise.all([
@@ -34,10 +36,13 @@ export const statusTool = defineTool({
       api.get('/models', z.array(WireModel)),
       api.get('/projects', z.array(WireProject), { workspaceId }),
     ])
-    const active =
+    const [active, dubs] =
       projectId === undefined
-        ? undefined
-        : await api.get(`/projects/${seg(projectId)}/generations/active`, z.array(WireActiveGeneration))
+        ? [undefined, undefined]
+        : await Promise.all([
+            api.get(`/projects/${seg(projectId)}/generations/active`, z.array(WireActiveGeneration)),
+            activeDubsOf(api, projectId),
+          ])
     return jsonResult({
       api: health.status,
       aiSettings: settings.settings,
@@ -73,6 +78,10 @@ export const statusTool = defineTool({
               providerStartedAt: g.providerStartedAt,
             })),
           }),
+      // 声の差し替え（ADR-0062）。待つときは wait の kind:"dub"。
+      ...(dubs === undefined
+        ? {}
+        : { activeDubs: dubs.map((d) => ({ jobId: d.id, shotId: d.shotId, status: d.status, sourceTakeId: d.sourceTakeId })) }),
     })
   },
 })

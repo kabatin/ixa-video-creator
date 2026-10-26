@@ -1,4 +1,6 @@
 import {
+  DialogueDub,
+  dubLineConflicts,
   MAX_DIALOGUE_LINES,
   MAX_DIALOGUE_TEXT_LENGTH,
   MAX_DIALOGUE_TRANSLATION_LENGTH,
@@ -28,11 +30,23 @@ export const DialogueLineInput = z.object({
       'English subtitle line (optional). Shown as the smaller second line of the automatic dialogue subtitle; ' +
         'editing the subtitle translation with edit_clips writes back here.',
     ),
+  dub: DialogueDub.optional().describe(
+    'Voice dub options for dub_takes (ADR-0062; omit for the default lip-synced re-read). style: reading direction ' +
+      '(Japanese); placeAtSec: speak from this time instead of following the mouth (off-screen); fitSec: shrink only if ' +
+      'longer; cutSec: cut at this length without stretching (laughs); levelDb (-40..12): distance, overrides the ' +
+      'character default; keepOriginal: keep the H3 voice; added + placeAtSec (+ levelLikeIndex): a line H3 did not ' +
+      'speak; startSec/endSec: this line\'s span in the take when the voice spans cannot be assigned (use suggestedSpans). ' +
+      'Seconds are from the shot start.',
+  ),
 })
 
 export const DialogueInput = z
   .array(DialogueLineInput)
   .max(MAX_DIALOGUE_LINES)
+  // 行の並びの中の食い違い（levelLikeIndex は足す行ではない別の行）。規則は domain の 1 か所。
+  .superRefine((lines, ctx) => {
+    dubLineConflicts(lines).forEach((conflict) => ctx.addIssue({ code: z.ZodIssueCode.custom, path: [...conflict.path], message: conflict.message }))
+  })
   .describe(
     'Spoken lines in order. Replaces all lines of the shot; [] clears them. Keep to 3–4 lines per 10 s ' +
       '(5 or more returns a warning). Every speaker needs speechName and voiceDescription (edit_character) ' +

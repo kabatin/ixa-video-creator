@@ -22,7 +22,7 @@ export const WaitInput = z.object({
     .min(1)
     .max(200)
     .optional()
-    .describe('Omit to wait until nothing is generating/drawing/rendering in the project.'),
+    .describe('Omit to wait until nothing is generating/drawing/rendering/dubbing in the project.'),
   maxWaitSec: z.number().int().min(1).max(MAX_WAIT_SEC).default(DEFAULT_MAX_WAIT_SEC),
 })
 
@@ -47,8 +47,8 @@ export const waitTool = defineTool({
   risk: 'read',
   description:
     'Wait for jobs of the project to finish, polling with backoff. jobs: [{kind:"generation"|"render"|"music"|"sfx"|' +
-    '"analysis"|"start_frame"|"voice", id}], {kind:"review", id: takeId, shotId} or {kind:"upscale", shotId, takeId}; ' +
-    'omit jobs to wait until nothing is generating, drawing or rendering in the project. Returns after maxWaitSec (default 480) even if not done ' +
+    '"analysis"|"start_frame"|"voice"|"dub", id}], {kind:"review", id: takeId, shotId} or {kind:"upscale", shotId, takeId}; ' +
+    'omit jobs to wait until nothing is generating, drawing, rendering or dubbing in the project. Returns after maxWaitSec (default 480) even if not done ' +
     '(timedOut: true) — just call wait again. Local video generation takes several minutes per take.',
   input: WaitInput,
   handler: async (args, deps) => {

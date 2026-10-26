@@ -45,6 +45,9 @@ const EXPECTED: Readonly<Record<string, string>> = {
   review_take: 'costly',
   hide_takes: 'destructive',
   upscale_takes: 'costly',
+  // 声の差し替え・説明から声を作る（ADR-0062）。Gemini の読み上げ・Voice Design は課金。
+  dub_takes: 'costly',
+  design_voice: 'costly',
   wait: 'read',
   cancel_jobs: 'destructive',
   align_to_music: 'write',

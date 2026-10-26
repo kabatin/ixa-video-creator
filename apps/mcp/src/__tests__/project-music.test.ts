@@ -171,6 +171,7 @@ describe('ixa_status / set_ai', () => {
       },
       { method: 'GET', path: '/projects', data: [projectRow()] },
       { method: 'GET', path: `/projects/${PROJECT}/generations/active`, data: [] },
+      { method: 'GET', path: `/projects/${PROJECT}/dubs/active`, data: [] },
     ])
     const result = jsonOf(await statusTool.run({ projectId: PROJECT }, depsFor(fake))) as Record<string, unknown>
     expect(fake.callsTo('GET', '/projects')[0]?.url).toBe(`${BASE}/projects?workspaceId=${WORKSPACE}`)

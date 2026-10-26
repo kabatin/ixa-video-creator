@@ -36,6 +36,7 @@ import {
 } from './tools/start-frames.js'
 import { setAiTool, statusTool } from './tools/status.js'
 import { draftStoryboardTool } from './tools/storyboard-draft.js'
+import { designVoiceTool, dubTakesTool } from './tools/dub.js'
 import { adoptTakeTool, generateTakesTool, hideTakesTool, listTakesTool, upscaleTakesTool } from './tools/takes.js'
 import { addTelopsTool, listTelopsTool, removeTelopsTool } from './tools/telops.js'
 import { viewTool } from './tools/view.js'
@@ -83,6 +84,7 @@ export const TOOLS: readonly ToolDef[] = [
   reviewTakeTool,
   hideTakesTool,
   upscaleTakesTool,
+  dubTakesTool,
   waitTool,
   cancelJobsTool,
   alignToMusicTool,
@@ -93,6 +95,7 @@ export const TOOLS: readonly ToolDef[] = [
   removeTelopsTool,
   setNarrationTool,
   speakNarrationTool,
+  designVoiceTool,
   setLyricsTool,
   // エフェクトと音
   addEffectsTool,

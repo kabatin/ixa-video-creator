@@ -20,6 +20,8 @@ export const dialogueViewOf = (shot: WireShot, speakerName: ReadonlyMap<string, 
             text: line.text,
             ...(line.offscreen === true ? { offscreen: true } : {}),
             ...(line.translation === undefined || line.translation === null ? {} : { translation: line.translation }),
+            // 声の差し替えの指定（ADR-0062）。無い行は出さない。
+            ...(line.dub === undefined ? {} : { dub: line.dub }),
           })),
         }),
     ...(warnings.length === 0 ? {} : { dialogueWarnings: warnings }),
@@ -30,6 +32,8 @@ export const dialogueViewOf = (shot: WireShot, speakerName: ReadonlyMap<string, 
 export const speechViewOf = (character: WireCharacter) => ({
   speechName: character.speechName ?? null,
   voiceDescription: character.voiceDescription ?? null,
+  // 差し替えのセリフの声（ADR-0062）。古い API は返さないので、返したときだけ出す。
+  ...(character.dialogueVoiceProfileId === undefined ? {} : { dialogueVoiceProfileId: character.dialogueVoiceProfileId }),
 })
 
 /**

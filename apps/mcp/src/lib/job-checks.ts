@@ -1,6 +1,7 @@
 import { UPSCALE_REASON } from '@ixa/domain'
 import { z } from 'zod'
 import { IxaApiError, seg, type ApiClient } from '../api-client.js'
+import { dubJobCheck, WireDubJob } from '../tools/dub.js'
 import { musicJobCheck } from '../tools/music-generation.js'
 import { voiceJobCheck } from '../tools/narration-speak.js'
 import { reviewCheck } from '../tools/review.js'
@@ -32,6 +33,7 @@ export const JobRef = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('start_frame'), id: z.string().ulid().describe('shotId') }),
   z.object({ kind: z.literal('review'), id: z.string().ulid().describe('takeId from review_take'), shotId: z.string().ulid() }),
   z.object({ kind: z.literal('voice'), id: z.string().ulid().describe('voice jobId from speak_narration') }),
+  z.object({ kind: z.literal('dub'), id: z.string().ulid().describe('dub jobId from dub_takes') }),
   z.object({
     kind: z.literal('upscale'),
     shotId: z.string().ulid(),
@@ -118,6 +120,8 @@ export const checkFor = (api: ApiClient, ref: JobRef): Check => {
       return { label: ref, poll: () => reviewCheck(api, ref.id) }
     case 'voice':
       return { label: ref, poll: () => voiceJobCheck(api, ref.id) }
+    case 'dub':
+      return { label: ref, poll: () => dubJobCheck(api, ref.id) }
     case 'upscale':
       return { label: ref, poll: () => upscaleCheck(api, ref.shotId, ref.takeId) }
   }
@@ -125,17 +129,22 @@ export const checkFor = (api: ApiClient, ref: JobRef): Check => {
 
 const ACTIVE_RENDER = new Set(['queued', 'rendering', 'encoding'])
 
+/** 作品で待っている・動いている声の差し替え（ADR-0062）。 */
+export const activeDubsOf = (api: ApiClient, projectId: string): Promise<readonly WireDubJob[]> =>
+  api.get(`/projects/${seg(projectId)}/dubs/active`, z.array(WireDubJob))
+
 /**
- * 作品の中で動いているもの全部（動画の生成・最初のコマ・書き出し）が止むまで。
+ * 作品の中で動いているもの全部（動画の生成・最初のコマ・書き出し・声の差し替え）が止むまで。
  * 解像度上げと曲作り・効果音作りは含まない（ジョブ ID で待つ）。
  */
 export const projectActivityCheck = (api: ApiClient, projectId: string): Check => ({
   label: { kind: 'project', projectId },
   poll: async () => {
-    const [generations, posters, renders] = await Promise.all([
+    const [generations, posters, renders, dubs] = await Promise.all([
       api.get(`/projects/${seg(projectId)}/generations/active`, z.array(WireActiveGeneration)),
       api.get(`/projects/${seg(projectId)}/shot-posters`, z.array(WireShotPoster)),
       api.get(`/projects/${seg(projectId)}/renders`, z.array(WireRenderJob)),
+      activeDubsOf(api, projectId),
     ])
     const drawing = posters.filter((p) => p.drawing).length
     const rendering = renders.filter((r) => ACTIVE_RENDER.has(r.status)).length
@@ -143,8 +152,9 @@ export const projectActivityCheck = (api: ApiClient, projectId: string): Check =
       videoGenerations: { queued: generations.filter((g) => g.status === 'queued').length, running: generations.filter((g) => g.status === 'running').length },
       startFramesDrawing: drawing,
       rendersActive: rendering,
+      dubsActive: dubs.length,
     }
-    return generations.length + drawing + rendering === 0 ? { state: 'succeeded', detail } : pending(detail)
+    return generations.length + drawing + rendering + dubs.length === 0 ? { state: 'succeeded', detail } : pending(detail)
   },
 })
 
@@ -164,10 +174,15 @@ export const assertJobsInProject = async (api: ApiClient, projectId: string, ref
     const ids = idsOf(refs, kind).map((r) => r.id)
     if (ids.length > 0) await assertListed(api, `${project}/${path}`, ids, label)
   }
-  const [generationShots, voiceLines] = await Promise.all([
+  const dubIds = idsOf(refs, 'dub').map((r) => r.id)
+  const [generationShots, voiceLines, dubJobs] = await Promise.all([
     Promise.all(idsOf(refs, 'generation').map(async (r) => (await api.get(`/generation-jobs/${seg(r.id)}`, WireGenerationJob)).shotId)),
     Promise.all(idsOf(refs, 'voice').map(async (r) => ({ id: r.id, lineId: (await api.get(`/voice-jobs/${seg(r.id)}`, WireVoiceJobLine)).lineId }))),
+    Promise.all(dubIds.map((id) => api.get(`/dub-jobs/${seg(id)}`, WireDubJob))),
   ])
+  // 差し替えのジョブは作品を返すので、その作品のものかをそのまま見る。
+  const foreignDubs = dubJobs.filter((job) => job.projectId !== projectId).map((job) => job.id)
+  if (foreignDubs.length > 0) throw new ToolInputError(`この作品に無い声の差し替えのジョブです: ${foreignDubs.join(', ')}`)
   const unowned = voiceLines.filter((v) => v.lineId === null).map((v) => v.id)
   if (unowned.length > 0) throw new ToolInputError(`作品の行に結び付かない声のジョブは待てません: ${unowned.join(', ')}`)
   const shotIds = [...generationShots, ...idsOf(refs, 'start_frame').map((r) => r.id)]

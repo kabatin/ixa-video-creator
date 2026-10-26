@@ -270,7 +270,8 @@ export const editShotsTool = defineTool({
     'screen), mood, camera {size, angleH, angle, lensMm, movement, movementIntensity} (only given fields change), ' +
     'locationId, cast (replaces the cast; characters from create_character), transitionToNext ' +
     '(cut|dissolve|dip_to_black|dip_to_white|wipe|whip_pan|glitch), continuityMode, timing, startSec/durationSec, ' +
-    'dialogue (spoken lines; replaces all lines; speakers need speechName/voiceDescription via edit_character), ' +
+    'dialogue (spoken lines; replaces all lines; speakers need speechName/voiceDescription via edit_character; each line\'s ' +
+    'optional dub sets how dub_takes re-reads it), ' +
     'takeAudioVolume/takeAudioMuted (the selected take\'s own sound in preview and export). ' +
     'A previous_shot shot starts from the last frame of the previous shot\'s selected take: adopt that take first, then generate. ' +
     'Edits run in order.',

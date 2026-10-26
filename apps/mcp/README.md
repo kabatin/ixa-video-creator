@@ -2,8 +2,8 @@
 
 stdio で話す MCP サーバ。ixa の API（`pnpm dev` の API、既定 `http://127.0.0.1:3001`）を
 自動化用の鍵（Bearer）で呼ぶ薄いクライアントで、曲作り → Shot 割り → 最初のコマ → 動画 → テロップ・ナレーション・歌詞・音 →
-書き出しまでを 58 のツールで扱う（ADR-0049。エフェクトの 3 本は ADR-0050、サムネイルは ADR-0051、効果音は ADR-0052・ADR-0054、
-最初のコマの履歴とやり直しは ADR-0055、Take のレビューは ADR-0057、会話劇のセリフ・Take の音・2 段字幕は ADR-0059〜0061）。各ツールには危険度の印（読むだけ・書く・消す・費用・設定）があり、
+書き出しまでを 60 のツールで扱う（ADR-0049。エフェクトの 3 本は ADR-0050、サムネイルは ADR-0051、効果音は ADR-0052・ADR-0054、
+最初のコマの履歴とやり直しは ADR-0055、Take のレビューは ADR-0057、会話劇のセリフ・Take の音・2 段字幕は ADR-0059〜0061、声の差し替えは ADR-0062）。各ツールには危険度の印（読むだけ・書く・消す・費用・設定）があり、
 MCP の annotations にも写している（ADR-0058）。印はツールのいちばん重い操作に合わせる。`action` で重さが変わるツール
 （`edit_character` の `update` と `delete` など）は、AI エージェントの会話の確認では呼び出しごとの印（`riskOf`）で決める。
 
@@ -79,8 +79,8 @@ IXA_API_TOKEN=... IXA_WORKSPACE_ID=... pnpm --filter @ixa/mcp --silent start
 | 曲 | `generate_music` · `upload_music` · `set_master_track` · `music_overview` |
 | Shot | `plan_shots` · `edit_shots` · `restructure_shots` · `draft_storyboard` · `create_character` · `edit_character` · `create_location` · `edit_location` · `manage_brand_assets` |
 | 絵 | `draw_start_frames` · `set_start_frame` · `set_end_frame` · `list_start_frame_history` · `use_start_frame` · `retry_image` · `view` |
-| Take | `generate_takes` · `import_take` · `list_takes` · `adopt_take` · `review_take` · `hide_takes` · `upscale_takes` · `wait` · `cancel_jobs` · `align_to_music` |
-| テロップと声 | `add_telops` · `list_telops` · `edit_clips` · `remove_telops` · `set_narration` · `speak_narration` · `set_lyrics` |
+| Take | `generate_takes` · `import_take` · `list_takes` · `adopt_take` · `review_take` · `hide_takes` · `upscale_takes` · `dub_takes` · `wait` · `cancel_jobs` · `align_to_music` |
+| テロップと声 | `add_telops` · `list_telops` · `edit_clips` · `remove_telops` · `set_narration` · `speak_narration` · `design_voice` · `set_lyrics` |
 | エフェクトと音 | `add_effects` · `list_effects` · `remove_effects` · `analyze_motion` · `suggest_sfx` · `generate_sfx` · `upload_sfx` · `list_sfx` · `remove_sfx` · `edit_audio` |
 | 仕上げ | `export` · `export_thumbnail` |
 | 履歴 | `list_edits` · `undo` |
@@ -93,7 +93,7 @@ IXA_API_TOKEN=... IXA_WORKSPACE_ID=... pnpm --filter @ixa/mcp --silent start
 効果音は手元の Stable Audio 3（または MOSS）が英語の説明から作る。映像は見ないので、鳴らす時刻（きっかけ）はエージェントが決める。
 `suggest_sfx` がエフェクトとトランジションから案を出し、`generate_sfx` で作って効果音の段に置く（`wait` の `kind: "sfx"` で待つ）。
 ナレーションは `set_narration` で台本と声を決め、`speak_narration` で声にする（声の AI は課金。`wait` の `kind: "voice"` で待つ）。
-キャラクターがしゃべる会話劇は、Shot のセリフから声付きの Take と字幕を作る（下の「会話劇の作り方」）。
+キャラクターがしゃべる会話劇は、Shot のセリフから声付きの Take と字幕を作り、`dub_takes` で声をキャラクターごとの声に差し替える（下の「会話劇の作り方」）。
 
 ### まだ MCP でできないこと
 
@@ -218,7 +218,51 @@ edit_shots {"projectId": "<projectId>", "edits": [{"shotIds": ["<shot2>"], "take
 update_project {"projectId": "<projectId>", "masteringMode": null}
 ```
 
-### 9. 書き出す
+### 9. 声を差し替える
+
+H3 の声は口に合っているが、声質が Shot ごとにそろわない。`dub_takes` で、採用中の音付き Take の声を
+キャラクターの**セリフの声**（Gemini）で読み直して口に合わせる（ADR-0062。読み上げは課金。同じ声・読み方・文は保存したものを使い回す）。
+結果は**新しい Take** で、自動で採用される。元の Take は残るので、戻すときは `adopt_take` で元の Take を選び直す。
+映像はそのままで、消すのは元の声の区間だけ（物音・環境音は残る）。
+
+1. 話し手ごとにセリフの声を決める。作品の声から選ぶか、説明から作る（`design_voice`。課金。作った鍵でしか読めない）。
+
+```text
+design_voice {"projectId": "<projectId>", "characterId": "<catId>", "description": "やわらかく、からかうような若い女性の声",
+  "gender": "female", "displayName": "ネコの声"}
+edit_character {"projectId": "<projectId>", "characterId": "<catId>", "action": "update",
+  "character": {"dialogueVoiceProfileId": "<voiceId>", "dialogueLevelDb": -2}}
+```
+
+`dialogueLevelDb` は距離の既定（元の声と同じ大きさにしてから足す dB。奥 -9.5、近い -2）。
+
+2. 差し替えて待つ。
+
+```text
+dub_takes {"projectId": "<projectId>", "shotIds": ["<shot1>", "<shot2>"]}
+wait {"projectId": "<projectId>", "jobs": [{"kind": "dub", "id": "<dubJobId>"}]}
+```
+
+- 結果の `lines` に行ごとの `agreement`（口との一致率 0〜1）・`tempoMin`/`tempoMax`（伸縮の幅）・`warnings`。
+  1.4 倍を超えると「早口に聞こえます」。1.6 倍を超える行は止まる（読み方の指示か Shot の指示を直す）。
+- セリフの声が無い・鍵の名札が違う・元の Take に音が無い、では理由を出して止まる。
+- 2 人のセリフが 1 つの声の区間にまとまると、行の区間が決まらずに止まる。結果の `suggestedSpans`（文字数の比で割った案）を
+  その行の `dub.startSec` / `dub.endSec` に入れて、もう一度 `dub_takes`。
+
+3. 行ごとの指定は `edit_shots` の `dialogue[].dub`（行を丸ごと置き換えるので、ほかの欄も一緒に送る）。
+
+```text
+edit_shots {"projectId": "<projectId>", "edits": [{"shotIds": ["<shot2>"], "dialogue": [
+  {"speakerId": "<mouseId>", "text": "な、なに？", "dub": {"startSec": 0.4, "endSec": 1.2, "style": "おびえて小声で"}},
+  {"speakerId": "<catId>", "text": "チーズ、好き？", "offscreen": true, "dub": {"placeAtSec": 2.5, "levelDb": -9.5}}
+]}]}
+```
+
+`style`（読み方の指示）・`placeAtSec`（口に合わせずこの時刻から）・`fitSec`（長いときだけ縮める）・`cutSec`（縮めずに切る）・
+`levelDb`（距離）・`keepOriginal`（元の声のまま）・`added` + `placeAtSec`（H3 が話していない所に足す。`levelLikeIndex` の行に音量を合わせる）。
+秒は Shot の頭から。字幕は差し替えた Take の置いた時刻に合う。
+
+### 10. 書き出す
 
 ```text
 export {"projectId": "<projectId>", "waitSec": 600}

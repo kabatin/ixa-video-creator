@@ -237,6 +237,26 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ shotIds: many(201, S) }, 'shotIds'],
     ],
   },
+  dub_takes: {
+    base: { projectId: P, shotIds: [S] },
+    cases: [
+      [{ projectId: undefined }, 'projectId'],
+      [{ shotIds: [] }, 'shotIds'],
+      [{ shotIds: many(51, S) }, 'shotIds'],
+      [{ shotIds: ['x'] }, 'shotIds.0'],
+    ],
+  },
+  design_voice: {
+    base: { projectId: P, characterId: S, description: 'やわらかい声', gender: 'female', displayName: 'ネコの声' },
+    cases: [
+      [{ characterId: 'x' }, 'characterId'],
+      [{ description: '  ' }, 'description'],
+      [{ description: long(1001) }, 'description'],
+      [{ gender: 'other' }, 'gender'],
+      [{ displayName: '' }, 'displayName'],
+      [{ displayName: long(41) }, 'displayName'],
+    ],
+  },
   wait: {
     base: { projectId: P },
     cases: [

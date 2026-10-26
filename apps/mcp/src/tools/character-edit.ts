@@ -1,7 +1,8 @@
-import { IdentityImageRole, LookImageRole, type ToolRisk } from '@ixa/domain'
+import { IdentityImageRole, LookImageRole, MAX_DUB_LEVEL_DB, MIN_DUB_LEVEL_DB, type ToolRisk } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
 import { SpeechFields } from '../lib/dialogue-input.js'
+import { assertListed } from '../lib/project-scope.js'
 import { ImageSource, resolveImage } from '../lib/image-source.js'
 import { defineTool, Id, jsonResult, mapLimited, ToolInputError } from '../tool-def.js'
 
@@ -21,6 +22,8 @@ const WireOwnedCharacter = z.object({
   speakerNo: z.number().optional(),
   speechName: z.string().nullable().optional(),
   voiceDescription: z.string().nullable().optional(),
+  dialogueVoiceProfileId: z.string().nullable().optional(),
+  dialogueLevelDb: z.number().optional(),
 })
 const WireFullLook = z.object({
   id: z.string(),
@@ -48,6 +51,17 @@ const CharacterFields = z.object({
   colorPalette: Tokens.optional(),
   // セリフの声（ADR-0059）
   ...SpeechFields,
+  // 声の差し替え（ADR-0062）
+  dialogueVoiceProfileId: Id.nullable()
+    .optional()
+    .describe('Voice used by dub_takes for this character (a voice of this project: set_narration voices or design_voice). null clears.'),
+  dialogueLevelDb: z
+    .number()
+    .finite()
+    .min(MIN_DUB_LEVEL_DB)
+    .max(MAX_DUB_LEVEL_DB)
+    .optional()
+    .describe('Default distance in dB for dubbed lines (0 = as loud as the H3 voice; e.g. -9.5 far, -2 close).'),
 })
 
 const LookFields = z.object({
@@ -165,6 +179,8 @@ const describeCharacter = async (api: ApiClient, characterId: string) => {
       speakerTag: character.speakerNo === undefined ? null : `S${String(character.speakerNo)}`,
       speechName: character.speechName ?? null,
       voiceDescription: character.voiceDescription ?? null,
+      dialogueVoiceProfileId: character.dialogueVoiceProfileId ?? null,
+      dialogueLevelDb: character.dialogueLevelDb ?? 0,
     },
     identityImages: identityImages.map((i) => ({ id: i.id, mediaAssetId: i.mediaAssetId, role: i.role, isPrimary: i.isPrimary ?? false })),
     looks: looks.map((look, index) => ({
@@ -190,6 +206,11 @@ const HANDLERS: Readonly<Record<Args['action'], Handler>> = {
   update: async (args, api) => {
     const patch = need(args.character, CHARACTER_UPDATE_SHAPE_MESSAGE)
     if (Object.keys(patch).length === 0) throw new ToolInputError(CHARACTER_UPDATE_SHAPE_MESSAGE)
+    // セリフの声は、この作品の声だけ（別の作品の声を ID だけで指させない）。
+    const voiceId = patch.dialogueVoiceProfileId
+    if (voiceId !== undefined && voiceId !== null) {
+      await assertListed(api, `/projects/${seg(args.projectId)}/voices`, [voiceId], '声')
+    }
     await api.request('PATCH', `/characters/${seg(args.characterId)}`, WireOwnedCharacter, { body: patch })
     return describeCharacter(api, args.characterId)
   },
@@ -308,7 +329,8 @@ export const editCharacterTool = defineTool({
     'Edit or delete a character, its looks (outfits; one is the default), look images, the canonical frame, ' +
     'identity images (face/body references) and make a character sheet (4-view image drawn by the image AI). ' +
     'Start with action="get" to see the ids. action="update" takes the fields inside character, e.g. the dialogue voice ' +
-    'character: {speechName, voiceDescription} (English; every dialogue speaker needs both before generate_takes). ' +
+    'character: {speechName, voiceDescription} (English; every dialogue speaker needs both before generate_takes), and for ' +
+    'dub_takes character: {dialogueVoiceProfileId, dialogueLevelDb}. ' +
     'Only update/delete of the character itself is undoable; look and image ' +
     'changes are not undoable.',
   input: EditCharacterInput,

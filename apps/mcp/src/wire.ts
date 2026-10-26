@@ -45,6 +45,8 @@ export const WireDialogueLine = z.object({
   text: z.string(),
   offscreen: z.boolean().optional(),
   translation: z.string().nullable().optional(),
+  /** 声の差し替えの指定（ADR-0062）。中身は domain の `DialogueDub`（MCP は読み返すだけ）。 */
+  dub: z.record(z.unknown()).optional(),
 })
 
 export const WireShot = z.object({
@@ -104,6 +106,8 @@ export const WireCharacter = z.object({
   /** セリフの声（ADR-0059）。古い API は返さないので省略可。 */
   speechName: z.string().nullable().optional(),
   voiceDescription: z.string().nullable().optional(),
+  /** 差し替えのセリフの声（ADR-0062）。古い API は返さないので省略可。 */
+  dialogueVoiceProfileId: z.string().nullable().optional(),
 })
 export type WireCharacter = z.infer<typeof WireCharacter>
 

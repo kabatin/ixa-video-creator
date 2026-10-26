@@ -147,6 +147,7 @@ describe('wait ツール', () => {
       },
       { method: 'GET', path: `/projects/${PROJECT}/shot-posters`, data: [{ shotId: SHOT, hasStartFrame: false, drawing: true }] },
       { method: 'GET', path: `/projects/${PROJECT}/renders`, data: [] },
+      { method: 'GET', path: `/projects/${PROJECT}/dubs/active`, data: [] },
     ])
     const outcome = jsonOf(await waitTool.run({ projectId: PROJECT, maxWaitSec: 30 }, depsFor(fake))) as Record<string, unknown>
     expect(outcome).toMatchObject({ done: false, timedOut: true, elapsedSec: 30 })
