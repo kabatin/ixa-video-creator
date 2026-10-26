@@ -18,6 +18,13 @@
 
 タスクに割り当てられた Acceptance Criteria と File Ownership は、指示に直接書かれている。
 
+## 導入・点検・更新を頼まれたとき
+
+「ixa を入れて」「使えるところまで整えて」「更新して」「調子を見て」と頼まれたら、**`INSTALL.md` の手順どおりに**
+`pnpm -s ixa setup | doctor | update | mcp`（`--json`）を回す（ADR-0063）。Claude Code では同じ内容がスキル
+`.claude/skills/ixa-setup` にある。答えの各項目の `fix.needsHuman: true` は人に聞く所
+（Homebrew・Docker Desktop・課金の鍵・アクセス用の鍵の発行・DB の共有）。勝手に進めない。
+
 ---
 
 ## 1. 責任構造

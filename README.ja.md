@@ -5,6 +5,9 @@
 直しはワークベンチの「AI エージェント」タブにふつうの言葉で頼めるし、Claude Code や Codex から MCP で
 制作を丸ごと進めさせることもできる。
 
+> **エージェントに入れてもらう。** この Mac の Claude Code か Codex にこう頼む:
+> *「https://github.com/kabatin/ixa-video-creator をこの Mac に入れて、INSTALL.md のとおり使えるところまで整えて」*
+
 [![CI](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml/badge.svg)](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/kabatin/ixa-video-creator)](https://github.com/kabatin/ixa-video-creator/releases) [![License: MIT](https://img.shields.io/github/license/kabatin/ixa-video-creator)](./LICENSE) [![GitHub stars](https://img.shields.io/github/stars/kabatin/ixa-video-creator?style=social)](https://github.com/kabatin/ixa-video-creator/stargazers)
 
 [English README](./README.md) · MIT · TypeScript モノレポ · v0.7
@@ -93,6 +96,8 @@ Claude Code への登録（鍵はシェルの環境から渡す。ファイル�
 ```
 
 `IXA_API_TOKEN` は「アクセス用の鍵」のページで発行する自動化用の鍵（[ADR-0046](./docs/adr/0046-passphrase-and-access-tokens.md)）で、いつでも取り消せる。Codex の設定などは [apps/mcp/README.md](./apps/mcp/README.md)。
+
+`pnpm ixa mcp --claude`（または `--codex`）が、この clone 用の登録の 1 行を出す（ワークスペースの ID は入れ、鍵は入れない）。`--write` を付けると実際に登録する。
 
 ## 曲が先にある
 
@@ -239,24 +244,29 @@ packages/
 
 ## 動かす
 
-Node 22 / pnpm 9 / Docker / FFmpeg、音声サービスに [uv](https://docs.astral.sh/uv/) と Python 3.11+ が要る。AI でテキストや絵を作るなら [Claude Code](https://docs.anthropic.com/en/docs/claude-code)・[Codex](https://github.com/openai/codex)・Grok CLI のどれかを同じ Mac でサインインしておく（任意。AI エージェントのタブには Claude Code）。
+Mac で Node 22 / pnpm 9 / Docker Desktop / FFmpeg / [uv](https://docs.astral.sh/uv/) が要る（音声サービスの Python 3.12 は uv が用意する）。AI でテキストや絵を作るなら [Claude Code](https://docs.anthropic.com/en/docs/claude-code)・[Codex](https://github.com/openai/codex)・Grok CLI のどれかを同じ Mac でサインインしておく（任意。AI エージェントのタブには Claude Code）。
 
 ```bash
 git clone https://github.com/kabatin/ixa-video-creator.git
 cd ixa-video-creator
 pnpm install
+pnpm ixa setup    # .env・署名の鍵・postgres と redis・DB の更新・ワークスペース・音声の依存。何度実行しても壊れない
 
-cp .env.example .env          # 既定は安全。課金は発生しない
-# 素材を画面へ見せる URL の署名の鍵（手元のファイルに置くときは必須。ADR-0041）
-printf 'STORAGE_SIGNING_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
-pnpm infra:up                 # postgres / redis
-pnpm db:migrate
-pnpm db:seed                  # ワークスペースを作り、その ID を .env に書く
-
-pnpm dev                      # web :3000, api :3001, worker, audio :8100
+pnpm dev          # web :3000, api :3001, worker, audio :8100
 ```
 
+`setup` は勝手に道具を入れない。足りなければ入れ方の 1 行（`brew install ffmpeg` など）を出して止まる。`pnpm ixa doctor` は今の状態を ✓ / ! / ✗ で並べ、問題ごとに直し方を 1 行添える（鍵は「入っている／いない」だけ）。どちらも `--json` で機械向けに出せる。エージェントが従う手順書は [INSTALL.md](./INSTALL.md)（人に聞くべき所も書いてある。[ADR-0063](./docs/adr/0063-ixa-cli-setup-doctor-update.md)）。
+
 <http://localhost:3000> を開き、作品を作り、音声ファイルを画面に落とす。あとは流れの帯が案内する。**既定ではローカルのスタブだけで動く。鍵も費用も要らない。**
+
+### 更新する
+
+```bash
+pnpm ixa update           # 最新のリリースへ（--main で main の先頭へ）
+pnpm ixa update --check   # 新しい版があるかだけ確かめる
+```
+
+未コミットの変更がある・`main` 以外にいる・ジョブ（生成・書き出し・絵・音楽・効果音・声・アップスケール・エージェント）が動いているときは止まる（`--force` はジョブの確認だけを外す）。リリースのタグへ fast-forward して依存を入れたあと、**新しい版の CLI** が `uv sync` と DB の更新を回し、新しく増えた `.env` の項目を一覧にし（値は書かない）、変更点のページを出して doctor を回す。終わったら `pnpm dev` を起動し直す。
 
 ### 有料の Provider を繋ぐ
 

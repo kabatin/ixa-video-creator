@@ -5,6 +5,9 @@ Cut against the music, let AI draft the storyboard, the frames, the takes, the s
 effects, and export exactly what you previewed. Ask for changes in plain words in the built-in
 agent tab, or let Claude Code or Codex drive the whole production over MCP.
 
+> **Let an agent install it.** Paste this into Claude Code or Codex on your Mac:
+> *"Install https://github.com/kabatin/ixa-video-creator on this Mac and get it ready to use, following its INSTALL.md."*
+
 [![CI](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml/badge.svg)](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/kabatin/ixa-video-creator)](https://github.com/kabatin/ixa-video-creator/releases) [![License: MIT](https://img.shields.io/github/license/kabatin/ixa-video-creator)](./LICENSE) [![GitHub stars](https://img.shields.io/github/stars/kabatin/ixa-video-creator?style=social)](https://github.com/kabatin/ixa-video-creator/stargazers)
 
 [日本語版 README](./README.ja.md) · MIT licensed · TypeScript monorepo · v0.7
@@ -92,6 +95,8 @@ Register it with Claude Code (the access key comes from your shell environment; 
 ```
 
 `IXA_API_TOKEN` is an automation key issued on the *Access keys* page (アクセス用の鍵) ([ADR-0046](./docs/adr/0046-passphrase-and-access-tokens.md)) and revocable at any time. Codex setup and the rest: [apps/mcp/README.md](./apps/mcp/README.md).
+
+`pnpm ixa mcp --claude` (or `--codex`) prints the exact registration line for this clone, with your workspace id filled in and no key in it; add `--write` to register it.
 
 ## Music first
 
@@ -238,24 +243,29 @@ The dependency direction is always `apps → packages → domain`, never back.
 
 ## Quick start
 
-Requires Node 22, pnpm 9, Docker, FFmpeg, and [uv](https://docs.astral.sh/uv/) with Python 3.11+ for the audio service. Optional: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex) or Grok CLI, signed in on the same Mac, for AI text and images — and Claude Code for the agent tab.
+Requires a Mac with Node 22, pnpm 9, Docker Desktop, FFmpeg and [uv](https://docs.astral.sh/uv/) (uv brings Python 3.12 for the audio service). Optional: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex) or Grok CLI, signed in on the same Mac, for AI text and images — and Claude Code for the agent tab.
 
 ```bash
 git clone https://github.com/kabatin/ixa-video-creator.git
 cd ixa-video-creator
 pnpm install
+pnpm ixa setup    # .env, signing key, postgres + redis, DB migrations, workspace, audio deps — safe to re-run
 
-cp .env.example .env          # defaults are safe: nothing bills
-# signing key for the URLs that show your footage in the browser (required for local files, ADR-0041)
-printf 'STORAGE_SIGNING_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
-pnpm infra:up                 # postgres, redis
-pnpm db:migrate
-pnpm db:seed                  # creates a workspace and writes its id into .env
-
-pnpm dev                      # web :3000, api :3001, worker, audio :8100
+pnpm dev          # web :3000, api :3001, worker, audio :8100
 ```
 
+`setup` never installs anything for you: if a tool is missing it prints the one line that installs it (`brew install ffmpeg`) and stops. `pnpm ixa doctor` shows the state of everything as ✓ / ! / ✗ with a one-line fix for each problem — keys only as set or not set. Both take `--json` for agents; [INSTALL.md](./INSTALL.md) is the runbook an agent follows, including where it must stop and ask you ([ADR-0063](./docs/adr/0063-ixa-cli-setup-doctor-update.md)).
+
 Open <http://localhost:3000>, create a project, and drop an audio file onto the window — the flow bar takes it from there. **Out of the box everything runs on local stubs — no API keys, no cost.**
+
+### Upgrading
+
+```bash
+pnpm ixa update           # to the latest release (--main for the tip of main)
+pnpm ixa update --check   # only tell me whether there is one
+```
+
+It refuses to run with uncommitted changes, off `main`, or while jobs (generation, export, images, music, sound effects, voices, upscaling, the agent) are running — `--force` lifts only the jobs check. It fast-forwards to the release tag and installs dependencies, then hands over to the **new** version of itself to run `uv sync` and the DB migrations, list any `.env` items the new version added (it never writes values), link the release notes and run `doctor`. Restart `pnpm dev` afterwards.
 
 ### Connecting a paid provider
 
