@@ -1,0 +1,23 @@
+{
+  "name": "@ixa/cli",
+  "version": "0.8.0",
+  "private": true,
+  "type": "module",
+  "description": "導入・点検・更新のコマンド（pnpm ixa setup | doctor | update | mcp。ADR-0063）",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@ixa/config": "workspace:*",
+    "@ixa/db": "workspace:*",
+    "tsx": "^4.23.13",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

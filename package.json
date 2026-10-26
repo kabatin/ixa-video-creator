@@ -19,7 +19,8 @@
     "db:migrate": "pnpm --filter @ixa/db db:migrate",
     "infra:up": "docker compose --env-file .env -f infra/docker-compose.yml up -d",
     "infra:down": "docker compose --env-file .env -f infra/docker-compose.yml down",
-    "db:seed": "pnpm --filter @ixa/db db:seed"
+    "db:seed": "pnpm --filter @ixa/db db:seed",
+    "ixa": "pnpm --filter @ixa/cli --silent start --"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

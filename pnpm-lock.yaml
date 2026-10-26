@@ -117,6 +117,28 @@ importers:
 
   apps/audio: {}
 
+  apps/cli:
+    dependencies:
+      '@ixa/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@ixa/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      tsx:
+        specifier: ^4.23.13
+        version: 4.23.13
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.3)(jsdom@30.0.1)(terser@5.51.2)
+
   apps/mcp:
     dependencies:
       '@ixa/domain':

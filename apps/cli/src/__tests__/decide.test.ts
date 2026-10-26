@@ -1,0 +1,109 @@
+import type { ActiveJobCounts } from '@ixa/db'
+import { describe, expect, it } from 'vitest'
+import { parseVersion, type Version } from '../lib/semver.js'
+import { infraAction, infraSettled, signingSecretAction, workspaceAction } from '../setup/decide.js'
+import {
+  describeActiveJobs,
+  fastForwardBlocker,
+  fastForwardOf,
+  releaseTarget,
+  updateBlockers,
+} from '../update/decide.js'
+import { releaseNotesUrl } from '../commands/update.js'
+
+const v = (text: string): Version => {
+  const parsed = parseVersion(text)
+  if (parsed === null) throw new Error(text)
+  return parsed
+}
+
+describe('setup の判定', () => {
+  it('署名の鍵：入っていれば済み、空なら埋める、行が無ければ足す', () => {
+    expect(signingSecretAction(`STORAGE_SIGNING_SECRET=${'x'.repeat(64)}\n`)).toBe('already')
+    expect(signingSecretAction('STORAGE_SIGNING_SECRET=\n')).toBe('fill')
+    expect(signingSecretAction('STORAGE_SIGNING_SECRET=   \n')).toBe('fill')
+    expect(signingSecretAction('# STORAGE_SIGNING_SECRET=\nA=1\n')).toBe('append')
+  })
+
+  it('ワークスペース：空なら用意して書く、合っていれば済み、違えば人に聞く', () => {
+    expect(workspaceAction(null, [])).toBe('ensure-and-fill')
+    expect(workspaceAction(null, ['01A'])).toBe('ensure-and-fill')
+    expect(workspaceAction('01A', ['01A'])).toBe('already')
+    expect(workspaceAction('01B', ['01A'])).toBe('mismatch')
+  })
+
+  it('Docker：両方動いていれば済み、外でつながれば触らない、無ければ起動、起動中なら待つ', () => {
+    const none = { postgres: false, redis: false }
+    expect(infraAction('healthy', 'healthy', none)).toBe('already')
+    expect(infraAction('missing', 'missing', { postgres: true, redis: true })).toBe('external')
+    expect(infraAction('missing', 'healthy', none)).toBe('start')
+    expect(infraAction('stopped', 'healthy', none)).toBe('start')
+    expect(infraAction('starting', 'healthy', none)).toBe('wait')
+  })
+
+  it('待つのを止める時', () => {
+    expect(infraSettled('healthy', 'healthy')).toBe('ready')
+    expect(infraSettled('starting', 'healthy')).toBe('pending')
+    expect(infraSettled('unhealthy', 'healthy')).toBe('broken')
+  })
+})
+
+const noJobs: ActiveJobCounts = { generation: 0, render: 0, image: 0, music: 0, sfx: 0, upscale: 0, dub: 0, voice: 0, agent: 0 }
+
+describe('update の止める条件', () => {
+  it('きれいな main でジョブも無ければ進める', () => {
+    expect(updateBlockers({ dirty: false, branch: 'main', activeJobs: noJobs, force: false })).toEqual([])
+  })
+
+  it('未コミットの変更・main 以外・動いているジョブで止める（全部並べる）', () => {
+    const blockers = updateBlockers({
+      dirty: true,
+      branch: 'feature/x',
+      activeJobs: { ...noJobs, render: 1, agent: 2 },
+      force: false,
+    })
+    expect(blockers.map((b) => b.id)).toEqual(['update.dirty', 'update.branch', 'update.active-jobs'])
+    expect(blockers.every((b) => b.status === 'needs_human')).toBe(true)
+    expect(blockers[2]?.message).toContain('書き出し 1 件・AI エージェントの作業 2 件')
+  })
+
+  it('--force はジョブの確認だけを外す', () => {
+    const blockers = updateBlockers({ dirty: true, branch: 'main', activeJobs: { ...noJobs, music: 1 }, force: true })
+    expect(blockers.map((b) => b.id)).toEqual(['update.dirty'])
+  })
+
+  it('数えられない（DB につながらない）ときは止めない', () => {
+    expect(updateBlockers({ dirty: false, branch: 'main', activeJobs: null, force: false })).toEqual([])
+  })
+
+  it('動いている種類だけを言う', () => {
+    expect(describeActiveJobs({ ...noJobs, sfx: 3 })).toBe('効果音 3 件')
+  })
+})
+
+describe('update の行き先', () => {
+  it('いちばん新しいリリースが今より新しければそこへ', () => {
+    expect(releaseTarget(['v0.7.2', 'v0.9.0', 'v0.8.0'], v('0.8.0'))).toEqual({ kind: 'newer', ref: 'v0.9.0', version: v('0.9.0') })
+  })
+
+  it('今が最新（か、それより先）なら最新', () => {
+    expect(releaseTarget(['v0.7.2', 'v0.8.0'], v('0.8.0')).kind).toBe('up-to-date')
+    expect(releaseTarget(['v0.7.2'], v('0.8.0')).kind).toBe('up-to-date')
+    expect(releaseTarget([], v('0.8.0')).kind).toBe('none')
+  })
+
+  it('fast-forward できるか。main がタグより先・枝分かれなら止めて理由を出す', () => {
+    expect(fastForwardOf({ same: false, headBehind: true, headAhead: false })).toBe('ff')
+    expect(fastForwardOf({ same: true, headBehind: true, headAhead: true })).toBe('same')
+    expect(fastForwardOf({ same: false, headBehind: false, headAhead: true })).toBe('ahead')
+    expect(fastForwardOf({ same: false, headBehind: false, headAhead: false })).toBe('diverged')
+    expect(fastForwardBlocker('ff', 'v0.9.0')).toBeNull()
+    expect(fastForwardBlocker('ahead', 'v0.9.0')?.message).toContain('先に進んで')
+    expect(fastForwardBlocker('diverged', 'v0.9.0')?.status).toBe('needs_human')
+  })
+
+  it('変更点の場所', () => {
+    expect(releaseNotesUrl('0.8.0', '0.9.0', false)).toBe('https://github.com/kabatin/ixa-video-creator/releases/tag/v0.9.0')
+    expect(releaseNotesUrl('0.8.0', '0.9.0', true)).toBe('https://github.com/kabatin/ixa-video-creator/compare/v0.8.0...main')
+  })
+})
