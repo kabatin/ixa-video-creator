@@ -50,7 +50,7 @@ export const WireShot = z.object({
   sourceInSec: z.number().optional(),
   /** Take の音（ADR-0060）。古い API は返さないので省略可。 */
   takeAudioVolume: z.number().optional(),
-  takeAudioMuted: z.boolean().optional(),
+  takeAudioMuted: z.boolean().nullable().optional(),
   description: z.string().optional(),
   mood: nullableString,
   camera: WireCamera,

@@ -9,15 +9,15 @@ import { PROJECT_ID, clipId, makeShot, makeTransition, shotId } from './fixtures
  * - Take は AI の動画で、**多くは音のトラックを持つ**（Take の音を鳴らさないことを確かめるのはここ）
  * - 尺に合わせた Shot（速度 1 以外）、速めた Shot、絵コンテの画像だけの Shot、Take の頭を切った Shot
  * - ディゾルブと暗転。ナレーション 1 行と、その間に曲を下げる設定
- * - **Shot はマイグレーション 0057 を通った形**（消音）
+ * - **Shot はマイグレーション 0057 を通った形**（消音は自動。セリフが無いので鳴らない）
  */
 
 const EPOCH = new Date('2026-09-16T00:00:00.000Z')
 const asset = (n: number): MediaAssetId => MediaAssetId.parse(`01ARZ3NDEKTSV4RRFFQ69G5M${n.toString().padStart(2, '0')}`)
 
-/** 0057 を通った前からの Shot（消音・大きさ 1）。 */
+/** 0057 を通った前からの Shot（消音は自動・大きさ 1）。セリフが無いので鳴らない。 */
 const migrated = (n: number, startSec: number, durationSec: number, overrides: Partial<Shot> = {}): Shot =>
-  makeShot(n, startSec, durationSec, { takeAudioMuted: true, takeAudioVolume: 1, ...overrides })
+  makeShot(n, startSec, durationSec, { takeAudioMuted: null, takeAudioVolume: 1, ...overrides })
 
 export const MV_SHOTS: readonly Shot[] = [
   migrated(1, 0, 3.75),

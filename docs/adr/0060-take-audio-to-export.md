@@ -20,11 +20,13 @@ Take の音はどこでも鳴らなかった。
 
 ### 1. Shot に Take の音の大きさと消音
 
-`Shot.takeAudioVolume`（0〜2・既定 1）と `takeAudioMuted`（既定 false）。
+`Shot.takeAudioVolume`（0〜2・既定 1）と `takeAudioMuted`（`boolean | null`・既定 null）。
 
-- **マイグレーション 0057 で、前からある Shot はすべて消音にする**（論理削除の行も。戻したとき鳴らないように）。
-  列を `DEFAULT true` で足してから既定を `false` に替える。これから作る Shot は音あり。
-- 段 1 の時点で作ったセリフのある Shot も、前からある Shot なので消音で始まる（字面どおり）。鳴らすには Shot ごとに外す。
+- **null は自動: セリフのある Shot だけ鳴らす**（`isTakeAudioMuted`）。true / false は制作者が選んだ値で、自動では変えない。
+- 最初は「新しい Shot は音あり・前からある Shot は 0057 で消音」にしたが、レビューで改めた。それだと MV に足した新しい Shot が、
+  頼んでいない AI の音を鳴らし、曲まで下げる。AI の動画には頼んでいない音が付いてくることが多い。
+- **マイグレーション 0057 は、前からある Shot も null（自動）で入れる**（論理削除の行も）。セリフの無い Shot（今までの MV はすべて）は
+  鳴らないままなので、前と同じ出力になる。段 1 で作ったセリフのある Shot は鳴り出す（そのために頼んだ音）。
 - Shot ごとに持つ。同じ Shot を 2 回使う作りは無いので、クリップごとと同じ意味になる。
 - 分割では後半にも引き継ぐ（消音の Shot を割って後半だけ鳴り出さない）。作品の複製でも写す。
 
@@ -32,7 +34,7 @@ Take の音はどこでも鳴らなかった。
 
 計画では `audio: { volume, muted, hasAudio }` だったが、**鳴らす Shot だけが `{ volume }` を持つ形にした**。
 
-- 鳴らすのは、採用 Take の素材の probe が `hasAudio: true`、消音していない、大きさが 0 でない Shot（`@ixa/timeline` の 1 か所）。
+- 鳴らすのは、採用 Take の素材の probe が `hasAudio: true`、消音していない（自動ならセリフがある）、大きさが 0 でない Shot（`@ixa/timeline` の 1 か所）。
 - 鳴らさない Shot は欄を書かない。こうすると、**消音にした MV の文書は前と 1 バイトも変わらない**
   （`muted: true` を全 Shot に書くと、文書・前回と同じ書き出しの判定・スナップショットがすべて変わる）。
   鳴らす Shot しか持たないので、`muted` と `hasAudio` は書くまでもなく決まっている。
@@ -78,22 +80,23 @@ Take の音はどこでも鳴らなかった。
 
 - API: `PATCH /shots/{id}` の `takeAudioVolume`・`takeAudioMuted`、`PATCH /projects/{id}` の `masteringMode`
   （取り消しの控えにも足した）。書き出しの応答に `masteringMode`。
-- 画面: Shot のインスペクターの Take の欄（速さの下）に「Take の音を鳴らす」「Take の音の大きさ」（割合 0〜200%）。
+- 画面: Shot のインスペクターの Take の欄（速さの下）に「Take の音」（自動（セリフがあれば鳴らす）/ 鳴らす / 鳴らさない。
+  下に、いま鳴るかと理由）と「Take の音の大きさ」（割合 0〜200%）。
   プロジェクト設定に「書き出しの音」→「仕上げの音量」（「全体をそろえる（今まで通り）」/「山だけ抑える」）。
   選んでいなければ、いまどちらになるかを選んだ形で見せ、理由（セリフのある Shot があるか）を添える。
-- MCP: `edit_shots` の `takeAudioVolume`・`takeAudioMuted`（一括の口は受けないので Shot ごとの PATCH）、
+- MCP: `edit_shots` の `takeAudioVolume`・`takeAudioMuted`（null で自動に戻す。一括の口は受けないので Shot ごとの PATCH）、
   `update_project` の `masteringMode`（null で自動に戻す）。`get_project` は既定と違うときだけ出す。
 
 ## 確かめたこと
 
 - セリフの無い MV の前後比較: 本制作の形（曲・テロップ・効果音・VIDEO2・ナレーションとダッキング・fit・速め・絵だけの Shot・
-  ディゾルブ・暗転。Take の多くは音付き、Shot は 0057 を通った消音）の入力から、**前の版で**書き出した
+  ディゾルブ・暗転。Take の多くは音付き、Shot は 0057 を通った自動の消音）の入力から、**前の版で**書き出した
   タイムライン・合成の配置表・Shot の動画の props・ffmpeg の引数と、丸ごと同じ（`golden/mv-without-dialogue.*.json`）。
   仕上げも、セリフの無い作品は `loudnorm` で、worker は前と同じ口だけを呼ぶ。
 - 持ち込んだ音付きの Take: 1kHz の音の入った mp4（probe は `hasAudio: true`）を、鳴らす Shot と鳴らさない Shot に置き、
   実 ffmpeg・実 Remotion で書き出して、前だけ鳴ることを測った。
 - `peak`: 実 ffmpeg で、0 dBFS 近い山は -1.5 dBFS 付近まで抑え、静かな音は持ち上げないこと。
-- 0057 は使い捨ての postgres で、前からの Shot（論理削除の行も）が消音、新しい Shot が音あり、前からのジョブが `loudnorm` になること。
+- 0057 は使い捨ての postgres で、前からの Shot（論理削除の行も）の消音が null（自動）、前からのジョブが `loudnorm` になること。
 
 ## 分かっている不足
 
@@ -101,5 +104,4 @@ Take の音はどこでも鳴らなかった。
 - 曲を下げるのは、鳴らす Shot の本体の区間全体（声の区間ではない）。セリフの区間を拾うのは段 3（`silencedetect`）。
 - 鳴らす Shot が無い作品で曲も無いとき、退避用の ffmpeg の書き出しは今まで通り音のトラックを持たない。
   鳴らす Shot だけのときは、その Shot の終わりで音のトラックが終わる（後ろは無音として再生される）。
-- 0057 を流す前に段 1 で作ったセリフのある Shot は消音で始まる。鳴らすには Shot ごとに外す（`edit_shots` でまとめて外せる）。
 - 実機での確認（vpipe の音付き生成を 1 本作って鳴らす）はまだ。

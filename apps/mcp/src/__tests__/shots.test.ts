@@ -222,6 +222,12 @@ describe('edit_shots', () => {
     expect(fake.callsTo('PATCH', `/projects/${PROJECT}/shots/bulk`)).toHaveLength(0)
   })
 
+  it('消音は null で自動（セリフのある Shot だけ鳴らす）に戻せる', async () => {
+    const fake = createFakeApi([...baseRoutes, { method: 'PATCH', path: `/shots/${SHOT_A}`, data: shotRow(SHOT_A, 0) }])
+    await editShotsTool.run({ projectId: PROJECT, edits: [{ shotIds: [SHOT_A], takeAudioMuted: null }] }, depsFor(fake))
+    expect(fake.callsTo('PATCH', `/shots/${SHOT_A}`)[0]?.body).toEqual({ takeAudioMuted: null })
+  })
+
   it('位置・尺は Shot が 1 つのときだけ（何も直す前に断る）', async () => {
     const fake = createFakeApi(baseRoutes)
     const result = await editShotsTool.run(

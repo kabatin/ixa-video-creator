@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import type { Shot } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import { buildTimelineDocument } from '../build.js'
 import { makeShot, makeSource } from './fixtures.js'
@@ -41,6 +42,17 @@ describe('Take の音', () => {
       }),
     )
     expect(doc.video1.map((item) => 'audio' in item)).toEqual([false, false, false])
+  })
+
+  it('消音が自動なら、セリフのある Shot だけ鳴らす', () => {
+    const line = { speakerId: 'cat', text: 'ねえ', offscreen: false, translation: null } as unknown as Shot['dialogue'][number]
+    const doc = buildTimelineDocument(
+      makeSource({
+        shots: [makeShot(1, 0, 2, { takeAudioMuted: null, dialogue: [line] }), makeShot(2, 2, 2, { takeAudioMuted: null })],
+        resolveShotMediaHasAudio: hasAudio(['S1', 'S2']),
+      }),
+    )
+    expect(doc.video1.map((item) => item.audio)).toEqual([{ volume: 1 }, undefined])
   })
 
   it('音の有無を引けなければ鳴らさない（A/B 比較など）', () => {

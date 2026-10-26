@@ -38,6 +38,15 @@ describe('PATCH /shots/:id の Take の音', () => {
     expect(f.shots.snapshot()[0]).toMatchObject({ takeAudioVolume: 1.4, takeAudioMuted: true })
   })
 
+  it('消音を null に戻すと自動（セリフのある Shot だけ鳴らす）', async () => {
+    const f = setup()
+    await patchJson(f.app, `/shots/${f.shot.id}`, { takeAudioMuted: true })
+    const res = await patchJson(f.app, `/shots/${f.shot.id}`, { takeAudioMuted: null })
+
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as Ok<ShotResponse>).data.takeAudioMuted).toBeNull()
+  })
+
   it.each([-0.1, MAX_TAKE_AUDIO_VOLUME + 0.1])('大きさ %s は 422 で保存しない', async (volume) => {
     const f = setup()
     const res = await patchJson(f.app, `/shots/${f.shot.id}`, { takeAudioVolume: volume })
@@ -88,7 +97,27 @@ describe('タイムラインの Take の音（持ち込んだ・作った Take �
     expect(doc.video1[0]?.audio).toEqual({ volume: 0.7 })
   })
 
-  it('消音した Shot（前からある Shot）・音の無い Take は鳴らさない', async () => {
+  it('消音が自動（前からある Shot・新しい Shot）なら、セリフのある Shot だけ鳴らす', async () => {
+    const SPEAKER = CharacterId.parse('01ARZ3NDEKTSV4RRFFQ69G5FB1')
+    const project = aProject()
+    const talking = aShotWithTake(project, {
+      startSec: 0, durationSec: 4, takeAudioMuted: null,
+      dialogue: [{ speakerId: SPEAKER, text: 'ねえ', offscreen: false, translation: null }],
+    })
+    const silent = aShotWithTake(project, { startSec: 4, durationSec: 4, takeAudioMuted: null })
+    const withAudio = (asset: typeof talking.asset) => ({ ...asset, probe: { ...PROBE, hasAudio: true } })
+    const deps = renderDeps({
+      project,
+      shots: [talking.shot, silent.shot],
+      takes: [talking.take, silent.take],
+      mediaAssets: [withAudio(talking.asset), withAudio(silent.asset)],
+    })
+    const res = await timelineRoutes(deps).request(`/projects/${project.id}/timeline`)
+    const doc = ((await res.json()) as Ok<TimelineDocument>).data
+    expect(doc.video1.map((item) => item.audio)).toEqual([{ volume: 1 }, undefined])
+  })
+
+  it('消音した Shot・音の無い Take は鳴らさない', async () => {
     expect((await documentOf(aProject(), { hasAudio: true, muted: true })).video1[0]?.audio).toBeUndefined()
     expect((await documentOf(aProject(), { hasAudio: false, muted: false })).video1[0]?.audio).toBeUndefined()
   })

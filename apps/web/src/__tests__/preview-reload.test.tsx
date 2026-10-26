@@ -93,7 +93,9 @@ describe('timelineShotsKey', () => {
     ['切り出す位置', { sourceInSec: 0.5 }],
     ['採用 Take', { selectedTakeId: TakeId.parse(TAKE_ID) }],
     // Take の音（ADR-0060）。鳴らすか・大きさは組み立て結果の video1 に効く。
-    ['Take の音を消すか', { takeAudioMuted: true }],
+    ['Take の音を鳴らすか', { takeAudioMuted: false }],
+    // 消音が自動なら、セリフの有無で鳴るかが変わる。
+    ['セリフの有無（消音が自動のとき）', { dialogue: [{ text: 'ねえ' }] as unknown as typeof shot.dialogue }],
     ['Take の音の大きさ', { takeAudioVolume: 1.5 }],
   ])('%s が変われば変わる', (_label, patch) => {
     expect(timelineShotsKey([{ ...shot, ...patch }])).not.toBe(timelineShotsKey([shot]))

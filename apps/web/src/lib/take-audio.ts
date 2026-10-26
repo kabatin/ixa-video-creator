@@ -1,4 +1,11 @@
-import { MAX_TAKE_AUDIO_VOLUME, resolveMasteringMode, type MasteringMode, type ProjectMasteringMode } from '@ixa/domain'
+import {
+  MAX_TAKE_AUDIO_VOLUME,
+  isTakeAudioMuted,
+  resolveMasteringMode,
+  type MasteringMode,
+  type ProjectMasteringMode,
+  type Shot,
+} from '@ixa/domain'
 
 /**
  * Take の音（ADR-0060）と、書き出しの仕上げの音量の言葉。**React を含まない。**
@@ -20,6 +27,32 @@ export const parseTakeAudioVolume = (raw: string): number | null => {
 
 export const takeAudioVolumeProblem = (raw: string): string | null =>
   parseTakeAudioVolume(raw) === null ? `0〜${String(MAX_PERCENT)}% で入れてください` : null
+
+type TakeAudioShot = Pick<Shot, 'takeAudioMuted' | 'dialogue'>
+
+/** Take の音を鳴らすかの選択肢（null = 自動は、セリフのある Shot だけ鳴らす）。 */
+export const TAKE_AUDIO_OPTIONS: readonly { readonly value: 'auto' | 'on' | 'off'; readonly label: string }[] = [
+  { value: 'auto', label: '自動（セリフがあれば鳴らす）' },
+  { value: 'on', label: '鳴らす' },
+  { value: 'off', label: '鳴らさない' },
+]
+
+export const takeAudioChoice = (muted: boolean | null): 'auto' | 'on' | 'off' =>
+  muted === null ? 'auto' : muted ? 'off' : 'on'
+
+/** 選択肢を保存する値に戻す。知らない値は undefined（保存しない）。 */
+export const parseTakeAudioChoice = (raw: string): boolean | null | undefined =>
+  raw === 'auto' ? null : raw === 'on' ? false : raw === 'off' ? true : undefined
+
+/** 選択欄の下の一言。自動のときは、いまどうなっているかと理由。 */
+export const takeAudioHint = (shot: TakeAudioShot): string => {
+  if (shot.takeAudioMuted === null) {
+    return shot.dialogue.length > 0 ? 'いまは鳴らします（セリフがあるため）。' : 'いまは鳴らしません（セリフが無いため）。'
+  }
+  return isTakeAudioMuted(shot)
+    ? '曲だけが鳴ります。'
+    : '音のある Take だけ鳴ります。鳴っている間は曲が下がります（曲を下げる設定のとき）。'
+}
 
 export const MASTERING_OPTIONS: readonly { readonly value: MasteringMode; readonly label: string }[] = [
   { value: 'loudnorm', label: '全体をそろえる（今まで通り）' },

@@ -229,7 +229,8 @@ export const getProjectTool = defineTool({
           ...(shot.speed === undefined || shot.speed === 1 ? {} : { speed: shot.speed }),
           ...(shot.sourceInSec === undefined || shot.sourceInSec === 0 ? {} : { sourceInSec: round(shot.sourceInSec) }),
           // Take の音（ADR-0060）。既定（音あり・1）のときは出さない。
-          ...(shot.takeAudioMuted === true ? { takeAudioMuted: true } : {}),
+          // 消音は選んだときだけ出す（null は自動: セリフのある Shot だけ鳴らす）。
+          ...(shot.takeAudioMuted === undefined || shot.takeAudioMuted === null ? {} : { takeAudioMuted: shot.takeAudioMuted }),
           ...(shot.takeAudioVolume === undefined || shot.takeAudioVolume === 1 ? {} : { takeAudioVolume: shot.takeAudioVolume }),
           description: shot.description ?? '',
           ...(shot.mood === null ? {} : { mood: shot.mood }),

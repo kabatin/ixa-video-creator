@@ -63,11 +63,12 @@ export const Shot = z.object({
    */
   speed: z.number().min(MIN_PLAYBACK_RATE).max(MAX_PLAYBACK_RATE).default(1),
   /**
-   * 採用 Take の音（ADR-0060）。鳴るのは Take に音があり、消音していないときだけ。
-   * 新しい Shot は音あり。**前からある Shot はマイグレーションで消音**にした（今まで鳴らなかった MV は鳴らないまま）。
+   * 採用 Take の音（ADR-0060）。鳴るのは Take に音があり、消音していないときだけ（`isTakeAudioMuted`）。
+   * 消音の **null は自動**: セリフのある Shot だけ鳴らす（MV に足した Shot が頼んでいない AI の音を鳴らさない）。
+   * true / false は制作者が選んだ値。前からある Shot もマイグレーション 0057 で自動（セリフが無いので鳴らないまま）。
    */
   takeAudioVolume: z.number().min(0).max(MAX_TAKE_AUDIO_VOLUME).default(1),
-  takeAudioMuted: z.boolean().default(false),
+  takeAudioMuted: z.boolean().nullable().default(null),
 
   // 演出
   description: z.string().default(''),
@@ -177,6 +178,11 @@ export type UpdateShotPatch = z.input<typeof UpdateShotPatch>
 
 export const CreateTransitionInput = Transition.omit({ id: true })
 export type CreateTransitionInput = z.input<typeof CreateTransitionInput>
+
+/** Take の音を消すか（ADR-0060）。選んでいなければ（null）、セリフの無い Shot は消す。 */
+export const isTakeAudioMuted = (
+  shot: { readonly takeAudioMuted: boolean | null; readonly dialogue: readonly unknown[] },
+): boolean => shot.takeAudioMuted ?? shot.dialogue.length === 0
 
 export const shotEndSec = (shot: Pick<Shot, 'startSec' | 'durationSec'>): Seconds =>
   shot.startSec + shot.durationSec

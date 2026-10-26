@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MasteringMode, resolveMasteringMode } from '../audio/mastering.js'
-import { CreateShotInput, MAX_TAKE_AUDIO_VOLUME, UpdateShotPatch } from '../shot/shot.js'
+import { CreateShotInput, MAX_TAKE_AUDIO_VOLUME, UpdateShotPatch, isTakeAudioMuted } from '../shot/shot.js'
 import { Project } from '../project/project.js'
 import { RenderJob } from '../render/render.js'
 import { TimelineDocument } from '../timeline/timeline.js'
@@ -15,12 +15,21 @@ describe('Shot の Take の音', () => {
     expect(UpdateShotPatch.safeParse({ takeAudioVolume: MAX_TAKE_AUDIO_VOLUME + 0.01 }).success).toBe(false)
   })
 
-  it('消音は真偽だけ', () => {
+  it('消音は真偽か null（自動に戻す）', () => {
     expect(UpdateShotPatch.safeParse({ takeAudioMuted: true }).success).toBe(true)
+    expect(UpdateShotPatch.safeParse({ takeAudioMuted: null }).success).toBe(true)
     expect(UpdateShotPatch.safeParse({ takeAudioMuted: 'yes' }).success).toBe(false)
   })
 
-  it('新しい Shot は音あり・大きさ 1 で始まる', () => {
+  it('自動（null）は、セリフのある Shot だけ鳴らす。選んだらその通り', () => {
+    const talking = [{ text: 'ねえ' }]
+    expect(isTakeAudioMuted({ takeAudioMuted: null, dialogue: [] })).toBe(true)
+    expect(isTakeAudioMuted({ takeAudioMuted: null, dialogue: talking })).toBe(false)
+    expect(isTakeAudioMuted({ takeAudioMuted: false, dialogue: [] })).toBe(false)
+    expect(isTakeAudioMuted({ takeAudioMuted: true, dialogue: talking })).toBe(true)
+  })
+
+  it('新しい Shot は自動・大きさ 1 で始まる（MV に足した Shot は頼んでいない音を鳴らさない）', () => {
     const created = CreateShotInput.parse({
       projectId: '01ARZ3NDEKTSV4RRFFQ69G5FAW',
       sequenceId: null,
@@ -32,7 +41,7 @@ describe('Shot の Take の音', () => {
       mood: null,
       sourceType: { type: 'ai_video' },
     })
-    expect(created).toMatchObject({ takeAudioVolume: 1, takeAudioMuted: false })
+    expect(created).toMatchObject({ takeAudioVolume: 1, takeAudioMuted: null })
   })
 })
 

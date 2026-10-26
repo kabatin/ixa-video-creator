@@ -420,7 +420,7 @@ type Shot = {
 
   // 採用 Take の音（ADR-0060）。鳴るのは Take に音があり、消音していないときだけ
   takeAudioVolume: number           // 0〜2。1 がそのまま
-  takeAudioMuted: boolean           // 新しい Shot は false。前からある Shot はマイグレーション 0057 で true
+  takeAudioMuted: boolean | null    // null は自動（セリフのある Shot だけ鳴らす。isTakeAudioMuted）。true / false は制作者が選んだ値
 
   // 場所。ひと続きのカットなので 1 つだけ持つ（ADR-0015）
   locationId: LocationId | null

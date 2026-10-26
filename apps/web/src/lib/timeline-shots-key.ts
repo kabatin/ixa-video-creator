@@ -1,4 +1,4 @@
-import type { Shot } from '@ixa/domain'
+import { isTakeAudioMuted, type Shot } from '@ixa/domain'
 
 /**
  * 組み立て結果（TimelineDocument）に効く Shot の値を 1 本の文字列にする。プレビューとタイムラインはこれが変わったら読み直す
@@ -14,8 +14,8 @@ export const timelineShotsKey = (shots: readonly Shot[] | null): string =>
         .map((shot) =>
           [
             shot.id, shot.startSec, shot.durationSec, shot.timing, shot.speed, shot.sourceInSec, shot.selectedTakeId ?? '-',
-            // Take の音（ADR-0060）。鳴らすか・大きさは video1 の音に効く。
-            shot.takeAudioMuted ? 'muted' : 'audible', shot.takeAudioVolume,
+            // Take の音（ADR-0060）。鳴らすか（自動ならセリフの有無で決まる）・大きさは video1 の音に効く。
+            isTakeAudioMuted(shot) ? 'muted' : 'audible', shot.takeAudioVolume,
           ].join(':'),
         )
         .join('|')

@@ -90,10 +90,11 @@ const Edit = z.object({
     .describe('Loudness of the selected take\'s own sound (voices, ambience). 1 = as generated, 0–2.'),
   takeAudioMuted: z
     .boolean()
+    .nullable()
     .optional()
     .describe(
-      'true = the take\'s own sound is not played (music only). Shots made before take sound existed start muted; ' +
-        'unmute dialogue shots to hear the voices.',
+      'true = the take\'s own sound is not played (music only); false = always played; null = automatic ' +
+        '(played only when the shot has dialogue, the default).',
     ),
 })
 

@@ -9,7 +9,7 @@ import type {
   TimelineDocument,
   Transition,
 } from '@ixa/domain'
-import { musicPlayedDurationSec } from '@ixa/domain'
+import { isTakeAudioMuted, musicPlayedDurationSec } from '@ixa/domain'
 import { clipsEndSec, shotsEndSec, sortClips, sortShotsByStart } from './ordering.js'
 import { shotPlaybackRate } from './speed.js'
 
@@ -159,11 +159,11 @@ export const timelineDurationSec = (source: TimelineSource): Seconds => {
 }
 
 /**
- * 採用 Take の音を鳴らすか（ADR-0060）。Take に音があり、消音しておらず、大きさが 0 でないときだけ。
- * 鳴らさない Shot は欄を書かない（前からある Shot は 0057 で消音にしたので、MV の文書は前と同じ形のまま）。
+ * 採用 Take の音を鳴らすか（ADR-0060）。Take に音があり、消音しておらず（自動ならセリフのある Shot だけ）、大きさが 0 でないときだけ。
+ * 鳴らさない Shot は欄を書かない（セリフの無い MV の Shot は自動で消音なので、文書は前と同じ形のまま）。
  */
 const shotAudio = (shot: Shot, source: TimelineSource): { readonly audio?: { readonly volume: number } } =>
-  !shot.takeAudioMuted && shot.takeAudioVolume > 0 && source.resolveShotMediaHasAudio?.(shot) === true
+  !isTakeAudioMuted(shot) && shot.takeAudioVolume > 0 && source.resolveShotMediaHasAudio?.(shot) === true
     ? { audio: { volume: shot.takeAudioVolume } }
     : {}
 

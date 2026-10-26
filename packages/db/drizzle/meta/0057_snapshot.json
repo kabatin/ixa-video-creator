@@ -1,5 +1,5 @@
 {
-  "id": "78c2d848-6b39-43d1-a2e6-36fc8602ce38",
+  "id": "6c20e748-5008-4039-83bf-97005c983981",
   "prevId": "ccc0485c-cacb-4af4-8c3d-dbf5bb5e7cb9",
   "version": "7",
   "dialect": "postgresql",
@@ -3780,8 +3780,7 @@
           "name": "take_audio_muted",
           "type": "boolean",
           "primaryKey": false,
-          "notNull": true,
-          "default": false
+          "notNull": false
         },
         "description": {
           "name": "description",
