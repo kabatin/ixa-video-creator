@@ -12,14 +12,17 @@ export type MasteringMode = z.infer<typeof MasteringMode>
 
 /**
  * 作品に保存する値。**null は「制作者がまだ選んでいない」**（自動）。
- * 自動は、セリフのある Shot が 1 つでもあれば `peak`、無ければ `loudnorm`。
+ * 自動は、**Take の音を実際に鳴らす Shot**（タイムラインの video1 に音を持つ Shot）が 1 つでもあれば `peak`、無ければ `loudnorm`。
+ * セリフの文があっても消音なら鳴らないので `loudnorm`、セリフが無くても鳴らしていれば `peak`。
  * 制作者が選べばその値を保存し、以後は自動で切り替えない。
  */
 export const ProjectMasteringMode = MasteringMode.nullable()
 export type ProjectMasteringMode = z.infer<typeof ProjectMasteringMode>
 
-/** 書き出しに使う仕上げ。選んであればそれ、無ければセリフの有無で決める。 */
-export const resolveMasteringMode = (
-  chosen: ProjectMasteringMode,
-  shots: readonly { readonly dialogue: readonly unknown[] }[],
-): MasteringMode => chosen ?? (shots.some((shot) => shot.dialogue.length > 0) ? 'peak' : 'loudnorm')
+/** タイムラインに Take の音を鳴らす Shot があるか（`TimelineDocument.video1` の `audio`）。 */
+export const hasAudibleTakeAudio = (video1: readonly { readonly audio?: unknown }[]): boolean =>
+  video1.some((item) => item.audio !== undefined)
+
+/** 書き出しに使う仕上げ。選んであればそれ、無ければ Take の音を鳴らす Shot があるかで決める。 */
+export const resolveMasteringMode = (chosen: ProjectMasteringMode, takeAudioAudible: boolean): MasteringMode =>
+  chosen ?? (takeAudioAudible ? 'peak' : 'loudnorm')

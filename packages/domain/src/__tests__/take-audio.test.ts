@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MasteringMode, resolveMasteringMode } from '../audio/mastering.js'
+import { MasteringMode, hasAudibleTakeAudio, resolveMasteringMode } from '../audio/mastering.js'
 import { CreateShotInput, MAX_TAKE_AUDIO_VOLUME, UpdateShotPatch, isTakeAudioMuted } from '../shot/shot.js'
 import { Project } from '../project/project.js'
 import { RenderJob } from '../render/render.js'
@@ -46,18 +46,20 @@ describe('Shot の Take の音', () => {
 })
 
 describe('書き出しの仕上げ', () => {
-  const silent = { dialogue: [] }
-  const talking = { dialogue: [{ text: 'ねえ' }] }
-
-  it('選んでいなければ、セリフのある Shot があれば山だけ抑える', () => {
-    expect(resolveMasteringMode(null, [silent, talking])).toBe('peak')
-    expect(resolveMasteringMode(null, [silent, silent])).toBe('loudnorm')
-    expect(resolveMasteringMode(null, [])).toBe('loudnorm')
+  it('選んでいなければ、Take の音を鳴らす Shot があれば山だけ抑える（セリフの文ではなく、実際に鳴るか）', () => {
+    expect(resolveMasteringMode(null, true)).toBe('peak')
+    expect(resolveMasteringMode(null, false)).toBe('loudnorm')
   })
 
-  it('制作者が選んだら、セリフの有無で変えない', () => {
-    expect(resolveMasteringMode('loudnorm', [talking])).toBe('loudnorm')
-    expect(resolveMasteringMode('peak', [silent])).toBe('peak')
+  it('鳴らす Shot は、タイムラインの video1 に音を持つ Shot', () => {
+    expect(hasAudibleTakeAudio([{}, { audio: { volume: 1 } }])).toBe(true)
+    expect(hasAudibleTakeAudio([{}, {}])).toBe(false)
+    expect(hasAudibleTakeAudio([])).toBe(false)
+  })
+
+  it('制作者が選んだら、鳴るかどうかで変えない', () => {
+    expect(resolveMasteringMode('loudnorm', true)).toBe('loudnorm')
+    expect(resolveMasteringMode('peak', false)).toBe('peak')
   })
 
   it('知らない仕上げを拒む', () => {

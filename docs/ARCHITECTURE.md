@@ -899,7 +899,7 @@ Stage 2: コンポジット（Remotion）
 Stage 3: 音声ミックス（FFmpeg）
    MUSIC + SFX + 素材音声をミックス、ラウドネス正規化（-14 LUFS 目安）
    採用 Take の音は、鳴らす Shot（Take に音があり消音していない）だけ混ぜる（ADR-0060）
-   仕上げは作品ごと: 全体をそろえる（loudnorm）か、山だけ -1.5 dBFS で抑える（peak。セリフのある作品の既定）
+   仕上げは作品ごと: 全体をそろえる（loudnorm）か、山だけ -1.5 dBFS で抑える（peak。Take の音を鳴らす作品の既定）
    ▼
 Stage 4: 最終エンコード（FFmpeg）
    プリセット別に H.264/H.265 + AAC、faststart、カラースペース指定

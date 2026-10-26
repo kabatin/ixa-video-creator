@@ -516,8 +516,8 @@ type DialogueLine = {
 
 - `loudnorm`: 全体を -14 LUFS・トゥルーピーク -1.5 dBTP にそろえる（ADR-0039。曲だけの MV 向け）。
 - `peak`: -1.5 dBFS を超える山だけ抑える。全体の大きさは測って記録するだけ（Take の声と曲の釣り合いを残す）。
-- 作品が選んでいなければ（`null`）、**セリフのある Shot が 1 つでもあれば `peak`、無ければ `loudnorm`**
-  （`resolveMasteringMode`）。制作者が選べば、その値を保存し、以後はセリフの有無で切り替えない。
+- 作品が選んでいなければ（`null`）、**Take の音を実際に鳴らす Shot（タイムラインの video1 に音を持つ Shot）が 1 つでもあれば `peak`、
+  無ければ `loudnorm`**（`resolveMasteringMode`・`hasAudibleTakeAudio`）。制作者が選べば、その値を保存し、以後は切り替えない。
 - 書き出しのジョブは、投入の時点で決めた仕上げを `RenderJob.masteringMode` に控える。
 
 ### Shot と Character / Look

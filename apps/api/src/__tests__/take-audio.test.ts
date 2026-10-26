@@ -127,9 +127,18 @@ describe('POST /projects/:projectId/render の仕上げ', () => {
   const SPEAKER = CharacterId.parse('01ARZ3NDEKTSV4RRFFQ69G5FB1')
   const talking = [{ speakerId: SPEAKER, text: 'ねえ', offscreen: false, translation: null }]
 
-  const masteringOf = async (project: Project, dialogue: typeof talking | [] = []) => {
-    const withTake = aShotWithTake(project, { startSec: 0, durationSec: 4, dialogue })
-    const deps = renderDeps({ project, shots: [withTake.shot], takes: [withTake.take], mediaAssets: [withTake.asset] })
+  const masteringOf = async (
+    project: Project,
+    shot: { readonly dialogue?: typeof talking; readonly takeAudioMuted?: boolean | null; readonly hasAudio?: boolean } = {},
+  ) => {
+    const withTake = aShotWithTake(project, {
+      startSec: 0,
+      durationSec: 4,
+      dialogue: shot.dialogue ?? [],
+      takeAudioMuted: shot.takeAudioMuted ?? null,
+    })
+    const asset = { ...withTake.asset, probe: { ...PROBE, hasAudio: shot.hasAudio ?? true } }
+    const deps = renderDeps({ project, shots: [withTake.shot], takes: [withTake.take], mediaAssets: [asset] })
     const res = await renderRoutes(deps).request(`/projects/${project.id}/render`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -140,15 +149,24 @@ describe('POST /projects/:projectId/render の仕上げ', () => {
     return ((await list.json()) as Ok<RenderJobResponse[]>).data[0]?.masteringMode
   }
 
-  it('セリフの無い作品（MV）は前と同じく全体をそろえる', async () => {
+  it('セリフの無い作品（MV。Take に音があっても鳴らさない）は前と同じく全体をそろえる', async () => {
     expect(await masteringOf(aProject())).toBe('loudnorm')
   })
 
-  it('選んでいなければ、セリフのある作品は山だけ抑える', async () => {
-    expect(await masteringOf(aProject(), talking)).toBe('peak')
+  it('選んでいなければ、Take の音を鳴らす Shot がある作品は山だけ抑える', async () => {
+    expect(await masteringOf(aProject(), { dialogue: talking })).toBe('peak')
   })
 
-  it('制作者が選んだら、セリフがあってもその通り', async () => {
-    expect(await masteringOf(aProject({ masteringMode: 'loudnorm' }), talking)).toBe('loudnorm')
+  it('セリフがあっても消音なら鳴らないので、全体をそろえる', async () => {
+    expect(await masteringOf(aProject(), { dialogue: talking, takeAudioMuted: true })).toBe('loudnorm')
+    expect(await masteringOf(aProject(), { dialogue: talking, hasAudio: false })).toBe('loudnorm')
+  })
+
+  it('セリフが無くても鳴らしていれば、山だけ抑える', async () => {
+    expect(await masteringOf(aProject(), { takeAudioMuted: false })).toBe('peak')
+  })
+
+  it('制作者が選んだら、鳴るかどうかに関わらずその通り', async () => {
+    expect(await masteringOf(aProject({ masteringMode: 'loudnorm' }), { dialogue: talking })).toBe('loudnorm')
   })
 })

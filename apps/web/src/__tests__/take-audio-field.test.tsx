@@ -53,17 +53,19 @@ describe('TakeAudioField', () => {
 
 describe('MasteringModeSection', () => {
   const project = (masteringMode: Project['masteringMode']) => ({ id: ProjectId.parse(PROJECT_ID), masteringMode })
-
-  it('選んでいなければ、セリフのある作品は「山だけ抑える」に見え、選ぶと保存する', async () => {
-    const updateProject = vi.fn((_id: unknown, patch: { masteringMode?: Project['masteringMode'] }) =>
+  const fakeApi = () =>
+    vi.fn((_id: unknown, patch: { masteringMode?: Project['masteringMode'] }) =>
       Promise.resolve({ masteringMode: patch.masteringMode ?? null } as Project),
     )
+
+  it('選んでいなければ自動に見せ、いまどちらになるかを添える。選ぶと保存する', async () => {
+    const updateProject = fakeApi()
     const onSaved = vi.fn()
-    render(<MasteringModeSection project={project(null)} hasDialogue api={{ updateProject }} onSaved={onSaved} />)
+    render(<MasteringModeSection project={project(null)} takeAudioAudible api={{ updateProject }} onSaved={onSaved} />)
 
     const select = screen.getByLabelText('仕上げの音量')
-    expect(select).toHaveValue('peak')
-    expect(screen.getByText(/セリフのある Shot があるので/)).toBeInTheDocument()
+    expect(select).toHaveValue('auto')
+    expect(screen.getByText(/いまは「山だけ抑える」になります/)).toBeInTheDocument()
 
     await userEvent.selectOptions(select, 'loudnorm')
     await waitFor(() => {
@@ -72,5 +74,17 @@ describe('MasteringModeSection', () => {
     expect(onSaved).toHaveBeenCalled()
     expect(select).toHaveValue('loudnorm')
     expect(screen.getByText(/YouTube・SNS の基準にそろえます/)).toBeInTheDocument()
+  })
+
+  it('選んだ後でも、自動（おすすめ）に戻せる（null を保存する）', async () => {
+    const updateProject = fakeApi()
+    render(<MasteringModeSection project={project('peak')} takeAudioAudible={false} api={{ updateProject }} />)
+
+    await userEvent.selectOptions(screen.getByLabelText('仕上げの音量'), 'auto')
+    await waitFor(() => {
+      expect(updateProject).toHaveBeenCalledWith(PROJECT_ID, { masteringMode: null })
+    })
+    expect(screen.getByLabelText('仕上げの音量')).toHaveValue('auto')
+    expect(screen.getByText(/いまは「全体をそろえる」になります/)).toBeInTheDocument()
   })
 })

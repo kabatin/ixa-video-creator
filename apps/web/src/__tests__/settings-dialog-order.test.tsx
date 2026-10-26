@@ -12,6 +12,10 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: 
 vi.mock('@/components/environment-panel', () => ({
   EnvironmentPanel: () => <p>接続先の中身</p>,
 }))
+// 仕上げの音量（ADR-0060）はタイムラインの材料を読む。並びだけを見るので、読めていない形にする。
+vi.mock('@/components/workbench/timeline-materials-provider', () => ({
+  useTimelineMaterials: () => ({ materials: null, reload: () => undefined }),
+}))
 
 describe('SettingsDialogBody', () => {
   it('プロジェクトの削除は、接続先と実行の設定より後ろ（一番下）', () => {

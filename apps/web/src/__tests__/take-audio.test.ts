@@ -5,6 +5,7 @@ import {
   formatTakeAudioVolume,
   masteringHint,
   masteringValue,
+  parseMasteringChoice,
   parseTakeAudioVolume,
   takeAudioVolumeProblem,
 } from '@/lib/take-audio'
@@ -33,22 +34,29 @@ describe('Take の音の大きさ', () => {
 })
 
 describe('仕上げの音量', () => {
-  it('選択肢は 2 つ（画面の言葉）', () => {
+  it('選択肢は自動（おすすめ）と 2 つ（画面の言葉）', () => {
     expect(MASTERING_OPTIONS).toEqual([
+      { value: 'auto', label: '自動（おすすめ）' },
       { value: 'loudnorm', label: '全体をそろえる（今まで通り）' },
       { value: 'peak', label: '山だけ抑える' },
     ])
   })
 
-  it('選んでいなければ、セリフの有無で決まった方を選んでいる形に見せ、理由を添える', () => {
-    expect(masteringValue(null, true)).toBe('peak')
-    expect(masteringValue(null, false)).toBe('loudnorm')
-    expect(masteringHint(null, true)).toBe('セリフのある Shot があるので「山だけ抑える」にしています。選ぶと、その後はセリフの有無で変えません。')
-    expect(masteringHint(null, false)).toBe('セリフのある Shot が無いので「全体をそろえる」にしています。選ぶと、その後はセリフの有無で変えません。')
+  it('選択肢と保存する値を行き来する（自動は null）', () => {
+    expect(masteringValue(null)).toBe('auto')
+    expect(masteringValue('peak')).toBe('peak')
+    expect(parseMasteringChoice('auto')).toBeNull()
+    expect(parseMasteringChoice('loudnorm')).toBe('loudnorm')
+    expect(parseMasteringChoice('limiter')).toBeUndefined()
+  })
+
+  it('自動のときは、いまどちらになるかと理由を添える', () => {
+    expect(masteringHint(null, true)).toBe('いまは「山だけ抑える」になります（Take の音を鳴らす Shot があるため）。')
+    expect(masteringHint(null, false)).toBe('いまは「全体をそろえる」になります（Take の音を鳴らす Shot が無いため）。')
+    expect(masteringHint(null, null)).toBe('Take の音を鳴らす Shot があれば「山だけ抑える」、無ければ「全体をそろえる」になります。')
   })
 
   it('選んだら、選んだ方の説明だけ', () => {
-    expect(masteringValue('loudnorm', true)).toBe('loudnorm')
     expect(masteringHint('peak', false)).toBe('音の山だけを抑えます。Take の声と曲の釣り合いはそのまま残ります。')
     expect(masteringHint('loudnorm', true)).toBe('書き出し全体の大きさを YouTube・SNS の基準にそろえます。')
   })

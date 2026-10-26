@@ -1,8 +1,8 @@
 import {
   MAX_TAKE_AUDIO_VOLUME,
+  MasteringMode,
   isTakeAudioMuted,
   resolveMasteringMode,
-  type MasteringMode,
   type ProjectMasteringMode,
   type Shot,
 } from '@ixa/domain'
@@ -54,7 +54,10 @@ export const takeAudioHint = (shot: TakeAudioShot): string => {
     : '音のある Take だけ鳴ります。鳴っている間は曲が下がります（曲を下げる設定のとき）。'
 }
 
-export const MASTERING_OPTIONS: readonly { readonly value: MasteringMode; readonly label: string }[] = [
+type MasteringChoice = MasteringMode | 'auto'
+
+export const MASTERING_OPTIONS: readonly { readonly value: MasteringChoice; readonly label: string }[] = [
+  { value: 'auto', label: '自動（おすすめ）' },
   { value: 'loudnorm', label: '全体をそろえる（今まで通り）' },
   { value: 'peak', label: '山だけ抑える' },
 ]
@@ -62,15 +65,27 @@ export const MASTERING_OPTIONS: readonly { readonly value: MasteringMode; readon
 const labelOf = (mode: MasteringMode): string =>
   mode === 'peak' ? '山だけ抑える' : '全体をそろえる'
 
-/** 選択欄に出す値。選んでいなければ、いま書き出すとどちらになるか（セリフの有無で決まる）。 */
-export const masteringValue = (chosen: ProjectMasteringMode, hasDialogue: boolean): MasteringMode =>
-  resolveMasteringMode(chosen, hasDialogue ? [{ dialogue: [null] }] : [])
+/** 選択欄に出す値。選んでいなければ自動。 */
+export const masteringValue = (chosen: ProjectMasteringMode): MasteringChoice => chosen ?? 'auto'
 
-/** 選択欄の下に出す一言。 */
-export const masteringHint = (chosen: ProjectMasteringMode, hasDialogue: boolean): string => {
+/** 選択肢を保存する値に戻す（自動は null）。知らない値は undefined（保存しない）。 */
+export const parseMasteringChoice = (raw: string): ProjectMasteringMode | undefined => {
+  if (raw === 'auto') return null
+  const parsed = MasteringMode.safeParse(raw)
+  return parsed.success ? parsed.data : undefined
+}
+
+/**
+ * 選択欄の下に出す一言。自動のときは、いま書き出すとどちらになるかと理由（決め方は domain の `resolveMasteringMode`）。
+ * `takeAudioAudible` はタイムラインに Take の音を鳴らす Shot があるか。読めていなければ null。
+ */
+export const masteringHint = (chosen: ProjectMasteringMode, takeAudioAudible: boolean | null): string => {
   if (chosen === null) {
-    const reason = hasDialogue ? 'セリフのある Shot があるので' : 'セリフのある Shot が無いので'
-    return `${reason}「${labelOf(masteringValue(null, hasDialogue))}」にしています。選ぶと、その後はセリフの有無で変えません。`
+    if (takeAudioAudible === null) {
+      return 'Take の音を鳴らす Shot があれば「山だけ抑える」、無ければ「全体をそろえる」になります。'
+    }
+    const reason = takeAudioAudible ? 'Take の音を鳴らす Shot があるため' : 'Take の音を鳴らす Shot が無いため'
+    return `いまは「${labelOf(resolveMasteringMode(null, takeAudioAudible))}」になります（${reason}）。`
   }
   return chosen === 'peak'
     ? '音の山だけを抑えます。Take の声と曲の釣り合いはそのまま残ります。'

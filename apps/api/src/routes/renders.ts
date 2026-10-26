@@ -7,6 +7,7 @@ import {
   RenderPreset as RenderPresetSchema,
   RenderScope as RenderScopeSchema,
   ShotId as ShotIdSchema,
+  hasAudibleTakeAudio,
   resolveMasteringMode,
   type RenderJob,
   type RenderJobId,
@@ -288,9 +289,9 @@ export const renderRoutes = (deps: RenderRoutesDeps) =>
       // 何をレンダリングしたかが常に分かるよう、投入時点の TimelineDocument を保存する
       // （ARCHITECTURE.md §16）。worker はこのスナップショットだけを使う。一部だけなら切った後のもの。
       const timelineSnapshot = range === null ? loaded.document : sliceTimelineDocument(loaded.document, range)
-      // 仕上げの音量（ADR-0060）。投入の時点の作品の設定（選んでいなければセリフの有無）で決めて控える。
-      // 一部だけの書き出しでも作品全体で決める（同じ作品の書き出しの音の作りを揃える）。
-      const masteringMode = resolveMasteringMode(loaded.project.masteringMode, loaded.source.shots)
+      // 仕上げの音量（ADR-0060）。投入の時点の作品の設定（選んでいなければ、Take の音を実際に鳴らす Shot があるか）で決めて控える。
+      // 一部だけの書き出しでも作品全体の文書で決める（同じ作品の書き出しの音の作りを揃える）。
+      const masteringMode = resolveMasteringMode(loaded.project.masteringMode, hasAudibleTakeAudio(loaded.document.video1))
 
       // **始める前に知らせる。** 同じ中身を書き出し直すと、時間をかけたうえ同じものができるだけ。
       if (!force) {

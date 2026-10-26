@@ -109,7 +109,7 @@ export const UpdateProjectInput = z.object({
     .describe(
       'Final loudness of exports. loudnorm: even out the whole piece to -14 LUFS (music videos). ' +
         'peak: only tame peaks at -1.5 dBFS, keeping the balance of take voices and music. null: automatic ' +
-        '(peak when any shot has dialogue).',
+        '(peak when any shot plays its take sound, e.g. dialogue shots).',
     ),
 })
 

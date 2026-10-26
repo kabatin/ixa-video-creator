@@ -52,7 +52,7 @@ export const Project = z.object({
    */
   instrumental: z.boolean().default(false),
   /**
-   * 書き出しの仕上げの音量（ADR-0060）。**null は制作者がまだ選んでいない**（自動。セリフがあれば山だけ抑える）。
+   * 書き出しの仕上げの音量（ADR-0060）。**null は制作者がまだ選んでいない**（自動。Take の音を鳴らす Shot があれば山だけ抑える）。
    * 決め方は `resolveMasteringMode`。
    */
   masteringMode: ProjectMasteringMode.default(null),

@@ -4,14 +4,18 @@ import { EnvironmentPanel } from '@/components/environment-panel'
 import { ProjectDeleteSection } from '@/components/project-delete-section'
 import { ProjectSettingsForm } from '@/components/project-settings-form'
 import { MasteringModeSection } from '@/components/workbench/dialogs/mastering-mode-section'
+import { useTimelineMaterials } from '@/components/workbench/timeline-materials-provider'
 import { useWorkbench } from '@/components/workbench/workbench-context'
+import { hasAudibleTakeAudio } from '@ixa/domain'
 
 /**
  * プロジェクト設定（ダイアログ。UI-WORKBENCH §3.3）。中身は既存の `project-settings-form`。
  * 保存前の入力があるときは背景クリックで閉じない（殻の `guardUnsaved`）。
  */
 export const SettingsDialogBody = () => {
-  const { project, shots, refresh } = useWorkbench()
+  const { project, refresh } = useWorkbench()
+  // 自動の仕上げは、タイムラインに Take の音を鳴らす Shot があるかで決まる（サーバと同じ文書を見る）。
+  const timeline = useTimelineMaterials().materials?.document.value ?? null
   return (
     <div className="mx-auto w-full max-w-3xl">
       <p className="mb-4 text-sm text-muted">
@@ -24,7 +28,7 @@ export const SettingsDialogBody = () => {
       <h2 className="mb-2 text-base font-semibold text-text">書き出しの音</h2>
       <MasteringModeSection
         project={project}
-        hasDialogue={(shots ?? []).some((shot) => shot.dialogue.length > 0)}
+        takeAudioAudible={timeline === null ? null : hasAudibleTakeAudio(timeline.video1)}
         onSaved={refresh}
       />
 
