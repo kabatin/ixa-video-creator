@@ -60,9 +60,15 @@ export const createInMemoryDubJobRepository = (seed: readonly DubJob[] = []): In
       return Promise.resolve(active(current) ? save({ ...current, status: 'cancelled', finishedAt: new Date() }) : current)
     },
     markRunning: (id) => Promise.resolve(transition(id, { status: 'running', startedAt: new Date() })),
+    // 実物と同じく、止めた行にも足す（状態は変えない）。
+    addCost: (id, usd) => {
+      const current = get(id)
+      save({ ...current, costUsd: current.costUsd + usd })
+      return Promise.resolve()
+    },
     markSucceeded: (id, input) =>
-      Promise.resolve(transition(id, { status: 'succeeded', takeId: input.takeId, costUsd: input.costUsd, record: input.record, finishedAt: new Date() })),
-    markFailed: (id, error, costUsd) => Promise.resolve(transition(id, { status: 'failed', error, costUsd, finishedAt: new Date() })),
+      Promise.resolve(transition(id, { status: 'succeeded', takeId: input.takeId, record: input.record, finishedAt: new Date() })),
+    markFailed: (id, error) => Promise.resolve(transition(id, { status: 'failed', error, finishedAt: new Date() })),
     snapshot: () => store,
   }
 }

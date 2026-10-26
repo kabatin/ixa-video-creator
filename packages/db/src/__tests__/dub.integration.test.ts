@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { closeDbClient, createDbClient, type DbExecutor } from '../client.js'
 import { createCharacterRepository } from '../repositories/character-repository.js'
+import { createDubJobRepository } from '../repositories/dub-job-repository.js'
 import { createProjectRepository } from '../repositories/project-repository.js'
 import { createShotRepository } from '../repositories/shot-repository.js'
 import { createTtsClipRepository } from '../repositories/tts-clip-repository.js'
@@ -94,6 +95,23 @@ describe.skipIf(url === undefined)('声の差し替えの表（実際の DB）',
       expect(await shots.selectTakeIfCurrent(b.shotId, b.takeId, b.takeId)).toBeNull()
       expect((await shots.selectTakeIfCurrent(a.shotId, a.takeId, a.takeId))?.selectedTakeId).toBe(a.takeId)
       expect(await shots.selectTakeIfCurrent(a.shotId, a.takeId, b.takeId)).toBeNull()
+    })
+  })
+
+  it('払った額は止めた行にも足し、止めた行は失敗で上書きしない', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const { projectId, workspaceId } = await aProject(tx)
+      const a = await insertShotWithTake(tx, projectId, workspaceId, 'IT-A')
+      const jobs = createDubJobRepository(tx)
+      const job = await jobs.create({ projectId, shotId: a.shotId, sourceTakeId: a.takeId })
+      await jobs.markRunning(job.id)
+      await jobs.addCost(job.id, 0.001)
+      await jobs.cancel(job.id)
+      await jobs.addCost(job.id, 0.002)
+      const failed = await jobs.markFailed(job.id, { code: 'x', message: 'y', retryable: false })
+      expect(failed.status).toBe('cancelled')
+      expect(failed.costUsd).toBeCloseTo(0.003, 9)
+      await expect(jobs.addCost(job.id, -1)).rejects.toThrow()
     })
   })
 

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { DUB_REASON, dialogueTelopOf, dubRecordOf, type TimelineClip } from '@ixa/domain'
 import { probeMedia } from '@ixa/media'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { failInterruptedDubJob } from '../interrupted.js'
 import { processDubJob } from '../processor.js'
 import { createDubWorld, createWorkDir, line, makeSourceVideo, removeWorkDir } from './fixtures.js'
 
@@ -237,6 +238,36 @@ describe('processDubJob（止める理由）', () => {
     expect(outcome).toEqual({ state: 'failed', code: 'no_source_audio' })
     expect(error?.message).toContain('音がありません')
   }, 30_000)
+
+  it('読み上げの途中で止められても、払った額はジョブに残る', async () => {
+    const world = await createDubWorld({
+      workDir: join(dir, 'cancel-mid'),
+      video,
+      afterSpeak: ({ dubJobs }) => async () => {
+        for (const job of await dubJobs.findActiveByProject(dubJobs.snapshot()[0]?.projectId ?? ('' as never))) await dubJobs.cancel(job.id)
+      },
+    })
+    const job = await world.newJob()
+    expect(await processDubJob(world.deps, { dubJobId: job.id })).toEqual({ state: 'cancelled' })
+    expect(world.tts.calls()).toHaveLength(1)
+    expect((await world.dubJobs.findById(job.id))).toMatchObject({ status: 'cancelled', costUsd: 0.001 })
+  }, 30_000)
+
+  it('払った後に知らない失敗で止まっても、払った額はジョブに残る', async () => {
+    const world = await createDubWorld({ workDir: join(dir, 'lost'), video, afterSpeak: () => () => Promise.resolve('lose_file') })
+    const job = await world.newJob()
+    await expect(processDubJob(world.deps, { dubJobId: job.id })).rejects.toThrow()
+    expect((await world.dubJobs.findById(job.id))).toMatchObject({ status: 'failed', costUsd: 0.001 })
+  }, 30_000)
+
+  it('キューに打ち切られたジョブを失敗にしても、払った額は消えない', async () => {
+    const world = await createDubWorld({ workDir: join(dir, 'interrupted'), video })
+    const job = await world.newJob()
+    await world.dubJobs.markRunning(job.id)
+    await world.dubJobs.addCost(job.id, 0.005)
+    await failInterruptedDubJob(world.deps, { dubJobId: job.id }, 'stalled')
+    expect((await world.dubJobs.findById(job.id))).toMatchObject({ status: 'failed', costUsd: 0.005 })
+  })
 
   it('止めたジョブは作らずに手を引く', async () => {
     const world = await createDubWorld({ workDir: join(dir, 'cancel'), video })

@@ -22,7 +22,8 @@ export const failInterruptedDubJob = async (
     const job = await deps.dubJobs.findById(parsed.data.dubJobId)
     if (job === null || job.status === 'succeeded' || job.status === 'failed' || job.status === 'cancelled') return
     deps.logger.error({ dubJobId: job.id, queueReason }, '差し替えのジョブがキューに打ち切られました。失敗にします')
-    await deps.dubJobs.markFailed(job.id, { code: 'interrupted', message: INTERRUPTED_MESSAGE, retryable: true }, job.costUsd)
+    // 払った額は読み上げのたびに足してあるので、ここでは触らない。
+    await deps.dubJobs.markFailed(job.id, { code: 'interrupted', message: INTERRUPTED_MESSAGE, retryable: true })
   } catch (error) {
     deps.logger.error({ err: error, queueReason }, '打ち切られた差し替えのジョブを失敗にできませんでした')
   }

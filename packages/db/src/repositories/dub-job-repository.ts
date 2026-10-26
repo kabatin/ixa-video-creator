@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, ne } from 'drizzle-orm'
+import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm'
 import {
   DubJob as DubJobSchema,
   DubJobId as DubJobIdSchema,
@@ -37,8 +37,13 @@ export type DubJobRepository = {
   /** 待っている・動いているなら止める。止めた行（または今の行）を返す。 */
   cancel(id: DubJobId): Promise<DubJob>
   markRunning(id: DubJobId): Promise<DubJob>
-  markSucceeded(id: DubJobId, input: { readonly takeId: TakeId; readonly costUsd: number; readonly record: DubParams }): Promise<DubJob>
-  markFailed(id: DubJobId, error: DubJobError, costUsd: number): Promise<DubJob>
+  /**
+   * 払った額を足す。**読み上げを頼むたびに、払った直後に呼ぶ**（止めた・知らない失敗・打ち切りでも額を失わない）。
+   * 止めた行にも足す（払ったことは事実）。状態は変えない。
+   */
+  addCost(id: DubJobId, usd: number): Promise<void>
+  markSucceeded(id: DubJobId, input: { readonly takeId: TakeId; readonly record: DubParams }): Promise<DubJob>
+  markFailed(id: DubJobId, error: DubJobError): Promise<DubJob>
 }
 
 /** row → Domain。zod で検証し、状態と中身の食い違いも止める（黙って読み替えない）。 */
@@ -111,16 +116,26 @@ export const createDubJobRepository = (db: DbExecutor): DubJobRepository => {
 
     markRunning: (id) => transition(id, { status: 'running', startedAt: new Date() }),
 
+    async addCost(id, usd) {
+      if (!(Number.isFinite(usd) && usd >= 0)) throw new Error(`払った額が正しくありません: ${String(usd)}`)
+      if (usd === 0) return
+      const rows = await db
+        .update(dubJobs)
+        .set({ costUsd: sql`${dubJobs.costUsd} + ${usd}` })
+        .where(eq(dubJobs.id, id))
+        .returning({ id: dubJobs.id })
+      if (rows.length === 0) throw new DbNotFoundError('dub_jobs', id)
+    },
+
     markSucceeded: (id, input) =>
       transition(id, {
         status: 'succeeded',
         takeId: input.takeId,
-        costUsd: input.costUsd,
         // 書く前に形を確かめる（壊れた記録を残さない）。
         record: DubParamsSchema.parse(input.record),
         finishedAt: new Date(),
       }),
 
-    markFailed: (id, error, costUsd) => transition(id, { status: 'failed', error, costUsd, finishedAt: new Date() }),
+    markFailed: (id, error) => transition(id, { status: 'failed', error, finishedAt: new Date() }),
   }
 }

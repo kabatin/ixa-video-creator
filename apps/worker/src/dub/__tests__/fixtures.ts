@@ -54,7 +54,10 @@ const ttsLengthOf = (text: string): number => {
 
 export type FakeTts = VoiceAdapter & { readonly calls: () => readonly SpeakRequest[] }
 
-export const createFakeTts = (): FakeTts => {
+/** 読み上げの後に起こすこと（n 回目の読み上げ）。`'lose_file'` は読み上げた音のファイルを返さない（払った後の失敗）。 */
+export type AfterSpeak = (callNo: number) => Promise<void | 'lose_file'>
+
+export const createFakeTts = (afterSpeak?: AfterSpeak): FakeTts => {
   let calls: readonly SpeakRequest[] = []
   return {
     tool: 'gemini_api',
@@ -67,7 +70,9 @@ export const createFakeTts = (): FakeTts => {
       const audioPath = `${request.outputBasePath}.wav`
       const expr = `0.1*sin(2*PI*500*t)*between(t,0.2,${(0.2 + length).toFixed(3)})`
       await runFfmpeg(['-y', '-f', 'lavfi', '-i', `aevalsrc='${expr}':s=24000:d=${(length + 0.4).toFixed(3)}`, '-c:a', 'pcm_s16le', audioPath])
-      return { audioPath, charTimes: null, costUsd: 0.001, record: { tool: 'gemini_api' } }
+      const after = afterSpeak === undefined ? undefined : await afterSpeak(calls.length)
+      const path = after === 'lose_file' ? `${audioPath}.missing` : audioPath
+      return { audioPath: path, charTimes: null, costUsd: 0.001, record: { tool: 'gemini_api' } }
     },
   }
 }
@@ -144,6 +149,7 @@ export const createDubWorld = async (input: {
   readonly designedKeyLabel?: string
   readonly mouseHasVoice?: boolean
   /** 前からある素材と Take（作品の複製で写したものなど。別の Shot・別の作品のもの）。 */
+  readonly afterSpeak?: (world: { readonly dubJobs: ReturnType<typeof createInMemoryDubJobRepository> }) => AfterSpeak
   readonly seed?: { readonly assets?: readonly MediaAsset[]; readonly takes?: readonly Take[]; readonly ttsClips?: readonly TtsClip[] }
 }): Promise<DubWorld> => {
   const project = { ...aProject(), id: newId(ProjectId), workspaceId: newId(WorkspaceId) }
@@ -192,9 +198,9 @@ export const createDubWorld = async (input: {
   const mediaAssets = createInMemoryMediaAssetRepository([asset, ...(input.seed?.assets ?? [])])
   const timelineClips = createInMemoryTimelineClipRepository([])
   const dubJobs = createInMemoryDubJobRepository()
+  const tts = createFakeTts(input.afterSpeak?.({ dubJobs }))
   const ttsClips = createInMemoryTtsClipRepository(input.seed?.ttsClips ?? [])
   const mediaQueue = createRecordingMediaQueue()
-  const tts = createFakeTts()
   const deps: DubProcessorDeps = {
     dubJobs,
     ttsClips,

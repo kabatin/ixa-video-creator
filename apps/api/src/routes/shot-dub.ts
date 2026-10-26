@@ -120,7 +120,6 @@ export const shotDubRoutes = (deps: Deps) =>
         await deps.dubJobs.markFailed(
           job.id,
           { code: 'enqueue_failed', message: '差し替えの順番に入れられませんでした。もう一度押してください', retryable: true },
-          0,
         )
         throw new Error('dub キューへ入れられませんでした', { cause: error })
       }

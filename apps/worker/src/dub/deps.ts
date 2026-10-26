@@ -42,17 +42,14 @@ export type DubProcessorDeps = RecordTakeDeps & {
 /** 理由を付けて失敗にする。画面にそのまま出せる日本語の文を持つ。 */
 export class DubFailure extends Error {
   readonly failure: DubJobError
-  /** 止まるまでに払った額（読み上げた行の分）。 */
-  readonly costUsd: number
 
   constructor(
     code: string,
     message: string,
-    options: { readonly retryable?: boolean; readonly suggestedSpans?: readonly DubLineSpanSuggestion[]; readonly costUsd?: number } = {},
+    options: { readonly retryable?: boolean; readonly suggestedSpans?: readonly DubLineSpanSuggestion[] } = {},
   ) {
     super(message)
     this.name = 'DubFailure'
-    this.costUsd = options.costUsd ?? 0
     this.failure = {
       code,
       message,

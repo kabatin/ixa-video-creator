@@ -115,6 +115,8 @@ export const readAloud = async (
     language: request.voice.language,
     outputBasePath: join(context.workDir, name),
   })
+  // 払った直後にジョブへ足す（この後の保存・伸縮で止まっても、止められても、額を失わない）。
+  await deps.dubJobs.addCost(context.dubJobId, result.costUsd)
   await remember(deps, context, cacheKey, result.audioPath, result.costUsd)
   return { path: result.audioPath, costUsd: result.costUsd, cached: false }
 }

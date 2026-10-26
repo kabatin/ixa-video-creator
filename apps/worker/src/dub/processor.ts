@@ -90,7 +90,7 @@ const readSource = async (deps: DubProcessorDeps, loaded: Loaded, workDir: strin
   return { videoPath, mono, durationSec, pcm, chunks: speechChunks(rmsFramesFromPcm(pcm, SPEECH_FRAME)) }
 }
 
-/** 行を順に読み直す。止まった行があれば、それまでに払った額を持って止める。 */
+/** 行を順に読み直す。額は Take に載せる分（ジョブの行には読み上げのたびに足してある）。 */
 const dubLines = async (
   deps: DubProcessorDeps,
   job: DubJob,
@@ -105,14 +105,13 @@ const dubLines = async (
       if (error instanceof VoiceProviderError) {
         throw new DubFailure('tts_failed', `${lineLabel(input.lineIndex, speakers.get(input.line.speakerId)?.character.displayName ?? '')}: ${error.message}`, {
           retryable: error.retryable,
-          costUsd: acc.costUsd,
         })
       }
       throw error
     })
     const name = speakers.get(input.line.speakerId)?.character.displayName ?? ''
     if (!outcome.ok) {
-      throw new DubFailure('too_fast', `${lineLabel(input.lineIndex, name)}: ${outcome.reason}`, { costUsd: acc.costUsd + outcome.costUsd })
+      throw new DubFailure('too_fast', `${lineLabel(input.lineIndex, name)}: ${outcome.reason}`)
     }
     return { results: new Map([...acc.results, [input.lineIndex, outcome.result]]), costUsd: acc.costUsd + outcome.result.costUsd }
   }, Promise.resolve({ results: new Map(), costUsd: 0 }))
@@ -220,7 +219,7 @@ const run = async (deps: DubProcessorDeps, job: DubJob, workDir: string): Promis
     providerParams: record,
     onDuplicateMedia: 'new_take',
   })
-  const succeeded = await deps.dubJobs.markSucceeded(job.id, { takeId: take.id, costUsd, record })
+  const succeeded = await deps.dubJobs.markSucceeded(job.id, { takeId: take.id, record })
   // 書き込みの直前に止められていたら、出来た Take は残すが採用しない（追記のみ）。
   if (succeeded.status === 'cancelled') return null
   await finish(deps, loaded, take)
@@ -232,7 +231,6 @@ const markUnexpectedFailure = async (deps: DubProcessorDeps, job: DubJob, error:
     await deps.dubJobs.markFailed(
       job.id,
       { code: 'unexpected', message: `声を差し替える途中で止まりました: ${error instanceof Error ? error.message : String(error)}`.slice(0, 1000), retryable: true },
-      0,
     )
   } catch (cause) {
     deps.logger.error({ dubJobId: job.id, err: cause }, '失敗を記録できませんでした。行が「動いている」のまま残ります')
@@ -258,7 +256,7 @@ export const processDubJob = async (deps: DubProcessorDeps, data: unknown): Prom
   } catch (error) {
     if (error instanceof DubCancelled) return { state: 'cancelled' }
     if (error instanceof DubFailure) {
-      await deps.dubJobs.markFailed(job.id, error.failure, error.costUsd)
+      await deps.dubJobs.markFailed(job.id, error.failure)
       deps.logger.warn({ dubJobId: job.id, code: error.failure.code }, '声の差し替えが止まりました')
       return { state: 'failed', code: error.failure.code }
     }
