@@ -85,10 +85,10 @@ describe('記録の audio と版', () => {
     return { raw: status.raw, posted }
   }
 
-  it('セリフのある Shot は、頼んだ audio: true と v4 の版を残す', async () => {
+  it('セリフのある Shot は、頼んだ audio: true と v5 の版を残す', async () => {
     const { raw, posted } = await run(spoken())
     expect(posted.audio).toBe(true)
-    expect(raw).toMatchObject({ audio: true, promptFormat: 'h3-official-v4-dialogue' })
+    expect(raw).toMatchObject({ audio: true, promptFormat: 'h3-official-v5-dialogue' })
   })
 
   it('セリフの無い Shot は今まで通り audio: false と v3', async () => {

@@ -15,7 +15,7 @@ import {
   vpipeVideoModels,
   type VpipeQuality,
 } from './descriptor.js'
-import { H3_DIALOGUE_PROMPT_FORMAT, H3_PROMPT_FORMAT, h3PromptFormatFor } from './h3-prompt.js'
+import { H3_DIALOGUE_V4_PROMPT_FORMAT, H3_PROMPT_FORMAT, h3PromptFormatFor } from './h3-prompt.js'
 import { buildVpipeBody, VPIPE_STEPS } from './request.js'
 
 /**
@@ -50,7 +50,7 @@ const binding: LocalServerBinding<VpipeQuality> = {
       hasStartImage,
       hasEndImage,
     }),
-  /** 版は投入の時点で仕様から決めて控える（セリフがあれば v4。ADR-0059）。 */
+  /** 版は投入の時点で仕様から決めて控える（セリフがあれば v5。ADR-0059 の追記）。 */
   promptFormatOf: h3PromptFormatFor,
   /**
    * 送ったステップ数と、**本文の組み立ての版**を記録に残す。
@@ -58,14 +58,15 @@ const binding: LocalServerBinding<VpipeQuality> = {
    * 版を残しておけば、仕様（`Take.spec`）と合わせて**いつでも同じ文面を組み直せる**。
    *
    * 版は控えから読む。控えが無ければ **null（分からない）**。v3 と決めつけると、セリフの Take を
-   * v3 で組み直してしまう。版を持たない前の控えは、音付きかどうかから引く（v4 と音付きは同じ条件）。
+   * v3 で組み直してしまう。版を持たない前の控えは、音付きかどうかから引く（そのころのセリフの版は v4。
+   * v5 からは控えに必ず版が入るので、ここで v5 にはならない）。
    */
   extraRecord: ({ note }) => ({
     steps: VPIPE_STEPS,
     promptFormat:
       note === null
         ? null
-        : (note.promptFormat ?? (note.audio ? H3_DIALOGUE_PROMPT_FORMAT : H3_PROMPT_FORMAT)),
+        : (note.promptFormat ?? (note.audio ? H3_DIALOGUE_V4_PROMPT_FORMAT : H3_PROMPT_FORMAT)),
   }),
 }
 

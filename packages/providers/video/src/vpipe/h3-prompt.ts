@@ -1,5 +1,5 @@
 import type { ShotCamera, ShotGenerationSpec } from '@ixa/domain'
-import { dialogueSentences, DIALOGUE_SOUNDSCAPE } from './h3-dialogue.js'
+import { dialogueSentences, DIALOGUE_SOUNDSCAPE, NO_ON_SCREEN_TEXT_SENTENCE } from './h3-dialogue.js'
 
 /**
  * MiniMax H3 の公式の書き方へ組み直す（ADR-0042。公式ガイド
@@ -32,21 +32,31 @@ import { dialogueSentences, DIALOGUE_SOUNDSCAPE } from './h3-dialogue.js'
  * | `h3-official-v2` | 開始画像を送ったときだけ有り | 記録の `startImage` の有無で組む |
  * | `h3-official-v3` | v2 と同じ | v2 と同じ。音の欄だけ「誰も話さない」（`SILENT_SOUNDSCAPE`） |
  * | `h3-official-v4-dialogue` | v2 と同じ | **セリフのある Shot だけ**（ADR-0059）。セリフの文を足し、音の欄はセリフと環境音 |
+ * | `h3-official-v5-dialogue` | v2 と同じ | v4 と同じ。セリフの文の後に「字幕・字を画面に出さない」1 文（`NO_ON_SCREEN_TEXT_SENTENCE`） |
  *
  * v1 は**取り違えのまま出していた版**（2026-10-07〜10-09）。投入では画像を取り寄せる前に本文を組むため、
  * 文面がいつも「画像なし」で組まれていた。v1 の Take（113 本）は「1 行目無し」が送った文面そのものなので、
  * 記録どおりに組み直せるよう版を分けた（文面の関数は同じで、渡す条件だけが違う）。
  */
 export const H3_PROMPT_FORMAT = 'h3-official-v3'
-/** セリフのある Shot の版（ADR-0059）。セリフの無い Shot は `H3_PROMPT_FORMAT` のまま。 */
-export const H3_DIALOGUE_PROMPT_FORMAT = 'h3-official-v4-dialogue'
+/**
+ * セリフのある Shot のいまの版（ADR-0059 の追記）。セリフの無い Shot は `H3_PROMPT_FORMAT` のまま。
+ * v4 は字幕のような字が絵に焼き込まれたので、v5 で「字を出さない」1 文を足した。
+ */
+export const H3_DIALOGUE_PROMPT_FORMAT = 'h3-official-v5-dialogue'
+/** 前のセリフの版。v4 で作った Take を記録どおりに組み直すためだけに残す。 */
+export const H3_DIALOGUE_V4_PROMPT_FORMAT = 'h3-official-v4-dialogue'
 export type H3PromptFormat =
   | 'h3-official-v1'
   | 'h3-official-v2'
   | 'h3-official-v3'
+  | typeof H3_DIALOGUE_V4_PROMPT_FORMAT
   | typeof H3_DIALOGUE_PROMPT_FORMAT
 
-/** その仕様をいま組むときの版。セリフがあれば v4、無ければ v3。 */
+const isDialogueFormat = (format: H3PromptFormat): boolean =>
+  format === H3_DIALOGUE_V4_PROMPT_FORMAT || format === H3_DIALOGUE_PROMPT_FORMAT
+
+/** その仕様をいま組むときの版。セリフがあれば v5、無ければ v3。 */
 export const h3PromptFormatFor = (spec: ShotGenerationSpec): H3PromptFormat =>
   spec.promptParts.dialogue === undefined ? H3_PROMPT_FORMAT : H3_DIALOGUE_PROMPT_FORMAT
 
@@ -72,6 +82,7 @@ const soundscapeFor = (format: H3PromptFormat): string => {
       return AMBIENT_SOUNDSCAPE
     case 'h3-official-v3':
       return SILENT_SOUNDSCAPE
+    case H3_DIALOGUE_V4_PROMPT_FORMAT:
     case H3_DIALOGUE_PROMPT_FORMAT:
       return DIALOGUE_SOUNDSCAPE
   }
@@ -190,7 +201,7 @@ export type H3PromptInput = {
    * **仕様の尺ではない。** H3 は 17n+5 コマしか作れず、仕様の尺より長くなる。省くと仕様の尺。
    */
   readonly videoSec?: number
-  /** 組み直すときの版。省くといまの版（`h3PromptFormatFor`。セリフがあれば v4）。 */
+  /** 組み直すときの版。省くといまの版（`h3PromptFormatFor`。セリフがあれば v5）。 */
   readonly format?: H3PromptFormat
 }
 
@@ -228,8 +239,10 @@ export const buildH3Prompt = (input: H3PromptInput): string => {
     parts.moodFragment === null ? '' : asSentence(`Mood: ${parts.moodFragment}`),
     // レビューの指摘から人が選んだ直し。**落とすと直しが届かない。**
     ...(spec.corrections ?? []).map(asSentence),
-    // セリフ（v4 だけ。カメラの動きの前に置く）
-    ...(format === H3_DIALOGUE_PROMPT_FORMAT && parts.dialogue !== undefined ? dialogueSentences(parts.dialogue) : []),
+    // セリフ（v4・v5 だけ。カメラの動きの前に置く）
+    ...(isDialogueFormat(format) && parts.dialogue !== undefined ? dialogueSentences(parts.dialogue) : []),
+    // v5 だけ: 字幕のような字を絵に焼き込ませない（字幕はテロップが出す）
+    format === H3_DIALOGUE_PROMPT_FORMAT && parts.dialogue !== undefined ? NO_ON_SCREEN_TEXT_SENTENCE : '',
     // カメラの動き（最後）
     cameraMovementSentence(spec.camera) ?? '',
   ]
@@ -240,7 +253,7 @@ export const buildH3Prompt = (input: H3PromptInput): string => {
     ...(referenceLine === null ? [] : [referenceLine, '']),
     `integrated_multimodal_description: [Shot 1] ${description}`,
     '',
-    // 書式として必須で、口の動きにも効く（`SILENT_SOUNDSCAPE`）。v4 だけは音付きで頼み、声を残す。
+    // 書式として必須で、口の動きにも効く（`SILENT_SOUNDSCAPE`）。v4・v5 は音付きで頼み、声を残す。
     soundscapeFor(format),
     '',
     'non_diegetic_music: None.',

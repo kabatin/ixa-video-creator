@@ -1,7 +1,7 @@
 import type { SpecDialogue } from '@ixa/domain'
 
 /**
- * H3 のセリフの書き方（`h3-official-v4-dialogue`。ADR-0059）。**一度出した文面は変えない**
+ * H3 のセリフの書き方（`h3-official-v4-dialogue` と `h3-official-v5-dialogue`。ADR-0059）。**一度出した文面は変えない**
  * （変えるときは次の版を足す。`__tests__/h3-prompt-dialogue.test.ts` のゴールデンが守る）。
  *
  * - 話し手: `The cat in a soft, sly … voice (S2) says: <d>[Japanese] ねえ、ネズミくん。</d>`
@@ -12,8 +12,16 @@ import type { SpecDialogue } from '@ixa/domain'
  * 呼び名と声の説明はキャラクターの欄を**一字一句そのまま**入れる。言い換えると別の声になる。
  */
 
-/** v4 の音の欄。声を残すので「誰も話さない」とは書かない。 */
+/** v4・v5 の音の欄。声を残すので「誰も話さない」とは書かない。 */
 export const DIALOGUE_SOUNDSCAPE = 'overall_soundscape: Only the dialogue and the ambient sound of the scene.'
+
+/**
+ * v5 で足した 1 文。セリフの文の後に 1 回だけ置く。
+ * v4 の文面にはセリフしか無く、本物の H3 の Take で、画面の下に読めない字の列（焼き込みの字幕のようなもの）が出た
+ * （2026-10-26）。字幕は ixa のテロップが出すので、絵の中には字を出させない。
+ */
+export const NO_ON_SCREEN_TEXT_SENTENCE =
+  'The dialogue is heard only; no subtitles, captions or any on-screen text appear in the frame.'
 
 /** セリフの言語。いまは日本語だけ（訳文は字幕に出すもので、声にはしない）。 */
 const SPOKEN_LANGUAGE = 'Japanese'
