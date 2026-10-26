@@ -1,4 +1,4 @@
-import { extractFrameByIndex, normalizeProgramLoudness, upscaleForRender } from '@ixa/media'
+import { extractFrameByIndex, limitProgramPeaks, normalizeProgramLoudness, upscaleForRender } from '@ixa/media'
 import { join } from 'node:path'
 import { createProviderRegistry } from '@ixa/provider-core'
 import { createContinuityFrameSource, createGenerationContextSource } from '@ixa/generation'
@@ -342,6 +342,8 @@ export const createGenerationWiring = (
     logger,
     // 書き出しの音量を -14 LUFS に揃える（ADR-0039）。
     normalizeLoudness: normalizeProgramLoudness,
+    // 仕上げ「山だけ抑える」（ADR-0060）。セリフのある作品の既定。
+    limitPeaks: limitProgramPeaks,
     // 枠より小さい映像は、Chrome に拡大させず先に Lanczos で拡大する（ADR-0045 段 3）。
     prepareMedia: createMediaPreparer({
       mediaAssets: renderMediaAssets,

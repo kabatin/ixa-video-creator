@@ -74,3 +74,29 @@ export const normalizeProgramLoudness = async (
   await runFfmpeg(programLoudnessArgs(inputPath, outputPath, measured, audioBitrate))
   return measureLoudness(outputPath)
 }
+
+/**
+ * 仕上げ「山だけ抑える」（ADR-0060。作品の `masteringMode` が `peak`）。**全体の大きさはそろえない。**
+ * セリフのある作品で全体を -14 LUFS にそろえると、声の大きさに合わせて曲まで上下し、Take の声と曲の釣り合いが崩れる。
+ * -1.5 dBFS を超える山だけを alimiter で抑える（`level=disabled`: alimiter の既定の自動の持ち上げを切る）。
+ */
+export const PROGRAM_PEAK_LIMIT_DBFS = -1.5
+const PEAK_LIMIT_LINEAR = (10 ** (PROGRAM_PEAK_LIMIT_DBFS / 20)).toFixed(6)
+
+export const programPeakLimitArgs = (inputPath: string, outputPath: string, audioBitrate: string): readonly string[] => [
+  '-y', '-i', inputPath, '-map', '0:v?', '-map', '0:a', '-c:v', 'copy',
+  '-af', `alimiter=limit=${PEAK_LIMIT_LINEAR}:level=disabled`,
+  '-c:a', 'aac', '-b:a', audioBitrate, '-movflags', '+faststart', outputPath,
+]
+
+/** 山を抑えて書き、書いた後の大きさを測って返す（記録するだけ）。音が無ければ書かずに null。 */
+export const limitProgramPeaks = async (
+  inputPath: string,
+  outputPath: string,
+  audioBitrate: string,
+): Promise<LoudnessMeasurement | null> => {
+  const probe = await probeMedia(inputPath)
+  if (probe.hasAudio !== true) return null
+  await runFfmpeg(programPeakLimitArgs(inputPath, outputPath, audioBitrate))
+  return measureLoudness(outputPath)
+}

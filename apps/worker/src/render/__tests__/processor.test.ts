@@ -47,6 +47,10 @@ type FixtureOptions = {
   readonly normalizeLoudness?: boolean
   /** 揃える口の結果。既定は「音が無い」（偽のレンダラの出力は音を持たない）。 */
   readonly loudness?: 'normalized' | 'no_audio' | Error
+  /** 仕上げ（ADR-0060。無ければ既定の「全体をそろえる」）。 */
+  readonly masteringMode?: RenderJob['masteringMode']
+  /** 山だけ抑える口の結果。既定は「抑えて測った」。 */
+  readonly peaks?: 'limited' | 'no_audio' | Error
   /**
    * 書き出しの直前の拡大（ADR-0045）。既定は「拡大が要らない」（文書をそのまま返す）。
    * `replace` は URL を差し替えた新しい文書を返す。`releaseFails` は片付けだけ失敗する。
@@ -55,6 +59,7 @@ type FixtureOptions = {
 }
 
 const NORMALIZED_BYTES = Buffer.from('normalized-mp4-bytes')
+const LIMITED_BYTES = Buffer.from('limited-mp4-bytes')
 
 const buildFixture = async (options: FixtureOptions = {}) => {
   const project = options.project ?? aProject()
@@ -71,9 +76,11 @@ const buildFixture = async (options: FixtureOptions = {}) => {
     timelineSnapshot: options.snapshot ?? aTimelineDocument(),
     ...(options.status === undefined ? {} : { status: options.status }),
     ...(options.normalizeLoudness === undefined ? {} : { normalizeLoudness: options.normalizeLoudness }),
+    ...(options.masteringMode === undefined ? {} : { masteringMode: options.masteringMode }),
   })
 
   const loudnessCalls: { input: string; output: string; audioBitrate: string }[] = []
+  const peakCalls: { input: string; output: string; audioBitrate: string }[] = []
   const prepareFrames: { width: number; height: number }[] = []
   const prepared: TimelineDocument[] = []
   let releases = 0
@@ -92,6 +99,14 @@ const buildFixture = async (options: FixtureOptions = {}) => {
       if (outcome === 'no_audio') return null
       await writeFile(output, NORMALIZED_BYTES)
       return { integratedLufs: -14.1, truePeakDb: -1.6 }
+    },
+    limitPeaks: async (input, output, audioBitrate) => {
+      peakCalls.push({ input, output, audioBitrate })
+      const outcome = options.peaks ?? 'limited'
+      if (outcome instanceof Error) throw outcome
+      if (outcome === 'no_audio') return null
+      await writeFile(output, LIMITED_BYTES)
+      return { integratedLufs: -16.3, truePeakDb: -1.5 }
     },
     prepareMedia: (doc, frame) => {
       prepareFrames.push(frame)
@@ -123,6 +138,7 @@ const buildFixture = async (options: FixtureOptions = {}) => {
     renderer,
     mediaQueue,
     loudnessCalls,
+    peakCalls,
     prepareFrames,
     prepared,
     releases: () => releases,
@@ -513,10 +529,12 @@ describe('出力を media キューへ回す', () => {
 /** 書き出しの音量を揃える（ADR-0039）。YouTube・SNS の基準（-14 LUFS）に合わせ、測った大きさを記録する。 */
 describe('processRenderJob（音量を揃える）', () => {
   it('既定では揃えてから保存し、揃えた後の大きさをジョブに残す（その画質の音のビットレートで）', async () => {
-    const { deps, job, project, loudnessCalls, renderJobs } = await buildFixture({ loudness: 'normalized' })
+    const { deps, job, project, loudnessCalls, peakCalls, renderJobs } = await buildFixture({ loudness: 'normalized' })
 
     expect((await processRenderJob(deps, { renderJobId: job.id })).state).toBe('succeeded')
 
+    // 前からのジョブ・セリフの無い作品（仕上げは loudnorm）は、前と同じく全体をそろえるだけ（ADR-0060）。
+    expect(peakCalls).toHaveLength(0)
     expect(loudnessCalls).toHaveLength(1)
     expect(loudnessCalls[0]?.input).toBe(outputPath)
     expect(loudnessCalls[0]?.audioBitrate).toMatch(/k$/)
@@ -546,5 +564,44 @@ describe('processRenderJob（音量を揃える）', () => {
 
     expect((await processRenderJob(deps, { renderJobId: job.id })).state).toBe('failed')
     expect(renderJobs.snapshot()[0]?.error).toMatch(/音量を揃えられませんでした/)
+  })
+})
+
+/** 仕上げ「山だけ抑える」（ADR-0060）。全体はそろえず、-1.5 dBFS を超える山だけ抑えて、全体の大きさは測って残すだけ。 */
+describe('processRenderJob（山だけ抑える）', () => {
+  it('山だけ抑えてから保存し、測った大きさを残す（全体はそろえない）', async () => {
+    const { deps, job, project, loudnessCalls, peakCalls, renderJobs } = await buildFixture({ masteringMode: 'peak' })
+
+    expect((await processRenderJob(deps, { renderJobId: job.id })).state).toBe('succeeded')
+
+    expect(loudnessCalls).toHaveLength(0)
+    expect(peakCalls).toHaveLength(1)
+    expect(peakCalls[0]?.input).toBe(outputPath)
+    expect(peakCalls[0]?.audioBitrate).toMatch(/k$/)
+    expect(Buffer.from(await deps.storage.get(renderKey(project.id, job.id, 'mp4')))).toEqual(LIMITED_BYTES)
+    expect(renderJobs.snapshot()[0]?.loudnessLufs).toBe(-16.3)
+  })
+
+  it('揃えないと選んだ書き出しは、山も抑えない', async () => {
+    const { deps, job, project, peakCalls } = await buildFixture({ masteringMode: 'peak', normalizeLoudness: false })
+
+    await processRenderJob(deps, { renderJobId: job.id })
+
+    expect(peakCalls).toHaveLength(0)
+    expect(Buffer.from(await deps.storage.get(renderKey(project.id, job.id, 'mp4')))).toEqual(OUTPUT_BYTES)
+  })
+
+  it('音が無ければ、そのまま保存する', async () => {
+    const { deps, job, project } = await buildFixture({ masteringMode: 'peak', peaks: 'no_audio' })
+
+    expect((await processRenderJob(deps, { renderJobId: job.id })).state).toBe('succeeded')
+    expect(Buffer.from(await deps.storage.get(renderKey(project.id, job.id, 'mp4')))).toEqual(OUTPUT_BYTES)
+  })
+
+  it('抑えられなければ、黙って抑えないまま出さず、理由を残して失敗にする', async () => {
+    const { deps, job, renderJobs } = await buildFixture({ masteringMode: 'peak', peaks: new Error('alimiter が失敗しました') })
+
+    expect((await processRenderJob(deps, { renderJobId: job.id })).state).toBe('failed')
+    expect(renderJobs.snapshot()[0]?.error).toMatch(/音の山を抑えられませんでした/)
   })
 })

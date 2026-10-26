@@ -68,6 +68,11 @@ export type RenderProcessorDeps = {
    */
   readonly normalizeLoudness: (input: string, output: string, audioBitrate: string) => Promise<LoudnessMeasurement | null>
   /**
+   * 仕上げ「山だけ抑える」（ADR-0060。`@ixa/media` の limitProgramPeaks）。全体はそろえず、書いた後の大きさを返す。
+   * 音が無ければ書かずに null。ジョブの `masteringMode` が `peak` のときだけ、`normalizeLoudness` の代わりに使う。
+   */
+  readonly limitPeaks: (input: string, output: string, audioBitrate: string) => Promise<LoudnessMeasurement | null>
+  /**
    * 書き出しの直前に、枠より小さい映像だけ Lanczos で拡大する（ADR-0045 段 3）。
    * 拡大が要る素材が無ければ文書をそのまま返す（いまの素材はすべてそう）。
    */
@@ -206,9 +211,16 @@ const enqueueIngest = async (
   }
 }
 
+/** 仕上げごとの口・書く先・失敗の言い方（ADR-0039・0060）。 */
+const MASTERING = {
+  loudnorm: { suffix: 'loudnorm', failure: '音量を揃えられませんでした' },
+  peak: { suffix: 'peak', failure: '音の山を抑えられませんでした' },
+} as const
+
 /**
- * 書き出しの音量を揃える（ADR-0039）。揃えないと選んだ書き出し・音が無い書き出しは、そのまま使う。
- * **揃えられなければ、黙って揃えないまま出さず失敗にする**（作り直すときに「揃えない」を選べる）。
+ * 書き出しの音量を仕上げる。揃えないと選んだ書き出し・音が無い書き出しは、そのまま使う。
+ * 仕上げはジョブに控えたもの（`loudnorm`: 全体を -14 LUFS にそろえる / `peak`: 山だけ抑え、大きさは測って残すだけ）。
+ * **仕上げられなければ、黙って仕上げないまま出さず失敗にする**（作り直すときに「揃えない」を選べる）。
  */
 const normalizeOutput = async (
   deps: RenderProcessorDeps,
@@ -216,19 +228,22 @@ const normalizeOutput = async (
   result: RenderResult,
 ): Promise<{ readonly output: RenderResult; readonly loudnessLufs: number | null }> => {
   if (!job.normalizeLoudness) return { output: result, loudnessLufs: null }
-  const normalizedPath = `${result.storageKey}.loudnorm.mp4`
+  const mastering = MASTERING[job.masteringMode]
+  const master = job.masteringMode === 'peak' ? deps.limitPeaks : deps.normalizeLoudness
+  const masteredPath = `${result.storageKey}.${mastering.suffix}.mp4`
   let measured: LoudnessMeasurement | null
   try {
-    measured = await deps.normalizeLoudness(result.storageKey, normalizedPath, PRESET_SETTINGS[job.preset].audioBitrate)
+    measured = await master(result.storageKey, masteredPath, PRESET_SETTINGS[job.preset].audioBitrate)
   } catch (error) {
-    throw new RenderFailure(`音量を揃えられませんでした（${error instanceof Error ? error.message : String(error)}）。「音量を揃える」を外して書き出し直せます`)
+    throw new RenderFailure(`${mastering.failure}（${error instanceof Error ? error.message : String(error)}）。「音量を揃える」を外して書き出し直せます`)
   }
   if (measured === null) return { output: result, loudnessLufs: null }
-  const bytes = (await stat(normalizedPath)).size
-  return {
-    output: { ...result, storageKey: normalizedPath, bytes },
-    loudnessLufs: Number.isFinite(measured.integratedLufs) ? Math.round(measured.integratedLufs * 10) / 10 : null,
+  const bytes = (await stat(masteredPath)).size
+  const loudnessLufs = Number.isFinite(measured.integratedLufs) ? Math.round(measured.integratedLufs * 10) / 10 : null
+  if (job.masteringMode === 'peak') {
+    deps.logger.info({ jobId: job.id, loudnessLufs, truePeakDb: measured.truePeakDb }, '音の山を抑えました（全体の大きさは測って残すだけ）')
   }
+  return { output: { ...result, storageKey: masteredPath, bytes }, loudnessLufs }
 }
 
 /** レンダリング本体。スナップショットをそのままレンダラへ渡す。 */
