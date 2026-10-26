@@ -1,4 +1,4 @@
-import { countActiveJobs, type ActiveJobCounts } from '@ixa/db'
+import { countActiveJobs, type ActiveJobs } from '@ixa/db'
 import type { Options } from '../args.js'
 import { devIsRunning, gatherRuntime } from '../checks/runtime.js'
 import { isBlank, missingEnvKeys, type EnvValues } from '../lib/env-file.js'
@@ -15,6 +15,7 @@ import {
   fastForwardOf,
   parseVersionOrThrow,
   releaseTarget,
+  staleJobsNotice,
   updateBlockers,
 } from '../update/decide.js'
 import { createGit, type Git } from '../update/git.js'
@@ -30,7 +31,7 @@ import { finalDoctor } from './doctor.js'
 const currentVersion = async (system: System, repo: RepoPaths): Promise<Version> =>
   parseVersionOrThrow(parseRootPackage((await system.readText(repo.rootPackage)) ?? '{}').version, 'package.json')
 
-const activeJobsOf = async (system: System, env: EnvValues): Promise<ActiveJobCounts | null> => {
+const activeJobsOf = async (system: System, env: EnvValues): Promise<ActiveJobs | null> => {
   if (isBlank(env, 'DATABASE_URL')) return null
   try {
     return await system.withDb(env['DATABASE_URL'] ?? '', (db) => countActiveJobs(db))
@@ -95,7 +96,9 @@ const fetchStage = async (system: System, repo: RepoPaths, out: Output, options:
   const current = await currentVersion(system, repo)
   const activeJobs = await activeJobsOf(system, await readEnv(system, repo))
   if (activeJobs === null) out.line('- DB につながらないので、動いているジョブは無いとみなします')
-  const blockers = updateBlockers({ dirty: await git.dirty(), branch: await git.branch(), activeJobs, force: options.force })
+  const stale = activeJobs === null ? null : staleJobsNotice(activeJobs.stale)
+  if (stale !== null) out.line(formatStep(stale))
+  const blockers = updateBlockers({ dirty: await git.dirty(), branch: await git.branch(), activeJobs: activeJobs?.counts ?? null, force: options.force })
   system.progress('新しい版を確かめています（git fetch --tags）…')
   await git.fetch()
   const target = await resolveTarget(git, current, options.main)

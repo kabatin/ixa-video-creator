@@ -75,14 +75,14 @@ describe.skipIf(url === undefined)('DB の点検（実際の DB）', () => {
 
   it('終わっていないジョブと作業中の会話だけを数える', async () => {
     await inRolledBackTransaction(async (tx) => {
-      const before = await countActiveJobs(tx)
+      const before = (await countActiveJobs(tx)).counts
       await insertProject(tx)
       await insertRenderJob(tx, '01M5RJMAINTQUEUED000000000', 'queued')
       await insertRenderJob(tx, '01M5RJMAINTENCODING0000000', 'encoding')
       await insertRenderJob(tx, '01M5RJMAINTDONE00000000000', 'succeeded')
       await insertRenderJob(tx, '01M5RJMAINTCANCEL00000000Z', 'cancelled')
       await insertAgentSession(tx, '01M5AGMAINTBUSY00000000000', 'awaiting_approval')
-      const after = await countActiveJobs(tx)
+      const after = (await countActiveJobs(tx)).counts
       expect(after.render - before.render).toBe(2)
       expect(after.agent - before.agent).toBe(1)
       expect(after.generation).toBe(before.generation)
@@ -91,10 +91,24 @@ describe.skipIf(url === undefined)('DB の点検（実際の DB）', () => {
 
   it('作業中でない会話は数えない', async () => {
     await inRolledBackTransaction(async (tx) => {
-      const before = await countActiveJobs(tx)
+      const before = (await countActiveJobs(tx)).counts
       await insertProject(tx)
       await insertAgentSession(tx, '01M5AGMAINTIDLE00000000000', 'idle')
-      expect((await countActiveJobs(tx)).agent).toBe(before.agent)
+      expect(((await countActiveJobs(tx)).counts).agent).toBe(before.agent)
+    })
+  })
+
+  it('絵コンテの案は running を数え done は数えない。2 日前から running のままの行は取り残しとして並べる', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const before = await countActiveJobs(tx)
+      await insertProject(tx)
+      await tx.execute(sql`insert into storyboard_draft_runs (id, project_id, drafter, status)
+        values ('01M5SBMA1NTRUN00000000000Z', ${PJ}, 'stub', 'running'), ('01M5SBMA1NTD0NE0000000000Z', ${PJ}, 'stub', 'done')`)
+      await tx.execute(sql`insert into storyboard_draft_runs (id, project_id, drafter, status, created_at)
+        values ('01M5SBMA1NTZ0MB1E00000000Z', ${PJ}, 'stub', 'running', now() - interval '2 days')`)
+      const after = await countActiveJobs(tx)
+      expect(after.counts.storyboard - before.counts.storyboard).toBe(1)
+      expect(after.stale.map((s) => s.id)).toContain('01M5SBMA1NTZ0MB1E00000000Z')
     })
   })
 })

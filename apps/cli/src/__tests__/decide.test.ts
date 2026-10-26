@@ -4,6 +4,7 @@ import { parseVersion, type Version } from '../lib/semver.js'
 import { infraAction, infraSettled, signingSecretAction, workspaceAction } from '../setup/decide.js'
 import {
   describeActiveJobs,
+  staleJobsNotice,
   fastForwardBlocker,
   fastForwardOf,
   releaseTarget,
@@ -48,7 +49,7 @@ describe('setup の判定', () => {
   })
 })
 
-const noJobs: ActiveJobCounts = { generation: 0, render: 0, image: 0, music: 0, sfx: 0, upscale: 0, dub: 0, voice: 0, agent: 0 }
+const noJobs: ActiveJobCounts = { generation: 0, render: 0, image: 0, music: 0, sfx: 0, upscale: 0, dub: 0, voice: 0, storyboard: 0, review: 0, thumbnail: 0, agent: 0 }
 
 describe('update の止める条件', () => {
   it('きれいな main でジョブも無ければ進める', () => {
@@ -78,6 +79,14 @@ describe('update の止める条件', () => {
 
   it('動いている種類だけを言う', () => {
     expect(describeActiveJobs({ ...noJobs, sfx: 3 })).toBe('効果音 3 件')
+    expect(describeActiveJobs({ ...noJobs, storyboard: 1, thumbnail: 2 })).toBe('絵コンテの案 1 件・サムネイル 2 件')
+  })
+
+  it('取り残し（24 時間より前から動いたまま）は止めずに知らせる。無ければ何も言わない', () => {
+    expect(staleJobsNotice([])).toBeNull()
+    const notice = staleJobsNotice([{ kind: 'storyboard', id: '01M4AGD9ACE64Q8036GVQM0YHA', since: '2026-10-07T03:00:00.000Z' }])
+    expect(notice?.status).toBe('notice')
+    expect(notice?.message).toContain('絵コンテの案 01M4AGD9ACE64Q8036GVQM0YHA（2026-10-07 から）')
   })
 })
 

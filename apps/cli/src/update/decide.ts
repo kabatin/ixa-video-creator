@@ -1,4 +1,4 @@
-import type { ActiveJobCounts, ActiveJobKind } from '@ixa/db'
+import type { ActiveJobCounts, ActiveJobKind, StaleJob } from '@ixa/db'
 import { compareVersions, formatVersion, latestVersionTag, parseVersion, type Version } from '../lib/semver.js'
 import type { StepResult } from '../types.js'
 
@@ -15,8 +15,25 @@ const JOB_LABEL: Readonly<Record<ActiveJobKind, string>> = {
   upscale: 'アップスケール',
   dub: '声の差し替え',
   voice: '声',
+  storyboard: '絵コンテの案',
+  review: 'レビュー',
+  thumbnail: 'サムネイル',
   agent: 'AI エージェントの作業',
 }
+
+/** 取り残し（24 時間より前から動いたまま）。数えないが、黙って無視もしない。 */
+export const staleJobsNotice = (stale: readonly StaleJob[]): StepResult | null =>
+  stale.length === 0
+    ? null
+    : {
+        id: 'update.stale-jobs',
+        status: 'notice',
+        message: `24 時間より前から「動いている」のままの行は数えていません（取り残しとみなす）: ${stale
+          .map((s) => `${JOB_LABEL[s.kind]} ${s.id}（${s.since.slice(0, 10)} から）`)
+          .join('・')}`,
+        fix: { hint: '本当に動いていないか画面で確かめる。消すかどうかは制作者が決める', needsHuman: true },
+        docs: 'INSTALL.md#更新',
+      }
 
 export const describeActiveJobs = (counts: ActiveJobCounts): string =>
   (Object.keys(JOB_LABEL) as ActiveJobKind[])
