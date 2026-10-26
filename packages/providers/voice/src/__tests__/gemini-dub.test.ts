@@ -173,6 +173,55 @@ describe('打ち切り', () => {
   })
 })
 
+/** 頭はすぐ返り、本文がいつまでも届かない応答（止められたら本文の読みが失敗する）。 */
+const stalledBody = (signal: AbortSignal | null | undefined, status = 200): Response => {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      signal?.addEventListener('abort', () => controller.error(new Error('aborted')))
+    },
+  })
+  return new Response(body, { status, headers: { 'content-type': 'application/json' } })
+}
+
+describe('本文の読みも打ち切りの中', () => {
+  it('頭だけ返って本文が来なければ、打ち切って「応答しませんでした」', async () => {
+    const fetch: FetchLike = (_url, init) => Promise.resolve(stalledBody(init.signal))
+    const voice = createGeminiVoice({ apiKey: KEY, fetch, timeoutMs: 20, costOf: () => 0 })
+    const error = await failure(voice.speak(request()))
+    expect(error.code).toBe('unavailable')
+    expect(error.message).toContain('応答しませんでした')
+  })
+
+  it('本文を読んでいる間に止めたら「止めました」（形が違うにしない）', async () => {
+    const controller = new AbortController()
+    const fetch: FetchLike = (_url, init) => {
+      setTimeout(() => controller.abort(), 5)
+      return Promise.resolve(stalledBody(init.signal))
+    }
+    const voice = createGeminiVoice({ apiKey: KEY, fetch, costOf: () => 0 })
+    const error = await failure(voice.speak(request({ signal: controller.signal })))
+    expect(error.code).toBe('cancelled')
+  })
+
+  it('500 の本文を読み切ってから送り直す', async () => {
+    const read: boolean[] = []
+    const body = () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            read.push(true)
+            controller.enqueue(new TextEncoder().encode('oops'))
+            controller.close()
+          },
+        }, { highWaterMark: 0 }),
+        { status: 500 },
+      )
+    const fake = sequence([body, audioResponse])
+    await voiceWith(fake).speak(request())
+    expect(read).toEqual([true])
+  })
+})
+
 describe('作った声（voice_…）は interactions で読む', () => {
   const wav = pcm16Wav(new Int16Array(24000), 24000)
   const interactions = (steps: unknown) => () => json({ steps })

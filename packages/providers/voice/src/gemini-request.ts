@@ -67,18 +67,26 @@ const tooLongWait = (sec: number): VoiceProviderError =>
 
 const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
-/** 1 回送る。打ち切りと、呼び出し側の取り消しを見分ける。 */
-const sendOnce = async (deps: GeminiRequestDeps, url: string, body: string, signal: AbortSignal | undefined): Promise<Response> => {
+/** 受け取った応答（本文は読み切ってある）。 */
+type Received = { readonly ok: boolean; readonly status: number; readonly text: string }
+
+/**
+ * 1 回送り、**本文まで読み切る**（打ち切りの 180 秒は本文の読みも含む。頭だけ返って本文が来ない応答で止まらない）。
+ * 打ち切りと、呼び出し側の取り消しを見分ける。失敗の応答の本文も読み切ってから捨てる（繋ぎを残さない）。
+ */
+const sendOnce = async (deps: GeminiRequestDeps, url: string, body: string, signal: AbortSignal | undefined): Promise<Received> => {
   const timeout = new AbortController()
   const timer = setTimeout(() => timeout.abort(), deps.timeoutMs ?? GEMINI_TIMEOUT_MS)
   const combined = signal === undefined ? timeout.signal : AbortSignal.any([signal, timeout.signal])
   try {
-    return await deps.fetch(url, {
+    const response = await deps.fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': deps.apiKey },
       body,
       signal: combined,
     })
+    const text = await response.text()
+    return { ok: response.ok, status: response.status, text }
   } catch (cause) {
     if (signal?.aborted === true) throw new VoiceProviderError('cancelled', `${WHO} への依頼を止めました`, false)
     if (timeout.signal.aborted) {
@@ -93,21 +101,20 @@ const sendOnce = async (deps: GeminiRequestDeps, url: string, body: string, sign
 
 type Tries = { readonly rateLimited: number; readonly serverErrors: number }
 
-/** 送り直しながら、成功の応答を得る。 */
+/** 送り直しながら、成功の応答の本文を得る。 */
 const sendWithRetry = async (
   deps: GeminiRequestDeps,
   url: string,
   body: string,
   signal: AbortSignal | undefined,
   tries: Tries,
-): Promise<Response> => {
+): Promise<string> => {
   const sleep = deps.sleep ?? defaultSleep
   const response = await sendOnce(deps, url, body, signal)
-  if (response.ok) return response
+  if (response.ok) return response.text
   if (response.status === 429) {
     if (tries.rateLimited >= GEMINI_MAX_RATE_LIMIT_RETRIES) throw voiceFailureFromStatus(WHO, 429)
-    const text = await response.text().catch(() => '')
-    const waitSec = (parseRetryDelaySec(text) ?? DEFAULT_RATE_LIMIT_SEC) + RATE_LIMIT_MARGIN_SEC
+    const waitSec = (parseRetryDelaySec(response.text) ?? DEFAULT_RATE_LIMIT_SEC) + RATE_LIMIT_MARGIN_SEC
     if (waitSec > GEMINI_MAX_RATE_LIMIT_WAIT_SEC) throw tooLongWait(waitSec)
     await sleep(waitSec * 1000)
     return sendWithRetry(deps, url, body, signal, { ...tries, rateLimited: tries.rateLimited + 1 })
@@ -128,10 +135,10 @@ export const geminiPostJson = async <T>(
   schema: z.ZodType<T>,
   signal?: AbortSignal,
 ): Promise<T> => {
-  const response = await sendWithRetry(deps, url, JSON.stringify(payload), signal, { rateLimited: 0, serverErrors: 0 })
+  const text = await sendWithRetry(deps, url, JSON.stringify(payload), signal, { rateLimited: 0, serverErrors: 0 })
   let json: unknown
   try {
-    json = await response.json()
+    json = JSON.parse(text)
   } catch {
     throw badResponse(WHO)
   }
