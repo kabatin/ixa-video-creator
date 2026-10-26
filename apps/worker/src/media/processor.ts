@@ -30,6 +30,22 @@ export const DEFAULT_POSTER_COUNT = 5
  */
 export const MEDIA_TIMEOUT_MS = 10 * 60 * 1000
 
+/**
+ * 話している区間を測る ffmpeg の打ち切り（ADR-0061）。取り込み全体（`MEDIA_TIMEOUT_MS`）とは別に短くする
+ * （音を読むだけなので Take の長さなら数秒で済む。長く掛かる素材は諦めて割り振りに戻す）。
+ */
+export const SPEECH_DETECT_TIMEOUT_MS = 30 * 1000
+
+/**
+ * 持ち込みの動画（`import_take` は手元の動画をアップロードしてから Take にする）を測る長さの上限（秒）。
+ * アップロードの時点ではまだ Take かどうか分からないので、Take らしい長さのものだけ測る（長い素材の取り込みを重くしない）。
+ */
+export const SPEECH_UPLOAD_MAX_SEC = 120
+
+/** 測る素材か。生成の Take と、Take らしい長さの持ち込みだけ（書き出しの結果・派生物・サムネイルは測らない）。 */
+const isTakeLike = (asset: MediaAsset, durationSec: number): boolean =>
+  asset.origin.type === 'generated' || (asset.origin.type === 'upload' && durationSec <= SPEECH_UPLOAD_MAX_SEC)
+
 /** 一時ディレクトリの接頭辞。ジョブごとに mkdtemp で一意化する。 */
 const TEMP_DIR_PREFIX = 'media-job-'
 
@@ -115,9 +131,12 @@ const withSpeechSegments = async (
   sourcePath: string,
   runOptions: RunOptions,
 ): Promise<MediaProbe> => {
-  if (asset.kind !== 'video' || !probe.hasAudio || probe.durationSec === null) return probe
+  if (asset.kind !== 'video' || !probe.hasAudio || probe.durationSec === null || !isTakeLike(asset, probe.durationSec)) return probe
   try {
-    const speechSegments = await (deps.detectSpeech ?? detectSpeechSegments)(sourcePath, probe.durationSec, runOptions)
+    const speechSegments = await (deps.detectSpeech ?? detectSpeechSegments)(sourcePath, probe.durationSec, {
+      ...runOptions,
+      timeoutMs: SPEECH_DETECT_TIMEOUT_MS,
+    })
     return { ...probe, speechSegments: [...speechSegments] }
   } catch (error) {
     deps.logger.warn({ mediaAssetId: asset.id, err: error }, '話している区間を測れませんでした（セリフの字幕は尺の割り振りになります）')

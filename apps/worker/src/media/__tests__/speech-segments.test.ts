@@ -1,9 +1,10 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { RenderJobId, TakeId } from '@ixa/domain'
 import { createMemoryStorage, type ObjectStorage } from '@ixa/storage'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { processMediaJob, type MediaOutcome } from '../processor.js'
+import { MEDIA_TIMEOUT_MS, SPEECH_DETECT_TIMEOUT_MS, processMediaJob, type MediaOutcome } from '../processor.js'
 import { inMemoryMediaAssets, readBytes, seedAsset, silentLogger, type InMemoryMediaAssets } from './doubles.js'
 import { makeTestAudio, makeTestVideo } from './fixtures.js'
 
@@ -61,6 +62,25 @@ describe('取り込みで話している区間を測る', () => {
     const asset = await seedAsset(repo, storage, { kind: 'audio', ext: 'm4a', mimeType: 'audio/mp4', body: audioBytes })
     const outcome = processed(await processMediaJob({ mediaAssets: repo, storage, workDir, logger: silentLogger }, { mediaAssetId: asset.id }))
     expect(outcome.probe).not.toHaveProperty('speechSegments')
+  }, FFMPEG_TIMEOUT_MS)
+
+  it('Take の動画（生成）は測り、書き出しの結果・派生物は測らない。測るときは取り込みより短い時間で打ち切る', async () => {
+    const calls: { readonly timeoutMs: number | undefined }[] = []
+    const detectSpeech = (_path: string, _sec: number, options: { readonly timeoutMs?: number }) => {
+      calls.push({ timeoutMs: options.timeoutMs })
+      return Promise.resolve([{ startSec: 0, endSec: 1 }])
+    }
+    const generated = await seedAsset(repo, storage, {
+      kind: 'video', ext: 'mp4', mimeType: 'video/mp4', body: videoBytes, origin: { type: 'generated', takeId: TakeId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAV') },
+    })
+    const rendered = await seedAsset(repo, storage, {
+      kind: 'video', ext: 'mp4', mimeType: 'video/mp4', body: videoBytes, origin: { type: 'rendered', renderJobId: RenderJobId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAW') },
+    })
+    const deps = { mediaAssets: repo, storage, workDir, logger: silentLogger, detectSpeech }
+    expect(processed(await processMediaJob(deps, { mediaAssetId: generated.id })).probe.speechSegments).toHaveLength(1)
+    expect(processed(await processMediaJob(deps, { mediaAssetId: rendered.id })).probe).not.toHaveProperty('speechSegments')
+    expect(calls).toEqual([{ timeoutMs: SPEECH_DETECT_TIMEOUT_MS }])
+    expect(SPEECH_DETECT_TIMEOUT_MS).toBeLessThan(MEDIA_TIMEOUT_MS)
   }, FFMPEG_TIMEOUT_MS)
 
   it('測れなくても取り込みは成功し、区間は「測っていない」（鍵なし）のまま', async () => {
