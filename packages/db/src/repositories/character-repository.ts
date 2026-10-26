@@ -73,6 +73,8 @@ export const characterRowToDomain = (row: CharacterRow): Character =>
     speakerNo: row.speakerNo,
     speechName: row.speechName,
     voiceDescription: row.voiceDescription,
+    dialogueVoiceProfileId: row.dialogueVoiceProfileId,
+    dialogueLevelDb: row.dialogueLevelDb,
     createdAt: row.createdAt,
   })
 

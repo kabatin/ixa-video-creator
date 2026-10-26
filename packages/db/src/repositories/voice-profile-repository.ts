@@ -49,6 +49,7 @@ export const voiceProfileRowToDomain = (row: VoiceProfileRow): VoiceProfile =>
     tuning: row.tuning,
     textStyleId: row.textStyleId,
     characterId: row.characterId,
+    designedVoice: row.designedVoice,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   })

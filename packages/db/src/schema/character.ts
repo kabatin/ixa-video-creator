@@ -1,4 +1,4 @@
-import { boolean, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import { boolean, doublePrecision, index, integer, pgTable, text, uniqueIndex, type AnyPgColumn } from 'drizzle-orm/pg-core'
 import type { IdentityImageRole, LookImageRole } from '@ixa/domain'
 import {
   IdentityImageRole as IdentityImageRoleSchema,
@@ -6,6 +6,7 @@ import {
 } from '@ixa/domain'
 import { createdAt, deletedAt, ulidPk, ulidRef } from './columns.js'
 import { mediaAssets } from './media.js'
+import { voiceProfiles } from './narration.js'
 import { projects, workspaces } from './workspace.js'
 
 /** DOMAIN.md §5 Character — 同一性のみ。時系列で変わる外見は character_looks。 */
@@ -37,6 +38,15 @@ export const characters = pgTable(
     speechName: text('speech_name'),
     /** 声の説明（英語）。 */
     voiceDescription: text('voice_description'),
+    /**
+     * セリフの声（ADR-0062）。声の差し替えでこの人の行を読み直す声。声を消すと null に戻る。
+     * 声の表は character を指すので、こちらは遅らせて引く（互いに指し合う）。
+     */
+    dialogueVoiceProfileId: ulidRef('dialogue_voice_profile_id').references((): AnyPgColumn => voiceProfiles.id, {
+      onDelete: 'set null',
+    }),
+    /** 距離の既定（dB）。行ごとの指定が無い行に足す。 */
+    dialogueLevelDb: doublePrecision('dialogue_level_db').notNull().default(0),
 
     createdAt: createdAt(),
     deletedAt: deletedAt(),

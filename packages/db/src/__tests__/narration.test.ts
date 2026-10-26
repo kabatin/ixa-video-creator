@@ -35,6 +35,7 @@ describe('voice_profiles', () => {
     tuning: {},
     textStyleId: null,
     characterId: newId(CharacterId),
+    designedVoice: null,
     createdAt: NOW,
     updatedAt: NOW,
     deletedAt: null,

@@ -1037,7 +1037,7 @@ PostgreSQL 16 + Drizzle（ADR-0007）。
 workspaces
 projects                     (mastering_mode: 書き出しの仕上げ。null は自動 / ADR-0060)
 media_assets                 (checksum_sha256 に UNIQUE 部分インデックス)
-characters                   ((project_id, speaker_no) に UNIQUE。話し手の番号は消しても詰めない / ADR-0059)
+characters                   ((project_id, speaker_no) に UNIQUE。話し手の番号は消しても詰めない / ADR-0059。dialogue_voice_profile_id・dialogue_level_db（セリフの声と距離の既定 / ADR-0062）)
 character_identity_images
 character_looks
 character_look_images
@@ -1065,6 +1065,8 @@ take_motion_analyses         (Take の動きの強さ・山・出来事。効果
 image_generation_jobs        (絵コンテの画像を作るジョブ。Shot の最初のフレームになる / ADR-0029。追記のみ)
 image_checks                 (作った絵のチェック。ジョブに 1 行。やり直すか・どれを当てるかの材料 / ADR-0055。追記のみ)
 upscale_jobs                 (出来た Take の解像度を上げるジョブ / ADR-0044。仕様を持たないので generation_jobs と別。追記のみ)
+dub_jobs                     (採用中の Take の声を差し替えるジョブ。出来たものは新しい Take。JSONB: error・record。追記のみ / ADR-0062)
+tts_clips                    (差し替えの読み上げの保存。cache_key = sha256(モデル・声・読み方・文) に UNIQUE / ADR-0062)
 access_tokens                (API に入る鍵 / 合言葉で入った端末と自動化用の鍵。鍵はハッシュだけ。取り消しは revoked_at、行は消さない)
 agent_sessions               (AI エージェントの会話（タスク）。作品ごと。同じ作品で作業中は 1 つだけ / ADR-0058)
 agent_messages               (会話の行。会話ごとの通し番号 seq で並ぶ。JSONB: body。追記のみ / ADR-0058)
@@ -1076,7 +1078,7 @@ shot_edit_batches            (一括編集の記録と取り消し。中身は�
 render_jobs                  (JSONB: timeline_snapshot。mastering_mode: 投入の時点の仕上げ / ADR-0060)
 thumbnails                   (YouTube のサムネイルの書き出し。JSONB: spec（署名付き URL は持たない）。追記のみ / ADR-0051)
 ai_settings                  (使う AI。この環境に 1 行だけ。無ければ環境変数が初期値 / ADR-0032)
-voice_profiles               (声。ナレーター・キャラクターの声 / ADR-0038)
+voice_profiles               (声。ナレーター・キャラクターの声 / ADR-0038。JSONB: designed_voice（説明から作った声の説明・性別・作った鍵の名札 / ADR-0062）)
 narration_lines              (ナレーション・セリフの原稿の行。位置（秒）を自分で持つ / ADR-0038)
 narration_takes              (行の声の Take。追記のみ。後から変わるのは char_times だけ / ADR-0038)
 voice_jobs                   (声・文字起こしのジョブ。掛かった額を持つ。追記のみ / ADR-0038)

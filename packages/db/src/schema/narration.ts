@@ -15,6 +15,7 @@ import {
   VoiceJobStatus as VoiceJobStatusSchema,
   VoiceToolId as VoiceToolIdSchema,
   type CharTime,
+  type DesignedVoice,
   type DuckingSettings,
   type NarrationTakeSource,
   type ReadingEntry,
@@ -55,7 +56,9 @@ export const voiceProfiles = pgTable(
     language: text('language').notNull().default('ja'),
     tuning: jsonb('tuning').$type<VoiceTuning>().notNull().default({}),
     textStyleId: ulidRef('text_style_id').references(() => textStyles.id, { onDelete: 'set null' }),
-    characterId: ulidRef('character_id').references(() => characters.id, { onDelete: 'set null' }),
+    characterId: ulidRef('character_id').references((): AnyPgColumn => characters.id, { onDelete: 'set null' }),
+    /** 説明から作った声（ADR-0062）の説明・性別・作った鍵の名札。既製の声は null。 */
+    designedVoice: jsonb('designed_voice').$type<DesignedVoice>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
