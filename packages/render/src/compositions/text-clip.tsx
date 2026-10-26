@@ -66,6 +66,8 @@ type DrawProps = {
   readonly template: TextTemplateKey
   /** 2 段目の訳文と、その文字の大きさ（ADR-0061）。無ければ 1 段だけ描く（今までと同じ絵）。 */
   readonly translation?: { readonly text: string; readonly fontSize: number }
+  /** 語の途中で折らない（セリフの字幕だけ。下の `bodyStyle`）。 */
+  readonly keepPhrases: boolean
 }
 
 /** 映像の矩形に重ねる箱。レターボックスの黒帯に文字がはみ出さないようにする。 */
@@ -79,7 +81,7 @@ const videoBoxStyle = (video: FitRect): React.CSSProperties => ({
   overflow: 'hidden',
 })
 
-const bodyStyle = (style: ResolvedTextStyle, fontSize: number): React.CSSProperties => {
+const bodyStyle = (style: ResolvedTextStyle, fontSize: number, keepPhrases: boolean): React.CSSProperties => {
   const shadow = TEXT_SHADOWS[style.shadow]
   return {
     fontFamily: FONT_STACKS[style.font],
@@ -96,6 +98,9 @@ const bodyStyle = (style: ResolvedTextStyle, fontSize: number): React.CSSPropert
           WebkitTextStroke: `${String(Math.round(fontSize * style.stroke.width))}px ${style.stroke.color}`,
           paintOrder: 'stroke fill',
         }),
+    // セリフの字幕だけ、字と字の間では折らず、句読点や空白で折る（「ねえ、ネズミく／ん。」と語の途中で折れた。2026-10-26）。
+    // それでも 1 行に入らない長い語は、下の anywhere でどこでも折る。ほかのテロップは今までの絵のまま。
+    ...(keepPhrases ? { wordBreak: 'keep-all' as const } : {}),
     // 日本語は単語の境目が無いので、どこでも折り返せるようにしておく。
     overflowWrap: 'anywhere',
     whiteSpace: 'pre-wrap',
@@ -105,15 +110,14 @@ const bodyStyle = (style: ResolvedTextStyle, fontSize: number): React.CSSPropert
 /** 文字の入れ物（帯）。背景・左の線・幅・ずらしを持つ。 */
 const bandStyle = ({ video, layout, decor, style, fontSize }: DrawProps): React.CSSProperties => {
   const { x, y } = style.offset
+  const width = `${String(boxWidthPercent(layout, style.marginX))}%`
   return {
-    ...(decor.width === 'full'
-      ? { width: `${String(layout.widthRatio * 100)}%` }
-      : { maxWidth: `${String(layout.widthRatio * 100)}%` }),
-    ...anchorMargins(style.anchor, video),
+    ...(decor.width === 'full' ? { width } : { maxWidth: width }),
+    ...anchorMargins(style, video),
     ...(style.background === null
       ? {}
       : {
-          padding: `${String(fontSize * 0.5)}px ${String(fontSize * 0.75)}px`,
+          padding: `${String(fontSize * style.paddingY)}px ${String(fontSize * style.paddingX)}px`,
           backgroundColor: rgba(style.background.color, style.background.opacity),
         }),
     // 左の線は帯の飾り。帯を消したら線も引かない（線だけ残ると浮く）。
@@ -156,11 +160,11 @@ const StyledText: React.FC<DrawProps> = (props) => (
     style={{ ...videoBoxStyle(props.video), ...anchorBoxStyle(props.style.anchor) }}
   >
     <div style={bandStyle(props)}>
-      <div style={bodyStyle(props.style, props.fontSize)}>
+      <div style={bodyStyle(props.style, props.fontSize, props.keepPhrases)}>
         {props.spoken === undefined ? props.text : <SpokenText split={props.spoken.split} color={props.spoken.color} />}
       </div>
       {props.translation === undefined ? null : (
-        <div data-telop-translation="" style={bodyStyle(props.style, props.translation.fontSize)}>
+        <div data-telop-translation="" style={bodyStyle(props.style, props.translation.fontSize, props.keepPhrases)}>
           {props.translation.text}
         </div>
       )}
@@ -185,6 +189,17 @@ const TEXT_TEMPLATES: Readonly<
   },
 })
 
+/**
+ * 箱の幅（映像の幅に対する割合）。見た目の `marginX` があれば画面から両側の余白を引いた幅、
+ * 無ければ型の流し込み幅（今までの箱）。
+ */
+export const textClipBoxWidthRatio = (template: TextTemplateKey, marginX: number | null): number =>
+  marginX === null ? TEXT_TEMPLATES[template].layout.widthRatio : Math.round((1 - 2 * marginX) * 10000) / 10000
+
+/** CSS の幅（%）。今までの箱は今までと同じ数の書き方（`layout.widthRatio * 100`）にする。 */
+const boxWidthPercent = (layout: TextLayout, marginX: number | null): number =>
+  marginX === null ? layout.widthRatio * 100 : Math.round((1 - 2 * marginX) * 10000) / 100
+
 const hasDrawer = (template: TextTemplateKey): boolean =>
   Object.prototype.hasOwnProperty.call(TEXT_TEMPLATES, template)
 
@@ -202,9 +217,11 @@ export const textClipFontSize = (
   template: TextTemplateKey,
   text: string,
   video: FitRect,
+  /** 見た目の左右の余白。null（省略）は型の流し込み幅。 */
+  marginX: number | null = null,
 ): number => {
   const { layout } = TEXT_TEMPLATES[template]
-  const boxWidth = video.width * layout.widthRatio
+  const boxWidth = video.width * textClipBoxWidthRatio(template, marginX)
   const charCount = Math.max(text.length, 1)
   const fits = Math.floor((boxWidth * layout.maxLines) / charCount)
   return Math.max(1, Math.min(Math.floor(textClipBaseLength(video) * layout.maxSizeRatio), fits))
@@ -232,9 +249,12 @@ export const textClipTranslationFontSize = (input: {
   readonly scale: number
   readonly translation: string
   readonly video: FitRect
+  /** 見た目の左右の余白。省くと型の流し込み幅。 */
+  readonly marginX?: number | null
 }): number => {
   const { layout } = TEXT_TEMPLATES[input.template]
-  const fits = Math.floor((input.video.width * layout.widthRatio * layout.maxLines) / Math.max(input.translation.length, 1))
+  const boxWidth = input.video.width * textClipBoxWidthRatio(input.template, input.marginX ?? null)
+  const fits = Math.floor((boxWidth * layout.maxLines) / Math.max(input.translation.length, 1))
   return Math.max(1, Math.min(Math.round(input.mainFontSize * input.scale), fits))
 }
 
@@ -365,7 +385,7 @@ export const TextClip: React.FC<{
   const style = resolveTextStyle(template, params.style)
   const fontSize =
     style.size === null
-      ? textClipFontSize(template, params.text, video)
+      ? textClipFontSize(template, params.text, video, style.marginX)
       : textClipSizedFontSize(style.size, video)
   const translation =
     params.translation === undefined
@@ -379,10 +399,21 @@ export const TextClip: React.FC<{
               scale: style.translationScale,
               translation: params.translation,
               video,
+              marginX: style.marginX,
             }),
           },
         }
-  const draw: DrawProps = { text: params.text, video, layout, decor, style, fontSize, template, ...translation }
+  const draw: DrawProps = {
+    text: params.text,
+    video,
+    layout,
+    decor,
+    style,
+    fontSize,
+    template,
+    ...translation,
+    keepPhrases: params.dialogue !== undefined,
+  }
   const body =
     params.highlight !== undefined && timing !== undefined ? (
       <Spoken timing={timing} highlight={params.highlight} draw={draw} />

@@ -40,7 +40,10 @@ const ClipEdit = z.object({
     .describe('Telops only: the smaller second line (null removes it). On dialogue captions it is saved to the shot line.'),
   template: TextTemplateKey.optional().describe('Telops only.'),
   styleName: z.string().min(1).optional().describe('Telops only: replace the look with this saved style.'),
-  style: TextStyle.optional().describe('Telops only: change just these look fields (e.g. {anchor:"top-center"}).'),
+  style: TextStyle.optional().describe(
+    'Telops only: change just these look fields (e.g. {anchor:"top-center"}, or box spacing {marginX:0.05, paddingX:0.3}; ' +
+      'same fields and ranges as add_telops style).',
+  ),
   unsetStyle: z.array(TextStyleKey).optional().describe('Telops only: reset these look fields to the template default.'),
   volume: z.number().min(0).max(2).optional().describe('Sound clips only.'),
   fadeInSec: z.number().min(0).max(CLIP_FADE_MAX_SEC).optional().describe('Sound clips only.'),

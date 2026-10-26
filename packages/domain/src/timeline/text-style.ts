@@ -49,6 +49,17 @@ export const MAX_TEXT_FADE_SEC = 2
 export const DEFAULT_TRANSLATION_SCALE = 0.6
 export const MIN_TRANSLATION_SCALE = 0.3
 export const MAX_TRANSLATION_SCALE = 1
+/**
+ * 箱の外側の余白（画面の端から。左右は画面の幅、上下は画面の高さに対する割合）。
+ * 左右を上限まで取っても、箱は画面の 2 割の幅を残す。
+ * 上下の既定は今までの下帯と同じ。左右は省くと型の流し込み幅のまま（そのまま 8 割・下帯 9 割）。
+ */
+export const MAX_TEXT_MARGIN = 0.4
+export const DEFAULT_TEXT_MARGIN_Y = 0.08
+/** 帯の内側の余白（文字の大きさに対する割合。縁取りの太さと同じ単位）。既定は今までの帯と同じ。 */
+export const MAX_TEXT_PADDING = 2
+export const DEFAULT_TEXT_PADDING_X = 0.75
+export const DEFAULT_TEXT_PADDING_Y = 0.5
 
 const HexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, '色は #RRGGBB の形で指定してください')
 
@@ -65,6 +76,8 @@ export const TextBackground = z.object({
 export type TextBackground = z.infer<typeof TextBackground>
 
 const Offset = z.number().min(-MAX_TEXT_OFFSET).max(MAX_TEXT_OFFSET)
+const Margin = z.number().min(0).max(MAX_TEXT_MARGIN)
+const Padding = z.number().min(0).max(MAX_TEXT_PADDING)
 
 /**
  * テロップごとの見た目の上書き。**知らない項目は弾く**（書き間違いを黙って捨てない）。
@@ -86,6 +99,13 @@ export const TextStyle = z
     fadeOutSec: z.number().min(0).max(MAX_TEXT_FADE_SEC).optional(),
     /** 下の段（訳文）の大きさ。訳文の無いテロップでは効かない（ADR-0061）。 */
     translationScale: z.number().min(MIN_TRANSLATION_SCALE).max(MAX_TRANSLATION_SCALE).optional(),
+    /** 左右の端からの余白。箱の幅は画面から両側の余白を引いたもの。 */
+    marginX: Margin.optional(),
+    /** 上下の端からの余白（上か下に寄せたときだけ効く）。 */
+    marginY: Margin.optional(),
+    /** 帯の内側の余白（帯の無いテロップでは効かない）。 */
+    paddingX: Padding.optional(),
+    paddingY: Padding.optional(),
   })
   .strict()
 export type TextStyle = z.infer<typeof TextStyle>
@@ -109,6 +129,10 @@ export const TEXT_STYLE_KEY_LABELS: Readonly<Record<TextStyleKey, string>> = Obj
   fadeInSec: 'フェードイン',
   fadeOutSec: 'フェードアウト',
   translationScale: '2 段目の大きさ',
+  marginX: '余白（左右）',
+  marginY: '余白（上下）',
+  paddingX: '内側の余白（左右）',
+  paddingY: '内側の余白（上下）',
 })
 
 /**
@@ -165,6 +189,11 @@ export type ResolvedTextStyle = {
   readonly fadeOutSec: number
   /** 下の段（訳文）の大きさ（上の段に対する割合）。 */
   readonly translationScale: number
+  /** 左右の余白。null = 型の流し込み幅のまま（今までの箱）。 */
+  readonly marginX: number | null
+  readonly marginY: number
+  readonly paddingX: number
+  readonly paddingY: number
 }
 
 const COMMON_DEFAULTS = {
@@ -177,6 +206,10 @@ const COMMON_DEFAULTS = {
   fadeInSec: 0,
   fadeOutSec: 0,
   translationScale: DEFAULT_TRANSLATION_SCALE,
+  marginX: null,
+  marginY: DEFAULT_TEXT_MARGIN_Y,
+  paddingX: DEFAULT_TEXT_PADDING_X,
+  paddingY: DEFAULT_TEXT_PADDING_Y,
 } as const
 
 /**

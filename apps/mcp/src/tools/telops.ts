@@ -104,7 +104,10 @@ const Telop = z.object({
     'Look overrides (applied on top of styleName): font gothic|mincho|rounded, size 0.02–0.2 of the shorter screen side ' +
       '(null = auto), weight, color #RRGGBB, stroke {color,width}, shadow, background {color,opacity}, align, ' +
       'anchor (9 positions like "top-center"), offset {x,y} −0.5–0.5, fadeInSec/fadeOutSec 0–2, ' +
-      'translationScale 0.3–1 (second line size vs the first, default 0.6).',
+      'translationScale 0.3–1 (second line size vs the first, default 0.6), ' +
+      'marginX 0–0.4 (gap from the left/right screen edges as a fraction of the width; the box is the width minus both gaps; ' +
+      'omit = template width), marginY 0–0.4 (gap from the top/bottom edge as a fraction of the height, default 0.08), ' +
+      'paddingX/paddingY 0–2 (space inside the background band as a fraction of the font size, default 0.75/0.5).',
   ),
   layer: z.number().int().min(0).max(20).default(0).describe('Higher layers draw on top. Lyrics use 1, narration 2.'),
 })

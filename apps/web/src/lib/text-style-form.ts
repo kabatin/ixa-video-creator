@@ -1,6 +1,8 @@
 import {
   MAX_TEXT_FADE_SEC,
+  MAX_TEXT_MARGIN,
   MAX_TEXT_OFFSET,
+  MAX_TEXT_PADDING,
   MAX_TEXT_SIZE,
   MIN_TEXT_SIZE,
   TextStyle,
@@ -134,6 +136,25 @@ export const parseOffsetPercent = (raw: string): Parsed => {
 }
 
 export const offsetPercentLabel = (offset: number): string => percent(offset)
+
+const parseBoundedPercent = (raw: string, max: number): Parsed => {
+  if (raw.trim() === '') return { ok: true, value: null }
+  const value = toNumber(raw)
+  const limit = max * 100
+  if (value === null || value < 0 || value > limit) {
+    return { ok: false, reason: `0〜${String(limit)} の数で入れてください（空欄は型の既定）` }
+  }
+  return { ok: true, value: fromPercent(value) }
+}
+
+/** 外側の余白（左右は画面の幅、上下は画面の高さの %）。空欄は型の既定（null）。 */
+export const parseMarginPercent = (raw: string): Parsed => parseBoundedPercent(raw, MAX_TEXT_MARGIN)
+
+/** 帯の内側の余白（文字の大きさの %）。空欄は型の既定（null）。 */
+export const parsePaddingPercent = (raw: string): Parsed => parseBoundedPercent(raw, MAX_TEXT_PADDING)
+
+/** 余白の欄の表示。null（型の流し込み幅のまま）は空欄。 */
+export const marginPercentLabel = (ratio: number | null): string => (ratio === null ? '' : percent(ratio))
 
 /** テロップの中身。読めない見た目は空（型の既定値）として扱う。文字が読めなければ null。 */
 export type ReadableTextParams = {

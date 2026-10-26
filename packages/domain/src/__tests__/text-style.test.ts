@@ -170,7 +170,7 @@ describe('textStyleChangeSummary', () => {
     expect(
       textStyleChangeSummary(3, {
         set: [],
-        unset: ['font', 'size', 'weight', 'color', 'stroke', 'shadow', 'background', 'align', 'anchor', 'offset', 'fadeInSec', 'fadeOutSec', 'translationScale'],
+        unset: ['font', 'size', 'weight', 'color', 'stroke', 'shadow', 'background', 'align', 'anchor', 'offset', 'fadeInSec', 'fadeOutSec', 'translationScale', 'marginX', 'marginY', 'paddingX', 'paddingY'],
       }),
     ).toBe('テロップ 3 件の見た目を型の既定に戻しました')
   })

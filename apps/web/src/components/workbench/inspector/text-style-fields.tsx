@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { AutoSaveCheckbox, AutoSaveColor, AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
 import { Section } from '@/components/workbench/ui/section'
+import { TextBoxFields } from '@/components/workbench/inspector/text-box-fields'
 import {
   ALIGN_OPTIONS,
   ANCHOR_GRID,
@@ -161,6 +162,8 @@ export const TextStyleFields = ({
         />
         <p className="text-xs text-muted">ずらしは画面の幅・高さに対する %（右・下が +）。</p>
       </Section>
+
+      <TextBoxFields resolved={resolved} disabled={disabled} onChange={set} />
 
       <Section title="出入り">
         <AutoSaveSelect

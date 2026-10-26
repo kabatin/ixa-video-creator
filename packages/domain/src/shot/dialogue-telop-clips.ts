@@ -26,8 +26,17 @@ import type { Shot } from './shot.js'
 /** セリフの字幕の層。ナレーションと同じ（手で置くテロップ 0・歌詞 1 とぶつからない）。 */
 export const DIALOGUE_TELOP_LAYER = NARRATION_TELOP_LAYER
 
-/** 当てた見た目が無いときの見た目。ナレーションと同じ下寄せの帯。 */
-export const DEFAULT_DIALOGUE_TEXT_STYLE: TextStyle = DEFAULT_NARRATION_TEXT_STYLE
+/**
+ * 当てた見た目が無いときの見た目。ナレーションと同じ下寄せの帯に、左右の余白を狭めた箱を重ねる。
+ * ナレーションの箱（流し込み 8 割・帯の内側の左右 0.75 字）では、9:16 で「ねえ、ネズミくん。」が
+ * 「ねえ、ネズミく／ん。」と折れた（2026-10-26）。箱を 9 割・内側を 0.3 字にすると、同じ大きさで 1 行に入る。
+ * ナレーションの既定は変えない（今の MV の字幕の絵を変えない）。
+ */
+export const DEFAULT_DIALOGUE_TEXT_STYLE: TextStyle = Object.freeze({
+  ...DEFAULT_NARRATION_TEXT_STYLE,
+  marginX: 0.05,
+  paddingX: 0.3,
+})
 
 /** 画面に出ない区間を数えないための最短（秒）。切り出しの端で欠けた区間の切れ端を行に当てない。 */
 const MIN_VISIBLE_SEGMENT_SEC = 0.05

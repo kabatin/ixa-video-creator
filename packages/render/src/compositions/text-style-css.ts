@@ -1,4 +1,4 @@
-import type { TextAnchor, TextFont, TextShadow, TextWeight } from '@ixa/domain'
+import type { ResolvedTextStyle, TextAnchor, TextFont, TextShadow, TextWeight } from '@ixa/domain'
 import type React from 'react'
 import type { FitRect } from '../presets.js'
 
@@ -38,9 +38,10 @@ export const rgba = (hex: string, opacity: number): string => {
 const VERTICAL = { top: 'flex-start', middle: 'center', bottom: 'flex-end' } as const
 const HORIZONTAL = { left: 'flex-start', center: 'center', right: 'flex-end' } as const
 
-/** 上下の端からの余白（映像の高さに対する割合）。今までの下帯と同じ。 */
-const EDGE_MARGIN_Y = 0.08
-/** 左右の端からの余白（映像の幅に対する割合）。 */
+/**
+ * 左右の端からの余白（映像の幅に対する割合）。見た目の `marginX` が無いときの値。
+ * 上下の余白の既定（0.08）は domain の `DEFAULT_TEXT_MARGIN_Y` が持ち、見た目の `marginY` で届く。
+ */
 const EDGE_MARGIN_X = 0.05
 
 const splitAnchor = (anchor: TextAnchor) => {
@@ -55,10 +56,13 @@ export const anchorBoxStyle = (anchor: TextAnchor): React.CSSProperties => {
 }
 
 /** 端に寄せたときだけ余白を取る。中央では取らない。 */
-export const anchorMargins = (anchor: TextAnchor, video: FitRect): React.CSSProperties => {
-  const { vertical, horizontal } = splitAnchor(anchor)
-  const y = video.height * EDGE_MARGIN_Y
-  const x = video.width * EDGE_MARGIN_X
+export const anchorMargins = (
+  style: Pick<ResolvedTextStyle, 'anchor' | 'marginX' | 'marginY'>,
+  video: FitRect,
+): React.CSSProperties => {
+  const { vertical, horizontal } = splitAnchor(style.anchor)
+  const y = video.height * style.marginY
+  const x = video.width * (style.marginX ?? EDGE_MARGIN_X)
   return {
     ...(vertical === 'top' ? { marginTop: y } : {}),
     ...(vertical === 'bottom' ? { marginBottom: y } : {}),
