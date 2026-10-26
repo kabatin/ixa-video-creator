@@ -30,7 +30,8 @@ export type InMemoryMediaAssets = MediaAssetRepository & {
   readonly updateCount: () => number
 }
 
-export const inMemoryMediaAssets = (): InMemoryMediaAssets => {
+/** `uniqueChecksum`: 実物の一意索引と同じく、同じ中身の 2 件目を拒む（既定は拒まない。同じ素材を何度も置くテストがあるため）。 */
+export const inMemoryMediaAssets = (options: { readonly uniqueChecksum?: boolean } = {}): InMemoryMediaAssets => {
   let store: readonly MediaAsset[] = []
   let updates = 0
 
@@ -49,6 +50,10 @@ export const inMemoryMediaAssets = (): InMemoryMediaAssets => {
 
     create: (input) => {
       const validated = CreateMediaAssetInputSchema.parse(input)
+      // 実物の一意索引（media_assets_checksum_sha256_live_uidx）と同じく、同じ中身の 2 件目を拒む
+      if (options.uniqueChecksum === true && store.some((a) => a.checksumSha256 === validated.checksumSha256)) {
+        return Promise.reject(new Error('duplicate key value violates unique constraint "media_assets_checksum_sha256_live_uidx"'))
+      }
       const created = MediaAssetSchema.parse({
         ...validated,
         id: validated.id ?? newId(MediaAssetIdSchema),

@@ -1,7 +1,8 @@
 import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createMemoryStorage, posterKey, proxyKey, thumbnailKey } from '@ixa/storage'
+import { MediaAssetId as MediaAssetIdSchema, newId } from '@ixa/domain'
+import { createMemoryStorage, mediaKey, posterKey, proxyKey, thumbnailKey } from '@ixa/storage'
 import type { ObjectStorage } from '@ixa/storage'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_POSTER_COUNT, processMediaJob, type MediaOutcome } from '../processor.js'
@@ -366,6 +367,37 @@ describe('processMediaJob', () => {
     expect(lastFrame?.bytes).toBeGreaterThan(0)
     // 実体がストレージに置かれていること
     expect(await storage.exists(lastFrame?.storageKey as string)).toBe(true)
+  }, FFMPEG_TIMEOUT_MS)
+
+  it('最終フレームが既にある絵と同じ中身なら、その絵を指す（声を差し替えた Take は映像が元と同じ）', async () => {
+    repo = inMemoryMediaAssets({ uniqueChecksum: true })
+    const first = await seedAsset(repo, storage, { kind: 'video', ext: 'mp4', mimeType: 'video/mp4', body: videoBytes })
+    processed(await processMediaJob(deps(), { mediaAssetId: first.id }))
+    const firstFrame = repo.snapshot().find((a) => a.id === first.id)?.lastFrameAssetId
+
+    // 映像は同じで音だけ違う動画（中身のハッシュは別）を、同じワークスペースに置く
+    const secondId = newId(MediaAssetIdSchema)
+    const secondKey = mediaKey(first.workspaceId, secondId, 'mp4')
+    await storage.put(secondKey, videoBytes, { contentType: 'video/mp4' })
+    await repo.create({
+      id: secondId,
+      workspaceId: first.workspaceId,
+      projectId: null,
+      kind: 'video',
+      storageKey: secondKey,
+      mimeType: 'video/mp4',
+      bytes: videoBytes.byteLength,
+      checksumSha256: 'd'.repeat(64),
+      probe: null,
+      origin: { type: 'upload', uploadedBy: 'test' },
+      tags: [],
+    })
+
+    processed(await processMediaJob(deps(), { mediaAssetId: secondId }))
+
+    const second = repo.snapshot().find((a) => a.id === secondId)
+    expect(second?.probe).not.toBeNull()
+    expect(second?.lastFrameAssetId).toBe(firstFrame)
   }, FFMPEG_TIMEOUT_MS)
 
   it('image には最終フレームを作らない', async () => {

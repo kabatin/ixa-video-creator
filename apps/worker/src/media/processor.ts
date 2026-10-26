@@ -178,22 +178,7 @@ const ingest = async (
    * （`ShotGenerationSpec.references` は MediaAssetId を持つ）。
    * ポスターフレームはレビュー用でキーのままでよいが、これだけは別扱いになる。
    */
-  const lastFrameAssetId =
-    keys.lastFrameKey === null || keys.lastFrameChecksum === null
-      ? null
-      : (
-          await deps.mediaAssets.create({
-            workspaceId: asset.workspaceId,
-            projectId: asset.projectId,
-            kind: 'image',
-            storageKey: keys.lastFrameKey,
-            mimeType: 'image/jpeg',
-            bytes: keys.lastFrameBytes,
-            checksumSha256: keys.lastFrameChecksum,
-            origin: { type: 'derived', sourceAssetId: asset.id, operation: 'last_frame' },
-            tags: ['last_frame'],
-          })
-        ).id
+  const lastFrameAssetId = await lastFrameAssetFor(deps, asset, keys)
 
   await deps.mediaAssets.update(asset.id, {
     probe,
@@ -220,6 +205,43 @@ const notifyIngested = async (deps: MediaProcessorDeps, mediaAssetId: MediaAsset
   } catch (error) {
     deps.logger.error({ mediaAssetId, err: error }, '取り込みが済んだことを知らせられませんでした（自動のレビューが積まれていません）')
   }
+}
+
+type LastFrameKeys = Pick<
+  Awaited<ReturnType<typeof storeDerivatives>>,
+  'lastFrameKey' | 'lastFrameChecksum' | 'lastFrameBytes'
+>
+
+/**
+ * 最終フレームの MediaAsset。**同じ中身の絵が既にあればそれを指す**
+ * （声を差し替えた Take は映像が元の Take と同じで、最終フレームも同じになる。
+ * 作ろうとすると checksum の一意索引に当たり、取り込み全体が落ちて probe が残らなかった）。
+ * 別のワークスペースの絵は指さず、最終フレーム無しで続ける。
+ */
+const lastFrameAssetFor = async (
+  deps: MediaProcessorDeps,
+  asset: MediaAsset,
+  keys: LastFrameKeys,
+): Promise<MediaAsset['id'] | null> => {
+  if (keys.lastFrameKey === null || keys.lastFrameChecksum === null) return null
+  const existing = await deps.mediaAssets.findByChecksum(keys.lastFrameChecksum)
+  if (existing !== null) {
+    if (existing.workspaceId === asset.workspaceId) return existing.id
+    deps.logger.warn({ mediaAssetId: asset.id }, '最終フレームと同じ中身の絵が別のワークスペースにあるため、最終フレーム無しで取り込みます')
+    return null
+  }
+  const created = await deps.mediaAssets.create({
+    workspaceId: asset.workspaceId,
+    projectId: asset.projectId,
+    kind: 'image',
+    storageKey: keys.lastFrameKey,
+    mimeType: 'image/jpeg',
+    bytes: keys.lastFrameBytes,
+    checksumSha256: keys.lastFrameChecksum,
+    origin: { type: 'derived', sourceAssetId: asset.id, operation: 'last_frame' },
+    tags: ['last_frame'],
+  })
+  return created.id
 }
 
 /**
