@@ -32,3 +32,9 @@ export const rateFromMime = (mimeType: string): number => {
   const rate = /rate=(\d+)/i.exec(mimeType)?.[1]
   return rate === undefined ? DEFAULT_RATE : Number(rate)
 }
+
+/** WAV の長さ（秒）。頭の 1 秒あたりのバイト数で割る。頭が読めなければ 24kHz・16 ビット・モノラルとみなす。 */
+export const wavDurationSec = (wav: Buffer): number => {
+  const byteRate = wav.length >= HEADER_BYTES ? wav.readUInt32LE(28) : 0
+  return Math.max(0, wav.length - HEADER_BYTES) / (byteRate > 0 ? byteRate : DEFAULT_RATE * 2)
+}

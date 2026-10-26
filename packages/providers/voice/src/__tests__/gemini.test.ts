@@ -129,7 +129,7 @@ describe('createGeminiVoice', () => {
   })
 
   it('上限（429）は「回数の上限」の失敗にする（鍵を文に入れない）', async () => {
-    const voice = createGeminiVoice({ apiKey: KEY, fetch: () => Promise.resolve(json({ error: { message: KEY } }, 429)), costOf: () => 0 })
+    const voice = createGeminiVoice({ apiKey: KEY, fetch: () => Promise.resolve(json({ error: { message: KEY } }, 429)), costOf: () => 0, sleep: () => Promise.resolve() })
 
     const error = await voice.speak(request()).catch((e: unknown) => e)
 

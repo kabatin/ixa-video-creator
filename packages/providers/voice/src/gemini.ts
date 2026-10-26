@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { extname } from 'node:path'
-import type { CharTime } from '@ixa/domain'
+import { GEMINI_TTS_TOKENS_PER_SEC, type CharTime } from '@ixa/domain'
 import {
   VoiceProviderError,
   type SpeakRequest,
@@ -12,8 +12,10 @@ import {
   type VoiceOption,
 } from '@ixa/provider-core'
 import { z } from 'zod'
-import { badResponse, requestJson, type FetchLike } from './http.js'
-import { rateFromMime, wavFromPcm } from './wav.js'
+import { GEMINI_INTERACTIONS_URL, InteractionsResponse, interactionsAudioOf, interactionsBody, isDesignedVoice } from './gemini-interactions.js'
+import { geminiPostJson, type GeminiRequestDeps } from './gemini-request.js'
+import { badResponse, requestJson } from './http.js'
+import { rateFromMime, wavDurationSec, wavFromPcm } from './wav.js'
 
 /**
  * Gemini の声と文字起こし（ADR-0038）。形は 2026-10-05 の公式の説明に合わせる。
@@ -22,6 +24,8 @@ import { rateFromMime, wavFromPcm } from './wav.js'
  *   指示を本文に混ぜると読み上げてしまう）。声は `voiceConfig.voice`。WAV（24kHz・モノラル）が返る
  * - 文字起こし: `gemini-3.5-transcribe` に音を base64 で送り、語の時刻を頼む（30 分まで）
  * - 鍵は `x-goog-api-key` ヘッダーだけ（URL に入れない）
+ * - 読み上げの 429・500 は待って送り直す（`gemini-request.ts`。ADR-0062）
+ * - 作った声（`voice_…`。ADR-0062）は `v1beta/interactions` で読む。既製の声は今まで通り `generateContent`
  * - 費用は呼び出し側が決める（無料枠か・2027 年の値上げは domain の規則。ここは使った量を渡すだけ）
  */
 
@@ -93,15 +97,48 @@ const AudioResponse = z.object({
   usageMetadata: z.object({ candidatesTokenCount: z.number().optional() }).optional(),
 })
 
-export type GeminiDeps = {
-  readonly apiKey: string
-  readonly fetch: FetchLike
-}
+/** 鍵と fetch。待つ口と打ち切りの長さは差し替えられる（テストは待たない）。 */
+export type GeminiDeps = GeminiRequestDeps
 
 const headers = (apiKey: string): Record<string, string> => ({ 'content-type': 'application/json', 'x-goog-api-key': apiKey })
 
+type CostOf = (usage: { readonly model: string; readonly outputTokens: number }) => number
+
+/**
+ * 作った声で読む（`v1beta/interactions`）。応答に使った量が無いので、費用は音の長さから見積もる
+ * （1 秒 = `GEMINI_TTS_TOKENS_PER_SEC`。見積もりの規則と同じ）。
+ */
+const speakDesigned = async (
+  deps: GeminiDeps & { readonly costOf: CostOf },
+  request: SpeakRequest,
+  model: string,
+  style: string,
+): Promise<SpeakResult> => {
+  const response = await geminiPostJson(
+    deps,
+    GEMINI_INTERACTIONS_URL,
+    interactionsBody({ model, text: request.text, style, voice: request.voiceName }),
+    InteractionsResponse,
+    request.signal,
+  )
+  const data = interactionsAudioOf(response)
+  if (data === null) throw badResponse(WHO)
+  const bytes = Buffer.from(data, 'base64')
+  const wav = bytes.subarray(0, 4).toString('ascii') === 'RIFF' ? bytes : wavFromPcm(bytes, rateFromMime(''))
+  const audioPath = `${request.outputBasePath}.wav`
+  await writeFile(audioPath, wav)
+  const outputTokens = Math.round(wavDurationSec(wav) * GEMINI_TTS_TOKENS_PER_SEC)
+  return {
+    audioPath,
+    charTimes: null,
+    costUsd: deps.costOf({ model, outputTokens }),
+    record: { tool: 'gemini_api', model, voice: request.voiceName, outputTokens, outputTokensEstimated: true, endpoint: 'interactions' },
+    ...(style === '' ? {} : { sentStyle: style }),
+  }
+}
+
 export const createGeminiVoice = (
-  deps: GeminiDeps & { readonly costOf: (usage: { readonly model: string; readonly outputTokens: number }) => number },
+  deps: GeminiDeps & { readonly costOf: CostOf },
 ): VoiceAdapter => ({
   tool: 'gemini_api',
   models: GEMINI_TTS_MODELS,
@@ -109,17 +146,12 @@ export const createGeminiVoice = (
   speak: async (request: SpeakRequest): Promise<SpeakResult> => {
     const model = request.model ?? GEMINI_DEFAULT_TTS_MODEL
     const style = geminiStyleOf(request.styleNote, request.direction, request.speed)
+    if (isDesignedVoice(request.voiceName)) return speakDesigned(deps, request, model, style)
     const body = {
       contents: [{ role: 'user', parts: [{ text: request.text, ...(style === '' ? {} : { speech_metadata: { style } }) }] }],
       generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { voice: request.voiceName } } },
     }
-    const response = await requestJson(
-      deps.fetch,
-      WHO,
-      `${BASE}/${model}:generateContent`,
-      { method: 'POST', headers: headers(deps.apiKey), body: JSON.stringify(body), ...(request.signal === undefined ? {} : { signal: request.signal }) },
-      AudioResponse,
-    )
+    const response = await geminiPostJson(deps, `${BASE}/${model}:generateContent`, body, AudioResponse, request.signal)
     const audio = response.candidates[0]?.content.parts.find((part) => part.inlineData !== undefined)?.inlineData
     if (audio === undefined) throw badResponse(WHO)
     const bytes = Buffer.from(audio.data, 'base64')
