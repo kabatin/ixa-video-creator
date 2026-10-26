@@ -1,7 +1,7 @@
 import { listWorkspaces, pendingMigrations, readMigrationJournal } from '@ixa/db'
 import {
   composeSettingsOf,
-  composeUpCommand,
+  COMPOSE_UP_COMMAND,
   infraOwnerOf,
   infraSharedOf,
   type ComposeSettings,
@@ -52,7 +52,7 @@ export const ownerCheck = (owner: InfraOwner, shared: boolean): CheckResult => {
       }
 }
 
-const containerCheck = (id: string, label: string, state: ContainerState, reachable: boolean, compose: ComposeSettings): CheckResult => {
+const containerCheck = (id: string, label: string, state: ContainerState, reachable: boolean): CheckResult => {
   if (state === 'healthy') return { id, group: 'db', level: 'ok', message: `${label} のコンテナが動いています` }
   // Docker 以外（brew の postgres など）で動かしている人は、つながれば良い。
   if (reachable) return { id, group: 'db', level: 'ok', message: `${label} は Docker の外で動いています（つながる）` }
@@ -62,7 +62,7 @@ const containerCheck = (id: string, label: string, state: ContainerState, reacha
     group: 'db',
     level: state === 'starting' ? 'warn' : 'fail',
     message: `${label} のコンテナ${why}`,
-    fix: { hint: 'Docker で起動する', command: composeUpCommand(compose), needsHuman: false },
+    fix: { hint: 'Docker で起動する', command: COMPOSE_UP_COMMAND, needsHuman: false },
     docs: DOCS,
   }
 }
@@ -116,8 +116,8 @@ const workspaceCheck = (ids: readonly string[] | null, envId: string | null): Ch
 
 /** 判定（純粋）。 */
 export const judgeDb = (facts: DbFacts): readonly CheckResult[] => [
-  containerCheck('db.postgres-container', 'postgres', facts.postgresContainer, facts.postgres === true, facts.compose),
-  containerCheck('db.redis-container', 'redis', facts.redisContainer, facts.redis === true, facts.compose),
+  containerCheck('db.postgres-container', 'postgres', facts.postgresContainer, facts.postgres === true),
+  containerCheck('db.redis-container', 'redis', facts.redisContainer, facts.redis === true),
   ownerCheck(facts.owner, facts.shared),
   connectCheck('db.postgres', 'postgres', facts.postgres),
   connectCheck('db.redis', 'redis', facts.redis),

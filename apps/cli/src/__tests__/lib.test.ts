@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { parseCliArgs } from '../args.js'
 import {
   composeProblems,
+  composeDownArgs,
   composeSettingsOf,
-  composeUpCommand,
+  COMPOSE_UP_COMMAND,
   containerInfoOf,
   containerStateOf,
   infraOwnerOf,
@@ -11,6 +12,7 @@ import {
   portMismatches,
   publishersOf,
 } from '../lib/compose.js'
+import { paths } from '../lib/repo.js'
 import { appendEnvLine, envKeysOf, missingEnvKeys, parseEnvFile, webLocalOverrides } from '../lib/env-file.js'
 import { appendCodexSection, claudeAddCommand, codexHasIxa, codexTomlSection, shellQuote } from '../lib/mcp-config.js'
 import { compareVersions, latestVersionTag, majorOf, parseVersion } from '../lib/semver.js'
@@ -57,9 +59,10 @@ describe('semver', () => {
 })
 
 describe('compose', () => {
-  it('既定は pnpm infra:up と同じ名前', () => {
+  it('既定は今までの pnpm infra:up と同じ名前。直し方の 1 行は見張りを通る CLI の口', () => {
     expect(composeSettingsOf({})).toEqual({ project: 'infra', postgresContainer: 'ixa-postgres', redisContainer: 'ixa-redis' })
-    expect(composeUpCommand(composeSettingsOf({}))).toBe('pnpm infra:up')
+    expect(COMPOSE_UP_COMMAND).toBe('pnpm ixa infra up')
+    expect(composeDownArgs(composeSettingsOf({}), paths('/r'))).toEqual(['compose', '-p', 'infra', '--env-file', '/r/.env', '-f', '/r/infra/docker-compose.yml', 'down'])
   })
 
   it('2 つ目の clone は .env の名前', () => {
@@ -165,6 +168,13 @@ describe('parseCliArgs', () => {
     expect(() => parseCliArgs(['instal'])).toThrow('知らないコマンド')
     expect(() => parseCliArgs(['doctor', '--jsno'])).toThrow()
     expect(() => parseCliArgs(['update', '--from', 'latest'])).toThrow('0.8.0')
+  })
+
+  it('infra は up か down をとる（それ以外は止める）', () => {
+    expect(parseCliArgs(['infra', 'down'])).toMatchObject({ command: 'infra', action: 'down' })
+    expect(() => parseCliArgs(['infra'])).toThrow('up')
+    expect(() => parseCliArgs(['infra', 'restart'])).toThrow('up')
+    expect(() => parseCliArgs(['doctor', 'up'])).toThrow()
   })
 
   it('何も無ければ使い方', () => {

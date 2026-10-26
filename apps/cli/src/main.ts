@@ -1,5 +1,6 @@
 import { HELP, parseCliArgs } from './args.js'
 import { doctorCommand } from './commands/doctor.js'
+import { infraCommand } from './commands/infra.js'
 import { mcpCommand } from './commands/mcp.js'
 import { setupCommand } from './commands/setup.js'
 import { updateCommand } from './commands/update.js'
@@ -30,6 +31,8 @@ const main = async (): Promise<number> => {
       return updateCommand(system, repo, out, options)
     case 'mcp':
       return mcpCommand(system, repo, out, options)
+    case 'infra':
+      return infraCommand(system, repo, out, options)
   }
 }
 

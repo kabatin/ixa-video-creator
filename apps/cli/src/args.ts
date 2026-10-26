@@ -3,10 +3,13 @@ import { z } from 'zod'
 
 /** 引数を読む（純粋）。知らない引数は止める（打ち間違いを黙って無視しない）。 */
 
-export const COMMANDS = ['setup', 'doctor', 'update', 'mcp', 'help'] as const
+export const COMMANDS = ['setup', 'doctor', 'update', 'mcp', 'infra', 'help'] as const
+export const INFRA_ACTIONS = ['up', 'down'] as const
 
 const Options = z.object({
   command: z.enum(COMMANDS),
+  /** `infra` のときだけ。 */
+  action: z.enum(INFRA_ACTIONS).optional(),
   json: z.boolean(),
   yes: z.boolean(),
   force: z.boolean(),
@@ -31,6 +34,7 @@ export const HELP = `使い方: pnpm ixa <コマンド> [オプション]
   update   最新のリリースへ上げる。--main で main の先頭へ、--check で確かめるだけ、
            --force で「動いているジョブ」の確認を外す、--while-running で dev を動かしたまま進める
   mcp      Claude Code / Codex に MCP を登録する 1 行を出す。--claude / --codex、--write で実際に登録
+  infra    up | down。この clone の postgres・redis を起こす・止める（pnpm infra:up / infra:down もこれ。ボリュームは消さない）
 
   共通: --json で機械向けに出す（各項目に fix.command・fix.needsHuman・docs）
   手順書: INSTALL.md`
@@ -57,10 +61,15 @@ export const parseCliArgs = (argv: readonly string[]): Options => {
       help: { type: 'boolean', short: 'h', default: false },
     },
   })
-  if (positionals.length > 1) throw new Error(`コマンドは 1 つだけ書きます（${positionals.join(' ')}）`)
   const command = values.help ? 'help' : (positionals[0] ?? 'help')
+  const action = command === 'infra' ? positionals[1] : undefined
+  if (command === 'infra' && (positionals.length !== 2 || !INFRA_ACTIONS.some((a) => a === action))) {
+    throw new Error('infra の後には up か down を書きます（pnpm ixa infra up）')
+  }
+  if (command !== 'infra' && positionals.length > 1) throw new Error(`コマンドは 1 つだけ書きます（${positionals.join(' ')}）`)
   const parsed = Options.safeParse({
     command,
+    action,
     json: values.json,
     yes: values.yes,
     force: values.force,

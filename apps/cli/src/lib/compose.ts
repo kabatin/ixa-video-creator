@@ -68,11 +68,26 @@ export const composeUpArgs = (settings: ComposeSettings, repo: RepoPaths): reado
   '-d',
 ]
 
-/** 打てる形の 1 行（直し方に出す）。直下で打つ前提の相対パス。 */
-export const composeUpCommand = (settings: ComposeSettings): string =>
-  settings.project === 'infra'
-    ? 'pnpm infra:up'
-    : `docker compose -p ${settings.project} --env-file .env -f infra/docker-compose.yml up -d`
+/**
+ * `docker compose … down` の引数。**`-v` は決して付けない**（素材の DB とキューが消える）。
+ * プロジェクト名を渡すので、2 つ目の clone から 1 つ目の clone のスタックを止めることは無い。
+ */
+export const composeDownArgs = (settings: ComposeSettings, repo: RepoPaths): readonly string[] => [
+  'compose',
+  '-p',
+  settings.project,
+  '--env-file',
+  repo.env,
+  '-f',
+  repo.compose,
+  'down',
+]
+
+/**
+ * 打てる形の 1 行（直し方に出す）。名前・ポート・別の clone の見張りを通す CLI の口にする
+ * （docker compose を直に打たせると、見張りを素通りする）。
+ */
+export const COMPOSE_UP_COMMAND = 'pnpm ixa infra up'
 
 /** `docker inspect` の答え（`running|healthy|/path/infra`）を状態に読む。 */
 export type ContainerState = 'healthy' | 'starting' | 'unhealthy' | 'stopped' | 'missing'

@@ -92,7 +92,7 @@ describe('judgeDb（DB の判定）', () => {
     }
     const container = byId(judgeDb(facts), 'db.postgres-container')
     expect(container?.level).toBe('fail')
-    expect(container?.fix?.command).toContain('-p ixatest')
+    expect(container?.fix?.command).toBe('pnpm ixa infra up')
     expect(byId(judgeDb(facts), 'db.migrations')?.level).toBe('skip')
   })
 

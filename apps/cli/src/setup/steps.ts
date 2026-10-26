@@ -6,7 +6,7 @@ import {
   composeProblems,
   composeSettingsOf,
   composeUpArgs,
-  composeUpCommand,
+  COMPOSE_UP_COMMAND,
   type ComposeSettings,
   type ContainerState,
 } from '../lib/compose.js'
@@ -145,7 +145,7 @@ const composeUp = async (system: System, compose: ComposeSettings, repo: RepoPat
     id: 'infra',
     status: 'failed',
     message: `Docker で起動できませんでした（${detail}）`,
-    fix: { hint: 'Docker Desktop が動いているか、ポートが空いているかを見る', command: composeUpCommand(compose), needsHuman: false },
+    fix: { hint: 'Docker Desktop が動いているか、ポートが空いているかを見る', command: COMPOSE_UP_COMMAND, needsHuman: false },
     docs: 'INSTALL.md#docker',
   }
 }
