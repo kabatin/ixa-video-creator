@@ -36,6 +36,7 @@ import type { SpeakRequest, SpeakResult, VoiceAdapter } from '@ixa/provider-core
 import { createMemoryStorage, type ObjectStorage } from '@ixa/storage'
 import { aProject, createRecordingEvents, createRecordingMediaQueue, silentLogger } from '../../generation/__tests__/doubles.js'
 import type { DubProcessorDeps } from '../deps.js'
+import type { DubTranscriber } from '../transcriber.js'
 
 /**
  * 声の差し替えの通しのテストの道具。**実 ffmpeg** で、合成した音付きの動画と偽の読み上げを作る。
@@ -158,6 +159,8 @@ export const createDubWorld = async (input: {
   /** 前からある素材と Take（作品の複製で写したものなど。別の Shot・別の作品のもの）。 */
   readonly afterSpeak?: (world: { readonly dubJobs: ReturnType<typeof createInMemoryDubJobRepository> }) => AfterSpeak
   readonly seed?: { readonly assets?: readonly MediaAsset[]; readonly takes?: readonly Take[]; readonly ttsClips?: readonly TtsClip[] }
+  /** 文字起こし（既定は無し。apps/audio が止まっているときと同じ）。 */
+  readonly transcribe?: DubTranscriber | null
 }): Promise<DubWorld> => {
   const project = { ...aProject(), id: newId(ProjectId), workspaceId: newId(WorkspaceId) }
   const storage = createMemoryStorage()
@@ -219,6 +222,7 @@ export const createDubWorld = async (input: {
     mediaAssets,
     storage,
     voiceAdapter: (tool) => (tool === 'gemini_api' ? tts : null),
+    transcribe: input.transcribe ?? null,
     keyLabel: KEY_LABEL,
     mediaQueue,
     clipLock: createInMemoryProjectClipLock(timelineClips),

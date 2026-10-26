@@ -16,6 +16,7 @@ import { createVoiceAdapters } from '@ixa/provider-voice'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import type { DubProcessorDeps } from './dub/index.js'
+import { createAudioServiceTranscriber } from './dub/transcriber.js'
 import { audioAdapterOptions } from './voice-wiring.js'
 
 /**
@@ -40,6 +41,8 @@ export const createDubWiring = (input: {
   mediaAssets: createMediaAssetRepository(input.db),
   storage: input.storage,
   voiceAdapter: createVoiceAdapters(audioAdapterOptions(input.config)),
+  // 行の区間の文字起こし（apps/audio）。音は音楽の解析と同じ AUDIO_ROOT に置く（apps/audio と同じ場所を指すこと）。
+  transcribe: createAudioServiceTranscriber({ baseUrl: input.config.audio.url, audioRoot: process.env.AUDIO_ROOT ?? '/tmp/ixa-audio' }),
   keyLabel: input.config.voiceAi.geminiKeyLabel,
   mediaQueue: input.mediaQueue,
   clipLock: createProjectClipLock(input.db),

@@ -14,6 +14,7 @@ import type { VoiceAdapter } from '@ixa/provider-core'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import type { RecordTakeDeps } from '../generation/complete.js'
+import type { DubTranscriber } from './transcriber.js'
 
 /** 声の差し替え（ADR-0062 段 5b）の worker が使うもの。 */
 export type DubProcessorDeps = RecordTakeDeps & {
@@ -28,6 +29,8 @@ export type DubProcessorDeps = RecordTakeDeps & {
   readonly storage: ObjectStorage
   /** 声の AI ごとの口（`@ixa/provider-voice` の表）。口が無い AI は null。 */
   readonly voiceAdapter: (tool: VoiceToolId) => VoiceAdapter | null
+  /** 行の区間を決める文字起こし（apps/audio の faster-whisper）。無ければ null（読み上げの長さで決め、警告を残す）。 */
+  readonly transcribe: DubTranscriber | null
   /** 今の Gemini の鍵の名札（`GEMINI_KEY_LABEL`。秘密ではない）。未設定は null。 */
   readonly keyLabel: string | null
   /** 出来た Take の素材を測る口（大きさ・fps・話している区間）。 */

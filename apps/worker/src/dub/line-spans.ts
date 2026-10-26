@@ -9,6 +9,7 @@ import {
   type DubJobId,
   type LineSpan,
   type LineSpanWarning,
+  type LineTranscript,
   type Project,
 } from '@ixa/domain'
 import { SPEECH_FRAME, readPcm16k, rmsFramesFromPcm } from '@ixa/media'
@@ -18,7 +19,10 @@ import { lineLabel, type Speaker } from './plan.js'
 import { readAloud, ttsCacheKey, type ReadInJob } from './tts-cache.js'
 
 /**
- * 行の区間を、読み上げの長さで決める（ADR-0062）。区間を決める前に、手の区間の無い読み直す行の読み上げ
+ * 行の区間を決める（ADR-0062）。まず元の Take の音を文字起こしし（台本を寄せる手がかりに渡す）、その語で決める。
+ * 文字起こしの口が無い・失敗したときは、読み上げの長さで決め、その行に警告を残す（ログにも書く）。
+ *
+ * 読み上げの長さは、文字起こしの決め手と控えに使う。区間を決める前に、手の区間の無い読み直す行の読み上げ
  * （最初の読み方）を読み、その声の長さで割り当てる。どの割り当てでも 1.6 倍を超える行があれば、
  * その行だけ残りの読み方も読んで割り当て直し、それでも収まらなければ止める。
  *
@@ -92,6 +96,36 @@ const readLengths = async (input: {
   }
 }
 
+/** 台本（H3 が話した行。足す行は話していない）。 */
+export const scriptPrompt = (lines: readonly DialogueLine[]): string =>
+  lines
+    .filter((line) => line.dub?.added !== true)
+    .map((line) => line.text.trim())
+    .join(' ')
+
+/** 文字起こしの語。口が無い・失敗したなら null（理由はログに書く。語の中身・音の置き場は書かない）。 */
+const transcriptOf = async (input: {
+  readonly deps: DubProcessorDeps
+  readonly context: SpanContext
+  readonly lines: readonly DialogueLine[]
+  readonly sourcePcm: Int16Array
+}): Promise<LineTranscript> => {
+  const transcribe = input.deps.transcribe
+  if (transcribe === null) {
+    input.deps.logger.warn({ dubJobId: input.context.dubJobId }, '文字起こしの口が無いので、行の区間を読み上げの長さで決めます')
+    return null
+  }
+  try {
+    return await transcribe({ pcm: input.sourcePcm, key: input.context.dubJobId, prompt: scriptPrompt(input.lines) })
+  } catch (error) {
+    input.deps.logger.warn(
+      { dubJobId: input.context.dubJobId, err: error },
+      '文字起こしに失敗したので、行の区間を読み上げの長さで決めます（apps/audio が動いているか確かめてください）',
+    )
+    return null
+  }
+}
+
 /** 行の区間。決まらなければ、どの行かを言い、まとまった区間を文字数の比で割った案を付けて止める。 */
 export const assignLineSpans = async (input: {
   readonly deps: DubProcessorDeps
@@ -99,15 +133,18 @@ export const assignLineSpans = async (input: {
   readonly lines: readonly DialogueLine[]
   readonly speakers: ReadonlyMap<CharacterId, Speaker>
   readonly sourceChunks: readonly DubChunk[]
+  readonly sourcePcm: Int16Array
   readonly assertNotCancelled: () => Promise<void>
 }): Promise<AssignedSpans> => {
+  const transcript = await transcriptOf(input)
+  await input.assertNotCancelled()
   const targets = input.lines.flatMap((line, index) => (needsLength(line) ? [index] : []))
   const first = await readLengths({ ...input, only: targets, count: 1 })
   const context = { ...input.context, readInJob: first.readInJob }
-  const tried = assignLines(input.sourceChunks, input.lines, first.lengths)
+  const tried = assignLines(input.sourceChunks, input.lines, first.lengths, transcript)
   const retry = !tried.ok && tried.cause === 'no_fit' ? await readLengths({ ...input, context, only: tried.lineIndices, count: 3 }) : null
   const lengths = retry === null ? first.lengths : new Map([...first.lengths, ...retry.lengths])
-  const assigned = retry === null ? tried : assignLines(input.sourceChunks, input.lines, lengths)
+  const assigned = retry === null ? tried : assignLines(input.sourceChunks, input.lines, lengths, transcript)
   if (!assigned.ok) throw new DubFailure('lines_unassigned', assigned.reason, { suggestedSpans: assigned.suggestions })
   return {
     spans: new Map(assigned.spans.map((span) => [span.lineIndex, span])),

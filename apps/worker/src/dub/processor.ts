@@ -202,6 +202,7 @@ const run = async (deps: DubProcessorDeps, job: DubJob, workDir: string): Promis
     lines,
     speakers,
     sourceChunks: source.chunks,
+    sourcePcm: source.pcm,
     assertNotCancelled: () => assertNotCancelled(deps, job),
   })
   const spans = assigned.spans

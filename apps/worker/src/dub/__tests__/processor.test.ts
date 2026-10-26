@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { failInterruptedDubJob } from '../interrupted.js'
 import { UNEXPECTED_DUB_MESSAGE, processDubJob } from '../processor.js'
 import { CLICK_SOURCE_EXPR, createDubWorld, createWorkDir, line, makeSourceVideo, removeWorkDir } from './fixtures.js'
+import type { DubTranscriber } from '../transcriber.js'
 
 /**
  * 声の差し替えの通し（ADR-0062 段 5b）。偽の読み上げと **実 ffmpeg** で、合成した音付きの動画を差し替える。
@@ -172,6 +173,48 @@ describe('processDubJob（通し）', () => {
     expect(texts.slice(0, 2)).toEqual(['こんにちは、ネズミくん。', 'やあ。'])
     expect(new Set(texts).size).toBe(texts.length)
     expect((await world.dubJobs.findById(job.id))?.costUsd).toBeCloseTo(0.001 * texts.length, 6)
+  }, 60_000)
+
+  it('文字起こしの語があれば、それで行の区間を決める（台本を渡し、長さだけの割り当てとは違う区間になる）', async () => {
+    const asked: { prompt: string; samples: number }[] = []
+    const transcribe: DubTranscriber = (input) => {
+      asked.push({ prompt: input.prompt, samples: input.pcm.length })
+      return Promise.resolve([
+        { startSec: 0.0, endSec: 0.15, text: 'こんにちは' },
+        { startSec: 1.0, endSec: 1.7, text: 'ネズミくん' },
+        { startSec: 2.0, endSec: 2.6, text: 'やあ' },
+      ])
+    }
+    const world = await createDubWorld({ workDir: join(dir, 'transcribed'), video: clicked, transcribe })
+    const job = await world.newJob()
+    expect((await processDubJob(world.deps, { dubJobId: job.id })).state).toBe('succeeded')
+    expect(asked).toEqual([{ prompt: 'こんにちは、ネズミくん。 やあ。', samples: expect.any(Number) as number }])
+    expect(asked[0]?.samples).toBeGreaterThan(16000 * 2.5)
+    const record = (await world.dubJobs.findById(job.id))?.record
+    // 長さだけなら 1 行目は 1.0 秒から（上のテスト）。語の通りに 0 秒の区間から受け持つ。
+    expect(record?.lines[0]?.sourceStartSec).toBeCloseTo(0.0, 1)
+    expect(record?.lines[0]?.sourceEndSec).toBeCloseTo(1.7, 1)
+    expect(record?.lines[1]?.sourceStartSec).toBeCloseTo(2.0, 1)
+    expect(record?.lines.flatMap((l) => l.warnings.map((w) => w.code))).not.toContain('line_span_by_length')
+  }, 60_000)
+
+  it('文字起こしの口が無い・失敗したら、読み上げの長さで決めて通し、行ごとに警告を残す', async () => {
+    const down: DubTranscriber = () => Promise.reject(new Error('connect ECONNREFUSED 127.0.0.1:8100'))
+    for (const [name, transcribe] of [
+      ['no-transcriber', null],
+      ['transcriber-down', down],
+    ] as const) {
+      const world = await createDubWorld({ workDir: join(dir, name), video: clicked, transcribe })
+      const job = await world.newJob()
+      expect((await processDubJob(world.deps, { dubJobId: job.id })).state).toBe('succeeded')
+      const record = (await world.dubJobs.findById(job.id))?.record
+      expect(record?.lines[0]?.sourceStartSec).toBeCloseTo(1.0, 1)
+      for (const l of record?.lines ?? []) {
+        expect(l.warnings.map((w) => w.code)).toContain('line_span_by_length')
+      }
+      const message = record?.lines[0]?.warnings.find((w) => w.code === 'line_span_by_length')?.message
+      expect(message).toContain('文字起こしが使えなかった')
+    }
   }, 60_000)
 
   it('元の声のままの行は消さず読み直さない。記録の置いた時刻は元の区間', async () => {
