@@ -64,3 +64,11 @@ librosa のテンポ推定はオンセット包絡のフレーム解像度（約
 − downbeat / section を自前実装する工数が発生する（見積: 1〜2 日）。
 − ジャンルによっては自動 section 検出が弱い。
   → MV は 1 曲のみであり、手動補正で十分にカバーできる。
+
+## 追記: 文字起こし（ADR-0062）
+
+apps/audio に `POST /transcribe`（声の差し替えで行の区間を決める手がかり）を足し、faster-whisper を入れた。
+同じ「商用ライセンス上クリーン」の方針で確かめた: faster-whisper（MIT）・CTranslate2（MIT）・Whisper small の重み
+（OpenAI、MIT。`Systran/faster-whisper-small` はそれを変換したもの）・tokenizers / huggingface_hub（Apache-2.0）・
+onnxruntime（MIT。VAD 用で今は使わない）・PyAV（BSD-3。同梱の FFmpeg は LGPL の動的リンク。音は librosa で読むので使わない）。
+非商用のモデル・GPL の依存は無い。macOS x86_64 のホイールが無いので onnxruntime は 1.21 未満に固定した。

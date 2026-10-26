@@ -3,7 +3,7 @@
 BPM / ビート / ダウンビート / セクション境界 / エネルギー / オンセット / ドロップ、
 および UI 描画用の波形ピークを返す HTTP サービス。
 
-**使用ライブラリは librosa（ISC）のみ。** madmom / essentia / allin1 は非商用ライセンスの
+**解析に使うのは librosa（ISC）のみ。** 声の差し替え用の文字起こしは faster-whisper（MIT）。 madmom / essentia / allin1 は非商用ライセンスの
 学習済みモデルに依存するため使用しない（`docs/adr/0009-music-analysis-librosa.md`）。
 
 ## 必要なもの
@@ -48,6 +48,19 @@ curl -X POST localhost:8100/analyze \
 音声ファイルそのものは受け取らず**パスだけ**を受け取る（同一ホストで動く前提。
 大きな音声を HTTP に乗せない）。`audio_path` は `AUDIO_ROOT` からの相対パス、
 または `AUDIO_ROOT` 配下の絶対パス。
+
+### 文字起こし（ADR-0062）
+
+```bash
+curl -X POST localhost:8100/transcribe \
+  -H 'content-type: application/json' \
+  -d '{"audio_path": "dub-x/source.wav", "language": "ja", "initial_prompt": "台本", "word_timestamps": true}'
+# {"model":"small","language":"ja","segments":[{"start":..,"end":..,"text":..,"words":[{"start":..,"end":..,"text":..}]}]}
+```
+
+faster-whisper（MIT）の `small`（int8・CPU）。最初の呼び出しでモデルを 1 度だけ読む（数十秒）。
+Hugging Face のキャッシュに無ければ取りに行く。`AUDIO_WHISPER_MODEL` で差し替えられる。読めなければ 503。
+実モデルのテストは `RUN_WHISPER_TESTS=1 uv run pytest tests/test_transcribe.py`。
 
 | 状況 | ステータス |
 |---|---|

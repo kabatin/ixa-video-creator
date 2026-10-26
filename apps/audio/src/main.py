@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+from typing import Literal
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -16,6 +17,14 @@ from .analyzer import analyze
 from .errors import AudioError, AudioFileNotFoundError, PathNotAllowedError
 from .models import AnalyzeResponse, WaveformBands
 from .paths import resolve_audio_path
+from .transcribe import (
+    TranscribeResponse,
+    Transcriber,
+    TranscriberUnavailableError,
+    TranscriptionFailedError,
+    create_whisper_transcriber,
+    model_name,
+)
 from .waveform import DEFAULT_BUCKETS, compute_waveform_v2
 
 DEFAULT_PORT = 8100
@@ -28,13 +37,26 @@ class AnalyzeRequest(BaseModel):
     audio_path: str = Field(min_length=1)
 
 
+class TranscribeRequest(BaseModel):
+    """文字起こしの対象。パスの扱いは `/analyze` と同じ。`initial_prompt` は台本（語の綴りを寄せる）。"""
+
+    audio_path: str = Field(min_length=1)
+    language: Literal["ja"] = "ja"
+    initial_prompt: str | None = Field(default=None, max_length=2000)
+    word_timestamps: bool = True
+
+
 class HealthResponse(BaseModel):
     status: str
 
 
-def create_app() -> FastAPI:
-    """アプリを組み立てる。import 時に副作用を起こさないよう関数に閉じる（CLAUDE.md §7b）。"""
+def create_app(transcriber: Transcriber | None = None) -> FastAPI:
+    """アプリを組み立てる。import 時に副作用を起こさないよう関数に閉じる（CLAUDE.md §7b）。
+
+    `transcriber` はテストで差し替える。既定の faster-whisper はモデルを最初の `/transcribe` で読む。
+    """
     app = FastAPI(title="iXA Audio Analysis", version="0.1.0")
+    transcribe = transcriber if transcriber is not None else create_whisper_transcriber()
 
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
@@ -65,6 +87,28 @@ def create_app() -> FastAPI:
             rms=wave.rms,
             bands=WaveformBands(low=wave.low, mid=wave.mid, high=wave.high),
         )
+
+    @app.post("/transcribe", response_model=TranscribeResponse)
+    def transcribe_endpoint(request: TranscribeRequest) -> TranscribeResponse:
+        try:
+            path = resolve_audio_path(request.audio_path)
+        except PathNotAllowedError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except AudioFileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        try:
+            segments = transcribe(
+                str(path),
+                language=request.language,
+                initial_prompt=request.initial_prompt,
+                word_timestamps=request.word_timestamps,
+            )
+        except TranscriberUnavailableError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except TranscriptionFailedError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return TranscribeResponse(model=model_name(), language=request.language, segments=segments)
 
     return app
 

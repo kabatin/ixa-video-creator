@@ -1,7 +1,7 @@
 [project]
 name = "ixa-audio"
 version = "0.1.0"
-description = "iXA 音楽解析サービス（librosa / ISC ライセンスのみを使用。ADR-0009）"
+description = "iXA 音楽解析・文字起こしサービス（librosa ISC・faster-whisper MIT。ADR-0009）"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.115.0",
@@ -15,6 +15,8 @@ dependencies = [
     # librosa の numba 依存は間接的なので、ここで上限を与えて解決を誘導する。
     "numba>=0.62,<0.63",
     "llvmlite>=0.45,<0.46",
+    "faster-whisper>=1.1.0",
+    "onnxruntime>=1.19,<1.21",
 ]
 
 [dependency-groups]
