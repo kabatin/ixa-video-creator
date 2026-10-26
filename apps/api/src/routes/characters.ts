@@ -1,7 +1,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type {
   CharacterLookRepository, CharacterRepository, EditTransaction, MediaAssetRepository, ProjectRepository,
-  ShotCharacterRepository, ShotRepository,
+  ShotCharacterRepository, ShotRepository, VoiceProfileRepository,
 } from '@ixa/db'
 import {
   Character as CharacterSchema,
@@ -17,6 +17,7 @@ import {
   type Shot,
   type ShotCharacter,
   type ShotId,
+  type VoiceProfileId,
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
 import {
@@ -52,9 +53,15 @@ export { LookImageResponse, LookResponse } from './character-looks.js'
  * プロジェクトとワークスペースは本文に入れない。プロジェクトは経路が持ち、ワークスペースはそのプロジェクトから引く
  * （キャラクターはプロジェクトごと。ADR-0034）。正が 2 つになるのを避ける。
  */
-const CreateCharacterBody = CreateCharacterInputSchema.omit({ workspaceId: true, projectId: true }).openapi(
-  'CreateCharacterInput',
-)
+const CreateCharacterBody = CreateCharacterInputSchema.omit({
+  workspaceId: true,
+  projectId: true,
+  // セリフの声（ADR-0062）は作った後に、その人の声から選ぶ（作る前には声が無い）。
+  dialogueVoiceProfileId: true,
+  dialogueLevelDb: true,
+}).openapi('CreateCharacterInput')
+
+export const FOREIGN_DIALOGUE_VOICE_MESSAGE = 'この作品の声ではありません（セリフの声は同じ作品の声から選んでください）'
 const UpdateCharacterBody = UpdateCharacterPatchSchema.openapi('UpdateCharacterPatch')
 
 const pathId = <T extends z.ZodTypeAny>(schema: T) =>
@@ -125,6 +132,22 @@ export type CharacterRoutesDeps = {
   projects: Pick<ProjectRepository, 'findById'>
   /** 作る・直す・消すの記録と書き込みを、同じトランザクションで行う（取り消し。2026-10-19）。**省けない。** */
   transaction: EditTransaction
+  /**
+   * セリフの声（ADR-0062）が同じ作品の声かを確かめる。声とナレーションを繋いでいない環境では無く、
+   * そのときセリフの声は選べない（確かめられない値を通さない）。
+   */
+  voices?: Pick<VoiceProfileRepository, 'findById'>
+}
+
+/** セリフの声が、同じ作品の生きている声か。確かめられなければ断る。 */
+const dialogueVoiceProblem = async (
+  deps: Pick<CharacterRoutesDeps, 'voices'>,
+  character: Character,
+  voiceId: VoiceProfileId | null | undefined,
+): Promise<FieldErrors | null> => {
+  if (voiceId === undefined || voiceId === null) return null
+  const voice = deps.voices === undefined ? null : await deps.voices.findById(voiceId)
+  return voice !== null && voice.projectId === character.projectId ? null : { dialogueVoiceProfileId: [FOREIGN_DIALOGUE_VOICE_MESSAGE] }
 }
 
 export const characterRoutes = (deps: CharacterRoutesDeps) =>
@@ -159,6 +182,8 @@ export const characterRoutes = (deps: CharacterRoutesDeps) =>
       const current = await deps.characters.findById(id)
       if (current === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
       const patch = c.req.valid('json')
+      const voiceProblem = await dialogueVoiceProblem(deps, current, patch.dialogueVoiceProfileId)
+      if (voiceProblem !== null) return c.json(fail(VALIDATION_ERROR_MESSAGE, voiceProblem), 422)
       const before = changedBefore(current, patch)
       const updated = await deps.transaction(async (tx) => {
         if (before !== null) {

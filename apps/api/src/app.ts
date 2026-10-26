@@ -62,9 +62,10 @@ import { uploadRoutes, type MediaIngestDeps } from './routes/uploads.js'
 import { shotCompareRoutes } from './routes/shot-compare.js'
 import { beatAlignmentRoutes, loadTimelineDocument, roughCutRoutes, timelineRoutes } from './routes/timeline.js'
 import { renderRoutes, type RenderQueue } from './routes/renders.js'
-import { assetFolderRoutes } from './routes/asset-folder.js'
-import { renderFolderRoutes } from './routes/render-folder.js'
 import type { RenderFolderDeps } from './render-folder/render-folder.js'
+import { renderFolderRouter } from './render-folder/mount.js'
+import type { DubRoutesDeps } from './dub/deps.js'
+import { dubRouter } from './dub/mount.js'
 
 /** 書き出しフォルダの場所と開く口。リポジトリ・ストレージは app が持っているものを使う。 */
 export type RenderFolderPlace = Pick<RenderFolderDeps, 'rootDir' | 'homeDir' | 'timeZone' | 'opener'>
@@ -218,6 +219,8 @@ export type AppDeps = {
   sfxGeneration?: SfxGenerationDeps
   /** 手元のファイルから取り込んだ効果音（ADR-0056）。無ければ口を置かない（テストの多くは要らない）。 */
   uploadedSfx?: UploadedSfxRoutesDeps['uploadedSfx']
+  /** 声の差し替え（ADR-0062）。無ければ口を置かない（テストの多くは要らない）。 */
+  dub?: Pick<DubRoutesDeps, 'dubJobs' | 'dubQueue' | 'voices' | 'voiceDesign'>
   /** Take の動きの分析（ADR-0054）。無ければ口を置かず、効果音の案は動きを見ない（テストの多くは要らない）。 */
   motion?: {
     readonly analyses: MotionAnalysisDeps['analyses'] & Pick<TakeMotionAnalysisRepository, 'create'>
@@ -525,8 +528,13 @@ export const createApp = (deps: AppDeps) => {
       mediaAssets,
       projects: deps.projects,
       transaction: deps.editTransaction,
+      // セリフの声（ADR-0062）が同じ作品の声かを確かめる。
+      ...(deps.narration === undefined ? {} : { voices: deps.narration.voices }),
     }),
   )
+  if (deps.dub !== undefined) {
+    app.route('/', dubRouter({ ...deps.dub, projects, shots: deps.shots, takes: deps.takes, mediaAssets, characters: deps.characters, storage, logger }))
+  }
   app.route(
     '/',
     shotCharacterRoutes({
@@ -773,41 +781,9 @@ export const createApp = (deps: AppDeps) => {
       }),
     )
   }
-  if (deps.renderFolder !== undefined) {
-    app.route(
-      '/',
-      renderFolderRoutes({
-        ...deps.renderFolder,
-        projects,
-        renderJobs: deps.renderJobs,
-        ...(deps.thumbnails === undefined ? {} : { thumbnails: deps.thumbnails.repository }),
-        mediaAssets,
-        storage,
-        logger,
-      }),
-    )
-    /**
-     * 作った素材のフォルダ（ADR-0041）。**手元のファイルがあるときだけ置く。**
-     * ハードリンクを張るので、置き場が `s3`（`deps.files` が無い）なら張るものが無い。
-     */
-    if (deps.files !== undefined) {
-      app.route(
-        '/',
-        assetFolderRoutes({
-          rootDir: deps.renderFolder.rootDir,
-          homeDir: deps.renderFolder.homeDir,
-          opener: deps.renderFolder.opener,
-          projects,
-          shots: deps.shots,
-          takes: deps.takes,
-          shotReferences: deps.shotReferences,
-          mediaAssets,
-          storage: deps.files.storage,
-          logger,
-        }),
-      )
-    }
-  }
+  // 書き出しフォルダと作った素材のフォルダ（ADR-0036・0041）。場所があるときだけ。
+  const folders = renderFolderRouter(deps)
+  if (folders !== null) app.route('/', folders)
 
   registerOpenApiDocument(app)
   registerErrorHandlers(app, logger)

@@ -71,6 +71,7 @@ import {
 import { continuityFrameKey, createStorage } from '@ixa/storage'
 import type { FileRoutesDeps } from './routes/files.js'
 import { Queue } from 'bullmq'
+import { createDubWiring } from './dub/wiring.js'
 import IORedis from 'ioredis'
 import { createRedisProjectEvents } from '@ixa/events'
 import { createAiWiring } from './ai/ai-wiring.js'
@@ -372,9 +373,12 @@ export const main = (): void => {
     textTool: async () => (await ai.current()).text,
     logger,
   })
+  // 声の差し替え（ADR-0062）。差し替えるのは worker の dub キュー。
+  const dub = createDubWiring({ config, db, connection })
   const app = createApp({
     auth,
     agent,
+    dub: dub.deps,
     narration: {
       projects: projectRepository,
       voices: createVoiceProfileRepository(db),
@@ -585,6 +589,7 @@ export const main = (): void => {
 
     registerShutdownHandlers(server, db, generationQueue, logger, async () => {
       await agent.service.shutdown()
+      await dub.close()
       await projectEvents.close()
     })
   }

@@ -62,6 +62,8 @@ export const copyCharacter = async (
     // 話し手の番号は写した先の作品で振り直す（作品の中で作った順）。
     speechName: source.speechName,
     voiceDescription: source.voiceDescription,
+    // 距離の既定（ADR-0062）は写す。セリフの声は元の作品の声を指すので写さない（写した先で選び直す）。
+    dialogueLevelDb: source.dialogueLevelDb,
   })
   for (const image of await deps.characters.listIdentityImages(source.id)) {
     await deps.characters.addIdentityImage({
