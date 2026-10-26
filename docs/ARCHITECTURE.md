@@ -898,6 +898,8 @@ Stage 2: コンポジット（Remotion）
    ▼
 Stage 3: 音声ミックス（FFmpeg）
    MUSIC + SFX + 素材音声をミックス、ラウドネス正規化（-14 LUFS 目安）
+   採用 Take の音は、鳴らす Shot（Take に音があり消音していない）だけ混ぜる（ADR-0060）
+   仕上げは作品ごと: 全体をそろえる（loudnorm）か、山だけ -1.5 dBFS で抑える（peak。セリフのある作品の既定）
    ▼
 Stage 4: 最終エンコード（FFmpeg）
    プリセット別に H.264/H.265 + AAC、faststart、カラースペース指定
@@ -1032,7 +1034,7 @@ PostgreSQL 16 + Drizzle（ADR-0007）。
 
 ```
 workspaces
-projects
+projects                     (mastering_mode: 書き出しの仕上げ。null は自動 / ADR-0060)
 media_assets                 (checksum_sha256 に UNIQUE 部分インデックス)
 characters                   ((project_id, speaker_no) に UNIQUE。話し手の番号は消しても詰めない / ADR-0059)
 character_identity_images
@@ -1050,7 +1052,7 @@ uploaded_sfx_sounds          (手元のファイルから取り込んだ効果�
 scripts
 script_versions
 sequences
-shots                        (project_id, order) に複合インデックス。JSONB: dialogue（セリフの行 / ADR-0059）
+shots                        (project_id, order) に複合インデックス。JSONB: dialogue（セリフの行 / ADR-0059）。take_audio_volume・take_audio_muted（Take の音 / ADR-0060）
 shot_characters
 shot_references
 transitions
@@ -1070,7 +1072,7 @@ review_findings
 storyboard_draft_runs        (絵コンテ下書きの実行 1 回分)
 storyboard_draft_items       (Shot ごとの案。中身は追記のみ。動くのは adopted_at だけ)
 shot_edit_batches            (一括編集の記録と取り消し。中身は追記のみ。動くのは undone_at だけ)
-render_jobs                  (JSONB: timeline_snapshot)
+render_jobs                  (JSONB: timeline_snapshot。mastering_mode: 投入の時点の仕上げ / ADR-0060)
 thumbnails                   (YouTube のサムネイルの書き出し。JSONB: spec（署名付き URL は持たない）。追記のみ / ADR-0051)
 ai_settings                  (使う AI。この環境に 1 行だけ。無ければ環境変数が初期値 / ADR-0032)
 voice_profiles               (声。ナレーター・キャラクターの声 / ADR-0038)

@@ -122,6 +122,8 @@ type Project = {
   styleGuide: string               // ルック。全 Shot の prompt の末尾に注入される共通スタイル記述
   avoid: string                    // 避けたいもの。Shot の絵の指示と AI の下書きにだけ入る（映像モデルは否定指定を受けない）
   styleReferenceAssetIds: MediaAssetId[]  // 手本画像（3 枚まで）。全 Shot の生成に参照 style として添える
+  // 書き出しの仕上げの音量（ADR-0060）。null は制作者がまだ選んでいない（自動）
+  masteringMode: 'loudnorm' | 'peak' | null
   status: 'planning' | 'production' | 'review' | 'finalizing' | 'done'
   createdAt: Date
   updatedAt: Date
@@ -416,6 +418,10 @@ type Shot = {
   camera: ShotCamera
   mood: string | null
 
+  // 採用 Take の音（ADR-0060）。鳴るのは Take に音があり、消音していないときだけ
+  takeAudioVolume: number           // 0〜2。1 がそのまま
+  takeAudioMuted: boolean           // 新しい Shot は false。前からある Shot はマイグレーション 0057 で true
+
   // 場所。ひと続きのカットなので 1 つだけ持つ（ADR-0015）
   locationId: LocationId | null
 
@@ -505,6 +511,14 @@ type DialogueLine = {
 
 - 1 Shot 20 行まで（止める上限）。5 行以上は「長すぎます」と警告するだけで止めない。
 - 話し手に英語の呼び名か声の説明が無いと、Take を作る前に止める。
+
+### 書き出しの仕上げの音量（ADR-0060）
+
+- `loudnorm`: 全体を -14 LUFS・トゥルーピーク -1.5 dBTP にそろえる（ADR-0039。曲だけの MV 向け）。
+- `peak`: -1.5 dBFS を超える山だけ抑える。全体の大きさは測って記録するだけ（Take の声と曲の釣り合いを残す）。
+- 作品が選んでいなければ（`null`）、**セリフのある Shot が 1 つでもあれば `peak`、無ければ `loudnorm`**
+  （`resolveMasteringMode`）。制作者が選べば、その値を保存し、以後はセリフの有無で切り替えない。
+- 書き出しのジョブは、投入の時点で決めた仕上げを `RenderJob.masteringMode` に控える。
 
 ### Shot と Character / Look
 
@@ -831,7 +845,10 @@ type TimelineDocument = {
   fps: number
   resolution: Resolution
   durationSec: Seconds
-  video1: Array<{ shotId: ShotId; startSec; durationSec; mediaUrl: string; inSec: Seconds }>
+  video1: Array<{
+    shotId: ShotId; startSec; durationSec; mediaUrl: string; inSec: Seconds
+    audio?: { volume: number }  // 採用 Take の音を鳴らす Shot だけ（Take に音があり消音していない。ADR-0060）
+  }>
   transitions: Transition[]
   clips: TimelineClip[]
   audio: Array<{
@@ -979,8 +996,9 @@ type RenderJob = {
   progress: number                     // 0..1
   outputAssetId: MediaAssetId | null
   error: string | null
-  normalizeLoudness: boolean           // 書き出しの音量を -14 LUFS に揃えるか（既定 true。ADR-0039）
-  loudnessLufs: number | null          // 揃えた後に測った大きさ。揃えていない・音が無ければ null
+  normalizeLoudness: boolean           // 書き出しの音量を仕上げるか（既定 true。ADR-0039）
+  masteringMode: 'loudnorm' | 'peak'   // 仕上げ方（ADR-0060）。投入の時点の作品の設定から決めて控える
+  loudnessLufs: number | null          // 仕上げた後に測った大きさ。仕上げていない・音が無ければ null
   createdAt: Date
   finishedAt: Date | null
 }
