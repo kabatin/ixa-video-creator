@@ -129,9 +129,11 @@ export const dialogueTelopClips = (input: DialogueTelopInput): readonly CreateTi
       const span = spans[lineIndex]
       if (span === undefined) return []
       const before = carried.get(keyOf(entry.shot.id, lineIndex))
+      // 短い区間は最短の尺まで延ばすが、次の行の頭と Shot の終わりは越えない（同じ層 2 で重ねない）。
+      const limit = Math.min(spans[lineIndex + 1]?.offsetSec ?? entry.shot.durationSec, entry.shot.durationSec)
       const auto = {
         startSec: round3(entry.shot.startSec + span.offsetSec),
-        durationSec: Math.max(span.durationSec, MIN_TEXT_CLIP_DURATION_SEC),
+        durationSec: round3(Math.max(span.durationSec, Math.min(MIN_TEXT_CLIP_DURATION_SEC, limit - span.offsetSec))),
       }
       const kept = before !== undefined && handEdited(before)
       const time = kept ? { startSec: before.clip.startSec, durationSec: before.clip.durationSec } : auto

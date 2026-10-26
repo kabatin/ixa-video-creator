@@ -138,6 +138,21 @@ describe('dialogueTelopClips', () => {
     expect(next?.content).toMatchObject({ templateKey: 'lower_third', params: { style: { color: '#FFD100' }, styleId } })
   })
 
+  it('短い区間は最短の尺まで延ばすが、次の行の頭と Shot の終わりは越えない（層 2 で重ねない）', () => {
+    const shot = aShot(
+      { durationSec: 2 },
+      { speech: [{ startSec: 0.2, endSec: 0.4 }, { startSec: 0.5, endSec: 0.6 }, { startSec: 1.8, endSec: 1.9 }] },
+    )
+    const three = { ...shot, shot: { ...shot.shot, dialogue: [line('あ'), line('い'), line('う')] } }
+    const clips = dialogueTelopClips({ projectId: PROJECT, shots: [three], existing: [] })
+    // 1 行目は 0.5（次の行の頭）まで、2 行目は最短の 0.5 秒、3 行目は Shot の終わり（12）まで。
+    expect(spansOf(clips)).toEqual([
+      [10.2, 0.3],
+      [10.5, 0.5],
+      [11.8, 0.2],
+    ])
+  })
+
   it('テロップに入らない長いセリフは、入る長さで切って「…」を付ける', () => {
     const long = 'あ'.repeat(150)
     const [clip] = dialogueTelopClips({ projectId: PROJECT, shots: [aShot({ dialogue: [line(long)] })], existing: [] })
