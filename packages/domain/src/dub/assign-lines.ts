@@ -1,5 +1,5 @@
 import { ASSIGN_AMBIGUITY_MARGIN, assignByLength, type LengthLine } from './assign-by-length.js'
-import { DUB_MAX_TEMPO, DUB_MIN_TEMPO } from './chunk-tempo.js'
+import { DUB_MAX_TEMPO } from './chunk-tempo.js'
 import type { DialogueDub } from './dialogue-dub.js'
 import type { DubWarning } from './dub-record.js'
 import { mergeChunksTo, spanOf, type ChunkGroup } from './pair-chunks.js'
@@ -11,7 +11,7 @@ import type { DubChunk } from './speech-chunks.js'
  * - 足す行（`added`）は数えない（H3 は話していない）
  * - 行の手の区間（`startSec`/`endSec`）があればそれを使う。その区間に掛かる声の区間は他の行に回さない
  * - 読み上げの長さ（`ttsSec`）があれば、残りの行に続いた区間の並びを、読み上げの長さに合うように割り当てる
- *   （`assignByLength`。クリック・環境音の区間は飛ばす）。どの割り当てでも 0.8〜1.6 倍に収まらなければ止める。
+ *   （`assignByLength`。クリック・環境音の区間は飛ばす）。どの割り当てでも 1.6 倍を超えるなら止める（0.8 倍未満は止めない）。
  *   次に良い割り当てとほとんど差が無ければ、良い方を使い、その行に迷いの警告を付ける
  * - 読み上げの長さが無い並びは、残りの声の区間を、すき間の短い所からつないで行の数にそろえて順に割り当てる
  * - 区間が行より少なければ、理由を付けて止める（手の区間を入れてもらう）
@@ -118,7 +118,7 @@ const shortageReason = (lines: readonly SpokenLine[], found: number): string =>
 
 const misfitReason = (lines: readonly SpokenLine[]): string =>
   `セリフの ${lineNumbers(lines)} 行目に、読み上げの長さに合う元の声の区間が見つかりません` +
-  `（どの区間に割り当てても、どの読み方でも ${String(DUB_MIN_TEMPO)}〜${String(DUB_MAX_TEMPO)} 倍の伸び縮みに収まりません）。` +
+  `（どの区間に割り当てても、どの読み方でも ${String(DUB_MAX_TEMPO)} 倍を超えて縮める必要があります）。` +
   '読み方の指示を直すか、行ごとに「行の区間」を入れてください'
 
 const ambiguousWarning = (lineIndex: number): LineSpanWarning => ({

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { assignLines } from '../dub/assign-lines.js'
+import { planLipPair } from '../dub/chunk-tempo.js'
 
 /**
  * 行の区間を、読み上げの長さで決める（ADR-0062）。行の順は変えず、声の区間の続いた並びを 1 行に割り当て、
@@ -62,7 +63,7 @@ describe('assignLines（読み上げの長さで割り当てる）', () => {
     expect(spansOf(result)).toEqual([[0, 1.0, 1.87, 'chunks']])
   })
 
-  it('どの読み方でも 0.8〜1.6 倍に収まらなければ、どの行かを言い、手の区間の案を付けて止める', () => {
+  it('どの読み方でも 1.6 倍を超えるなら、どの行かを言い、手の区間の案を付けて止める', () => {
     const result = assignLines([c(0.0, 0.15), c(1.0, 1.3)], [{ text: 'あいうえお' }], tts([[0, [1.4, 2.0]]]))
     expect(result.ok).toBe(false)
     if (result.ok) return
@@ -82,6 +83,18 @@ describe('assignLines（読み上げの長さで割り当てる）', () => {
   it('同じ声の続きの短い区間は、飛ばすより行に含める', () => {
     const result = assignLines([c(0.0, 0.9), c(0.95, 1.15)], [{ text: 'あ' }], tts([[0, [1.0]]]))
     expect(spansOf(result)).toEqual([[0, 0.0, 1.15, 'chunks']])
+  })
+
+  it('H3 がゆっくり話した行（0.8 倍未満）も割り当て、倍率は 0.8 に丸めて警告する（前と同じ）', () => {
+    const result = assignLines([c(0.0, 0.15), c(1.0, 2.0)], [{ text: 'あ' }], tts([[0, [0.5]]]))
+    expect(spansOf(result)).toEqual([[0, 1.0, 2.0, 'chunks']])
+    // 置く段の倍率（読み上げ 0.5 秒 ÷ 元の声 1.0 秒）は 0.8 に丸め、警告を付ける。
+    const plan = planLipPair(
+      { tts: [c(0.2, 0.7)], source: c(1.0, 2.0) },
+      { ttsDurationSec: 0.9, nextSourceStartSec: null, shotDurationSec: 3 },
+    )
+    expect(plan.ok && plan.tempo).toBe(0.8)
+    expect(plan.ok && plan.warnings.map((w) => w.code)).toEqual(['slow_tempo_clamped'])
   })
 
   it('どれか 1 つの読み方で収まれば、それで割り当てる', () => {

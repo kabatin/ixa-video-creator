@@ -1,4 +1,4 @@
-import { DUB_MAX_TEMPO, DUB_MIN_TEMPO } from './chunk-tempo.js'
+import { DUB_MAX_TEMPO } from './chunk-tempo.js'
 import type { DubChunk } from './speech-chunks.js'
 
 /**
@@ -8,7 +8,8 @@ import type { DubChunk } from './speech-chunks.js'
  * - 行の前・間・後ろの区間は飛ばしてよい（クリック・環境音）
  * - 費用 = Σ|log(元の声の長さ ÷ 読み上げの長さ)| + 飛ばした声の長さ × 小さな重み + 行の中の途切れ × 重み
  *   + 0.25 秒未満の並び（読み上げがそれほど短くないとき）
- * - 口に合わせる行は、どの読み方でも 0.8〜1.6 倍に収まらない並びを外れ（大きな費用）とする
+ * - 口に合わせる行は、どの読み方でも 1.6 倍を超える並びを外れ（大きな費用）とする。0.8 倍未満は外れにしない
+ *   （H3 がゆっくり話した行。置く段で 0.8 倍に丸めて警告する。前と同じ）
  * - 一番良い割り当てと次に良い割り当てを動的計画法で求める（迷いの警告に使う）
  *
  * 文字起こし（faster-whisper）の語の時刻は、実の H3 の Take で 1 行目を 1.04〜4.76 秒と大きく外したので使わない。
@@ -18,7 +19,7 @@ export type LengthLine = {
   readonly lineIndex: number
   /** 読み上げの声の長さ（読み方ごと）。無い行（元の声のままの行）は長さを比べない。 */
   readonly ttsSec: readonly number[] | null
-  /** 口に合わせる行か（0.8〜1.6 倍に収まることを求める）。 */
+  /** 口に合わせる行か（1.6 倍以下に収まることを求める）。 */
   readonly lip: boolean
 }
 
@@ -38,13 +39,14 @@ const EPS = 1e-9
 export type LengthAssignment = {
   readonly cost: number
   readonly runs: readonly (readonly [number, number])[]
-  /** 0.8〜1.6 倍に収まらない行（`lineIndex`）。 */
+  /** 1.6 倍以下に収まらない行（`lineIndex`）。 */
   readonly misfits: readonly number[]
 }
 
 const durationOf = (chunk: DubChunk | undefined): number => (chunk === undefined ? 0 : chunk.endSec - chunk.startSec)
 
-const fits = (ratio: number): boolean => ratio >= DUB_MIN_TEMPO - EPS && ratio <= DUB_MAX_TEMPO + EPS
+/** 0.8 倍未満は収まるとみなす（置く段で 0.8 に丸める）。 */
+const fits = (ratio: number): boolean => ratio <= DUB_MAX_TEMPO + EPS
 
 type RunCost = { readonly cost: number; readonly misfit: boolean }
 
