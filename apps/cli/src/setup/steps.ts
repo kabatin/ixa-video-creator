@@ -3,6 +3,7 @@ import { applyMigrations, ensureDefaultWorkspace, fillEmptyEnvValue, listWorkspa
 import { FOREIGN_INFRA_FIX, inspectContainer } from '../checks/db.js'
 import { gatherTools, judgeTools } from '../checks/tools.js'
 import {
+  composeProblems,
   composeSettingsOf,
   composeUpArgs,
   composeUpCommand,
@@ -100,7 +101,7 @@ export const signingSecretStep = async ({ system, repo }: SetupContext): Promise
 
 /** 4. 設定の検査。人が決める問題（課金の鍵など）が残っていれば止まる。 */
 export const envValidStep = (env: EnvValues): StepResult => {
-  const problems = configProblems(env)
+  const problems = [...configProblems(env), ...composeProblems(env)]
   return problems.length === 0
     ? { id: 'env.valid', status: 'already', message: '設定の検査を通りました' }
     : {
@@ -170,6 +171,11 @@ const composeUp = async (system: System, compose: ComposeSettings, repo: RepoPat
 /** 5. postgres・redis を Docker で起動し、使えるまで待つ。 */
 export const infraStep = async ({ system, repo }: SetupContext, env: EnvValues): Promise<StepResult> => {
   const id = 'infra'
+  // update の 2 段目は設定の検査を通らずにここへ来るので、名前の形はここでも止める。
+  const badNames = composeProblems(env)
+  if (badNames.length > 0) {
+    return { id, status: 'needs_human', message: `Docker の名前の設定に問題があります: ${badNames.join(' / ')}`, fix: FOREIGN_INFRA_FIX, docs: 'INSTALL.md#2-つ目の-clone' }
+  }
   const compose = composeSettingsOf(env)
   const foreign = await foreignInfra(system, compose, repo, env)
   if (foreign !== null) return foreign

@@ -1,4 +1,5 @@
 import { configProblems } from '@ixa/config'
+import { composeProblems } from '../lib/compose.js'
 import { missingEnvKeys, parseEnvFile, webLocalOverrides } from '../lib/env-file.js'
 import type { RepoPaths } from '../lib/repo.js'
 import type { System } from '../system.js'
@@ -21,7 +22,8 @@ const DOCS = 'INSTALL.md#設定'
 const SETUP_FIXABLE = ['STORAGE_SIGNING_SECRET']
 
 const validityCheck = (envContent: string): CheckResult => {
-  const problems = configProblems(parseEnvFile(envContent))
+  const env = parseEnvFile(envContent)
+  const problems = [...configProblems(env), ...composeProblems(env)]
   if (problems.length === 0) return { id: 'env.valid', group: 'env', level: 'ok', message: '設定の検査を通りました' }
   const setupCanFix = problems.every((p) => SETUP_FIXABLE.some((name) => p.includes(name)))
   return {

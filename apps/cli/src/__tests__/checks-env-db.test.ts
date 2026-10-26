@@ -42,6 +42,12 @@ describe('judgeEnv（設定の判定）', () => {
     expect(JSON.stringify(results)).not.toContain(':pw@')
   })
 
+  it('IXA_COMPOSE_* の形が違えば ✗（既定の名前＝1 つ目の clone に黙って戻さない）', () => {
+    const valid = byId(judgeEnv({ envContent: `${okEnv}\nIXA_COMPOSE_PROJECT=Bad Name`, exampleContent: example, webLocalContent: null }), 'env.valid')
+    expect(valid).toMatchObject({ level: 'fail', fix: { needsHuman: true } })
+    expect(valid?.message).toContain('IXA_COMPOSE_PROJECT')
+  })
+
   it('apps/web/.env.local が違う値で上書きしていれば名前を出す', () => {
     const webLocal = 'NEXT_PUBLIC_WORKSPACE_ID=01OTHER\nNEXT_PUBLIC_API_URL=http://127.0.0.1:3001\n'
     const web = byId(judgeEnv({ envContent: okEnv, exampleContent: example, webLocalContent: webLocal }), 'env.web-local')

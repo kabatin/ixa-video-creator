@@ -14,6 +14,32 @@ const nameOr = (value: string | undefined, fallback: string): string => {
   return NAME_PATTERN.test(trimmed) ? trimmed : fallback
 }
 
+const PORT_PATTERN = /^\d{1,5}$/
+
+/**
+ * 書いたのに形が違う名前・ポート。**黙って既定に戻さない**（既定は 1 つ目の clone の名前なので、
+ * 戻すとそのコンテナや DB を触ってしまう）。setup・infra・doctor はこれが空でないと先へ進まない。
+ */
+export const composeProblems = (env: EnvValues): readonly string[] => {
+  const written = (key: string): string | null => {
+    const value = (env[key] ?? '').trim()
+    return value === '' ? null : value
+  }
+  const names = (['IXA_COMPOSE_PROJECT', 'IXA_COMPOSE_PREFIX'] as const)
+    .filter((key) => {
+      const value = written(key)
+      return value !== null && !NAME_PATTERN.test(value)
+    })
+    .map((key) => `${key}: 形が違います（小文字の英数字・_・- だけで、英数字で始める）`)
+  const ports = (['POSTGRES_PORT', 'REDIS_PORT'] as const)
+    .filter((key) => {
+      const value = written(key)
+      return value !== null && (!PORT_PATTERN.test(value) || Number(value) < 1 || Number(value) > 65535)
+    })
+    .map((key) => `${key}: ポートの番号（1〜65535）で書いてください`)
+  return [...names, ...ports]
+}
+
 export type ComposeSettings = {
   readonly project: string
   readonly postgresContainer: string

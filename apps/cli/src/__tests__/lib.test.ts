@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseCliArgs } from '../args.js'
-import { composeSettingsOf, composeUpCommand, containerInfoOf, containerStateOf, infraOwnerOf } from '../lib/compose.js'
+import { composeProblems, composeSettingsOf, composeUpCommand, containerInfoOf, containerStateOf, infraOwnerOf } from '../lib/compose.js'
 import { appendEnvLine, envKeysOf, missingEnvKeys, parseEnvFile, webLocalOverrides } from '../lib/env-file.js'
 import { appendCodexSection, claudeAddCommand, codexHasIxa, codexTomlSection, shellQuote } from '../lib/mcp-config.js'
 import { compareVersions, latestVersionTag, majorOf, parseVersion } from '../lib/semver.js'
@@ -52,9 +52,18 @@ describe('compose', () => {
     expect(composeUpCommand(composeSettingsOf({}))).toBe('pnpm infra:up')
   })
 
-  it('2 つ目の clone は .env の名前。変な値は既定に戻す', () => {
+  it('2 つ目の clone は .env の名前', () => {
     expect(composeSettingsOf({ IXA_COMPOSE_PREFIX: 'ixatest', IXA_COMPOSE_PROJECT: 'ixatest' }).postgresContainer).toBe('ixatest-postgres')
-    expect(composeSettingsOf({ IXA_COMPOSE_PREFIX: 'a b; rm' }).postgresContainer).toBe('ixa-postgres')
+    expect(composeProblems({ IXA_COMPOSE_PREFIX: 'ixatest', IXA_COMPOSE_PROJECT: 'ixatest' })).toEqual([])
+    expect(composeProblems({})).toEqual([])
+  })
+
+  it('書いたのに形が違う名前は黙って既定（=1 つ目の clone）に戻さず、問題として返す', () => {
+    const problems = composeProblems({ IXA_COMPOSE_PREFIX: 'a b; rm', IXA_COMPOSE_PROJECT: 'Ixa Test' })
+    expect(problems).toHaveLength(2)
+    expect(problems.join('\n')).toContain('IXA_COMPOSE_PROJECT')
+    expect(problems.join('\n')).toContain('IXA_COMPOSE_PREFIX')
+    expect(composeProblems({ POSTGRES_PORT: '5432x' })[0]).toContain('POSTGRES_PORT')
   })
 
   it('docker inspect の答えを状態に読む', () => {
