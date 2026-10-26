@@ -33,13 +33,21 @@ export type GeminiRequestDeps = {
   readonly timeoutMs?: number
 }
 
-const RETRY_IN = /retry in ((?:\d+h)?(?:\d+m)?(?:[\d.]+s)?)/i
+/** 「500ms」「768.49ms」（ミリ秒だけ）。分の「m」と取り違えないよう先に見る。 */
+const RETRY_IN_MS = /retry in ([\d.]+)ms\b/i
+const RETRY_IN = /retry in ((?:\d+h)?(?:\d+m(?!s))?(?:[\d.]+s)?)/i
 
 /** 429 の返答の本文から、待つ秒数（余裕の 2 秒は足さない）。見つからなければ null。 */
 export const parseRetryDelaySec = (body: string): number | null => {
-  const found = RETRY_IN.exec(body.slice(0, BODY_SCAN_CHARS))?.[1]
+  const head = body.slice(0, BODY_SCAN_CHARS)
+  const ms = RETRY_IN_MS.exec(head)?.[1]
+  if (ms !== undefined) {
+    const value = Number.parseFloat(ms)
+    return Number.isFinite(value) ? value / 1000 : null
+  }
+  const found = RETRY_IN.exec(head)?.[1]
   if (found === undefined || found === '') return null
-  const part = (unit: string): number => Number.parseFloat(new RegExp(`([\\d.]+)${unit}`).exec(found)?.[1] ?? '0')
+  const part = (unit: string): number => Number.parseFloat(new RegExp(`([\\d.]+)${unit}(?!s)`).exec(found)?.[1] ?? '0')
   return part('h') * 3600 + part('m') * 60 + part('s')
 }
 

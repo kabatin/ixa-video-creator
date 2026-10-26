@@ -79,6 +79,12 @@ describe('parseRetryDelaySec', () => {
     expect(parseRetryDelaySec('retry in 2m')).toBe(120)
   })
 
+  it('ミリ秒（「retry in 500ms」「retry in 768.49ms」）を秒にする（分と取り違えない）', () => {
+    expect(parseRetryDelaySec('Please retry in 500ms')).toBeCloseTo(0.5, 6)
+    expect(parseRetryDelaySec('retry in 768.49ms.')).toBeCloseTo(0.76849, 6)
+    expect(parseRetryDelaySec('retry in 1m30s')).toBe(90)
+  })
+
   it('無ければ null。600 字より後ろは見ない', () => {
     expect(parseRetryDelaySec('Resource exhausted')).toBeNull()
     expect(parseRetryDelaySec(`${'x'.repeat(600)} retry in 5s`)).toBeNull()
