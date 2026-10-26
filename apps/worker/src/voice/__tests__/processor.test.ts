@@ -54,6 +54,7 @@ const voice: VoiceProfile = {
   tuning: {},
   textStyleId: null,
   characterId: null,
+  designedVoice: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 }

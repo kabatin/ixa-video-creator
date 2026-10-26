@@ -8,8 +8,8 @@ import {
 } from '../queues.js'
 
 describe('QUEUE_CONFIGS', () => {
-  it('13 のキューがすべて定義されている', () => {
-    expect(QUEUE_CONFIGS).toHaveLength(13)
+  it('14 のキューがすべて定義されている', () => {
+    expect(QUEUE_CONFIGS).toHaveLength(14)
     expect(QUEUE_CONFIGS.map((config) => config.name).sort()).toEqual(
       Object.values(QUEUE_NAMES).sort(),
     )
@@ -41,6 +41,8 @@ describe('QUEUE_CONFIGS', () => {
       motion: 1,
       // サムネイル（ADR-0051）。Chrome を起こすので 1 つずつ。
       thumbnail: 1,
+      // 声の差し替え（ADR-0062）。Gemini の回数の上限に配慮して 1 つずつ。
+      dub: 1,
     })
   })
 })
@@ -106,6 +108,7 @@ describe('resolveQueueConfigs', () => {
       sfx: 1,
       motion: 1,
       thumbnail: 1,
+      dub: 1,
     })
   })
 

@@ -71,6 +71,8 @@ import { createMotionWiring } from './motion-wiring.js'
 import { createThumbnailWiring } from './thumbnail-wiring.js'
 import type { ThumbnailProcessorDeps } from './thumbnail/index.js'
 import { createVoiceWiring } from './voice-wiring.js'
+import { createDubWiring } from './dub-wiring.js'
+import type { DubProcessorDeps } from './dub/index.js'
 import { createRegenerationEnqueue } from './regeneration-wiring.js'
 import { QUEUE_NAMES } from './queues.js'
 
@@ -92,6 +94,8 @@ export type GenerationWiring = {
   readonly image: ImageProcessorDeps
   /** ナレーションの声と文字起こし（ADR-0038）。 */
   readonly voice: VoiceProcessorDeps
+  /** 声の差し替え（ADR-0062）。 */
+  readonly dub: DubProcessorDeps
   /** 曲を作る（ADR-0048）。 */
   readonly music: MusicProcessorDeps
   /** 効果音を作る（ADR-0052）。 */
@@ -434,6 +438,7 @@ export const createGenerationWiring = (
       checkModel: config.imageCheckModel,
     }),
     voice: createVoiceWiring({ config, db, storage, mediaQueue: deps.mediaQueue, events: deps.events, logger }),
+    dub: createDubWiring({ config, db, storage, mediaQueue: deps.mediaQueue, events: deps.events, logger }),
     music: createMusicWiring({
       db,
       storage,

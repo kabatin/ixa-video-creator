@@ -8,6 +8,7 @@ import {
   type MediaKind,
   type Project,
   type ProviderId,
+  type ProviderParams,
   type ModelId,
   type SentPrompt,
   type Shot,
@@ -74,6 +75,11 @@ export type RecordTakeInput = {
   readonly lineage: TakeLineageFields
   /** ジョブで選んだ「NG なら自動で作り直す」（ADR-0057）。Take に写す。省けない（写し忘れると作り直しが黙って止まる）。 */
   readonly autoRetake: boolean
+  /**
+   * 送ったパラメータの記録。省けば `{ kind: 'http', request: raw }`（生成・解像度上げ）。
+   * 声の差し替え（ADR-0062）は行ごとの記録（`kind: 'dub'`）を渡す。
+   */
+  readonly providerParams?: ProviderParams
 }
 
 export type RecordTakeDeps = {
@@ -151,7 +157,7 @@ export const recordTake = async (deps: RecordTakeDeps, input: RecordTakeInput): 
     specHash: input.specHash,
     providerId: input.providerId,
     modelId: input.modelId,
-    providerParams: { kind: 'http', request: input.raw } as const,
+    providerParams: input.providerParams ?? ({ kind: 'http', request: input.raw } as const),
     sentPrompt: input.sentPrompt,
     seedUsed: input.seedUsed,
     costUsd: input.costUsd,

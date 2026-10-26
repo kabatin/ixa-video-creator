@@ -17,6 +17,7 @@ export const QUEUE_NAMES = {
   sfx: 'sfx',
   motion: 'motion',
   thumbnail: 'thumbnail',
+  dub: 'dub',
 } as const
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES]
@@ -83,6 +84,11 @@ export const QUEUE_CONFIGS: readonly QueueConfig[] = [
    * （書き出しの render と同じ考え）。
    */
   { name: QUEUE_NAMES.thumbnail, concurrency: 1 },
+  /**
+   * 声の差し替え（ADR-0062）。**同時 1 つ。** Gemini の無料枠は 1 分・1 日の回数に上限があり、
+   * 1 本の中でも行ごとに順に読む。ffmpeg も手元の機械を使う。
+   */
+  { name: QUEUE_NAMES.dub, concurrency: 1 },
 ]
 
 const concurrencyEnvVarName = (queueName: QueueName): string =>

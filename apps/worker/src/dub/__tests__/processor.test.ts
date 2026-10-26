@@ -1,0 +1,197 @@
+import { writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { DUB_REASON, dialogueTelopOf, dubRecordOf, type TimelineClip } from '@ixa/domain'
+import { probeMedia } from '@ixa/media'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { processDubJob } from '../processor.js'
+import { createDubWorld, createWorkDir, line, makeSourceVideo, removeWorkDir } from './fixtures.js'
+
+/**
+ * 声の差し替えの通し（ADR-0062 段 5b）。偽の読み上げと **実 ffmpeg** で、合成した音付きの動画を差し替える。
+ *
+ * - 新しい Take ができ、元の Take は変わらず、採用が移り、字幕が記録の置いた時刻になる
+ * - 保存した読み上げは使い回す（2 回目は読み上げを頼まない）
+ * - 止める理由は日本語で、どの行・誰の声かを言う（声が無い・鍵の名札が違う・1.6 倍超・行の区間が決まらない・音が無い）
+ */
+
+let dir = ''
+let video: Uint8Array = new Uint8Array()
+let silent: Uint8Array = new Uint8Array()
+
+beforeAll(async () => {
+  dir = await createWorkDir()
+  video = await makeSourceVideo(dir, { audio: true })
+  silent = await makeSourceVideo(dir, { audio: false })
+}, 30_000)
+
+afterAll(async () => {
+  await removeWorkDir(dir)
+})
+
+const dialogueSpans = (clips: readonly TimelineClip[]) =>
+  clips
+    .filter((clip) => clip.content.type === 'text' && dialogueTelopOf(clip.content.params) !== null)
+    .sort((a, b) => a.startSec - b.startSec)
+    .map((clip) => [clip.startSec, clip.durationSec])
+
+describe('processDubJob（通し）', () => {
+  it('新しい Take を作って採用し、元の Take は変えず、字幕を置いた時刻にする。2 回目は読み上げを使い回す', async () => {
+    const world = await createDubWorld({ workDir: join(dir, 'ok'), video })
+    const sourceBefore = structuredClone(await world.takes.findById(world.source.id))
+    const job = await world.newJob()
+
+    const outcome = await processDubJob(world.deps, { dubJobId: job.id })
+    expect(outcome.state).toBe('succeeded')
+    if (outcome.state !== 'succeeded') return
+
+    const take = (await world.takes.findByShot(world.shot.id)).find((t) => t.id === outcome.takeId) ?? null
+    expect(take).not.toBeNull()
+    if (take === null) return
+    expect(take.parentTakeId).toBe(world.source.id)
+    expect(take.regenerationReason).toBe(DUB_REASON)
+    expect(take.specHash).toBe(world.source.specHash)
+    expect(take.spec).toEqual(world.source.spec)
+    expect(take.providerId).toBe(world.source.providerId)
+    expect(take.costUsd).toBeCloseTo(0.002, 6)
+
+    const record = dubRecordOf(take)
+    expect(record?.sourceTakeId).toBe(world.source.id)
+    expect(record?.integratedLufs).toBeGreaterThan(-16.6)
+    expect(record?.integratedLufs).toBeLessThan(-15.4)
+    expect(record?.lines.map((l) => l.mode)).toEqual(['lip', 'lip'])
+    for (const l of record?.lines ?? []) {
+      expect(l.agreement).toBeGreaterThan(0.7)
+      expect(l.tempoMin).toBeGreaterThanOrEqual(0.8)
+      expect(l.tempoMax).toBeLessThanOrEqual(1.6)
+      expect(l.reading).toBe('plain')
+    }
+    expect(record?.lines[0]?.placedStartSec).toBeCloseTo(0.46, 1)
+    expect(record?.lines[1]?.placedStartSec).toBeCloseTo(1.76, 1)
+
+    // 元の Take は 1 バイトも変わらない（追記のみ）。採用は新しい Take へ移る。
+    expect(await world.takes.findById(world.source.id)).toEqual(sourceBefore)
+    expect((await world.shots.findById(world.shot.id))?.selectedTakeId).toBe(take.id)
+    expect(world.mediaQueue.enqueued()).toContain(take.mediaAssetId)
+
+    // 映像は写すだけ・音がある。
+    const asset = await world.deps.mediaAssets.findById(take.mediaAssetId)
+    const outPath = join(dir, 'ok-out.mp4')
+    await writeFile(outPath, await world.storage.get(asset?.storageKey ?? ''))
+    const probe = await probeMedia(outPath)
+    expect(probe.hasAudio).toBe(true)
+    expect(probe.codec).toBe('h264')
+    expect(probe.durationSec).toBeCloseTo(3, 0)
+
+    // 字幕は記録の置いた時刻（Shot の頭 10 秒から）。
+    const spans = dialogueSpans(world.timelineClips.snapshot())
+    expect(spans).toHaveLength(2)
+    expect(spans[0]?.[0]).toBeCloseTo(10 + (record?.lines[0]?.placedStartSec ?? 0), 3)
+    expect(spans[1]?.[0]).toBeCloseTo(10 + (record?.lines[1]?.placedStartSec ?? 0), 3)
+
+    const done = await world.dubJobs.findById(job.id)
+    expect(done).toMatchObject({ status: 'succeeded', takeId: take.id })
+    expect(done?.record?.lines).toHaveLength(2)
+
+    // 2 回目（同じ元の Take から）。読み上げは保存済みを使うので頼まない・払わない。
+    const calls = world.tts.calls().length
+    expect(calls).toBe(2)
+    const again = await world.dubJobs.create({ projectId: world.project.id, shotId: world.shot.id, sourceTakeId: world.source.id })
+    const second = await processDubJob(world.deps, { dubJobId: again.id })
+    expect(second.state).toBe('succeeded')
+    expect(world.tts.calls()).toHaveLength(calls)
+    expect((await world.dubJobs.findById(again.id))?.costUsd).toBe(0)
+    expect(world.ttsClips.snapshot()).toHaveLength(2)
+  }, 60_000)
+
+  it('元の声のままの行は消さず読み直さない。記録の置いた時刻は元の区間', async () => {
+    const world = await createDubWorld({
+      workDir: join(dir, 'keep'),
+      video,
+      dialogue: (ids) => [line(ids.cat, 'こんにちは、ネズミくん。'), line(ids.mouse, 'やあ。', { keepOriginal: true })],
+    })
+    const job = await world.newJob()
+    const outcome = await processDubJob(world.deps, { dubJobId: job.id })
+    expect(outcome.state).toBe('succeeded')
+    const record = (await world.dubJobs.findById(job.id))?.record
+    expect(record?.lines[1]).toMatchObject({ mode: 'keep_original', agreement: null, reading: null })
+    expect(record?.lines[1]?.placedStartSec).toBeCloseTo(1.8, 1)
+    expect(world.tts.calls()).toHaveLength(1)
+  }, 60_000)
+})
+
+describe('processDubJob（止める理由）', () => {
+  const failed = async (world: Awaited<ReturnType<typeof createDubWorld>>) => {
+    const job = await world.newJob()
+    const outcome = await processDubJob(world.deps, { dubJobId: job.id })
+    const after = await world.dubJobs.findById(job.id)
+    // 止まったときは Take を作らず、採用も変えない。
+    expect(await world.takes.findByShot(world.shot.id)).toHaveLength(1)
+    expect((await world.shots.findById(world.shot.id))?.selectedTakeId).toBe(world.source.id)
+    return { outcome, error: after?.error ?? null, status: after?.status, costUsd: after?.costUsd }
+  }
+
+  it('話し手にセリフの声が無ければ、誰のどの行かを言って止める（読み上げを頼まない）', async () => {
+    const world = await createDubWorld({ workDir: join(dir, 'novoice'), video, mouseHasVoice: false })
+    const { outcome, error } = await failed(world)
+    expect(outcome).toEqual({ state: 'failed', code: 'no_dialogue_voice' })
+    expect(error?.message).toBe('セリフの 2 行目（ネズミ）: ネズミ にセリフの声がありません。キャラクターの「セリフの声」を選んでください')
+    expect(world.tts.calls()).toHaveLength(0)
+  }, 30_000)
+
+  it('作った声の鍵の名札が今の鍵と違えば止める', async () => {
+    const world = await createDubWorld({ workDir: join(dir, 'key'), video, designedKeyLabel: 'key1-2026-01-01' })
+    const { outcome, error } = await failed(world)
+    expect(outcome).toEqual({ state: 'failed', code: 'key_label_mismatch' })
+    expect(error?.message).toContain('名札「key1-2026-01-01」')
+    expect(error?.message).toContain('今の鍵は「key2-2026-10-14」')
+    expect(world.tts.calls()).toHaveLength(0)
+  }, 30_000)
+
+  it('3 通りの読み方がどれも 1.6 倍を超えたときだけ止める', async () => {
+    const world = await createDubWorld({
+      workDir: join(dir, 'fast'),
+      video,
+      dialogue: (ids) => [line(ids.cat, 'ながい、ながい、ながい。まだ。'), line(ids.mouse, 'やあ。')],
+    })
+    const { outcome, error, status, costUsd } = await failed(world)
+    expect(status).toBe('failed')
+    expect(outcome).toEqual({ state: 'failed', code: 'too_fast' })
+    expect(error?.message).toMatch(/^セリフの 1 行目（ネコ）: 読み上げが長すぎます/)
+    expect(world.tts.calls().map((call) => call.text)).toEqual([
+      'ながい、ながい、ながい。まだ。',
+      'ながい、<short pause>ながい、<short pause>ながい。<short pause>まだ。',
+      'ながいながいながい。まだ。',
+    ])
+    // 止まるまでに読んだ分は払っている（3 通り）。
+    expect(costUsd).toBeCloseTo(0.003, 6)
+  }, 60_000)
+
+  it('行の区間が決まらなければ、行を番号で言い、文字数の比で割った手の区間の案を付けて止める', async () => {
+    const world = await createDubWorld({
+      workDir: join(dir, 'merged'),
+      video,
+      dialogue: (ids) => [line(ids.cat, 'こんにちは'), line(ids.mouse, 'やあ'), line(ids.cat, 'またね')],
+    })
+    const { outcome, error } = await failed(world)
+    expect(outcome).toEqual({ state: 'failed', code: 'lines_unassigned' })
+    expect(error?.message).toContain('セリフの 1・2・3 行目')
+    expect(error?.suggestedSpans?.map((s) => s.lineIndex)).toEqual([0, 1, 2])
+    expect(error?.suggestedSpans?.[0]?.startSec).toBeCloseTo(0.5, 1)
+    expect(error?.suggestedSpans?.[2]?.endSec).toBeCloseTo(2.4, 1)
+  }, 30_000)
+
+  it('元の Take に音が無ければ止める', async () => {
+    const world = await createDubWorld({ workDir: join(dir, 'silent'), video: silent })
+    const { outcome, error } = await failed(world)
+    expect(outcome).toEqual({ state: 'failed', code: 'no_source_audio' })
+    expect(error?.message).toContain('音がありません')
+  }, 30_000)
+
+  it('止めたジョブは作らずに手を引く', async () => {
+    const world = await createDubWorld({ workDir: join(dir, 'cancel'), video })
+    const job = await world.newJob()
+    await world.dubJobs.cancel(job.id)
+    expect(await processDubJob(world.deps, { dubJobId: job.id })).toEqual({ state: 'skipped', reason: 'status=cancelled' })
+    expect(world.tts.calls()).toHaveLength(0)
+  })
+})

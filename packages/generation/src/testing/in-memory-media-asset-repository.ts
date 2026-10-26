@@ -44,7 +44,8 @@ export const createInMemoryMediaAssetRepository = (
       const validated = CreateMediaAssetInputSchema.parse(input)
       const created = MediaAssetSchema.parse({
         ...validated,
-        id: newId(MediaAssetIdSchema),
+        // 渡された ID を使う（実物と同じ。storageKey にその ID が埋まるため、ずらすとパスと行が食い違う）。
+        id: validated.id ?? newId(MediaAssetIdSchema),
         createdAt: new Date(),
       })
       store = [...store, created]

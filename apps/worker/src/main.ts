@@ -18,6 +18,7 @@ import { processRegenerationJob } from './regeneration/index.js'
 import { failInterruptedImageJob, processImageJob } from './image/index.js'
 import { processUpscaleJob } from './upscale/index.js'
 import { failInterruptedVoiceJob, processVoiceJob } from './voice/index.js'
+import { failInterruptedDubJob, processDubJob } from './dub/index.js'
 import { failInterruptedMusicJob, processMusicJob } from './music/index.js'
 import { failInterruptedSfxJob, processSfxJob } from './sfx/index.js'
 import { failInterruptedMotionJob, processMotionJob } from './motion/index.js'
@@ -63,6 +64,8 @@ const createWorkers = (
             return (await processImageJob(generation.image, job.data)).state
           case QUEUE_NAMES.voice:
             return (await processVoiceJob(generation.voice, job.data)).state
+          case QUEUE_NAMES.dub:
+            return (await processDubJob(generation.dub, job.data)).state
           case QUEUE_NAMES.music:
             return (await processMusicJob(generation.music, job.data)).state
           case QUEUE_NAMES.sfx:
@@ -105,6 +108,9 @@ const createWorkers = (
       }
       if (config.name === QUEUE_NAMES.voice && job !== undefined) {
         void failInterruptedVoiceJob(generation.voice, job.data, error.message)
+      }
+      if (config.name === QUEUE_NAMES.dub && job !== undefined) {
+        void failInterruptedDubJob(generation.dub, job.data, error.message)
       }
       if (config.name === QUEUE_NAMES.music && job !== undefined) {
         void failInterruptedMusicJob(generation.music, job.data, error.message)
