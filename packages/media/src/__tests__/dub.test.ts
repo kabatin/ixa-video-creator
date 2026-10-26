@@ -3,7 +3,7 @@ import { speechChunks } from '@ixa/domain'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { measureLoudness } from '../audio.js'
 import { atempoChain, stretchChunks } from '../dub/stretch-chunks.js'
-import { DUB_TARGET_LUFS, mixDub, muteExpression } from '../dub/mix-dub.js'
+import { DUB_TARGET_LUFS, mixDub, muteExpression, sourceIsMono } from '../dub/mix-dub.js'
 import { matchLevelGainDb, voicedLevelOfPcm } from '../dub/match-level.js'
 import { DUB_PCM_RATE, pcmFromBytes, readPcm16k, readRmsFrames, rmsFramesFromPcm } from '../dub/rms-frames.js'
 import { probeMedia } from '../probe.js'
@@ -180,6 +180,32 @@ describe('mixDub（ステレオの元の音）', () => {
       at('stereo-dubbed.mp4'),
     )
     const pcm = await readPcm16k(at('stereo-dubbed.mp4'), at('stereo-dubbed.raw'))
+    const ratioDb = 20 * Math.log10(toneLevel(pcm, 500, 0.6, 0.9) / toneLevel(pcm, 300, 1.9, 2.3))
+    expect(Math.abs(ratioDb)).toBeLessThan(0.5)
+  }, 30_000)
+})
+
+describe('mixDub（モノラルの元の音）', () => {
+  it('元の音もモノラルから左右に同じ大きさで写し、声が元の声より 3 dB 大きく鳴らない', async () => {
+    const mono = '0.2*sin(2*PI*300*t)*(between(t,0.5,1.0)+between(t,1.8,2.4))'
+    await runFfmpeg([
+      '-y', '-f', 'lavfi', '-i', 'testsrc=size=160x120:rate=24:duration=3',
+      '-f', 'lavfi', '-i', `aevalsrc='${mono}':s=48000:d=3`,
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ac', '1', '-b:a', '128k', '-shortest', at('mono.mp4'),
+    ])
+    expect(await sourceIsMono(at('mono.mp4'))).toBe(true)
+    expect(await sourceIsMono(at('stereo.mp4'))).toBe(false)
+    await makeAudio(at('half-mono.wav'), '0.1*sin(2*PI*500*t)', 0.5)
+
+    const source = voicedLevelOfPcm(await readPcm16k(at('mono.mp4'), at('mono.raw')), { startSec: 1.8, endSec: 2.4 })
+    const voice = voicedLevelOfPcm(await readPcm16k(at('half-mono.wav'), at('half-mono.raw')))
+    const gainDb = matchLevelGainDb({ sourceLevelDb: source, voiceLevelDb: voice, levelDb: 0 })
+
+    await mixDub(
+      { videoPath: at('mono.mp4'), voices: [{ path: at('half-mono.wav'), startSec: 0.5, gainDb }], muteRanges: [{ startSec: 0.45, endSec: 1.1 }] },
+      at('mono-dubbed.mp4'),
+    )
+    const pcm = await readPcm16k(at('mono-dubbed.mp4'), at('mono-dubbed.raw'))
     const ratioDb = 20 * Math.log10(toneLevel(pcm, 500, 0.6, 0.9) / toneLevel(pcm, 300, 1.9, 2.3))
     expect(Math.abs(ratioDb)).toBeLessThan(0.5)
   }, 30_000)

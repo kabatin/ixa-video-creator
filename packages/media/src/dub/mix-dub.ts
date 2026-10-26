@@ -1,6 +1,6 @@
 import type { DubChunk } from '@ixa/domain'
 import { measureLoudness, type LoudnessMeasurement } from '../audio.js'
-import { FfmpegError, runFfmpeg, type RunOptions } from '../ffmpeg-runner.js'
+import { FfmpegError, runFfmpeg, runFfprobe, type RunOptions } from '../ffmpeg-runner.js'
 import { loudnormLinearFilter, loudnormMeasureFilter, parseLoudnormJson } from '../program-loudness.js'
 
 /**
@@ -21,6 +21,11 @@ export const DUB_MUTE_RAMP_SEC = 0.015
 const MIX_FORMAT = 'aformat=sample_rates=48000:channel_layouts=stereo'
 /** 声（モノラル）を左右に同じ大きさで写す（音量合わせの基準の左右の平均と同じ大きさになる）。 */
 const VOICE_TO_STEREO = 'aformat=channel_layouts=mono,pan=stereo|c0=c0|c1=c0'
+/**
+ * モノラルの元の音も同じ写し方にする。aformat に任せると左右 0.707 倍に写し、声だけが元の声より約 3 dB 大きく鳴った
+ * （音量合わせはモノラルのままの大きさで測るため）。
+ */
+const MONO_SOURCE_TO_STEREO = 'pan=stereo|c0=c0|c1=c0,'
 
 export type DubVoice = {
   readonly path: string
@@ -34,6 +39,8 @@ export type MixDubInput = {
   readonly videoPath: string
   readonly voices: readonly DubVoice[]
   readonly muteRanges: readonly DubChunk[]
+  /** 元の音がモノラルか。省けば `mixDub` が ffprobe で確かめる。 */
+  readonly sourceMono?: boolean
 }
 
 const fmt = (sec: number): string => sec.toFixed(4)
@@ -53,13 +60,27 @@ export const muteExpression = (ranges: readonly DubChunk[]): string => {
 
 /** 混ぜるまでの filter_complex（最後のラベルは `[mix]`）。 */
 export const dubMixGraph = (input: MixDubInput): string => {
-  const original = `[0:a]${MIX_FORMAT},asetnsamples=n=${MUTE_STEP_SAMPLES}:p=0,volume='${muteExpression(input.muteRanges)}':eval=frame[orig]`
+  const upmix = input.sourceMono === true ? MONO_SOURCE_TO_STEREO : ''
+  const original = `[0:a]${upmix}${MIX_FORMAT},asetnsamples=n=${MUTE_STEP_SAMPLES}:p=0,volume='${muteExpression(input.muteRanges)}':eval=frame[orig]`
   const voices = input.voices.map((voice, index) => {
     const delayMs = Math.max(0, Math.round(voice.startSec * 1000))
     return `[${index + 1}:a]${VOICE_TO_STEREO},${MIX_FORMAT},volume=${voice.gainDb.toFixed(3)}dB,adelay=${delayMs}:all=1[v${index}]`
   })
   const labels = ['[orig]', ...input.voices.map((_, index) => `[v${index}]`)].join('')
   return [original, ...voices, `${labels}amix=inputs=${input.voices.length + 1}:normalize=0:duration=first[mix]`].join(';')
+}
+
+/** 元の音の最初の音のストリームがモノラルか（ffprobe）。音が無ければ失敗にする（差し替える声が無い）。 */
+export const sourceIsMono = async (videoPath: string, options?: RunOptions): Promise<boolean> => {
+  const { stdout } = await runFfprobe(
+    ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=channels', '-of', 'csv=p=0', videoPath],
+    options,
+  )
+  const channels = Number.parseInt(stdout.trim(), 10)
+  if (!Number.isFinite(channels) || channels < 1) {
+    throw new FfmpegError('元の Take に音がありません', `ffprobe ${videoPath}`, 0, stdout)
+  }
+  return channels === 1
 }
 
 const inputsOf = (input: MixDubInput): readonly string[] => ['-i', input.videoPath, ...input.voices.flatMap((voice) => ['-i', voice.path])]
@@ -83,7 +104,8 @@ export const mixDubWriteArgs = (
 ]
 
 /** 混ぜて書き、書いた後の大きさを返す。混ぜた音が無音で測れなければ失敗にする（黙って元のまま使わない）。 */
-export const mixDub = async (input: MixDubInput, outputPath: string, options?: RunOptions): Promise<LoudnessMeasurement> => {
+export const mixDub = async (given: MixDubInput, outputPath: string, options?: RunOptions): Promise<LoudnessMeasurement> => {
+  const input = given.sourceMono === undefined ? { ...given, sourceMono: await sourceIsMono(given.videoPath, options) } : given
   const measureArgs = mixDubMeasureArgs(input)
   const { stderr } = await runFfmpeg(measureArgs, options)
   const measured = parseLoudnormJson(stderr)
