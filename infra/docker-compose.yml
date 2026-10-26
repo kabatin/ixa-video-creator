@@ -1,14 +1,17 @@
+# 名前とポートは .env で替えられる（既定は今までと同じ ixa-postgres・5432 / ixa-redis・6379）。
+# 同じ Mac で 2 つ目の clone を動かすときだけ使う（ADR-0063）。プロジェクト名は
+# `pnpm ixa setup` が IXA_COMPOSE_PROJECT（既定 infra）で -p に渡す。
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: ixa-postgres
+    container_name: ${IXA_COMPOSE_PREFIX:-ixa}-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-ixa}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ixa_dev_password}
       POSTGRES_DB: ${POSTGRES_DB:-ixa}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -19,11 +22,11 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: ixa-redis
+    container_name: ${IXA_COMPOSE_PREFIX:-ixa}-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
