@@ -21,6 +21,7 @@ import {
   createRenderJobRepository,
   createShotRepository,
   createTakeRepository,
+  createTimelineClipRepository,
   createCharacterLookRepository,
   createCharacterRepository,
   createLocationRepository,
@@ -51,6 +52,7 @@ import {
   type PollScheduler,
 } from './generation/index.js'
 import type { MediaProcessorDeps } from './media/index.js'
+import { allAfterIngested, syncDialogueTelopsAfterIngest } from './media/dialogue-telops.js'
 import type { RenderProcessorDeps } from './render/index.js'
 import { createMediaPreparer } from './render/prepare-media.js'
 import { createReviewWiring, type ReviewWiring } from './review-wiring.js'
@@ -308,16 +310,26 @@ export const createGenerationWiring = (
     storage,
     workDir: process.env.MEDIA_WORK_DIR ?? '/tmp/ixa-media-work',
     logger,
-    // 自動の作り直しを選んだ Take は、取り込みが済んだらレビューを積む（ADR-0057）。Take ごとに 1 つにまとめる。
-    afterIngested: reviewWhenAutoRetake({
-      takes: createTakeRepository(db),
-      reviewQueue: {
-        enqueue: async (takeId) => {
-          await reviewQueue.add('review', { takeId }, { jobId: `auto-review-${takeId}`, removeOnComplete: true, removeOnFail: true })
+    afterIngested: allAfterIngested(
+      // 取り込みで Take の音と話している区間が分かるので、セリフの字幕を作り直す（ADR-0061）。投げない。
+      syncDialogueTelopsAfterIngest({
+        shots: createShotRepository(db),
+        takes: createTakeRepository(db),
+        mediaAssets: createMediaAssetRepository(db),
+        timelineClips: createTimelineClipRepository(db),
+        logger,
+      }),
+      // 自動の作り直しを選んだ Take は、取り込みが済んだらレビューを積む（ADR-0057）。Take ごとに 1 つにまとめる。
+      reviewWhenAutoRetake({
+        takes: createTakeRepository(db),
+        reviewQueue: {
+          enqueue: async (takeId) => {
+            await reviewQueue.add('review', { takeId }, { jobId: `auto-review-${takeId}`, removeOnComplete: true, removeOnFail: true })
+          },
         },
-      },
-      logger,
-    }),
+        logger,
+      }),
+    ),
   }
 
   const renderMediaAssets = createMediaAssetRepository(db)

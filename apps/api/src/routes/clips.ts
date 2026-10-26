@@ -31,6 +31,7 @@ import {
   successResponse,
   type FieldErrors,
 } from '../response.js'
+import { normalizeTextTranslation, planTranslationWriteBack } from '../dialogue/translation-write-back.js'
 import { changedFieldsOf, recordClipEdits, updateEditOf } from './clip-edit-recording.js'
 
 /**
@@ -274,6 +275,8 @@ export type ClipRoutesDeps = {
   mediaAssets: Pick<MediaAssetRepository, 'findById'>
   /** ナレーションのテロップを手で消したとき（その行を「テロップなし」にする。ADR-0038）。ナレーションが無い環境では省く。 */
   onNarrationTelopDeleted?: (lineId: NarrationLineId) => Promise<void>
+  /** セリフの字幕の訳文を Shot の行へ書き戻したあと（字幕を作り直す。ADR-0061）。無ければ作り直さない。 */
+  onDialogueTranslationWritten?: (projectId: ProjectId) => Promise<void>
   /**
    * 作る・直す・消すを、**書く前に、書き込みと同じトランザクションで**記録する（取り消し。2026-10-19）。
    * **省けない**（省くと戻せない操作が黙って増える）。書き込みが落ちれば記録も残らない。
@@ -341,16 +344,18 @@ export const clipRoutes = (deps: ClipRoutesDeps) => {
 
       const effect = normalizeEffectClip(input)
       if (!effect.ok) return c.json(fail(VALIDATION_ERROR_MESSAGE, effect.fields), 422)
+      const translated = normalizeTextTranslation(effect.value)
+      if (!translated.ok) return c.json(fail(VALIDATION_ERROR_MESSAGE, translated.fields), 422)
 
       // 記録は書く前に、同じトランザクションで作る。作る物の ID を先に決めて記録に入れる。
       const id = newId(TimelineClipIdSchema)
       const created = await deps.transaction(async (tx) => {
         await recordClipEdits(tx.editBatches, {
           projectId,
-          summary: clipEditSummary('create', effect.value),
+          summary: clipEditSummary('create', translated.value),
           edits: [{ op: 'create', clipId: id }],
         })
-        return tx.timelineClips.create({ ...effect.value, projectId, id })
+        return tx.timelineClips.create({ ...translated.value, projectId, id })
       })
       return c.json(ok(toClipResponse(created)), 201)
     })
@@ -384,20 +389,28 @@ export const clipRoutes = (deps: ClipRoutesDeps) => {
 
       const effect = normalizeEffectClip(patch)
       if (!effect.ok) return c.json(fail(VALIDATION_ERROR_MESSAGE, effect.fields), 422)
+      const translated = normalizeTextTranslation(effect.value)
+      if (!translated.ok) return c.json(fail(VALIDATION_ERROR_MESSAGE, translated.fields), 422)
+      const value = translated.value
 
-      const edit = updateEditOf(existing, effect.value)
-      const after = { track: effect.value.track ?? existing.track, content: effect.value.content ?? existing.content }
+      const edit = updateEditOf(existing, value)
+      const after = { track: value.track ?? existing.track, content: value.content ?? existing.content }
       // 読んでから書くまでに消されていれば、リポジトリが DbNotFoundError を投げ、共通ハンドラが 404 にする（記録も残らない）。
-      const updated = await deps.transaction(async (tx) => {
+      const { updated, wroteBack } = await deps.transaction(async (tx) => {
+        // セリフの字幕の訳文は行が正（ADR-0061）。行へ書き戻し、取り消しの記録にも行の「変える前」を入れる。
+        const writeBack = await planTranslationWriteBack(tx.shots, existing, value.content)
         if (edit !== null) {
           await recordClipEdits(tx.editBatches, {
             projectId: existing.projectId,
-            summary: clipEditSummary('update', after, changedFieldsOf(existing, effect.value)),
+            summary: clipEditSummary('update', after, changedFieldsOf(existing, value)),
             edits: [edit],
+            ...(writeBack === null ? {} : { shotEntries: [writeBack.entry] }),
           })
         }
-        return tx.timelineClips.update(id, effect.value)
+        if (writeBack !== null) await tx.shots.update(writeBack.shotId, { dialogue: [...writeBack.dialogue] })
+        return { updated: await tx.timelineClips.update(id, value), wroteBack: writeBack !== null }
       })
+      if (wroteBack) await deps.onDialogueTranslationWritten?.(existing.projectId)
       return c.json(ok(toClipResponse(updated)), 200)
     })
     .openapi(deleteClipRoute, async (c) => {

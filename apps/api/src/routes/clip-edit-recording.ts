@@ -5,6 +5,7 @@ import {
   type ClipSnapshot,
   type EditBatch,
   type EditBatchClipEdit,
+  type EditBatchEntry,
   type EditBatchLineEntry,
   type ProjectId,
   type TimelineClip,
@@ -25,6 +26,8 @@ export type ClipEditDraft = {
   readonly edits: readonly EditBatchClipEdit[]
   /** ナレーションのテロップを消すと、行が「テロップなし」になる。戻すときに行も戻す。 */
   readonly lineEntries?: readonly EditBatchLineEntry[]
+  /** セリフの字幕の訳文を直すと、Shot の行の訳文へ書き戻す（ADR-0061）。戻すときに行も戻す。 */
+  readonly shotEntries?: readonly EditBatchEntry[]
 }
 
 /** 記録する。**1 件も無ければ作らない**（`null`）。空の記録は「戻せない行」として履歴に積もる。 */
@@ -35,7 +38,7 @@ export const recordClipEdits = async (recorder: EditBatchRecorder, draft: ClipEd
     projectId: draft.projectId,
     kind: 'clip_edit',
     summary: draft.summary,
-    entries: [],
+    entries: [...(draft.shotEntries ?? [])],
     clipEdits: [...draft.edits],
     lineEntries: [...lineEntries],
   })

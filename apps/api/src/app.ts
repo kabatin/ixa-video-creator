@@ -32,6 +32,7 @@ import type { MotionAnalysisDeps } from './motion/deps.js'
 import { loadProjectMotionEvents } from './motion/shot-motion.js'
 import { narrationRoutes } from './routes/narration.js'
 import { turnOffLineTelop } from './narration/telops.js'
+import { createDialogueTelopSync } from './dialogue/telop-sync.js'
 import { generationActivityRoutes, type GenerationActivityDeps } from './routes/generation-activity.js'
 import { upscaleActivityRoutes } from './routes/upscale-activity.js'
 import { generationCancelRoutes } from './routes/generation-cancel.js'
@@ -280,6 +281,9 @@ export const createApp = (deps: AppDeps) => {
   // 門より先に CORS が答える。門の外に置くもの（/health・/files・入る口）は門の中で見分ける。
   app.use('*', deps.auth.gate)
   app.route('/', deps.auth.routes)
+  // セリフの字幕（ADR-0061）。Shot を変える口の書き込みが成功したら、作品ごとに作り直す（口ごとに呼び忘れない）。
+  const dialogueTelops = createDialogueTelopSync({ ...deps, mediaAssets })
+  app.use('*', dialogueTelops.middleware)
 
   app.route('/', healthRoutes())
   // 置き場が fs のときだけ。位置は @ixa/storage の定数（署名を作る側と同じものを読む）。
@@ -656,6 +660,7 @@ export const createApp = (deps: AppDeps) => {
       projects,
       mediaAssets,
       ...(narration === undefined ? {} : { onNarrationTelopDeleted: (lineId: NarrationLineId) => turnOffLineTelop(narration, lineId) }),
+      onDialogueTranslationWritten: dialogueTelops.sync, // 訳文を行へ書き戻したら字幕を作り直す（ADR-0061）
       transaction: deps.editTransaction,
     }),
   )
