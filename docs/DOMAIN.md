@@ -210,6 +210,10 @@ type Character = {
   speechName: string | null         // 英語の呼び名 'The cat'。全 Shot で一字一句同じ文になる
   voiceDescription: string | null   // 声の説明（英語）"a soft, sly, teasing young woman's voice"
 
+  // 声の差し替え（ADR-0062）
+  dialogueVoiceProfileId: VoiceProfileId | null  // セリフの声（同じ作品の声）。無ければ差し替えの前に止める。声を消すと null
+  dialogueLevelDb: number           // 距離の既定（-40〜12 dB、既定 0）。行の dub.levelDb が優先
+
   createdAt: Date
 }
 
@@ -699,6 +703,30 @@ type Take = {
 **Immutability 規約**: `spec` / `providerParams` / `mediaAssetId` / `costUsd` は作成後に更新しない。
 「作り直し」は必ず新しい Take を作る。DB レベルでも UPDATE を避けること。
 
+### 声の差し替え（DubJob。ADR-0062）
+
+```ts
+type DubJob = {                     // 追記のみ。状態の遷移とそのとき決まる列だけ書く
+  id: DubJobId
+  projectId: ProjectId
+  shotId: ShotId
+  sourceTakeId: TakeId              // 積んだときの採用中の Take（入力そのもの）
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  takeId: TakeId | null             // 出来た Take（成功のときだけ）
+  costUsd: number                   // 読み上げに払った額（保存済みを使った行は 0）
+  error: { code; message; retryable; suggestedSpans?: { lineIndex; startSec; endSec }[] } | null
+  record: DubParams | null          // 出来た Take の providerParams と同じ（成功のときだけ）
+  queuedAt: Date; startedAt: Date | null; finishedAt: Date | null
+}
+```
+
+- 出来たものは**新しい Take**（`parentTakeId` = 元、`regenerationReason` = `'dub'`、`spec`・`specHash`・`sentPrompt`・
+  `providerId`・`modelId` は元のまま、`providerParams` は `kind: 'dub'` の行ごとの記録）。元の Take は変えない。
+- 出来たら採用を移す（人が待つ間に別の Take を選んでいたら奪わない）。戻すのは Take の切り替えだけ。
+- 差し替えた Take のセリフの字幕は、記録の置いた時刻（`placedStartSec`/`placedEndSec`）を行の時刻にする。
+- 差し替えられない理由は `dubBlocker`（画面と API が同じもの）。話し手のセリフの声・鍵の名札・行の区間は worker が確かめる。
+- 読み上げは `tts_clips`（鍵 = sha256(モデル・声・読み方・速さ・文)）に保存して使い回す。
+
 ---
 
 ## 11. Review
@@ -941,6 +969,10 @@ type VoiceProfile = {
   tuning: { stability?; similarity?; style? }   // ElevenLabs だけ
   textStyleId: TextStyleId | null   // この声のテロップの見た目
   characterId: CharacterId | null   // 誰の声か。null はナレーター
+  designedVoice: {                  // 説明から作った声（Voice Design。ADR-0062）。既製の声は null
+    description: string; gender: 'female' | 'male'
+    keyLabel: string                // 作った鍵の名札（GEMINI_KEY_LABEL。鍵そのものではない）。今の名札と違えば使う前に止める
+  } | null
   createdAt: Date
   updatedAt: Date
 }
