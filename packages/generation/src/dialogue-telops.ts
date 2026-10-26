@@ -1,17 +1,12 @@
+import type { LockedProjectClips, MediaAssetRepository, ProjectClipLock, ShotRepository, TakeRepository } from '@ixa/db'
 import {
-  DbNotFoundError,
-  type MediaAssetRepository,
-  type ShotRepository,
-  type TakeRepository,
-  type TimelineClipRepository,
-} from '@ixa/db'
-import {
-  canonicalJson,
   dialogueTelopClips,
   dialogueTelopOf,
+  isEmptyDialogueTelopPlan,
+  planDialogueTelopSync,
   shotPlaybackRate,
   takeAudioPlays,
-  type CreateTimelineClipInput,
+  type DialogueTelopPlan,
   type DialogueTelopShot,
   type ProjectId,
   type Shot,
@@ -22,23 +17,21 @@ import {
  * セリフの字幕を、Shot のセリフの行に合わせて作り直す（ADR-0061）。規則は domain の `dialogueTelopClips`。
  * api（セリフ・Take・Take の音・Shot の時刻を変えた）と worker（取り込みで話している区間が分かった）の両方から呼ぶ。
  *
- * - **セリフから作ったテロップだけを差し替える**（手で置いたテロップ・歌詞・ナレーションは触らない）。
- * - **セリフの無い作品は書かない**（読むだけ。セリフの字幕も無ければ差し替えを呼ばない）。
- * - 中身が変わらなければ何もしない（タイムラインを無駄に書き換えない）。
+ * - **同じ作品の作り直しは 1 本ずつ**（`lock`。本物は `pg_advisory_xact_lock`）。鍵を取ってから今の字幕を読み直して書く。
+ *   並んだ作り直しが、読んだ時点で字幕が無い全員で足して重ねる・読んだ後に人が直した時刻を古い値で潰す、を防ぐ。
+ * - **差分で書く**（`planDialogueTelopSync`）。残る行はその場で直し、ID を変えない。中身が同じなら書かない。
+ * - **セリフから作ったテロップだけ**を触る（手で置いたテロップ・歌詞・ナレーションは触らない）。
+ * - **セリフの無い作品は書かない**（セリフの字幕が残っていなければ、鍵の中で読むだけ）。
  */
 
 export type DialogueTelopSyncDeps = {
   readonly shots: Pick<ShotRepository, 'findByProject'>
   readonly takes: Pick<TakeRepository, 'findById'>
   readonly mediaAssets: Pick<MediaAssetRepository, 'findById'>
-  readonly timelineClips: Pick<TimelineClipRepository, 'findByProject' | 'replace'>
+  readonly lock: ProjectClipLock
 }
 
 type SyncResult = { readonly changed: boolean; readonly count: number }
-
-/** 比べるための形（ID・作った時刻を除く。作る前の入力は層と不透明度を省けるので、既定で埋める）。 */
-const shapeOf = (clip: Pick<CreateTimelineClipInput, 'track' | 'startSec' | 'durationSec' | 'layer' | 'opacity'> & { readonly content: unknown }): string =>
-  canonicalJson({ track: clip.track, startSec: clip.startSec, durationSec: clip.durationSec, layer: clip.layer ?? 0, opacity: clip.opacity ?? 1, content: clip.content })
 
 const isDialogueTelop = (clip: TimelineClip): boolean =>
   clip.content.type === 'text' && dialogueTelopOf(clip.content.params) !== null
@@ -57,33 +50,27 @@ const timingOf = async (deps: DialogueTelopSyncDeps, shot: Shot): Promise<Dialog
   }
 }
 
-const syncOnce = async (deps: DialogueTelopSyncDeps, projectId: ProjectId): Promise<SyncResult> => {
-  const [shots, clips] = await Promise.all([deps.shots.findByProject(projectId), deps.timelineClips.findByProject(projectId)])
-  const existing = clips.filter(isDialogueTelop)
-  const speaking = shots.filter((shot) => shot.dialogue.length > 0)
-  if (speaking.length === 0 && existing.length === 0) return { changed: false, count: 0 }
-  const timed = await Promise.all(speaking.map((shot) => timingOf(deps, shot)))
-  const desired = dialogueTelopClips({ projectId, shots: timed, existing })
-  const same =
-    existing.length === desired.length &&
-    existing.map(shapeOf).sort().join('\n') === desired.map(shapeOf).sort().join('\n')
-  if (same) return { changed: false, count: desired.length }
-  await deps.timelineClips.replace(
-    existing.map((clip) => clip.id),
-    desired,
-  )
-  return { changed: true, count: desired.length }
+const apply = async (clips: LockedProjectClips, plan: DialogueTelopPlan): Promise<void> => {
+  for (const id of plan.deletes) await clips.softDelete(id)
+  for (const { id, patch } of plan.updates) await clips.update(id, patch)
+  for (const { id, patch } of plan.restores) {
+    await clips.restore(id)
+    if (patch !== null) await clips.update(id, patch)
+  }
+  for (const input of plan.creates) await clips.create(input)
 }
 
-/**
- * 作り直す。api と worker が同じ作品で重なると、先に差し替えた側が相手を消しているので、後の側は消す相手が無い
- * （`DbNotFoundError`）。そのときは読み直して 1 度だけやり直す（ナレーションの字幕と同じ）。
- */
 export const syncDialogueTelops = async (deps: DialogueTelopSyncDeps, projectId: ProjectId): Promise<SyncResult> => {
-  try {
-    return await syncOnce(deps, projectId)
-  } catch (error) {
-    if (!(error instanceof DbNotFoundError)) throw error
-    return syncOnce(deps, projectId)
-  }
+  // Shot も鍵の中で読む（先に読むと、後から来た作り直しが新しい行で書いた後に、古い行で書き戻してしまう）。
+  return deps.lock(projectId, async (clips) => {
+    const speaking = (await deps.shots.findByProject(projectId)).filter((shot) => shot.dialogue.length > 0)
+    const timed = await Promise.all(speaking.map((shot) => timingOf(deps, shot)))
+    const live = (await clips.findByProject(projectId)).filter(isDialogueTelop)
+    if (timed.length === 0 && live.length === 0) return { changed: false, count: 0 }
+    const desired = dialogueTelopClips({ projectId, shots: timed, existing: live })
+    const plan = planDialogueTelopSync({ live, desired })
+    if (isEmptyDialogueTelopPlan(plan)) return { changed: false, count: desired.length }
+    await apply(clips, plan)
+    return { changed: true, count: desired.length }
+  })
 }

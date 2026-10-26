@@ -21,7 +21,7 @@ import {
   createRenderJobRepository,
   createShotRepository,
   createTakeRepository,
-  createTimelineClipRepository,
+  createProjectClipLock,
   createCharacterLookRepository,
   createCharacterRepository,
   createLocationRepository,
@@ -316,7 +316,7 @@ export const createGenerationWiring = (
         shots: createShotRepository(db),
         takes: createTakeRepository(db),
         mediaAssets: createMediaAssetRepository(db),
-        timelineClips: createTimelineClipRepository(db),
+        lock: createProjectClipLock(db),
         logger,
       }),
       // 自動の作り直しを選んだ Take は、取り込みが済んだらレビューを積む（ADR-0057）。Take ごとに 1 つにまとめる。

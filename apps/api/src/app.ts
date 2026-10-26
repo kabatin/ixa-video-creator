@@ -2,6 +2,7 @@ import { OpenAPIHono } from '@hono/zod-openapi'
 import type { MiddlewareHandler } from 'hono'
 import { cors } from 'hono/cors'
 import type {
+  ProjectClipLock,
   GenerationJobRepository,
   MediaAssetRepository,
   ProjectRepository,
@@ -178,6 +179,8 @@ export type AppDeps = {
   editBatches: EditBatchRepository
   /** 取り消しの記録と、その記録が戻す書き込みを同じトランザクションで行う口。 */
   editTransaction: EditTransaction
+  /** セリフの字幕の作り直しを作品ごとに 1 本ずつ流す鍵（ADR-0061）。 */
+  projectClipLock: ProjectClipLock
   /**
    * 絵コンテ下書きの口。**どの実装を挿すかは main.ts だけが決める**
    * （レビュアと同じ方針。`apps/worker/src/review-wiring.ts`）。
@@ -282,7 +285,7 @@ export const createApp = (deps: AppDeps) => {
   app.use('*', deps.auth.gate)
   app.route('/', deps.auth.routes)
   // セリフの字幕（ADR-0061）。Shot を変える口の書き込みが成功したら、作品ごとに作り直す（口ごとに呼び忘れない）。
-  const dialogueTelops = createDialogueTelopSync({ ...deps, mediaAssets })
+  const dialogueTelops = createDialogueTelopSync({ ...deps, mediaAssets, lock: deps.projectClipLock })
   app.use('*', dialogueTelops.middleware)
 
   app.route('/', healthRoutes())

@@ -17,6 +17,7 @@ import {
   aShot,
   aTake,
   createInMemoryMediaAssetRepository,
+  createInMemoryProjectClipLock,
   createInMemoryShotRepository,
   createInMemoryTakeRepository,
   createInMemoryTimelineClipRepository,
@@ -64,11 +65,13 @@ const setup = (input: { readonly shot?: Partial<Shot>; readonly probe?: MediaPro
   const media = input.probe === undefined ? null : asset(input.probe)
   const take = media === null ? null : aTake(baseShot, 'a'.repeat(64), { mediaAssetId: media.id })
   const shot = take === null ? baseShot : { ...baseShot, selectedTakeId: take.id }
+  const timelineClips = createInMemoryTimelineClipRepository(input.clips ?? [])
   const deps = {
     shots: createInMemoryShotRepository([shot]),
     takes: createInMemoryTakeRepository(take === null ? [] : [take]),
     mediaAssets: createInMemoryMediaAssetRepository(media === null ? [] : [media]),
-    timelineClips: createInMemoryTimelineClipRepository(input.clips ?? []),
+    lock: createInMemoryProjectClipLock(timelineClips),
+    timelineClips,
   }
   return { deps, shot }
 }
@@ -166,10 +169,26 @@ describe('syncDialogueTelops', () => {
       content: { type: 'text', templateKey: 'plain', params: { text: '歌詞', lyricLine: 0 } },
     })
     const { deps } = setup({ shot: { dialogue: [] }, clips: manual.snapshot() })
-    let replaced = 0
-    const watched = { ...deps, timelineClips: { ...deps.timelineClips, replace: (...args: Parameters<typeof deps.timelineClips.replace>) => { replaced += 1; return deps.timelineClips.replace(...args) } } }
+    let writes = 0
+    const count = <T>(run: () => Promise<T>): Promise<T> => {
+      writes += 1
+      return run()
+    }
+    const watched = {
+      ...deps,
+      lock: ((projectId, fn) =>
+        deps.lock(projectId, (clips) =>
+          fn({
+            ...clips,
+            create: (input) => count(() => clips.create(input)),
+            update: (id, patch) => count(() => clips.update(id, patch)),
+            softDelete: (id) => count(() => clips.softDelete(id)),
+            restore: (id) => count(() => clips.restore(id)),
+          }),
+        )) as typeof deps.lock,
+    }
     expect(await syncDialogueTelops(watched, PROJECT)).toEqual({ changed: false, count: 0 })
-    expect(replaced).toBe(0)
+    expect(writes).toBe(0)
     expect(deps.timelineClips.snapshot()).toEqual([lyric])
   })
 
@@ -179,5 +198,45 @@ describe('syncDialogueTelops', () => {
     await deps.shots.update(shot.id, { dialogue: [] })
     expect(await syncDialogueTelops(deps, PROJECT)).toEqual({ changed: true, count: 0 })
     expect(dialogueClips(deps.timelineClips.snapshot())).toEqual([])
+  })
+
+  it('同じ作品の作り直しが並んでも、字幕は行ごとに 1 枚（MCP は Shot を並べて直す）', async () => {
+    const { deps } = setup()
+    await Promise.all([1, 2, 3, 4].map(() => syncDialogueTelops(deps, PROJECT)))
+    expect(spans(deps.timelineClips.snapshot())).toEqual([
+      [10, 2],
+      [12, 4],
+    ])
+  })
+
+  it('前に重なって作られた字幕は、1 枚を残して消す', async () => {
+    const { deps } = setup()
+    await syncDialogueTelops(deps, PROJECT)
+    const [first] = dialogueClips(deps.timelineClips.snapshot())
+    if (first === undefined) throw new Error('字幕があるはず')
+    await deps.timelineClips.create({
+      projectId: first.projectId,
+      track: first.track,
+      startSec: first.startSec,
+      durationSec: first.durationSec,
+      layer: first.layer,
+      opacity: first.opacity,
+      content: first.content,
+    })
+    await syncDialogueTelops(deps, PROJECT)
+    expect(dialogueClips(deps.timelineClips.snapshot())).toHaveLength(2)
+    expect(dialogueClips(deps.timelineClips.snapshot()).map((clip) => clip.id)).toContain(first.id)
+  })
+
+  it('直すときは同じ ID のまま（取り消しの記録とインスペクターの選択が切れない）', async () => {
+    const { deps, shot } = setup()
+    await syncDialogueTelops(deps, PROJECT)
+    const before = dialogueClips(deps.timelineClips.snapshot()).map((clip) => clip.id)
+    await deps.shots.update(shot.id, { dialogue: [line('あいう', 'Ah'), line('かきくけこさ'), line('たち')] })
+    await syncDialogueTelops(deps, PROJECT)
+    const after = dialogueClips(deps.timelineClips.snapshot())
+    expect(after.slice(0, 2).map((clip) => clip.id)).toEqual(before)
+    expect(after).toHaveLength(3)
+    expect(after[0]?.content).toMatchObject({ params: { translation: 'Ah' } })
   })
 })

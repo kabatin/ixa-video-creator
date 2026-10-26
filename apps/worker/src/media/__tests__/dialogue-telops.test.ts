@@ -12,6 +12,7 @@ import {
   aShot,
   aTake,
   createInMemoryMediaAssetRepository,
+  createInMemoryProjectClipLock,
   createInMemoryShotRepository,
   createInMemoryTakeRepository,
   createInMemoryTimelineClipRepository,
@@ -61,11 +62,13 @@ const setup = (kind: MediaKind = 'video') => {
     ],
   })
   const take = aTake(base, 'a'.repeat(64), { mediaAssetId: asset.id })
+  const timelineClips = createInMemoryTimelineClipRepository()
   const deps = {
     shots: createInMemoryShotRepository([{ ...base, selectedTakeId: take.id }]),
     takes: createInMemoryTakeRepository([take]),
     mediaAssets: createInMemoryMediaAssetRepository([asset]),
-    timelineClips: createInMemoryTimelineClipRepository(),
+    lock: createInMemoryProjectClipLock(timelineClips),
+    timelineClips,
     logger: silentLogger,
   }
   return { deps, asset }
@@ -94,7 +97,7 @@ describe('syncDialogueTelopsAfterIngest', () => {
 
   it('作り直しに失敗しても投げない（取り込みは済んでいる）', async () => {
     const { deps, asset } = setup()
-    const broken = { ...deps, timelineClips: { ...deps.timelineClips, findByProject: () => Promise.reject(new Error('DB が落ちた')) } }
+    const broken = { ...deps, lock: (() => Promise.reject(new Error('DB が落ちた'))) as typeof deps.lock }
     await expect(syncDialogueTelopsAfterIngest(broken)(asset)).resolves.toBeUndefined()
   })
 

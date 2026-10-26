@@ -1,4 +1,4 @@
-import { DbNotFoundError, type TextStyleRepository, type TimelineClipRepository } from '@ixa/db'
+import { DbNotFoundError, type ProjectClipLock, type TextStyleRepository, type TimelineClipRepository } from '@ixa/db'
 import {
   CreateTextStylePresetInput,
   CreateTimelineClipInput as CreateTimelineClipInputSchema,
@@ -9,6 +9,7 @@ import {
   UpdateTextStylePresetPatch,
   UpdateTimelineClipPatch as UpdateTimelineClipPatchSchema,
   newId,
+  type ProjectId,
   type TimelineClip,
 } from '@ixa/domain'
 
@@ -19,6 +20,8 @@ import {
 
 export type InMemoryTimelineClipRepository = TimelineClipRepository & {
   readonly snapshot: () => readonly TimelineClip[]
+  /** 論理削除したもの（消した順）。 */
+  readonly deletedSnapshot: () => readonly TimelineClip[]
 }
 
 export const createInMemoryTimelineClipRepository = (
@@ -30,6 +33,7 @@ export const createInMemoryTimelineClipRepository = (
 
   return {
     snapshot: () => store,
+    deletedSnapshot: () => deleted,
 
     findByProject: (projectId) =>
       Promise.resolve(store.filter((clip) => clip.projectId === projectId)),
@@ -150,5 +154,29 @@ export const createInMemoryTextStyleRepository = (
       store = [...store, removed]
       return Promise.resolve(removed)
     },
+  }
+}
+
+/**
+ * `ProjectClipLock` のメモリ版（ADR-0061）。本物の `pg_advisory_xact_lock` と同じく、**同じ作品の作り直しを 1 本ずつ**流す
+ * （前の作り直しが終わるまで次は待つ）。中身はメモリ版のクリップの口をそのまま使う。
+ */
+export const createInMemoryProjectClipLock = (
+  clips: TimelineClipRepository & { readonly deletedSnapshot?: () => readonly TimelineClip[] },
+): ProjectClipLock => {
+  let tails: ReadonlyMap<ProjectId, Promise<unknown>> = new Map()
+  return <T>(projectId: ProjectId, fn: Parameters<ProjectClipLock>[1]): Promise<T> => {
+    const previous = tails.get(projectId) ?? Promise.resolve()
+    const run = previous
+      .catch(() => undefined)
+      .then(() =>
+        fn({
+          ...clips,
+          findDeletedByProject: (id) =>
+            Promise.resolve([...(clips.deletedSnapshot?.() ?? [])].reverse().filter((clip) => clip.projectId === id)),
+        }),
+      ) as Promise<T>
+    tails = new Map([...tails, [projectId, run]])
+    return run
   }
 }

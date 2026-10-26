@@ -31,6 +31,7 @@ import {
   createScriptRepository,
   createEditBatchRepository,
   createEditTransaction,
+  createProjectClipLock,
   createStoryboardDraftRepository,
   createSequenceRepository,
   createMusicAnalysisRepository,
@@ -474,6 +475,7 @@ export const main = (): void => {
     editBatches: createEditBatchRepository(db),
     // 取り消しの記録と書き込みを同じトランザクションで行う口。
     editTransaction: createEditTransaction(db),
+    projectClipLock: createProjectClipLock(db),
     // 絵コンテの案の口は「使う AI」のテキストで決まる（ADR-0032。未選択なら STORYBOARD_DRAFTER）。
     storyboardDrafter: ai.storyboardDrafter,
     textAssistant: ai.textAssistant,

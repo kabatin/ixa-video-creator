@@ -12,6 +12,7 @@ import {
   createInMemoryCharacterRepository,
   createInMemoryLocationRepository,
   createInMemoryMediaAssetRepository,
+  createInMemoryProjectClipLock,
   createInMemoryShotCharacterRepository,
   createInMemoryShotReferenceRepository,
   createInMemoryImageCheckRepository,
@@ -115,7 +116,7 @@ export const createRecordingReviewQueue = (): RecordingReviewQueue => {
   }
 }
 
-const baseDeps = (providers: readonly VideoProvider[]): Omit<AppDeps, 'editTransaction'> => ({
+const baseDeps = (providers: readonly VideoProvider[]): Omit<AppDeps, 'editTransaction' | 'projectClipLock'> => ({
   // 誰でも通す門（ルートのテスト用）。本物の門は `auth.test.ts` と `auth-wiring.test.ts` が確かめる。
   auth: openAuthForTests(),
   projects: createInMemoryProjectRepository(),
@@ -170,7 +171,7 @@ const baseDeps = (providers: readonly VideoProvider[]): Omit<AppDeps, 'editTrans
 })
 
 /** その deps のリポジトリで書くメモリ版の `EditTransaction`（書き込みが落ちれば記録を巻き戻す）。 */
-const editTransactionOf = (deps: Omit<AppDeps, 'editTransaction'>) =>
+const editTransactionOf = (deps: Omit<AppDeps, 'editTransaction' | 'projectClipLock'>) =>
   createInMemoryEditTransaction({
     editBatches: deps.editBatches,
     projects: deps.projects,
@@ -192,9 +193,10 @@ const editTransactionOf = (deps: Omit<AppDeps, 'editTransaction'>) =>
  * テスト用の `createApp`。**取り消しの記録と書き込みの口を、渡した deps のリポジトリで作り直す。**
  * `{ ...baseAppDeps(), shots }` のように差し替えると、`baseAppDeps` の口は古いリポジトリへ書いてしまうため。
  */
-export const createTestApp = (deps: AppDeps) => createApp({ ...deps, editTransaction: editTransactionOf(deps) })
+export const createTestApp = (deps: AppDeps) =>
+  createApp({ ...deps, editTransaction: editTransactionOf(deps), projectClipLock: createInMemoryProjectClipLock(deps.timelineClips) })
 
 export const baseAppDeps = (providers: readonly VideoProvider[] = []): AppDeps => {
   const deps = baseDeps(providers)
-  return { ...deps, editTransaction: editTransactionOf(deps) }
+  return { ...deps, editTransaction: editTransactionOf(deps), projectClipLock: createInMemoryProjectClipLock(deps.timelineClips) }
 }
