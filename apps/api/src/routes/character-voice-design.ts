@@ -9,8 +9,10 @@ import {
   VOICE_NAME_MAX,
   VoiceProfileId as VoiceProfileIdSchema,
   newId,
+  type CreateVoiceProfileInput,
   type MediaAssetId,
   type Project,
+  type VoiceProfile,
   type VoiceProfileId,
 } from '@ixa/domain'
 import { VoiceProviderError } from '@ixa/provider-core'
@@ -18,6 +20,7 @@ import { GEMINI_DEFAULT_TTS_MODEL } from '@ixa/provider-voice'
 import { mediaKey } from '@ixa/storage'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
+import { isUniqueViolation } from './unique-violation.js'
 import type { DubRoutesDeps } from '../dub/deps.js'
 import { DUPLICATE_VOICE_NAME_MESSAGE, VoiceProfileResponse, toVoiceResponse } from './narration-voices.js'
 
@@ -27,6 +30,11 @@ import { DUPLICATE_VOICE_NAME_MESSAGE, VoiceProfileResponse, toVoiceResponse } f
  *
  * 作った声は**作った鍵のプロジェクトでしか読めない**ので、鍵の名札（秘密ではない）と一緒に保存する。
  */
+
+export const VOICE_DESIGN_BUSY_MESSAGE = 'このキャラクターの声を作っている最中です。できてからもう一度押してください'
+
+/** 同じ名前が埋まっていたときに試す「（2）」〜の数。払った声を失わないための逃げ道なので、上限は余裕を持たせる。 */
+const MAX_NAME_SUFFIX = 20
 
 export const VOICE_DESIGN_UNAVAILABLE_MESSAGE =
   'この環境では説明から声を作れません（Gemini の声を使う設定と、鍵の名札が必要です）'
@@ -56,6 +64,7 @@ const designRoute = createRoute({
     201: { description: '作った声と試し聞き', content: { 'application/json': { schema: successResponse(DesignVoiceResponse) } } },
     404: errorContent('キャラクターが存在しない'),
     409: errorContent('同じ名前の声がある'),
+    429: errorContent('このキャラクターの声を作っている最中'),
     422: errorContent('入力の検証に失敗した'),
     502: errorContent('声を作れなかった'),
     503: errorContent('この環境では作れない'),
@@ -64,11 +73,18 @@ const designRoute = createRoute({
 
 type Deps = Pick<DubRoutesDeps, 'characters' | 'voices' | 'projects' | 'mediaAssets' | 'storage' | 'voiceDesign' | 'logger'>
 
-/** 試し聞きを素材にする。同じ中身の素材が既にあればそれを指す。 */
-const storeSample = async (deps: Deps, project: Project, voiceProfileId: VoiceProfileId, wav: Buffer): Promise<MediaAssetId> => {
+/**
+ * 試し聞きを素材にする。同じ中身の素材がこの作品にあればそれを指す。**別の作品の素材は指さない**
+ * （同じ中身の素材は 2 つ作れないので、そのときは保存せず null。声そのものは保存してある）。
+ */
+const storeSample = async (deps: Deps, project: Project, voiceProfileId: VoiceProfileId, wav: Buffer): Promise<MediaAssetId | null> => {
   const checksumSha256 = createHash('sha256').update(wav).digest('hex')
   const existing = await deps.mediaAssets.findByChecksum(checksumSha256)
-  if (existing !== null) return existing.id
+  if (existing !== null && existing.projectId === project.id) return existing.id
+  if (existing !== null) {
+    deps.logger.warn({ voiceProfileId }, '試し聞きと同じ中身の素材が別の作品にあるので、試し聞きは保存しません')
+    return null
+  }
   const id = newId(MediaAssetIdSchema)
   const storageKey = mediaKey(project.workspaceId, id, 'wav')
   await deps.storage.put(storageKey, wav, { contentType: 'audio/wav' })
@@ -86,8 +102,32 @@ const storeSample = async (deps: Deps, project: Project, voiceProfileId: VoicePr
   return id
 }
 
-export const characterVoiceDesignRoutes = (deps: Deps) =>
-  new OpenAPIHono({ defaultHook: validationHook }).openapi(designRoute, async (c) => {
+const suffixedName = (base: string, n: number): string => {
+  const suffix = `（${String(n)}）`
+  return `${base.slice(0, Math.max(0, VOICE_NAME_MAX - suffix.length))}${suffix}`
+}
+
+/**
+ * 作った声を保存する。**払った声を失わない**: 名前の確かめの後に同じ名前が入っていたら（同時に作った）、
+ * 「（2）」「（3）」…を付けて保存し直す。それでも保存できなければ、声の ID をログに残して投げる（手で拾える）。
+ */
+const saveDesignedVoice = async (deps: Deps, input: CreateVoiceProfileInput & { readonly id: VoiceProfileId }, attempt = 1): Promise<VoiceProfile> => {
+  const name = attempt === 1 ? input.name : suffixedName(input.name, attempt)
+  try {
+    return await deps.voices.create({ ...input, name })
+  } catch (error) {
+    if (!isUniqueViolation(error) || attempt >= MAX_NAME_SUFFIX) {
+      deps.logger.error({ voiceName: input.voiceName, err: error }, '作った声を保存できませんでした（声の ID を手で登録してください）')
+      throw error
+    }
+    return saveDesignedVoice(deps, input, attempt + 1)
+  }
+}
+
+export const characterVoiceDesignRoutes = (deps: Deps) => {
+  /** いま声を作っているキャラクター（同じキャラクターで続けて押されても二重に払わない。この API の中だけ）。 */
+  let designing: ReadonlySet<string> = new Set()
+  return new OpenAPIHono({ defaultHook: validationHook }).openapi(designRoute, async (c) => {
     const character = await deps.characters.findById(c.req.valid('param').id)
     if (character === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
     const project = await deps.projects.findById(character.projectId)
@@ -97,6 +137,8 @@ export const characterVoiceDesignRoutes = (deps: Deps) =>
     if (design === null || keyLabel === null || !keyLabel.success) return c.json(fail(VOICE_DESIGN_UNAVAILABLE_MESSAGE), 503)
     const input = c.req.valid('json')
     if ((await deps.voices.findByName(project.id, input.displayName)) !== null) return c.json(fail(DUPLICATE_VOICE_NAME_MESSAGE), 409)
+    if (designing.has(character.id)) return c.json(fail(VOICE_DESIGN_BUSY_MESSAGE), 429)
+    designing = new Set([...designing, character.id])
 
     const designed = await design
       .designVoice({ description: input.description, gender: input.gender, displayName: input.displayName, languageCode: 'ja-JP' })
@@ -104,10 +146,13 @@ export const characterVoiceDesignRoutes = (deps: Deps) =>
         if (error instanceof VoiceProviderError) return { error: error.message }
         throw error
       })
+      .finally(() => {
+        designing = new Set([...designing].filter((id) => id !== character.id))
+      })
     if ('error' in designed) return c.json(fail(`声を作れませんでした: ${designed.error}`), 502)
 
     const id = newId(VoiceProfileIdSchema)
-    const voice = await deps.voices.create({
+    const voice = await saveDesignedVoice(deps, {
       id,
       projectId: project.id,
       name: input.displayName,
@@ -121,3 +166,4 @@ export const characterVoiceDesignRoutes = (deps: Deps) =>
     deps.logger.info({ voiceProfileId: id, characterId: character.id }, '説明から声を作りました')
     return c.json(ok({ voice: toVoiceResponse(voice), sampleMediaAssetId }), 201)
   })
+}

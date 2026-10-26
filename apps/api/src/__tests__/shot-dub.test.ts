@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { OpenAPIHono } from '@hono/zod-openapi'
 import {
   CharacterId,
@@ -128,9 +129,13 @@ const setup = async (options: Setup = {}) => {
 }
 
 /** 同じ表で、ジョブの口の一部だけを差し替えた app（同時に押されたときの再現）。 */
-const setupWith = (f: Awaited<ReturnType<typeof setup>>, patch: Partial<Awaited<ReturnType<typeof setup>>['dubJobs']>) => {
+const setupWith = (
+  f: Awaited<ReturnType<typeof setup>>,
+  patch: Partial<Awaited<ReturnType<typeof setup>>['dubJobs']>,
+  others: Partial<Parameters<typeof dubRouter>[0]> = {},
+) => {
   const app = new OpenAPIHono({ defaultHook: validationHook })
-  app.route('/', dubRouter({ ...f.deps, dubJobs: { ...f.dubJobs, ...patch } }))
+  app.route('/', dubRouter({ ...f.deps, dubJobs: { ...f.dubJobs, ...patch }, ...others }))
   registerErrorHandlers(app, createLogger('silent'))
   return app
 }
@@ -282,6 +287,63 @@ describe('POST /characters/:id/voices/design', () => {
       expect((await post(f.app, `/characters/${f.cat.id}/voices/design`, bad)).status).toBe(422)
     }
     expect(design.calls()).toEqual([])
+  })
+
+  it('作っている間に同じ名前の声ができていても、払った声を失わず「（2）」を付けて保存する', async () => {
+    const design = fakeDesign(() => Promise.resolve({ voiceId: 'voice_abc123', sampleWav: null }))
+    const f = await setup({ design: design.port })
+    // 名前の確かめは通り、保存の時点で同じ名前が先に入った（同時に作った）。
+    let first = true
+    const racingVoices = {
+      ...f.voices,
+      create: (input: Parameters<typeof f.voices.create>[0]) => {
+        if (first) {
+          first = false
+          return Promise.reject(Object.assign(new Error('duplicate key'), { code: '23505' }))
+        }
+        return f.voices.create(input)
+      },
+    }
+    const app = setupWith(f, {}, { voices: racingVoices })
+    const res = await post(app, `/characters/${f.cat.id}/voices/design`, body)
+    expect(res.status).toBe(201)
+    expect(((await res.json()) as Body<{ voice: { name: string; voiceName: string } }>).data.voice).toMatchObject({
+      name: `${body.displayName}（2）`,
+      voiceName: 'voice_abc123',
+    })
+    expect(design.calls()).toHaveLength(1)
+  })
+
+  it('同じキャラクターで作っている最中にもう一度押されたら 429（二重に払わない）', async () => {
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const design = fakeDesign(async () => {
+      await gate
+      return { voiceId: 'voice_slow', sampleWav: null }
+    })
+    const f = await setup({ design: design.port })
+    const firstRes = post(f.app, `/characters/${f.cat.id}/voices/design`, body)
+    const second = await post(f.app, `/characters/${f.cat.id}/voices/design`, { ...body, displayName: '別の名前' })
+    expect(second.status).toBe(429)
+    release()
+    expect((await firstRes).status).toBe(201)
+    expect(design.calls()).toHaveLength(1)
+    // 終われば、また作れる。
+    expect((await post(f.app, `/characters/${f.cat.id}/voices/design`, { ...body, displayName: '三つ目' })).status).toBe(201)
+  })
+
+  it('試し聞きと同じ中身の素材が別の作品にあれば指さない（保存せず、声は保存する）', async () => {
+    const design = fakeDesign(() => Promise.resolve({ voiceId: 'voice_abc123', sampleWav: WAV }))
+    const f = await setup({ design: design.port })
+    const foreign = assetWith('01ARZ3NDEKTSV4RRFFQ69G5FAW', '01ARZ3NDEKTSV4RRFFQ69G5FAX', null)
+    const theirs = { ...foreign, kind: 'audio' as const, checksumSha256: createHash('sha256').update(WAV).digest('hex') }
+    const app = setupWith(f, {}, { mediaAssets: createInMemoryMediaAssetRepository([theirs]) })
+    const res = await post(app, `/characters/${f.cat.id}/voices/design`, body)
+    expect(res.status).toBe(201)
+    const data = ((await res.json()) as Body<{ sampleMediaAssetId: string | null }>).data
+    expect(data.sampleMediaAssetId).toBeNull()
   })
 
   it('Gemini が断ったら 502 で理由を返し、声は保存しない', async () => {
