@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { parseCliArgs } from '../args.js'
-import { composeProblems, composeSettingsOf, composeUpCommand, containerInfoOf, containerStateOf, infraOwnerOf } from '../lib/compose.js'
+import {
+  composeProblems,
+  composeSettingsOf,
+  composeUpCommand,
+  containerInfoOf,
+  containerStateOf,
+  infraOwnerOf,
+  loopbackPortOf,
+  portMismatches,
+  publishersOf,
+} from '../lib/compose.js'
 import { appendEnvLine, envKeysOf, missingEnvKeys, parseEnvFile, webLocalOverrides } from '../lib/env-file.js'
 import { appendCodexSection, claudeAddCommand, codexHasIxa, codexTomlSection, shellQuote } from '../lib/mcp-config.js'
 import { compareVersions, latestVersionTag, majorOf, parseVersion } from '../lib/semver.js'
@@ -71,6 +81,41 @@ describe('compose', () => {
     expect(containerStateOf({ exitCode: 0, stdout: 'running|starting|/r/infra' })).toBe('starting')
     expect(containerStateOf({ exitCode: 0, stdout: 'exited||' })).toBe('stopped')
     expect(containerStateOf({ exitCode: 1, stdout: '' })).toBe('missing')
+  })
+
+  it('POSTGRES_PORT・REDIS_PORT を書いたのに URL のポートが違えば問題として返す', () => {
+    const env = {
+      POSTGRES_PORT: '55432',
+      REDIS_PORT: '56379',
+      DATABASE_URL: 'postgresql://ixa:pw@127.0.0.1:5432/ixa',
+      REDIS_URL: 'redis://127.0.0.1:56379',
+    }
+    const problems = portMismatches(env)
+    expect(problems).toHaveLength(1)
+    expect(problems[0]).toContain('DATABASE_URL')
+    expect(problems[0]).not.toContain('pw')
+    expect(portMismatches({ ...env, DATABASE_URL: 'postgresql://ixa:pw@127.0.0.1:55432/ixa' })).toEqual([])
+    expect(portMismatches({ DATABASE_URL: 'postgresql://x@127.0.0.1:5433/ixa' })).toEqual([])
+  })
+
+  it('URL のポート（書いていなければ既定）。この Mac の中を指しているときだけ', () => {
+    expect(loopbackPortOf('postgresql://ixa@127.0.0.1:55432/ixa', 5432)).toBe(55432)
+    expect(loopbackPortOf('postgresql://ixa@localhost/ixa', 5432)).toBe(5432)
+    expect(loopbackPortOf('redis://db.example.com:6379', 6379)).toBeNull()
+    expect(loopbackPortOf('not a url', 6379)).toBeNull()
+  })
+
+  it('そのポートを公開しているコンテナを読む（compose の場所が無いものは場所 null）', () => {
+    expect(publishersOf('ixa-postgres|/Users/me/ixa/infra\nmine|\n')).toEqual([
+      { state: 'healthy', composeDir: '/Users/me/ixa/infra' },
+      { state: 'healthy', composeDir: null },
+    ])
+    expect(publishersOf('')).toEqual([])
+  })
+
+  it('名前が違っても、同じポートを別の clone の compose が持っていれば別の clone のもの', () => {
+    const byPort = publishersOf('ixa-postgres|/Users/me/ixa/infra')
+    expect(infraOwnerOf([containerInfoOf(null), ...byPort], '/tmp/clone2')).toEqual({ kind: 'other', dir: '/Users/me/ixa' })
   })
 
   it('コンテナを起こした clone を見分ける（場所に空白があっても）', () => {

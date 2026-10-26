@@ -1,20 +1,18 @@
 import { listWorkspaces, pendingMigrations, readMigrationJournal } from '@ixa/db'
 import {
-  INSPECT_FORMAT,
   composeSettingsOf,
   composeUpCommand,
-  containerInfoOf,
   infraOwnerOf,
   infraSharedOf,
   type ComposeSettings,
-  type ContainerInfo,
   type ContainerState,
   type InfraOwner,
 } from '../lib/compose.js'
 import { dbErrorReason } from '../lib/db-error.js'
 import { isBlank, type EnvValues } from '../lib/env-file.js'
 import type { System } from '../system.js'
-import type { CheckResult, Fix } from '../types.js'
+import type { CheckResult } from '../types.js'
+import { FOREIGN_INFRA_FIX, infraInfos, inspectContainer } from './containers.js'
 
 /** DB の点検（postgres・redis が動いているか・誰のものか・つながるか・まだの DB の更新・ワークスペース）。 */
 
@@ -38,14 +36,6 @@ export type DbFacts = {
 
 const DOCS = 'INSTALL.md#db'
 const SETUP = { hint: 'setup が起動・更新・初期データまでやる', command: 'pnpm ixa setup', needsHuman: false } as const
-
-/** 別の clone のコンテナを見つけたときの直し方（分けるか共有するかは人が決める）。 */
-export const FOREIGN_INFRA_FIX: Fix = {
-  hint:
-    '分けるなら .env に IXA_COMPOSE_PROJECT・IXA_COMPOSE_PREFIX・POSTGRES_PORT・REDIS_PORT を書き、DATABASE_URL・REDIS_URL のポートも揃える。' +
-    '共有してよいなら IXA_COMPOSE_SHARED=true。どちらにするか制作者に聞く',
-  needsHuman: true,
-}
 
 export const ownerCheck = (owner: InfraOwner, shared: boolean): CheckResult => {
   const id = 'db.infra-owner'
@@ -135,11 +125,6 @@ export const judgeDb = (facts: DbFacts): readonly CheckResult[] => [
   workspaceCheck(facts.workspaceIds, facts.envWorkspaceId),
 ]
 
-export const inspectContainer = async (system: System, name: string): Promise<ContainerInfo> => {
-  const result = await system.run('docker', ['inspect', '-f', INSPECT_FORMAT, name], { timeoutMs: 10_000 })
-  return containerInfoOf(result.kind === 'completed' ? result : null)
-}
-
 type DbRead = { readonly pending: readonly string[]; readonly workspaceIds: readonly string[] }
 
 const readDb = async (system: System, url: string): Promise<DbRead | string> => {
@@ -163,9 +148,10 @@ export const gatherDb = async (system: System, env: EnvValues, repoRoot: string)
   const compose = composeSettingsOf(env)
   const databaseUrl = isBlank(env, 'DATABASE_URL') ? null : (env['DATABASE_URL'] ?? null)
   const redisUrl = isBlank(env, 'REDIS_URL') ? null : (env['REDIS_URL'] ?? null)
-  const [postgresInfo, redisInfo, db, redis] = await Promise.all([
+  const [postgresInfo, redisInfo, infos, db, redis] = await Promise.all([
     inspectContainer(system, compose.postgresContainer),
     inspectContainer(system, compose.redisContainer),
+    infraInfos(system, env),
     databaseUrl === null ? Promise.resolve(null) : readDb(system, databaseUrl),
     redisUrl === null ? Promise.resolve(null) : system.redisPing(redisUrl, 3000),
   ])
@@ -174,7 +160,7 @@ export const gatherDb = async (system: System, env: EnvValues, repoRoot: string)
     compose,
     postgresContainer: postgresInfo.state,
     redisContainer: redisInfo.state,
-    owner: infraOwnerOf([postgresInfo, redisInfo], repoRoot),
+    owner: infraOwnerOf(infos, repoRoot),
     shared: infraSharedOf(env),
     postgres: db === null ? null : typeof db === 'string' ? db : true,
     redis,

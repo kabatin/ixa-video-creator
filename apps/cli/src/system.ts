@@ -41,6 +41,8 @@ export type System = {
   readonly readText: (path: string) => Promise<string | null>
   readonly writeText: (path: string, content: string) => Promise<void>
   readonly exists: (path: string) => Promise<boolean>
+  /** シンボリックリンクをたどった場所。無ければそのまま返す（clone の場所の比べ合わせに使う）。 */
+  readonly realpath: (path: string) => Promise<string>
   /** そこ（無ければいちばん近い親）に書けるか。**書いて確かめない**（doctor は読むだけ）。 */
   readonly canWrite: (path: string) => Promise<boolean>
   /** 空き容量（バイト）。分からなければ null。 */

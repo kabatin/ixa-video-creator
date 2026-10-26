@@ -37,7 +37,7 @@ export const composeProblems = (env: EnvValues): readonly string[] => {
       return value !== null && (!PORT_PATTERN.test(value) || Number(value) < 1 || Number(value) > 65535)
     })
     .map((key) => `${key}: ポートの番号（1〜65535）で書いてください`)
-  return [...names, ...ports]
+  return [...names, ...ports, ...portMismatches(env)]
 }
 
 export type ComposeSettings = {
@@ -118,3 +118,49 @@ export const infraOwnerOf = (infos: readonly ContainerInfo[], repoRoot: string):
 
 /** 別の clone のコンテナを共有してよいと `.env` で決めてあるか。 */
 export const infraSharedOf = (env: EnvValues): boolean => (env['IXA_COMPOSE_SHARED'] ?? '').trim() === 'true'
+
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['127.0.0.1', 'localhost', '[::1]', '::1'])
+
+/** URL のポート（書いていなければ既定）。この Mac の中を指していなければ null（Docker の口と比べない）。 */
+export const loopbackPortOf = (url: string, fallback: number): number | null => {
+  try {
+    const parsed = new URL(url)
+    if (!LOOPBACK_HOSTS.has(parsed.hostname)) return null
+    return parsed.port === '' ? fallback : Number(parsed.port)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Docker で公開するポート（POSTGRES_PORT・REDIS_PORT）を書いたのに、つなぐ URL のポートが違う。
+ * そのままだと、自分のコンテナを起こしたのに別のもの（1 つ目の clone の DB など）につながる。
+ * **文に URL は入れない**（合言葉が入る）。
+ */
+export const portMismatches = (env: EnvValues): readonly string[] =>
+  (
+    [
+      ['POSTGRES_PORT', 'DATABASE_URL', 5432],
+      ['REDIS_PORT', 'REDIS_URL', 6379],
+    ] as const
+  )
+    .filter(([portKey, urlKey, fallback]) => {
+      const published = (env[portKey] ?? '').trim()
+      if (published === '') return false
+      const port = loopbackPortOf(env[urlKey] ?? '', fallback)
+      return port !== null && port !== Number(published)
+    })
+    .map(([portKey, urlKey]) => `${portKey} と ${urlKey} のポートが違います（${urlKey} を ${portKey} に揃える）`)
+
+/** そのポートを公開しているコンテナを探す `docker ps` の書式（名前|compose の場所）。 */
+export const PUBLISHER_FORMAT = '{{.Names}}|{{.Label "com.docker.compose.project.working_dir"}}'
+
+/** `docker ps --filter publish=<port>` の答え。動いているものしか出ないので状態は healthy とみなす。 */
+export const publishersOf = (stdout: string): readonly ContainerInfo[] =>
+  stdout
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .map((line) => {
+      const dir = line.slice(line.indexOf('|') + 1).trim()
+      return { state: 'healthy' as const, composeDir: dir === '' ? null : dir }
+    })

@@ -14,7 +14,8 @@ import { createRealSystem } from './real-system.js'
 const main = async (): Promise<number> => {
   const options = parseCliArgs(process.argv.slice(2))
   const system = createRealSystem()
-  const repo = paths(REPO_ROOT)
+  // シンボリックリンク越しの clone でも、コンテナやポートの持ち主と同じ書き方で比べる。
+  const repo = paths(await system.realpath(REPO_ROOT))
   const out = createOutput(options.json)
   switch (options.command) {
     case 'help':

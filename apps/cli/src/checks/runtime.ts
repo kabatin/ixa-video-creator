@@ -102,7 +102,8 @@ const ownerOf = async (system: System, port: number, root: string): Promise<Port
   if (listener === null) return { kind: 'free' }
   const ixaRoot = listener.cwd === null ? null : await ixaRootOf(system, listener.cwd)
   if (ixaRoot === null) return { kind: 'other', pid: listener.pid }
-  return path.resolve(ixaRoot) === path.resolve(root) ? { kind: 'this-repo' } : { kind: 'other-ixa', root: ixaRoot }
+  const [theirs, mine] = await Promise.all([system.realpath(ixaRoot), system.realpath(root)])
+  return theirs === mine ? { kind: 'this-repo' } : { kind: 'other-ixa', root: ixaRoot }
 }
 
 const ApiHealth = z.object({ success: z.literal(true), data: z.object({ status: z.literal('ok') }) })

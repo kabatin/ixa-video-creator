@@ -1,7 +1,7 @@
 import { spawn, type StdioOptions } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { constants } from 'node:fs'
-import { access, readFile, statfs, writeFile } from 'node:fs/promises'
+import { access, readFile, realpath, statfs, writeFile } from 'node:fs/promises'
 import { connect } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -177,6 +177,13 @@ export const createRealSystem = (): System => ({
   readText,
   writeText: (file, content) => writeFile(file, content, 'utf8'),
   exists,
+  realpath: async (file) => {
+    try {
+      return await realpath(file)
+    } catch {
+      return file
+    }
+  },
   canWrite,
   freeBytes,
   listener,

@@ -1,14 +1,12 @@
 import { configProblems } from '@ixa/config'
 import { applyMigrations, ensureDefaultWorkspace, fillEmptyEnvValue, listWorkspaces, pendingMigrations, readMigrationJournal } from '@ixa/db'
-import { FOREIGN_INFRA_FIX, inspectContainer } from '../checks/db.js'
+import { inspectContainer } from '../checks/containers.js'
 import { gatherTools, judgeTools } from '../checks/tools.js'
 import {
   composeProblems,
   composeSettingsOf,
   composeUpArgs,
   composeUpCommand,
-  infraOwnerOf,
-  infraSharedOf,
   type ComposeSettings,
   type ContainerState,
 } from '../lib/compose.js'
@@ -17,6 +15,7 @@ import type { RepoPaths } from '../lib/repo.js'
 import type { System } from '../system.js'
 import type { StepResult } from '../types.js'
 import { infraAction, infraSettled, signingSecretAction, workspaceAction } from './decide.js'
+import { infraGuard } from './infra-guard.js'
 
 /**
  * setup の各手順（ADR-0063）。どれも「済み」なら何もせず `already` を返す（何度実行しても壊れない）。
@@ -137,23 +136,6 @@ const containerStates = async (system: System, compose: ComposeSettings): Promis
   return [p.state, r.state]
 }
 
-/** 同じ名前のコンテナが別の clone のもの。そのまま進むと、その clone の DB に更新や初期データを書く。 */
-const foreignInfra = async (system: System, compose: ComposeSettings, repo: RepoPaths, env: EnvValues): Promise<StepResult | null> => {
-  const infos = await Promise.all([
-    inspectContainer(system, compose.postgresContainer),
-    inspectContainer(system, compose.redisContainer),
-  ])
-  const owner = infraOwnerOf(infos, repo.root)
-  if (owner.kind !== 'other' || infraSharedOf(env)) return null
-  return {
-    id: 'infra',
-    status: 'needs_human',
-    message: `${compose.postgresContainer}・${compose.redisContainer} は別の場所の ixa（${owner.dir}）のものです。このまま進むとその DB を使います`,
-    fix: FOREIGN_INFRA_FIX,
-    docs: 'INSTALL.md#2-つ目の-clone',
-  }
-}
-
 const composeUp = async (system: System, compose: ComposeSettings, repo: RepoPaths): Promise<StepResult | null> => {
   system.progress('postgres・redis を起動しています…')
   const up = await system.run('docker', composeUpArgs(compose, repo), { cwd: repo.root, timeoutMs: 300_000 })
@@ -171,14 +153,9 @@ const composeUp = async (system: System, compose: ComposeSettings, repo: RepoPat
 /** 5. postgres・redis を Docker で起動し、使えるまで待つ。 */
 export const infraStep = async ({ system, repo }: SetupContext, env: EnvValues): Promise<StepResult> => {
   const id = 'infra'
-  // update の 2 段目は設定の検査を通らずにここへ来るので、名前の形はここでも止める。
-  const badNames = composeProblems(env)
-  if (badNames.length > 0) {
-    return { id, status: 'needs_human', message: `Docker の名前の設定に問題があります: ${badNames.join(' / ')}`, fix: FOREIGN_INFRA_FIX, docs: 'INSTALL.md#2-つ目の-clone' }
-  }
+  const guard = await infraGuard(system, env, repo, id)
+  if (guard !== null) return guard
   const compose = composeSettingsOf(env)
-  const foreign = await foreignInfra(system, compose, repo, env)
-  if (foreign !== null) return foreign
   const [postgres, redis] = await containerStates(system, compose)
   const action = infraAction(postgres, redis, await reachable(system, env))
   if (action === 'already') return { id, status: 'already', message: 'postgres・redis は動いています' }
@@ -199,8 +176,10 @@ export const infraStep = async ({ system, repo }: SetupContext, env: EnvValues):
 }
 
 /** 6. DB の更新を当てる。 */
-export const migrateStep = async ({ system }: SetupContext, env: EnvValues): Promise<StepResult> => {
+export const migrateStep = async ({ system, repo }: SetupContext, env: EnvValues): Promise<StepResult> => {
   const id = 'db.migrate'
+  const guard = await infraGuard(system, env, repo, id)
+  if (guard !== null) return guard
   const journal = await readMigrationJournal()
   const url = env['DATABASE_URL'] ?? ''
   const pending = await system.withDb(url, (db) => pendingMigrations(db, journal))
@@ -213,6 +192,8 @@ export const migrateStep = async ({ system }: SetupContext, env: EnvValues): Pro
 /** 7. 初期データ（ワークスペース）。ID を `.env` の空欄に書く（値があれば書き換えない）。 */
 export const seedStep = async ({ system, repo }: SetupContext, env: EnvValues): Promise<StepResult> => {
   const id = 'db.seed'
+  const guard = await infraGuard(system, env, repo, id)
+  if (guard !== null) return guard
   const url = env['DATABASE_URL'] ?? ''
   const envId = isBlank(env, 'NEXT_PUBLIC_WORKSPACE_ID') ? null : (env['NEXT_PUBLIC_WORKSPACE_ID'] ?? '').trim()
   const ids = await system.withDb(url, async (db) => (await listWorkspaces(db)).map((w) => w.id))
