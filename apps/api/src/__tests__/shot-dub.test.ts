@@ -106,7 +106,33 @@ const setup = async (options: Setup = {}) => {
     }),
   )
   registerErrorHandlers(app, createLogger('silent'))
-  return { app, project, shot, source, dubJobs, enqueued: () => enqueued, cat, voices, mediaAssets, storage }
+  const deps = {
+    projects: createInMemoryProjectRepository([project]),
+    shots,
+    takes,
+    mediaAssets,
+    dubJobs,
+    dubQueue: {
+      enqueue: (id: string) => {
+        enqueued.push(id)
+        return Promise.resolve()
+      },
+    },
+    characters,
+    voices,
+    storage,
+    voiceDesign: options.design === undefined ? null : options.design,
+    logger: createLogger('silent'),
+  }
+  return { app, project, shot, source, dubJobs, enqueued: () => enqueued, cat, voices, mediaAssets, storage, deps }
+}
+
+/** 同じ表で、ジョブの口の一部だけを差し替えた app（同時に押されたときの再現）。 */
+const setupWith = (f: Awaited<ReturnType<typeof setup>>, patch: Partial<Awaited<ReturnType<typeof setup>>['dubJobs']>) => {
+  const app = new OpenAPIHono({ defaultHook: validationHook })
+  app.route('/', dubRouter({ ...f.deps, dubJobs: { ...f.dubJobs, ...patch } }))
+  registerErrorHandlers(app, createLogger('silent'))
+  return app
 }
 
 const post = (app: OpenAPIHono, path: string, body?: unknown) =>
@@ -148,6 +174,18 @@ describe('POST /shots/:shotId/dub', () => {
     expect(res.status).toBe(409)
     expect(((await res.json()) as Body<null>).error).toBe(DUB_GENERATING_REASON)
     expect(g.enqueued()).toEqual([])
+  })
+
+  it('同時に押されて表の一意で落ちたら 409（2 本目は積まない）', async () => {
+    const f = await setup()
+    // 1 本目が積まれた直後に 2 本目が来た（2 本目の確かめの時点では、まだ 1 本目が見えていない）。
+    await f.dubJobs.create({ projectId: f.project.id, shotId: f.shot.id, sourceTakeId: f.source.id })
+    const racing = setupWith(f, { findActiveByProject: () => Promise.resolve([]) })
+    const res = await post(racing, `/shots/${f.shot.id}/dub`)
+    expect(res.status).toBe(409)
+    expect(((await res.json()) as Body<null>).error).toBe(DUB_IN_PROGRESS_REASON)
+    expect(f.dubJobs.snapshot()).toHaveLength(1)
+    expect(f.enqueued()).toEqual([])
   })
 
   it('セリフが無い・音が無い Take は 422（理由つき）。積まない', async () => {

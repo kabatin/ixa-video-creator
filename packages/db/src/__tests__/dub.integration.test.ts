@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { closeDbClient, createDbClient, type DbExecutor } from '../client.js'
 import { createCharacterRepository } from '../repositories/character-repository.js'
 import { createDubJobRepository } from '../repositories/dub-job-repository.js'
+import { isUniqueViolation } from '../unique-violation.js'
 import { createProjectRepository } from '../repositories/project-repository.js'
 import { createShotRepository } from '../repositories/shot-repository.js'
 import { createTtsClipRepository } from '../repositories/tts-clip-repository.js'
@@ -95,6 +96,20 @@ describe.skipIf(url === undefined)('声の差し替えの表（実際の DB）',
       expect(await shots.selectTakeIfCurrent(b.shotId, b.takeId, b.takeId)).toBeNull()
       expect((await shots.selectTakeIfCurrent(a.shotId, a.takeId, a.takeId))?.selectedTakeId).toBe(a.takeId)
       expect(await shots.selectTakeIfCurrent(a.shotId, a.takeId, b.takeId)).toBeNull()
+    })
+  })
+
+  it('同じ Shot で待っている・動いている差し替えは 1 本だけ（一意で落ちる）。終われば次を積める', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const { projectId, workspaceId } = await aProject(tx)
+      const a = await insertShotWithTake(tx, projectId, workspaceId, 'IT-A')
+      const jobs = createDubJobRepository(tx)
+      const first = await jobs.create({ projectId, shotId: a.shotId, sourceTakeId: a.takeId })
+      await tx.execute(sql`savepoint dup`)
+      await expect(jobs.create({ projectId, shotId: a.shotId, sourceTakeId: a.takeId })).rejects.toSatisfy(isUniqueViolation)
+      await tx.execute(sql`rollback to savepoint dup`)
+      await jobs.cancel(first.id)
+      expect((await jobs.create({ projectId, shotId: a.shotId, sourceTakeId: a.takeId })).status).toBe('queued')
     })
   })
 

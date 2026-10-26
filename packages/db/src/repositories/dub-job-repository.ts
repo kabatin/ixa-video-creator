@@ -28,6 +28,7 @@ export type CreateDubJobInput = {
 
 /** 声の差し替えのジョブの読み書き（ADR-0062）。戻り値は必ず `@ixa/domain` の型。 */
 export type DubJobRepository = {
+  /** 同じ Shot に待っている・動いているジョブがあれば一意の違反（23505）で投げる。 */
   create(input: CreateDubJobInput): Promise<DubJob>
   findById(id: DubJobId): Promise<DubJob | null>
   /** 作品の中で待っている・動いているジョブ（二重に積まないため・作品の動いているジョブの一覧に出すため）。 */

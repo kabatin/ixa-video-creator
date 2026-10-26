@@ -77,7 +77,12 @@ export const SUGGESTED_SPANS_HINT =
 
 export const DubTakesInput = z.object({
   projectId: Id,
-  shotIds: z.array(Id).min(1).max(50),
+  shotIds: z
+    .array(Id)
+    .min(1)
+    .max(50)
+    // 同じ Shot を 2 度積むと、2 本目は断られるか二重に払う。渡し間違いとして止める。
+    .refine((ids) => new Set(ids).size === ids.length, { message: 'shotIds must not repeat a shot' }),
 })
 
 export const dubTakesTool = defineTool({

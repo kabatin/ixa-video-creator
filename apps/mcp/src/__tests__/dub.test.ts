@@ -90,6 +90,12 @@ describe('dub_takes', () => {
     expect(result).not.toHaveProperty('next')
   })
 
+  it('同じ Shot を 2 度渡したら 1 本も積まない（二重に払わない）', async () => {
+    const fake = createFakeApi([ownedShots(PROJECT, [SHOT_A])])
+    await expect(dubTakesTool.run({ projectId: PROJECT, shotIds: [SHOT_A, SHOT_A] }, depsFor(fake))).resolves.toBeDefined()
+    expect(fake.callsTo('POST', /\/dub$/)).toHaveLength(0)
+  })
+
   it('別の作品の Shot が混じれば 1 本も積まない', async () => {
     const fake = createFakeApi([ownedShots(PROJECT, [SHOT_A])])
     const result = await dubTakesTool.run({ projectId: PROJECT, shotIds: [SHOT_A, SHOT_B] }, depsFor(fake))

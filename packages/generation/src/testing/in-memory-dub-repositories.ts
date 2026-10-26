@@ -36,7 +36,10 @@ export const createInMemoryDubJobRepository = (seed: readonly DubJob[] = []): In
 
   return {
     create: (input) =>
-      Promise.resolve(
+      // 実物の一意（同じ Shot で動いているのは 1 本）と同じく、23505 で落とす。
+      store.some((job) => job.shotId === input.shotId && active(job))
+        ? Promise.reject(Object.assign(new Error('duplicate key value violates unique constraint "dub_jobs_active_shot_uidx"'), { code: '23505' }))
+        : Promise.resolve(
         save(
           DubJobSchema.parse({
             id: newId(DubJobIdSchema),

@@ -12,6 +12,7 @@ import {
 } from '@ixa/domain'
 import { NOT_FOUND_MESSAGE, validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
+import { isUniqueViolation } from './unique-violation.js'
 import type { DubRoutesDeps } from '../dub/deps.js'
 
 /**
@@ -112,7 +113,14 @@ export const shotDubRoutes = (deps: Deps) =>
       if (blocker !== null) return c.json(fail(blocker), CONFLICT_REASONS.includes(blocker) ? 409 : 422)
       const selected = shot.selectedTakeId
       if (selected === null) return c.json(fail(NOT_FOUND_MESSAGE), 404)
-      const job = await deps.dubJobs.create({ projectId: shot.projectId, shotId: shot.id, sourceTakeId: selected })
+      // 確かめてから積むまでの間に同じ Shot が積まれたら、表の一意（動いているのは 1 本）が落とす。
+      const job = await deps.dubJobs
+        .create({ projectId: shot.projectId, shotId: shot.id, sourceTakeId: selected })
+        .catch((error: unknown) => {
+          if (isUniqueViolation(error)) return null
+          throw error
+        })
+      if (job === null) return c.json(fail(DUB_IN_PROGRESS_REASON), 409)
       try {
         await deps.dubQueue.enqueue(job.id)
       } catch (error) {

@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import { doublePrecision, index, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core'
 import { DubJobStatus as DubJobStatusSchema, type DubJobError, type DubJobStatus, type DubParams } from '@ixa/domain'
 import { createdAt, seconds, timestampTz, ulidPk, ulidRef } from './columns.js'
@@ -41,6 +42,8 @@ export const dubJobs = pgTable(
   (t) => [
     index('dub_jobs_shot_id_idx').on(t.shotId),
     index('dub_jobs_project_status_idx').on(t.projectId, t.status),
+    // 同じ Shot で待っている・動いている差し替えは 1 本だけ（同時に 2 回押されても二重に積まない・払わない）。
+    uniqueIndex('dub_jobs_active_shot_uidx').on(t.shotId).where(sql`${t.status} in ('queued', 'running')`),
   ],
 )
 

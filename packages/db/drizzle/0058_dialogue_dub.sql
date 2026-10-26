@@ -38,5 +38,6 @@ ALTER TABLE "tts_clips" ADD CONSTRAINT "tts_clips_workspace_id_workspaces_id_fk"
 ALTER TABLE "tts_clips" ADD CONSTRAINT "tts_clips_media_asset_id_media_assets_id_fk" FOREIGN KEY ("media_asset_id") REFERENCES "public"."media_assets"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "dub_jobs_shot_id_idx" ON "dub_jobs" USING btree ("shot_id");--> statement-breakpoint
 CREATE INDEX "dub_jobs_project_status_idx" ON "dub_jobs" USING btree ("project_id","status");--> statement-breakpoint
+CREATE UNIQUE INDEX "dub_jobs_active_shot_uidx" ON "dub_jobs" USING btree ("shot_id") WHERE "dub_jobs"."status" in ('queued', 'running');--> statement-breakpoint
 CREATE UNIQUE INDEX "tts_clips_workspace_cache_key_uidx" ON "tts_clips" USING btree ("workspace_id","cache_key");--> statement-breakpoint
 ALTER TABLE "characters" ADD CONSTRAINT "characters_dialogue_voice_profile_id_voice_profiles_id_fk" FOREIGN KEY ("dialogue_voice_profile_id") REFERENCES "public"."voice_profiles"("id") ON DELETE set null ON UPDATE no action;

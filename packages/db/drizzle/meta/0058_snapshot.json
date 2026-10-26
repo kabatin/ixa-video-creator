@@ -1,5 +1,5 @@
 {
-  "id": "73992ec6-59ec-4508-beb3-6e977d4eece8",
+  "id": "5dd0b236-a848-448b-a110-ecef4ae679b8",
   "prevId": "6c20e748-5008-4039-83bf-97005c983981",
   "version": "7",
   "dialect": "postgresql",
@@ -1020,6 +1020,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "dub_jobs_active_shot_uidx": {
+          "name": "dub_jobs_active_shot_uidx",
+          "columns": [
+            {
+              "expression": "shot_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"dub_jobs\".\"status\" in ('queued', 'running')",
           "concurrently": false,
           "method": "btree",
           "with": {}
