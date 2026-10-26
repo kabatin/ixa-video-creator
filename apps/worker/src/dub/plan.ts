@@ -1,5 +1,4 @@
 import {
-  assignLines,
   muteRanges,
   type Character,
   type CharacterId,
@@ -54,13 +53,6 @@ export const resolveSpeakers = async (
     return [id, { character, voice }] as const
   })
   return new Map(speakers)
-}
-
-/** 行の区間。決まらなければ、どの行かを言い、まとまった区間を文字数の比で割った案を付けて止める。 */
-export const lineSpans = (sourceChunks: readonly DubChunk[], lines: readonly DialogueLine[]): ReadonlyMap<number, LineSpan> => {
-  const assigned = assignLines(sourceChunks, lines)
-  if (!assigned.ok) throw new DubFailure('lines_unassigned', assigned.reason, { suggestedSpans: assigned.suggestions })
-  return new Map(assigned.spans.map((span) => [span.lineIndex, span]))
 }
 
 /** 1 行の消す範囲（元の声のままの行は無い）。 */

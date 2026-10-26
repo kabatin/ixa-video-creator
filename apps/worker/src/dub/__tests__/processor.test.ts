@@ -5,7 +5,7 @@ import { probeMedia } from '@ixa/media'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { failInterruptedDubJob } from '../interrupted.js'
 import { UNEXPECTED_DUB_MESSAGE, processDubJob } from '../processor.js'
-import { createDubWorld, createWorkDir, line, makeSourceVideo, removeWorkDir } from './fixtures.js'
+import { CLICK_SOURCE_EXPR, createDubWorld, createWorkDir, line, makeSourceVideo, removeWorkDir } from './fixtures.js'
 
 /**
  * 声の差し替えの通し（ADR-0062 段 5b）。偽の読み上げと **実 ffmpeg** で、合成した音付きの動画を差し替える。
@@ -18,11 +18,13 @@ import { createDubWorld, createWorkDir, line, makeSourceVideo, removeWorkDir } f
 let dir = ''
 let video: Uint8Array = new Uint8Array()
 let silent: Uint8Array = new Uint8Array()
+let clicked: Uint8Array = new Uint8Array()
 
 beforeAll(async () => {
   dir = await createWorkDir()
   video = await makeSourceVideo(dir, { audio: true })
   silent = await makeSourceVideo(dir, { audio: false })
+  clicked = await makeSourceVideo(dir, { audio: true, expr: CLICK_SOURCE_EXPR, name: 'clicked.mp4' })
 }, 30_000)
 
 afterAll(async () => {
@@ -155,6 +157,23 @@ describe('processDubJob（通し）', () => {
     expect(world.tts.calls()).toHaveLength(2)
   }, 60_000)
 
+  it('頭にクリックがあっても、読み上げの長さで行の区間を選ぶ（クリックを 1 行目に渡さない）', async () => {
+    const world = await createDubWorld({ workDir: join(dir, 'click'), video: clicked })
+    const job = await world.newJob()
+    const outcome = await processDubJob(world.deps, { dubJobId: job.id })
+    expect(outcome.state).toBe('succeeded')
+    const record = (await world.dubJobs.findById(job.id))?.record
+    expect(record?.lines[0]?.sourceStartSec).toBeCloseTo(1.0, 1)
+    expect(record?.lines[0]?.sourceEndSec).toBeCloseTo(1.7, 1)
+    expect(record?.lines[1]?.sourceStartSec).toBeCloseTo(2.0, 1)
+    expect(record?.lines[1]?.sourceEndSec).toBeCloseTo(2.6, 1)
+    // 区間を決める前に読んだ読み上げは、行ごとの読み直しで使い回す（同じ文を 2 回頼まない・払わない）。
+    const texts = world.tts.calls().map((call) => call.text)
+    expect(texts.slice(0, 2)).toEqual(['こんにちは、ネズミくん。', 'やあ。'])
+    expect(new Set(texts).size).toBe(texts.length)
+    expect((await world.dubJobs.findById(job.id))?.costUsd).toBeCloseTo(0.001 * texts.length, 6)
+  }, 60_000)
+
   it('元の声のままの行は消さず読み直さない。記録の置いた時刻は元の区間', async () => {
     const world = await createDubWorld({
       workDir: join(dir, 'keep'),
@@ -199,7 +218,7 @@ describe('processDubJob（止める理由）', () => {
     expect(world.tts.calls()).toHaveLength(0)
   }, 30_000)
 
-  it('3 通りの読み方がどれも 1.6 倍を超えたときだけ止める', async () => {
+  it('3 通りの読み方がどれも 1.6 倍を超えたときだけ止める（収まらない行だけを読み足す）', async () => {
     const world = await createDubWorld({
       workDir: join(dir, 'fast'),
       video,
@@ -207,15 +226,17 @@ describe('processDubJob（止める理由）', () => {
     })
     const { outcome, error, status, costUsd } = await failed(world)
     expect(status).toBe('failed')
-    expect(outcome).toEqual({ state: 'failed', code: 'too_fast' })
-    expect(error?.message).toMatch(/^セリフの 1 行目（ネコ）: 読み上げが長すぎます/)
+    expect(outcome).toEqual({ state: 'failed', code: 'lines_unassigned' })
+    expect(error?.message).toMatch(/^セリフの 1 行目に、読み上げの長さに合う元の声の区間が見つかりません/)
+    expect(error?.suggestedSpans?.map((s) => s.lineIndex)).toEqual([0, 1])
     expect(world.tts.calls().map((call) => call.text)).toEqual([
       'ながい、ながい、ながい。まだ。',
+      'やあ。',
       'ながい、<short pause>ながい、<short pause>ながい。<short pause>まだ。',
       'ながいながいながい。まだ。',
     ])
-    // 止まるまでに読んだ分は払っている（3 通り）。
-    expect(costUsd).toBeCloseTo(0.003, 6)
+    // 止まるまでに読んだ分は払っている（1 行目の 3 通りと 2 行目）。
+    expect(costUsd).toBeCloseTo(0.004, 6)
   }, 60_000)
 
   it('行の区間が決まらなければ、行を番号で言い、文字数の比で割った手の区間の案を付けて止める', async () => {

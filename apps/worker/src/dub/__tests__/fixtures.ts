@@ -79,10 +79,17 @@ export const createFakeTts = (afterSpeak?: AfterSpeak): FakeTts => {
 
 const SOURCE_EXPR = '0.2*sin(2*PI*300*t)*(between(t,0.5,1.2)+between(t,1.8,2.4))+0.004*sin(2*PI*3000*t)'
 
-/** 音付き（または音なし）の 3 秒の動画を作り、バイト列を返す。 */
-export const makeSourceVideo = async (dir: string, options: { readonly audio: boolean }): Promise<Uint8Array> => {
-  const path = join(dir, options.audio ? 'source.mp4' : 'silent.mp4')
-  const audio = options.audio ? ['-f', 'lavfi', '-i', `aevalsrc='${SOURCE_EXPR}|${SOURCE_EXPR}':s=48000:d=3`] : []
+/** 頭に 0.15 秒のクリック、元の声は 1.0〜1.7 秒と 2.0〜2.6 秒（実の H3 の Take の形。クリックの後の間が行の間より長い）。 */
+export const CLICK_SOURCE_EXPR = '0.2*sin(2*PI*300*t)*(between(t,0,0.15)+between(t,1.0,1.7)+between(t,2.0,2.6))+0.004*sin(2*PI*3000*t)'
+
+/** 音付き（または音なし）の 3 秒の動画を作り、バイト列を返す。`expr` は元の音の式（既定は `SOURCE_EXPR`）。 */
+export const makeSourceVideo = async (
+  dir: string,
+  options: { readonly audio: boolean; readonly expr?: string; readonly name?: string },
+): Promise<Uint8Array> => {
+  const path = join(dir, options.name ?? (options.audio ? 'source.mp4' : 'silent.mp4'))
+  const expr = options.expr ?? SOURCE_EXPR
+  const audio = options.audio ? ['-f', 'lavfi', '-i', `aevalsrc='${expr}|${expr}':s=48000:d=3`] : []
   await runFfmpeg([
     '-y', '-f', 'lavfi', '-i', 'testsrc=size=160x120:rate=24:duration=3', ...audio,
     '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',

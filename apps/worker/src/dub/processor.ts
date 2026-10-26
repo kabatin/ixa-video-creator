@@ -10,7 +10,9 @@ import {
   type DubJob,
   type DubLineRecord,
   type DubParams,
+  type DubWarning,
   type LineSpan,
+  type LineSpanWarning,
   type MediaAsset,
   type Project,
   type Shot,
@@ -24,12 +26,13 @@ import { recordTake } from '../generation/complete.js'
 import { DubCancelled, DubFailure, type DubProcessorDeps } from './deps.js'
 import { DubJobData } from './job-data.js'
 import { dubLine, type LineContext, type LineInput, type LineResult } from './line-dub.js'
-import { dubMuteRanges, lineInputs, lineLabel, lineSpans, resolveSpeakers, type Speaker } from './plan.js'
+import { assignLineSpans } from './line-spans.js'
+import { dubMuteRanges, lineInputs, lineLabel, resolveSpeakers, type Speaker } from './plan.js'
 
 /**
  * 採用中の Take の声を、キャラクターのセリフの声で読み直して差し替える（ADR-0062 段 5b）。
  *
- * 1. 元の Take の音を 16kHz にし、声の区間 → 行の区間
+ * 1. 元の Take の音を 16kHz にし、声の区間 → 行の区間（読み上げの最初の読み方の長さで決める。`line-spans.ts`）
  * 2. 行ごとに読み方を最大 3 通り試し（保存済みはそのまま使う）→ 伸縮 → 一致率で選ぶ → 音量を合わせる
  * 3. 混ぜる（映像は写すだけ）→ 新しい Take（spec を写し、親は元の Take、理由は dub）→ 採用 → 字幕を作り直す
  *
@@ -137,16 +140,24 @@ const keptRecord = (lineIndex: number, span: LineSpan): DubLineRecord => ({
   warnings: [],
 })
 
+/** 記録の警告（同じ種類は 1 つ、8 つまで）。 */
+const withWarnings = (record: DubLineRecord, extra: readonly DubWarning[]): DubLineRecord => {
+  const all = [...extra, ...record.warnings]
+  return { ...record, warnings: all.filter((w, i) => all.findIndex((o) => o.code === w.code) === i).slice(0, 8) }
+}
+
 const recordsOf = (
   shot: Shot,
   spans: ReadonlyMap<number, LineSpan>,
   results: ReadonlyMap<number, LineResult>,
+  spanWarnings: readonly LineSpanWarning[],
 ): readonly DubLineRecord[] =>
   shot.dialogue.flatMap((_, index) => {
     const result = results.get(index)
-    if (result !== undefined) return [result.record]
     const span = spans.get(index)
-    return span === undefined ? [] : [keptRecord(index, span)]
+    const record = result?.record ?? (span === undefined ? null : keptRecord(index, span))
+    if (record === null) return []
+    return [withWarnings(record, spanWarnings.filter((w) => w.lineIndex === index).map((w) => w.warning))]
   })
 
 /** 出来た Take を採用する。**人が待つ間に別の Take を選んでいたら、その選びを奪わない。** */
@@ -185,10 +196,28 @@ const run = async (deps: DubProcessorDeps, job: DubJob, workDir: string): Promis
   const lines = loaded.shot.dialogue
   const speakers = await resolveSpeakers(deps, lines)
   const source = await readSource(deps, loaded, workDir)
-  const spans = lineSpans(source.chunks, lines)
+  const assigned = await assignLineSpans({
+    deps,
+    context: { project: loaded.project, dubJobId: job.id, workDir },
+    lines,
+    speakers,
+    sourceChunks: source.chunks,
+    assertNotCancelled: () => assertNotCancelled(deps, job),
+  })
+  const spans = assigned.spans
   const inputs = lineInputs({ lines, spans, speakers, sourcePcm: source.pcm, sourceChunks: source.chunks })
-  const context: LineContext = { project: loaded.project, dubJobId: job.id, workDir, shotDurationSec: source.durationSec, sourceChunks: source.chunks }
-  const { results, costUsd } = await dubLines(deps, job, inputs, context, speakers)
+  const context: LineContext = {
+    project: loaded.project,
+    dubJobId: job.id,
+    workDir,
+    shotDurationSec: source.durationSec,
+    sourceChunks: source.chunks,
+    readInJob: assigned.readInJob,
+  }
+  const dubbed = await dubLines(deps, job, inputs, context, speakers)
+  const results = dubbed.results
+  // 区間を決めるために読んだ分も Take の額に入れる（行ごとの読み直しは保存済みを使うので 0）。
+  const costUsd = assigned.costUsd + dubbed.costUsd
   const voices: readonly DubVoice[] = [...results.values()].flatMap((result) => result.voices)
   const outputPath = join(workDir, 'dubbed.mp4')
   const loudness = await mixDub(
@@ -201,7 +230,7 @@ const run = async (deps: DubProcessorDeps, job: DubJob, workDir: string): Promis
     voiceTool: 'gemini_api',
     model: inputs[0]?.voice.model ?? GEMINI_DEFAULT_TTS_MODEL,
     integratedLufs: Number.isFinite(loudness.integratedLufs) ? loudness.integratedLufs : null,
-    lines: [...recordsOf(loaded.shot, spans, results)],
+    lines: [...recordsOf(loaded.shot, spans, results, assigned.warnings)],
   }
   await assertNotCancelled(deps, job)
   const startedAt = job.startedAt ?? job.queuedAt

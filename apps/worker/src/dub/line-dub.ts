@@ -35,7 +35,7 @@ import {
   type DubVoice,
 } from '@ixa/media'
 import type { DubProcessorDeps } from './deps.js'
-import { readAloud } from './tts-cache.js'
+import { readAloud, type ReadInJob } from './tts-cache.js'
 
 /**
  * 1 行を読み直して置く（ADR-0062）。読み方を最大 3 通り試し（保存済みはそのまま使う）、伸縮して、
@@ -64,6 +64,8 @@ export type LineContext = {
   readonly workDir: string
   readonly shotDurationSec: number
   readonly sourceChunks: readonly DubChunk[]
+  /** 行の区間を決めるときに読んだ読み上げ（使い回す）。 */
+  readonly readInJob?: ReadInJob
 }
 
 export type LineResult = {

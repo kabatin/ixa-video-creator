@@ -90,14 +90,22 @@ const remember = async (
   await deps.ttsClips.save({ workspaceId: context.project.workspaceId, cacheKey, mediaAssetId, durationSec, costUsd })
 }
 
+/**
+ * このジョブで既に読んだ読み上げ（鍵 → 手元のファイル）。行の区間を決めるときに読んだものを、行ごとの読み直しで使い回す
+ * （同じ中身の素材が別のワークスペースにあって保存できなかったときも、二重に払わない）。
+ */
+export type ReadInJob = ReadonlyMap<string, string>
+
 /** 保存してあればそれを、無ければ読み上げて保存する。`name` は作業用のファイル名（拡張子なし）。 */
 export const readAloud = async (
   deps: DubProcessorDeps,
-  context: { readonly project: Project; readonly dubJobId: DubJobId; readonly workDir: string },
+  context: { readonly project: Project; readonly dubJobId: DubJobId; readonly workDir: string; readonly readInJob?: ReadInJob },
   request: TtsRequest,
   name: string,
 ): Promise<TtsReading> => {
   const cacheKey = ttsCacheKey(request)
+  const inJob = context.readInJob?.get(cacheKey)
+  if (inJob !== undefined) return { path: inJob, costUsd: 0, cached: true }
   const cached = await fromCache(deps, context.project, cacheKey, join(context.workDir, `${name}.cached.wav`))
   if (cached !== null) return cached
   const adapter = deps.voiceAdapter(request.voice.tool)
