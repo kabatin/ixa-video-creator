@@ -10,7 +10,8 @@ import { DubFailure, type DubProcessorDeps } from './deps.js'
 /**
  * 読み上げを保存して使い回す（ADR-0062）。**声・読み方・文が同じなら読み直さない**
  * （音量や置き方だけ変えてやり直しても、読み上げの費用は掛からない）。
- * 鍵は sha256(モデル・声・読み方の指示・速さ・文)。API キーは入れない。
+ * 鍵は sha256(モデル・声・読み方の指示・速さ・文)。API キーは入れない。**ワークスペースごと**に引く。
+ * 保存した素材が消されていたら（読めなければ）読み直し、保存の行をその素材へ付け替える。
  */
 
 export type TtsReading = {
@@ -37,12 +38,18 @@ export const ttsCacheKey = (request: TtsRequest): string =>
     )
     .digest('hex')
 
-const fromCache = async (deps: DubProcessorDeps, cacheKey: string, path: string): Promise<TtsReading | null> => {
-  const clip = await deps.ttsClips.findByKey(cacheKey)
+const fromCache = async (deps: DubProcessorDeps, project: Project, cacheKey: string, path: string): Promise<TtsReading | null> => {
+  const clip = await deps.ttsClips.findByKey(project.workspaceId, cacheKey)
   if (clip === null) return null
   const asset = await deps.mediaAssets.findById(clip.mediaAssetId)
-  if (asset === null) return null
-  await writeFile(path, await deps.storage.get(asset.storageKey))
+  // 消された素材・別のワークスペースの素材は使わない（読み直して付け替える）。
+  if (asset === null || asset.workspaceId !== project.workspaceId) return null
+  try {
+    await writeFile(path, await deps.storage.get(asset.storageKey))
+  } catch (error) {
+    deps.logger.warn({ mediaAssetId: asset.id, err: error }, '保存した読み上げを読めませんでした。読み直します')
+    return null
+  }
   return { path, costUsd: 0, cached: true }
 }
 
@@ -59,6 +66,8 @@ const remember = async (
   const durationSec = (await probeMedia(path)).durationSec ?? 0
   if (!(durationSec > 0)) throw new DubFailure('tts_empty', '読み上げが空でした。もう一度差し替えてください', { retryable: true })
   const existing = await deps.mediaAssets.findByChecksum(checksumSha256)
+  // 同じ中身の素材が別のワークスペースにあれば指さない（同じ中身は 2 つ作れないので、保存せずに使うだけ）。
+  if (existing !== null && existing.workspaceId !== context.project.workspaceId) return
   const mediaAssetId =
     existing?.id ??
     (await (async () => {
@@ -78,7 +87,7 @@ const remember = async (
       })
       return id
     })())
-  await deps.ttsClips.save({ cacheKey, mediaAssetId, durationSec, costUsd })
+  await deps.ttsClips.save({ workspaceId: context.project.workspaceId, cacheKey, mediaAssetId, durationSec, costUsd })
 }
 
 /** 保存してあればそれを、無ければ読み上げて保存する。`name` は作業用のファイル名（拡張子なし）。 */
@@ -89,7 +98,7 @@ export const readAloud = async (
   name: string,
 ): Promise<TtsReading> => {
   const cacheKey = ttsCacheKey(request)
-  const cached = await fromCache(deps, cacheKey, join(context.workDir, `${name}.cached.wav`))
+  const cached = await fromCache(deps, context.project, cacheKey, join(context.workDir, `${name}.cached.wav`))
   if (cached !== null) return cached
   const adapter = deps.voiceAdapter(request.voice.tool)
   if (adapter === null) {

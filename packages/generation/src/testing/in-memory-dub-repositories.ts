@@ -72,12 +72,16 @@ export type InMemoryTtsClipRepository = TtsClipRepository & { readonly snapshot:
 export const createInMemoryTtsClipRepository = (seed: readonly TtsClip[] = []): InMemoryTtsClipRepository => {
   let store: readonly TtsClip[] = seed
   return {
-    findByKey: (cacheKey) => Promise.resolve(store.find((clip) => clip.cacheKey === cacheKey) ?? null),
+    findByKey: (workspaceId, cacheKey) =>
+      Promise.resolve(store.find((clip) => clip.workspaceId === workspaceId && clip.cacheKey === cacheKey) ?? null),
+    // 実物と同じく、同じワークスペース・同じ鍵なら素材・長さ・額を書き替える（1 行のまま）。
     save: (input) => {
-      const existing = store.find((clip) => clip.cacheKey === input.cacheKey)
-      if (existing !== undefined) return Promise.resolve(existing)
-      const clip: TtsClip = { ...input, id: newId(TtsClipIdSchema), createdAt: new Date() }
-      store = [...store, clip]
+      const existing = store.find((clip) => clip.workspaceId === input.workspaceId && clip.cacheKey === input.cacheKey)
+      const clip: TtsClip =
+        existing === undefined
+          ? { ...input, id: newId(TtsClipIdSchema), createdAt: new Date() }
+          : { ...existing, mediaAssetId: input.mediaAssetId, durationSec: input.durationSec, costUsd: input.costUsd }
+      store = [...store.filter((other) => other.id !== clip.id), clip]
       return Promise.resolve(clip)
     },
     snapshot: () => store,

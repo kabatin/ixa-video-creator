@@ -31,6 +31,7 @@ import {
   createInMemoryVoiceProfileRepository,
 } from '@ixa/generation/testing'
 import { runFfmpeg } from '@ixa/media'
+import type { TtsClip } from '@ixa/db'
 import type { SpeakRequest, SpeakResult, VoiceAdapter } from '@ixa/provider-core'
 import { createMemoryStorage, type ObjectStorage } from '@ixa/storage'
 import { aProject, createRecordingEvents, createRecordingMediaQueue, silentLogger } from '../../generation/__tests__/doubles.js'
@@ -143,7 +144,7 @@ export const createDubWorld = async (input: {
   readonly designedKeyLabel?: string
   readonly mouseHasVoice?: boolean
   /** 前からある素材と Take（作品の複製で写したものなど。別の Shot・別の作品のもの）。 */
-  readonly seed?: { readonly assets: readonly MediaAsset[]; readonly takes: readonly Take[] }
+  readonly seed?: { readonly assets?: readonly MediaAsset[]; readonly takes?: readonly Take[]; readonly ttsClips?: readonly TtsClip[] }
 }): Promise<DubWorld> => {
   const project = { ...aProject(), id: newId(ProjectId), workspaceId: newId(WorkspaceId) }
   const storage = createMemoryStorage()
@@ -191,7 +192,7 @@ export const createDubWorld = async (input: {
   const mediaAssets = createInMemoryMediaAssetRepository([asset, ...(input.seed?.assets ?? [])])
   const timelineClips = createInMemoryTimelineClipRepository([])
   const dubJobs = createInMemoryDubJobRepository()
-  const ttsClips = createInMemoryTtsClipRepository()
+  const ttsClips = createInMemoryTtsClipRepository(input.seed?.ttsClips ?? [])
   const mediaQueue = createRecordingMediaQueue()
   const tts = createFakeTts()
   const deps: DubProcessorDeps = {

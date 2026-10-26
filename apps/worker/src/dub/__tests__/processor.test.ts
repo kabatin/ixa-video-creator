@@ -128,6 +128,32 @@ describe('processDubJob（通し）', () => {
     expect((await world.shots.findById(world.shot.id))?.selectedTakeId).toBe(outcome.takeId)
   }, 60_000)
 
+  it('保存した読み上げの素材が消されていたら読み直し、保存の行をその素材へ付け替える（毎回払わない）', async () => {
+    const world = await createDubWorld({ workDir: join(dir, 'dead'), video })
+    expect((await processDubJob(world.deps, { dubJobId: (await world.newJob()).id })).state).toBe('succeeded')
+    const before = world.ttsClips.snapshot()
+    for (const clip of before) await world.mediaAssets.softDelete(clip.mediaAssetId)
+    expect((await processDubJob(world.deps, { dubJobId: (await world.newJob()).id })).state).toBe('succeeded')
+    expect(world.tts.calls()).toHaveLength(4)
+    const after = world.ttsClips.snapshot()
+    expect(after).toHaveLength(2)
+    expect(after.map((c) => c.mediaAssetId)).not.toEqual(before.map((c) => c.mediaAssetId))
+    // 付け替えた後は使い回す。
+    expect((await processDubJob(world.deps, { dubJobId: (await world.newJob()).id })).state).toBe('succeeded')
+    expect(world.tts.calls()).toHaveLength(4)
+  }, 60_000)
+
+  it('別のワークスペースの保存した読み上げは使わない（鍵が同じでも）', async () => {
+    const other = await createDubWorld({ workDir: join(dir, 'ws-a'), video })
+    expect((await processDubJob(other.deps, { dubJobId: (await other.newJob()).id })).state).toBe('succeeded')
+    const theirAssets = (await Promise.all(other.ttsClips.snapshot().map((c) => other.mediaAssets.findById(c.mediaAssetId)))).flatMap(
+      (a) => (a === null ? [] : [a]),
+    )
+    const world = await createDubWorld({ workDir: join(dir, 'ws-b'), video, seed: { assets: theirAssets, ttsClips: other.ttsClips.snapshot() } })
+    expect((await processDubJob(world.deps, { dubJobId: (await world.newJob()).id })).state).toBe('succeeded')
+    expect(world.tts.calls()).toHaveLength(2)
+  }, 60_000)
+
   it('元の声のままの行は消さず読み直さない。記録の置いた時刻は元の区間', async () => {
     const world = await createDubWorld({
       workDir: join(dir, 'keep'),

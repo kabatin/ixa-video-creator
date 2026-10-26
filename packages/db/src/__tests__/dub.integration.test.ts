@@ -97,17 +97,28 @@ describe.skipIf(url === undefined)('声の差し替えの表（実際の DB）',
     })
   })
 
-  it('同じ鍵の読み上げは 1 行で、2 度目は先の行を返す', async () => {
+  it('同じワークスペース・同じ鍵の読み上げは 1 行で、2 度目は素材を付け替える。別のワークスペースの行は引かない', async () => {
     await inRolledBackTransaction(async (tx) => {
       const { projectId, workspaceId } = await aProject(tx)
+      const other = await aProject(tx)
       const clips = createTtsClipRepository(tx)
       const key = 'c'.repeat(64)
-      const first = await clips.save({ cacheKey: key, mediaAssetId: await anAudio(tx, workspaceId, projectId), durationSec: 1.2, costUsd: 0.001 })
-      const second = await clips.save({ cacheKey: key, mediaAssetId: await anAudio(tx, workspaceId, projectId), durationSec: 9, costUsd: 0 })
+      const first = await clips.save({ workspaceId, cacheKey: key, mediaAssetId: await anAudio(tx, workspaceId, projectId), durationSec: 1.2, costUsd: 0.001 })
+      const replacement = await anAudio(tx, workspaceId, projectId)
+      const second = await clips.save({ workspaceId, cacheKey: key, mediaAssetId: replacement, durationSec: 1.3, costUsd: 0.002 })
       expect(second.id).toBe(first.id)
-      expect(second.durationSec).toBe(1.2)
-      expect((await clips.findByKey(key))?.mediaAssetId).toBe(first.mediaAssetId)
-      expect(await clips.findByKey('d'.repeat(64))).toBeNull()
+      expect(second).toMatchObject({ mediaAssetId: replacement, durationSec: 1.3, costUsd: 0.002 })
+      expect((await clips.findByKey(workspaceId, key))?.mediaAssetId).toBe(replacement)
+      expect(await clips.findByKey(other.workspaceId, key)).toBeNull()
+      const theirs = await clips.save({
+        workspaceId: other.workspaceId,
+        cacheKey: key,
+        mediaAssetId: await anAudio(tx, other.workspaceId, other.projectId),
+        durationSec: 2,
+        costUsd: 0,
+      })
+      expect(theirs.id).not.toBe(first.id)
+      expect(await clips.findByKey(workspaceId, 'd'.repeat(64))).toBeNull()
     })
   })
 

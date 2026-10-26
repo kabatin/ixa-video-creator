@@ -4,13 +4,14 @@ import { createdAt, seconds, timestampTz, ulidPk, ulidRef } from './columns.js'
 import { takes } from './generation.js'
 import { mediaAssets } from './media.js'
 import { shots } from './shot.js'
-import { projects } from './workspace.js'
+import { projects, workspaces } from './workspace.js'
 
 /**
  * 声の差し替え（ADR-0062 段 5b）。
  *
  * - `dub_jobs`: 1 Shot の差し替えの仕事。★ 追記のみ。更新は状態の遷移とそのとき決まる列だけ（`upscale_jobs` と同じ）。
  * - `tts_clips`: 読み上げの保存。声・読み方・文が同じなら読み直さない（音量や置き方だけ変えても無料でやり直せる）。
+ *   **ワークスペースごと**（別のワークスペースの読み上げは読まない）。素材が消されていたら読み直して付け替える。
  */
 export const dubJobs = pgTable(
   'dub_jobs',
@@ -47,6 +48,9 @@ export const ttsClips = pgTable(
   'tts_clips',
   {
     id: ulidPk(),
+    workspaceId: ulidRef('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
     /** sha256(モデル・声・読み方の指示・文) の 16 進。鍵（API キー）は入れない。 */
     cacheKey: text('cache_key').notNull(),
     mediaAssetId: ulidRef('media_asset_id')
@@ -57,5 +61,5 @@ export const ttsClips = pgTable(
     costUsd: doublePrecision('cost_usd').notNull().default(0),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex('tts_clips_cache_key_uidx').on(t.cacheKey)],
+  (t) => [uniqueIndex('tts_clips_workspace_cache_key_uidx').on(t.workspaceId, t.cacheKey)],
 )
