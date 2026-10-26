@@ -33,6 +33,7 @@ import { CAMERA_MOVEMENT_HINT } from '@/lib/camera-hint'
 import { CANCEL_GENERATION_LABEL } from '@/lib/context-menus'
 import { describeActiveGeneration } from '@/lib/generation-progress'
 import { useAskReview } from '@/components/workbench/use-ask-review'
+import { InfoTip } from '@/components/workbench/ui/collapsible-section'
 
 /**
  * 生成（UI-WORKBENCH-2 §5.2）。**このパネルの主ボタン**はここ。
@@ -251,21 +252,21 @@ export const ShotGenerateSection = ({
           ))}
         </select>
       </FieldRow>
-      <label className="flex items-start gap-2 text-xs text-text">
-        <input
-          type="checkbox"
-          className="mt-0.5"
-          checked={autoRetake}
-          disabled={busy || generating}
-          onChange={(event) => setAutoRetake(event.target.checked)}
-        />
-        <span>
+      {/* 長い説明は ⓘ に畳む（2026-10-26。文は残し、押すと出す）。 */}
+      <div className="flex items-center gap-1">
+        <label className="flex items-center gap-2 text-xs text-text">
+          <input
+            type="checkbox"
+            checked={autoRetake}
+            disabled={busy || generating}
+            onChange={(event) => setAutoRetake(event.target.checked)}
+          />
           NG なら自動で作り直す
-          <span className="block text-muted">
-            できたら自動でレビューし、不合格なら上限まで作り直します。時間と AI の利用枠を多く使うので、任せて離れるとき向けです。
-          </span>
-        </span>
-      </label>
+        </label>
+        <InfoTip label="NG なら自動で作り直す">
+          できたら自動でレビューし、不合格なら上限まで作り直します。時間と AI の利用枠を多く使うので、任せて離れるとき向けです。
+        </InfoTip>
+      </div>
       <p className="text-xs text-muted" title={cost.view?.provenance}>
         {costLabel(cost)}
       </p>
@@ -277,7 +278,12 @@ export const ShotGenerateSection = ({
        * カメラの動きが決まっていないときの一言（ADR-0042）。**止めない。**
        * 指定が無いと、立ち上がるような動作で顔が画面の外へ出ることがある（実測）。
        */}
-      {lacksCameraMovement(shot) && <p className="text-xs text-muted">{CAMERA_MOVEMENT_HINT}</p>}
+      {lacksCameraMovement(shot) && (
+        <p className="flex items-center gap-1 text-xs text-muted">
+          <span>カメラの動きが決まっていません</span>
+          <InfoTip label="カメラの動き">{CAMERA_MOVEMENT_HINT}</InfoTip>
+        </p>
+      )}
       <Button
         tone="primary"
         disabled={busy || generating || blocker !== null}

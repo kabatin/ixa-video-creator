@@ -3,6 +3,7 @@
 import { isTakeAudioMuted, type Shot } from '@ixa/domain'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
+import { InfoTip } from '@/components/workbench/ui/collapsible-section'
 import {
   TAKE_AUDIO_OPTIONS,
   formatTakeAudioVolume,
@@ -25,17 +26,22 @@ export type TakeAudioFieldProps = {
 
 export const TakeAudioField = ({ shot, disabled = false, onSave }: TakeAudioFieldProps) => (
   <div className="space-y-1.5">
-    <AutoSaveSelect
-      label="Take の音"
-      value={takeAudioChoice(shot.takeAudioMuted)}
-      options={TAKE_AUDIO_OPTIONS}
-      disabled={disabled}
-      onSave={async (raw) => {
-        const takeAudioMuted = parseTakeAudioChoice(raw)
-        if (takeAudioMuted !== undefined) await onSave({ takeAudioMuted })
-      }}
-    />
-    <p className="text-xs text-muted">{takeAudioHint(shot)}</p>
+    {/* 説明は ⓘ に畳む（2026-10-26。文は残し、押すと出す）。 */}
+    <div className="flex items-start gap-1">
+      <div className="min-w-0 flex-1">
+        <AutoSaveSelect
+          label="Take の音"
+          value={takeAudioChoice(shot.takeAudioMuted)}
+          options={TAKE_AUDIO_OPTIONS}
+          disabled={disabled}
+          onSave={async (raw) => {
+            const takeAudioMuted = parseTakeAudioChoice(raw)
+            if (takeAudioMuted !== undefined) await onSave({ takeAudioMuted })
+          }}
+        />
+      </div>
+      <InfoTip label="Take の音">{takeAudioHint(shot)}</InfoTip>
+    </div>
     <AutoSaveField
       label="Take の音の大きさ"
       value={formatTakeAudioVolume(shot.takeAudioVolume)}

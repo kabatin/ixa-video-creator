@@ -2,6 +2,7 @@
 
 import { dubRecordOf, type DubParams, type Shot, type Take } from '@ixa/domain'
 import { Button } from '@/components/ui/button'
+import { InfoTip } from '@/components/workbench/ui/collapsible-section'
 import type { ShotDub } from '@/components/workbench/use-shot-dub'
 import { dubProgressLabel, dubResultRows, isDubActive } from '@/lib/dub-view'
 
@@ -31,6 +32,9 @@ export const ShotDubSection = ({
         <Button size="sm" disabled={dub.state === null || blocker !== null || active || dub.busy} onClick={dub.start}>
           声を差し替える
         </Button>
+        <InfoTip label="声の差し替え">
+          元の Take は残ります。差し替えた Take を自動で採用するので、戻すときは Take を選び直します。
+        </InfoTip>
         {active && job !== null && (
           <>
             <span role="status" className="text-xs text-muted">
@@ -54,9 +58,6 @@ export const ShotDubSection = ({
         </p>
       )}
       {record !== null && <DubResultTable record={record} dialogue={shot.dialogue} />}
-      <p className="text-xs text-muted">
-        元の Take は残ります。差し替えた Take を自動で採用するので、戻すときは Take を選び直します。
-      </p>
     </div>
   )
 }

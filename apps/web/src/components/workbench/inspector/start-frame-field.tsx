@@ -13,6 +13,7 @@ import { DRAW_ANYWAY_LABEL, drawWithoutStoryboardWarning } from '@/lib/step-guar
 import { useContextMenuHost } from '@/components/workbench/ui/context-menu'
 import { StartFrameHistory } from '@/components/workbench/inspector/start-frame-history'
 import { PromptButton } from '@/components/prompt/prompt-button'
+import { InfoTip, SubPart } from '@/components/workbench/ui/collapsible-section'
 import { promptViewFromImageJob } from '@/lib/prompt-view'
 
 /**
@@ -219,16 +220,18 @@ export const StartFrameField = ({
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold text-muted">最初のフレーム</p>
+      <div className="flex items-center gap-1">
+        <p className="text-xs font-semibold text-muted">最初のフレーム</p>
+        {state.kind === 'ready' && current === null && (
+          <InfoTip label="最初のフレーム">
+            画像を付けると、生成のモデル「画像から動画（ローカル・無料）」でこの絵を動かした Take を作れます。
+          </InfoTip>
+        )}
+      </div>
       {state.kind === 'loading' && <p className="text-xs text-muted">読み込んでいます…</p>}
       {state.kind === 'error' && (
         <p role="alert" className="text-xs text-danger">
           {`最初のフレームを読めませんでした: ${state.message}`}
-        </p>
-      )}
-      {state.kind === 'ready' && current === null && (
-        <p className="text-xs text-muted">
-          画像を付けると、生成のモデル「画像から動画（ローカル・無料）」でこの絵を動かした Take を作れます。
         </p>
       )}
       {current !== null && (
@@ -275,14 +278,17 @@ export const StartFrameField = ({
           onRetry={retry}
         />
       )}
+      {/* 手元の画像は普段使わないので、ファイルの欄は畳んでおく（2026-10-26。欄とボタンだけで背を取っていた）。 */}
       {state.kind === 'ready' && (
-        <ImageUploader
-          id={`start-frame-${shot.id}`}
-          workspaceId={workspaceId}
-          submitLabel={current === null ? '画像を付ける' : '画像を付け替える'}
-          disabled={disabled || busy}
-          onUploaded={attach}
-        />
+        <SubPart title="画像ファイルから…">
+          <ImageUploader
+            id={`start-frame-${shot.id}`}
+            workspaceId={workspaceId}
+            submitLabel={current === null ? '画像を付ける' : '画像を付け替える'}
+            disabled={disabled || busy}
+            onUploaded={attach}
+          />
+        </SubPart>
       )}
       {error !== null && (
         <p role="alert" className="text-xs text-danger">

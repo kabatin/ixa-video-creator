@@ -6,6 +6,7 @@ import { ImageUploader } from '@/components/image-uploader'
 import { MediaImage } from '@/components/media-image'
 import { Button } from '@/components/ui/button'
 import { INPUT_CLASS } from '@/components/workbench/ui/section'
+import { InfoTip, SubPart } from '@/components/workbench/ui/collapsible-section'
 import { createApiClient } from '@/lib/api-client'
 import { describeForPerson } from '@/lib/api-error'
 import type { ShotEndFrameApi } from '@/lib/shot-end-frame-api'
@@ -116,9 +117,13 @@ export const EndFrameField = ({
     })
   }
 
+  // 普段使わないので、まとまりごと畳んでおく（2026-10-26）。付いていれば題に添える（開かなくても分かる）。
   return (
-    <div className="space-y-2">
-      <p className="text-xs font-semibold text-muted">終わりの画像</p>
+    <SubPart title={current === null ? '終わりの画像' : '終わりの画像（あり）'}>
+      <div className="flex items-center gap-1">
+        <p className="text-xs font-semibold text-muted">終わりの画像</p>
+        <InfoTip label="終わりの画像">{END_FRAME_NOTE}</InfoTip>
+      </div>
       {state.kind === 'loading' && <p className="text-xs text-muted">読み込んでいます…</p>}
       {state.kind === 'error' && (
         <p role="alert" className="text-xs text-danger">
@@ -165,20 +170,21 @@ export const EndFrameField = ({
         </div>
       )}
       {state.kind === 'ready' && (
-        <ImageUploader
-          id={`end-frame-${shot.id}`}
-          workspaceId={workspaceId}
-          submitLabel={current === null ? '終わりの画像を付ける' : '終わりの画像を付け替える'}
-          disabled={disabled || busy}
-          onUploaded={attach}
-        />
+        <SubPart title="画像ファイルから…">
+          <ImageUploader
+            id={`end-frame-${shot.id}`}
+            workspaceId={workspaceId}
+            submitLabel={current === null ? '終わりの画像を付ける' : '終わりの画像を付け替える'}
+            disabled={disabled || busy}
+            onUploaded={attach}
+          />
+        </SubPart>
       )}
-      <p className="text-xs text-muted">{END_FRAME_NOTE}</p>
       {error !== null && (
         <p role="alert" className="text-xs text-danger">
           {error}
         </p>
       )}
-    </div>
+    </SubPart>
   )
 }

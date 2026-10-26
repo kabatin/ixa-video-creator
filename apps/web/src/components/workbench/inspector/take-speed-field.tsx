@@ -3,6 +3,7 @@
 import type { Shot, Take } from '@ixa/domain'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
+import { InfoTip } from '@/components/workbench/ui/collapsible-section'
 import { useAdoptedTakeDuration } from '@/components/workbench/inspector/use-adopted-take-duration'
 import { formatClock } from '@/lib/format-time'
 import type { FootageApi } from '@/lib/footage-api'
@@ -33,17 +34,22 @@ export const TakeSpeedField = ({ shot, adopted, disabled = false, onSave, api }:
   }
   return (
     <div className="space-y-1.5">
-      <AutoSaveSelect
-        label="速さ"
-        value={String(shot.speed)}
-        options={speedOptions(shot.speed)}
-        disabled={disabled}
-        onSave={async (raw) => {
-          const speed = parseSpeed(raw)
-          if (speed !== null) await onSave({ speed })
-        }}
-      />
-      <p className="text-xs text-muted">{speedHint(shot, takeSec)}</p>
+      {/* 説明は ⓘ に畳む（2026-10-26。文は残し、押すと出す）。 */}
+      <div className="flex items-start gap-1">
+        <div className="min-w-0 flex-1">
+          <AutoSaveSelect
+            label="速さ"
+            value={String(shot.speed)}
+            options={speedOptions(shot.speed)}
+            disabled={disabled}
+            onSave={async (raw) => {
+              const speed = parseSpeed(raw)
+              if (speed !== null) await onSave({ speed })
+            }}
+          />
+        </div>
+        <InfoTip label="速さ">{speedHint(shot, takeSec)}</InfoTip>
+      </div>
       <AutoSaveField
         label="使い始め"
         value={formatClock(shot.sourceInSec)}

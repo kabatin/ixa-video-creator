@@ -1,7 +1,8 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ShotInspector } from '@/components/workbench/inspector/shot-inspector'
+import { sectionStorageKey } from '@/lib/section-open-state'
 import { aWorkbenchShot, renderInWorkbench } from './workbench-fixture'
 
 /**
@@ -27,13 +28,16 @@ vi.mock('@/components/workbench/inspector/footage-import-form', () => ({
 vi.mock('@/components/workbench/inspector/take-timing-field', () => ({
   TakeTimingField: () => null,
 }))
-vi.mock('@/components/workbench/use-shot-takes', () => ({ useShotTakes: () => ({ takes: [] }) }))
+vi.mock('@/components/workbench/use-shot-takes', () => ({ useShotTakes: () => ({ takes: [], error: null }) }))
 vi.mock('@/components/review-panel', () => ({ ReviewPanel: () => null }))
 
 // jsdom には無い。欄へ送る動きそのものはブラウザで確かめる。
 const scrollIntoView = vi.fn()
 beforeAll(() => {
   Element.prototype.scrollIntoView = scrollIntoView
+})
+beforeEach(() => {
+  window.localStorage.clear()
 })
 
 describe('ShotInspector の Take を作る', () => {
@@ -49,17 +53,26 @@ describe('ShotInspector の Take を作る', () => {
       inspectorTab: 'generate',
     })
 
-    const target = screen
-      .getByRole('heading', { name: 'Take を作る' })
-      .closest('section')?.parentElement
+    // 2026-10-26: 「Take を作る」は「Take」の区切りの中の小見出しになった。送り先はその区切り。
+    const target = screen.getByRole('heading', { name: 'Take' }).closest('section')
     expect(scrollIntoView.mock.contexts).toContain(target)
   })
 
-  it('作る欄の見出しは「Take を作る」', () => {
+  it('Take の区切りの中に「Take を作る」の小見出しと作る欄がある', () => {
     const shot = aWorkbenchShot(1)
     renderInWorkbench(<ShotInspector shot={shot} isFirst />, { shots: [shot] })
 
-    expect(screen.getByRole('heading', { name: 'Take を作る' })).toBeInTheDocument()
+    const take = screen.getByRole('heading', { name: 'Take' }).closest('section') as HTMLElement
+    expect(within(take).getByText('Take を作る')).toBeInTheDocument()
+    expect(within(take).getByText('作る欄の中身')).toBeInTheDocument()
+  })
+
+  it('Take の区切りを畳んでいても、「Take を作る…」から来たら開く', () => {
+    window.localStorage.setItem(sectionStorageKey('shot', 'take'), 'closed')
+    const shot = aWorkbenchShot(1)
+    renderInWorkbench(<ShotInspector shot={shot} isFirst />, { shots: [shot], inspectorTab: 'generate' })
+
+    expect(screen.getByRole('button', { name: 'Take' })).toHaveAttribute('aria-expanded', 'true')
   })
 
   /** インスペクターの「…」も、右クリックと同じ中身（2026-09-30）。 */
@@ -119,9 +132,7 @@ describe('ShotInspector: 送り直し', () => {
       callbacks.forEach((callback) => callback())
       expect(scrollIntoView).toHaveBeenCalledTimes(1)
 
-      const body = screen
-        .getByRole('heading', { name: 'Take を作る' })
-        .closest('.workbench-panel-body')
+      const body = screen.getByRole('heading', { name: 'Take' }).closest('.workbench-panel-body')
       body?.dispatchEvent(new Event('wheel', { bubbles: true }))
       scrollIntoView.mockClear()
       callbacks.forEach((callback) => callback())

@@ -7,6 +7,7 @@ import {
   type ShotGenerateApi,
 } from '@/components/workbench/inspector/shot-generate-section'
 import { WorkbenchContext } from '@/components/workbench/workbench-context'
+import { CAMERA_MOVEMENT_HINT } from '@/lib/camera-hint'
 import type { WireVideoModel } from '@/lib/models-api'
 import { SHOT_ID } from './fixtures'
 import { aWorkbenchShot, workbenchValue } from './workbench-fixture'
@@ -81,10 +82,14 @@ describe('カメラの動きが決まっていないとき', () => {
     camera: { size: 'medium', angleH: null, angle: null, lensMm: null, movement, movementIntensity: null },
   })
 
-  it('決まっていなければ、直し方まで言う', () => {
+  // 2026-10-26: 直し方の長い文は ⓘ に畳んだ（読み上げには常に渡し、押すと出す）。
+  it('決まっていなければ言い、直し方は ⓘ で言う', async () => {
     renderSection(true, camera(null))
 
-    expect(screen.getByText(/カメラの動きが決まっていません/)).toBeVisible()
+    expect(screen.getByText('カメラの動きが決まっていません')).toBeVisible()
+    const tip = screen.getByRole('button', { name: 'カメラの動きの説明' })
+    expect(tip).toHaveAccessibleDescription(CAMERA_MOVEMENT_HINT)
+    await userEvent.click(tip)
     expect(screen.getByText(/ティルト/)).toBeVisible()
   })
 

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 /**
  * パネルの中の区切り（UI-WORKBENCH-2 §8）。**カードにしない。** 小見出しと罫線だけ。
  * 箱の中に箱を作ると、320px の右ペインの 3 割が余白になった。
+ * インスペクター（Shot・キャラクター）は畳める見出しの行 `CollapsibleSection`（`collapsible-section.tsx`）を使う（2026-10-26）。
  */
 export const Section = ({
   title,
@@ -21,30 +22,6 @@ export const Section = ({
     </div>
     <div className="space-y-1.5">{children}</div>
   </section>
-)
-
-/**
- * 畳める区切り。普段触らないもの（カメラの細かい設定・レビュー）を下に畳んでおく
- * （制作者 2026-10-03「普段触らないような詳細設定は下のほうで」）。見出しは押すと開く。
- */
-export const CollapsibleSection = ({
-  title,
-  defaultOpen = false,
-  children,
-}: {
-  readonly title: string
-  readonly defaultOpen?: boolean
-  readonly children: ReactNode
-}) => (
-  <details open={defaultOpen} className="group border-t border-line py-2">
-    <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-semibold text-muted hover:text-text">
-      <span aria-hidden="true" className="inline-block transition-transform group-open:rotate-90">
-        ▸
-      </span>
-      <span>{title}</span>
-    </summary>
-    <div className="mt-1.5 space-y-1.5">{children}</div>
-  </details>
 )
 
 /**
