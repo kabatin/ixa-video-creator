@@ -16,6 +16,18 @@ import { Seconds } from '../common/time.js'
 export const MediaKind = z.enum(['image', 'video', 'audio', 'font', 'lut', 'other'])
 export type MediaKind = z.infer<typeof MediaKind>
 
+/** 話している区間の上限（1 本の Take に、これより多く拾うのは物音を拾い続けているとき）。 */
+export const MAX_SPEECH_SEGMENTS = 200
+
+/**
+ * 素材の音の中で、音が鳴っている（話している）区間（素材の頭からの秒。ADR-0061）。
+ * 無音（silencedetect）の裏返しで拾う。セリフの字幕の時刻に使う。
+ */
+export const SpeechSegment = z
+  .object({ startSec: Seconds, endSec: Seconds })
+  .refine((segment) => segment.endSec > segment.startSec, '区間の終わりは頭より後にしてください')
+export type SpeechSegment = z.infer<typeof SpeechSegment>
+
 export const MediaProbe = z.object({
   /** コンテナの尺。音声が映像より長ければ音声の尺になる。タイムラインや Take の尺はこれを使う。 */
   durationSec: Seconds.nullable(),
@@ -29,6 +41,11 @@ export const MediaProbe = z.object({
   fps: z.number().positive().nullable(),
   hasAudio: z.boolean(),
   codec: z.string().nullable(),
+  /**
+   * 話している区間（ADR-0061）。取り込みで、音のトラックがある動画だけ測る。
+   * **無いのは「測っていない」**（これを持つ前の素材・音の無い素材・測れなかった素材）。空の配列は「測ったが無音」。
+   */
+  speechSegments: z.array(SpeechSegment).max(MAX_SPEECH_SEGMENTS).optional(),
 })
 export type MediaProbe = z.infer<typeof MediaProbe>
 

@@ -1,8 +1,8 @@
 import { writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import type { MediaAssetRepository } from '@ixa/db'
-import { MediaAssetId as MediaAssetIdSchema, type MediaAsset, type MediaProbe } from '@ixa/domain'
-import { probeMedia, type RunOptions } from '@ixa/media'
+import { MediaAssetId as MediaAssetIdSchema, type MediaAsset, type MediaProbe, type SpeechSegment } from '@ixa/domain'
+import { detectSpeechSegments, probeMedia, type RunOptions } from '@ixa/media'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import { z } from 'zod'
@@ -51,6 +51,8 @@ export type MediaProcessorDeps = {
    * できてからでないと見られないので、ここから積む。**落ちても取り込みは成功のまま**（ログに残す）。
    */
   readonly afterIngested?: (asset: MediaAsset) => Promise<void>
+  /** 話している区間を拾う（ADR-0061）。既定は ffmpeg の silencedetect。テストで差し替える。 */
+  readonly detectSpeech?: (filePath: string, durationSec: number, options: RunOptions) => Promise<readonly SpeechSegment[]>
 }
 
 export type MediaOutcome =
@@ -103,6 +105,27 @@ const download = async (
 }
 
 /**
+ * 音のある動画の、話している区間（ADR-0061。セリフの字幕の時刻に使う）。**測れなくても取り込みは止めない**
+ * （区間の鍵を持たない＝「測っていない」になり、字幕は尺の割り振りに戻る）。曲・声などの音だけの素材は測らない。
+ */
+const withSpeechSegments = async (
+  deps: MediaProcessorDeps,
+  asset: MediaAsset,
+  probe: MediaProbe,
+  sourcePath: string,
+  runOptions: RunOptions,
+): Promise<MediaProbe> => {
+  if (asset.kind !== 'video' || !probe.hasAudio || probe.durationSec === null) return probe
+  try {
+    const speechSegments = await (deps.detectSpeech ?? detectSpeechSegments)(sourcePath, probe.durationSec, runOptions)
+    return { ...probe, speechSegments: [...speechSegments] }
+  } catch (error) {
+    deps.logger.warn({ mediaAssetId: asset.id, err: error }, '話している区間を測れませんでした（セリフの字幕は尺の割り振りになります）')
+    return probe
+  }
+}
+
+/**
  * probe → 生成物作成 → 格納 → DB 反映。
  * 生成物は一時ディレクトリで作り切ってから格納し、最後に 1 回だけ update する。
  * 途中で throw すれば MediaAsset は元のまま残る（部分的な状態を作らない）。
@@ -116,7 +139,7 @@ const ingest = async (
   const runOptions: RunOptions = { timeoutMs: MEDIA_TIMEOUT_MS }
 
   const sourcePath = await download(deps.storage, asset, jobDir)
-  const probe = await probeMedia(sourcePath, runOptions)
+  const probe = await withSpeechSegments(deps, asset, await probeMedia(sourcePath, runOptions), sourcePath, runOptions)
 
   const derivatives = await buildDerivatives({
     kind: asset.kind,
