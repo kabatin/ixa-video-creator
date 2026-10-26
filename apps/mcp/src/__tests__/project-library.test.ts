@@ -80,6 +80,23 @@ describe('update_project', () => {
   })
 })
 
+describe('update_project の仕上げの音量（ADR-0060）', () => {
+  it('選んだ仕上げを PATCH し、null は自動に戻す', async () => {
+    const fake = createFakeApi([
+      { method: 'PATCH', path: `/projects/${PROJECT}`, data: projectRow({ masteringMode: 'peak' }) },
+    ])
+    const result = jsonOf(await updateProjectTool.run({ projectId: PROJECT, masteringMode: 'peak' }, depsFor(fake))) as {
+      project: { masteringMode?: string }
+    }
+    expect(fake.callsTo('PATCH', `/projects/${PROJECT}`)[0]?.body).toEqual({ masteringMode: 'peak' })
+    expect(result.project.masteringMode).toBe('peak')
+
+    const auto = createFakeApi([{ method: 'PATCH', path: `/projects/${PROJECT}`, data: projectRow({ masteringMode: null }) }])
+    await updateProjectTool.run({ projectId: PROJECT, masteringMode: null }, depsFor(auto))
+    expect(auto.callsTo('PATCH', `/projects/${PROJECT}`)[0]?.body).toEqual({ masteringMode: null })
+  })
+})
+
 describe('update_project の確かめと危険度', () => {
   it('別の作品の素材を手本画像にしようとしたら PATCH しない', async () => {
     const fake = createFakeApi([ownedMedia(OTHER)])

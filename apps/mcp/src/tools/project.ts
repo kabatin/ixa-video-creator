@@ -1,4 +1,4 @@
-import { AspectRatio, Fps, MAX_STYLE_REFERENCES, ProjectStatus, Seconds } from '@ixa/domain'
+import { AspectRatio, Fps, MAX_STYLE_REFERENCES, MasteringMode, ProjectStatus, Seconds } from '@ixa/domain'
 import { z } from 'zod'
 import { IxaApiError, seg, type ApiClient } from '../api-client.js'
 import {
@@ -104,6 +104,13 @@ export const UpdateProjectInput = z.object({
   budgetUsd: z.number().min(0).nullable().optional(),
   instrumental: z.boolean().optional().describe('true = no lyrics (skips the lyric steps).'),
   status: ProjectStatus.optional(),
+  masteringMode: MasteringMode.nullable()
+    .optional()
+    .describe(
+      'Final loudness of exports. loudnorm: even out the whole piece to -14 LUFS (music videos). ' +
+        'peak: only tame peaks at -1.5 dBFS, keeping the balance of take voices and music. null: automatic ' +
+        '(peak when any shot has dialogue).',
+    ),
 })
 
 export const updateProjectTool = defineTool({
@@ -113,7 +120,7 @@ export const updateProjectTool = defineTool({
   riskOf: (args) => (args.budgetUsd === undefined ? 'write' : 'settings'),
   description:
     'Change project settings: name, concept (new script version; not undoable), styleGuide, avoid, aspect ratio, style reference ' +
-    'images (replaces all, max 3), target duration, budget, instrumental, status. Only the given fields change.',
+    'images (replaces all, max 3), target duration, budget, instrumental, status, masteringMode. Only the given fields change.',
   input: UpdateProjectInput,
   handler: async ({ projectId, concept, styleReferences, aspectRatio, ...fields }, { api, workspaceId }) => {
     const styleReferenceAssetIds =
@@ -157,6 +164,8 @@ const compactProject = (p: WireProject) => ({
   status: p.status,
   ...(p.styleGuide ? { styleGuide: p.styleGuide } : {}),
   ...(p.avoid ? { avoid: p.avoid } : {}),
+  // 仕上げの音量（ADR-0060）。選んでいなければ出さない（自動）。
+  ...(p.masteringMode === undefined || p.masteringMode === null ? {} : { masteringMode: p.masteringMode }),
 })
 
 const conceptOf = async (api: ApiClient, projectId: string): Promise<string> => {
@@ -219,6 +228,9 @@ export const getProjectTool = defineTool({
           // 速さと Take の使い始め（ADR-0050）。既定（1 倍・頭から）のときは出さない。
           ...(shot.speed === undefined || shot.speed === 1 ? {} : { speed: shot.speed }),
           ...(shot.sourceInSec === undefined || shot.sourceInSec === 0 ? {} : { sourceInSec: round(shot.sourceInSec) }),
+          // Take の音（ADR-0060）。既定（音あり・1）のときは出さない。
+          ...(shot.takeAudioMuted === true ? { takeAudioMuted: true } : {}),
+          ...(shot.takeAudioVolume === undefined || shot.takeAudioVolume === 1 ? {} : { takeAudioVolume: shot.takeAudioVolume }),
           description: shot.description ?? '',
           ...(shot.mood === null ? {} : { mood: shot.mood }),
           camera: compactCamera(shot.camera),

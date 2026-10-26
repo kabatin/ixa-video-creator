@@ -1,4 +1,4 @@
-import { ImageCheckIssue, ImageGenerationJobStatus, RenderPreset, RenderScope } from '@ixa/domain'
+import { ImageCheckIssue, ImageGenerationJobStatus, MasteringMode, RenderPreset, RenderScope } from '@ixa/domain'
 import { z } from 'zod'
 
 /**
@@ -19,6 +19,8 @@ export const WireProject = z.object({
   styleGuide: z.string().optional(),
   avoid: z.string().optional(),
   status: z.string(),
+  /** 仕上げの音量（ADR-0060）。null は自動。古い API は返さないので省略可。 */
+  masteringMode: MasteringMode.nullable().optional(),
 })
 export type WireProject = z.infer<typeof WireProject>
 
@@ -46,6 +48,9 @@ export const WireShot = z.object({
   /** 速さと Take の使い始め（ADR-0050）。古い API は返さないので省略可。 */
   speed: z.number().optional(),
   sourceInSec: z.number().optional(),
+  /** Take の音（ADR-0060）。古い API は返さないので省略可。 */
+  takeAudioVolume: z.number().optional(),
+  takeAudioMuted: z.boolean().optional(),
   description: z.string().optional(),
   mood: nullableString,
   camera: WireCamera,

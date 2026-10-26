@@ -205,6 +205,23 @@ describe('edit_shots', () => {
     expect(result.results[1]).toEqual({ shotIds: [SHOT_A], updated: 1 })
   })
 
+  it('Take の音の大きさと消音は Shot ごとの PATCH で送る（ADR-0060）', async () => {
+    const fake = createFakeApi([
+      ...baseRoutes,
+      { method: 'PATCH', path: `/shots/${SHOT_A}`, data: shotRow(SHOT_A, 0) },
+      { method: 'PATCH', path: `/shots/${SHOT_B}`, data: shotRow(SHOT_B, 1) },
+    ])
+    await editShotsTool.run(
+      { projectId: PROJECT, edits: [{ shotIds: [SHOT_A, SHOT_B], takeAudioVolume: 1.3, takeAudioMuted: false }] },
+      depsFor(fake),
+    )
+    expect(fake.callsTo('PATCH', /^\/shots\//).map((c) => [c.path, c.body])).toEqual([
+      [`/shots/${SHOT_A}`, { takeAudioVolume: 1.3, takeAudioMuted: false }],
+      [`/shots/${SHOT_B}`, { takeAudioVolume: 1.3, takeAudioMuted: false }],
+    ])
+    expect(fake.callsTo('PATCH', `/projects/${PROJECT}/shots/bulk`)).toHaveLength(0)
+  })
+
   it('位置・尺は Shot が 1 つのときだけ（何も直す前に断る）', async () => {
     const fake = createFakeApi(baseRoutes)
     const result = await editShotsTool.run(

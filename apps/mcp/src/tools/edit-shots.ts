@@ -1,5 +1,6 @@
 import {
   MAX_PLAYBACK_RATE,
+  MAX_TAKE_AUDIO_VOLUME,
   MIN_PLAYBACK_RATE,
   Seconds,
   ShotCamera,
@@ -81,6 +82,19 @@ const Edit = z.object({
   startSec: Seconds.optional().describe('Position on the timeline. Only with a single shotId.'),
   durationSec: Seconds.positive().optional().describe('Length on the timeline. Only with a single shotId.'),
   dialogue: DialogueInput.optional(),
+  takeAudioVolume: z
+    .number()
+    .min(0)
+    .max(MAX_TAKE_AUDIO_VOLUME)
+    .optional()
+    .describe('Loudness of the selected take\'s own sound (voices, ambience). 1 = as generated, 0–2.'),
+  takeAudioMuted: z
+    .boolean()
+    .optional()
+    .describe(
+      'true = the take\'s own sound is not played (music only). Shots made before take sound existed start muted; ' +
+        'unmute dialogue shots to hear the voices.',
+    ),
 })
 
 export const EditShotsInput = z.object({
@@ -109,6 +123,9 @@ const singlePatchOf = (edit: EditInput) => ({
   ...(edit.durationSec === undefined ? {} : { durationSec: edit.durationSec }),
   // セリフ（ADR-0059）は一括の口が受けない。Shot ごとに丸ごと置き換える。
   ...(edit.dialogue === undefined ? {} : { dialogue: edit.dialogue }),
+  // Take の音の大きさと消音（ADR-0060）も一括の口が受けない。
+  ...(edit.takeAudioVolume === undefined ? {} : { takeAudioVolume: edit.takeAudioVolume }),
+  ...(edit.takeAudioMuted === undefined ? {} : { takeAudioMuted: edit.takeAudioMuted }),
 })
 
 /** 同じ位置・尺を何本にも入れると重なりだらけになる（一括の口が時間を受けないのと同じ理由）。 */
@@ -252,7 +269,8 @@ export const editShotsTool = defineTool({
     'screen), mood, camera {size, angleH, angle, lensMm, movement, movementIntensity} (only given fields change), ' +
     'locationId, cast (replaces the cast; characters from create_character), transitionToNext ' +
     '(cut|dissolve|dip_to_black|dip_to_white|wipe|whip_pan|glitch), continuityMode, timing, startSec/durationSec, ' +
-    'dialogue (spoken lines; replaces all lines; speakers need speechName/voiceDescription via edit_character). ' +
+    'dialogue (spoken lines; replaces all lines; speakers need speechName/voiceDescription via edit_character), ' +
+    'takeAudioVolume/takeAudioMuted (the selected take\'s own sound in preview and export). ' +
     'A previous_shot shot starts from the last frame of the previous shot\'s selected take: adopt that take first, then generate. ' +
     'Edits run in order.',
   input: EditShotsInput,

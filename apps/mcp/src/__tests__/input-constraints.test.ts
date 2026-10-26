@@ -103,6 +103,9 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ edits: [{ shotIds: ['x'] }] }, 'edits.0.shotIds.0'],
       [{ edits: [{ shotIds: [S], description: long(4001) }] }, 'edits.0.description'],
       [{ edits: [{ shotIds: [S], mood: long(501) }] }, 'edits.0.mood'],
+      [{ edits: [{ shotIds: [S], takeAudioVolume: -0.1 }] }, 'edits.0.takeAudioVolume'],
+      [{ edits: [{ shotIds: [S], takeAudioVolume: 2.1 }] }, 'edits.0.takeAudioVolume'],
+      [{ edits: [{ shotIds: [S], takeAudioMuted: 'yes' }] }, 'edits.0.takeAudioMuted'],
       [{ edits: [{ shotIds: [S], camera: { size: 'huge' } }] }, 'edits.0.camera.size'],
       [{ edits: [{ shotIds: [S], camera: { lensMm: 0 } }] }, 'edits.0.camera.lensMm'],
       [{ edits: [{ shotIds: [S], camera: { movement: 'zoom' } }] }, 'edits.0.camera.movement'],
@@ -352,6 +355,7 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ durationSec: 0 }, 'durationSec'],
       [{ budgetUsd: -1 }, 'budgetUsd'],
       [{ status: 'archived' }, 'status'],
+      [{ masteringMode: 'limiter' }, 'masteringMode'],
     ],
   },
   duplicate_project: {
