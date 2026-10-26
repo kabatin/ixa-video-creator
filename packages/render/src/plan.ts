@@ -52,7 +52,15 @@ export type ShotPlan = {
   readonly playbackRate: number
   /** 映すもの。`image` は Take が無い Shot の絵コンテの画像（止めて映す。速度・切り出し位置は効かない）。 */
   readonly kind: 'video' | 'image'
+  /**
+   * 採用 Take の音を鳴らす（ADR-0060）。鳴らす Shot だけが持つ。`durationSec` は Shot の本体の長さ
+   * （ディゾルブの尻は含まない。尻では次の Shot の音に替わる）。頭と尻に `TAKE_AUDIO_FADE_SEC` のフェードを付ける。
+   */
+  readonly audio?: { readonly volume: number; readonly durationSec: number }
 }
+
+/** Take の音の切り口のフェード（秒。ADR-0060）。切った所でプツッと鳴らないだけの長さ。 */
+export const TAKE_AUDIO_FADE_SEC = 0.02
 
 /** dip_to_black / dip_to_white で挟む単色。 */
 export type DipPlan = {
@@ -163,8 +171,23 @@ const buildShots = (doc: TimelineDocument): readonly ShotPlan[] =>
       playbackRate: shot.playbackRate ?? 1,
       // 種類が無い文書（これまでの書き出しの記録）は動画。
       kind: shot.kind ?? 'video',
+      // 鳴らさない Shot は欄を書かない（前と同じ配置表のまま）。絵には音が無い。
+      ...(shot.audio === undefined || shot.kind === 'image'
+        ? {}
+        : { audio: { volume: shot.audio.volume, durationSec: shot.durationSec } }),
     }
   })
+
+/**
+ * 曲を下げる声の区間（ADR-0039・0060）。ナレーション・セリフの声と、採用 Take の音を鳴らす Shot の本体。
+ * Take の音はセリフの声なので、ナレーションと同じく曲を下げる。
+ */
+const voiceSpansOf = (doc: TimelineDocument): readonly VoiceSpan[] => [
+  ...doc.audio.filter((track) => track.role === 'voice').map((track) => ({ startSec: track.startSec, endSec: track.startSec + track.durationSec })),
+  ...doc.video1
+    .filter((shot) => shot.audio !== undefined && shot.kind !== 'image')
+    .map((shot) => ({ startSec: shot.startSec, endSec: shot.startSec + shot.durationSec })),
+]
 
 /**
  * dip は Shot の境界（前の Shot の終端）を中心に置く。
@@ -200,18 +223,12 @@ const buildClips = (doc: TimelineDocument, baseZIndex: number): readonly ClipPla
   }))
 
 /**
- * 音の配置（ADR-0039）。曲には、声の区間（まとめたもの）とダッキングの設定を付ける。声は下げない。
+ * 音の配置（ADR-0039）。曲には、声の区間（まとめたもの。Take の音を鳴らす Shot も含む）とダッキングの設定を付ける。声は下げない。
  * 描く側（Remotion・ffmpeg）は `audioVolumeAt` と同じ形で、1 コマごとに音量を引く。
  */
 export const buildAudioPlans = (doc: TimelineDocument): readonly AudioPlan[] => {
   const settings = doc.ducking?.enabled === true ? doc.ducking : null
-  const voiceSpans =
-    settings === null
-      ? []
-      : mergeVoiceSpans(
-          doc.audio.filter((track) => track.role === 'voice').map((track) => ({ startSec: track.startSec, endSec: track.startSec + track.durationSec })),
-          settings,
-        )
+  const voiceSpans = settings === null ? [] : mergeVoiceSpans(voiceSpansOf(doc), settings)
   return doc.audio.map((track) => {
     const role = track.role ?? 'music'
     return {

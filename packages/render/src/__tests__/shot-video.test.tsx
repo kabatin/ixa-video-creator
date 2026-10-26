@@ -16,7 +16,7 @@ const call = (element: Element): Element =>
 
 describe('ShotVideo', () => {
   it('書き出しは OffthreadVideo だけ（下敷きもコマの写しも無い）', () => {
-    const video = call(ShotVideo({ shot, box, rendering: true }) as Element)
+    const video = call(ShotVideo({ shot, box, rendering: true, fps: 24 }) as Element)
 
     expect(video.type).toBe(OffthreadVideo)
     expect(video.props).toMatchObject({
@@ -30,10 +30,10 @@ describe('ShotVideo', () => {
   })
 
   it('プレビューは下敷き付きの部品にする（同じ Shot・同じ枠）', () => {
-    const element = ShotVideo({ shot, box, rendering: false }) as Element
+    const element = ShotVideo({ shot, box, rendering: false, fps: 24 }) as Element
 
     expect(element.type).toBe(PreviewShotVideo)
-    expect(element.props).toEqual({ shot, box })
+    expect(element.props).toEqual({ shot, box, fps: 24 })
   })
 })
 
@@ -45,7 +45,7 @@ describe('ShotVideo の絵', () => {
   const still = { mediaUrl: 'https://media.test/S2.png', startFrom: 0, playbackRate: 1, kind: 'image' as const }
 
   it.each([true, false])('書き出し=%s でも、絵を同じ枠に収めて出す', (rendering) => {
-    const element = ShotVideo({ shot: still, box, rendering }) as Element
+    const element = ShotVideo({ shot: still, box, rendering, fps: 24 }) as Element
 
     expect(element.type).toBe(Img)
     expect(element.props).toMatchObject({ src: still.mediaUrl, style: { ...box, objectFit: 'contain' } })

@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "fps": 24,
+  "resolution": {
+    "width": 1920,
+    "height": 1080
+  },
+  "durationSec": 17,
+  "video1": [
+    {
+      "shotId": "01ARZ3NDEKTSV4RRFFQ69G5F01",
+      "startSec": 0,
+      "durationSec": 3.75,
+      "mediaUrl": "https://media.test/S1.mp4",
+      "mediaAssetId": "01ARZ3NDEKTSV4RRFFQ69G5M01",
+      "inSec": 0
+    },
+    {
+      "shotId": "01ARZ3NDEKTSV4RRFFQ69G5F02",
+      "startSec": 3.75,
+      "durationSec": 2.5,
+      "mediaUrl": "https://media.test/S2.mp4",
+      "mediaAssetId": "01ARZ3NDEKTSV4RRFFQ69G5M02",
+      "inSec": 0,
+      "playbackRate": 1.2
+    },
+    {
+      "shotId": "01ARZ3NDEKTSV4RRFFQ69G5F03",
+      "startSec": 6.25,
+      "durationSec": 4,
+      "mediaUrl": "https://media.test/S3.mp4",
+      "mediaAssetId": "01ARZ3NDEKTSV4RRFFQ69G5M03",
+      "inSec": 0.5
+    },
+    {
+      "shotId": "01ARZ3NDEKTSV4RRFFQ69G5F04",
+      "startSec": 10.25,
+      "durationSec": 2,
+      "mediaUrl": "https://media.test/S4.mp4",
+      "mediaAssetId": "01ARZ3NDEKTSV4RRFFQ69G5M04",
+      "inSec": 0,
+      "playbackRate": 1.5
+    },
+    {
+      "shotId": "01ARZ3NDEKTSV4RRFFQ69G5F05",
+      "startSec": 12.25,
+      "durationSec": 1.75,
+      "mediaUrl": "https://media.test/S5.png",
+      "inSec": 0,
+      "kind": "image"
+    },
+    {
+      "shotId": "01ARZ3NDEKTSV4RRFFQ69G5F06",
+      "startSec": 14,
+      "durationSec": 3,
+      "mediaUrl": "https://media.test/S6.mp4",
+      "mediaAssetId": "01ARZ3NDEKTSV4RRFFQ69G5M06",
+      "inSec": 0
+    }
+  ],
+  "transitions": [
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5F51",
+      "projectId": "01ARZ3NDEKTSV4RRFFQ69G5F99",
+      "fromShotId": "01ARZ3NDEKTSV4RRFFQ69G5F01",
+      "toShotId": "01ARZ3NDEKTSV4RRFFQ69G5F02",
+      "type": "dissolve",
+      "durationSec": 0.5
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5F52",
+      "projectId": "01ARZ3NDEKTSV4RRFFQ69G5F99",
+      "fromShotId": "01ARZ3NDEKTSV4RRFFQ69G5F03",
+      "toShotId": "01ARZ3NDEKTSV4RRFFQ69G5F04",
+      "type": "dip_to_black",
+      "durationSec": 0.4
+    }
+  ],
+  "clips": [
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5F41",
+      "track": "TEXT",
+      "startSec": 1,
+      "durationSec": 2.5,
+      "layer": 2,
+      "opacity": 1,
+      "content": {
+        "type": "text",
+        "templateKey": "lower_third",
+        "params": {
+          "text": "iXA CUP"
+        }
+      }
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5F43",
+      "track": "VIDEO2",
+      "startSec": 14,
+      "durationSec": 2,
+      "layer": 0,
+      "opacity": 0.6,
+      "content": {
+        "type": "media",
+        "mediaUrl": "https://media.test/01ARZ3NDEKTSV4RRFFQ69G5M43.mp4",
+        "mediaAssetId": "01ARZ3NDEKTSV4RRFFQ69G5M43",
+        "kind": "video",
+        "inSec": 0,
+        "outSec": 2,
+        "volume": 1
+      }
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5F42",
+      "track": "SFX",
+      "startSec": 6.25,
+      "durationSec": 1.2,
+      "layer": 0,
+      "opacity": 1,
+      "content": {
+        "type": "media",
+        "mediaUrl": "https://media.test/sfx.wav",
+        "mediaAssetId": "01ARZ3NDEKTSV4RRFFQ69G5M42",
+        "kind": "audio",
+        "inSec": 0.1,
+        "outSec": 1.3,
+        "volume": 0.8,
+        "fadeInSec": 0.05,
+        "fadeOutSec": 0.3
+      }
+    }
+  ],
+  "audio": [
+    {
+      "mediaUrl": "https://media.test/music.wav",
+      "startSec": 0,
+      "durationSec": 17,
+      "volume": 0.9,
+      "fadeInSec": 0.5,
+      "fadeOutSec": 2
+    },
+    {
+      "mediaUrl": "https://media.test/voice.wav",
+      "startSec": 8,
+      "durationSec": 1.5,
+      "volume": 1,
+      "inSec": 0.2,
+      "role": "voice"
+    }
+  ],
+  "ducking": {
+    "enabled": true,
+    "depthDb": 10,
+    "attackSec": 0.15,
+    "releaseSec": 0.4
+  }
+}

@@ -1,6 +1,6 @@
 import type { RenderPreset, TimelineDocument } from '@ixa/domain'
 import { volumeExpression } from './audio-expr.js'
-import { buildAudioPlans } from './plan.js'
+import { TAKE_AUDIO_FADE_SEC, buildAudioPlans } from './plan.js'
 import { PRESET_SETTINGS } from './presets.js'
 
 /** ffmpeg のフィルタ式に指数表記を渡さない。秒は固定小数で書く。 */
@@ -72,16 +72,43 @@ const videoFilters = (
   return { filters, label: current }
 }
 
-/** `audio` を adelay で並べて amix する。normalize=0 で音量を勝手に下げさせない。 */
+/**
+ * 採用 Take の音（ADR-0060）。鳴らす Shot だけ、映像と同じ入力の音を `[N:a]` として取り出す。
+ * 映像と同じ区間（尺 × 速度）を切り、速度を合わせ、Shot の尺ちょうどに揃えてから、頭と尻に 20ms のフェードを付けて置く。
+ * Take が Shot より短くても尻のフェードが効くよう、無音で尺まで伸ばす（Remotion の合成と同じく尻で 0 になる）。
+ */
+const takeAudioFilters = (doc: TimelineDocument): readonly { readonly filter: string; readonly label: string }[] =>
+  doc.video1.flatMap((shot, index) => {
+    if (shot.audio === undefined || shot.kind === 'image') return []
+    const rate = shot.playbackRate ?? 1
+    const duration = sec(shot.durationSec)
+    const label = `ta${index}`
+    return [
+      {
+        label,
+        filter:
+          `[${index + 1}:a]atrim=start=${startSec(shot.inSec)}:duration=${sec(shot.durationSec * rate)},asetpts=PTS-STARTPTS,` +
+          `${rate === 1 ? '' : `atempo=${sec(rate)},`}apad=whole_dur=${duration},atrim=duration=${duration},` +
+          `afade=t=in:st=0:d=${sec(TAKE_AUDIO_FADE_SEC)},afade=t=out:st=${sec(shot.durationSec - TAKE_AUDIO_FADE_SEC)}:d=${sec(TAKE_AUDIO_FADE_SEC)},` +
+          `volume=${shot.audio.volume.toFixed(4)},adelay=${ms(shot.startSec)}:all=1[${label}]`,
+      },
+    ]
+  })
+
+/**
+ * `audio` と採用 Take の音を adelay で並べて amix する。normalize=0 で音量を勝手に下げさせない。
+ * Take の音を鳴らす Shot が無ければ、前と同じ引数になる。
+ */
 const audioFilters = (
   doc: TimelineDocument,
   firstAudioInput: number,
 ): { readonly filters: readonly string[]; readonly label: string | null } => {
-  if (doc.audio.length === 0) return { filters: [], label: null }
+  const takeAudio = takeAudioFilters(doc)
+  if (doc.audio.length === 0 && takeAudio.length === 0) return { filters: [], label: null }
 
   // フェードとダッキング（ADR-0039）は Remotion と同じ配置表から、同じ形の式にする。
   const plans = buildAudioPlans(doc)
-  const filters = doc.audio.map((track, index) => {
+  const trackFilters = doc.audio.map((track, index) => {
     const input = firstAudioInput + index
     const delay = ms(track.startSec)
     const plan = plans[index]
@@ -93,11 +120,14 @@ const audioFilters = (
     )
   })
 
-  if (doc.audio.length === 1) return { filters, label: 'a0' }
+  const filters = [...trackFilters, ...takeAudio.map((entry) => entry.filter)]
+  const labels = [...doc.audio.map((_, index) => `a${index}`), ...takeAudio.map((entry) => entry.label)]
+  const [only] = labels
+  if (labels.length === 1 && only !== undefined) return { filters, label: only }
 
-  const inputs = doc.audio.map((_, index) => `[a${index}]`).join('')
+  const inputs = labels.map((label) => `[${label}]`).join('')
   return {
-    filters: [...filters, `${inputs}amix=inputs=${doc.audio.length}:normalize=0[amix]`],
+    filters: [...filters, `${inputs}amix=inputs=${labels.length}:normalize=0[amix]`],
     label: 'amix',
   }
 }

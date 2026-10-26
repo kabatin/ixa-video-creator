@@ -67,7 +67,7 @@ const UNRESOLVED_STYLE: React.CSSProperties = {
 }
 
 /** Shot 本体。`<Sequence>` の中なので `useCurrentFrame()` は Shot 頭からの相対フレーム。 */
-const ShotBody: React.FC<{ shot: ShotPlan; video: FitRect }> = ({ shot, video }) => {
+const ShotBody: React.FC<{ shot: ShotPlan; video: FitRect; fps: number }> = ({ shot, video, fps }) => {
   const frame = useCurrentFrame()
   const { isRendering } = useRemotionEnvironment()
   const total = shot.range.durationInFrames
@@ -85,10 +85,10 @@ const ShotBody: React.FC<{ shot: ShotPlan; video: FitRect }> = ({ shot, video })
     <AbsoluteFill style={{ zIndex: shot.zIndex, opacity }}>
       {/*
         速度は尺に合わせる Shot だけ 1 以外（ADR-0026）。切り出し位置は素材のフレームで数える。
-        **Shot の音は鳴らさない**。音楽が先のアプリで、音は曲（AI の動画には音が付いてくることが多い）。
+        Take の音は、鳴らす Shot（Take に音があり消音していない）だけ鳴らす（ADR-0060。`ShotVideo`）。
         プレビューは直近のコマを写した下敷きを敷く（ADR-0027）。
       */}
-      <ShotVideo shot={shot} box={boxStyle(video)} rendering={isRendering} />
+      <ShotVideo shot={shot} box={boxStyle(video)} rendering={isRendering} fps={fps} />
     </AbsoluteFill>
   )
 }
@@ -343,7 +343,7 @@ export const timelineLayers = (
               // 次の Shot が隙間なく続くときだけ残す。最後の Shot や隙間の前では、黒のはずの間に絵を残さない。
               {...(holds ? { postmountFor, styleWhilePostmounted: HOLD_UNDER_WHILE_POSTMOUNTED } : {})}
             >
-              <ShotBody shot={shot} video={plan.video} />
+              <ShotBody shot={shot} video={plan.video} fps={plan.fps} />
             </Sequence>
           )
         })}

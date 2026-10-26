@@ -1,7 +1,8 @@
 import type React from 'react'
 import { useCallback, useRef } from 'react'
 import { Img, OffthreadVideo, type OnVideoFrame } from 'remotion'
-import type { ShotPlan } from '../plan.js'
+import { clipAudioVolume } from '../clip-audio.js'
+import { TAKE_AUDIO_FADE_SEC, type ShotPlan } from '../plan.js'
 
 /**
  * Shot の動画（ADR-0027）。
@@ -18,25 +19,38 @@ import type { ShotPlan } from '../plan.js'
  * 別オリジンの動画を写した canvas は読み出せなくなるが、表示には差し支えない。
  */
 export type ShotVideoProps = {
-  readonly shot: Pick<ShotPlan, 'mediaUrl' | 'startFrom' | 'playbackRate' | 'kind'>
+  readonly shot: Pick<ShotPlan, 'mediaUrl' | 'startFrom' | 'playbackRate' | 'kind' | 'audio'>
   /** 描く枠（位置と大きさ）。contain で収める。 */
   readonly box: React.CSSProperties
   /** 書き出し中か（`useRemotionEnvironment().isRendering`）。 */
   readonly rendering: boolean
+  /** Take の音のフェードをコマで数えるため（ADR-0060）。 */
+  readonly fps: number
 }
 
 type BodyProps = Omit<ShotVideoProps, 'rendering'> & { readonly onVideoFrame?: OnVideoFrame }
 
 /**
- * 切り出し位置は素材のフレームで数える。速度は尺に合わせる Shot だけ 1 以外（ADR-0026）。
- * **Shot の音は鳴らさない**。音楽が先のアプリで、音は曲（AI の動画には音が付いてくることが多い）。
+ * Take の音（ADR-0060）。鳴らす Shot だけ消音を外し、切り口の頭と尻に 20ms のフェードを付ける
+ * （`volume` は Shot の頭からのコマ。尻はディゾルブの前、Shot の本体の終わりで 0 になる）。
+ * 鳴らさない Shot は前と同じ `muted` だけ（音楽が先のアプリで、AI の動画には頼んでいない音が付いてくることが多い）。
  */
-const Body = ({ shot, box, onVideoFrame }: BodyProps) => (
+const audioProps = (shot: ShotVideoProps['shot'], fps: number): { readonly muted: boolean; readonly volume?: (frame: number) => number } => {
+  if (shot.audio === undefined) return { muted: true }
+  const volume = clipAudioVolume(
+    { volume: shot.audio.volume, durationSec: shot.audio.durationSec, fadeInSec: TAKE_AUDIO_FADE_SEC, fadeOutSec: TAKE_AUDIO_FADE_SEC },
+    fps,
+  )
+  return { muted: false, volume: typeof volume === 'number' ? () => volume : volume }
+}
+
+/** 切り出し位置は素材のフレームで数える。速度は尺に合わせる Shot だけ 1 以外（ADR-0026）。 */
+const Body = ({ shot, box, fps, onVideoFrame }: BodyProps) => (
   <OffthreadVideo
     src={shot.mediaUrl}
     startFrom={shot.startFrom}
     playbackRate={shot.playbackRate}
-    muted
+    {...audioProps(shot, fps)}
     style={{ ...box, objectFit: 'contain' }}
     {...(onVideoFrame === undefined ? {} : { onVideoFrame })}
   />
@@ -89,7 +103,7 @@ export const copyFrameTo = (canvas: unknown, frame: unknown): void => {
  */
 const COPY_ON_EVENTS = ['loadeddata', 'seeked', 'canplay'] as const
 
-export const PreviewShotVideo = ({ shot, box }: Omit<ShotVideoProps, 'rendering'>) => {
+export const PreviewShotVideo = ({ shot, box, fps }: Omit<ShotVideoProps, 'rendering'>) => {
   const underlay = useRef<HTMLCanvasElement>(null)
   const watched = useRef<VideoFrameLike | null>(null)
   const onVideoFrame = useCallback<OnVideoFrame>((frame) => {
@@ -106,7 +120,7 @@ export const PreviewShotVideo = ({ shot, box }: Omit<ShotVideoProps, 'rendering'
   return (
     <>
       <canvas ref={underlay} style={{ ...box, objectFit: 'contain' }} />
-      <Body shot={shot} box={box} onVideoFrame={onVideoFrame} />
+      <Body shot={shot} box={box} fps={fps} onVideoFrame={onVideoFrame} />
     </>
   )
 }
@@ -117,7 +131,7 @@ export const PreviewShotVideo = ({ shot, box }: Omit<ShotVideoProps, 'rendering'
  * 絵（Take が無い Shot の絵コンテの画像。制作者 2026-10-02）は書き出しもプレビューも `<Img>` だけ。
  * `<Img>` は読み込みを待ってからコマを出すので、書き出しで空のコマにならない。止まった絵なので下敷きも要らない。
  */
-export const ShotVideo = ({ shot, box, rendering }: ShotVideoProps) => {
+export const ShotVideo = ({ shot, box, rendering, fps }: ShotVideoProps) => {
   if (shot.kind === 'image') return <Img src={shot.mediaUrl} style={{ ...box, objectFit: 'contain' }} />
-  return rendering ? <Body shot={shot} box={box} /> : <PreviewShotVideo shot={shot} box={box} />
+  return rendering ? <Body shot={shot} box={box} fps={fps} /> : <PreviewShotVideo shot={shot} box={box} fps={fps} />
 }

@@ -1,0 +1,41 @@
+[
+  {
+    "src": "https://media.test/S1.mp4",
+    "startFrom": 0,
+    "playbackRate": 1,
+    "muted": true,
+    "volume": "undefined"
+  },
+  {
+    "src": "https://media.test/S2.mp4",
+    "startFrom": 0,
+    "playbackRate": 1.2,
+    "muted": true,
+    "volume": "undefined"
+  },
+  {
+    "src": "https://media.test/S3.mp4",
+    "startFrom": 12,
+    "playbackRate": 1,
+    "muted": true,
+    "volume": "undefined"
+  },
+  {
+    "src": "https://media.test/S4.mp4",
+    "startFrom": 0,
+    "playbackRate": 1.5,
+    "muted": true,
+    "volume": "undefined"
+  },
+  {
+    "src": "https://media.test/S5.png",
+    "volume": "undefined"
+  },
+  {
+    "src": "https://media.test/S6.mp4",
+    "startFrom": 0,
+    "playbackRate": 1,
+    "muted": true,
+    "volume": "undefined"
+  }
+]
