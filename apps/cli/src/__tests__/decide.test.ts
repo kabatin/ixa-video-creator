@@ -4,6 +4,7 @@ import { parseVersion, type Version } from '../lib/semver.js'
 import { infraAction, infraSettled, signingSecretAction, workspaceAction } from '../setup/decide.js'
 import {
   describeActiveJobs,
+  devRunningBlocker,
   staleJobsNotice,
   fastForwardBlocker,
   fastForwardOf,
@@ -71,6 +72,12 @@ describe('update の止める条件', () => {
   it('--force はジョブの確認だけを外す', () => {
     const blockers = updateBlockers({ dirty: true, branch: 'main', activeJobs: { ...noJobs, music: 1 }, force: true })
     expect(blockers.map((b) => b.id)).toEqual(['update.dirty'])
+  })
+
+  it('この clone の dev が動いていれば止める。--while-running（--force とは別の同意）のときだけ進む', () => {
+    expect(devRunningBlocker(false, false)).toBeNull()
+    expect(devRunningBlocker(true, false)).toMatchObject({ id: 'update.dev-running', status: 'needs_human', fix: { needsHuman: true } })
+    expect(devRunningBlocker(true, true)).toBeNull()
   })
 
   it('数えられない（DB につながらない）ときは止めない', () => {

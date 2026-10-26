@@ -10,6 +10,7 @@ import type { System } from '../system.js'
 import { hasFailure, isStopping, type StepResult } from '../types.js'
 import {
   describeMove,
+  devRunningBlocker,
   fastForwardBlocker,
   fastForwardOf,
   parseVersionOrThrow,
@@ -89,6 +90,9 @@ const fetchStage = async (system: System, repo: RepoPaths, out: Output, options:
   const blockers = [
     ...jobs.steps.filter(isStopping),
     ...updateBlockers({ dirty: await git.dirty(), branch: await git.branch(), activeJobs: jobs.counts, force: options.force }),
+    ...[devRunningBlocker(devIsRunning(await gatherRuntime(system, await readEnv(system, repo), repo.root)), options.whileRunning)].filter(
+      (s): s is StepResult => s !== null,
+    ),
   ]
   system.progress('新しい版を確かめています（git fetch --tags）…')
   await git.fetch()

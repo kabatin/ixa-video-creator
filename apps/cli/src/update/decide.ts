@@ -97,6 +97,26 @@ export const updateBlockers = (facts: GuardFacts): readonly StepResult[] => [
     : []),
 ]
 
+/**
+ * この clone の dev が動いているまま取り込むと、tsx watch と next dev が途中の版を読み込み直し、
+ * DB の更新の前に新しいコードが古い DB に当たる。止めてからにする。
+ * 動かしたまま進めるのは `--while-running`（ジョブの `--force` とは別の同意）。
+ */
+export const devRunningBlocker = (devRunning: boolean, whileRunning: boolean): StepResult | null =>
+  devRunning && !whileRunning
+    ? {
+        id: 'update.dev-running',
+        status: 'needs_human',
+        message: 'この clone の dev（pnpm dev）が動いています。動いたまま更新すると、途中の版を読み込み直して落ちることがあります',
+        fix: {
+          hint: 'dev を止めてから（Ctrl+C）。動かしたまま進めてよければ --while-running（制作者に確かめる）',
+          command: 'pnpm ixa update --while-running',
+          needsHuman: true,
+        },
+        docs: 'INSTALL.md#更新',
+      }
+    : null
+
 export type Target =
   | { readonly kind: 'none' }
   | { readonly kind: 'up-to-date'; readonly version: Version }

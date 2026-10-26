@@ -10,6 +10,7 @@ const Options = z.object({
   json: z.boolean(),
   yes: z.boolean(),
   force: z.boolean(),
+  whileRunning: z.boolean(),
   check: z.boolean(),
   main: z.boolean(),
   afterFetch: z.boolean(),
@@ -28,7 +29,7 @@ export const HELP = `使い方: pnpm ixa <コマンド> [オプション]
   setup    初めての導入（何度実行しても壊れない）。--yes で途中の質問をしない
   doctor   今の状態を ✓ / ! / ✗ で出す（読むだけ）。✗ があれば終了コード 1
   update   最新のリリースへ上げる。--main で main の先頭へ、--check で確かめるだけ、
-           --force で「動いているジョブ」の確認を外す
+           --force で「動いているジョブ」の確認を外す、--while-running で dev を動かしたまま進める
   mcp      Claude Code / Codex に MCP を登録する 1 行を出す。--claude / --codex、--write で実際に登録
 
   共通: --json で機械向けに出す（各項目に fix.command・fix.needsHuman・docs）
@@ -45,6 +46,7 @@ export const parseCliArgs = (argv: readonly string[]): Options => {
       json: { type: 'boolean', default: false },
       yes: { type: 'boolean', short: 'y', default: false },
       force: { type: 'boolean', default: false },
+      'while-running': { type: 'boolean', default: false },
       check: { type: 'boolean', default: false },
       main: { type: 'boolean', default: false },
       'after-fetch': { type: 'boolean', default: false },
@@ -62,6 +64,7 @@ export const parseCliArgs = (argv: readonly string[]): Options => {
     json: values.json,
     yes: values.yes,
     force: values.force,
+    whileRunning: values['while-running'],
     check: values.check,
     main: values.main,
     afterFetch: values['after-fetch'],
