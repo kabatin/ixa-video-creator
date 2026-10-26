@@ -84,6 +84,22 @@ const s3Settings = (env: Env): AppConfig['storage']['s3'] => {
 }
 
 /**
+ * 設定の問題を**全部**返す（空なら揃っている）。`pnpm ixa doctor` が 1 回で全部を見せるため。
+ *
+ * `loadConfig` は起動を止めるのが仕事なので、組み合わせの問題は最初の 1 つで投げる。
+ * 点検ではそれだと 1 つ直すたびに次が出てくるので、ここでは並べて返す。
+ * **文に入るのは変数の名前だけ**（値は入れない。`describeIssue` と各 `*Problem` の作法）。
+ */
+export const configProblems = (env: NodeJS.ProcessEnv): readonly string[] => {
+  const result = EnvSchema.safeParse(env)
+  if (!result.success) return result.error.issues.map(describeIssue)
+  const parsed = result.data
+  return [localVideoGeneratorProblem(parsed), audioApiProblem(parsed), storageProblem(parsed)].filter(
+    (problem): problem is string => problem !== null,
+  )
+}
+
+/**
  * 環境変数を検証し、ネストされた AppConfig を返す。
  * モジュール読み込み時には実行されない（呼ばれたときだけ検証する）。
  */
