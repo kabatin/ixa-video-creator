@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { GenerationJobId, MediaAssetId, ShotId, TakeId } from '../common/ids.js'
+import { DubParams } from '../dub/dub-record.js'
 import { Corrections, ShotGenerationSpec } from './spec.js'
 
 export const ProviderId = z.string().min(1).brand<'ProviderId'>()
@@ -37,6 +38,8 @@ export const ProviderParams = z.discriminatedUnion('kind', [
     sourceModel: z.string().trim().min(1).max(120).nullable(),
     fileName: z.string().max(255).nullable(),
   }),
+  /** 声を差し替えた Take（ADR-0062）。映像は元の Take のまま、声だけ Gemini で読み直した。 */
+  DubParams,
 ])
 export type ProviderParams = z.infer<typeof ProviderParams>
 

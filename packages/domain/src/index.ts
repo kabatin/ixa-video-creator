@@ -101,3 +101,7 @@ export * from './narration/narration-telop-clips.js'
 export * from './audio/mix.js'
 export * from './audio/mastering.js'
 export * from './timeline/srt.js'
+
+// 声の差し替え（ADR-0062）
+export * from './dub/dialogue-dub.js'
+export * from './dub/dub-record.js'

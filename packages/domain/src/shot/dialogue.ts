@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { CharacterId } from '../common/ids.js'
+import { DialogueDub, dubLineConflicts } from '../dub/dialogue-dub.js'
 
 /**
  * Shot のセリフ（ADR-0059）。1 行 = 1 人が 1 回しゃべること。
@@ -37,11 +38,20 @@ export const DialogueLine = z
       .nullable()
       .default(null)
       .transform((value) => (value === null || value === '' ? null : value)),
+    /** 声の差し替えの指定（ADR-0062）。無い行は鍵ごと無い（前からの行は 1 バイトも変わらない）。 */
+    dub: DialogueDub.optional(),
   })
   .strict()
 export type DialogueLine = z.infer<typeof DialogueLine>
 
-export const DialogueLines = z.array(DialogueLine).max(MAX_DIALOGUE_LINES)
+export const DialogueLines = z
+  .array(DialogueLine)
+  .max(MAX_DIALOGUE_LINES)
+  .superRefine((lines, ctx) => {
+    dubLineConflicts(lines).forEach((conflict) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [...conflict.path], message: conflict.message }),
+    )
+  })
 export type DialogueLines = z.infer<typeof DialogueLines>
 
 export type DialogueWarning = {
