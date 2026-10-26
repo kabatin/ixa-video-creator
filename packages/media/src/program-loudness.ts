@@ -11,7 +11,9 @@ import { probeMedia } from './probe.js'
 export const PROGRAM_TARGET_LUFS = -14
 const TARGET_TP = -1.5
 const TARGET_LRA = 11
-const TARGET = `I=${PROGRAM_TARGET_LUFS}:TP=${TARGET_TP}:LRA=${TARGET_LRA}`
+/** loudnorm の目標（TP -1.5・LRA 11 は共通。統合の大きさだけ口ごとに違う。声の差し替えは -16）。 */
+export const loudnormTarget = (targetLufs: number): string => `I=${targetLufs}:TP=${TARGET_TP}:LRA=${TARGET_LRA}`
+const TARGET = loudnormTarget(PROGRAM_TARGET_LUFS)
 
 export type LoudnormMeasurement = {
   readonly inputI: number
@@ -45,6 +47,13 @@ export const parseLoudnormJson = (stderr: string): LoudnormMeasurement | null =>
   return { inputI, inputTp, inputLra, inputThresh, targetOffset }
 }
 
+/** 1 回目（測る）の loudnorm。 */
+export const loudnormMeasureFilter = (targetLufs: number): string => `loudnorm=${loudnormTarget(targetLufs)}:print_format=json`
+
+/** 2 回目（測った値を渡して線形に直す）の loudnorm。 */
+export const loudnormLinearFilter = (targetLufs: number, measured: LoudnormMeasurement): string =>
+  `loudnorm=${loudnormTarget(targetLufs)}:measured_I=${measured.inputI}:measured_TP=${measured.inputTp}:measured_LRA=${measured.inputLra}:measured_thresh=${measured.inputThresh}:offset=${measured.targetOffset}:linear=true`
+
 export const programLoudnessArgs = (
   inputPath: string,
   outputPath: string,
@@ -53,7 +62,7 @@ export const programLoudnessArgs = (
 ): readonly string[] => [
   '-y', '-i', inputPath, '-map', '0:v?', '-map', '0:a', '-c:v', 'copy',
   '-af',
-  `loudnorm=${TARGET}:measured_I=${measured.inputI}:measured_TP=${measured.inputTp}:measured_LRA=${measured.inputLra}:measured_thresh=${measured.inputThresh}:offset=${measured.targetOffset}:linear=true`,
+  loudnormLinearFilter(PROGRAM_TARGET_LUFS, measured),
   // loudnorm は内部で 192kHz に上げるので、出力を 48kHz に戻す。
   '-ar', '48000', '-c:a', 'aac', '-b:a', audioBitrate, '-movflags', '+faststart', outputPath,
 ]
