@@ -4,7 +4,7 @@ import { DUB_REASON, dialogueTelopOf, dubRecordOf, type TimelineClip } from '@ix
 import { probeMedia } from '@ixa/media'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { failInterruptedDubJob } from '../interrupted.js'
-import { processDubJob } from '../processor.js'
+import { UNEXPECTED_DUB_MESSAGE, processDubJob } from '../processor.js'
 import { createDubWorld, createWorkDir, line, makeSourceVideo, removeWorkDir } from './fixtures.js'
 
 /**
@@ -257,7 +257,10 @@ describe('processDubJob（止める理由）', () => {
     const world = await createDubWorld({ workDir: join(dir, 'lost'), video, afterSpeak: () => () => Promise.resolve('lose_file') })
     const job = await world.newJob()
     await expect(processDubJob(world.deps, { dubJobId: job.id })).rejects.toThrow()
-    expect((await world.dubJobs.findById(job.id))).toMatchObject({ status: 'failed', costUsd: 0.001 })
+    const failed = await world.dubJobs.findById(job.id)
+    expect(failed).toMatchObject({ status: 'failed', costUsd: 0.001 })
+    // 画面・MCP に出る文は決まった日本語だけ（手元のパスや ffmpeg の出力を出さない。元の文はログだけ）。
+    expect(failed?.error?.message).toBe(UNEXPECTED_DUB_MESSAGE)
   }, 30_000)
 
   it('キューに打ち切られたジョブを失敗にしても、払った額は消えない', async () => {

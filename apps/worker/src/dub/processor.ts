@@ -36,6 +36,11 @@ import { dubMuteRanges, lineInputs, lineLabel, lineSpans, resolveSpeakers, type 
  * **元の Take は変えない**（追記のみ）。止まるときは、どの行・誰の声かを言う日本語の理由で止める。
  */
 
+/**
+ * 知らない失敗のときに画面・MCP に出す文。**元の文（手元のパス・ffmpeg の出力など）は出さず、ログにだけ残す。**
+ */
+export const UNEXPECTED_DUB_MESSAGE = '声を差し替える途中で止まりました。もう一度差し替えてください'
+
 export type DubOutcome =
   | { readonly state: 'succeeded'; readonly takeId: string }
   | { readonly state: 'failed'; readonly code: string }
@@ -227,11 +232,9 @@ const run = async (deps: DubProcessorDeps, job: DubJob, workDir: string): Promis
 }
 
 const markUnexpectedFailure = async (deps: DubProcessorDeps, job: DubJob, error: unknown): Promise<void> => {
+  deps.logger.error({ dubJobId: job.id, err: error }, '声の差し替えが知らない理由で止まりました')
   try {
-    await deps.dubJobs.markFailed(
-      job.id,
-      { code: 'unexpected', message: `声を差し替える途中で止まりました: ${error instanceof Error ? error.message : String(error)}`.slice(0, 1000), retryable: true },
-    )
+    await deps.dubJobs.markFailed(job.id, { code: 'unexpected', message: UNEXPECTED_DUB_MESSAGE, retryable: true })
   } catch (cause) {
     deps.logger.error({ dubJobId: job.id, err: cause }, '失敗を記録できませんでした。行が「動いている」のまま残ります')
   }
