@@ -301,6 +301,22 @@ export const EnvSchema = z.object({
     .string()
     .transform((v) => (v.trim() === '' ? undefined : v))
     .optional(),
+  /**
+   * Gemini の鍵の名札（例 key2-2026-10-14。ADR-0062）。**鍵そのものではない**（秘密ではない設定値）。
+   * 説明から作った声はこの名札と一緒に保存し、名札が違う鍵では使う前に止める（作った鍵のプロジェクトでしか読めない）。
+   * 形は `@ixa/domain` の `GeminiKeyLabel` と同じ（config は domain に依存しないので、ここで同じ形を確かめる）。空なら未設定。
+   */
+  GEMINI_KEY_LABEL: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v.trim()))
+    .pipe(
+      z
+        .string()
+        .max(64)
+        .regex(/^[A-Za-z0-9._-]+$/, '鍵の名札は英数字と . _ - だけにしてください')
+        .optional(),
+    )
+    .optional(),
   /** ElevenLabs の API キー（声・文字起こし）。空なら未設定。 */
   ELEVENLABS_API_KEY: z
     .string()
@@ -487,5 +503,7 @@ export interface AppConfig {
     geminiBilling: Env['GEMINI_API_BILLING']
     elevenLabsUsdPer1kChars: number
     whisperCppModel: string | null
+    /** Gemini の鍵の名札（作った声と照らす。秘密ではない）。未設定は null。 */
+    geminiKeyLabel: string | null
   }
 }

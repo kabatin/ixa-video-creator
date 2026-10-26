@@ -164,6 +164,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): AppConfig => {
       geminiBilling: parsed.GEMINI_API_BILLING,
       elevenLabsUsdPer1kChars: parsed.ELEVENLABS_USD_PER_1K_CHARS,
       whisperCppModel: parsed.WHISPER_CPP_MODEL ?? null,
+      geminiKeyLabel: parsed.GEMINI_KEY_LABEL ?? null,
     },
   }
 }

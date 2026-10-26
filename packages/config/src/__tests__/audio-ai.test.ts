@@ -31,7 +31,15 @@ describe('声と文字起こしの AI', () => {
       geminiBilling: 'free',
       elevenLabsUsdPer1kChars: 0.08,
       whisperCppModel: null,
+      geminiKeyLabel: null,
     })
+  })
+
+  it('GEMINI_KEY_LABEL は鍵の名札（秘密ではない）。英数字と . _ - だけ。空は未設定', () => {
+    expect(loadConfig({ ...requiredEnv, GEMINI_KEY_LABEL: 'key2-2026-10-14' }).voiceAi.geminiKeyLabel).toBe('key2-2026-10-14')
+    expect(loadConfig({ ...requiredEnv, GEMINI_KEY_LABEL: ' ' }).voiceAi.geminiKeyLabel).toBeNull()
+    expect(() => loadConfig({ ...requiredEnv, GEMINI_KEY_LABEL: 'my key' })).toThrow(/GEMINI_KEY_LABEL/)
+    expect(() => loadConfig({ ...requiredEnv, GEMINI_KEY_LABEL: 'k'.repeat(65) })).toThrow(/GEMINI_KEY_LABEL/)
   })
 
   it('鍵を置いただけでは使えるようにならない', () => {

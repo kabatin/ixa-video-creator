@@ -74,6 +74,7 @@ const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
       geminiBilling: 'free',
       elevenLabsUsdPer1kChars: 0.08,
       whisperCppModel: null,
+      geminiKeyLabel: null,
     },
     ...overrides,
   })
