@@ -6,7 +6,10 @@ import { COMMANDS } from '../args.js'
 
 export const redactUrls = (text: string): string => text.replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, '$1***@')
 
-export const errorMessage = (error: unknown): string => redactUrls(error instanceof Error ? error.message : String(error))
+export const errorMessage = (error: unknown): string =>
+  redactUrls(error instanceof Error ? error.message : String(error))
+    .replace(/\s*\n\s*/g, ' ')
+    .trim()
 
 /** `--json` のときの最上位の失敗。stdout に JSON を 1 つだけ出す。 */
 export const errorPayload = (argv: readonly string[], error: unknown) => {

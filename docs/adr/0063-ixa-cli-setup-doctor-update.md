@@ -109,6 +109,12 @@ Codex は `[mcp_servers.ixa]` の節で鍵は `env_vars` の名前だけ）を�
 - 使い捨ての clone（別の Docker のプロジェクト・55432/56379）で setup を 2 回（2 回目は全部「済み」）→ doctor。
   ローカルの偽のタグ（v0.9.0。DB の更新 1 本と `.env` の新しい項目 1 つ）で update の 2 段を通した（2 段目が新しい版のコードで走ることを印で確かめた）。
 - `.env.example` をそのまま写した `.env` が API の検査で落ちていた（空の `STORAGE_PUBLIC_BASE_URL`）。直した。
+- レビューの直しのあと、使い捨ての clone でもう一度通した（2026-10-27）:
+  - setup 2 回（2 回目は全部「済み」）→ doctor ✗ 0。`pnpm infra:down` → `infra:up` でデータ（ワークスペース）が残る。
+  - 名前だけ替えて同じポートを指す 2 つ目の clone は、setup が `infra` で止まり、`pnpm infra:down` も 1 つ目のスタックを止めなかった。
+  - 偽のタグ v0.9.0 を、わざと壊した DB の更新で用意して update: 書き出し中のジョブで止まる → `--force` で進む →
+    2 段目の DB の更新で止まり、印が残る → `update` は「最新です」と言わず `update.pending`、doctor は `tools.update-pending` ✗ →
+    原因を直して `--resume` → 済んで印が消える。20 日前から running の絵コンテの案は数えず、取り残しとして知らせた。
 
 ## 分かっている不足
 

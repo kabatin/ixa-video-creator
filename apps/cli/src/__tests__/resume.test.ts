@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createOutput } from '../printer.js'
-import { errorPayload, redactUrls } from '../lib/errors.js'
+import { errorMessage, errorPayload, redactUrls } from '../lib/errors.js'
 import { runSteps } from '../setup/run-steps.js'
 import { parseMarker, pendingCheck, pendingUpdateStep } from '../update/marker.js'
 
@@ -48,6 +48,10 @@ describe('途中で投げても、失敗の手順と直し方にする', () => {
     expect(results[1]?.fix?.command).toBe('pnpm -s ixa setup')
     expect(results[1]?.message).not.toContain('secret')
     expect(ran).toEqual([])
+  })
+
+  it('複数行の文（drizzle の失敗など）は 1 行にまとめる', () => {
+    expect(errorMessage(new Error('Failed query: CREATE TABLE x\n\nparams: '))).toBe('Failed query: CREATE TABLE x params:')
   })
 
   it('URL の合言葉を伏せる', () => {
