@@ -1,6 +1,8 @@
 import {
+  dialogueTelopOf,
   lyricLineOf,
   MAX_TEXT_CLIP_LENGTH,
+  MAX_TEXT_CLIP_TRANSLATION_LENGTH,
   mergeTextStyle,
   MIN_TEXT_CLIP_DURATION_SEC,
   narrationLineOf,
@@ -85,6 +87,13 @@ export const failureReason = (error: unknown): string => {
 
 const Telop = z.object({
   text: z.string().trim().min(1).max(MAX_TEXT_CLIP_LENGTH).describe('Shown text (Japanese is fine).'),
+  translation: z
+    .string()
+    .trim()
+    .min(1)
+    .max(MAX_TEXT_CLIP_TRANSLATION_LENGTH)
+    .optional()
+    .describe('Optional smaller second line under the text (e.g. the English subtitle). Size: style.translationScale.'),
   atSec: Seconds.optional().describe('Timeline seconds where it appears. Give this OR shotCode.'),
   shotCode: z.string().min(1).optional().describe('Appear at the head of this shot (e.g. "CUT3"), plus offsetSec.'),
   offsetSec: Seconds.optional().describe('Seconds from the shot head (with shotCode). Default 0.'),
@@ -94,7 +103,8 @@ const Telop = z.object({
   style: TextStyle.optional().describe(
     'Look overrides (applied on top of styleName): font gothic|mincho|rounded, size 0.02–0.2 of the shorter screen side ' +
       '(null = auto), weight, color #RRGGBB, stroke {color,width}, shadow, background {color,opacity}, align, ' +
-      'anchor (9 positions like "top-center"), offset {x,y} −0.5–0.5, fadeInSec/fadeOutSec 0–2.',
+      'anchor (9 positions like "top-center"), offset {x,y} −0.5–0.5, fadeInSec/fadeOutSec 0–2, ' +
+      'translationScale 0.3–1 (second line size vs the first, default 0.6).',
   ),
   layer: z.number().int().min(0).max(20).default(0).describe('Higher layers draw on top. Lyrics use 1, narration 2.'),
 })
@@ -143,6 +153,7 @@ const planTelops = (
         templateKey: telop.template,
         params: {
           text: telop.text,
+          ...(telop.translation === undefined ? {} : { translation: telop.translation }),
           ...(style === undefined ? {} : { style }),
           ...(preset === null ? {} : { styleId: preset.id }),
         },
@@ -156,7 +167,9 @@ export const addTelopsTool = defineTool({
   description:
     'Place on-screen text (telops/captions/titles) on the timeline TEXT track. Place by atSec or shotCode+offsetSec; ' +
     'pick a template, an optional saved style (styleName) and look overrides (position via style.anchor/offset). ' +
-    'For song lyrics use set_lyrics; for narration captions use set_narration (they make their own telops).',
+    'Add translation for a smaller second line (two-line Japanese + English subtitles). ' +
+    'For song lyrics use set_lyrics; for narration captions use set_narration; dialogue captions come from the shot ' +
+    'dialogue (edit_shots) — they make their own telops.',
   input: AddTelopsInput,
   handler: async ({ projectId, telops }, { api }) => {
     const needsShots = telops.some((t) => t.shotCode !== undefined)
@@ -182,15 +195,23 @@ export const addTelopsTool = defineTool({
   },
 })
 
-/** どこから来たテロップか。歌詞・ナレーションのものは元を直すと作り直される。 */
-const originOf = (params: Record<string, unknown>): 'lyrics' | 'narration' | 'manual' =>
-  narrationLineOf(params) !== null ? 'narration' : lyricLineOf(params) !== null ? 'lyrics' : 'manual'
+/** どこから来たテロップか。歌詞・ナレーション・セリフのものは元を直すと作り直される。 */
+const originOf = (params: Record<string, unknown>): 'lyrics' | 'narration' | 'dialogue' | 'manual' => {
+  if (narrationLineOf(params) !== null) return 'narration'
+  if (dialogueTelopOf(params) !== null) return 'dialogue'
+  return lyricLineOf(params) !== null ? 'lyrics' : 'manual'
+}
+
+/** セリフの字幕は消さない（消しても Shot のセリフから作り直される。ADR-0061）。 */
+export const DIALOGUE_TELOP_REMOVE_REASON =
+  'セリフの字幕は Shot のセリフから作られます（消しても作り直されます）。消すときは edit_shots でその行を消してください'
 
 export const listTelopsTool = defineTool({
   name: 'list_telops',
   risk: 'read',
   description:
-    'List the telops on the TEXT track (id, time, text, template, style name, layer, origin manual|lyrics|narration) ' +
+    'List the telops on the TEXT track (id, time, text, translation, template, style name, layer, ' +
+    'origin manual|lyrics|narration|dialogue) ' +
     'ordered by time, and the saved text styles. Use ids with edit_clips / remove_telops.',
   input: z.object({ projectId: Id }),
   handler: async ({ projectId }, { api }) => {
@@ -205,6 +226,7 @@ export const listTelopsTool = defineTool({
           startSec: round(clip.startSec),
           durationSec: round(clip.durationSec),
           text: typeof content.params.text === 'string' ? content.params.text : '',
+          ...(typeof content.params.translation === 'string' ? { translation: content.params.translation } : {}),
           template: content.templateKey,
           styleName: styleId === null ? null : (styleName.get(styleId) ?? null),
           ...(content.params.style === undefined ? {} : { style: content.params.style }),
@@ -260,6 +282,7 @@ export const removeTelopsTool = defineTool({
     const clipResults = await mapLimited(clipIds, 4, async (id) => {
       const clip = byId.get(id)
       if (clip?.content.type !== 'text') return { ok: false as const, id, reason: 'テロップではないクリップは消しません（エフェクト・効果音など）' }
+      if (dialogueTelopOf(clip.content.params) !== null) return { ok: false as const, id, reason: DIALOGUE_TELOP_REMOVE_REASON }
       return deleteOne(api, `/clips/${seg(id)}`, id)
     })
     // 行は順に消す（消すたびにテロップを作り直すので、並べて投げない）。

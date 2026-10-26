@@ -1,6 +1,8 @@
 import {
   CLIP_FADE_MAX_SEC,
+  dialogueTelopOf,
   MAX_TEXT_CLIP_LENGTH,
+  MAX_TEXT_CLIP_TRANSLATION_LENGTH,
   mergeTextStyle,
   narrationLineOf,
   Seconds,
@@ -28,6 +30,14 @@ const ClipEdit = z.object({
   durationSec: z.number().positive().max(600).optional(),
   layer: z.number().int().min(0).max(20).optional(),
   text: z.string().trim().min(1).max(MAX_TEXT_CLIP_LENGTH).optional().describe('Telops only.'),
+  translation: z
+    .string()
+    .trim()
+    .min(1)
+    .max(MAX_TEXT_CLIP_TRANSLATION_LENGTH)
+    .nullable()
+    .optional()
+    .describe('Telops only: the smaller second line (null removes it). On dialogue captions it is saved to the shot line.'),
   template: TextTemplateKey.optional().describe('Telops only.'),
   styleName: z.string().min(1).optional().describe('Telops only: replace the look with this saved style.'),
   style: TextStyle.optional().describe('Telops only: change just these look fields (e.g. {anchor:"top-center"}).'),
@@ -42,7 +52,7 @@ export const EditClipsInput = z.object({ projectId: Id, edits: z.array(ClipEdit)
 
 type Patch = Readonly<Record<string, unknown>>
 
-const TEXT_FIELDS = ['text', 'template', 'styleName', 'style', 'unsetStyle'] as const
+const TEXT_FIELDS = ['text', 'translation', 'template', 'styleName', 'style', 'unsetStyle'] as const
 const SOUND_FIELDS = ['volume', 'fadeInSec', 'fadeOutSec'] as const
 
 const given = (edit: ClipEdit, keys: readonly (keyof ClipEdit)[]): readonly string[] =>
@@ -57,7 +67,14 @@ const textContent = (
   if (edit.text !== undefined && narrationLineOf(clip.content.params) !== null) {
     throw new ToolInputError(`${where}: ナレーションのテロップの文字は行で直してください（set_narration の edit_lines）`)
   }
-  const params = clip.content.params
+  if (edit.text !== undefined && dialogueTelopOf(clip.content.params) !== null) {
+    throw new ToolInputError(`${where}: セリフの字幕の文字は Shot のセリフで直してください（edit_shots の dialogue）`)
+  }
+  // 訳文は欄が無ければ触らない。null は外す（2 段目を消す）。
+  const params =
+    edit.translation === undefined
+      ? clip.content.params
+      : Object.fromEntries(Object.entries(clip.content.params).filter(([key]) => key !== 'translation'))
   const preset = edit.styleName === undefined ? null : findTextStyle(presets, edit.styleName, where)
   const touchesStyle = preset !== null || edit.style !== undefined || edit.unsetStyle !== undefined
   const style = mergeTextStyle(preset === null ? params.style : preset.style, edit.style ?? {}, edit.unsetStyle ?? [])
@@ -67,6 +84,7 @@ const textContent = (
     params: {
       ...params,
       ...(edit.text === undefined ? {} : { text: edit.text }),
+      ...(edit.translation === undefined || edit.translation === null ? {} : { translation: edit.translation }),
       ...(touchesStyle ? { style } : {}),
       ...(preset === null ? {} : { styleId: preset.id }),
     },
@@ -126,7 +144,8 @@ export const editClipsTool = defineTool({
   description:
     'Change timeline clips by id: telops (text, template, saved style, look fields such as position anchor/offset, ' +
     'time, length), sound clips (time, length, volume 0–2, fades) and effect clips (time, length). Ids come from ' +
-    'list_telops / list_sfx / list_effects. Narration captions follow their line: edit the line with set_narration.',
+    'list_telops / list_sfx / list_effects. Narration captions follow their line: edit the line with set_narration. ' +
+    'Dialogue captions follow the shot dialogue (edit_shots); their translation edits are saved back to the line.',
   input: EditClipsInput,
   handler: async ({ projectId, edits }, { api }) => {
     const needsStyles = edits.some((e) => e.styleName !== undefined)
