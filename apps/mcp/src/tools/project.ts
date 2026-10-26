@@ -25,6 +25,7 @@ import {
 } from '../wire.js'
 import { dialogueViewOf, speechViewOf } from '../lib/dialogue-view.js'
 import { ImageSource, resolveImage } from '../lib/image-source.js'
+import type { Logger } from '../logger.js'
 import { defineTool, Id, jsonResult, mapLimited, round, ToolInputError } from '../tool-def.js'
 
 /** 作品を作る・全体を見る。 */
@@ -190,6 +191,23 @@ const conceptOf = async (api: ApiClient, projectId: string): Promise<string> => 
   }
 }
 
+export const TIMELINE_UNAVAILABLE_NOTE =
+  'タイムラインを組めなかったため、Take の音が鳴るか（takeAudioPlays）と自動の仕上げ（effectiveMasteringMode）は分かりません（null）'
+
+/**
+ * Take の音を鳴らす Shot（ADR-0060）を読むためのタイムライン。API が組めなかった（4xx/5xx）ときは
+ * ログに残して null を返し、get_project の残りは返す。それ以外の失敗（通信・形の違い）はそのまま投げる。
+ */
+const takeAudioTimelineOf = async (api: ApiClient, base: string, logger: Logger) => {
+  try {
+    return (await api.get(`${base}/timeline`, WireTimelineTakeAudio)).video1
+  } catch (error) {
+    if (!(error instanceof IxaApiError)) throw error
+    logger.warn({ tool: 'get_project', status: error.status }, 'タイムラインを組めず、Take の音と自動の仕上げを判定できませんでした')
+    return null
+  }
+}
+
 /** カメラのうち決まっている項目だけ。 */
 const compactCamera = (camera: z.infer<typeof WireShot>['camera']) =>
   Object.fromEntries(Object.entries(camera).filter(([, value]) => value !== null))
@@ -201,11 +219,12 @@ export const getProjectTool = defineTool({
     'Everything about a project in one compact JSON: settings, concept, music tracks (which one is master), ' +
     'characters, locations, and every shot in order with start/duration, description, mood, camera, location, cast, ' +
     'start-frame state (ready/drawing/missing), selected take, status and the transition into the next shot. ' +
+    'If the timeline cannot be built, takeAudioPlays/effectiveMasteringMode are null and notes says so. ' +
     'Dialogue: each shot\'s lines (speaker, text, offscreen, translation) and dialogueWarnings, takeAudioPlays (whether ' +
     'the selected take\'s own sound is heard in preview/export), characters\' speechName/voiceDescription (null = missing, ' +
     'needed before generating dialogue shots), and effectiveMasteringMode (what export uses when masteringMode is automatic).',
   input: z.object({ projectId: Id }),
-  handler: async ({ projectId }, { api }) => {
+  handler: async ({ projectId }, { api, logger }) => {
     const base = `/projects/${seg(projectId)}`
     const [project, concept, shots, tracks, characters, locations, posters, transitions, timeline] = await Promise.all([
       api.get(base, WireProject),
@@ -217,7 +236,7 @@ export const getProjectTool = defineTool({
       api.get(`${base}/shot-posters`, z.array(WireShotPoster)),
       api.get(`${base}/transitions`, z.array(WireTransition)),
       // Take の音を鳴らす Shot（ADR-0060）。書き出しの仕上げの自動もこれで決まる（renders と同じ規則）。
-      api.get(`${base}/timeline`, WireTimelineTakeAudio),
+      takeAudioTimelineOf(api, base, logger),
     ])
     const ordered = [...shots].sort((a, b) => a.order - b.order)
     const casts = await mapLimited(ordered, 6, (shot) =>
@@ -227,12 +246,17 @@ export const getProjectTool = defineTool({
     const locationName = new Map(locations.map((l) => [l.id, l.name]))
     const posterOf = new Map(posters.map((p) => [p.shotId, p]))
     const transitionFrom = new Map(transitions.map((t) => [t.fromShotId, t]))
-    const audible = new Set(timeline.video1.flatMap((item) => (item.audio === undefined ? [] : [item.shotId])))
+    const audible =
+      timeline === null ? null : new Set(timeline.flatMap((item) => (item.audio === undefined ? [] : [item.shotId])))
+    const chosenMastering = project.masteringMode ?? null
     return jsonResult({
       project: {
         ...compactProject(project),
-        effectiveMasteringMode: resolveMasteringMode(project.masteringMode ?? null, hasAudibleTakeAudio(timeline.video1)),
+        // 自動のときはタイムラインで決まる。組めなければ null（loudnorm と黙って言わない）。
+        effectiveMasteringMode:
+          timeline === null ? chosenMastering : resolveMasteringMode(chosenMastering, hasAudibleTakeAudio(timeline)),
       },
+      ...(timeline === null ? { notes: [TIMELINE_UNAVAILABLE_NOTE] } : {}),
       concept,
       musicTracks: tracks.map((t) => ({ id: t.id, title: t.title, isMaster: t.isMaster ?? false })),
       characters: characters.map((c) => ({ id: c.id, name: c.name, displayName: c.displayName, ...speechViewOf(c) })),
@@ -262,7 +286,7 @@ export const getProjectTool = defineTool({
           startFrame: poster === undefined ? 'unknown' : poster.drawing ? 'drawing' : poster.hasStartFrame ? 'ready' : 'missing',
           selectedTakeId: shot.selectedTakeId,
           // 採用 Take の音が鳴るか（ADR-0060）。Take を採用している Shot だけ。
-          ...(shot.selectedTakeId === null ? {} : { takeAudioPlays: audible.has(shot.id) }),
+          ...(shot.selectedTakeId === null ? {} : { takeAudioPlays: audible === null ? null : audible.has(shot.id) }),
           status: shot.status,
           ...(transition === undefined ? {} : { transitionToNext: { type: transition.type, durationSec: transition.durationSec ?? 0 } }),
         }

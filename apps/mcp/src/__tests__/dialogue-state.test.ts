@@ -132,6 +132,33 @@ describe('get_project の会話劇', () => {
   })
 })
 
+describe('get_project でタイムラインが組めないとき', () => {
+  const withTimeline = (masteringMode: string | null, timeline: Route): readonly Route[] =>
+    projectRoutes(masteringMode, []).map((r) => (r.path === `/projects/${PROJECT}/timeline` ? timeline : r))
+
+  it.each([422, 500])('タイムラインが %d でも残りを返し、分からない値は null と注記で残す', async (status) => {
+    const timeline: Route = { method: 'GET', path: `/projects/${PROJECT}/timeline`, status, data: '組めません' }
+    const result = jsonOf(
+      await getProjectTool.run({ projectId: PROJECT }, depsFor(createFakeApi(withTimeline(null, timeline)))),
+    ) as ProjectView & { notes?: string[] }
+
+    // 「loudnorm」と黙って言わない
+    expect(result.project).toMatchObject({ effectiveMasteringMode: null })
+    expect(result.shots[0]).toMatchObject({ takeAudioPlays: null, dialogue: expect.any(Array) as unknown })
+    expect(result.shots).toHaveLength(2)
+    expect(result.notes?.join('')).toContain('タイムライン')
+  })
+
+  it('仕上げを選んであれば、タイムラインが組めなくてもその値を返す', async () => {
+    const timeline: Route = { method: 'GET', path: `/projects/${PROJECT}/timeline`, status: 500, data: 'x' }
+    const result = jsonOf(
+      await getProjectTool.run({ projectId: PROJECT }, depsFor(createFakeApi(withTimeline('peak', timeline)))),
+    ) as ProjectView
+    expect(result.project).toMatchObject({ masteringMode: 'peak', effectiveMasteringMode: 'peak' })
+    expect(result.shots[0]).toMatchObject({ takeAudioPlays: null })
+  })
+})
+
 describe('list_takes の音', () => {
   const shotRoute = (overrides: Record<string, unknown>): Route => ({
     method: 'GET',
