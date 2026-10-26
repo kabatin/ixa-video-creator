@@ -31,11 +31,14 @@ export type ShotDrops = {
   readonly castDropped: number
   readonly locationDropped: number
   readonly dialogueLinesDropped: number
-  /** 写した Shot（元 → 先）。セリフの字幕の印を指し直すのに使う（ADR-0061）。 */
-  readonly shotMap: ReadonlyMap<ShotId, ShotId>
+  /**
+   * セリフの行を**そのまま**写した Shot（元 → 先。ADR-0061）。セリフの字幕の印を指し直すのに使う。
+   * 行を外した（話し手を写さない）・行を写さない（絵コンテを写さない）Shot は入れない（何行目かがずれるため）。
+   */
+  readonly dialogueShotMap: ReadonlyMap<ShotId, ShotId>
 }
 
-const NO_DROPS: ShotDrops = { castDropped: 0, locationDropped: 0, dialogueLinesDropped: 0, shotMap: new Map() }
+const NO_DROPS: ShotDrops = { castDropped: 0, locationDropped: 0, dialogueLinesDropped: 0, dialogueShotMap: new Map() }
 
 /** 写した Take のうち、外していない Take があるか（状態を決めるのに使う）。 */
 const visibleTakes = (shot: SourceShot): readonly Take[] => shot.takes.filter((take) => !shot.hiddenTakeIds.has(take.id))
@@ -155,6 +158,12 @@ export const writeShots = async (
     castDropped,
     locationDropped: copies.filter((copy) => copy.locationDropped).length,
     dialogueLinesDropped: copies.reduce((sum, copy) => sum + copy.dialogueLinesDropped, 0),
-    shotMap,
+    dialogueShotMap: new Map(
+      source.shots.flatMap(({ shot }, i) => {
+        const copied = shotMap.get(shot.id)
+        const intact = copies[i]?.input.dialogue?.length === shot.dialogue.length
+        return copied === undefined || !intact ? [] : [[shot.id, copied] as const]
+      }),
+    ),
   }
 }

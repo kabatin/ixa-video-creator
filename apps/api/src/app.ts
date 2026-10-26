@@ -584,6 +584,7 @@ export const createApp = (deps: AppDeps) => {
       shotReferences: deps.shotReferences,
       takes: deps.takes,
       transitions: deps.transitions,
+      syncDialogueTelops: dialogueTelops.sync,
       // 声とナレーション（ADR-0038）。繋いでいない環境では持っていけない。
       ...(narration === undefined
         ? {}

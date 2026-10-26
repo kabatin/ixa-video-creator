@@ -45,12 +45,14 @@ export const duplicateProject = async (
       characters: library.characters,
       styles,
     })
-    const { castDropped, locationDropped, dialogueLinesDropped, shotMap } = await writeShots(deps, project, snapshot, items, library)
+    const { castDropped, locationDropped, dialogueLinesDropped, dialogueShotMap } = await writeShots(deps, project, snapshot, items, library)
     const { lyricLinksDropped, narrationLinksDropped } = await writeClips(deps, project, snapshot, items, {
       styles,
       narrationLines,
-      shots: shotMap,
+      shots: dialogueShotMap,
     })
+    // セリフの字幕は写した先の Shot から作り直す（写さなかった行の字幕を消し、残った行は時刻と見た目を引き継ぐ）。
+    await deps.syncDialogueTelops(project.id)
     return {
       project,
       notes: duplicationNotes({

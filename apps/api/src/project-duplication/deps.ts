@@ -19,6 +19,7 @@ import type {
   TimelineClipRepository,
   TransitionRepository,
 } from '@ixa/db'
+import type { ProjectId } from '@ixa/domain'
 import type { Logger } from 'pino'
 import type { LibraryCopyDeps } from '../library-copy.js'
 
@@ -54,5 +55,7 @@ export type ProjectDuplicationDeps = LibraryCopyDeps & {
    * 繋いでいない環境では省く（写した先で必要になったら分析し直すだけで、失うものは無い）。
    */
   readonly motionAnalyses?: Pick<TakeMotionAnalysisRepository, 'findLatestSucceededByTakes' | 'create'>
+  /** 写した作品のセリフの字幕を作り直す（ADR-0061）。複製の最後に 1 回だけ呼ぶ。 */
+  readonly syncDialogueTelops: (projectId: ProjectId) => Promise<void>
   readonly logger: Logger
 }

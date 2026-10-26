@@ -8,6 +8,7 @@ import {
   MOTION_ANALYZER_VERSION,
   type CreateMotionAnalysisInput,
   computeSpecHash,
+  dialogueTelopOf,
   newId,
   type DuplicationItem,
   type Project,
@@ -19,11 +20,13 @@ import {
   aTake,
   createInMemoryNarrationLineRepository,
   createInMemoryNarrationTakeRepository,
+  createInMemoryProjectClipLock,
   createInMemoryShotCharacterRepository,
   createInMemoryShotRepository,
   createInMemoryTakeRepository,
   createInMemoryVoiceProfileRepository,
 } from '@ixa/generation/testing'
+import { syncDialogueTelops } from '@ixa/generation'
 import { describe, expect, it } from 'vitest'
 import { registerErrorHandlers, validationHook } from '../errors.js'
 import { createLogger } from '../logger.js'
@@ -91,6 +94,13 @@ const seed = async () => {
     ...narration,
     motionAnalyses,
     logger: createLogger('silent'),
+    // セリフの字幕は複製の最後に、写した先の Shot から作り直す（ADR-0061）。
+    syncDialogueTelops: async (projectId) => {
+      await syncDialogueTelops(
+        { shots: deps.shots, takes: deps.takes, mediaAssets: deps.mediaAssets, lock: createInMemoryProjectClipLock(deps.timelineClips) },
+        projectId,
+      )
+    },
   }
   await deps.takes.hide(takeA1.id, new Date())
 
@@ -424,3 +434,43 @@ describe('POST /projects/:id/duplicate（動きの分析。ADR-0054 追記）', 
     expect(f.motionAnalyses.snapshot()).toHaveLength(1)
   })
 })
+
+describe('POST /projects/:id/duplicate のセリフの字幕（ADR-0061）', () => {
+  /** 元の作品で字幕を作り、1 行目の時刻を手で直しておく。 */
+  const withTelops = async () => {
+    const f = await seed()
+    await f.deps.syncDialogueTelops(f.source.id)
+    const [telop] = (await f.deps.timelineClips.findByProject(f.source.id)).filter(
+      (clip) => clip.content.type === 'text' && dialogueTelopOf(clip.content.params) !== null,
+    )
+    if (telop === undefined) throw new Error('元の作品に字幕があるはず')
+    await f.deps.timelineClips.update(telop.id, { startSec: 0.3, durationSec: 1.2 })
+    return f
+  }
+  const dialogueTelopsOf = async (deps: Awaited<ReturnType<typeof seed>>['deps'], projectId: string) =>
+    (await deps.timelineClips.findByProject(projectId as Project['id'])).filter(
+      (clip) => clip.content.type === 'text' && dialogueTelopOf(clip.content.params) !== null,
+    )
+
+  it('行をそのまま写した Shot の字幕は、写した Shot を指し、手で直した時刻を残す', async () => {
+    const f = await withTelops()
+    const res = await f.duplicate([...DUPLICATION_ITEMS])
+    const { project } = ((await res.json()) as Ok<Duplicated>).data
+    const [a] = await shotsOf(f.deps, project.id)
+    const telops = await dialogueTelopsOf(f.deps, project.id)
+    expect(telops).toHaveLength(1)
+    expect(telops[0]).toMatchObject({ startSec: 0.3, durationSec: 1.2 })
+    expect(telops[0]?.content.type === 'text' ? dialogueTelopOf(telops[0].content.params)?.shotId : null).toBe(a?.id)
+  })
+
+  it('行を持っていかなかった（話し手を写さない・絵コンテを写さない）Shot の字幕は、写した先に残さない', async () => {
+    const f = await withTelops()
+    const res = await f.duplicate(['shots', 'telops'])
+    const { project } = ((await res.json()) as Ok<Duplicated>).data
+    expect(await dialogueTelopsOf(f.deps, project.id)).toEqual([])
+    // ふつうのテロップにもしない（作り直しと重ならない）。
+    const texts = (await f.deps.timelineClips.findByProject(project.id as Project['id'])).filter((clip) => clip.content.type === 'text')
+    expect(texts.map((clip) => (clip.content.type === 'text' ? clip.content.params['text'] : null))).not.toContain('いらっしゃい！')
+  })
+})
+

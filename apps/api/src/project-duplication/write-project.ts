@@ -1,5 +1,6 @@
 import {
   copyClipInput,
+  isOrphanDialogueTelop,
   copyMusicAnalysisInput,
   copyNarrationLineInput,
   copyNarrationTakeInput,
@@ -194,7 +195,8 @@ export const writeClips = async (
     readonly shots: ReadonlyMap<ShotId, ShotId>
   },
 ): Promise<{ readonly lyricLinksDropped: number; readonly narrationLinksDropped: number }> => {
-  const copies = source.clips.map((clip) =>
+  // 行をそのまま写さなかった Shot の字幕は持っていかない（印を外すと、作り直しの字幕と重なる手置きのテロップになる）。
+  const copies = source.clips.filter((clip) => !isOrphanDialogueTelop(clip, maps.shots)).map((clip) =>
     copyClipInput(clip, {
       projectId: target.id,
       styles: maps.styles,

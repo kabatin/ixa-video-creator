@@ -173,6 +173,15 @@ const copyTextParams = (
   }
 }
 
+/**
+ * 写さないセリフの字幕か（ADR-0061）。印の Shot を、行をそのまま写した Shot（`shots`）の中に引けなければ写さない
+ * （印を外すと手で置いたテロップになり、写した先の作り直しの字幕と重なる。何行目かもずれる）。
+ */
+export const isOrphanDialogueTelop = (clip: TimelineClip, shots: IdMap<ShotId>): boolean => {
+  const mark = clip.content.type === 'text' ? dialogueTelopOf(clip.content.params) : null
+  return mark !== null && !shots.has(mark.shotId)
+}
+
 /** タイムラインのクリップを新しい作品のクリップにする。重ね素材は同じファイルを指したまま。 */
 export const copyClipInput = (
   clip: TimelineClip,
