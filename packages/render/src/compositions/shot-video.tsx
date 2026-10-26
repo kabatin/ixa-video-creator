@@ -1,7 +1,7 @@
 import type React from 'react'
 import { useCallback, useRef } from 'react'
 import { Img, OffthreadVideo, type OnVideoFrame } from 'remotion'
-import { clipAudioVolume } from '../clip-audio.js'
+import { takeAudioVolume } from '../clip-audio.js'
 import { TAKE_AUDIO_FADE_SEC, type ShotPlan } from '../plan.js'
 
 /**
@@ -31,18 +31,12 @@ export type ShotVideoProps = {
 type BodyProps = Omit<ShotVideoProps, 'rendering'> & { readonly onVideoFrame?: OnVideoFrame }
 
 /**
- * Take の音（ADR-0060）。鳴らす Shot だけ消音を外し、切り口の頭と尻に 20ms のフェードを付ける
- * （`volume` は Shot の頭からのコマ。尻はディゾルブの前、Shot の本体の終わりで 0 になる）。
+ * Take の音（ADR-0060）。鳴らす Shot だけ消音を外し、切り口の頭と尻を弱める（`takeAudioVolume`。`volume` は Shot の頭からのコマ。
+ * 尻はディゾルブの前、Shot の本体の終わりで 0 になる）。
  * 鳴らさない Shot は前と同じ `muted` だけ（音楽が先のアプリで、AI の動画には頼んでいない音が付いてくることが多い）。
  */
-const audioProps = (shot: ShotVideoProps['shot'], fps: number): { readonly muted: boolean; readonly volume?: (frame: number) => number } => {
-  if (shot.audio === undefined) return { muted: true }
-  const volume = clipAudioVolume(
-    { volume: shot.audio.volume, durationSec: shot.audio.durationSec, fadeInSec: TAKE_AUDIO_FADE_SEC, fadeOutSec: TAKE_AUDIO_FADE_SEC },
-    fps,
-  )
-  return { muted: false, volume: typeof volume === 'number' ? () => volume : volume }
-}
+const audioProps = (shot: ShotVideoProps['shot'], fps: number): { readonly muted: boolean; readonly volume?: (frame: number) => number } =>
+  shot.audio === undefined ? { muted: true } : { muted: false, volume: takeAudioVolume(shot.audio, fps, TAKE_AUDIO_FADE_SEC) }
 
 /** 切り出し位置は素材のフレームで数える。速度は尺に合わせる Shot だけ 1 以外（ADR-0026）。 */
 const Body = ({ shot, box, fps, onVideoFrame }: BodyProps) => (

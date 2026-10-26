@@ -82,31 +82,45 @@ describe('配置表', () => {
 })
 
 describe('Remotion の Shot の動画', () => {
-  const FPS = 50
-  const plan = buildTimelinePlan(
-    makeDocument({ fps: FPS, durationSec: 2, video1: [audible(1, 0, 2, 1.5)] }),
-    { width: 1920, height: 1080 },
-  )
-  const shot = plan.shots[0]
-  if (shot === undefined) throw new Error('Shot がありません')
-
-  it('書き出しは消音を外し、切り口の頭と尻に 20ms のフェードを付ける', () => {
-    const video = call(ShotVideo({ shot, box, rendering: true, fps: FPS }) as Element)
+  const planAt = (fps: number) =>
+    buildTimelinePlan(makeDocument({ fps, durationSec: 2, video1: [audible(1, 0, 2, 1.5)] }), { width: 1920, height: 1080 })
+  const shotAt = (fps: number) => {
+    const shot = planAt(fps).shots[0]
+    if (shot === undefined) throw new Error('Shot がありません')
+    return shot
+  }
+  const volumeAt = (fps: number) => {
+    const video = call(ShotVideo({ shot: shotAt(fps), box, rendering: true, fps }) as Element)
     expect(video.type).toBe(OffthreadVideo)
     expect(video.props.muted).toBe(false)
-    const volume = video.props.volume as (frame: number) => number
+    return video.props.volume as (frame: number) => number
+  }
+
+  it('書き出しは消音を外し、頭と尻のコマを弱める（0 にはせず、Take の頭の音を落とさない）', () => {
     expect(TAKE_AUDIO_FADE_SEC).toBe(0.02)
-    // 50fps の 1 コマは 20ms。頭のコマは 0、次のコマで元の大きさ、尻（2 秒目）で 0 に戻る。
-    expect(volume(0)).toBe(0)
+    // 24fps の 1 コマは約 42ms。フェードは 1 コマ分にし、コマの真ん中で引く。頭と尻のコマは半分の大きさ。
+    const volume = volumeAt(24)
+    expect(volume(0)).toBeCloseTo(0.75)
     expect(volume(1)).toBeCloseTo(1.5)
-    expect(volume(49)).toBeCloseTo(1.5)
-    expect(volume(100)).toBe(0)
+    expect(volume(46)).toBeCloseTo(1.5)
+    expect(volume(47)).toBeCloseTo(0.75)
+    expect(volume(48)).toBe(0)
+  })
+
+  it('1 コマが 20ms より短ければ、フェードは 20ms', () => {
+    // 100fps の 1 コマは 10ms。頭のコマ（真ん中 5ms）は 1/4、3 コマ目（25ms）で元の大きさ。
+    const volume = volumeAt(100)
+    expect(volume(0)).toBeCloseTo(1.5 * 0.25)
+    expect(volume(1)).toBeCloseTo(1.5 * 0.75)
+    expect(volume(2)).toBeCloseTo(1.5)
+    expect(volume(199)).toBeCloseTo(1.5 * 0.25)
   })
 
   it('プレビューも同じ Shot と同じ fps を下敷き付きの部品へ渡す（同じ音量の関数になる）', () => {
-    const element = ShotVideo({ shot, box, rendering: false, fps: FPS }) as Element
+    const shot = shotAt(50)
+    const element = ShotVideo({ shot, box, rendering: false, fps: 50 }) as Element
     expect(element.type).toBe(PreviewShotVideo)
-    expect(element.props).toEqual({ shot, box, fps: FPS })
+    expect(element.props).toEqual({ shot, box, fps: 50 })
   })
 })
 

@@ -41,7 +41,10 @@ Take の音はどこでも鳴らなかった。
 ### 3. プレビューと書き出しで鳴らす
 
 - **Remotion**（プレビューと本番の書き出し）: 鳴らす Shot だけ `OffthreadVideo` の `muted` を外し、`volume` を関数にする。
-  切り口の頭と尻に 20ms のフェード（`clipAudioVolume` をそのまま使う）。尻は Shot の本体の終わり（ディゾルブの尻の前）で 0 になる。
+  切り口の頭と尻を弱める（`takeAudioVolume`）。`volume` はコマごとにしか変えられないので、ffmpeg の `afade` に近づけるよう、
+  フェードの長さは 20ms と 1 コマのうち長いほうにし、コマの真ん中の時刻で引く（24fps なら頭と尻のコマは半分の大きさ。
+  最初は `clipAudioVolume` をそのまま使い、頭のコマが 0 になって 42ms 消え、尻のコマはフェードせずに切れていた）。
+  尻は Shot の本体の終わり（ディゾルブの尻の前）で 0 になる。
 - **ffmpeg**（退避用）: 鳴らす Shot の入力の `[N:a]` を、`atrim`（映像と同じ区間）→ `atempo`（速度を変えた Shot）→
   `apad`/`atrim`（Shot の尺ちょうど）→ `afade` 頭と尻 0.02 → `volume` → `adelay` で `amix`（normalize=0）に入れる。
   鳴らす Shot が無ければ、引数は前と同じ。
