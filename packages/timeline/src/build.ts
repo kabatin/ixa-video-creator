@@ -74,6 +74,11 @@ export type TimelineSource = {
    */
   readonly resolveShotMediaDurationSec?: (shot: Shot) => number | null
   /**
+   * 採用 Take に音のトラックがあるか（素材の probe の `hasAudio`。ADR-0060）。鳴らすのは、音があり消音していない Shot だけ。
+   * 省略・false は「鳴らさない」（A/B 比較など、音を出さない口。分からない Take も鳴らさない）。
+   */
+  readonly resolveShotMediaHasAudio?: (shot: Shot) => boolean
+  /**
    * 採用 Take が無い Shot の絵コンテの画像（最初のフレーム）の URL。無ければ undefined。
    * **Take があれば使わない**（Take が勝つ）。省略すれば絵は出さない（A/B 比較など、Take だけを映す口）。
    */
@@ -154,12 +159,22 @@ export const timelineDurationSec = (source: TimelineSource): Seconds => {
 }
 
 /**
+ * 採用 Take の音を鳴らすか（ADR-0060）。Take に音があり、消音しておらず、大きさが 0 でないときだけ。
+ * 鳴らさない Shot は欄を書かない（前からある Shot は 0057 で消音にしたので、MV の文書は前と同じ形のまま）。
+ */
+const shotAudio = (shot: Shot, source: TimelineSource): { readonly audio?: { readonly volume: number } } =>
+  !shot.takeAudioMuted && shot.takeAudioVolume > 0 && source.resolveShotMediaHasAudio?.(shot) === true
+    ? { audio: { volume: shot.takeAudioVolume } }
+    : {}
+
+/**
  * VIDEO1 トラック。**Shot 列の投影であり独立実体を持たない**（ADR-0002）。
  *
  * - `startSec` 昇順に並べる
  * - 採用 Take が無い Shot は、絵コンテの画像があればそれを Shot の尺だけ映す（`kind: 'image'`）。
  *   絵も無ければ含めない（未生成の Shot が黒画面として出ないようにする）
  * - `inSec` は `shot.sourceInSec`（生成尺から編集尺を切り出す位置。ADR-0011）。絵は 0
+ * - Take の音を鳴らす Shot だけ `audio` を持つ（`shotAudio`）
  */
 const buildVideo1 = (source: TimelineSource): TimelineDocument['video1'] =>
   sortShotsByStart(source.shots).flatMap((shot): TimelineDocument['video1'] => {
@@ -191,6 +206,7 @@ const buildVideo1 = (source: TimelineSource): TimelineDocument['video1'] =>
         inSec: shot.sourceInSec,
         // 1 のときは書かない。速度を変えない Shot の文書は今までと同じ形のまま。
         ...(playbackRate === 1 ? {} : { playbackRate }),
+        ...shotAudio(shot, source),
       },
     ]
   })

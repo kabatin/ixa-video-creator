@@ -45,6 +45,8 @@ export const makeShot = (
   sourceInSec: 0,
   timing: 'trim',
   speed: 1,
+  takeAudioVolume: 1,
+  takeAudioMuted: false,
   description: '',
   dialogue: [],
   camera: {
