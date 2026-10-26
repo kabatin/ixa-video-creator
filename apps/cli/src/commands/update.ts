@@ -12,6 +12,7 @@ import {
   devRunningBlocker,
   fastForwardBlocker,
   fastForwardOf,
+  moveDecision,
   parseVersionOrThrow,
   releaseTarget,
   updateBlockers,
@@ -31,18 +32,19 @@ const currentVersion = async (system: System, repo: RepoPaths): Promise<Version>
   parseVersionOrThrow(parseRootPackage((await system.readText(repo.rootPackage)) ?? '{}').version, 'package.json')
 
 type Resolved =
-  | { readonly kind: 'move'; readonly ref: string; readonly version: Version }
+  | { readonly kind: 'candidate'; readonly ref: string; readonly version: Version; readonly target: 'same-version' | 'newer' }
   | { readonly kind: 'up-to-date' }
   | { readonly kind: 'no-release' }
 
+/** 行き先の候補。--main は版に関わらず origin/main（取り込むかは祖先で決める）。 */
 const resolveTarget = async (git: Git, current: Version, main: boolean): Promise<Resolved> => {
   if (main) {
     const version = parseVersionOrThrow(parseRootPackage(await git.versionAt('origin/main')).version, 'origin/main')
-    return (await git.ancestry('origin/main')).same ? { kind: 'up-to-date' } : { kind: 'move', ref: 'origin/main', version }
+    return { kind: 'candidate', ref: 'origin/main', version, target: 'newer' }
   }
   const target = releaseTarget(await git.tags(), current)
   if (target.kind === 'none') return { kind: 'no-release' }
-  return target.kind === 'up-to-date' ? { kind: 'up-to-date' } : { kind: 'move', ref: target.ref, version: target.version }
+  return target.kind === 'older' ? { kind: 'up-to-date' } : { kind: 'candidate', ref: target.ref, version: target.version, target: target.kind }
 }
 
 const finish = (out: Output, ok: boolean, steps: readonly StepResult[], extra: Record<string, unknown>): number => {
@@ -79,18 +81,13 @@ const fetchStage = async (system: System, repo: RepoPaths, out: Output, options:
   if (target.kind === 'no-release') {
     return finish(out, false, [{ id: 'update.target', status: 'failed', message: 'リリースのタグ（vX.Y.Z）が見つかりません' }], { from, ...json })
   }
-  if (target.kind === 'up-to-date') {
+  const relation = target.kind === 'candidate' ? fastForwardOf(await git.ancestry(target.ref)) : 'same'
+  if (target.kind === 'up-to-date' || (target.kind === 'candidate' && moveDecision(target.target, relation) === 'up-to-date')) {
     out.line(`✓ 最新です（${from}）`)
     return finish(out, true, [], { from, to: from, upToDate: true, ...json })
   }
   const to = formatVersion(target.version)
-  const relation = fastForwardOf(await git.ancestry(target.ref))
-  // タグの名前は新しいが中身は今と同じ（package.json の版を上げ忘れたタグなど）。取り込むものが無い。
-  if (relation === 'same') {
-    out.line(`✓ 最新です（${target.ref} と同じコミット）`)
-    return finish(out, true, [], { from, to: from, upToDate: true, ...json })
-  }
-  const ff = fastForwardBlocker(relation, target.ref)
+  const ff = fastForwardBlocker(relation, target.ref, options.main)
   const allBlockers = [...blockers, ...(ff === null ? [] : [ff])]
   out.line(`新しい版があります: ${describeMove(current, target.version)}`)
   if (options.check) return finish(out, true, allBlockers, { check: true, from, to, ...json })

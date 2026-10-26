@@ -119,16 +119,19 @@ export const devRunningBlocker = (devRunning: boolean, whileRunning: boolean): S
 
 export type Target =
   | { readonly kind: 'none' }
-  | { readonly kind: 'up-to-date'; readonly version: Version }
-  | { readonly kind: 'newer'; readonly ref: string; readonly version: Version }
+  | { readonly kind: 'older' }
+  | { readonly kind: 'same-version' | 'newer'; readonly ref: string; readonly version: Version }
 
-/** 最新のリリースのタグ。今より新しくなければ「最新」。 */
+/**
+ * いちばん新しいリリースのタグと、今の版との関係。**同じ版でも候補として返す**
+ * （版を上げずにタグが先へ進んでいることがある。取り込むかは祖先で決める。`moveDecision`）。
+ */
 export const releaseTarget = (tags: readonly string[], current: Version): Target => {
   const latest = latestVersionTag(tags)
   if (latest === null) return { kind: 'none' }
-  return compareVersions(latest.version, current) > 0
-    ? { kind: 'newer', ref: latest.tag, version: latest.version }
-    : { kind: 'up-to-date', version: current }
+  const cmp = compareVersions(latest.version, current)
+  if (cmp < 0) return { kind: 'older' }
+  return { kind: cmp === 0 ? 'same-version' : 'newer', ref: latest.tag, version: latest.version }
 }
 
 /** HEAD と行き先の関係。 */
@@ -142,14 +145,23 @@ export const fastForwardOf = (a: Ancestry): FastForward => {
   return a.headAhead ? 'ahead' : 'diverged'
 }
 
-export const fastForwardBlocker = (ff: FastForward, ref: string): StepResult | null => {
+/** 取り込むか（純粋）。版が新しくても中身が同じなら最新。版が同じでもタグが先なら取り込む。 */
+export const moveDecision = (kind: 'older' | 'same-version' | 'newer', ff: FastForward): 'move' | 'up-to-date' | 'blocked' => {
+  if (kind === 'older' || ff === 'same') return 'up-to-date'
+  if (ff === 'ff') return 'move'
+  return kind === 'newer' ? 'blocked' : 'up-to-date'
+}
+
+export const fastForwardBlocker = (ff: FastForward, ref: string, main = false): StepResult | null => {
   if (ff === 'ff' || ff === 'same') return null
   return {
     id: 'update.fast-forward',
     status: 'needs_human',
     message:
       ff === 'ahead'
-        ? `今の main は ${ref} より先に進んでいます（リリースより新しい）。--main で main の先頭を追うか、そのまま使ってください`
+        ? main
+          ? `今の main は ${ref} より先に進んでいます（自分のコミットがあります）。取り込むものはありません`
+          : `今の main は ${ref} より先に進んでいます（リリースより新しい）。--main で main の先頭を追うか、そのまま使ってください`
         : `今の main に ${ref} に無いコミットがあり、fast-forward できません`,
     fix: { hint: '自分のコミットを積んでいるなら、どう取り込むか制作者に確かめる', needsHuman: true },
     docs: 'INSTALL.md#更新',

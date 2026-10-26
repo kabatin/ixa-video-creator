@@ -8,6 +8,7 @@ import {
   staleJobsNotice,
   fastForwardBlocker,
   fastForwardOf,
+  moveDecision,
   releaseTarget,
   updateBlockers,
 } from '../update/decide.js'
@@ -102,10 +103,21 @@ describe('update の行き先', () => {
     expect(releaseTarget(['v0.7.2', 'v0.9.0', 'v0.8.0'], v('0.8.0'))).toEqual({ kind: 'newer', ref: 'v0.9.0', version: v('0.9.0') })
   })
 
-  it('今が最新（か、それより先）なら最新', () => {
-    expect(releaseTarget(['v0.7.2', 'v0.8.0'], v('0.8.0')).kind).toBe('up-to-date')
-    expect(releaseTarget(['v0.7.2'], v('0.8.0')).kind).toBe('up-to-date')
+  it('今より古いタグしか無ければ最新。同じ版のタグは候補として返す（中身は祖先で決める）', () => {
+    expect(releaseTarget(['v0.7.2'], v('0.8.0')).kind).toBe('older')
+    expect(releaseTarget(['v0.7.2', 'v0.8.0'], v('0.8.0'))).toEqual({ kind: 'same-version', ref: 'v0.8.0', version: v('0.8.0') })
     expect(releaseTarget([], v('0.8.0')).kind).toBe('none')
+  })
+
+  it('取り込むか（版と祖先の両方で決める）', () => {
+    expect(moveDecision('newer', 'ff')).toBe('move')
+    expect(moveDecision('newer', 'same')).toBe('up-to-date')
+    expect(moveDecision('newer', 'ahead')).toBe('blocked')
+    // 版は同じでもタグが先にある（版を上げずにタグを打ち直した・main が 0.8.0 のまま後ろにいる）
+    expect(moveDecision('same-version', 'ff')).toBe('move')
+    expect(moveDecision('same-version', 'same')).toBe('up-to-date')
+    expect(moveDecision('same-version', 'ahead')).toBe('up-to-date')
+    expect(moveDecision('older', 'ff')).toBe('up-to-date')
   })
 
   it('fast-forward できるか。main がタグより先・枝分かれなら止めて理由を出す', () => {
@@ -114,7 +126,9 @@ describe('update の行き先', () => {
     expect(fastForwardOf({ same: false, headBehind: false, headAhead: true })).toBe('ahead')
     expect(fastForwardOf({ same: false, headBehind: false, headAhead: false })).toBe('diverged')
     expect(fastForwardBlocker('ff', 'v0.9.0')).toBeNull()
-    expect(fastForwardBlocker('ahead', 'v0.9.0')?.message).toContain('先に進んで')
+    expect(fastForwardBlocker('ahead', 'v0.9.0')?.message).toContain('--main')
+    expect(fastForwardBlocker('ahead', 'origin/main', true)?.message).not.toContain('--main で')
+    expect(fastForwardBlocker('ahead', 'origin/main', true)?.message).toContain('自分のコミット')
     expect(fastForwardBlocker('diverged', 'v0.9.0')?.status).toBe('needs_human')
   })
 
