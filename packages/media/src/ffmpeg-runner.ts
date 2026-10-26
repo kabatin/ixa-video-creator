@@ -17,6 +17,9 @@ export const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000
 /** stderr を無制限にバッファすると 4K 素材のエンコードでメモリを食うため、末尾のみ保持する。 */
 const MAX_STDERR_BYTES = 1024 * 1024
 
+/** stderr を残す上限（文字）。これに達した stderr は頭が切れている（末尾だけ残る）。 */
+export const MAX_STDERR_CHARS = MAX_STDERR_BYTES
+
 /**
  * FFmpeg / FFprobe の実行に失敗したときに throw される。
  * 原因調査に stderr が必須なので、必ず保持して握り潰さない（CLAUDE.md 規約 5）。

@@ -68,7 +68,7 @@ export type MediaProcessorDeps = {
    */
   readonly afterIngested?: (asset: MediaAsset) => Promise<void>
   /** 話している区間を拾う（ADR-0061）。既定は ffmpeg の silencedetect。テストで差し替える。 */
-  readonly detectSpeech?: (filePath: string, durationSec: number, options: RunOptions) => Promise<readonly SpeechSegment[]>
+  readonly detectSpeech?: (filePath: string, durationSec: number, options: RunOptions) => Promise<readonly SpeechSegment[] | null>
 }
 
 export type MediaOutcome =
@@ -137,7 +137,8 @@ const withSpeechSegments = async (
       ...runOptions,
       timeoutMs: SPEECH_DETECT_TIMEOUT_MS,
     })
-    return { ...probe, speechSegments: [...speechSegments] }
+    // null は出力の頭が切れて分からなかった（測っていないのと同じく鍵を持たない）。
+    return speechSegments === null ? probe : { ...probe, speechSegments: [...speechSegments] }
   } catch (error) {
     deps.logger.warn({ mediaAssetId: asset.id, err: error }, '話している区間を測れませんでした（セリフの字幕は尺の割り振りになります）')
     return probe

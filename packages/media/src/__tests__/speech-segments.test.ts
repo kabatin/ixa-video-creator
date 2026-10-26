@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { runFfmpeg } from '../ffmpeg-runner.js'
-import { detectSpeechSegments, parseSilenceDetect } from '../speech-segments.js'
+import { detectSpeechSegments, parseSilenceDetect, speechSegmentsFromStderr } from '../speech-segments.js'
 import { createTempDir, removeTempDir } from './fixtures.js'
 
 /**
@@ -39,6 +39,12 @@ describe('parseSilenceDetect', () => {
     expect(parseSilenceDetect(stderr, 3)).toEqual([])
   })
 
+  it('出力の頭が切れていれば（stderr は末尾だけ残す）、区間は「分からない」（null）。頭の無音を 0 秒からの声と取り違えない', () => {
+    const tail = ['silence_end: 1.5 | silence_duration: 0.5', 'silence_start: 2'].join('\n')
+    expect(speechSegmentsFromStderr(tail, 3, { truncated: true })).toBeNull()
+    expect(speechSegmentsFromStderr(tail, 3, { truncated: false })).toEqual(parseSilenceDetect(tail, 3))
+  })
+
   it('尺が分からない（0 以下）なら区間を作らない', () => {
     expect(parseSilenceDetect('', 0)).toEqual([])
   })
@@ -72,7 +78,7 @@ describe('detectSpeechSegments（実 ffmpeg）', () => {
     async () => {
       const tone = '0.5*sin(2*PI*440*t)'
       const path = await makeVideo('two-lines.mp4', `${tone}*(between(t,0.3,1.0)+between(t,1.6,2.6))`, 3)
-      const segments = await detectSpeechSegments(path, 3)
+      const segments = (await detectSpeechSegments(path, 3)) ?? []
       expect(segments).toHaveLength(2)
       expect(segments[0]?.startSec).toBeCloseTo(0.3, 1)
       expect(segments[0]?.endSec).toBeCloseTo(1.0, 1)

@@ -1,5 +1,5 @@
 import { MAX_SPEECH_SEGMENTS, type SpeechSegment } from '@ixa/domain'
-import { runFfmpeg, type RunOptions } from './ffmpeg-runner.js'
+import { MAX_STDERR_CHARS, runFfmpeg, type RunOptions } from './ffmpeg-runner.js'
 
 /**
  * 素材の音から、話している区間を拾う（ADR-0061）。ffmpeg の `silencedetect` で無音を見つけ、その裏返しを区間にする。
@@ -63,12 +63,25 @@ export const parseSilenceDetect = (stderr: string, durationSec: number): readonl
     .slice(0, MAX_SPEECH_SEGMENTS)
 }
 
-/** 実 ffmpeg で、素材の最初の音のトラックの話している区間を拾う。音のトラックが無い素材では ffmpeg が失敗する（呼ぶ側が見分ける）。 */
+/**
+ * stderr から区間を作る。**頭が切れた stderr（`truncated`）は「分からない」（null）**にする。
+ * 頭の `silence_start: 0` が消えていると、最初の無音を 0 秒からの声と取り違えて、無い区間を作ってしまう。
+ */
+export const speechSegmentsFromStderr = (
+  stderr: string,
+  durationSec: number,
+  options: { readonly truncated: boolean },
+): readonly SpeechSegment[] | null => (options.truncated ? null : parseSilenceDetect(stderr, durationSec))
+
+/**
+ * 実 ffmpeg で、素材の最初の音のトラックの話している区間を拾う。音のトラックが無い素材では ffmpeg が失敗する（呼ぶ側が見分ける）。
+ * 出力が長すぎて頭が切れたら null（「測っていない」と同じ扱い。字幕は割り振りに戻る）。
+ */
 export const detectSpeechSegments = async (
   filePath: string,
   durationSec: number,
   options?: RunOptions,
-): Promise<readonly SpeechSegment[]> => {
+): Promise<readonly SpeechSegment[] | null> => {
   const { stderr } = await runFfmpeg(
     [
       '-hide_banner', '-nostats', '-i', filePath, '-map', '0:a:0', '-vn',
@@ -77,5 +90,5 @@ export const detectSpeechSegments = async (
     ],
     options,
   )
-  return parseSilenceDetect(stderr, durationSec)
+  return speechSegmentsFromStderr(stderr, durationSec, { truncated: stderr.length >= MAX_STDERR_CHARS })
 }
