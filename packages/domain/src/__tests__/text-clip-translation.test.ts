@@ -3,6 +3,7 @@ import {
   DEFAULT_TRANSLATION_SCALE,
   MAX_TRANSLATION_SCALE,
   MIN_TRANSLATION_SCALE,
+  TEXT_STYLE_KEY_LABELS,
   TEXT_TEMPLATE_STYLE_DEFAULTS,
   TextStyle,
   resolveTextStyle,
@@ -32,6 +33,10 @@ describe('下の段の大きさ（translationScale）', () => {
     ['数でない', '0.6'],
   ])('%s は弾く', (_label, translationScale) => {
     expect(TextStyle.safeParse({ translationScale }).success).toBe(false)
+  })
+
+  it('呼び名は画面の欄と同じ「2 段目の大きさ」（変更の履歴とインスペクターで言葉をそろえる）', () => {
+    expect(TEXT_STYLE_KEY_LABELS.translationScale).toBe('2 段目の大きさ')
   })
 
   it('見た目は今も知らない項目を弾く（strict のまま）', () => {

@@ -1,6 +1,6 @@
 'use client'
 
-import { DEFAULT_TRANSLATION_SCALE, TextStyle } from '@ixa/domain'
+import { DEFAULT_TRANSLATION_SCALE, TEXT_STYLE_KEY_LABELS, TextStyle } from '@ixa/domain'
 import { AutoSaveField } from '@/components/workbench/ui/auto-save-field'
 import { AutoSaveSelect } from '@/components/workbench/ui/auto-save-choice'
 import { withStyle } from '@/lib/text-style-form'
@@ -43,7 +43,7 @@ export const TextTranslationFields = ({
       />
       {translation !== '' && (
         <AutoSaveSelect
-          label="2 段目の大きさ"
+          label={TEXT_STYLE_KEY_LABELS.translationScale}
           value={String(scaleOf(params))}
           options={SCALE_OPTIONS}
           onSave={(next) => onSave(withStyle(params, { translationScale: Number(next) }))}

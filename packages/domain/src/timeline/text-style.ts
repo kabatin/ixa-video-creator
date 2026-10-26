@@ -108,7 +108,7 @@ export const TEXT_STYLE_KEY_LABELS: Readonly<Record<TextStyleKey, string>> = Obj
   offset: 'ずらし',
   fadeInSec: 'フェードイン',
   fadeOutSec: 'フェードアウト',
-  translationScale: '訳の大きさ',
+  translationScale: '2 段目の大きさ',
 })
 
 /**
