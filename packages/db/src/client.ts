@@ -13,6 +13,11 @@ export const DbClientOptions = z.object({
   idleTimeoutSec: z.number().int().positive().default(30),
   /** 接続確立のタイムアウト秒数 */
   connectTimeoutSec: z.number().int().positive().default(10),
+  /**
+   * Postgres の NOTICE を捨てるか。既定は捨てない（postgres.js の既定どおり console に出る）。
+   * `pnpm ixa` の DB の更新は NOTICE を大量に出し、点検の表示を埋めるので捨てる。
+   */
+  silenceNotices: z.boolean().default(false),
 })
 export type DbClientOptions = z.input<typeof DbClientOptions>
 
@@ -33,6 +38,7 @@ export const createDbClient = (databaseUrl: string, options: DbClientOptions = {
     max: opts.maxConnections,
     idle_timeout: opts.idleTimeoutSec,
     connect_timeout: opts.connectTimeoutSec,
+    ...(opts.silenceNotices ? { onnotice: () => undefined } : {}),
   })
   return drizzle(sql, { schema })
 }
