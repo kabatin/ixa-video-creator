@@ -110,6 +110,7 @@ describe('get_project', () => {
       { method: 'GET', path: `/projects/${PROJECT}/transitions`, data: [{ id: ulid('TN1'), fromShotId: SHOT_A, toShotId: SHOT_B, type: 'dissolve', durationSec: 0.5 }] },
       { method: 'GET', path: `/shots/${SHOT_A}/characters`, data: [{ characterId: CHAR, lookId: ulid('LK1'), prominence: 'primary', order: 0 }] },
       { method: 'GET', path: `/shots/${SHOT_B}/characters`, data: [] },
+      { method: 'GET', path: `/projects/${PROJECT}/timeline`, data: { durationSec: 5, video1: [] } },
     ])
     const result = jsonOf(await getProjectTool.run({ projectId: PROJECT }, depsFor(fake))) as {
       concept: string

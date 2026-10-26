@@ -39,6 +39,14 @@ export const WireCamera = z.object({
   movementIntensity: nullableString,
 })
 
+/** Shot のセリフの 1 行（ADR-0059）。訳文は 2 段字幕の 2 段目（ADR-0061）。 */
+export const WireDialogueLine = z.object({
+  speakerId: z.string(),
+  text: z.string(),
+  offscreen: z.boolean().optional(),
+  translation: z.string().nullable().optional(),
+})
+
 export const WireShot = z.object({
   id: z.string(),
   order: z.number(),
@@ -57,7 +65,8 @@ export const WireShot = z.object({
   locationId: nullableString,
   selectedTakeId: nullableString,
   status: z.string(),
-  /** セリフの警告（ADR-0059）。古い API は返さないので省略可。 */
+  /** セリフの行（ADR-0059）と警告。古い API は返さないので省略可。 */
+  dialogue: z.array(WireDialogueLine).optional(),
   dialogueWarnings: z.array(z.object({ code: z.string(), message: z.string() })).optional(),
 })
 export type WireShot = z.infer<typeof WireShot>
@@ -92,6 +101,9 @@ export const WireCharacter = z.object({
   name: z.string(),
   displayName: z.string(),
   description: z.string().optional(),
+  /** セリフの声（ADR-0059）。古い API は返さないので省略可。 */
+  speechName: z.string().nullable().optional(),
+  voiceDescription: z.string().nullable().optional(),
 })
 export type WireCharacter = z.infer<typeof WireCharacter>
 
@@ -295,3 +307,11 @@ export const bulkResult = <T extends z.ZodRawShape>(okShape: T) =>
     z.object({ shotId: z.string(), ok: z.literal(true), ...okShape }),
     z.object({ shotId: z.string(), ok: z.literal(false), reason: z.string() }),
   ])
+
+/**
+ * タイムラインのうち、Take の音を鳴らす Shot（ADR-0060）。鳴らす Shot だけ `audio` を持つ。
+ * 署名付き URL（`mediaUrl`）は読まない（規約 7。結果にも出さない）。
+ */
+export const WireTimelineTakeAudio = z.object({
+  video1: z.array(z.object({ shotId: z.string(), audio: z.object({ volume: z.number() }).optional() })),
+})

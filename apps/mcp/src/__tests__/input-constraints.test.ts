@@ -209,6 +209,7 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ shotId: 'x' }, 'shotId'],
       [{ projectId: undefined }, 'projectId'],
       [{ includeLastFrame: 'yes' }, 'includeLastFrame'],
+      [{ includeAudio: 'yes' }, 'includeAudio'],
     ],
   },
   review_take: {

@@ -1,6 +1,7 @@
 import { lineagePairViolation, UPSCALE_REASON } from '@ixa/domain'
 import { z } from 'zod'
 import { seg, type ApiClient } from '../api-client.js'
+import { takeAudioViewOf } from '../lib/dialogue-view.js'
 import { assertShotsInProject, assertTakesOfShot } from '../lib/project-scope.js'
 import { bulkResult, WireShot, WireTake } from '../wire.js'
 import { defineTool, describeError, Id, jsonResult, mapLimited, round, SEED_MAX, ToolInputError } from '../tool-def.js'
@@ -118,8 +119,14 @@ export const generateTakesTool = defineTool({
   },
 })
 
-/** Take の動画の最後のコマ（media の処理が切り出す）。まだ切り出していなければ null。 */
-const WireTakeMedia = z.object({ lastFrameAssetId: z.string().nullable().default(null) })
+/**
+ * Take の動画の最後のコマ（media の処理が切り出す）。まだ切り出していなければ null。
+ * `probe.hasAudio` は音のトラックがあるか（ADR-0060）。まだ調べていなければ probe が null。
+ */
+const WireTakeMedia = z.object({
+  lastFrameAssetId: z.string().nullable().default(null),
+  probe: z.object({ hasAudio: z.boolean() }).nullable().optional(),
+})
 
 export const lastFrameOf = async (api: ApiClient, mediaAssetId: string): Promise<string | null> =>
   (await api.get(`/media/${seg(mediaAssetId)}`, WireTakeMedia)).lastFrameAssetId
@@ -130,21 +137,31 @@ export const listTakesTool = defineTool({
   description:
     'List the takes of a shot (newest last) with model, generated length, seed, cost, review state, lineage ' +
     '(upscaled takes have reason "解像度を上げる") and which one is selected. includeLastFrame adds lastFrameAssetId ' +
-    '(the final frame; pass it to set_start_frame {mediaAssetId} to continue the next shot). View with view {shotId, takeId}.',
+    '(the final frame; pass it to set_start_frame {mediaAssetId} to continue the next shot). includeAudio adds hasAudio ' +
+    '(whether the take has its own sound track, e.g. dialogue from an audio model; null = not analysed yet). takeAudio is the ' +
+    'shot\'s take-sound setting: volume, muted (effective) and auto (true = muted unless the shot has dialogue; change with ' +
+    'edit_shots takeAudioMuted/takeAudioVolume). View with view {shotId, takeId}.',
   input: z.object({
     projectId: Id,
     shotId: Id,
     includeLastFrame: z.boolean().default(false).describe('Also look up each take\'s final frame (one request per take).'),
+    includeAudio: z
+      .boolean()
+      .default(false)
+      .describe('Also look up whether each take has a sound track (one request per take, shared with includeLastFrame).'),
   }),
-  handler: async ({ projectId, shotId, includeLastFrame }, { api }) => {
+  handler: async ({ projectId, shotId, includeLastFrame, includeAudio }, { api }) => {
     await assertShotsInProject(api, projectId, [shotId])
     const [shot, takes] = await Promise.all([
       api.get(`/shots/${seg(shotId)}`, WireShot),
       api.get(`/shots/${seg(shotId)}/takes`, z.array(WireTake)),
     ])
     const sorted = [...takes].sort((a, b) => a.index - b.index)
-    // 最後のコマは Take ごとに 1 回引くので、頼まれたときだけ（一括の口は API に無い）。
-    const lastFrames = includeLastFrame ? await mapLimited(sorted, 4, (t) => lastFrameOf(api, t.mediaAssetId)) : null
+    // 最後のコマと音は Take ごとに素材を 1 回引くので、頼まれたときだけ（一括の口は API に無い）。
+    const media =
+      includeLastFrame || includeAudio
+        ? await mapLimited(sorted, 4, (t) => api.get(`/media/${seg(t.mediaAssetId)}`, WireTakeMedia))
+        : null
     return jsonResult({
       shotId,
       shotDurationSec: round(shot.durationSec),
@@ -152,6 +169,8 @@ export const listTakesTool = defineTool({
       speed: shot.speed ?? 1,
       sourceInSec: round(shot.sourceInSec ?? 0),
       selectedTakeId: shot.selectedTakeId,
+      // Take の音の設定（ADR-0060）。
+      takeAudio: takeAudioViewOf(shot),
       takes: sorted.map((t, i) => ({
           id: t.id,
           index: t.index,
@@ -165,7 +184,8 @@ export const listTakesTool = defineTool({
           ...(t.regenerationReason === null ? {} : { reason: t.regenerationReason }),
           upscaled: t.regenerationReason === UPSCALE_REASON,
           selected: t.id === shot.selectedTakeId,
-          ...(lastFrames === null ? {} : { lastFrameAssetId: lastFrames[i] ?? null }),
+          ...(media === null || !includeLastFrame ? {} : { lastFrameAssetId: media[i]?.lastFrameAssetId ?? null }),
+          ...(media === null || !includeAudio ? {} : { hasAudio: media[i]?.probe?.hasAudio ?? null }),
           createdAt: t.createdAt,
         })),
     })
