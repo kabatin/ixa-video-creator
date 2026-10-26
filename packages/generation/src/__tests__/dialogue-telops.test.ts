@@ -239,4 +239,38 @@ describe('syncDialogueTelops', () => {
     expect(after).toHaveLength(3)
     expect(after[0]?.content).toMatchObject({ params: { translation: 'Ah' } })
   })
+
+  it('Shot を消して取り消すと、消した字幕を同じ ID で戻す（見た目と手で直した時刻が残る）', async () => {
+    const { deps, shot } = setup()
+    await syncDialogueTelops(deps, PROJECT)
+    const [first] = dialogueClips(deps.timelineClips.snapshot())
+    if (first === undefined || first.content.type !== 'text') throw new Error('字幕があるはず')
+    await deps.timelineClips.update(first.id, {
+      startSec: 10.7,
+      durationSec: 0.9,
+      content: { ...first.content, params: { ...first.content.params, style: { color: '#FFD100' } } },
+    })
+    await deps.shots.softDelete(shot.id)
+    await syncDialogueTelops(deps, PROJECT)
+    expect(dialogueClips(deps.timelineClips.snapshot())).toEqual([])
+    await deps.shots.restore(shot.id)
+    await syncDialogueTelops(deps, PROJECT)
+    const [back] = dialogueClips(deps.timelineClips.snapshot())
+    expect(back?.id).toBe(first.id)
+    expect(back).toMatchObject({ startSec: 10.7, durationSec: 0.9, content: { params: { style: { color: '#FFD100' } } } })
+    expect(dialogueClips(deps.timelineClips.snapshot())).toHaveLength(2)
+  })
+
+  it('セリフの字が変わっていれば、消した字幕は戻さず新しく作る', async () => {
+    const { deps, shot } = setup()
+    await syncDialogueTelops(deps, PROJECT)
+    const [first] = dialogueClips(deps.timelineClips.snapshot())
+    await deps.shots.update(shot.id, { dialogue: [] })
+    await syncDialogueTelops(deps, PROJECT)
+    await deps.shots.update(shot.id, { dialogue: [line('べつのセリフ'), line('かきくけこさ')] })
+    await syncDialogueTelops(deps, PROJECT)
+    const ids = dialogueClips(deps.timelineClips.snapshot()).map((clip) => clip.id)
+    expect(ids).not.toContain(first?.id)
+    expect(ids).toHaveLength(2)
+  })
 })

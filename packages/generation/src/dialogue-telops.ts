@@ -6,6 +6,7 @@ import {
   planDialogueTelopSync,
   shotPlaybackRate,
   takeAudioPlays,
+  type CreateTimelineClipInput,
   type DialogueTelopPlan,
   type DialogueTelopShot,
   type ProjectId,
@@ -50,6 +51,40 @@ const timingOf = async (deps: DialogueTelopSyncDeps, shot: Shot): Promise<Dialog
   }
 }
 
+const markKey = (clip: Pick<CreateTimelineClipInput, 'content'>): string | null => {
+  const mark = clip.content.type === 'text' ? dialogueTelopOf(clip.content.params) : null
+  return mark === null ? null : `${mark.shotId}#${String(mark.lineIndex)}`
+}
+
+const textOf = (clip: Pick<CreateTimelineClipInput, 'content'>): unknown =>
+  clip.content.type === 'text' ? clip.content.params?.['text'] : undefined
+
+/**
+ * 戻してよい、消した字幕（Shot を消して取り消した・セリフを消して取り消した）。**同じ行で、字が同じ**ものだけ、
+ * 行ごとに新しく消したほうを 1 枚。作り直しで消した字幕は取り消しの記録に入らないので、ここで戻して
+ * 見た目と手で直した時刻を残す。字が変わった行は戻さない（別のセリフに昔の時刻を当てない）。
+ */
+const restorableTelops = async (
+  clips: LockedProjectClips,
+  projectId: ProjectId,
+  live: readonly TimelineClip[],
+  desired: readonly Pick<CreateTimelineClipInput, 'content'>[],
+): Promise<readonly TimelineClip[]> => {
+  const liveKeys = new Set(live.flatMap((clip) => markKey(clip) ?? []))
+  const missing = new Map(
+    desired.flatMap((clip) => {
+      const key = markKey(clip)
+      return key === null || liveKeys.has(key) ? [] : [[key, textOf(clip)] as const]
+    }),
+  )
+  if (missing.size === 0) return []
+  const deleted = await clips.findDeletedByProject(projectId)
+  return [...missing].flatMap(([key, text]) => {
+    const found = deleted.find((clip) => markKey(clip) === key && textOf(clip) === text)
+    return found === undefined ? [] : [found]
+  })
+}
+
 const apply = async (clips: LockedProjectClips, plan: DialogueTelopPlan): Promise<void> => {
   for (const id of plan.deletes) await clips.softDelete(id)
   for (const { id, patch } of plan.updates) await clips.update(id, patch)
@@ -67,8 +102,10 @@ export const syncDialogueTelops = async (deps: DialogueTelopSyncDeps, projectId:
     const timed = await Promise.all(speaking.map((shot) => timingOf(deps, shot)))
     const live = (await clips.findByProject(projectId)).filter(isDialogueTelop)
     if (timed.length === 0 && live.length === 0) return { changed: false, count: 0 }
-    const desired = dialogueTelopClips({ projectId, shots: timed, existing: live })
-    const plan = planDialogueTelopSync({ live, desired })
+    const first = dialogueTelopClips({ projectId, shots: timed, existing: live })
+    const restorable = await restorableTelops(clips, projectId, live, first)
+    const desired = restorable.length === 0 ? first : dialogueTelopClips({ projectId, shots: timed, existing: [...live, ...restorable] })
+    const plan = planDialogueTelopSync({ live, restorable, desired })
     if (isEmptyDialogueTelopPlan(plan)) return { changed: false, count: desired.length }
     await apply(clips, plan)
     return { changed: true, count: desired.length }

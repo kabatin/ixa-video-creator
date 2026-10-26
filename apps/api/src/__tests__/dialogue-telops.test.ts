@@ -100,6 +100,23 @@ describe('Shot を変えたらセリフの字幕を作り直す', () => {
     expect(dialogueTelops(f.timelineClips.snapshot())).toEqual([])
   })
 
+  it('Shot を消して取り消すと、字幕も同じ ID・同じ時刻で戻る', async () => {
+    const f = await setup()
+    await send(f.app, 'PATCH', `/shots/${f.shot.id}`, { dialogue: lines(f.cat.id) })
+    const [first] = dialogueTelops(f.timelineClips.snapshot())
+    if (first === undefined) throw new Error('字幕があるはず')
+    await send(f.app, 'PATCH', `/clips/${first.id}`, { startSec: 2.2, durationSec: 0.8 })
+    await send(f.app, 'DELETE', `/shots/${f.shot.id}`)
+    const history = (await (await send(f.app, 'GET', `/projects/${f.project.id}/edit-batches`)).json()) as {
+      data: EditBatchSummaryResponse[]
+    }
+    const latest = history.data[0]
+    if (latest === undefined) throw new Error('記録があるはず')
+    expect((await send(f.app, 'POST', `/projects/${f.project.id}/edit-batches/${latest.id}/undo`)).status).toBe(200)
+    const [back] = dialogueTelops(f.timelineClips.snapshot())
+    expect(back).toMatchObject({ id: first.id, startSec: 2.2, durationSec: 0.8 })
+  })
+
   it('セリフの無い作品は、Shot を直してもテロップを書き換えない', async () => {
     const f = await setup()
     const lyric = await f.timelineClips.create({
