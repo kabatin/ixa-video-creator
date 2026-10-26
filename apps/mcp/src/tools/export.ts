@@ -24,7 +24,10 @@ export const ExportInput = z.object({
   startSec: Seconds.optional().describe('With scope "range".'),
   endSec: Seconds.positive().optional().describe('With scope "range".'),
   shotIds: z.array(Id).min(1).max(200).optional().describe('With scope "shots".'),
-  normalizeLoudness: z.boolean().default(true),
+  normalizeLoudness: z
+    .boolean()
+    .default(true)
+    .describe('Apply the final mastering chosen by the project masteringMode (see update_project). false skips it.'),
   force: z.boolean().default(false).describe('Render again even if nothing changed since the last successful export.'),
   waitSec: z.number().int().min(0).max(MAX_WAIT_SEC).default(0).describe('Wait up to this long for the render.'),
   download: z.boolean().default(true).describe('When finished, save the mp4 under IXA_MCP_OUTPUT_DIR.'),
