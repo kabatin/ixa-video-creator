@@ -22,7 +22,7 @@ agent tab, or let Claude Code or Codex drive the whole production over MCP.
 ## What it is, in four lines
 
 - **The song is the timeline.** Cuts are positions in the waveform, so every shot is exactly as long as the music asks for — and that length is what the video model is told to make.
-- **An AI agent can do the work with you.** A chat tab inside the workbench, and an MCP server with 58 tools for Claude Code and Codex. Everything the agent makes shows up as ordinary shots, takes and clips you can review, change or undo with ⌘Z.
+- **An AI agent can do the work with you.** A chat tab inside the workbench, and an MCP server with 62 tools for Claude Code and Codex. Everything the agent makes shows up as ordinary shots, takes and clips you can review, change or undo with ⌘Z.
 - **One Mac can be the whole studio.** Pictures (FLUX.2 [klein]), video (MiniMax H3, Wan 2.2), songs and BGM (ACE-Step 1.5, Stable Audio 3, MiniMax-Music3) and sound effects (Stable Audio 3) can all run locally, for free. Paid APIs are optional and fenced off.
 - **It is honest about what it costs and where it falls short.** Measured numbers only, and a section on [limits](#limits-honestly) you should read before you start.
 
@@ -56,7 +56,7 @@ Open **AI エージェント** in the bottom dock and type what you want — *"m
 
 ### From Claude Code or Codex: the MCP server
 
-`apps/mcp` is a stdio MCP server ([ADR-0049](./docs/adr/0049-mcp-server.md)) — a thin client of the same API — with **58 tools** that cover the whole job, from the song to telops, narration, lyrics, the sound mix and the exported file:
+`apps/mcp` is a stdio MCP server ([ADR-0049](./docs/adr/0049-mcp-server.md)) — a thin client of the same API — with **62 tools** that cover the whole job, from the song to telops, narration, lyrics, the sound mix and the exported file:
 
 | Stage | Tools |
 |---|---|
@@ -65,7 +65,7 @@ Open **AI エージェント** in the bottom dock and type what you want — *"m
 | Shots and cast | `plan_shots` · `edit_shots` · `restructure_shots` · `draft_storyboard` · `create_character` · `edit_character` · `create_location` · `edit_location` · `manage_brand_assets` |
 | Start frames | `draw_start_frames` · `set_start_frame` · `set_end_frame` · `list_start_frame_history` · `use_start_frame` · `retry_image` · `view` |
 | Takes | `generate_takes` · `import_take` · `list_takes` · `adopt_take` · `review_take` · `hide_takes` · `upscale_takes` · `wait` · `cancel_jobs` · `align_to_music` |
-| Telops and voice | `add_telops` · `list_telops` · `edit_clips` · `remove_telops` · `set_narration` · `speak_narration` · `set_lyrics` |
+| Telops and voice | `add_telops` · `list_telops` · `edit_clips` · `remove_telops` · `set_narration` · `speak_narration` · `set_lyrics` · `dub_takes` · `design_voice` |
 | Effects and sound | `add_effects` · `list_effects` · `remove_effects` · `analyze_motion` · `suggest_sfx` · `generate_sfx` · `upload_sfx` · `list_sfx` · `remove_sfx` · `edit_audio` |
 | Delivering | `export` · `export_thumbnail` |
 | History | `list_edits` · `undo` |
