@@ -1,4 +1,4 @@
-import { appendEnvLine, parseEnvFile } from '../lib/env-file.js'
+import { parseEnvFile, setEnvValue } from '../lib/env-file.js'
 import { defaultUrlOf, TOKEN_ENV_NAMES, urlEnvOfToken } from './servers.js'
 
 /**
@@ -28,14 +28,6 @@ export const mergeGeneratorList = (current: string, additions: string): string =
     .filter((item) => item !== '' && item !== 'none')
   const merged = [...new Set(items)]
   return merged.length === 0 ? 'none' : merged.join(',')
-}
-
-const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
-/** 1 行の値を替える（無ければ末尾に足す）。最初の 1 行だけを替える。 */
-export const setEnvValue = (content: string, key: string, value: string): string => {
-  const pattern = new RegExp(`^${escapeRegExp(key)}=.*$`, 'm')
-  return pattern.test(content) ? content.replace(pattern, () => `${key}=${value}`) : appendEnvLine(content, key, value)
 }
 
 type Decision = 'set' | 'same' | 'conflict'

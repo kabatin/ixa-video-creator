@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { connectCodeChanges, validateInstallEnv } from '../ai/contract.js'
-import { applyEnvChanges, mergeGeneratorList, setEnvValue } from '../ai/env-merge.js'
+import { applyEnvChanges, mergeGeneratorList } from '../ai/env-merge.js'
+import { setEnvValue } from '../lib/env-file.js'
 import { parseCliArgs } from '../args.js'
 
 const TOKEN = 'T'.repeat(43)
@@ -26,6 +27,24 @@ describe('setEnvValue', () => {
     expect(setEnvValue('A=1', 'B', '$&y')).toBe('A=1\nB=$&y\n')
     expect(setEnvValue('AB=1\n', 'A', '2')).toBe('AB=1\nA=2\n')
   })
+
+  it('export 付き・前に空白のある行も同じ行として替える（行を重ねない）', () => {
+    expect(setEnvValue('export A=1\n', 'A', 'x')).toBe('export A=x\n')
+    expect(setEnvValue('  A = 1\n', 'A', 'x')).toBe('  A =x\n')
+    expect(setEnvValue('# A=1\n', 'A', 'x')).toBe('# A=1\nA=x\n')
+  })
+
+  it('改行の入った値は書かない（.env に行を足されないための最後の守り。値は文に入れない）', () => {
+    for (const value of ['http://x:8765/\nIXA_EVIL=1', 'a\rB=1']) {
+      expect(() => setEnvValue('A=1\n', 'A', value)).toThrow('A の値に改行')
+      expect(() => setEnvValue('', 'B', value)).toThrow('B の値に改行')
+      try {
+        setEnvValue('', 'B', value)
+      } catch (error) {
+        expect(String(error)).not.toContain('IXA_EVIL')
+      }
+    }
+  })
 })
 
 describe('applyEnvChanges', () => {
@@ -46,6 +65,11 @@ describe('applyEnvChanges', () => {
     expect(kept.conflicts).toEqual(['SFX_API_URL', 'SFX_API_TOKEN'])
     expect(kept.content).toBe(custom)
     expect(applyEnvChanges(custom, changes, true).changed).toEqual(['SFX_API_URL', 'SFX_API_TOKEN'])
+  })
+
+  it('export 付き・字下げの行は、その行を替える（同じ名前の行を末尾に重ねない）', () => {
+    const r = applyEnvChanges('export LOCAL_SFX_GENERATOR=none\n  SFX_API_URL=http://127.0.0.1:8769\n', { LOCAL_SFX_GENERATOR: 'sfx_api', SFX_API_URL: 'http://ai.local:8769' }, false)
+    expect(r.content).toBe('export LOCAL_SFX_GENERATOR=sfx_api\n  SFX_API_URL=http://ai.local:8769\n')
   })
 
   it('同じ値なら何もしない（何度回しても同じ）', () => {
@@ -98,6 +122,9 @@ describe('connectCodeChanges（接続コード）', () => {
       connectCode([{ id: 'evil-api', url: 'http://ai.local:1', token: TOKEN }]),
       connectCode([{ id: 'sfx-api', url: 'javascript:alert(1)', token: TOKEN }]),
       connectCode([{ id: 'sfx-api', url: 'http://ai.local:8769', token: `${TOKEN} x` }]),
+      // new URL() は改行とタブを黙って落とすので、URL として読めても .env に行が増える。
+      connectCode([{ id: 'sfx-api', url: 'http://ai.local:8769/\nIXA_EVIL=1', token: TOKEN }]),
+      connectCode([{ id: 'sfx-api', url: 'http://ai.local:8769/\tx', token: TOKEN }]),
       Buffer.from(JSON.stringify({ v: 2, servers: [] })).toString('base64url'),
     ]
     for (const code of bad) {

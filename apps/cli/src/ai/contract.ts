@@ -67,7 +67,8 @@ const ConnectCode = z.object({
     .array(
       z.object({
         id: z.enum(SERVER_REPOS),
-        url: z.string().refine(isHttpUrl),
+        // new URL() は改行・タブを黙って落とすので、URL として読める前に 1 行で書ける形かを見る。
+        url: z.string().regex(SAFE_VALUE).refine(isHttpUrl),
         token: z.string().regex(SAFE_VALUE),
       }),
     )

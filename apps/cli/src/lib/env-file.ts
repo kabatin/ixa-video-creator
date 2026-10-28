@@ -42,10 +42,13 @@ export const appendEnvLine = (content: string, key: string, value: string): stri
 const escapeKey = (key: string): string => key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /**
- * 値を決めて書く。書いてある行（`# ` で始まる行は除く）があれば最初の 1 行の値を入れ替え、無ければ末尾に足す。
+ * 値を決めて書く。書いてある行（`# ` で始まる行は除く。`export ` 付き・前の空白も同じ行とみなす）があれば
+ * 最初の 1 行の値を入れ替え、無ければ末尾に足す。
  * **値の入った行を書き換えるので、呼ぶ側が「書き換えてよい」と決めたときだけ使う**（stub → claude_cli など）。
+ * 改行の入った値は書かない（外から来た値で `.env` に行を足されないための最後の守り。値は文に入れない）。
  */
 export const setEnvValue = (content: string, key: string, value: string): string => {
+  if (/[\r\n]/.test(value)) throw new Error(`${key} の値に改行が入っているので .env に書けません`)
   const pattern = new RegExp(`^([ \\t]*(?:export[ \\t]+)?${escapeKey(key)}[ \\t]*=).*$`, 'm')
   return pattern.test(content) ? content.replace(pattern, (_line, head: string) => `${head}${value}`) : appendEnvLine(content, key, value)
 }
