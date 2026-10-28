@@ -170,18 +170,21 @@ export const judgeTextAi = (fact: TextAiFact): StepResult => {
   return { id, status: 'already', message: `${spec.label} が入っています（${signIn}）` }
 }
 
-/** 切り替えを `.env` に書く（聞いて、--yes なら聞かずに）。 */
+/**
+ * 切り替えを `.env` に書く。**契約の利用枠を使う口に替えるので、端末で「はい」と答えたときだけ**
+ * （`--yes` では聞かずに書かない。Gemini の鍵・MCP の登録と同じく人に頼む）。
+ */
 const switchEnv = async (ctx: SetupContext, switches: readonly EnvSwitch[]): Promise<StepResult | null> => {
   if (switches.length === 0) return null
   const what = switches.map((s) => s.why).join('・')
   const keys = switches.map((s) => `${s.key}=${s.value}`).join(' ')
-  const allowed = ctx.yes || (await ctx.system.confirm(`まだ選んでいない AI の初期値を ${what}しますか（契約の利用枠を使います）`))
+  const allowed = !ctx.yes && (await ctx.system.confirm(`まだ選んでいない AI の初期値を ${what}しますか（契約の利用枠を使います）`))
   if (!allowed) {
     return {
       id: 'text-ai.env',
       status: 'notice',
-      message: `AI の初期値は変えていません（お試しのまま）。使うなら .env を ${keys} にするか、画面の「使う AI」で選ぶ`,
-      fix: { hint: '画面の「使う AI」で選ぶか、.env を書き換える', needsHuman: true },
+      message: `AI の初期値は変えていません（お試しのまま${ctx.yes ? '。--yes では聞きません' : ''}）。使うなら .env を ${keys} にするか、画面の「使う AI」で選ぶ`,
+      fix: { hint: '契約の利用枠を使ってよいか制作者に確かめ、画面の「使う AI」で選ぶか、端末で pnpm ixa setup を回して「はい」と答える', needsHuman: true },
       docs: DOCS,
     }
   }

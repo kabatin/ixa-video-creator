@@ -28,7 +28,8 @@ Decider: Claude（Architect）
   `claude auth login` などを出す。
   入っていてサインインしていれば、`.env` の既定（`stub`・空）だけを切り替える（`text-ai.env`）:
   `STORYBOARD_DRAFTER=claude_cli`（テキストの初期値。画像のチェック・動きの分析・見直しはテキストが Claude のときに動く）、
-  `IMAGE_PROVIDER=codex_cli`（画像の初期値）。契約の利用枠を使うので聞く（`--yes` なら聞かずに切り替える）。制作者が書いた値は触らない。
+  `IMAGE_PROVIDER=codex_cli`（画像の初期値）。契約の利用枠を使うので、端末で `--yes` でないときだけ聞く。`--yes` では書かずに `notice`（`fix.needsHuman: true`）を返す
+  （Gemini の鍵・MCP の登録と同じ。2026-10-28 のレビューで、`--yes` で黙って利用枠を使う口に替わるのを止めた）。制作者が書いた値は触らない。
 - **Gemini の鍵**（`env.gemini`）: 端末で `--yes` でないときだけ「入れますか」と聞き、鍵は**画面に出さずに**受け取る
   （`System.promptSecret`。raw モード）。`GEMINI_API_KEY`・`AUDIO_API_PROVIDERS`（`gemini_api` を足す。今ある一覧は残す）・
   `GEMINI_API_BILLING`（無料枠では原稿が Google の製品の改善に使われると言って聞く）・`GEMINI_KEY_LABEL`

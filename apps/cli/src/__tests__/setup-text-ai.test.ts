@@ -116,12 +116,23 @@ describe('textAiEnvSwitches', () => {
 })
 
 describe('textAiStep', () => {
-  it('--yes なら聞かずに .env を切り替える。メールアドレスはどこにも出さない', async () => {
-    const { system, env } = withEnv('STORYBOARD_DRAFTER=stub\nIMAGE_PROVIDER=stub\n', allSignedIn)
+  it('--yes では聞かず、利用枠を使う AI に切り替えない（人に頼む notice）。メールアドレスはどこにも出さない', async () => {
+    const asked: string[] = []
+    const initial = 'STORYBOARD_DRAFTER=stub\nIMAGE_PROVIDER=stub\n'
+    const { system, env } = withEnv(initial, allSignedIn, { confirm: (q) => Promise.resolve(void asked.push(q)).then(() => true) })
     const results = await textAiStep({ system, repo, yes: true })
+    expect(env()).toBe(initial)
+    expect(asked).toEqual([])
+    expect(results.find((r) => r.id === 'text-ai.env')).toMatchObject({ status: 'notice', fix: { needsHuman: true } })
+    expect(JSON.stringify(results)).toContain('STORYBOARD_DRAFTER=claude_cli')
+    expect(JSON.stringify(results)).not.toContain(EMAIL)
+  })
+
+  it('端末で --yes でなければ聞き、「はい」なら .env を切り替える', async () => {
+    const { system, env } = withEnv('STORYBOARD_DRAFTER=stub\nIMAGE_PROVIDER=stub\n', allSignedIn, { confirm: () => Promise.resolve(true) })
+    const results = await textAiStep({ system, repo, yes: false })
     expect(parseEnvFile(env())).toMatchObject({ STORYBOARD_DRAFTER: 'claude_cli', IMAGE_PROVIDER: 'codex_cli' })
     expect(results.find((r) => r.id === 'text-ai.env')).toMatchObject({ status: 'done' })
-    expect(results.map((r) => r.status)).not.toContain('needs_human')
     expect(JSON.stringify(results)).not.toContain(EMAIL)
   })
 
