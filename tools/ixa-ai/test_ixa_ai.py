@@ -1,0 +1,283 @@
+"""ixa_ai.py のテスト（ADR-0064）。ネットワークもコマンドも使わない（偽の Io）。
+
+python3 -m unittest discover -s tools/ixa-ai     # または uv run --with pytest pytest tools/ixa-ai
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import sys
+import tempfile
+import unittest
+from dataclasses import replace
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+_spec = importlib.util.spec_from_file_location("ixa_ai", HERE / "ixa_ai.py")
+assert _spec is not None and _spec.loader is not None
+ixa_ai = importlib.util.module_from_spec(_spec)
+sys.modules["ixa_ai"] = ixa_ai  # dataclass が自分のモジュールを引く
+_spec.loader.exec_module(ixa_ai)
+
+TOKEN = "T" * 43
+GB = 1_000_000_000
+
+
+def server_answer(server: str, ids: list[str], status: str = "installed") -> str:
+    comps = [{"id": i, "status": status, "message": "ok"} for i in ids]
+    return "progress noise\n" + json.dumps({"server": server, "ok": True, "tokenSet": False, "components": comps})
+
+
+class Fake:
+    """偽の外の口。呼ばれたコマンドと環境変数・端末に出したものを記録する。"""
+
+    def __init__(self, *, macos="26.0", ram=64, free_gb=500, tools=("uv", "brew"), tty=False, answers=(), setup=None):
+        self.calls: list[tuple[list[str], dict | None]] = []
+        self.tty_lines: list[str] = []
+        self.out_lines: list[str] = []
+        self.err_lines: list[str] = []
+        self.downloads: list[tuple[str, Path]] = []
+        self.answers = list(answers)
+        self.macos, self.ram, self.free_gb, self.tools = macos, ram, free_gb, set(tools)
+        self.setup = setup or (lambda cmd: (0, server_answer(cmd[0], cmd[cmd.index("--models") + 1].split(","))))
+        self.home = Path(tempfile.mkdtemp())
+        self.io = ixa_ai.Io(
+            run=self.run,
+            which=lambda name: f"/bin/{name}" if name in self.tools else None,
+            ask=lambda q: self.answers.pop(0),
+            is_tty=tty,
+            err=self.err_lines.append,
+            out=self.out_lines.append,
+            tty=self.tty_lines.append,
+            download=lambda url, dest: self.downloads.append((url, dest)),
+            free_bytes=lambda p: self.free_gb * GB,
+            home=self.home,
+            hostname=lambda: "ai-mac.local",
+            token=lambda: TOKEN,
+        )
+
+    def run(self, cmd: list[str], env: dict | None) -> tuple[int, str]:
+        self.calls.append((cmd, env))
+        if cmd[:2] == ["sw_vers", "-productVersion"]:
+            return 0, self.macos + "\n"
+        if cmd[:3] == ["sysctl", "-n", "hw.memsize"]:
+            return 0, str(self.ram * 1024**3)
+        if cmd[:3] == ["sysctl", "-in", "hw.optional.arm64"]:
+            return 0, "1\n"
+        if len(cmd) > 1 and cmd[1] == "setup" and "--check" in cmd:
+            return 2, ""
+        if len(cmd) > 1 and cmd[1] == "setup":
+            return self.setup(cmd)
+        if cmd[:3] == ["uv", "tool", "install"]:
+            self.tools.add(cmd[3].split("/")[-1].split("@")[0])
+            return 0, ""
+        return 0, ""
+
+    def setups(self) -> list[tuple[list[str], dict | None]]:
+        return [(c, e) for c, e in self.calls if len(c) > 1 and c[1] == "setup" and "--check" not in c]
+
+
+def run_main(fake: Fake, *argv: str) -> tuple[int, dict]:
+    code = ixa_ai.main(list(argv), fake.io)
+    return code, json.loads(fake.out_lines[-1])
+
+
+ARM = dict(arm64=True, macos="26.0", ram_gb=64.0, free_bytes=500 * GB, uv=True, brew=True)
+
+
+class CatalogTest(unittest.TestCase):
+    def test_embedded_catalog_matches_catalog_json(self):
+        self.assertEqual(json.loads((HERE / "catalog.json").read_text(encoding="utf-8")), ixa_ai.CATALOG)
+
+    def test_items_point_at_known_servers_and_unique_ids(self):
+        ids = [i["id"] for i in ixa_ai.CATALOG["items"]]
+        self.assertEqual(len(ids), len(set(ids)))
+        for item in ixa_ai.CATALOG["items"]:
+            self.assertIn(item["server"], [*ixa_ai.CATALOG["servers"], None])
+            self.assertTrue(item["licence"]["url"].startswith("https://"))
+
+
+class SelectionTest(unittest.TestCase):
+    rows = ixa_ai.CATALOG["items"]
+
+    def test_numbers_ranges_ids_and_all(self):
+        self.assertEqual(ixa_ai.parse_selection("1,3", self.rows), ["h3", "wan-5b"])
+        self.assertEqual(ixa_ai.parse_selection("9-10", self.rows), ["sa3-medium", "sa3-small"])
+        self.assertEqual(ixa_ai.parse_selection("moss, 1,1", self.rows), ["moss", "h3"])
+        self.assertEqual(len(ixa_ai.parse_selection("all", self.rows)), len(self.rows))
+
+    def test_rejects_out_of_range_unknown_and_empty(self):
+        for bad in ("0", "13", "3-1", "nope", " , "):
+            with self.subTest(bad=bad), self.assertRaises(ixa_ai.UsageError):
+                ixa_ai.parse_selection(bad, self.rows)
+
+    def test_id_list_rejects_shell_text(self):
+        self.assertEqual(ixa_ai.parse_id_list("h3,sa3-small"), ["h3", "sa3-small"])
+        with self.assertRaises(ixa_ai.UsageError):
+            ixa_ai.parse_id_list("h3;rm -rf")
+
+
+class RunnableTest(unittest.TestCase):
+    def machine(self, **kw):
+        return ixa_ai.Machine(**{**ARM, **kw})
+
+    def test_macos_gating(self):
+        h3 = ixa_ai.item_by_id("h3")
+        self.assertEqual(ixa_ai.runnable(h3, self.machine())[0], True)
+        ok, reason = ixa_ai.runnable(h3, self.machine(macos="15.7.4"))
+        self.assertFalse(ok)
+        self.assertIn("26.0", reason)
+
+    def test_intel_ram_lan_and_brew(self):
+        self.assertFalse(ixa_ai.runnable(ixa_ai.item_by_id("sa3-small"), self.machine(arm64=False))[0])
+        self.assertFalse(ixa_ai.runnable(ixa_ai.item_by_id("wan-5b"), self.machine(ram_gb=16.0))[0])
+        whisper = ixa_ai.item_by_id("whisper-cpp")
+        self.assertTrue(ixa_ai.runnable(whisper, self.machine(arm64=False))[0])
+        self.assertFalse(ixa_ai.runnable(whisper, self.machine(), lan=True)[0])
+        self.assertFalse(ixa_ai.runnable(whisper, self.machine(brew=False))[0])
+
+    def test_disk(self):
+        h3 = ixa_ai.item_by_id("h3")
+        self.assertIsNone(ixa_ai.disk_problem([h3], 300 * GB))
+        self.assertIn("ディスクが足りません", ixa_ai.disk_problem([h3], 150 * GB))
+        self.assertEqual(ixa_ai.disk_need_gb([ixa_ai.item_by_id("klein-9b")]), (0, ["klein-9b"]))
+
+
+class ConnectCodeTest(unittest.TestCase):
+    def test_roundtrip(self):
+        entries = [{"id": "sfx-api", "url": "http://ai-mac.local:8769", "token": TOKEN}]
+        code = ixa_ai.encode_connect_code(entries)
+        self.assertNotIn("=", code)
+        self.assertEqual(ixa_ai.decode_connect_code(code), {"v": 1, "servers": entries})
+
+
+class InstallTest(unittest.TestCase):
+    def test_plan_json_shape_changes_nothing(self):
+        fake = Fake()
+        code, payload = run_main(fake, "plan", "--json")
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["action"], "plan")
+        self.assertEqual({"arm64", "macos", "ramGb", "freeGb", "tools"}, set(payload["machine"]))
+        first = payload["items"][0]
+        for key in ("id", "kinds", "server", "ixaAi", "downloadGb", "ramGb", "minMacos", "licence", "runnable", "state"):
+            self.assertIn(key, first)
+        self.assertEqual(fake.setups(), [])
+
+    def test_yes_without_accepting_every_licence_is_refused(self):
+        fake = Fake()
+        code, payload = run_main(
+            fake, "install", "--models", "sa3-small,moss", "--accept-licenses", "sa3-small", "--yes", "--json"
+        )
+        self.assertEqual(code, 3)
+        self.assertTrue(payload["fix"]["needsHuman"])
+        self.assertIn("moss", payload["message"])
+        self.assertEqual(fake.setups(), [])
+
+    def test_not_runnable_is_refused(self):
+        fake = Fake(macos="15.7.4")
+        code, payload = run_main(fake, "install", "--models", "h3", "--accept-licenses", "h3", "--yes", "--json")
+        self.assertEqual(code, 1)
+        self.assertIn("macOS 26.0", payload["message"])
+        self.assertEqual(fake.setups(), [])
+
+    def test_not_enough_disk_stops_before_installing(self):
+        fake = Fake(free_gb=100)
+        code, payload = run_main(fake, "install", "--models", "h3", "--accept-licenses", "h3", "--yes", "--json")
+        self.assertEqual(code, 1)
+        self.assertIn("ディスク", payload["message"])
+        self.assertFalse(any(c[:3] == ["uv", "tool", "install"] for c, _ in fake.calls))
+
+    def test_unknown_id_and_non_tty_without_models(self):
+        self.assertEqual(run_main(Fake(), "install", "--models", "nope", "--yes", "--json")[0], 2)
+        self.assertEqual(run_main(Fake(), "install", "--json")[0], 2)
+
+    def test_same_mac_installs_and_returns_env_without_tokens(self):
+        fake = Fake(tools=("uv", "brew", "wan-api"))
+        argv = ["install", "--models", "sa3-small,moss", "--accept-licenses", "sa3-small,moss", "--yes", "--json"]
+        code, payload = run_main(fake, *argv)
+        self.assertEqual(code, 0)
+        self.assertIn(["uv", "tool", "install", "git+https://github.com/kabatin/sfx-api@main"], [c for c, _ in fake.calls])
+        (cmd, env), *_ = fake.setups()
+        self.assertEqual(cmd[:7], ["sfx-api", "setup", "--models", "sa3-small,moss", "--json", "--yes", "--service"])
+        self.assertIn("wan-api=http://127.0.0.1:8766/v1/health", cmd)
+        self.assertIsNone(env)
+        self.assertEqual(payload["env"], {"LOCAL_SFX_GENERATOR": "sfx_api", "SFX_API_URL": "http://127.0.0.1:8769"})
+        self.assertEqual(payload["servers"][0]["server"], "sfx-api")
+        self.assertEqual([c["status"] for c in payload["servers"][0]["components"]], ["installed", "installed"])
+        self.assertEqual(fake.tty_lines, [])
+
+    def test_two_video_servers_share_one_generator_list(self):
+        fake = Fake()
+        argv = ["install", "--models", "h3,wan-5b", "--accept-licenses", "h3,wan-5b", "--yes", "--json", "--no-service"]
+        code, payload = run_main(fake, *argv)
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["env"]["LOCAL_VIDEO_GENERATOR"], "vpipe,wan")
+        self.assertTrue(all("--service" not in c for c, _ in fake.setups()))
+
+    def test_lan_passes_token_by_env_and_prints_connect_code_once(self):
+        fake = Fake()
+        argv = [
+            "install",
+            "--models",
+            "sa3-small,klein-4b",
+            "--accept-licenses",
+            "sa3-small,klein-4b",
+            "--yes",
+            "--json",
+            "--lan",
+        ]
+        result = Path(tempfile.mkdtemp()) / "r.json"
+        code, payload = run_main(fake, *argv, "--result-file", str(result))
+        self.assertEqual(code, 0)
+        envs = {c[0]: e for c, e in fake.setups()}
+        self.assertEqual(envs["sfx-api"]["SFX_API_TOKEN"], TOKEN)
+        self.assertEqual(envs["sfx-api"]["SFX_API_COORD_TOKEN_KLEIN_API"], TOKEN)
+        self.assertTrue(all("--lan" in c and TOKEN not in c for c, _ in fake.setups()))
+        self.assertEqual(len(fake.tty_lines), 1)
+        code_text = fake.tty_lines[0].split("pnpm ixa ai connect ")[1].split()[0]
+        decoded = ixa_ai.decode_connect_code(code_text)
+        self.assertEqual({s["id"] for s in decoded["servers"]}, {"sfx-api", "klein-api"})
+        self.assertIn({"id": "sfx-api", "url": "http://ai-mac.local:8769", "token": TOKEN}, decoded["servers"])
+        self.assertEqual(payload["env"]["SFX_API_URL"], "http://ai-mac.local:8769")
+        for text in [*fake.out_lines, *fake.err_lines, result.read_text(encoding="utf-8")]:
+            self.assertNotIn(TOKEN, text)
+            self.assertNotIn(code_text, text)
+
+    def test_unreadable_server_answer_fails_and_adds_no_env(self):
+        fake = Fake(setup=lambda cmd: (2, "usage: sfx-api ...\n"))
+        code, payload = run_main(fake, "install", "--models", "sa3-small", "--accept-licenses", "sa3-small", "--yes", "--json")
+        self.assertEqual(code, 1)
+        self.assertEqual(payload["env"], {})
+        self.assertIn("--reinstall", payload["servers"][0]["components"][0]["fix"]["command"])
+
+    def test_needs_human_from_server_keeps_env_and_exits_3(self):
+        fake = Fake(setup=lambda cmd: (3, server_answer("klein-api", ["klein-4b"], "needs_human")))
+        code, payload = run_main(fake, "install", "--models", "klein-4b", "--accept-licenses", "klein-4b", "--yes", "--json")
+        self.assertEqual(code, 3)
+        self.assertEqual(payload["env"]["LOCAL_IMAGE_GENERATOR"], "klein")
+
+    def test_whisper_installs_with_brew_and_sets_model_path(self):
+        fake = Fake()
+        argv = ["install", "--models", "whisper-cpp", "--accept-licenses", "whisper-cpp", "--yes", "--json"]
+        code, payload = run_main(fake, *argv)
+        self.assertEqual(code, 0)
+        self.assertIn(["brew", "install", "whisper-cpp"], [c for c, _ in fake.calls])
+        self.assertEqual(len(fake.downloads), 1)
+        self.assertTrue(payload["env"]["WHISPER_CPP_MODEL"].endswith("whisper.cpp/ggml-large-v3-turbo.bin"))
+
+    def test_interactive_selection_and_licence_prompts(self):
+        fake = Fake(tty=True, answers=["10,11", "y", "n", "y"])
+        code = ixa_ai.main(["install"], fake.io)
+        self.assertEqual(code, 0)
+        (cmd, _), *_ = fake.setups()
+        self.assertEqual(cmd[3], "sa3-small")
+
+    def test_interactive_all_skips_unrunnable(self):
+        fake = Fake(tty=True, macos="15.0", ram=16, answers=["all", *["n"] * 20])
+        io = replace(fake.io)
+        self.assertEqual(ixa_ai.main(["install"], io), 3)
+
+
+if __name__ == "__main__":
+    unittest.main()

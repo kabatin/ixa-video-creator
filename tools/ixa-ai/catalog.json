@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "servers": {
+    "vpipe-api": {
+      "repo": "kabatin/vpipe-api", "ref": "main", "cli": "vpipe-api", "port": 8765, "envPrefix": "VPIPE_API_",
+      "ixa": {"generatorEnv": "LOCAL_VIDEO_GENERATOR", "generator": "vpipe", "urlEnv": "VPIPE_API_URL", "tokenEnv": "VPIPE_API_TOKEN"}
+    },
+    "wan-api": {
+      "repo": "kabatin/wan-api", "ref": "main", "cli": "wan-api", "port": 8766, "envPrefix": "WAN_API_",
+      "ixa": {"generatorEnv": "LOCAL_VIDEO_GENERATOR", "generator": "wan", "urlEnv": "WAN_API_URL", "tokenEnv": "WAN_API_TOKEN"}
+    },
+    "klein-api": {
+      "repo": "kabatin/klein-api", "ref": "main", "cli": "klein-api", "port": 8767, "envPrefix": "KLEIN_API_",
+      "ixa": {"generatorEnv": "LOCAL_IMAGE_GENERATOR", "generator": "klein", "urlEnv": "KLEIN_API_URL", "tokenEnv": "KLEIN_API_TOKEN"}
+    },
+    "ace-step-api": {
+      "repo": "kabatin/ace-step-api", "ref": "main", "cli": "ace-step-api", "port": 8768, "envPrefix": "ACE_STEP_API_",
+      "ixa": {"generatorEnv": "LOCAL_MUSIC_GENERATOR", "generator": "ace_step", "urlEnv": "ACE_STEP_API_URL", "tokenEnv": "ACE_STEP_API_TOKEN"}
+    },
+    "sfx-api": {
+      "repo": "kabatin/sfx-api", "ref": "main", "cli": "sfx-api", "port": 8769, "envPrefix": "SFX_API_",
+      "ixa": {"generatorEnv": "LOCAL_SFX_GENERATOR", "generator": "sfx_api", "urlEnv": "SFX_API_URL", "tokenEnv": "SFX_API_TOKEN"}
+    }
+  },
+  "items": [
+    {
+      "id": "h3", "label": "MiniMax H3 Turbo", "kinds": ["video"], "server": "vpipe-api", "ixaAi": ["vpipe"],
+      "downloadGb": 118, "peakDiskGb": 185, "ramGb": 16, "ramRecommendedGb": 32, "minMacos": "26.0",
+      "licence": {
+        "name": "MiniMax H3 Community License",
+        "summary": "米国・EU・英国・韓国では使えない。商用利用は別の条件",
+        "url": "https://huggingface.co/MiniMaxAI/MiniMax-H3"
+      }
+    },
+    {
+      "id": "flashvsr", "label": "FlashVSR（高画質化）", "kinds": ["upscale"], "server": "vpipe-api", "ixaAi": [],
+      "downloadGb": 7, "peakDiskGb": null, "ramGb": null, "ramRecommendedGb": null, "minMacos": "26.0",
+      "licence": {
+        "name": "Apache-2.0",
+        "summary": "商用可",
+        "url": "https://huggingface.co/JunhaoZhuang/FlashVSR-v1.1"
+      }
+    },
+    {
+      "id": "wan-5b", "label": "Wan 2.2 5B", "kinds": ["video"], "server": "wan-api", "ixaAi": ["wan"],
+      "downloadGb": 18, "peakDiskGb": null, "ramGb": 32, "ramRecommendedGb": null, "minMacos": "14.0",
+      "licence": {
+        "name": "Apache-2.0",
+        "summary": "商用可",
+        "url": "https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B"
+      }
+    },
+    {
+      "id": "klein-9b", "label": "FLUX.2 [klein] 9B", "kinds": ["image"], "server": "klein-api", "ixaAi": ["klein"],
+      "downloadGb": null, "peakDiskGb": null, "ramGb": 11, "ramRecommendedGb": null, "minMacos": "14.0",
+      "licence": {
+        "name": "FLUX Non-Commercial License",
+        "summary": "重みは商用不可（作った画像は使える）",
+        "url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-9B"
+      }
+    },
+    {
+      "id": "klein-4b", "label": "FLUX.2 [klein] 4B（下書き）", "kinds": ["image"], "server": "klein-api", "ixaAi": ["klein"],
+      "downloadGb": 3.9, "peakDiskGb": null, "ramGb": 5, "ramRecommendedGb": null, "minMacos": "14.0",
+      "licence": {
+        "name": "Apache-2.0",
+        "summary": "商用可",
+        "url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B"
+      }
+    },
+    {
+      "id": "z-image-turbo", "label": "Z-Image Turbo", "kinds": ["image"], "server": "klein-api", "ixaAi": ["z_image"],
+      "downloadGb": 11, "peakDiskGb": null, "ramGb": null, "ramRecommendedGb": null, "minMacos": "14.0",
+      "licence": {
+        "name": "Apache-2.0",
+        "summary": "商用可",
+        "url": "https://huggingface.co/Tongyi-MAI/Z-Image-Turbo"
+      }
+    },
+    {
+      "id": "ace-step", "label": "ACE-Step 1.5", "kinds": ["music"], "server": "ace-step-api", "ixaAi": ["ace_step"],
+      "downloadGb": 10, "peakDiskGb": null, "ramGb": 19, "ramRecommendedGb": 32, "minMacos": "14.0",
+      "licence": {
+        "name": "MIT",
+        "summary": "商用可",
+        "url": "https://github.com/ace-step/ACE-Step-1.5"
+      }
+    },
+    {
+      "id": "minimax-music3", "label": "MiniMax-Music3", "kinds": ["music"], "server": "ace-step-api", "ixaAi": ["minimax_music3"],
+      "downloadGb": 13, "peakDiskGb": null, "ramGb": 24, "ramRecommendedGb": null, "minMacos": "14.0",
+      "licence": {
+        "name": "MiniMax-Music3 Community License",
+        "summary": "商用可。ただし「MiniMax-Music3」の名前を目立つように出す。年商 2000 万ドルを超えるなら許可が要る",
+        "url": "https://huggingface.co/MiniMaxAI/MiniMax-Music3/blob/main/LICENSE"
+      }
+    },
+    {
+      "id": "sa3-medium", "label": "Stable Audio 3 Medium", "kinds": ["music", "sfx"], "server": "sfx-api", "ixaAi": ["stable_audio_medium_music", "stable_audio_medium_sfx"],
+      "downloadGb": 6.5, "peakDiskGb": null, "ramGb": 11, "ramRecommendedGb": null, "minMacos": "14.0",
+      "licence": {
+        "name": "Stability AI Community License",
+        "summary": "年商 100 万ドル未満なら無料。商用利用は登録が要る",
+        "url": "https://huggingface.co/stabilityai/stable-audio-3-optimized/blob/main/LICENSE.md"
+      }
+    },
+    {
+      "id": "sa3-small", "label": "Stable Audio 3 Small", "kinds": ["sfx"], "server": "sfx-api", "ixaAi": ["stable_audio_sfx"],
+      "downloadGb": 1.9, "peakDiskGb": null, "ramGb": 4, "ramRecommendedGb": null, "minMacos": "14.0",
+      "licence": {
+        "name": "Stability AI Community License",
+        "summary": "年商 100 万ドル未満なら無料。商用利用は登録が要る",
+        "url": "https://huggingface.co/stabilityai/stable-audio-3-optimized/blob/main/LICENSE.md"
+      }
+    },
+    {
+      "id": "moss", "label": "MOSS SFX v2", "kinds": ["sfx"], "server": "sfx-api", "ixaAi": ["moss_sfx"],
+      "downloadGb": 11.2, "peakDiskGb": null, "ramGb": 22, "ramRecommendedGb": null, "minMacos": "14.0",
+      "licence": {
+        "name": "Apache-2.0",
+        "summary": "商用可",
+        "url": "https://huggingface.co/OpenMOSS-Team/MOSS-SoundEffect-v2.0"
+      }
+    },
+    {
+      "id": "whisper-cpp", "label": "whisper.cpp（large-v3-turbo）", "kinds": ["transcribe"], "server": null, "ixaAi": ["whisper_cpp"],
+      "downloadGb": 1.6, "peakDiskGb": null, "ramGb": null, "ramRecommendedGb": null, "minMacos": "14.0",
+      "licence": {
+        "name": "MIT",
+        "summary": "商用可（Homebrew で whisper-cpp を入れる）",
+        "url": "https://github.com/ggml-org/whisper.cpp"
+      }
+    }
+  ]
+}

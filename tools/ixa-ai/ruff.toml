@@ -1,0 +1,7 @@
+# tools/ixa-ai は 1 ファイルの Python（ADR-0064）。一覧（CATALOG）の行は長いので E501 は見ない。
+line-length = 130
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "B", "UP", "SIM", "I"]
+ignore = ["E501"]
