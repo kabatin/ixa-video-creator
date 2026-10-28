@@ -219,7 +219,7 @@ pnpm -s ixa ai install --models sa3-small,klein-4b --accept-licenses sa3-small,k
 **別の Mac（AI 用）に入れる**: その Mac で次の 1 行（ixa の clone も Node も要らない。uv だけ）。
 
 ```bash
-uv run https://raw.githubusercontent.com/kabatin/ixa-video-creator/v0.8.2/tools/ixa-ai/ixa_ai.py install --lan
+uv run https://raw.githubusercontent.com/kabatin/ixa-video-creator/v0.8.3/tools/ixa-ai/ixa_ai.py install --lan
 ```
 
 `<版>` は ixa の版のタグ（例 `v0.8.1`）。最後に接続コードが**端末に 1 回だけ**出る（端末でなければ出さずに止まるので、ターミナルで回す）。

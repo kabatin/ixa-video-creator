@@ -289,7 +289,7 @@ pnpm ixa ai install --plan   # just the list: size, memory, licence, and whether
 Each server's own `setup` installs its engine and weights; ixa only asks what you want and calls it ([ADR-0064](./docs/adr/0064-select-and-install-local-ai.md)). To run the models on a **separate Mac**, run this there (only [uv](https://docs.astral.sh/uv/) is needed) then run `pnpm ixa ai connect` on your ixa Mac and paste the connection code it printed once (it is not echoed):
 
 ```bash
-uv run https://raw.githubusercontent.com/kabatin/ixa-video-creator/v0.8.2/tools/ixa-ai/ixa_ai.py install --lan
+uv run https://raw.githubusercontent.com/kabatin/ixa-video-creator/v0.8.3/tools/ixa-ai/ixa_ai.py install --lan
 ```
 
 Or by hand: **start the server, list it in `.env`, pick it under *Which AI*.**
