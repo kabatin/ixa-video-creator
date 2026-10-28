@@ -2,23 +2,23 @@
   "version": 1,
   "servers": {
     "vpipe-api": {
-      "repo": "kabatin/vpipe-api", "ref": "main", "cli": "vpipe-api", "port": 8765, "envPrefix": "VPIPE_API_",
+      "repo": "kabatin/vpipe-api", "ref": "v0.1.5", "cli": "vpipe-api", "port": 8765, "envPrefix": "VPIPE_API_",
       "ixa": {"generatorEnv": "LOCAL_VIDEO_GENERATOR", "generator": "vpipe", "urlEnv": "VPIPE_API_URL", "tokenEnv": "VPIPE_API_TOKEN"}
     },
     "wan-api": {
-      "repo": "kabatin/wan-api", "ref": "main", "cli": "wan-api", "port": 8766, "envPrefix": "WAN_API_",
+      "repo": "kabatin/wan-api", "ref": "v0.1.1", "cli": "wan-api", "port": 8766, "envPrefix": "WAN_API_",
       "ixa": {"generatorEnv": "LOCAL_VIDEO_GENERATOR", "generator": "wan", "urlEnv": "WAN_API_URL", "tokenEnv": "WAN_API_TOKEN"}
     },
     "klein-api": {
-      "repo": "kabatin/klein-api", "ref": "main", "cli": "klein-api", "port": 8767, "envPrefix": "KLEIN_API_",
+      "repo": "kabatin/klein-api", "ref": "v0.1.1", "cli": "klein-api", "port": 8767, "envPrefix": "KLEIN_API_",
       "ixa": {"generatorEnv": "LOCAL_IMAGE_GENERATOR", "generator": "klein", "urlEnv": "KLEIN_API_URL", "tokenEnv": "KLEIN_API_TOKEN"}
     },
     "ace-step-api": {
-      "repo": "kabatin/ace-step-api", "ref": "main", "cli": "ace-step-api", "port": 8768, "envPrefix": "ACE_STEP_API_",
+      "repo": "kabatin/ace-step-api", "ref": "v0.1.1", "cli": "ace-step-api", "port": 8768, "envPrefix": "ACE_STEP_API_",
       "ixa": {"generatorEnv": "LOCAL_MUSIC_GENERATOR", "generator": "ace_step", "urlEnv": "ACE_STEP_API_URL", "tokenEnv": "ACE_STEP_API_TOKEN"}
     },
     "sfx-api": {
-      "repo": "kabatin/sfx-api", "ref": "main", "cli": "sfx-api", "port": 8769, "envPrefix": "SFX_API_",
+      "repo": "kabatin/sfx-api", "ref": "v0.1.1", "cli": "sfx-api", "port": 8769, "envPrefix": "SFX_API_",
       "ixa": {"generatorEnv": "LOCAL_SFX_GENERATOR", "generator": "sfx_api", "urlEnv": "SFX_API_URL", "tokenEnv": "SFX_API_TOKEN"}
     }
   },

@@ -94,7 +94,7 @@ Supersedes: ADR-0063 の「分かっている不足」の「手元の AI サー�
 
 ## 分かっている不足
 
-- 各サーバーの `<ref>` はまだ `main`（`setup` の入った版のタグが切られたら catalog.json で固定する）。
+- 各サーバーの `<ref>` は `setup` の入った版のタグに固定した（vpipe-api v0.1.5、ほかの 4 つは v0.1.1）。サーバーの版を上げたら catalog.json と埋め込みの一覧を直す。
 - klein 9B の容量、FlashVSR・Z-Image Turbo・whisper.cpp のメモリは未計測（一覧に「不明」と出し、空きの計算には入れない）。
 - Z-Image Turbo の ixa の AI の ID は `z_image` と置いた（packages/domain 側の名前が決まったら合わせる）。
 - 前に入れたサーバーには、新しく入れたサーバーの `coordinate_with` が足されない（入れ直すか、そのサーバーの `setup` をもう一度）。

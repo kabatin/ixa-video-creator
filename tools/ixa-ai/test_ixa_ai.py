@@ -216,7 +216,7 @@ class InstallTest(unittest.TestCase):
         argv = ["install", "--models", "sa3-small,moss", "--accept-licenses", "sa3-small,moss", "--yes", "--json"]
         code, payload = run_main(fake, *argv)
         self.assertEqual(code, 0)
-        self.assertIn(["uv", "tool", "install", "git+https://github.com/kabatin/sfx-api@main"], [c for c, _ in fake.calls])
+        self.assertIn(["uv", "tool", "install", "git+https://github.com/kabatin/sfx-api@v0.1.1"], [c for c, _ in fake.calls])
         (cmd, env), *_ = fake.setups()
         self.assertEqual(cmd[:7], ["sfx-api", "setup", "--models", "sa3-small,moss", "--json", "--yes", "--service"])
         self.assertIn("wan-api=http://127.0.0.1:8766/v1/health", cmd)
