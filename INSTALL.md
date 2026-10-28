@@ -183,7 +183,10 @@ pnpm -s ixa ai install --plan --json
 ```
 
 `plan.machine`（Apple Silicon か・macOS・メモリ・空き）と、`plan.items` の各行（`id`・`kinds`・`downloadGb`・`peakDiskGb`・
-`ramGb`・`minMacos`・`licence.summary`・`licence.url`・`runnable`・`reason`・`state`）を見る。
+`ramGb`・`minMacos`・`licence.summary`・`licence.url`・`runnable`・`reason`・`state`・`serverVersion`）を見る。
+`state` は `installed`（入っている）・`missing`（無い）・`outdated`・`unknown`（サーバーが答えなかった）。
+`outdated` はサーバーの CLI（`serverVersion`）が ixa の決めた版より古く、入っているかを聞けない（入っているとも無いとも言えない）。
+`ai install` が決めた版に上げてから聞き直し、入っていないものだけを落とす。人に容量を見せるときは「入っていれば落とさない（無ければ約 N GB）」と伝える。
 
 **2. 人に聞く**（ここで必ず止まる）: `runnable: true` の中から、**どれを入れるか**を人に選んでもらい、選んだものの
 **ライセンスの要点と URL** と**合計の容量**を見せて同意を取る。例:

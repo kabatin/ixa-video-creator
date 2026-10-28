@@ -41,7 +41,19 @@ class Fake:
     """偽の外の口。呼ばれたコマンドと環境変数・端末に出したものを記録する。"""
 
     def __init__(
-        self, *, macos="26.0", ram=64, free_gb=500, tools=("uv", "brew"), tty=False, answers=(), setup=None, terminal=True
+        self,
+        *,
+        macos="26.0",
+        ram=64,
+        free_gb=500,
+        tools=("uv", "brew"),
+        tty=False,
+        answers=(),
+        setup=None,
+        terminal=True,
+        versions=None,
+        check=None,
+        uv_code=0,
     ):
         self.calls: list[tuple[list[str], dict | None]] = []
         self.tty_lines: list[str] = []
@@ -52,6 +64,10 @@ class Fake:
         self.macos, self.ram, self.free_gb, self.tools = macos, ram, free_gb, set(tools)
         self.setup = setup or lan_setup
         self.terminal = terminal
+        # CLI の名前 → `--version` の版。無いものは何も答えない（版を読めない）。
+        self.versions = dict(versions or {})
+        self.check = check or (lambda cmd: (2, ""))
+        self.uv_code = uv_code
         self.home = Path(tempfile.mkdtemp())
         self.io = ixa_ai.Io(
             run=self.run,
@@ -82,12 +98,18 @@ class Fake:
             return 0, str(self.ram * 1024**3)
         if cmd[:3] == ["sysctl", "-in", "hw.optional.arm64"]:
             return 0, "1\n"
+        if cmd[1:] == ["--version"]:
+            return (0, f"{cmd[0]} {self.versions[cmd[0]]}\n") if cmd[0] in self.versions else (0, "")
         if len(cmd) > 1 and cmd[1] == "setup" and "--check" in cmd:
-            return 2, ""
+            return self.check(cmd)
         if len(cmd) > 1 and cmd[1] == "setup":
             return self.setup(cmd)
         if cmd[:3] == ["uv", "tool", "install"]:
-            self.tools.add(cmd[3].split("/")[-1].split("@")[0])
+            if self.uv_code != 0:
+                return self.uv_code, ""
+            name, _, ref = cmd[-1].split("/")[-1].partition("@")
+            self.tools.add(name)
+            self.versions[name] = ref.removeprefix("v")
             return 0, ""
         return 0, ""
 
@@ -347,6 +369,56 @@ class InstallTest(unittest.TestCase):
                 io_ = replace(fake.io)
                 # 動かないもの（h3 など）を外してからライセンスを聞く（外さないと「動かないもの」で 1 になる）。
                 self.assertEqual(ixa_ai.main(["install"], io_), 3)
+
+
+def checked_installed(cmd: list[str]) -> tuple[int, str]:
+    """決めた版の `setup --check`：どれも入っていると答える。"""
+    return 0, server_answer(cmd[0], cmd[cmd.index("--models") + 1].split(","), "installed")
+
+
+SFX_REINSTALL = ["uv", "tool", "install", "--reinstall", "git+https://github.com/kabatin/sfx-api@v0.1.1"]
+SFX_ARGV = ["install", "--models", "sa3-small", "--accept-licenses", "sa3-small", "--yes", "--json"]
+
+
+class OutdatedServerTest(unittest.TestCase):
+    """決めた版（catalog の ref）より古いサーバーの CLI は `setup --check` を知らない（2026-10-28 に起きた）。"""
+
+    def test_plan_marks_an_older_cli_outdated_without_asking_it(self):
+        fake = Fake(tools=("uv", "brew", "klein-api"), versions={"klein-api": "0.1.0"}, check=checked_installed)
+        code, payload = run_main(fake, "plan", "--json")
+        self.assertEqual(code, 0)
+        states = {i["state"] for i in payload["items"] if i["server"] == "klein-api"}
+        self.assertEqual(states, {"outdated"})
+        self.assertFalse(any(c[:2] == ["klein-api", "setup"] for c, _ in fake.calls))
+
+    def test_plan_asks_a_cli_at_the_pinned_version(self):
+        fake = Fake(tools=("uv", "brew", "klein-api"), versions={"klein-api": "0.1.1"}, check=checked_installed)
+        _, payload = run_main(fake, "plan", "--json")
+        states = {i["state"] for i in payload["items"] if i["server"] == "klein-api"}
+        self.assertEqual(states, {"installed"})
+
+    def test_plan_tells_a_human_the_cli_is_old_and_will_be_upgraded(self):
+        fake = Fake(tools=("uv", "brew", "klein-api"), versions={"klein-api": "0.1.0"})
+        self.assertEqual(ixa_ai.main(["plan"], fake.io), 0)
+        self.assertIn("klein-api 0.1.0 は古い版", fake.out_lines[-1])
+
+    def test_install_upgrades_an_older_cli_then_counts_only_what_is_missing(self):
+        # 空き 1 GB では sa3-small（1.9 GB）は落とせない。上げて聞き直し、入っていると分かれば止まらない。
+        fake = Fake(tools=("uv", "brew", "sfx-api"), versions={"sfx-api": "0.1.0"}, check=checked_installed, free_gb=1)
+        code, payload = run_main(fake, *SFX_ARGV)
+        self.assertEqual(code, 0)
+        commands = [c for c, _ in fake.calls]
+        self.assertIn(SFX_REINSTALL, commands)
+        (setup, _), *_ = fake.setups()
+        self.assertLess(commands.index(SFX_REINSTALL), commands.index(setup))
+        self.assertEqual(payload["env"]["LOCAL_SFX_GENERATOR"], "sfx_api")
+
+    def test_install_stops_before_setup_when_the_cli_cannot_be_upgraded(self):
+        fake = Fake(tools=("uv", "brew", "sfx-api"), versions={"sfx-api": "0.1.0"}, uv_code=1)
+        code, payload = run_main(fake, *SFX_ARGV)
+        self.assertEqual(code, 1)
+        self.assertEqual(payload["fix"]["command"], " ".join(SFX_REINSTALL))
+        self.assertEqual(fake.setups(), [])
 
 
 class JsonErrorTest(unittest.TestCase):

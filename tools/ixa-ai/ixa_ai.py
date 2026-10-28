@@ -443,9 +443,18 @@ def setup_command(server: str, ids: list[str], *, lan: bool, service: bool, peer
     return [cli, "setup", "--models", ",".join(ids), "--json", "--yes", *flags, *coordinate_args(server, peers)]
 
 
-def install_command(server: str) -> list[str]:
+def server_source(server: str) -> str:
     s = CATALOG["servers"][server]
-    return ["uv", "tool", "install", f"git+https://github.com/{s['repo']}@{s['ref']}"]
+    return f"git+https://github.com/{s['repo']}@{s['ref']}"
+
+
+def install_command(server: str) -> list[str]:
+    return ["uv", "tool", "install", server_source(server)]
+
+
+def reinstall_command(server: str) -> list[str]:
+    """古い版から決めた版（catalog の ref）へ入れ直す。"""
+    return ["uv", "tool", "install", "--reinstall", server_source(server)]
 
 
 def last_json_line(stdout: str) -> dict | None:
@@ -478,27 +487,58 @@ def whisper_model_path(io: Io) -> Path:
     return io.home / ".local" / "share" / "whisper.cpp" / WHISPER_MODEL_NAME
 
 
-def probe_states(io: Io) -> dict[str, str]:
-    """入っているか（サーバーの `setup --check --json` に聞く。CLI が無ければ missing）。"""
-    states: dict[str, str] = {}
-    for server, spec in CATALOG["servers"].items():
-        ids = [i["id"] for i in CATALOG["items"] if i["server"] == server]
-        if io.which(spec["cli"]) is None:
-            states = {**states, **{i: "missing" for i in ids}}
-            continue
-        _, stdout = io.run([spec["cli"], "setup", "--check", "--json", "--models", ",".join(ids)], None)
-        reported = {c.get("id"): c.get("status") for c in (last_json_line(stdout) or {}).get("components", [])}
-        states = {**states, **{i: str(reported.get(i) or "unknown") for i in ids}}
+def installed_version(io: Io, server: str) -> str | None:
+    """サーバーの CLI の版（`<cli> --version` の x.y.z）。読めなければ None。"""
+    code, stdout = io.run([CATALOG["servers"][server]["cli"], "--version"], None)
+    found = re.search(r"\d+\.\d+\.\d+", stdout) if code == 0 else None
+    return found.group(0) if found else None
+
+
+def is_outdated(version: str | None, server: str) -> bool:
+    """決めた版（catalog の ref）より古いか。版を読めなければ古いとは言わない（setup --check に任せる）。"""
+    return version is not None and version_tuple(version) < version_tuple(CATALOG["servers"][server]["ref"])
+
+
+def probe_server(io: Io, server: str) -> tuple[dict[str, str], str | None]:
+    """1 つのサーバーの id ごとの状態と CLI の版。CLI が無ければ missing、決めた版より古ければ outdated
+    （古い CLI は `setup --check` を知らず、聞くと使い方のエラーを端末に出すので聞かない）。"""
+    spec = CATALOG["servers"][server]
+    ids = [i["id"] for i in CATALOG["items"] if i["server"] == server]
+    if io.which(spec["cli"]) is None:
+        return {i: "missing" for i in ids}, None
+    version = installed_version(io, server)
+    if is_outdated(version, server):
+        return {i: "outdated" for i in ids}, version
+    _, stdout = io.run([spec["cli"], "setup", "--check", "--json", "--models", ",".join(ids)], None)
+    reported = {c.get("id"): c.get("status") for c in (last_json_line(stdout) or {}).get("components", [])}
+    return {i: str(reported.get(i) or "unknown") for i in ids}, version
+
+
+def probe_states(io: Io) -> tuple[dict[str, str], dict[str, str | None]]:
+    """入っているか（id → 状態）と、サーバーごとの CLI の版。"""
+    probed = {server: probe_server(io, server) for server in CATALOG["servers"]}
+    states = {i: s for server_states, _ in probed.values() for i, s in server_states.items()}
     whisper = io.which(WHISPER_CLI) is not None and whisper_model_path(io).exists()
-    return {**states, "whisper-cpp": "installed" if whisper else "missing"}
+    versions = {server: version for server, (_, version) in probed.items()}
+    return {**states, "whisper-cpp": "installed" if whisper else "missing"}, versions
 
 
 def plan_items(io: Io, machine: Machine, lan: bool) -> list[dict]:
-    states = probe_states(io)
+    states, versions = probe_states(io)
     rows = []
     for number, item in enumerate(CATALOG["items"], start=1):
         ok, reason = runnable(item, machine, lan)
-        rows.append({**item, "number": number, "runnable": ok, "reason": reason, "state": states.get(item["id"], "unknown")})
+        state = states.get(item["id"], "unknown")
+        rows.append(
+            {
+                **item,
+                "number": number,
+                "runnable": ok,
+                "reason": reason,
+                "state": state,
+                "serverVersion": versions.get(item["server"]),
+            }
+        )
     return rows
 
 
@@ -532,9 +572,18 @@ def ram_text(item: dict) -> str:
     return f"メモリ約 {item['ramGb']} GB{rec}"
 
 
+def state_text(row: dict) -> str:
+    if row["state"] in OK_STATUSES:
+        return "（入っています）"
+    if row["state"] == "outdated":
+        server = CATALOG["servers"][row["server"]]
+        return f"（{server['cli']} {row['serverVersion']} は古い版。入れるときに {server['ref']} に上げてから、入っているか確かめます）"
+    return ""
+
+
 def format_row(row: dict) -> str:
     kinds = "・".join(KIND_LABEL[k] for k in row["kinds"])
-    state = "（入っています）" if row["state"] in OK_STATUSES else ""
+    state = state_text(row)
     lic = row["licence"]
     head = f"{row['number']:>2}. {row['label']}［{kinds}］{state}"
     detail = f"    {size_text(row)}・{ram_text(row)}・macOS {row['minMacos']} 以上・{lic['name']}：{lic['summary']}"
@@ -653,7 +702,7 @@ def install_server(io: Io, server: str, ids: list[str], ctx: dict, say: Say) -> 
     code, stdout = io.run(command, server_env(server, ctx["tokens"], ctx["peers"]))
     answer = last_json_line(stdout)
     if answer is None:
-        reinstall = " ".join(install_command(server)).replace("tool install", "tool install --reinstall")
+        reinstall = " ".join(reinstall_command(server))
         fix = {"hint": "サーバーが古いかもしれません。入れ直してもう一度", "command": reinstall, "needsHuman": False}
         message = f"{server} setup の答えを読めません（終了コード {code}）"
         comps = [{"id": i, "status": "failed", "message": message, "fix": fix} for i in ids]
@@ -685,6 +734,22 @@ def server_ok(entry: dict) -> bool:
     return all(c["status"] in (*OK_STATUSES, "needs_human") for c in entry["components"])
 
 
+def upgrade_outdated(io: Io, agreed: list[dict], state: dict[str, str], say: Say) -> dict[str, str] | tuple[int, dict]:
+    """選んだもののサーバーの CLI が古い版なら決めた版に入れ直し、聞き直した状態（id → 状態）を返す。
+    古い CLI は入っているかを答えられないので、落とす量は上げたあとで数える（入っているモデルを数えない）。"""
+    servers = list(dict.fromkeys(i["server"] for i in agreed if state[i["id"]] == "outdated"))
+    fresh: dict[str, str] = {}
+    for server in servers:
+        command = reinstall_command(server)
+        say(f"… {server} を決めた版（{CATALOG['servers'][server]['ref']}）に上げます（{' '.join(command)}）")
+        code, _ = io.run(command, None)
+        if code != 0:
+            fix = {"hint": "上のエラーを直してもう一度", "command": " ".join(command), "needsHuman": False}
+            return stop(say, EXIT_FAIL, f"{server} を決めた版に上げられませんでした（uv tool install が {code}）", fix)
+        fresh = {**fresh, **probe_server(io, server)[0]}
+    return fresh
+
+
 def install(args: argparse.Namespace, io: Io) -> tuple[int, dict]:
     say = Say(json_mode=args.json, io=io)
     machine = read_machine(io)
@@ -701,7 +766,11 @@ def install(args: argparse.Namespace, io: Io) -> tuple[int, dict]:
     agreed = consent(args, io, selected, say)
     if isinstance(agreed, tuple):
         return agreed
-    state = {r["id"]: r["state"] for r in rows}
+    probed = {r["id"]: r["state"] for r in rows}
+    upgraded = upgrade_outdated(io, agreed, probed, say)
+    if isinstance(upgraded, tuple):
+        return upgraded
+    state = {**probed, **upgraded}
     todo = [i for i in agreed if state[i["id"]] not in OK_STATUSES]
     problem = disk_problem(todo, machine.free_bytes)
     if problem:
