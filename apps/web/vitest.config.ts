@@ -1,6 +1,17 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
+/**
+ * Node 25 以降は Node 自前の `localStorage` が既定で有効になり、jsdom の `localStorage` を隠す
+ * （`--localstorage-file` が無いと undefined になり、`localStorage.clear()` で落ちる）。
+ * テストの worker では切って jsdom のものを使わせる。
+ * 24 以前はこの既定が無いので何も渡さない（22 の古い版はこの印自体を知らない）。
+ */
+const NODE_WEBSTORAGE_DEFAULT_MAJOR = 25
+const nodeMajor = Number(process.versions.node.split('.')[0])
+const workerExecArgv =
+  nodeMajor >= NODE_WEBSTORAGE_DEFAULT_MAJOR ? ['--no-experimental-webstorage'] : []
+
 export default defineConfig({
   /**
    * JSX を変換する。Next.js の変換はここには効かないため自前で指定する。
@@ -26,5 +37,6 @@ export default defineConfig({
     environmentMatchGlobs: [['src/**/*.test.tsx', 'jsdom']],
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     setupFiles: ['./vitest.setup.ts'],
+    poolOptions: { forks: { execArgv: workerExecArgv } },
   },
 })
