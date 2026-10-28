@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { VoiceToolId } from '../narration/voice-profile.js'
+import { AI_CHECKS_OFF } from '../ai/ai-checks.js'
 import {
   AI_PURPOSE_LABELS,
   AI_TOOLS,
@@ -64,6 +65,7 @@ describe('recommendAiSettings', () => {
       transcribe: 'stub',
       music: 'stub',
       sfx: 'stub',
+      checks: { image: false, video: false },
     })
   })
 
@@ -82,6 +84,7 @@ describe('recommendAiSettings', () => {
       transcribe: 'stub',
       music: 'stub',
       sfx: 'stub',
+      checks: { image: false, video: false },
     })
   })
 
@@ -122,14 +125,14 @@ describe('recommendAiSettings', () => {
 })
 
 describe('resolveAiSettings', () => {
-  const defaults = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub' } as const
+  const defaults = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub', checks: AI_CHECKS_OFF } as const
 
   it('まだ選んでいなければ初期値（環境変数）を使い、そう名乗る', () => {
     expect(resolveAiSettings(null, defaults)).toEqual({ settings: defaults, source: 'default' })
   })
 
   it('選んであれば選んだものが勝つ', () => {
-    const saved = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'macos_say', transcribe: 'whisper_cpp', music: 'ace_step', sfx: 'stable_audio_sfx' } as const
+    const saved = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'macos_say', transcribe: 'whisper_cpp', music: 'ace_step', sfx: 'stable_audio_sfx', checks: { image: true, video: false } } as const
 
     expect(resolveAiSettings(saved, defaults)).toEqual({ settings: saved, source: 'saved' })
   })
@@ -149,6 +152,7 @@ describe('aiDefaultsFromEnv', () => {
       transcribe: 'stub',
       music: 'stable_audio_medium_music',
       sfx: 'stub',
+      checks: { image: false, video: false },
     })
   })
 
@@ -163,6 +167,7 @@ describe('aiDefaultsFromEnv', () => {
       transcribe: 'stub',
       music: 'stable_audio_medium_music',
       sfx: 'stub',
+      checks: { image: false, video: false },
     })
   })
 

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { STABLE_AUDIO_MUSIC_DURATION_MAX_SEC } from '../music/music-job.js'
+import { AI_CHECKS_OFF, AiChecks } from './ai-checks.js'
 
 /**
  * 使う AI（ADR-0032）。この環境で見つかった AI から、テキスト・画像・動画・声・文字起こし・曲ごとに 1 つ選ぶ
@@ -305,6 +306,11 @@ export const AiSettings = z.object({
   transcribe: AiToolId,
   music: AiToolId,
   sfx: AiToolId,
+  /**
+   * AI のチェック（ADR-0066）。用途ではないので `AiPurpose` には入れない。
+   * **省けば切る**（チェックを知らない前の画面・MCP からの保存でも、勝手に入れない）。
+   */
+  checks: AiChecks.default(AI_CHECKS_OFF),
 })
 export type AiSettings = z.infer<typeof AiSettings>
 
@@ -355,6 +361,8 @@ export const recommendAiSettings = (
     transcribe: pick('transcribe'),
     music: pick('music'),
     sfx: pick('sfx'),
+    // チェックは勧めない（Claude の利用枠を使う。ADR-0066）。
+    checks: AI_CHECKS_OFF,
   }
 }
 
@@ -389,4 +397,6 @@ export const aiDefaultsFromEnv = (env: AiEnvChoices): AiSettings => ({
   music: 'stable_audio_medium_music',
   // 効果音も新しい用途。選ぶまではお試し（作らない）。
   sfx: 'stub',
+  // チェックは切る（ADR-0066）。
+  checks: AI_CHECKS_OFF,
 })
