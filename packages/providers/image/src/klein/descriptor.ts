@@ -14,9 +14,14 @@ import type { LocalServerIdentity } from '@ixa/provider-video'
 export const KLEIN_PROVIDER_ID: ProviderId = ProviderId.parse('klein')
 
 export const KLEIN_IMAGE_MODEL_ID: ModelId = ModelId.parse('klein/flux2-klein')
+/** 同じ workflow の速い段（draft = klein 4B。ADR-0065）。 */
+export const KLEIN_4B_IMAGE_MODEL_ID: ModelId = ModelId.parse('klein/flux2-klein-4b')
+/** klein-api の別の workflow（Z Image Turbo。ADR-0065）。 */
+export const Z_IMAGE_TURBO_MODEL_ID: ModelId = ModelId.parse('klein/z-image-turbo')
 
 /** klein-api 側のワークフロー名。 */
 export const KLEIN_WORKFLOW_ID = 'flux2-klein'
+export const Z_IMAGE_TURBO_WORKFLOW_ID = 'z-image-turbo'
 
 /** klein-api の既定の待ち受け（vpipe-api は 8765、wan-api は 8766）。 */
 export const KLEIN_DEFAULT_BASE_URL = 'http://127.0.0.1:8767'
@@ -61,7 +66,7 @@ const KLEIN_CAPABILITIES: ImageModelCapabilities = {
 export const kleinImageModel: ImageModelDescriptor = {
   id: KLEIN_IMAGE_MODEL_ID,
   providerId: KLEIN_PROVIDER_ID,
-  label: 'FLUX.2 [klein]（手元）',
+  label: 'FLUX.2 [klein] 9B（手元）',
   capabilities: KLEIN_CAPABILITIES,
   /** 画像は「使う AI」で明示して選ぶので Router は使わない。値は目安。 */
   qualities: {
@@ -76,3 +81,48 @@ export const kleinImageModel: ImageModelDescriptor = {
     typicalLatencySec: 50,
   },
 }
+
+/**
+ * klein 4B（klein-api の `quality: draft`。ADR-0065）。9B と同じ workflow・同じ大きさ・同じ参照の扱いで、
+ * 段だけが違う（サーバが 4B のモデルを使う）。Apache-2.0。実測: 1 枚 14 秒・約 5GB（参照なし）。
+ */
+export const klein4bImageModel: ImageModelDescriptor = {
+  ...kleinImageModel,
+  id: KLEIN_4B_IMAGE_MODEL_ID,
+  label: 'FLUX.2 [klein] 4B（手元）',
+  qualities: { characterConsistency: 0.5, promptAdherence: 0.7, textRendering: 0.5 },
+  economics: { costPerImageUsd: 0, typicalLatencySec: 25 },
+}
+
+/**
+ * Z Image Turbo（klein-api の `z-image-turbo` workflow。ADR-0065）。Apache-2.0。1 枚 約 33 秒。
+ * 本文は flux2-klein と同じ形。**参照の画像は受けない**（文章から作るモデル。人物の見た目は文章で伝える）。
+ * 大きさは 64 の倍数（ここの 3 つはどれも 64 の倍数）。
+ */
+export const zImageTurboModel: ImageModelDescriptor = {
+  ...kleinImageModel,
+  id: Z_IMAGE_TURBO_MODEL_ID,
+  label: 'Z Image Turbo（手元）',
+  capabilities: { ...KLEIN_CAPABILITIES, referenceImages: { max: 0, roles: [] } },
+  qualities: { characterConsistency: 0.3, promptAdherence: 0.8, textRendering: 0.7 },
+  economics: { costPerImageUsd: 0, typicalLatencySec: 33 },
+}
+
+/** klein-api が出すモデル。worker はこの全部を klein の口に登録する。 */
+export const KLEIN_IMAGE_MODELS: readonly ImageModelDescriptor[] = Object.freeze([kleinImageModel, klein4bImageModel, zImageTurboModel])
+
+/** 送る workflow と段。 */
+export type KleinVariant = { readonly workflow: string; readonly quality: 'draft' | 'standard' }
+
+const VARIANTS: ReadonlyMap<string, KleinVariant> = new Map([
+  [KLEIN_IMAGE_MODEL_ID, { workflow: KLEIN_WORKFLOW_ID, quality: 'standard' }],
+  [KLEIN_4B_IMAGE_MODEL_ID, { workflow: KLEIN_WORKFLOW_ID, quality: 'draft' }],
+  [Z_IMAGE_TURBO_MODEL_ID, { workflow: Z_IMAGE_TURBO_WORKFLOW_ID, quality: 'standard' }],
+])
+
+/** モデルの workflow と段。klein-api のモデルでなければ null。 */
+export const kleinVariantOf = (modelId: ModelId): KleinVariant | null => VARIANTS.get(modelId) ?? null
+
+/** klein-api の health で見る workflow の画面の名前。 */
+export const kleinWorkflowLabelOf = (workflowId: string): string | undefined =>
+  workflowId === KLEIN_WORKFLOW_ID ? 'FLUX.2 [klein]（手元）' : workflowId === Z_IMAGE_TURBO_WORKFLOW_ID ? zImageTurboModel.label : undefined
