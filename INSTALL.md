@@ -5,6 +5,7 @@
 > message and the suggested fix, and wait for their answer. Never print secret values.
 
 人が手で入れるときも同じ手順でよい（`pnpm ixa setup` が全部やる）。決めたことは [ADR-0063](./docs/adr/0063-ixa-cli-setup-doctor-update.md)。
+手元の生成 AI（動画・絵・曲・効果音・文字起こし）は別の手順（下の「手元の生成 AI」、[ADR-0064](./docs/adr/0064-select-and-install-local-ai.md)）。
 
 ---
 
@@ -22,6 +23,8 @@
 | ポートを使っている別のプロセスを止める | 人の作業を止める |
 | 未コミットの変更・自分のブランチがある clone を更新する | 人の変更を消しかねない |
 | Claude Code / Codex の設定に MCP を書き込む（`--write`） | 人の設定を書き換える |
+| 手元の生成 AI を入れる（`pnpm ixa ai install`）: **どれを入れるか・ライセンスの同意・大きなダウンロード** | ライセンスに同意するのは制作者。数 GB〜数百 GB を落とす |
+| 手元の生成 AI のために Homebrew で入れる（`brew install whisper-cpp`） | その Mac にソフトを入れる |
 
 **しないこと**: 鍵の値を表示・ログ・チャットに出す／`IXA_API_TOKEN` をファイルに書く／`docker compose down -v`／
 値の入った `.env` の行を書き換える（人に言われたときだけ）／`pnpm dev` を勝手に止める・起動し直す。
@@ -142,7 +145,56 @@ Homebrew が無ければ、`brew` の 1 行の代わりに Homebrew（https://br
 - `optional.whisper-model`（-）→ 文字起こしのモデルは初めて使うときに取ってくる（約 500 MB）。失敗ではない。
 - `optional.storage` → 素材の置き場（既定 `~/ixa-video-creator/storage`、`.env` の `STORAGE_DIR`）に書けるか・空き。
 - `local-ai.*`（!）→ `.env` で有効にした手元の AI サーバー（vpipe・wan・klein・ace-step・sfx）に届かない。
-  サーバは別のリポジトリ。起動は人に頼む。
+  入っていなければ下の「手元の生成 AI」。入っているなら起動は人に頼む。
+
+## 手元の生成 AI
+
+この Mac（Apple Silicon）の GPU で、費用を掛けずに動画・絵・曲・効果音・文字起こしを作る AI を、**選んで**入れる。
+入れ方は各サーバー（vpipe-api・wan-api・klein-api・ace-step-api・sfx-api）の `setup` が持ち、ixa はそれを呼ぶだけ。
+
+**1. 一覧を見る（何も変えない）**
+
+```bash
+pnpm -s ixa ai install --plan --json
+```
+
+`plan.machine`（Apple Silicon か・macOS・メモリ・空き）と、`plan.items` の各行（`id`・`kinds`・`downloadGb`・`peakDiskGb`・
+`ramGb`・`minMacos`・`licence.summary`・`licence.url`・`runnable`・`reason`・`state`）を見る。
+
+**2. 人に聞く**（ここで必ず止まる）: `runnable: true` の中から、**どれを入れるか**を人に選んでもらい、選んだものの
+**ライセンスの要点と URL** と**合計の容量**を見せて同意を取る。例:
+
+| id | 気をつけること |
+|---|---|
+| `h3` | MiniMax H3 Community License。米国・EU・英国・韓国では使えない。約 118 GB（準備中は最大 185 GB）・macOS 26 以上 |
+| `minimax-music3` | 画面に「MiniMax-Music3」の名前を目立つように出す。年商 2000 万ドル超は許可が要る |
+| `sa3-medium` / `sa3-small` | Stability AI Community License。年商 100 万ドル未満なら無料、商用は登録が要る |
+| `klein-9b` | 重みは商用不可（作った画像は使える） |
+| `whisper-cpp` | Homebrew で `whisper-cpp` を入れる |
+
+**3. 入れる**（同意を得た ID だけを、両方に書く）:
+
+```bash
+pnpm -s ixa ai install --models sa3-small,klein-4b --accept-licenses sa3-small,klein-4b --yes --json
+```
+
+- `--accept-licenses` に無い ID が 1 つでもあると、何も入れずに `needs_human` で止まる。**人の同意なしに足さない。**
+- 空きが足りなければ止まる（`failed`）。空けるか、選ぶものを減らすかを人に聞く。
+- 何度実行しても壊れない（入っているものは `already`）。あとから 1 つ足してもよい。
+- `.env` の `LOCAL_*_GENERATOR` に足し、接続先を書いて、最後に doctor を回す。値の入った接続先を替えるときは止まる（人に聞いて `--yes`）。
+- klein は入れたあと、Mac の画面に「ほかのアプリのデータへのアクセス」の確認が出る（`needs_human`）。**人に画面で許可してもらう。**
+- 人が手で入れるなら `pnpm ixa ai install`（番号で選び、ライセンスに 1 つずつ y で答える）。
+
+**別の Mac（AI 用）に入れる**: その Mac で次の 1 行（ixa の clone も Node も要らない。uv だけ）。
+
+```bash
+uv run https://raw.githubusercontent.com/kabatin/ixa-video-creator/<版>/tools/ixa-ai/ixa_ai.py install --lan
+```
+
+`<版>` は ixa の版のタグ（例 `v0.8.1`）。最後に `pnpm ixa ai connect <接続コード>` の 1 行が**画面に 1 回だけ**出る。
+合言葉を含むので、人にコピーしてもらい、ixa の Mac の clone で貼ってもらう（エージェントはチャットやファイルに写さない）。
+
+**調子を見る**: `pnpm -s ixa ai status --json`（手元の AI サーバーに届くかだけ）。
 
 ## 5. MCP の登録
 

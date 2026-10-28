@@ -279,7 +279,20 @@ The switch is deliberate and separate from the key: having a key never enables b
 
 ### Generating on this Mac (optional)
 
-Five local servers turn one Apple Silicon Mac into a free studio. Enable any of them, or all of them: **start the server, list it in `.env`, pick it under *Which AI*.**
+Five local servers turn one Apple Silicon Mac into a free studio. Enable any of them, or all of them.
+
+```bash
+pnpm ixa ai install          # pick models by number, agree to each licence, then it installs, starts and wires them into .env
+pnpm ixa ai install --plan   # just the list: size, memory, licence, and whether it runs on this Mac
+```
+
+Each server's own `setup` installs its engine and weights; ixa only asks what you want and calls it ([ADR-0064](./docs/adr/0064-select-and-install-local-ai.md)). To run the models on a **separate Mac**, run this there (only [uv](https://docs.astral.sh/uv/) is needed) and paste the `pnpm ixa ai connect …` line it prints once into your ixa Mac:
+
+```bash
+uv run https://raw.githubusercontent.com/kabatin/ixa-video-creator/<version>/tools/ixa-ai/ixa_ai.py install --lan
+```
+
+Or by hand: **start the server, list it in `.env`, pick it under *Which AI*.**
 
 | Server | Makes | Models | Default address |
 |---|---|---|---|
@@ -287,7 +300,7 @@ Five local servers turn one Apple Silicon Mac into a free studio. Enable any of 
 | [wan-api](https://github.com/kabatin/wan-api) | video | Wan 2.2 TI2V-5B | `http://127.0.0.1:8766` |
 | [klein-api](https://github.com/kabatin/klein-api) | images | FLUX.2 [klein] | `http://127.0.0.1:8767` |
 | [ace-step-api](https://github.com/kabatin/ace-step-api) | songs | ACE-Step 1.5, MiniMax-Music3 | `http://127.0.0.1:8768` |
-| sfx-api | sound effects, BGM | Stable Audio 3, MOSS SFX v2 | `http://127.0.0.1:8769` |
+| [sfx-api](https://github.com/kabatin/sfx-api) | sound effects, BGM | Stable Audio 3, MOSS SFX v2 | `http://127.0.0.1:8769` |
 
 ```bash
 # .env (default for each is `none`)

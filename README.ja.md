@@ -280,7 +280,20 @@ FAL_API_KEY=...
 
 ### この Mac で作る（任意）
 
-手元の生成サーバ 5 つで、Apple Silicon の Mac 1 台が無料のスタジオになる。どれか 1 つでも、全部でも有効にできる。**サーバを起動 → `.env` に書く →「使う AI」で選ぶ。**
+手元の生成サーバ 5 つで、Apple Silicon の Mac 1 台が無料のスタジオになる。どれか 1 つでも、全部でも有効にできる。
+
+```bash
+pnpm ixa ai install          # 番号でモデルを選び、ライセンスに 1 つずつ同意すると、入れて・起動して・.env につなぐ
+pnpm ixa ai install --plan   # 一覧だけ（容量・メモリ・ライセンス・この Mac で動くか）
+```
+
+エンジンと重みを入れるのは各サーバーの `setup` で、ixa は選んで呼ぶだけ（[ADR-0064](./docs/adr/0064-select-and-install-local-ai.md)）。**別の Mac** で動かすなら、その Mac で次の 1 行を回し（要るのは [uv](https://docs.astral.sh/uv/) だけ）、1 回だけ出る `pnpm ixa ai connect …` を ixa の Mac で貼る。
+
+```bash
+uv run https://raw.githubusercontent.com/kabatin/ixa-video-creator/<版>/tools/ixa-ai/ixa_ai.py install --lan
+```
+
+手で入れるなら: **サーバを起動 → `.env` に書く →「使う AI」で選ぶ。**
 
 | サーバ | 作るもの | モデル | 既定の場所 |
 |---|---|---|---|
@@ -288,7 +301,7 @@ FAL_API_KEY=...
 | [wan-api](https://github.com/kabatin/wan-api) | 動画 | Wan 2.2 TI2V-5B | `http://127.0.0.1:8766` |
 | [klein-api](https://github.com/kabatin/klein-api) | 画像 | FLUX.2 [klein] | `http://127.0.0.1:8767` |
 | [ace-step-api](https://github.com/kabatin/ace-step-api) | 曲 | ACE-Step 1.5・MiniMax-Music3 | `http://127.0.0.1:8768` |
-| sfx-api | 効果音・BGM | Stable Audio 3・MOSS SFX v2 | `http://127.0.0.1:8769` |
+| [sfx-api](https://github.com/kabatin/sfx-api) | 効果音・BGM | Stable Audio 3・MOSS SFX v2 | `http://127.0.0.1:8769` |
 
 ```bash
 # .env（どれも既定は none）
