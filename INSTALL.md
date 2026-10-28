@@ -22,7 +22,9 @@
 | 別の clone の DB を共有するか分けるか | 別の作品が混ざる |
 | ポートを使っている別のプロセスを止める | 人の作業を止める |
 | 未コミットの変更・自分のブランチがある clone を更新する | 人の変更を消しかねない |
-| Claude Code / Codex の設定に MCP を書き込む（`--write`） | 人の設定を書き換える |
+| Claude Code / Codex の設定に MCP を書き込む（`--write`・setup の `mcp.claude`） | 人の設定を書き換える |
+| テキスト・画像の AI の初期値を Claude Code / Codex にする（setup の `text-ai.env`） | 契約の利用枠を使う |
+| 値の入った接続先（`*_API_URL`）を替える（`--overwrite-env`） | 別の Mac を指す設定を消しかねない |
 | 手元の生成 AI を入れる（`pnpm ixa ai install`）: **どれを入れるか・ライセンスの同意・大きなダウンロード** | ライセンスに同意するのは制作者。数 GB〜数百 GB を落とす |
 | 手元の生成 AI のために Homebrew で入れる（`brew install whisper-cpp`） | その Mac にソフトを入れる |
 
@@ -46,6 +48,7 @@ pnpm -s ixa setup --yes --json
   pnpm は `corepack enable && corepack prepare pnpm@9.15.4 --activate` で入る（人に聞かなくてよい）。
 - `setup` は何度実行しても壊れない。済んだ手順は `already`（済み）になる。
 - `--yes` は途中の質問（Docker Desktop を起動するか）に「はい」で答える。人の同意が要る手順は飛ばして `needs_human` を返す。
+  任意のもの（テキストの AI の初期値・Gemini の鍵・MCP の登録）は `--yes` では書かずに `notice` を返す（下の「任意」）。
 
 ## 2. 結果の読み方
 
@@ -141,7 +144,27 @@ Homebrew が無ければ、`brew` の 1 行の代わりに Homebrew（https://br
 
 ## 任意
 
-- `optional.claude` / `optional.codex`（!）→ 無くても動く。AI エージェントのタブ・絵コンテの案・絵は Claude Code / Codex を使う。入れるかは人が決める。
+無くても画面は開けて作品は作れるもの。setup はどれも**止めずに**知らせる（`notice`。人が決めるものは `fix.needsHuman: true`）。
+setup はこの順に回す: 音の解析の依存の後、テキストの AI → Gemini の鍵 → 書き出しの headless Chrome → MCP の登録（[ADR-0065](./docs/adr/0065-setup-covers-every-feature-and-klein-image-models.md)）。
+
+**setup の手順**
+
+| id | すること | 人に聞く |
+|---|---|---|
+| `text-ai.claude` / `text-ai.codex` / `text-ai.grok` | 入っているか・サインイン済みかを見るだけ（AI には何も頼まない。メールアドレスは読まない）。無ければ入れ方、サインインしていなければ `claude auth login`・`codex login`・`grok login` を出す。Grok は確かめる口が無く、記録があるかだけ | 入れる・サインインするのは人 |
+| `text-ai.env` | 入っていてサインイン済みなら、`.env` の既定（`stub`・空）だけを `STORYBOARD_DRAFTER=claude_cli`・`IMAGE_PROVIDER=codex_cli` に替える。**契約の利用枠を使う**ので、端末で `--yes` でないときだけ聞く。`--yes` では書かずに `notice` を返す | はい（人に聞いてから、端末で `pnpm ixa setup` を回して「はい」か、画面の「使う AI」で選ぶ） |
+| `env.gemini` | Gemini の鍵（声・文字起こし）。端末で `--yes` でないときだけ「入れますか」と聞き、鍵は**画面に出さずに**受け取る。`GEMINI_API_KEY`・`AUDIO_API_PROVIDERS`（`gemini_api` を足す）・`GEMINI_API_BILLING`・`GEMINI_KEY_LABEL` を書く。`--yes`・端末でないときは聞かずに「要る」を返す | はい（**原稿が Google に送られる**。無料枠では製品の改善に使われる。鍵は人が貼る。エージェントは鍵を受け取らない） |
+| `render.browser` | 書き出しの headless Chrome（約 100 MB）を先に取ってくる。取れなくても初めての書き出しで取りに行くので止めない | いいえ |
+| `mcp.claude` | Claude Code に ixa の MCP を登録する。端末で `--yes` でないときだけ聞き、「はい」なら `pnpm ixa mcp --claude --write` と同じ登録をする。`--yes` では書かずにその 1 行を返す。Claude Code が無ければ飛ばす | はい（人の設定を書き換える。下の「5. MCP の登録」） |
+
+**doctor の点検**
+
+- `optional.claude` / `optional.codex` / `optional.grok`（!）→ 無くても動く。AI エージェントのタブ・絵コンテの案・絵のチェックは Claude Code、
+  絵コンテの画像は Codex、テキストの控えは Grok を使う。入れるかは人が決める。
+- `tools.remotion-browser`（!）→ 書き出しの headless Chrome がまだ無い。`pnpm ixa setup` が取ってくる（人に聞かなくてよい）。
+  `-`（確かめられない）は依存が入っていないとき。`pnpm install` の後にもう一度。
+- `tools.japanese-font`（!）→ 字幕のヒラギノ（角ゴシック・明朝・丸ゴ）が `/System/Library/Fonts` に無い。書き出しは別の書体になる。
+  Font Book の「標準フォントを復元」を人に頼む。Mac 以外では `-`。
 - `optional.whisper-model`（-）→ 文字起こしのモデルは初めて使うときに取ってくる（約 500 MB）。失敗ではない。
 - `optional.storage` → 素材の置き場（既定 `~/ixa-video-creator/storage`、`.env` の `STORAGE_DIR`）に書けるか・空き。
 - `local-ai.*`（!）→ `.env` で有効にした手元の AI サーバー（vpipe・wan・klein・ace-step・sfx）に届かない。
@@ -169,7 +192,9 @@ pnpm -s ixa ai install --plan --json
 | `h3` | MiniMax H3 Community License。米国・EU・英国・韓国では使えない。約 118 GB（準備中は最大 185 GB）・macOS 26 以上 |
 | `minimax-music3` | 画面に「MiniMax-Music3」の名前を目立つように出す。年商 2000 万ドル超は許可が要る |
 | `sa3-medium` / `sa3-small` | Stability AI Community License。年商 100 万ドル未満なら無料、商用は登録が要る |
-| `klein-9b` | 重みは商用不可（作った画像は使える） |
+| `klein-9b` | FLUX.2 [klein] 9B。FLUX Non-Commercial License、**重みは商用不可**（作った画像は使える）。約 17.8 GB・メモリ約 11 GB |
+| `klein-4b` | FLUX.2 [klein] 4B（下書き。速い）。Apache-2.0 で商用可。約 8.6 GB・メモリ約 5 GB |
+| `z-image-turbo` | Z Image Turbo。Apache-2.0 で商用可。約 10.9 GB。**キャラクターなどの参照の画像は使えない**（見た目は文章で伝える） |
 | `whisper-cpp` | Homebrew で `whisper-cpp` を入れる |
 
 **3. 入れる**（同意を得た ID だけを、両方に書く）:
@@ -183,6 +208,8 @@ pnpm -s ixa ai install --models sa3-small,klein-4b --accept-licenses sa3-small,k
 - 何度実行しても壊れない（入っているものは `already`）。あとから 1 つ足してもよい。
 - `.env` の `LOCAL_*_GENERATOR` に足し、接続先を書いて、最後に doctor を回す。値の入った接続先（別の Mac を指す `*_API_URL` など）を替えるときは、何も書かずに止まる（`ai.env.kept`）。人に聞いて、替えてよければ `--overwrite-env` を足してもう一度（`--yes` では替わらない）。
 - klein は入れたあと、Mac の画面に「ほかのアプリのデータへのアクセス」の確認が出る（`needs_human`）。**人に画面で許可してもらう。**
+- 画像の 3 つ（`klein-9b`・`klein-4b`・`z-image-turbo`）は同じ klein-api に入り、どれも `LOCAL_IMAGE_GENERATOR=klein` で有効になる。
+  ixa は入っている段だけを「使える」にし（4B だけなら 9B は出ない）、まだ選んでいなければ商用可の 4B → Z Image Turbo → 9B の順に勧める。
 - 人が手で入れるなら `pnpm ixa ai install`（番号で選び、ライセンスに 1 つずつ y で答える）。
 
 **別の Mac（AI 用）に入れる**: その Mac で次の 1 行（ixa の clone も Node も要らない。uv だけ）。
@@ -204,6 +231,10 @@ pnpm ixa ai connect
 **調子を見る**: `pnpm -s ixa ai status --json`（手元の AI サーバーに届くかだけ）。
 
 ## 5. MCP の登録
+
+setup の `mcp.claude` が Claude Code の分を受け持つ（端末で「はい」と答えれば登録済み・`already` なら済み）。
+`setup --yes` では書かずに `notice` と 1 行（`pnpm ixa mcp --claude --write`）を返すので、その 1 行を人に見せて許可を取る。
+Codex は setup では触らない。
 
 ```bash
 pnpm -s ixa mcp --claude    # Claude Code に登録する 1 行（claude mcp add …）

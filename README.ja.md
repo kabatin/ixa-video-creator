@@ -170,7 +170,7 @@ Claude Code への登録（鍵はシェルの環境から渡す。ファイル�
 | 用途 | 選べるもの |
 |---|---|
 | テキスト — 絵コンテの案・入力の手伝い・レビュー・画像のチェック・AI エージェント | Claude Code・Codex・Grok |
-| 画像 — 最初のフレーム・キャラクターシート・キーアート | Codex・FLUX.2 [klein]（手元・無料） |
+| 画像 — 最初のフレーム・キャラクターシート・キーアート | Codex・FLUX.2 [klein] 4B / 9B・Z Image Turbo（手元・無料） |
 | 動画 — Take | 静止画を動かす（無料）・MiniMax H3（手元・無料）・Wan 2.2 5B（手元・無料）・Seedance（fal・有料） |
 | 声 — ナレーション | Mac の声（無料）・Gemini API・ElevenLabs（有料） |
 | 文字起こし — 録ったナレーションを行にする | whisper.cpp（手元・無料）・Gemini API・ElevenLabs（有料） |
@@ -250,12 +250,12 @@ Mac で Node 22 / pnpm 9 / Docker Desktop / FFmpeg / [uv](https://docs.astral.sh
 git clone https://github.com/kabatin/ixa-video-creator.git
 cd ixa-video-creator
 pnpm install
-pnpm ixa setup    # .env・署名の鍵・postgres と redis・DB の更新・ワークスペース・音声の依存。何度実行しても壊れない
+pnpm ixa setup    # .env・署名の鍵・postgres と redis・DB の更新・ワークスペース・音声の依存・テキストの AI・書き出しの Chrome・MCP。何度実行しても壊れない
 
 pnpm dev          # web :3000, api :3001, worker, audio :8100
 ```
 
-`setup` は勝手に道具を入れない。足りなければ入れ方の 1 行（`brew install ffmpeg` など）を出して止まる。`pnpm ixa doctor` は今の状態を ✓ / ! / ✗ で並べ、問題ごとに直し方を 1 行添える（鍵は「入っている／いない」だけ）。どちらも `--json` で機械向けに出せる。エージェントが従う手順書は [INSTALL.md](./INSTALL.md)（人に聞くべき所も書いてある。[ADR-0063](./docs/adr/0063-ixa-cli-setup-doctor-update.md)）。
+`setup` は勝手に道具を入れない。足りなければ入れ方の 1 行（`brew install ffmpeg` など）を出して止まる（取ってくるのは書き出しの headless Chrome だけ）。契約や設定に関わるもの（テキストと画像を Claude Code・Codex にする・Gemini の鍵・Claude Code への MCP の登録）は端末で聞き、`--yes` では飛ばす。`pnpm ixa doctor` は今の状態を ✓ / ! / ✗ で並べ、問題ごとに直し方を 1 行添える（鍵は「入っている／いない」だけ）。どちらも `--json` で機械向けに出せる。エージェントが従う手順書は [INSTALL.md](./INSTALL.md)（人に聞くべき所も書いてある。[ADR-0063](./docs/adr/0063-ixa-cli-setup-doctor-update.md)）。
 
 <http://localhost:3000> を開き、作品を作り、音声ファイルを画面に落とす。あとは流れの帯が案内する。**既定ではローカルのスタブだけで動く。鍵も費用も要らない。**
 
@@ -299,7 +299,7 @@ uv run https://raw.githubusercontent.com/kabatin/ixa-video-creator/<版>/tools/i
 |---|---|---|---|
 | [vpipe-api](https://github.com/kabatin/vpipe-api) | 動画・解像度上げ | MiniMax H3 Turbo・FlashVSR | `http://127.0.0.1:8765` |
 | [wan-api](https://github.com/kabatin/wan-api) | 動画 | Wan 2.2 TI2V-5B | `http://127.0.0.1:8766` |
-| [klein-api](https://github.com/kabatin/klein-api) | 画像 | FLUX.2 [klein] | `http://127.0.0.1:8767` |
+| [klein-api](https://github.com/kabatin/klein-api) | 画像 | FLUX.2 [klein] 9B / 4B・Z Image Turbo | `http://127.0.0.1:8767` |
 | [ace-step-api](https://github.com/kabatin/ace-step-api) | 曲 | ACE-Step 1.5・MiniMax-Music3 | `http://127.0.0.1:8768` |
 | [sfx-api](https://github.com/kabatin/sfx-api) | 効果音・BGM | Stable Audio 3・MOSS SFX v2 | `http://127.0.0.1:8769` |
 
@@ -360,7 +360,7 @@ fal・ElevenLabs・Gemini の有料枠以外は無料で動く（スタブ・`lo
 
 - **[Remotion](https://www.remotion.dev/docs/license)** は、操作する人数が 3 人までなら無償。**4 人以上は有償ライセンスが要る**（共同で開発・運用する当事者の人数は合算）。このリポジトリが MIT であることはその義務を免除しない。
 - Provider の API（fal.ai・Gemini・ElevenLabs）は、各社の条件で利用者に直接課金される。Claude Code・Codex・Grok は利用者自身のアカウントで動く。
-- 手元のモデルの重みは ixa に同梱しない。有効にする前にそれぞれ確かめること。**MiniMax H3**（MiniMax H3 Community License）は利用できる地域・用途に制限がある。**Wan 2.2** は Apache-2.0。**FLUX.2 [klein]** は 9B の重みが商用利用を含まない。**ACE-Step 1.5** は MIT。**MiniMax-Music3**（MiniMax-Music3 Community License）は名前を目立つように出すことを求める（画面に出している）。**Stable Audio 3**（Stability AI Community License）は年商 100 万ドル未満なら商用可。**MOSS SFX v2** は Apache-2.0。
+- 手元のモデルの重みは ixa に同梱しない。有効にする前にそれぞれ確かめること。**MiniMax H3**（MiniMax H3 Community License）は利用できる地域・用途に制限がある。**Wan 2.2** は Apache-2.0。**FLUX.2 [klein]** は 9B の重みが商用利用を含まない（4B は Apache-2.0）。**Z Image Turbo** は Apache-2.0。**ACE-Step 1.5** は MIT。**MiniMax-Music3**（MiniMax-Music3 Community License）は名前を目立つように出すことを求める（画面に出している）。**Stable Audio 3**（Stability AI Community License）は年商 100 万ドル未満なら商用可。**MOSS SFX v2** は Apache-2.0。
 
 ## 貢献
 

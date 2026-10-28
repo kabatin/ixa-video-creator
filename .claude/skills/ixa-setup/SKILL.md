@@ -11,11 +11,11 @@ description: ixa（iXA Video Creator）を入れる・更新する・調子を�
 
 | 頼まれごと | 最初に打つ |
 |---|---|
-| 入れて・整えて | `pnpm install` → `pnpm -s ixa setup --yes --json` |
+| 入れて・整えて | `pnpm install` → `pnpm -s ixa setup --yes --json`（任意のもの `text-ai.env`・`env.gemini`・`mcp.claude` は `notice` で返る。人に聞いてから、端末で人に `pnpm ixa setup` を回してもらう） |
 | 調子を見て | `pnpm -s ixa doctor --json` |
 | 更新して | `pnpm -s ixa update --check --json` → 人に版を伝えて `pnpm -s ixa update --json` |
 | Claude Code / Codex から使いたい | `pnpm -s ixa mcp --claude`（または `--codex`） |
-| 手元の生成 AI を入れて | `pnpm -s ixa ai install --plan --json` → **人に選んでもらい、ライセンスと容量の同意を取る** → `pnpm -s ixa ai install --models <id,…> --accept-licenses <同じ id> --yes --json` |
+| 手元の生成 AI を入れて | `pnpm -s ixa ai install --plan --json` → **人に選んでもらい、ライセンスと容量の同意を取る**（画像は `klein-4b`・`z-image-turbo` が商用可、`klein-9b` は重みが非商用） → `pnpm -s ixa ai install --models <id,…> --accept-licenses <同じ id> --yes --json`。`ai.env.kept` で止まったら、替えてよいか人に聞いて `--overwrite-env` |
 | 別の Mac の AI につなぎたい | その Mac で INSTALL.md「手元の生成 AI」の `uv run … ixa_ai.py install --lan` を人に（ターミナルで）回してもらい、ixa の Mac で人に `pnpm ixa ai connect` を打って接続コードを貼ってもらう |
 
 ## 進め方
@@ -28,7 +28,7 @@ description: ixa（iXA Video Creator）を入れる・更新する・調子を�
 
 ## してはいけないこと
 
-- 鍵の値を表示する・ファイルに書く。アクセス用の鍵を DB に作る（発行は画面 http://localhost:3000/access-keys で制作者が押す）。
+- 鍵の値を表示する・ファイルに書く。アクセス用の鍵を DB に作る（発行は画面 http://localhost:3000/access-keys で制作者が押す）。Gemini の鍵を人から受け取って貼る（人が端末で貼る）。
 - `docker compose down -v`、値の入った `.env` の行の書き換え、`--force`・`--write`・`--overwrite-env` を人の許可なしに付けること。
 - `pnpm dev` を勝手に止める・起動し直す（作っている途中の絵や動画が止まる）。
 - 人が同意していない ID を `--accept-licenses` に入れる。接続コード（合言葉を含む）をチャットやファイルに写す。

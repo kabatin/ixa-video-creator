@@ -169,7 +169,7 @@ The first time you open the workbench, *使う AI* (which AI to use) looks for A
 | Purpose | Choices |
 |---|---|
 | Text — storyboard drafts, writing help, reviews, image checks, the agent tab | Claude Code · Codex · Grok |
-| Images — start frames, character sheets, key art | Codex · FLUX.2 [klein] (local, free) |
+| Images — start frames, character sheets, key art | Codex · FLUX.2 [klein] 4B / 9B · Z Image Turbo (local, free) |
 | Video — takes | still-motion (free) · MiniMax H3 (local, free) · Wan 2.2 5B (local, free) · Seedance via fal (paid) |
 | Voice — narration | Mac voice (free) · Gemini API · ElevenLabs (paid) |
 | Transcription — recorded narration into lines | whisper.cpp (local, free) · Gemini API · ElevenLabs (paid) |
@@ -249,12 +249,12 @@ Requires a Mac with Node 22, pnpm 9, Docker Desktop, FFmpeg and [uv](https://doc
 git clone https://github.com/kabatin/ixa-video-creator.git
 cd ixa-video-creator
 pnpm install
-pnpm ixa setup    # .env, signing key, postgres + redis, DB migrations, workspace, audio deps — safe to re-run
+pnpm ixa setup    # .env, signing key, postgres + redis, DB migrations, workspace, audio deps, text AI, Chrome for export, MCP — safe to re-run
 
 pnpm dev          # web :3000, api :3001, worker, audio :8100
 ```
 
-`setup` never installs anything for you: if a tool is missing it prints the one line that installs it (`brew install ffmpeg`) and stops. `pnpm ixa doctor` shows the state of everything as ✓ / ! / ✗ with a one-line fix for each problem — keys only as set or not set. Both take `--json` for agents; [INSTALL.md](./INSTALL.md) is the runbook an agent follows, including where it must stop and ask you ([ADR-0063](./docs/adr/0063-ixa-cli-setup-doctor-update.md)).
+`setup` never installs software for you: if a tool is missing it prints the one line that installs it (`brew install ffmpeg`) and stops (it only fetches the headless Chrome used for export). Anything that uses your plans or settings — switching text and images to Claude Code / Codex, a Gemini key, registering the MCP server in Claude Code — is asked in a terminal and skipped with `--yes`. `pnpm ixa doctor` shows the state of everything as ✓ / ! / ✗ with a one-line fix for each problem — keys only as set or not set. Both take `--json` for agents; [INSTALL.md](./INSTALL.md) is the runbook an agent follows, including where it must stop and ask you ([ADR-0063](./docs/adr/0063-ixa-cli-setup-doctor-update.md)).
 
 Open <http://localhost:3000>, create a project, and drop an audio file onto the window — the flow bar takes it from there. **Out of the box everything runs on local stubs — no API keys, no cost.**
 
@@ -298,7 +298,7 @@ Or by hand: **start the server, list it in `.env`, pick it under *Which AI*.**
 |---|---|---|---|
 | [vpipe-api](https://github.com/kabatin/vpipe-api) | video, upscaling | MiniMax H3 Turbo, FlashVSR | `http://127.0.0.1:8765` |
 | [wan-api](https://github.com/kabatin/wan-api) | video | Wan 2.2 TI2V-5B | `http://127.0.0.1:8766` |
-| [klein-api](https://github.com/kabatin/klein-api) | images | FLUX.2 [klein] | `http://127.0.0.1:8767` |
+| [klein-api](https://github.com/kabatin/klein-api) | images | FLUX.2 [klein] 9B / 4B, Z Image Turbo | `http://127.0.0.1:8767` |
 | [ace-step-api](https://github.com/kabatin/ace-step-api) | songs | ACE-Step 1.5, MiniMax-Music3 | `http://127.0.0.1:8768` |
 | [sfx-api](https://github.com/kabatin/sfx-api) | sound effects, BGM | Stable Audio 3, MOSS SFX v2 | `http://127.0.0.1:8769` |
 
@@ -359,7 +359,7 @@ This project is MIT. Some dependencies carry obligations that pass to **you** as
 
 - **[Remotion](https://www.remotion.dev/docs/license)** is free for individuals and organisations of up to three people; **four or more requires a company license**, aggregated across collaborating parties. MIT on this repository does not waive that.
 - Provider APIs (fal.ai, Gemini, ElevenLabs) bill you directly under their own terms. Claude Code, Codex and Grok run under your own accounts.
-- The local models are not shipped with ixa; check each one before enabling it. **MiniMax H3** (MiniMax H3 Community License) restricts where and how the weights may be used. **Wan 2.2** is Apache-2.0. **FLUX.2 [klein]**: the 9B weights do not cover commercial use. **ACE-Step 1.5** is MIT. **MiniMax-Music3** (MiniMax-Music3 Community License) asks for its name to be shown prominently, which the app does. **Stable Audio 3** (Stability AI Community License) allows commercial use below US$1M annual revenue. **MOSS SFX v2** is Apache-2.0.
+- The local models are not shipped with ixa; check each one before enabling it. **MiniMax H3** (MiniMax H3 Community License) restricts where and how the weights may be used. **Wan 2.2** is Apache-2.0. **FLUX.2 [klein]**: the 9B weights do not cover commercial use; the 4B is Apache-2.0. **Z Image Turbo** is Apache-2.0. **ACE-Step 1.5** is MIT. **MiniMax-Music3** (MiniMax-Music3 Community License) asks for its name to be shown prominently, which the app does. **Stable Audio 3** (Stability AI Community License) allows commercial use below US$1M annual revenue. **MOSS SFX v2** is Apache-2.0.
 
 ## Contributing
 
