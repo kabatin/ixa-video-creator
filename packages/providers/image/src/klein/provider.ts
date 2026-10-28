@@ -29,7 +29,7 @@ import {
   type LocalServerHttp,
 } from '@ixa/provider-video'
 import { KleinJob, KleinSubmitResponse, type KleinOutputInfo } from './api.js'
-import { KLEIN_IDENTITY, KLEIN_WORKFLOW_ID, kleinImageModel } from './descriptor.js'
+import { KLEIN_IDENTITY, KLEIN_IMAGE_MODELS, kleinVariantOf } from './descriptor.js'
 import { readKleinReferences } from './references.js'
 
 /**
@@ -136,10 +136,14 @@ export const createKleinImageProvider = (options: KleinImageProviderOptions): Im
 
   return {
     id: identity.providerId,
-    models: [kleinImageModel],
+    models: KLEIN_IMAGE_MODELS,
     exclusiveResource: 'local-gpu',
 
     async submit(request: ImageGenerationRequest): Promise<ProviderJobHandle> {
+      const variant = kleinVariantOf(request.model.id)
+      if (variant === null) {
+        throw new CapabilityViolationError(request.model.id, [`${request.model.id} は ${identity.serverName} のモデルではありません`])
+      }
       const violations = validateImageRequest(request, request.model)
       if (violations.length > 0) throw new CapabilityViolationError(request.model.id, violations)
       ensurePromptLength(identity, request.prompt)
@@ -149,13 +153,13 @@ export const createKleinImageProvider = (options: KleinImageProviderOptions): Im
       const response = await localServerRequest(
         http,
         'POST',
-        `/v1/workflows/${KLEIN_WORKFLOW_ID}/jobs`,
+        `/v1/workflows/${variant.workflow}/jobs`,
         {
           prompt: request.prompt,
           // **常に明示する。** サーバの既定に頼ると、版が変わったとき黙って違う大きさで返る。
           output: { width: request.resolution.width, height: request.resolution.height },
-          // ixa が使う段は standard だけ（ADR-0047 §2）。
-          quality: 'standard',
+          // 段はモデルで決まる（9B と Z Image は standard、4B は draft。ADR-0065）。
+          quality: variant.quality,
           seed: request.seed,
           count: request.count,
           reference_images: references,
@@ -173,7 +177,7 @@ export const createKleinImageProvider = (options: KleinImageProviderOptions): Im
       }
       return {
         providerId: identity.providerId,
-        modelId: kleinImageModel.id,
+        modelId: request.model.id,
         ref: encodeLocalServerJobRef(identity, parsed.data.id),
         submittedAt: new Date(),
       }
@@ -214,7 +218,7 @@ export const createKleinImageProvider = (options: KleinImageProviderOptions): Im
             // 手元の GPU。費用は掛からない。
             costUsd: 0,
             raw: {
-              workflow: KLEIN_WORKFLOW_ID,
+              workflow: job.workflow,
               outputs: outputs.map(({ index, width, height, seed_used }) => ({ index, width, height, seed_used })),
               ...(job.timings === null || job.timings === undefined ? {} : { timings: job.timings }),
             },

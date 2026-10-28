@@ -1,5 +1,4 @@
-import type { LocalServerHealthCheck } from '@ixa/provider-video'
-import { checkWorkflowHealth, type WorkflowHealthInput } from '../local-server/workflow-health.js'
+import { checkWorkflowHealth, type LocalServerHealthCheck, type WorkflowHealthInput } from '@ixa/provider-video'
 import { ACE_STEP_IDENTITY, ACE_STEP_MUSIC_MODELS, aceStepWorkflowOf } from './descriptor.js'
 
 /**

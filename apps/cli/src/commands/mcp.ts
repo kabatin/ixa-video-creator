@@ -1,6 +1,6 @@
 import path from 'node:path'
 import type { Options } from '../args.js'
-import { isBlank } from '../lib/env-file.js'
+import { isBlank, type EnvValues } from '../lib/env-file.js'
 import {
   appendCodexSection,
   claudeAddArgs,
@@ -20,7 +20,7 @@ import type { StepResult } from '../types.js'
  * `--write` を付けたときだけ実際に登録する。**アクセス用の鍵は入れない・作らない**（発行は画面で制作者が押す）。
  */
 
-const tokenHint = (): StepResult => ({
+export const tokenHint = (): StepResult => ({
   id: 'mcp.token',
   status: 'needs_human',
   message: `アクセス用の鍵（IXA_API_TOKEN）は制作者が画面で発行します: http://localhost:${String(WEB_PORT)}${ACCESS_KEYS_PATH}（pnpm dev が動いているとき）`,
@@ -31,7 +31,7 @@ const tokenHint = (): StepResult => ({
   docs: 'apps/mcp/README.md',
 })
 
-const writeClaude = async (system: System, target: McpTarget): Promise<StepResult> => {
+export const writeClaude = async (system: System, target: McpTarget): Promise<StepResult> => {
   const existing = await system.run('claude', ['mcp', 'get', 'ixa'], { timeoutMs: 15_000 })
   if (existing.kind === 'not_found') {
     return { id: 'mcp.claude', status: 'failed', message: 'claude コマンドがありません（Claude Code が入っていない）' }
@@ -56,9 +56,20 @@ const writeCodex = async (system: System, target: McpTarget): Promise<StepResult
   return { id: 'mcp.codex', status: 'done', message: `${file} に [mcp_servers.ixa] を足しました` }
 }
 
+/** 登録の中身（`.env` から）。ワークスペースの ID が空なら null。 */
+export const mcpTargetOf = (repo: RepoPaths, env: EnvValues): McpTarget | null =>
+  isBlank(env, 'NEXT_PUBLIC_WORKSPACE_ID')
+    ? null
+    : {
+        tsx: repo.mcpTsx,
+        main: repo.mcpMain,
+        apiUrl: `http://127.0.0.1:${String(portsOf(env).api)}`,
+        workspaceId: (env['NEXT_PUBLIC_WORKSPACE_ID'] ?? '').trim(),
+      }
+
 export const mcpCommand = async (system: System, repo: RepoPaths, out: Output, options: Options): Promise<number> => {
-  const env = await readEnv(system, repo)
-  if (isBlank(env, 'NEXT_PUBLIC_WORKSPACE_ID')) {
+  const target = mcpTargetOf(repo, await readEnv(system, repo))
+  if (target === null) {
     const step: StepResult = {
       id: 'mcp.workspace',
       status: 'failed',
@@ -68,12 +79,6 @@ export const mcpCommand = async (system: System, repo: RepoPaths, out: Output, o
     out.line(formatStep(step))
     out.result({ command: 'mcp', ok: false, steps: [step] })
     return 1
-  }
-  const target: McpTarget = {
-    tsx: repo.mcpTsx,
-    main: repo.mcpMain,
-    apiUrl: `http://127.0.0.1:${String(portsOf(env).api)}`,
-    workspaceId: (env['NEXT_PUBLIC_WORKSPACE_ID'] ?? '').trim(),
   }
   const both = !options.claude && !options.codex
   const claude = both || options.claude

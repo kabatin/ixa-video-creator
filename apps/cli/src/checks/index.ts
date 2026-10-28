@@ -6,6 +6,7 @@ import { gatherDb, judgeDb } from './db.js'
 import { gatherEnv, judgeEnv } from './env.js'
 import { gatherLocalAi, judgeLocalAi } from './local-ai.js'
 import { gatherOptional, judgeOptional } from './optional.js'
+import { gatherRender, judgeRender } from './render.js'
 import { gatherRuntime, judgeRuntime } from './runtime.js'
 import { pendingCheck, readMarker } from '../update/marker.js'
 import { gatherTools, judgeTools } from './tools.js'
@@ -23,8 +24,9 @@ export const runChecks = async (system: System, repo: RepoPaths): Promise<readon
   const expectedPnpm = expectedPnpmVersion(parseRootPackage(rootPackage))
   const envFacts = await gatherEnv(system, repo)
   const env = envFacts.envContent === null ? {} : parseEnvFile(envFacts.envContent)
-  const [tools, db, runtime, localAi, optional] = await Promise.all([
+  const [tools, render, db, runtime, localAi, optional] = await Promise.all([
     gatherTools(system, expectedPnpm),
+    gatherRender(system, repo),
     gatherDb(system, env, repo.root),
     gatherRuntime(system, env, repo.root),
     gatherLocalAi(system, env),
@@ -32,6 +34,7 @@ export const runChecks = async (system: System, repo: RepoPaths): Promise<readon
   ])
   return byGroup([
     ...judgeTools(tools),
+    ...judgeRender(render),
     pendingCheck(await readMarker(system, repo)),
     ...judgeEnv(envFacts),
     ...judgeDb(db),

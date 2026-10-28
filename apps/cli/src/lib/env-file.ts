@@ -38,3 +38,23 @@ export const webLocalOverrides = (rootEnv: EnvValues, webLocal: EnvValues): read
 /** 行が無ければ末尾に足す（`fillEmptyEnvValue` は行が無いと何もしないため）。値の入った行は触らない。 */
 export const appendEnvLine = (content: string, key: string, value: string): string =>
   `${content}${content.endsWith('\n') || content === '' ? '' : '\n'}${key}=${value}\n`
+
+const escapeKey = (key: string): string => key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * 値を決めて書く。書いてある行（`# ` で始まる行は除く）があれば最初の 1 行の値を入れ替え、無ければ末尾に足す。
+ * **値の入った行を書き換えるので、呼ぶ側が「書き換えてよい」と決めたときだけ使う**（stub → claude_cli など）。
+ */
+export const setEnvValue = (content: string, key: string, value: string): string => {
+  const pattern = new RegExp(`^([ \\t]*(?:export[ \\t]+)?${escapeKey(key)}[ \\t]*=).*$`, 'm')
+  return pattern.test(content) ? content.replace(pattern, (_line, head: string) => `${head}${value}`) : appendEnvLine(content, key, value)
+}
+
+/** カンマ区切りの一覧に 1 つ足す（あれば何もしない。空白と空の項目は落とす）。 */
+export const addToListValue = (current: string, item: string): string => {
+  const items = current
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part !== '')
+  return (items.includes(item) ? items : [...items, item]).join(',')
+}

@@ -32,6 +32,10 @@ export const paths = (root: string) => ({
   nodeModules: path.join(root, 'node_modules'),
   mcpTsx: path.join(root, 'apps', 'mcp', 'node_modules', '.bin', 'tsx'),
   mcpMain: path.join(root, 'apps', 'mcp', 'src', 'main.ts'),
+  /** 書き出す worker のディレクトリ（Remotion の headless Chrome はここの node_modules/.remotion に入る）。 */
+  workerDir: path.join(root, 'apps', 'worker'),
+  cliTsx: path.join(root, 'apps', 'cli', 'node_modules', '.bin', 'tsx'),
+  remotionBrowserScript: path.join(root, 'packages', 'render', 'scripts', 'remotion-browser.ts'),
 })
 export type RepoPaths = ReturnType<typeof paths>
 

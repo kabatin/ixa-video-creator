@@ -18,7 +18,14 @@ import {
   minimaxMusic3Model,
   stableAudioMusicModel,
 } from '@ixa/provider-music'
-import { KLEIN_IDENTITY, codexCliImageModel, kleinImageModel, stubGeminiLikeImageModel } from '@ixa/provider-image'
+import {
+  checkKleinHealth,
+  codexCliImageModel,
+  klein4bImageModel,
+  kleinImageModel,
+  stubGeminiLikeImageModel,
+  zImageTurboModel,
+} from '@ixa/provider-image'
 import {
   createClaudeCliStoryboardDrafter,
   createStubAssistant,
@@ -29,7 +36,7 @@ import {
   type StoryboardDrafter,
   type TextAssistant,
 } from '@ixa/provider-llm'
-import { checkLocalServerHealth, localVideoServerWirings } from '@ixa/provider-video'
+import { localVideoServerWirings } from '@ixa/provider-video'
 import { chooseMusicModel, type MusicModelChoice } from '../music/music-model.js'
 import { chooseSfxModel, sfxModelsFor, type SfxModelChoice } from '../sfx/sfx-model.js'
 import type { AiRoutesDeps } from '../routes/ai.js'
@@ -88,14 +95,15 @@ const localServerProbes = (config: AppConfig): Readonly<Record<LocalServerName, 
     return { enabled: wiring.enabled, enabledBy: 'LOCAL_VIDEO_GENERATOR', check: () => wiring.checkHealth() }
   }
   // 画像のサーバ（ADR-0047）。動画の表（`localVideoServerWirings`）には入れない（Provider の種類が違う）。
+  // 1 台で FLUX.2 [klein]（9B・4B）と Z Image Turbo を出すので、workflow ごとに見る（ADR-0065）。
   const klein: LocalServerProbe = {
     enabled: config.providers.localImageGenerators.includes('klein'),
     enabledBy: 'LOCAL_IMAGE_GENERATOR',
-    check: () =>
-      checkLocalServerHealth({
-        identity: KLEIN_IDENTITY,
+    check: (workflowId) =>
+      checkKleinHealth({
         baseUrl: config.providers.kleinApiUrl,
         token: config.providers.kleinApiToken,
+        ...(workflowId === undefined ? {} : { workflowId }),
       }),
   }
   // 曲のサーバ（ADR-0048）。画像と同じく動画の表には入れない。1 台で ACE-Step と MiniMax-Music3 を出すので、
@@ -158,6 +166,9 @@ export const createAiWiring = (config: AppConfig, db: DbClient): AiWiring => {
     stub: { providerId: stubGeminiLikeImageModel.providerId, modelId: stubGeminiLikeImageModel.id },
     codex_cli: { providerId: codexCliImageModel.providerId, modelId: codexCliImageModel.id },
     klein: { providerId: kleinImageModel.providerId, modelId: kleinImageModel.id },
+    // 同じ klein-api の別の段・別の workflow（ADR-0065）。
+    klein_4b: { providerId: klein4bImageModel.providerId, modelId: klein4bImageModel.id },
+    z_image: { providerId: zImageTurboModel.providerId, modelId: zImageTurboModel.id },
   }
   // 曲（ADR-0048）。`.env` で有効にしていなければ null（選べても作れない理由を言う）。
   // Stable Audio の歌なし BGM は効果音と同じ sfx-api なので、効果音のサーバの有効・無効に従う。
