@@ -116,6 +116,15 @@ describe('spawnCliStreamRunner（本物の子プロセス。CLI の代わりに 
     )
     return { lines, handle }
   }
+  /**
+   * 子が 1 行書くまで待つ。決まった時間（以前は 300ms）だけ待つと、混んだ CI では node が立ち上がって
+   * 書く前に止めてしまい、`[]` になって落ちていた（2026-10-26・27・28）。vitest の既定の 5 秒より前に諦める。
+   */
+  const FIRST_LINE_TIMEOUT_MS = 4_000
+  const untilFirstLine = async (lines: readonly string[]): Promise<void> => {
+    const deadline = Date.now() + FIRST_LINE_TIMEOUT_MS
+    while (lines.length === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20))
+  }
 
   it('行ごとに順に受け取る（途中で切れて届いた行も 1 行にする）。stdin で依頼を渡す', async () => {
     const path = script(
@@ -155,7 +164,7 @@ process.stdin.on('end', () => {
       `process.stdout.write('started\\n'); setInterval(() => {}, 1000); process.on('SIGTERM', () => process.exit(143))`,
     )
     const { lines, handle } = run(path)
-    await new Promise((resolve) => setTimeout(resolve, 300))
+    await untilFirstLine(lines)
     handle.stop()
     const exit = await handle.exited
     expect(lines).toEqual(['started'])
