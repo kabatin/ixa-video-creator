@@ -1,4 +1,4 @@
-import type { ImageCheckResult, ImageGenerationJobId } from '@ixa/domain'
+import type { AiSettings, AiToolId, ImageCheckResult, ImageGenerationJobId } from '@ixa/domain'
 import { createInMemoryImageCheckRepository } from '@ixa/generation/testing'
 import type { ImageCheckRequest, ImageChecker } from '@ixa/provider-llm'
 import { processImageJob, type ImageJobResult, type ImageProcessorDeps } from '../processor.js'
@@ -51,11 +51,17 @@ export const RETRY = (score: number): ImageCheckResult => ({
   promptDelta: 'exactly five fingers on each hand',
 })
 
+/** 文章の AI と絵のチェック（ADR-0066）。既定は絵のチェックを入れる（チェックの手順を確かめる試験が多いため）。 */
+export const checkSettingsOf =
+  (text: AiToolId, image = true) =>
+  (): Promise<Pick<AiSettings, 'text' | 'checks'>> =>
+    Promise.resolve({ text, checks: { image, video: false } })
+
 /** チェックの材料の既定。文章の AI は Claude ではない（チェックを飛ばして今までどおり当てる）。 */
 export const checkDeps = () => ({
   imageChecks: createInMemoryImageCheckRepository(),
   checker: fakeImageChecker([PASS]),
-  textTool: () => Promise.resolve('codex_cli' as const),
+  checkSettings: checkSettingsOf('codex_cli'),
   maxRetries: 2,
   queue: recordingImageQueue(),
 })

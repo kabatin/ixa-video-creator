@@ -12,7 +12,7 @@ import {
 } from '@ixa/db'
 import {
   ImageCheckMaxRetries,
-  type AiToolId,
+  type AiSettings,
   type GenerationContextSource,
   type MediaAssetId,
   type ProjectEventPublisher,
@@ -93,8 +93,11 @@ export const createImageWiring = (input: {
   readonly localGpuLease: LocalGpuLease
   /** 順番待ちの絵を積み直す先（image キュー）。 */
   readonly imageQueue: ImageQueueAdd
-  /** いま選んでいる文章の AI（ADR-0032）。Claude のときだけ作った絵をチェックする（ADR-0055）。 */
-  readonly textTool: () => Promise<AiToolId>
+  /**
+   * いま選んでいる文章の AI と AI のチェック（ADR-0032・0066）。絵のチェックを入れていて、
+   * 文章の AI が Claude のときだけ作った絵をチェックする（ADR-0055）。
+   */
+  readonly checkSettings: () => Promise<Pick<AiSettings, 'text' | 'checks'>>
   /** 自動のやり直しの上限（ADR-0055）。 */
   readonly maxRetries: number
   /** チェックに使う Claude のモデル（`IMAGE_CHECK_MODEL`。既定は Sonnet のモデル ID）。**チェックにだけ効かせる**。 */
@@ -106,7 +109,7 @@ export const createImageWiring = (input: {
     imageJobs: createImageJobRepository(input.db),
     imageChecks: createImageCheckRepository(input.db),
     checker: createClaudeCliImageChecker({ model: input.checkModel }),
-    textTool: input.textTool,
+    checkSettings: input.checkSettings,
     // 設定の範囲は domain の規則で確かめ直す（設定側と食い違ったら起動時に落とす）。
     maxRetries: ImageCheckMaxRetries.parse(input.maxRetries),
     queue: imageQueuePorts(input.imageQueue),

@@ -139,7 +139,7 @@ const chosenVideoProvider = (config: AppConfig, db: DbClient) => {
   return async (): Promise<ProviderId> => ProviderIdSchema.parse((await chosen()).video)
 }
 
-/** いま選んでいるテキストの AI。自動レビューの vision 判定に使う（Claude なら画像を見る Claude）。 */
+/** いま選んでいるテキストの AI。動きの読み取り（ADR-0054。人が頼んだときだけ）に使う。 */
 const chosenTextTool = (config: AppConfig, db: DbClient) => {
   const chosen = chosenAi(config, db)
   return async (): Promise<AiToolId> => (await chosen()).text
@@ -390,7 +390,7 @@ export const createGenerationWiring = (
    * 再生成が通ったら generation キューへ戻る。**判定はしない。積むだけ。**
    */
   const regenerationQueue = new Queue(QUEUE_NAMES.regeneration, { connection })
-  const reviewWiring = createReviewWiring(db, storage, logger, chosenTextTool(config, db), {
+  const reviewWiring = createReviewWiring(db, storage, logger, chosenAi(config, db), {
     regeneration: {
       enqueue: async (takeId) => {
         await regenerationQueue.add('regenerate', { takeId })
@@ -432,8 +432,9 @@ export const createGenerationWiring = (
       },
       localGpuLease,
       imageQueue,
-      // 作った絵のチェック（ADR-0055）。文章の AI が Claude のときだけ見る。上限は設定から。
-      textTool: chosenTextTool(config, db),
+      // 作った絵のチェック（ADR-0055）。絵のチェックを入れていて（ADR-0066。既定は切る）、
+      // 文章の AI が Claude のときだけ見る。上限は設定から。
+      checkSettings: chosenAi(config, db),
       maxRetries: config.imageCheckMaxRetries,
       checkModel: config.imageCheckModel,
     }),

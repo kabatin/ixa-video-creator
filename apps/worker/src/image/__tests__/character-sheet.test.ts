@@ -29,7 +29,7 @@ import {
 } from '../../generation/__tests__/doubles.js'
 import { retryImageJobInput } from '@ixa/db'
 import type { ImageProcessorDeps } from '../processor.js'
-import { checkDeps, fakeImageChecker, PASS, RETRY, runImageJob } from './queue-doubles.js'
+import { checkDeps, checkSettingsOf, fakeImageChecker, PASS, RETRY, runImageJob } from './queue-doubles.js'
 import { FAKE_PNG, fakeImageProvider } from './doubles.js'
 
 /**
@@ -185,7 +185,7 @@ describe('キャラクターシートのジョブ', () => {
     const f = await setup()
     const deps = {
       ...f.deps,
-      textTool: () => Promise.resolve('claude_cli' as const),
+      checkSettings: checkSettingsOf('claude_cli'),
       checker: fakeImageChecker([RETRY(0.2), PASS]),
       adapters: [{ provider: { ...f.provider, exclusiveResource: 'local-gpu' as const }, model: codexCliImageModel }],
     }
@@ -201,7 +201,7 @@ describe('キャラクターシートのジョブ', () => {
   /** レビューの指摘（2026-10-19）。Codex で当てたあと人が押したやり直しのシートも、識別画像に入る。 */
   it('人が押したやり直しのシートも、識別画像の四面図に足す', async () => {
     const f = await setup()
-    const deps = { ...f.deps, textTool: () => Promise.resolve('claude_cli' as const), checker: fakeImageChecker([RETRY(0.3)]) }
+    const deps = { ...f.deps, checkSettings: checkSettingsOf('claude_cli'), checker: fakeImageChecker([RETRY(0.3)]) }
     await runImageJob(deps, { imageJobId: f.job.id })
     const first = await f.deps.imageJobs.findById(f.job.id)
 

@@ -10,7 +10,7 @@ import type {
 import {
   compileStartFramePrompt,
   resolveReferences,
-  type AiToolId,
+  type AiSettings,
   type AspectRatio,
   type GenerationContextSource,
   type ImageGenerationJob,
@@ -69,10 +69,10 @@ export type ImageProcessorDeps = {
   readonly imageJobs: ImageJobRepository
   /** 作った絵のチェック（ADR-0055）。 */
   readonly imageChecks: ImageCheckRepository
-  /** 絵を見る口（Claude CLI）。文章の AI が Claude のときだけ使う。 */
+  /** 絵を見る口（Claude CLI）。絵のチェックを入れていて、文章の AI が Claude のときだけ使う（ADR-0066）。 */
   readonly checker: ImageChecker
-  /** いま選んでいる文章の AI（ADR-0032）。チェックするたびに読む。 */
-  readonly textTool: () => Promise<AiToolId>
+  /** いま選んでいる文章の AI と AI のチェック（ADR-0032・0066）。チェックするたびに読む。 */
+  readonly checkSettings: () => Promise<Pick<AiSettings, 'text' | 'checks'>>
   /** 自動のやり直しの上限（回数。既定 2）。 */
   readonly maxRetries: number
   /** image キューへ積む口。描く手順（やり直し）とチェックの手順。 */

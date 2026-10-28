@@ -10,7 +10,7 @@ import {
   createTakeRepository,
   type DbClient,
 } from '@ixa/db'
-import type { AiToolId, MusicAnalysis, Project, ProjectId } from '@ixa/domain'
+import type { AiSettings, MusicAnalysis, Project, ProjectId } from '@ixa/domain'
 import { brandReviewer, musicReviewer, technicalReviewer } from '@ixa/review'
 import type { DeterministicReviewer } from '@ixa/review'
 import { createClaudeCliVisionReviewer, createStubVisionReviewer } from '@ixa/provider-llm'
@@ -106,8 +106,8 @@ export const createReviewWiring = (
   db: DbClient,
   storage: ObjectStorage,
   logger: Logger,
-  /** いま選んでいるテキストの AI（ADR-0032）。判定するたびに読む。 */
-  textTool: () => Promise<AiToolId>,
+  /** いま選んでいるテキストの AI と動画のチェック（ADR-0032・0066）。判定するたびに読む。 */
+  checkSettings: () => Promise<Pick<AiSettings, 'text' | 'checks'>>,
   queues: {
     /** review が fail した Take を回す先。積むだけで可否は判定しない。 */
     readonly regeneration: RegenerationJobQueue
@@ -123,11 +123,12 @@ export const createReviewWiring = (
 
   /**
    * vision 判定は「使う AI」のテキストで選ぶ（制作者 2026-10-01「自動レビューの繋ぎ」）。
-   * Claude なら画像を見る Claude のレビュー（手元に落としたフレームを Read で開く）、それ以外はお試し。
+   * 動画のチェックを入れていて Claude なら画像を見る Claude のレビュー（手元に落としたフレームを Read で開く）、
+   * それ以外はお試し（ADR-0066。既定は切る）。
    */
   const visionReviewers: readonly VisionReviewer[] = [
     createChosenVisionReviewer({
-      textTool,
+      checkSettings,
       claude: createClaudeCliVisionReviewer(),
       stub: createStubVisionReviewer(),
     }),

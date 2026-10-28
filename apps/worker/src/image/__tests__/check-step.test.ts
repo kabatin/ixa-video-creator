@@ -30,11 +30,11 @@ import {
   inMemoryShots,
   silentLogger,
 } from '../../generation/__tests__/doubles.js'
-import { CHECK_FAILED_NOTE, CHECK_SKIPPED_NOTE } from '../check-step.js'
+import { CHECK_FAILED_NOTE, CHECK_OFF_NOTE, CHECK_SKIPPED_NOTE } from '../check-step.js'
 import { failInterruptedImageJob } from '../interrupted.js'
 import { processImageJob, type ImageProcessorDeps } from '../processor.js'
 import { fakeImageProvider } from './doubles.js'
-import { checkDeps, fakeImageChecker, PASS, recordingImageQueue, RETRY, runImageJob } from './queue-doubles.js'
+import { checkDeps, checkSettingsOf, fakeImageChecker, PASS, recordingImageQueue, RETRY, runImageJob } from './queue-doubles.js'
 
 /**
  * 作った絵のチェックと、当てる・やり直すの判断（ADR-0055）。開始フレームで確かめる。
@@ -80,6 +80,8 @@ const queuedJob = (): ImageGenerationJob => ({
 type Options = {
   readonly results?: readonly ImageCheckResult[]
   readonly textTool?: 'claude_cli' | 'codex_cli'
+  /** 絵のチェック（ADR-0066）。既定は入れる。 */
+  readonly imageCheck?: boolean
   readonly local?: boolean
   readonly maxRetries?: number
   /** この回数目（1 から）の submit を断る。 */
@@ -99,7 +101,7 @@ const setup = (options: Options = {}) => {
   const deps = {
     ...checkDeps(),
     checker,
-    textTool: () => Promise.resolve(options.textTool ?? 'claude_cli'),
+    checkSettings: checkSettingsOf(options.textTool ?? 'claude_cli', options.imageCheck ?? true),
     maxRetries: options.maxRetries ?? 2,
     imageJobs: createInMemoryImageJobRepository([job]),
     shots: inMemoryShots([shot]),
@@ -164,6 +166,39 @@ describe('チェックして当てる', () => {
     expect(checker.calls).toHaveLength(0)
     expect(deps.imageChecks.snapshot()).toMatchObject([{ outcome: 'skipped', verdict: null, note: CHECK_SKIPPED_NOTE }])
     expect(await manualStartFrameOf(deps.shotReferences, shot.id)).not.toBeNull()
+  })
+
+  /** ADR-0066。既定は切る（制作者 2026-10-28「トークン消費激しすぎる」）。Claude を選んでいても見ない。 */
+  it('絵のチェックを切っていれば、Claude を選んでいても見せずに当てる（切ったことを残す）', async () => {
+    const { job, deps, checker } = setup({ imageCheck: false })
+    await runImageJob(deps, { imageJobId: job.id })
+
+    expect(checker.calls).toHaveLength(0)
+    expect(deps.imageChecks.snapshot()).toMatchObject([{ outcome: 'skipped', verdict: null, costUsd: 0, note: CHECK_OFF_NOTE }])
+    expect(await manualStartFrameOf(deps.shotReferences, shot.id)).not.toBeNull()
+  })
+
+  it('絵のチェックを切っていれば、手元の AI でも描き直さない', async () => {
+    const { job, deps, checker } = setup({ imageCheck: false, results: [RETRY(0.1), PASS] })
+    await runImageJob(deps, { imageJobId: job.id })
+
+    expect(checker.calls).toHaveLength(0)
+    expect(jobsOf(deps).map((candidate) => candidate.attempt)).toEqual([1])
+    expect((await deps.imageJobs.findById(job.id))?.appliedAt).not.toBeNull()
+  })
+
+  it('チェックするたびに設定を読む（画面で入れたら次の 1 枚から効く）', async () => {
+    const { deps, checker } = setup()
+    let image = false
+    const live = { ...deps, checkSettings: () => Promise.resolve({ text: 'claude_cli' as const, checks: { image, video: false } }) }
+    const first = await deps.imageJobs.create(retryImageJobInput(queuedJob()))
+    await runImageJob(live, { imageJobId: first.id })
+    expect(checker.calls).toHaveLength(0)
+
+    image = true
+    const second = await deps.imageJobs.create(retryImageJobInput(queuedJob()))
+    await runImageJob(live, { imageJobId: second.id })
+    expect(checker.calls).toHaveLength(1)
   })
 
   /** レビューの指摘（2026-10-19）。絵の素材が見つからなければ、空のキーで保管庫を読まずに、素材の ID を付けて投げる。 */

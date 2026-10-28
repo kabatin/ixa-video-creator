@@ -2,6 +2,7 @@ import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { retryImageJobInput } from '@ixa/db'
 import {
+  aiCheckGate,
   chainToSettle,
   enforceImageCheckVerdict,
   pickImageToApply,
@@ -32,6 +33,8 @@ import { localReferenceResolver, type ImageAdapter, type ImageJobResult, type Jo
 
 /** 画面に出る文。実装の言葉を入れない。 */
 export const CHECK_SKIPPED_NOTE = '「使う AI」の文章が Claude ではないため、チェックしていません。'
+/** 絵のチェックを切っているとき（既定。ADR-0066）。 */
+export const CHECK_OFF_NOTE = '「使う AI」で絵のチェックを切っているため、チェックしていません。'
 export const CHECK_FAILED_NOTE = 'チェックの AI から答えが返らなかったため、チェックせずに使います。'
 export const CHECK_NO_TOOL_NOTE = 'この環境ではこの絵の AI を使えないため、チェックしていません。'
 
@@ -82,7 +85,10 @@ const runCheck = async (
       note,
       costUsd: 0,
     })
-  if ((await deps.textTool()) !== 'claude_cli') return skipped(CHECK_SKIPPED_NOTE)
+  // 切っていれば Claude に見せない（やり直しも積まない）。入れていても Claude でなければ見ない（ADR-0066）。
+  const gate = aiCheckGate(await deps.checkSettings(), 'image')
+  if (gate === 'off') return skipped(CHECK_OFF_NOTE)
+  if (gate === 'not_claude') return skipped(CHECK_SKIPPED_NOTE)
   if (adapter === undefined || job.mediaAssetId === null) return skipped(CHECK_NO_TOOL_NOTE)
   try {
     const { result, costUsd } = await askChecker({ ...deps, ...adapter }, job, job.mediaAssetId)
