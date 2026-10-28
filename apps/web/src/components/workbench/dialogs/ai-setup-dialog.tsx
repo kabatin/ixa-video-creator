@@ -7,6 +7,7 @@ import { useWorkbench } from '@/components/workbench/workbench-context'
 import { describeForPerson } from '@/lib/api-error'
 import { createApiClient } from '@/lib/api-client'
 import type { AiSettingsApi, WireAiTools } from '@/lib/ai-settings-api'
+import { AiCheckSwitches } from '@/components/workbench/dialogs/ai-check-switches'
 import { aiOptionsFor, initialAiChoice, type AiOption } from '@/lib/ai-setup'
 import { fieldErrorsOf, type ServerFieldErrors } from '@/lib/library-api'
 
@@ -232,6 +233,13 @@ export const AiSetupDialogBody = ({ api }: { readonly api?: AiSettingsApi }) => 
           }}
         />
       </div>
+      <AiCheckSwitches
+        checks={loaded.choice.checks}
+        text={loaded.choice.text}
+        onChange={(checks) => {
+          setLoaded({ ...loaded, choice: { ...loaded.choice, checks } })
+        }}
+      />
       {formError !== null && (
         <p role="alert" className="text-sm text-danger">
           {formError}

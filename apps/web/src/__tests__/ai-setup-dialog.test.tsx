@@ -64,8 +64,8 @@ const TOOLS: readonly WireAiTool[] = [
   },
 ]
 
-const RECOMMENDED: AiSettings = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub' }
-const CURRENT: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub' }
+const RECOMMENDED: AiSettings = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub', checks: { image: false, video: false } }
+const CURRENT: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub', checks: { image: false, video: false } }
 
 const fakeApi = (overrides: Partial<AiSettingsApi> = {}): AiSettingsApi => ({
   listAiTools: vi.fn(() => Promise.resolve({ tools: [...TOOLS], recommended: RECOMMENDED })),
@@ -148,6 +148,7 @@ describe('AiSetupDialogBody', () => {
         transcribe: 'stub',
         music: 'stub',
         sfx: 'stub',
+        checks: { image: false, video: false },
       })
       expect(value.closeDialog).toHaveBeenCalled()
     })
@@ -178,6 +179,50 @@ describe('AiSetupDialogBody', () => {
     // 中の名前（video）を画面に出さない。
     expect(document.body.textContent).not.toContain('video')
     expect(value.closeDialog).not.toHaveBeenCalled()
+  })
+
+  /** ADR-0066（制作者 2026-10-28「トークン消費激しすぎるから、切り替え可能にしてデフォルトは OFF」）。 */
+  it('Claude のチェックは、初めはどちらも切った状態で出す', async () => {
+    await open()
+
+    expect(screen.getByRole('switch', { name: /描いた絵をチェックする/ })).not.toBeChecked()
+    expect(screen.getByRole('switch', { name: /Take をチェックする/ })).not.toBeChecked()
+    // 入れると Claude の利用枠を使うことを、切り替えの横で言う。
+    expect(screen.getByRole('switch', { name: /描いた絵/ })).toHaveAccessibleDescription(/1 枚描くごとに Claude の利用枠/)
+    expect(screen.getByRole('switch', { name: /Take/ })).toHaveAccessibleDescription(/Take 1 本ごとに Claude の利用枠/)
+  })
+
+  it('絵と Take のチェックを別々に入れて保存する', async () => {
+    const { api } = await open()
+
+    await userEvent.click(screen.getByRole('switch', { name: /描いた絵をチェックする/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'この設定で使う' }))
+
+    await waitFor(() => {
+      expect(api.saveAiSettings).toHaveBeenCalledWith(expect.objectContaining({ checks: { image: true, video: false } }))
+    })
+  })
+
+  it('保存してあるチェックの入り切りをそのまま出す', async () => {
+    await open(
+      fakeApi({
+        getAiSettings: vi.fn(() =>
+          Promise.resolve({ settings: { ...RECOMMENDED, checks: { image: false, video: true } }, source: 'saved' as const }),
+        ),
+      }),
+    )
+
+    expect(screen.getByRole('switch', { name: /描いた絵をチェックする/ })).not.toBeChecked()
+    expect(screen.getByRole('switch', { name: /Take をチェックする/ })).toBeChecked()
+  })
+
+  it('テキストの AI が Claude でなければ、入れても働かないと言う', async () => {
+    await open()
+    expect(screen.queryByText(/いまは入れても働きません/)).toBeNull()
+
+    await userEvent.click(within(await panel(/テキスト/)).getByRole('radio', { name: /お試し/ }))
+
+    expect(screen.getByText(/いまは入れても働きません/)).toBeInTheDocument()
   })
 
   it('「あとで」は保存せずに閉じる', async () => {

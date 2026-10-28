@@ -93,8 +93,8 @@ describe('aiOptionsFor', () => {
 })
 
 describe('initialAiChoice', () => {
-  const recommended: AiSettings = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'macos_say', transcribe: 'stub', music: 'stub', sfx: 'stub' }
-  const current: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub' }
+  const recommended: AiSettings = { text: 'claude_cli', image: 'codex_cli', video: 'local', voice: 'macos_say', transcribe: 'stub', music: 'stub', sfx: 'stub', checks: { image: false, video: false } }
+  const current: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub', checks: { image: false, video: false } }
 
   it('まだ選んでいなければ勧める組み合わせから始める', () => {
     expect(initialAiChoice({ settings: current, source: 'default' }, recommended)).toEqual(
