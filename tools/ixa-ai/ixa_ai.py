@@ -88,7 +88,7 @@ CATALOG_JSON = r"""
     },
     {
       "id": "klein-9b", "label": "FLUX.2 [klein] 9B", "kinds": ["image"], "server": "klein-api", "ixaAi": ["klein"],
-      "downloadGb": null, "peakDiskGb": null, "ramGb": 11, "ramRecommendedGb": null, "minMacos": "14.0",
+      "downloadGb": 17.8, "peakDiskGb": null, "ramGb": 11, "ramRecommendedGb": null, "minMacos": "14.0",
       "licence": {
         "name": "FLUX Non-Commercial License",
         "summary": "重みは商用不可（作った画像は使える）",
@@ -96,8 +96,8 @@ CATALOG_JSON = r"""
       }
     },
     {
-      "id": "klein-4b", "label": "FLUX.2 [klein] 4B（下書き）", "kinds": ["image"], "server": "klein-api", "ixaAi": ["klein"],
-      "downloadGb": 3.9, "peakDiskGb": null, "ramGb": 5, "ramRecommendedGb": null, "minMacos": "14.0",
+      "id": "klein-4b", "label": "FLUX.2 [klein] 4B（下書き）", "kinds": ["image"], "server": "klein-api", "ixaAi": ["klein_4b"],
+      "downloadGb": 8.6, "peakDiskGb": null, "ramGb": 5, "ramRecommendedGb": null, "minMacos": "14.0",
       "licence": {
         "name": "Apache-2.0",
         "summary": "商用可",
@@ -106,7 +106,7 @@ CATALOG_JSON = r"""
     },
     {
       "id": "z-image-turbo", "label": "Z-Image Turbo", "kinds": ["image"], "server": "klein-api", "ixaAi": ["z_image"],
-      "downloadGb": 11, "peakDiskGb": null, "ramGb": null, "ramRecommendedGb": null, "minMacos": "14.0",
+      "downloadGb": 10.9, "peakDiskGb": null, "ramGb": null, "ramRecommendedGb": null, "minMacos": "14.0",
       "licence": {
         "name": "Apache-2.0",
         "summary": "商用可",

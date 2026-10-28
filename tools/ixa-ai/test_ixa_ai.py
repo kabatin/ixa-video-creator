@@ -141,7 +141,9 @@ class RunnableTest(unittest.TestCase):
         h3 = ixa_ai.item_by_id("h3")
         self.assertIsNone(ixa_ai.disk_problem([h3], 300 * GB))
         self.assertIn("ディスクが足りません", ixa_ai.disk_problem([h3], 150 * GB))
-        self.assertEqual(ixa_ai.disk_need_gb([ixa_ai.item_by_id("klein-9b")]), (0, ["klein-9b"]))
+        unknown = {**ixa_ai.item_by_id("klein-9b"), "downloadGb": None, "peakDiskGb": None}
+        self.assertEqual(ixa_ai.disk_need_gb([unknown]), (0, ["klein-9b"]))
+        self.assertEqual(ixa_ai.disk_need_gb([ixa_ai.item_by_id("klein-9b")]), (17.8, []))
 
 
 class ConnectCodeTest(unittest.TestCase):
