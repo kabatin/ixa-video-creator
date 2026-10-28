@@ -37,6 +37,11 @@ export type VisionStageInput = {
   readonly workDir: string
   /** セリフの話し手の名前（ADR-0059）。引けなければ「話し手不明」になる。 */
   readonly speakerName?: (id: CharacterId) => string | null
+  /**
+   * 画像を見る判定を飛ばす理由（ADR-0066。Take のチェックを切っている・テキストが Claude でない）。
+   * あればレビュアを呼ばず、判定していないことを warn で残す。null・省略なら判定する。
+   */
+  readonly skipReason?: string | null
 }
 
 export type VisionStageResult = {
@@ -163,14 +168,15 @@ export const NO_FRAMES_MESSAGE =
  */
 const skippedFindings = (
   reviewers: readonly VisionReviewer[],
+  message: string,
 ): readonly CreateReviewFindingInput[] =>
   [...new Set(reviewers.flatMap((reviewer) => reviewer.supports))].map((reviewer) => ({
     reviewer,
     severity: 'warn' as const,
     score: null,
-    message: NO_FRAMES_MESSAGE,
+    message,
     evidence: null,
-    // 直すのはプロンプトではなく取り込み経路。再生成ループに差分を渡さない。
+    // 直すのはプロンプトではない（取り込み経路・設定）。再生成ループに差分を渡さない。
     suggestedPromptDelta: null,
   }))
 
@@ -182,12 +188,17 @@ const skippedFindings = (
  * ただし黙って空を返すのではなく、判定していないことを warn として残す。
  */
 export const runVisionStage = async (input: VisionStageInput): Promise<VisionStageResult> => {
+  // 判定しないと決まっていれば、フレームも落とさない。fail は出さない（作り直しを積ませない。ADR-0066）。
+  if (input.skipReason !== undefined && input.skipReason !== null) {
+    input.logger.info({ shotId: input.shot.id, reason: input.skipReason }, '画像を見る判定はしません')
+    return { findings: skippedFindings(input.reviewers, input.skipReason), costUsd: 0 }
+  }
   if (subjectKeys(input.asset).length === 0) {
     input.logger.warn(
       { mediaAssetId: input.asset.id, shotId: input.shot.id },
       '判定できるフレームが無いため vision レビューを実行しません',
     )
-    return { findings: skippedFindings(input.reviewers), costUsd: 0 }
+    return { findings: skippedFindings(input.reviewers, NO_FRAMES_MESSAGE), costUsd: 0 }
   }
 
   // 判定のたびに置き場を作り、終わったら必ず片付ける（失敗しても）。

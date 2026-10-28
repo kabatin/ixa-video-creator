@@ -69,6 +69,8 @@ type HarnessOptions = {
   readonly withAsset?: boolean
   /** 生成を頼んだときに「NG なら自動で作り直す」を選んだか（ADR-0057）。既定は選んでいない。 */
   readonly autoRetake?: boolean
+  /** 画像を見る判定を飛ばす理由（ADR-0066）。省けば判定する。 */
+  readonly visionSkipReason?: () => Promise<string | null>
 }
 
 const harness = (options: HarnessOptions = {}): Harness => {
@@ -99,6 +101,7 @@ const harness = (options: HarnessOptions = {}): Harness => {
     workDir: join(tmpdir(), 'ixa-review-processor-test'),
     logger: silentLogger,
     measurer: options.measurer ?? (() => Promise.resolve(measurements(take, shot))),
+    ...(options.visionSkipReason === undefined ? {} : { visionSkipReason: options.visionSkipReason }),
   }
 
   return { deps, takeId: take.id, takes, reviews, vision, regeneration }
@@ -308,6 +311,68 @@ describe('processReviewJob', () => {
 
       expect(outcome).toEqual({ state: 'reviewed', verdict: 'warn' })
       expect(regeneration.enqueued()).toHaveLength(0)
+    })
+
+    /**
+     * ADR-0066。Take のチェックを切っている（既定）・テキストが Claude でないときは、画像を見る判定をしない。
+     * 前はお試しのレビュアが入力から決まる結果で判定し、fail なら自動の作り直しを積み、「作り直し推奨」の印も付いた。
+     */
+    describe('画像を見る判定を飛ばすとき（Take のチェックを切っている）', () => {
+      const failingVision = () =>
+        fakeVisionReviewer({ result: visionResult({ severity: 'fail', score: 0.1 }), costUsd: 0 })
+
+      it('レビュアが fail を返すはずでも呼ばず、自動の作り直しを選んだ Take でも積まない', async () => {
+        const vision = failingVision()
+        const { deps, takeId, regeneration, takes } = harness({
+          vision,
+          autoRetake: true,
+          visionSkipReason: () => Promise.resolve('切っています'),
+        })
+
+        const outcome = await processReviewJob(deps, { takeId })
+
+        expect(vision.calls()).toHaveLength(0)
+        expect(outcome).toEqual({ state: 'reviewed', verdict: 'warn' })
+        expect(regeneration.enqueued()).toHaveLength(0)
+        // 不合格（failed）にしないので「作り直し推奨」の印も付かない。
+        expect((await takes.findById(takeId))?.reviewStatus).toBe('warned')
+      })
+
+      it('判定していないことを指摘に残す（合格に化けさせない）', async () => {
+        const { deps, takeId, reviews } = harness({ visionSkipReason: () => Promise.resolve('切っています') })
+
+        await processReviewJob(deps, { takeId })
+
+        const run = reviews.runs()[0]
+        expect(run?.verdict).toBe('warn')
+        expect(run?.costUsd).toBe(0)
+        expect(reviews.findings().map((f) => [f.reviewer, f.severity, f.message])).toEqual([
+          ['identity', 'warn', '切っています'],
+        ])
+      })
+
+      it('決まった規則のレビュアの fail はそのまま（作り直しも今までどおり積む）', async () => {
+        const vision = failingVision()
+        const { deps, takeId, regeneration } = harness({
+          vision,
+          deterministic: [reviewerReturning([finding()])],
+          autoRetake: true,
+          visionSkipReason: () => Promise.resolve('切っています'),
+        })
+
+        expect(await processReviewJob(deps, { takeId })).toEqual({ state: 'reviewed', verdict: 'fail' })
+        expect(regeneration.enqueued()).toEqual([takeId])
+      })
+
+      it('飛ばす理由が無ければ（入れていて Claude）、今までどおり判定して fail なら積む', async () => {
+        const vision = failingVision()
+        const { deps, takeId, regeneration } = harness({ vision, autoRetake: true, visionSkipReason: () => Promise.resolve(null) })
+
+        await processReviewJob(deps, { takeId })
+
+        expect(vision.calls()).toHaveLength(1)
+        expect(regeneration.enqueued()).toEqual([takeId])
+      })
     })
 
     it('pass では積まない', async () => {

@@ -13,9 +13,9 @@ import {
 import type { AiSettings, MusicAnalysis, Project, ProjectId } from '@ixa/domain'
 import { brandReviewer, musicReviewer, technicalReviewer } from '@ixa/review'
 import type { DeterministicReviewer } from '@ixa/review'
-import { createClaudeCliVisionReviewer, createStubVisionReviewer } from '@ixa/provider-llm'
+import { createClaudeCliVisionReviewer } from '@ixa/provider-llm'
 import type { VisionReviewer } from '@ixa/provider-llm'
-import { createChosenVisionReviewer } from './review/chosen-reviewer.js'
+import { visionSkipReasonOf } from './review/vision-gate.js'
 import type { ObjectStorage } from '@ixa/storage'
 import type { Logger } from 'pino'
 import type {
@@ -122,17 +122,11 @@ export const createReviewWiring = (
   const brandAssets = createBrandAssetRepository(db)
 
   /**
-   * vision 判定は「使う AI」のテキストで選ぶ（制作者 2026-10-01「自動レビューの繋ぎ」）。
-   * 動画のチェックを入れていて Claude なら画像を見る Claude のレビュー（手元に落としたフレームを Read で開く）、
-   * それ以外はお試し（ADR-0066。既定は切る）。
+   * vision 判定は画像を見る Claude のレビュー（手元に落としたフレームを Read で開く。制作者 2026-10-01「自動レビューの繋ぎ」）。
+   * **呼ぶのは Take のチェックを入れていて、テキストが Claude のときだけ**（`visionSkipReasonOf`。ADR-0066。既定は切る）。
+   * それ以外は判定せず、判定していないことを残す。
    */
-  const visionReviewers: readonly VisionReviewer[] = [
-    createChosenVisionReviewer({
-      checkSettings,
-      claude: createClaudeCliVisionReviewer(),
-      stub: createStubVisionReviewer(),
-    }),
-  ]
+  const visionReviewers: readonly VisionReviewer[] = [createClaudeCliVisionReviewer()]
 
   return {
     review: {
@@ -147,6 +141,7 @@ export const createReviewWiring = (
       regenerationQueue: queues.regeneration,
       deterministicReviewers: DETERMINISTIC_REVIEWERS,
       visionReviewers,
+      visionSkipReason: async () => visionSkipReasonOf(await checkSettings()),
       workDir: process.env.REVIEW_WORK_DIR ?? '/tmp/ixa-review-work',
       logger,
       /**

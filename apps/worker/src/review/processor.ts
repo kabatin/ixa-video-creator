@@ -95,6 +95,11 @@ export type ReviewProcessorDeps = {
   readonly deterministicReviewers: readonly DeterministicReviewer[]
   /** Stage 2。Stage 1 が fail したときは 1 度も呼ばれない。 */
   readonly visionReviewers: readonly VisionReviewer[]
+  /**
+   * Stage 2 を飛ばす理由（ADR-0066）。**判定するたびに読む。** null なら判定する。省けば判定する。
+   * 飛ばすときはレビュアを呼ばず、判定していないことを warn で残す（fail にしないので作り直しは積まれない）。
+   */
+  readonly visionSkipReason?: () => Promise<string | null>
   /** 一時ファイルの置き場。この下にジョブごとのディレクトリを掘る。 */
   readonly workDir: string
   readonly logger: Logger
@@ -279,6 +284,7 @@ export const processReviewJob = async (
           storage: deps.storage,
           logger: deps.logger,
           workDir: deps.workDir,
+          skipReason: deps.visionSkipReason === undefined ? null : await deps.visionSkipReason(),
         })
 
     const findings = [...deterministicFindings, ...vision.findings]

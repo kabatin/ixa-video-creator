@@ -150,6 +150,43 @@ describe('runVisionStage', () => {
   })
 })
 
+/** ADR-0066。Take のチェックを切っている・テキストが Claude でないときは、判定しないと決まっている。 */
+describe('判定を飛ばす理由があるとき', () => {
+  const run = (reviewers: readonly VisionReviewer[], storage: ObjectStorage = createMemoryStorage()) =>
+    runVisionStage({
+      shot,
+      asset: aVideoAsset(project),
+      reviewers,
+      storage,
+      workDir: join(tmpdir(), 'ixa-review-vision-test'),
+      logger: silentLogger,
+      skipReason: '切っています',
+    })
+
+  it('レビュアを呼ばず、フレームも落とさず、判定していないことを種別ごとに warn で残す', async () => {
+    const reviewer = fakeVisionReviewer({ supports: ['identity', 'continuity'] })
+    const reads: string[] = []
+    const storage = { ...createMemoryStorage(), get: (key: string) => (reads.push(key), Promise.resolve(new Uint8Array([0xff]))) }
+
+    const result = await run([reviewer], storage)
+
+    expect(reviewer.calls()).toHaveLength(0)
+    expect(reads).toHaveLength(0)
+    expect(result.costUsd).toBe(0)
+    expect(result.findings.map((finding) => [finding.reviewer, finding.severity, finding.message])).toEqual([
+      ['identity', 'warn', '切っています'],
+      ['continuity', 'warn', '切っています'],
+    ])
+    expect(result.findings.every((finding) => finding.suggestedPromptDelta === null && finding.score === null)).toBe(true)
+  })
+
+  it('fail にも pass にもならない（作り直しを積ませず、合格にも見せない）', async () => {
+    const result = await run([fakeVisionReviewer({ result: { severity: 'fail', score: 0, message: 'x', frameSec: null, suggestedPromptDelta: 'y' } })])
+
+    expect(aggregateVerdict(result.findings)).toBe('warn')
+  })
+})
+
 describe('判定できるフレームが無いとき', () => {
   /** ポスターフレームもサムネイルも無い MediaAsset。実機で実際にこの状態が出た。 */
   const frameless = () => aVideoAsset(project, { posterKeys: [], thumbnailKey: null })
