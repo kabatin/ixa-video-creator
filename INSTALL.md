@@ -191,8 +191,15 @@ pnpm -s ixa ai install --models sa3-small,klein-4b --accept-licenses sa3-small,k
 uv run https://raw.githubusercontent.com/kabatin/ixa-video-creator/<版>/tools/ixa-ai/ixa_ai.py install --lan
 ```
 
-`<版>` は ixa の版のタグ（例 `v0.8.1`）。最後に `pnpm ixa ai connect <接続コード>` の 1 行が**画面に 1 回だけ**出る。
-合言葉を含むので、人にコピーしてもらい、ixa の Mac の clone で貼ってもらう（エージェントはチャットやファイルに写さない）。
+`<版>` は ixa の版のタグ（例 `v0.8.1`）。最後に接続コードが**端末に 1 回だけ**出る（端末でなければ出さずに止まるので、ターミナルで回す）。
+合言葉を含むので、人にコピーしてもらい、ixa の Mac の clone で次を打って、聞かれたら貼ってもらう（画面には出ない）。
+エージェントは接続コードをチャットやファイルに写さない。
+
+```bash
+pnpm ixa ai connect
+```
+
+`pnpm ixa ai connect <接続コード>` と引数でも渡せるが、`ps` の一覧とシェルの履歴に残るので勧めない。
 
 **調子を見る**: `pnpm -s ixa ai status --json`（手元の AI サーバーに届くかだけ）。
 

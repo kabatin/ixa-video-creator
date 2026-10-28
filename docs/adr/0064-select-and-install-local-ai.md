@@ -35,14 +35,22 @@ Supersedes: ADR-0063 の「分かっている不足」の「手元の AI サー�
 - 同じ GPU を順番に使うよう、入れるサーバー同士と、すでに入っているサーバーを `--coordinate-with` で教える。
 - whisper.cpp（文字起こし）はサーバーではないので、`brew install whisper-cpp` と `ggml-large-v3-turbo.bin`（約 1.6 GB）を
   `~/.local/share/whisper.cpp/` に取る。Homebrew は `--yes` か端末での「はい」が要る。`--lan` では入れない（ixa の Mac で動かすもの）。
+  モデルは Hugging Face の版（commit）を固定した URL から `.part` に落とし、**固定した sha256 が合ったときだけ**置く。
+  失敗・不一致では `.part` を残さない。
 - 終了コード: 0 済み・1 失敗・2 引数・3 人の同意が要る（サーバーと同じ）。
 
 ### 3. 合言葉（token）
 
 - `--lan` のときだけ、サーバーごとに `secrets.token_urlsafe(32)` を作り、**環境変数** `<PREFIX>_TOKEN`（例 `SFX_API_TOKEN`）で
   `setup` に渡す。引数には載せない（`ps` に出る）。
-- 最後に `pnpm ixa ai connect <接続コード>` を**端末（/dev/tty）に 1 回だけ**出す。接続コードは
-  `base64url(JSON{v:1, servers:[{id,url,token}]})`。URL はホスト名（`<LocalHostName>.local`）で書く（IP はよく変わる）。
+- サーバーは `<PREFIX>_TOKEN` があればそれを設定に書く（**既にある設定の合言葉より環境変数が勝つ**。5 台の
+  `setup/config_write.py` で確かめた）。それでも接続コードに入れるのは、`setup` の答えが **`tokenSet: true`** のサーバーだけ
+  （作った合言葉と違うものが残っていれば 401 になるため）。`false` のサーバーは失敗として返す（`components` に 1 行足す）。
+- 最後に接続コードを**端末（/dev/tty）に 1 回だけ**出し、「ixa の Mac で `pnpm ixa ai connect` を打ち、聞かれたら貼る」と案内する
+  （引数で渡すと `ps` や履歴に残る）。**/dev/tty を開けなければどこにも出さず**、端末で回し直すよう頼む（終了コード 3）。
+  接続コードは `base64url(JSON{v:1, servers:[{id,url,token}]})`。URL はホスト名（`<LocalHostName>.local`）で書く（IP はよく変わる）。
+- `--json` のときは、引数の誤り（終了コード 2）や思わぬ失敗（1）でも、最後に JSON を 1 つだけ出す。
+- 番号の代わりの「動くもの全部」（`all`・`a`・`全部`）は、どの語でも動かないものを外す。
 - `--json` の答え・`--result-file`・ログには合言葉も接続コードも入れない。テストが確かめる。
 
 ### 4. ixa の CLI（`apps/cli`）

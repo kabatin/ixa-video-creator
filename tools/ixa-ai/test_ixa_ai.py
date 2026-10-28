@@ -5,11 +5,14 @@ python3 -m unittest discover -s tools/ixa-ai     # または uv run --with pytes
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import io
 import json
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from dataclasses import replace
 from pathlib import Path
 
@@ -24,15 +27,22 @@ TOKEN = "T" * 43
 GB = 1_000_000_000
 
 
-def server_answer(server: str, ids: list[str], status: str = "installed") -> str:
+def server_answer(server: str, ids: list[str], status: str = "installed", token_set: bool = False) -> str:
     comps = [{"id": i, "status": status, "message": "ok"} for i in ids]
-    return "progress noise\n" + json.dumps({"server": server, "ok": True, "tokenSet": False, "components": comps})
+    return "progress noise\n" + json.dumps({"server": server, "ok": True, "tokenSet": token_set, "components": comps})
+
+
+def lan_setup(cmd: list[str]) -> tuple[int, str]:
+    """--lan の setup は合言葉を設定して tokenSet: true と答える（サーバーは環境変数の合言葉を使う）。"""
+    return 0, server_answer(cmd[0], cmd[cmd.index("--models") + 1].split(","), token_set="--lan" in cmd)
 
 
 class Fake:
     """偽の外の口。呼ばれたコマンドと環境変数・端末に出したものを記録する。"""
 
-    def __init__(self, *, macos="26.0", ram=64, free_gb=500, tools=("uv", "brew"), tty=False, answers=(), setup=None):
+    def __init__(
+        self, *, macos="26.0", ram=64, free_gb=500, tools=("uv", "brew"), tty=False, answers=(), setup=None, terminal=True
+    ):
         self.calls: list[tuple[list[str], dict | None]] = []
         self.tty_lines: list[str] = []
         self.out_lines: list[str] = []
@@ -40,7 +50,8 @@ class Fake:
         self.downloads: list[tuple[str, Path]] = []
         self.answers = list(answers)
         self.macos, self.ram, self.free_gb, self.tools = macos, ram, free_gb, set(tools)
-        self.setup = setup or (lambda cmd: (0, server_answer(cmd[0], cmd[cmd.index("--models") + 1].split(","))))
+        self.setup = setup or lan_setup
+        self.terminal = terminal
         self.home = Path(tempfile.mkdtemp())
         self.io = ixa_ai.Io(
             run=self.run,
@@ -49,13 +60,18 @@ class Fake:
             is_tty=tty,
             err=self.err_lines.append,
             out=self.out_lines.append,
-            tty=self.tty_lines.append,
-            download=lambda url, dest: self.downloads.append((url, dest)),
+            tty=self.to_tty,
+            download=lambda url, dest, sha256: self.downloads.append((url, dest)),
             free_bytes=lambda p: self.free_gb * GB,
             home=self.home,
             hostname=lambda: "ai-mac.local",
             token=lambda: TOKEN,
         )
+
+    def to_tty(self, text: str) -> bool:
+        if self.terminal:
+            self.tty_lines.append(text)
+        return self.terminal
 
     def run(self, cmd: list[str], env: dict | None) -> tuple[int, str]:
         self.calls.append((cmd, env))
@@ -237,7 +253,8 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(envs["sfx-api"]["SFX_API_COORD_TOKEN_KLEIN_API"], TOKEN)
         self.assertTrue(all("--lan" in c and TOKEN not in c for c, _ in fake.setups()))
         self.assertEqual(len(fake.tty_lines), 1)
-        code_text = fake.tty_lines[0].split("pnpm ixa ai connect ")[1].split()[0]
+        self.assertIn("pnpm ixa ai connect", fake.tty_lines[0])
+        code_text = [line.strip() for line in fake.tty_lines[0].splitlines() if line.strip()][-1]
         decoded = ixa_ai.decode_connect_code(code_text)
         self.assertEqual({s["id"] for s in decoded["servers"]}, {"sfx-api", "klein-api"})
         self.assertIn({"id": "sfx-api", "url": "http://ai-mac.local:8769", "token": TOKEN}, decoded["servers"])
@@ -245,6 +262,53 @@ class InstallTest(unittest.TestCase):
         for text in [*fake.out_lines, *fake.err_lines, result.read_text(encoding="utf-8")]:
             self.assertNotIn(TOKEN, text)
             self.assertNotIn(code_text, text)
+
+    def test_lan_leaves_out_servers_that_did_not_set_the_token(self):
+        # サーバーは既にある設定の合言葉を残すことがある。tokenSet: true と答えたものだけを接続コードに入れる。
+        def setup(cmd):
+            ids = cmd[cmd.index("--models") + 1].split(",")
+            return 0, server_answer(cmd[0], ids, token_set=cmd[0] == "sfx-api")
+
+        fake = Fake(setup=setup)
+        argv = [
+            "install",
+            "--models",
+            "sa3-small,klein-4b",
+            "--accept-licenses",
+            "sa3-small,klein-4b",
+            "--yes",
+            "--json",
+            "--lan",
+        ]
+        code, payload = run_main(fake, *argv)
+        self.assertEqual(code, 1)
+        code_text = [line.strip() for line in fake.tty_lines[0].splitlines() if line.strip()][-1]
+        self.assertEqual([s["id"] for s in ixa_ai.decode_connect_code(code_text)["servers"]], ["sfx-api"])
+        klein = next(e for e in payload["servers"] if e["server"] == "klein-api")
+        self.assertIn("failed", [c["status"] for c in klein["components"]])
+        self.assertNotIn("KLEIN_API_URL", payload["env"])
+
+    def test_lan_without_any_token_set_prints_no_code(self):
+        fake = Fake(setup=lambda cmd: (0, server_answer(cmd[0], cmd[cmd.index("--models") + 1].split(","))))
+        argv = ["install", "--models", "sa3-small", "--accept-licenses", "sa3-small", "--yes", "--json", "--lan"]
+        code, payload = run_main(fake, *argv)
+        self.assertEqual(code, 1)
+        self.assertEqual(fake.tty_lines, [])
+        self.assertEqual(payload["env"], {})
+
+    def test_lan_without_a_terminal_does_not_print_the_code_anywhere(self):
+        fake = Fake(terminal=False)
+        argv = ["install", "--models", "sa3-small", "--accept-licenses", "sa3-small", "--yes", "--json", "--lan"]
+        code, payload = run_main(fake, *argv)
+        self.assertEqual(code, 3)
+        self.assertFalse(payload["ok"])
+        self.assertTrue(payload["fix"]["needsHuman"])
+        self.assertIn("端末", payload["message"])
+        for text in [*fake.out_lines, *fake.err_lines]:
+            self.assertNotIn(TOKEN, text)
+            self.assertNotIn(
+                ixa_ai.encode_connect_code([{"id": "sfx-api", "url": "http://ai-mac.local:8769", "token": TOKEN}]), text
+            )
 
     def test_unreadable_server_answer_fails_and_adds_no_env(self):
         fake = Fake(setup=lambda cmd: (2, "usage: sfx-api ...\n"))
@@ -276,9 +340,73 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(cmd[3], "sa3-small")
 
     def test_interactive_all_skips_unrunnable(self):
-        fake = Fake(tty=True, macos="15.0", ram=16, answers=["all", *["n"] * 20])
-        io = replace(fake.io)
-        self.assertEqual(ixa_ai.main(["install"], io), 3)
+        for word in ("all", "a", "全部", " ALL "):
+            with self.subTest(word=word):
+                fake = Fake(tty=True, macos="15.0", ram=16, answers=[word, *["n"] * 20])
+                io_ = replace(fake.io)
+                # 動かないもの（h3 など）を外してからライセンスを聞く（外さないと「動かないもの」で 1 になる）。
+                self.assertEqual(ixa_ai.main(["install"], io_), 3)
+
+
+class JsonErrorTest(unittest.TestCase):
+    """--json のときは、引数の誤り・思わぬ失敗でも最後に JSON を 1 つだけ出す。"""
+
+    def test_argparse_errors_emit_one_json_object(self):
+        for argv in (["install", "--json", "--nope"], ["--json"], ["bogus", "--json"]):
+            with self.subTest(argv=argv):
+                fake = Fake()
+                with unittest.mock.patch("sys.stderr", io.StringIO()):
+                    code = ixa_ai.main(argv, fake.io)
+                self.assertEqual(code, 2)
+                self.assertEqual(len(fake.out_lines), 1)
+                payload = json.loads(fake.out_lines[0])
+                self.assertFalse(payload["ok"])
+                self.assertIn("message", payload)
+
+    def test_unexpected_exception_emits_json_and_exits_1(self):
+        fake = Fake()
+
+        def boom(_cmd, _env):
+            raise RuntimeError("壊れた")
+
+        broken = replace(fake.io, run=boom)
+        code = ixa_ai.main(["plan", "--json"], broken)
+        self.assertEqual(code, 1)
+        payload = json.loads(fake.out_lines[-1])
+        self.assertEqual(payload["ok"], False)
+        self.assertEqual(payload["action"], "plan")
+
+
+class DownloadTest(unittest.TestCase):
+    """本物の _real_download を file:// で回す（ネットワークは使わない）。"""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.src = self.dir / "model.bin"
+        self.src.write_bytes(b"weights" * 1000)
+        self.sha = hashlib.sha256(self.src.read_bytes()).hexdigest()
+        self.dest = self.dir / "out" / "model.bin"
+        self.part = self.dest.with_suffix(".bin.part")
+
+    def test_matching_sha256_moves_the_file_in_place(self):
+        ixa_ai._real_download(self.src.as_uri(), self.dest, self.sha)
+        self.assertEqual(self.dest.read_bytes(), self.src.read_bytes())
+        self.assertFalse(self.part.exists())
+
+    def test_wrong_sha256_leaves_nothing(self):
+        with self.assertRaises(OSError):
+            ixa_ai._real_download(self.src.as_uri(), self.dest, "0" * 64)
+        self.assertFalse(self.dest.exists())
+        self.assertFalse(self.part.exists())
+
+    def test_failed_download_removes_the_part_file(self):
+        with self.assertRaises(OSError):
+            ixa_ai._real_download((self.dir / "missing.bin").as_uri(), self.dest, self.sha)
+        self.assertFalse(self.part.exists())
+
+    def test_whisper_model_is_pinned(self):
+        self.assertRegex(ixa_ai.WHISPER_MODEL_SHA256, r"^[0-9a-f]{64}$")
+        self.assertNotIn("/resolve/main/", ixa_ai.WHISPER_MODEL_URL)
 
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ description: ixa（iXA Video Creator）を入れる・更新する・調子を�
 | 更新して | `pnpm -s ixa update --check --json` → 人に版を伝えて `pnpm -s ixa update --json` |
 | Claude Code / Codex から使いたい | `pnpm -s ixa mcp --claude`（または `--codex`） |
 | 手元の生成 AI を入れて | `pnpm -s ixa ai install --plan --json` → **人に選んでもらい、ライセンスと容量の同意を取る** → `pnpm -s ixa ai install --models <id,…> --accept-licenses <同じ id> --yes --json` |
-| 別の Mac の AI につなぎたい | その Mac で INSTALL.md「手元の生成 AI」の `uv run … ixa_ai.py install --lan` を人に回してもらい、出た `pnpm ixa ai connect …` を人に貼ってもらう |
+| 別の Mac の AI につなぎたい | その Mac で INSTALL.md「手元の生成 AI」の `uv run … ixa_ai.py install --lan` を人に（ターミナルで）回してもらい、ixa の Mac で人に `pnpm ixa ai connect` を打って接続コードを貼ってもらう |
 
 ## 進め方
 

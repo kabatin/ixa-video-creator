@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import platform
@@ -176,14 +177,26 @@ EXIT_OK, EXIT_FAIL, EXIT_ARGS, EXIT_HUMAN = 0, 1, 2, 3
 DISK_MARGIN = 1.1
 GB = 1_000_000_000
 WHISPER_MODEL_NAME = "ggml-large-v3-turbo.bin"
-WHISPER_MODEL_URL = f"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{WHISPER_MODEL_NAME}"
+# 版を固定し、落としたものを sha256 で確かめる（main の先頭が替わっても、確かめていない重みを置かない）。
+WHISPER_MODEL_REVISION = "5359861c739e955e79d9a303bcbc70fb988958b1"
+WHISPER_MODEL_URL = f"https://huggingface.co/ggerganov/whisper.cpp/resolve/{WHISPER_MODEL_REVISION}/{WHISPER_MODEL_NAME}"
+WHISPER_MODEL_SHA256 = "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69"
 WHISPER_CLI = "whisper-cli"
 CONNECT_CODE_VERSION = 1
 ID_LIST = re.compile(r"^[a-z0-9-]+(,[a-z0-9-]+)*$")
+# 番号の代わりに「動くもの全部」を選ぶ語（選ぶときも、動かないものを外すときも同じ語を見る）。
+ALL_WORDS = ("all", "a", "全部")
 
 
 class UsageError(Exception):
     """引数が不正（終了コード 2）。"""
+
+
+class JsonArgumentParser(argparse.ArgumentParser):
+    """引数の誤りで終わらず UsageError にする（--json のときも最後に JSON を 1 つ出すため）。"""
+
+    def error(self, message: str):  # type: ignore[override]
+        raise UsageError(message)
 
 
 # ---------------------------------------------------------------- 外の口（テストは偽物を渡す）
@@ -199,8 +212,9 @@ class Io:
     is_tty: bool
     err: Callable[[str], None]
     out: Callable[[str], None]
-    tty: Callable[[str], None]
-    download: Callable[[str, Path], None]
+    # 端末にだけ出す。端末が無ければ出さずに False（接続コードをパイプやログに残さない）。
+    tty: Callable[[str], bool]
+    download: Callable[[str, Path, str], None]
     free_bytes: Callable[[Path], int]
     home: Path
     hostname: Callable[[], str]
@@ -223,21 +237,31 @@ def _real_ask(question: str) -> str:
     return sys.stdin.readline().strip()
 
 
-def _real_tty(text: str) -> None:
-    """端末にだけ出す（パイプやログに残さない）。端末が無ければ stderr。"""
+def _real_tty(text: str) -> bool:
+    """端末にだけ出す（パイプやログに残さない）。端末が無ければ**どこにも出さず** False。"""
     try:
         with open("/dev/tty", "w", encoding="utf-8") as tty:
             tty.write(text + "\n")
     except OSError:
-        sys.stderr.write(text + "\n")
+        return False
+    return True
 
 
-def _real_download(url: str, dest: Path) -> None:
+def _real_download(url: str, dest: Path, sha256: str) -> None:
+    """.part に落とし、sha256 が合ったときだけ dest にする。失敗したら .part を残さない。"""
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_suffix(dest.suffix + ".part")
-    with urllib.request.urlopen(url, timeout=60) as response, open(part, "wb") as f:  # noqa: S310 固定の https
-        shutil.copyfileobj(response, f, length=8 * 1024 * 1024)
-    part.rename(dest)
+    digest = hashlib.sha256()
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response, open(part, "wb") as f:  # noqa: S310 固定の https
+            while chunk := response.read(8 * 1024 * 1024):
+                digest.update(chunk)
+                f.write(chunk)
+        if digest.hexdigest() != sha256:
+            raise OSError(f"{dest.name} の sha256 が合いません（落とし直してください）")
+        part.rename(dest)
+    finally:
+        part.unlink(missing_ok=True)
 
 
 def _real_hostname() -> str:
@@ -332,7 +356,7 @@ def parse_id_list(text: str | None) -> list[str]:
 def parse_selection(text: str, items: list[dict]) -> list[str]:
     """番号の選び方（"1,3,7" / "2-4" / "all" / ID）を ID の一覧にする。"""
     text = text.strip().lower()
-    if text in ("all", "a", "全部"):
+    if text in ALL_WORDS:
         return [i["id"] for i in items]
     picked: list[str] = []
     for part in [p.strip() for p in text.split(",") if p.strip()]:
@@ -559,7 +583,7 @@ def choose(args: argparse.Namespace, io: Io, rows: list[dict], say: Say) -> list
         say(format_row(row))
     answer = io.ask("\n入れるものの番号（例 1,3,7・all で動くもの全部）: ")
     picked = parse_selection(answer, rows)
-    if answer.strip().lower() != "all":
+    if answer.strip().lower() not in ALL_WORDS:
         return picked
     return [r["id"] for r in rows if r["id"] in picked and r["runnable"]]
 
@@ -648,7 +672,7 @@ def install_whisper(args: argparse.Namespace, io: Io, say: Say) -> dict:
         return {"id": "whisper-cpp", "status": "already", "message": f"{model.name} はもうあります", "model": str(model)}
     say(f"… whisper.cpp のモデルを取ります（{WHISPER_MODEL_NAME}）")
     try:
-        io.download(WHISPER_MODEL_URL, model)
+        io.download(WHISPER_MODEL_URL, model, WHISPER_MODEL_SHA256)
     except OSError as error:
         return {"id": "whisper-cpp", "status": "failed", "message": f"モデルを取れませんでした: {error}"}
     return {"id": "whisper-cpp", "status": "installed", "message": f"{model.name} を入れました", "model": str(model)}
@@ -686,11 +710,29 @@ def install(args: argparse.Namespace, io: Io) -> tuple[int, dict]:
     return run_install(args, io, say, agreed)
 
 
-def print_connect_line(io: Io, host: str, servers: list[str], tokens: dict[str, str]) -> None:
+def print_connect_line(io: Io, host: str, servers: list[str], tokens: dict[str, str]) -> bool:
+    """接続コードを端末にだけ 1 回出す。端末が無ければ出さずに False。
+
+    引数で渡すと ps やシェルの履歴に残るので、ixa の Mac では `pnpm ixa ai connect` を打ってから貼ってもらう。
+    """
     code = encode_connect_code([{"id": s, "url": ixa_url(s, host), "token": tokens[s]} for s in servers])
-    io.tty(
-        f"\nixa の Mac で次の 1 行を貼ってください（合言葉を含むので、ここに 1 回だけ出します）:\n  pnpm ixa ai connect {code}\n"
+    return io.tty(
+        "\nixa の Mac で pnpm ixa ai connect を打ち、聞かれたら次の接続コードを貼ってください"
+        f"（合言葉を含むので、ここに 1 回だけ出します。チャットやファイルに写さない）:\n  {code}\n"
     )
+
+
+def token_not_set(entry: dict) -> dict:
+    """--lan で、サーバーが合言葉を設定したと答えなかった（既にある設定の合言葉を残したなど）。接続コードに入れない。"""
+    fix = {
+        "hint": f"{entry['server']} の設定の合言葉を確かめ、install --lan をもう一度",
+        "needsHuman": False,
+    }
+    message = f"{entry['server']} が合言葉を設定したと答えなかったので、接続コードに入れませんでした"
+    return {
+        **entry,
+        "components": [*entry["components"], {"id": entry["server"], "status": "failed", "message": message, "fix": fix}],
+    }
 
 
 def run_install(args: argparse.Namespace, io: Io, say: Say, agreed: list[dict]) -> tuple[int, dict]:
@@ -707,10 +749,14 @@ def run_install(args: argparse.Namespace, io: Io, say: Say, agreed: list[dict]) 
     whisper = [install_whisper(args, io, say)] if any(i["server"] is None for i in agreed) else []
     for comp in [c for e in entries for c in e["components"]] + whisper:
         say(f"{MARK.get(comp['status'], '✗')} {comp['id']}: {comp.get('message', comp['status'])}")
+    if args.lan:
+        # サーバーは環境変数の合言葉を設定に書く（既にある設定より環境変数が勝つ）。そう答えたものだけをつなぐ。
+        entries = [e if not server_ok(e) or e["tokenSet"] else token_not_set(e) for e in entries]
     ok_servers = [e["server"] for e in entries if server_ok(e)]
     model = next((w["model"] for w in whisper if "model" in w), None)
-    if args.lan and ok_servers:
-        print_connect_line(io, ctx["host"], ok_servers, ctx["tokens"])
+    if args.lan and ok_servers and not print_connect_line(io, ctx["host"], ok_servers, ctx["tokens"]):
+        fix = {"hint": "制作者が端末（ターミナル）で同じ 1 行を回し直す（接続コードは端末にだけ出します）", "needsHuman": True}
+        return stop(say, EXIT_HUMAN, "端末が無いので接続コードを出せませんでした（入れたものはそのまま）", fix)
     statuses = [c["status"] for e in entries for c in e["components"]] + [w["status"] for w in whisper]
     exit_code = exit_code_of([s if s in (*OK_STATUSES, "needs_human") else "failed" for s in statuses])
     payload = {
@@ -728,7 +774,7 @@ def run_install(args: argparse.Namespace, io: Io, say: Say, agreed: list[dict]) 
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="ixa_ai.py", description="ixa の手元の生成 AI を選んで入れる（ADR-0064）")
+    parser = JsonArgumentParser(prog="ixa_ai.py", description="ixa の手元の生成 AI を選んで入れる（ADR-0064）")
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("plan", "list", "status"):
         p = sub.add_parser(name)
@@ -756,9 +802,22 @@ def emit(args: argparse.Namespace, io: Io, payload: dict) -> None:
         path.chmod(0o600)
 
 
+def usage_failure(argv: list[str], io: Io, error: UsageError) -> int:
+    """引数を読めなかった。--json なら JSON を 1 つ出す（どのサブコマンドかは分かれば入れる）。"""
+    io.err(f"ixa_ai: {error}")
+    if "--json" in argv:
+        action = next((a for a in argv if a in ("plan", "list", "status", "install")), None)
+        io.out(json.dumps({"ok": False, "action": action, "message": str(error)}, ensure_ascii=False))
+    return EXIT_ARGS
+
+
 def main(argv: list[str] | None = None, io: Io | None = None) -> int:
     io = io or real_io()
-    args = build_parser().parse_args(argv)
+    argv = sys.argv[1:] if argv is None else argv
+    try:
+        args = build_parser().parse_args(argv)
+    except UsageError as error:
+        return usage_failure(argv, io, error)
     try:
         if args.command == "install":
             code, payload = install(args, io)
@@ -772,6 +831,9 @@ def main(argv: list[str] | None = None, io: Io | None = None) -> int:
     except UsageError as error:
         io.err(f"ixa_ai: {error}")
         code, payload = EXIT_ARGS, {"ok": False, "action": args.command, "message": str(error)}
+    except Exception as error:  # --json の答えを必ず 1 つ出す（握り潰さず、型と文を stderr に出す）
+        io.err(f"ixa_ai: 思わぬ失敗です: {type(error).__name__}: {error}")
+        code, payload = EXIT_FAIL, {"ok": False, "action": args.command, "message": f"思わぬ失敗です（{type(error).__name__}）"}
     emit(args, io, payload)
     return code
 
