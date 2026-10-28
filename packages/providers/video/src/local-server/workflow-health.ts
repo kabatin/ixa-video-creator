@@ -20,8 +20,11 @@ const WorkflowHealth = z.object({
   available: z.boolean(),
   loaded: z.boolean().optional(),
   reason: z.string().nullish(),
-  /** 段ごとに重みが違う workflow（klein-api の flux2-klein: standard = 9B・draft = 4B）。古い版は返さない。 */
-  qualities: z.record(QualityHealth).optional(),
+  /**
+   * 段ごとに重みが違う workflow（klein-api の flux2-klein: standard = 9B・draft = 4B）。古い版は返さない。
+   * 段の無い workflow には klein-api 0.1.1 が `null` を返す（省かない）ので、null も「段なし」として受ける。
+   */
+  qualities: z.record(QualityHealth).nullish(),
 })
 const Workflows = z.record(WorkflowHealth)
 const VersionOnly = z.object({ version: z.string() })
@@ -52,7 +55,7 @@ const qualityState = (
   quality: string | undefined,
   up: LocalServerHealthCheck,
 ): LocalServerHealthCheck => {
-  if (quality === undefined || qualities === undefined) return up
+  if (quality === undefined || qualities === undefined || qualities === null) return up
   const found = qualities[quality]
   if (found === undefined) return { state: 'down', reason: `${label}がこの ${identity.serverName} にありません` }
   if (found.available) return up

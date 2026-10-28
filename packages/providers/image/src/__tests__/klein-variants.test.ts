@@ -198,6 +198,22 @@ describe('checkKleinHealth', () => {
     expect(missingQuality.state).toBe('down')
   })
 
+  /** klein-api 0.1.1 の実際の答え。段の無い workflow は `qualities: null` を返す（省かない）。 */
+  it('段の無い workflow の qualities: null を受け付ける（klein-api 0.1.1 の実際の形）', async () => {
+    const actual = {
+      'flux2-klein': {
+        available: true,
+        reason: null,
+        qualities: { draft: { available: true, reason: null }, standard: { available: true, reason: null } },
+      },
+      'z-image-turbo': { available: true, reason: null, qualities: null },
+    }
+    for (const [workflowId, quality] of [['z-image-turbo', undefined], ['flux2-klein', 'draft'], ['flux2-klein', 'standard']] as const) {
+      const result = await checkKleinHealth({ baseUrl: BASE_URL, token: null, workflowId, quality, fetch: serve(health(actual)) })
+      expect(result.state).toBe('up')
+    }
+  })
+
   it('段を返さない古い版は、workflow が使えれば段も使えるとみなす（今までどおり）', async () => {
     for (const quality of ['draft', 'standard']) {
       const result = await checkKleinHealth({ baseUrl: BASE_URL, token: null, workflowId: 'flux2-klein', quality, fetch: serve(health(workflows)) })
