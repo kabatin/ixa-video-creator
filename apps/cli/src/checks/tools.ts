@@ -61,9 +61,10 @@ const nodeCheck = (version: string): CheckResult => {
 const pnpmCheck = (result: RunResult, expected: string | null): CheckResult => {
   const id = 'tools.pnpm'
   const version = versionIn(outputOf(result) ?? '')
+  // Node 25 以降は corepack が同梱されないので、npm で入れるところから始める
   const activate: Fix = {
-    hint: 'corepack で決まった版を使う',
-    command: `corepack enable && corepack prepare pnpm@${expected ?? '9'} --activate`,
+    hint: 'corepack を入れて決まった版を使う',
+    command: `npm install -g corepack && corepack enable && corepack prepare pnpm@${expected ?? '9'} --activate`,
     needsHuman: false,
   }
   if (version === null) return { id, group: 'tools', level: 'fail', message: 'pnpm が入っていません', fix: activate, docs: DOCS }

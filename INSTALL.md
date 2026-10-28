@@ -45,7 +45,8 @@ pnpm -s ixa setup --yes --json
 ```
 
 - `node -v` が 22 未満、または `pnpm` が無いときは `pnpm install` の前に直す（下の「道具」）。
-  pnpm は `corepack enable && corepack prepare pnpm@9.15.4 --activate` で入る（人に聞かなくてよい）。
+  pnpm は `npm install -g corepack && corepack enable && corepack prepare pnpm@9.15.4 --activate` で入る（人に聞かなくてよい）。
+  Node 25 以降は corepack が同梱されないので、`npm install -g corepack` から始める。
 - `setup` は何度実行しても壊れない。済んだ手順は `already`（済み）になる。
 - `--yes` は途中の質問（Docker Desktop を起動するか）に「はい」で答える。人の同意が要る手順は飛ばして `needs_human` を返す。
   任意のもの（テキストの AI の初期値・Gemini の鍵・MCP の登録）は `--yes` では書かずに `notice` を返す（下の「任意」）。
@@ -82,7 +83,7 @@ pnpm -s ixa setup --yes --json
 | id | 直し方 | 人に聞く |
 |---|---|---|
 | `tools.node` | `brew install node@22`（22 以上） | はい |
-| `tools.pnpm` | `corepack enable && corepack prepare pnpm@9.15.4 --activate` | いいえ |
+| `tools.pnpm` | `npm install -g corepack && corepack enable && corepack prepare pnpm@9.15.4 --activate` | いいえ |
 | `tools.git` | `xcode-select --install` | はい |
 | `tools.docker` | Docker Desktop を入れてもらう（下の「Docker」） | はい |
 | `tools.docker-running` / `tools.docker-compose` | 下の「Docker」 | — |

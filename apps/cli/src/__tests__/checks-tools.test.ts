@@ -44,6 +44,15 @@ describe('judgeTools（道具の判定）', () => {
     expect(major?.fix?.command).toContain('corepack prepare pnpm@9.15.4')
   })
 
+  it('pnpm の直し方は corepack を npm で入れるところから（Node 25 以降は corepack が同梱されない）', () => {
+    const pnpm = byId(judgeTools(facts({ pnpm: missing }, '26.5.0')), 'tools.pnpm')
+    expect(pnpm?.level).toBe('fail')
+    expect(pnpm?.fix).toMatchObject({
+      command: 'npm install -g corepack && corepack enable && corepack prepare pnpm@9.15.4 --activate',
+      needsHuman: false,
+    })
+  })
+
   it('FFmpeg が無ければ brew install ffmpeg を出す（入れない・人の同意が要る）', () => {
     const ffmpeg = byId(judgeTools(facts({ ffmpeg: missing })), 'tools.ffmpeg')
     expect(ffmpeg?.level).toBe('fail')
