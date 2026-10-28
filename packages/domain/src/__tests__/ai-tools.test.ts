@@ -348,3 +348,35 @@ describe('効果音', () => {
     expect(AI_TOOLS.moss_sfx.label).toBe('MOSS SFX v2')
   })
 })
+
+describe('手元の画像（klein-api。ADR-0065）', () => {
+  it('9B・4B・Z Image Turbo はどれも klein-api で見つけ、画像にだけ使える', () => {
+    expect(AI_TOOLS.klein.detect).toEqual({ kind: 'local_server', server: 'klein', workflow: 'flux2-klein' })
+    expect(AI_TOOLS.klein_4b.detect).toEqual({ kind: 'local_server', server: 'klein', workflow: 'flux2-klein' })
+    expect(AI_TOOLS.z_image.detect).toEqual({ kind: 'local_server', server: 'klein', workflow: 'z-image-turbo' })
+    for (const id of ['klein', 'klein_4b', 'z_image'] as const) {
+      expect(AI_TOOLS[id].purposes).toEqual(['image'])
+      expect(aiChoiceProblem('video', id, ready())).toMatch(/動画にはまだ使えません/)
+    }
+  })
+
+  it('ライセンスの違いを言う（9B は商用不可、4B と Z Image は商用可）。参照が効かないことも言う', () => {
+    expect(AI_TOOLS.klein.notice).toMatch(/商用には使えません/)
+    expect(AI_TOOLS.klein_4b.notice).toMatch(/商用にも使えます/)
+    expect(AI_TOOLS.z_image.notice).toMatch(/商用にも使えます/)
+    expect(AI_TOOLS.z_image.notice).toMatch(/参照の画像は使えません/)
+  })
+
+  it('画面の名前は短く、内部の名前を出さない', () => {
+    expect([AI_TOOLS.klein.label, AI_TOOLS.klein_4b.label, AI_TOOLS.z_image.label]).toEqual([
+      'FLUX.2 [klein] 9B',
+      'FLUX.2 [klein] 4B',
+      'Z Image Turbo',
+    ])
+  })
+
+  it('Codex が無く klein-api だけなら 9B を勧める', () => {
+    const statuses = { ...allMissing(), klein: ready(), klein_4b: ready(), z_image: ready() }
+    expect(recommendAiSettings(statuses).image).toBe('klein')
+  })
+})

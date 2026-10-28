@@ -33,6 +33,8 @@ export const AiToolId = z.enum([
   'vpipe',
   'wan',
   'klein',
+  'klein_4b',
+  'z_image',
   'ace_step',
   'minimax_music3',
   'stable_audio_medium_music',
@@ -65,8 +67,8 @@ export type AiToolDetection =
   /**
    * 手元の生成サーバが応答するか（`GET /v1/health`。ADR-0031 / 0040 / 0047 / 0048 / 0052）。
    * **どのサーバかを持つ。** 5 台（vpipe-api・wan-api・klein-api・ace-step-api・sfx-api）あるので、持たないと
-   * 1 台の起動でほかが「使える」と出てしまう。sfx-api（Stable Audio Medium・Small・MOSS・曲の Medium）と
-   * ace-step-api（ACE-Step・MiniMax-Music3）は 1 台で複数のモデルを出すので、
+   * 1 台の起動でほかが「使える」と出てしまう。sfx-api（Stable Audio Medium・Small・MOSS・曲の Medium）・
+   * ace-step-api（ACE-Step・MiniMax-Music3）・klein-api（FLUX.2 [klein]・Z Image Turbo）は 1 台で複数のモデルを出すので、
    * **どの workflow か**（`workflow`）も持つ。片方だけ使えないことがある（health の `workflows`）。
    */
   | {
@@ -157,12 +159,33 @@ export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
   }),
   klein: tool({
     id: 'klein',
-    label: 'FLUX.2 [klein]',
+    label: 'FLUX.2 [klein] 9B',
     tags: ON_THIS_MAC_FREE,
-    detect: { kind: 'local_server', server: 'klein' },
+    // klein-api は 1 台で 9B・4B（flux2-klein の段）と Z Image Turbo（別の workflow）を出す（ADR-0065）。
+    detect: { kind: 'local_server', server: 'klein', workflow: 'flux2-klein' },
     purposes: ['image'],
     // 動画と同じ機械の GPU を使う（ADR-0047）。動画を作っている間は絵も順番待ちになる。
-    notice: SHARED_GPU_NOTICE,
+    // 9B の重みは FLUX Non-Commercial License（ADR-0065）。
+    notice: `商用には使えません（FLUX の非商用ライセンス）。${SHARED_GPU_NOTICE}`,
+  }),
+  klein_4b: tool({
+    id: 'klein_4b',
+    label: 'FLUX.2 [klein] 4B',
+    tags: ON_THIS_MAC_FREE,
+    // 9B と同じ workflow の速い段（draft）。workflow が使えるかで見る（段ごとの health は無い）。
+    detect: { kind: 'local_server', server: 'klein', workflow: 'flux2-klein' },
+    purposes: ['image'],
+    notice: `9B より速く（1 枚 15 秒ほど）、出来は少し落ちます。Apache-2.0 で商用にも使えます。${SHARED_GPU_NOTICE}`,
+  }),
+  z_image: tool({
+    id: 'z_image',
+    label: 'Z Image Turbo',
+    tags: ON_THIS_MAC_FREE,
+    detect: { kind: 'local_server', server: 'klein', workflow: 'z-image-turbo' },
+    purposes: ['image'],
+    notice:
+      '1 枚 30 秒ほど。Apache-2.0 で商用にも使えます。キャラクターなどの参照の画像は使えません（見た目は文章で伝えます）。' +
+      SHARED_GPU_NOTICE,
   }),
   ace_step: tool({
     id: 'ace_step',
@@ -301,7 +324,7 @@ export const aiChoiceProblem = (
 const RECOMMENDATION_ORDER: Readonly<Record<AiPurpose, readonly AiToolId[]>> = Object.freeze({
   text: ['claude_cli', 'codex_cli', 'grok_cli'],
   // klein は実測が揃うまで初期値にしない（ADR-0047）。選べば使える。
-  image: ['codex_cli', 'klein'],
+  image: ['codex_cli', 'klein', 'z_image', 'klein_4b'],
   // vpipe を先に置くのは、実測のある（速さと出来の分かっている）方を初期値にするため（ADR-0040）。
   video: ['vpipe', 'wan', 'local'],
   voice: ['macos_say'],

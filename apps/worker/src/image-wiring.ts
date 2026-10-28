@@ -23,7 +23,7 @@ import {
   createCodexCliImageProvider,
   createKleinImageProvider,
   createStubImageProvider,
-  kleinImageModel,
+  KLEIN_IMAGE_MODELS,
   stubGeminiLikeImageModel,
 } from '@ixa/provider-image'
 import type { ObjectStorage } from '@ixa/storage'
@@ -39,21 +39,17 @@ import type { ImageAdapter, ImageProcessorDeps } from './image/index.js'
 /** 手元の画像生成サーバ（ADR-0047）。`.env` の `LOCAL_IMAGE_GENERATOR` に書いたときだけ作る（API の一覧と同じ条件）。 */
 export type KleinSettings = { readonly enabled: boolean; readonly baseUrl: string; readonly token: string | null }
 
+/** klein-api の口は 1 つで、モデル（9B・4B・Z Image Turbo。ADR-0065）ごとに並べる。 */
+const kleinAdapters = (stubOutputDir: string, klein: KleinSettings): readonly ImageAdapter[] => {
+  if (!klein.enabled) return []
+  const provider = createKleinImageProvider({ baseUrl: klein.baseUrl, token: klein.token, outputDir: join(stubOutputDir, 'klein') })
+  return KLEIN_IMAGE_MODELS.map((model) => ({ provider, model }))
+}
+
 const imageAdapters = (workDir: string, stubOutputDir: string, klein: KleinSettings): readonly ImageAdapter[] => [
   { provider: createStubImageProvider({ outputDir: join(stubOutputDir, 'image') }), model: stubGeminiLikeImageModel },
   { provider: createCodexCliImageProvider({ workingDirRoot: join(workDir, 'codex') }), model: codexCliImageModel },
-  ...(klein.enabled
-    ? [
-        {
-          provider: createKleinImageProvider({
-            baseUrl: klein.baseUrl,
-            token: klein.token,
-            outputDir: join(stubOutputDir, 'klein'),
-          }),
-          model: kleinImageModel,
-        },
-      ]
-    : []),
+  ...kleinAdapters(stubOutputDir, klein),
 ]
 
 /** image キューへ積む口（BullMQ の `Queue.add` の部分）。 */

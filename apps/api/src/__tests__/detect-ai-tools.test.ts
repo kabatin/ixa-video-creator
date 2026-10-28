@@ -99,6 +99,36 @@ describe('detectAiTools', () => {
     expect(on.klein).toEqual({ state: 'ready', version: '0.1.0' })
   })
 
+  /** ADR-0065。klein-api は 1 台で 9B・4B（flux2-klein）と Z Image Turbo（z-image-turbo）を出す。 */
+  it('klein の 9B・4B・Z Image Turbo は同じ LOCAL_IMAGE_GENERATOR で有効にし、workflow ごとに health を見る', async () => {
+    const off = await detectAiTools(probe())
+    expect(off.z_image).toEqual({ state: 'missing', reason: expect.stringMatching(/LOCAL_IMAGE_GENERATOR=klein/) as unknown })
+    const asked: (string | undefined)[] = []
+    const base = probe()
+    const on = await detectAiTools({
+      ...base,
+      localServers: {
+        ...base.localServers,
+        klein: {
+          enabled: true,
+          enabledBy: 'LOCAL_IMAGE_GENERATOR',
+          check: (workflow) => {
+            asked.push(workflow)
+            return Promise.resolve(
+              workflow === 'z-image-turbo'
+                ? { state: 'down', reason: 'Z Image Turbo（手元）はこの klein-api にありません' }
+                : { state: 'up', version: '0.2.0' },
+            )
+          },
+        },
+      },
+    })
+    expect(on.klein).toEqual({ state: 'ready', version: '0.2.0' })
+    expect(on.klein_4b).toEqual({ state: 'ready', version: '0.2.0' })
+    expect(on.z_image).toEqual({ state: 'missing', reason: 'Z Image Turbo（手元）はこの klein-api にありません' })
+    expect([...asked].sort()).toEqual(['flux2-klein', 'flux2-klein', 'z-image-turbo'])
+  })
+
   /** ADR-0048。曲のサーバも有効にする一覧の名前が違う。 */
   it('ACE-Step は LOCAL_MUSIC_GENERATOR で有効にし方を言い、有効なら health を見る', async () => {
     const off = await detectAiTools(probe())
