@@ -57,8 +57,15 @@ export type System = {
   readonly randomHex: (bytes: number) => string
   /** はい／いいえを聞く。端末でなければ聞かずに false。 */
   readonly confirm: (question: string) => Promise<boolean>
+  /**
+   * 秘密（API キー）を**画面に出さずに**受け取る。端末でなければ聞かずに null。取りやめ（Ctrl-C）も null。
+   * 受け取った値はどこにも表示・記録しない（呼ぶ側も `.env` に書くだけ）。
+   */
+  readonly promptSecret: (question: string) => Promise<string | null>
   readonly sleep: (ms: number) => Promise<void>
   readonly nodeVersion: string
+  /** `process.platform`（フォントの置き場など、Mac でしか決まらない点検に使う）。 */
+  readonly platform: NodeJS.Platform
   readonly homedir: string
   readonly isTty: boolean
   /** 進み具合を人に見せる（stderr）。`--json` でも stdout を汚さない。 */

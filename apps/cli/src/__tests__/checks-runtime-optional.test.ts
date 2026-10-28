@@ -73,6 +73,7 @@ describe('judgeLocalAi（手元の AI サーバー）', () => {
 const optional: OptionalFacts = {
   claude: { kind: 'completed', exitCode: 0, stdout: '2.1.0', stderr: '' },
   codex: { kind: 'not_found' },
+  grok: { kind: 'not_found' },
   whisperModelCached: false,
   audioVenv: true,
   storageRoot: '/Users/me/ixa-video-creator/storage',
@@ -85,6 +86,7 @@ describe('judgeOptional（任意のもの）', () => {
   it('Codex が無ければ !（入れるかは人）。whisper のモデルが無いのは失敗ではない', () => {
     const results = judgeOptional(optional)
     expect(byId(results, 'optional.codex')).toMatchObject({ level: 'warn', fix: { needsHuman: true } })
+    expect(byId(results, 'optional.grok')).toMatchObject({ level: 'warn', fix: { needsHuman: true } })
     expect(byId(results, 'optional.whisper-model')?.level).toBe('skip')
   })
 

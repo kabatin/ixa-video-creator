@@ -171,6 +171,38 @@ const confirm = async (question: string): Promise<boolean> => {
   }
 }
 
+const CTRL_C = '\u0003'
+const BACKSPACES = new Set(['\u007f', '\b'])
+
+/** 打った文字を出さずに 1 行読む（raw モード）。貼り付けもそのまま受ける。 */
+const promptSecret = (question: string): Promise<string | null> => {
+  const input = process.stdin
+  if (!input.isTTY) return Promise.resolve(null)
+  process.stderr.write(question)
+  return new Promise((resolve) => {
+    let typed = ''
+    const finish = (result: string | null): void => {
+      input.off('data', onData)
+      input.setRawMode(false)
+      input.pause()
+      process.stderr.write('\n')
+      resolve(result)
+    }
+    const onData = (chunk: string): void => {
+      for (const ch of chunk) {
+        if (ch === '\r' || ch === '\n') return finish(typed)
+        if (ch === CTRL_C) return finish(null)
+        if (BACKSPACES.has(ch)) typed = typed.slice(0, -1)
+        else if (ch >= ' ') typed = `${typed}${ch}`
+      }
+    }
+    input.setEncoding('utf8')
+    input.setRawMode(true)
+    input.resume()
+    input.on('data', onData)
+  })
+}
+
 export const createRealSystem = (): System => ({
   run,
   httpGet,
@@ -192,8 +224,10 @@ export const createRealSystem = (): System => ({
   withDb,
   randomHex: (bytes) => randomBytes(bytes).toString('hex'),
   confirm,
+  promptSecret,
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   nodeVersion: process.versions.node,
+  platform: process.platform,
   homedir: os.homedir(),
   isTty: process.stdout.isTTY,
   progress: (line) => {

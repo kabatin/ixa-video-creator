@@ -5,7 +5,7 @@ import type { RunResult, System } from '../system.js'
 import type { CheckResult } from '../types.js'
 
 /**
- * 任意のもの（無くても動く）。Claude Code・Codex・文字起こしのモデル・素材の置き場・課金の鍵の有無・音の解析の依存。
+ * 任意のもの（無くても動く）。Claude Code・Codex・Grok・文字起こしのモデル・素材の置き場・課金の鍵の有無・音の解析の依存。
  * 課金の鍵は「入っている／いない」だけ（値も長さも出さない）。
  */
 
@@ -18,6 +18,7 @@ export const LOW_FREE_BYTES = 10 * 1024 ** 3
 export type OptionalFacts = {
   readonly claude: RunResult
   readonly codex: RunResult
+  readonly grok: RunResult
   readonly whisperModelCached: boolean
   readonly audioVenv: boolean
   readonly storageRoot: string
@@ -84,6 +85,7 @@ export const judgeOptional = (facts: OptionalFacts): readonly CheckResult[] => [
       },
   cliCheck('optional.claude', 'Claude Code', facts.claude, 'AI エージェントのタブ・絵コンテの案・絵のチェックに使う', 'https://docs.anthropic.com/en/docs/claude-code'),
   cliCheck('optional.codex', 'Codex', facts.codex, '絵コンテの画像に使う', 'https://github.com/openai/codex'),
+  cliCheck('optional.grok', 'Grok', facts.grok, 'テキストの控えに使う', 'https://x.ai/cli'),
   facts.whisperModelCached
     ? { id: 'optional.whisper-model', group: 'optional', level: 'ok', message: '文字起こしのモデル（faster-whisper small）が手元にあります' }
     : {
@@ -107,9 +109,10 @@ const whisperModelDir = (homedir: string, hfHome: string | undefined): string =>
 
 export const gatherOptional = async (system: System, env: EnvValues, repo: RepoPaths): Promise<OptionalFacts> => {
   const storageRoot = storageRootOf(env, system.homedir)
-  const [claude, codex, whisperModelCached, audioVenv, storageWritable, storageFreeBytes] = await Promise.all([
+  const [claude, codex, grok, whisperModelCached, audioVenv, storageWritable, storageFreeBytes] = await Promise.all([
     system.run('claude', ['--version'], { timeoutMs: 10_000 }),
     system.run('codex', ['--version'], { timeoutMs: 10_000 }),
+    system.run('grok', ['--version'], { timeoutMs: 10_000 }),
     system.exists(whisperModelDir(system.homedir, process.env['HF_HOME'])),
     system.exists(repo.audioVenv),
     system.canWrite(storageRoot),
@@ -118,6 +121,7 @@ export const gatherOptional = async (system: System, env: EnvValues, repo: RepoP
   return {
     claude,
     codex,
+    grok,
     whisperModelCached,
     audioVenv,
     storageRoot,
