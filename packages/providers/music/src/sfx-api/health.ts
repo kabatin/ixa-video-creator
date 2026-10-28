@@ -1,5 +1,4 @@
-import type { LocalServerHealthCheck } from '@ixa/provider-video'
-import { checkWorkflowHealth, type WorkflowHealthInput } from '../local-server/workflow-health.js'
+import { checkWorkflowHealth, type LocalServerHealthCheck, type WorkflowHealthInput } from '@ixa/provider-video'
 import { SFX_API_IDENTITY, SFX_API_MODELS } from './descriptor.js'
 import { STABLE_AUDIO_MUSIC_WORKFLOW_ID, stableAudioMusicModel } from './music-descriptor.js'
 

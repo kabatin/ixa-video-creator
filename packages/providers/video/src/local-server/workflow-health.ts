@@ -1,17 +1,11 @@
-import {
-  LocalServerHealth,
-  localServerRequest,
-  LocalServerRequestError,
-  localServerUnreachableCode,
-  reasonOf,
-  type LocalServerFetch,
-  type LocalServerHealthCheck,
-  type LocalServerIdentity,
-} from '@ixa/provider-video'
 import { z } from 'zod'
+import { LocalServerHealth } from './api.js'
+import type { LocalServerHealthCheck } from './health-check.js'
+import { localServerRequest, LocalServerRequestError, reasonOf, type LocalServerFetch } from './http.js'
+import { localServerUnreachableCode, type LocalServerIdentity } from './identity.js'
 
 /**
- * 1 台で複数の workflow を出す手元のサーバ（sfx-api・ace-step-api）の health。サーバが応答するかに加えて、
+ * 1 台で複数の workflow を出す手元のサーバ（sfx-api・ace-step-api・klein-api）の health。サーバが応答するかに加えて、
  * **workflow ごとに使えるか**を見る。`GET /v1/health` は `workflows: { [id]: { available, loaded, reason } }` を返す。
  * `available: true, loaded: false` は待機中のふつうの状態（初回に読み込む）。一部だけ使えないことがある。
  *
@@ -37,16 +31,31 @@ export type WorkflowHealthInput = {
   readonly fetch?: LocalServerFetch
 }
 
+export type WorkflowHealthOptions = {
+  /**
+   * workflow の一覧を返さない古い版にもあった workflow。省略は「どれもあった」とみなす（sfx-api・ace-step-api）。
+   * 渡すと、古い版でこれ以外を頼まれたときは「無い」と答える（klein-api の z-image-turbo は新しい版にしか無い。ADR-0065）。
+   */
+  readonly legacyWorkflows?: readonly string[]
+}
+
 const workflowState = (
   identity: LocalServerIdentity,
   label: string,
   body: unknown,
   workflowId: string,
   up: LocalServerHealthCheck,
+  options: WorkflowHealthOptions,
 ): LocalServerHealthCheck => {
   const raw: unknown = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).workflows : undefined
   // workflow の一覧を返さない古い版は、応答していれば使えるとみなす（投入の失敗が理由を言う）。
-  if (raw === undefined) return up
+  // 古い版に無かった workflow だけは「無い」と答える（選べるように見せて投入で 404 にしない）。
+  if (raw === undefined) {
+    const legacy = options.legacyWorkflows
+    return legacy === undefined || legacy.includes(workflowId)
+      ? up
+      : { state: 'down', reason: `${label}はこの ${identity.serverName} にありません（${identity.serverName} を新しい版にしてください）` }
+  }
   const parsed = Workflows.safeParse(raw)
   // 一覧の形が違う。**全部使えるように見せない**（使えない方を選んで、投入で初めて断られる）。
   if (!parsed.success) return { state: 'down', reason: `${identity.serverName} の workflow の一覧の形が違います` }
@@ -64,6 +73,7 @@ export const checkWorkflowHealth = async (
   identity: LocalServerIdentity,
   labelOf: (workflowId: string) => string | undefined,
   input: WorkflowHealthInput,
+  options: WorkflowHealthOptions = {},
 ): Promise<LocalServerHealthCheck> => {
   try {
     const response = await localServerRequest(
@@ -91,7 +101,7 @@ export const checkWorkflowHealth = async (
     const up: LocalServerHealthCheck = { state: 'up', version: version.success ? version.data.version : null }
     const { workflowId } = input
     if (workflowId === undefined) return up
-    return workflowState(identity, labelOf(workflowId) ?? workflowId, response.body, workflowId, up)
+    return workflowState(identity, labelOf(workflowId) ?? workflowId, response.body, workflowId, up, options)
   } catch (error) {
     if (!(error instanceof LocalServerRequestError)) throw error
     return error.code === localServerUnreachableCode(identity)
