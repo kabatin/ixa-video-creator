@@ -50,3 +50,7 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      # tools/ixa-ai（ADR-0064）は標準ライブラリだけの Python。偽の Io で回すので、Linux でも Mac として判定する。
+      - name: Test tools/ixa-ai
+        run: python3 -m unittest discover -s tools/ixa-ai

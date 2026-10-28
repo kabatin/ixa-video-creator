@@ -219,6 +219,8 @@ class Io:
     home: Path
     hostname: Callable[[], str]
     token: Callable[[], str] = lambda: secrets.token_urlsafe(32)
+    # (OS の名前, CPU)。テスト（CI は Linux）でも Mac として判定を回せるよう、ここから読む。
+    uname: Callable[[], tuple[str, str]] = lambda: (platform.system(), platform.machine())
 
 
 def _real_run(cmd: list[str], extra_env: dict[str, str] | None) -> tuple[int, str]:
@@ -307,10 +309,11 @@ def read_machine(io: Io) -> Machine:
     code, ver = io.run(["sw_vers", "-productVersion"], None)
     code_mem, mem = io.run(["sysctl", "-n", "hw.memsize"], None)
     code_arm, arm = io.run(["sysctl", "-in", "hw.optional.arm64"], None)
+    system, cpu = io.uname()
     ram = int(mem.strip()) / (1024**3) if code_mem == 0 and mem.strip().isdigit() else None
     return Machine(
         # Rosetta の Python でも Apple Silicon と分かるよう、機械に聞く（platform.machine() は x86_64 を返す）。
-        arm64=platform.system() == "Darwin" and (platform.machine() == "arm64" or (code_arm == 0 and arm.strip() == "1")),
+        arm64=system == "Darwin" and (cpu == "arm64" or (code_arm == 0 and arm.strip() == "1")),
         macos=ver.strip() if code == 0 and ver.strip() else None,
         ram_gb=round(ram, 1) if ram is not None else None,
         free_bytes=io.free_bytes(io.home),

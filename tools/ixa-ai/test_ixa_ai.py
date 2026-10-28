@@ -66,6 +66,7 @@ class Fake:
             home=self.home,
             hostname=lambda: "ai-mac.local",
             token=lambda: TOKEN,
+            uname=lambda: ("Darwin", "arm64"),
         )
 
     def to_tty(self, text: str) -> bool:
