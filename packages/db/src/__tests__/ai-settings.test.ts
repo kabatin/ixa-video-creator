@@ -20,6 +20,8 @@ describe('ai_settings', () => {
     transcribeTool: 'whisper_cpp',
     musicTool: 'ace_step',
     sfxTool: 'stable_audio_sfx',
+    imageCheck: false,
+    videoCheck: false,
     updatedAt: new Date('2026-09-30T00:00:00Z'),
     ...patch,
   })
@@ -33,7 +35,14 @@ describe('ai_settings', () => {
       transcribe: 'whisper_cpp',
       music: 'ace_step',
       sfx: 'stable_audio_sfx',
+      checks: { image: false, video: false },
     })
+  })
+
+  /** AI のチェック（ADR-0066）。絵と Take は別々の列。取り違えない。 */
+  it('チェックの列を、絵と Take のそれぞれへ写す', () => {
+    expect(aiSettingsRowToDomain(row({ imageCheck: true }))?.checks).toEqual({ image: true, video: false })
+    expect(aiSettingsRowToDomain(row({ videoCheck: true }))?.checks).toEqual({ image: false, video: true })
   })
 
   /** 名前を消した AI が残っていても、毎回の読み込みで落とさない。選び直してもらう。 */
@@ -74,5 +83,21 @@ describe('ai_settings', () => {
     expect(sql).toMatch(/ADD COLUMN "music_tool" text DEFAULT 'stub' NOT NULL/)
     // 効果音（ADR-0052）も同じ。
     expect(sql).toMatch(/ADD COLUMN "sfx_tool" text DEFAULT 'stub' NOT NULL/)
+    // AI のチェック（ADR-0066）は既定で切る。
+    expect(sql).toMatch(/ADD COLUMN "image_check" boolean DEFAULT false NOT NULL/)
+    expect(sql).toMatch(/ADD COLUMN "video_check" boolean DEFAULT false NOT NULL/)
+  })
+
+  /**
+   * AI のチェック（ADR-0066）。**既定は切る。** 既定値が無いと既にある 1 行が NOT NULL を満たせず、
+   * 既定が true だと、列を足しただけで Claude の利用枠を使い始める。
+   */
+  it('チェックの列は、既定値が「切る」（false）', () => {
+    const columns = getTableConfig(aiSettings).columns
+    for (const name of ['image_check', 'video_check']) {
+      const column = columns.find((c) => c.name === name)
+      expect(column?.notNull).toBe(true)
+      expect(column?.default).toBe(false)
+    }
   })
 })

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, pgTable, text } from 'drizzle-orm/pg-core'
+import { boolean, check, pgTable, text } from 'drizzle-orm/pg-core'
 import { updatedAt } from './columns.js'
 
 /**
@@ -26,6 +26,12 @@ export const aiSettings = pgTable(
     musicTool: text('music_tool').notNull().default('stub'),
     /** 効果音（ADR-0052）。声と同じ理由で既定値をお試しにする。 */
     sfxTool: text('sfx_tool').notNull().default('stub'),
+    /**
+     * AI のチェック（ADR-0066）。描いた絵と動画の Take を Claude が見るか。**既定は切る**
+     * （声と同じ理由で既定値が要る。切るのは、チェックが Claude の利用枠を多く使うため）。
+     */
+    imageCheck: boolean('image_check').notNull().default(false),
+    videoCheck: boolean('video_check').notNull().default(false),
     updatedAt: updatedAt(),
   },
   (table) => [check('ai_settings_single_row', sql`${table.id} = 'default'`)],
