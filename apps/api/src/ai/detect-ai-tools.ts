@@ -25,8 +25,11 @@ export type LocalServerProbe = {
    * 曲は `LOCAL_MUSIC_GENERATOR`（ADR-0048）、効果音は `LOCAL_SFX_GENERATOR`（ADR-0052））。
    */
   readonly enabledBy: 'LOCAL_VIDEO_GENERATOR' | 'LOCAL_IMAGE_GENERATOR' | 'LOCAL_MUSIC_GENERATOR' | 'LOCAL_SFX_GENERATOR'
-  /** `workflow` は 1 台で複数のモデルを出すサーバ（sfx-api・ace-step-api）だけが見る。ほかのサーバは無視する。 */
-  readonly check: (workflow?: string) => Promise<LocalServerHealthCheck>
+  /**
+   * `workflow` は 1 台で複数のモデルを出すサーバ（sfx-api・ace-step-api・klein-api）だけが見る。ほかのサーバは無視する。
+   * `quality` は段ごとに重みが違う workflow（klein-api の flux2-klein）の段（ADR-0065）。
+   */
+  readonly check: (workflow?: string, quality?: string) => Promise<LocalServerHealthCheck>
 }
 
 export type AiToolProbe = {
@@ -111,7 +114,7 @@ const statusOf = async (spec: AiToolSpec, probe: AiToolProbe): Promise<AiToolSta
           reason: `.env の ${server.enabledBy}=${spec.detect.server} で有効にしてから選べます`,
         }
       }
-      const health = await server.check(spec.detect.workflow)
+      const health = await server.check(spec.detect.workflow, spec.detect.quality)
       return health.state === 'up'
         ? { state: 'ready', version: health.version }
         : { state: 'missing', reason: health.reason }

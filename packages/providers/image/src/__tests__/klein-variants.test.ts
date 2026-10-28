@@ -175,6 +175,36 @@ describe('checkKleinHealth', () => {
     expect(z.state === 'down' ? z.reason : '').toMatch(/Z Image Turbo（手元）はこの klein-api にありません.*新しい版/)
   })
 
+  /** 段ごとの health（klein-api の新しい版）。4B だけ入れたときに 9B を使えるように見せない。 */
+  it('段（qualities）を返す版: standard は 9B、draft は 4B が使えるときだけ up。理由に置き場所は出さない', async () => {
+    const qualities = {
+      'flux2-klein': {
+        available: true,
+        loaded: false,
+        reason: null,
+        qualities: {
+          draft: { available: true, reason: null },
+          standard: { available: false, reason: 'weights not found at /Users/x/flux2-klein-9b' },
+        },
+      },
+    }
+    const check = (quality: string) =>
+      checkKleinHealth({ baseUrl: BASE_URL, token: null, workflowId: 'flux2-klein', quality, fetch: serve(health(qualities)) })
+    expect(await check('draft')).toEqual({ state: 'up', version: '0.2.0' })
+    const nine = await check('standard')
+    expect(nine.state === 'down' ? nine.reason : '').toMatch(/^FLUX\.2 \[klein\] 9B（手元）は今使えません/)
+    expect(JSON.stringify(nine)).not.toContain('/Users/x')
+    const missingQuality = await check('ultra')
+    expect(missingQuality.state).toBe('down')
+  })
+
+  it('段を返さない古い版は、workflow が使えれば段も使えるとみなす（今までどおり）', async () => {
+    for (const quality of ['draft', 'standard']) {
+      const result = await checkKleinHealth({ baseUrl: BASE_URL, token: null, workflowId: 'flux2-klein', quality, fetch: serve(health(workflows)) })
+      expect(result.state).toBe('up')
+    }
+  })
+
   it('一覧に無い workflow は使えない', async () => {
     const result = await checkKleinHealth({
       baseUrl: BASE_URL,

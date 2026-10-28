@@ -103,7 +103,7 @@ describe('detectAiTools', () => {
   it('klein の 9B・4B・Z Image Turbo は同じ LOCAL_IMAGE_GENERATOR で有効にし、workflow ごとに health を見る', async () => {
     const off = await detectAiTools(probe())
     expect(off.z_image).toEqual({ state: 'missing', reason: expect.stringMatching(/LOCAL_IMAGE_GENERATOR=klein/) as unknown })
-    const asked: (string | undefined)[] = []
+    const asked: string[] = []
     const base = probe()
     const on = await detectAiTools({
       ...base,
@@ -112,8 +112,8 @@ describe('detectAiTools', () => {
         klein: {
           enabled: true,
           enabledBy: 'LOCAL_IMAGE_GENERATOR',
-          check: (workflow) => {
-            asked.push(workflow)
+          check: (workflow, quality) => {
+            asked.push(`${String(workflow)}:${String(quality)}`)
             return Promise.resolve(
               workflow === 'z-image-turbo'
                 ? { state: 'down', reason: 'Z Image Turbo（手元）はこの klein-api にありません' }
@@ -126,7 +126,8 @@ describe('detectAiTools', () => {
     expect(on.klein).toEqual({ state: 'ready', version: '0.2.0' })
     expect(on.klein_4b).toEqual({ state: 'ready', version: '0.2.0' })
     expect(on.z_image).toEqual({ state: 'missing', reason: 'Z Image Turbo（手元）はこの klein-api にありません' })
-    expect([...asked].sort()).toEqual(['flux2-klein', 'flux2-klein', 'z-image-turbo'])
+    // 9B は standard、4B は draft の段で見る（4B だけ入れた klein-api で 9B を「使える」にしない）。
+    expect([...asked].sort()).toEqual(['flux2-klein:draft', 'flux2-klein:standard', 'z-image-turbo:undefined'])
   })
 
   /** ADR-0048。曲のサーバも有効にする一覧の名前が違う。 */

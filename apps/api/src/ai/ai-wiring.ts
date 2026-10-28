@@ -99,11 +99,13 @@ const localServerProbes = (config: AppConfig): Readonly<Record<LocalServerName, 
   const klein: LocalServerProbe = {
     enabled: config.providers.localImageGenerators.includes('klein'),
     enabledBy: 'LOCAL_IMAGE_GENERATOR',
-    check: (workflowId) =>
+    // 9B（standard）と 4B（draft）は同じ workflow の段なので、段ごとにも見る（4B だけ入れたとき 9B を出さない）。
+    check: (workflowId, quality) =>
       checkKleinHealth({
         baseUrl: config.providers.kleinApiUrl,
         token: config.providers.kleinApiToken,
         ...(workflowId === undefined ? {} : { workflowId }),
+        ...(quality === undefined ? {} : { quality }),
       }),
   }
   // 曲のサーバ（ADR-0048）。画像と同じく動画の表には入れない。1 台で ACE-Step と MiniMax-Music3 を出すので、

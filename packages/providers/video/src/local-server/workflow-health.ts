@@ -15,10 +15,13 @@ import { localServerUnreachableCode, type LocalServerIdentity } from './identity
 /** 一覧を開くたびに叩くので短く（止まったサーバで画面を待たせない）。 */
 const HEALTH_CHECK_TIMEOUT_MS = 2000
 
+const QualityHealth = z.object({ available: z.boolean(), reason: z.string().nullish() })
 const WorkflowHealth = z.object({
   available: z.boolean(),
   loaded: z.boolean().optional(),
   reason: z.string().nullish(),
+  /** 段ごとに重みが違う workflow（klein-api の flux2-klein: standard = 9B・draft = 4B）。古い版は返さない。 */
+  qualities: z.record(QualityHealth).optional(),
 })
 const Workflows = z.record(WorkflowHealth)
 const VersionOnly = z.object({ version: z.string() })
@@ -28,6 +31,8 @@ export type WorkflowHealthInput = {
   readonly token: string | null
   /** 見る workflow。省略はサーバが応答するかだけ。 */
   readonly workflowId?: string
+  /** 見る段（`qualities` の鍵）。省略は workflow が使えるかだけ。段を返さない古い版も workflow で見る。 */
+  readonly quality?: string
   readonly fetch?: LocalServerFetch
 }
 
@@ -39,11 +44,28 @@ export type WorkflowHealthOptions = {
   readonly legacyWorkflows?: readonly string[]
 }
 
+/** 段を見る。段の一覧を返さない古い版は、workflow が使えれば段も使えるとみなす（今までどおり）。 */
+const qualityState = (
+  identity: LocalServerIdentity,
+  label: string,
+  qualities: z.infer<typeof WorkflowHealth>['qualities'],
+  quality: string | undefined,
+  up: LocalServerHealthCheck,
+): LocalServerHealthCheck => {
+  if (quality === undefined || qualities === undefined) return up
+  const found = qualities[quality]
+  if (found === undefined) return { state: 'down', reason: `${label}がこの ${identity.serverName} にありません` }
+  if (found.available) return up
+  const reason = found.reason?.trim() ?? ''
+  return { state: 'down', reason: `${label}は今使えません（${reason === '' ? '理由不明' : reasonOf(reason)}）` }
+}
+
 const workflowState = (
   identity: LocalServerIdentity,
   label: string,
   body: unknown,
   workflowId: string,
+  quality: string | undefined,
   up: LocalServerHealthCheck,
   options: WorkflowHealthOptions,
 ): LocalServerHealthCheck => {
@@ -65,13 +87,13 @@ const workflowState = (
     const reason = workflow.reason?.trim() ?? ''
     return { state: 'down', reason: `${label}は今使えません（${reason === '' ? '理由不明' : reasonOf(reason)}）` }
   }
-  return up
+  return qualityState(identity, label, workflow.qualities, quality, up)
 }
 
-/** `labelOf` は workflow の画面の名前（知らなければ workflow の名前のまま出す）。 */
+/** `labelOf` は workflow（と段）の画面の名前（知らなければ workflow の名前のまま出す）。 */
 export const checkWorkflowHealth = async (
   identity: LocalServerIdentity,
-  labelOf: (workflowId: string) => string | undefined,
+  labelOf: (workflowId: string, quality?: string) => string | undefined,
   input: WorkflowHealthInput,
   options: WorkflowHealthOptions = {},
 ): Promise<LocalServerHealthCheck> => {
@@ -99,9 +121,9 @@ export const checkWorkflowHealth = async (
     }
     const version = VersionOnly.safeParse(response.body)
     const up: LocalServerHealthCheck = { state: 'up', version: version.success ? version.data.version : null }
-    const { workflowId } = input
+    const { workflowId, quality } = input
     if (workflowId === undefined) return up
-    return workflowState(identity, labelOf(workflowId) ?? workflowId, response.body, workflowId, up, options)
+    return workflowState(identity, labelOf(workflowId, quality) ?? workflowId, response.body, workflowId, quality, up, options)
   } catch (error) {
     if (!(error instanceof LocalServerRequestError)) throw error
     return error.code === localServerUnreachableCode(identity)

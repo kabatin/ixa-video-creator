@@ -351,8 +351,9 @@ describe('効果音', () => {
 
 describe('手元の画像（klein-api。ADR-0065）', () => {
   it('9B・4B・Z Image Turbo はどれも klein-api で見つけ、画像にだけ使える', () => {
-    expect(AI_TOOLS.klein.detect).toEqual({ kind: 'local_server', server: 'klein', workflow: 'flux2-klein' })
-    expect(AI_TOOLS.klein_4b.detect).toEqual({ kind: 'local_server', server: 'klein', workflow: 'flux2-klein' })
+    // 9B と 4B は同じ workflow の別の段（standard・draft）で見つける（4B だけ入れたとき 9B を出さない）。
+    expect(AI_TOOLS.klein.detect).toEqual({ kind: 'local_server', server: 'klein', workflow: 'flux2-klein', quality: 'standard' })
+    expect(AI_TOOLS.klein_4b.detect).toEqual({ kind: 'local_server', server: 'klein', workflow: 'flux2-klein', quality: 'draft' })
     expect(AI_TOOLS.z_image.detect).toEqual({ kind: 'local_server', server: 'klein', workflow: 'z-image-turbo' })
     for (const id of ['klein', 'klein_4b', 'z_image'] as const) {
       expect(AI_TOOLS[id].purposes).toEqual(['image'])
@@ -375,8 +376,13 @@ describe('手元の画像（klein-api。ADR-0065）', () => {
     ])
   })
 
-  it('Codex が無く klein-api だけなら 9B を勧める', () => {
-    const statuses = { ...allMissing(), klein: ready(), klein_4b: ready(), z_image: ready() }
-    expect(recommendAiSettings(statuses).image).toBe('klein')
+  /** 9B の重みは非商用。商用にも使える Apache-2.0 の 4B・Z Image Turbo を先に勧める。 */
+  it('画像は Codex の次に klein 4B・Z Image Turbo を勧め、非商用の 9B は最後', () => {
+    const local = { ...allMissing(), klein: ready(), klein_4b: ready(), z_image: ready() }
+    expect(recommendAiSettings(local).image).toBe('klein_4b')
+    expect(recommendAiSettings({ ...local, klein_4b: missing() }).image).toBe('z_image')
+    expect(recommendAiSettings({ ...local, klein_4b: missing(), z_image: missing() }).image).toBe('klein')
+    expect(recommendAiSettings({ ...local, codex_cli: ready() }).image).toBe('codex_cli')
   })
+
 })

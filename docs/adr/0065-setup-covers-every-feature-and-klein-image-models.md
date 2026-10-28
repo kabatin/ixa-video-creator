@@ -65,13 +65,20 @@ Decider: Claude（Architect）
 - 見つけ方は workflow ごとの health（`GET /v1/health` の `workflows[id].available`。sfx-api・ace-step-api と同じ）。
   部品は `packages/providers/music` から `packages/providers/video/src/local-server/workflow-health.ts` に移した。
   **`workflows` を返さない古い klein-api には `flux2-klein` しか無い**とみなし、Z Image を「無い（新しい版にする）」と言う
-  （選べるように見せて投入で 404 にしない）。4B は段ごとの health が無いので `flux2-klein` が使えるかで見る。
-- 9B を勧める順は今のまま（Codex の次）。その後ろに Z Image・4B を置く。
+  （選べるように見せて投入で 404 にしない）。
+- **9B と 4B は段ごとの health で見る**（2026-10-28 のレビューで決めた契約。klein-api 側も同時に出すよう直す）:
+  `workflows["flux2-klein"].qualities = {"draft": {"available": bool, "reason": str|null}, "standard": {...}}`。
+  `klein`（9B）は `standard` が使えるときだけ、`klein_4b` は `draft` が使えるときだけ「使える」。
+  4B だけ入れた klein-api でも、今までは workflow が使えるので 9B（非商用）まで「使える」と出て、しかも最初に勧めていた。
+  見る段は AI の表が持つ（`AI_TOOLS[...].detect.quality`）。`qualities` を返さない古い版は今までどおり workflow で見る。
+  一覧にない段を頼まれたら「無い」と答える。理由の文は workflow と同じく置き場所を出さない。
+- 勧める順は Codex の次に、**商用にも使える Apache-2.0 の 4B・Z Image Turbo を先に、非商用の 9B を最後に**置く
+  （`codex_cli` → `klein_4b` → `z_image` → `klein`）。黙って非商用の重みを初期値にしない。
 
 ## 分かっている不足
 
 - klein-api の Z Image Turbo の workflow と、health の `workflows` は別の作業で足される。ixa の契約テストは
   `docs/api.md` の flux2-klein と同じ本文・sfx-api と同じ health の形を前提にしている。形が違えば契約テストを直す。
-- 4B の重みが無い klein-api でも `klein_4b` は「使える」と出る（段ごとの health が無い）。投入の失敗が理由を言う。
+- 段ごとの health（`qualities`）を返さない古い klein-api では、4B・9B のどちらかの重みが無くても両方「使える」と出る。投入の失敗が理由を言う。
 - `promptSecret` の実物（raw モードの入力）は端末でしか確かめられない。単体テストは偽物で、鍵が文に出ないことだけを見る。
-- `.claude/skills/ixa-setup`・INSTALL.md の手順はこの ADR では直していない（同じ計画の ADR-0064 側でまとめて直す）。
+- `.claude/skills/ixa-setup`・INSTALL.md の手順は、2026-10-28 のレビューの直しで書き足した（INSTALL.md「任意」）。

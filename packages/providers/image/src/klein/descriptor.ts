@@ -124,5 +124,9 @@ const VARIANTS: ReadonlyMap<string, KleinVariant> = new Map([
 export const kleinVariantOf = (modelId: ModelId): KleinVariant | null => VARIANTS.get(modelId) ?? null
 
 /** klein-api の health で見る workflow の画面の名前。 */
-export const kleinWorkflowLabelOf = (workflowId: string): string | undefined =>
-  workflowId === KLEIN_WORKFLOW_ID ? 'FLUX.2 [klein]（手元）' : workflowId === Z_IMAGE_TURBO_WORKFLOW_ID ? zImageTurboModel.label : undefined
+export const kleinWorkflowLabelOf = (workflowId: string, quality?: string): string | undefined => {
+  if (workflowId === Z_IMAGE_TURBO_WORKFLOW_ID) return zImageTurboModel.label
+  if (workflowId !== KLEIN_WORKFLOW_ID) return undefined
+  // 段ごとに重みが違う（standard = 9B・draft = 4B。ADR-0065）。
+  return quality === 'standard' ? kleinImageModel.label : quality === 'draft' ? klein4bImageModel.label : 'FLUX.2 [klein]（手元）'
+}

@@ -70,11 +70,14 @@ export type AiToolDetection =
    * 1 台の起動でほかが「使える」と出てしまう。sfx-api（Stable Audio Medium・Small・MOSS・曲の Medium）・
    * ace-step-api（ACE-Step・MiniMax-Music3）・klein-api（FLUX.2 [klein]・Z Image Turbo）は 1 台で複数のモデルを出すので、
    * **どの workflow か**（`workflow`）も持つ。片方だけ使えないことがある（health の `workflows`）。
+   * klein-api の flux2-klein は段ごとに重みが違う（standard = 9B・draft = 4B）ので、**どの段か**（`quality`）も持つ
+   * （health の `workflows[...].qualities`。ADR-0065）。
    */
   | {
       readonly kind: 'local_server'
       readonly server: 'vpipe' | 'wan' | 'klein' | 'ace_step' | 'sfx_api'
       readonly workflow?: string
+      readonly quality?: 'draft' | 'standard'
     }
 
 export type AiToolSpec = {
@@ -162,7 +165,8 @@ export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
     label: 'FLUX.2 [klein] 9B',
     tags: ON_THIS_MAC_FREE,
     // klein-api は 1 台で 9B・4B（flux2-klein の段）と Z Image Turbo（別の workflow）を出す（ADR-0065）。
-    detect: { kind: 'local_server', server: 'klein', workflow: 'flux2-klein' },
+    // 9B は flux2-klein の standard の段。4B だけ入れた klein-api で「使える」にしない（ADR-0065）。
+    detect: { kind: 'local_server', server: 'klein', workflow: 'flux2-klein', quality: 'standard' },
     purposes: ['image'],
     // 動画と同じ機械の GPU を使う（ADR-0047）。動画を作っている間は絵も順番待ちになる。
     // 9B の重みは FLUX Non-Commercial License（ADR-0065）。
@@ -172,8 +176,8 @@ export const AI_TOOLS: Readonly<Record<AiToolId, AiToolSpec>> = Object.freeze({
     id: 'klein_4b',
     label: 'FLUX.2 [klein] 4B',
     tags: ON_THIS_MAC_FREE,
-    // 9B と同じ workflow の速い段（draft）。workflow が使えるかで見る（段ごとの health は無い）。
-    detect: { kind: 'local_server', server: 'klein', workflow: 'flux2-klein' },
+    // 9B と同じ workflow の速い段（draft）。段ごとの health が無い古い版では workflow が使えるかで見る。
+    detect: { kind: 'local_server', server: 'klein', workflow: 'flux2-klein', quality: 'draft' },
     purposes: ['image'],
     notice: `9B より速く（1 枚 15 秒ほど）、出来は少し落ちます。Apache-2.0 で商用にも使えます。${SHARED_GPU_NOTICE}`,
   }),
@@ -323,8 +327,8 @@ export const aiChoiceProblem = (
  */
 const RECOMMENDATION_ORDER: Readonly<Record<AiPurpose, readonly AiToolId[]>> = Object.freeze({
   text: ['claude_cli', 'codex_cli', 'grok_cli'],
-  // klein は実測が揃うまで初期値にしない（ADR-0047）。選べば使える。
-  image: ['codex_cli', 'klein', 'z_image', 'klein_4b'],
+  // 手元では商用にも使える Apache-2.0 の 4B・Z Image Turbo を先に、非商用の 9B を最後に勧める（ADR-0065）。
+  image: ['codex_cli', 'klein_4b', 'z_image', 'klein'],
   // vpipe を先に置くのは、実測のある（速さと出来の分かっている）方を初期値にするため（ADR-0040）。
   video: ['vpipe', 'wan', 'local'],
   voice: ['macos_say'],
