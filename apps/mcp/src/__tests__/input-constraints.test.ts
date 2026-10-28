@@ -22,6 +22,9 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
     cases: [
       [{ purpose: 'audio' }, 'purpose'],
       [{ tool: 'nope' }, 'tool'],
+      // AI のチェック（ADR-0066）は真偽だけ。
+      [{ imageCheck: 'yes' }, 'imageCheck'],
+      [{ videoCheck: 1 }, 'videoCheck'],
     ],
   },
   create_project: {

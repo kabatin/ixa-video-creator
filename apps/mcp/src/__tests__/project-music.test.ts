@@ -148,6 +148,58 @@ describe('ixa_status / set_ai', () => {
     expect(fake.callsTo('PUT', '/ai/settings')[0]?.body).toEqual({ ...settings, image: 'fal' })
   })
 
+  /** ADR-0066。チェックだけを切り替え、用途ごとの AI はそのまま送る。もう片方のチェックも今の値のまま。 */
+  it('set_ai は Claude のチェックだけを切り替えられる（もう片方は今の値のまま）', async () => {
+    const settings = { text: 'claude_cli', image: 'klein', checks: { image: false, video: true } }
+    const fake = createFakeApi([
+      { method: 'GET', path: '/ai/settings', data: { settings, source: 'saved' } },
+      { method: 'PUT', path: '/ai/settings', data: { settings: { ...settings, checks: { image: true, video: true } }, source: 'saved' } },
+    ])
+    const result = jsonOf(await setAiTool.run({ imageCheck: true }, depsFor(fake)))
+    expect(fake.callsTo('PUT', '/ai/settings')[0]?.body).toEqual({ ...settings, checks: { image: true, video: true } })
+    expect(result).toEqual({ aiSettings: { ...settings, checks: { image: true, video: true } } })
+  })
+
+  it('set_ai はチェックを返さない前の API でも、指定の無いチェックを切って送る', async () => {
+    const settings = { text: 'claude_cli', image: 'klein' }
+    const fake = createFakeApi([
+      { method: 'GET', path: '/ai/settings', data: { settings, source: 'saved' } },
+      { method: 'PUT', path: '/ai/settings', data: { settings, source: 'saved' } },
+    ])
+    await setAiTool.run({ videoCheck: true }, depsFor(fake))
+    expect(fake.callsTo('PUT', '/ai/settings')[0]?.body).toEqual({ ...settings, checks: { image: false, video: true } })
+  })
+
+  it('set_ai は用途だけ替えるとき、今のチェックをそのまま送る', async () => {
+    const settings = { text: 'claude_cli', image: 'klein', checks: { image: true, video: false } }
+    const fake = createFakeApi([
+      { method: 'GET', path: '/ai/settings', data: { settings, source: 'saved' } },
+      { method: 'PUT', path: '/ai/settings', data: { settings, source: 'saved' } },
+    ])
+    await setAiTool.run({ purpose: 'image', tool: 'klein_4b' }, depsFor(fake))
+    expect(fake.callsTo('PUT', '/ai/settings')[0]?.body).toEqual({ ...settings, image: 'klein_4b' })
+  })
+
+  it('set_ai は何も指定が無い・用途と AI の片方だけなら、API を呼ばずに断る', async () => {
+    const fake = createFakeApi([])
+    expect(textOf(await setAiTool.run({}, depsFor(fake)))).toContain('どれかを指定')
+    expect(textOf(await setAiTool.run({ purpose: 'image' }, depsFor(fake)))).toContain('一緒に指定')
+    expect(textOf(await setAiTool.run({ tool: 'klein', imageCheck: true }, depsFor(fake)))).toContain('一緒に指定')
+    expect(fake.calls).toHaveLength(0)
+  })
+
+  it('ixa_status は Claude のチェックの入り切りを返す', async () => {
+    const fake = createFakeApi([
+      { method: 'GET', path: '/health', data: { status: 'ok', uptimeSec: 3 } },
+      { method: 'GET', path: '/ai/tools', data: { tools: [], recommended: {} } },
+      { method: 'GET', path: '/ai/settings', data: { settings: { text: 'claude_cli', checks: { image: false, video: true } }, source: 'saved' } },
+      { method: 'GET', path: '/models', data: [] },
+      { method: 'GET', path: '/projects', data: [] },
+    ])
+    const result = jsonOf(await statusTool.run({}, depsFor(fake))) as Record<string, unknown>
+    expect(result).toMatchObject({ aiSettings: { text: 'claude_cli', checks: { image: false, video: true } } })
+  })
+
   it('状態をまとめて返す（ワークスペースの作品・使えるモデル・動いている生成）', async () => {
     const fake = createFakeApi([
       { method: 'GET', path: '/health', data: { status: 'ok', uptimeSec: 3 } },

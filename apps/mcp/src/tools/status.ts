@@ -19,6 +19,7 @@ export const statusTool = defineTool({
   risk: 'read',
   description:
     'Start here. Shows whether the ixa API is up, which AI tools are available per purpose and which are selected, ' +
+    '(aiSettings.checks: whether Claude checks drawn images / Takes; both off by default, change with set_ai), ' +
     'the video models you can pass to generate_takes, the projects in the workspace, and (with projectId) the video ' +
     'generations currently queued/running. Write everything the user sees in Japanese unless told otherwise. ' +
     'Workflow: create_project → music → set_master_track → plan_shots → cast → edit_shots → draw_start_frames → ' +
@@ -91,15 +92,39 @@ export const setAiTool = defineTool({
   risk: 'settings',
   description:
     'Choose which AI tool ixa uses for one purpose (text = storyboard/assist, image = start frames, video = takes, ' +
-    'voice, transcribe, music, sfx = sound effects). Check ixa_status first: only tools listed as usableFor that purpose are accepted. ' +
+    'voice, transcribe, music, sfx = sound effects), and/or switch the Claude checks on or off. Check ixa_status first: ' +
+    'only tools listed as usableFor that purpose are accepted. ' +
     'Local image tools (klein-api): klein = FLUX.2 [klein] 9B (best quality, non-commercial license), ' +
     'klein_4b = FLUX.2 [klein] 4B (faster, Apache-2.0), z_image = Z Image Turbo (Apache-2.0, ignores reference images such as characters). ' +
+    'imageCheck = Claude looks at every drawn image (start frame, character sheet, key art) and redraws obvious failures; ' +
+    'videoCheck = Claude looks at Take frames during review. Both are off by default because each image / Take uses the ' +
+    "user's Claude allowance; they only work while the text tool is claude_cli. Turn them on only when the user asks. " +
     'This changes the setting for the whole app (the human user sees it too).',
-  input: z.object({ purpose: AiPurpose, tool: AiToolId }),
-  handler: async ({ purpose, tool }, { api }) => {
+  input: z.object({
+    purpose: AiPurpose.optional(),
+    tool: AiToolId.optional(),
+    imageCheck: z.boolean().optional(),
+    videoCheck: z.boolean().optional(),
+  }),
+  refine: (args, ctx) => {
+    if ((args.purpose === undefined) !== (args.tool === undefined))
+      ctx.addIssue({ code: 'custom', message: 'purpose と tool は一緒に指定してください' })
+    if (args.purpose === undefined && args.imageCheck === undefined && args.videoCheck === undefined)
+      ctx.addIssue({ code: 'custom', message: 'purpose と tool、imageCheck、videoCheck のどれかを指定してください' })
+  },
+  handler: async ({ purpose, tool, imageCheck, videoCheck }, { api }) => {
     const current = await api.get('/ai/settings', WireAiSettings)
+    const checks =
+      imageCheck === undefined && videoCheck === undefined
+        ? {}
+        : {
+            checks: {
+              image: imageCheck ?? current.settings.checks?.image ?? false,
+              video: videoCheck ?? current.settings.checks?.video ?? false,
+            },
+          }
     const saved = await api.request('PUT', '/ai/settings', WireAiSettings, {
-      body: { ...current.settings, [purpose]: tool },
+      body: { ...current.settings, ...(purpose === undefined ? {} : { [purpose]: tool }), ...checks },
     })
     return jsonResult({ aiSettings: saved.settings })
   },

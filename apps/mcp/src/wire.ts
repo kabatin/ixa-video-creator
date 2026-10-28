@@ -300,8 +300,14 @@ export const WireAiTools = z.object({
   ),
 })
 
+/**
+ * 使う AI。用途ごとの AI の名前と、AI のチェック（`checks`。ADR-0066）。
+ * チェックを返さない前の API でも読める（`checks` を省ける）。
+ */
 export const WireAiSettings = z.object({
-  settings: z.record(z.string(), z.string()),
+  settings: z
+    .object({ checks: z.object({ image: z.boolean(), video: z.boolean() }).optional() })
+    .catchall(z.string()),
   source: z.enum(['saved', 'default']),
 })
 
