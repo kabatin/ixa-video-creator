@@ -109,7 +109,11 @@ const readResult = async (system: System, file: string): Promise<InstallResult |
   await system.remove(file)
   if (text === null) return null
   const parsed = InstallResult.safeParse(parseJson(text))
-  if (!parsed.success) throw new Error('ixa_ai.py の答えの形が違います（tools/ixa-ai の版が合っていないかもしれません）')
+  if (!parsed.success) {
+    // どこが違うかだけを添える（値は URL・パスのこともあるので出さない）
+    const where = [...new Set(parsed.error.issues.map((issue) => issue.path.join('.') || '（全体）'))].join('・')
+    throw new Error(`ixa_ai.py の答えの形が違います: ${where}（tools/ixa-ai の版が合っていないかもしれません）`)
+  }
   return parsed.data
 }
 

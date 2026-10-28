@@ -707,8 +707,16 @@ def install_server(io: Io, server: str, ids: list[str], ctx: dict, say: Say) -> 
         message = f"{server} setup の答えを読めません（終了コード {code}）"
         comps = [{"id": i, "status": "failed", "message": message, "fix": fix} for i in ids]
         return {"server": server, "url": url, "tokenSet": False, "components": comps}
-    comps = [{k: c[k] for k in ("id", "status", "message", "fix") if k in c} for c in answer["components"]]
+    comps = [component_of(c) for c in answer["components"]]
     return {"server": server, "url": url, "tokenSet": bool(answer.get("tokenSet")), "components": comps}
+
+
+def component_of(answer: dict) -> dict:
+    """サーバーの部品 1 つを ixa に渡す形にする。サーバーは無い値を null で返す（直し方に打つ 1 行が無いと
+    "command": null）。null は ixa の形に合わず答え全体が捨てられるので、無いものとして落とす。"""
+    comp = {k: answer[k] for k in ("id", "status", "message", "fix") if answer.get(k) is not None}
+    fix = comp.get("fix")
+    return {**comp, "fix": {k: v for k, v in fix.items() if v is not None}} if isinstance(fix, dict) else comp
 
 
 def install_whisper(args: argparse.Namespace, io: Io, say: Say) -> dict:

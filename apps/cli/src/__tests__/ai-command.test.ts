@@ -194,6 +194,20 @@ describe('ai install', () => {
     expect(forced.written[repo.env]).toContain('SFX_API_URL=http://127.0.0.1:8769\n')
   })
 
+  it('答えの形が違えば、どこが違うかを添えて止める（値は出さない）', async () => {
+    const fix = { hint: '許可する', command: null, needsHuman: true }
+    const answer = {
+      ok: false,
+      action: 'install',
+      servers: [{ server: 'klein-api', url: 'http://127.0.0.1:8767', tokenSet: true, components: [{ id: 'klein-4b', status: 'needs_human', fix }] }],
+      local: [],
+      env: {},
+    }
+    const { system } = fileSystem({ [repo.env]: EXAMPLE, [RESULT_FILE]: JSON.stringify(answer) }, { run: () => Promise.resolve(done('')) })
+    const run = aiInstallCommand(system, repo, captured(true).out, parseCliArgs(['ai', 'install', '--models', 'klein-4b']))
+    await expect(run).rejects.toThrow('servers.0.components.0.fix.command')
+  })
+
   it('.env が無ければ何も入れずに止める', async () => {
     const calls: string[] = []
     const { system } = fileSystem({}, { run: (cmd) => Promise.resolve(void calls.push(cmd)).then(() => done('')) })

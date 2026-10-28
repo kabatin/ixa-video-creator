@@ -340,6 +340,20 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(payload["env"], {})
         self.assertIn("--reinstall", payload["servers"][0]["components"][0]["fix"]["command"])
 
+    def test_nulls_from_the_server_are_dropped(self):
+        # サーバーは直し方に打つ 1 行が無いと "command": null を返す。そのまま渡すと ixa（zod）が答え全体を捨てる（2026-10-28）。
+        comp = {
+            "id": "klein-4b",
+            "status": "needs_human",
+            "message": None,
+            "fix": {"hint": "許可する", "command": None, "needsHuman": True},
+        }
+        answer = json.dumps({"server": "klein-api", "ok": False, "tokenSet": False, "components": [comp]})
+        fake = Fake(setup=lambda cmd: (3, answer))
+        _, payload = run_main(fake, "install", "--models", "klein-4b", "--accept-licenses", "klein-4b", "--yes", "--json")
+        (got,) = payload["servers"][0]["components"]
+        self.assertEqual(got, {"id": "klein-4b", "status": "needs_human", "fix": {"hint": "許可する", "needsHuman": True}})
+
     def test_needs_human_from_server_keeps_env_and_exits_3(self):
         fake = Fake(setup=lambda cmd: (3, server_answer("klein-api", ["klein-4b"], "needs_human")))
         code, payload = run_main(fake, "install", "--models", "klein-4b", "--accept-licenses", "klein-4b", "--yes", "--json")
