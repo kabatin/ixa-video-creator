@@ -77,6 +77,27 @@ describe('ai connect', () => {
     expect(asked.written[repo.env]).toContain('SFX_API_URL=http://ai-mac.local:8769\n')
   })
 
+  it('接続コードを省くと、端末では画面に出さずに聞き、端末でなければ stdin から読む', async () => {
+    const asked: string[] = []
+    const viaPrompt = fileSystem({ [repo.env]: EXAMPLE }, { promptSecret: (q) => Promise.resolve(void asked.push(q)).then(() => code) })
+    const c = captured(true)
+    expect(await aiConnectCommand(viaPrompt.system, repo, c.out, parseCliArgs(['ai', 'connect']))).toBe(0)
+    expect(asked).toHaveLength(1)
+    expect(viaPrompt.written[repo.env]).toContain(`SFX_API_TOKEN=${TOKEN}\n`)
+    expect(c.all()).not.toContain(code)
+    const viaStdin = fileSystem({ [repo.env]: EXAMPLE }, { readStdin: () => Promise.resolve(`${code}\n`) })
+    expect(await aiConnectCommand(viaStdin.system, repo, captured(true).out, parseCliArgs(['ai', 'connect']))).toBe(0)
+    expect(viaStdin.written[repo.env]).toContain(`SFX_API_TOKEN=${TOKEN}\n`)
+  })
+
+  it('接続コードを受け取れなければ何も書かずに人に頼む', async () => {
+    const { system, written } = fileSystem({ [repo.env]: EXAMPLE })
+    const c = captured(true)
+    expect(await aiConnectCommand(system, repo, c.out, parseCliArgs(['ai', 'connect']))).toBe(1)
+    expect(written[repo.env]).toBeUndefined()
+    expect(c.results[0]).toMatchObject({ ok: false, steps: [{ id: 'ai.connect.code', status: 'needs_human', fix: { needsHuman: true } }] })
+  })
+
   it('短い合言葉は configProblems が止め、.env を書かない', async () => {
     const short = connectCode([{ id: 'sfx-api', url: 'http://ai-mac.local:8769', token: 'short' }])
     const { system, written } = fileSystem({ [repo.env]: EXAMPLE })

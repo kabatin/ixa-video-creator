@@ -62,6 +62,11 @@ export type System = {
    * 受け取った値はどこにも表示・記録しない（呼ぶ側も `.env` に書くだけ）。
    */
   readonly promptSecret: (question: string) => Promise<string | null>
+  /**
+   * 端末でないとき、stdin を終わりまで読む（`echo <接続コード> | pnpm ixa ai connect`）。端末なら読まずに null、空も null。
+   * 受け取った値は `promptSecret` と同じく表示・記録しない。
+   */
+  readonly readStdin: () => Promise<string | null>
   readonly sleep: (ms: number) => Promise<void>
   readonly nodeVersion: string
   /** `process.platform`（フォントの置き場など、Mac でしか決まらない点検に使う）。 */

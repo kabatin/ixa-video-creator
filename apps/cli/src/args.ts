@@ -56,21 +56,24 @@ export const HELP = `使い方: pnpm ixa <コマンド> [オプション]
   ai       手元の生成 AI（ADR-0064）
            install  選んで入れる。--plan で一覧だけ（何も変えない）、--models h3,sa3-small と
                     --accept-licenses h3,sa3-small --yes で質問せずに入れる
-           connect <接続コード>  別の Mac で入れた AI を .env につなぐ
+           connect  別の Mac で入れた AI を .env につなぐ。接続コードは画面に出さずに聞く（端末でなければ stdin から読む）
            どちらも、値の入った接続先（*_API_URL）を替えるのは --overwrite-env か、端末で「はい」と答えたときだけ
            status   手元の AI サーバーに届くかだけを見る
 
   共通: --json で機械向けに出す（各項目に fix.command・fix.needsHuman・docs）
   手順書: INSTALL.md`
 
-/** `ai` の後ろ（install | connect <接続コード> | status）。**接続コードは文に入れない。** */
+/**
+ * `ai` の後ろ（install | connect [接続コード] | status）。**打った語は文に入れない**（接続コードを含むことがある。数だけ言う）。
+ * 接続コードは省ける（`ai connect` が画面に出さずに聞くか stdin から読む。引数だと ps やシェルの履歴に残る）。
+ */
 const checkAiPositionals = (positionals: readonly string[], lan: boolean): void => {
   const action = positionals[1]
   if (!AI_ACTIONS.some((a) => a === action)) throw new Error('ai の後には install・connect・status のどれかを書きます（pnpm ixa ai install）')
-  const expected = action === 'connect' ? 3 : 2
-  if (positionals.length !== expected) {
-    throw new Error(action === 'connect' ? 'ai connect の後には接続コードを 1 つだけ書きます' : `ai ${String(action)} の後ろに余分な語があります`)
+  if (action === 'connect' && positionals.length > 3) {
+    throw new Error(`ai connect の後には接続コードを 1 つだけ書きます（${String(positionals.length - 2)} つあります。省くと画面に出さずに聞きます）`)
   }
+  if (action !== 'connect' && positionals.length !== 2) throw new Error(`ai ${String(action)} の後ろに余分な語があります`)
   if (lan) {
     throw new Error(
       '--lan は AI 用の別の Mac で使います: その Mac で uv run https://raw.githubusercontent.com/kabatin/ixa-video-creator/<版>/tools/ixa-ai/ixa_ai.py install --lan を回し、出た 1 行（pnpm ixa ai connect …）をこの Mac で貼る',
@@ -113,7 +116,8 @@ export const parseCliArgs = (argv: readonly string[]): Options => {
   }
   if (command === 'ai') checkAiPositionals(positionals, values.lan)
   if (command !== 'infra' && command !== 'ai' && positionals.length > 1) {
-    throw new Error(`コマンドは 1 つだけ書きます（${positionals.join(' ')}）`)
+    // 語は写さない（`pnpm ixa connect <接続コード>` のように ai を抜かして貼ることがある）。
+    throw new Error(`コマンドは 1 つだけ書きます（${String(positionals.length)} つあります）`)
   }
   const parsed = Options.safeParse({
     command,
@@ -140,7 +144,7 @@ export const parseCliArgs = (argv: readonly string[]): Options => {
   if (!parsed.success) {
     const first = parsed.error.issues[0]
     throw new Error(
-      first?.path[0] === 'command' ? `知らないコマンドです: ${command}（${COMMANDS.join(' / ')}）` : (first?.message ?? '引数が不正です'),
+      first?.path[0] === 'command' ? `知らないコマンドです（${COMMANDS.join(' / ')}）` : (first?.message ?? '引数が不正です'),
     )
   }
   return parsed.data

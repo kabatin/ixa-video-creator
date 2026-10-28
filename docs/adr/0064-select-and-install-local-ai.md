@@ -50,7 +50,11 @@ Supersedes: ADR-0063 の「分かっている不足」の「手元の AI サー�
 - `pnpm ixa ai install`: `uv run tools/ixa-ai/ixa_ai.py install --result-file ~/.cache/ixa/ai-install-result.json …` を
   `inherit: 'to-stderr'` で呼ぶ（端末での質問はそのまま通る）。答えのファイルを zod で読んで消し、`env` を `.env` に書いて doctor を回す。
   `--plan` は一覧だけ（何も変えない）。`--lan` は止めて「別の Mac で回す」1 行を案内する。
-- `pnpm ixa ai connect <接続コード>`: 読んで `LOCAL_*_GENERATOR`・`*_API_URL`・`*_API_TOKEN` を書き、doctor を回す。
+- `pnpm ixa ai connect [接続コード]`: 読んで `LOCAL_*_GENERATOR`・`*_API_URL`・`*_API_TOKEN` を書き、doctor を回す。
+  - **接続コードは引数で渡さず、聞かれてから貼るのを勧める。** 引数は `ps` の一覧とシェルの履歴（`~/.zsh_history`）に残り、
+    接続コードには合言葉が入っている。省くと、端末では画面に出さずに聞き（`promptSecret`）、端末でなければ stdin を読む
+    （`… | pnpm ixa ai connect`）。引数の形も残す（使い捨ての端末・CI 向け）が、手順書では聞く形だけを書く。
+  - 引数の誤りの文には打った語を写さない（`pnpm ixa connect <接続コード>` のように `ai` を抜かして貼ることがある。数だけ言う）。
 - `.env` の書き方（`apps/cli/src/ai/env-merge.ts`、純粋）:
   - `LOCAL_*_GENERATOR` は今の一覧に足す。`none` を外し、重ねず、今の順を残す。
   - 値の入った `*_API_URL`・`WHISPER_CPP_MODEL` を**別の値に替えるのは `--overwrite-env` か端末での「はい」のときだけ**。既定の URL は空とみなす。

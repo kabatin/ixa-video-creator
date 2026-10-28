@@ -174,18 +174,22 @@ const confirm = async (question: string): Promise<boolean> => {
 const CTRL_C = '\u0003'
 const BACKSPACES = new Set(['\u007f', '\b'])
 
-/** 打った文字を出さずに 1 行読む（raw モード）。貼り付けもそのまま受ける。 */
-const promptSecret = (question: string): Promise<string | null> => {
-  const input = process.stdin
+/** `promptSecret` が使う stdin の口（テストは偽物を渡す）。 */
+export type SecretInput = Pick<NodeJS.ReadStream, 'isTTY' | 'setRawMode' | 'setEncoding' | 'resume' | 'pause' | 'on' | 'off' | 'once'>
+
+/** 打った文字を出さずに 1 行読む（raw モード）。貼り付けもそのまま受ける。stdin が閉じたら null（待ち続けない）。 */
+export const readSecretLine = (input: SecretInput, write: (text: string) => void, question: string): Promise<string | null> => {
   if (!input.isTTY) return Promise.resolve(null)
-  process.stderr.write(question)
+  write(question)
   return new Promise((resolve) => {
     let typed = ''
+    const onEnd = (): void => finish(null)
     const finish = (result: string | null): void => {
       input.off('data', onData)
+      input.off('end', onEnd)
       input.setRawMode(false)
       input.pause()
-      process.stderr.write('\n')
+      write('\n')
       resolve(result)
     }
     const onData = (chunk: string): void => {
@@ -200,7 +204,19 @@ const promptSecret = (question: string): Promise<string | null> => {
     input.setRawMode(true)
     input.resume()
     input.on('data', onData)
+    input.once('end', onEnd)
   })
+}
+
+const promptSecret = (question: string): Promise<string | null> =>
+  readSecretLine(process.stdin, (text) => process.stderr.write(text), question)
+
+const readStdin = async (): Promise<string | null> => {
+  if (process.stdin.isTTY) return null
+  const chunks: Buffer[] = []
+  for await (const chunk of process.stdin) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)))
+  const text = Buffer.concat(chunks).toString('utf8').trim()
+  return text === '' ? null : text
 }
 
 export const createRealSystem = (): System => ({
@@ -225,6 +241,7 @@ export const createRealSystem = (): System => ({
   randomHex: (bytes) => randomBytes(bytes).toString('hex'),
   confirm,
   promptSecret,
+  readStdin,
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   nodeVersion: process.versions.node,
   platform: process.platform,

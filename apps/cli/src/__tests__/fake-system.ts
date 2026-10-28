@@ -20,6 +20,7 @@ export const fakeSystem = (
   randomHex: (bytes) => 'f'.repeat(bytes * 2),
   confirm: () => Promise.resolve(false),
   promptSecret: () => Promise.resolve(null),
+  readStdin: () => Promise.resolve(null),
   sleep: () => Promise.resolve(),
   nodeVersion: '22.11.0',
   platform: 'darwin',

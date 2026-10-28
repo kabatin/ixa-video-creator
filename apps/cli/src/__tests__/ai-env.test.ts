@@ -151,9 +151,34 @@ describe('parseCliArgs（ai）', () => {
     expect(parseCliArgs(['ai', 'status']).action).toBe('status')
   })
 
+  it('ai connect は接続コードを省ける（端末で画面に出さずに聞くか、stdin から読む）', () => {
+    expect(parseCliArgs(['ai', 'connect'])).toMatchObject({ action: 'connect', code: undefined })
+  })
+
+  it('余分な語・知らないコマンドの文に、打った語を写さない（接続コードを ai 抜きで貼ることがある）', () => {
+    const SECRET = connectCode([{ id: 'sfx-api', url: 'http://ai.local:8769', token: TOKEN }])
+    const cases: readonly (readonly string[])[] = [
+      ['connect', SECRET],
+      [SECRET],
+      ['doctor', SECRET],
+      ['ai', 'connect', SECRET, 'extra'],
+      ['ai', 'status', SECRET],
+      ['infra', 'up', SECRET],
+    ]
+    for (const argv of cases) {
+      expect(() => parseCliArgs(argv)).toThrow()
+      try {
+        parseCliArgs(argv)
+      } catch (error) {
+        expect(String(error)).not.toContain(SECRET)
+        expect(String(error)).not.toContain(TOKEN)
+      }
+    }
+    expect(() => parseCliArgs(['doctor', SECRET])).toThrow('2 つあります')
+  })
+
   it('形の違うものは止める（接続コードは文に入れない）', () => {
     expect(() => parseCliArgs(['ai'])).toThrow('install・connect・status')
-    expect(() => parseCliArgs(['ai', 'connect'])).toThrow('接続コード')
     expect(() => parseCliArgs(['ai', 'status', 'x'])).toThrow('余分')
     expect(() => parseCliArgs(['ai', 'install', '--models', 'h3;rm'])).toThrow('カンマ区切り')
     expect(() => parseCliArgs(['ai', 'install', '--lan'])).toThrow('別の Mac')
