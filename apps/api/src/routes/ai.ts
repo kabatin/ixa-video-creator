@@ -14,6 +14,7 @@ import { errorContent, fail, ok, successResponse } from '../response.js'
 
 /**
  * 使う AI（ADR-0032）。この環境で見つかった AI と、用途（テキスト・画像・動画・声・文字起こし・曲）ごとの選択。
+ * AI のチェック（`checks`。ADR-0066）も同じ行に持つ。省けば切る（domain の `AiSettings`）。
  *
  * **選べるかの規則は domain の `aiChoiceProblem` 1 か所。** 一覧の「選べない理由」と、保存の 422 が同じ文を言う。
  * API キーは扱わない（`.env` のまま。規約 6）。
@@ -84,7 +85,7 @@ const putSettingsRoute = createRoute({
   method: 'put',
   path: '/ai/settings',
   tags: ['ai'],
-  summary: '用途ごとに使う AI を選ぶ',
+  summary: '用途ごとに使う AI と、AI のチェック（絵・Take。既定は切る）を選ぶ',
   request: { body: { required: true, content: { 'application/json': { schema: Settings } } } },
   responses: {
     200: {

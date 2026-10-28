@@ -8,7 +8,8 @@ import { baseAppDeps, createTestApp } from './app-deps.js'
  * **選べるかの規則は domain の `aiChoiceProblem` 1 か所**（一覧の灰色と 422 が同じ理由を言う）。
  */
 
-const DEFAULTS: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub' }
+const OFF = { image: false, video: false }
+const DEFAULTS: AiSettings = { text: 'stub', image: 'stub', video: 'stub', voice: 'stub', transcribe: 'stub', music: 'stub', sfx: 'stub', checks: OFF }
 
 const statuses = (ready: readonly AiToolId[]): Record<AiToolId, AiToolStatus> =>
   Object.fromEntries(
@@ -93,6 +94,8 @@ describe('GET /ai/tools', () => {
       transcribe: 'stub',
       music: 'stub',
       sfx: 'stub',
+      // チェックは勧めない（Claude の利用枠を使う。ADR-0066）。
+      checks: OFF,
     })
   })
 
@@ -127,8 +130,37 @@ describe('/ai/settings', () => {
     const body = (await (await app.request('/ai/settings')).json()) as { data: unknown }
 
     expect(saved.status).toBe(200)
-    expect(store.value).toEqual(chosen)
+    // チェックを送らなければ切る（チェックを知らない前の画面・MCP から保存しても、勝手に入れない。ADR-0066）。
+    expect(store.value).toEqual({ ...chosen, checks: OFF })
+    expect(body.data).toEqual({ settings: { ...chosen, checks: OFF }, source: 'saved' })
+  })
+
+  it('AI のチェック（絵・Take）を入れて保存すると、以後はそれを返す（ADR-0066）', async () => {
+    const { app, store } = setup()
+    const chosen = { ...DEFAULTS, text: 'claude_cli', checks: { image: true, video: false } }
+
+    const saved = await put(app, chosen)
+    const body = (await (await app.request('/ai/settings')).json()) as { data: unknown }
+
+    expect(saved.status).toBe(200)
+    expect(store.value?.checks).toEqual({ image: true, video: false })
     expect(body.data).toEqual({ settings: chosen, source: 'saved' })
+  })
+
+  it('まだ選んでいなければ、AI のチェックはどちらも切って返す', async () => {
+    const { app } = setup()
+
+    const body = (await (await app.request('/ai/settings')).json()) as { data: { settings: AiSettings } }
+
+    expect(body.data.settings.checks).toEqual(OFF)
+  })
+
+  it('AI のチェックが真偽でなければ 422（保存しない）', async () => {
+    const { app, store } = setup()
+
+    expect((await put(app, { ...DEFAULTS, checks: { image: 'yes', video: false } })).status).toBe(422)
+    expect((await put(app, { ...DEFAULTS, checks: { image: true } })).status).toBe(422)
+    expect(store.value).toBeNull()
   })
 
   it('その用途に使えない AI・見つからない AI は 422 で、用途ごとに理由を返す（保存しない）', async () => {
