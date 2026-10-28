@@ -14,12 +14,17 @@ import {
   toolsStep,
   type SetupContext,
 } from '../setup/steps.js'
+import { geminiStep } from '../setup/gemini.js'
+import { mcpStep } from '../setup/mcp-step.js'
+import { remotionBrowserStep } from '../setup/render-browser.js'
+import { textAiStep } from '../setup/text-ai.js'
 import type { System } from '../system.js'
 import { hasFailure, isStopping } from '../types.js'
 import { finalDoctor } from './doctor.js'
 
 /**
- * `pnpm ixa setup`（ADR-0063）。道具 → `.env` → Docker → DB の更新 → 初期データ → 音の解析の依存 → doctor。
+ * `pnpm ixa setup`（ADR-0063）。道具 → `.env` → Docker → DB の更新 → 初期データ → 音の解析の依存 →
+ * テキストの AI → Gemini の鍵 → 書き出しの headless Chrome → MCP の登録（ADR-0065。どれも止めない）→ doctor。
  * 止まる手順があればそこで止め、直し方を出す（それより先は回さない）。
  */
 
@@ -41,6 +46,10 @@ export const setupCommand = async (system: System, repo: RepoPaths, out: Output,
     async (c) => migrateStep(c, await readEnv(c.system, c.repo)),
     async (c) => seedStep(c, await readEnv(c.system, c.repo)),
     audioDepsStep,
+    textAiStep,
+    geminiStep,
+    remotionBrowserStep,
+    mcpStep,
   ]
   const results = await runSteps(ctx, steps, out, 'pnpm -s ixa setup')
   const stopped = results.some(isStopping)
