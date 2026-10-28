@@ -6,7 +6,7 @@ import type { CheckResult } from '../types.js'
 /**
  * 手元の AI サーバー（vpipe・wan・klein・ace-step・sfx）。**`.env` で有効にしたものだけ**届くかを見る。
  * 叩くのは `GET /v1/health` だけ（何も積まない。`packages/providers` の点検と同じ口）。
- * サーバそのものの導入・更新は扱わない（別のリポジトリ）。
+ * サーバそのものの導入は `pnpm ixa ai install`（ADR-0064）。ここは届くかを見るだけ。
  */
 
 export type LocalServerFacts = {
@@ -19,7 +19,7 @@ export type LocalServerFacts = {
 
 export type LocalAiFacts = { readonly configValid: boolean; readonly servers: readonly LocalServerFacts[] }
 
-const DOCS = 'README.md#generating-on-this-mac-optional'
+const DOCS = 'INSTALL.md#手元の生成-ai'
 
 /** 判定（純粋）。 */
 export const judgeLocalAi = (facts: LocalAiFacts): readonly CheckResult[] => {
@@ -38,7 +38,10 @@ export const judgeLocalAi = (facts: LocalAiFacts): readonly CheckResult[] => {
           level: 'warn',
           message: `${server.enabledBy} に ${server.id} があるが届きません（${server.reachable}）`,
           fix: {
-            hint: `サーバを起動するか、${server.urlEnvName} を確かめる（サーバは別のリポジトリ）`,
+            hint:
+              `この Mac に入れるなら pnpm ixa ai install。別の Mac なら、その Mac で ixa_ai.py install --lan を回し、` +
+              `出た pnpm ixa ai connect … を貼る（INSTALL.md）。入っているならサーバを起動するか ${server.urlEnvName} を確かめる`,
+            command: 'pnpm ixa ai install',
             needsHuman: true,
           },
           docs: DOCS,

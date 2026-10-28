@@ -1,0 +1,135 @@
+import { describe, expect, it } from 'vitest'
+import { connectCodeChanges, validateInstallEnv } from '../ai/contract.js'
+import { applyEnvChanges, mergeGeneratorList, setEnvValue } from '../ai/env-merge.js'
+import { parseCliArgs } from '../args.js'
+
+const TOKEN = 'T'.repeat(43)
+export const connectCode = (servers: readonly { id: string; url: string; token: string }[]): string =>
+  Buffer.from(JSON.stringify({ v: 1, servers })).toString('base64url')
+
+describe('mergeGeneratorList（LOCAL_*_GENERATOR を足し合わせる）', () => {
+  it('none を外し、重ねず、今の順のまま後ろに足す', () => {
+    expect(mergeGeneratorList('none', 'sfx_api')).toBe('sfx_api')
+    expect(mergeGeneratorList('vpipe', 'wan,vpipe')).toBe('vpipe,wan')
+    expect(mergeGeneratorList(' wan , vpipe ', 'vpipe')).toBe('wan,vpipe')
+  })
+
+  it('何も無ければ none（空にしない）', () => {
+    expect(mergeGeneratorList('', '')).toBe('none')
+    expect(mergeGeneratorList('none', 'none')).toBe('none')
+  })
+})
+
+describe('setEnvValue', () => {
+  it('最初の 1 行だけを替え、無ければ末尾に足す。値の $ はそのまま', () => {
+    expect(setEnvValue('A=1\nB=2\nA=3\n', 'A', 'x')).toBe('A=x\nB=2\nA=3\n')
+    expect(setEnvValue('A=1', 'B', '$&y')).toBe('A=1\nB=$&y\n')
+    expect(setEnvValue('AB=1\n', 'A', '2')).toBe('AB=1\nA=2\n')
+  })
+})
+
+describe('applyEnvChanges', () => {
+  const base = 'LOCAL_SFX_GENERATOR=none\nSFX_API_URL=http://127.0.0.1:8769\nSFX_API_TOKEN=\nWHISPER_CPP_MODEL=\n'
+
+  it('一覧を合わせ、既定の URL は値が入っていない扱いで替える', () => {
+    const r = applyEnvChanges(base, { LOCAL_SFX_GENERATOR: 'sfx_api', SFX_API_URL: 'http://ai.local:8769', SFX_API_TOKEN: TOKEN }, false)
+    expect(r.conflicts).toEqual([])
+    expect(r.changed).toEqual(['LOCAL_SFX_GENERATOR', 'SFX_API_URL', 'SFX_API_TOKEN'])
+    expect(r.content).toContain('LOCAL_SFX_GENERATOR=sfx_api\n')
+    expect(r.content).toContain(`SFX_API_TOKEN=${TOKEN}\n`)
+  })
+
+  it('値の入った別の URL は替えず、対の合言葉も替えない（overwrite なら替える）', () => {
+    const custom = base.replace('http://127.0.0.1:8769', 'http://old.local:8769')
+    const changes = { SFX_API_URL: 'http://ai.local:8769', SFX_API_TOKEN: TOKEN }
+    const kept = applyEnvChanges(custom, changes, false)
+    expect(kept.conflicts).toEqual(['SFX_API_URL', 'SFX_API_TOKEN'])
+    expect(kept.content).toBe(custom)
+    expect(applyEnvChanges(custom, changes, true).changed).toEqual(['SFX_API_URL', 'SFX_API_TOKEN'])
+  })
+
+  it('同じ値なら何もしない（何度回しても同じ）', () => {
+    const once = applyEnvChanges(base, { LOCAL_SFX_GENERATOR: 'sfx_api', WHISPER_CPP_MODEL: '/m.bin' }, false).content
+    const twice = applyEnvChanges(once, { LOCAL_SFX_GENERATOR: 'sfx_api', WHISPER_CPP_MODEL: '/m.bin' }, false)
+    expect(twice.changed).toEqual([])
+    expect(twice.content).toBe(once)
+  })
+})
+
+describe('validateInstallEnv（ixa_ai.py の env を絞る）', () => {
+  it('知っている名前と値だけを通す', () => {
+    const env = { LOCAL_VIDEO_GENERATOR: 'vpipe,wan', VPIPE_API_URL: 'http://127.0.0.1:8765', WHISPER_CPP_MODEL: '/a/b.bin' }
+    expect(validateInstallEnv(env)).toEqual(env)
+  })
+
+  it('合言葉・知らない値・崩れる値は止める（値は文に入れない）', () => {
+    expect(() => validateInstallEnv({ SFX_API_TOKEN: TOKEN })).toThrow('SFX_API_TOKEN は ixa_ai.py が書いてよい名前ではありません')
+    expect(() => validateInstallEnv({ LOCAL_IMAGE_GENERATOR: 'klein,dalle' })).toThrow('知らない値')
+    expect(() => validateInstallEnv({ VPIPE_API_URL: 'http://a\nB=1' })).toThrow('形が違います')
+    expect(() => validateInstallEnv({ VPIPE_API_URL: 'file:///etc' })).toThrow('URL ではありません')
+    expect(() => validateInstallEnv({ WHISPER_CPP_MODEL: 'rel.bin' })).toThrow('絶対パス')
+    try {
+      validateInstallEnv({ SFX_API_TOKEN: TOKEN })
+    } catch (error) {
+      expect(String(error)).not.toContain(TOKEN)
+    }
+  })
+})
+
+describe('connectCodeChanges（接続コード）', () => {
+  it('サーバーごとに一覧・URL・合言葉にする（ixa_ai.py と同じ base64url・= 無し）', () => {
+    const code = connectCode([
+      { id: 'vpipe-api', url: 'http://ai.local:8765', token: TOKEN },
+      { id: 'wan-api', url: 'http://ai.local:8766', token: TOKEN },
+    ])
+    expect(code).not.toContain('=')
+    expect(connectCodeChanges(code)).toEqual({
+      LOCAL_VIDEO_GENERATOR: 'vpipe,wan',
+      VPIPE_API_URL: 'http://ai.local:8765',
+      VPIPE_API_TOKEN: TOKEN,
+      WAN_API_URL: 'http://ai.local:8766',
+      WAN_API_TOKEN: TOKEN,
+    })
+  })
+
+  it('読めないコードは止め、文にコードも合言葉も入れない', () => {
+    const bad = [
+      'not-base64!',
+      connectCode([{ id: 'evil-api', url: 'http://ai.local:1', token: TOKEN }]),
+      connectCode([{ id: 'sfx-api', url: 'javascript:alert(1)', token: TOKEN }]),
+      connectCode([{ id: 'sfx-api', url: 'http://ai.local:8769', token: `${TOKEN} x` }]),
+      Buffer.from(JSON.stringify({ v: 2, servers: [] })).toString('base64url'),
+    ]
+    for (const code of bad) {
+      expect(() => connectCodeChanges(code)).toThrow('接続コードを読めません')
+      try {
+        connectCodeChanges(code)
+      } catch (error) {
+        expect(String(error)).not.toContain(TOKEN)
+        expect(String(error)).not.toContain(code)
+      }
+    }
+  })
+})
+
+describe('parseCliArgs（ai）', () => {
+  it('install・connect・status と、そのオプション', () => {
+    expect(parseCliArgs(['ai', 'install', '--plan', '--json'])).toMatchObject({ command: 'ai', action: 'install', plan: true })
+    expect(parseCliArgs(['ai', 'install', '--models', 'h3,sa3-small', '--accept-licenses', 'h3', '--yes'])).toMatchObject({
+      models: 'h3,sa3-small',
+      acceptLicenses: 'h3',
+      yes: true,
+    })
+    expect(parseCliArgs(['ai', 'connect', 'abc'])).toMatchObject({ action: 'connect', code: 'abc' })
+    expect(parseCliArgs(['ai', 'status']).action).toBe('status')
+  })
+
+  it('形の違うものは止める（接続コードは文に入れない）', () => {
+    expect(() => parseCliArgs(['ai'])).toThrow('install・connect・status')
+    expect(() => parseCliArgs(['ai', 'connect'])).toThrow('接続コード')
+    expect(() => parseCliArgs(['ai', 'status', 'x'])).toThrow('余分')
+    expect(() => parseCliArgs(['ai', 'install', '--models', 'h3;rm'])).toThrow('カンマ区切り')
+    expect(() => parseCliArgs(['ai', 'install', '--lan'])).toThrow('別の Mac')
+    expect(() => parseCliArgs(['ai', 'connect', 'SECRETCODE', 'extra'])).toThrow(/^(?!.*SECRETCODE)/)
+  })
+})
