@@ -181,7 +181,7 @@ pnpm -s ixa ai install --models sa3-small,klein-4b --accept-licenses sa3-small,k
 - `--accept-licenses` に無い ID が 1 つでもあると、何も入れずに `needs_human` で止まる。**人の同意なしに足さない。**
 - 空きが足りなければ止まる（`failed`）。空けるか、選ぶものを減らすかを人に聞く。
 - 何度実行しても壊れない（入っているものは `already`）。あとから 1 つ足してもよい。
-- `.env` の `LOCAL_*_GENERATOR` に足し、接続先を書いて、最後に doctor を回す。値の入った接続先を替えるときは止まる（人に聞いて `--yes`）。
+- `.env` の `LOCAL_*_GENERATOR` に足し、接続先を書いて、最後に doctor を回す。値の入った接続先（別の Mac を指す `*_API_URL` など）を替えるときは、何も書かずに止まる（`ai.env.kept`）。人に聞いて、替えてよければ `--overwrite-env` を足してもう一度（`--yes` では替わらない）。
 - klein は入れたあと、Mac の画面に「ほかのアプリのデータへのアクセス」の確認が出る（`needs_human`）。**人に画面で許可してもらう。**
 - 人が手で入れるなら `pnpm ixa ai install`（番号で選び、ライセンスに 1 つずつ y で答える）。
 

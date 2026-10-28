@@ -9,7 +9,9 @@ import { isStopping, type StepResult, type StepStatus } from '../types.js'
 import { finalDoctor } from './doctor.js'
 
 /**
- * `pnpm ixa ai install [--plan] [--models …] [--accept-licenses …] [--yes]`（ADR-0064）。
+ * `pnpm ixa ai install [--plan] [--models …] [--accept-licenses …] [--yes] [--overwrite-env]`（ADR-0064）。
+ * `--yes` は ixa_ai.py に渡すだけ（ライセンス・ダウンロードの質問を飛ばす）。値の入った `.env` の接続先を
+ * 替えるのは `--overwrite-env` だけ（writeEnvStep）。
  * 選ぶ・同意を取る・入れるのは `tools/ixa-ai/ixa_ai.py`（uv で動く。別の Mac でも同じもの）。
  * ここはそれを呼び、答えを `.env` に書き、doctor を回すだけ。`--plan` は何も変えない。
  */
@@ -34,12 +36,13 @@ export const installArgs = (script: string, resultFile: string, options: Options
   ...(options.yes ? ['--yes'] : []),
 ]
 
-/** やり直しの 1 行（選んだものと同意をそのまま付ける。`--yes` は writeEnvStep が足す）。 */
+/** やり直しの 1 行（選んだものと同意をそのまま付ける。`--overwrite-env` は writeEnvStep が足す）。 */
 export const retryOf = (options: Options): string =>
   [
     'pnpm ixa ai install',
     ...(options.models === undefined ? [] : [`--models ${options.models}`]),
     ...(options.acceptLicenses === undefined ? [] : [`--accept-licenses ${options.acceptLicenses}`]),
+    ...(options.yes ? ['--yes'] : []),
   ].join(' ')
 
 const STATUS: Readonly<Record<string, StepStatus>> = {
@@ -132,7 +135,7 @@ export const aiInstallCommand = async (system: System, repo: RepoPaths, out: Out
   const envSteps =
     result === null || Object.keys(result.env).length === 0
       ? []
-      : await writeEnvStep(system, repo, validateInstallEnv(result.env), options.yes, retryOf(options))
+      : await writeEnvStep(system, repo, validateInstallEnv(result.env), options.overwriteEnv, retryOf(options))
   const all = [...steps, ...envSteps]
   envSteps.forEach((s) => out.line(formatStep(s)))
   return finish(system, repo, out, all)

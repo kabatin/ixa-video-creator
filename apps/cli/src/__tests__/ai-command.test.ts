@@ -57,14 +57,21 @@ describe('ai connect', () => {
     expect(env).toContain(`SFX_API_TOKEN=${TOKEN}\n`)
   })
 
-  it('値の入った別の接続先は --yes か「はい」が無ければ替えない', async () => {
+  it('値の入った別の接続先は --overwrite-env か「はい」が無ければ替えず、何も書かない（--yes では替えない）', async () => {
     const custom = EXAMPLE.replace('SFX_API_URL=http://127.0.0.1:8769', 'SFX_API_URL=http://old.local:8769')
-    const { system, written } = fileSystem({ [repo.env]: custom })
-    const c = captured(true)
-    const exit = await aiConnectCommand(system, repo, c.out, parseCliArgs(['ai', 'connect', code]))
-    expect(exit).toBe(1)
-    expect(written[repo.env] ?? '').not.toContain(TOKEN)
-    expect(c.all()).toContain('SFX_API_URL')
+    for (const argv of [['ai', 'connect', code], ['ai', 'connect', code, '--yes']]) {
+      const { system, written } = fileSystem({ [repo.env]: custom })
+      const c = captured(true)
+      const exit = await aiConnectCommand(system, repo, c.out, parseCliArgs(argv))
+      expect(exit).toBe(1)
+      expect(written[repo.env]).toBeUndefined()
+      expect(c.all()).toContain('SFX_API_URL')
+      expect(c.results[0]).toMatchObject({ steps: [{ id: 'ai.env.kept', status: 'needs_human', fix: { needsHuman: true } }] })
+      expect(JSON.stringify(c.results[0])).toContain('--overwrite-env')
+    }
+    const forced = fileSystem({ [repo.env]: custom })
+    await aiConnectCommand(forced.system, repo, captured(true).out, parseCliArgs(['ai', 'connect', code, '--overwrite-env']))
+    expect(forced.written[repo.env]).toContain('SFX_API_URL=http://ai-mac.local:8769\n')
     const asked = fileSystem({ [repo.env]: custom }, { confirm: () => Promise.resolve(true) })
     await aiConnectCommand(asked.system, repo, captured(true).out, parseCliArgs(['ai', 'connect', code]))
     expect(asked.written[repo.env]).toContain('SFX_API_URL=http://ai-mac.local:8769\n')
@@ -81,8 +88,8 @@ describe('ai connect', () => {
 })
 
 describe('ai install', () => {
-  it('引数をそのまま ixa_ai.py に渡す', () => {
-    const options = parseCliArgs(['ai', 'install', '--models', 'h3', '--accept-licenses', 'h3', '--yes'])
+  it('引数をそのまま ixa_ai.py に渡す（--overwrite-env は ixa の .env のことなので渡さない）', () => {
+    const options = parseCliArgs(['ai', 'install', '--models', 'h3', '--accept-licenses', 'h3', '--yes', '--overwrite-env'])
     expect(installArgs('/s.py', '/r.json', options)).toEqual([
       'run', '/s.py', 'install', '--result-file', '/r.json', '--models', 'h3', '--accept-licenses', 'h3', '--yes',
     ])
@@ -139,6 +146,31 @@ describe('ai install', () => {
         { id: 'ai.env', status: 'done', message: '.env に書きました: LOCAL_SFX_GENERATOR' },
       ],
     })
+  })
+
+  it('--yes でも、値の入った別の URL（別の Mac の sfx-api など）は替えない。--overwrite-env なら替える', async () => {
+    const answer = {
+      ok: true,
+      action: 'install',
+      servers: [{ server: 'sfx-api', url: 'http://127.0.0.1:8769', tokenSet: false, components: [{ id: 'sa3-small', status: 'installed' }] }],
+      local: [],
+      env: { LOCAL_SFX_GENERATOR: 'sfx_api', SFX_API_URL: 'http://127.0.0.1:8769' },
+    }
+    const remote = EXAMPLE.replace('SFX_API_URL=http://127.0.0.1:8769', 'SFX_API_URL=http://ai-mac.local:8769')
+    const base = ['ai', 'install', '--models', 'sa3-small', '--accept-licenses', 'sa3-small', '--yes', '--json']
+    const runWith = async (argv: readonly string[]) => {
+      const fs = fileSystem({ [repo.env]: remote, [RESULT_FILE]: JSON.stringify(answer) }, { run: () => Promise.resolve(done('')) })
+      const c = captured(true)
+      const exit = await aiInstallCommand(fs.system, repo, c.out, parseCliArgs(argv))
+      return { exit, written: fs.written, c }
+    }
+    const kept = await runWith(base)
+    expect(kept.exit).toBe(1)
+    expect(kept.written[repo.env]).toBeUndefined()
+    expect(kept.c.results[0]).toMatchObject({ steps: [{ id: 'ai.sa3-small' }, { id: 'ai.env.kept', status: 'needs_human' }] })
+    expect(JSON.stringify(kept.c.results[0])).toContain('--overwrite-env')
+    const forced = await runWith([...base, '--overwrite-env'])
+    expect(forced.written[repo.env]).toContain('SFX_API_URL=http://127.0.0.1:8769\n')
   })
 
   it('.env が無ければ何も入れずに止める', async () => {

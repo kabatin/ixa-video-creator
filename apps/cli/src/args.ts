@@ -26,6 +26,8 @@ const Options = z.object({
   lan: z.boolean(),
   json: z.boolean(),
   yes: z.boolean(),
+  /** `ai install | connect` で、値の入った `*_API_URL` を替えてよい（`--yes` とは分ける。ADR-0064）。 */
+  overwriteEnv: z.boolean(),
   force: z.boolean(),
   whileRunning: z.boolean(),
   check: z.boolean(),
@@ -55,6 +57,7 @@ export const HELP = `使い方: pnpm ixa <コマンド> [オプション]
            install  選んで入れる。--plan で一覧だけ（何も変えない）、--models h3,sa3-small と
                     --accept-licenses h3,sa3-small --yes で質問せずに入れる
            connect <接続コード>  別の Mac で入れた AI を .env につなぐ
+           どちらも、値の入った接続先（*_API_URL）を替えるのは --overwrite-env か、端末で「はい」と答えたときだけ
            status   手元の AI サーバーに届くかだけを見る
 
   共通: --json で機械向けに出す（各項目に fix.command・fix.needsHuman・docs）
@@ -85,6 +88,7 @@ export const parseCliArgs = (argv: readonly string[]): Options => {
     options: {
       json: { type: 'boolean', default: false },
       yes: { type: 'boolean', short: 'y', default: false },
+      'overwrite-env': { type: 'boolean', default: false },
       force: { type: 'boolean', default: false },
       'while-running': { type: 'boolean', default: false },
       check: { type: 'boolean', default: false },
@@ -116,6 +120,7 @@ export const parseCliArgs = (argv: readonly string[]): Options => {
     action,
     json: values.json,
     yes: values.yes,
+    overwriteEnv: values['overwrite-env'],
     force: values.force,
     whileRunning: values['while-running'],
     check: values.check,

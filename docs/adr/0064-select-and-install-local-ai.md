@@ -53,7 +53,10 @@ Supersedes: ADR-0063 の「分かっている不足」の「手元の AI サー�
 - `pnpm ixa ai connect <接続コード>`: 読んで `LOCAL_*_GENERATOR`・`*_API_URL`・`*_API_TOKEN` を書き、doctor を回す。
 - `.env` の書き方（`apps/cli/src/ai/env-merge.ts`、純粋）:
   - `LOCAL_*_GENERATOR` は今の一覧に足す。`none` を外し、重ねず、今の順を残す。
-  - 値の入った `*_API_URL`・`WHISPER_CPP_MODEL` を**別の値に替えるのは `--yes` か端末での「はい」のときだけ**。既定の URL は空とみなす。
+  - 値の入った `*_API_URL`・`WHISPER_CPP_MODEL` を**別の値に替えるのは `--overwrite-env` か端末での「はい」のときだけ**。既定の URL は空とみなす。
+    `--yes` では替えない（`--yes` は ixa_ai.py に渡すライセンス・ダウンロードの質問の省略だけ。2026-10-28 のレビュー:
+    `--yes` で別の Mac を指す `SFX_API_URL` が 127.0.0.1 に替わり、別の Mac の合言葉だけが残っていた）。
+    替えてよいと言われなければ**何も書かない**（`ai.env.kept`、`needs_human`）。
   - 合言葉は対の URL を書けたときだけ書く。
   - 書いた後の `configProblems` が書く前より増えるなら書かない。合言葉の形（32 文字以上など）の規則は写さず、`packages/config` を唯一の正にする。
   - `ixa_ai.py` の `env` は名前と値の形を絞る（合言葉の名前は通さない）。

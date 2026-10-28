@@ -16,7 +16,7 @@ import { finalDoctor } from './doctor.js'
  */
 
 export const aiConnectCommand = async (system: System, repo: RepoPaths, out: Output, options: Options): Promise<number> => {
-  const steps = await writeEnvStep(system, repo, connectCodeChanges(options.code ?? ''), options.yes, 'pnpm ixa ai connect <接続コード>')
+  const steps = await writeEnvStep(system, repo, connectCodeChanges(options.code ?? ''), options.overwriteEnv, 'pnpm ixa ai connect <接続コード>')
   steps.forEach((s) => out.line(formatStep(s)))
   const ok = !steps.some(isStopping)
   const results = steps.some((s) => s.status === 'done') ? await finalDoctor(system, repo, out) : []
