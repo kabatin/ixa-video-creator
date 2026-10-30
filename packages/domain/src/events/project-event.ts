@@ -37,6 +37,9 @@ import { ShotStatus } from '../shot/shot.js'
  * 出来事の形は domain が決める。API と worker が別々に形を持つと必ずズレる（lessons L-016）。
  */
 
+/** 書いた画面の印。ヘッダから来るので短い英数字だけを通す。 */
+export const ProjectEditOrigin = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)
+
 const base = {
   projectId: ProjectId,
   /** 起きた時刻（ISO 8601）。順序の判断に使う。**受け手の時計を使わない。** */
@@ -124,6 +127,17 @@ export const ProjectEvent = z.discriminatedUnion('type', [
     timelineClipId: TimelineClipId.nullable().default(null),
     error: z.string().nullable(),
   }),
+  /**
+   * 作品を書き換えた（2026-10-30）。テロップ・効果音・Shot・ナレーション・トランジション…の書き込みが成功した。
+   * MCP（外のエージェント）や別の画面が変えた物を、開いている画面が読み直さずに出すための合図。
+   * **何を変えたかは運ばない**（画面は全部を読み直す。口ごとに運ぶ物を決めると、どれかで必ず漏れる）。
+   */
+  z.object({
+    ...base,
+    type: z.literal('project.edited'),
+    /** 書いた画面の印（`X-Ixa-Client`）。画面は自分の書き込みを読み直さない。MCP など印の無い書き込みは null。 */
+    origin: ProjectEditOrigin.nullable().default(null),
+  }),
 ])
 export type ProjectEvent = z.infer<typeof ProjectEvent>
 
@@ -157,4 +171,5 @@ export const SHOT_LIST_EVENT_TYPES: readonly ProjectEventType[] = [
   'voice_job.status',
   'music_job.status',
   'sfx_job.status',
+  'project.edited',
 ]
