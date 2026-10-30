@@ -1,4 +1,5 @@
 import type { z } from 'zod'
+import { EDIT_ORIGIN_HEADER, browserEditOrigin } from '@/lib/edit-origin'
 import { ensureOk, joinUrl, jsonHeaders, send, unwrap } from '@/lib/http'
 
 /**
@@ -27,13 +28,25 @@ export type Requester = {
 export type RequesterOptions = {
   /** Next のサーバ側から呼ぶときのクッキー（ブラウザの中では要らない。ブラウザが付ける）。 */
   readonly cookie?: string
+  /**
+   * 書き込みに付ける画面の印（`edit-origin.ts`）。省けばこのタブの印（サーバ側では付けない）。
+   * API はこれを `project.edited` に載せ、画面は自分の書き込みを読み直さない。
+   */
+  readonly editOrigin?: string | null
 }
 
 export const createRequester = (baseUrl: string, options: RequesterOptions = {}): Requester => {
   const headers: Readonly<Record<string, string>> =
     options.cookie === undefined || options.cookie === '' ? jsonHeaders : { ...jsonHeaders, cookie: options.cookie }
+  const editOrigin = options.editOrigin === undefined ? browserEditOrigin() : options.editOrigin
+  /** 書き込みだけに印を付ける（読むだけの要求は何も書き換えない）。 */
+  const writeHeaders: Readonly<Record<string, string>> =
+    editOrigin === null ? headers : { ...headers, [EDIT_ORIGIN_HEADER]: editOrigin }
+  const headersFor = (method: string): Readonly<Record<string, string>> => (method === 'GET' ? headers : writeHeaders)
   const initFor = (method: string, body: unknown): RequestInit =>
-    body === undefined ? { method, headers } : { method, headers, body: JSON.stringify(body) }
+    body === undefined
+      ? { method, headers: headersFor(method) }
+      : { method, headers: headersFor(method), body: JSON.stringify(body) }
 
   const call = async <T>(
     method: string,
@@ -70,7 +83,7 @@ export const createRequester = (baseUrl: string, options: RequesterOptions = {})
 
     remove: async (path) => {
       const url = joinUrl(baseUrl, path)
-      const raw = await send(url, { method: 'DELETE', headers })
+      const raw = await send(url, { method: 'DELETE', headers: writeHeaders })
       ensureOk(raw, `DELETE ${url}`)
     },
   }

@@ -29,6 +29,8 @@ import { PosterRenewalContext } from '@/lib/poster-renewal'
 import { sortShotsByStart } from '@/lib/timeline-display'
 import { posterByShotId, postersStale, posterRetryDelayMs, type ShotPosterMap } from '@/lib/shot-posters'
 import { useProjectEvents } from '@/lib/use-project-events'
+import { browserEditOrigin, isForeignEdit } from '@/lib/edit-origin'
+import { useCoalescedReload } from '@/components/workbench/use-coalesced-reload'
 import { musicJobAddedTracks, musicJobNotice } from '@/lib/music-job-form'
 import { imageJobFailureNotice } from '@/lib/image-job-notice'
 import type { DialogPayload } from '@/lib/dialog-payload'
@@ -57,6 +59,9 @@ export type WorkbenchProviderProps = {
   readonly focusPanel: (panel: PanelId) => void
   readonly children: ReactNode
 }
+
+/** 外の書き換えの合図をまとめる間合い（MCP は 1 件ずつ書く）。 */
+const FOREIGN_EDIT_TIMING = { quietMs: 600, maxWaitMs: 3000 } as const
 
 /** 引く前の状態。空の Map は「1 件も無い」ではなく「まだ引いていない」（L-021）。 */
 const NO_POSTERS: ShotPosterMap = new Map()
@@ -194,6 +199,8 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
       const line = jobEventEntry(event, (id) => shots?.find((shot) => shot.id === id)?.code ?? null)
       if (line !== null) consoleLog.push(line.level, line.text)
       setShots((current) => (current === null ? current : applyProjectEvent(current, event).shots))
+      // 外（MCP・エージェント・別の画面）の書き換え（2026-10-30）。自分の書き込みは保存した部品が反映済み。
+      if (isForeignEdit(event, browserEditOrigin())) reloadForeignEdits()
       // 採用が変わると表紙の絵も変わる。**別の経路の採用**（一括・別の画面・API）もここで拾う。
       // 以前は生成の成功でしか取り直さず、採用した Shot の絵が読み直すまで出なかった。
       if (event.type === 'shot.status') setPosterEpoch((epoch) => epoch + 1)
@@ -362,6 +369,20 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
     router.refresh()
     setPosterEpoch((epoch) => epoch + 1)
   }, [router])
+
+  /**
+   * 外の書き換えを読み直す。テロップの縁の色を MCP で変えても、読み直すまで古い色のままだった（制作者 2026-10-30）。
+   * サーバの一覧・タイムラインとプレビュー（posterEpoch）・ナレーション・効果音・楽曲をまとめて取り直す。
+   */
+  const reloadForeignEdits = useCoalescedReload(
+    useCallback((): void => {
+      refresh()
+      bumpNarration()
+      bumpSfx()
+      setMusicMadeEpoch((epoch) => epoch + 1)
+    }, [refresh, bumpNarration, bumpSfx]),
+    FOREIGN_EDIT_TIMING,
+  )
 
   const value = useMemo<WorkbenchContextValue>(
     () => ({
