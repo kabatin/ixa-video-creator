@@ -95,6 +95,7 @@ import { clipSpanRoutes } from './routes/clip-spans.js'
 import { clipTextStyleRoutes } from './routes/clip-text-style.js'
 import { textStyleRoutes } from './routes/text-styles.js'
 import { eventRoutes } from './routes/events.js'
+import { createProjectEditedNotifier, PROJECT_EDIT_ORIGIN_HEADER } from './events/project-edited.js'
 import { agentSessionRoutes } from './routes/agent-sessions.js'
 import { agentApprovalRoutes } from './routes/agent-approvals.js'
 import { agentStreamRoutes } from './routes/agent-stream.js'
@@ -274,7 +275,8 @@ export const createApp = (deps: AppDeps) => {
         // 画面の Requester が使うメソッドはすべて（PUT を落としていて「使う AI」の保存と最初のフレームが止まっていた）。
         allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
         // 自動化用の鍵（Bearer）を送れるように。
-        allowHeaders: ['Content-Type', 'Authorization'],
+        // 書いた画面の印（`project.edited` の origin）。
+        allowHeaders: ['Content-Type', 'Authorization', PROJECT_EDIT_ORIGIN_HEADER],
         // 合言葉で入ったクッキーを、画面（別のポート）からの呼び出しに付けさせる（認証）。
         // これが無いと、画面が `credentials: 'include'` で呼んだ応答をブラウザが捨てる。
         credentials: true,
@@ -287,6 +289,16 @@ export const createApp = (deps: AppDeps) => {
   // 門より先に CORS が答える。門の外に置くもの（/health・/files・入る口）は門の中で見分ける。
   app.use('*', deps.auth.gate)
   app.route('/', deps.auth.routes)
+  // 作品を書き換えたら、開いている画面へ知らせる（MCP の書き込みが読み直すまで出なかった。2026-10-30）。
+  // **字幕の作り直しより外に置く。** 作り直しが終わってから流すので、画面は作り直した字幕まで読める。
+  app.use(
+    '*',
+    createProjectEditedNotifier({
+      ...deps,
+      ...(deps.narration === undefined ? {} : { narrationLines: deps.narration.lines }),
+      now: () => new Date(),
+    }),
+  )
   // セリフの字幕（ADR-0061）。Shot を変える口の書き込みが成功したら、作品ごとに作り直す（口ごとに呼び忘れない）。
   const dialogueTelops = createDialogueTelopSync({ ...deps, mediaAssets, lock: deps.projectClipLock })
   app.use('*', dialogueTelops.middleware)
