@@ -71,7 +71,7 @@ describe('DELETE /takes/:id（見えなくする）', () => {
     const res = await f.hide(f.second)
 
     expect(((await res.json()) as Ok<HideData>).data.shot.status).toBe('draft')
-    expect(f.events.published().at(-1)).toMatchObject({ type: 'shot.status', status: 'draft' })
+    expect(f.events.published().filter((event) => event.type !== 'project.edited').at(-1)).toMatchObject({ type: 'shot.status', status: 'draft' })
   })
 
   it('まだ残っていれば採用待ちのまま', async () => {

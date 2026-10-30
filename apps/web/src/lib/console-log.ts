@@ -104,6 +104,9 @@ export const jobEventEntry = (
   switch (event.type) {
     case 'shot.status':
       return null
+    // 書き換えの合図（MCP の書き込み 1 件ごと）。数が多く、読む価値が無い。
+    case 'project.edited':
+      return null
     case 'generation_job.status':
       if (event.status === 'succeeded') return { level: 'info', text: `${shot(event.shotId)} の Take ができました` }
       if (event.status === 'failed') {

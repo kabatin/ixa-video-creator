@@ -1,4 +1,4 @@
-import { GenerationJob, newId, GenerationJobId, type Project } from '@ixa/domain'
+import { GenerationJob, newId, GenerationJobId, type Project, type ProjectEvent } from '@ixa/domain'
 import {
   aShot,
   aTake,
@@ -88,6 +88,10 @@ const build = (
 const cancel = (f: ReturnType<typeof build>) =>
   postJson(f.app, `/shots/${f.shot.id}/generations/cancel`, {})
 
+/** ジョブと Shot の出来事。書き換えの合図（project.edited）は除く。 */
+const jobEvents = (f: { readonly events: { readonly published: () => readonly ProjectEvent[] } }) =>
+  f.events.published().filter((event) => event.type !== 'project.edited')
+
 describe('POST /shots/:id/generations/cancel', () => {
   it('動いている生成（順番待ち・作成中）をすべて取り消す', async () => {
     const f = build({
@@ -167,7 +171,8 @@ describe('POST /shots/:id/generations/cancel', () => {
 
     await cancel(f)
 
-    const types = f.events.published().map((event) =>
+    // 書き換えの合図（project.edited）はどの書き込みでも流れる。ここではジョブと Shot の出来事だけを見る。
+    const types = jobEvents(f).map((event) =>
       event.type === 'generation_job.status' ? `job:${event.status}` : event.type === 'shot.status' ? `shot:${event.status}` : event.type,
     )
     expect(types).toEqual(['job:cancelled', 'shot:draft'])
@@ -182,7 +187,7 @@ describe('POST /shots/:id/generations/cancel', () => {
     const json = (await res.json()) as Ok<CancelData>
     expect(json.data.cancelledJobIds).toEqual([])
     // 生成中でない Shot の状態は変えない
-    expect(f.events.published()).toEqual([])
+    expect(jobEvents(f)).toEqual([])
   })
 
   it('存在しない Shot は 404', async () => {

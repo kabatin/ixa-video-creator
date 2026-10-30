@@ -1,7 +1,6 @@
 import { ShotCharacter, type CharacterId, type ShotId } from '@ixa/domain'
 import { z } from 'zod'
-import { ensureOk, joinUrl, jsonHeaders, send, unwrap } from '@/lib/http'
-import type { Requester, WireSchema } from '@/lib/requester'
+import type { Requester } from '@/lib/requester'
 
 /**
  * Shot の登場人物（`ShotCharacter` / docs/DOMAIN.md §5・§9）の呼び出し口。
@@ -31,29 +30,6 @@ const castPath = (shotId: ShotId): string => `/shots/${encodeURIComponent(shotId
 const memberPath = (shotId: ShotId, characterId: CharacterId): string =>
   `${castPath(shotId)}/${encodeURIComponent(characterId)}`
 
-/**
- * `Requester` は PUT を持たない（GET / POST / PATCH / DELETE のみ）。
- * ここだけのために共有の口を増やすと他の API モジュールへ影響するため、
- * `Requester` と同じ HTTP プリミティブ（`@/lib/http`）の上に組み立てる。
- * **エラー文脈の付け方と封筒の剥がし方は共有のまま**なので、方針は二重化していない。
- */
-const put = async <T>(
-  requester: Requester,
-  path: string,
-  body: unknown,
-  schema: WireSchema<T>,
-): Promise<T> => {
-  const url = joinUrl(requester.baseUrl, path)
-  const context = `PUT ${url}`
-  const raw = await send(url, {
-    method: 'PUT',
-    headers: jsonHeaders,
-    body: JSON.stringify(body),
-  })
-  ensureOk(raw, context)
-  return unwrap(schema, raw, context)
-}
-
 export type ShotCastApi = {
   /** order 昇順で返る。空配列は「誰も出ていない」であって、失敗ではない。 */
   readonly listShotCast: (shotId: ShotId) => Promise<WireShotCharacter[]>
@@ -70,7 +46,7 @@ export const createShotCastApi = (requester: Requester): ShotCastApi => ({
   listShotCast: async (shotId) => requester.get(castPath(shotId), WireShotCharacterList),
 
   replaceShotCast: async (shotId, entries) =>
-    put(requester, castPath(shotId), ReplaceShotCastBody.parse({ entries }), WireShotCharacterList),
+    requester.put(castPath(shotId), ReplaceShotCastBody.parse({ entries }), WireShotCharacterList),
 
   unlinkShotCharacter: async (shotId, characterId) =>
     requester.remove(memberPath(shotId, characterId)),
