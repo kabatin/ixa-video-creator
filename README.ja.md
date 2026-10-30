@@ -290,7 +290,7 @@ pnpm ixa ai install --plan   # 一覧だけ（容量・メモリ・ライセン�
 エンジンと重みを入れるのは各サーバーの `setup` で、ixa は選んで呼ぶだけ（[ADR-0064](./docs/adr/0064-select-and-install-local-ai.md)）。**別の Mac** で動かすなら、その Mac で次の 1 行を回し（要るのは [uv](https://docs.astral.sh/uv/) だけ）、ixa の Mac で `pnpm ixa ai connect` を打って、1 回だけ出た接続コードを貼る（画面には出ない）。
 
 ```bash
-uv run https://raw.githubusercontent.com/kabatin/ixa-video-creator/v0.8.3/tools/ixa-ai/ixa_ai.py install --lan
+uv run https://raw.githubusercontent.com/kabatin/ixa-video-creator/v0.8.4/tools/ixa-ai/ixa_ai.py install --lan
 ```
 
 手で入れるなら: **サーバを起動 → `.env` に書く →「使う AI」で選ぶ。**

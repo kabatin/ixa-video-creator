@@ -128,7 +128,7 @@ export const AGENT_TOOLS: readonly ToolDef[] = [
 /** 全ツールの危険度（ツール名 → 印）。 */
 export const TOOL_RISKS: ReadonlyMap<string, ToolRisk> = new Map([...TOOLS, ...AGENT_TOOLS].map((t) => [t.name, t.risk]))
 
-export const SERVER_INFO = { name: 'ixa', version: '0.8.3' } as const
+export const SERVER_INFO = { name: 'ixa', version: '0.8.4' } as const
 
 /** MCP サーバを組み立てる。接続（stdio）は main.ts が行う。 */
 export const createServer = (deps: ToolDeps): McpServer => {

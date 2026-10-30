@@ -1,6 +1,6 @@
 {
   "name": "@ixa/cli",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "private": true,
   "type": "module",
   "description": "導入・点検・更新のコマンド（pnpm ixa setup | doctor | update | mcp。ADR-0063）",
