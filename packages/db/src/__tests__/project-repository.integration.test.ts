@@ -1,7 +1,10 @@
 import { WorkspaceId, newId, type CreateProjectInput } from '@ixa/domain'
+import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { closeDbClient, createDbClient, type DbExecutor } from '../client.js'
+import { DbNotFoundError } from '../errors.js'
 import { createProjectRepository } from '../repositories/project-repository.js'
+import { isUniqueViolation } from '../unique-violation.js'
 import { workspaces } from '../schema/workspace.js'
 
 /**
@@ -90,6 +93,50 @@ describe.skipIf(url === undefined)('ProjectRepository の種類と見本の印�
       await repo.softDelete(first.id)
       const again = await repo.create(inputFor(workspaceId), { demoKey: 'ixa-demo-v1' })
       expect((await repo.findByDemoKey(workspaceId, 'ixa-demo-v1'))?.id).toBe(again.id)
+    })
+  })
+
+  /** 見本を入れる処理は、全部書き終えてから最後に印を付ける（書きかけの作品を「入っている」と読ませない。ADR-0067）。 */
+  it('印を後から付ける: 生きている持ち主がいれば一意索引にぶつかり、持ち主を消した後は付けられる', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const repo = createProjectRepository(tx)
+      const workspaceId = await newWorkspace(tx)
+      const holder = await repo.create(inputFor(workspaceId))
+      const challenger = await repo.create(inputFor(workspaceId))
+      expect((await repo.setDemoKey(holder.id, 'ixa-demo-v1')).demoKey).toBe('ixa-demo-v1')
+
+      const clash: unknown = await tx
+        .transaction(async (inner) => {
+          await createProjectRepository(inner).setDemoKey(challenger.id, 'ixa-demo-v1')
+        })
+        .catch((error: unknown) => error)
+      expect(isUniqueViolation(clash)).toBe(true)
+      expect((await repo.findById(challenger.id))?.demoKey).toBeNull()
+
+      await repo.softDelete(holder.id)
+      expect((await repo.setDemoKey(challenger.id, 'ixa-demo-v1')).demoKey).toBe('ixa-demo-v1')
+      expect((await repo.findByDemoKey(workspaceId, 'ixa-demo-v1'))?.id).toBe(challenger.id)
+    })
+  })
+
+  it('消した作品・壊れた印には付けない', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const repo = createProjectRepository(tx)
+      const project = await repo.create(inputFor(await newWorkspace(tx)))
+      await expect(repo.setDemoKey(project.id, 'IXA DEMO')).rejects.toThrow()
+      await repo.softDelete(project.id)
+      await expect(repo.setDemoKey(project.id, 'ixa-demo-v1')).rejects.toBeInstanceOf(DbNotFoundError)
+    })
+  })
+
+  it('作業場所があるかを読む（ある ID・無い ID・消した作業場所）', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const repo = createProjectRepository(tx)
+      const workspaceId = await newWorkspace(tx)
+      expect(await repo.workspaceExists(workspaceId)).toBe(true)
+      expect(await repo.workspaceExists(newId(WorkspaceId))).toBe(false)
+      await tx.update(workspaces).set({ deletedAt: new Date() }).where(eq(workspaces.id, workspaceId))
+      expect(await repo.workspaceExists(workspaceId)).toBe(false)
     })
   })
 

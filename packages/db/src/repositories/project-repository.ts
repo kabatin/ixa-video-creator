@@ -12,7 +12,7 @@ import {
 } from '@ixa/domain'
 import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
-import { projects } from '../schema/workspace.js'
+import { projects, workspaces } from '../schema/workspace.js'
 import { selectProjectRowsWithActivity } from './project-activity-read.js'
 
 /** drizzle の row 型。パッケージ外へは出さない。 */
@@ -44,6 +44,13 @@ export type ProjectRepository = {
   /** 見本の印の付いた、消していない作品。無ければ null（生きている作品で印は 1 つだけ。部分一意索引が守る）。 */
   findByDemoKey(workspaceId: WorkspaceId, demoKey: ProjectDemoKey): Promise<Project | null>
   create(input: CreateProjectInput, options?: CreateProjectOptions): Promise<Project>
+  /**
+   * 見本の印を付ける（同梱の見本を入れる処理が、全部書き終えてから最後に呼ぶ。ADR-0067）。
+   * 同じワークスペースに同じ印の生きている作品があれば、部分一意索引の違反（23505）を投げる。消した作品には付けない。
+   */
+  setDemoKey(id: ProjectId, demoKey: ProjectDemoKey): Promise<Project>
+  /** 作業場所があるか（消していない行だけ。`workspaces.deleted_at`）。見本を入れる前に、取りに行く前に確かめる。読むだけ。 */
+  workspaceExists(workspaceId: WorkspaceId): Promise<boolean>
   update(id: ProjectId, patch: UpdateProjectPatch): Promise<Project>
   softDelete(id: ProjectId): Promise<void>
 }
@@ -141,6 +148,23 @@ export const createProjectRepository = (db: DbExecutor): ProjectRepository => ({
       .returning()
     const row = rows[0]
     if (!row) throw new Error('projects への INSERT が行を返しませんでした')
+    return projectRowToDomain(row)
+  },
+
+  async workspaceExists(workspaceId) {
+    const rows = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(and(eq(workspaces.id, workspaceId), isNull(workspaces.deletedAt)))
+      .limit(1)
+    return rows.length > 0
+  },
+
+  async setDemoKey(id, demoKey) {
+    const key = ProjectDemoKeySchema.parse(demoKey)
+    const rows = await db.update(projects).set({ demoKey: key, updatedAt: new Date() }).where(liveById(id)).returning()
+    const row = rows[0]
+    if (!row) throw new DbNotFoundError('Project', id)
     return projectRowToDomain(row)
   },
 

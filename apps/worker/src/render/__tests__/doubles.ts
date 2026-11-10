@@ -90,6 +90,8 @@ export const inMemoryProjects = (seed: readonly Project[]): InMemoryProjects => 
       Promise.resolve(store.find((p) => p.workspaceId === workspaceId && p.demoKey === demoKey) ?? null),
     findByWorkspaceWithActivity: () => Promise.reject(new Error('未使用')),
     create: () => Promise.reject(new Error('未使用')),
+    setDemoKey: () => Promise.reject(new Error('未使用')),
+    workspaceExists: () => Promise.reject(new Error('未使用')),
     update: () => Promise.reject(new Error('未使用')),
     softDelete: () => Promise.resolve(),
   }
