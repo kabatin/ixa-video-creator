@@ -178,7 +178,7 @@ export type WorkbenchContextValue = {
    */
   readonly activeUpscales: ActiveUpscales
   /**
-   * 作品の方針のコンセプト・あらすじ（流れの帯 ②）。**読めていなければ null**（空文字は「まだ書いていない」）。
+   * 作品の方針のコンセプト・あらすじ（流れの帯の「作品の方針」）。**読めていなければ null**（空文字は「まだ書いていない」）。
    */
   readonly concept: string | null
   /** 作品の方針で保存したら呼ぶ。読み直しを待たずに帯へ映す。 */

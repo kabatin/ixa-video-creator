@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import type { ProjectConceptApi } from '@/lib/project-concept-api'
 
 /**
- * 作品の方針のコンセプト・あらすじ（流れの帯 ② の材料。制作者 2026-10-01）。
+ * 作品の方針のコンセプト・あらすじ（流れの帯の「作品の方針」の材料。制作者 2026-10-01）。
  * サーバを読み直すたび（`epoch`）に取り直す。**読めなければ null**（帯は「分からない」と出す。空文字と混ぜない）。
  * 作品の方針で保存したら、読み直しを待たずに手元へ映す（`saved`）。
  */

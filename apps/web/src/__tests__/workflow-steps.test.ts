@@ -227,6 +227,42 @@ describe('workflowSteps の作品の種類', () => {
   })
 })
 
+/**
+ * ナレーションから始める種類は、曲を先に求めない。曲が無ければ楽曲の段は飛ばし（後から足せる）、
+ * 曲があってもナレーションの段は飛ばさない（作品の芯なので、行が無ければ「まだ」）。
+ */
+describe('workflowSteps のナレーションから始める種類の楽曲とナレーション', () => {
+  const fresh = { hasTrack: false, concept: '', hasLook: false, lyricLineCount: 0, lyricCueCount: 0, lyricTelopCount: 0, narration: { lines: 0, ready: 0 } }
+
+  it('作ったばかり（曲も行も無い）なら楽曲は飛ばし、次は楽曲ではなく作品の方針', () => {
+    for (const kind of ['kamishibai', 'cm'] as const) {
+      const result = workflowSteps(input({ ...fresh, kind }))
+      expect(stepOf(result, 'music')).toMatchObject({ state: 'skipped', reason: SKIP_REASONS.musicForNarrationKind })
+      expect(stateOf(result, 'narration')).toBe('todo')
+      expect(result.nextId).toBe('concept')
+    }
+  })
+
+  it('方針が済んでいれば、次はナレーション', () => {
+    expect(workflowSteps(input({ kind: 'kamishibai', hasTrack: false, narration: { lines: 0, ready: 0 } })).nextId).toBe('narration')
+  })
+
+  it('曲（BGM）を先に入れても、行が無ければナレーションは飛ばさず「まだ」で、次はナレーション。楽曲は済み', () => {
+    const result = workflowSteps(input({ kind: 'kamishibai', hasTrack: true, narration: { lines: 0, ready: 0 } }))
+    expect(stateOf(result, 'music')).toBe('done')
+    expect(stepOf(result, 'narration')).toMatchObject({ state: 'todo', reason: null })
+    expect(result.nextId).toBe('narration')
+  })
+
+  it('ミュージックビデオは今までどおり（曲が無ければ次は楽曲、曲があって行が無ければナレーションは飛ばす）', () => {
+    const none = workflowSteps(input({ ...fresh, kind: 'mv' }))
+    expect(stateOf(none, 'music')).toBe('todo')
+    expect(none.nextId).toBe('music')
+    const withTrack = workflowSteps(input({ kind: 'mv', hasTrack: true, narration: { lines: 0, ready: 0 } }))
+    expect(stepOf(withTrack, 'narration')).toMatchObject({ state: 'skipped', reason: SKIP_REASONS.narrationWithTrack })
+  })
+})
+
 describe('stepNumber', () => {
   it('並んだ位置から丸数字にする（段が減っても飛ばない）', () => {
     const steps = workflowSteps(input({ kind: 'cm' })).steps
@@ -257,9 +293,10 @@ describe('飛ばす段の理由', () => {
   })
 
   it('理由は段ごとに違い、歌詞の話をするのは歌詞の段だけ', () => {
-    expect(new Set(Object.values(SKIP_REASONS)).size).toBe(3)
+    expect(new Set(Object.values(SKIP_REASONS)).size).toBe(4)
     expect(SKIP_REASONS.narrationWithTrack).not.toContain('歌詞')
     expect(SKIP_REASONS.musicWithNarration).not.toContain('歌詞')
+    expect(SKIP_REASONS.musicForNarrationKind).not.toContain('歌詞')
   })
 })
 

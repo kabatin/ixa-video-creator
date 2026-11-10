@@ -46,6 +46,7 @@ export const SKIP_REASONS = {
   instrumental: '「歌詞なし」の作品なので飛ばします（作品の方針で「歌詞なし」を外すと使えます）',
   narrationWithTrack: '曲があるので、ナレーションは入れなくても進めます',
   musicWithNarration: 'ナレーションで進めるので、曲は無くても進めます',
+  musicForNarrationKind: 'ナレーションから始める作品なので、曲は無くても進めます（後から足せます）',
 } as const
 
 export type WorkflowInput = {
@@ -164,19 +165,27 @@ const telopsStep = (input: WorkflowInput): WorkflowStep =>
 
 /**
  * ナレーション。行があれば、声を作って置いた行を数える。行が無ければ、曲のある作品では要らない段（飛ばす）、
- * 曲の無い作品ではまだ（ナレーションが芯になる）。
+ * 曲の無い作品ではまだ（ナレーションが芯になる）。**ナレーションから始める種類は、曲があっても飛ばさない**
+ * （BGM を先に入れただけで、作品の芯の段を飛ばしていた）。
  */
 const narrationStep = (input: WorkflowInput): WorkflowStep => {
   if (input.narration === null) return flag('narration', null)
   if (input.narration.lines > 0) return tally('narration', input.narration.ready, input.narration.lines)
-  return input.hasTrack ? skipped('narration', SKIP_REASONS.narrationWithTrack) : flag('narration', false)
+  return input.hasTrack && !startsFromNarration(input)
+    ? skipped('narration', SKIP_REASONS.narrationWithTrack)
+    : flag('narration', false)
 }
 
-/** 楽曲。曲が無くてもナレーションがあれば飛ばしてよい（予告・宣伝の動画。制作者 2026-10-05）。 */
-const musicStep = (input: WorkflowInput): WorkflowStep =>
-  !input.hasTrack && (input.narration?.lines ?? 0) > 0
-    ? skipped('music', SKIP_REASONS.musicWithNarration)
-    : flag('music', input.hasTrack)
+/**
+ * 楽曲。曲が無くてもナレーションがあれば飛ばしてよい（予告・宣伝の動画。制作者 2026-10-05）。
+ * **ナレーションから始める種類は曲を先に求めない**: 曲が無ければ飛ばし（後から足せる）、あれば済み
+ * （以前は楽曲が「次はここ」になり、前のタブ・ストーリーボードの主ボタンと違う所を指していた）。
+ */
+const musicStep = (input: WorkflowInput): WorkflowStep => {
+  if (input.hasTrack) return flag('music', true)
+  if (startsFromNarration(input)) return skipped('music', SKIP_REASONS.musicForNarrationKind)
+  return (input.narration?.lines ?? 0) > 0 ? skipped('music', SKIP_REASONS.musicWithNarration) : flag('music', false)
+}
 
 /** 歌詞の 2 段。ナレーションから始める種類には無い（「—」で並べず、帯から外す）。 */
 const lyricSteps = (input: WorkflowInput): readonly WorkflowStep[] =>

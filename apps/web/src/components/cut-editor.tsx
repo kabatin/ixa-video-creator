@@ -617,7 +617,7 @@ export const CutEditor = ({
       {cutting && cutSave.outcome !== null && (
         <div>
           <p role="status" className="text-sm text-ok">
-            {`${String(cutSave.outcome.createdCount)} 個の Shot を作りました。次は絵コンテです（流れの帯の ⑥）。`}
+            {`${String(cutSave.outcome.createdCount)} 個の Shot を作りました。次は絵コンテです。`}
           </p>
           {cutSave.outcome.warnings.length > 0 && (
             <ul role="alert" className="mt-1 list-disc space-y-1 pl-5 text-sm text-warn">

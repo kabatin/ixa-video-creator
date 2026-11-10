@@ -150,7 +150,7 @@ export const WorkbenchProvider = (props: WorkbenchProviderProps) => {
 
   const [serverEpoch, setServerEpoch] = useState(0)
   const lastServerShots = useRef(props.initialShots)
-  // 帯の ② の材料。`saved` は setState なので変わらない（値の作り直しを招かない）。
+  // 帯の「作品の方針」の材料。`saved` は setState なので変わらない（値の作り直しを招かない）。
   const { concept, saved: conceptSaved } = useProjectConcept(api, projectId, serverEpoch)
 
   /**

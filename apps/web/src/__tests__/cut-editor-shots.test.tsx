@@ -138,7 +138,8 @@ describe('区切って Shot にする', () => {
       expect(api.createCuts).toHaveBeenCalledTimes(1)
     })
     expect(api.createCuts).toHaveBeenCalledWith(PROJECT_ID, { boundariesSec: [0, 30, 116], sequenceId: null })
-    expect(await screen.findByText(/2 個の Shot を作りました/)).toBeTruthy()
+    // 次の段は名前で言う。帯の番号は作品の種類で変わるので書かない（以前は「流れの帯の ⑥」と固定で書いていた）。
+    expect(await screen.findByText('2 個の Shot を作りました。次は絵コンテです。')).toBeTruthy()
     expect(saveButton()).toBeDisabled()
   })
 
