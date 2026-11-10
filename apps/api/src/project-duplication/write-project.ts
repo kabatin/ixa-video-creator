@@ -11,6 +11,7 @@ import {
   type LocationId,
   type NarrationLineId,
   type Project,
+  type ProjectDemoKey,
   type ShotId,
   type TextStyleId,
   type VoiceProfileId,
@@ -33,15 +34,19 @@ export type LibraryMaps = {
   readonly locations: ReadonlyMap<LocationId, LocationId>
 }
 
-/** 新しい作品を作る。作成の入力に無い項目（避けたいもの・歌詞など）は作った後に入れる。 */
+/**
+ * 新しい作品を作る。作成の入力に無い項目（避けたいもの・歌詞など）は作った後に入れる。
+ * `demoKey` は同梱の見本を入れるときだけ渡す（ADR-0067。複製は渡さない）。
+ */
 export const createDuplicateProject = async (
   deps: ProjectDuplicationDeps,
   source: Project,
   name: string,
   items: ReadonlySet<DuplicationItem>,
+  demoKey?: ProjectDemoKey,
 ): Promise<Project> => {
   const keepConcept = items.has('concept')
-  const created = await deps.projects.create({
+  const input = {
     workspaceId: source.workspaceId,
     name,
     kind: source.kind,
@@ -50,7 +55,8 @@ export const createDuplicateProject = async (
     aspectRatio: source.aspectRatio,
     budgetUsd: source.budgetUsd,
     styleGuide: keepConcept ? source.styleGuide : '',
-  })
+  }
+  const created = await (demoKey === undefined ? deps.projects.create(input) : deps.projects.create(input, { demoKey }))
   return deps.projects.update(created.id, {
     ...(keepConcept
       ? {

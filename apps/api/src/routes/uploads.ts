@@ -6,12 +6,11 @@ import {
   ProjectId as ProjectIdSchema,
   WorkspaceId as WorkspaceIdSchema,
   newId,
-  type MediaAssetId,
   type MediaKind,
 } from '@ixa/domain'
 import { mediaKey, type ObjectStorage } from '@ixa/storage'
 import { VALIDATION_ERROR_MESSAGE, validationHook } from '../errors.js'
-import type { Logger } from '../logger.js'
+import { registerMediaAsset, type MediaIngestDeps } from '../media-intake.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
 import { MediaAssetResponse, toMediaAssetResponse } from './media.js'
 
@@ -21,27 +20,8 @@ import { MediaAssetResponse, toMediaAssetResponse } from './media.js'
  * 署名付き URL は DB に保存しない（CLAUDE.md 規約 7）。
  */
 
-/** BullMQ のキュー名（docs/ARCHITECTURE.md §20）。apps 同士を import しないため定数で持つ。 */
-export const MEDIA_QUEUE_NAME = 'media'
-
-/**
- * 取り込みジョブ（ffprobe / プロキシ / サムネ / ポスター）をキューへ投入する Port。
- * Redis への依存を main.ts に閉じ込める。
- */
-export type MediaQueue = {
-  /** ジョブデータは ID のみ。実データは DB から読む（ADR-0008）。 */
-  enqueue(mediaAssetId: MediaAssetId): Promise<void>
-}
-
-/**
- * media キューへの投入口。
- * キューとロガーを 1 つのオブジェクトにまとめてあるのは、キューだけ配線して
- * 投入失敗を握り潰す配線を型の上で作れなくするため（CLAUDE.md 規約 5）。
- */
-export type MediaIngestDeps = {
-  readonly queue: MediaQueue
-  readonly logger: Logger
-}
+// キュー名・投入口の形は登録の共通の道（`media-intake.ts`）が持つ。これまでの import 先のため、ここからも出す。
+export { MEDIA_QUEUE_NAME, type MediaIngestDeps, type MediaQueue } from '../media-intake.js'
 
 /** 1 ファイルあたりのアップロード上限（バイト）。既定 5GB。 */
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024
@@ -180,30 +160,6 @@ export type UploadRoutesDeps = {
   mediaIngest?: MediaIngestDeps
 }
 
-/**
- * 取り込みジョブをキューへ投入する。
- * 投入に失敗しても素材の登録自体は成功しているため throw しないが、
- * 握り潰さずにログへ残し、queued=false として呼び出し側にも伝える（CLAUDE.md 規約 5）。
- */
-const enqueueIngest = async (
-  ingest: MediaIngestDeps | undefined,
-  mediaAssetId: MediaAssetId,
-): Promise<boolean> => {
-  if (ingest === undefined) {
-    return false
-  }
-  try {
-    await ingest.queue.enqueue(mediaAssetId)
-    return true
-  } catch (error) {
-    ingest.logger.error(
-      { mediaAssetId, queue: MEDIA_QUEUE_NAME, err: error },
-      'media キューへの取り込みジョブ投入に失敗しました',
-    )
-    return false
-  }
-}
-
 export const uploadRoutes = ({ mediaAssets, storage, mediaIngest }: UploadRoutesDeps) =>
   new OpenAPIHono({ defaultHook: validationHook })
     .openapi(signUploadRoute, async (c) => {
@@ -280,31 +236,27 @@ export const uploadRoutes = ({ mediaAssets, storage, mediaIngest }: UploadRoutes
         )
       }
 
-      // 重複排除。同じ内容のファイルを二重に登録しない。
-      const duplicate = await mediaAssets.findByChecksum(body.checksumSha256)
-      if (duplicate !== null) {
-        // 既存の素材は取り込み済み（または取り込み中）なので、キューへ入れ直さない。
-        return c.json(ok({ ...toMediaAssetResponse(duplicate), queued: false }), 200)
+      // 重複排除と登録・取り込みジョブの投入（同梱の見本と同じ道。`media-intake.ts`）。
+      // 同じ内容の素材が先にあれば、それを返す（取り込み済みか取り込み中なので、キューへ入れ直さない）。
+      const registered = await registerMediaAsset(
+        { mediaAssets, ...(mediaIngest === undefined ? {} : { mediaIngest }) },
+        {
+          // 署名時に採番した ID をそのまま使う。
+          // storageKey にこの ULID が埋まっているため、別 ID を振るとパスと行がずれる。
+          id: body.mediaAssetId,
+          workspaceId: body.workspaceId,
+          projectId: body.projectId,
+          kind: body.kind,
+          storageKey: body.storageKey,
+          mimeType: body.mimeType,
+          bytes: head.bytes,
+          checksumSha256: body.checksumSha256,
+          origin: { type: 'upload', uploadedBy: body.uploadedBy },
+          tags: [],
+        },
+      )
+      if (!registered.created) {
+        return c.json(ok({ ...toMediaAssetResponse(registered.asset), queued: false }), 200)
       }
-
-      const created = await mediaAssets.create({
-        // 署名時に採番した ID をそのまま使う。
-        // storageKey にこの ULID が埋まっているため、別 ID を振るとパスと行がずれる。
-        id: body.mediaAssetId,
-        workspaceId: body.workspaceId,
-        projectId: body.projectId,
-        kind: body.kind,
-        storageKey: body.storageKey,
-        mimeType: body.mimeType,
-        bytes: head.bytes,
-        checksumSha256: body.checksumSha256,
-        origin: { type: 'upload', uploadedBy: body.uploadedBy },
-        tags: [],
-      })
-
-      // media キューへ取り込みジョブ（ffprobe / プロキシ / サムネ / ポスター）を投入する。
-      // 投入に失敗しても登録は成功しているので 201 を返す（docs/ARCHITECTURE.md §7）。
-      const queued = await enqueueIngest(mediaIngest, created.id)
-
-      return c.json(ok({ ...toMediaAssetResponse(created), queued }), 201)
+      return c.json(ok({ ...toMediaAssetResponse(registered.asset), queued: registered.queued }), 201)
     })
