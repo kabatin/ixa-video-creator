@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { MediaAssetId } from '../common/ids.js'
-import { MediaKind, MediaProbe } from '../media/media-asset.js'
+import { MediaProbe } from '../media/media-asset.js'
 import { PROJECT_NAME_MAX_LENGTH, ProjectDemoKey } from './project.js'
 
 /**
@@ -18,6 +18,22 @@ export const DEMO_MANIFEST_FORMAT_VERSION = 1
 
 /** 1 つのファイルの大きさの上限（バイト）。見本は 1 本数 MB。入れる側はこれを丸ごと読み込む。 */
 export const MAX_DEMO_FILE_BYTES = 200 * 1024 * 1024
+/** 素材の数・ファイルの数・合わせた大きさの上限（入れる側が丸ごと読み込むので、目録の形で縛る）。 */
+export const MAX_DEMO_MEDIA = 200
+export const MAX_DEMO_FILES = 50
+export const MAX_DEMO_TOTAL_BYTES = 500 * 1024 * 1024
+
+/** 取りに行く先の頭に許すホスト（リリースのファイル）。飛ばされた先に許すホストは API が持つ。 */
+export const DEMO_BASE_URL_HOST = 'github.com'
+
+/** 見本の素材に許す種類と型（絵・動画・音だけ。HTML・SVG・フォント・LUT などは入れない）。 */
+export const DEMO_CONTENT_TYPES = Object.freeze({
+  image: ['image/png', 'image/jpeg', 'image/webp'],
+  video: ['video/mp4', 'video/quicktime', 'video/webm'],
+  audio: ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/flac', 'audio/ogg'],
+} as const)
+export const DemoMediaKind = z.enum(['image', 'video', 'audio'])
+export type DemoMediaKind = z.infer<typeof DemoMediaKind>
 
 /** ファイル名: 英数字で始まり、`/`・`..`・空白を含まない（取りに行く先・読む場所の外へ出さない）。 */
 const SAFE_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*(\.[A-Za-z0-9]+)?$/
@@ -25,8 +41,6 @@ const SAFE_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*(\.[A-Za-z0-9]+)?$/
 const SAFE_KEY_SEGMENT = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9]+)?$/
 /** 目録の `files` が書いてよい置き場の頭。いまは曲の解析の波形（`music/{projectId}/{trackId}/peaks.json`）だけ。 */
 export const DEMO_FILE_KEY_PREFIXES = ['music'] as const
-
-const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i
 
 export const DemoFileName = z.string().min(1).max(128).regex(SAFE_FILE_NAME, 'ファイル名に使えない文字があります')
 
@@ -47,7 +61,7 @@ export const DemoStorageKey = z
     )
   }, '見本のファイルを置ける場所ではありません')
 
-/** 取りに行く先の頭。https で、末尾が `/`、問い合わせ・断片・利用者名を持たない（署名付きの URL を目録に入れない）。 */
+/** 取りに行く先の頭。https の github.com で、末尾が `/`、問い合わせ・断片・利用者名を持たない（署名付きの URL を目録に入れない）。 */
 export const DemoBaseUrl = z
   .string()
   .url()
@@ -57,13 +71,14 @@ export const DemoBaseUrl = z
     const url = new URL(value)
     return (
       url.protocol === 'https:' &&
+      url.hostname === DEMO_BASE_URL_HOST &&
       value.endsWith('/') &&
       url.search === '' &&
       url.hash === '' &&
       url.username === '' &&
       url.password === ''
     )
-  }, '取りに行く先は https で、末尾を / にし、? 以降を付けないでください')
+  }, '取りに行く先は https://github.com/ の下で、末尾を / にし、? や # 以降を付けないでください')
 
 const fileFields = {
   file: DemoFileName,
@@ -71,14 +86,19 @@ const fileFields = {
   sizeBytes: z.number().int().positive().max(MAX_DEMO_FILE_BYTES),
 }
 
-export const DemoMediaEntry = z.object({
-  id: MediaAssetId,
-  ...fileFields,
-  contentType: z.string().min(1).max(255),
-  kind: MediaKind,
-  /** 素材の行に先に入れておく probe（取り込みのジョブが後から測り直す）。 */
-  probe: MediaProbe.nullable(),
-})
+export const DemoMediaEntry = z
+  .object({
+    id: MediaAssetId,
+    ...fileFields,
+    contentType: z.string().min(1).max(255),
+    kind: DemoMediaKind,
+    /** 素材の行に先に入れておく probe（取り込みのジョブが後から測り直す）。 */
+    probe: MediaProbe.nullable(),
+  })
+  .refine((entry) => DEMO_CONTENT_TYPES[entry.kind].some((type) => type === entry.contentType), {
+    message: '見本の素材にできない型です（絵・動画・音の決まった型だけ）',
+    path: ['contentType'],
+  })
 export type DemoMediaEntry = z.infer<typeof DemoMediaEntry>
 
 export const DemoFileEntry = z.object({ key: DemoStorageKey, ...fileFields })
@@ -97,8 +117,8 @@ export const DemoManifest = z
     /** 入れた作品の名前。 */
     title: z.string().trim().min(1).max(PROJECT_NAME_MAX_LENGTH),
     baseUrl: DemoBaseUrl,
-    media: z.array(DemoMediaEntry),
-    files: z.array(DemoFileEntry),
+    media: z.array(DemoMediaEntry).max(MAX_DEMO_MEDIA),
+    files: z.array(DemoFileEntry).max(MAX_DEMO_FILES),
     source: z.record(z.unknown()),
   })
   .superRefine((manifest, ctx) => {
@@ -107,6 +127,7 @@ export const DemoManifest = z
       ...duplicatesOf(manifest.media.map((entry) => entry.sha256)).map(() => '同じ中身の素材が 2 つあります'),
       ...duplicatesOf([...manifest.media, ...manifest.files].map((entry) => entry.file)).map(() => '同じファイル名が 2 つあります'),
       ...duplicatesOf(manifest.files.map((entry) => entry.key)).map(() => '同じ置き場が 2 つあります'),
+      ...(demoTotalBytes(manifest) > MAX_DEMO_TOTAL_BYTES ? ['合わせた大きさが上限を超えています'] : []),
     ]
     for (const message of new Set(problems)) ctx.addIssue({ code: z.ZodIssueCode.custom, message })
   })
@@ -115,109 +136,3 @@ export type DemoManifest = z.infer<typeof DemoManifest>
 /** 初めて入れるときに取りに行く大きさ（バイト）。 */
 export const demoTotalBytes = (manifest: Pick<DemoManifest, 'media' | 'files'>): number =>
   [...manifest.media, ...manifest.files].reduce((sum, entry) => sum + entry.sizeBytes, 0)
-
-/** JSON の木の文字の値を `fn` で替えた**新しい木**を返す（キーは替えない。元は変えない）。 */
-const mapStringValues = (value: unknown, fn: (text: string) => string): unknown => {
-  if (typeof value === 'string') return fn(value)
-  if (Array.isArray(value)) return value.map((item: unknown) => mapStringValues(item, fn))
-  if (typeof value === 'object' && value !== null) {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, mapStringValues(item, fn)]))
-  }
-  return value
-}
-
-/** JSON の木の文字の値を、すべて集める（キーは数えない）。 */
-const stringValues = (value: unknown): readonly string[] => {
-  if (typeof value === 'string') return [value]
-  if (Array.isArray(value)) return value.flatMap((item: unknown) => stringValues(item))
-  if (typeof value === 'object' && value !== null) return Object.values(value).flatMap((item) => stringValues(item))
-  return []
-}
-
-/**
- * 素材の ID を付け替える。**値がちょうど表の ID と一致するものだけ**を替える（ID は ULID なので、ほかの値には当たらない。
- * 列の名前を並べないので、あとで列が増えても漏れない）。キー・表に無い値・ID を含むだけの文字（置き場など）は替えない。
- */
-export const remapExactValues = (value: unknown, map: ReadonlyMap<string, string>): unknown =>
-  mapStringValues(value, (text) => map.get(text) ?? text)
-
-/** 値に出てくる ULID（どれが素材かは書き出す側が素材の表で引く）。 */
-export const ulidValues = (value: unknown): ReadonlySet<string> =>
-  new Set(stringValues(value).filter((text) => ULID.test(text)))
-
-/** `source` が指す素材のうち、`media` に無いもの（書き出す側の点検。入れた先で絵が欠ける）。 */
-export const unlistedMediaReferences = (
-  manifest: Pick<DemoManifest, 'media' | 'source'>,
-  knownMediaIds: ReadonlySet<string>,
-): readonly string[] => {
-  const listed = new Set<string>(manifest.media.map((entry) => entry.id))
-  return [...ulidValues(manifest.source)].filter((id) => knownMediaIds.has(id) && !listed.has(id)).sort()
-}
-
-/** 署名・鍵を運ぶ問い合わせの名前（fs の `sig`・`exp`、S3 の `X-Amz-*`、そのほかの `token` など）。 */
-const SIGNED_QUERY_NAMES = /[?&](sig|signature|exp|expires|token|access_token|x-amz-[a-z-]+)=/i
-
-/** 署名付きの URL に見える文字か（書き出す目録に入れない）。URL の形で、署名・鍵の問い合わせを持つもの。 */
-export const looksLikeSignedUrl = (text: string): boolean => /[a-z]+:\/\//i.test(text) && SIGNED_QUERY_NAMES.test(text)
-
-/**
- * 公開する目録に入れてはいけないものを探す決まり（ADR-0067「公開する目録に入れないもの」）。
- * 機械と持ち主の情報（ホーム・利用者名・手元の道・手元のサーバ）と、秘密（鍵・署名付きの URL）。
- * ホームと利用者名は呼ぶ側が渡す（ここは純粋なまま）。
- */
-export type PublicLeakRules = {
-  /** 置き場の署名の鍵・S3 の鍵・合言葉など。空の文字は見ない。 */
-  readonly secrets: readonly string[]
-  /** 作る人のホーム（`os.homedir()`）。空なら見ない。 */
-  readonly homeDir: string
-  /** 作る人の利用者名（`os.userInfo().username`）。短すぎる名前は見ない（どの文にも当たる）。 */
-  readonly userName: string
-}
-
-/** 利用者名として見る最短の長さ。 */
-const MIN_USER_NAME_LENGTH = 3
-
-/** 手元の道（文の頭か区切りの後ろから始まるもの）。URL の中の `/home/` などは当てない。 */
-const LOCAL_PATH = /(?:^|[\s"'=(<,;])(?:\/(?:Users|home|private|tmp)\/|\/var\/folders\/|[A-Za-z]:[\\/])/
-const URL_IN_TEXT = /[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+/gi
-
-/** 手元のサーバ（この Mac・LAN の中）を指す名前か。 */
-const isLocalHost = (hostname: string): boolean => {
-  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase()
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host === '::1' || host === '0.0.0.0') return true
-  const octets = host.split('.').map(Number)
-  if (octets.length !== 4 || octets.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false
-  const [a = -1, b = -1] = octets
-  return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254)
-}
-
-const pointsAtLocalServer = (text: string): boolean =>
-  [...text.matchAll(URL_IN_TEXT)].some(([url]) => URL.canParse(url) && isLocalHost(new URL(url).hostname))
-
-/** 1 つの文字が決まりに当たるか。 */
-const leaks = (text: string, rules: PublicLeakRules): boolean =>
-  looksLikeSignedUrl(text) ||
-  rules.secrets.some((secret) => secret !== '' && text.includes(secret)) ||
-  (rules.homeDir !== '' && text.includes(rules.homeDir)) ||
-  (rules.userName.length >= MIN_USER_NAME_LENGTH && text.includes(rules.userName)) ||
-  LOCAL_PATH.test(text) ||
-  /file:\/\//i.test(text) ||
-  pointsAtLocalServer(text)
-
-const childPath = (path: string, key: string): string => (path === '' ? key : `${path}.${key}`)
-
-/**
- * 決まりに当たる文字（値とキー）の**場所だけ**を返す（例 `source.shots[0].description`）。
- * 値は返さない（秘密を端末やログに写さない）。
- */
-export const publicLeaks = (value: unknown, rules: PublicLeakRules, path = ''): readonly string[] => {
-  if (typeof value === 'string') return leaks(value, rules) ? [path] : []
-  if (Array.isArray(value)) return value.flatMap((item: unknown, index) => publicLeaks(item, rules, `${path}[${String(index)}]`))
-  if (typeof value === 'object' && value !== null) {
-    return Object.entries(value).flatMap(([key, item]) => {
-      const here = childPath(path, key)
-      return [...(leaks(key, rules) ? [here] : []), ...publicLeaks(item, rules, here)]
-    })
-  }
-  return []
-}

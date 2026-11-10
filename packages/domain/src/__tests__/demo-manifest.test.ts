@@ -5,9 +5,9 @@ import {
   demoTotalBytes,
   looksLikeSignedUrl,
   publicLeaks,
+  demoBindingProblems,
   remapExactValues,
   ulidValues,
-  unlistedMediaReferences,
 } from '../index.js'
 
 /**
@@ -90,11 +90,24 @@ describe('目録の形', () => {
     expect(DemoManifest.safeParse(aManifest({ formatVersion: 2 })).success).toBe(false)
   })
 
-  it('同じ素材の ID・同じファイル名が 2 つあれば断る', () => {
-    const twice = aManifest({ media: [aMedia(), aMedia({ sha256: 'c'.repeat(64) })] })
+  it('同じ素材の ID が 2 つあれば断る（中身もファイル名も別）', () => {
+    const twice = aManifest({ media: [aMedia(), aMedia({ sha256: 'c'.repeat(64), file: `${'c'.repeat(64)}.mp4` })] })
     expect(DemoManifest.safeParse(twice).success).toBe(false)
+  })
+
+  it('同じ中身（sha256）が 2 つあれば断る（ID もファイル名も別）', () => {
+    const sameSha = aManifest({ media: [aMedia(), aMedia({ id: MEDIA_B, file: 'other.mp4' })] })
+    expect(DemoManifest.safeParse(sameSha).success).toBe(false)
+  })
+
+  it('同じファイル名が 2 つあれば断る（ID も中身も別）', () => {
     const sameFile = aManifest({ media: [aMedia(), aMedia({ id: MEDIA_B, sha256: 'c'.repeat(64) })] })
     expect(DemoManifest.safeParse(sameFile).success).toBe(false)
+  })
+
+  it('同じ置き場が 2 つあれば断る', () => {
+    const entry = { key: 'music/01JP/01JT/peaks.json', file: 'peaks-01.json', sha256: 'b'.repeat(64), sizeBytes: 20 }
+    expect(DemoManifest.safeParse(aManifest({ files: [entry, { ...entry, file: 'peaks-02.json', sha256: 'd'.repeat(64) }] })).success).toBe(false)
   })
 
   it('素材の元のファイル名は目録に持たない（作る人の機械の名前を出さない）', () => {
@@ -148,12 +161,6 @@ describe('素材の ID の付け替え', () => {
 })
 
 describe('書き出す目録の点検', () => {
-  it('素材なのに目録に無い ID を拾う', () => {
-    const manifest = DemoManifest.parse(aManifest({ source: { shots: [{ mediaAssetId: MEDIA_A }, { mediaAssetId: MEDIA_B }] } }))
-    expect(unlistedMediaReferences(manifest, new Set([MEDIA_A, MEDIA_B]))).toEqual([MEDIA_B])
-    expect(unlistedMediaReferences(manifest, new Set([MEDIA_A]))).toEqual([])
-  })
-
   it.each([
     'http://127.0.0.1:3001/files/media/x/original.mp4?exp=1&sig=abc',
     'https://bucket.s3.amazonaws.com/x?X-Amz-Signature=abc&X-Amz-Credential=y',
@@ -211,5 +218,126 @@ describe('公開する目録の点検（機械と持ち主の情報）', () => {
 
   it('短すぎる利用者名では拾わない（どの文にも当たってしまう）', () => {
     expect(publicLeaks({ a: 'made by ai' }, { secrets: [], homeDir: '', userName: 'ai' })).toEqual([])
+  })
+})
+
+describe('目録の形の境目', () => {
+  it.each([0, -1, 200 * 1024 * 1024 + 1, 1.5])('大きさ %s は断る（正の整数・上限 200 MB）', (sizeBytes) => {
+    expect(DemoManifest.safeParse(aManifest({ media: [aMedia({ sizeBytes })] })).success).toBe(false)
+  })
+
+  it('上限ちょうどの大きさは通る', () => {
+    expect(DemoManifest.safeParse(aManifest({ media: [aMedia({ sizeBytes: 200 * 1024 * 1024 })] })).success).toBe(true)
+  })
+
+  it.each(['', '   ', 'あ'.repeat(201)])('題 %j は断る（空・201 文字）', (title) => {
+    expect(DemoManifest.safeParse(aManifest({ title })).success).toBe(false)
+  })
+
+  it('大文字の sha256 は断る', () => {
+    expect(DemoManifest.safeParse(aManifest({ media: [aMedia({ sha256: 'A'.repeat(64) })] })).success).toBe(false)
+  })
+
+  it('ファイル名は 128 文字まで', () => {
+    const name = (length: number) => `${'a'.repeat(length - 4)}.mp4`
+    expect(DemoManifest.safeParse(aManifest({ media: [aMedia({ file: name(128) })] })).success).toBe(true)
+    expect(DemoManifest.safeParse(aManifest({ media: [aMedia({ file: name(129) })] })).success).toBe(false)
+  })
+
+  it.each([
+    'https://github.com/kabatin/ixa-video-creator/releases/download/demo-v1/#x',
+    'https://example.com/releases/download/demo-v1/',
+    'https://objects.githubusercontent.com/x/',
+  ])('取りに行く先 %j は断る（# 付き・github.com 以外）', (baseUrl) => {
+    expect(DemoManifest.safeParse(aManifest({ baseUrl })).success).toBe(false)
+  })
+
+  it('素材は 200 件、ファイルは 50 件まで', () => {
+    const media = (n: number) =>
+      Array.from({ length: n }, (_, i) => {
+        const sha = i.toString(16).padStart(64, '0')
+        return aMedia({ id: `01J${i.toString().padStart(23, '0')}`, sha256: sha, file: `${sha}.mp4`, sizeBytes: 1 })
+      })
+    expect(DemoManifest.safeParse(aManifest({ media: media(200) })).success).toBe(true)
+    expect(DemoManifest.safeParse(aManifest({ media: media(201) })).success).toBe(false)
+    const files = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ key: `music/p/t${String(i)}/peaks.json`, file: `w${String(i)}.json`, sha256: i.toString(16).padStart(64, 'f'), sizeBytes: 1 }))
+    expect(DemoManifest.safeParse(aManifest({ files: files(50) })).success).toBe(true)
+    expect(DemoManifest.safeParse(aManifest({ files: files(51) })).success).toBe(false)
+  })
+
+  it('合わせて 500 MB まで', () => {
+    const big = (i: number, sizeBytes: number) => aMedia({ id: `01J${String(i).padStart(23, '0')}`, sha256: String(i).padStart(64, '0'), file: `m${String(i)}.mp4`, sizeBytes })
+    const mb = 1024 * 1024
+    expect(DemoManifest.safeParse(aManifest({ files: [], media: [big(1, 200 * mb), big(2, 200 * mb), big(3, 100 * mb)] })).success).toBe(true)
+    expect(DemoManifest.safeParse(aManifest({ files: [], media: [big(1, 200 * mb), big(2, 200 * mb), big(3, 100 * mb + 1)] })).success).toBe(false)
+  })
+
+  it.each([
+    ['other', 'application/octet-stream'],
+    ['lut', 'text/plain'],
+    ['image', 'text/html'],
+    ['image', 'image/svg+xml'],
+    ['video', 'image/png'],
+    ['audio', 'video/mp4'],
+  ])('素材の種類 %s・%s は断る（絵・動画・音の決まった型だけ）', (kind, contentType) => {
+    expect(DemoManifest.safeParse(aManifest({ media: [aMedia({ kind, contentType })] })).success).toBe(false)
+  })
+
+  it.each([
+    ['image', 'image/png'],
+    ['image', 'image/jpeg'],
+    ['video', 'video/mp4'],
+    ['audio', 'audio/wav'],
+    ['audio', 'audio/mpeg'],
+  ])('素材の種類 %s・%s は通る', (kind, contentType) => {
+    expect(DemoManifest.safeParse(aManifest({ media: [aMedia({ kind, contentType })] })).success).toBe(true)
+  })
+})
+
+describe('目録の中の結び付き（demoBindingProblems）', () => {
+  const LOCAL = '01JXXXXXXXXXXXXXXXXXXXXXXX'
+  const SHOT = '01JSSSSSSSSSSSSSSSSSSSSSSS'
+  const bound = (source: Record<string, unknown>) =>
+    demoBindingProblems(DemoManifest.parse(aManifest({ source })))
+
+  it('素材は目録の素材・ほかの ID は目録の中で定まったもの・作業場所などは決まった欄だけ', () => {
+    expect(
+      bound({
+        project: { id: OTHER, workspaceId: '01JWWWWWWWWWWWWWWWWWWWWWWW', styleReferenceAssetIds: [MEDIA_A] },
+        shots: [{ shot: { id: SHOT, projectId: OTHER }, takes: [{ shotId: SHOT, mediaAssetId: MEDIA_A, copiedFromTakeId: LOCAL }] }],
+        tracks: [{ analyses: [{ waveformPeaksKey: 'music/01JP/01JT/peaks.json' }] }],
+      }),
+    ).toEqual([])
+  })
+
+  it('目録に無い ULID を指す欄は断る（この機械の素材に当たってはいけない）', () => {
+    expect(bound({ project: { id: OTHER }, shots: [{ takes: [{ mediaAssetId: LOCAL }] }] })).toEqual(['source.shots[0].takes[0].mediaAssetId'])
+  })
+
+  it('目録の中の ID と素材の ID が重なれば断る', () => {
+    expect(bound({ project: { id: MEDIA_A } })).toEqual(['source.project.id'])
+  })
+
+  it('波形の置き場は目録の files のどれか', () => {
+    expect(bound({ project: { id: OTHER }, tracks: [{ analyses: [{ waveformPeaksKey: 'music/x/y/peaks.json' }] }] })).toEqual([
+      'source.tracks[0].analyses[0].waveformPeaksKey',
+    ])
+  })
+})
+
+describe('公開する目録の点検（鍵と署名の形）', () => {
+  const rules = { secrets: [], homeDir: '', userName: '' }
+  it.each([
+    'https://storage.googleapis.com/b/o?X-Goog-Signature=abc',
+    'https://d111.cloudfront.net/x?Key-Pair-Id=K&Signature=s&Policy=p',
+    'https://example.com/x?Policy=eyJ',
+    'https://maps.example.com/api?key=AIzaSy123',
+    'https://api.example.com/v1?api_key=abc',
+    'https://user:pw@example.com/x',
+    'https%3A%2F%2Fexample.com%2Fx%3Fsig%3Dabc',
+    'mail me: creator@example.com',
+  ])('%s を拾う', (value) => {
+    expect(publicLeaks({ a: value }, rules)).toEqual(['a'])
   })
 })
