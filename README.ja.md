@@ -1,12 +1,8 @@
 # iXA Video Creator
 
-**曲から作るミュージックビデオの制作台。作業は、AI エージェントに頼むこともできる。**
-曲に合わせて切り、絵コンテ・絵・映像・BGM・効果音の下書きを AI に任せ、プレビューで見たままを書き出す。
-直しはワークベンチの「AI エージェント」タブにふつうの言葉で頼めるし、Claude Code や Codex から MCP で
-制作を丸ごと進めさせることもできる。
-
-> **エージェントに入れてもらう。** この Mac の Claude Code か Codex にこう頼む:
-> *「https://github.com/kabatin/ixa-video-creator をこの Mac に入れて、INSTALL.md のとおり使えるところまで整えて」*
+**曲から MV を、Apple Silicon の Mac 1 台で。**
+拍に合わせて切り、絵コンテ・絵・映像・BGM・効果音を手元の AI で作り、プレビューで見たままを書き出す。
+作業は AI エージェントにも頼める（ワークベンチのタブ、または Claude Code・Codex から MCP で）。
 
 [![CI](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml/badge.svg)](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/kabatin/ixa-video-creator)](https://github.com/kabatin/ixa-video-creator/releases) [![License: MIT](https://img.shields.io/github/license/kabatin/ixa-video-creator)](./LICENSE) [![GitHub stars](https://img.shields.io/github/stars/kabatin/ixa-video-creator?style=social)](https://github.com/kabatin/ixa-video-creator/stargazers)
 
@@ -17,15 +13,6 @@
 | ![Demo: drop a song onto an empty project, it is analysed, section boundaries become cuts in one click, the cuts become shots, each shot gets a take from its start frame, and the whole thing plays back in sync with the music](./docs/images/demo.webp) | ![The AI agent tab: the creator asks for a one-line summary of every shot, the agent reads the project and answers in a list; then asks for a sound effect on the whale's tail, the agent starts a motion analysis and stops at a confirmation card with Run, Cancel and "don't ask again in this task"; the creator cancels and the agent offers two other ways](./docs/images/agent-chat.webp) |
 | 曲を落とす → セクションの境目で切る → Shot → Shot ごとに Take → 通しで再生。 | ふつうの言葉で頼む。読むだけならすぐ動き、生成・削除・書き出しは「実行」を押すまで待つ。 |
 
----
-
-## 4 行で言うと
-
-- **曲がそのままタイムラインになる。** カットは波形の上の位置なので、Shot の尺は曲が求める長さちょうどになり、その長さがそのまま動画の AI に渡る。
-- **AI エージェントと一緒に作れる。** ワークベンチの中のチャットのタブと、Claude Code・Codex 向けの 62 ツールの MCP サーバ。エージェントが作ったものは、ふつうの Shot・Take・クリップとして並び、見て直せて、⌘Z で戻せる。
-- **Mac 1 台がスタジオになる。** 絵（FLUX.2 [klein]）、映像（MiniMax H3・Wan 2.2）、曲と BGM（ACE-Step 1.5・Stable Audio 3・MiniMax-Music3）、効果音（Stable Audio 3）を、手元で無料で作れる。有料の API は任意で、明示しない限り開かない。
-- **費用と弱点を隠さない。** 数字は実測のものだけ。始める前に[正直な制約](#正直な制約)を読んでほしい。
-
 ## このツールで作ったもの
 
 ![Seven frames from "Senko's Time Travel", a vertical short: the girl Senko lit by a gaming monitor in an esports shop, on a footbridge at sunset, in an ukiyo-e castle town under cherry blossoms, raising a glowing sword in a stained-glass hall, riding a flying whale above the clouds, on a neon rooftop in 2099, and back in the shop under the title card](./docs/images/senko-stills.jpg)
@@ -35,6 +22,36 @@
 ![Nine frames from the "NIGHT RUN" trailer: a rain-soaked neon street, two sports cars idling in steam, an extreme close-up of a driver's eyes, a car streaking past in motion blur, a rear wheel spinning in tyre smoke, a car racing through a lit tunnel, the driver at the wheel in the rain, the two leads at a lookout at dawn, and the NIGHT RUN title over a wet street](./docs/images/night-run-stills.jpg)
 
 <sub>**NIGHT RUN** — 横 16:9・66 秒・41 Shot の予告編。ナレーション・エフェクト・効果音の段つき。書き出したファイルからコマを抜いた。</sub>
+
+## ほかと違う 3 つのこと
+
+- **曲が先。** 曲がそのままタイムラインになる。カットは波形の上の位置なので、Shot の尺は曲が求める長さちょうどになり、その長さがそのまま動画の AI に渡る。
+- **Mac 1 台・無料。** 絵（FLUX.2 [klein]）、映像（MiniMax H3・Wan 2.2）、曲と BGM（ACE-Step 1.5・Stable Audio 3・MiniMax-Music3）、効果音（Stable Audio 3）を、Apple Silicon の手元で作る。有料の API は任意で、明示しない限り開かない。
+- **頼めば作る。** ワークベンチの中のチャットのタブと、Claude Code・Codex 向けの 62 ツールの MCP サーバ。エージェントが作ったものは、ふつうの Shot・Take・クリップとして並び、見て直せて、⌘Z で戻せる。
+
+費用と弱点も隠さない。数字は実測のものだけ。始める前に[正直な制約](#正直な制約)を読んでほしい。
+
+## 動かす
+
+Mac と、Node 22 / pnpm 9 / Docker Desktop / FFmpeg / [uv](https://docs.astral.sh/uv/) が要る。
+
+```bash
+git clone https://github.com/kabatin/ixa-video-creator.git
+cd ixa-video-creator
+pnpm install
+pnpm ixa setup    # .env・署名の鍵・postgres と redis・DB の更新・ワークスペース・音声の依存・テキストの AI・書き出しの Chrome・MCP。何度実行しても壊れない
+
+pnpm dev          # web :3000, api :3001, worker, audio :8100
+```
+
+<http://localhost:3000> を開き、作品を作り、音声ファイルを画面に落とす。あとは流れの帯が案内する。**既定ではローカルのスタブだけで動く。鍵も費用も要らない。**
+
+> **エージェントに入れてもらうこともできる。** この Mac の Claude Code か Codex にこう頼む:
+> *「https://github.com/kabatin/ixa-video-creator をこの Mac に入れて、INSTALL.md のとおり使えるところまで整えて」*
+
+次に: [この Mac で無料で作る](#この-mac-で作る任意) · [入れ方の詳しい説明](#入れ方の詳しい説明) · [更新する](#更新する) · [有料の Provider を繋ぐ](#有料の-provider-を繋ぐ)
+
+---
 
 ## AI エージェントに頼む
 
@@ -53,11 +70,19 @@
 - **モデルは会話ごとに選べる。** 既定は Sonnet。Opus・Haiku も選べる。
 - **エージェントの直しも ⌘Z で戻せる。** 自分の操作と同じ API を通るので、取り消しも同じように効く。
 
+<details>
+<summary><b>安全の作り</b></summary>
+
 **安全の作り**（[ADR-0058](./docs/adr/0058-agent-chat-tab.md)）。タブは Claude Code の CLI を、ixa の MCP のツールだけで起こす — シェルやファイルを触る組み込みのツールは無く、制作者自身の Claude の設定やフックも読まない。ツールを使う前に必ず確認の関所を通り、確認の答えは**画面からだけ**受ける（エージェントが自分の確認に答えることはできない）。**ほかの作品**を触る操作は、「以後確認しない」の後でも必ず確認する。エージェントの鍵は 1 回のやりとりごとに発行し、MCP の設定ファイル（権限 600）にだけ書き（ログや会話には出さない）、やりとりが終わったら取り消す。同じ作品で動く会話は 1 つだけなので、2 つの会話が同じ直しを取り合うことはない。
+
+</details>
 
 ### Claude Code・Codex から: MCP サーバ
 
 `apps/mcp` は stdio の MCP サーバ（[ADR-0049](./docs/adr/0049-mcp-server.md)）。画面と同じ API を呼ぶ薄い層で、曲からテロップ・ナレーション・歌詞・音の仕上げ・書き出しまで、制作の全体を **62 のツール**で扱う:
+
+<details>
+<summary><b>62 ツールの一覧（段ごと）</b></summary>
 
 | 段 | ツール |
 |---|---|
@@ -71,11 +96,18 @@
 | 届ける | `export` · `export_thumbnail` |
 | 履歴 | `list_edits` · `undo` |
 
+</details>
+
 **`view` はエージェントの目。** 最初のフレームと Take のコマを**画像として**返すので、エージェントは自分で見て、崩れた手や溶けた車を描き直してから次へ進める。`export_thumbnail` も、できた JPEG を画像で返す。
 
 > 「横 16:9 で 60 秒のショートを作って。夜のストリートレースのあと、夜明けに 2 人が寄り添う」
 
 最初の試作（62 秒・16 Shot、曲づくりも含めてこのツールだけで作った）は、手元の GPU 1 台で約 4 時間だった。長い生成で呼び出しを止めておくことはなく、エージェントは頼んでから `wait` で待つ（`wait` は上限の時間で必ず返る）。
+
+`pnpm ixa mcp --claude`（または `--codex`）が、この clone 用の登録の 1 行を出す（ワークスペースの ID は入れ、鍵は入れない）。`--write` を付けると実際に登録する。
+
+<details>
+<summary><b>手で登録する</b></summary>
 
 Claude Code への登録（鍵はシェルの環境から渡す。ファイルに直に書かない）:
 
@@ -97,7 +129,7 @@ Claude Code への登録（鍵はシェルの環境から渡す。ファイル�
 
 `IXA_API_TOKEN` は「アクセス用の鍵」のページで発行する自動化用の鍵（[ADR-0046](./docs/adr/0046-passphrase-and-access-tokens.md)）で、いつでも取り消せる。Codex の設定などは [apps/mcp/README.md](./apps/mcp/README.md)。
 
-`pnpm ixa mcp --claude`（または `--codex`）が、この clone 用の登録の 1 行を出す（ワークスペースの ID は入れ、鍵は入れない）。`--write` を付けると実際に登録する。
+</details>
 
 ## 曲が先にある
 
@@ -122,6 +154,9 @@ Claude Code への登録（鍵はシェルの環境から渡す。ファイル�
 
 ![The production flow bar: song, direction, lyric timing, captions, cut into shots and storyboard are done; frames are at 40 of 44 and highlighted as the next step; takes at 7 of 44; export done](./docs/images/flow-bar.png)
 
+<details>
+<summary><b>10 の段</b></summary>
+
 1. **楽曲** — 音源を落とすか、作る。拍・小節頭・セクションを解析する。
 2. **作品の方針** — コンセプト・あらすじ・歌詞・ルック（画風・光・質感）、避けたいものと手本画像。全部の生成に自動で足されるので、書くのは 1 回でよい。
 3. **歌詞の時刻** — 曲を流し、各行の歌い出しで Enter を押す。
@@ -134,6 +169,8 @@ Claude Code への登録（鍵はシェルの環境から渡す。ファイル�
 10. **書き出す** — H.264。全体か、選んだ Shot だけ。`~/Movies/ixa-video-creator/<作品名>/` に置かれる。YouTube のサムネイルも。
 
 段を飛ばしてもよいが、飛ばす前に確かめる。
+
+</details>
 
 ## 音・仕上げ・AI の見直し
 
@@ -196,6 +233,9 @@ Claude Code への登録（鍵はシェルの環境から渡す。ファイル�
 
 ## 特徴
 
+<details>
+<summary><b>設計で決めた 7 つのこと</b></summary>
+
 **曲の構造がデータとして扱える。** 拍と小節頭は数として持っているので、吸着・絞り込み・並べ替えの対象になる。各 Shot が拍に対してどこにあるかは出すが、**それを間違いとして扱わない** — 参考の作品では 27 カット中 16 件が意図的に拍から外れている。
 
 **プレビューが書き出しそのもの。** プレイヤー・書き出し・サムネイルは、*同じ* `TimelineDocument` を *同じ* Remotion コンポジションに通す。プレビュー用の別経路が無いので、見た目と出力がズレない。
@@ -210,6 +250,8 @@ Claude Code への登録（鍵はシェルの環境から渡す。ファイル�
 
 **お金を第一級の危険として扱う。** 作品ごとの予算を、ジョブを積む前にサーバ側で検査する。ローカルの FFmpeg スタブが `VideoProvider` を完全に実装しているので、有料 API を繋ぐ前に、キュー・ポーリング・失敗処理・予算の歯止めまで 0 円で通しで動かせる。
 
+</details>
+
 ## 正直な制約
 
 - **Apple Silicon の Mac が前提。** 無料の手元のモデルは、Apple Silicon 向けの別のサーバ（vpipe-api・wan-api・klein-api・ace-step-api・sfx-api）で動く。無ければ、お試し・Codex の画像・有料 API になる。
@@ -223,6 +265,9 @@ Claude Code への登録（鍵はシェルの環境から渡す。ファイル�
 - **個人プロジェクト。** インターフェースは版ごとにまだ動く。
 
 ## 構成
+
+<details>
+<summary><b>リポジトリの並び</b></summary>
 
 ```
 apps/
@@ -242,22 +287,13 @@ packages/
 
 **Shot First.** ストーリーボード・生成・Take・レビュー・タイムラインがすべて 1 つのエンティティにぶら下がる。`Shot` がマスタータイムライン上の位置 — 曲を切って与えた位置 — を持つので、時間が食い違う第 2 の場所が無い。時間は秒（float）で持ち、フレームとミリ秒はドメインにも DB にも入れない。
 
-## 動かす
+</details>
 
-Mac で Node 22 / pnpm 9 / Docker Desktop / FFmpeg / [uv](https://docs.astral.sh/uv/) が要る（音声サービスの Python 3.12 は uv が用意する）。AI でテキストや絵を作るなら [Claude Code](https://docs.anthropic.com/en/docs/claude-code)・[Codex](https://github.com/openai/codex)・Grok CLI のどれかを同じ Mac でサインインしておく（任意。AI エージェントのタブには Claude Code）。
+## 入れ方の詳しい説明
 
-```bash
-git clone https://github.com/kabatin/ixa-video-creator.git
-cd ixa-video-creator
-pnpm install
-pnpm ixa setup    # .env・署名の鍵・postgres と redis・DB の更新・ワークスペース・音声の依存・テキストの AI・書き出しの Chrome・MCP。何度実行しても壊れない
-
-pnpm dev          # web :3000, api :3001, worker, audio :8100
-```
+`pnpm ixa setup` には Node 22 / pnpm 9 / Docker Desktop / FFmpeg / [uv](https://docs.astral.sh/uv/) が要る（音声サービスの Python 3.12 は uv が用意する）。AI でテキストや絵を作るなら [Claude Code](https://docs.anthropic.com/en/docs/claude-code)・[Codex](https://github.com/openai/codex)・Grok CLI のどれかを同じ Mac でサインインしておく（任意。AI エージェントのタブには Claude Code）。
 
 `setup` は勝手に道具を入れない。足りなければ入れ方の 1 行（`brew install ffmpeg` など）を出して止まる（取ってくるのは書き出しの headless Chrome だけ）。契約や設定に関わるもの（テキストと画像を Claude Code・Codex にする・Gemini の鍵・Claude Code への MCP の登録）は端末で聞き、`--yes` では飛ばす。`pnpm ixa doctor` は今の状態を ✓ / ! / ✗ で並べ、問題ごとに直し方を 1 行添える（鍵は「入っている／いない」だけ）。どちらも `--json` で機械向けに出せる。エージェントが従う手順書は [INSTALL.md](./INSTALL.md)（人に聞くべき所も書いてある。[ADR-0063](./docs/adr/0063-ixa-cli-setup-doctor-update.md)）。
-
-<http://localhost:3000> を開き、作品を作り、音声ファイルを画面に落とす。あとは流れの帯が案内する。**既定ではローカルのスタブだけで動く。鍵も費用も要らない。**
 
 ### 更新する
 
@@ -293,6 +329,9 @@ pnpm ixa ai install --plan   # 一覧だけ（容量・メモリ・ライセン�
 uv run https://raw.githubusercontent.com/kabatin/ixa-video-creator/v0.8.4/tools/ixa-ai/ixa_ai.py install --lan
 ```
 
+<details>
+<summary><b>サーバを手でつなぐ</b></summary>
+
 手で入れるなら: **サーバを起動 → `.env` に書く →「使う AI」で選ぶ。**
 
 | サーバ | 作るもの | モデル | 既定の場所 |
@@ -313,6 +352,8 @@ VPIPE_API_URL=http://127.0.0.1:8765
 VPIPE_API_TOKEN=                  # URL がこのマシンの外を指すときだけ要る
 # WAN_ / KLEIN_ / ACE_STEP_ / SFX_ の API_URL と API_TOKEN も同じ扱い
 ```
+
+</details>
 
 <details>
 <summary><b>実測の速さと、手元の生成ごとの振る舞い</b></summary>

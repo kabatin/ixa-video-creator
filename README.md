@@ -1,12 +1,9 @@
 # iXA Video Creator
 
-**Make music videos from the song outward — and hand the work to an AI agent when you want to.**
-Cut against the music, let AI draft the storyboard, the frames, the takes, the score and the sound
-effects, and export exactly what you previewed. Ask for changes in plain words in the built-in
-agent tab, or let Claude Code or Codex drive the whole production over MCP.
-
-> **Let an agent install it.** Paste this into Claude Code or Codex on your Mac:
-> *"Install https://github.com/kabatin/ixa-video-creator on this Mac and get it ready to use, following its INSTALL.md."*
+**Turn a song into a music video on one Apple Silicon Mac.**
+Cut on the beat, let local AI make the storyboard, the frames, the takes, the score and the sound
+effects, and export exactly what you previewed — or ask an AI agent (the built-in tab, or
+Claude Code / Codex over MCP) to run the whole edit.
 
 [![CI](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml/badge.svg)](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/kabatin/ixa-video-creator)](https://github.com/kabatin/ixa-video-creator/releases) [![License: MIT](https://img.shields.io/github/license/kabatin/ixa-video-creator)](./LICENSE) [![GitHub stars](https://img.shields.io/github/stars/kabatin/ixa-video-creator?style=social)](https://github.com/kabatin/ixa-video-creator/stargazers)
 
@@ -17,15 +14,6 @@ agent tab, or let Claude Code or Codex drive the whole production over MCP.
 | ![Demo: drop a song onto an empty project, it is analysed, section boundaries become cuts in one click, the cuts become shots, each shot gets a take from its start frame, and the whole thing plays back in sync with the music](./docs/images/demo.webp) | ![The AI agent tab: the creator asks for a one-line summary of every shot, the agent reads the project and answers in a list; then asks for a sound effect on the whale's tail, the agent starts a motion analysis and stops at a confirmation card with Run, Cancel and "don't ask again in this task"; the creator cancels and the agent offers two other ways](./docs/images/agent-chat.webp) |
 | Drop a song → cut at its section boundaries → shots → a take for every shot → play it through. | Ask in plain words. Reads run straight away; anything that generates, deletes or exports waits for your OK. |
 
----
-
-## What it is, in four lines
-
-- **The song is the timeline.** Cuts are positions in the waveform, so every shot is exactly as long as the music asks for — and that length is what the video model is told to make.
-- **An AI agent can do the work with you.** A chat tab inside the workbench, and an MCP server with 62 tools for Claude Code and Codex. Everything the agent makes shows up as ordinary shots, takes and clips you can review, change or undo with ⌘Z.
-- **One Mac can be the whole studio.** Pictures (FLUX.2 [klein]), video (MiniMax H3, Wan 2.2), songs and BGM (ACE-Step 1.5, Stable Audio 3, MiniMax-Music3) and sound effects (Stable Audio 3) can all run locally, for free. Paid APIs are optional and fenced off.
-- **It is honest about what it costs and where it falls short.** Measured numbers only, and a section on [limits](#limits-honestly) you should read before you start.
-
 ## Made with it
 
 ![Seven frames from "Senko's Time Travel", a vertical short: the girl Senko lit by a gaming monitor in an esports shop, on a footbridge at sunset, in an ukiyo-e castle town under cherry blossoms, raising a glowing sword in a stained-glass hall, riding a flying whale above the clouds, on a neon rooftop in 2099, and back in the shop under the title card](./docs/images/senko-stills.jpg)
@@ -35,6 +23,36 @@ agent tab, or let Claude Code or Codex drive the whole production over MCP.
 ![Nine frames from the "NIGHT RUN" trailer: a rain-soaked neon street, two sports cars idling in steam, an extreme close-up of a driver's eyes, a car streaking past in motion blur, a rear wheel spinning in tyre smoke, a car racing through a lit tunnel, the driver at the wheel in the rain, the two leads at a lookout at dawn, and the NIGHT RUN title over a wet street](./docs/images/night-run-stills.jpg)
 
 <sub>**NIGHT RUN** — a 66-second 16:9 trailer in 41 shots, with narration, effects and a sound-effect lane. Frames taken from the exported file.</sub>
+
+## Three things that make it different
+
+- **The song comes first.** The song is the timeline. Cuts are positions in the waveform, so every shot is exactly as long as the music asks for — and that length is what the video model is told to make.
+- **One Mac, for free.** Pictures (FLUX.2 [klein]), video (MiniMax H3, Wan 2.2), songs and BGM (ACE-Step 1.5, Stable Audio 3, MiniMax-Music3) and sound effects (Stable Audio 3) all run locally on Apple Silicon. Paid APIs are optional and fenced off.
+- **Ask, and it gets made.** A chat tab inside the workbench, and an MCP server with 62 tools for Claude Code and Codex. Everything the agent makes shows up as ordinary shots, takes and clips you can review, change or undo with ⌘Z.
+
+It is also honest about what it costs and where it falls short: measured numbers only, and a section on [limits](#limits-honestly) worth reading before you start.
+
+## Quick start
+
+You need a Mac with Node 22, pnpm 9, Docker Desktop, FFmpeg and [uv](https://docs.astral.sh/uv/).
+
+```bash
+git clone https://github.com/kabatin/ixa-video-creator.git
+cd ixa-video-creator
+pnpm install
+pnpm ixa setup    # .env, signing key, postgres + redis, DB migrations, workspace, audio deps, text AI, Chrome for export, MCP — safe to re-run
+
+pnpm dev          # web :3000, api :3001, worker, audio :8100
+```
+
+Open <http://localhost:3000>, create a project, and drop an audio file onto the window — the flow bar takes it from there. **Out of the box everything runs on local stubs — no API keys, no cost.**
+
+> **Or let an agent install it.** Paste this into Claude Code or Codex on your Mac:
+> *"Install https://github.com/kabatin/ixa-video-creator on this Mac and get it ready to use, following its INSTALL.md."*
+
+Next: [generate on this Mac for free](#generating-on-this-mac-optional) · [setup in detail](#setup-in-detail) · [upgrading](#upgrading) · [connecting a paid provider](#connecting-a-paid-provider)
+
+---
 
 ## Ask an AI agent
 
@@ -52,11 +70,19 @@ Open **AI エージェント** in the bottom dock and type what you want — *"m
 - **Pick the model per conversation.** Sonnet by default; Opus or Haiku when you want.
 - **Undo works on the agent's edits too.** They go through the same API as your own, so ⌘Z takes them back.
 
+<details>
+<summary><b>How it stays safe</b></summary>
+
 **How it stays safe** ([ADR-0058](./docs/adr/0058-agent-chat-tab.md)). The tab starts the Claude Code CLI with only ixa's MCP tools — no shell or file tools of its own, and none of your own Claude settings or hooks. Every tool call passes through a permission check, and the answer to a confirmation is accepted **only from the screen**, never from the agent itself. Anything that touches a *different* project always asks, even after "don't ask again". The agent's access key is issued for one exchange, written only into its MCP config file (mode 600) — never to logs or the chat — and revoked when the exchange ends. Only one agent conversation runs per project at a time, so it never fights another one over the same edit.
+
+</details>
 
 ### From Claude Code or Codex: the MCP server
 
 `apps/mcp` is a stdio MCP server ([ADR-0049](./docs/adr/0049-mcp-server.md)) — a thin client of the same API — with **62 tools** that cover the whole job, from the song to telops, narration, lyrics, the sound mix and the exported file:
+
+<details>
+<summary><b>All 62 tools, by stage</b></summary>
 
 | Stage | Tools |
 |---|---|
@@ -70,11 +96,18 @@ Open **AI エージェント** in the bottom dock and type what you want — *"m
 | Delivering | `export` · `export_thumbnail` |
 | History | `list_edits` · `undo` |
 
+</details>
+
 **`view` is the agent's eyes.** It returns start frames and frames sampled from a take *as images*, so the agent can look at what it made and redraw a broken hand or a melting car before moving on. `export_thumbnail` hands back the finished JPEG the same way.
 
 > "Make a 60-second 16:9 short: a night street race, then the two drivers at dawn."
 
 The first test — a 62-second, 16-shot short made entirely through these tools, music included — took about four hours on one local GPU. Long jobs never block a call: the agent queues them and polls with `wait`, which always returns within its time limit.
+
+`pnpm ixa mcp --claude` (or `--codex`) prints the exact registration line for this clone, with your workspace id filled in and no key in it; add `--write` to register it.
+
+<details>
+<summary><b>Registering it by hand</b></summary>
 
 Register it with Claude Code (the access key comes from your shell environment; never write it into the file):
 
@@ -96,7 +129,7 @@ Register it with Claude Code (the access key comes from your shell environment; 
 
 `IXA_API_TOKEN` is an automation key issued on the *Access keys* page (アクセス用の鍵) ([ADR-0046](./docs/adr/0046-passphrase-and-access-tokens.md)) and revocable at any time. Codex setup and the rest: [apps/mcp/README.md](./apps/mcp/README.md).
 
-`pnpm ixa mcp --claude` (or `--codex`) prints the exact registration line for this clone, with your workspace id filled in and no key in it; add `--write` to register it.
+</details>
 
 ## Music first
 
@@ -121,6 +154,9 @@ A bar under the menu walks you through the whole job and always highlights the n
 
 ![The production flow bar: song, direction, lyric timing, captions, cut into shots and storyboard are done; frames are at 40 of 44 and highlighted as the next step; takes at 7 of 44; export done](./docs/images/flow-bar.png)
 
+<details>
+<summary><b>The ten steps</b></summary>
+
 1. **Song** — drop an audio file, or make one; it is analysed for beats, downbeats and sections.
 2. **Direction** — concept, synopsis, lyrics and the look (style, light, texture), plus things to avoid and reference images. Added to every generation, so you write them once.
 3. **Lyric timing** — play the song and press Enter on the first syllable of each line.
@@ -133,6 +169,8 @@ A bar under the menu walks you through the whole job and always highlights the n
 10. **Export** — H.264, the whole film or selected shots, into `~/Movies/ixa-video-creator/<project>/`. Plus a YouTube thumbnail.
 
 Skipping a step is allowed, but you are asked first.
+
+</details>
 
 ## Sound, finish and second opinions
 
@@ -195,6 +233,9 @@ These stills were made with an image model outside the app and brought in as eac
 
 ## Why it might interest you
 
+<details>
+<summary><b>Seven design choices, one paragraph each</b></summary>
+
 **The song's structure is data, not a picture of a waveform.** Beats and downbeats are numbers you can snap to, filter by and sort against. The tool shows where each shot sits relative to the beat *without calling it a mistake* — on the reference project 16 of 27 cuts are deliberately off the grid.
 
 **Preview is the render.** The player, the exported file and the thumbnail consume the *same* `TimelineDocument` through the *same* Remotion composition. There is no separate preview path that can drift from the output.
@@ -209,6 +250,8 @@ These stills were made with an image model outside the app and brought in as eac
 
 **Money is treated as a first-class hazard.** Per-project budgets are enforced server-side before a job is enqueued. A local FFmpeg stub implements the whole `VideoProvider` interface, so queueing, polling, failure handling and the budget guard all run end to end at zero cost before you connect a paid API.
 
+</details>
+
 ## Limits, honestly
 
 - **It assumes an Apple Silicon Mac.** The free local models run through separate servers (vpipe-api, wan-api, klein-api, ace-step-api, sfx-api) built for Apple Silicon. Without them you are on stubs, Codex images, or paid APIs.
@@ -222,6 +265,9 @@ These stills were made with an image model outside the app and brought in as eac
 - **It is a personal project.** Interfaces still move between versions.
 
 ## How it fits together
+
+<details>
+<summary><b>The layout of the repository</b></summary>
 
 ```
 apps/
@@ -241,22 +287,13 @@ The dependency direction is always `apps → packages → domain`, never back.
 
 **Shot First.** Storyboard, generation, takes, review and the timeline all hang off one entity. A `Shot` owns its position on the master timeline — the position you gave it by cutting the song — so there is no second place where time can disagree. Time is stored in seconds as a float; frames and milliseconds never enter the domain or the database.
 
-## Quick start
+</details>
 
-Requires a Mac with Node 22, pnpm 9, Docker Desktop, FFmpeg and [uv](https://docs.astral.sh/uv/) (uv brings Python 3.12 for the audio service). Optional: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex) or Grok CLI, signed in on the same Mac, for AI text and images — and Claude Code for the agent tab.
+## Setup in detail
 
-```bash
-git clone https://github.com/kabatin/ixa-video-creator.git
-cd ixa-video-creator
-pnpm install
-pnpm ixa setup    # .env, signing key, postgres + redis, DB migrations, workspace, audio deps, text AI, Chrome for export, MCP — safe to re-run
-
-pnpm dev          # web :3000, api :3001, worker, audio :8100
-```
+`pnpm ixa setup` needs Node 22, pnpm 9, Docker Desktop, FFmpeg and [uv](https://docs.astral.sh/uv/) (uv brings Python 3.12 for the audio service). Optional: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex) or Grok CLI, signed in on the same Mac, for AI text and images — and Claude Code for the agent tab.
 
 `setup` never installs software for you: if a tool is missing it prints the one line that installs it (`brew install ffmpeg`) and stops (it only fetches the headless Chrome used for export). Anything that uses your plans or settings — switching text and images to Claude Code / Codex, a Gemini key, registering the MCP server in Claude Code — is asked in a terminal and skipped with `--yes`. `pnpm ixa doctor` shows the state of everything as ✓ / ! / ✗ with a one-line fix for each problem — keys only as set or not set. Both take `--json` for agents; [INSTALL.md](./INSTALL.md) is the runbook an agent follows, including where it must stop and ask you ([ADR-0063](./docs/adr/0063-ixa-cli-setup-doctor-update.md)).
-
-Open <http://localhost:3000>, create a project, and drop an audio file onto the window — the flow bar takes it from there. **Out of the box everything runs on local stubs — no API keys, no cost.**
 
 ### Upgrading
 
@@ -292,6 +329,9 @@ Each server's own `setup` installs its engine and weights; ixa only asks what yo
 uv run https://raw.githubusercontent.com/kabatin/ixa-video-creator/v0.8.4/tools/ixa-ai/ixa_ai.py install --lan
 ```
 
+<details>
+<summary><b>Wiring a server by hand</b></summary>
+
 Or by hand: **start the server, list it in `.env`, pick it under *Which AI*.**
 
 | Server | Makes | Models | Default address |
@@ -312,6 +352,8 @@ VPIPE_API_URL=http://127.0.0.1:8765
 VPIPE_API_TOKEN=                  # required only when the URL points off this machine
 # WAN_ / KLEIN_ / ACE_STEP_ / SFX_ API_URL and API_TOKEN work the same way
 ```
+
+</details>
 
 <details>
 <summary><b>Measured speeds and how each local path behaves</b></summary>
