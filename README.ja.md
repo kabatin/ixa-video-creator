@@ -10,7 +10,7 @@
 
 [![CI](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml/badge.svg)](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/kabatin/ixa-video-creator)](https://github.com/kabatin/ixa-video-creator/releases) [![License: MIT](https://img.shields.io/github/license/kabatin/ixa-video-creator)](./LICENSE) [![GitHub stars](https://img.shields.io/github/stars/kabatin/ixa-video-creator?style=social)](https://github.com/kabatin/ixa-video-creator/stargazers)
 
-[English README](./README.md) · MIT · TypeScript モノレポ · v0.7
+[English README](./README.md) · MIT · TypeScript モノレポ
 
 | 🎵 曲から作る | 🤖 頼んで作る |
 |---|---|

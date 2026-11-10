@@ -10,7 +10,7 @@ agent tab, or let Claude Code or Codex drive the whole production over MCP.
 
 [![CI](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml/badge.svg)](https://github.com/kabatin/ixa-video-creator/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/kabatin/ixa-video-creator)](https://github.com/kabatin/ixa-video-creator/releases) [![License: MIT](https://img.shields.io/github/license/kabatin/ixa-video-creator)](./LICENSE) [![GitHub stars](https://img.shields.io/github/stars/kabatin/ixa-video-creator?style=social)](https://github.com/kabatin/ixa-video-creator/stargazers)
 
-[日本語版 README](./README.ja.md) · MIT licensed · TypeScript monorepo · v0.7
+[日本語版 README](./README.ja.md) · MIT licensed · TypeScript monorepo
 
 | 🎵 Start from the song | 🤖 Or just ask |
 |---|---|
