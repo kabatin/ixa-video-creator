@@ -1,6 +1,7 @@
 'use client'
 
 import type { ConsoleLevel } from '@/lib/console-log'
+import { DOCK_MESSAGES } from '@/lib/dock-messages'
 import type { ProjectId } from '@ixa/domain'
 import {
   DockviewReact,
@@ -186,7 +187,7 @@ export const WorkbenchDock = ({ projectId, query, onReady, onNotice }: Workbench
 
   return (
     <div className="workbench-dock h-full">
-      <DockviewReact components={COMPONENTS} theme={themeAbyss} onReady={ready} />
+      <DockviewReact components={COMPONENTS} theme={themeAbyss} messages={DOCK_MESSAGES} onReady={ready} />
     </div>
   )
 }
