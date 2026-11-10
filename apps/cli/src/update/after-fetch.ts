@@ -64,7 +64,7 @@ const newKeysStep = async (system: System, repo: RepoPaths): Promise<StepResult>
         id: 'update.new-keys',
         status: 'notice',
         message: `新しい版で増えた .env の項目（値は書いていません。無ければ既定で動きます）: ${missing.join(', ')}`,
-        fix: { hint: '.env.example の説明を読み、要るものだけ .env に足す（鍵は制作者に聞く）', needsHuman: false },
+        fix: { hint: '.env.example の説明を読み、要るものだけ .env に足す（ほかの設定の説明は .env.full.example。鍵は制作者に聞く）', needsHuman: false },
         docs: 'INSTALL.md#更新',
       }
 }

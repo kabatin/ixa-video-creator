@@ -48,7 +48,7 @@ const newKeysCheck = (exampleContent: string, envContent: string): CheckResult =
         level: 'warn',
         message: `.env.example にあって .env に無い項目: ${missing.join(', ')}`,
         fix: {
-          hint: '.env.example の説明を読み、要るものだけ .env に足す（無ければ既定で動く。鍵は制作者に聞く）',
+          hint: '.env.example の説明を読み、要るものだけ .env に足す（無ければ既定で動く。ほかの設定の説明は .env.full.example。鍵は制作者に聞く）',
           needsHuman: false,
         },
         docs: DOCS,

@@ -10,7 +10,10 @@ import { connectCode } from './ai-env.test.js'
 import { done, fakeSystem } from './fake-system.js'
 
 const TOKEN = 'Q'.repeat(43)
-const EXAMPLE = readFileSync(new URL('../../../../.env.example', import.meta.url), 'utf8')
+// 全部の項目が書いてある .env（古い版から使っている人の形）。接続先の行が既にある場合を見る。
+const EXAMPLE = readFileSync(new URL('../../../../.env.full.example', import.meta.url), 'utf8')
+// setup が写す最小の .env（ADR-0068）。接続先の行がまだ無い場合を見る。
+const MINIMAL = readFileSync(new URL('../../../../.env.example', import.meta.url), 'utf8')
 const repo = paths('/repo')
 const RESULT_FILE = resultFileOf('/Users/me')
 const ROOT_PACKAGE = JSON.stringify({ name: 'ixa-video-creator', version: '0.8.1', packageManager: 'pnpm@9.15.4' })
@@ -52,6 +55,18 @@ describe('ai connect', () => {
       expect(c.all()).not.toContain(code)
     }
     const env = written[repo.env] ?? ''
+    expect(env).toContain('LOCAL_SFX_GENERATOR=sfx_api\n')
+    expect(env).toContain('SFX_API_URL=http://ai-mac.local:8769\n')
+    expect(env).toContain(`SFX_API_TOKEN=${TOKEN}\n`)
+  })
+
+  it('最小の .env（接続先の行が無い）からでも、足りない行を足して書く', async () => {
+    expect(MINIMAL).not.toContain('SFX_API_URL')
+    const { system, written } = fileSystem({ [repo.env]: MINIMAL })
+    const exit = await aiConnectCommand(system, repo, captured(true).out, parseCliArgs(['ai', 'connect', code, '--yes']))
+    expect(exit).toBe(0)
+    const env = written[repo.env] ?? ''
+    expect(env.startsWith(MINIMAL)).toBe(true)
     expect(env).toContain('LOCAL_SFX_GENERATOR=sfx_api\n')
     expect(env).toContain('SFX_API_URL=http://ai-mac.local:8769\n')
     expect(env).toContain(`SFX_API_TOKEN=${TOKEN}\n`)

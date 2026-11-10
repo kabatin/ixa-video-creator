@@ -34,7 +34,7 @@ export const generatorIdsByEnv = (): ReadonlyMap<string, readonly string[]> =>
 export const URL_ENV_NAMES: readonly string[] = LOCAL_VIDEO_SERVERS.map((server) => server.urlEnvName)
 export const TOKEN_ENV_NAMES: readonly string[] = LOCAL_VIDEO_SERVERS.map((server) => server.tokenEnvName)
 
-/** 値の入っていない扱いにしてよい URL（その名前の既定。`.env.example` にもこの値が入っている）。 */
+/** 値の入っていない扱いにしてよい URL（その名前の既定。`.env.full.example` にもこの値が入っている）。 */
 export const defaultUrlOf = (urlEnvName: string): string | undefined =>
   LOCAL_VIDEO_SERVERS.find((server) => server.urlEnvName === urlEnvName)?.defaultUrl
 

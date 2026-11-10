@@ -103,11 +103,12 @@ Homebrew が無ければ、`brew` の 1 行の代わりに Homebrew（https://br
 
 ## 設定
 
-- `.env` は `.env.example` から作られる。既定は**課金しない設定**（映像・絵・下書きは手元のスタブ）。
+- `.env` は `.env.example`（最初に要るものだけ）から作られる。既定は**課金しない設定**（映像・絵・下書きは手元のスタブ）。
+  ほかの設定は全部 `.env.full.example` にある（説明つき）。変えるときは要る行だけを `.env` へ写す。書かない設定は既定で動く。
 - 署名の鍵（`STORAGE_SIGNING_SECRET`）は setup が作って入れる。**値は表示しない。**
 - `env.valid` が `fail` で `needsHuman` → 書いてある名前の組み合わせが成り立たない（例: `AUDIO_API_PROVIDERS` に書いたのに鍵が無い）。
   どちらに直すか人に聞く。
-- `env.new-keys`（!）→ 新しい版で増えた項目。無くても既定で動く。`.env.example` の説明を読んで、要るものだけ足す（鍵は人に聞く）。
+- `env.new-keys`（!）→ 新しい版で `.env.example` に増えた項目。無くても既定で動く。`.env.example`（詳しくは `.env.full.example`）の説明を読んで、要るものだけ足す（鍵は人に聞く）。
 - `env.web-local`（!）→ `apps/web/.env.local` が直下の `.env` と違う値を持っている。消すか揃える。
 
 ## DB
@@ -124,7 +125,7 @@ Homebrew が無ければ、`brew` の 1 行の代わりに Homebrew（https://br
 `POSTGRES_PORT` と `DATABASE_URL` のポートが違う（`REDIS_*` も）・`IXA_COMPOSE_*` の形が違うときは `env.valid` で止まる。
 **どちらにするか人に聞く**:
 
-- **分ける**（ふつうはこちら）: `.env` に書き、URL のポートも揃えてから setup をやり直す。
+- **分ける**（ふつうはこちら）: `.env` に書き、URL のポートも揃えてから setup をやり直す（`IXA_COMPOSE_*` の説明は `.env.full.example`）。
   ```bash
   IXA_COMPOSE_PROJECT=ixa2
   IXA_COMPOSE_PREFIX=ixa2
