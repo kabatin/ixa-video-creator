@@ -51,6 +51,16 @@ describe('.env.example（最小）と .env.full.example（全部）', () => {
     expect(keysOf(MINIMAL)).toEqual(expect.arrayContaining(['AUDIO_ROOT', 'AUDIO_PORT', 'AUDIO_SERVICE_URL']))
   })
 
+  it('2 つの処理が揃える値は、名前があるだけでなく揃っている（どちらの見本も）', () => {
+    for (const content of [MINIMAL, FULL]) {
+      const env = parseEnv(content)
+      // 空の AUDIO_ROOT= は worker では '' のまま（`?? '/tmp/ixa-audio'` は空を拾わない）、apps/audio では cwd になり食い違う。
+      expect(env['AUDIO_ROOT'] ?? '').toMatch(/^\/\S+/)
+      expect(new URL(env['AUDIO_SERVICE_URL'] ?? 'http://x').port).toBe(env['AUDIO_PORT'])
+      expect(new URL(env['NEXT_PUBLIC_API_URL'] ?? 'http://x').port).toBe(env['API_PORT'])
+    }
+  })
+
   it('必須の名前を最小の見本から消すと読み込みが止まる（上の検査が素通りしていない）', () => {
     const withoutDb = MINIMAL.replace(/^DATABASE_URL=.*$/m, '')
     expect(withoutDb).not.toBe(MINIMAL)
