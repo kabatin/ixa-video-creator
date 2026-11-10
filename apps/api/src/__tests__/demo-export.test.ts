@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { MediaAssetId as MediaAssetIdSchema, newId, type DemoManifest } from '@ixa/domain'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createDirBundleSource } from '../demo-project/bundle-source.js'
-import { parseExportArgs, secretsFromEnv } from '../demo-project/export-cli.js'
+import { forbiddenWordsLine, parseExportArgs, secretsFromEnv } from '../demo-project/export-cli.js'
 import { exportReviewLines } from '../demo-project/export-review.js'
 import { createDemoInstaller } from '../demo-project/installer.js'
 import { createLogger } from '../logger.js'
@@ -32,6 +32,8 @@ const normalize = (value: unknown): unknown => {
   const ordinals = new Map<string, string>()
   const walk = (node: unknown): unknown => {
     if (typeof node === 'string') {
+      // 置き場（`music/{作品}/{曲}/peaks.json`）の中の ID も、区間ごとに同じ番号へ（入れた作品の ID で決まる置き場になる）。
+      if (node.includes('/')) return node.split('/').map((segment) => walk(segment)).join('/')
       if (!ULID.test(node)) return node
       const known = ordinals.get(node) ?? `#${String(ordinals.size + 1)}`
       ordinals.set(node, known)
@@ -79,7 +81,9 @@ describe('書き出して入れ直す', () => {
 
     expect(normalize(comparable(second))).toEqual(normalize(comparable(first)))
     expect(second.media.map((entry) => entry.sha256).sort()).toEqual(first.media.map((entry) => entry.sha256).sort())
-    expect(second.files).toEqual(first.files)
+    // 波形は同じ中身。置き場は入れた作品の ID で決まる（作る人の作品の置き場ではない）。
+    expect(second.files.map(({ sha256, sizeBytes }) => ({ sha256, sizeBytes }))).toEqual(first.files.map(({ sha256, sizeBytes }) => ({ sha256, sizeBytes })))
+    expect(second.files[0]?.key).not.toBe(first.files[0]?.key)
   }, 60_000)
 })
 
@@ -208,6 +212,40 @@ describe('書き出しの引数', () => {
   it('全部そろえば読める（pnpm の -- が前に付いても）', () => {
     expect(parseExportArgs(['--', ...ok])).toMatchObject({ demoKey: 'ixa-demo-v1', baseUrl: 'https://github.com/o/r/releases/download/d/', title: '見本' })
   })
+
+  it('--forbid は何度でも書け、拾ってほしい語（本名・機械の名前）になる。点検の一覧はその数と、渡したときだけ見つけることを言う', () => {
+    expect(parseExportArgs(ok).forbid).toEqual([])
+    expect(parseExportArgs([...ok, '--forbid', 'Taro Yamada', '--forbid', 'mac-studio']).forbid).toEqual(['Taro Yamada', 'mac-studio'])
+    expect(forbiddenWordsLine(2)).toBe('作る人が渡した語 2 件も確かめました。本名・ハンドル名・機械の名前は、--forbid で渡したときだけ見つけます。')
+    expect(forbiddenWordsLine(0)).toContain('--forbid')
+  })
+
+  it('渡した語が中身にあれば止める（値は言わない）', async () => {
+    const creator = aWorld()
+    const seeded = await seedCreatorProject(creator, tmp)
+    await creator.writers.projects.update(seeded.project.id, { styleGuide: '撮影 Taro Yamada' })
+    const out = join(tmp, 'forbid')
+    const error: unknown = await exportToDir(creator, seeded.project, out, { extraWords: ['taro yamada'] }).catch((e: unknown) => e)
+    expect((error as Error).message).toMatch(/1 件あるので、目録を書きません: source\.project\.styleGuide$/)
+    expect((error as Error).message.toLowerCase()).not.toContain('taro')
+  }, 60_000)
+
+  it('キーに当たったときも、止める文にそのキーを入れない', async () => {
+    const creator = aWorld()
+    const seeded = await seedCreatorProject(creator, tmp)
+    const [clip] = await creator.writers.timelineClips.findByProject(seeded.project.id)
+    const content = clip!.content
+    if (content.type !== 'text') throw new Error('テロップのはず')
+    await creator.writers.timelineClips.replace([clip!.id], [{
+      projectId: seeded.project.id, track: 'TEXT', startSec: 0, durationSec: 2,
+      content: { ...content, params: { ...content.params, '/Users/demo-maker/secret-folder': true } },
+    }])
+    const out = join(tmp, 'key-hit')
+    const error: unknown = await exportToDir(creator, seeded.project, out).catch((e: unknown) => e)
+    expect((error as Error).message).toContain('<key>')
+    expect((error as Error).message).not.toContain('secret-folder')
+    expect((error as Error).message).not.toContain('demo-maker')
+  }, 60_000)
 
   it('知らない引数・欠けた引数・https でない取りに行く先は止める', () => {
     expect(() => parseExportArgs([...ok, '--force'])).toThrow()

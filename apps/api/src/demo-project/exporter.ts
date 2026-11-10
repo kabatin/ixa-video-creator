@@ -43,6 +43,8 @@ export type DemoExportDeps = ProjectDuplicationDeps & {
   readonly secrets: readonly string[]
   /** 作る人の機械（ホームと利用者名）。目録に入っていれば書かない。 */
   readonly machine: { readonly homeDir: string; readonly userName: string }
+  /** 作る人が渡した、拾ってほしい語（本名・ハンドル名・機械の名前）。 */
+  readonly extraWords?: readonly string[]
 }
 
 export type DemoExportRequest = {
@@ -109,7 +111,8 @@ const exportWaveforms = async (deps: DemoExportDeps, source: DemoSource): Promis
   const exported = await Promise.all(
     keys.map(async (key, index) => {
       const parsedKey = DemoStorageKey.safeParse(key)
-      if (!parsedKey.success) throw new Error(`曲の解析の波形の置き場が、見本に入れられる形ではありません（${key}）`)
+      // 置き場の値は言わない（作る人の作品の ID や、見せたくない道を含みうる）。何本目の波形かだけ。
+      if (!parsedKey.success) throw new Error(`曲の解析の波形（${String(index + 1)} 本目）の置き場が、見本に入れられる形ではありません`)
       const bytes = await readObject(deps, key, '曲の解析の波形')
       const sha256 = sha256Hex(bytes)
       const file = `waveform-${String(index + 1)}-${sha256.slice(0, 16)}.json`
@@ -158,7 +161,7 @@ export const exportDemo = async (deps: DemoExportDeps, request: DemoExportReques
     throw new Error(`書き出した目録を入れる側が断ります: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
   }
   // 値そのものは出さない（秘密を端末やログに写さない）。数と場所（JSON の道）だけ言う。
-  const leaks = publicLeaks(manifest, { secrets: deps.secrets, ...deps.machine })
+  const leaks = publicLeaks(manifest, { secrets: deps.secrets, ...deps.machine, extraWords: deps.extraWords ?? [] })
   if (leaks.length > 0) {
     const shown = leaks.slice(0, MAX_LEAK_PATHS).join('、')
     const more = leaks.length > MAX_LEAK_PATHS ? ` ほか ${String(leaks.length - MAX_LEAK_PATHS)} 件` : ''

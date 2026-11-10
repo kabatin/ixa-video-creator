@@ -1,6 +1,15 @@
 import { readFile, writeFile } from 'node:fs/promises'
+import { waveformKey } from '@ixa/storage'
 import { join } from 'node:path'
-import type { DemoManifest, MediaAssetId, ProjectDemoKey } from '@ixa/domain'
+import {
+  MediaAssetId as MediaAssetIdSchema,
+  demoBindingProblems,
+  newId,
+  remapExactValues,
+  type DemoManifest,
+  type MediaAssetId,
+  type ProjectDemoKey,
+} from '@ixa/domain'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createDirBundleSource, type DemoBundleSource } from '../demo-project/bundle-source.js'
 import {
@@ -125,7 +134,11 @@ describe('見本を入れる', () => {
     const [track] = await w.musicTracks.findByProject(project.id)
     const analysis = await w.musicAnalyses.findByTrack(track!.id)
     expect(analysis?.bpm).toBe(120)
+    // 波形は入れた作品・曲の ID から決まる置き場に置く（目録の置き場は目録の中の名前だけ）。
+    expect(analysis?.waveformPeaksKey).toBe(waveformKey(project.id, track!.id))
+    expect(analysis?.waveformPeaksKey).not.toBe(manifest.files[0]?.key)
     expect(await world.storage.exists(analysis!.waveformPeaksKey)).toBe(true)
+    expect(await world.storage.exists(manifest.files[0]!.key)).toBe(false)
 
     const clips = await w.timelineClips.findByProject(project.id)
     expect(clips).toHaveLength(1)
@@ -431,6 +444,55 @@ describe('入れる前に断るもの', () => {
     for (const key of mediaKeys) expect(await world.storage.exists(key)).toBe(false)
   })
 
+  it('置いたファイルを消すのも失敗したら、元の失敗を投げ、消せなかったことはログに残す', async () => {
+    const { world, deps } = userSide(createDirBundleSource(bundleDir))
+    const logged: string[] = []
+    const logger = createLogger('silent')
+    const spy = { ...logger, error: (_obj: unknown, msg?: string) => void logged.push(String(msg)) } as unknown as typeof logger
+    const installer = createDemoInstaller({
+      ...deps,
+      logger: spy,
+      storage: { ...world.storage, delete: () => Promise.reject(new Error('消せません')) },
+      mediaAssets: { ...world.mediaAssets, create: () => Promise.reject(new Error('DB が落ちています')) },
+    })
+    const error: unknown = await installer.install(world.workspaceId).catch((e: unknown) => e)
+    expect((error as Error).message).toBe('DB が落ちています')
+    expect(logged).toContain('見本の素材の行を作れず、置いたファイルも消せませんでした')
+  })
+
+  it('同じ置き場に中身の違うファイルが既にあれば、上書きせずに断る（入れた作品の置き場でも）', async () => {
+    const { world, deps } = userSide(createDirBundleSource(bundleDir))
+    const other = new TextEncoder().encode('{"peaks":[9]}')
+    const installer = createDemoInstaller({
+      ...deps,
+      storage: {
+        ...world.storage,
+        exists: (key: string) => (key.endsWith('/peaks.json') ? Promise.resolve(true) : world.storage.exists(key)),
+        get: (key: string) => (key.endsWith('/peaks.json') ? Promise.resolve(other) : world.storage.get(key)),
+      },
+    })
+    expect(await reasonOf(installer.install(world.workspaceId))).toBe('conflict')
+    expect(await world.writers.projects.findByDemoKey(world.workspaceId, DEMO_KEY)).toBeNull()
+  })
+
+  it('作る人の機械に入れても、元の作品の波形は使わず、自分の置き場に置く', async () => {
+    const installer = createDemoInstaller({
+      bundle: createDirBundleSource(bundleDir),
+      projects: creator.writers.projects,
+      mediaAssets: creator.mediaAssets,
+      storage: creator.storage,
+      writers: creator.writers,
+      logger: createLogger('silent'),
+    })
+    const before = await creator.storage.get(seeded.peaksKey)
+    const { project } = await installer.install(creator.workspaceId)
+    const [track] = await creator.writers.musicTracks.findByProject(project.id)
+    const analysis = await creator.writers.musicAnalyses.findByTrack(track!.id)
+    expect(analysis?.waveformPeaksKey).toBe(waveformKey(project.id, track!.id))
+    expect(analysis?.waveformPeaksKey).not.toBe(seeded.peaksKey)
+    expect(await creator.storage.get(seeded.peaksKey)).toEqual(before)
+  })
+
   it('目録に無い ULID を素材の欄に置いた目録は断る（この機械の素材に当たらせない）', async () => {
     const { world, deps } = userSide(createDirBundleSource(bundleDir))
     // 入れる人の機械にある素材の ID を、目録の Take に書き込む。
@@ -449,16 +511,18 @@ describe('入れる前に断るもの', () => {
     await removeDir(dir)
   })
 
-  it('目録の中で定めた ID が、この機械の素材の ID と同じなら断る', async () => {
+  it('目録の中で定めた ID が、この機械の素材の ID と同じなら断る（結び付きは閉じたまま）', async () => {
     const victim = aWorld()
     const local = await victim.mediaAssets.create({
       workspaceId: victim.workspaceId, projectId: null, kind: 'image', storageKey: `media/${victim.workspaceId}/z/original.png`,
       mimeType: 'image/png', bytes: 1, checksumSha256: 'e'.repeat(64), origin: { type: 'upload', uploadedBy: 'test' }, tags: [],
     })
+    // ロケーションの ID を、それを指すすべての所ごと、この機械の素材の ID に替える（目録の中の結び付きは閉じている）。
     const dir = await bundleWith((m) => {
-      const locations = m.source['locations'] as { id: string }[]
-      locations[0]!.id = local.id
-      return m
+      const locationId = (m.source['locations'] as { id: string }[])[0]!.id
+      const source = remapExactValues(m.source, new Map([[locationId, local.id]])) as Record<string, unknown>
+      expect(demoBindingProblems({ ...m, source })).toEqual([])
+      return { ...m, source }
     })
     const installer = createDemoInstaller({
       bundle: createDirBundleSource(dir),
@@ -468,8 +532,66 @@ describe('入れる前に断るもの', () => {
       writers: victim.writers,
       logger: createLogger('silent'),
     })
-    expect(await reasonOf(installer.install(victim.workspaceId))).toBe('invalid')
+    const error: unknown = await installer.install(victim.workspaceId).catch((e: unknown) => e)
+    expect(demoFailureReason(error)).toBe('invalid')
+    expect((error as Error).message).toContain('この機械の素材と 1 件重なっています')
     expect(await victim.writers.projects.findByWorkspace(victim.workspaceId)).toEqual([])
+    await removeDir(dir)
+  })
+
+  it('目録で定めた ID が、この機械の消した素材の ID と同じでも、入れた作品のどの行もその素材を指さない', async () => {
+    const victim = aWorld()
+    const deleted = await victim.mediaAssets.create({
+      workspaceId: victim.workspaceId, projectId: null, kind: 'image', storageKey: `media/${victim.workspaceId}/d/original.png`,
+      mimeType: 'image/png', bytes: 1, checksumSha256: 'f'.repeat(64), origin: { type: 'upload', uploadedBy: 'test' }, tags: [],
+    })
+    await victim.mediaAssets.softDelete(deleted.id)
+    // ロケーションの ID を消した素材の ID にし、Take の素材の欄もその ID で指す（定めた ID なので結び付きは閉じている）。
+    const dir = await bundleWith((m) => {
+      const locationId = (m.source['locations'] as { id: string }[])[0]!.id
+      const source = remapExactValues(m.source, new Map([[locationId, deleted.id]])) as Record<string, unknown>
+      const shots = source['shots'] as { takes: { mediaAssetId: string }[] }[]
+      shots[0]!.takes[0]!.mediaAssetId = deleted.id
+      expect(demoBindingProblems({ ...m, source })).toEqual([])
+      return { ...m, source }
+    })
+    const installer = createDemoInstaller({
+      bundle: createDirBundleSource(dir),
+      projects: victim.writers.projects,
+      mediaAssets: victim.mediaAssets,
+      storage: victim.storage,
+      writers: victim.writers,
+      logger: createLogger('silent'),
+    })
+    // 入れられても入れられなくても、生きている作品の行が消した素材を指してはいけない（定めた ID は新しい ID に付け替える）。
+    await installer.install(victim.workspaceId).catch(() => undefined)
+    const projects = await victim.writers.projects.findByWorkspace(victim.workspaceId)
+    const rows = await Promise.all(
+      projects.map(async (p) => {
+        const shots = await victim.writers.shots.findByProject(p.id)
+        return {
+          shots,
+          takes: await Promise.all(shots.map((shot) => victim.writers.takes.findByShot(shot.id, { includeHidden: true }))),
+          locations: await victim.writers.locations.findByProject(p.id),
+          clips: await victim.writers.timelineClips.findByProject(p.id),
+        }
+      }),
+    )
+    expect(JSON.stringify(rows)).not.toContain(deleted.id)
+    await removeDir(dir)
+  })
+
+  it('使われない枝の `id` は ID を定めない（読んだ後の中身で数える）', async () => {
+    const { world, deps } = userSide(createDirBundleSource(bundleDir))
+    const stray = newId(MediaAssetIdSchema)
+    const dir = await bundleWith((m) => {
+      const shots = m.source['shots'] as { takes: { mediaAssetId: string }[] }[]
+      shots[0]!.takes[0]!.mediaAssetId = stray
+      // 形に無い枝（読むと落ちる）で、その ID を「定めた」ことにしようとする。
+      return { ...m, source: { ...m.source, unused: { id: stray } } }
+    })
+    const installer = createDemoInstaller({ ...deps, bundle: createDirBundleSource(dir) })
+    expect(await reasonOf(installer.install(world.workspaceId))).toBe('invalid')
     await removeDir(dir)
   })
 

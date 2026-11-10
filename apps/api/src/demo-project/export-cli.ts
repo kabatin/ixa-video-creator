@@ -46,12 +46,15 @@ const ExportArgs = z.object({
   demoKey: ProjectDemoKey,
   baseUrl: DemoBaseUrl,
   title: z.string().trim().min(1).max(PROJECT_NAME_MAX_LENGTH),
+  /** 拾ってほしい語（本名・ハンドル名・機械の名前）。`--forbid` を何度でも書ける。 */
+  forbid: z.array(z.string().trim().min(1).max(200)).max(50),
 })
 export type ExportArgs = z.infer<typeof ExportArgs>
 
 export const EXPORT_USAGE =
   '使い方: pnpm --filter @ixa/api demo:export -- --project <作品の ID> --out <書き出すフォルダ> ' +
-  '--demo-key <見本の印 例 ixa-demo-v1> --base-url <https://…/ で終わる取りに行く先> --title <作品の名前>'
+  '--demo-key <見本の印 例 ixa-demo-v1> --base-url <https://…/ で終わる取りに行く先> --title <作品の名前> ' +
+  '[--forbid <拾ってほしい語（本名・ハンドル名・機械の名前）> …]'
 
 /** 引数を読む（純粋）。知らない引数・欠けた引数は止める。 */
 export const parseExportArgs = (argv: readonly string[]): ExportArgs => {
@@ -66,6 +69,7 @@ export const parseExportArgs = (argv: readonly string[]): ExportArgs => {
       'demo-key': { type: 'string' },
       'base-url': { type: 'string' },
       title: { type: 'string' },
+      forbid: { type: 'string', multiple: true },
     },
   })
   const parsed = ExportArgs.safeParse({
@@ -74,6 +78,7 @@ export const parseExportArgs = (argv: readonly string[]): ExportArgs => {
     demoKey: values['demo-key'],
     baseUrl: values['base-url'],
     title: values.title,
+    forbid: values.forbid ?? [],
   })
   if (!parsed.success) {
     const where = parsed.error.issues.map((issue) => issue.path.join('.')).join(', ')
@@ -81,6 +86,10 @@ export const parseExportArgs = (argv: readonly string[]): ExportArgs => {
   }
   return parsed.data
 }
+
+/** 点検の一覧の 1 行: 作る人が渡した語の数と、渡したときだけ見つけること。 */
+export const forbiddenWordsLine = (count: number): string =>
+  `作る人が渡した語 ${String(count)} 件も確かめました。本名・ハンドル名・機械の名前は、--forbid で渡したときだけ見つけます。`
 
 /** 鍵の名前（値は目録に入っていてはいけない）。 */
 const SECRET_NAME = /KEY|TOKEN|SECRET|PASSPHRASE|PASSWORD/i
@@ -159,11 +168,15 @@ export const runExportDemo = async (
         writeOut: (name, bytes) => writeFile(join(outDir, name), bytes),
         secrets: secrets.secrets,
         machine: { homeDir: homedir(), userName: userInfo().username },
+        extraWords: args.forbid,
       },
       request,
     )
     const skipped = secrets.skipped > 0 ? [`鍵の点検: 8 文字より短い鍵 ${String(secrets.skipped)} 件は見ていません（どの文にも当たってしまうため）。`] : []
-    return { manifestPath: join(outDir, DEMO_MANIFEST_FILE), review: [...skipped, ...exportReviewLines(manifest)] }
+    return {
+      manifestPath: join(outDir, DEMO_MANIFEST_FILE),
+      review: [...skipped, forbiddenWordsLine(args.forbid.length), ...exportReviewLines(manifest)],
+    }
   } finally {
     await closeDbClient(db)
   }

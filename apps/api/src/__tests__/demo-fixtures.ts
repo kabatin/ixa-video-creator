@@ -212,6 +212,7 @@ export const exportToDir = async (world: DemoWorld, project: Project, dir: strin
     readonly title?: string
     readonly secrets?: readonly string[]
     readonly machine?: { readonly homeDir: string; readonly userName: string }
+    readonly extraWords?: readonly string[]
   } = {}) => {
   await mkdir(dir, { recursive: true })
   const manifest = await exportDemo(
@@ -223,6 +224,7 @@ export const exportToDir = async (world: DemoWorld, project: Project, dir: strin
       secrets: overrides.secrets ?? [],
       // 試験の機械（実際のホームに頼らない）。
       machine: overrides.machine ?? { homeDir: '/Users/demo-maker', userName: 'demo-maker' },
+      extraWords: overrides.extraWords ?? [],
     },
     { projectId: project.id, demoKey: 'ixa-demo-v1', baseUrl: DEMO_BASE_URL, title: overrides.title ?? '見本の作品' },
   )

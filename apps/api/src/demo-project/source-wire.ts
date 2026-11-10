@@ -90,7 +90,57 @@ const DemoSourceWire = z.object({
 })
 
 /** 目録の `source` を読む。合わなければ投げる（どの列が合わないかを添える。値は添えない）。 */
+/**
+ * 中身の配列の上限（見本としては十分に大きく、決まった数）。入れる側は丸ごと読んで書くので、いくらでも並べさせない。
+ * キーは場所（`shots[].takes` は各 Shot の Take）。中身を確かめる前に数で断る。
+ */
+export const DEMO_SOURCE_CAPS: Readonly<Record<string, { readonly max: number; readonly label: string }>> = Object.freeze({
+  tracks: { max: 20, label: '楽曲' },
+  'tracks[].analyses': { max: 20, label: '曲の解析' },
+  characters: { max: 200, label: 'キャラクター' },
+  locations: { max: 200, label: 'ロケーション' },
+  brandAssets: { max: 200, label: 'ブランド資産' },
+  textStyles: { max: 200, label: '文字の見た目' },
+  clips: { max: 5000, label: 'テロップ・重ね素材' },
+  sequences: { max: 200, label: 'シーケンス' },
+  shots: { max: 1000, label: 'Shot' },
+  'shots[].takes': { max: 100, label: 'Shot ごとの Take' },
+  'shots[].cast': { max: 50, label: 'Shot ごとの登場人物' },
+  'shots[].frames': { max: 50, label: 'Shot ごとの最初のフレーム' },
+  transitions: { max: 1000, label: 'トランジション' },
+  voices: { max: 100, label: '声' },
+  narrationLines: { max: 2000, label: 'ナレーションの行' },
+  narrationTakes: { max: 5000, label: '声の Take' },
+  characterAssets: { max: 200, label: 'キャラクターの Look と画像' },
+  'characterAssets[].identityImages': { max: 100, label: 'キャラクターの画像' },
+  'characterAssets[].looks': { max: 100, label: 'Look' },
+  'characterAssets[].looks[].images': { max: 100, label: 'Look の画像' },
+})
+
+const childrenAt = (node: unknown, key: string): readonly unknown[] => {
+  if (typeof node !== 'object' || node === null || Array.isArray(node)) return []
+  const value: unknown = (node as Readonly<Record<string, unknown>>)[key]
+  return Array.isArray(value) ? value : []
+}
+
+/** 場所の配列をすべて集める（`a[].b[].c` なら、各 a の各 b の c）。 */
+const arraysAt = (json: unknown, path: string): readonly (readonly unknown[])[] => {
+  const [head = '', ...rest] = path.split('[].')
+  return rest.reduce<readonly (readonly unknown[])[]>(
+    (arrays, key) => arrays.flatMap((array) => array.map((item) => childrenAt(item, key))),
+    [childrenAt(json, head)],
+  )
+}
+
+/** 上限を超えた配列の知らせ（空なら超えていない）。 */
+export const sourceCapProblems = (json: unknown): readonly string[] =>
+  Object.entries(DEMO_SOURCE_CAPS).flatMap(([path, cap]) =>
+    arraysAt(json, path).some((array) => array.length > cap.max) ? [`${cap.label}が多すぎます（${String(cap.max)} まで）`] : [],
+  )
+
 export const parseDemoSource = (json: unknown): DemoSource => {
+  const tooMany = sourceCapProblems(json)
+  if (tooMany.length > 0) throw new Error(`見本の目録の中身が大きすぎます（${tooMany.join('・')}）`)
   const parsed = DemoSourceWire.safeParse(json)
   if (!parsed.success) {
     const where = parsed.error.issues

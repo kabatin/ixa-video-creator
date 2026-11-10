@@ -61,10 +61,10 @@ const installRoute = createRoute({
     200: { description: 'もう入っていた見本の作品', content: { 'application/json': { schema: successResponse(DemoInstallResponse) } } },
     201: { description: '入れた見本の作品', content: { 'application/json': { schema: successResponse(DemoInstallResponse) } } },
     404: errorContent('見本がまだ用意されていない・作業場所が無い（何も取りに行っていない）'),
-    409: errorContent('この機械の同じ名札の素材の中身が、見本と食い違う（何も作っていない）'),
+    409: errorContent('この機械の同じ名札の素材・置き場の中身が、見本と食い違う（見本の作品は作っていない。それより前に登録した素材は残り、入れ直すときに使う）'),
     422: errorContent('入力の検証に失敗した'),
     500: errorContent('入れられなかった（作りかけの作品は消してある）'),
-    502: errorContent('見本のファイルを取れなかった・壊れていた（何も作っていない）'),
+    502: errorContent('見本のファイルを取れなかった・壊れていた（取り終えてから置くので、素材も作品も作っていない）'),
   },
 })
 

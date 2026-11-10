@@ -121,8 +121,22 @@ describe('リリースから取る口', () => {
 
   it('目録より大きい応答は、大きさの申告でも、読んでいる途中でも断る', async () => {
     const big = new Uint8Array(BYTES.byteLength + 1)
-    const declared = await failureOf(source(fakeFetch(big, { headers: { 'content-length': String(big.byteLength) } }).impl).fetchFile(manifest, ENTRY))
+    // 大きさの申告で断るときは、本文を 1 回も読まない（読んでから上限で断る道と見分ける）。
+    let pulls = 0
+    const unread = () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull: (controller) => {
+            pulls += 1
+            controller.enqueue(big)
+            controller.close()
+          },
+        }, { highWaterMark: 0 }),
+        { headers: { 'content-length': String(big.byteLength) } },
+      )
+    const declared = await failureOf(source(routedFetch({ [FIRST]: unread }).impl).fetchFile(manifest, ENTRY))
     expect(declared.reason).toBe('broken')
+    expect(pulls).toBe(0)
     const stream = new ReadableStream<Uint8Array>({
       start: (controller) => {
         controller.enqueue(big)

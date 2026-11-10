@@ -1,6 +1,9 @@
 import type { ProjectRepository } from '@ixa/db'
 import {
   DUPLICATION_ITEMS,
+  MediaAssetId as MediaAssetIdSchema,
+  demoDefinedIds,
+  newId,
   demoTotalBytes,
   remapExactValues,
   type DemoManifest,
@@ -14,6 +17,7 @@ import { isUniqueViolation } from '../routes/unique-violation.js'
 import { DemoFileError, DemoManifestError, DemoUnavailableError, DemoWorkspaceMissingError } from './errors.js'
 import { checkAgainstLocalMedia, checkManifest, checkNarrationWiring } from './preflight.js'
 import { installDemoMedia, type DemoMediaDeps } from './media.js'
+import { withInstalledWaveforms } from './waveforms.js'
 import { demoWriteDeps } from './write-deps.js'
 import { parseDemoSource } from './source-wire.js'
 
@@ -53,6 +57,10 @@ export type DemoInstallerDeps = DemoMediaDeps & {
   readonly logger: Logger
 }
 
+/** 目録の中で定めた ID（どこかの `id` の値）→ 新しい ID。 */
+const freshIds = (canonical: Record<string, unknown>): ReadonlyMap<string, string> =>
+  new Map(demoDefinedIds(canonical).map((id) => [id, newId(MediaAssetIdSchema)] as const))
+
 /** 付け替えた後の中身を読む（付け替える前に `checkManifest` が同じ形を確かめている）。 */
 const parseSource = (json: unknown) => {
   try {
@@ -69,14 +77,18 @@ const install = async (deps: DemoInstallerDeps, manifest: DemoManifest, workspac
   if (existing !== null) return { project: existing, created: false }
 
   // 取りに行く前に確かめる（読めない・結び付きの閉じていない目録のために何 MB も取らない。preflight.ts）。
-  checkNarrationWiring(checkManifest(manifest), deps.writers)
-  await checkAgainstLocalMedia(deps.mediaAssets, manifest)
-  const { ids } = await installDemoMedia(deps, manifest, workspaceId)
-  const source = parseSource(remapExactValues(manifest.source, ids))
+  const checked = checkManifest(manifest)
+  checkNarrationWiring(checked.source, deps.writers)
+  await checkAgainstLocalMedia(deps.mediaAssets, checked.canonical)
+  const { ids, files } = await installDemoMedia(deps, manifest, workspaceId)
+  // 素材の ID はこの機械の素材へ、目録の中で定めた ID はすべて新しい ID へ付け替えてから読む
+  // （定めた ID がこの機械の行（消した素材も）の ID と同じでも、入れた作品の行はそれを指さない）。
+  const source = parseSource(remapExactValues(checked.canonical, new Map([...freshIds(checked.canonical), ...ids])))
   // 作品は**頼んだ作業場所**に作る（目録を作った人の作業場所ではない）。
   const snapshot = { ...source, project: { ...source.project, workspaceId } }
   try {
-    const written = await writeSnapshot(demoWriteDeps(deps.writers, source.characterAssets), snapshot, {
+    const writers = withInstalledWaveforms(demoWriteDeps(deps.writers, source.characterAssets), files, deps.storage)
+    const written = await writeSnapshot(writers, snapshot, {
       name: manifest.title,
       items: new Set(DUPLICATION_ITEMS),
       // 印は最後に付ける。ぶつかったら（別の口が先に入れた）、書き手が自分の作品を消してから投げる。
