@@ -10,8 +10,8 @@
 import { runExportDemo } from '../src/demo-project/export-cli.js'
 
 runExportDemo(process.argv.slice(2), process.env)
-  .then((manifestPath) => {
-    process.stdout.write(`見本の目録を書き出しました: ${manifestPath}\n`)
+  .then(({ manifestPath, review }) => {
+    process.stdout.write(`見本の目録を書き出しました: ${manifestPath}\n${review.join('\n')}\n`)
     process.exit(0)
   })
   .catch((error: unknown) => {

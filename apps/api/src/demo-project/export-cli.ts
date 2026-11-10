@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
+import { homedir, userInfo } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { loadConfig } from '@ixa/config'
@@ -31,6 +32,7 @@ import { DemoBaseUrl, PROJECT_NAME_MAX_LENGTH, ProjectDemoKey, ProjectId } from 
 import { createStorage } from '@ixa/storage'
 import { z } from 'zod'
 import { createLogger } from '../logger.js'
+import { exportReviewLines } from './export-review.js'
 import { DEMO_MANIFEST_FILE, exportDemo, type DemoExportRequest } from './exporter.js'
 
 /**
@@ -80,8 +82,11 @@ export const parseExportArgs = (argv: readonly string[]): ExportArgs => {
   return parsed.data
 }
 
-/** 書き出す。**DB は読むだけ**（書く口は exporter が呼ばない）。書いた目録の場所を返す。 */
-export const runExportDemo = async (argv: readonly string[], env: NodeJS.ProcessEnv): Promise<string> => {
+/** 書き出す。**DB は読むだけ**（書く口は exporter が呼ばない）。書いた目録の場所と、作る人に見せる点検の一覧を返す。 */
+export const runExportDemo = async (
+  argv: readonly string[],
+  env: NodeJS.ProcessEnv,
+): Promise<{ readonly manifestPath: string; readonly review: readonly string[] }> => {
   const args = parseExportArgs(argv)
   const outDir = resolve(args.out)
   if (existsSync(join(outDir, DEMO_MANIFEST_FILE))) {
@@ -93,7 +98,7 @@ export const runExportDemo = async (argv: readonly string[], env: NodeJS.Process
     const { storage } = createStorage(config.storage)
     await mkdir(outDir, { recursive: true })
     const request: DemoExportRequest = { projectId: args.projectId, demoKey: args.demoKey, baseUrl: args.baseUrl, title: args.title }
-    await exportDemo(
+    const manifest = await exportDemo(
       {
         projects: createProjectRepository(db),
         scripts: createScriptRepository(db),
@@ -126,10 +131,11 @@ export const runExportDemo = async (argv: readonly string[], env: NodeJS.Process
           config.storage.s3?.accessKeyId ?? '',
           config.api.passphrase ?? '',
         ],
+        machine: { homeDir: homedir(), userName: userInfo().username },
       },
       request,
     )
-    return join(outDir, DEMO_MANIFEST_FILE)
+    return { manifestPath: join(outDir, DEMO_MANIFEST_FILE), review: exportReviewLines(manifest) }
   } finally {
     await closeDbClient(db)
   }

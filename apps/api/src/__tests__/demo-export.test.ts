@@ -4,6 +4,7 @@ import type { DemoManifest } from '@ixa/domain'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createDirBundleSource } from '../demo-project/bundle-source.js'
 import { parseExportArgs } from '../demo-project/export-cli.js'
+import { exportReviewLines } from '../demo-project/export-review.js'
 import { createDemoInstaller } from '../demo-project/installer.js'
 import { createLogger } from '../logger.js'
 import { aWorld, exportToDir, makeTempDir, removeDir, seedCreatorProject } from './demo-fixtures.js'
@@ -100,7 +101,8 @@ describe('書かない目録', () => {
     const out = join(tmp, 'signed')
     const error: unknown = await exportToDir(creator, seeded.project, out).catch((e: unknown) => e)
     expect(error).toBeInstanceOf(Error)
-    expect((error as Error).message).toContain('署名付きの URL か鍵に見える値が 1 件')
+    expect((error as Error).message).toContain('公開できない値（鍵・署名付きの URL・この機械の場所や名前）が 1 件')
+    expect((error as Error).message).toContain('source.project.avoid')
     expect((error as Error).message).not.toContain('sig=')
     expect(await readdir(out)).toEqual([])
   }, 60_000)
@@ -111,7 +113,39 @@ describe('書かない目録', () => {
     const secret = 'z'.repeat(40)
     await creator.writers.projects.update(seeded.project.id, { styleGuide: `水彩 ${secret}` })
     const out = join(tmp, 'secret')
-    await expect(exportToDir(creator, seeded.project, out, { secrets: [secret] })).rejects.toThrow('署名付きの URL か鍵に見える値が 1 件')
+    await expect(exportToDir(creator, seeded.project, out, { secrets: [secret] })).rejects.toThrow(/が 1 件あるので、目録を書きません: source\.project\.styleGuide$/)
+    expect(await readdir(out)).toEqual([])
+  }, 60_000)
+})
+
+describe('機械と持ち主の情報', () => {
+  it('Take の送った記録（CLI の作業フォルダ・手元のサーバ）・費用・作業名は外して書き、中身は残す', async () => {
+    const creator = aWorld()
+    const seeded = await seedCreatorProject(creator, tmp)
+    const [take] = await creator.writers.takes.findByShot(seeded.shots.b.id)
+    // 書き手の口は Take を直せないので、記録ごと差し替えた Take を作り、採用し直す。
+    const cliTake = await creator.writers.takes.create({
+      ...take!,
+      providerParams: { kind: 'cli', command: 'codex exec', cwd: '/Users/creator/ixa', cliVersion: '1.0.0', exitCode: 0, stdoutDigest: 'f'.repeat(64) },
+    })
+    await creator.writers.shots.selectTake(seeded.shots.b.id, cliTake.id)
+    const manifest = await exportToDir(creator, seeded.project, join(tmp, 'neutral'), { title: '公開する題' })
+    const text = JSON.stringify(manifest)
+    expect(text).not.toContain('/Users/creator')
+    expect(text).not.toContain('作る人の作品')
+    const project = manifest.source['project'] as Record<string, unknown>
+    expect(project).toMatchObject({ name: '公開する題', budgetUsd: null, lyrics: '一行目', styleGuide: '水彩のアニメ調' })
+    expect(manifest.media[0]).not.toHaveProperty('originalFilename')
+  }, 60_000)
+
+  it('中身の文にこの機械の場所が入っていれば止め、場所（JSON の道）だけを言う', async () => {
+    const creator = aWorld()
+    const seeded = await seedCreatorProject(creator, tmp)
+    await creator.writers.shots.update(seeded.shots.a.id, { description: '素材は /Users/creator/Desktop/a.png から' })
+    const out = join(tmp, 'local-path')
+    const error: unknown = await exportToDir(creator, seeded.project, out).catch((e: unknown) => e)
+    expect((error as Error).message).toMatch(/1 件あるので、目録を書きません: source\.shots\[0\]\.shot\.description$/)
+    expect((error as Error).message).not.toContain('Desktop')
     expect(await readdir(out)).toEqual([])
   }, 60_000)
 })
@@ -128,4 +162,26 @@ describe('書き出しの引数', () => {
     expect(() => parseExportArgs(ok.slice(2))).toThrow(/projectId/)
     expect(() => parseExportArgs(ok.map((arg) => (arg === 'https://example.com/d/' ? 'http://example.com/d/' : arg)))).toThrow(/baseUrl/)
   })
+})
+
+describe('書き出した後の点検の一覧', () => {
+  it('Shot・Take・素材の数と大きさ、そのまま公開する文の欄の名前（値は出さない）、最後に一度読む案内', async () => {
+    const creator = aWorld()
+    const seeded = await seedCreatorProject(creator, tmp)
+    const manifest = await exportToDir(creator, seeded.project, join(tmp, 'review'))
+    const lines = exportReviewLines(manifest)
+    const text = lines.join('\n')
+    expect(text).toContain('Shot 2 件')
+    expect(text).toContain('Take 3 件')
+    expect(text).toContain(`素材のファイル ${String(manifest.media.length)} 件`)
+    expect(text).toMatch(/合わせて \d+(\.\d)? (B|KB|MB)/)
+    expect(text).toContain('歌詞（project.lyrics）')
+    expect(text).toContain('ルック（project.styleGuide）')
+    expect(text).toContain('Shot の説明（shots[].shot.description）')
+    // 空の欄は挙げない・値は出さない。
+    expect(text).not.toContain('避けたいもの')
+    expect(text).not.toContain('一行目')
+    expect(text).not.toContain('夜の街を走る')
+    expect(lines.at(-1)).toBe('上げる前に、manifest.json を一度読んでください。')
+  }, 60_000)
 })

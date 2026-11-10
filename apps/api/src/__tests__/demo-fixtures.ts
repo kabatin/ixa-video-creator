@@ -208,7 +208,11 @@ export const seedCreatorProject = async (world: DemoWorld, mediaDir: string) => 
 }
 
 /** 作品を書き出し、フォルダ（`DEMO_DIR` の形）に置く。 */
-export const exportToDir = async (world: DemoWorld, project: Project, dir: string, overrides: { readonly title?: string; readonly secrets?: readonly string[] } = {}) => {
+export const exportToDir = async (world: DemoWorld, project: Project, dir: string, overrides: {
+    readonly title?: string
+    readonly secrets?: readonly string[]
+    readonly machine?: { readonly homeDir: string; readonly userName: string }
+  } = {}) => {
   await mkdir(dir, { recursive: true })
   const manifest = await exportDemo(
     {
@@ -217,6 +221,8 @@ export const exportToDir = async (world: DemoWorld, project: Project, dir: strin
       storage: world.storage,
       writeOut: (name, bytes) => writeFile(join(dir, name), bytes),
       secrets: overrides.secrets ?? [],
+      // 試験の機械（実際のホームに頼らない）。
+      machine: overrides.machine ?? { homeDir: '/Users/creator', userName: 'creator' },
     },
     { projectId: project.id, demoKey: 'ixa-demo-v1', baseUrl: DEMO_BASE_URL, title: overrides.title ?? '見本の作品' },
   )

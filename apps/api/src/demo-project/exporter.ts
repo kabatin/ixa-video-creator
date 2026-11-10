@@ -4,7 +4,7 @@ import {
   MediaAssetId as MediaAssetIdSchema,
   DemoManifest,
   DemoStorageKey,
-  leakingValues,
+  publicLeaks,
   ulidValues,
   unlistedMediaReferences,
   type DemoFileEntry,
@@ -17,6 +17,7 @@ import type { ProjectDuplicationDeps } from '../project-duplication/deps.js'
 import { readDuplicationSource } from '../project-duplication/read-source.js'
 import { fileExtension } from '../routes/uploads.js'
 import { sha256Hex } from './bundle-source.js'
+import { neutraliseForPublic } from './neutralise.js'
 import { serializeDemoSource, type CharacterAssets, type DemoSource } from './source-wire.js'
 
 /**
@@ -25,7 +26,8 @@ import { serializeDemoSource, type CharacterAssets, type DemoSource } from './so
  * 1. 作品を全部読む（作品の複製と同じ読み方。キャラクターの Look と画像も）
  * 2. 値に出てくる ULID を素材の表で引き、素材の元のファイルを `<sha256>.<拡張子>` にする（中身を測り直して照らす）
  * 3. 曲の解析の波形を `files` にする
- * 4. **署名付きの URL・鍵に見える値が 1 つでもあれば書かない。** 元のファイルが欠けていても書かない
+ * 4. 機械と持ち主の情報を外す（`neutralise.ts`）。**鍵・署名付きの URL・この機械の場所や名前が 1 つでも残れば書かない**
+ *    （`publicLeaks`）。元のファイルが欠けていても書かない
  * 5. 全部そろってから書く（途中で止まったときに、半端な目録を残さない）
  */
 
@@ -37,6 +39,8 @@ export type DemoExportDeps = ProjectDuplicationDeps & {
   readonly writeOut: (name: string, bytes: Uint8Array) => Promise<void>
   /** 目録に入っていてはいけない値（置き場の署名の鍵・S3 の鍵など）。 */
   readonly secrets: readonly string[]
+  /** 作る人の機械（ホームと利用者名）。目録に入っていれば書かない。 */
+  readonly machine: { readonly homeDir: string; readonly userName: string }
 }
 
 export type DemoExportRequest = {
@@ -47,6 +51,9 @@ export type DemoExportRequest = {
 }
 
 export const DEMO_MANIFEST_FILE = 'manifest.json'
+
+/** 断ったときに挙げる場所の数の上限。 */
+const MAX_LEAK_PATHS = 10
 
 type OutFile = { readonly name: string; readonly bytes: Uint8Array }
 
@@ -86,7 +93,6 @@ const exportMedia = async (deps: DemoExportDeps, asset: MediaAsset): Promise<{ r
       sha256,
       sizeBytes: bytes.byteLength,
       contentType: asset.mimeType,
-      originalFilename: original,
       kind: asset.kind,
       probe: asset.probe,
     },
@@ -113,7 +119,11 @@ export const exportDemo = async (deps: DemoExportDeps, request: DemoExportReques
   const project = await deps.projects.findById(request.projectId)
   if (project === null) throw new Error('書き出す作品が見つかりません')
   const read = await readDuplicationSource(deps, project, new Set(DUPLICATION_ITEMS))
-  const source: DemoSource = { ...read, characterAssets: await readCharacterAssets(deps, read.characters) }
+  // 機械と持ち主の情報を外してから書く（中身は残す。neutralise.ts）。
+  const source: DemoSource = neutraliseForPublic(
+    { ...read, characterAssets: await readCharacterAssets(deps, read.characters) },
+    { title: request.title },
+  )
   const json = serializeDemoSource(source)
 
   // 値に出てくる ULID のうち、素材の表にあるものが素材（列の名前を並べないので、列が増えても漏れない）。
@@ -134,10 +144,12 @@ export const exportDemo = async (deps: DemoExportDeps, request: DemoExportReques
   })
   const unlisted = unlistedMediaReferences(manifest, new Set(assets.map((asset) => asset.id)))
   if (unlisted.length > 0) throw new Error(`目録に入っていない素材を指しています（${String(unlisted.length)} 件）`)
-  // 値そのものは出さない（秘密を端末やログに写さない）。数だけ言う。
-  const leaks = leakingValues(manifest, deps.secrets)
+  // 値そのものは出さない（秘密を端末やログに写さない）。数と場所（JSON の道）だけ言う。
+  const leaks = publicLeaks(manifest, { secrets: deps.secrets, ...deps.machine })
   if (leaks.length > 0) {
-    throw new Error(`署名付きの URL か鍵に見える値が ${String(leaks.length)} 件あるので、目録を書きません`)
+    const shown = leaks.slice(0, MAX_LEAK_PATHS).join('、')
+    const more = leaks.length > MAX_LEAK_PATHS ? ` ほか ${String(leaks.length - MAX_LEAK_PATHS)} 件` : ''
+    throw new Error(`公開できない値（鍵・署名付きの URL・この機械の場所や名前）が ${String(leaks.length)} 件あるので、目録を書きません: ${shown}${more}`)
   }
 
   for (const out of [...media.map((item) => item.out), ...waveforms.outs]) await deps.writeOut(out.name, out.bytes)

@@ -4,6 +4,7 @@ import {
   DemoStorageKey,
   demoTotalBytes,
   looksLikeSignedUrl,
+  publicLeaks,
   remapExactValues,
   ulidValues,
   unlistedMediaReferences,
@@ -28,7 +29,6 @@ const aMedia = (overrides: Record<string, unknown> = {}) => ({
   sha256: SHA,
   sizeBytes: 1000,
   contentType: 'video/mp4',
-  originalFilename: 'cut-01.mp4',
   kind: 'video',
   probe: null,
   ...overrides,
@@ -97,6 +97,11 @@ describe('目録の形', () => {
     expect(DemoManifest.safeParse(sameFile).success).toBe(false)
   })
 
+  it('素材の元のファイル名は目録に持たない（作る人の機械の名前を出さない）', () => {
+    const parsed = DemoManifest.parse(aManifest({ media: [aMedia({ originalFilename: '/Users/me/Desktop/秘密.mp4' })] }))
+    expect(parsed.media[0]).not.toHaveProperty('originalFilename')
+  })
+
   it('初めて入れるときに取りに行く大きさは素材とファイルの合計', () => {
     expect(demoTotalBytes(DemoManifest.parse(aManifest()))).toBe(1020)
   })
@@ -159,5 +164,52 @@ describe('書き出す目録の点検', () => {
 
   it.each(['https://example.com/about', '見本の歌詞 sig=1', 'exp=3'])('ふつうの文 %j は署名付きと見ない', (value) => {
     expect(looksLikeSignedUrl(value)).toBe(false)
+  })
+})
+
+describe('公開する目録の点検（機械と持ち主の情報）', () => {
+  const rules = { secrets: ['s'.repeat(32)], homeDir: '/Users/creator', userName: 'creator' }
+  const clean = {
+    title: '見本',
+    source: {
+      project: { lyrics: '夜の街を走る', styleGuide: 'watercolor, soft light' },
+      takes: [{ spec: { prompt: 'a girl runs through the city at night' }, providerParams: { kind: 'http', request: {} } }],
+      note: 'https://example.com/about と /api/x は書いてよい。a/b/c も。',
+    },
+  }
+
+  it('中身だけの目録は通る', () => {
+    expect(publicLeaks(clean, rules)).toEqual([])
+  })
+
+  it.each([
+    ['渡した秘密', 'key=ssssssssssssssssssssssssssssssss'],
+    ['署名付きの URL', 'https://example.com/x?sig=abc&exp=1'],
+    ['この機械のホーム', 'see /Users/creator/Movies/out.mp4'],
+    ['この機械の利用者名', 'made by creator'],
+    ['/Users/ の道', '/Users/someone/x.png'],
+    ['/home/ の道', 'cwd /home/someone/ixa'],
+    ['/private/ の道', '/private/tmp/claude/x'],
+    ['/var/folders/ の道', '"/var/folders/ab/T/x"'],
+    ['/tmp/ の道', '/tmp/ixa-audio/a.wav'],
+    ['Windows のドライブ', 'C:\\Users\\x'],
+    ['file:// の URL', 'file:///etc/hosts'],
+    ['localhost の URL', 'http://localhost:3001/files/x'],
+    ['127.0.0.1 の URL', 'http://127.0.0.1:8100/health'],
+    ['私用の IPv4 の URL（10.x）', 'http://10.0.0.5:8787/x'],
+    ['私用の IPv4 の URL（172.16-31.x）', 'http://172.20.1.2/x'],
+    ['私用の IPv4 の URL（192.168.x）', 'https://192.168.1.10/x'],
+    ['.local の URL', 'http://mac-studio.local:8080/x'],
+  ])('%s を含めば拾い、場所（JSON の道）だけを返す', (_label, value) => {
+    const found = publicLeaks({ ...clean, source: { ...clean.source, shots: [{ description: value }] } }, rules)
+    expect(found).toEqual(['source.shots[0].description'])
+  })
+
+  it('キーに入っていても拾う', () => {
+    expect(publicLeaks({ request: { '/Users/creator/x': 1 } }, rules)).toEqual(['request./Users/creator/x'])
+  })
+
+  it('短すぎる利用者名では拾わない（どの文にも当たってしまう）', () => {
+    expect(publicLeaks({ a: 'made by ai' }, { secrets: [], homeDir: '', userName: 'ai' })).toEqual([])
   })
 })

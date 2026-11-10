@@ -142,6 +142,33 @@ describe('見本を入れる', () => {
     )
   })
 
+  it('作る人の作業場所（A）で書き出した見本を B に入れても、A の ID を持つ行は 1 つも無い', async () => {
+    // 目録には作業場所の ID が残る（作品・キャラクター・ロケーション・ブランド資産の形が必須）。入れる側は使わない。
+    expect(JSON.stringify(manifest.source)).toContain(creator.workspaceId)
+    const { installer, world } = userSide(createDirBundleSource(bundleDir))
+    const { project } = await installer.install(world.workspaceId)
+    const w = world.writers
+    const characters = await w.characters.findByProject(project.id)
+    const shots = await w.shots.findByProject(project.id)
+    const rows = {
+      project: await w.projects.findById(project.id),
+      characters,
+      looks: await Promise.all(characters.map((c) => w.looks.findByCharacter(c.id))),
+      locations: await w.locations.findByProject(project.id),
+      brandAssets: await w.brandAssets.findByProject(project.id),
+      media: await world.mediaAssets.findByWorkspace(world.workspaceId),
+      tracks: await w.musicTracks.findByProject(project.id),
+      shots,
+      takes: await Promise.all(shots.map((shot) => w.takes.findByShot(shot.id, { includeHidden: true }))),
+      clips: await w.timelineClips.findByProject(project.id),
+      voices: await w.voices.findByProject(project.id),
+      lines: await w.narrationLines.findByProject(project.id),
+    }
+    expect(rows.media.length).toBe(manifest.media.length)
+    expect(characters.every((c) => c.workspaceId === world.workspaceId)).toBe(true)
+    expect(JSON.stringify(rows)).not.toContain(creator.workspaceId)
+  })
+
   it('2 度目は同じ作品を返し、何も取りに行かない', async () => {
     const bundle = counting(createDirBundleSource(bundleDir))
     const { installer, world } = userSide(bundle.source)
