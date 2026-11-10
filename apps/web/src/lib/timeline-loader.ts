@@ -68,7 +68,7 @@ export const loadBeatSource = async (projectId: ProjectId): Promise<BeatSource> 
 
 /** モニターの入力だけ。プレビューのパネルが使う。 */
 export const loadTimelineDocument = (projectId: ProjectId): Promise<Part<WireTimelineDocument>> =>
-  attempt('TimelineDocument', () =>
+  attempt('タイムライン', () =>
     createTimelineApi(createRequester(resolveApiBaseUrl())).getTimelineDocument(projectId),
   )
 
@@ -78,9 +78,9 @@ export const loadTimelineMaterials = async (projectId: ProjectId): Promise<Timel
   const beatAlignmentApi = createBeatAlignmentApi(requester)
 
   const [transitions, clips, document, issues, beatSource, beatAlignment] = await Promise.all([
-    attempt('Transition', () => timelineApi.listTransitions(projectId)),
+    attempt('トランジション', () => timelineApi.listTransitions(projectId)),
     attempt('クリップ', () => timelineApi.listClips(projectId)),
-    attempt('TimelineDocument', () => timelineApi.getTimelineDocument(projectId)),
+    attempt('タイムライン', () => timelineApi.getTimelineDocument(projectId)),
     // 検証はサーバの validateTimeline が唯一の正。画面に同じ規則を置かない。
     attempt('検証結果', () => timelineApi.getTimelineIssues(projectId)),
     loadBeatSource(projectId),

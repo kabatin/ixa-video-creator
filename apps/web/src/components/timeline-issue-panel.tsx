@@ -162,7 +162,7 @@ export const TimelineIssuePanel = ({
       >
         <h2 className="text-sm font-semibold text-warn">{summary.message}</h2>
         <p className="mt-1 text-sm text-warn">
-          Shot・Transition・クリップのいずれかを読み込めていません。
+          Shot・トランジション・クリップのいずれかを読み込めていません。
           この状態は「指摘なし」ではありません。読み込みに失敗した理由を先に解消してください。
         </p>
       </section>

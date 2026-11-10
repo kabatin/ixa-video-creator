@@ -39,6 +39,9 @@ import {
   summarizeTimelineIssues,
   timeSpanToRect,
   timelineRowLabel,
+  MUSIC_ROW_LABEL,
+  TRANSITION_ROW_LABEL,
+  layerLabel,
   transitionForPair,
   transitionTypeLabel,
   hiddenTracks,
@@ -215,8 +218,15 @@ describe('トラックとレーン', () => {
   })
 
   it('行と Transition のラベルを返す', () => {
-    expect(timelineRowLabel('TEXT')).toContain('TEXT')
+    expect(timelineRowLabel('TEXT')).toBe('テロップ')
     expect(transitionTypeLabel('dip_to_black')).toBe('黒フェード')
+  })
+
+  /** 画面の言葉は日本語（英語のままにするのは Shot / Take / Look だけ）。`TEXT`・`VFX` のような内部の名前を帯に出さない。 */
+  it('帯と段の名前に英字を出さない', () => {
+    const names = [...TIMELINE_ROWS.map(timelineRowLabel), MUSIC_ROW_LABEL, TRANSITION_ROW_LABEL, layerLabel(0)]
+    expect(names.filter((name) => /[A-Za-z]/.test(name))).toEqual([])
+    expect(layerLabel(0)).toBe('レイヤー1')
   })
 
   it('layer ごとの段に分け、段の中は開始順にする', () => {
@@ -434,7 +444,7 @@ describe('ズームの呼び名（PHASE 8.4）', () => {
 
 /**
  * タイムラインの帯の札（制作者 2026-10-02「テロップすべてに テロップ「＊＊＊＊」 ってなってるの文字数の無駄だよね」）。
- * TEXT 帯の札は文字そのものだけにする（帯の名前が「TEXT（テロップ）」なので種類は分かる）。
+ * TEXT 帯の札は文字そのものだけにする（帯の名前が「テロップ」なので種類は分かる）。
  * 知らせ・一覧・ツールチップの一文は、種類が混ざるので今までどおり「テロップ「…」」。
  */
 describe('clipChipLabel', () => {

@@ -45,7 +45,7 @@ describe('効果音の帯', () => {
   it('落とす口があれば、空でも帯を出して落とせると言う', () => {
     tracks({ onDropAudio: vi.fn() })
     expect(screen.getByText('効果音のファイルをここへ落とすと置けます')).toBeInTheDocument()
-    expect(screen.queryByText(/まだ置けない帯は隠しています: .*SFX/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/まだ置けない帯は隠しています: .*効果音/)).not.toBeInTheDocument()
   })
 
   it('音のファイルを落とすと、落とした秒で渡し、画面全体の取り込みには流さない', () => {
@@ -145,7 +145,7 @@ describe('帯の並び', () => {
       narrationLane: () => null,
       audioLane: { durationSec: 10, node: null },
     })
-    const labels = ['MUSIC（波形）', 'VIDEO1（Shot）', 'VIDEO2（重ね素材）', 'Transition', 'ナレーション', 'TEXT（テロップ）', 'VFX（エフェクト）', 'SFX（効果音）']
+    const labels = ['楽曲', '映像', '重ね素材', 'トランジション', 'ナレーション', 'テロップ', 'エフェクト', '効果音']
     const nodes = labels.map((label) => screen.getByText(label))
     const ordered = nodes.every(
       (node, index) => index === 0 || (nodes[index - 1]?.compareDocumentPosition(node) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING,

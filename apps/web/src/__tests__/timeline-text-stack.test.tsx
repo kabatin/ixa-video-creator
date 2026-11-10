@@ -39,8 +39,8 @@ const textClip = (id: TimelineClipId, text: string, startSec: number, layer: num
   })
 
 const textLaneOf = (layer: number): HTMLElement => {
-  const row = screen.getByText('TEXT（テロップ）').parentElement as HTMLElement
-  const lane = within(row).getByText(`Layer${String(layer + 1)}`).parentElement
+  const row = screen.getByText('テロップ').parentElement as HTMLElement
+  const lane = within(row).getByText(`レイヤー${String(layer + 1)}`).parentElement
   if (lane === null) throw new Error(`TEXT の layer ${String(layer)} の段が無い`)
   return lane
 }

@@ -208,11 +208,11 @@ describe('TextClipInspector', () => {
     })
   })
 
-  it('TEXT 帯のすべてに当てるのは、確かめてから（テロップだけ・メディアは含めない）', async () => {
+  it('テロップすべてに当てるのは、確かめてから（テロップだけ・メディアは含めない）', async () => {
     await open()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'TEXT 帯のすべてに当てる' }))
-    const dialog = screen.getByRole('alertdialog', { name: 'TEXT 帯のすべてに当てる' })
+    await userEvent.click(await screen.findByRole('button', { name: 'テロップすべてに当てる' }))
+    const dialog = screen.getByRole('alertdialog', { name: 'テロップすべてに当てる' })
     expect(fake.applyTextStyle).not.toHaveBeenCalled()
     await userEvent.click(within(dialog).getByRole('button', { name: 'すべてに当てる' }))
 

@@ -184,7 +184,7 @@ export const useTimelineInlineForms = ({
       return
     }
     const existing = point.existing
-    void run(existing === null ? 'Transition を追加' : 'Transition を差し替え', async () => {
+    void run(existing === null ? 'トランジションを追加' : 'トランジションを差し替え', async () => {
       const created = await api.createTransition(
         projectId,
         existing === null ? result.value : { ...result.value, replaceTransitionId: existing.id },

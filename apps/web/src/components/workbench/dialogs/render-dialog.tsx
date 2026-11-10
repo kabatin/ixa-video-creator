@@ -42,7 +42,7 @@ const loadRenderMaterials = async (projectId: ProjectId): Promise<RenderMaterial
     attempt('書き出しの履歴', () => renderApi.listRenderJobs(projectId)),
     // 検証はサーバの validateTimeline が唯一の正（L-016）。
     attempt('投入前の検査結果', () => timelineApi.getTimelineIssues(projectId)),
-    attempt('TimelineDocument', () => timelineApi.getTimelineDocument(projectId)),
+    attempt('タイムライン', () => timelineApi.getTimelineDocument(projectId)),
   ])
   return { jobs, issues, durationSec: document.value?.durationSec ?? null }
 }

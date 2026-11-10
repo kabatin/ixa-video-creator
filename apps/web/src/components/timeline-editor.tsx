@@ -341,7 +341,7 @@ export const TimelineEditor = ({
   }
 
   const removeTransition = (id: TransitionId): void => {
-    void run('Transition を削除', async () => {
+    void run('トランジションを削除', async () => {
       await api.deleteTransition(id)
       setTransitions((current) =>
         current === null ? current : current.filter((transition) => transition.id !== id),

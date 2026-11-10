@@ -19,6 +19,8 @@ import {
   rulerTicks,
   secondsToPx,
   timelineRowLabel,
+  MUSIC_ROW_LABEL,
+  TRANSITION_ROW_LABEL,
   timelineTrackGroups,
   TIMELINE_LANE_HEIGHT_PX,
   TIMELINE_TRANSITION_ROW_HEIGHT_PX,
@@ -341,7 +343,7 @@ export const TimelineTracks = ({
         </Row>
 
         {audioLane !== undefined && (
-          <Row label="MUSIC（波形）" contentWidthPx={contentWidthPx}>
+          <Row label={MUSIC_ROW_LABEL} contentWidthPx={contentWidthPx}>
             <div style={{ width: audioLane.durationSec * pxPerSec }}>{audioLane.node}</div>
           </Row>
         )}
@@ -367,7 +369,7 @@ export const TimelineTracks = ({
         {/* VIDEO2（重ね素材）は映像の仲間なので VIDEO1 のすぐ下（制作者 2026-10-19 の並び）。 */}
         {trackGroups.video.map(renderTrackRow)}
 
-        <Row label="Transition" contentWidthPx={contentWidthPx}>
+        <Row label={TRANSITION_ROW_LABEL} contentWidthPx={contentWidthPx}>
           <TimelineTransitionRow
             points={transitionPoints}
             pxPerSec={pxPerSec}
@@ -414,7 +416,7 @@ export const TimelineTracks = ({
          * 置く口ができたら `INSERTABLE_TRACKS` に足すだけで帯も戻る。
          */
         <p className="sticky left-0 border-t border-line px-3 py-1.5 text-xs text-muted">
-          {`まだ置けない帯は隠しています: ${hidden.join(' / ')}`}
+          {`まだ置けない帯は隠しています: ${hidden.map(timelineRowLabel).join(' / ')}`}
         </p>
       )}
     </div>

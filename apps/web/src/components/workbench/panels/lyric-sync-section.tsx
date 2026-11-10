@@ -15,7 +15,7 @@ import { DEFAULT_PX_PER_SEC } from '@/lib/timeline-display'
 import { beatSourceOf, buildSnapCandidates, snapPoint, snapToleranceSec } from '@/lib/timeline-snap'
 
 const PLACE_TELOPS_CONFIRM =
-  '時刻の付いたフレーズを、TEXT 帯の歌詞の段にテロップとして置きます。前に歌詞から置いたテロップは置き直します（手で置いたテロップは残ります）。'
+  '時刻の付いたフレーズを、テロップの帯の歌詞の段に置きます。前に歌詞から置いたテロップは置き直します（手で置いたテロップは残ります）。'
 
 const sameCues = (a: readonly number[], b: readonly number[]): boolean =>
   a.length === b.length && a.every((cue, index) => cue === b[index])

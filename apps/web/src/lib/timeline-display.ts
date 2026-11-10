@@ -91,13 +91,24 @@ export const timelineTrackGroups = (
   rest: shown.filter((track) => !VIDEO_TRACKS.includes(track)),
 })
 
+/**
+ * 帯の名前。**画面に出すのは日本語だけ**（CLAUDE.md「画面の言葉」。英語のままにするのは Shot / Take / Look の 3 語）。
+ * `TEXT`・`VFX` のようなドメインの値は内部の名前で、制作者に見せる言葉ではない。
+ */
 const ROW_LABELS: Readonly<Record<TimelineRow, string>> = {
-  VIDEO1: 'VIDEO1（Shot）',
-  VFX: 'VFX（エフェクト）',
-  TEXT: 'TEXT（テロップ）',
-  VIDEO2: 'VIDEO2（重ね素材）',
-  SFX: 'SFX（効果音）',
+  VIDEO1: '映像',
+  VFX: 'エフェクト',
+  TEXT: 'テロップ',
+  VIDEO2: '重ね素材',
+  SFX: '効果音',
 }
+
+/** Shot の帯の上下にある、段の名前（楽曲・トランジション）。帯の名前は必ずここから引く。 */
+export const MUSIC_ROW_LABEL = '楽曲'
+export const TRANSITION_ROW_LABEL = 'トランジション'
+
+/** 段の札（`レイヤー1`）。画面では 1 から数える（layer は内部の 0 始まりの番号）。 */
+export const layerLabel = (layer: number): string => `レイヤー${String(layer + 1)}`
 
 export const timelineRowLabel = (row: TimelineRow): string => ROW_LABELS[row]
 
@@ -302,11 +313,11 @@ export const describeClipContent = (content: TimelineClip['content'], mediaName?
 
 /**
  * タイムラインの帯の札に出す文字（制作者 2026-10-02「テロップすべてに テロップ「＊＊＊＊」 ってなってるの文字数の無駄だよね」）。
- * テロップは文字そのものだけにする（帯の名前「TEXT（テロップ）」で種類は分かる。札は幅が狭く、前置きで本文が切れていた）。
+ * テロップは文字そのものだけにする（帯の名前「テロップ」で種類は分かる。札は幅が狭く、前置きで本文が切れていた）。
  * それ以外は一行要約のまま。知らせ・一覧・ツールチップでは種類が混ざるので `describeClipContent` を使う。
  */
 export const clipChipLabel = (content: TimelineClip['content'], mediaName?: string): string => {
-  // エフェクトも型の名前だけ（帯の名前「VFX（エフェクト）」で種類は分かる）。
+  // エフェクトも型の名前だけ（帯の名前「エフェクト」で種類は分かる）。
   if (content.type === 'motion_graphics') return effectChipLabel(content)
   if (content.type === 'media') return mediaName ?? describeClipContent(content)
   const params = parseTextClipParams(content.params)

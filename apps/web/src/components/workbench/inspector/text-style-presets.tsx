@@ -153,7 +153,7 @@ export const TextStylePresets = ({
               </Button>
               <ConfirmButton
                 size="sm"
-                label="TEXT 帯のすべてに当てる"
+                label="テロップすべてに当てる"
                 message={`テロップ ${String(textClips.length)} 件すべての見た目を「${preset.name}」にします。文字は変わりません。`}
                 confirmLabel="すべてに当てる"
                 disabled={locked || textClips.length === 0}
