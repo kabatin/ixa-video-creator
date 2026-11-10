@@ -32,6 +32,29 @@ export const DEMO_CONTENT_TYPES = Object.freeze({
   video: ['video/mp4', 'video/quicktime', 'video/webm'],
   audio: ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/flac', 'audio/ogg'],
 } as const)
+/** 型ごとに許すファイルの拡張子（小文字）。拡張子と宣言した型が食い違う素材は、取りに行く前に断る。 */
+export const DEMO_EXTENSIONS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  'image/png': ['png'],
+  'image/jpeg': ['jpg', 'jpeg'],
+  'image/webp': ['webp'],
+  'video/mp4': ['mp4', 'm4v'],
+  'video/quicktime': ['mov'],
+  'video/webm': ['webm'],
+  'audio/wav': ['wav'],
+  'audio/x-wav': ['wav'],
+  'audio/mpeg': ['mp3'],
+  'audio/mp4': ['m4a', 'mp4'],
+  'audio/aac': ['aac', 'm4a'],
+  'audio/flac': ['flac'],
+  'audio/ogg': ['ogg', 'oga'],
+})
+
+/** ファイル名の拡張子（小文字）。無ければ null。 */
+const extensionOfFile = (file: string): string | null => {
+  const dot = file.lastIndexOf('.')
+  return dot <= 0 ? null : file.slice(dot + 1).toLowerCase()
+}
+
 export const DemoMediaKind = z.enum(['image', 'video', 'audio'])
 export type DemoMediaKind = z.infer<typeof DemoMediaKind>
 
@@ -98,6 +121,10 @@ export const DemoMediaEntry = z
   .refine((entry) => DEMO_CONTENT_TYPES[entry.kind].some((type) => type === entry.contentType), {
     message: '見本の素材にできない型です（絵・動画・音の決まった型だけ）',
     path: ['contentType'],
+  })
+  .refine((entry) => (DEMO_EXTENSIONS[entry.contentType] ?? []).some((ext) => ext === extensionOfFile(entry.file)), {
+    message: 'ファイルの拡張子が、宣言した型と食い違います',
+    path: ['file'],
   })
 export type DemoMediaEntry = z.infer<typeof DemoMediaEntry>
 

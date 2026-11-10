@@ -212,8 +212,10 @@ describe('公開する目録の点検（機械と持ち主の情報）', () => {
     expect(found).toEqual(['source.shots[0].description'])
   })
 
-  it('キーに入っていても拾う', () => {
-    expect(publicLeaks({ request: { '/Users/creator/x': 1 } }, rules)).toEqual(['request./Users/creator/x'])
+  it('キーに入っていても拾い、そのキーは場所の中でも伏せる（値もキーも返さない）', () => {
+    const found = publicLeaks({ request: { '/Users/creator/x': { inner: 'ok' }, fine: '/tmp/a' } }, rules)
+    expect(found).toEqual(['request.<key>', 'request.fine'])
+    expect(found.join(' ')).not.toContain('creator')
   })
 
   it('短すぎる利用者名では拾わない（どの文にも当たってしまう）', () => {
@@ -291,7 +293,8 @@ describe('目録の形の境目', () => {
     ['audio', 'audio/wav'],
     ['audio', 'audio/mpeg'],
   ])('素材の種類 %s・%s は通る', (kind, contentType) => {
-    expect(DemoManifest.safeParse(aManifest({ media: [aMedia({ kind, contentType })] })).success).toBe(true)
+    const ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'video/mp4': 'mp4', 'audio/wav': 'wav', 'audio/mpeg': 'mp3' }[contentType]
+    expect(DemoManifest.safeParse(aManifest({ media: [aMedia({ kind, contentType, file: `${SHA}.${String(ext)}` })] })).success).toBe(true)
   })
 })
 
@@ -339,5 +342,55 @@ describe('公開する目録の点検（鍵と署名の形）', () => {
     'mail me: creator@example.com',
   ])('%s を拾う', (value) => {
     expect(publicLeaks({ a: value }, rules)).toEqual(['a'])
+  })
+})
+
+describe('公開する目録の点検（この機械と LAN）', () => {
+  const rules = { secrets: [], homeDir: '/Users/creator', userName: 'creator', extraWords: ['Taro Yamada', 'mac-studio'] }
+  it.each([
+    ['平文の http の URL', 'see http://example.com/page'],
+    ['ドットの無いホスト', 'https://intranet/wiki'],
+    ['.lan', 'https://nas.lan/share'],
+    ['.internal', 'https://build.internal/x'],
+    ['.home.arpa', 'https://router.home.arpa/'],
+    ['.ts.net', 'https://mac.tail1234.ts.net/x'],
+    ['100.64.0.0/10', 'https://100.100.1.2/x'],
+    ['IPv6 fc00::/7', 'https://[fd12:3456::1]/x'],
+    ['IPv6 fe80::/10', 'https://[fe80::1]/x'],
+    ['IPv6 ::1', 'https://[::1]:3001/x'],
+    ['スキーム無しの私用 IPv4', 'server at 192.168.0.12'],
+    ['スキーム無しの私用 IPv4 とポート', 'vpipe 10.1.2.3:8787 で作った'],
+    ['小文字の /users/', '/users/someone/x.png'],
+    ['~/ の道', 'saved to ~/Movies/out.mp4'],
+    ['大文字小文字の違う利用者名', 'made by CREATOR'],
+    ['作る人が渡した語（本名）', 'by taro yamada'],
+    ['作る人が渡した語（機械の名前）', 'rendered on Mac-Studio'],
+  ])('%s を拾う', (_label, value) => {
+    expect(publicLeaks({ a: value }, rules)).toEqual(['a'])
+  })
+
+  it.each(['https://example.com/about', '1.2.3.4 は公開のアドレス', 'version 10.2 の機能', 'a/b/c'])('%s は拾わない', (value) => {
+    expect(publicLeaks({ a: value }, rules)).toEqual([])
+  })
+})
+
+describe('素材の拡張子と型', () => {
+  it.each([
+    ['a.json', 'image/png', 'image'],
+    ['a.png', 'image/jpeg', 'image'],
+    ['a.mp4', 'video/webm', 'video'],
+    ['a.mp3', 'audio/wav', 'audio'],
+    ['noext', 'image/png', 'image'],
+  ])('%s を %s として宣言した素材は断る（取りに行く前）', (file, contentType, kind) => {
+    expect(DemoManifest.safeParse(aManifest({ media: [aMedia({ file, contentType, kind })] })).success).toBe(false)
+  })
+
+  it.each([
+    ['a.jpg', 'image/jpeg', 'image'],
+    ['a.jpeg', 'image/jpeg', 'image'],
+    ['a.mov', 'video/quicktime', 'video'],
+    ['a.m4a', 'audio/mp4', 'audio'],
+  ])('%s・%s は通る', (file, contentType, kind) => {
+    expect(DemoManifest.safeParse(aManifest({ media: [aMedia({ file, contentType, kind })] })).success).toBe(true)
   })
 })
