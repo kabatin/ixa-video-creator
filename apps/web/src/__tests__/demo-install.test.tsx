@@ -114,6 +114,8 @@ describe('見本を開く', () => {
       expect(replace).toHaveBeenCalledWith(`/projects/${PROJECT.id}`)
     })
     expect(install).toHaveBeenCalledTimes(1)
+    // 効果が 2 回走っても、状態を読むのは 1 回（2 回目の効果は何もしない）。
+    expect(getStatus).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('alert')).toBeNull()
   })
 })
