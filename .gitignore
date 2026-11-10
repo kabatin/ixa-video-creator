@@ -2,6 +2,8 @@ node_modules/
 dist/
 build/
 .next/
+# pnpm ixa start の本番ビルド（next dev の .next と分ける）
+.next-start/
 out/
 coverage/
 *.tsbuildinfo

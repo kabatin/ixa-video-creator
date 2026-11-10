@@ -34,12 +34,35 @@ const withWorkspaceExtensionAlias = (config) => ({
   },
 })
 
+/**
+ * **出力先は切り替えられる。** `next dev` は `.next` を使う。`pnpm ixa start` の本番ビルドは
+ * `NEXT_DIST_DIR=.next-start` で別の置き場へ出す。同じ `.next` を奪い合うと、動いている
+ * dev サーバの全ページが 500 になる。
+ * 空文字や絶対パス・`..` は Next が `.next` を外へ書き出す事故になるので受け付けない。
+ */
+const distDir = (() => {
+  const value = process.env.NEXT_DIST_DIR
+  if (value === undefined || value === '') return '.next'
+  if (!/^\.?[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) || value.includes('..')) {
+    throw new Error(`NEXT_DIST_DIR は apps/web 直下のフォルダ名だけを指定する（受け取った値: ${value}）`)
+  }
+  return value
+})()
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
 
-  // @ixa/domain は TypeScript ソースを直接公開しているため Next 側でトランスパイルする。
-  transpilePackages: ['@ixa/domain'],
+  distDir,
+
+  // ワークスペースの包みは TypeScript ソースを直接公開しているため Next 側でトランスパイルする。
+  // web が読むもの（domain / render / timeline）と、それらが画面側へ連れてくるもの（music）を並べる。
+  transpilePackages: ['@ixa/domain', '@ixa/music', '@ixa/render', '@ixa/timeline'],
+
+  // ビルド中の lint と型検査はしない。CI が `pnpm lint` / `pnpm typecheck` で別に回しており、
+  // ビルドは `pnpm ixa start` で使う人の手元で走る。そこで同じ検査を繰り返すと待ち時間とメモリが増えるだけになる。
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
 
   // 型付きルートは使わない。生成される next-env.d.ts の path 参照を避ける。
   typedRoutes: false,
