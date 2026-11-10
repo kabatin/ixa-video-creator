@@ -42,10 +42,10 @@ cd ixa-video-creator
 pnpm install
 pnpm ixa setup    # .env, signing key, postgres + redis, DB migrations, workspace, audio deps, text AI, Chrome for export, MCP — safe to re-run
 
-pnpm dev          # web :3000, api :3001, worker, audio :8100
+pnpm ixa start    # builds the screen once (~40 s), then web :3000, api :3001, worker, audio :8100
 ```
 
-Open <http://localhost:3000>, create a project, and drop an audio file onto the window — the flow bar takes it from there. **Out of the box everything runs on local stubs — no API keys, no cost.**
+Open <http://localhost:3000>, create a project, and drop an audio file onto the window — the flow bar takes it from there. **Out of the box everything runs on local stubs — no API keys, no cost.** Working on the code itself? `pnpm dev` runs the same four with hot reload.
 
 > **Or let an agent install it.** Paste this into Claude Code or Codex on your Mac:
 > *"Install https://github.com/kabatin/ixa-video-creator on this Mac and get it ready to use, following its INSTALL.md."*
@@ -302,7 +302,7 @@ pnpm ixa update           # to the latest release (--main for the tip of main)
 pnpm ixa update --check   # only tell me whether there is one
 ```
 
-It refuses to run with uncommitted changes, off `main`, while `pnpm dev` is running (stop it first, or `--while-running`), or while jobs (generation, export, images, music, sound effects, voices, upscaling, storyboard drafts, reviews, thumbnails, the agent) are running — `--force` lifts only the jobs check. If it stops halfway, fix the cause and run `pnpm ixa update --resume`. It fast-forwards to the release tag and installs dependencies, then hands over to the **new** version of itself to run `uv sync` and the DB migrations, list any `.env` items the new version added (it never writes values), link the release notes and run `doctor`. Restart `pnpm dev` afterwards.
+It refuses to run with uncommitted changes, off `main`, while ixa is running (stop it first, or `--while-running`), or while jobs (generation, export, images, music, sound effects, voices, upscaling, storyboard drafts, reviews, thumbnails, the agent) are running — `--force` lifts only the jobs check. If it stops halfway, fix the cause and run `pnpm ixa update --resume`. It fast-forwards to the release tag and installs dependencies, then hands over to the **new** version of itself to run `uv sync` and the DB migrations, list any `.env` items the new version added (it never writes values), link the release notes and run `doctor`. Start it again with `pnpm ixa start` afterwards.
 
 ### Connecting a paid provider
 
