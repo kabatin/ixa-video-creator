@@ -79,7 +79,7 @@ export const judgeOptional = (facts: OptionalFacts): readonly CheckResult[] => [
         id: 'tools.audio-deps',
         group: 'tools',
         level: 'fail',
-        message: '音の解析の依存（apps/audio/.venv）がありません。pnpm dev で音の解析が起動しません',
+        message: '音の解析の依存（apps/audio/.venv）がありません。pnpm ixa start・pnpm dev で音の解析が起動しません',
         fix: { hint: 'uv で入れる（Python 3.12 も uv が用意する）', command: 'uv sync --directory apps/audio', needsHuman: false },
         docs: DOCS,
       },

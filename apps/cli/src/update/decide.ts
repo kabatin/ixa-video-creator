@@ -107,9 +107,9 @@ export const devRunningBlocker = (devRunning: boolean, whileRunning: boolean): S
     ? {
         id: 'update.dev-running',
         status: 'needs_human',
-        message: 'この clone の dev（pnpm dev）が動いています。動いたまま更新すると、途中の版を読み込み直して落ちることがあります',
+        message: 'この clone の ixa（pnpm ixa start か pnpm dev）が動いています。動いたまま更新すると、途中の版を読み込み直して落ちることがあります',
         fix: {
-          hint: 'dev を止めてから（Ctrl+C）。動かしたまま進めてよければ --while-running（制作者に確かめる）',
+          hint: 'ixa を止めてから（起動した端末で Ctrl+C）。動かしたまま進めてよければ --while-running（制作者に確かめる）',
           command: 'pnpm ixa update --while-running',
           needsHuman: true,
         },

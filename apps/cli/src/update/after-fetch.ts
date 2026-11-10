@@ -93,7 +93,7 @@ export const afterFetchStage = async (system: System, repo: RepoPaths, out: Outp
   out.line(`\n変更点: ${releaseNotes}`)
   const checks = proceed ? await finalDoctor(system, repo, out) : []
   const devRestartNeeded = devIsRunning(await gatherRuntime(system, await readEnv(system, repo), repo.root))
-  if (devRestartNeeded) out.line('\n! dev が動いています。新しい版にするため起動し直してください（Ctrl+C で止めて pnpm dev）')
+  if (devRestartNeeded) out.line('\n! ixa が動いています。新しい版にするため起動し直してください（Ctrl+C で止めて pnpm ixa start。開発なら pnpm dev）')
   const ok = proceed && !hasFailure(checks)
   out.result({ command: 'update', ok, from, to, releaseNotes, devRestartNeeded, steps: results, results: checks })
   return ok ? 0 : 1

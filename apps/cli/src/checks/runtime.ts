@@ -33,16 +33,16 @@ const portCheck = ({ name, port, owner }: PortFacts): CheckResult => {
   const label = `${LABEL[name]} の ${String(port)}`
   switch (owner.kind) {
     case 'free':
-      return { id, group: 'runtime', level: 'ok', message: `${label} は空いています（dev は動いていません）` }
+      return { id, group: 'runtime', level: 'ok', message: `${label} は空いています（ixa は動いていません）` }
     case 'this-repo':
-      return { id, group: 'runtime', level: 'ok', message: `${label} はこの clone の dev が使っています` }
+      return { id, group: 'runtime', level: 'ok', message: `${label} はこの clone の ixa が使っています` }
     case 'other-ixa':
       return {
         id,
         group: 'runtime',
         level: 'warn',
-        message: `${label} は別の場所の ixa（${owner.root}）が使っています。この clone の dev は同時に起動できません`,
-        fix: { hint: '別の場所の dev を止めるか、どちらを使うか制作者に確かめる', needsHuman: true },
+        message: `${label} は別の場所の ixa（${owner.root}）が使っています。この clone の ixa は同時に起動できません`,
+        fix: { hint: '別の場所の ixa を止めるか、どちらを使うか制作者に確かめる', needsHuman: true },
         docs: DOCS,
       }
     case 'other':
@@ -50,7 +50,7 @@ const portCheck = ({ name, port, owner }: PortFacts): CheckResult => {
         id,
         group: 'runtime',
         level: 'fail',
-        message: `${label} を ixa 以外のもの（pid ${String(owner.pid)}）が使っています。dev が起動できません`,
+        message: `${label} を ixa 以外のもの（pid ${String(owner.pid)}）が使っています。ixa が起動できません`,
         fix: { hint: '何が使っているか確かめ、止めてよいか制作者に聞く', command: `lsof -nP -iTCP:${String(port)} -sTCP:LISTEN`, needsHuman: true },
         docs: DOCS,
       }
@@ -58,7 +58,7 @@ const portCheck = ({ name, port, owner }: PortFacts): CheckResult => {
 }
 
 const healthCheck = (id: string, label: string, healthy: boolean | null): CheckResult => {
-  if (healthy === null) return { id, group: 'runtime', level: 'skip', message: `${label}: この clone の dev が動いていないので見ません` }
+  if (healthy === null) return { id, group: 'runtime', level: 'skip', message: `${label}: この clone の ixa が動いていないので見ません` }
   return healthy
     ? { id, group: 'runtime', level: 'ok', message: `${label} は応答しています` }
     : {
@@ -66,7 +66,7 @@ const healthCheck = (id: string, label: string, healthy: boolean | null): CheckR
         group: 'runtime',
         level: 'fail',
         message: `${label} は待ち受けているが /health に答えません`,
-        fix: { hint: 'dev を起動し直す（pnpm dev の画面のエラーを見る）', command: 'pnpm dev', needsHuman: false },
+        fix: { hint: 'ixa を起動し直す（起動した端末で Ctrl+C で止め、出ていたエラーを見てから。開発なら pnpm dev）', command: 'pnpm ixa start', needsHuman: false },
         docs: DOCS,
       }
 }
@@ -136,5 +136,5 @@ export const gatherRuntime = async (system: System, env: EnvValues, root: string
   }
 }
 
-/** この clone の dev が動いているか（update の後に「起動し直して」と言うため）。 */
+/** この clone の ixa（pnpm ixa start か pnpm dev）が動いているか（update の後に「起動し直して」と言うため・start が二重に起こさないため）。 */
 export const devIsRunning = (facts: RuntimeFacts): boolean => facts.ports.some((p) => p.owner.kind === 'this-repo')

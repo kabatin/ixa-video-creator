@@ -7,6 +7,8 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start",
+    "build:start": "NEXT_DIST_DIR=.next-start next build",
+    "serve": "NEXT_DIST_DIR=.next-start next start -p 3000",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run"

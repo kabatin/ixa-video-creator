@@ -51,6 +51,13 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # pnpm ixa start（ADR-0068）が使う人の手元で回す本番ビルド。ここで回さないと、壊れても誰も気づかない
+      # （next build は lint・型検査を飛ばす設定なので、それは上の 2 つが受け持つ）。
+      - name: Build web for pnpm ixa start
+        run: pnpm --filter @ixa/web run build:start
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
       # tools/ixa-ai（ADR-0064）は標準ライブラリだけの Python。偽の Io で回すので、Linux でも Mac として判定する。
       - name: Test tools/ixa-ai
         run: python3 -m unittest discover -s tools/ixa-ai

@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "tsx watch --env-file=../../.env src/main.ts",
     "start": "node --import tsx --env-file=../../.env src/main.ts",
+    "serve": "node --import tsx --env-file=../../.env src/main.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint src"

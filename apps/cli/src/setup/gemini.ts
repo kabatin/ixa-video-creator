@@ -86,6 +86,6 @@ export const geminiStep = async ({ system, repo, yes }: SetupContext): Promise<S
   return {
     id: ID,
     status: 'done',
-    message: `Gemini の鍵を .env に入れました（AUDIO_API_PROVIDERS に gemini_api、GEMINI_API_BILLING=${billing}）。dev を起動し直すと効きます`,
+    message: `Gemini の鍵を .env に入れました（AUDIO_API_PROVIDERS に gemini_api、GEMINI_API_BILLING=${billing}）。ixa を起動し直すと効きます`,
   }
 }

@@ -30,5 +30,5 @@ description: ixa（iXA Video Creator）を入れる・更新する・調子を�
 
 - 鍵の値を表示する・ファイルに書く。アクセス用の鍵を DB に作る（発行は画面 http://localhost:3000/access-keys で制作者が押す）。Gemini の鍵を人から受け取って貼る（人が端末で貼る）。
 - `docker compose down -v`、値の入った `.env` の行の書き換え、`--force`・`--write`・`--overwrite-env` を人の許可なしに付けること。
-- `pnpm dev` を勝手に止める・起動し直す（作っている途中の絵や動画が止まる）。
+- `pnpm ixa start`・`pnpm dev` を勝手に止める・起動し直す（作っている途中の絵や動画が止まる）。起動を頼まれたら INSTALL.md「起動する」のとおり後ろで起こし、`pnpm -s ixa doctor --json` で待つ。
 - 人が同意していない ID を `--accept-licenses` に入れる。接続コード（合言葉を含む）をチャットやファイルに写す。

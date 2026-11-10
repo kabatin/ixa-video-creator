@@ -29,7 +29,7 @@
 | 手元の生成 AI のために Homebrew で入れる（`brew install whisper-cpp`） | その Mac にソフトを入れる |
 
 **しないこと**: 鍵の値を表示・ログ・チャットに出す／`IXA_API_TOKEN` をファイルに書く／`docker compose down -v`／
-値の入った `.env` の行を書き換える（人に言われたときだけ）／`pnpm dev` を勝手に止める・起動し直す。
+値の入った `.env` の行を書き換える（人に言われたときだけ）／`pnpm ixa start`・`pnpm dev` を勝手に止める・起動し直す。
 
 **機械で読むときは `pnpm -s ixa <コマンド> --json`**（`-s` が無いと pnpm の見出しが stdout に混ざる）。
 
@@ -62,7 +62,7 @@ pnpm -s ixa setup --yes --json
   "steps": [{ "id": "tools.ffmpeg", "status": "needs_human", "message": "FFmpeg が入っていません",
               "fix": { "hint": "…", "command": "brew install ffmpeg", "needsHuman": true }, "docs": "INSTALL.md#道具" }],
   "results": [{ "id": "db.migrations", "group": "db", "level": "ok", "message": "…" }],
-  "next": ["pnpm dev を起動して http://localhost:3000 を開く…"]
+  "next": ["pnpm ixa start で起動して http://localhost:3000 を開く…"]
 }
 ```
 
@@ -140,9 +140,10 @@ Homebrew が無ければ、`brew` の 1 行の代わりに Homebrew（https://br
 
 ## 動いているもの
 
-- `runtime.port-*` が ! → そのポートを別の場所の ixa の dev が使っている。この clone の dev は同時に起動できない。どうするか人に聞く。
+- `runtime.port-*` が ! → そのポートを別の場所の ixa が使っている。この clone の ixa は同時に起動できない。どうするか人に聞く。
 - `runtime.port-*` が ✗ → ixa 以外が使っている。`lsof -nP -iTCP:<ポート> -sTCP:LISTEN` で確かめ、止めてよいか人に聞く。
-- `runtime.*-health` が ✗ → dev は動いているが答えない。`pnpm dev` の出力のエラーを見る。
+- `runtime.*-health` が ✗ → ixa は動いているが答えない。起動した端末（`pnpm ixa start` か `pnpm dev`）の出力のエラーを見る。
+- 「動いている」は `pnpm ixa start` でも `pnpm dev` でも同じに見える（どちらもこの clone のポートを使う）。
 
 ## 任意
 
@@ -247,7 +248,7 @@ pnpm -s ixa mcp --codex     # Codex の ~/.codex/config.toml に足す節
 ```
 
 - 出てきた 1 行を人に見せる。**実際に登録する（`--write` を付ける）のは人の許可を得てから**。
-- アクセス用の鍵（`IXA_API_TOKEN`）は入らない。**制作者が画面で発行する**: `pnpm dev` を起動し、
+- アクセス用の鍵（`IXA_API_TOKEN`）は入らない。**制作者が画面で発行する**: `pnpm ixa start` で起動し、
   http://localhost:3000/access-keys で「自動化用の鍵」を作り、シェルの環境に置く（例 `~/.zshrc` に `export IXA_API_TOKEN=…`）。
   エージェントは鍵を DB に作らない・ファイルに書かない。
 
@@ -260,9 +261,29 @@ pnpm -s ixa doctor --json
 `ok: true`（✗ が 0）なら終わり。人に報告する:
 
 - やったこと（`steps` の `done`）と、残っている ! のうち人が決めること（`fix.needsHuman`）
-- 次の 1 手: `pnpm dev` → http://localhost:3000（曲を落とすところから）、MCP の登録の 1 行と鍵の発行の場所
+- 次の 1 手: `pnpm ixa start` → http://localhost:3000（曲を落とすところから）、MCP の登録の 1 行と鍵の発行の場所
 
-`pnpm dev` は人が起動する（エージェントが起動するなら人に聞いてから。止めるときも同じ）。
+`pnpm ixa start` は人が起動する（エージェントが起動するなら人に聞いてから。止めるときも同じ）。下の「起動する」。
+
+## 起動する
+
+```bash
+pnpm ixa start           # 画面（:3000）・API・worker・音の解析を起こす。Ctrl+C で全部止まる
+pnpm ixa start --build   # 画面を必ず組み立て直してから起こす
+```
+
+- 使う人のための起動。画面は組み立て済みのものを出し、API・worker は直しを見張らない（`pnpm dev` のように開くたびに組み立て直さない・
+  メモリが増えて画面が勝手に起動し直すことも無い）。**コードを直しながら動かすなら `pnpm dev`**（開発の形。今までどおり）。
+  決めたことは [ADR-0068](./docs/adr/0068-ixa-start.md)。
+- 画面は `apps/web/.next-start` に組み立てる。**コード（git の版）か `NEXT_PUBLIC_*` が前に組み立てたときと違えば**、起こす前に組み立て直す
+  （初回は数分かかることがある。2 回目からは変わったときだけ）。版の印は `git rev-parse HEAD` なので、コミットしていない直しは拾わない
+  （そのときは `--build`）。組み立てに失敗したら起こさずに止まり、次の `start` でもう一度組み立てる。
+- この clone の ixa がもう動いていれば、何も起こさずに場所だけ言う（`start` でも `dev` でも）。ポートを別のものが使っていれば起こさずに
+  `runtime.port-*` を出す（上の「動いているもの」）。`.env` が無ければ `pnpm ixa setup` を勧める。
+- **`--json`**: 止めるまで返らないので、`--json` では起動しない。もう動いているときだけ `{"command":"start","ok":true,"running":true,"url":…}`、
+  それ以外は `ok: false`・`running: false`・`error`（理由）を返す。エージェントが起こすなら、人に聞いてから `--json` を付けずに
+  後ろで `pnpm ixa start` を起こし、`pnpm -s ixa doctor --json` の `runtime.api-health`・`runtime.audio-health` が ✓ になるまで待つ
+  （組み立てがあると数分かかる）。
 
 ## 更新
 
@@ -272,9 +293,9 @@ pnpm -s ixa update --json           # 最新のリリースへ（--main で main
 ```
 
 - 止まる条件（`needs_human`）: 未コミットの変更がある（`update.dirty`）／ main 以外にいる（`update.branch`）／
-  動いているジョブがある（`update.active-jobs`）／ この clone の dev が動いている（`update.dev-running`）／
+  動いているジョブがある（`update.active-jobs`）／ この clone の ixa（`start` か `dev`）が動いている（`update.dev-running`）／
   main がタグより先・枝分かれ（`update.fast-forward`）。どれも人に聞く。
-  - `--force` はジョブの確認だけを外す。`--while-running` は dev を動かしたまま進める（別の同意）。**どちらも人の許可なしに付けない**。
+  - `--force` はジョブの確認だけを外す。`--while-running` は ixa を動かしたまま進める（別の同意）。**どちらも人の許可なしに付けない**。
   - ジョブを数えられなかった（`update.active-jobs` が `failed`。合言葉違いなど）→ `pnpm -s ixa doctor` で DB を見る。
     DB が動いていないだけなら 0 件とみなして進む（JSON の `activeJobsReason` に理由）。
   - `update.stale-jobs`（`notice`）→ 24 時間より前から「動いている」のままの行（取り残し）。数えていない。消すかどうかは人が決める。
@@ -282,5 +303,6 @@ pnpm -s ixa update --json           # 最新のリリースへ（--main で main
   **新しい版の CLI** が `uv sync` → DB の更新 → 新しく増えた `.env` の項目の一覧（値は書かない）→ 印を消す → doctor。
 - **途中で止まったら**（`update.pending`・doctor の `tools.update-pending`）→ 原因を直して `pnpm -s ixa update --resume`。
   「最新です」と出ても、印があるうちは更新が済んでいない。
-- `update.new-keys`（`notice`）→ 新しい項目を人に伝える。`devRestartNeeded: true` → 「dev を起動し直してください」と伝える（勝手に止めない）。
+- `update.new-keys`（`notice`）→ 新しい項目を人に伝える。`devRestartNeeded: true` → 「ixa を起動し直してください（Ctrl+C で止めて `pnpm ixa start`）」と伝える（勝手に止めない）。
+  次の `start` は版が変わったのを見て画面を組み立て直す。
 - 変更点は `releaseNotes` の URL。

@@ -5,6 +5,7 @@ import { doctorCommand } from './commands/doctor.js'
 import { infraCommand } from './commands/infra.js'
 import { mcpCommand } from './commands/mcp.js'
 import { setupCommand } from './commands/setup.js'
+import { startCommand } from './commands/start.js'
 import { updateCommand } from './commands/update.js'
 import { REPO_ROOT, paths } from './lib/repo.js'
 import { createOutput } from './printer.js'
@@ -29,6 +30,8 @@ const main = async (): Promise<number> => {
       return doctorCommand(system, repo, out)
     case 'setup':
       return setupCommand(system, repo, out, options)
+    case 'start':
+      return startCommand(system, repo, out, options)
     case 'update':
       return updateCommand(system, repo, out, options)
     case 'mcp':

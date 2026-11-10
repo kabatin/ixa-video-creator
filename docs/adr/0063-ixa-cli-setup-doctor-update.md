@@ -123,3 +123,8 @@ Codex は `[mcp_servers.ixa]` の節で鍵は `env_vars` の名前だけ）を�
 - 手元の AI サーバー（vpipe など）自体の導入・更新は扱わない（別のリポジトリ）。doctor は届くかを見るだけ。
 - update は dev を起動し直さない（動いている作業を止めないため。案内だけ）。
 - web の 3000 は固定なので、同じ Mac で 2 つの clone の dev は同時に動かせない（doctor が ! で知らせる）。
+
+## 追記（2026-11-10）: 写す `.env.example` は最小にした（ADR-0068）
+
+setup が写す `.env.example` は、最初に要る 14 項目だけにした。全部の説明は `.env.full.example`。
+update・doctor は今までどおり `.env.example` と比べる。使う人の起動は `pnpm ixa start`（同じ ADR）。

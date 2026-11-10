@@ -14,7 +14,7 @@ export const ROOT_PACKAGE_NAME = 'ixa-video-creator'
 /** 公開しているリポジトリ（リリースノートの案内に使う）。 */
 export const RELEASES_URL = 'https://github.com/kabatin/ixa-video-creator/releases'
 
-/** web の待ち受けポート（apps/web/package.json の dev スクリプトが持つ）。 */
+/** web の待ち受けポート（apps/web/package.json の dev・serve スクリプトが持つ）。 */
 export const WEB_PORT = 3000
 
 /** 画面で「アクセス用の鍵」を発行する場所。 */
@@ -25,6 +25,8 @@ export const paths = (root: string) => ({
   env: path.join(root, '.env'),
   envExample: path.join(root, '.env.example'),
   webEnvLocal: path.join(root, 'apps', 'web', '.env.local'),
+  /** `pnpm ixa start` の画面の組み立ての記録（ADR-0068）。組み立ての出力先 `.next-start` の中に置く。 */
+  webBuildRecord: path.join(root, 'apps', 'web', '.next-start', 'ixa-build.json'),
   rootPackage: path.join(root, 'package.json'),
   compose: path.join(root, 'infra', 'docker-compose.yml'),
   audioDir: path.join(root, 'apps', 'audio'),

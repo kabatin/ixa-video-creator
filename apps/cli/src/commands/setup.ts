@@ -29,7 +29,7 @@ import { finalDoctor } from './doctor.js'
  */
 
 export const nextSteps = (apiPort: number): readonly string[] => [
-  `pnpm dev を起動して http://localhost:${String(WEB_PORT)} を開く（API は :${String(apiPort)}）`,
+  `pnpm ixa start で起動して http://localhost:${String(WEB_PORT)} を開く（API は :${String(apiPort)}。初回は画面の組み立てに数分かかることがある）`,
   'Claude Code / Codex から使うなら: pnpm ixa mcp --claude（または --codex）',
 ]
 

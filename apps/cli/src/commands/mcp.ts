@@ -23,7 +23,7 @@ import type { StepResult } from '../types.js'
 export const tokenHint = (): StepResult => ({
   id: 'mcp.token',
   status: 'needs_human',
-  message: `アクセス用の鍵（IXA_API_TOKEN）は制作者が画面で発行します: http://localhost:${String(WEB_PORT)}${ACCESS_KEYS_PATH}（pnpm dev が動いているとき）`,
+  message: `アクセス用の鍵（IXA_API_TOKEN）は制作者が画面で発行します: http://localhost:${String(WEB_PORT)}${ACCESS_KEYS_PATH}（ixa が動いているとき。pnpm ixa start）`,
   fix: {
     hint: '発行した鍵はシェルの環境に置く（例 ~/.zshrc に export IXA_API_TOKEN=...）。設定ファイルには書かない。エージェントは DB に直接作らない',
     needsHuman: true,
