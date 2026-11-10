@@ -70,6 +70,29 @@ describe.skipIf(url === undefined)('ProjectRepository の種類と見本の印�
     })
   })
 
+  /** 見本の印は、ワークスペースの生きている作品で 1 つだけ（部分一意索引）。消した後と、別のワークスペースは入れられる。 */
+  it('同じワークスペースに同じ印の生きている作品は 2 つ作れない', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const repo = createProjectRepository(tx)
+      const workspaceId = await newWorkspace(tx)
+      const first = await repo.create(inputFor(workspaceId), { demoKey: 'ixa-demo-v1' })
+      await expect(
+        tx.transaction(async (inner) => {
+          await createProjectRepository(inner).create(inputFor(workspaceId), { demoKey: 'ixa-demo-v1' })
+        }),
+      ).rejects.toThrow()
+
+      expect((await repo.create(inputFor(await newWorkspace(tx)), { demoKey: 'ixa-demo-v1' })).demoKey).toBe('ixa-demo-v1')
+      // 印の無い作品は、いくつあってもよい。
+      await repo.create(inputFor(workspaceId))
+      await repo.create(inputFor(workspaceId))
+
+      await repo.softDelete(first.id)
+      const again = await repo.create(inputFor(workspaceId), { demoKey: 'ixa-demo-v1' })
+      expect((await repo.findByDemoKey(workspaceId, 'ixa-demo-v1'))?.id).toBe(again.id)
+    })
+  })
+
   it('壊れた見本の印は書かない', async () => {
     await inRolledBackTransaction(async (tx) => {
       const repo = createProjectRepository(tx)

@@ -1,4 +1,5 @@
-import { boolean, doublePrecision, index, integer, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
+import { boolean, doublePrecision, index, integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core'
 import type { AspectRatio, Fps, MasteringMode, ProjectKind, ProjectStatus, Resolution } from '@ixa/domain'
 import {
   AspectRatio as AspectRatioSchema,
@@ -59,5 +60,11 @@ export const projects = pgTable(
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
   },
-  (t) => [index('projects_workspace_id_idx').on(t.workspaceId)],
+  (t) => [
+    index('projects_workspace_id_idx').on(t.workspaceId),
+    /** 見本の印は、ワークスペースの生きている作品で 1 つだけ（同時に入れても見本が 2 つにならない）。 */
+    uniqueIndex('projects_workspace_demo_key_live_uidx')
+      .on(t.workspaceId, t.demoKey)
+      .where(sql`${t.deletedAt} IS NULL AND ${t.demoKey} IS NOT NULL`),
+  ],
 )

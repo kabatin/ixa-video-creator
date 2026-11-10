@@ -29,7 +29,7 @@ export type CreateProjectOptions = {
 export type ProjectRepository = {
   findById(id: ProjectId): Promise<Project | null>
   findByWorkspace(workspaceId: WorkspaceId): Promise<Project[]>
-  /** 見本の印の付いた、消していない作品。無ければ null。複数あれば先に作った方。 */
+  /** 見本の印の付いた、消していない作品。無ければ null（生きている作品で印は 1 つだけ。部分一意索引が守る）。 */
   findByDemoKey(workspaceId: WorkspaceId, demoKey: ProjectDemoKey): Promise<Project | null>
   create(input: CreateProjectInput, options?: CreateProjectOptions): Promise<Project>
   update(id: ProjectId, patch: UpdateProjectPatch): Promise<Project>
@@ -88,7 +88,6 @@ export const createProjectRepository = (db: DbExecutor): ProjectRepository => ({
       .select()
       .from(projects)
       .where(and(eq(projects.workspaceId, workspaceId), eq(projects.demoKey, key), isNull(projects.deletedAt)))
-      .orderBy(asc(projects.id))
       .limit(1)
     const row = rows[0]
     return row ? projectRowToDomain(row) : null

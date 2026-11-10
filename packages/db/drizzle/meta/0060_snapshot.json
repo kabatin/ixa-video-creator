@@ -1,5 +1,5 @@
 {
-  "id": "899149d4-1540-4195-af3f-ea6381bbdc1d",
+  "id": "fe0409ae-9f3f-4bc8-ade4-d58fa63126af",
   "prevId": "29266c98-714c-485c-922b-ffc28fa6ded2",
   "version": "7",
   "dialect": "postgresql",
@@ -2315,6 +2315,28 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "projects_workspace_demo_key_live_uidx": {
+          "name": "projects_workspace_demo_key_live_uidx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "demo_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"projects\".\"deleted_at\" IS NULL AND \"projects\".\"demo_key\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
