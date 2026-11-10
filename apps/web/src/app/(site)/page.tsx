@@ -1,11 +1,12 @@
-import type { Project, ProjectId, WorkspaceId } from '@ixa/domain'
+import type { ProjectId, WorkspaceId } from '@ixa/domain'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorPanel } from '@/components/error-panel'
 import { PageHeader } from '@/components/page-header'
 import { PosterRenewalOnRefresh } from '@/components/poster-renewal-on-refresh'
-import { ProjectList } from '@/components/project-list'
+import { ProjectBrowser } from '@/components/project-browser'
 import { ProjectListActions } from '@/components/project-list-actions'
 import { resolveApiBaseUrl, type ApiClient } from '@/lib/api-client'
+import type { WireProjectListItem } from '@/lib/api-schemas'
 import { describeError } from '@/lib/api-error'
 import { createServerApiClient, redirectIfUnauthenticated } from '@/lib/server-api-client'
 import { pickProjectCover, type PosterView } from '@/lib/shot-posters'
@@ -16,7 +17,7 @@ import { LinkButton } from '@/components/ui/button'
 export const dynamic = 'force-dynamic'
 
 type LoadResult =
-  | { readonly ok: true; readonly projects: readonly Project[] }
+  | { readonly ok: true; readonly projects: readonly WireProjectListItem[] }
   | { readonly ok: false; readonly message: string }
 
 /** API 障害でページを落とさない。失敗は必ず表示可能な値へ畳む。 */
@@ -35,7 +36,7 @@ const loadProjects = async (api: ApiClient, workspaceId: WorkspaceId): Promise<L
  */
 const loadCovers = async (
   api: ApiClient,
-  projects: readonly Project[],
+  projects: readonly WireProjectListItem[],
 ): Promise<ReadonlyMap<ProjectId, PosterView>> => {
   const entries = await Promise.all(
     projects.map(async (project): Promise<readonly [ProjectId, PosterView]> => {
@@ -51,6 +52,13 @@ const loadCovers = async (
   )
   return new Map(entries)
 }
+
+/** 作品が 1 件も無いときの補足。何をする道具かを 3 行で（作品の作り方の流れ）。 */
+const FIRST_STEPS: readonly string[] = Object.freeze([
+  '曲やナレーションに合わせて Shot を切ります',
+  'Shot ごとに絵と動画を AI で作り、良い Take を選びます',
+  'つないで 1 本の動画に書き出します',
+])
 
 const NewProjectLink = () => (
   <LinkButton href={NEW_PROJECT_HREF} tone="primary">
@@ -100,13 +108,14 @@ const ProjectsPage = async () => {
           message="プロジェクトがありません"
           actionHref={NEW_PROJECT_HREF}
           actionLabel="最初のプロジェクトを作成"
+          hint={FIRST_STEPS}
         />
       ) : (
-        // 右上の「…」と右クリックで複製・削除（制作者 2026-10-04）。
+        // 右下の「…」と右クリックで複製・削除・素材置き場にする（制作者 2026-10-04）。検索・並べ方・素材置き場の畳みは ProjectBrowser。
         <ProjectListActions>
           {/* 表紙の URL は 5 分で切れる。読めなくなったらページを描き直して新しい URL をもらう。 */}
           <PosterRenewalOnRefresh issuedAtMs={coversIssuedAtMs}>
-            <ProjectList projects={result.projects} covers={covers} />
+            <ProjectBrowser projects={result.projects} covers={covers} />
           </PosterRenewalOnRefresh>
         </ProjectListActions>
       )}

@@ -1,6 +1,6 @@
 'use client'
 
-import type { ProjectId } from '@ixa/domain'
+import type { ProjectId, ProjectKind } from '@ixa/domain'
 import { useRouter } from 'next/navigation'
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
 import { ProjectDuplicateForm } from '@/components/project-duplicate-form'
@@ -19,14 +19,22 @@ import { workbenchHref } from '@/lib/workbench-url'
  * 出来るといい」）。カードの「…」と右クリックで同じメニューを出す。**カードを押したときの行き先（ワークベンチ）は 1 つのまま。**
  *
  * メニュー・確認はワークベンチの右クリックと同じ部品（`ContextMenuHost`）。複製の画面はワークベンチと同じ `ProjectDuplicateForm`。
+ *
+ * 素材置き場（種類 `library`）にする・作品に戻すもここ。素材置き場は一覧の下に畳む。戻すときはミュージックビデオにし、
+ * ほかの種類は作品の設定で選び直す（知らせでそう言う）。
  */
 
 export type ProjectListActionsApi = {
   readonly deleteProject: (projectId: ProjectId) => Promise<void>
+  /** 種類を変える（素材置き場にする・作品に戻す）。 */
+  readonly setProjectKind: (projectId: ProjectId, kind: ProjectKind) => Promise<void>
 } & ProjectDuplicateApi
 
 /** カードが知っていればよいこと。 */
-export type ProjectCardTarget = { readonly id: ProjectId; readonly name: string }
+export type ProjectCardTarget = { readonly id: ProjectId; readonly name: string; readonly kind: ProjectKind }
+
+/** 素材置き場から戻すときの種類。ほかの種類は作品の設定で選び直す。 */
+const KIND_WHEN_BACK_TO_WORK: ProjectKind = 'mv'
 
 type Actions = {
   readonly openMenu: (project: ProjectCardTarget, at: { readonly x: number; readonly y: number }, origin: HTMLElement) => void
@@ -38,6 +46,9 @@ const defaultApi = (): ProjectListActionsApi => {
   const base = resolveApiBaseUrl()
   return {
     deleteProject: (projectId) => createLibraryClient(base).deleteProject(projectId),
+    setProjectKind: async (projectId, kind) => {
+      await createLibraryClient(base).updateProject(projectId, { kind })
+    },
     ...createProjectDuplicateApi(createRequester(base)),
   }
 }
@@ -66,6 +77,29 @@ const Inner = ({ api, children }: { readonly api: ProjectListActionsApi; readonl
                 setDuplicating(project)
               },
             },
+            project.kind === 'library'
+              ? {
+                  kind: 'item',
+                  id: 'to-work',
+                  label: '作品に戻す',
+                  disabledReason: null,
+                  run: async () => {
+                    await api.setProjectKind(project.id, KIND_WHEN_BACK_TO_WORK)
+                    setNotice(`「${project.name}」を作品に戻しました。種類は作品の設定で選び直せます`)
+                    router.refresh()
+                  },
+                }
+              : {
+                  kind: 'item',
+                  id: 'to-library',
+                  label: '素材置き場にする',
+                  disabledReason: null,
+                  run: async () => {
+                    await api.setProjectKind(project.id, 'library')
+                    setNotice(`「${project.name}」を素材置き場にしました`)
+                    router.refresh()
+                  },
+                },
             { kind: 'separator' },
             {
               kind: 'item',

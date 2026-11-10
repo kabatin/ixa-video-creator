@@ -15,6 +15,7 @@ import {
   WireGenerateResult,
   WireProject,
   WireProjectList,
+  type WireProjectListItem,
   WireShot,
   WireShotList,
   WireMediaInfo,
@@ -100,7 +101,8 @@ export const sameHostAsPage = (configured: string, pageHostname: string): string
 }
 
 export type ProjectApi = {
-  listProjects: (workspaceId: string) => Promise<Project[]>
+  /** 作品一覧。行ごとに進み具合（`activity`）が付く。 */
+  listProjects: (workspaceId: string) => Promise<WireProjectListItem[]>
   getProject: (id: string) => Promise<Project | null>
   createProject: (input: CreateProjectInput) => Promise<Project>
   listShots: (projectId: ProjectId) => Promise<Shot[]>
@@ -202,7 +204,7 @@ export const createApiClient = (
   const requester = createRequester(baseUrl, options)
 
   const projectApi: ProjectApi = {
-    listProjects: async (workspaceId: string): Promise<Project[]> => {
+    listProjects: async (workspaceId: string): Promise<WireProjectListItem[]> => {
       const query = new URLSearchParams({ workspaceId })
       return requester.get(`/projects?${query.toString()}`, WireProjectList)
     },

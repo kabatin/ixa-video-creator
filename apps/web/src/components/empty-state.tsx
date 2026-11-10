@@ -63,8 +63,9 @@ export type EmptyStateProps = {
   readonly actionLabel: string
   /**
    * 推奨の作り方が複数あるときの補足。**「無い」と混ざる言葉を書かないこと。**
+   * 行を並べて渡すと、1 行ずつ順に並べる（手順の説明など）。
    */
-  readonly hint?: string
+  readonly hint?: string | readonly string[]
   /** 二番目の入口。推奨ではないがやりたい人向けの経路。 */
   readonly secondaryHref?: string
   readonly secondaryLabel?: string
@@ -89,7 +90,17 @@ export const EmptyState = ({
     className="rounded-lg border border-dashed border-line-strong bg-surface p-12 text-center"
   >
     <p className="text-sm text-muted">{message}</p>
-    {hint !== undefined && <p className="mt-2 text-sm text-muted">{hint}</p>}
+    {typeof hint === 'string' ? (
+      <p className="mt-2 text-sm text-muted">{hint}</p>
+    ) : (
+      hint !== undefined && (
+        <ol className="mt-2 space-y-1 text-sm text-muted">
+          {hint.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ol>
+      )
+    )}
     <div className="mt-4">
       <LinkButton href={actionHref} tone="primary">
         {actionLabel}

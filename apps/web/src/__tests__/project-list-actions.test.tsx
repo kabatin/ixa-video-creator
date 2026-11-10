@@ -1,4 +1,4 @@
-import { ProjectId, newId } from '@ixa/domain'
+import { ProjectId, newId, type ProjectKind } from '@ixa/domain'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -12,18 +12,19 @@ import { ProjectCardFrame, ProjectListActions, type ProjectListActionsApi } from
 const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => router }))
 
-const PROJECT = { id: newId(ProjectId), name: '進め！戦子ちゃん！' }
+const PROJECT = { id: newId(ProjectId), name: '進め！戦子ちゃん！', kind: 'short' as ProjectKind }
 
 const fakeApi = (): ProjectListActionsApi => ({
   deleteProject: vi.fn(() => Promise.resolve()),
+  setProjectKind: vi.fn(() => Promise.resolve()),
   duplicateProject: vi.fn(),
 })
 
-const show = (api: ProjectListActionsApi = fakeApi()) => {
+const show = (api: ProjectListActionsApi = fakeApi(), project: typeof PROJECT = PROJECT) => {
   render(
     <ProjectListActions api={api}>
       <ul>
-        <ProjectCardFrame project={PROJECT}>
+        <ProjectCardFrame project={project}>
           <a href="/projects/x">進め！戦子ちゃん！</a>
         </ProjectCardFrame>
       </ul>
@@ -38,13 +39,51 @@ beforeEach(() => {
 })
 
 describe('作品一覧の操作', () => {
-  it('「…」で「複製…」「削除…」のメニューを出す', async () => {
+  it('「…」で「複製…」「素材置き場にする」「削除…」のメニューを出す', async () => {
     show()
 
     await userEvent.click(screen.getByRole('button', { name: '進め！戦子ちゃん！ の操作' }))
 
     const menu = screen.getByRole('menu', { name: '進め！戦子ちゃん！ の操作' })
-    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['複製…', '削除…'])
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      '複製…',
+      '素材置き場にする',
+      '削除…',
+    ])
+  })
+
+  it('「素材置き場にする」で種類を素材置き場にし、一覧を読み直して知らせる', async () => {
+    const api = show()
+
+    await userEvent.click(screen.getByRole('button', { name: '進め！戦子ちゃん！ の操作' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: '素材置き場にする' }))
+
+    await waitFor(() => {
+      expect(api.setProjectKind).toHaveBeenCalledWith(PROJECT.id, 'library')
+    })
+    expect(router.refresh).toHaveBeenCalled()
+    expect(await screen.findByText('「進め！戦子ちゃん！」を素材置き場にしました')).toBeInTheDocument()
+  })
+
+  it('素材置き場には「作品に戻す」を出し、ミュージックビデオに戻して、種類は設定で選び直せると知らせる', async () => {
+    const api = show(fakeApi(), { ...PROJECT, kind: 'library' })
+
+    await userEvent.click(screen.getByRole('button', { name: '進め！戦子ちゃん！ の操作' }))
+    const menu = screen.getByRole('menu', { name: '進め！戦子ちゃん！ の操作' })
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      '複製…',
+      '作品に戻す',
+      '削除…',
+    ])
+    await userEvent.click(within(menu).getByRole('menuitem', { name: '作品に戻す' }))
+
+    await waitFor(() => {
+      expect(api.setProjectKind).toHaveBeenCalledWith(PROJECT.id, 'mv')
+    })
+    expect(router.refresh).toHaveBeenCalled()
+    expect(
+      await screen.findByText('「進め！戦子ちゃん！」を作品に戻しました。種類は作品の設定で選び直せます'),
+    ).toBeInTheDocument()
   })
 
   it('カードを右クリックしても同じメニューが出る', () => {

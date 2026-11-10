@@ -22,6 +22,12 @@ const projectJson = {
   updatedAt: '2026-09-16T01:02:03.000Z',
 }
 
+/** 一覧の行（`GET /projects`）。作品の欄に進み具合が付く。 */
+const listItemJson = {
+  ...projectJson,
+  activity: { lastActivityAt: '2026-11-10T05:02:00.000Z', shotCount: 27, adoptedTakeCount: 20, hasRender: true },
+}
+
 const requestBodyOf = (init: RequestInit | undefined): string =>
   typeof init?.body === 'string' ? init.body : ''
 
@@ -44,7 +50,7 @@ afterEach(() => {
 
 describe('createApiClient', () => {
   it('listProjects は封筒を剥がして Project をパースする', async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [projectJson] }))
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [listItemJson] }))
 
     const projects = await createApiClient(BASE_URL).listProjects(WORKSPACE_ID)
 
@@ -56,6 +62,28 @@ describe('createApiClient', () => {
 
     const [url] = fetchMock.mock.calls[0] ?? []
     expect(url).toBe(`${BASE_URL}/projects?workspaceId=${WORKSPACE_ID}`)
+  })
+
+  it('listProjects は行ごとの進み具合も読み、日時を Date に戻す', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, data: [listItemJson] }))
+
+    const [project] = await createApiClient(BASE_URL).listProjects(WORKSPACE_ID)
+
+    expect(project?.activity).toEqual({
+      lastActivityAt: new Date('2026-11-10T05:02:00.000Z'),
+      shotCount: 27,
+      adoptedTakeCount: 20,
+      hasRender: true,
+    })
+  })
+
+  it('listProjects は進み具合が壊れていたら読まない（採用が Shot の数を超える・欠けている）', async () => {
+    const broken = { ...listItemJson, activity: { ...listItemJson.activity, adoptedTakeCount: 28 } }
+    fetchMock.mockResolvedValueOnce(jsonResponse({ success: true, data: [broken] }))
+    await expect(createApiClient(BASE_URL).listProjects(WORKSPACE_ID)).rejects.toThrow()
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ success: true, data: [projectJson] }))
+    await expect(createApiClient(BASE_URL).listProjects(WORKSPACE_ID)).rejects.toThrow()
   })
 
   it('createProject は POST してパース済み Project を返す', async () => {

@@ -38,14 +38,16 @@ import { VOICE_TOOL_LABELS } from '@/lib/voice-defaults'
 
 export type LibraryImportSourceApi = Pick<
   ApiClient,
-  | 'listProjects'
   | 'listCharacters'
   | 'listLocations'
   | 'listBrandAssets'
   | 'listVoices'
   | 'listMusicTracks'
   | 'listSfxJobs'
->
+> & {
+  /** 取り込み元の候補。作品の欄だけを読む（一覧の進み具合は使わない）。 */
+  readonly listProjects: (workspaceId: string) => Promise<readonly Project[]>
+}
 
 type Choice = { readonly key: string; readonly label: string; readonly badge?: string }
 

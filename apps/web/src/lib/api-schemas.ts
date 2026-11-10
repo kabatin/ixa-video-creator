@@ -4,6 +4,7 @@ import {
   GenerationJobId,
   ModelId,
   Project,
+  ProjectActivity,
   Shot,
   ShotId,
   Take,
@@ -23,7 +24,16 @@ export const WireProject = Project.extend({
 })
 export type WireProject = z.infer<typeof WireProject>
 
-export const WireProjectList = z.array(WireProject)
+/**
+ * 一覧の行の進み具合。日時だけ文字列から戻し、残りはドメインの規則（採用は Shot の数を超えない）で確かめる。
+ */
+export const WireProjectActivity = z.object({ lastActivityAt: z.coerce.date() }).passthrough().pipe(ProjectActivity)
+
+/** 作品一覧の 1 行（`GET /projects`）。作品の欄と、進み具合（`activity`）。 */
+export const WireProjectListItem = WireProject.extend({ activity: WireProjectActivity })
+export type WireProjectListItem = z.infer<typeof WireProjectListItem>
+
+export const WireProjectList = z.array(WireProjectListItem)
 
 export const WireShot = Shot.extend({
   lockedAt: z.coerce.date().nullable(),

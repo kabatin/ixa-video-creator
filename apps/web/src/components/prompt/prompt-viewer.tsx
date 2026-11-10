@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { WorkbenchDialog } from '@/components/workbench/workbench-dialog'
 import { copyText } from '@/lib/copy-text'
+import { formatDateTime } from '@/lib/format-date'
 import { promptViewCopyText, type PromptReuse, type PromptView } from '@/lib/prompt-view'
 
 /**
@@ -11,15 +12,6 @@ import { promptViewCopyText, type PromptReuse, type PromptView } from '@/lib/pro
  * 開くのは `PromptButton`（どこでも同じボタン）と、素材ツリーの右クリック「プロンプトを見る」。
  * 殻はワークベンチのダイアログ（medium）。コピーはすべて `copyText` を通す。
  */
-
-const dateFormatter = new Intl.DateTimeFormat('ja-JP', {
-  timeZone: 'Asia/Tokyo',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-})
 
 const COPIED = 'コピーしました'
 
@@ -59,7 +51,7 @@ const PromptViewerBody = ({
 
   const meta = [
     view.tool === null ? null : `使った AI: ${view.tool}`,
-    view.createdAt === null ? null : `作った日時: ${dateFormatter.format(view.createdAt)}`,
+    view.createdAt === null ? null : `作った日時: ${formatDateTime(view.createdAt)}`,
   ].filter((part): part is string => part !== null)
   const reuse = view.reuse
 

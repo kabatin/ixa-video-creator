@@ -1,9 +1,10 @@
-import type { Project, ProjectId } from '@ixa/domain'
+import type { ProjectId } from '@ixa/domain'
 import { ProjectCard } from '@/components/project-card'
+import type { WireProjectListItem } from '@/lib/api-schemas'
 import type { PosterView } from '@/lib/shot-posters'
 
 export type ProjectListProps = {
-  readonly projects: readonly Project[]
+  readonly projects: readonly WireProjectListItem[]
   /**
    * カードの絵。**渡さなければ絵の枠ごと出ない**（繋がっていない）。
    * 渡して `url` が null なら「絵が無い」で、理由が付く。混ぜない（L-015）。

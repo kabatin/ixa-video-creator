@@ -1,5 +1,6 @@
 import type { EditBatchId, EditBatchKind, ShotId } from '@ixa/domain'
 import type { WireEditBatch, WireUndoResult } from '@/lib/edit-history-api'
+import { formatDateTime } from '@/lib/format-date'
 
 /**
  * 一括で変えた操作の履歴を読める形に写す（P64-1）。**React を含まない純粋関数だけ。**
@@ -34,19 +35,10 @@ const KIND_LABELS: Readonly<Record<EditBatchKind, string>> = Object.freeze({
 
 export const editBatchKindLabel = (kind: EditBatchKind): string => KIND_LABELS[kind]
 
-const dateFormatter = new Intl.DateTimeFormat('ja-JP', {
-  timeZone: 'Asia/Tokyo',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-})
-
 /** ISO 文字列を読める日時にする。読めない値はそのまま出す（握り潰さない）。 */
 export const formatEditBatchTime = (iso: string): string => {
   const at = new Date(iso)
-  return Number.isNaN(at.getTime()) ? iso : dateFormatter.format(at)
+  return Number.isNaN(at.getTime()) ? iso : formatDateTime(at)
 }
 
 export type EditHistoryRow = {

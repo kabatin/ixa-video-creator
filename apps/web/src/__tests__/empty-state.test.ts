@@ -1,5 +1,7 @@
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { describeViewState, type ViewStateKind } from '@/components/empty-state'
+import { EmptyState, describeViewState, type ViewStateKind } from '@/components/empty-state'
 
 const KINDS: readonly ViewStateKind[] = ['missing', 'empty', 'unreadable', 'loading']
 
@@ -42,5 +44,23 @@ describe('画面の状態', () => {
   it('返す値を書き換えられない', () => {
     const state = describeViewState('empty', 'Shot')
     expect(Object.isFrozen(state)).toBe(true)
+  })
+})
+
+describe('EmptyState の補足', () => {
+  const markup = (hint: string | readonly string[]) =>
+    renderToStaticMarkup(
+      createElement(EmptyState, { message: 'プロジェクトがありません', actionHref: '/new', actionLabel: '作成', hint }),
+    )
+
+  it('1 行の補足はそのまま 1 段で出す', () => {
+    expect(markup('まだ 1 件もありません。').match(/<p /g)).toHaveLength(2)
+  })
+
+  it('行を並べて渡すと、1 行ずつ別の段で出す（順番どおり）', () => {
+    const html = markup(['一つ目の行', '二つ目の行', '三つ目の行'])
+    expect(html.match(/<li/g)).toHaveLength(3)
+    expect(html.indexOf('一つ目の行')).toBeLessThan(html.indexOf('二つ目の行'))
+    expect(html.indexOf('二つ目の行')).toBeLessThan(html.indexOf('三つ目の行'))
   })
 })
