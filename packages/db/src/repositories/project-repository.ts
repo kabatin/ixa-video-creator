@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import type {
-  CreateProjectInput, Project, ProjectDemoKey, ProjectId, UpdateProjectPatch, WorkspaceId,
+  CreateProjectInput, Project, ProjectActivity, ProjectDemoKey, ProjectId, UpdateProjectPatch, WorkspaceId,
 } from '@ixa/domain'
 import {
   CreateProjectInput as CreateProjectInputSchema,
@@ -13,6 +13,7 @@ import {
 import type { DbExecutor } from '../client.js'
 import { DbNotFoundError } from '../errors.js'
 import { projects } from '../schema/workspace.js'
+import { selectProjectRowsWithActivity } from './project-activity-read.js'
 
 /** drizzle の row 型。パッケージ外へは出さない。 */
 export type ProjectRow = typeof projects.$inferSelect
@@ -26,9 +27,20 @@ export type CreateProjectOptions = {
   readonly demoKey?: ProjectDemoKey
 }
 
+/** 作品一覧の 1 行。作品そのものと、進み具合（数えた値。保存しない）。 */
+export type ProjectWithActivity = {
+  readonly project: Project
+  readonly activity: ProjectActivity
+}
+
 export type ProjectRepository = {
   findById(id: ProjectId): Promise<Project | null>
   findByWorkspace(workspaceId: WorkspaceId): Promise<Project[]>
+  /**
+   * 消していない作品と、それぞれの進み具合（作品一覧）。並びは `findByWorkspace` と同じ。
+   * **作品が何件でも問い合わせは 1 回**（`project-activity-read.ts`）。
+   */
+  findByWorkspaceWithActivity(workspaceId: WorkspaceId): Promise<ProjectWithActivity[]>
   /** 見本の印の付いた、消していない作品。無ければ null（生きている作品で印は 1 つだけ。部分一意索引が守る）。 */
   findByDemoKey(workspaceId: WorkspaceId, demoKey: ProjectDemoKey): Promise<Project | null>
   create(input: CreateProjectInput, options?: CreateProjectOptions): Promise<Project>
@@ -80,6 +92,11 @@ export const createProjectRepository = (db: DbExecutor): ProjectRepository => ({
       .where(and(eq(projects.workspaceId, workspaceId), isNull(projects.deletedAt)))
       .orderBy(asc(projects.id))
     return rows.map(projectRowToDomain)
+  },
+
+  async findByWorkspaceWithActivity(workspaceId) {
+    const rows = await selectProjectRowsWithActivity(db, workspaceId)
+    return rows.map(({ row, activity }) => ({ project: projectRowToDomain(row), activity }))
   },
 
   async findByDemoKey(workspaceId, demoKey) {

@@ -137,6 +137,17 @@ type Project = {
 ID はすべて新しく振り、ファイル（MediaAsset）は写さず同じものを指す。項目どうしの依存（例: Take は Shot が要る）と
 写し方の規則は domain の `duplication-options.ts` / `duplication-copy.ts` が唯一の正で、画面と API が同じ判定を使う。
 
+**作品一覧の進み具合（`ProjectActivity`）**: 一覧の 1 行に添える値で、**保存しない**（引くたびに数える）。
+
+```ts
+type ProjectActivity = {
+  lastActivityAt: Date      // 作品の updatedAt・編集の記録（作った / 取り消した時刻）・Take・書き出しジョブのうち一番新しい時刻
+  shotCount: number         // 生きている Shot の数（論理削除した Shot は数えない）
+  adoptedTakeCount: number  // そのうち Take を採用している（selectedTakeId がある）Shot の数。shotCount を超えない
+  hasRender: boolean        // 書き出しジョブが 1 回でも succeeded になったか
+}
+```
+
 ---
 
 ## 4. MediaAsset（すべてのファイルの唯一の実体）

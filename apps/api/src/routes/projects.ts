@@ -3,6 +3,7 @@ import type {
   EditTransaction,
   MediaAssetRepository,
   ProjectRepository,
+  ProjectWithActivity,
   ShotRepository,
   TakeRepository,
   VoiceJobRepository,
@@ -53,6 +54,31 @@ export const toProjectResponse = (project: Project): ProjectResponse => ({
   updatedAt: project.updatedAt.toISOString(),
 })
 
+/**
+ * 一覧の行の進み具合（`ProjectActivity`）。日時は ISO8601 文字列。**一覧だけに付ける**（1 件・作成・直しの応答は変えない）。
+ */
+export const ProjectActivityResponse = z
+  .object({
+    lastActivityAt: z.string().datetime(),
+    shotCount: z.number().int().nonnegative(),
+    adoptedTakeCount: z.number().int().nonnegative(),
+    hasRender: z.boolean(),
+  })
+  .openapi('ProjectActivity')
+export type ProjectActivityResponse = z.infer<typeof ProjectActivityResponse>
+
+/** 一覧の 1 行。作品の欄はそのままに、進み具合を `activity` に入れ子で足す。 */
+export const ProjectListItemResponse = ProjectResponse.extend({ activity: ProjectActivityResponse }).openapi(
+  'ProjectListItem',
+)
+export type ProjectListItemResponse = z.infer<typeof ProjectListItemResponse>
+
+/** 一覧の 1 行を DTO へ写す（新しいオブジェクトを返す）。 */
+export const toProjectListItemResponse = ({ project, activity }: ProjectWithActivity): ProjectListItemResponse => ({
+  ...toProjectResponse(project),
+  activity: { ...activity, lastActivityAt: activity.lastActivityAt.toISOString() },
+})
+
 const CreateProjectBody = CreateProjectInputSchema.openapi('CreateProjectInput')
 const UpdateProjectBody = UpdateProjectPatchSchema.openapi('UpdateProjectPatch')
 
@@ -91,7 +117,7 @@ const listProjectsRoute = createRoute({
   summary: 'ワークスペース内のプロジェクト一覧',
   request: { query: ListProjectsQuery },
   responses: {
-    200: jsonContent('プロジェクト一覧', listResponse(ProjectResponse)),
+    200: jsonContent('プロジェクト一覧（行ごとに進み具合）', listResponse(ProjectListItemResponse)),
     422: errorContent('入力の検証に失敗した'),
     500: errorContent('サーバ内部エラー'),
   },
@@ -341,8 +367,8 @@ export const projectRoutes = ({
     })
     .openapi(listProjectsRoute, async (c) => {
       const { workspaceId } = c.req.valid('query')
-      const found = await projects.findByWorkspace(workspaceId)
-      return c.json(okList(found.map(toProjectResponse)), 200)
+      const found = await projects.findByWorkspaceWithActivity(workspaceId)
+      return c.json(okList(found.map(toProjectListItemResponse)), 200)
     })
     .openapi(getProjectRoute, async (c) => {
       const found = await projects.findById(c.req.valid('param').id)
