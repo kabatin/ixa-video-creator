@@ -2,10 +2,7 @@
 
 import { Fragment } from 'react'
 import { useWorkflow } from '@/components/workbench/workflow-context'
-import type { WorkflowStep } from '@/lib/workflow-steps'
-
-/** 段の番号。帯の幅を取らないよう丸数字にする。 */
-const NUMBERS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'] as const
+import { stepNumber, type WorkflowStep } from '@/lib/workflow-steps'
 
 /** 済み・途中・分からないの印。まだの段は何も付けない。 */
 const markOf = (step: WorkflowStep): string => {
@@ -50,19 +47,15 @@ export const WorkflowBar = () => {
             <button
               type="button"
               aria-current={isNext ? 'step' : undefined}
-              title={
-                isNext
-                  ? '次はここ'
-                  : step.state === 'skipped'
-                    ? '歌詞が無いので飛ばします（作品の方針で歌詞を入れると使えます）'
-                    : undefined
-              }
+              // 飛ばす理由は段ごとに違う（飛ばす規則の隣にある。`SKIP_REASONS`）。
+              title={isNext ? '次はここ' : (step.reason ?? undefined)}
               onClick={() => {
                 go(step.id)
               }}
               className={`h-6 shrink-0 whitespace-nowrap rounded px-2 tabular-nums focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus ${toneOf(step, isNext)}`}
             >
-              {`${NUMBERS[index] ?? ''} ${step.label}${markOf(step)}`}
+              {/* 番号は並んだ位置から（ナレーションから始める種類は段が減っても ①〜⑧ と続く）。 */}
+              {`${stepNumber(index)} ${step.label}${markOf(step)}`}
             </button>
           </Fragment>
         )

@@ -157,6 +157,8 @@ const WorkbenchShell = ({
   const setNotice = workbench.notify
   /** ドックの配置・前のタブが変わるたびに進む。メニューの作業モードの表示を追わせる。 */
   const [dockEpoch, setDockEpoch] = useState(0)
+  /** 開いたときに保存した配置を戻したか。戻したなら、作品の種類でタブを組み替えない。 */
+  const [layoutRestored, setLayoutRestored] = useState(false)
   const history = useEditHistory(workbench.projectId, workbench.serverEpoch)
   /** 「ファイルを取り込む…」でファイル選択を開く口。`FileIntake` が登録する。 */
   const fileOpener = useRef<(() => void) | null>(null)
@@ -203,8 +205,9 @@ const WorkbenchShell = ({
   useWorkbenchKeys({ undo })
 
   // 既定はタイムラインが前。曲を入れたとき・Shot がまだ無いときだけ聴きながら切るを前に出す。
+  // ナレーションから始める種類を既定の配置で開いたら、ナレーションを前に出す。
   // 狭い画面（縦一列）では全部が並んでいるので、開いた時点で飛ばさない。
-  useCutterFront(wide ? dockEpoch > 0 : true, !wide || query.bottom !== null)
+  useCutterFront(wide ? dockEpoch > 0 : true, !wide || query.bottom !== null, layoutRestored)
 
   // プロンプトビューアの「これを元に作る」は、文を入れた作成画面を開く。
   const openDialog = workbench.openDialog
@@ -254,8 +257,9 @@ const WorkbenchShell = ({
               <WorkbenchDock
                 projectId={workbench.projectId}
                 query={query}
-                onReady={(api) => {
+                onReady={(api, restored) => {
                   dock.current = api
+                  setLayoutRestored(restored)
                   const bump = (): void => {
                     setDockEpoch((epoch) => epoch + 1)
                   }

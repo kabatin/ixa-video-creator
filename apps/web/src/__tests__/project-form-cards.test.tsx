@@ -1,5 +1,5 @@
 import { WorkspaceId } from '@ixa/domain'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ProjectForm } from '@/components/project-form'
@@ -14,7 +14,12 @@ import { WORKSPACE_ID } from './fixtures'
  */
 
 const ai = vi.hoisted(() => ({ video: 'vpipe' }))
+const api = vi.hoisted(() => ({ createProject: vi.fn(() => Promise.resolve({ id: '01ARZ3NDEKTSV4RRFFQ69G5FAV' })) }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }))
+vi.mock('@/lib/api-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api-client')>()),
+  createApiClient: () => ({ createProject: api.createProject }),
+}))
 vi.mock('@/lib/models-api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/models-api')>()),
   createModelsApi: () => ({
@@ -73,5 +78,45 @@ describe('ProjectForm（新規作成）', () => {
   it('作成ボタンは共通の主ボタン', () => {
     show()
     expect(screen.getByRole('button', { name: 'プロジェクトを作成' }).className).toContain('bg-accent')
+  })
+})
+
+/** 何を作るか（作品の種類）。いちばん上で聞き、形をまだ選んでいなければ、その種類の既定の形にする。 */
+describe('ProjectForm の「何を作りますか」', () => {
+  it('5 つの種類を名前と一言で並べ、ミュージックビデオを選んでおく', () => {
+    show()
+    const group = screen.getByRole('group', { name: '何を作りますか' })
+    expect(within(group).getAllByRole('radio').map((radio) => radio.closest('label')?.textContent)).toEqual([
+      'ミュージックビデオ曲に合わせて切ります。横長',
+      'ショート動画曲に合わせて切ります。縦長',
+      '紙芝居ナレーションと絵で進めます',
+      'CM・予告ナレーションと文字で短く伝えます',
+      '素材置き場キャラクターや曲をためておき、他の作品へ取り込みます',
+    ])
+    expect(within(group).getByRole('radio', { name: /ミュージックビデオ/ })).toBeChecked()
+  })
+
+  it('ショート動画を選ぶと縦長になり、ミュージックビデオに戻すと横長に戻る', async () => {
+    show()
+    await userEvent.click(screen.getByRole('radio', { name: /^ショート動画/ }))
+    expect(screen.getByRole('radio', { name: /縦長 9:16/ })).toBeChecked()
+    expect(screen.getByRole('radio', { name: /FHD 縦/ })).toBeChecked()
+    await userEvent.click(screen.getByRole('radio', { name: /ミュージックビデオ/ }))
+    expect(screen.getByRole('radio', { name: /横長 16:9/ })).toBeChecked()
+  })
+
+  it('形を自分で選んだら、種類を変えても形は変わらない', async () => {
+    show()
+    await userEvent.click(screen.getByRole('radio', { name: /正方形 1:1/ }))
+    await userEvent.click(screen.getByRole('radio', { name: /^ショート動画/ }))
+    expect(screen.getByRole('radio', { name: /正方形 1:1/ })).toBeChecked()
+  })
+
+  it('選んだ種類で作る', async () => {
+    show()
+    await userEvent.type(screen.getByLabelText('プロジェクト名'), '夏の紙芝居')
+    await userEvent.click(screen.getByRole('radio', { name: /紙芝居/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'プロジェクトを作成' }))
+    expect(api.createProject).toHaveBeenCalledWith(expect.objectContaining({ name: '夏の紙芝居', kind: 'kamishibai' }))
   })
 })

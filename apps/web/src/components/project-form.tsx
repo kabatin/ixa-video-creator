@@ -8,14 +8,16 @@ import { describeError } from '@/lib/api-error'
 import {
   initialProjectFormValues,
   validateProjectForm,
-  withAspectRatio,
+  withChosenAspectRatio,
+  withChosenResolution,
+  withKind,
   type FieldErrors,
   type ProjectFormValues,
 } from '@/lib/project-form'
 import { workbenchHref } from '@/lib/workbench-url'
 import { TextField } from '@/components/form/text-field'
 import { FieldError } from '@/components/form/field-error'
-import { AspectRatioField, FpsField, ResolutionField } from '@/components/project-spec-fields'
+import { AspectRatioField, FpsField, ProjectKindField, ResolutionField } from '@/components/project-spec-fields'
 import { VideoAiFpsNote } from '@/components/project-video-ai-note'
 import { Button } from '@/components/ui/button'
 
@@ -66,6 +68,15 @@ export const ProjectForm = ({ workspaceId }: ProjectFormProps) => {
         void submit()
       }}
     >
+      {/* 何を作るか。形をまだ選んでいなければ、その種類の既定の形にする（選んだ形は上書きしない）。 */}
+      <ProjectKindField
+        value={values.kind}
+        disabled={submitting}
+        onChange={(kind) => {
+          setValues((current) => withKind(current, kind))
+        }}
+      />
+
       <TextField
         id="name"
         label="プロジェクト名"
@@ -83,7 +94,7 @@ export const ProjectForm = ({ workspaceId }: ProjectFormProps) => {
         disabled={submitting}
         error={errors.aspectRatio}
         onChange={(aspectRatio) => {
-          setValues((current) => withAspectRatio(current, aspectRatio))
+          setValues((current) => withChosenAspectRatio(current, aspectRatio))
         }}
       />
 
@@ -94,7 +105,7 @@ export const ProjectForm = ({ workspaceId }: ProjectFormProps) => {
           disabled={submitting}
           error={errors.resolutionKey}
           onChange={(resolutionKey) => {
-            setValues((current) => ({ ...current, resolutionKey }))
+            setValues((current) => withChosenResolution(current, resolutionKey))
           }}
         />
       )}

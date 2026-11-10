@@ -33,6 +33,7 @@ const values = (patch: Partial<ProjectSettingsValues> = {}): ProjectSettingsValu
 describe('initialProjectSettingsValues', () => {
   it('保存済みの値をそのまま文字列にする', () => {
     expect(initialProjectSettingsValues(project)).toEqual({
+      kind: 'mv',
       name: 'iXA CUP MUSIC VIDEO',
       aspectRatio: '16:9',
       resolutionKey: '1920x1080',
@@ -92,12 +93,13 @@ describe('resolveResolution', () => {
 })
 
 describe('validateProjectSettings', () => {
-  it('設定で直す 7 列を patch にする', () => {
+  it('設定で直す 8 列を patch にする', () => {
     const result = validateProjectSettings(values())
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.patch).toEqual({
+      kind: 'mv',
       name: 'iXA CUP MUSIC VIDEO',
       aspectRatio: '16:9',
       resolution: { width: 1920, height: 1080 },
@@ -170,6 +172,16 @@ describe('validateProjectSettings', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.errors.fps).toContain('24 / 25 / 30 / 60')
+  })
+
+  /** 種類を変えても形は変えない（新規作成と違い、作った後の形は制作者が決めたもの）。 */
+  it('種類を変えて送る。形と大きさはそのまま', () => {
+    const result = validateProjectSettings(values({ kind: 'kamishibai' }))
+    expect(result.ok && result.patch).toMatchObject({ kind: 'kamishibai', aspectRatio: '16:9', resolution: { width: 1920, height: 1080 } })
+  })
+
+  it('種類が候補外なら kind のエラーにする', () => {
+    expect(validateProjectSettings(values({ kind: 'anime' }))).toEqual({ ok: false, errors: { kind: '種類を選択してください。' } })
   })
 
   it('状態が候補外なら status のエラーにする', () => {

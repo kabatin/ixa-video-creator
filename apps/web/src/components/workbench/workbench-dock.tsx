@@ -116,7 +116,8 @@ export type WorkbenchDockProps = {
   readonly projectId: ProjectId
   /** URL で指定されたタブ。開いたときに一度だけ前に出す（§7.1）。 */
   readonly query: WorkbenchQuery
-  readonly onReady: (api: DockviewApi) => void
+  /** `layoutRestored` は保存した配置を戻したか（既定の配置で開いたなら false）。 */
+  readonly onReady: (api: DockviewApi, layoutRestored: boolean) => void
   /** 配置を戻した理由など。利用者に必ず知らせる。 */
   readonly onNotice: (message: string, level?: ConsoleLevel) => void
 }
@@ -128,12 +129,13 @@ export type WorkbenchDockProps = {
  * 黙って既定に戻すと、利用者は自分の配置がなぜ消えたのか分からない。
  */
 export const WorkbenchDock = ({ projectId, query, onReady, onNotice }: WorkbenchDockProps) => {
-  const ready = (event: DockviewReadyEvent): void => {
-    const api = event.api
+  /** 配置を置く。保存した配置（古い版から移したものも）を戻せたら true、既定の配置で開いたら false。 */
+  const placeLayout = (api: DockviewApi): boolean => {
     const stored = readStoredWorkbenchLayout(window.localStorage, projectId)
     if (stored.state === 'ready') {
       try {
         api.fromJSON(stored.layout)
+        return true
       } catch (error) {
         api.clear()
         addDefaultPanels(api)
@@ -144,29 +146,35 @@ export const WorkbenchDock = ({ projectId, query, onReady, onNotice }: Workbench
           }`,
           'warn',
         )
-      }
-    } else {
-      // v3 が無ければ v2 を移す（利用者が組んだ配置を黙って捨てない）。
-      const legacy = stored.state === 'missing' ? migrateLegacyLayout(api, window.localStorage, projectId) : null
-      if (legacy?.state === 'migrated') {
-        writeWorkbenchLayout(window.localStorage, projectId, api.toJSON())
-        const titles = (ids: readonly PanelId[]): string => ids.map((id) => `「${PANEL_SPECS[id].title}」`).join('')
-        const changes = [
-          ...(legacy.added.length > 0 ? [`${titles(legacy.added)}のタブを足しています。`] : []),
-          ...(legacy.moved.length > 0 ? [`${titles(legacy.moved)}を左の区画へ移しています。`] : []),
-        ]
-        if (changes.length > 0) onNotice(`配置を新しくしました。${changes.join('')}`)
-      } else {
-        addDefaultPanels(api)
-        sizeDefaultAreas(api, api.height)
-        if (stored.state === 'invalid') {
-          onNotice(`保存した配置が壊れているため初期配置で開きました: ${stored.reason}`, 'warn')
-        }
-        if (legacy?.state === 'unreadable') {
-          onNotice(`配置を新しくしました。前の配置は戻せなかったため初期配置で開いています: ${legacy.reason}`, 'warn')
-        }
+        return false
       }
     }
+    // v3 が無ければ v2 を移す（利用者が組んだ配置を黙って捨てない）。
+    const legacy = stored.state === 'missing' ? migrateLegacyLayout(api, window.localStorage, projectId) : null
+    if (legacy?.state === 'migrated') {
+      writeWorkbenchLayout(window.localStorage, projectId, api.toJSON())
+      const titles = (ids: readonly PanelId[]): string => ids.map((id) => `「${PANEL_SPECS[id].title}」`).join('')
+      const changes = [
+        ...(legacy.added.length > 0 ? [`${titles(legacy.added)}のタブを足しています。`] : []),
+        ...(legacy.moved.length > 0 ? [`${titles(legacy.moved)}を左の区画へ移しています。`] : []),
+      ]
+      if (changes.length > 0) onNotice(`配置を新しくしました。${changes.join('')}`)
+      return true
+    }
+    addDefaultPanels(api)
+    sizeDefaultAreas(api, api.height)
+    if (stored.state === 'invalid') {
+      onNotice(`保存した配置が壊れているため初期配置で開きました: ${stored.reason}`, 'warn')
+    }
+    if (legacy?.state === 'unreadable') {
+      onNotice(`配置を新しくしました。前の配置は戻せなかったため初期配置で開いています: ${legacy.reason}`, 'warn')
+    }
+    return false
+  }
+
+  const ready = (event: DockviewReadyEvent): void => {
+    const api = event.api
+    const restored = placeLayout(api)
 
     // 保存した配置はタブ名も持っている。パネルを改名しても古い名前が残るので当て直す。
     retitlePanels(api)
@@ -182,7 +190,7 @@ export const WorkbenchDock = ({ projectId, query, onReady, onNotice }: Workbench
     api.onDidLayoutChange(() => {
       writeWorkbenchLayout(window.localStorage, projectId, api.toJSON())
     })
-    onReady(api)
+    onReady(api, restored)
   }
 
   return (

@@ -1,5 +1,13 @@
-import type { AspectRatio, Resolution } from '@ixa/domain'
+import type { AspectRatio, ProjectKind, Resolution } from '@ixa/domain'
+import { projectKindDisplay, type ProjectKindDisplay } from '@/lib/project-kind-display'
 import { ASPECT_RATIOS, FPS_OPTIONS, resolutionPresetsFor } from '@/lib/resolution-presets'
+
+export type ProjectKindChoice = ProjectKindDisplay & { readonly value: ProjectKind }
+
+/** 何を作るか（作品の種類）の並び。曲から始めるもの → ナレーションから始めるもの → 素材置き場。 */
+export const PROJECT_KIND_CHOICES: readonly ProjectKindChoice[] = (
+  ['mv', 'short', 'kamishibai', 'cm', 'library'] as const satisfies readonly ProjectKind[]
+).map((value) => ({ value, ...projectKindDisplay(value) }))
 
 /**
  * 新規作成・設定で選ぶ「形・大きさ・fps」の言葉と図の材料（制作者 2026-10-03「アスペクト比は数字「16:9」を見ても、

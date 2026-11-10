@@ -1,6 +1,7 @@
 import { ProjectKind } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import { projectKindDisplay, projectKindHint, projectKindLabel } from '@/lib/project-kind-display'
+import { PROJECT_KIND_CHOICES } from '@/lib/project-spec-choices'
 
 describe('作品の種類の表示', () => {
   it('どの種類にも名前と一言がある（種類を足したらここも足す）', () => {
@@ -8,6 +9,11 @@ describe('作品の種類の表示', () => {
       expect(projectKindLabel(kind).length).toBeGreaterThan(0)
       expect(projectKindHint(kind).length).toBeGreaterThan(0)
     }
+  })
+
+  it('新規作成の選択肢は全部の種類を 1 回ずつ並べる', () => {
+    expect(PROJECT_KIND_CHOICES.map((choice) => choice.value)).toEqual(['mv', 'short', 'kamishibai', 'cm', 'library'])
+    expect([...PROJECT_KIND_CHOICES.map((choice) => choice.value)].sort()).toEqual([...ProjectKind.options].sort())
   })
 
   it('名前は重ならない', () => {

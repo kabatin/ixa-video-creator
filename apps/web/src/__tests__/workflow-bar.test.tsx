@@ -7,6 +7,7 @@ import { WorkflowBar } from '@/components/workbench/workflow-bar'
 import { WorkflowProvider } from '@/components/workbench/workflow-context'
 import type { WorkbenchContextValue } from '@/components/workbench/workbench-context'
 import type { ShotPosterMap } from '@/lib/shot-posters'
+import { SKIP_REASONS } from '@/lib/workflow-steps'
 import { aProject, aWorkbenchShot, renderInWorkbench } from './workbench-fixture'
 
 /**
@@ -104,11 +105,40 @@ describe('WorkflowBar', () => {
     expect(value.openCutter).toHaveBeenCalledWith('cut')
   })
 
-  it('歌詞が無ければ ③ と ④ は「—」', () => {
+  /** 作ったばかりの作品は歌詞をまだ書いていないだけ。「—」にするのは「歌詞なし」を選んだときだけ。 */
+  it('歌詞をまだ書いていなければ ③ と ④ は飛ばさない', () => {
     show({ track, concept: '夜明け', project: { ...aProject, lyrics: '' } })
 
-    expect(screen.getByRole('button', { name: /③ 歌詞の時刻/ })).toHaveTextContent('—')
+    expect(screen.getByRole('button', { name: /③ 歌詞の時刻/ })).not.toHaveTextContent('—')
+    expect(screen.getByRole('button', { name: /④ テロップ/ })).not.toHaveTextContent('—')
+  })
+
+  it('「歌詞なし」にすると ③ と ④ は「—」で、吹き出しに歌詞なしだからと言う', () => {
+    show({ track, concept: '夜明け', project: { ...aProject, lyrics: '', instrumental: true } })
+
+    const lyrics = screen.getByRole('button', { name: /③ 歌詞の時刻/ })
+    expect(lyrics).toHaveTextContent('—')
+    expect(lyrics).toHaveAttribute('title', SKIP_REASONS.instrumental)
     expect(screen.getByRole('button', { name: /④ テロップ/ })).toHaveTextContent('—')
+  })
+
+  it('飛ばすナレーションの吹き出しは歌詞の話をしない（曲があるから飛ばす）', () => {
+    show(ready(), { lyricTelopCount: 3, narration: { lines: 0, ready: 0 } })
+
+    const narration = screen.getByRole('button', { name: /⑤ ナレーション/ })
+    expect(narration).toHaveTextContent('—')
+    expect(narration).toHaveAttribute('title', SKIP_REASONS.narrationWithTrack)
+  })
+
+  it('ナレーションから始める種類は歌詞の 2 段を出さず、番号を詰めて ①〜⑧', () => {
+    show(ready({ project: { ...aProject, kind: 'kamishibai', styleGuide: '水彩' } }), { narration: { lines: 2, ready: 0 } })
+
+    expect(screen.queryByRole('button', { name: /歌詞の時刻/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /テロップ/ })).toBeNull()
+    expect(screen.getAllByRole('button').map((button) => button.textContent?.slice(0, 1))).toEqual([
+      '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧',
+    ])
+    expect(screen.getByRole('button', { name: /③ ナレーション/ })).toHaveAttribute('aria-current', 'step')
   })
 
   it('絵コンテ・絵・Take は件数を出し、押すとその作業の画面へ。⑩ 書き出すは書き出しの画面を開く', async () => {

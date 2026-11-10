@@ -1,4 +1,4 @@
-import type { ProjectId } from '@ixa/domain'
+import { projectKindRule, type ProjectId, type ProjectKind } from '@ixa/domain'
 import type { AddPanelOptions, SerializedDockview } from 'dockview-react'
 import { z } from 'zod'
 
@@ -263,6 +263,17 @@ export const shouldFrontCutter = (input: {
   if (input.previousTrackId === undefined) return input.shotCount === 0
   return input.previousTrackId !== input.trackId
 }
+
+/**
+ * 開いた時点でナレーションを前に出すか（`shouldFrontCutter` の開いた時点の判定の代わり）。
+ * ナレーションから始める種類（紙芝居・CM・予告。`projectKindRule`）は、最初の作業が原稿を書いて声にすること。
+ * **既定の配置で開いたときだけ**。保存した配置を戻したなら、制作者が組んだ並びを崩さない。
+ */
+export const shouldFrontNarration = (input: {
+  readonly kind: ProjectKind
+  /** 開いたときに保存した配置を戻したか（古い版から移した配置も、制作者が組んだもの）。 */
+  readonly layoutRestored: boolean
+}): boolean => !input.layoutRestored && projectKindRule(input.kind).startsFrom === 'narration'
 
 /**
  * 区画を縮めてよい下限。**保存した配置にも当てる**ので `sizeDefaultAreas` とは別にする。

@@ -1,4 +1,4 @@
-import { lyricLineOf } from '@ixa/domain'
+import { lyricLineOf, projectKindRule, type ProjectKind } from '@ixa/domain'
 
 /**
  * 制作の流れの帯（制作者 2026-10-01）。**React を含まない純粋な関数。**
@@ -9,6 +9,8 @@ import { lyricLineOf } from '@ixa/domain'
  *   持ってった方が効率的」、2026-10-03「まずはテロップのタイミングをセット」）。テロップは黒い画面で、絵を作らずに確かめられる
  * - 区切ってから時刻を付けたら、境目が歌い出しより中央値 1.95 秒早くなり、絵と歌詞がずれた
  * - 区切りは「Shot にする」まで保存されないので、区切ると Shot は 1 つの段にした（区切ったかは Shot の有無でしか分からない）
+ *
+ * - ナレーションから始める種類（紙芝居・CM・予告。`projectKindRule`）は、歌詞の時刻とテロップの段がそもそも無い
  *
  * 「音楽 → 区切り → Shot → Take」と飛ばして、作品と関係ない映像ができた。各段が済んだか・途中か・
  * 次はどこかを決める。**分からない段は「分からない」のまま**にし、次の段として選ばない（L-021）。
@@ -26,7 +28,7 @@ export type WorkflowStepId =
   | 'takes'
   | 'render'
 
-/** `skipped` は要らない段（歌詞の無い曲の「歌詞の時刻」「テロップ」）。次の段に選ばない。 */
+/** `skipped` は要らない段（「歌詞なし」の作品の歌詞の段など）。次の段に選ばない。理由は `reason`。 */
 export type WorkflowStepState = 'done' | 'partial' | 'todo' | 'unknown' | 'skipped'
 
 export type WorkflowStep = {
@@ -35,9 +37,20 @@ export type WorkflowStep = {
   readonly state: WorkflowStepState
   /** 数えて途中を出す段だけ。数えられないときは null。 */
   readonly progress: { readonly done: number; readonly total: number } | null
+  /** 飛ばす段だけ、なぜ飛ばすか（帯の吹き出しに出す）。飛ばさない段は null。 */
+  readonly reason: string | null
 }
 
+/** 飛ばす理由。**飛ばす規則の隣に置く**（帯が理由を書き写すと、どの段でも同じ話をしてしまう）。 */
+export const SKIP_REASONS = {
+  instrumental: '「歌詞なし」の作品なので飛ばします（作品の方針で「歌詞なし」を外すと使えます）',
+  narrationWithTrack: '曲があるので、ナレーションは入れなくても進めます',
+  musicWithNarration: 'ナレーションで進めるので、曲は無くても進めます',
+} as const
+
 export type WorkflowInput = {
+  /** 作品の種類。ナレーションから始める種類には、歌詞の時刻とテロップの段が無い。 */
+  readonly kind: ProjectKind
   /** 楽曲（マスター）が登録されているか。 */
   readonly hasTrack: boolean
   /** コンセプト・あらすじ。**読めていなければ null**（空文字は「まだ書いていない」）。 */
@@ -46,7 +59,7 @@ export type WorkflowInput = {
   readonly hasLook: boolean
   /** 歌詞なしの作品か（作品の方針でチェックする）。歌詞の時刻とテロップの段を飛ばし、方針は方針・ルックで数える。 */
   readonly instrumental: boolean
-  /** 歌詞の行数（`lyricLines`）。0 なら歌詞の時刻とテロップの段は飛ばす。 */
+  /** 歌詞の行数（`lyricLines`）。0 は「まだ書いていない」（飛ばすのは「歌詞なし」を選んだときだけ）。 */
   readonly lyricLineCount: number
   /** 時刻を付けた行の数（`lyricCues` の長さ。前から順に付く）。 */
   readonly lyricCueCount: number
@@ -86,9 +99,16 @@ const flag = (id: WorkflowStepId, done: boolean | null): WorkflowStep => ({
   label: LABELS[id],
   state: done === null ? 'unknown' : done ? 'done' : 'todo',
   progress: null,
+  reason: null,
 })
 
-const skipped = (id: WorkflowStepId): WorkflowStep => ({ id, label: LABELS[id], state: 'skipped', progress: null })
+const skipped = (id: WorkflowStepId, reason: string): WorkflowStep => ({
+  id,
+  label: LABELS[id],
+  state: 'skipped',
+  progress: null,
+  reason,
+})
 
 /** 数え上げた段の状態。全部なら済み、0 ならまだ、その間は途中。 */
 const tally = (id: WorkflowStepId, done: number, total: number): WorkflowStep => ({
@@ -96,25 +116,30 @@ const tally = (id: WorkflowStepId, done: number, total: number): WorkflowStep =>
   label: LABELS[id],
   state: done === total ? 'done' : done === 0 ? 'todo' : 'partial',
   progress: { done, total },
+  reason: null,
 })
 
 /** Shot ごとに数える段。1 件でも分からなければ件数を出さない。 */
 const counted = (id: WorkflowStepId, marks: readonly (boolean | null)[]): WorkflowStep => {
-  if (marks.length === 0) return { id, label: LABELS[id], state: 'todo', progress: null }
+  if (marks.length === 0) return { id, label: LABELS[id], state: 'todo', progress: null, reason: null }
   if (marks.some((mark) => mark === null)) {
-    return { id, label: LABELS[id], state: 'unknown', progress: null }
+    return { id, label: LABELS[id], state: 'unknown', progress: null, reason: null }
   }
   return tally(id, marks.filter((mark) => mark === true).length, marks.length)
 }
 
-/** 歌詞を使わない作品か（歌詞なしにした・歌詞がまだ 1 行も無い）。 */
-const withoutLyrics = (input: WorkflowInput): boolean => input.instrumental || input.lyricLineCount === 0
+/** ナレーションから始める種類か。歌詞の時刻とテロップの段が無く、作品の方針でも歌詞を数えない。 */
+const startsFromNarration = (input: WorkflowInput): boolean => projectKindRule(input.kind).startsFrom === 'narration'
 
-/** 歌詞の時刻。歌詞を使わなければ飛ばす。行ごとに数える（前から順に付く）。 */
-const lyricsStep = (input: WorkflowInput): WorkflowStep =>
-  withoutLyrics(input)
-    ? skipped('lyrics')
-    : tally('lyrics', Math.min(input.lyricCueCount, input.lyricLineCount), input.lyricLineCount)
+/** 歌詞を使う作品か。**飛ばすのは制作者が「歌詞なし」を選んだときだけ**（歌詞がまだ無いだけの新しい作品は飛ばさない）。 */
+const usesLyrics = (input: WorkflowInput): boolean => !input.instrumental && !startsFromNarration(input)
+
+/** 歌詞の時刻。「歌詞なし」なら飛ばす。行ごとに数える（前から順に付く）。歌詞がまだ無ければ、まだ。 */
+const lyricsStep = (input: WorkflowInput): WorkflowStep => {
+  if (input.instrumental) return skipped('lyrics', SKIP_REASONS.instrumental)
+  if (input.lyricLineCount === 0) return flag('lyrics', false)
+  return tally('lyrics', Math.min(input.lyricCueCount, input.lyricLineCount), input.lyricLineCount)
+}
 
 /**
  * 作品の方針。方針（コンセプト・あらすじ）・歌詞・ルックの 3 つを数える
@@ -124,16 +149,17 @@ const lyricsStep = (input: WorkflowInput): WorkflowStep =>
  */
 const conceptStep = (input: WorkflowInput): WorkflowStep => {
   if (input.concept === null) return flag('concept', null)
-  const parts = input.instrumental
-    ? [input.concept.trim() !== '', input.hasLook]
-    : [input.concept.trim() !== '', input.lyricLineCount > 0, input.hasLook]
+  // ナレーションから始める種類も歌詞の段が無いので、方針・ルックの 2 つで数える。
+  const parts = usesLyrics(input)
+    ? [input.concept.trim() !== '', input.lyricLineCount > 0, input.hasLook]
+    : [input.concept.trim() !== '', input.hasLook]
   return tally('concept', parts.filter(Boolean).length, parts.length)
 }
 
-/** テロップ。歌詞を使わなければ飛ばす。歌詞から置いたテロップが 1 つでもあれば済み。 */
+/** テロップ。「歌詞なし」なら飛ばす。歌詞から置いたテロップが 1 つでもあれば済み。 */
 const telopsStep = (input: WorkflowInput): WorkflowStep =>
-  withoutLyrics(input)
-    ? skipped('telops')
+  input.instrumental
+    ? skipped('telops', SKIP_REASONS.instrumental)
     : flag('telops', input.lyricTelopCount === null ? null : input.lyricTelopCount > 0)
 
 /**
@@ -143,12 +169,18 @@ const telopsStep = (input: WorkflowInput): WorkflowStep =>
 const narrationStep = (input: WorkflowInput): WorkflowStep => {
   if (input.narration === null) return flag('narration', null)
   if (input.narration.lines > 0) return tally('narration', input.narration.ready, input.narration.lines)
-  return input.hasTrack ? skipped('narration') : flag('narration', false)
+  return input.hasTrack ? skipped('narration', SKIP_REASONS.narrationWithTrack) : flag('narration', false)
 }
 
 /** 楽曲。曲が無くてもナレーションがあれば飛ばしてよい（予告・宣伝の動画。制作者 2026-10-05）。 */
 const musicStep = (input: WorkflowInput): WorkflowStep =>
-  !input.hasTrack && (input.narration?.lines ?? 0) > 0 ? skipped('music') : flag('music', input.hasTrack)
+  !input.hasTrack && (input.narration?.lines ?? 0) > 0
+    ? skipped('music', SKIP_REASONS.musicWithNarration)
+    : flag('music', input.hasTrack)
+
+/** 歌詞の 2 段。ナレーションから始める種類には無い（「—」で並べず、帯から外す）。 */
+const lyricSteps = (input: WorkflowInput): readonly WorkflowStep[] =>
+  startsFromNarration(input) ? [] : [lyricsStep(input), telopsStep(input)]
 
 export const workflowSteps = (
   input: WorkflowInput,
@@ -156,8 +188,7 @@ export const workflowSteps = (
   const steps: readonly WorkflowStep[] = [
     musicStep(input),
     conceptStep(input),
-    lyricsStep(input),
-    telopsStep(input),
+    ...lyricSteps(input),
     narrationStep(input),
     flag('shots', input.shots.length > 0),
     counted(
@@ -177,6 +208,14 @@ export const workflowSteps = (
   const next = steps.find((step) => step.state === 'todo' || step.state === 'partial')
   return { steps, nextId: next?.id ?? null }
 }
+
+/** 丸数字の始まり（①）。⑳ まである。 */
+const CIRCLED_ONE = 0x2460
+const CIRCLED_MAX = 20
+
+/** 帯の段の番号。**並んだ位置から**付ける（段が減っても番号が飛ばない）。⑳ を超えたら数字のまま。 */
+export const stepNumber = (index: number): string =>
+  index >= 0 && index < CIRCLED_MAX ? String.fromCodePoint(CIRCLED_ONE + index) : String(index + 1)
 
 /** 歌詞から置いたテロップの数（行の印 `lyricLine` があるもの。ADR-0033）。手で置いたテロップは数えない。 */
 export const lyricTelopCountOf = (

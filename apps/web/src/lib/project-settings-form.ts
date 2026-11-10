@@ -1,6 +1,7 @@
 import {
   AspectRatio,
   Fps,
+  ProjectKind,
   ProjectStatus,
   Resolution,
   UpdateProjectPatch,
@@ -21,6 +22,8 @@ import { defaultResolutionKeyFor, findResolution } from '@/lib/resolution-preset
  */
 
 export type ProjectSettingsValues = {
+  /** 作品の種類。**ここで変えても形は変えない**（新規作成と違い、形は作った後に制作者が決めたもの）。 */
+  readonly kind: string
   readonly name: string
   readonly aspectRatio: string
   readonly resolutionKey: string
@@ -49,6 +52,7 @@ export const resolutionKeyOf = (resolution: Resolution): string =>
   `${String(resolution.width)}x${String(resolution.height)}`
 
 export const initialProjectSettingsValues = (project: Project): ProjectSettingsValues => ({
+  kind: project.kind,
   name: project.name,
   aspectRatio: project.aspectRatio,
   resolutionKey: resolutionKeyOf(project.resolution),
@@ -148,6 +152,11 @@ export const validateProjectSettings = (
     return { ok: false, errors: { fps: 'fps は 24 / 25 / 30 / 60 から選択してください。' } }
   }
 
+  const kind = ProjectKind.safeParse(values.kind)
+  if (!kind.success) {
+    return { ok: false, errors: { kind: '種類を選択してください。' } }
+  }
+
   const status = ProjectStatus.safeParse(values.status)
   if (!status.success) {
     return { ok: false, errors: { status: '状態を選択してください。' } }
@@ -160,6 +169,7 @@ export const validateProjectSettings = (
   if (!budgetUsd.ok) return { ok: false, errors: { budgetUsd: budgetUsd.message } }
 
   const parsed = UpdateProjectPatch.safeParse({
+    kind: kind.data,
     name,
     aspectRatio: aspectRatio.data,
     resolution,

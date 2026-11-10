@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { useCutterFront } from '@/components/workbench/use-cutter-front'
 import { WorkbenchContext, type WorkbenchContextValue } from '@/components/workbench/workbench-context'
 import { PROJECT_ID } from './fixtures'
-import { aWorkbenchShot, workbenchValue } from './workbench-fixture'
+import { aProject, aWorkbenchShot, workbenchValue } from './workbench-fixture'
 
 /**
  * 聴きながら切るを前に出す配線（判定そのものは `shouldFrontCutter` のテスト）。
@@ -23,14 +23,16 @@ const track = (id: string) =>
 const T1 = track('01ARZ3NDEKTSV4RRFFQ69G5FD1')
 const T2 = track('01ARZ3NDEKTSV4RRFFQ69G5FD2')
 
-const Probe = ({ ready, skipInitial }: { readonly ready: boolean; readonly skipInitial: boolean }) => {
-  useCutterFront(ready, skipInitial)
+type ProbeProps = { readonly ready: boolean; readonly skipInitial: boolean; readonly layoutRestored?: boolean }
+
+const Probe = ({ ready, skipInitial, layoutRestored = false }: ProbeProps) => {
+  useCutterFront(ready, skipInitial, layoutRestored)
   return null
 }
 
-const setup = (initial: Partial<WorkbenchContextValue>, props: { ready: boolean; skipInitial: boolean }) => {
+const setup = (initial: Partial<WorkbenchContextValue>, props: ProbeProps) => {
   const focusPanel = vi.fn()
-  const tree = (patch: Partial<WorkbenchContextValue>, next: { ready: boolean; skipInitial: boolean }) => (
+  const tree = (patch: Partial<WorkbenchContextValue>, next: ProbeProps) => (
     <WorkbenchContext.Provider value={workbenchValue({ focusPanel, ...patch })}>
       <Probe {...next} />
     </WorkbenchContext.Provider>
@@ -72,5 +74,39 @@ describe('useCutterFront', () => {
     expect(focusPanel).not.toHaveBeenCalled()
     rerender({ track: T1, shots: [aWorkbenchShot(0)] })
     expect(focusPanel).toHaveBeenCalledTimes(1)
+  })
+})
+
+/** ナレーションから始める種類は、既定の配置で開いたらナレーションを前に出す（聴きながら切るの代わり）。 */
+describe('useCutterFront のナレーションから始める種類', () => {
+  const kamishibai = { ...aProject, kind: 'kamishibai' as const }
+
+  it('既定の配置で開いたら、楽曲が無くてもナレーションを前に出す', () => {
+    const { focusPanel } = setup({ project: kamishibai, track: null, shots: [] }, { ready: true, skipInitial: false })
+    expect(focusPanel).toHaveBeenCalledTimes(1)
+    expect(focusPanel).toHaveBeenCalledWith('narration')
+  })
+
+  it('楽曲があって Shot が 0 件でも、聴きながら切るではなくナレーション', () => {
+    const { focusPanel } = setup({ project: kamishibai, track: T1, shots: [] }, { ready: true, skipInitial: false })
+    expect(focusPanel.mock.calls).toEqual([['narration']])
+  })
+
+  it('保存した配置を戻したなら、ナレーションは前に出さない', () => {
+    const { focusPanel } = setup(
+      { project: kamishibai, track: null, shots: [] },
+      { ready: true, skipInitial: false, layoutRestored: true },
+    )
+    expect(focusPanel).not.toHaveBeenCalled()
+  })
+
+  it('URL で下のタブを指定されたら出さない', () => {
+    const { focusPanel } = setup({ project: kamishibai, track: null, shots: [] }, { ready: true, skipInitial: true })
+    expect(focusPanel).not.toHaveBeenCalled()
+  })
+
+  it('ミュージックビデオは今までどおり（楽曲が無ければ何も出さない）', () => {
+    const { focusPanel } = setup({ track: null, shots: [] }, { ready: true, skipInitial: false })
+    expect(focusPanel).not.toHaveBeenCalled()
   })
 })

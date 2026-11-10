@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useWorkbench } from '@/components/workbench/workbench-context'
-import { shouldFrontCutter } from '@/lib/workbench-layout'
+import { shouldFrontCutter, shouldFrontNarration } from '@/lib/workbench-layout'
 
 /**
  * 聴きながら切るを前に出す（判定は `shouldFrontCutter`）。既定はタイムラインが前。
@@ -10,10 +10,13 @@ import { shouldFrontCutter } from '@/lib/workbench-layout'
  * - 開いた時点で楽曲があって Shot が 0 件
  * - 開いたあとでマスターの楽曲が決まった・替わった
  *
+ * ナレーションから始める種類を既定の配置で開いたときは、開いた時点でナレーションを前に出す（`shouldFrontNarration`）。
+ *
  * `ready` はドックを置き終えたか。置く前に頼むと、保存した配置を戻す前の空のドックに足してしまう。
  * URL で下の区画のタブを指定されたとき（`skipInitial`）は、開いた時点の判定をしない。
+ * `layoutRestored` は保存した配置を戻したか（戻したならナレーションへは組み替えない）。
  */
-export const useCutterFront = (ready: boolean, skipInitial: boolean): void => {
+export const useCutterFront = (ready: boolean, skipInitial: boolean, layoutRestored: boolean): void => {
   const workbench = useWorkbench()
   const trackId = workbench.track?.id ?? null
   const shotCount = workbench.shots?.length ?? null
@@ -23,17 +26,27 @@ export const useCutterFront = (ready: boolean, skipInitial: boolean): void => {
    * 判定の材料のうち、変わっても判定し直さないもの。
    * Shot の数が変わっただけで聴きながら切るへ飛ばさない（Shot を作った直後に前のタブが替わる）。
    */
-  const latest = useRef({ shotCount, skipInitial, focusPanel: workbench.focusPanel })
+  const latest = useRef({
+    shotCount,
+    skipInitial,
+    layoutRestored,
+    kind: workbench.project.kind,
+    focusPanel: workbench.focusPanel,
+  })
   useEffect(() => {
-    latest.current = { shotCount, skipInitial, focusPanel: workbench.focusPanel }
+    latest.current = { shotCount, skipInitial, layoutRestored, kind: workbench.project.kind, focusPanel: workbench.focusPanel }
   })
 
   useEffect(() => {
     if (!ready) return
     const previous = previousTrackId.current
     previousTrackId.current = trackId
-    const { shotCount: count, skipInitial: skip, focusPanel } = latest.current
+    const { shotCount: count, skipInitial: skip, layoutRestored: restored, kind, focusPanel } = latest.current
     if (previous === undefined && skip) return
+    if (previous === undefined && shouldFrontNarration({ kind, layoutRestored: restored })) {
+      focusPanel('narration')
+      return
+    }
     if (shouldFrontCutter({ previousTrackId: previous, trackId, shotCount: count })) focusPanel('cutter')
   }, [ready, trackId])
 }

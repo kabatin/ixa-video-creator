@@ -9,6 +9,7 @@ import {
   applyPreset,
   sizeDefaultAreas,
   shouldFrontCutter,
+  shouldFrontNarration,
   migrateLegacyLayout,
   BOTTOM_HEIGHT_RATIO,
   clearWorkbenchLayout,
@@ -282,6 +283,24 @@ describe('聴きながら切るを前に出すか', () => {
   it('同じ楽曲のまま・楽曲が外れたときは出さない', () => {
     expect(shouldFrontCutter({ previousTrackId: 'T1', trackId: 'T1', shotCount: 0 })).toBe(false)
     expect(shouldFrontCutter({ previousTrackId: 'T1', trackId: null, shotCount: 0 })).toBe(false)
+  })
+})
+
+/** ナレーションから始める種類（紙芝居・CM・予告）は、開いた時点でナレーションを前に出す。保存した配置は組み替えない。 */
+describe('ナレーションを前に出すか', () => {
+  it('ナレーションから始める種類で、既定の配置で開いたなら出す', () => {
+    expect(shouldFrontNarration({ kind: 'kamishibai', layoutRestored: false })).toBe(true)
+    expect(shouldFrontNarration({ kind: 'cm', layoutRestored: false })).toBe(true)
+  })
+
+  it('保存した配置を戻したなら出さない（制作者が組んだ並びを崩さない）', () => {
+    expect(shouldFrontNarration({ kind: 'kamishibai', layoutRestored: true })).toBe(false)
+  })
+
+  it('曲から始める種類・素材置き場では出さない', () => {
+    for (const kind of ['mv', 'short', 'library'] as const) {
+      expect(shouldFrontNarration({ kind, layoutRestored: false })).toBe(false)
+    }
   })
 })
 

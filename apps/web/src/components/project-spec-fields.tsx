@@ -1,8 +1,8 @@
-import type { AspectRatio } from '@ixa/domain'
+import type { AspectRatio, ProjectKind } from '@ixa/domain'
 import type { ReactNode } from 'react'
 import { ChoiceCard, ChoiceGroup } from '@/components/ui/choice-card'
 import { FieldError } from '@/components/form/field-error'
-import { ASPECT_CHOICES, FPS_CHOICES, resolutionChoicesFor } from '@/lib/project-spec-choices'
+import { ASPECT_CHOICES, FPS_CHOICES, PROJECT_KIND_CHOICES, resolutionChoicesFor } from '@/lib/project-spec-choices'
 
 /**
  * 新規作成とプロジェクト設定で共有する「形・大きさ・fps」の選択（制作者 2026-10-03「アスペクト比は数字を見ても、縦だっけ？
@@ -47,6 +47,33 @@ const Name = ({ children }: { readonly children: ReactNode }) => (
 )
 const Hint = ({ children }: { readonly children: ReactNode }) => (
   <span className="text-xs text-muted">{children}</span>
+)
+
+/** 何を作るか（新規作成のいちばん上）。選ぶと形の既定が変わる（`withKind`）。 */
+export const ProjectKindField = ({
+  value,
+  disabled,
+  onChange,
+}: {
+  readonly value: ProjectKind
+  readonly disabled: boolean
+  readonly onChange: (value: ProjectKind) => void
+}) => (
+  <ChoiceGroup legend="何を作りますか" columns={5} disabled={disabled}>
+    {PROJECT_KIND_CHOICES.map((choice) => (
+      <ChoiceCard
+        key={choice.value}
+        name="project-kind"
+        checked={value === choice.value}
+        onSelect={() => {
+          onChange(choice.value)
+        }}
+      >
+        <Name>{choice.label}</Name>
+        <Hint>{choice.hint}</Hint>
+      </ChoiceCard>
+    ))}
+  </ChoiceGroup>
 )
 
 export const AspectRatioField = ({

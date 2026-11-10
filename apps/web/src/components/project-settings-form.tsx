@@ -22,6 +22,7 @@ import {
   type ProjectSettingsValues,
 } from '@/lib/project-settings-form'
 import { AspectRatioField, FpsField, ResolutionField } from '@/components/project-spec-fields'
+import { PROJECT_KIND_CHOICES } from '@/lib/project-spec-choices'
 import { WORDING } from '@/lib/wording'
 
 /**
@@ -42,8 +43,15 @@ const STATUS_OPTIONS: readonly SelectOption[] = ProjectStatus.options.map((statu
   label: statusLabel(status),
 }))
 
+/** 作品の種類（新規作成と同じ並び・同じ名前）。 */
+const KIND_OPTIONS: readonly SelectOption[] = PROJECT_KIND_CHOICES.map((choice) => ({
+  value: choice.value,
+  label: choice.label,
+}))
+
 /** サーバが返した列名を、この画面のフィールドへ写す。 */
 const FIELD_BY_COLUMN: Readonly<Record<string, ProjectSettingsField>> = Object.freeze({
+  kind: 'kind',
   name: 'name',
   aspectRatio: 'aspectRatio',
   resolution: 'resolutionKey',
@@ -130,6 +138,19 @@ export const ProjectSettingsForm = ({ project }: ProjectSettingsFormProps) => {
           error={errors.name}
           onChange={(name) => {
             set({ name })
+          }}
+        />
+
+        {/* 種類を変えても形は変えない（形は下で、制作者が決める）。 */}
+        <SelectField
+          id="project-kind"
+          label="種類"
+          value={values.kind}
+          options={KIND_OPTIONS}
+          disabled={busy}
+          error={errors.kind}
+          onChange={(kind) => {
+            set({ kind })
           }}
         />
 

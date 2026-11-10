@@ -24,3 +24,27 @@ describe('ProjectSettingsForm の大きさ', () => {
     expect(screen.queryByRole('radio', { name: /保存済みの値/ })).toBeNull()
   })
 })
+
+/** 作品の種類は選んで直せる。**ここで種類を変えても形は変えない**（形は作った後に制作者が決めたもの）。 */
+describe('ProjectSettingsForm の種類', () => {
+  it('5 つの種類から選べ、いまの種類を選んでおく', () => {
+    render(<ProjectSettingsForm project={{ ...aProject, kind: 'short' }} />)
+    const select = screen.getByLabelText('種類')
+    expect(select).toHaveValue('short')
+    expect([...(select as HTMLSelectElement).options].map((option) => option.text)).toEqual([
+      'ミュージックビデオ',
+      'ショート動画',
+      '紙芝居',
+      'CM・予告',
+      '素材置き場',
+    ])
+  })
+
+  it('種類を変えても形と大きさは変わらない', async () => {
+    render(<ProjectSettingsForm project={aProject} />)
+    await userEvent.selectOptions(screen.getByLabelText('種類'), 'short')
+    expect(screen.getByLabelText('種類')).toHaveValue('short')
+    expect(screen.getByRole('radio', { name: /横長 16:9/ })).toBeChecked()
+    expect(screen.getByRole('radio', { name: /^FHD/ })).toBeChecked()
+  })
+})

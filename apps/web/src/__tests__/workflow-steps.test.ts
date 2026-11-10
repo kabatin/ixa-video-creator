@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lyricTelopCountOf, workflowSteps, type WorkflowInput } from '@/lib/workflow-steps'
+import { lyricTelopCountOf, SKIP_REASONS, stepNumber, workflowSteps, type WorkflowInput } from '@/lib/workflow-steps'
 
 /**
  * 制作の流れの帯（制作者 2026-10-01）。「音楽 → 区切り → Shot → Take」と飛ばして、作品と関係ない映像ができた。
@@ -18,6 +18,7 @@ const shot = (overrides: Partial<WorkflowInput['shots'][number]> = {}): Workflow
 })
 
 const input = (overrides: Partial<WorkflowInput> = {}): WorkflowInput => ({
+  kind: 'mv',
   hasTrack: true,
   concept: '夜明けの屋上で二人が出会う',
   hasLook: true,
@@ -150,13 +151,18 @@ describe('workflowSteps', () => {
     expect(result.nextId).toBe('shots')
   })
 
-  it('歌詞が無い作品では、歌詞の時刻とテロップを飛ばす（次に選ばない）', () => {
+  /**
+   * 作ったばかりの作品は、歌詞をまだ書いていないだけ。**飛ばすのは制作者が「歌詞なし」を選んだときだけ**
+   * （以前は歌詞が 0 行なら飛ばしていて、新しい作品で歌詞の段が「—」になっていた）。
+   */
+  it('歌詞をまだ書いていないだけなら、歌詞の時刻とテロップは飛ばさず「まだ」。次は作品の方針（歌詞を書く）', () => {
     const result = workflowSteps(input({ lyricLineCount: 0, lyricCueCount: 0, lyricTelopCount: 0 }))
-    expect(stateOf(result, 'lyrics')).toBe('skipped')
-    expect(stateOf(result, 'telops')).toBe('skipped')
+    expect(stepOf(result, 'lyrics')).toMatchObject({ state: 'todo', reason: null })
+    expect(stateOf(result, 'telops')).toBe('todo')
+    expect(result.nextId).toBe('concept')
   })
 
-  it('Shot が無ければ、次は ⑤ 区切って Shot（区切りは Shot にするまで保存されないので Shot の有無で見る）', () => {
+  it('Shot が無ければ、次は ⑥ 区切って Shot（区切りは Shot にするまで保存されないので Shot の有無で見る）', () => {
     const result = workflowSteps(input())
     expect(stateOf(result, 'shots')).toBe('todo')
     expect(result.nextId).toBe('shots')
@@ -186,7 +192,7 @@ describe('workflowSteps', () => {
     expect(result.nextId).toBe('takes')
   })
 
-  it('Take まで済めば、次は ⑨ 書き出す。書き出しの履歴が読めていなければ「分からない」', () => {
+  it('Take まで済めば、次は ⑩ 書き出す。書き出しの履歴が読めていなければ「分からない」', () => {
     const result = workflowSteps(allDone({ rendered: false }))
     expect(result.nextId).toBe('render')
     expect(stateOf(workflowSteps(allDone({ rendered: null })), 'render')).toBe('unknown')
@@ -196,6 +202,64 @@ describe('workflowSteps', () => {
     const result = workflowSteps(allDone())
     expect(result.steps.every((step) => step.state === 'done')).toBe(true)
     expect(result.nextId).toBeNull()
+  })
+})
+
+/** 作品の種類。ナレーションから始める種類（紙芝居・CM・予告）は、歌詞の 2 段がそもそも無い。 */
+describe('workflowSteps の作品の種類', () => {
+  const labels = (kind: WorkflowInput['kind']) => workflowSteps(input({ kind })).steps.map((step) => step.label)
+
+  it('ナレーションから始める種類は 8 段（歌詞の時刻とテロップが無い。楽曲は残す）', () => {
+    for (const kind of ['kamishibai', 'cm'] as const) {
+      expect(labels(kind)).toEqual(['楽曲', '作品の方針', 'ナレーション', '区切って Shot', '絵コンテ', '絵', 'Take', '書き出す'])
+    }
+  })
+
+  it('曲から始める種類と素材置き場は 10 段のまま', () => {
+    for (const kind of ['mv', 'short', 'library'] as const) expect(labels(kind)).toHaveLength(10)
+  })
+
+  /** 歌詞の段が無いので、作品の方針も歌詞を数えない（数えると「歌詞なし」を選ぶまで 2/3 で止まる）。 */
+  it('ナレーションから始める種類は、作品の方針を方針・ルックの 2 つで数え、次の段は残った段から選ぶ', () => {
+    const result = workflowSteps(input({ kind: 'kamishibai', lyricLineCount: 0, lyricTelopCount: 0, narration: { lines: 2, ready: 0 } }))
+    expect(stepOf(result, 'concept')).toMatchObject({ state: 'done', progress: { done: 2, total: 2 } })
+    expect(result.nextId).toBe('narration')
+  })
+})
+
+describe('stepNumber', () => {
+  it('並んだ位置から丸数字にする（段が減っても飛ばない）', () => {
+    const steps = workflowSteps(input({ kind: 'cm' })).steps
+    expect(steps.map((_, index) => stepNumber(index))).toEqual(['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧'])
+    expect(stepNumber(9)).toBe('⑩')
+  })
+})
+
+/** 飛ばす段は、それぞれ自分の理由を持つ（以前は帯の吹き出しがどの段でも歌詞の話をしていた）。 */
+describe('飛ばす段の理由', () => {
+  it('歌詞なしにした作品の歌詞の時刻とテロップ', () => {
+    const result = workflowSteps(input({ instrumental: true }))
+    expect(stepOf(result, 'lyrics')?.reason).toBe(SKIP_REASONS.instrumental)
+    expect(stepOf(result, 'telops')?.reason).toBe(SKIP_REASONS.instrumental)
+  })
+
+  it('曲があってナレーションが無いときのナレーション', () => {
+    expect(stepOf(workflowSteps(input()), 'narration')?.reason).toBe(SKIP_REASONS.narrationWithTrack)
+  })
+
+  it('曲が無くナレーションで進めるときの楽曲', () => {
+    const result = workflowSteps(input({ hasTrack: false, narration: { lines: 2, ready: 0 } }))
+    expect(stepOf(result, 'music')?.reason).toBe(SKIP_REASONS.musicWithNarration)
+  })
+
+  it('飛ばさない段は理由を持たない', () => {
+    expect(workflowSteps(input()).steps.filter((step) => step.state !== 'skipped').every((step) => step.reason === null)).toBe(true)
+  })
+
+  it('理由は段ごとに違い、歌詞の話をするのは歌詞の段だけ', () => {
+    expect(new Set(Object.values(SKIP_REASONS)).size).toBe(3)
+    expect(SKIP_REASONS.narrationWithTrack).not.toContain('歌詞')
+    expect(SKIP_REASONS.musicWithNarration).not.toContain('歌詞')
   })
 })
 

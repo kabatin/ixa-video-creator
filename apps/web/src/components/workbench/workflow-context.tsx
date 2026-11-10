@@ -40,6 +40,7 @@ export const WorkflowProvider = ({
 }) => {
   const workbench = useWorkbench()
   const { steps, nextId } = workflowSteps({
+    kind: workbench.project.kind,
     hasTrack: workbench.track !== null,
     concept: workbench.concept,
     hasLook: workbench.project.styleGuide.trim() !== '',
