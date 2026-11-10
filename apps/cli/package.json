@@ -5,7 +5,7 @@
   "type": "module",
   "description": "導入・点検・更新のコマンド（pnpm ixa setup | doctor | update | mcp。ADR-0063）",
   "scripts": {
-    "start": "tsx src/main.ts",
+    "start": "node --import tsx src/main.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint src"

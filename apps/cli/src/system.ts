@@ -40,6 +40,8 @@ export type System = {
   /** 無ければ null。 */
   readonly readText: (path: string) => Promise<string | null>
   readonly writeText: (path: string, content: string) => Promise<void>
+  /** 無いときだけ作る（あれば書かずに false）。2 つの手が同じ印を同時に取らないための口。 */
+  readonly createText: (path: string, content: string) => Promise<boolean>
   /** 無ければ何もしない。 */
   readonly remove: (path: string) => Promise<void>
   readonly exists: (path: string) => Promise<boolean>
@@ -50,6 +52,15 @@ export type System = {
   /** 空き容量（バイト）。分からなければ null。 */
   readonly freeBytes: (path: string) => Promise<number | null>
   readonly listener: (port: number) => Promise<Listener | null>
+  /** そのプロセスがまだ生きているか（印を残したまま落ちた start を見分ける）。 */
+  readonly pidAlive: (pid: number) => boolean
+  /** この CLI のプロセス番号。 */
+  readonly pid: number
+  /**
+   * この CLI の環境変数。子（next build）はこれを受け継ぎ、Next.js はファイルより先にこれを読む。
+   * 判定に使うだけで、表示には名前しか出さない。
+   */
+  readonly processEnv: Readonly<Record<string, string | undefined>>
   /** Redis に PING して PONG が返るか。返らなければ理由。 */
   readonly redisPing: (url: string, timeoutMs: number) => Promise<true | string>
   /** DB につないで何かして閉じる。 */

@@ -13,6 +13,7 @@ const idle: RuntimeFacts = {
   ],
   apiHealthy: null,
   audioHealthy: null,
+  building: null,
 }
 
 describe('judgeRuntime（ポートと /health）', () => {
@@ -43,10 +44,20 @@ describe('judgeRuntime（ポートと /health）', () => {
       ports: idle.ports.map((p) => ({ ...p, owner: { kind: 'this-repo' } })),
       apiHealthy: false,
       audioHealthy: true,
+      building: null,
     }
     expect(byId(judgeRuntime(facts), 'runtime.api-health')?.level).toBe('fail')
     expect(byId(judgeRuntime(facts), 'runtime.audio-health')?.level).toBe('ok')
     expect(devIsRunning(facts)).toBe(true)
+  })
+
+  it('画面を組み立てている最中（ポートはまだ開いていない）は知らせるだけの行を出し、update には動いていると見せる', () => {
+    const building: RuntimeFacts = { ...idle, building: { pid: 321, startedAt: '2026-11-10T09:00:00.000Z' } }
+    expect(byId(judgeRuntime(building), 'runtime.web-build')).toMatchObject({ level: 'ok' })
+    expect(byId(judgeRuntime(building), 'runtime.web-build')?.message).toContain('組み立てている最中')
+    expect(byId(judgeRuntime(building), 'runtime.web-build')?.message).toContain('321')
+    expect(devIsRunning(building)).toBe(true)
+    expect(byId(judgeRuntime(idle), 'runtime.web-build')?.message).not.toContain('最中')
   })
 })
 

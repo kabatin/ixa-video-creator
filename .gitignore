@@ -38,3 +38,6 @@ pnpm-lock.yaml.bak
 
 # pnpm ixa update の途中の印（ADR-0063）
 /.ixa-update-pending.json
+
+# pnpm ixa start が画面を組み立てている間の印（ADR-0068）
+/apps/web/.ixa-start-build.json

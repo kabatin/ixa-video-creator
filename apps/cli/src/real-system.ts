@@ -24,10 +24,34 @@ const stdioFor = (inherit: RunOptions['inherit']): StdioOptions => {
   return ['ignore', 'pipe', 'pipe']
 }
 
+/**
+ * 端末につないだ子（`inherit: 'all'`。`pnpm ixa start` の turbo など）が動いている間の、この CLI への合図の扱い。
+ *
+ * - **SIGINT（Ctrl+C）では落ちない。** 端末は同じプロセスグループの全員に送るので、子にも届いている。
+ *   子が止まり終えるのを待ち、子の本当の終了コードを返す（先に落ちると、子が片付けている途中でプロンプトが戻る）。
+ *   ここで子へ送り直さない（2 度目の Ctrl+C を「すぐ殺せ」と読む子がある）。
+ * - **SIGTERM は子へ渡す。** `kill <この CLI>` はグループに届かないので、渡さないと子だけ動き続ける。
+ *
+ * 子が終わったら手を離す（ほかの所の Ctrl+C はいつもどおり CLI を止める）。
+ */
+const holdSignalsWhile = (child: ReturnType<typeof spawn>): (() => void) => {
+  const onInterrupt = (): void => undefined
+  const onTerminate = (): void => {
+    child.kill('SIGTERM')
+  }
+  process.on('SIGINT', onInterrupt)
+  process.on('SIGTERM', onTerminate)
+  return () => {
+    process.off('SIGINT', onInterrupt)
+    process.off('SIGTERM', onTerminate)
+  }
+}
+
 const run = (command: string, args: readonly string[], options: RunOptions = {}): Promise<RunResult> =>
   new Promise((resolve) => {
     const timeoutMs = options.inherit === undefined ? (options.timeoutMs ?? DEFAULT_RUN_TIMEOUT_MS) : options.timeoutMs
     const child = spawn(command, [...args], { cwd: options.cwd, stdio: stdioFor(options.inherit) })
+    const release = options.inherit === 'all' ? holdSignalsWhile(child) : () => undefined
     const out: Buffer[] = []
     const err: Buffer[] = []
     child.stdout?.on('data', (chunk: Buffer) => out.push(chunk))
@@ -42,14 +66,17 @@ const run = (command: string, args: readonly string[], options: RunOptions = {})
           }, timeoutMs)
     child.on('error', (error: Error) => {
       clearTimeout(timer)
+      release()
       resolve(errorCode(error) === 'ENOENT' ? { kind: 'not_found' } : { kind: 'spawn_failed', reason: error.message })
     })
-    child.on('close', (code: number | null) => {
+    child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
       clearTimeout(timer)
+      release()
       if (timedOut) return resolve({ kind: 'timeout' })
       resolve({
         kind: 'completed',
-        exitCode: code ?? 1,
+        // 合図で止まった子はシェルと同じ 128 + 番号（Ctrl+C なら 130）にする。
+        exitCode: code ?? (signal === null ? 1 : 128 + os.constants.signals[signal]),
         stdout: Buffer.concat(out).toString('utf8'),
         stderr: Buffer.concat(err).toString('utf8'),
       })
@@ -76,6 +103,27 @@ const readText = async (file: string): Promise<string | null> => {
   } catch (error) {
     if (errorCode(error) === 'ENOENT') return null
     throw new Error(`${file} を読めませんでした: ${String(error)}`, { cause: error })
+  }
+}
+
+/** 無いときだけ作る（`wx`。あれば false）。それ以外の失敗は場所を添えて投げる。 */
+const createText = async (file: string, content: string): Promise<boolean> => {
+  try {
+    await writeFile(file, content, { encoding: 'utf8', flag: 'wx' })
+    return true
+  } catch (error) {
+    if (errorCode(error) === 'EEXIST') return false
+    throw new Error(`${file} を作れませんでした: ${String(error)}`, { cause: error })
+  }
+}
+
+/** 合図 0 を送って確かめる（送らない）。持ち主が別の人（EPERM）でも生きている。 */
+const pidAlive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return errorCode(error) === 'EPERM'
   }
 }
 
@@ -224,6 +272,7 @@ export const createRealSystem = (): System => ({
   httpGet,
   readText,
   writeText: (file, content) => writeFile(file, content, 'utf8'),
+  createText,
   remove: (file) => rm(file, { force: true }),
   exists,
   realpath: async (file) => {
@@ -236,6 +285,9 @@ export const createRealSystem = (): System => ({
   canWrite,
   freeBytes,
   listener,
+  pidAlive,
+  pid: process.pid,
+  processEnv: process.env,
   redisPing,
   withDb,
   randomHex: (bytes) => randomBytes(bytes).toString('hex'),

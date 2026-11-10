@@ -19,11 +19,16 @@ Amends: ADR-0063 §3（setup が写す `.env.example` の中身）
 ### 1. `pnpm ixa start`
 
 ```
-.env が無い                → 起こさない（pnpm ixa setup を勧める）
-この clone の ixa が動いている → 起こさない（場所だけ言う。start でも dev でも同じに見える。devIsRunning）
-ポートを別のものが使っている  → 起こさない（doctor の runtime.port-* をそのまま見せる）
-画面の組み立てが古い         → pnpm --filter @ixa/web run build:start（成功したら記録を書く）
-                           → pnpm exec turbo run serve（端末につなぐ。Ctrl+C で全部止まる。終了コードを返す）
+更新が途中で止まっている       → 起こさない（update.pending。先に pnpm -s ixa update --resume）
+.env が無い                   → 起こさない（pnpm ixa setup を勧める）
+ほかの start が組み立てている   → 起こさない（印 apps/web/.ixa-start-build.json の持ち主が生きている）
+この clone の ixa が全部動いている → 起こさない（場所だけ言う。--build なら組み立て直していないと言って 1）
+一部だけ動いている            → 起こさない（start.partial。動いているもの・いないものを名前で言う）
+ポートを別のものが使っている     → 起こさない（doctor の runtime.port-* をそのまま見せる）
+設定か DB が足りない          → 起こさない（doctor の env.valid・db.postgres・db.redis・db.migrations をそのまま見せる）
+--json                      → 起こさない（後ろで起こして doctor で待つ、と答える）
+画面の組み立てが古い           → 印を取って pnpm --filter @ixa/web run build:start（成功したら記録を書く。印は必ず外す）
+                             → pnpm exec turbo run serve（端末につなぐ。Ctrl+C で全部止まる。終了コードを返す）
 ```
 
 - 各アプリに `serve` を足す。web は `NEXT_DIST_DIR=.next-start next start -p 3000`、api・worker は `start` と同じ
@@ -37,10 +42,24 @@ Amends: ADR-0063 §3（setup が写す `.env.example` の中身）
 - **組み立て中の lint と型検査は止める**（`eslint.ignoreDuringBuilds`・`typescript.ignoreBuildErrors`）。CI が別に回しており、
   組み立ては使う人の手元で走る。`transpilePackages` には web が読むワークスペースの包み（domain・music・render・timeline）を並べる。
 - **組み立て直すか**（`apps/cli/src/start/build-record.ts`。純粋）: 成功したら `apps/web/.next-start/ixa-build.json` に
-  `git rev-parse HEAD` と `NEXT_PUBLIC_*` の指紋（sha256。値は書かない。`apps/web/.env.local` が直下の `.env` に勝つ）を書く。
-  次の起動で、記録が無い・読めない（zod）・版が違う・指紋が違う・`--build` のどれかなら組み立て直す。git の版が分からなければ毎回組み立てる。
-  組み立てる前に前の記録を消す（途中で止まった出力先を「組み立て済み」と読まない）。失敗したら起こさず、その終了コードで返る。
-  コミットしていない直しは拾わない（開発は `pnpm dev`。要るなら `--build`）。
+  `git rev-parse HEAD` と `NEXT_PUBLIC_*` の指紋（sha256。値は書かない）を書く。
+  次の起動で、記録が無い・読めない（zod。理由を言う）・版が違う・指紋が違う・`--build` のどれかなら組み立て直す。
+  git の版が分からなければ毎回組み立てる。組み立てる前に前の記録を消す（途中で止まった出力先を「組み立て済み」と読まない）。
+  失敗したら起こさず、その終了コードで返る。コミットしていない直しは拾わない（開発は `pnpm dev`。要るなら `--build`）。
+- **指紋は Next が実際に焼き込む値で計る。** 強い順（先に決めたものが勝ち、空の値も「決めた」に数える）:
+  起こしたプロセスの環境 → `apps/web/.env.production.local` → `.env.local` → `.env.production` → `.env` → 直下の `.env`。
+  確かめたこと: `@next/env` 15.5.25 の `loadEnvConfig` は production でこの 4 つのファイルをこの順に読み、環境にある名前
+  （`undefined` でないもの）は上書きしない。`next build` はこれを設定ファイルより先に呼ぶ（`build/index.js` の load-dotenv →
+  load-next-config）。`next.config.mjs` の `process.loadEnvFile` は Node 22 で既にある名前を上書きしない（空の値も）。
+  だから直下の `.env` がいちばん弱い。`$VAR` の展開（`@next/env` だけがする）は指紋に入れない。
+- **組み立ての間は印を持つ**（`apps/web/.ixa-start-build.json`。pid と始めた時刻、zod。`.next-start` の外）。組み立ての間は
+  どのポートも開かないので、印が無いと doctor は「動いていない」と言い、2 つ目の start が同じ出力先に組み立て、update が組み立ての下で
+  git を動かす。印は「無いときだけ作る」口（`wx`）で取り、終われば失敗でも投げても `finally` で外す。持ち主の pid が死んでいる・
+  読めない印は、理由を言って消す。doctor は `runtime.web-build`（知らせるだけ）、update は `devIsRunning` が印を「動いている」に数える。
+- **Ctrl+C**: 端末は同じプロセスグループの全員に SIGINT を送る。CLI は `inherit: 'all'` の子が動いている間は SIGINT で落ちず
+  （子が止まり終えるのを待ち、子の本当の終了コードを返す）、SIGTERM は子へ渡す。子が終われば手を離す（`real-system.ts`）。
+  SIGTERM を渡すのは、外の pnpm が Ctrl+C を受けると CLI に SIGTERM を送るため（下の「分かっている不足」の実験）。
+  CLI は `tsx` の CLI を挟まず `node --import tsx` で起こす（`tsx` の CLI は合図の中継の途中で CLI を消してしまった）。
 - **`--json` では起こさない**（止めるまで返らず、最後の JSON を出せない）。動いているときだけ `running: true` と URL を答え、
   それ以外は `ok: false`・`running: false`・`error` を返す。エージェントは `--json` を付けずに後ろで起こし、
   `pnpm -s ixa doctor --json` の `runtime.*` で待つ（INSTALL.md「起動する」）。
@@ -81,3 +100,19 @@ Amends: ADR-0063 §3（setup が写す `.env.example` の中身）
 - `pnpm ixa start` を端から端まで（組み立て → `turbo run serve` → 画面が開く）は回していない。作業した Mac では制作者の dev が
   3000・3001・8100 を使っていて止められなかった。
 - 組み立ての記録はコミットの版しか見ない。コミットしていない直しで起動するなら `--build`。
+- **ポートを持たない worker の取り残しは見えない。** 前の start か dev の worker だけが残っていると、ポートは全部空いているので
+  start はそのまま起こし、2 つの worker が同じキューを取り合う（古い版の worker がジョブを取ることもある）。
+- **turbo は、どれか 1 つが 0 以外で終わると残りも止める**（半分だけ動いているアプリは分かりにくいので、わざとそのままにする）。
+  確かめたこと（turbo 2.10.13、制作者のポートに触らない使い捨ての 2 つの包み）: 持続する task の片方が `exit 3` で終わると、
+  もう片方は 8 秒の `sleep` の途中で止められ、turbo は 3 で終わった。**片方が `exit 0` で終わったときは、もう片方は最後まで動いた**
+  （turbo は 0 で終わった）。つまり「1 つ止まれば全部止まる」は失敗で終わったときだけで、サーバが 0 で終わると残りは動き続ける。
+  ixa の 4 つのサーバが 0 で終わる場面（正常な終了）は Ctrl+C か合図のときだけと見ているが、確かめていない。
+- **Ctrl+C は本物の端末では押していない。** 代わりに、新しいプロセスグループの全員に SIGINT を送る実験をした（制作者のポートに触らない。
+  CLI に見立てた script が `System.run` の `inherit: 'all'` で、INT と TERM を受けて 2 秒かけて片付けてから 5 で終わる `sh` を起こす。
+  外側は `pnpm ixa` と同じく pnpm run が 2 段）:
+  - CLI の起動が `tsx src/main.ts`（前の形）: いちばん外の pnpm は 72ms で戻り、CLI は合図を受けた記録も残さずに消え、
+    `sh` は親を失ったまま 2 秒後に片付けを終えた（プロンプトが先に戻り、後から出力が混ざる）。
+  - `node --import tsx src/main.ts`（今の形）: pnpm は Ctrl+C を受けるとすぐ子へ SIGTERM を送る。CLI はそれを子へ渡し、子の片付けを待ち、
+    子の 5 を返し、外の pnpm はその後に戻った。
+  そこで `@ixa/cli` の `start` を `node --import tsx src/main.ts` にした（api・worker の `start` と同じ形）。turbo が SIGINT と SIGTERM の
+  両方を受けて片付けることは、turbo の実物では確かめていない。

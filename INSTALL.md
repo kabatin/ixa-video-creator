@@ -276,14 +276,27 @@ pnpm ixa start --build   # 画面を必ず組み立て直してから起こす
   メモリが増えて画面が勝手に起動し直すことも無い）。**コードを直しながら動かすなら `pnpm dev`**（開発の形。今までどおり）。
   決めたことは [ADR-0068](./docs/adr/0068-ixa-start.md)。
 - 画面は `apps/web/.next-start` に組み立てる。**コード（git の版）か `NEXT_PUBLIC_*` が前に組み立てたときと違えば**、起こす前に組み立て直す
-  （初回は数分かかることがある。2 回目からは変わったときだけ）。版の印は `git rev-parse HEAD` なので、コミットしていない直しは拾わない
-  （そのときは `--build`）。組み立てに失敗したら起こさずに止まり、次の `start` でもう一度組み立てる。
-- この clone の ixa がもう動いていれば、何も起こさずに場所だけ言う（`start` でも `dev` でも）。ポートを別のものが使っていれば起こさずに
-  `runtime.port-*` を出す（上の「動いているもの」）。`.env` が無ければ `pnpm ixa setup` を勧める。
+  （初回は数分かかることがある。2 回目からは変わったときだけ）。`NEXT_PUBLIC_*` は、起こした端末の環境・`apps/web` の
+  `.env.production.local`・`.env.local`・`.env.production`・`.env`・直下の `.env` の順に強い（先に決めたものが勝つ）。
+  版の印は `git rev-parse HEAD` なので、コミットしていない直しは拾わない（そのときは `--build`）。
+  組み立てに失敗したら起こさずに止まり、次の `start` でもう一度組み立てる。
+- **組み立ての間はどのポートも開かない。** その間は `apps/web/.ixa-start-build.json`（持ち主の pid と始めた時刻）を置き、終われば消す。
+  doctor は `runtime.web-build` で「組み立てている最中」と言い、2 つ目の `start` は「画面を組み立てている最中です」で止まり、
+  update はこの clone の ixa が動いているとみなして止まる（`update.dev-running`）。持ち主が死んでいれば、次の `start` が理由を言って消す。
+- 起こさずに止まるとき（どれも直し方を出す）: 更新が途中で止まっている（`update.pending`。先に `pnpm -s ixa update --resume`）／
+  `.env` が無い（`pnpm ixa setup`）／ほかの `start` が組み立てている／**一部だけ**動いている（`start.partial`。動いているもの・いないものを
+  名前で言う。残っているものを起動した端末で止めてから。端末が分からなければ `fix.command` の `lsof` で確かめる）／
+  ポートを別のものが使っている（`runtime.port-*`。上の「動いているもの」）／設定か DB が起動に足りない（`env.valid`・`db.postgres`・
+  `db.redis`・`db.migrations`。doctor と同じ文。組み立てに数分かける前に止める）。
+- この clone の ixa が**全部**（画面・API・音の解析）動いていれば、何も起こさずに場所だけ言う（`start` でも `dev` でも）。
+  `--build` を付けていたら、組み立て直していないと言って 1 で返る（止めてから `pnpm ixa start --build`）。
 - **`--json`**: 止めるまで返らないので、`--json` では起動しない。もう動いているときだけ `{"command":"start","ok":true,"running":true,"url":…}`、
-  それ以外は `ok: false`・`running: false`・`error`（理由）を返す。エージェントが起こすなら、人に聞いてから `--json` を付けずに
-  後ろで `pnpm ixa start` を起こし、`pnpm -s ixa doctor --json` の `runtime.api-health`・`runtime.audio-health` が ✓ になるまで待つ
-  （組み立てがあると数分かかる）。
+  それ以外は `ok: false`・`running: false` と、止めた理由（`steps`・`results`）か `error` を返す。エージェントが起こすなら、人に聞いてから
+  `--json` を付けずに後ろで `pnpm ixa start` を起こし、`pnpm -s ixa doctor --json` で待つ。起き上がったしるし:
+  `runtime.port-web`・`runtime.port-api`・`runtime.port-audio` が「この clone の ixa が使っています」（画面は組み立てが済んで
+  `next start` が待ち受けたときに開く）、`runtime.api-health`・`runtime.audio-health` が ✓。組み立ての間は `runtime.web-build` が
+  「組み立てている最中」と言う（数分かかることがある）。
+- Ctrl+C は画面・API・worker・音の解析に届く。どれか 1 つが失敗（0 以外）で終わると、turbo が残りも止める。
 
 ## 更新
 

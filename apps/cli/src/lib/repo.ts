@@ -27,6 +27,12 @@ export const paths = (root: string) => ({
   webEnvLocal: path.join(root, 'apps', 'web', '.env.local'),
   /** `pnpm ixa start` の画面の組み立ての記録（ADR-0068）。組み立ての出力先 `.next-start` の中に置く。 */
   webBuildRecord: path.join(root, 'apps', 'web', '.next-start', 'ixa-build.json'),
+  /** 組み立てている間の印。`.next-start` の外（組み立てが出力先を消すため。start/build-lock.ts）。 */
+  webBuildLock: path.join(root, 'apps', 'web', '.ixa-start-build.json'),
+  /** `next build` が読む apps/web の env（強い順は start/build-record.ts）。 */
+  webEnv: path.join(root, 'apps', 'web', '.env'),
+  webEnvProduction: path.join(root, 'apps', 'web', '.env.production'),
+  webEnvProductionLocal: path.join(root, 'apps', 'web', '.env.production.local'),
   rootPackage: path.join(root, 'package.json'),
   compose: path.join(root, 'infra', 'docker-compose.yml'),
   audioDir: path.join(root, 'apps', 'audio'),

@@ -1,13 +1,15 @@
 import path from 'node:path'
 import { z } from 'zod'
 import type { EnvValues } from '../lib/env-file.js'
-import { ROOT_PACKAGE_NAME, portsOf } from '../lib/repo.js'
+import { ROOT_PACKAGE_NAME, paths, portsOf } from '../lib/repo.js'
+import { readBuildLock, type BuildLock } from '../start/build-lock.js'
 import type { System } from '../system.js'
 import type { CheckResult } from '../types.js'
 
 /**
  * 動いているものの点検。3000（web）・API・音の解析のポートが ixa の物か空いているか。
- * dev が動いていれば API と音の解析の `/health`（どちらも門の外で、鍵は要らない）。
+ * この clone の ixa（`pnpm ixa start` か `pnpm dev`）が動いていれば API と音の解析の `/health`（どちらも門の外で、鍵は要らない）。
+ * `pnpm ixa start` が画面を組み立てている最中（ポートはまだ開いていない）なら、その印も見る（ADR-0068）。
  */
 
 export type PortOwner =
@@ -23,6 +25,8 @@ export type RuntimeFacts = {
   /** `/health` が ok を返したか。見なかったら null。 */
   readonly apiHealthy: boolean | null
   readonly audioHealthy: boolean | null
+  /** `pnpm ixa start` が画面を組み立てている最中なら、その印（持ち主が生きているものだけ）。 */
+  readonly building: BuildLock | null
 }
 
 const LABEL = { web: '画面（web）', api: 'API', audio: '音の解析' } as const
@@ -71,11 +75,24 @@ const healthCheck = (id: string, label: string, healthy: boolean | null): CheckR
       }
 }
 
+/** 知らせるだけ（組み立ては失敗ではない。終われば start がそのまま起こす）。 */
+const buildCheck = (building: BuildLock | null): CheckResult =>
+  building === null
+    ? { id: 'runtime.web-build', group: 'runtime', level: 'ok', message: '画面の組み立て（pnpm ixa start）は走っていません' }
+    : {
+        id: 'runtime.web-build',
+        group: 'runtime',
+        level: 'ok',
+        message: `pnpm ixa start が画面を組み立てている最中です（pid ${String(building.pid)}、${building.startedAt} から）。終わると起動します`,
+        docs: 'INSTALL.md#起動する',
+      }
+
 /** 判定（純粋）。 */
 export const judgeRuntime = (facts: RuntimeFacts): readonly CheckResult[] => [
   ...facts.ports.map(portCheck),
   healthCheck('runtime.api-health', 'API', facts.apiHealthy),
   healthCheck('runtime.audio-health', '音の解析', facts.audioHealthy),
+  buildCheck(facts.building),
 ]
 
 const RootPackageName = z.object({ name: z.string() })
@@ -129,12 +146,19 @@ export const gatherRuntime = async (system: System, env: EnvValues, root: string
     })),
   )
   const mine = (name: PortFacts['name']) => facts.find((f) => f.name === name)?.owner.kind === 'this-repo'
+  const lock = await readBuildLock(system, paths(root))
   return {
     ports: facts,
+    building: lock.kind === 'held' ? lock.lock : null,
     apiHealthy: mine('api') ? await healthy(system, `http://127.0.0.1:${String(ports.api)}/health`, ApiHealth) : null,
     audioHealthy: mine('audio') ? await healthy(system, `http://127.0.0.1:${String(ports.audio)}/health`, AudioHealth) : null,
   }
 }
 
-/** この clone の ixa（pnpm ixa start か pnpm dev）が動いているか（update の後に「起動し直して」と言うため・start が二重に起こさないため）。 */
-export const devIsRunning = (facts: RuntimeFacts): boolean => facts.ports.some((p) => p.owner.kind === 'this-repo')
+/**
+ * この clone の ixa（pnpm ixa start か pnpm dev）が動いているか。**どれか 1 つでも**（update が止める・「起動し直して」と言うため）。
+ * 画面を組み立てている最中も動いているに数える（組み立ての下で git を動かさない）。
+ * start が「もう動いている」と言うのは全部が動いているときだけで、そちらは commands/start.ts が見る。
+ */
+export const devIsRunning = (facts: RuntimeFacts): boolean =>
+  facts.building !== null || facts.ports.some((p) => p.owner.kind === 'this-repo')
