@@ -8,6 +8,8 @@ import { ProjectListActions } from '@/components/project-list-actions'
 import { resolveApiBaseUrl, type ApiClient } from '@/lib/api-client'
 import type { WireProjectListItem } from '@/lib/api-schemas'
 import { describeError } from '@/lib/api-error'
+import { demoEntrance, unreadableDemoEntrance, type DemoEntrance } from '@/lib/demo-entrance'
+import { getDemoStatus } from '@/lib/demo-status-server'
 import { toProjectListEntry } from '@/lib/project-list-entry'
 import { createServerApiClient, redirectIfUnauthenticated } from '@/lib/server-api-client'
 import { pickProjectCover, type PosterView } from '@/lib/shot-posters'
@@ -54,6 +56,18 @@ const loadCovers = async (
   return new Map(entries)
 }
 
+/**
+ * 「見本を開く」を出すか（ADR-0067）。**確かめられなかったことは理由として残す**（黙って隠すと「見本は無い」と読める）。
+ */
+const loadDemoEntrance = async (workspaceId: WorkspaceId): Promise<DemoEntrance> => {
+  try {
+    return demoEntrance(await getDemoStatus(workspaceId))
+  } catch (error) {
+    redirectIfUnauthenticated(error)
+    return unreadableDemoEntrance(describeError(error))
+  }
+}
+
 /** 作品が 1 件も無いときの補足。何をする道具かを 3 行で（作品の作り方の流れ）。 */
 const FIRST_STEPS: readonly string[] = Object.freeze([
   '曲やナレーションに合わせて Shot を切ります',
@@ -61,10 +75,14 @@ const FIRST_STEPS: readonly string[] = Object.freeze([
   'つないで 1 本の動画に書き出します',
 ])
 
-const NewProjectLink = () => (
-  <LinkButton href={NEW_PROJECT_HREF} tone="primary">
-    新規プロジェクト
-  </LinkButton>
+/** 見本の入口は、新規の左に並べる（見本が用意されていて、まだ入れていないときだけ）。 */
+const HeaderActions = ({ demo }: { readonly demo: DemoEntrance }) => (
+  <div className="flex flex-wrap items-center gap-2">
+    {demo.kind === 'offer' && <LinkButton href={demo.href}>{demo.label}</LinkButton>}
+    <LinkButton href={NEW_PROJECT_HREF} tone="primary">
+      新規プロジェクト
+    </LinkButton>
+  </div>
 )
 
 const ProjectsPage = async () => {
@@ -88,15 +106,23 @@ const ProjectsPage = async () => {
   const result = await loadProjects(api, workspace.workspaceId)
   // 表紙の URL を発行する時刻。画面はここから 1 分を数える（戻るボタンで出た古いページを見分けるため）。
   const coversIssuedAtMs = Date.now()
-  const covers = result.ok ? await loadCovers(api, result.projects) : new Map<ProjectId, PosterView>()
+  // 一覧が読めなかったときは見本も聞かない（同じ理由で失敗し、エラーが 2 つ並ぶだけになる）。
+  const [covers, demo]: readonly [ReadonlyMap<ProjectId, PosterView>, DemoEntrance] = result.ok
+    ? await Promise.all([loadCovers(api, result.projects), loadDemoEntrance(workspace.workspaceId)])
+    : [new Map(), { kind: 'none' }]
 
   return (
     <main>
       <PageHeader
         title="プロジェクト"
         description="カードを押すと、その映像のワークベンチが開きます。"
-        action={<NewProjectLink />}
+        action={<HeaderActions demo={demo} />}
       />
+      {demo.kind === 'unreadable' && (
+        <p role="status" className="mb-4 text-sm text-muted">
+          {demo.message}
+        </p>
+      )}
       {!result.ok ? (
         <ErrorPanel
           title="プロジェクトを読み込めませんでした"
@@ -110,6 +136,7 @@ const ProjectsPage = async () => {
           actionHref={NEW_PROJECT_HREF}
           actionLabel="最初のプロジェクトを作成"
           hint={FIRST_STEPS}
+          {...(demo.kind === 'offer' ? { secondaryHref: demo.href, secondaryLabel: demo.label } : {})}
         />
       ) : (
         // 右下の「…」と右クリックで複製・削除・素材置き場にする（制作者 2026-10-04）。検索・並べ方・素材置き場の畳みは ProjectBrowser。

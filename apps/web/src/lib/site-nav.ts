@@ -24,3 +24,6 @@ export const SITE_NAV_ENTRIES: readonly SiteNavEntry[] = Object.freeze([
 
 /** 新規プロジェクトの入口。ここだけが URL を知っている。 */
 export const NEW_PROJECT_HREF = '/projects/new'
+
+/** 同梱の見本の作品を入れて開く画面（ADR-0067）。一覧が、見本が用意されているときだけ入口を出す。 */
+export const DEMO_HREF = '/demo'

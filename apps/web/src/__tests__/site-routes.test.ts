@@ -2,7 +2,7 @@ import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { buildMenus, type MenuState } from '@/lib/menu-model'
-import { NEW_PROJECT_HREF, SITE_NAV_ENTRIES } from '@/lib/site-nav'
+import { DEMO_HREF, NEW_PROJECT_HREF, SITE_NAV_ENTRIES } from '@/lib/site-nav'
 
 /**
  * ページの一覧と、そこへ行くリンクを突き合わせる。
@@ -87,7 +87,7 @@ describe('入口のリンク', () => {
     .flatMap((menu) => menu.items)
     .flatMap((item) => (item.action?.kind === 'href' ? [item.action.href] : []))
 
-  const targets = [...SITE_NAV_ENTRIES.map((entry) => entry.href), NEW_PROJECT_HREF, ...menuHrefs]
+  const targets = [...SITE_NAV_ENTRIES.map((entry) => entry.href), NEW_PROJECT_HREF, DEMO_HREF, ...menuHrefs]
 
   /** キャラクター・素材ライブラリの入口は外した（プロジェクトごとになった。ADR-0034）。残りはプロジェクト一覧と新規。 */
   it('検査する行き先がある（空振りで合格にしない）', () => {
