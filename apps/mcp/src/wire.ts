@@ -1,4 +1,4 @@
-import { ImageCheckIssue, ImageGenerationJobStatus, MasteringMode, RenderPreset, RenderScope } from '@ixa/domain'
+import { ImageCheckIssue, ImageGenerationJobStatus, MasteringMode, ProjectKind, RenderPreset, RenderScope } from '@ixa/domain'
 import { z } from 'zod'
 
 /**
@@ -12,6 +12,8 @@ const nullableString = z.string().nullable()
 export const WireProject = z.object({
   id: z.string(),
   name: z.string(),
+  /** 作品の種類。古い API は返さないので省略可。 */
+  kind: ProjectKind.optional(),
   fps: z.number(),
   resolution: z.object({ width: z.number(), height: z.number() }),
   aspectRatio: z.string(),

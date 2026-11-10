@@ -1,6 +1,11 @@
 import { boolean, doublePrecision, index, integer, jsonb, pgTable, text } from 'drizzle-orm/pg-core'
-import type { AspectRatio, Fps, MasteringMode, ProjectStatus, Resolution } from '@ixa/domain'
-import { AspectRatio as AspectRatioSchema, MasteringMode as MasteringModeSchema, ProjectStatus as ProjectStatusSchema } from '@ixa/domain'
+import type { AspectRatio, Fps, MasteringMode, ProjectKind, ProjectStatus, Resolution } from '@ixa/domain'
+import {
+  AspectRatio as AspectRatioSchema,
+  MasteringMode as MasteringModeSchema,
+  ProjectKind as ProjectKindSchema,
+  ProjectStatus as ProjectStatusSchema,
+} from '@ixa/domain'
 import { createdAt, deletedAt, seconds, ulidPk, ulidRef, updatedAt } from './columns.js'
 
 /**
@@ -24,6 +29,10 @@ export const projects = pgTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
+    // 作品の種類。これまでの行はミュージックビデオとして読む。
+    kind: text('kind', { enum: ProjectKindSchema.options }).$type<ProjectKind>().notNull().default('mv'),
+    // 同梱の見本の印（例 ixa-demo-v1）。ふつうの作品は null。
+    demoKey: text('demo_key'),
 
     // 出力仕様（レンダリングと Provider 選択の制約になる）
     fps: integer('fps').$type<Fps>().notNull(),

@@ -5,6 +5,7 @@ export * from './common/time.js'
 // エンティティ
 export * from './project/workspace.js'
 export * from './project/project.js'
+export * from './project/project-kind.js'
 export * from './project/duplication-options.js'
 export * from './project/duplication-copy.js'
 export * from './project/library-import.js'

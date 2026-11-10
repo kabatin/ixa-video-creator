@@ -55,6 +55,15 @@ describe('update_project', () => {
     })
   })
 
+  it('作品の種類を変えられる（形は変えない）', async () => {
+    const fake = createFakeApi([{ method: 'PATCH', path: `/projects/${PROJECT}`, data: projectRow({ kind: 'library' }) }])
+    const result = jsonOf(await updateProjectTool.run({ projectId: PROJECT, kind: 'library' }, depsFor(fake))) as {
+      project: { kind: string }
+    }
+    expect(fake.callsTo('PATCH', `/projects/${PROJECT}`)[0]?.body).toEqual({ kind: 'library' })
+    expect(result.project.kind).toBe('library')
+  })
+
   it('コンセプトだけなら PATCH しない', async () => {
     const fake = createFakeApi([
       { method: 'GET', path: `/projects/${PROJECT}`, data: projectRow() },

@@ -4,6 +4,7 @@ import {
   hasAudibleTakeAudio,
   MAX_STYLE_REFERENCES,
   MasteringMode,
+  ProjectKind,
   ProjectStatus,
   resolveMasteringMode,
   Seconds,
@@ -30,6 +31,11 @@ import { defineTool, Id, jsonResult, mapLimited, round, ToolInputError } from '.
 
 /** 作品を作る・全体を見る。 */
 
+/** 作品の種類の説明（作る・直すで同じ）。種類を選んでも形（aspectRatio）は変わらない。 */
+const KIND_DESCRIPTION =
+  'What the piece is: mv (music video, default), short (vertical music short; pass aspectRatio 9:16), kamishibai ' +
+  '(pictures driven by narration), cm (ad / trailer with narration and text), library (shelf of characters and music to import into other projects).'
+
 /** 形ごとの既定の大きさ（web の resolution-presets.ts の先頭と同じ）。 */
 export const DEFAULT_RESOLUTION: Readonly<Record<AspectRatio, { width: number; height: number }>> = {
   '16:9': { width: 1920, height: 1080 },
@@ -41,6 +47,7 @@ export const DEFAULT_RESOLUTION: Readonly<Record<AspectRatio, { width: number; h
 
 export const CreateProjectInput = z.object({
   name: z.string().min(1).max(200).describe('Project name shown to the user (Japanese preferred).'),
+  kind: ProjectKind.optional().describe(KIND_DESCRIPTION),
   aspectRatio: AspectRatio.default('16:9'),
   fps: Fps.default(24),
   resolution: z
@@ -71,6 +78,7 @@ export const createProjectTool = defineTool({
       {
         workspaceId,
         name: args.name,
+        ...(args.kind === undefined ? {} : { kind: args.kind }),
         fps: args.fps,
         resolution: args.resolution ?? DEFAULT_RESOLUTION[args.aspectRatio],
         aspectRatio: args.aspectRatio,
@@ -98,6 +106,7 @@ export const createProjectTool = defineTool({
 export const UpdateProjectInput = z.object({
   projectId: Id,
   name: z.string().min(1).max(200).optional(),
+  kind: ProjectKind.optional().describe(KIND_DESCRIPTION),
   concept: z
     .string()
     .min(1)
@@ -131,7 +140,7 @@ export const updateProjectTool = defineTool({
   risk: 'settings',
   riskOf: (args) => (args.budgetUsd === undefined ? 'write' : 'settings'),
   description:
-    'Change project settings: name, concept (new script version; not undoable), styleGuide, avoid, aspect ratio, style reference ' +
+    'Change project settings: name, kind, concept (new script version; not undoable), styleGuide, avoid, aspect ratio, style reference ' +
     'images (replaces all, max 3), target duration, budget, instrumental, status, masteringMode. Only the given fields change.',
   input: UpdateProjectInput,
   handler: async ({ projectId, concept, styleReferences, aspectRatio, ...fields }, { api, workspaceId }) => {
@@ -169,6 +178,7 @@ export const updateProjectTool = defineTool({
 const compactProject = (p: WireProject) => ({
   id: p.id,
   name: p.name,
+  ...(p.kind === undefined ? {} : { kind: p.kind }),
   aspectRatio: p.aspectRatio,
   resolution: `${String(p.resolution.width)}x${String(p.resolution.height)}`,
   fps: p.fps,

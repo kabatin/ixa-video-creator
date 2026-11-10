@@ -22,7 +22,8 @@ import type { DuplicationSource } from './read-source.js'
 
 /**
  * 新しい作品と、Shot 以外の中身（作品の方針・楽曲・キャラクターなど・テロップ）を書く。
- * 名前・画面の形・予算はいつも引き継ぐ。それ以外は選んだものだけ。
+ * 名前・作品の種類・画面の形・予算はいつも引き継ぐ。それ以外は選んだものだけ。
+ * **見本の印（demoKey）は写さない**（写すと見本が 2 つになり、見本を入れ直すかの判定が狂う）。
  */
 
 /** Shot を張り直すのに使う付け替え表。 */
@@ -43,6 +44,7 @@ export const createDuplicateProject = async (
   const created = await deps.projects.create({
     workspaceId: source.workspaceId,
     name,
+    kind: source.kind,
     fps: source.fps,
     resolution: source.resolution,
     aspectRatio: source.aspectRatio,

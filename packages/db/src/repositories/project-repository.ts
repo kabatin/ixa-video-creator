@@ -1,9 +1,10 @@
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import type {
-  CreateProjectInput, Project, ProjectId, UpdateProjectPatch, WorkspaceId,
+  CreateProjectInput, Project, ProjectDemoKey, ProjectId, UpdateProjectPatch, WorkspaceId,
 } from '@ixa/domain'
 import {
   CreateProjectInput as CreateProjectInputSchema,
+  ProjectDemoKey as ProjectDemoKeySchema,
   UpdateProjectPatch as UpdateProjectPatchSchema,
   Project as ProjectSchema,
   ProjectId as ProjectIdSchema,
@@ -16,12 +17,21 @@ import { projects } from '../schema/workspace.js'
 /** drizzle の row 型。パッケージ外へは出さない。 */
 export type ProjectRow = typeof projects.$inferSelect
 
-/** 更新可能な列。id / workspaceId / createdAt は変更不可。 */
+/**
+ * 作るときの、作成の入力（`CreateProjectInput`）に入れない指定。**同梱の見本を入れる処理だけが渡す。**
+ * HTTP の作成口（`POST /projects`）は渡さない（任意の作品を見本にさせない）。
+ */
+export type CreateProjectOptions = {
+  /** 同梱の見本の印（例 `ixa-demo-v1`）。省略は null（ふつうの作品）。 */
+  readonly demoKey?: ProjectDemoKey
+}
 
 export type ProjectRepository = {
   findById(id: ProjectId): Promise<Project | null>
   findByWorkspace(workspaceId: WorkspaceId): Promise<Project[]>
-  create(input: CreateProjectInput): Promise<Project>
+  /** 見本の印の付いた、消していない作品。無ければ null。複数あれば先に作った方。 */
+  findByDemoKey(workspaceId: WorkspaceId, demoKey: ProjectDemoKey): Promise<Project | null>
+  create(input: CreateProjectInput, options?: CreateProjectOptions): Promise<Project>
   update(id: ProjectId, patch: UpdateProjectPatch): Promise<Project>
   softDelete(id: ProjectId): Promise<void>
 }
@@ -35,6 +45,8 @@ export const projectRowToDomain = (row: ProjectRow): Project =>
     id: row.id,
     workspaceId: row.workspaceId,
     name: row.name,
+    kind: row.kind,
+    demoKey: row.demoKey,
     fps: row.fps,
     resolution: row.resolution,
     aspectRatio: row.aspectRatio,
@@ -70,8 +82,21 @@ export const createProjectRepository = (db: DbExecutor): ProjectRepository => ({
     return rows.map(projectRowToDomain)
   },
 
-  async create(input) {
+  async findByDemoKey(workspaceId, demoKey) {
+    const key = ProjectDemoKeySchema.parse(demoKey)
+    const rows = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.workspaceId, workspaceId), eq(projects.demoKey, key), isNull(projects.deletedAt)))
+      .orderBy(asc(projects.id))
+      .limit(1)
+    const row = rows[0]
+    return row ? projectRowToDomain(row) : null
+  },
+
+  async create(input, options = {}) {
     const validated = CreateProjectInputSchema.parse(input)
+    const demoKey = options.demoKey === undefined ? null : ProjectDemoKeySchema.parse(options.demoKey)
     const now = new Date()
     const rows = await db
       .insert(projects)
@@ -79,6 +104,8 @@ export const createProjectRepository = (db: DbExecutor): ProjectRepository => ({
         id: newId(ProjectIdSchema),
         workspaceId: validated.workspaceId,
         name: validated.name,
+        kind: validated.kind,
+        demoKey,
         fps: validated.fps,
         resolution: validated.resolution,
         aspectRatio: validated.aspectRatio,

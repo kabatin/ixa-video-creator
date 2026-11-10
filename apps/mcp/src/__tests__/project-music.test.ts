@@ -76,6 +76,14 @@ describe('create_project', () => {
     expect(fake.calls[0]?.body).toMatchObject({ aspectRatio: '16:9', fps: 24, resolution: { width: 1920, height: 1080 } })
   })
 
+  /** 種類は送ったときだけ送る（送らなければ API がミュージックビデオにする）。形の既定は種類で変えない。 */
+  it('作品の種類を渡せば送り、返ってきた種類を見せる', async () => {
+    const fake = createFakeApi([{ method: 'POST', path: '/projects', status: 201, data: projectRow({ kind: 'kamishibai' }) }])
+    const result = jsonOf(await createProjectTool.run({ name: 'x', kind: 'kamishibai' }, depsFor(fake))) as { project: { kind: string } }
+    expect(fake.calls[0]?.body).toMatchObject({ kind: 'kamishibai', aspectRatio: '16:9' })
+    expect(result.project.kind).toBe('kamishibai')
+  })
+
   it('API の 422 を状態コードと項目つきで返す', async () => {
     const fake = createFakeApi([
       { method: 'POST', path: '/projects', status: 422, raw: { success: false, error: '入力の検証に失敗しました', fields: { name: ['長すぎます'] } } },

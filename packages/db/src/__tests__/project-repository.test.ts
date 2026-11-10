@@ -8,6 +8,8 @@ const baseRow = (): ProjectRow => ({
   id: newId(ProjectId),
   workspaceId: newId(WorkspaceId),
   name: 'iXA CUP MUSIC VIDEO',
+  kind: 'short',
+  demoKey: 'ixa-demo-v1',
   fps: 24,
   resolution: { width: 1920, height: 1080 },
   aspectRatio: '16:9',
@@ -34,6 +36,9 @@ describe('projectRowToDomain', () => {
       id: row.id,
       workspaceId: row.workspaceId,
       name: row.name,
+      // 作品の種類と見本の印。既定値ではなく行の値を写す。
+      kind: 'short',
+      demoKey: 'ixa-demo-v1',
       fps: 24,
       resolution: { width: 1920, height: 1080 },
       aspectRatio: '16:9',
@@ -58,7 +63,8 @@ describe('projectRowToDomain', () => {
   })
 
   it('null 許容列を保持する', () => {
-    const project = projectRowToDomain({ ...baseRow(), durationSec: null, budgetUsd: null, masteringMode: null })
+    const project = projectRowToDomain({ ...baseRow(), durationSec: null, budgetUsd: null, masteringMode: null, demoKey: null })
+    expect(project.demoKey).toBeNull()
     expect(project.durationSec).toBeNull()
     expect(project.masteringMode).toBeNull()
     expect(project.budgetUsd).toBeNull()
@@ -66,6 +72,11 @@ describe('projectRowToDomain', () => {
 
   it('不正な ID（非 ULID）は握り潰さず投げる', () => {
     expect(() => projectRowToDomain({ ...baseRow(), id: 'not-a-ulid' })).toThrow()
+  })
+
+  it('不正な種類・見本の印は投げる', () => {
+    expect(() => projectRowToDomain({ ...baseRow(), kind: 'anime' as ProjectRow['kind'] })).toThrow()
+    expect(() => projectRowToDomain({ ...baseRow(), demoKey: 'IXA DEMO' })).toThrow()
   })
 
   it('不正な status は投げる', () => {

@@ -111,6 +111,9 @@ type Project = {
   id: ProjectId
   workspaceId: WorkspaceId
   name: string
+  // 作品の種類。作業の始め方（曲・ナレーション・なし）と既定の形は domain の project-kind.ts。これまでの作品は mv
+  kind: 'mv' | 'short' | 'kamishibai' | 'cm' | 'library'
+  demoKey: string | null           // 同梱の見本の印（例 ixa-demo-v1）。作る入力・直す差分からは付けられない
   // 出力仕様（レンダリングとプロバイダ選択の制約になる）
   fps: 24 | 25 | 30 | 60
   resolution: Resolution

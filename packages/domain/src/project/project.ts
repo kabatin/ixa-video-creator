@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { MediaAssetId, ProjectId, WorkspaceId } from '../common/ids.js'
 import { AspectRatio, Fps, Resolution, Seconds } from '../common/time.js'
 import { ProjectMasteringMode } from '../audio/mastering.js'
+import { DEFAULT_PROJECT_KIND, ProjectKind } from './project-kind.js'
 
 /** 手本画像（ムードボード）の上限（ADR-0030）。参照の上限（Codex は 4 枚）に人物や場所の分を残す。 */
 export const MAX_STYLE_REFERENCES = 3
@@ -14,10 +15,28 @@ export type ProjectStatus = z.infer<typeof ProjectStatus>
 /** 作品の名前の上限。複製の既定の名前（「のコピー」）もこれに収める。 */
 export const PROJECT_NAME_MAX_LENGTH = 200
 
+/** 見本の印の長さの上限。 */
+export const PROJECT_DEMO_KEY_MAX_LENGTH = 64
+
+/**
+ * 同梱の見本の作品に付ける印（例 `ixa-demo-v1`）。同じ印の作品があれば入れ直さない。
+ * 小文字・数字・ハイフンだけで、英数字で始まる。**作る入力・直す差分には無い**（任意の作品を見本にさせない）。
+ */
+export const ProjectDemoKey = z
+  .string()
+  .min(1)
+  .max(PROJECT_DEMO_KEY_MAX_LENGTH)
+  .regex(/^[a-z0-9][a-z0-9-]*$/)
+export type ProjectDemoKey = z.infer<typeof ProjectDemoKey>
+
 export const Project = z.object({
   id: ProjectId,
   workspaceId: WorkspaceId,
   name: z.string().min(1).max(PROJECT_NAME_MAX_LENGTH),
+  /** 作品の種類（`project-kind.ts`）。これまでの作品はミュージックビデオとして読む。 */
+  kind: ProjectKind.default(DEFAULT_PROJECT_KIND),
+  /** 同梱の見本の印。ふつうの作品は null。 */
+  demoKey: ProjectDemoKey.nullable().default(null),
 
   // 出力仕様。レンダリングと Provider 選択の制約になる。
   fps: Fps,
@@ -68,14 +87,15 @@ export const CreateProjectInput = Project.pick({
 }).extend({
   budgetUsd: z.number().nonnegative().nullable().default(null),
   styleGuide: z.string().default(''),
+  kind: ProjectKind.default(DEFAULT_PROJECT_KIND),
 })
 export type CreateProjectInput = z.input<typeof CreateProjectInput>
 
 /**
  * 更新可能な列。リポジトリの契約はドメインが定義する（ADR-0007）。
- * id / workspaceId / createdAt は変更できない。
+ * id / workspaceId / createdAt は変更できない。見本の印（demoKey）も直せない（送られても黙って落とす）。
  */
 export const UpdateProjectPatch = Project.omit({
-  id: true, workspaceId: true, createdAt: true, updatedAt: true,
+  id: true, workspaceId: true, demoKey: true, createdAt: true, updatedAt: true,
 }).partial()
 export type UpdateProjectPatch = z.input<typeof UpdateProjectPatch>

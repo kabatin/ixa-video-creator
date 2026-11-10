@@ -135,6 +135,14 @@ describe('作品の記録（EditBatchProjectEntry）', () => {
     expect(EditBatchProjectEntry.safeParse({ patch: { workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' } }).success).toBe(false)
   })
 
+  /** 種類は直せる欄なので戻せる。見本の印は直す欄ではないので控えない。 */
+  it('作品の種類は控えられ、見本の印は受け付けない', () => {
+    expect(EditBatchProjectEntry.parse({ patch: { kind: 'short' } })).toEqual({ patch: { kind: 'short' } })
+    expect(EditBatchProjectEntry.parse({ patch: { name: 'x' } })).toEqual({ patch: { name: 'x' } })
+    expect(EditBatchProjectEntry.safeParse({ patch: { kind: 'anime' } }).success).toBe(false)
+    expect(EditBatchProjectEntry.safeParse({ patch: { demoKey: 'ixa-demo-v1' } }).success).toBe(false)
+  })
+
   it('これまでの記録は無いものとして読み、作品の記録だけでも取り消せる', () => {
     expect(EditBatch.parse({ ...base, kind: 'rough_cut' }).projectEntry).toBeNull()
     expect(canUndo(EditBatch.parse({ ...base, kind: 'project_edit', projectEntry: { patch: { avoid: '' } } }))).toBe(true)

@@ -186,6 +186,8 @@ export const EditBatchProjectEntry = z.object({
   patch: z
     .object({
       name: project.name.optional(),
+      // 作品の種類。見本の印（demoKey）は直す欄ではないので無い。
+      kind: project.kind.removeDefault().optional(),
       fps: project.fps.optional(),
       resolution: project.resolution.optional(),
       aspectRatio: project.aspectRatio.optional(),

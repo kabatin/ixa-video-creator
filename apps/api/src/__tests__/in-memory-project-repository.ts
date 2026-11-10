@@ -2,6 +2,7 @@ import { DbNotFoundError, type ProjectRepository } from '@ixa/db'
 import {
   CreateProjectInput as CreateProjectInputSchema,
   Project as ProjectSchema,
+  ProjectDemoKey as ProjectDemoKeySchema,
   ProjectId as ProjectIdSchema,
   UpdateProjectPatch as UpdateProjectPatchSchema,
   newId,
@@ -33,13 +34,21 @@ export const createInMemoryProjectRepository = (
     findByWorkspace: (workspaceId) =>
       Promise.resolve(store.filter((project) => project.workspaceId === workspaceId)),
 
-    create: (input) => {
+    findByDemoKey: (workspaceId, demoKey) =>
+      Promise.resolve(
+        store.find((project) => project.workspaceId === workspaceId && project.demoKey === ProjectDemoKeySchema.parse(demoKey)) ??
+          null,
+      ),
+
+    create: (input, options = {}) => {
       const validated = CreateProjectInputSchema.parse(input)
       const now = new Date()
       const created = ProjectSchema.parse({
         id: newId(ProjectIdSchema),
         workspaceId: validated.workspaceId,
         name: validated.name,
+        kind: validated.kind,
+        demoKey: options.demoKey ?? null,
         fps: validated.fps,
         resolution: validated.resolution,
         aspectRatio: validated.aspectRatio,
@@ -82,6 +91,7 @@ export const createInMemoryProjectRepository = (
 export const createFailingProjectRepository = (error: Error): ProjectRepository => ({
   findById: () => Promise.reject(error),
   findByWorkspace: () => Promise.reject(error),
+  findByDemoKey: () => Promise.reject(error),
   create: () => Promise.reject(error),
   update: () => Promise.reject(error),
   softDelete: () => Promise.reject(error),

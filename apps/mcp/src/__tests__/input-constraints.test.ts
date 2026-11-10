@@ -41,6 +41,7 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ styleGuide: long(4001) }, 'styleGuide'],
       [{ avoid: long(4001) }, 'avoid'],
       [{ budgetUsd: -1 }, 'budgetUsd'],
+      [{ kind: 'anime' }, 'kind'],
     ],
   },
   get_project: { base: { projectId: P }, cases: [[{ projectId: 'nope' }, 'projectId']] },
@@ -380,6 +381,7 @@ const CASES: Record<string, { readonly base: Record<string, unknown>; readonly c
       [{ budgetUsd: -1 }, 'budgetUsd'],
       [{ status: 'archived' }, 'status'],
       [{ masteringMode: 'limiter' }, 'masteringMode'],
+      [{ kind: 'anime' }, 'kind'],
     ],
   },
   duplicate_project: {

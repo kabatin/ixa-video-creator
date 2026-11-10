@@ -63,7 +63,7 @@ const analysisOf = (musicTrackId: string): MusicAnalysis =>
   })
 
 /** 元の作品。方針・歌詞・楽曲・登場人物・ロケーション・テロップ・Shot 2 件（採用・外した Take・ロック・最初のフレーム）。 */
-const seed = async () => {
+const seed = async (overrides: Partial<Project> = {}) => {
   const source: Project = aProject({
     name: '進め！戦子ちゃん！',
     styleGuide: '和モダンのアニメ調',
@@ -72,6 +72,7 @@ const seed = async () => {
     lyricCues: [1, 3],
     instrumental: false,
     budgetUsd: 50,
+    ...overrides,
   })
   const shotA: Shot = aShot(source.id, { code: 'CUT-01', order: 1000, startSec: 0, durationSec: 2, description: '店の前', mood: '気合い' })
   const shotB: Shot = aShot(source.id, { code: 'CUT-02', order: 2000, startSec: 2, durationSec: 2, description: '店内' })
@@ -297,6 +298,20 @@ describe('POST /projects/:id/duplicate（一部だけ）', () => {
     ])
     const clips = await f.deps.timelineClips.findByProject(project.id as Project['id'])
     expect(clips.map((clip) => clip.track)).toEqual(['TEXT', 'TEXT'])
+  })
+})
+
+describe('POST /projects/:id/duplicate（作品の種類と見本の印）', () => {
+  /** 種類は画面の形と同じく、いつも引き継ぐ。見本の印は写さない（写すと見本が 2 つになり、入れ直しの判定が狂う）。 */
+  it.each([[[]], [[...DUPLICATION_ITEMS]]] as const)('種類は引き継ぎ、見本の印は写さない（%j）', async (items) => {
+    const f = await seed({ kind: 'kamishibai', demoKey: 'ixa-demo-v1' })
+
+    const res = await f.duplicate(items)
+
+    expect(res.status).toBe(201)
+    const { project } = ((await res.json()) as Ok<Duplicated>).data
+    expect(await f.deps.projects.findById(project.id as Project['id'])).toMatchObject({ kind: 'kamishibai', demoKey: null })
+    expect((await f.deps.projects.findByDemoKey(f.source.workspaceId, 'ixa-demo-v1'))?.id).toBe(f.source.id)
   })
 })
 

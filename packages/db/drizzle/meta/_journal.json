@@ -421,6 +421,13 @@
       "when": 1793198650161,
       "tag": "0059_ai_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1794301494759,
+      "tag": "0060_project_kind",
+      "breakpoints": true
     }
   ]
 }

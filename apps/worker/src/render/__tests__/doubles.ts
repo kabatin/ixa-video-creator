@@ -86,6 +86,8 @@ export const inMemoryProjects = (seed: readonly Project[]): InMemoryProjects => 
     findById: (id) => Promise.resolve(store.find((p) => p.id === id) ?? null),
     findByWorkspace: (workspaceId) =>
       Promise.resolve(store.filter((p) => p.workspaceId === workspaceId)),
+    findByDemoKey: (workspaceId, demoKey) =>
+      Promise.resolve(store.find((p) => p.workspaceId === workspaceId && p.demoKey === demoKey) ?? null),
     create: () => Promise.reject(new Error('未使用')),
     update: () => Promise.reject(new Error('未使用')),
     softDelete: () => Promise.resolve(),
