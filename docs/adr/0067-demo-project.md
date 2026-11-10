@@ -1,0 +1,114 @@
+# ADR-0067: 同梱の見本の作品（目録は git、ファイルはリリース）
+
+Status: Accepted
+Date: 2026-11-10
+Decider: Claude（Architect）
+
+## 背景
+
+初めて触る人は、曲も絵も無い空の作品から始めることになる。曲と Shot と絵と採用した Take がそろった作品を
+1 回押す（または `pnpm ixa demo`）だけで開き、再生し、書き出せるようにしたい。
+
+この ADR で作るのは**仕組みだけ**。中身（見本の作品そのもの）はまだ無い。目録が無いあいだは、
+どの入口も「まだ用意されていません」と答えるか、出さない。目録が無いときに今の動きを悪くしない。
+
+## 決めたこと
+
+### 1. 見本 = 目録（`manifest.json`）+ ファイル
+
+- 目録は git に置く（`apps/api/demo/manifest.json`。いまは無い）。ファイルは GitHub のリリースに置き、`baseUrl + file` で取りに行く
+  - 画像・動画は数 MB ずつあり、git に入れるとリポジトリが重くなる。目録だけなら版と一緒に変わり、差分も読める
+- 形は domain の `DemoManifest`（`packages/domain/src/project/demo-manifest.ts`。純粋な zod と関数だけ）
+  - `formatVersion: 1`・`demoKey`（`ProjectDemoKey`）・`title`（入れた作品の名前）・`baseUrl`（https・末尾 `/`・問い合わせ無し）
+  - `media[]`: `id`（`source` の中でその素材を指す ID）・`file`・`sha256`・`sizeBytes`・`contentType`・`originalFilename`・`kind`・`probe`
+  - `files[]`: `key`（置き場。いまは `music/` の下だけ＝曲の解析の波形）・`file`・`sha256`・`sizeBytes`
+  - `file` は英数字で始まり `/`・`..` を含まない。`key` は知っている頭の下で、区間はすべて安全な文字。どちらも目録の形で縛る
+  - `source`: 作品の複製が読む形（`DuplicationSource`）を JSON にしたもの + `characterAssets`（キャラクターの Look と画像）。
+    JSON ↔ domain は API の `demo-project/source-wire.ts`（`DuplicationSource` が API の型のため）。
+    ドメインのスキーマをそのまま使い、日時の列だけを文字から Date に戻す（画面の `api-schemas.ts` の `z.coerce.date()` と同じ考え）
+
+### 2. 素材の ID の付け替えは「値がちょうど ID の所」を木ごと替える
+
+入れる側が、目録の素材ごとに使う素材（同じ中身の既存の行か、新しく作った行）を決めたら、
+`remapExactValues` が `source` の木を全部歩き、**値がちょうど目録の素材の ID である文字だけ**を替えてから domain で読む。
+
+- ID は ULID なので、丸ごと一致する値はほかに無い。列の名前を並べないので、あとで列が増えても漏れない
+- キー・ID を含むだけの文字（波形の置き場など）は替えない
+- 書き出す側も同じ歩き方（`ulidValues`）で、値に出てくる ULID を素材の表で引いて素材を見つける。
+  素材なのに `media` に無いものがあれば書かない（`unlistedMediaReferences`）
+
+### 3. 出どころは 2 つ（`DemoBundleSource`）
+
+- 同梱: 目録は git、ファイルは組み込みの fetch で https から取る。リダイレクトはたどる（リリースのファイルは署名付きの URL へ飛ぶ）。
+  時間の上限・目録より大きい応答は読み切らずに断る・飛ばされた先が https でなければ断る。**丸ごと読み、大きさと sha256 を確かめてから**返す。
+  例外とログに入れるのはファイル名だけ（飛ばされた先の URL は入れない）
+- この機械のフォルダ: `DEMO_DIR`（絶対パス。`.env.full.example` にだけ書く）。`<dir>/manifest.json` とファイルを読む。確かめ方は同じ。
+  ネットにつながらない機械へ入れるときと、公開する前の見本を確かめるときに使う。**あれば同梱より優先する**
+
+### 4. 入れるのは API だけ（`apps/api/src/demo-project/`）
+
+- `GET /projects/demo?workspaceId=` → `{ available, title, totalBytes, project }`（200）
+- `POST /projects/demo` `{ workspaceId }` → `{ project, created }`（入れた 201・もう入っていた 200・目録が無い 404・
+  取れない/壊れていた 502・目録が読めない/書く途中の失敗 500）
+- 口は新しいファイル（`routes/project-demo.ts`）に置き、**`/projects/{id}` より先に登録する**（`demo` を作品の ID として読ませない）
+- 手順
+  1. 目録が無ければ「見本はまだ用意されていません」
+  2. 同じ `demoKey` の生きている作品が作業場所にあれば、それを返す（何も取りに行かない）
+  3. 中身がこの版で読めることを先に確かめる（読めない目録のために取りに行かない）
+  4. 素材: 同じ sha256 の生きている素材があれば使う（取りに行かない）。無ければ取って確かめ、**全部そろってから**ふつうの素材の置き場に入れ、
+     アップロードの完了と同じ道（`media-intake.ts` の `registerMediaAsset`。`POST /uploads/complete` もここを通る）で登録し、取り込みジョブを投げる
+     （サムネイルなどはアップロードの後と同じように数秒後にできる）
+  5. `files`: その置き場に無ければ入れる
+  6. ID を付け替えて読み、**作品の複製と同じ書き手**（`project-duplication/write-snapshot.ts` の `writeSnapshot`）で書く
+- 作品は**頼んだ作業場所**に作る（目録を作った人の作業場所ではない）。名前は目録の `title`、印は `demoKey`
+- 作品の複製（`duplicate.ts`）は「読む + `writeSnapshot`」になった。見本で足したのは `demoKey` を作る口へ渡すことと、失敗の文を呼ぶ側が決めることだけ
+- 書き手は書く途中で元の作品を読むことがある。見本には元の作品が無いので、`demo-project/write-deps.ts` が答える。
+  **目録が答えない読みは空を返さずに投げる**（書き手が新しく元を読むようになっても、黙って中身の少ない作品を入れない）
+
+  | 書く途中の読み | 見本での答え |
+  |---|---|
+  | `characters.listIdentityImages`・`looks.findByCharacter`・`looks.listLookImages`（`copyCharacter`） | 目録の `characterAssets` |
+  | `motionAnalyses.findLatestSucceededByTakes`（`writeShots`） | 口ごと渡さない（省ける口。写した先で分析し直すだけ） |
+  | ほかの `find*`（読む側の口） | 呼ばれたら投げる |
+
+### 5. 1 つだけ入れる（2 度押し・画面と CLI が重なる）
+
+- 入れる口の中に「入れている途中」の表を持つ（作業場所 + 印 → 約束）。同じ組の 2 つ目は同じ約束を待つ。
+  表は配線（`createApp`）で作る口が持つ（import しただけでは何もしない）
+- 最後の守りは `(workspace_id, demo_key)` の生きている行の部分一意索引。ぶつかったら作った方を読み直して返す
+
+### 6. 失敗したとき
+
+- 取れない・壊れていた: 何も置き場に入れず、作品も作らない
+- 書く途中: 作りかけの作品を消す（複製と同じ）。登録した素材は残す（正しい中身で、重ならない。次に使い回す）
+- 画面の文は理由ごとに 1 つ（`demo-project/errors.ts`）。URL・ID・番号を入れない。文脈（ファイル名・作業場所・印）はログに残す
+
+### 7. 書き出す道具（作る人のため）
+
+`pnpm --filter @ixa/api demo:export -- --project <ID> --out <フォルダ> --demo-key <印> --base-url <https://…/> --title <名前>`
+（`apps/api/scripts/export-demo.ts` は呼ぶだけ。中身は `demo-project/exporter.ts`）。
+
+- 作品を複製と同じ読み方で全部読み、素材の元のファイルを `<sha256>.<拡張子>` に、曲の解析の波形を `files` に写す。中身は測り直して登録と照らす
+- **DB は読むだけ**。元のファイルが欠けていれば止める。署名付きの URL・置き場の鍵・合言葉に見える値が 1 つでもあれば書かない（値は言わず、件数だけ）
+- 全部そろってから書く。書き出したフォルダを `DEMO_DIR` に指定すれば、公開する前に入れて確かめられる
+
+### 8. 入口
+
+- 画面: `/demo`（状態を見て、無ければ「まだ用意されていません」と一覧へ戻る道。あれば入れて、作品のワークベンチへ置き換えて移る。
+  失敗は理由と「もう一度」）。一覧の「見本を開く」は、サーバ側から `getDemoStatus(workspaceId)`（`apps/web/src/lib/demo-status-server.ts`）で出すかを決める
+- CLI: `pnpm ixa demo`（`--json`）。動いている ixa に頼むだけ。合言葉を決めていなければ入る口でクッキーをもらい、
+  書き込みには `CORS_ORIGINS` の先頭を Origin に付ける。使い終えた鍵は取り消す。**合言葉を決めていれば入らず**、画面の「見本を開く」へ案内する
+- **MCP の道具は足さない。** 道具の数は 62 のまま。エージェントは `pnpm ixa demo --json` で足りる
+
+## 結果
+
+- 見本を作れば、目録を git に足し、ファイルをリリースに置くだけで、全員の入口が「入れられる」に変わる
+- 作品の複製と見本が同じ書き手を使うので、複製に項目が増えれば見本にも入る（`source` は列を並べない）
+
+## 分かっている不足
+
+- ネットが要る（同梱の目録のとき）。つながらない機械は `DEMO_DIR` で入れる
+- サムネイル・プロキシは入れた数秒後にできる（取り込みジョブを待たない）
+- 中身はまだ公開していない。中身の権利（ライセンス）は、中身を作るときに決める
+- 書き出す目録には、作る人の作品の中身がそのまま入る（指示文・使った AI・費用など）。公開する前に何を外すかは中身を作るときに決める
+- 見本の素材は作業場所の持ち物で、作品には結び付けない（素材の行の `projectId` は空。作業場所ごとの素材の一覧は今の画面に無い）
