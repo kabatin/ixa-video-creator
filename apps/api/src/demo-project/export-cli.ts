@@ -82,6 +82,37 @@ export const parseExportArgs = (argv: readonly string[]): ExportArgs => {
   return parsed.data
 }
 
+/** 鍵の名前（値は目録に入っていてはいけない）。 */
+const SECRET_NAME = /KEY|TOKEN|SECRET|PASSPHRASE|PASSWORD/i
+/** これより短い鍵は点検しない（`includes` がどの文にも当たり、書き出しが通らなくなる）。 */
+export const MIN_SECRET_LENGTH = 8
+
+const passwordOf = (url: URL): string => {
+  try {
+    return decodeURIComponent(url.password)
+  } catch {
+    return url.password
+  }
+}
+
+/**
+ * 設定から鍵を集める（純粋）。名前が鍵らしい値と、URL の形の値のパスワード（`postgresql://u:pw@…`）。
+ * 短すぎるものは外して数を返す（空は数えない）。
+ */
+export const secretsFromEnv = (env: Readonly<Record<string, string | undefined>>): { readonly secrets: readonly string[]; readonly skipped: number } => {
+  const candidates = Object.entries(env).flatMap(([name, value]) => {
+    if (value === undefined || value.trim() === '') return []
+    const named = SECRET_NAME.test(name) ? [value.trim()] : []
+    const password = URL.canParse(value) ? passwordOf(new URL(value)) : ''
+    return [...named, ...(password === '' ? [] : [password])]
+  })
+  const unique = [...new Set(candidates)]
+  return {
+    secrets: unique.filter((secret) => secret.length >= MIN_SECRET_LENGTH),
+    skipped: unique.filter((secret) => secret.length < MIN_SECRET_LENGTH).length,
+  }
+}
+
 /** 書き出す。**DB は読むだけ**（書く口は exporter が呼ばない）。書いた目録の場所と、作る人に見せる点検の一覧を返す。 */
 export const runExportDemo = async (
   argv: readonly string[],
@@ -93,6 +124,7 @@ export const runExportDemo = async (
     throw new Error(`${join(outDir, DEMO_MANIFEST_FILE)} がもうあります。空のフォルダを指定してください`)
   }
   const config = loadConfig(env)
+  const secrets = secretsFromEnv(env)
   const db = createDbClient(config.database.url)
   try {
     const { storage } = createStorage(config.storage)
@@ -125,17 +157,13 @@ export const runExportDemo = async (
         mediaAssets: createMediaAssetRepository(db),
         storage,
         writeOut: (name, bytes) => writeFile(join(outDir, name), bytes),
-        secrets: [
-          config.storage.signingSecret ?? '',
-          config.storage.s3?.secretAccessKey ?? '',
-          config.storage.s3?.accessKeyId ?? '',
-          config.api.passphrase ?? '',
-        ],
+        secrets: secrets.secrets,
         machine: { homeDir: homedir(), userName: userInfo().username },
       },
       request,
     )
-    return { manifestPath: join(outDir, DEMO_MANIFEST_FILE), review: exportReviewLines(manifest) }
+    const skipped = secrets.skipped > 0 ? [`鍵の点検: 8 文字より短い鍵 ${String(secrets.skipped)} 件は見ていません（どの文にも当たってしまうため）。`] : []
+    return { manifestPath: join(outDir, DEMO_MANIFEST_FILE), review: [...skipped, ...exportReviewLines(manifest)] }
   } finally {
     await closeDbClient(db)
   }

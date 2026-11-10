@@ -55,6 +55,7 @@ export const exportReviewLines = (manifest: DemoManifest): readonly string[] => 
     `Shot ${String(source.shots.length)} 件・Take ${String(takes)} 件・素材のファイル ${String(manifest.media.length)} 件（合わせて ${formatSize(demoTotalBytes(manifest))}）`,
     'そのまま公開する文の欄:',
     ...(published.length === 0 ? ['  （ありません）'] : published.map((field) => `  - ${field.label}（${field.path}）`)),
+    '素材のファイルそのものの中の情報（写真の撮影情報など）は見ていません。',
     '上げる前に、manifest.json を一度読んでください。',
   ]
 }

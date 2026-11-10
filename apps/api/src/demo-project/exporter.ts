@@ -3,10 +3,10 @@ import {
   DUPLICATION_ITEMS,
   MediaAssetId as MediaAssetIdSchema,
   DemoManifest,
+  DemoMediaKind,
   DemoStorageKey,
   publicLeaks,
   ulidValues,
-  unlistedMediaReferences,
   type DemoFileEntry,
   type DemoMediaEntry,
   type MediaAsset,
@@ -18,17 +18,19 @@ import { readDuplicationSource } from '../project-duplication/read-source.js'
 import { fileExtension } from '../routes/uploads.js'
 import { sha256Hex } from './bundle-source.js'
 import { neutraliseForPublic } from './neutralise.js'
+import { checkManifest } from './preflight.js'
 import { serializeDemoSource, type CharacterAssets, type DemoSource } from './source-wire.js'
 
 /**
  * 見本の目録とファイルを書き出す（作る人の道具。ADR-0067）。**DB は読むだけ。**
  *
  * 1. 作品を全部読む（作品の複製と同じ読み方。キャラクターの Look と画像も）
- * 2. 値に出てくる ULID を素材の表で引き、素材の元のファイルを `<sha256>.<拡張子>` にする（中身を測り直して照らす）
+ * 2. 値に出てくる ULID を素材の表で引き、素材の元のファイルを `<sha256>.<拡張子>` にする（中身を測り直して照らす）。
+ *    消した素材は表に出ないので、目録の外を指す値として次の点検で止まる
  * 3. 曲の解析の波形を `files` にする
  * 4. 機械と持ち主の情報を外す（`neutralise.ts`）。**鍵・署名付きの URL・この機械の場所や名前が 1 つでも残れば書かない**
  *    （`publicLeaks`）。元のファイルが欠けていても書かない
- * 5. 全部そろってから書く（途中で止まったときに、半端な目録を残さない）
+ * 5. 入れる側と同じ点検（`checkManifest`）を通してから書く。全部そろってから書く（半端な目録を残さない）
  */
 
 /** 作品を読む口は複製と同じもの（**書く口は呼ばない**。DB は読むだけ）。 */
@@ -86,6 +88,8 @@ const exportMedia = async (deps: DemoExportDeps, asset: MediaAsset): Promise<{ r
   const ext = fileExtension(original)
   if (ext === null) throw new Error(`素材 ${asset.id} の拡張子が分かりません`)
   const file = `${sha256}.${ext}`
+  const kind = DemoMediaKind.safeParse(asset.kind)
+  if (!kind.success) throw new Error(`素材 ${asset.id} は、入れる側が受けない形です（種類が絵・動画・音のどれでもありません）`)
   return {
     entry: {
       id: asset.id,
@@ -93,7 +97,7 @@ const exportMedia = async (deps: DemoExportDeps, asset: MediaAsset): Promise<{ r
       sha256,
       sizeBytes: bytes.byteLength,
       contentType: asset.mimeType,
-      kind: asset.kind,
+      kind: kind.data,
       probe: asset.probe,
     },
     out: { name: file, bytes },
@@ -133,7 +137,7 @@ export const exportDemo = async (deps: DemoExportDeps, request: DemoExportReques
   for (const asset of assets) media.push(await exportMedia(deps, asset))
   const waveforms = await exportWaveforms(deps, source)
 
-  const manifest = DemoManifest.parse({
+  const parsed = DemoManifest.safeParse({
     formatVersion: 1,
     demoKey: request.demoKey,
     title: request.title,
@@ -142,8 +146,17 @@ export const exportDemo = async (deps: DemoExportDeps, request: DemoExportReques
     files: waveforms.entries,
     source: json,
   })
-  const unlisted = unlistedMediaReferences(manifest, new Set(assets.map((asset) => asset.id)))
-  if (unlisted.length > 0) throw new Error(`目録に入っていない素材を指しています（${String(unlisted.length)} 件）`)
+  if (!parsed.success) {
+    const where = [...new Set(parsed.error.issues.map((issue) => issue.path.join('.')))].slice(0, MAX_LEAK_PATHS).join('、')
+    throw new Error(`書き出した目録が、入れる側が受けない形です（${where}）`, { cause: parsed.error })
+  }
+  const manifest = parsed.data
+  // 入れる側と同じ点検を通す（素材の型・目録の外を指す値。消した素材を指す Take もここで止まる）。
+  try {
+    checkManifest(manifest)
+  } catch (error) {
+    throw new Error(`書き出した目録を入れる側が断ります: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
+  }
   // 値そのものは出さない（秘密を端末やログに写さない）。数と場所（JSON の道）だけ言う。
   const leaks = publicLeaks(manifest, { secrets: deps.secrets, ...deps.machine })
   if (leaks.length > 0) {

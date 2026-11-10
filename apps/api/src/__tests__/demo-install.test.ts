@@ -3,7 +3,14 @@ import { join } from 'node:path'
 import type { DemoManifest, MediaAssetId, ProjectDemoKey } from '@ixa/domain'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createDirBundleSource, type DemoBundleSource } from '../demo-project/bundle-source.js'
-import { DemoFileError, DemoManifestError, DemoUnavailableError, demoFailureMessage } from '../demo-project/errors.js'
+import {
+  DemoFileError,
+  DemoManifestError,
+  DemoUnavailableError,
+  DemoWorkspaceMissingError,
+  demoFailureMessage,
+  demoFailureReason,
+} from '../demo-project/errors.js'
 import { createDemoInstaller, type DemoInstallerDeps } from '../demo-project/installer.js'
 import type { MediaQueue } from '../media-intake.js'
 import { createLogger } from '../logger.js'
@@ -135,6 +142,8 @@ describe('見本を入れる', () => {
 
     // 素材はアップロードと同じ道で登録し、取り込みジョブを投げる（サムネイルができる）。
     expect(queue.enqueued).toHaveLength(manifest.media.length)
+    // 見本の素材はどの作品にも結び付けない（MCP の「この作品の素材か」の点検は、作品に属さない素材を通す）。
+    for (const id of queue.enqueued) expect((await world.mediaAssets.findById(id))?.projectId).toBeNull()
     expect(project.styleReferenceAssetIds).toHaveLength(1)
     expect(project.styleReferenceAssetIds[0]).not.toBe(seeded.media.image1)
     expect((await world.mediaAssets.findById(project.styleReferenceAssetIds[0]!))?.checksumSha256).toBe(
@@ -187,11 +196,13 @@ describe('見本を入れる', () => {
     const { installer, world } = userSide(bundle.source)
     const reused = manifest.media.find((entry) => entry.id === seeded.media.video2)!
     const bytes = await readFile(join(bundleDir, reused.file))
+    const storageKey = `media/${world.workspaceId}/x/original.mp4`
+    await world.storage.put(storageKey, bytes, { contentType: 'video/mp4' })
     const existing = await world.mediaAssets.create({
       workspaceId: world.workspaceId,
       projectId: null,
       kind: 'video',
-      storageKey: `media/${world.workspaceId}/x/original.mp4`,
+      storageKey,
       mimeType: 'video/mp4',
       bytes: bytes.byteLength,
       checksumSha256: sha256Of(bytes),
@@ -213,30 +224,98 @@ describe('見本を入れる', () => {
     expect((await world.writers.projects.findByWorkspace(world.workspaceId)).filter((p) => p.demoKey === DEMO_KEY)).toHaveLength(1)
   })
 
-  it('別の入れる口が先に作っていたら（一意索引がぶつけたら）、そちらを返す', async () => {
+  it('別の入れる口が先に入れていたら（最後に印を付けるときに一意索引がぶつけたら）、自分の作品を消してそちらを返す', async () => {
     const { world, deps, installer } = userSide(createDirBundleSource(bundleDir))
     const first = await installer.install(world.workspaceId)
-    // 2 つ目の入れる口（入れている途中の表を共有しない）。始めに読んだときはまだ無く、作るときに一意索引にぶつかる。
+    // 2 つ目の入れる口（入れている途中の表を共有しない）。始めに読んだときはまだ無かった。
     const realProjects = world.writers.projects
     let reads = 0
     const raced = createDemoInstaller({
       ...deps,
       projects: {
+        ...realProjects,
         findByDemoKey: (workspaceId, key) => {
           reads += 1
           return reads === 1 ? Promise.resolve(null) : realProjects.findByDemoKey(workspaceId, key)
         },
       },
+    })
+    await expect(raced.install(world.workspaceId)).resolves.toEqual({ project: first.project, created: false })
+    expect(await realProjects.findByWorkspace(world.workspaceId)).toEqual([first.project])
+  })
+})
+
+describe('書きかけの見本を「入っている」と読ませない', () => {
+  /** 書き手の口の 1 つを、1 回だけ失敗させる。 */
+  const failingOnce = <T extends object, K extends keyof T>(repo: T, key: K): T => {
+    let failed = false
+    const real = repo[key]
+    return {
+      ...repo,
+      [key]: (...args: unknown[]) => {
+        if (!failed) {
+          failed = true
+          return Promise.reject(new Error('書けませんでした'))
+        }
+        return typeof real === 'function' ? (real as (...a: unknown[]) => unknown).apply(repo, args) : real
+      },
+    }
+  }
+
+  it('作った直後の直し（update）が落ちても、印の付いた作品は残らず、次は最初から入れられる', async () => {
+    const { world, deps } = userSide(createDirBundleSource(bundleDir))
+    const installer = createDemoInstaller({ ...deps, writers: { ...world.writers, projects: failingOnce(world.writers.projects, 'update') } })
+    await expect(installer.install(world.workspaceId)).rejects.toThrow()
+    expect(await world.writers.projects.findByDemoKey(world.workspaceId, DEMO_KEY)).toBeNull()
+    expect(await world.writers.projects.findByWorkspace(world.workspaceId)).toEqual([])
+    expect((await installer.install(world.workspaceId)).created).toBe(true)
+  })
+
+  it('作りかけを消すのも落ちたら、作品は残るが印は付かず、次は入れ直す', async () => {
+    const { world, deps } = userSide(createDirBundleSource(bundleDir))
+    const installer = createDemoInstaller({
+      ...deps,
       writers: {
         ...world.writers,
-        projects: {
-          ...realProjects,
-          create: () => Promise.reject(Object.assign(new Error('duplicate key value'), { code: '23505' })),
+        projects: failingOnce(world.writers.projects, 'softDelete'),
+        shots: failingOnce(world.writers.shots, 'createMany'),
+      },
+    })
+    await expect(installer.install(world.workspaceId)).rejects.toThrow()
+    expect(await world.writers.projects.findByDemoKey(world.workspaceId, DEMO_KEY)).toBeNull()
+    expect((await world.writers.projects.findByWorkspace(world.workspaceId)).every((p) => p.demoKey === null)).toBe(true)
+    const again = await installer.install(world.workspaceId)
+    expect(again.created).toBe(true)
+    expect(again.project.demoKey).toBe(DEMO_KEY)
+  })
+
+  it('書いている途中に状態を読んでも、入っている作品は無い', async () => {
+    const { world, deps } = userSide(createDirBundleSource(bundleDir))
+    let release: () => void = () => undefined
+    let entered: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const inside = new Promise<void>((resolve) => (entered = resolve))
+    const createMany = world.writers.shots.createMany.bind(world.writers.shots)
+    const installer = createDemoInstaller({
+      ...deps,
+      writers: {
+        ...world.writers,
+        shots: {
+          ...world.writers.shots,
+          createMany: async (inputs) => {
+            entered()
+            await gate
+            return createMany(inputs)
+          },
         },
       },
     })
-    await expect(raced.install(world.workspaceId)).resolves.toEqual({ project: first.project, created: false })
-    expect((await realProjects.findByWorkspace(world.workspaceId)).filter((p) => p.demoKey === DEMO_KEY)).toHaveLength(1)
+    const running = installer.install(world.workspaceId)
+    await inside
+    expect((await installer.status(world.workspaceId)).project).toBeNull()
+    release()
+    expect((await running).created).toBe(true)
+    expect((await installer.status(world.workspaceId)).project?.id).toBe((await running).project.id)
   })
 })
 
@@ -296,5 +375,123 @@ describe('壊れたもの・途中の失敗', () => {
     const { installer, world } = userSide(createDirBundleSource(bad))
     await expect(installer.status(world.workspaceId)).rejects.toBeInstanceOf(DemoManifestError)
     await removeDir(bad)
+  })
+})
+
+/** 作った見本のフォルダを写し、目録だけ差し替える（ファイルはそのまま）。 */
+const bundleWith = async (edit: (m: DemoManifest) => unknown): Promise<string> => {
+  const dir = await makeTempDir()
+  for (const entry of [...manifest.media, ...manifest.files]) await writeFile(join(dir, entry.file), await readFile(join(bundleDir, entry.file)))
+  await writeFile(join(dir, 'manifest.json'), JSON.stringify(edit(structuredClone(manifest))))
+  return dir
+}
+
+const reasonOf = async (promise: Promise<unknown>) => demoFailureReason(await promise.catch((e: unknown) => e))
+
+describe('入れる前に断るもの', () => {
+  it('作業場所が無ければ、何も取りに行かずに断る', async () => {
+    const bundle = counting(createDirBundleSource(bundleDir))
+    const { world, deps } = userSide(bundle.source)
+    const installer = createDemoInstaller({ ...deps, projects: { ...world.writers.projects, workspaceExists: () => Promise.resolve(false) } })
+    await expect(installer.install(world.workspaceId)).rejects.toBeInstanceOf(DemoWorkspaceMissingError)
+    expect(bundle.fetched).toEqual([])
+  })
+
+  it('同じ sha256 の素材があっても、置き場の中身が違えば使わず、上書きもせずに断る', async () => {
+    const bundle = counting(createDirBundleSource(bundleDir))
+    const { installer, world } = userSide(bundle.source)
+    const target = manifest.media.find((entry) => entry.id === seeded.media.video2)!
+    const storageKey = `media/${world.workspaceId}/y/original.mp4`
+    const wrong = new Uint8Array(target.sizeBytes).fill(7)
+    await world.storage.put(storageKey, wrong, { contentType: 'video/mp4' })
+    // 申告だけの checksum（アップロードの完了はクライアントの申告を確かめない）。
+    await world.mediaAssets.create({
+      workspaceId: world.workspaceId, projectId: null, kind: 'video', storageKey, mimeType: 'video/mp4',
+      bytes: target.sizeBytes, checksumSha256: target.sha256, origin: { type: 'upload', uploadedBy: 'test' }, tags: [],
+    })
+    const error: unknown = await installer.install(world.workspaceId).catch((e: unknown) => e)
+    expect(demoFailureReason(error)).toBe('conflict')
+    expect(demoFailureMessage(error)).toBe('この機械にある素材の 1 つが、見本のファイルと中身が食い違っています。見本は入れませんでした。')
+    expect(await world.storage.get(storageKey)).toEqual(wrong)
+    expect(await world.writers.projects.findByWorkspace(world.workspaceId)).toEqual([])
+  })
+
+  it('素材の行を作れなければ（一意索引以外の失敗でも）、置いたファイルを消す', async () => {
+    const { world, deps } = userSide(createDirBundleSource(bundleDir))
+    const put: string[] = []
+    const storage = { ...world.storage, put: (key: string, body: Uint8Array, options: { contentType: string }) => (put.push(key), world.storage.put(key, body, options)) }
+    const installer = createDemoInstaller({
+      ...deps,
+      storage,
+      mediaAssets: { ...world.mediaAssets, create: () => Promise.reject(new Error('DB が落ちています')) },
+    })
+    await expect(installer.install(world.workspaceId)).rejects.toThrow()
+    const mediaKeys = put.filter((key) => key.startsWith('media/'))
+    expect(mediaKeys.length).toBeGreaterThan(0)
+    for (const key of mediaKeys) expect(await world.storage.exists(key)).toBe(false)
+  })
+
+  it('目録に無い ULID を素材の欄に置いた目録は断る（この機械の素材に当たらせない）', async () => {
+    const { world, deps } = userSide(createDirBundleSource(bundleDir))
+    // 入れる人の機械にある素材の ID を、目録の Take に書き込む。
+    const local = await world.mediaAssets.create({
+      workspaceId: world.workspaceId, projectId: null, kind: 'image', storageKey: `media/${world.workspaceId}/z/original.png`,
+      mimeType: 'image/png', bytes: 1, checksumSha256: 'e'.repeat(64), origin: { type: 'upload', uploadedBy: 'test' }, tags: [],
+    })
+    const dir = await bundleWith((m) => {
+      const shots = m.source['shots'] as { takes: { mediaAssetId: string }[] }[]
+      shots[0]!.takes[0]!.mediaAssetId = local.id
+      return m
+    })
+    const installer = createDemoInstaller({ ...deps, bundle: createDirBundleSource(dir) })
+    expect(await reasonOf(installer.install(world.workspaceId))).toBe('invalid')
+    expect(await world.writers.projects.findByWorkspace(world.workspaceId)).toEqual([])
+    await removeDir(dir)
+  })
+
+  it('目録の中で定めた ID が、この機械の素材の ID と同じなら断る', async () => {
+    const victim = aWorld()
+    const local = await victim.mediaAssets.create({
+      workspaceId: victim.workspaceId, projectId: null, kind: 'image', storageKey: `media/${victim.workspaceId}/z/original.png`,
+      mimeType: 'image/png', bytes: 1, checksumSha256: 'e'.repeat(64), origin: { type: 'upload', uploadedBy: 'test' }, tags: [],
+    })
+    const dir = await bundleWith((m) => {
+      const locations = m.source['locations'] as { id: string }[]
+      locations[0]!.id = local.id
+      return m
+    })
+    const installer = createDemoInstaller({
+      bundle: createDirBundleSource(dir),
+      projects: victim.writers.projects,
+      mediaAssets: victim.mediaAssets,
+      storage: victim.storage,
+      writers: victim.writers,
+      logger: createLogger('silent'),
+    })
+    expect(await reasonOf(installer.install(victim.workspaceId))).toBe('invalid')
+    expect(await victim.writers.projects.findByWorkspace(victim.workspaceId)).toEqual([])
+    await removeDir(dir)
+  })
+
+  it('曲の解析の波形の置き場が目録の files に無ければ断る', async () => {
+    const dir = await bundleWith((m) => {
+      const tracks = m.source['tracks'] as { analyses: { waveformPeaksKey: string }[] }[]
+      tracks[0]!.analyses[0]!.waveformPeaksKey = 'music/other/track/peaks.json'
+      return m
+    })
+    const { installer, world } = userSide(createDirBundleSource(dir))
+    expect(await reasonOf(installer.install(world.workspaceId))).toBe('invalid')
+    await removeDir(dir)
+  })
+
+  it('声とナレーションの口が繋がっていないのに目録に声があれば、黙って落とさずに断る', async () => {
+    const { world, deps } = userSide(createDirBundleSource(bundleDir))
+    const { voices: _v, narrationLines: _l, narrationTakes: _t, ...withoutNarration } = world.writers
+    void _v
+    void _l
+    void _t
+    const installer = createDemoInstaller({ ...deps, writers: withoutNarration })
+    await expect(installer.install(world.workspaceId)).rejects.toThrow('声とナレーション')
+    expect(await world.writers.projects.findByWorkspace(world.workspaceId)).toEqual([])
   })
 })

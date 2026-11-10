@@ -11,7 +11,6 @@ import {
   type LocationId,
   type NarrationLineId,
   type Project,
-  type ProjectDemoKey,
   type ShotId,
   type TextStyleId,
   type VoiceProfileId,
@@ -35,18 +34,16 @@ export type LibraryMaps = {
 }
 
 /**
- * 新しい作品を作る。作成の入力に無い項目（避けたいもの・歌詞など）は作った後に入れる。
- * `demoKey` は同梱の見本を入れるときだけ渡す（ADR-0067。複製は渡さない）。
+ * 新しい作品を作る（作成の入力に入る項目だけ）。**見本の印は付けない**（見本は全部書き終えてから最後に付ける。ADR-0067）。
+ * 作成の入力に無い項目（避けたいもの・歌詞など）は `applyProjectSettings` が入れる。
  */
-export const createDuplicateProject = async (
+export const createDuplicateProject = (
   deps: ProjectDuplicationDeps,
   source: Project,
   name: string,
   items: ReadonlySet<DuplicationItem>,
-  demoKey?: ProjectDemoKey,
-): Promise<Project> => {
-  const keepConcept = items.has('concept')
-  const input = {
+): Promise<Project> =>
+  deps.projects.create({
     workspaceId: source.workspaceId,
     name,
     kind: source.kind,
@@ -54,11 +51,18 @@ export const createDuplicateProject = async (
     resolution: source.resolution,
     aspectRatio: source.aspectRatio,
     budgetUsd: source.budgetUsd,
-    styleGuide: keepConcept ? source.styleGuide : '',
-  }
-  const created = await (demoKey === undefined ? deps.projects.create(input) : deps.projects.create(input, { demoKey }))
-  return deps.projects.update(created.id, {
-    ...(keepConcept
+    styleGuide: items.has('concept') ? source.styleGuide : '',
+  })
+
+/** 作った作品に、作成の入力に無い項目を入れる。失敗したら呼ぶ側が作りかけを消す（作った後の書き込みの 1 つ）。 */
+export const applyProjectSettings = (
+  deps: ProjectDuplicationDeps,
+  created: Project,
+  source: Project,
+  items: ReadonlySet<DuplicationItem>,
+): Promise<Project> =>
+  deps.projects.update(created.id, {
+    ...(items.has('concept')
       ? {
           avoid: source.avoid,
           styleReferenceAssetIds: source.styleReferenceAssetIds,
@@ -72,7 +76,6 @@ export const createDuplicateProject = async (
     ...(items.has('music') ? { durationSec: source.durationSec } : {}),
     ...(items.has('lyricTiming') ? { lyricCues: source.lyricCues } : {}),
   })
-}
 
 /** コンセプト・あらすじ（いまの版だけ。版の履歴は持っていかない）。 */
 export const writeConcept = async (deps: ProjectDuplicationDeps, target: Project, concept: string | null): Promise<void> => {

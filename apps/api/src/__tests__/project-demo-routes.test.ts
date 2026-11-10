@@ -48,7 +48,7 @@ describe('POST /projects/demo', () => {
     const bundle: DemoBundleSource = {
       manifest: () =>
         Promise.resolve(
-          DemoManifest.parse({ formatVersion: 1, demoKey: 'ixa-demo-v1', title: '見本', baseUrl: 'https://example.com/d/', media: [], files: [], source: {} }),
+          DemoManifest.parse({ formatVersion: 1, demoKey: 'ixa-demo-v1', title: '見本', baseUrl: 'https://github.com/o/r/releases/download/d/', media: [], files: [], source: {} }),
         ),
       fetchFile: () => Promise.reject(new Error('取りに行ってはいけない')),
     }
@@ -64,7 +64,10 @@ describe('POST /projects/demo', () => {
       tmp = await makeTempDir()
       const creator = aWorld()
       const seeded = await seedCreatorProject(creator, tmp)
-      manifest = await exportToDir(creator, seeded.project, join(tmp, 'bundle'))
+      const exported = await exportToDir(creator, seeded.project, join(tmp, 'bundle'))
+      // ここの口（baseAppDeps）は声とナレーションを繋いでいない。繋いでいない口に声のある見本は入れない（install の試験）ので、
+      // 声を抜いた目録で口の答え方だけを見る。
+      manifest = { ...exported, source: { ...exported.source, voices: [], narrationLines: [], narrationTakes: [] } }
     }, 60_000)
     afterAll(async () => {
       await removeDir(tmp)
@@ -108,9 +111,12 @@ describe('見本を書く口（目録が答えない読み）', () => {
       () => deps.takes.findByShot(newId(ShotId)),
       () => deps.musicAnalyses.findByTrack(newId(MusicTrackId)),
       () => deps.timelineClips.findByProject(newId(ProjectId)),
-      () => deps.voices?.findByProject(newId(ProjectId)) ?? Promise.reject(new Error('声の口が無い')),
     ]
-    for (const read of reads) await expect(read()).rejects.toThrow(/目録が答えない読み|声の口が無い/)
+    for (const read of reads) await expect(read()).rejects.toThrow('目録が答えない読み')
+    // 声の口は繋いである（aWorld）。繋いであれば、読む口は同じく投げる。
+    const { voices } = deps
+    expect(voices).toBeDefined()
+    if (voices !== undefined) await expect(voices.findByProject(newId(ProjectId))).rejects.toThrow('目録が答えない読み')
     // 目録に無いキャラクターの Look を読もうとしても投げる（空の Look で入れない）。
     await expect(Promise.resolve().then(() => deps.looks.findByCharacter(newId(CharacterId)))).rejects.toThrow('Look と画像がありません')
     expect(deps.motionAnalyses).toBeUndefined()

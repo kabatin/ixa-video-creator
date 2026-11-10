@@ -1,9 +1,10 @@
+import { createHash } from 'node:crypto'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { DemoManifest } from '@ixa/domain'
+import { MediaAssetId as MediaAssetIdSchema, newId, type DemoManifest } from '@ixa/domain'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createDirBundleSource } from '../demo-project/bundle-source.js'
-import { parseExportArgs } from '../demo-project/export-cli.js'
+import { parseExportArgs, secretsFromEnv } from '../demo-project/export-cli.js'
 import { exportReviewLines } from '../demo-project/export-review.js'
 import { createDemoInstaller } from '../demo-project/installer.js'
 import { createLogger } from '../logger.js'
@@ -150,17 +151,68 @@ describe('機械と持ち主の情報', () => {
   }, 60_000)
 })
 
+describe('入れる側が断るものは書かない', () => {
+  it('消した素材を指す Take があれば、件数と場所を言って止める（入れる側で外部キーに落ちない）', async () => {
+    const creator = aWorld()
+    const seeded = await seedCreatorProject(creator, tmp)
+    await creator.mediaAssets.softDelete(seeded.media.video3)
+    const out = join(tmp, 'deleted-media')
+    const error: unknown = await exportToDir(creator, seeded.project, out).catch((e: unknown) => e)
+    expect((error as Error).message).toMatch(/目録の外を指す値が 1 件あります: source\.shots\[1\]\.takes\[0\]\.mediaAssetId/)
+    expect(await readdir(out)).toEqual([])
+  }, 60_000)
+
+  it('入れる側が受けない素材の型（SVG）があれば止める', async () => {
+    const creator = aWorld()
+    const seeded = await seedCreatorProject(creator, tmp)
+    const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>')
+    const id = newId(MediaAssetIdSchema)
+    const storageKey = `media/${creator.workspaceId}/${id}/original.svg`
+    await creator.storage.put(storageKey, svg, { contentType: 'image/svg+xml' })
+    await creator.mediaAssets.create({
+      id, workspaceId: creator.workspaceId, projectId: null, kind: 'image', storageKey, mimeType: 'image/svg+xml',
+      bytes: svg.byteLength, checksumSha256: createHash('sha256').update(svg).digest('hex'), origin: { type: 'upload', uploadedBy: 'test' }, tags: [],
+    })
+    await creator.writers.projects.update(seeded.project.id, { styleReferenceAssetIds: [id] })
+    const out = join(tmp, 'svg')
+    await expect(exportToDir(creator, seeded.project, out)).rejects.toThrow('入れる側が受けない形です')
+    expect(await readdir(out)).toEqual([])
+  }, 60_000)
+})
+
+describe('鍵の集め方（secretsFromEnv）', () => {
+  it('KEY・TOKEN・SECRET・PASSPHRASE・PASSWORD の名前の値と、URL のパスワードを集め、8 文字より短いものは数えて外す', () => {
+    const { secrets, skipped } = secretsFromEnv({
+      STORAGE_SIGNING_SECRET: 's'.repeat(40),
+      FAL_API_KEY: 'fal-1234567890',
+      VPIPE_API_TOKEN: 'tok-abcdefgh',
+      IXA_PASSPHRASE: 'short',
+      S3_SECRET_ACCESS_KEY: 'minio-secret-key',
+      DB_PASSWORD: 'p4ssw0rd!',
+      DATABASE_URL: 'postgresql://ixa:db-password-123@127.0.0.1:5432/ixa',
+      REDIS_URL: 'redis://:rpw@127.0.0.1:6379',
+      LOG_LEVEL: 'info',
+      EMPTY_TOKEN: '',
+    })
+    expect([...secrets].sort()).toEqual(
+      ['s'.repeat(40), 'fal-1234567890', 'tok-abcdefgh', 'minio-secret-key', 'p4ssw0rd!', 'db-password-123'].sort(),
+    )
+    // 短すぎて外した値: IXA_PASSPHRASE と REDIS_URL のパスワード（空は数えない）。
+    expect(skipped).toBe(2)
+  })
+})
+
 describe('書き出しの引数', () => {
-  const ok = ['--project', '01JAAAAAAAAAAAAAAAAAAAAAAA', '--out', '/tmp/x', '--demo-key', 'ixa-demo-v1', '--base-url', 'https://example.com/d/', '--title', '見本']
+  const ok = ['--project', '01JAAAAAAAAAAAAAAAAAAAAAAA', '--out', '/tmp/x', '--demo-key', 'ixa-demo-v1', '--base-url', 'https://github.com/o/r/releases/download/d/', '--title', '見本']
 
   it('全部そろえば読める（pnpm の -- が前に付いても）', () => {
-    expect(parseExportArgs(['--', ...ok])).toMatchObject({ demoKey: 'ixa-demo-v1', baseUrl: 'https://example.com/d/', title: '見本' })
+    expect(parseExportArgs(['--', ...ok])).toMatchObject({ demoKey: 'ixa-demo-v1', baseUrl: 'https://github.com/o/r/releases/download/d/', title: '見本' })
   })
 
   it('知らない引数・欠けた引数・https でない取りに行く先は止める', () => {
     expect(() => parseExportArgs([...ok, '--force'])).toThrow()
     expect(() => parseExportArgs(ok.slice(2))).toThrow(/projectId/)
-    expect(() => parseExportArgs(ok.map((arg) => (arg === 'https://example.com/d/' ? 'http://example.com/d/' : arg)))).toThrow(/baseUrl/)
+    expect(() => parseExportArgs(ok.map((arg) => (arg === 'https://github.com/o/r/releases/download/d/' ? 'http://example.com/d/' : arg)))).toThrow(/baseUrl/)
   })
 })
 
@@ -182,6 +234,7 @@ describe('書き出した後の点検の一覧', () => {
     expect(text).not.toContain('避けたいもの')
     expect(text).not.toContain('一行目')
     expect(text).not.toContain('夜の街を走る')
+    expect(text).toContain('素材のファイルそのものの中の情報（写真の撮影情報など）は見ていません')
     expect(lines.at(-1)).toBe('上げる前に、manifest.json を一度読んでください。')
   }, 60_000)
 })

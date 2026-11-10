@@ -3,6 +3,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DemoManifest, type DemoFileRef } from '@ixa/domain'
 import { DemoFileError, DemoManifestError } from './errors.js'
+import { fetchReleaseFile } from './release-fetch.js'
 
 /**
  * 見本の出どころ（ADR-0067）。目録と、目録が名前を挙げたファイルを渡す。2 つの実装がある。
@@ -76,24 +77,6 @@ export const createDirBundleSource = (dir: string): DemoBundleSource => ({
 /** ファイル 1 つを取りに行く時間の上限。見本のファイルは 1 つ数 MB。 */
 export const DEMO_FETCH_TIMEOUT_MS = 120_000
 
-/** 上限を超えたら止めて投げる読み方（応答の大きさの申告を信用しない）。 */
-const readCapped = async (body: ReadableStream<Uint8Array>, entry: DemoFileRef): Promise<Uint8Array> => {
-  const reader = body.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    total += value.byteLength
-    if (total > entry.sizeBytes) {
-      await reader.cancel()
-      throw new DemoFileError('broken', entry.file, '目録より大きい応答です')
-    }
-    chunks.push(value)
-  }
-  return Buffer.concat(chunks)
-}
-
 export type ReleaseBundleOptions = {
   /** 同梱の目録の場所（`apps/api/demo/manifest.json`）。 */
   readonly manifestPath: string
@@ -103,40 +86,15 @@ export type ReleaseBundleOptions = {
 }
 
 /**
- * 同梱の目録と、リリースに置いたファイル（`baseUrl + file`）。リダイレクトはたどる（リリースのファイルは
- * 署名付きの URL へ飛ばされる）。**飛ばされた先の URL は例外にもログにも入れない**（ファイル名だけ）。
+ * 同梱の目録と、リリースに置いたファイル（`baseUrl + file`）。取り方は `release-fetch.ts`
+ * （リダイレクトは許したホストの https だけを自分でたどる。飛ばされた先の URL は例外にもログにも入れない）。
  */
 export const createReleaseBundleSource = (options: ReleaseBundleOptions): DemoBundleSource => {
   const fetchImpl = options.fetch ?? fetch
   const timeoutMs = options.timeoutMs ?? DEMO_FETCH_TIMEOUT_MS
   return {
     manifest: () => readManifestFile(options.manifestPath),
-    fetchFile: async (manifest, entry) => {
-      let response: Response
-      try {
-        response = await fetchImpl(new URL(entry.file, manifest.baseUrl), {
-          redirect: 'follow',
-          signal: AbortSignal.timeout(timeoutMs),
-        })
-      } catch (error) {
-        const timedOut = error instanceof Error && error.name === 'TimeoutError'
-        // 元の例外は URL を含みうるので cause に付けない（名前だけ残す）。
-        throw new DemoFileError('network', entry.file, timedOut ? '時間内に取れませんでした' : `つながりません（${error instanceof Error ? error.name : 'unknown'}）`)
-      }
-      if (!response.ok || response.body === null) {
-        throw new DemoFileError('network', entry.file, `応答 ${String(response.status)}`)
-      }
-      // 飛ばされた先も https でなければ受けない（中身は sha256 で確かめるが、平文の経路を使わない）。
-      if (response.url !== '' && !response.url.startsWith('https://')) {
-        await response.body.cancel()
-        throw new DemoFileError('network', entry.file, 'https でない先へ飛ばされました')
-      }
-      const declared = Number(response.headers.get('content-length'))
-      if (Number.isFinite(declared) && declared > entry.sizeBytes) {
-        await response.body.cancel()
-        throw new DemoFileError('broken', entry.file, '目録より大きい応答です')
-      }
-      return verifyFileBytes(entry, await readCapped(response.body, entry))
-    },
+    fetchFile: async (manifest, entry) =>
+      verifyFileBytes(entry, await fetchReleaseFile(fetchImpl, manifest.baseUrl, entry, timeoutMs)),
   }
 }

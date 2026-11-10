@@ -1,6 +1,6 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import type { MiddlewareHandler } from 'hono'
-import { cors } from 'hono/cors'
+import { corsFor } from './app-cors.js'
 import type {
   ProjectClipLock,
   GenerationJobRepository,
@@ -78,8 +78,8 @@ import { libraryImportRoutes } from './routes/library-imports.js'
 import { projectDuplicateRoutes } from './routes/project-duplicate.js'
 import { projectDemoRoutes } from './routes/project-demo.js'
 import { duplicationDepsFromApp } from './project-duplication/app-deps.js'
-import { noDemoBundle, type DemoBundleSource } from './demo-project/bundle-source.js'
-import { createDemoInstaller } from './demo-project/installer.js'
+import type { DemoBundleSource } from './demo-project/bundle-source.js'
+import { demoInstallerFromApp } from './demo-project/app-wiring.js'
 import { scriptRoutes } from './routes/scripts.js'
 import { sequenceRoutes } from './routes/sequences.js'
 import { musicRoutes, type AnalysisQueue } from './routes/music.js'
@@ -99,7 +99,7 @@ import { clipSpanRoutes } from './routes/clip-spans.js'
 import { clipTextStyleRoutes } from './routes/clip-text-style.js'
 import { textStyleRoutes } from './routes/text-styles.js'
 import { eventRoutes } from './routes/events.js'
-import { createProjectEditedNotifier, PROJECT_EDIT_ORIGIN_HEADER } from './events/project-edited.js'
+import { createProjectEditedNotifier } from './events/project-edited.js'
 import { agentSessionRoutes } from './routes/agent-sessions.js'
 import { agentApprovalRoutes } from './routes/agent-approvals.js'
 import { agentStreamRoutes } from './routes/agent-stream.js'
@@ -267,29 +267,9 @@ export const createApp = (deps: AppDeps) => {
   const { projects, mediaAssets, storage, logger } = deps
   const app = new OpenAPIHono({ defaultHook: validationHook })
 
-  /**
-   * ブラウザから API を直接叩く経路（署名付き URL の取得など）のために CORS を許可する。
-   *
-   * **許可先は設定で明示する。ワイルドカードを使わない。**
-   * 開発中は Web の開発サーバだけを許可すれば足りる。
-   */
-  if (deps.corsOrigins.length > 0) {
-    app.use(
-      '*',
-      cors({
-        origin: [...deps.corsOrigins],
-        // 画面の Requester が使うメソッドはすべて（PUT を落としていて「使う AI」の保存と最初のフレームが止まっていた）。
-        allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-        // 自動化用の鍵（Bearer）を送れるように。
-        // 書いた画面の印（`project.edited` の origin）。
-        allowHeaders: ['Content-Type', 'Authorization', PROJECT_EDIT_ORIGIN_HEADER],
-        // 合言葉で入ったクッキーを、画面（別のポート）からの呼び出しに付けさせる（認証）。
-        // これが無いと、画面が `credentials: 'include'` で呼んだ応答をブラウザが捨てる。
-        credentials: true,
-        maxAge: 600,
-      }),
-    )
-  }
+  // CORS（許可先は設定で明示する。`app-cors.ts`）。
+  const corsMiddleware = corsFor(deps.corsOrigins)
+  if (corsMiddleware !== null) app.use('*', corsMiddleware)
 
   // **門は CORS の下見のあと、すべての口の前。** 下見（OPTIONS）はクッキーを付けずに来るので、
   // 門より先に CORS が答える。門の外に置くもの（/health・/files・入る口）は門の中で見分ける。
@@ -333,22 +313,8 @@ export const createApp = (deps: AppDeps) => {
   // 画面がモデルの性質（fps・尺・参照の上限）を書き写さないための口。
   app.route('/', modelRoutes({ registry: deps.registry }))
   // 同梱の見本の作品（ADR-0067）。**`/projects/{id}` より先に置く**（`demo` を作品の ID として読ませない）。
-  // 書き手は作品の複製と同じ。入れている途中の表は、この入れる口が 1 つだけ持つ。
   const duplication = duplicationDepsFromApp(deps, dialogueTelops.sync)
-  app.route(
-    '/',
-    projectDemoRoutes({
-      installer: createDemoInstaller({
-        bundle: deps.demoBundle ?? noDemoBundle,
-        projects,
-        mediaAssets,
-        ...(deps.mediaIngest === undefined ? {} : { mediaIngest: deps.mediaIngest }),
-        storage,
-        writers: duplication,
-        logger,
-      }),
-    }),
-  )
+  app.route('/', projectDemoRoutes({ installer: demoInstallerFromApp(deps, duplication) }))
   app.route(
     '/',
     // 費用の出どころ判定は **過去の事実**。今 registry にいる Provider と突き合わせない

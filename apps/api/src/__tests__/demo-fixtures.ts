@@ -39,7 +39,7 @@ import { baseAppDeps } from './app-deps.js'
  * - `exportToDir` … 作品を書き出してフォルダに置く（`DEMO_DIR` の形）
  */
 
-export const DEMO_BASE_URL = 'https://example.com/releases/download/demo-v1/'
+export const DEMO_BASE_URL = 'https://github.com/kabatin/ixa-video-creator/releases/download/demo-v1/'
 
 export const sha256Of = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex')
 
@@ -222,7 +222,7 @@ export const exportToDir = async (world: DemoWorld, project: Project, dir: strin
       writeOut: (name, bytes) => writeFile(join(dir, name), bytes),
       secrets: overrides.secrets ?? [],
       // 試験の機械（実際のホームに頼らない）。
-      machine: overrides.machine ?? { homeDir: '/Users/creator', userName: 'creator' },
+      machine: overrides.machine ?? { homeDir: '/Users/demo-maker', userName: 'demo-maker' },
     },
     { projectId: project.id, demoKey: 'ixa-demo-v1', baseUrl: DEMO_BASE_URL, title: overrides.title ?? '見本の作品' },
   )

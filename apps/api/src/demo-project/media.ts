@@ -4,20 +4,21 @@ import {
   newId,
   type DemoManifest,
   type DemoMediaEntry,
+  type MediaAsset,
   type MediaAssetId,
   type WorkspaceId,
 } from '@ixa/domain'
-import { contentTypeForKey, mediaKey, type ObjectStorage } from '@ixa/storage'
+import { ObjectNotFoundError, contentTypeForKey, mediaKey, type ObjectStorage } from '@ixa/storage'
 import { registerMediaAsset, type MediaIngestDeps } from '../media-intake.js'
 import { isUniqueViolation } from '../routes/unique-violation.js'
 import { fileExtension, isContentTypeAllowed } from '../routes/uploads.js'
-import type { DemoBundleSource } from './bundle-source.js'
-import { DemoManifestError } from './errors.js'
+import { sha256Hex, type DemoBundleSource } from './bundle-source.js'
+import { DemoFileError, DemoManifestError } from './errors.js'
 
 /**
  * 見本の素材とファイルを置き場に入れる（ADR-0067）。
  *
- * 1. **同じ中身（sha256）の素材が既にあれば、それを使って取りに行かない**（2 度目・別の作業場所でも速い）
+ * 1. **同じ中身（sha256）の素材が既にあれば、置き場の中身を照らしてから使い、取りに行かない**（2 度目・別の作業場所でも速い）
  * 2. 足りないものを**全部取って確かめてから**置き場に入れる（1 つでも合わなければ何も入れない）
  * 3. 素材はアップロードの完了と同じ道（`registerMediaAsset`）で登録し、取り込みジョブ（サムネイルなど）を投げる
  */
@@ -27,20 +28,38 @@ export const DEMO_UPLOADER = 'demo'
 
 export type DemoMediaDeps = {
   readonly bundle: DemoBundleSource
-  readonly mediaAssets: Pick<MediaAssetRepository, 'findByChecksum' | 'create'>
+  readonly mediaAssets: Pick<MediaAssetRepository, 'findByChecksum' | 'findById' | 'create'>
   readonly mediaIngest?: MediaIngestDeps
-  readonly storage: Pick<ObjectStorage, 'put' | 'exists' | 'delete'>
+  readonly storage: Pick<ObjectStorage, 'put' | 'get' | 'exists' | 'delete'>
 }
 
 type PendingMedia = { readonly entry: DemoMediaEntry; readonly ext: string; readonly bytes: Uint8Array }
 
 /** 素材の拡張子と種類を確かめる（取りに行く前に）。 */
-const extensionOf = (entry: DemoMediaEntry): string => {
+export const extensionOf = (entry: DemoMediaEntry): string => {
   const ext = fileExtension(entry.file)
   if (ext === null || !isContentTypeAllowed(entry.kind, entry.contentType)) {
     throw new DemoManifestError(`見本の目録の素材 ${entry.file} の種類が合いません`)
   }
   return ext
+}
+
+/**
+ * 同じ sha256 の素材を使う前に、置き場の中身を読んで照らす（アップロードの完了はクライアントの申告した checksum を
+ * 確かめずに登録する。名札だけを信じると、中身の違う素材を見本の絵として使ってしまう）。違えば使わず、上書きもしない。
+ */
+const verifiedReuse = async (deps: DemoMediaDeps, asset: MediaAsset, entry: DemoMediaEntry): Promise<MediaAssetId> => {
+  let bytes: Uint8Array
+  try {
+    bytes = await deps.storage.get(asset.storageKey)
+  } catch (error) {
+    if (error instanceof ObjectNotFoundError) throw new DemoFileError('conflict', entry.file, '同じ名札の素材の中身が置き場にありません', { cause: error })
+    throw error
+  }
+  if (bytes.byteLength !== entry.sizeBytes || sha256Hex(bytes) !== entry.sha256) {
+    throw new DemoFileError('conflict', entry.file, '同じ名札の素材の中身が違います')
+  }
+  return asset.id
 }
 
 /** 取って確かめた素材を置き場に入れ、登録する。同じ中身が先に登録されていたら、そちらを使う。 */
@@ -61,22 +80,25 @@ const storeMedia = async (deps: DemoMediaDeps, workspaceId: WorkspaceId, pending
     origin: { type: 'upload' as const, uploadedBy: DEMO_UPLOADER },
     tags: [],
   }
+  let registered: Awaited<ReturnType<typeof registerMediaAsset>>
   try {
-    const registered = await registerMediaAsset(
+    registered = await registerMediaAsset(
       { mediaAssets: deps.mediaAssets, ...(deps.mediaIngest === undefined ? {} : { mediaIngest: deps.mediaIngest }) },
       input,
     )
-    // 取りに行っている間に、同じ中身が別の道で登録されていた。入れた方は使わないので消す。
-    if (!registered.created) await deps.storage.delete(storageKey)
-    return registered.asset.id
   } catch (error) {
-    // 同じ中身の登録が重なった（一意索引が守った）。先にできた方を使う。
+    // 行を作れなかった（理由を問わず）。置いたファイルは使われないので消す。
+    await deps.storage.delete(storageKey)
+    // 同じ中身の登録が重なった（一意索引が守った）。先にできた方を、中身を照らしてから使う。
     if (!isUniqueViolation(error)) throw error
     const existing = await deps.mediaAssets.findByChecksum(pending.entry.sha256)
     if (existing === null) throw error
-    await deps.storage.delete(storageKey)
-    return existing.id
+    return verifiedReuse(deps, existing, pending.entry)
   }
+  if (registered.created) return registered.asset.id
+  // 取りに行っている間に、同じ中身が別の道で登録されていた。入れた方は使わないので消し、先の方を照らして使う。
+  await deps.storage.delete(storageKey)
+  return verifiedReuse(deps, registered.asset, pending.entry)
 }
 
 /**
@@ -94,7 +116,7 @@ export const installDemoMedia = async (
     const ext = extensionOf(entry)
     const existing = await deps.mediaAssets.findByChecksum(entry.sha256)
     if (existing === null) missingMedia.push({ entry, ext })
-    else ids.set(entry.id, existing.id)
+    else ids.set(entry.id, await verifiedReuse(deps, existing, entry))
   }
   const missingFiles = []
   for (const entry of manifest.files) {

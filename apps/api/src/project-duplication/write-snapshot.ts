@@ -1,7 +1,8 @@
-import { duplicationNotes, type DuplicationItem, type Project, type ProjectDemoKey } from '@ixa/domain'
+import { duplicationNotes, type DuplicationItem, type Project } from '@ixa/domain'
 import type { ProjectDuplicationDeps } from './deps.js'
 import type { DuplicationSource } from './read-source.js'
 import {
+  applyProjectSettings,
   createDuplicateProject,
   writeClips,
   writeConcept,
@@ -16,7 +17,8 @@ import { writeShots } from './write-shots.js'
  * 読んだもの（`DuplicationSource`）を新しい作品に書く。作品の複製（ADR-0037）と同梱の見本（ADR-0067）が使う。
  *
  * - 新しい作品は `snapshot.project` の作業場所に作る（見本は呼ぶ側が、入れる先の作業場所に替えて渡す）
- * - **途中で失敗したら、作りかけの新しい作品を消してから投げる**（半分だけ写した作品を残さない）。
+ * - **作った後の書き込みのどれかが失敗したら、作りかけの新しい作品を消してから投げる**（半分だけ写した作品を残さない。
+ *   作成の入力に無い項目の書き込みと、最後の 1 手（`finish`）も含む）。
  *   リポジトリをまたぐトランザクションが無いため、消すことで戻す
  */
 
@@ -29,8 +31,11 @@ export type WrittenProject = {
 export type WriteSnapshotOptions = {
   readonly name: string
   readonly items: ReadonlySet<DuplicationItem>
-  /** 同梱の見本の印（見本を入れるときだけ）。 */
-  readonly demoKey?: ProjectDemoKey
+  /**
+   * 全部書き終えた後の最後の 1 手（見本は印を付ける。ADR-0067）。ここで投げても作りかけを消す。
+   * 省けば何もしない（作品の複製）。
+   */
+  readonly finish?: (project: Project) => Promise<Project>
   /** 失敗したときの知らせ。`error` は投げる例外の文、`log` はログの文、`context` はログに添えるもの。 */
   readonly failure: {
     readonly error: string
@@ -45,8 +50,10 @@ export const writeSnapshot = async (
   options: WriteSnapshotOptions,
 ): Promise<WrittenProject> => {
   const { items } = options
-  const project = await createDuplicateProject(deps, snapshot.project, options.name, items, options.demoKey)
+  const created = await createDuplicateProject(deps, snapshot.project, options.name, items)
   try {
+    // 作成の入力に無い項目も、作りかけを消す範囲の中で入れる（落ちたら作りかけを残さない）。
+    const project = await applyProjectSettings(deps, created, snapshot.project, items)
     await writeConcept(deps, project, snapshot.concept)
     await writeMusic(deps, project, snapshot)
     const library = await writeLibrary(deps, project, snapshot)
@@ -66,7 +73,7 @@ export const writeSnapshot = async (
     // セリフの字幕は写した先の Shot から作り直す（写さなかった行の字幕を消し、残った行は時刻と見た目を引き継ぐ）。
     await deps.syncDialogueTelops(project.id)
     return {
-      project,
+      project: options.finish === undefined ? project : await options.finish(project),
       notes: duplicationNotes({
         castDropped,
         locationDropped,
@@ -77,9 +84,9 @@ export const writeSnapshot = async (
       }),
     }
   } catch (error) {
-    deps.logger.error({ err: error, ...options.failure.context, projectId: project.id }, options.failure.log)
-    await deps.projects.softDelete(project.id).catch((cleanupError: unknown) => {
-      deps.logger.error({ err: cleanupError, projectId: project.id }, '作りかけの作品を消せませんでした')
+    deps.logger.error({ err: error, ...options.failure.context, projectId: created.id }, options.failure.log)
+    await deps.projects.softDelete(created.id).catch((cleanupError: unknown) => {
+      deps.logger.error({ err: cleanupError, projectId: created.id }, '作りかけの作品を消せませんでした')
     })
     throw new Error(options.failure.error, { cause: error })
   }

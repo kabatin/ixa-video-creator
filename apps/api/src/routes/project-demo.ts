@@ -1,6 +1,13 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { WorkspaceId as WorkspaceIdSchema } from '@ixa/domain'
-import { DEMO_UNAVAILABLE_MESSAGE, DemoUnavailableError, demoFailureMessage, demoFailureReason } from '../demo-project/errors.js'
+import {
+  DEMO_UNAVAILABLE_MESSAGE,
+  DEMO_WORKSPACE_MISSING_MESSAGE,
+  DemoUnavailableError,
+  DemoWorkspaceMissingError,
+  demoFailureMessage,
+  demoFailureReason,
+} from '../demo-project/errors.js'
 import type { DemoInstaller } from '../demo-project/installer.js'
 import { validationHook } from '../errors.js'
 import { errorContent, fail, ok, successResponse } from '../response.js'
@@ -53,7 +60,8 @@ const installRoute = createRoute({
   responses: {
     200: { description: 'もう入っていた見本の作品', content: { 'application/json': { schema: successResponse(DemoInstallResponse) } } },
     201: { description: '入れた見本の作品', content: { 'application/json': { schema: successResponse(DemoInstallResponse) } } },
-    404: errorContent('見本がまだ用意されていない'),
+    404: errorContent('見本がまだ用意されていない・作業場所が無い（何も取りに行っていない）'),
+    409: errorContent('この機械の同じ名札の素材の中身が、見本と食い違う（何も作っていない）'),
     422: errorContent('入力の検証に失敗した'),
     500: errorContent('入れられなかった（作りかけの作品は消してある）'),
     502: errorContent('見本のファイルを取れなかった・壊れていた（何も作っていない）'),
@@ -73,7 +81,9 @@ export const projectDemoRoutes = (deps: ProjectDemoRoutesDeps) =>
       } catch (error) {
         // 文脈は入れる口がログに残している。ここでは理由ごとの文だけを返す（URL・ID・番号を入れない）。
         if (error instanceof DemoUnavailableError) return c.json(fail(DEMO_UNAVAILABLE_MESSAGE), 404)
+        if (error instanceof DemoWorkspaceMissingError) return c.json(fail(DEMO_WORKSPACE_MISSING_MESSAGE), 404)
         const reason = demoFailureReason(error)
+        if (reason === 'conflict') return c.json(fail(demoFailureMessage(error)), 409)
         return c.json(fail(demoFailureMessage(error)), reason === 'network' || reason === 'broken' ? 502 : 500)
       }
     })
