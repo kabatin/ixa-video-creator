@@ -23,7 +23,7 @@ import {
  */
 
 const MODEL_OPTIONS = [
-  { value: 'AUTO' as const, label: 'AUTO（ルーターに任せる）' },
+  { value: 'AUTO' as const, label: 'おまかせ（自動で選ぶ）' },
   { value: ModelId.parse('veo-3'), label: 'Veo 3' },
 ]
 

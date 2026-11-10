@@ -45,7 +45,7 @@ const SHARED_OUTPUT = {
 export const stubVeoLikeModel: VideoModelDescriptor = {
   id: STUB_VEO_LIKE_MODEL_ID,
   providerId: STUB_PROVIDER_ID,
-  label: 'Stub (Veo-like)',
+  label: 'お試し（AI を使わない仮の動画・4〜8 秒）',
   capabilities: {
     ...SHARED_OUTPUT,
     aspectRatios: [...SHARED_OUTPUT.aspectRatios],
@@ -75,7 +75,7 @@ export const stubVeoLikeModel: VideoModelDescriptor = {
 export const stubSeedanceLikeModel: VideoModelDescriptor = {
   id: STUB_SEEDANCE_LIKE_MODEL_ID,
   providerId: STUB_PROVIDER_ID,
-  label: 'Stub (Seedance-like)',
+  label: 'お試し（AI を使わない仮の動画・4〜15 秒）',
   capabilities: {
     ...SHARED_OUTPUT,
     aspectRatios: [...SHARED_OUTPUT.aspectRatios],

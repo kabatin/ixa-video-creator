@@ -37,7 +37,7 @@ const GEMINI_LIKE_CAPABILITIES: ImageModelCapabilities = {
 export const stubGeminiLikeImageModel: ImageModelDescriptor = {
   id: STUB_GEMINI_LIKE_MODEL_ID,
   providerId: STUB_IMAGE_PROVIDER_ID,
-  label: 'Stub (Gemini-like image)',
+  label: 'お試し（AI を使わない仮の絵）',
   capabilities: GEMINI_LIKE_CAPABILITIES,
   qualities: {
     characterConsistency: 0.85,

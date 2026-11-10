@@ -9,7 +9,7 @@ import type { WireVideoModel } from '@/lib/models-api'
  */
 export const AUTO_MODEL = 'AUTO'
 
-const AUTO_OPTION: Option = { value: AUTO_MODEL, label: 'AUTO（ルーターに任せる）' }
+const AUTO_OPTION: Option = { value: AUTO_MODEL, label: 'おまかせ（自動で選ぶ）' }
 
 export const MODEL_OPTIONS: readonly Option[] = [AUTO_OPTION]
 
