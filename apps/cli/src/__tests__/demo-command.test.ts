@@ -85,6 +85,7 @@ describe('demoCommand', () => {
     const h = harness({ env: `${ENV}IXA_PASSPHRASE=correct-horse-battery\n` })
     expect(await run(h)).toBe(1)
     expect(h.lines.join('\n')).toContain('画面の『見本を開く』から入れてください')
+    expect(h.lines.join('\n')).toContain('http://localhost:3000/demo')
     expect(h.calls.filter((c) => c.url.includes('/auth/login'))).toEqual([])
   })
 

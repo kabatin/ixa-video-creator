@@ -39,7 +39,7 @@ const notRunning: StepResult = {
   docs: 'INSTALL.md#起動する',
 }
 
-const PASSPHRASE_MESSAGE = '合言葉を決めているので、ここからは入れません。画面の『見本を開く』から入れてください'
+const PASSPHRASE_MESSAGE = `合言葉を決めているので、ここからは入れません。画面の『見本を開く』から入れてください（${WEB_URL}/demo）`
 const UNAVAILABLE_MESSAGE = '見本はまだ用意されていません'
 
 const Envelope = z.union([
