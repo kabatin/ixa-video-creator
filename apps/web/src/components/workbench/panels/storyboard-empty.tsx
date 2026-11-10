@@ -1,8 +1,8 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { AddTrackButton } from '@/components/workbench/ui/add-track-button'
 import { PanelEmpty } from '@/components/workbench/panels/panel-frame'
+import { StoryboardNoTrack } from '@/components/workbench/panels/storyboard-no-track'
 import { useWorkbench } from '@/components/workbench/workbench-context'
 import { useWorkflow } from '@/components/workbench/workflow-context'
 import { WORKFLOW_ACTIONS, type WorkflowStep } from '@/lib/workflow-steps'
@@ -30,16 +30,9 @@ export const StoryboardEmpty = () => {
   const workbench = useWorkbench()
   const { steps, nextId, go } = useWorkflow()
 
-  if (workbench.musicLoaded && workbench.track === null) {
-    return (
-      <PanelEmpty
-        title="楽曲が登録されていません"
-        hint="曲を登録して解析すると、波形の上で区切りを置いて Shot にできます。"
-      >
-        <AddTrackButton />
-      </PanelEmpty>
-    )
-  }
+  // 曲の無い人にも入口を出す（楽曲を登録・曲を作る…・曲なしで始める）。
+  if (workbench.musicLoaded && workbench.track === null) return <StoryboardNoTrack />
+
 
   const before = steps.filter((step) => BEFORE_SHOTS.has(step.id))
   // Shot の前の段がまだなら、その段。済んでいれば（分からない段だけが残っていても）区切って Shot にする。

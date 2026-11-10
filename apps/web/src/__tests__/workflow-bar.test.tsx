@@ -47,14 +47,16 @@ const ready = (patch: Partial<WorkbenchContextValue> = {}): Partial<WorkbenchCon
 })
 
 describe('WorkflowBar', () => {
-  it('楽曲が無ければ ① 楽曲が次。押すと楽曲の登録のしかたを言う', async () => {
+  /** 素材ツリーへ行かせていたころは、そこから先（登録・曲を作る）を自分で探す必要があった。聴きながら切るなら両方ある。 */
+  it('楽曲が無ければ ① 楽曲が次。押すと聴きながら切るを開く（登録と曲を作る…がある）', async () => {
     const { value } = show({ track: null })
 
     const music = screen.getByRole('button', { name: /① 楽曲/ })
     expect(music).toHaveAttribute('aria-current', 'step')
     await userEvent.click(music)
-    expect(value.focusPanel).toHaveBeenCalledWith('assets')
-    expect(value.notify).toHaveBeenCalledWith(expect.stringContaining('楽曲がまだありません'), 'warn')
+    expect(value.openCutter).toHaveBeenCalledWith('cut')
+    expect(value.focusPanel).not.toHaveBeenCalledWith('assets')
+    expect(value.notify).not.toHaveBeenCalled()
   })
 
   it('ルックが空なら ② 作品の方針が途中（2/3）で次。押すと作品の方針を開く', async () => {

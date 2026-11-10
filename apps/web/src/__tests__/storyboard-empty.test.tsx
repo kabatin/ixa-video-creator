@@ -1,4 +1,4 @@
-import type { MusicTrack } from '@ixa/domain'
+import type { MusicTrack, Project } from '@ixa/domain'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
@@ -61,5 +61,56 @@ describe('StoryboardEmpty', () => {
   it('楽曲が無ければ、楽曲の登録を出す', () => {
     renderInWorkbench(<StoryboardEmpty />, { track: null, musicLoaded: true })
     expect(screen.getByText('楽曲が登録されていません')).toBeTruthy()
+  })
+})
+
+/**
+ * 曲の無い人の入口。楽曲を登録・曲を作る…・曲なしで始める（ナレーションから）の 3 つを出し、
+ * 主ボタン（塗り）は作品の種類の始め方に合わせる。素材置き場は主ボタンを置かない。
+ */
+describe('StoryboardEmpty の曲が無いときの入口', () => {
+  const ENTRANCES = ['楽曲を登録', '曲を作る…', '曲なしで始める（ナレーションから）'] as const
+  const isPrimary = (name: string): boolean => screen.getByRole('button', { name }).className.includes('bg-accent')
+  const showWithout = (kind: Project['kind'], narration: { lines: number; ready: number } | null = { lines: 0, ready: 0 }) =>
+    renderInWorkbench(
+      <WorkflowProvider lyricTelopCount={0} narration={narration} rendered={false}>
+        <StoryboardEmpty />
+      </WorkflowProvider>,
+      { track: null, musicLoaded: true, project: { ...aProject, kind } },
+    )
+
+  it('曲から始める種類は「楽曲を登録」が主ボタンで、ほかの 2 つは控えめ', () => {
+    showWithout('mv')
+    expect(ENTRANCES.map(isPrimary)).toEqual([true, false, false])
+    expect(screen.getByText(/曲を登録して解析すると/)).toBeTruthy()
+  })
+
+  it('ナレーションから始める種類は「曲なしで始める」が主ボタン。押すとナレーションを前に出す', async () => {
+    const { value } = showWithout('kamishibai')
+    expect(ENTRANCES.map(isPrimary)).toEqual([false, false, true])
+    expect(screen.getByText(/ナレーションの原稿を書いて声にすると/)).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: '曲なしで始める（ナレーションから）' }))
+    expect(value.focusPanel).toHaveBeenCalledWith('narration')
+  })
+
+  it('素材置き場は主ボタンを置かない', () => {
+    showWithout('library')
+    expect(ENTRANCES.map(isPrimary)).toEqual([false, false, false])
+  })
+
+  it('「曲を作る…」は曲を作る画面を開く', async () => {
+    const { value } = showWithout('mv')
+    await userEvent.click(screen.getByRole('button', { name: '曲を作る…' }))
+    expect(value.openDialog).toHaveBeenCalledWith('make-music')
+  })
+
+  it('置いたナレーションがあれば、その切れ目で Shot にする道を主ボタンにし、聴きながら切るを開く', async () => {
+    const { value } = showWithout('mv', { lines: 3, ready: 2 })
+    expect(screen.getByText(/置いたナレーションの切れ目で Shot にできます/)).toBeTruthy()
+    expect(screen.queryByText(/曲を登録して解析すると/)).toBeNull()
+    expect(isPrimary('ナレーションの切れ目で Shot にする')).toBe(true)
+    expect(ENTRANCES.map(isPrimary)).toEqual([false, false, false])
+    await userEvent.click(screen.getByRole('button', { name: 'ナレーションの切れ目で Shot にする' }))
+    expect(value.openCutter).toHaveBeenCalledWith('cut')
   })
 })

@@ -1,26 +1,21 @@
-import type { ConsoleLevel } from '@/lib/console-log'
 import type { WorkbenchContextValue } from '@/components/workbench/workbench-context'
 
 /**
  * 作業の場所へ行く口。メニューと流れの帯（制作者 2026-10-01）が同じ動きをする（書き写さない）。
  */
 
-export const NO_TRACK_NOTICE =
-  '楽曲がまだありません。音声ファイルを画面に落とすか、素材ツリーの「＋」から登録します。'
-
 type Navigable = Pick<
   WorkbenchContextValue,
-  'track' | 'inspect' | 'openViewer' | 'focusPanel' | 'projectId'
+  'track' | 'inspect' | 'openViewer' | 'focusPanel' | 'projectId' | 'openCutter'
 >
 
-/** 楽曲（マスター）を見る。まだ無ければ、登録のしかたを言って素材ツリーへ。 */
-export const goToMasterTrack = (
-  workbench: Navigable,
-  notify: (message: string, level?: ConsoleLevel) => void,
-): void => {
+/**
+ * 楽曲（マスター）を見る。まだ無ければ聴きながら切るを開く。そこに「楽曲を登録」と「曲を作る…」がある
+ * （`MusicGate`）。以前は素材ツリーへ行かせ、登録のしかたを文で言うだけだった。
+ */
+export const goToMasterTrack = (workbench: Navigable): void => {
   if (workbench.track === null) {
-    notify(NO_TRACK_NOTICE, 'warn')
-    workbench.focusPanel('assets')
+    workbench.openCutter('cut')
     return
   }
   workbench.inspect({ kind: 'track', id: workbench.track.id })

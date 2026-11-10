@@ -149,7 +149,7 @@ export const WorkbenchMenu = ({
     'import-files': onImportFiles,
     'open-asset-folder': openAssetFolder,
     'inspect-master-track': () => {
-      goToMasterTrack(workbench, onNotice)
+      goToMasterTrack(workbench)
     },
     'inspect-project': () => {
       goToProjectConcept(workbench)

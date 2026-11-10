@@ -60,7 +60,7 @@ export const WorkflowProvider = ({
   const go = (id: WorkflowStepId): void => {
     switch (id) {
       case 'music':
-        goToMasterTrack(workbench, workbench.notify)
+        goToMasterTrack(workbench)
         return
       case 'concept':
         goToProjectConcept(workbench)
