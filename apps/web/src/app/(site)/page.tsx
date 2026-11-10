@@ -8,6 +8,7 @@ import { ProjectListActions } from '@/components/project-list-actions'
 import { resolveApiBaseUrl, type ApiClient } from '@/lib/api-client'
 import type { WireProjectListItem } from '@/lib/api-schemas'
 import { describeError } from '@/lib/api-error'
+import { toProjectListEntry } from '@/lib/project-list-entry'
 import { createServerApiClient, redirectIfUnauthenticated } from '@/lib/server-api-client'
 import { pickProjectCover, type PosterView } from '@/lib/shot-posters'
 import { NEW_PROJECT_HREF } from '@/lib/site-nav'
@@ -115,7 +116,8 @@ const ProjectsPage = async () => {
         <ProjectListActions>
           {/* 表紙の URL は 5 分で切れる。読めなくなったらページを描き直して新しい URL をもらう。 */}
           <PosterRenewalOnRefresh issuedAtMs={coversIssuedAtMs}>
-            <ProjectBrowser projects={result.projects} covers={covers} />
+            {/* 一覧が使う欄だけを渡す（行をそのまま渡すと、歌詞や方針まで全作品分ブラウザへ届く）。 */}
+            <ProjectBrowser projects={result.projects.map((row) => toProjectListEntry(row, covers.get(row.id)))} />
           </PosterRenewalOnRefresh>
         </ProjectListActions>
       )}

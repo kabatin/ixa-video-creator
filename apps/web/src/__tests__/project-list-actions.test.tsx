@@ -65,24 +65,24 @@ describe('作品一覧の操作', () => {
     expect(await screen.findByText('「進め！戦子ちゃん！」を素材置き場にしました')).toBeInTheDocument()
   })
 
-  it('素材置き場には「作品に戻す」を出し、ミュージックビデオに戻して、種類は設定で選び直せると知らせる', async () => {
+  it('素材置き場には「素材置き場から出す」を出し、ミュージックビデオにして、種類は設定で選び直せると知らせる', async () => {
     const api = show(fakeApi(), { ...PROJECT, kind: 'library' })
 
     await userEvent.click(screen.getByRole('button', { name: '進め！戦子ちゃん！ の操作' }))
     const menu = screen.getByRole('menu', { name: '進め！戦子ちゃん！ の操作' })
     expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       '複製…',
-      '作品に戻す',
+      '素材置き場から出す',
       '削除…',
     ])
-    await userEvent.click(within(menu).getByRole('menuitem', { name: '作品に戻す' }))
+    await userEvent.click(within(menu).getByRole('menuitem', { name: '素材置き場から出す' }))
 
     await waitFor(() => {
       expect(api.setProjectKind).toHaveBeenCalledWith(PROJECT.id, 'mv')
     })
     expect(router.refresh).toHaveBeenCalled()
     expect(
-      await screen.findByText('「進め！戦子ちゃん！」を作品に戻しました。種類は作品の設定で選び直せます'),
+      await screen.findByText('「進め！戦子ちゃん！」を素材置き場から出しました。種類は作品の設定で選び直せます'),
     ).toBeInTheDocument()
   })
 

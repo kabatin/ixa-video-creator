@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { ProjectBrowser } from '@/components/project-browser'
 import type { WireProjectListItem } from '@/lib/api-schemas'
+import { toProjectListEntry, type ProjectListEntry } from '@/lib/project-list-entry'
 
 /**
  * 作品一覧（名前で探す・並べ方・素材置き場の畳み）と、カードの言葉（種類・進み具合・最後に触った時刻・状態の札）。
@@ -20,7 +21,7 @@ type RowInput = {
   readonly hasRender?: boolean
 }
 
-const row = (input: RowInput): WireProjectListItem => ({
+const fullRow = (input: RowInput): WireProjectListItem => ({
   id: newId(ProjectId),
   workspaceId: newId(WorkspaceId),
   name: input.name,
@@ -48,6 +49,9 @@ const row = (input: RowInput): WireProjectListItem => ({
     hasRender: input.hasRender ?? false,
   },
 })
+
+/** 画面へ渡すのは一覧用に写した行（表紙は繋がない）。 */
+const row = (input: RowInput): ProjectListEntry => toProjectListEntry(fullRow(input), undefined)
 
 const NIGHT = row({
   name: 'NIGHT RUN',
@@ -82,7 +86,30 @@ describe('ProjectBrowser', () => {
     expect(cardNames()).toEqual(['NIGHT RUN', '進め！戦子ちゃん！', 'あさやけ'])
     expect(libraryToggle()).toHaveTextContent('素材置き場（1 件）')
     expect(libraryToggle()).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByText('キャラ置き場')).not.toBeInTheDocument()
+    expect(cardNames()).not.toContain('キャラ置き場')
+  })
+
+  it('畳んでいる間も、開け閉めが指す段は画面にあり、隠れている', async () => {
+    render(<ProjectBrowser projects={[NIGHT, SHELF]} />)
+
+    const regionId = libraryToggle().getAttribute('aria-controls') ?? ''
+    const region = document.getElementById(regionId)
+    expect(region).not.toBeNull()
+    expect(region).not.toBeVisible()
+
+    await userEvent.click(libraryToggle())
+    expect(document.getElementById(regionId)).toBeVisible()
+  })
+
+  it('知らせの段は検索する前からあり、中身だけが変わる', async () => {
+    render(<ProjectBrowser projects={[NIGHT]} />)
+
+    const status = screen.getByRole('status')
+    expect(status).toHaveTextContent('')
+
+    await userEvent.type(searchBox(), '夜明け')
+    expect(screen.getByRole('status')).toBe(status)
+    expect(status).toHaveTextContent('「夜明け」に当たるプロジェクトはありません。')
   })
 
   it('押すと素材置き場を開く', async () => {

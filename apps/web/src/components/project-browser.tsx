@@ -1,9 +1,8 @@
 'use client'
 
-import type { ProjectId } from '@ixa/domain'
 import { useId, useMemo, useState } from 'react'
 import { ProjectList } from '@/components/project-list'
-import type { WireProjectListItem } from '@/lib/api-schemas'
+import type { ProjectListEntry } from '@/lib/project-list-entry'
 import {
   DEFAULT_PROJECT_SORT,
   PROJECT_SORT_OPTIONS,
@@ -11,12 +10,13 @@ import {
   projectListView,
   type ProjectSortKey,
 } from '@/lib/project-list-view'
-import type { PosterView } from '@/lib/shot-posters'
 
 export type ProjectBrowserProps = {
-  /** 一覧の全行（1 件以上）。0 件のときはこの部品を出さず、空の案内を出す（ページの側）。 */
-  readonly projects: readonly WireProjectListItem[]
-  readonly covers?: ReadonlyMap<ProjectId, PosterView>
+  /**
+   * 一覧の全行（1 件以上・表紙付き）。0 件のときはこの部品を出さず、空の案内を出す（ページの側）。
+   * **一覧用に写した行だけを受ける**（`toProjectListEntry`。行をそのまま渡すと使わない欄までブラウザへ届く）。
+   */
+  readonly projects: readonly ProjectListEntry[]
 }
 
 /**
@@ -25,8 +25,11 @@ export type ProjectBrowserProps = {
  * 素材置き場は**はじめは畳む**（作品として書き出さないので、どれを開くか選ぶときに邪魔になる）。
  * 検索語が素材置き場に当たっている間は開く。開け閉めを押したら、次に検索語を変えるまではその通りにする。
  * 素材置き場が 1 件も無ければ段ごと出さない。
+ *
+ * 読み上げのため、畳んだ段は消さずに `hidden` で隠し（開け閉めが指す先を残す）、
+ * 「当たるプロジェクトはありません」の知らせの段はいつも置いて中身だけを変える（後から足した段は読まれないことがある）。
  */
-export const ProjectBrowser = ({ projects, covers }: ProjectBrowserProps) => {
+export const ProjectBrowser = ({ projects }: ProjectBrowserProps) => {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<ProjectSortKey>(DEFAULT_PROJECT_SORT)
   /** 押して決めた開け閉め。null は「検索語に任せる」。 */
@@ -71,23 +74,25 @@ export const ProjectBrowser = ({ projects, covers }: ProjectBrowserProps) => {
         </label>
       </div>
 
-      {nothingMatches && (
-        <p role="status" className="text-sm text-muted">
-          {`「${query.trim()}」に当たるプロジェクトはありません。`}
-          <button
-            type="button"
-            onClick={() => {
-              setQuery('')
-              setLibraryToggled(null)
-            }}
-            className="ml-2 text-text underline hover:text-accent"
-          >
-            検索語を消す
-          </button>
-        </p>
-      )}
+      <p role="status" className={nothingMatches ? 'text-sm text-muted' : 'sr-only'}>
+        {nothingMatches && (
+          <>
+            {`「${query.trim()}」に当たるプロジェクトはありません。`}
+            <button
+              type="button"
+              onClick={() => {
+                setQuery('')
+                setLibraryToggled(null)
+              }}
+              className="ml-2 text-text underline hover:text-accent"
+            >
+              検索語を消す
+            </button>
+          </>
+        )}
+      </p>
 
-      {view.works.length > 0 && <ProjectList projects={view.works} covers={covers} />}
+      {view.works.length > 0 && <ProjectList projects={view.works} />}
 
       {hasLibrary && (
         <section aria-label="素材置き場" className="border-t border-line pt-4">
@@ -101,11 +106,9 @@ export const ProjectBrowser = ({ projects, covers }: ProjectBrowserProps) => {
             <span aria-hidden="true">{libraryOpen ? '▾' : '▸'}</span>
             {`素材置き場（${String(view.library.length)} 件）`}
           </button>
-          {libraryOpen && (
-            <div id={libraryRegionId} className="mt-3">
-              <ProjectList projects={view.library} covers={covers} />
-            </div>
-          )}
+          <div id={libraryRegionId} hidden={!libraryOpen} className="mt-3">
+            <ProjectList projects={view.library} />
+          </div>
         </section>
       )}
     </div>

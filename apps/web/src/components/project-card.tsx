@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { ProjectCardFrame } from '@/components/project-list-actions'
 import { ShotPoster } from '@/components/shot-poster'
-import type { WireProjectListItem } from '@/lib/api-schemas'
+import type { ProjectListEntry } from '@/lib/project-list-entry'
 import { projectKindLabel } from '@/lib/project-kind-display'
 import { describeProjectSpec } from '@/lib/project-spec-choices'
 import {
@@ -14,15 +14,12 @@ import {
 import { workbenchHref } from '@/lib/workbench-url'
 
 export type ProjectCardProps = {
-  /** 一覧の 1 行（作品の欄と進み具合）。 */
-  readonly project: WireProjectListItem
   /**
-   * 表紙にする絵（`pickProjectCover` が選ぶ）。**`undefined` は「呼び出し側がまだ繋いでいない」**。
-   * `null` は「繋がっているが絵が無い」で、そのときは `coverReason` に理由が入る。
+   * 一覧用に写した 1 行（作品の欄の一部・進み具合・表紙）。**`cover` が `undefined` なら「呼び出し側がまだ繋いでいない」**で、
+   * 絵の枠ごと出さない。`cover.url` が null なら「繋がっているが絵が無い」で、`cover.reason` に理由が入る。
    * 2 つを混ぜると、繋ぎ忘れが「Take がありません」に化ける（L-021）。
    */
-  readonly coverUrl?: string | null
-  readonly coverReason?: string | null
+  readonly project: ProjectListEntry
 }
 
 /**
@@ -39,7 +36,7 @@ export type ProjectCardProps = {
  * どれを開くか選べるよう、種類・どこまで進んだか・最後に触った時刻を出す。状態の札は、はじめの「企画」のままなら出さない
  * （手で変えるまで全部「企画」なので、出しても何も言っていない）。
  */
-export const ProjectCard = ({ project, coverUrl, coverReason }: ProjectCardProps) => {
+export const ProjectCard = ({ project }: ProjectCardProps) => {
   const progress = projectProgressLine(project.kind, project.activity)
   return (
     <ProjectCardFrame project={{ id: project.id, name: project.name, kind: project.kind }}>
@@ -47,11 +44,11 @@ export const ProjectCard = ({ project, coverUrl, coverReason }: ProjectCardProps
         href={workbenchHref(project.id)}
         className="block rounded-lg p-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
       >
-        {(coverUrl !== undefined || coverReason !== undefined) && (
+        {project.cover !== undefined && (
           <div className="mb-4">
             <ShotPoster
-              url={coverUrl ?? null}
-              reason={coverReason ?? null}
+              url={project.cover.url}
+              reason={project.cover.reason}
               alt={`${project.name} の表紙`}
               size="card"
             />

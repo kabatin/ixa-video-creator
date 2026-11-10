@@ -20,21 +20,22 @@ import { workbenchHref } from '@/lib/workbench-url'
  *
  * メニュー・確認はワークベンチの右クリックと同じ部品（`ContextMenuHost`）。複製の画面はワークベンチと同じ `ProjectDuplicateForm`。
  *
- * 素材置き場（種類 `library`）にする・作品に戻すもここ。素材置き場は一覧の下に畳む。戻すときはミュージックビデオにし、
+ * 素材置き場（種類 `library`）にする・素材置き場から出すもここ。素材置き場は一覧の下に畳む。出すときはミュージックビデオにし、
  * ほかの種類は作品の設定で選び直す（知らせでそう言う）。
+ * **「作品に戻す」とは言わない。** 「作品の設定」「作品の方針」は素材置き場にも使う言葉で、「作品」が 2 つの意味になる。
  */
 
 export type ProjectListActionsApi = {
   readonly deleteProject: (projectId: ProjectId) => Promise<void>
-  /** 種類を変える（素材置き場にする・作品に戻す）。 */
+  /** 種類を変える（素材置き場にする・素材置き場から出す）。 */
   readonly setProjectKind: (projectId: ProjectId, kind: ProjectKind) => Promise<void>
 } & ProjectDuplicateApi
 
 /** カードが知っていればよいこと。 */
 export type ProjectCardTarget = { readonly id: ProjectId; readonly name: string; readonly kind: ProjectKind }
 
-/** 素材置き場から戻すときの種類。ほかの種類は作品の設定で選び直す。 */
-const KIND_WHEN_BACK_TO_WORK: ProjectKind = 'mv'
+/** 素材置き場から出すときの種類。ほかの種類は作品の設定で選び直す。 */
+const KIND_WHEN_LEAVING_LIBRARY: ProjectKind = 'mv'
 
 type Actions = {
   readonly openMenu: (project: ProjectCardTarget, at: { readonly x: number; readonly y: number }, origin: HTMLElement) => void
@@ -80,12 +81,12 @@ const Inner = ({ api, children }: { readonly api: ProjectListActionsApi; readonl
             project.kind === 'library'
               ? {
                   kind: 'item',
-                  id: 'to-work',
-                  label: '作品に戻す',
+                  id: 'leave-library',
+                  label: '素材置き場から出す',
                   disabledReason: null,
                   run: async () => {
-                    await api.setProjectKind(project.id, KIND_WHEN_BACK_TO_WORK)
-                    setNotice(`「${project.name}」を作品に戻しました。種類は作品の設定で選び直せます`)
+                    await api.setProjectKind(project.id, KIND_WHEN_LEAVING_LIBRARY)
+                    setNotice(`「${project.name}」を素材置き場から出しました。種類は作品の設定で選び直せます`)
                     router.refresh()
                   },
                 }
