@@ -12,6 +12,22 @@ jobs:
   ci:
     name: Lint / Typecheck / Test
     runs-on: ubuntu-latest
+    # DB の結合テスト用（下の「Test DB against a real Postgres」だけが使う）。中身は毎回まっさら。
+    # パスワードは使い捨てのコンテナのためのもので、秘密ではない。
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ixa
+          POSTGRES_PASSWORD: ixa
+          POSTGRES_DB: ixa_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ixa -d ixa_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -50,6 +66,20 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      # 上の Test は DATABASE_URL を渡さないので、packages/db の *.integration.test.ts は毎回飛ばされる。
+      # それだと SQL（集計・列の既定値・部分一意索引）は、消しても緑のままになる。
+      # ここでマイグレーションを 0 から全部当て（これ自体が「全部当たる」の検査）、実際の DB で回す。
+      # DATABASE_URL はこの 2 つの手順にだけ渡す（ほかのパッケージのテストを DB につながせない）。
+      - name: Migrate a fresh Postgres
+        run: pnpm --filter @ixa/db run db:migrate
+        env:
+          DATABASE_URL: postgres://ixa:ixa@localhost:5432/ixa_ci
+
+      - name: Test DB against a real Postgres
+        run: pnpm --filter @ixa/db exec vitest run --no-file-parallelism integration
+        env:
+          DATABASE_URL: postgres://ixa:ixa@localhost:5432/ixa_ci
 
       # pnpm ixa start（ADR-0068）が使う人の手元で回す本番ビルド。ここで回さないと、壊れても誰も気づかない
       # （next build は lint・型検査を飛ばす設定なので、それは上の 2 つが受け持つ）。
