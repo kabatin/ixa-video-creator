@@ -386,6 +386,17 @@ export const EnvSchema = z.object({
       message: '絶対パス（/ で始まる）で書いてください',
     })
     .optional(),
+  /**
+   * 見本の作品（ADR-0067）を、この機械のフォルダ（`manifest.json` とファイル）から入れる。空なら同梱の目録を使う。
+   * ネットにつながらない機械へ入れるときと、公開する前の見本を確かめるときに使う。**絶対パスだけ受ける。**
+   */
+  DEMO_DIR: z
+    .string()
+    .transform((v) => (v.trim() === '' ? undefined : v.trim()))
+    .refine((v) => v === undefined || v.startsWith('/'), {
+      message: '絶対パス（/ で始まる）で書いてください',
+    })
+    .optional(),
 })
 
 export type Env = z.infer<typeof EnvSchema>
@@ -492,6 +503,8 @@ export interface AppConfig {
   }
   /** 書き出した動画を置くフォルダ（絶対パス）。未設定は null（API が既定を決める）。 */
   renderExportDir: string | null
+  /** 見本の作品を入れるフォルダ（ADR-0067。絶対パス）。未設定は null（同梱の目録を使う）。 */
+  demoDir: string | null
   /** 作った画像を自動でやり直す上限の回数（ADR-0055）。 */
   imageCheckMaxRetries: number
   /** 作った画像のチェックに使う Claude のモデル（ADR-0055 追記）。 */

@@ -469,6 +469,23 @@ describe('書き出しフォルダ（RENDER_EXPORT_DIR）', () => {
   })
 })
 
+/** 見本の作品をこの機械のフォルダから入れる（ADR-0067）。省略すれば null（同梱の目録を使う）。 */
+describe('見本のフォルダ（DEMO_DIR）', () => {
+  it('省略・空なら null', () => {
+    expect(loadConfig(requiredEnv).demoDir).toBeNull()
+    expect(loadConfig({ ...requiredEnv, DEMO_DIR: '  ' }).demoDir).toBeNull()
+  })
+
+  it('絶対パスならそのまま使う', () => {
+    expect(loadConfig({ ...requiredEnv, DEMO_DIR: '/Volumes/外付け/見本' }).demoDir).toBe('/Volumes/外付け/見本')
+  })
+
+  it('相対パス・~ 始まりは起動時に止める', () => {
+    expect(() => loadConfig({ ...requiredEnv, DEMO_DIR: 'demo' })).toThrow(/DEMO_DIR/)
+    expect(() => loadConfig({ ...requiredEnv, DEMO_DIR: '~/demo' })).toThrow(/DEMO_DIR/)
+  })
+})
+
 /**
  * 置き場の設定（ADR-0041）。**既定は `fs`**（この機械のただのファイル）。
  */

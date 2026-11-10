@@ -63,6 +63,7 @@ const aConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
       ...LOCAL_VIDEO_OFF,
     },
     renderExportDir: null,
+    demoDir: null,
     imageCheckMaxRetries: 2,
     imageCheckModel: 'claude-sonnet-5-5',
     motionAnalysisModel: 'claude-sonnet-5-5',
