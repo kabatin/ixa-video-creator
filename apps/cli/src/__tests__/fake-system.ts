@@ -7,6 +7,7 @@ export const fakeSystem = (
 ): System => ({
   run: (command, args) => Promise.resolve(answers[[command, ...args].join(' ')] ?? { kind: 'not_found' }),
   httpGet: () => Promise.resolve({ ok: false, reason: 'つながりません' }),
+  httpPost: () => Promise.resolve({ ok: false, reason: 'つながりません' }),
   readText: () => Promise.resolve(null),
   writeText: () => Promise.resolve(),
   createText: () => Promise.resolve(true),

@@ -97,6 +97,21 @@ const httpGet = async (
   }
 }
 
+const httpPost = async (
+  url: string,
+  body: string,
+  timeoutMs: number,
+  headers: Readonly<Record<string, string>> = {},
+): Promise<HttpResult> => {
+  try {
+    const response = await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(timeoutMs), redirect: 'manual' })
+    return { ok: true, status: response.status, body: await response.text(), setCookies: response.headers.getSetCookie() }
+  } catch (error) {
+    // 理由に URL は入れない（httpGet と同じ）。
+    return { ok: false, reason: error instanceof Error && error.name === 'TimeoutError' ? '応答がありません' : 'つながりません' }
+  }
+}
+
 const readText = async (file: string): Promise<string | null> => {
   try {
     return await readFile(file, 'utf8')
@@ -270,6 +285,7 @@ const readStdin = async (): Promise<string | null> => {
 export const createRealSystem = (): System => ({
   run,
   httpGet,
+  httpPost,
   readText,
   writeText: (file, content) => writeFile(file, content, 'utf8'),
   createText,

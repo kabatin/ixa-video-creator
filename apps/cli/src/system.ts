@@ -23,7 +23,13 @@ export type RunOptions = {
 }
 
 export type HttpResult =
-  | { readonly ok: true; readonly status: number; readonly body: string }
+  | {
+      readonly ok: true
+      readonly status: number
+      readonly body: string
+      /** 応答の `Set-Cookie`（`httpPost` だけが入れる。入る口のクッキーを受け取るため）。 */
+      readonly setCookies?: readonly string[]
+    }
   | { readonly ok: false; readonly reason: string }
 
 /** ポートで待ち受けているプロセス。 */
@@ -37,6 +43,13 @@ export type System = {
   readonly run: (command: string, args: readonly string[], options?: RunOptions) => Promise<RunResult>
   /** 秘密は `headers` で渡す（URL に入れない）。 */
   readonly httpGet: (url: string, timeoutMs: number, headers?: Readonly<Record<string, string>>) => Promise<HttpResult>
+  /** 本文（JSON の文字）を送る。秘密は `headers` で渡す（URL に入れない）。リダイレクトはたどらない。 */
+  readonly httpPost: (
+    url: string,
+    body: string,
+    timeoutMs: number,
+    headers?: Readonly<Record<string, string>>,
+  ) => Promise<HttpResult>
   /** 無ければ null。 */
   readonly readText: (path: string) => Promise<string | null>
   readonly writeText: (path: string, content: string) => Promise<void>

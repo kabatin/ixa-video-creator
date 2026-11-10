@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 /** 引数を読む（純粋）。知らない引数は止める（打ち間違いを黙って無視しない）。 */
 
-export const COMMANDS = ['setup', 'start', 'doctor', 'update', 'mcp', 'infra', 'ai', 'help'] as const
+export const COMMANDS = ['setup', 'start', 'doctor', 'update', 'mcp', 'infra', 'ai', 'demo', 'help'] as const
 export const INFRA_ACTIONS = ['up', 'down'] as const
 export const AI_ACTIONS = ['install', 'connect', 'status'] as const
 
@@ -51,6 +51,7 @@ export const HELP = `使い方: pnpm ixa <コマンド> [オプション]
   setup    初めての導入（何度実行しても壊れない）。--yes で途中の質問をしない
   start    ixa を起動する（http://localhost:3000。Ctrl+C で止める）。画面はコードか設定が変わったときだけ
            組み立て直す（初回は数分）。--build で必ず組み立て直す。開発で直しながら動かすなら pnpm dev
+  demo     見本の作品を入れて、画面の場所を出す（ixa を起動してから。合言葉を決めていれば画面から入れる）
   doctor   今の状態を ✓ / ! / ✗ で出す（読むだけ）。✗ があれば終了コード 1
   update   最新のリリースへ上げる。--main で main の先頭へ、--check で確かめるだけ、
            --force で「動いているジョブ」の確認を外す、--while-running で ixa を動かしたまま進める、
