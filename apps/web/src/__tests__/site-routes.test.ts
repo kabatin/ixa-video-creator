@@ -40,6 +40,8 @@ const EXPECTED_ROUTES: readonly string[] = [
   '/characters',
   '/characters/[id]',
   '/characters/new',
+  // 同梱の見本の作品を入れて開く（ADR-0067）。入口は一覧に置く。
+  '/demo',
   '/library',
   '/login',
   '/projects/[id]',
