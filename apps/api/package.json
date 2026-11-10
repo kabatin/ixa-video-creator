@@ -14,7 +14,8 @@
     "serve": "node --import tsx --env-file=../../.env src/main.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "demo:export": "tsx --env-file-if-exists=../../.env scripts/export-demo.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.0",

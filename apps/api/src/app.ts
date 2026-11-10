@@ -76,6 +76,10 @@ import { thumbnailRoutes, type ThumbnailQueue } from './routes/thumbnails.js'
 import { assetRoutes } from './routes/assets.js'
 import { libraryImportRoutes } from './routes/library-imports.js'
 import { projectDuplicateRoutes } from './routes/project-duplicate.js'
+import { projectDemoRoutes } from './routes/project-demo.js'
+import { duplicationDepsFromApp } from './project-duplication/app-deps.js'
+import { noDemoBundle, type DemoBundleSource } from './demo-project/bundle-source.js'
+import { createDemoInstaller } from './demo-project/installer.js'
 import { scriptRoutes } from './routes/scripts.js'
 import { sequenceRoutes } from './routes/sequences.js'
 import { musicRoutes, type AnalysisQueue } from './routes/music.js'
@@ -205,6 +209,8 @@ export type AppDeps = {
   events: ProjectEventPublisher & ProjectEventSubscriber
   /** media キューへの投入。未配線なら登録のみ行い queued: false を返す。 */
   mediaIngest?: MediaIngestDeps
+  /** 同梱の見本の出どころ（ADR-0067）。無ければ見本は「まだ用意されていません」（テストの多くは要らない）。 */
+  demoBundle?: DemoBundleSource
   /**
    * この環境の状態を返す口（`describeEnvironment(config)`）。
    * **app 層が config を直接読まない。** 注入して、テストから差し替えられるようにする。
@@ -326,6 +332,23 @@ export const createApp = (deps: AppDeps) => {
   app.route('/', upscaleActivityRoutes({ projects: deps.projects, upscaleJobs: deps.upscaleJobs }))
   // 画面がモデルの性質（fps・尺・参照の上限）を書き写さないための口。
   app.route('/', modelRoutes({ registry: deps.registry }))
+  // 同梱の見本の作品（ADR-0067）。**`/projects/{id}` より先に置く**（`demo` を作品の ID として読ませない）。
+  // 書き手は作品の複製と同じ。入れている途中の表は、この入れる口が 1 つだけ持つ。
+  const duplication = duplicationDepsFromApp(deps, dialogueTelops.sync)
+  app.route(
+    '/',
+    projectDemoRoutes({
+      installer: createDemoInstaller({
+        bundle: deps.demoBundle ?? noDemoBundle,
+        projects,
+        mediaAssets,
+        ...(deps.mediaIngest === undefined ? {} : { mediaIngest: deps.mediaIngest }),
+        storage,
+        writers: duplication,
+        logger,
+      }),
+    }),
+  )
   app.route(
     '/',
     // 費用の出どころ判定は **過去の事実**。今 registry にいる Provider と突き合わせない
@@ -582,38 +605,9 @@ export const createApp = (deps: AppDeps) => {
       ...(deps.sfxGeneration === undefined ? {} : { sfxJobs: deps.sfxGeneration.sfxJobs }),
     }),
   )
-  // 作品を複製する（持っていく項目を選べる。ADR-0037）。
-  // 声とナレーション（ADR-0038）の口。繋いでいない環境では省く。
+  // 作品を複製する（持っていく項目を選べる。ADR-0037）。口の組み方は同梱の見本と同じ（`duplicationDepsFromApp`）。
   const narration = deps.narration
-  app.route(
-    '/',
-    projectDuplicateRoutes({
-      projects: deps.projects,
-      scripts: deps.scripts,
-      musicTracks: deps.musicTracks,
-      musicAnalyses: deps.musicAnalyses,
-      characters: deps.characters,
-      looks: deps.looks,
-      locations: deps.locations,
-      brandAssets: deps.brandAssets,
-      textStyles: deps.textStyles,
-      timelineClips: deps.timelineClips,
-      sequences: deps.sequences,
-      shots: deps.shots,
-      shotCharacters: deps.shotCharacters,
-      shotReferences: deps.shotReferences,
-      takes: deps.takes,
-      transitions: deps.transitions,
-      syncDialogueTelops: dialogueTelops.sync,
-      // 声とナレーション（ADR-0038）。繋いでいない環境では持っていけない。
-      ...(narration === undefined
-        ? {}
-        : { voices: narration.voices, narrationLines: narration.lines, narrationTakes: narration.takes }),
-      // 動きの分析（ADR-0054 追記）。Take を写すなら分析も写す。
-      ...(deps.motion === undefined ? {} : { motionAnalyses: deps.motion.analyses }),
-      logger,
-    }),
-  )
+  app.route('/', projectDuplicateRoutes(duplication))
 
   app.route(
     '/',

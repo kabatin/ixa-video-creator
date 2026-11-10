@@ -1,6 +1,8 @@
 import { createAgentWiring } from './agent/agent-wiring.js'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { createDirBundleSource, createReleaseBundleSource } from './demo-project/bundle-source.js'
 import { serve, type ServerType } from '@hono/node-server'
 import { describeEnvironment, getConfig, isLoopbackHost, loopbackAssetUrlWarning } from '@ixa/config'
 import {
@@ -490,6 +492,11 @@ export const main = (): void => {
     reviews: createReviewRepository(db),
     reviewQueue: reviewQueuePort,
     mediaIngest,
+    // 同梱の見本（ADR-0067）。DEMO_DIR があればそのフォルダ、無ければ git に置いた目録とリリースのファイル。
+    demoBundle:
+      config.demoDir === null
+        ? createReleaseBundleSource({ manifestPath: fileURLToPath(new URL('../demo/manifest.json', import.meta.url)) })
+        : createDirBundleSource(config.demoDir),
     // Provider の登録はここでのみ行う。Phase 1 はスタブのみ（ADR-0014）。
     // API 側は capability の参照と Model Router のためだけに使い、実行は worker が行う。
     registry: createProviderRegistry([

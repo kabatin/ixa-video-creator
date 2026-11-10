@@ -1,0 +1,128 @@
+import { createHash } from 'node:crypto'
+import { writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { DemoManifest, type DemoFileRef } from '@ixa/domain'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createDirBundleSource, createReleaseBundleSource } from '../demo-project/bundle-source.js'
+import { DemoFileError, demoFailureMessage } from '../demo-project/errors.js'
+import { makeTempDir, removeDir } from './demo-fixtures.js'
+
+/**
+ * 見本のファイルを取る口（ADR-0067）。**確かめてから返す**（大きさ・sha256）。
+ * 取りに行く口は、目録より大きい応答を読み切らずに断り、**飛ばされた先の URL を例外に入れない**。
+ */
+
+const BYTES = new TextEncoder().encode('見本のファイルの中身')
+const SHA = createHash('sha256').update(BYTES).digest('hex')
+const ENTRY: DemoFileRef = { file: 'peaks-1.json', sha256: SHA, sizeBytes: BYTES.byteLength }
+const SIGNED = 'https://objects.example.com/x?X-Amz-Signature=secret&X-Amz-Credential=key'
+
+const manifest = DemoManifest.parse({
+  formatVersion: 1,
+  demoKey: 'ixa-demo-v1',
+  title: '見本',
+  baseUrl: 'https://example.com/releases/download/demo-v1/',
+  media: [],
+  files: [{ key: 'music/p/t/peaks.json', ...ENTRY }],
+  source: {},
+})
+
+/** 応答を返す偽の fetch。呼ばれた URL を控える。`url` は飛ばされた先（Response.url の代わり）。 */
+const fakeFetch = (body: Uint8Array | null, init: { status?: number; headers?: Record<string, string>; url?: string } = {}) => {
+  const calls: string[] = []
+  const impl: typeof fetch = (input) => {
+    calls.push(input instanceof Request ? input.url : input.toString())
+    const response = new Response(body, { status: init.status ?? 200, headers: init.headers ?? {} })
+    if (init.url !== undefined) Object.defineProperty(response, 'url', { value: init.url })
+    return Promise.resolve(response)
+  }
+  return { calls, impl }
+}
+
+const failureOf = async (promise: Promise<unknown>): Promise<DemoFileError> => {
+  const error: unknown = await promise.catch((e: unknown) => e)
+  expect(error).toBeInstanceOf(DemoFileError)
+  return error as DemoFileError
+}
+
+describe('リリースから取る口', () => {
+  const source = (impl: typeof fetch) => createReleaseBundleSource({ manifestPath: '/nonexistent/manifest.json', fetch: impl })
+
+  it('目録の頭とファイル名をつないで取りに行き、確かめた中身を返す', async () => {
+    const fake = fakeFetch(BYTES, { url: SIGNED })
+    await expect(source(fake.impl).fetchFile(manifest, ENTRY)).resolves.toEqual(Buffer.from(BYTES))
+    expect(fake.calls).toEqual(['https://example.com/releases/download/demo-v1/peaks-1.json'])
+  })
+
+  it('目録が無ければ見本は無い', async () => {
+    await expect(source(fakeFetch(BYTES).impl).manifest()).resolves.toBeNull()
+  })
+
+  it('sha256 が合わなければ壊れていたとして断り、URL を言わない', async () => {
+    const tampered = new Uint8Array(BYTES.byteLength).fill(65)
+    const error = await failureOf(source(fakeFetch(tampered, { url: SIGNED }).impl).fetchFile(manifest, ENTRY))
+    expect(error.reason).toBe('broken')
+    expect(error.message).toContain('peaks-1.json')
+    expect(error.message).not.toContain('https://')
+  })
+
+  it('目録より大きい応答は、大きさの申告でも、読んでいる途中でも断る', async () => {
+    const big = new Uint8Array(BYTES.byteLength + 1)
+    const declared = await failureOf(source(fakeFetch(big, { headers: { 'content-length': String(big.byteLength) } }).impl).fetchFile(manifest, ENTRY))
+    expect(declared.reason).toBe('broken')
+    const stream = new ReadableStream<Uint8Array>({
+      start: (controller) => {
+        controller.enqueue(big)
+        controller.close()
+      },
+    })
+    const streamed = await failureOf(
+      source(() => Promise.resolve(new Response(stream, { status: 200 }))).fetchFile(manifest, ENTRY),
+    )
+    expect(streamed.message).toContain('目録より大きい応答')
+  })
+
+  it('つながらない・断られたときは、取りに行けなかったと言う（URL も番号も画面の文に入れない）', async () => {
+    const offline: typeof fetch = () => Promise.reject(new TypeError(`fetch failed ${SIGNED}`))
+    const error = await failureOf(source(offline).fetchFile(manifest, ENTRY))
+    expect(error.reason).toBe('network')
+    expect(error.message).not.toContain('X-Amz')
+    expect(error.cause).toBeUndefined()
+    const message = demoFailureMessage(error)
+    expect(message).toBe('見本のファイルを取りに行けませんでした。インターネットにつながっているか確かめて、もう一度試してください。')
+
+    const notFound = await failureOf(source(fakeFetch(null, { status: 404 }).impl).fetchFile(manifest, ENTRY))
+    expect(notFound.reason).toBe('network')
+    expect(demoFailureMessage(notFound)).not.toMatch(/404|https?:/)
+  })
+
+  it('https でない先へ飛ばされたら受けない', async () => {
+    const error = await failureOf(source(fakeFetch(BYTES, { url: 'http://example.com/x' }).impl).fetchFile(manifest, ENTRY))
+    expect(error.reason).toBe('network')
+  })
+})
+
+describe('この機械のフォルダから読む口（DEMO_DIR）', () => {
+  let dir: string
+  beforeAll(async () => {
+    dir = await makeTempDir()
+  })
+  afterAll(async () => {
+    await removeDir(dir)
+  })
+
+  it('目録とファイルを読み、確かめる', async () => {
+    await writeFile(join(dir, 'manifest.json'), JSON.stringify(manifest))
+    await writeFile(join(dir, ENTRY.file), BYTES)
+    const source = createDirBundleSource(dir)
+    expect((await source.manifest())?.demoKey).toBe('ixa-demo-v1')
+    await expect(source.fetchFile(manifest, ENTRY)).resolves.toEqual(Buffer.from(BYTES))
+  })
+
+  it('無いファイルは足りないと言い、大きいファイルは読まずに断る', async () => {
+    const source = createDirBundleSource(dir)
+    expect((await failureOf(source.fetchFile(manifest, { ...ENTRY, file: 'none.json' }))).reason).toBe('missing')
+    await writeFile(join(dir, 'big.json'), new Uint8Array(BYTES.byteLength + 10))
+    expect((await failureOf(source.fetchFile(manifest, { ...ENTRY, file: 'big.json' }))).reason).toBe('broken')
+  })
+})
