@@ -18,7 +18,8 @@ const markOf = (step: WorkflowStep): string => {
 const toneOf = (step: WorkflowStep, isNext: boolean): string => {
   if (isNext) return 'bg-accent text-accent-fg font-semibold'
   if (step.state === 'done') return 'text-ok hover:bg-surface-2'
-  if (step.state === 'skipped') return 'text-muted opacity-60 hover:bg-surface-2'
+  // 薄めない。`opacity-60` は地との比が 3.38 で、12px の文字の下限 4.5 に届かなかった。飛ばす段は「—」と斜体で言う。
+  if (step.state === 'skipped') return 'text-muted italic hover:bg-surface-2'
   if (step.state === 'partial') return 'text-text hover:bg-surface-2'
   return 'text-muted hover:bg-surface-2 hover:text-text'
 }

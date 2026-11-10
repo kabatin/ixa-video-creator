@@ -95,18 +95,19 @@ export const AgentPanel = () => {
           <p className="max-w-md text-center text-sm text-muted">
             作品の直しをチャットで頼めます。生成・削除・書き出しの前には確認を出します。
           </p>
-          <div className="grid w-full max-w-lg grid-cols-1 gap-3 sm:grid-cols-2">
+          {/* 幅はパネルで決まる（窓の幅ではない）。狭いときは縦に積み、文字を途中で折らない。 */}
+          <div className="flex w-full max-w-lg flex-wrap gap-3">
             <button
               type="button"
               disabled={creating}
-              className="rounded-lg border border-accent bg-accent/10 px-4 py-6 text-base font-semibold text-text hover:bg-accent/20 disabled:opacity-60"
+              className="min-w-[9rem] flex-1 whitespace-nowrap rounded-lg border border-accent bg-accent/10 px-4 py-6 text-base font-semibold text-text hover:bg-accent/20 disabled:opacity-60"
               onClick={() => void startNew()}
             >
               新しいタスク
             </button>
             <button
               type="button"
-              className="rounded-lg border border-line-strong bg-surface px-4 py-6 text-base font-semibold text-text hover:bg-surface-2"
+              className="min-w-[9rem] flex-1 whitespace-nowrap rounded-lg border border-line-strong bg-surface px-4 py-6 text-base font-semibold text-text hover:bg-surface-2"
               onClick={() => {
                 setView({ kind: 'list' })
                 void loadSessions()

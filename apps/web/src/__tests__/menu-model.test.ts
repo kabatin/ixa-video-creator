@@ -79,9 +79,10 @@ describe('有効判定', () => {
     expect(find(READY, 'undo').enabled).toBe(true)
   })
 
-  it('やり直すは常に無効', () => {
-    expect(find(EMPTY, 'redo').enabled).toBe(false)
-    expect(find(READY, 'redo').enabled).toBe(false)
+  /** 作らないと決めた機能を、常に押せない項目として並べない。 */
+  it('やり直すはメニューに置かない', () => {
+    const labels = buildMenus(READY).flatMap((menu) => menu.items.map((entry) => entry.label))
+    expect(labels.filter((label) => label.includes('やり直'))).toEqual([])
   })
 
   it('チェックが無ければ一括変更と一括生成は無効', () => {

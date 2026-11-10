@@ -81,10 +81,11 @@ describe('MenuBar', () => {
     const onSelect = vi.fn()
     render(<MenuBar menus={menus} onSelect={onSelect} />)
     fireEvent.click(top('編集'))
-    const redo = screen.getByRole('menuitem', { name: /やり直す/ })
-    expect(redo).toHaveAttribute('aria-disabled', 'true')
-    expect(redo).toHaveAttribute('title')
-    fireEvent.click(redo)
+    // 履歴が無いので「元に戻す」は押せない。
+    const undo = screen.getByRole('menuitem', { name: /元に戻す/ })
+    expect(undo).toHaveAttribute('aria-disabled', 'true')
+    expect(undo).toHaveAttribute('title')
+    fireEvent.click(undo)
     expect(onSelect).not.toHaveBeenCalled()
   })
 

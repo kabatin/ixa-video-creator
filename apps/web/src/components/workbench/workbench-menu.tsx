@@ -140,7 +140,6 @@ export const WorkbenchMenu = ({
 
   const COMMANDS: Readonly<Record<MenuCommand, () => void>> = {
     undo: onUndo,
-    redo: () => undefined,
     'reset-layout': onResetLayout,
     'copy-link': copyLink,
     'unselect-take': unselectTake,

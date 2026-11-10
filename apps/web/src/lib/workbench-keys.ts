@@ -6,7 +6,7 @@ import { isTextEntryTarget, resolveKeyOwner, type KeyTargetLike } from '@/lib/pl
  * | 打鍵 | 動き |
  * |---|---|
  * | ⌘Z / Ctrl+Z | 元に戻す（一括操作） |
- * | ⇧⌘Z | やり直す（未実装。何もしない） |
+ * | ⇧⌘Z | やり直す（作らない。何もしない） |
  * | ⌘Y | 変更履歴 |
  * | ⌘, | 環境設定 |
  * | ⌘K / Ctrl+K | 再生位置で分割（ADR-0024） |

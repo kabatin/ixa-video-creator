@@ -38,7 +38,6 @@ export type MenuAction =
 
 export type MenuCommand =
   | 'undo'
-  | 'redo'
   | 'reset-layout'
   | 'copy-link'
   | 'bulk-edit'
@@ -147,8 +146,6 @@ export const SPLIT_SHORTCUT = '⌘K'
 export const DELETE_SHORTCUT = 'Delete'
 const NO_CHECKED = '一覧で Shot にチェックを付けてください'
 
-export const REDO_DISABLED_REASON = 'やり直しはまだありません'
-
 /** メニューの項目名に入れる見出しの長さ。これを超えたら末尾を省く。 */
 const UNDO_SUMMARY_MAX = 32
 
@@ -230,11 +227,7 @@ export const buildMenus = (state: MenuState): readonly Menu[] => {
           shortcut: '⌘Z',
           disabledReason: undoDisabledReason(undo),
         }),
-        // 実装が無い。モックでも灰色。押せるように見せない。
-        item('redo', 'やり直す', command('redo'), {
-          shortcut: '⇧⌘Z',
-          disabledReason: REDO_DISABLED_REASON,
-        }),
+        // 「やり直す」は置かない。やり直しは作らないと決めている。常に押せない項目として並べない。
         item('history', '変更履歴…', dialog('history'), { shortcut: '⌘Y' }),
       ],
     },
