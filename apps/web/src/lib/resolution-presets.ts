@@ -1,4 +1,10 @@
-import type { AspectRatio, Resolution } from '@ixa/domain'
+import {
+  AspectRatio as AspectRatioSchema,
+  PROJECT_FPS_OPTIONS,
+  PROJECT_RESOLUTIONS,
+  type AspectRatio,
+  type Resolution,
+} from '@ixa/domain'
 
 export type ResolutionPreset = {
   readonly key: string
@@ -9,24 +15,47 @@ export type ResolutionPreset = {
   readonly resolution: Resolution
 }
 
-const preset = (width: number, height: number, name: string): ResolutionPreset => ({
-  key: `${String(width)}x${String(height)}`,
-  name,
-  label: `${name} (${String(width)}×${String(height)})`,
-  resolution: { width, height },
-})
+const keyOf = ({ width, height }: Resolution): string => `${String(width)}x${String(height)}`
 
-const PRESETS: Readonly<Record<AspectRatio, readonly ResolutionPreset[]>> = {
-  '16:9': [preset(1920, 1080, 'FHD'), preset(1280, 720, 'HD'), preset(3840, 2160, '4K')],
-  '9:16': [preset(1080, 1920, 'FHD 縦'), preset(720, 1280, 'HD 縦')],
-  '1:1': [preset(1080, 1080, '正方形 大'), preset(720, 720, '正方形 小')],
-  '4:5': [preset(1080, 1350, 'SNS 縦'), preset(864, 1080, 'SNS 縦 小')],
-  '21:9': [preset(2560, 1080, 'シネスコ'), preset(3440, 1440, 'シネスコ 大')],
+/**
+ * 大きさの名前。**どの大きさを選べるかの正は domain の `PROJECT_RESOLUTIONS`**で、ここは名前を添えるだけ
+ * （表を 2 つ持つと、画面で選べる大きさを Take が断る。2026-11-11）。名前の無い大きさは数字だけで出る。
+ */
+const PRESET_NAMES: Readonly<Record<string, string>> = {
+  '1920x1080': 'FHD',
+  '1280x720': 'HD',
+  '3840x2160': '4K',
+  '1080x1920': 'FHD 縦',
+  '720x1280': 'HD 縦',
+  '1080x1080': '正方形 大',
+  '720x720': '正方形 小',
+  '1080x1350': 'SNS 縦',
+  '864x1080': 'SNS 縦 小',
+  '2560x1080': 'シネスコ',
+  '3440x1440': 'シネスコ 大',
 }
 
-export const ASPECT_RATIOS: readonly AspectRatio[] = ['16:9', '9:16', '1:1', '4:5', '21:9']
+const preset = (resolution: Resolution): ResolutionPreset => {
+  const key = keyOf(resolution)
+  const size = `${String(resolution.width)}×${String(resolution.height)}`
+  const name = PRESET_NAMES[key] ?? size
+  return { key, name, label: name === size ? size : `${name} (${size})`, resolution }
+}
 
-export const FPS_OPTIONS: readonly number[] = [24, 25, 30, 60]
+export const ASPECT_RATIOS: readonly AspectRatio[] = AspectRatioSchema.options
+
+const presetsOf = (aspectRatio: AspectRatio): readonly ResolutionPreset[] =>
+  PROJECT_RESOLUTIONS[aspectRatio].map(preset)
+
+const PRESETS: Readonly<Record<AspectRatio, readonly ResolutionPreset[]>> = {
+  '16:9': presetsOf('16:9'),
+  '9:16': presetsOf('9:16'),
+  '1:1': presetsOf('1:1'),
+  '4:5': presetsOf('4:5'),
+  '21:9': presetsOf('21:9'),
+}
+
+export const FPS_OPTIONS: readonly number[] = PROJECT_FPS_OPTIONS
 
 export const resolutionPresetsFor = (aspectRatio: AspectRatio): readonly ResolutionPreset[] =>
   PRESETS[aspectRatio]

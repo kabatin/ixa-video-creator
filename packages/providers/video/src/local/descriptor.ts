@@ -1,4 +1,10 @@
-import { ModelId, ProviderId } from '@ixa/domain'
+import {
+  AspectRatio,
+  ModelId,
+  PROJECT_FPS_OPTIONS,
+  PROJECT_RESOLUTIONS,
+  ProviderId,
+} from '@ixa/domain'
 import type { VideoModelDescriptor } from '@ixa/provider-core'
 
 /**
@@ -20,15 +26,11 @@ export const localStillMotionModel: VideoModelDescriptor = {
   capabilities: {
     // 1 枚の画像から何秒でも作れる。尺の量子化を起こさない。
     durations: { mode: 'range', min: 0.5, max: 60 },
-    aspectRatios: ['16:9', '9:16', '1:1'],
-    resolutions: [
-      { width: 3840, height: 2160 },
-      { width: 1920, height: 1080 },
-      { width: 1280, height: 720 },
-      { width: 1080, height: 1920 },
-      { width: 1080, height: 1080 },
-    ],
-    fps: [24, 25, 30],
+    // 作品の設定で選べる形・大きさ・fps はすべて受ける（正は domain の `project-resolutions.ts`）。
+    // ffmpeg に大きさと fps を渡すだけなので、技術的な制限は無い。ここが狭いと、無料の道が Take で止まる。
+    aspectRatios: [...AspectRatio.options],
+    resolutions: AspectRatio.options.flatMap((aspectRatio) => PROJECT_RESOLUTIONS[aspectRatio]),
+    fps: [...PROJECT_FPS_OPTIONS],
     referenceImages: { max: 1, roles: ['start_frame'] },
     requiresStartFrame: true,
     seed: true,
