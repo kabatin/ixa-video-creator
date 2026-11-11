@@ -16,9 +16,13 @@ Claude Code / Codex over MCP) to run the whole edit.
 
 ## Made with it
 
+https://github.com/user-attachments/assets/ff89e46d-f9cb-4b11-9fcd-0cfde1dc8bf1
+
 ![Seven frames from "Senko's Time Travel", a vertical short: the girl Senko lit by a gaming monitor in an esports shop, on a footbridge at sunset, in an ukiyo-e castle town under cherry blossoms, raising a glowing sword in a stained-glass hall, riding a flying whale above the clouds, on a neon rooftop in 2099, and back in the shop under the title card](./docs/images/senko-stills.jpg)
 
-<sub>**戦子のタイムトラベル (Senko's Time Travel)** — a 26-second 9:16 short in seven shots. Start frames, video, music and sound effects were all made on one Mac with local models; only the narrator's voice is the Gemini API.</sub>
+<sub>**戦子のタイムトラベル (Senko's Time Travel)** — a 32-second 9:16 short in seven shots. Start frames, video, music and sound effects were all made on one Mac with local models; only the narrator's voice is the Gemini API.</sub>
+
+https://github.com/user-attachments/assets/0f39f83e-ff3e-48df-b5b4-b72f891d5dd4
 
 ![Nine frames from the "NIGHT RUN" trailer: a rain-soaked neon street, two sports cars idling in steam, an extreme close-up of a driver's eyes, a car streaking past in motion blur, a rear wheel spinning in tyre smoke, a car racing through a lit tunnel, the driver at the wheel in the rain, the two leads at a lookout at dawn, and the NIGHT RUN title over a wet street](./docs/images/night-run-stills.jpg)
 

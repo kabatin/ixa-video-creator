@@ -15,9 +15,13 @@
 
 ## このツールで作ったもの
 
+https://github.com/user-attachments/assets/ff89e46d-f9cb-4b11-9fcd-0cfde1dc8bf1
+
 ![Seven frames from "Senko's Time Travel", a vertical short: the girl Senko lit by a gaming monitor in an esports shop, on a footbridge at sunset, in an ukiyo-e castle town under cherry blossoms, raising a glowing sword in a stained-glass hall, riding a flying whale above the clouds, on a neon rooftop in 2099, and back in the shop under the title card](./docs/images/senko-stills.jpg)
 
-<sub>**戦子のタイムトラベル** — 縦 9:16・26 秒・7 Shot のショート。最初のフレーム・映像・曲・効果音はすべて Mac 1 台の手元のモデルで作り、ナレーションの声だけ Gemini API を使った。</sub>
+<sub>**戦子のタイムトラベル** — 縦 9:16・32 秒・7 Shot のショート。最初のフレーム・映像・曲・効果音はすべて Mac 1 台の手元のモデルで作り、ナレーションの声だけ Gemini API を使った。</sub>
+
+https://github.com/user-attachments/assets/0f39f83e-ff3e-48df-b5b4-b72f891d5dd4
 
 ![Nine frames from the "NIGHT RUN" trailer: a rain-soaked neon street, two sports cars idling in steam, an extreme close-up of a driver's eyes, a car streaking past in motion blur, a rear wheel spinning in tyre smoke, a car racing through a lit tunnel, the driver at the wheel in the rain, the two leads at a lookout at dawn, and the NIGHT RUN title over a wet street](./docs/images/night-run-stills.jpg)
 
