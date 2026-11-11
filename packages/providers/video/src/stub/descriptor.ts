@@ -1,4 +1,10 @@
-import { ModelId, ProviderId } from '@ixa/domain'
+import {
+  AspectRatio,
+  ModelId,
+  PROJECT_FPS_OPTIONS,
+  PROJECT_RESOLUTIONS,
+  ProviderId,
+} from '@ixa/domain'
 import type { VideoModelCapabilities, VideoModelDescriptor } from '@ixa/provider-core'
 
 /**
@@ -26,17 +32,17 @@ export const STUB_PROVIDER_IDS: readonly ProviderId[] = Object.freeze([STUB_PROV
 export const STUB_VEO_LIKE_MODEL_ID: ModelId = ModelId.parse('stub/veo-like')
 export const STUB_SEEDANCE_LIKE_MODEL_ID: ModelId = ModelId.parse('stub/seedance-like')
 
-/** どのスタブモデルでも共通の出力形式。FFmpeg 側の制約ではなく、実モデルを模した宣言。 */
+/**
+ * どのスタブモデルでも共通の出力形式。**作品の設定で選べる形・大きさ・fps はすべて受ける**
+ * （正は domain の `project-resolutions.ts`）。お試しは初めての人が選ぶ道で、画面で選べる大きさを
+ * 断ると Take で止まる（2026-11-11）。実モデルを模すのは、尺の量子化と参照の切り詰めのほう。
+ */
 const SHARED_OUTPUT = {
-  aspectRatios: ['16:9', '9:16', '1:1'],
-  resolutions: [
-    { width: 1920, height: 1080 },
-    { width: 1280, height: 720 },
-    { width: 1080, height: 1920 },
-  ],
-  fps: [24, 30],
+  aspectRatios: [...AspectRatio.options],
+  resolutions: AspectRatio.options.flatMap((aspectRatio) => PROJECT_RESOLUTIONS[aspectRatio]),
+  fps: [...PROJECT_FPS_OPTIONS],
   audioGeneration: false,
-} as const satisfies Pick<
+} satisfies Pick<
   VideoModelCapabilities,
   'aspectRatios' | 'resolutions' | 'fps' | 'audioGeneration'
 >

@@ -81,7 +81,9 @@ describe('スタブ下書きの正常系', () => {
 describe('スタブ下書きと音楽セクション', () => {
   it('セクションに乗っている Shot は理由にラベルを書く', () => {
     const item = stubDraftItem(aDraftShot({ startSec: 10 }), SECTIONS)
-    expect(item.reason).toContain('chorus')
+    expect(item.reason).toContain('サビ')
+    // 画面に出る文。解析のラベル（英語）をそのまま書かない。
+    expect(item.reason).not.toContain('chorus')
   })
 
   it('解析が無ければ「未解析」と書く（セクション不明を黙って埋めない）', () => {

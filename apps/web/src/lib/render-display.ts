@@ -61,8 +61,16 @@ export const RENDER_PRESET_OPTIONS: readonly RenderPresetOption[] = RenderPreset
   (value) => ({ value, ...PRESET_INFO[value] }),
 )
 
-/** 既定はプレビュー。最初の 1 回を最も安く・短く終わらせる。 */
-export const DEFAULT_RENDER_PRESET: RenderPreset = 'preview_720p'
+/**
+ * 既定はプレビュー。最初の 1 回を最も安く・短く終わらせる。
+ *
+ * **縦長の作品だけは縦型。** プレビューは横長なので、そのまま押すと左右に黒帯の付いた横長の動画が出る
+ * （2026-11-11、ショート動画の最初の書き出しがそうなった）。大きさが分からなければプレビュー。
+ */
+export const defaultRenderPresetFor = (
+  resolution: { readonly width: number; readonly height: number } | null,
+): RenderPreset =>
+  resolution !== null && resolution.height > resolution.width ? 'social_vertical' : 'preview_720p'
 
 export const renderPresetLabel = (preset: RenderPreset): string => PRESET_INFO[preset].label
 

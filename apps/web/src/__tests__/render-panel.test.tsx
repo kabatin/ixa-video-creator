@@ -52,6 +52,7 @@ const setup = (
     openFails?: boolean
     /** 最初の 1 回は「前回と同じ」を返す（2 回目からは受け付ける）。 */
     duplicateFirst?: boolean
+    projectResolution?: { readonly width: number; readonly height: number }
   } = {},
 ) => {
   const startRender = vi
@@ -84,6 +85,7 @@ const setup = (
       jobsError={null}
       issues={options.issues === undefined ? [] : options.issues}
       timelineDurationSec={250.92}
+      projectResolution={options.projectResolution ?? null}
       watch={watchOf(options.jobs ?? [done])}
       api={api}
       folderApi={folderApi}
@@ -94,6 +96,18 @@ const setup = (
 }
 
 const startButton = () => screen.getByRole('button', { name: /^書き出す/ })
+
+describe('画質の既定', () => {
+  it('横長の作品・大きさが分からない作品はプレビューが選ばれている', () => {
+    setup({})
+    expect(screen.getByRole('radio', { name: /^プレビュー/ })).toBeChecked()
+  })
+
+  it('縦長の作品は縦型が選ばれている', () => {
+    setup({ projectResolution: { width: 1080, height: 1920 } })
+    expect(screen.getByRole('radio', { name: /縦型/ })).toBeChecked()
+  })
+})
 
 describe('書き出す前の確認', () => {
   it('指摘が無ければ「問題はありません」。書き出せる', () => {

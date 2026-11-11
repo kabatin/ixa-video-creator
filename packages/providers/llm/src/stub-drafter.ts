@@ -1,6 +1,7 @@
 import {
   MAX_DRAFT_DESCRIPTION_LENGTH,
   MAX_DRAFT_REASON_LENGTH,
+  sectionLabelName,
   type MusicSection,
   type StoryboardDraftCamera,
 } from '@ixa/domain'
@@ -111,7 +112,7 @@ export const stubDraftItem = (
   const idea = pick(SHOT_IDEAS, digest)
   const mood = pick(MOODS, digest >>> 8)
 
-  const sectionPhrase = sectionLabel === null ? '曲の構成は未解析' : `${sectionLabel} の位置`
+  const sectionPhrase = section === null ? '曲の構成は未解析' : `${sectionLabelName(section.label)} の位置`
   const currentPhrase =
     shot.description.trim() === '' ? 'いまの説明は空' : `いまの説明「${shot.description}」`
 

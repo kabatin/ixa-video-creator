@@ -81,7 +81,8 @@ export const parseExportArgs = (argv: readonly string[]): ExportArgs => {
     forbid: values.forbid ?? [],
   })
   if (!parsed.success) {
-    const where = parsed.error.issues.map((issue) => issue.path.join('.')).join(', ')
+    // 欄の名前と決まりを言う。zod の文は決まりだけで、渡された値は含まない。
+    const where = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join(' / ')
     throw new Error(`引数が足りないか、形が合いません（${where}）\n${EXPORT_USAGE}`)
   }
   return parsed.data

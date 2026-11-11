@@ -99,3 +99,14 @@ describe('UpdateMusicTrackPatch（PHASE 8）', () => {
     expect(UpdateMusicTrackPatch.safeParse({ fadeOutSec: -1 }).success).toBe(false)
   })
 })
+
+describe('sectionLabelName', () => {
+  it('どのラベルにも画面に出す名前がある（英語のラベルをそのまま出さない）', async () => {
+    const { SectionLabel, sectionLabelName } = await import('../music/music.js')
+    for (const label of SectionLabel.options) {
+      expect(sectionLabelName(label), label).not.toMatch(/[a-z_]/)
+    }
+    expect(sectionLabelName('verse')).toBe('A メロ')
+    expect(sectionLabelName('chorus')).toBe('サビ')
+  })
+})

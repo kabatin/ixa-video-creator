@@ -9,11 +9,11 @@ import { makeModel, makeSpec, modelId } from './fixtures.js'
 const asset = () => MediaAssetId.parse('01ARZ3NDEKTSV4RRFFQ69G5FAV')
 
 const cheap = makeModel({
-  id: 'cheap', economics: { costPerSecondUsd: 0.05, typicalLatencySec: 30 },
+  id: 'cheap', label: '安いモデル', economics: { costPerSecondUsd: 0.05, typicalLatencySec: 30 },
   qualities: { characterConsistency: 0.4, motion: 0.5, physics: 0.5, cameraControl: 0.4, promptAdherence: 0.5 },
 })
 const premium = makeModel({
-  id: 'premium', economics: { costPerSecondUsd: 0.4, typicalLatencySec: 180 },
+  id: 'premium', label: '高いモデル', economics: { costPerSecondUsd: 0.4, typicalLatencySec: 180 },
   qualities: { characterConsistency: 0.95, motion: 0.9, physics: 0.9, cameraControl: 0.8, promptAdherence: 0.9 },
 })
 
@@ -75,8 +75,11 @@ describe('selectModel', () => {
       expect(error).toBeInstanceOf(NoEligibleModelError)
       const e = error as NoEligibleModelError
       expect(e.rejected).toHaveLength(2)
-      expect(e.message).toContain('cheap')
-      expect(e.message).toContain('premium')
+      // 画面にそのまま出る文。内部の ID ではなく、選択肢と同じ名前で言う。
+      expect(e.message).toContain(cheap.label)
+      expect(e.message).toContain(premium.label)
+      expect(e.message).not.toContain(cheap.id)
+      expect(e.message).not.toContain(premium.id)
     }
   })
 

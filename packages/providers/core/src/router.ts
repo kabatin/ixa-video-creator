@@ -51,10 +51,17 @@ export type RouterConstraints = {
 }
 
 export class NoEligibleModelError extends Error {
-  constructor(readonly rejected: readonly { modelId: ModelId; reason: string }[]) {
+  /**
+   * `labels` は画面に出す名前（選択肢と同じ言葉）。この文はそのまま画面に出るので、
+   * 名前が分かるモデルは内部の ID ではなく名前で言う。
+   */
+  constructor(
+    readonly rejected: readonly { modelId: ModelId; reason: string }[],
+    labels: ReadonlyMap<ModelId, string> = new Map(),
+  ) {
     super(
       '要求を満たせるモデルがありません:\n' +
-        rejected.map((r) => `- ${r.modelId}: ${r.reason}`).join('\n'),
+        rejected.map((r) => `- ${labels.get(r.modelId) ?? r.modelId}: ${r.reason}`).join('\n'),
     )
     this.name = 'NoEligibleModelError'
   }
@@ -88,6 +95,7 @@ export const selectModel = (
   weights: RouterWeights = BALANCED_WEIGHTS,
 ): RouterDecision => {
   const rejected: { modelId: ModelId; reason: string }[] = []
+  const labels = new Map(models.map((model) => [model.id, model.label]))
   const eligible: { model: VideoModelDescriptor; cost: number }[] = []
 
   // --- ハードフィルタ
@@ -130,7 +138,7 @@ export const selectModel = (
     eligible.push({ model, cost })
   }
 
-  if (eligible.length === 0) throw new NoEligibleModelError(rejected)
+  if (eligible.length === 0) throw new NoEligibleModelError(rejected, labels)
 
   // --- 重み付きスコアリング
   const maxCost = Math.max(...eligible.map((e) => e.cost))
@@ -153,7 +161,7 @@ export const selectModel = (
   // 同点のときは ID 順で決める。ランダム性を持ち込まない（再現性のため）。
   scored.sort((a, b) => (b.score - a.score) || (a.model.id < b.model.id ? -1 : 1))
   const best = scored[0]
-  if (!best) throw new NoEligibleModelError(rejected)
+  if (!best) throw new NoEligibleModelError(rejected, labels)
 
   const others = scored.slice(1).map((s) => ({
     modelId: s.model.id,

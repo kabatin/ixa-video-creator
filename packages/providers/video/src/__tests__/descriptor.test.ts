@@ -1,4 +1,4 @@
-import { quantizeDuration } from '@ixa/domain'
+import { AspectRatio, PROJECT_FPS_OPTIONS, PROJECT_RESOLUTIONS, quantizeDuration } from '@ixa/domain'
 import { VideoModelCapabilities } from '@ixa/provider-core'
 import { describe, expect, it } from 'vitest'
 import {
@@ -11,6 +11,18 @@ describe('スタブモデルの capability 宣言', () => {
   it('VideoModelCapabilities スキーマを満たす', () => {
     for (const model of stubVideoModels) {
       expect(() => VideoModelCapabilities.parse(model.capabilities)).not.toThrow()
+    }
+  })
+
+  it('作品で選べる形・大きさ・fps はすべて受ける（お試しは初めての人が選ぶ。模すのは尺と参照の制約）', () => {
+    for (const model of stubVideoModels) {
+      expect([...model.capabilities.aspectRatios].sort()).toEqual([...AspectRatio.options].sort())
+      expect([...model.capabilities.fps].sort()).toEqual([...PROJECT_FPS_OPTIONS].sort())
+      for (const aspectRatio of AspectRatio.options) {
+        for (const resolution of PROJECT_RESOLUTIONS[aspectRatio]) {
+          expect(model.capabilities.resolutions).toContainEqual(resolution)
+        }
+      }
     }
   })
 

@@ -80,6 +80,7 @@ export const RenderDialogBody = ({ watch }: { readonly watch: RenderWatch }) => 
       issues={issues.value}
       issuesError={issues.error}
       timelineDurationSec={durationSec}
+      projectResolution={workbench.project.resolution}
       // 選んだ Shot だけを書き出す範囲（チェックがあればチェックした Shot、無ければ選んでいる 1 件）。
       range={renderRangeChoice({
         shots: workbench.shots ?? [],

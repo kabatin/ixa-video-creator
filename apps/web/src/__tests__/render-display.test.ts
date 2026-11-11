@@ -2,7 +2,7 @@ import { RenderPreset } from '@ixa/domain'
 import { describe, expect, it } from 'vitest'
 import {
   activeRenderJobs,
-  DEFAULT_RENDER_PRESET,
+  defaultRenderPresetFor,
   describeRenderJob,
   formatJobTime,
   isRenderJobActive,
@@ -35,7 +35,15 @@ describe('プリセットの選択肢', () => {
   })
 
   it('既定はプレビュー。最初の 1 回を安く終わらせる', () => {
-    expect(DEFAULT_RENDER_PRESET).toBe('preview_720p')
+    expect(defaultRenderPresetFor({ width: 1920, height: 1080 })).toBe('preview_720p')
+    expect(defaultRenderPresetFor({ width: 1080, height: 1080 })).toBe('preview_720p')
+    expect(defaultRenderPresetFor(null)).toBe('preview_720p')
+  })
+
+  it('縦長の作品の既定は縦型（横長のプレビューのままだと、左右に黒帯の付いた横長の動画が出る）', () => {
+    expect(defaultRenderPresetFor({ width: 1080, height: 1920 })).toBe('social_vertical')
+    expect(defaultRenderPresetFor({ width: 720, height: 1280 })).toBe('social_vertical')
+    expect(defaultRenderPresetFor({ width: 1080, height: 1350 })).toBe('social_vertical')
     expect(renderPresetLabel('preview_720p')).toContain('720p')
   })
 

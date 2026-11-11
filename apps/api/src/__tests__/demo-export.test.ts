@@ -251,6 +251,8 @@ describe('書き出しの引数', () => {
     expect(() => parseExportArgs([...ok, '--force'])).toThrow()
     expect(() => parseExportArgs(ok.slice(2))).toThrow(/projectId/)
     expect(() => parseExportArgs(ok.map((arg) => (arg === 'https://github.com/o/r/releases/download/d/' ? 'http://example.com/d/' : arg)))).toThrow(/baseUrl/)
+    // どこが違うかだけでなく、決まり（github.com の下・末尾 /）も言う。
+    expect(() => parseExportArgs(ok.map((arg) => (arg === 'https://github.com/o/r/releases/download/d/' ? 'https://example.com/d/' : arg)))).toThrow(/https:\/\/github\.com\//)
   })
 })
 

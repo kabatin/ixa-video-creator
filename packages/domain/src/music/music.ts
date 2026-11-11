@@ -80,6 +80,20 @@ export const SectionLabel = z.enum([
 ])
 export type SectionLabel = z.infer<typeof SectionLabel>
 
+const SECTION_LABEL_NAMES: Readonly<Record<SectionLabel, string>> = {
+  intro: 'イントロ',
+  verse: 'A メロ',
+  pre_chorus: 'B メロ',
+  chorus: 'サビ',
+  bridge: 'ブリッジ',
+  break: 'ブレイク',
+  drop: 'ドロップ',
+  outro: 'アウトロ',
+}
+
+/** 画面や案の文に出す名前。ラベル（英語）は解析と DB の言葉で、そのまま人に見せない。 */
+export const sectionLabelName = (label: SectionLabel): string => SECTION_LABEL_NAMES[label]
+
 export const MusicSection = z.object({
   start: Seconds,
   end: Seconds,

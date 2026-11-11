@@ -25,7 +25,7 @@ import {
   type StartRenderDuplicate,
   type WireRenderJob,
 } from '@/lib/render-api'
-import { DEFAULT_RENDER_PRESET } from '@/lib/render-display'
+import { defaultRenderPresetFor } from '@/lib/render-display'
 import type { RenderFolderApi } from '@/lib/render-folder-api'
 import type { RenderRangeChoice } from '@/lib/render-range'
 import { createRequester } from '@/lib/requester'
@@ -59,6 +59,8 @@ export type RenderPanelProps = {
   readonly issuesError?: string | null
   /** 書き出される長さ。読めなければ null。 */
   readonly timelineDurationSec: number | null
+  /** 作品の大きさ。画質の既定を決める（縦長なら縦型）。省略ならプレビュー。 */
+  readonly projectResolution?: { readonly width: number; readonly height: number } | null
   /**
    * 走っている書き出しの見守り。**ダイアログより長生きする場所で作ったものを渡す。**
    * 省略するとこのパネルが自分で作る＝閉じると追跡が止まる。
@@ -120,6 +122,7 @@ const RenderPanelView = ({
   issues,
   issuesError = null,
   timelineDurationSec,
+  projectResolution = null,
   watch,
   range = null,
   onFixTimeline,
@@ -132,7 +135,7 @@ const RenderPanelView = ({
   const toOutputUrl = useMemo(() => resolveOutputUrl ?? defaultResolveOutputUrl, [resolveOutputUrl])
   const folder = useRenderFolder(projectId, folderApi)
 
-  const [preset, setPreset] = useState<RenderPreset>(DEFAULT_RENDER_PRESET)
+  const [preset, setPreset] = useState<RenderPreset>(() => defaultRenderPresetFor(projectResolution))
   const [normalizeLoudness, setNormalizeLoudness] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
